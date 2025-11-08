@@ -37,4 +37,6 @@ type LOCAL = {
   passwordKeyPrint?: { hash: string; salt: string };
   /** integer */
   walletCreationBlockHeight?: number;
+  /** boolean */
+  airgapSignerCameraEnabled?: boolean;
 };

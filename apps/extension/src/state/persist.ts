@@ -24,6 +24,7 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
     const knownSites = await localExtStorage.get('knownSites');
     const frontendUrl = await localExtStorage.get('frontendUrl');
     const numeraires = await localExtStorage.get('numeraires');
+    const airgapSignerCameraEnabled = await localExtStorage.get('airgapSignerCameraEnabled');
 
     set(
       produce((state: AllSlices) => {
@@ -32,6 +33,7 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
         state.connectedSites.knownSites = knownSites as OriginRecord[];
         state.defaultFrontend.url = frontendUrl;
         state.numeraires.selectedNumeraires = numeraires;
+        state.airgapSigner.cameraEnabled = airgapSignerCameraEnabled ?? false;
       }),
     );
 
@@ -98,6 +100,15 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
             state.network.chainId = stored
               ? AppParameters.fromJsonString(stored).chainId
               : state.network.chainId;
+          }),
+        );
+      }
+
+      if (changes.airgapSignerCameraEnabled) {
+        const stored = changes.airgapSignerCameraEnabled.newValue;
+        set(
+          produce((state: AllSlices) => {
+            state.airgapSigner.cameraEnabled = stored ?? false;
           }),
         );
       }
