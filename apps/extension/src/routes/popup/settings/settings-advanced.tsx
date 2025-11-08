@@ -1,4 +1,4 @@
-import { BarChartIcon, HomeIcon, Share1Icon, TrashIcon } from '@radix-ui/react-icons';
+import { BarChartIcon, CameraIcon, HomeIcon, Share1Icon, TrashIcon } from '@radix-ui/react-icons';
 import { CustomLink } from '../../../shared/components/link';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
@@ -20,6 +20,11 @@ const links = [
     title: 'Price Denomination',
     icon: <BarChartIcon className='size-5 text-muted-foreground' />,
     href: PopupPath.SETTINGS_NUMERAIRES,
+  },
+  {
+    title: 'Airgap Signer',
+    icon: <CameraIcon className='size-5 text-muted-foreground' />,
+    href: PopupPath.SETTINGS_AIRGAP_SIGNER,
   },
   {
     title: 'Clear Cache',

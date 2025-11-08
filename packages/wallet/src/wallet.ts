@@ -81,6 +81,11 @@ export class Wallet<T extends CustodyTypeName = CustodyTypeName> {
             const spendKey = SpendKey.fromJsonString(unsealed);
             return Promise.resolve(authorizePlan(spendKey, plan));
           }
+          case 'airgapSigner': {
+            // Airgap signer: sign via QR code with air-gapped device
+            const { airgapSignerAuthorize } = await import('./airgap-signer-ui');
+            return airgapSignerAuthorize(plan);
+          }
           default:
             // unreachable
             this.custodyType satisfies never;
