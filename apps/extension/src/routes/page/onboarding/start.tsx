@@ -39,6 +39,13 @@ export const OnboardingStart = () => {
           >
             Import existing wallet
           </Button>
+          <Button
+            variant='outline'
+            className='w-full'
+            onClick={() => navigate(PagePath.IMPORT_ZIGNER)}
+          >
+            Connect Zigner (watch-only)
+          </Button>
         </CardContent>
       </Card>
     </FadeTransition>

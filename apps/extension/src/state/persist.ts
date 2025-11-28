@@ -24,7 +24,7 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
     const knownSites = await localExtStorage.get('knownSites');
     const frontendUrl = await localExtStorage.get('frontendUrl');
     const numeraires = await localExtStorage.get('numeraires');
-    const airgapSignerCameraEnabled = await localExtStorage.get('airgapSignerCameraEnabled');
+    const zignerCameraEnabled = await localExtStorage.get('zignerCameraEnabled');
 
     set(
       produce((state: AllSlices) => {
@@ -33,7 +33,7 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
         state.connectedSites.knownSites = knownSites as OriginRecord[];
         state.defaultFrontend.url = frontendUrl;
         state.numeraires.selectedNumeraires = numeraires;
-        state.airgapSigner.cameraEnabled = airgapSignerCameraEnabled ?? false;
+        state.zigner.cameraEnabled = zignerCameraEnabled ?? false;
       }),
     );
 
@@ -104,11 +104,11 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
         );
       }
 
-      if (changes.airgapSignerCameraEnabled) {
-        const stored = changes.airgapSignerCameraEnabled.newValue;
+      if (changes.zignerCameraEnabled) {
+        const stored = changes.zignerCameraEnabled.newValue;
         set(
           produce((state: AllSlices) => {
-            state.airgapSigner.cameraEnabled = stored ?? false;
+            state.zigner.cameraEnabled = stored ?? false;
           }),
         );
       }

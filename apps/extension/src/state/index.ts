@@ -13,7 +13,7 @@ import { createOriginApprovalSlice, OriginApprovalSlice } from './origin-approva
 import { ConnectedSitesSlice, createConnectedSitesSlice } from './connected-sites';
 import { createDefaultFrontendSlice, DefaultFrontendSlice } from './default-frontend';
 import { createNumerairesSlice, NumerairesSlice } from './numeraires';
-import { createAirgapSignerSlice, AirgapSignerSlice } from './airgap-signer';
+import { createZignerSlice, ZignerSlice } from './zigner';
 
 export interface AllSlices {
   wallets: WalletsSlice;
@@ -25,7 +25,7 @@ export interface AllSlices {
   originApproval: OriginApprovalSlice;
   connectedSites: ConnectedSitesSlice;
   defaultFrontend: DefaultFrontendSlice;
-  airgapSigner: AirgapSignerSlice;
+  zigner: ZignerSlice;
 }
 
 export type SliceCreator<SliceInterface> = StateCreator<
@@ -49,7 +49,7 @@ export const initializeStore = (
     txApproval: createTxApprovalSlice(local)(setState, getState, store),
     originApproval: createOriginApprovalSlice()(setState, getState, store),
     defaultFrontend: createDefaultFrontendSlice(local)(setState, getState, store),
-    airgapSigner: createAirgapSignerSlice(local)(setState, getState, store),
+    zigner: createZignerSlice(local)(setState, getState, store),
   }));
 };
 

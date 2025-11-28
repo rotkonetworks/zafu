@@ -5,6 +5,7 @@ import { Network } from '@repo/ui/components/ui/network';
 import { useChainIdQuery } from '../../../hooks/chain-id';
 import { motion } from 'framer-motion';
 import { useStore } from '../../../state';
+import { WalletSwitcher } from './wallet-switcher';
 
 export const IndexHeader = () => {
   const navigate = usePopupNav();
@@ -18,6 +19,7 @@ export const IndexHeader = () => {
           onClick={() => navigate(PopupPath.SETTINGS)}
           className='size-6 shrink-0 cursor-pointer hover:opacity-50'
         />
+        <WalletSwitcher />
         {chainId ? (
           <motion.div
             initial={{ opacity: 0 }}

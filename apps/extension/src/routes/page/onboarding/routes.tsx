@@ -2,6 +2,7 @@ import { PagePath } from '../paths';
 import { OnboardingStart } from './start';
 import { GenerateSeedPhrase } from './generate';
 import { ImportSeedPhrase } from './import';
+import { ImportZigner } from './import-zigner';
 import { OnboardingSuccess } from './success';
 import { SetPassword } from './password';
 
@@ -17,6 +18,10 @@ export const onboardingRoutes = [
   {
     path: PagePath.IMPORT_SEED_PHRASE,
     element: <ImportSeedPhrase />,
+  },
+  {
+    path: PagePath.IMPORT_ZIGNER,
+    element: <ImportZigner />,
   },
   {
     path: PagePath.SET_PASSWORD,

@@ -7,7 +7,7 @@ import { SettingsPassphrase } from './settings-passphrase';
 import { SettingsRPC } from './settings-rpc';
 import { SettingsDefaultFrontend } from './settings-default-frontend';
 import { SettingsNumeraires } from './settings-numeraires';
-import { SettingsAirgapSigner } from './settings-airgap-signer';
+import { SettingsZigner } from './settings-zigner';
 
 export const settingsRoutes = [
   {
@@ -43,7 +43,7 @@ export const settingsRoutes = [
     element: <SettingsNumeraires />,
   },
   {
-    path: PopupPath.SETTINGS_AIRGAP_SIGNER,
-    element: <SettingsAirgapSigner />,
+    path: PopupPath.SETTINGS_ZIGNER,
+    element: <SettingsZigner />,
   },
 ];

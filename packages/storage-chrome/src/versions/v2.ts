@@ -4,16 +4,17 @@ type VERSION = 2;
 
 type SYNC = void;
 
+type BoxJson = { cipherText: string; nonce: string };
+
 type LOCAL = {
   // required values
   knownSites: { choice: 'Approved' | 'Denied' | 'Ignored'; date: number; origin: string }[];
   /** Stringified AssetId */
   numeraires: string[];
   wallets: {
-    custody: {
-      /** BoxJson */
-      encryptedSeedPhrase: { cipherText: string; nonce: string };
-    };
+    custody:
+      | { encryptedSeedPhrase: BoxJson }
+      | { airgapSigner: BoxJson };
     /** Stringified FullViewingKey */
     fullViewingKey: string;
     /** Stringified WalletId */
@@ -22,6 +23,8 @@ type LOCAL = {
   }[];
 
   // optional values
+  /** Index of the active wallet (default 0) */
+  activeWalletIndex?: number;
   backupReminderSeen?: boolean;
   /** integer */
   compactFrontierBlockHeight?: number;
@@ -37,6 +40,8 @@ type LOCAL = {
   passwordKeyPrint?: { hash: string; salt: string };
   /** integer */
   walletCreationBlockHeight?: number;
-  /** boolean */
-  airgapSignerCameraEnabled?: boolean;
+  /** Whether camera is enabled for Zigner QR scanning */
+  zignerCameraEnabled?: boolean;
+  /** Flag indicating cache clearing is in progress (survives extension restart) */
+  clearingCache?: boolean;
 };

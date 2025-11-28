@@ -22,9 +22,9 @@ const links = [
     href: PopupPath.SETTINGS_NUMERAIRES,
   },
   {
-    title: 'Airgap Signer',
+    title: 'Zigner',
     icon: <CameraIcon className='size-5 text-muted-foreground' />,
-    href: PopupPath.SETTINGS_AIRGAP_SIGNER,
+    href: PopupPath.SETTINGS_ZIGNER,
   },
   {
     title: 'Clear Cache',

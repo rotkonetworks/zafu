@@ -11,7 +11,8 @@
   "exports": {
     ".": "./src/wallet.ts",
     "./airgap-signer": "./src/airgap-signer.ts",
-    "./airgap-signer-ui": "./src/airgap-signer-ui.ts"
+    "./airgap-signer-ui": "./src/airgap-signer-ui.ts",
+    "./zigner-signer": "./src/zigner-signer.ts"
   },
   "dependencies": {
     "@penumbra-zone/bech32m": "18.0.0",

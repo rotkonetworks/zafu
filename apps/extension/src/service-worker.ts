@@ -56,8 +56,34 @@ import { localMigrations } from '@repo/storage-chrome/migrations';
 localExtStorage.enableMigration(localMigrations);
 
 let walletServices: Promise<Services>;
+let currentWalletIndex: number | undefined;
+
+// Reinitialize services when active wallet changes
+const reinitializeServices = async () => {
+  walletServices = startWalletServices();
+  // Ensure services start syncing
+  const services = await walletServices;
+  const ws = await services.getWalletServices();
+  void ws.blockProcessor.sync();
+};
+
+// Listen for active wallet changes
+localExtStorage.addListener(changes => {
+  if (changes.activeWalletIndex !== undefined) {
+    const newIndex = changes.activeWalletIndex.newValue ?? 0;
+    if (currentWalletIndex !== undefined && currentWalletIndex !== newIndex) {
+      console.log(`Switching wallet from ${currentWalletIndex} to ${newIndex}`);
+      currentWalletIndex = newIndex;
+      void reinitializeServices();
+    } else {
+      currentWalletIndex = newIndex;
+    }
+  }
+});
 
 const initHandler = async () => {
+  // Track initial wallet index
+  currentWalletIndex = (await localExtStorage.get('activeWalletIndex')) ?? 0;
   walletServices = startWalletServices();
   const rpcImpls = await getRpcImpls();
 

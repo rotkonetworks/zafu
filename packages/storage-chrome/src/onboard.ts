@@ -27,8 +27,11 @@ export const onboardGrpcEndpoint = async (): Promise<string> => {
 
 export const onboardWallet = async (): Promise<WalletJson> => {
   const wallets = await localExtStorage.get('wallets');
-  if (wallets[0]) {
-    return wallets[0];
+  const activeIndex = (await localExtStorage.get('activeWalletIndex')) ?? 0;
+  const activeWallet = wallets[activeIndex] ?? wallets[0];
+
+  if (activeWallet) {
+    return activeWallet;
   }
 
   return new Promise(resolve => {

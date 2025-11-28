@@ -18,6 +18,9 @@ import {
   getCustodyTypeName,
 } from './custody';
 
+// Re-export custody types for external use
+export type { CustodyTypeName, CustodyNamedValue };
+
 export interface WalletCustody {
   authorizePlan: (plan: TransactionPlan) => Promise<AuthorizationData>;
 }
@@ -82,7 +85,7 @@ export class Wallet<T extends CustodyTypeName = CustodyTypeName> {
             return Promise.resolve(authorizePlan(spendKey, plan));
           }
           case 'airgapSigner': {
-            // Airgap signer: sign via QR code with air-gapped device
+            // Airgap signer: sign via QR code with air-gapped device (e.g., Zigner)
             const { airgapSignerAuthorize } = await import('./airgap-signer-ui');
             return airgapSignerAuthorize(plan);
           }

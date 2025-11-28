@@ -1,8 +1,28 @@
 import { AssetId } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { Services } from '@repo/context';
-import { isPraxServicesMessage, ServicesMessage } from '../services';
+import {
+  isPraxServicesMessage,
+  ServicesMessage,
+  type ClearCacheProgress,
+  type ClearCacheStep,
+  CLEAR_CACHE_STEPS,
+} from '../services';
 import { isValidInternalSender } from '../../senders/internal';
 import { localExtStorage } from '@repo/storage-chrome/local';
+
+/** Broadcast progress to all extension pages */
+function broadcastProgress(step: ClearCacheStep, completed: number, total: number): void {
+  const progress: ClearCacheProgress = {
+    type: 'ClearCacheProgress',
+    step,
+    completed,
+    total,
+  };
+  // Send to all extension pages (popup, options, etc.)
+  void chrome.runtime.sendMessage(progress).catch(() => {
+    // Ignore errors - popup may have closed
+  });
+}
 
 export const internalServiceListener = (
   walletServices: Promise<Services>,
@@ -17,15 +37,34 @@ export const internalServiceListener = (
   switch (ServicesMessage[req as keyof typeof ServicesMessage]) {
     case ServicesMessage.ClearCache:
       void (async () => {
+        const total = CLEAR_CACHE_STEPS.length;
+        let completed = 0;
+
+        // Mark that clearing is in progress (persists across extension restart)
+        await localExtStorage.set('clearingCache', true);
+
+        // Step 1: Stop block processor
+        broadcastProgress('stopping', completed, total);
         const { blockProcessor, indexedDb } = await walletServices.then(ws =>
           ws.getWalletServices(),
         );
         blockProcessor.stop('clearCache');
-        await Promise.allSettled([
-          localExtStorage.remove('params'),
-          indexedDb.clear(),
-          localExtStorage.remove('fullSyncHeight'),
+        completed++;
 
+        // Step 2: Clear params
+        broadcastProgress('clearing-params', completed, total);
+        await localExtStorage.remove('params');
+        completed++;
+
+        // Step 3: Clear database (this is the slowest step)
+        broadcastProgress('clearing-database', completed, total);
+        await indexedDb.clear();
+        completed++;
+
+        // Step 4: Clear sync state
+        broadcastProgress('clearing-sync-state', completed, total);
+        await Promise.all([
+          localExtStorage.remove('fullSyncHeight'),
           // Side-effect of resetting the cache strips the database and resets the user state.
           // This flag gates whether the wallet pulls the 'latest' state commitment tree frontier
           // from the full node, and removing this flag is neccessary to prevent that. On cache
@@ -34,6 +73,13 @@ export const internalServiceListener = (
           // sync acceleration affordances provided by that flag.
           localExtStorage.remove('compactFrontierBlockHeight'),
         ]);
+        completed++;
+
+        // Clear the in-progress flag before reload
+        await localExtStorage.remove('clearingCache');
+
+        // Step 5: Reload
+        broadcastProgress('reloading', completed, total);
       })()
         .then(() => respond())
         .finally(() => chrome.runtime.reload());

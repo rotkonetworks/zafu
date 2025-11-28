@@ -1,4 +1,8 @@
-const CUSTODY_TYPES = ['encryptedSeedPhrase', 'encryptedSpendKey', 'airgapSigner'] as const;
+const CUSTODY_TYPES = [
+  'encryptedSeedPhrase',
+  'encryptedSpendKey',
+  'airgapSigner',
+] as const;
 
 export type CustodyTypeName = (typeof CUSTODY_TYPES)[number];
 
