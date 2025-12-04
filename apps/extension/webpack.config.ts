@@ -6,12 +6,28 @@ import rootPackageJson from '../../package.json' with { type: 'json' };
 
 import CopyPlugin from 'copy-webpack-plugin';
 import HtmlWebpackPlugin from 'html-webpack-plugin';
-import { spawn } from 'node:child_process';
+import { spawn, execSync } from 'node:child_process';
 import path from 'node:path';
 import url from 'node:url';
 import { type WebExtRunner, cmd as WebExtCmd } from 'web-ext';
 import webpack from 'webpack';
 import WatchExternalFilesPlugin from 'webpack-watch-external-files-plugin';
+
+// Get git commit info for build verification
+const getGitInfo = (cwd: string) => {
+  try {
+    const commit = execSync('git rev-parse HEAD', { cwd, encoding: 'utf-8' }).trim();
+    const branch = execSync('git rev-parse --abbrev-ref HEAD', { cwd, encoding: 'utf-8' }).trim();
+    const dirty = execSync('git diff --quiet && echo clean || echo dirty', {
+      cwd,
+      encoding: 'utf-8',
+      shell: '/bin/bash',
+    }).trim();
+    return { commit, branch, dirty };
+  } catch {
+    return { commit: 'unknown', branch: 'unknown', dirty: 'unknown' };
+  }
+};
 
 export default ({
   WEBPACK_WATCH = false,
@@ -19,8 +35,12 @@ export default ({
 }: {
   ['WEBPACK_WATCH']?: boolean;
   PRAX_ID: string;
-}): webpack.Configuration => {
+}): webpack.Configuration[] => {
   const keysPackage = path.dirname(url.fileURLToPath(import.meta.resolve('@penumbra-zone/keys')));
+  // Resolve wasm package via a known export, then go up to package root
+  const wasmPackage = path.dirname(
+    path.dirname(url.fileURLToPath(import.meta.resolve('@penumbra-zone/wasm/build'))),
+  );
 
   const localPackages = [
     ...Object.values(rootPackageJson.dependencies),
@@ -41,8 +61,20 @@ export default ({
   const srcDir = path.join(__dirname, 'src');
   const entryDir = path.join(srcDir, 'entry');
   const injectDir = path.join(srcDir, 'content-scripts');
+  const distDir = path.join(__dirname, 'dist');
 
   const CHROMIUM_PROFILE = process.env['CHROMIUM_PROFILE'];
+
+  // Get git commit info for build verification
+  const praxGit = getGitInfo(__dirname);
+  const penumbraWebDir = path.resolve(__dirname, '../../../penumbra-web');
+  const penumbraWebGit = getGitInfo(penumbraWebDir);
+
+  const BUILD_INFO = {
+    prax: praxGit,
+    penumbraWeb: penumbraWebGit,
+    buildTime: new Date().toISOString(),
+  };
 
   /*
    * The DefinePlugin replaces specified tokens with specified values.
@@ -53,6 +85,7 @@ export default ({
   const DefinePlugin = new webpack.DefinePlugin({
     PRAX: JSON.stringify(PRAX_ID),
     PRAX_ORIGIN: JSON.stringify(`chrome-extension://${PRAX_ID}`),
+    BUILD_INFO: JSON.stringify(BUILD_INFO),
     'globalThis.__DEV__': JSON.stringify(process.env['NODE_ENV'] !== 'production'),
     'globalThis.__ASSERT_ROOT__': JSON.stringify(false),
   });
@@ -110,46 +143,61 @@ export default ({
       ),
   };
 
-  return {
+  // Shared module rules for TypeScript and JS
+  const sharedModuleRules: webpack.RuleSetRule[] = [
+    {
+      test: /\.tsx?$/,
+      use: 'ts-loader',
+      exclude: /node_modules/,
+    },
+    {
+      test: /\.m?js/,
+      resolve: {
+        fullySpecified: false,
+      },
+    },
+  ];
+
+  // Shared plugins for both configs
+  const sharedPlugins = [
+    new webpack.ProvidePlugin({
+      // Required by the `bip39` library
+      Buffer: ['buffer', 'Buffer'],
+    }),
+    new webpack.IgnorePlugin({
+      // Not required by the `bip39` library, but very nice
+      checkResource(resource) {
+        return /.*\/wordlists\/(?!english).*\.json/.test(resource);
+      },
+    }),
+    DefinePlugin,
+  ];
+
+  // Browser config for DOM-based entries (pages, popups, offscreen, injected scripts)
+  const browserConfig: webpack.Configuration = {
+    name: 'browser',
     entry: {
       'injected-session': path.join(injectDir, 'injected-session.ts'),
       'injected-penumbra-global': path.join(injectDir, 'injected-penumbra-global.ts'),
       'offscreen-handler': path.join(entryDir, 'offscreen-handler.ts'),
       'page-root': path.join(entryDir, 'page-root.tsx'),
       'popup-root': path.join(entryDir, 'popup-root.tsx'),
-      'service-worker': path.join(srcDir, 'service-worker.ts'),
-      'wasm-build-action': path.join(srcDir, 'wasm-build-action.ts'),
     },
     output: {
-      path: path.join(__dirname, 'dist'),
+      path: distDir,
       filename: '[name].js',
     },
     optimization: {
       splitChunks: {
         chunks: chunk => {
-          const filesNotToChunk = [
-            'injected-session',
-            'injected-penumbra-global',
-            'service-worker',
-            'wasm-build-action',
-          ];
+          const filesNotToChunk = ['injected-session', 'injected-penumbra-global'];
           return chunk.name ? !filesNotToChunk.includes(chunk.name) : false;
         },
       },
     },
     module: {
       rules: [
-        {
-          test: /\.tsx?$/,
-          use: 'ts-loader',
-          exclude: /node_modules/,
-        },
-        {
-          test: /\.m?js/,
-          resolve: {
-            fullySpecified: false,
-          },
-        },
+        ...sharedModuleRules,
         {
           test: /\.css$/i,
           use: [
@@ -183,23 +231,17 @@ export default ({
     },
     plugins: [
       new webpack.CleanPlugin(),
-      new webpack.ProvidePlugin({
-        // Required by the `bip39` library
-        Buffer: ['buffer', 'Buffer'],
-      }),
-      new webpack.IgnorePlugin({
-        // Not required by the `bip39` library, but very nice
-        checkResource(resource) {
-          return /.*\/wordlists\/(?!english).*\.json/.test(resource);
-        },
-      }),
-      DefinePlugin,
+      ...sharedPlugins,
       new CopyPlugin({
         patterns: [
           'public',
           {
             from: path.join(keysPackage, 'keys', '*_pk.bin'),
             to: 'keys/[name][ext]',
+          },
+          {
+            from: path.join(wasmPackage, 'wasm-parallel'),
+            to: 'wasm-parallel',
           },
         ],
       }),
@@ -232,4 +274,34 @@ export default ({
       asyncWebAssembly: true,
     },
   };
+
+  // Worker config for service worker and WASM build workers
+  // Uses 'webworker' target to avoid DOM-based chunk loading
+  // Depends on 'browser' to ensure it runs after browser config (which cleans the dist)
+  const workerConfig: webpack.Configuration = {
+    name: 'worker',
+    dependencies: ['browser'],
+    target: 'webworker',
+    entry: {
+      'service-worker': path.join(srcDir, 'service-worker.ts'),
+      'wasm-build-action': path.join(srcDir, 'wasm-build-action.ts'),
+      'wasm-build-parallel': path.join(srcDir, 'wasm-build-parallel.ts'),
+    },
+    output: {
+      path: distDir,
+      filename: '[name].js',
+    },
+    module: {
+      rules: sharedModuleRules,
+    },
+    resolve: {
+      extensions: ['.ts', '.tsx', '.js'],
+    },
+    plugins: [...sharedPlugins],
+    experiments: {
+      asyncWebAssembly: true,
+    },
+  };
+
+  return [browserConfig, workerConfig];
 };

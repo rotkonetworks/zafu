@@ -1,0 +1,289 @@
+name: Build Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      build_target:
+        description: 'Build target'
+        required: true
+        default: 'beta'
+        type: choice
+        options:
+          - beta
+          - prod
+          - all
+      penumbra_web_repo:
+        description: 'penumbra-web repository (org/repo)'
+        required: false
+        default: 'rotkonetworks/web'
+      penumbra_web_ref:
+        description: 'penumbra-web branch/tag/commit'
+        required: false
+        default: 'feat/rayon-parallel-wasm'
+      create_release:
+        description: 'Create GitHub release'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout prax
+        uses: actions/checkout@v4
+        with:
+          path: prax
+
+      - name: Checkout penumbra-web
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.inputs.penumbra_web_repo || 'rotkonetworks/web' }}
+          ref: ${{ github.event.inputs.penumbra_web_ref || 'feat/rayon-parallel-wasm' }}
+          path: penumbra-web
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.4.0
+
+      - name: Setup Rust stable
+        uses: dtolnay/rust-action@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Setup Rust nightly (for parallel WASM)
+        run: |
+          rustup toolchain install nightly
+          rustup component add rust-src --toolchain nightly
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack
+
+      - name: Install wasm-bindgen-cli
+        run: cargo install wasm-bindgen-cli --version 0.2.106
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            penumbra-web/packages/wasm/crate/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('penumbra-web/packages/wasm/crate/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Cache pnpm
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Compile WASM (regular)
+        working-directory: penumbra-web/packages/wasm
+        run: pnpm compile
+
+      - name: Compile WASM (parallel with rayon)
+        working-directory: penumbra-web/packages/wasm
+        run: pnpm compile:parallel
+
+      - name: Install penumbra-web dependencies
+        working-directory: penumbra-web
+        run: pnpm install
+
+      - name: Build penumbra-web packages
+        working-directory: penumbra-web
+        run: pnpm build
+
+      - name: Install prax dependencies
+        working-directory: prax
+        run: pnpm install --ignore-scripts || true
+
+      - name: Sync wasm-parallel to pnpm stores
+        run: |
+          for wasm_store in $(find prax/node_modules/.pnpm -path "*@penumbra-zone+wasm*" -name "wasm" -type d 2>/dev/null); do
+            wasm_pkg_dir=$(dirname "$wasm_store")
+            if [ ! -d "$wasm_pkg_dir/wasm-parallel" ]; then
+              echo "Copying wasm-parallel to $wasm_pkg_dir"
+              cp -r penumbra-web/packages/wasm/wasm-parallel "$wasm_pkg_dir/"
+            fi
+          done
+
+      - name: Build extension (beta)
+        if: ${{ github.event.inputs.build_target == 'beta' || github.event.inputs.build_target == 'all' || github.event_name == 'push' }}
+        working-directory: prax/apps/extension
+        run: pnpm bundle:beta
+
+      - name: Build extension (prod)
+        if: ${{ github.event.inputs.build_target == 'prod' || github.event.inputs.build_target == 'all' || github.event_name == 'push' }}
+        working-directory: prax/apps/extension
+        run: pnpm bundle:prod
+
+      - name: Get version info
+        id: version
+        run: |
+          VERSION=$(node -p "require('./prax/apps/extension/package.json').version")
+          PRAX_COMMIT=$(cd prax && git rev-parse HEAD)
+          PRAX_SHORT=$(cd prax && git rev-parse --short HEAD)
+          PENUMBRA_COMMIT=$(cd penumbra-web && git rev-parse HEAD)
+          PENUMBRA_SHORT=$(cd penumbra-web && git rev-parse --short HEAD)
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "prax_commit=$PRAX_COMMIT" >> $GITHUB_OUTPUT
+          echo "prax_short=$PRAX_SHORT" >> $GITHUB_OUTPUT
+          echo "penumbra_commit=$PENUMBRA_COMMIT" >> $GITHUB_OUTPUT
+          echo "penumbra_short=$PENUMBRA_SHORT" >> $GITHUB_OUTPUT
+          echo "timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
+
+      - name: Create build artifacts
+        working-directory: prax/apps/extension
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TIMESTAMP="${{ steps.version.outputs.timestamp }}"
+
+          # Create beta zip if built
+          if [ -d "beta-dist" ]; then
+            ZIP_NAME="prax-v${VERSION}-beta-${TIMESTAMP}.zip"
+            cd beta-dist && zip -r "../$ZIP_NAME" . && cd ..
+            echo "Created $ZIP_NAME"
+          fi
+
+          # Create prod zip if built
+          if [ -d "dist" ]; then
+            ZIP_NAME="prax-v${VERSION}-${TIMESTAMP}.zip"
+            cd dist && zip -r "../$ZIP_NAME" . && cd ..
+            echo "Created $ZIP_NAME"
+          fi
+
+      - name: Generate build manifest
+        working-directory: prax/apps/extension
+        env:
+          PENUMBRA_WEB_REPO: ${{ github.event.inputs.penumbra_web_repo || 'rotkonetworks/web' }}
+          PENUMBRA_WEB_REF: ${{ github.event.inputs.penumbra_web_ref || 'feat/rayon-parallel-wasm' }}
+        run: |
+          cat > build-manifest.json << EOF
+          {
+            "version": "${{ steps.version.outputs.version }}",
+            "build_time": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+            "build_target": "${{ github.event.inputs.build_target || 'all' }}",
+            "prax": {
+              "commit": "${{ steps.version.outputs.prax_commit }}",
+              "ref": "${{ github.ref }}",
+              "repo": "https://github.com/${{ github.repository }}"
+            },
+            "penumbra_web": {
+              "commit": "${{ steps.version.outputs.penumbra_commit }}",
+              "ref": "${PENUMBRA_WEB_REF}",
+              "repo": "https://github.com/${PENUMBRA_WEB_REPO}"
+            },
+            "runner": {
+              "os": "${{ runner.os }}",
+              "arch": "${{ runner.arch }}"
+            },
+            "checksums": {}
+          }
+          EOF
+
+      - name: Generate checksums
+        working-directory: prax/apps/extension
+        run: |
+          echo "# Prax Extension Build Checksums" > checksums.sha256
+          echo "# Build: ${{ steps.version.outputs.timestamp }}" >> checksums.sha256
+          echo "# prax: ${{ steps.version.outputs.prax_commit }}" >> checksums.sha256
+          echo "# penumbra-web: ${{ steps.version.outputs.penumbra_commit }}" >> checksums.sha256
+          echo "" >> checksums.sha256
+
+          for zip in prax-v*.zip; do
+            if [ -f "$zip" ]; then
+              sha256sum "$zip" >> checksums.sha256
+            fi
+          done
+
+          echo "" >> checksums.sha256
+          echo "# WASM binaries" >> checksums.sha256
+          sha256sum ../../../penumbra-web/packages/wasm/wasm/index_bg.wasm | sed 's|.*/wasm/||' >> checksums.sha256
+          sha256sum ../../../penumbra-web/packages/wasm/wasm-parallel/index_bg.wasm | sed 's|.*/wasm/||' >> checksums.sha256
+
+          cat checksums.sha256
+
+      - name: Upload beta artifact
+        if: ${{ github.event.inputs.build_target == 'beta' || github.event.inputs.build_target == 'all' || github.event_name == 'push' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: prax-beta-${{ steps.version.outputs.prax_short }}
+          path: |
+            prax/apps/extension/prax-v*-beta-*.zip
+            prax/apps/extension/build-manifest.json
+            prax/apps/extension/checksums.sha256
+
+      - name: Upload prod artifact
+        if: ${{ github.event.inputs.build_target == 'prod' || github.event.inputs.build_target == 'all' || github.event_name == 'push' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: prax-prod-${{ steps.version.outputs.prax_short }}
+          path: |
+            prax/apps/extension/prax-v*-2*.zip
+            !prax/apps/extension/prax-v*-beta-*.zip
+            prax/apps/extension/build-manifest.json
+            prax/apps/extension/checksums.sha256
+
+      - name: Create GitHub Release
+        if: ${{ github.event.inputs.create_release == 'true' || github.event_name == 'push' }}
+        uses: softprops/action-gh-release@v2
+        env:
+          PENUMBRA_WEB_REPO: ${{ github.event.inputs.penumbra_web_repo || 'rotkonetworks/web' }}
+          PENUMBRA_WEB_REF: ${{ github.event.inputs.penumbra_web_ref || 'feat/rayon-parallel-wasm' }}
+        with:
+          name: Prax v${{ steps.version.outputs.version }}
+          tag_name: ${{ github.ref_name || format('v{0}-{1}', steps.version.outputs.version, steps.version.outputs.timestamp) }}
+          draft: ${{ github.event_name == 'workflow_dispatch' }}
+          prerelease: ${{ contains(github.ref, 'beta') || github.event.inputs.build_target == 'beta' }}
+          body: |
+            ## Prax Wallet v${{ steps.version.outputs.version }}
+
+            ### Build Info
+            - **prax**: `${{ steps.version.outputs.prax_commit }}`
+            - **penumbra-web**: `${{ steps.version.outputs.penumbra_commit }}` from [${{ env.PENUMBRA_WEB_REPO }}](https://github.com/${{ env.PENUMBRA_WEB_REPO }}) @ `${{ env.PENUMBRA_WEB_REF }}`
+            - **Built**: ${{ steps.version.outputs.timestamp }}
+
+            ### Features
+            - Rayon-based parallel transaction building for faster multi-action transactions
+            - SharedArrayBuffer support for true multi-threaded WASM execution
+
+            ### Verification
+            Download `checksums.sha256` and verify with:
+            ```bash
+            sha256sum -c checksums.sha256
+            ```
+
+            ### Reproducible Build
+            ```bash
+            git clone https://github.com/${{ github.repository }} prax
+            git clone https://github.com/${{ env.PENUMBRA_WEB_REPO }} penumbra-web
+            cd prax && git checkout ${{ steps.version.outputs.prax_commit }}
+            cd ../penumbra-web && git checkout ${{ steps.version.outputs.penumbra_commit }}
+            cd ../prax && ./scripts/build-release.sh --all
+            ```
+          files: |
+            prax/apps/extension/prax-v*.zip
+            prax/apps/extension/build-manifest.json
+            prax/apps/extension/checksums.sha256

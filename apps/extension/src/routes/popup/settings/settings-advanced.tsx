@@ -33,6 +33,23 @@ const links = [
   },
 ];
 
+const BuildInfoSection = () => (
+  <div className='mt-auto pt-6 border-t border-border'>
+    <div className='text-xs text-muted-foreground space-y-1'>
+      <div className='font-medium text-foreground/70'>Build Info</div>
+      <div className='font-mono'>
+        prax: {BUILD_INFO.prax.commit.slice(0, 8)}{' '}
+        <span className='text-muted-foreground/60'>({BUILD_INFO.prax.branch})</span>
+      </div>
+      <div className='font-mono'>
+        web: {BUILD_INFO.penumbraWeb.commit.slice(0, 8)}{' '}
+        <span className='text-muted-foreground/60'>({BUILD_INFO.penumbraWeb.branch})</span>
+      </div>
+      <div className='text-muted-foreground/50'>{new Date(BUILD_INFO.buildTime).toLocaleString()}</div>
+    </div>
+  </div>
+);
+
 export const SettingsAdvanced = () => {
   const navigate = usePopupNav();
 
@@ -43,6 +60,7 @@ export const SettingsAdvanced = () => {
           <CustomLink key={i.href} title={i.title} icon={i.icon} onClick={() => navigate(i.href)} />
         ))}
       </div>
+      <BuildInfoSection />
     </SettingsScreen>
   );
 };

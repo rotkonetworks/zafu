@@ -55,6 +55,14 @@ import { localMigrations } from '@repo/storage-chrome/migrations';
 
 localExtStorage.enableMigration(localMigrations);
 
+// Log build info for verification
+console.log(
+  `[Prax] Build info:\n` +
+    `  prax: ${BUILD_INFO.prax.commit.slice(0, 8)} (${BUILD_INFO.prax.branch})\n` +
+    `  penumbra-web: ${BUILD_INFO.penumbraWeb.commit.slice(0, 8)} (${BUILD_INFO.penumbraWeb.branch})\n` +
+    `  built: ${BUILD_INFO.buildTime}`,
+);
+
 let walletServices: Promise<Services>;
 
 const initHandler = async () => {
