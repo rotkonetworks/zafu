@@ -158,6 +158,8 @@ export default ({
     output: {
       path: distDir,
       filename: '[name].js',
+      // Use contenthash for WASM to dedupe identical modules
+      webassemblyModuleFilename: '[contenthash].wasm',
     },
     optimization: {
       splitChunks: {
@@ -261,6 +263,8 @@ export default ({
     output: {
       path: distDir,
       filename: '[name].js',
+      // Use contenthash for WASM to dedupe identical modules
+      webassemblyModuleFilename: '[contenthash].wasm',
     },
     module: {
       rules: sharedModuleRules,
