@@ -21,7 +21,7 @@ export const popup = async <M extends PopupType>(
 ): Promise<PopupResponse<M>[M] | null> => {
   await throwIfNeedsLogin();
 
-  const lockGranted = (async lock => {
+  const lockGranted = async (lock: Lock | null): Promise<PopupResponse<M> | null> => {
     if (!lock) {
       throw new Error(`Popup ${popupType} already open`);
     }
@@ -36,7 +36,7 @@ export const popup = async <M extends PopupType>(
     } as PopupRequest<M>;
 
     return sendPopup(popupRequest);
-  }) satisfies LockGrantedCallback;
+  };
 
   const popupResponse = await navigator.locks.request(
     popupType,
@@ -47,8 +47,7 @@ export const popup = async <M extends PopupType>(
   if (popupResponse == null) {
     return null;
   } else {
-    const { [popupType]: response } = popupResponse;
-    return response;
+    return popupResponse[popupType] as PopupResponse<M>[M] | null;
   }
 };
 
