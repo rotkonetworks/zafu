@@ -247,7 +247,7 @@ export default ({
     },
   };
 
-  // Worker config for service worker and WASM build workers
+  // Worker config for service worker and WASM build worker
   // Uses 'webworker' target to avoid DOM-based chunk loading
   // Depends on 'browser' to ensure it runs after browser config (which cleans the dist)
   const workerConfig: webpack.Configuration = {
@@ -256,7 +256,6 @@ export default ({
     target: 'webworker',
     entry: {
       'service-worker': path.join(srcDir, 'service-worker.ts'),
-      'wasm-build-action': path.join(srcDir, 'wasm-build-action.ts'),
       'wasm-build-parallel': path.join(srcDir, 'wasm-build-parallel.ts'),
     },
     output: {

@@ -1,11 +1,8 @@
 import { ConnectError } from '@connectrpc/connect';
 import { errorToJson } from '@connectrpc/connect/protocol-connect';
 import {
-  ActionBuildRequest,
-  ActionBuildResponse,
   ParallelBuildRequest,
   ParallelBuildResponse,
-  isActionBuildRequest,
   isParallelBuildRequest,
   isOffscreenRequest,
 } from '@penumbra-zone/types/internal-msg/offscreen';
@@ -16,19 +13,9 @@ chrome.runtime.onMessage.addListener((req, _sender, respond) => {
   }
   const { type, request } = req;
 
-  // Handle single action build (JS worker parallelism)
-  if (type === 'BUILD_ACTION' && isActionBuildRequest(request)) {
-    void handleBuildRequest(
-      () => spawnActionBuildWorker(request),
-      type,
-      respond,
-    );
-    return true;
-  }
-
-  // Handle full parallel build (rayon parallelism)
+  // Handle parallel build (rayon-based, single WASM call)
   if (type === 'BUILD_PARALLEL' && isParallelBuildRequest(request)) {
-    console.log('[Offscreen] Received BUILD_PARALLEL request, spawning rayon worker...');
+    console.log('[Offscreen] Received BUILD_PARALLEL request');
     void handleBuildRequest(
       () => spawnParallelBuildWorker(request),
       type,
@@ -68,33 +55,6 @@ async function handleBuildRequest<T>(
     respond({ type, error });
   }
 }
-
-const spawnActionBuildWorker = (req: ActionBuildRequest) => {
-  const { promise, resolve, reject } = Promise.withResolvers<ActionBuildResponse>();
-
-  const worker = new Worker(new URL('../wasm-build-action.ts', import.meta.url));
-  void promise.finally(() => worker.terminate());
-
-  const onWorkerMessage = (e: MessageEvent) => resolve(e.data as ActionBuildResponse);
-
-  const onWorkerError = ({ error, filename, lineno, colno, message }: ErrorEvent) =>
-    reject(
-      error instanceof Error
-        ? error
-        : new Error(`Worker ErrorEvent ${filename}:${lineno}:${colno} ${message}`),
-    );
-
-  const onWorkerMessageError = (ev: MessageEvent) => reject(ConnectError.from(ev.data ?? ev));
-
-  worker.addEventListener('message', onWorkerMessage, { once: true });
-  worker.addEventListener('error', onWorkerError, { once: true });
-  worker.addEventListener('messageerror', onWorkerMessageError, { once: true });
-
-  // Send data to web worker
-  worker.postMessage(req);
-
-  return promise;
-};
 
 /**
  * Persistent worker for rayon-based parallel transaction building.
