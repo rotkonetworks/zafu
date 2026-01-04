@@ -39,8 +39,10 @@ export const Login = () => {
   return (
     <FadeTransition className='flex flex-col items-stretch justify-start'>
       <div className='flex h-screen flex-col justify-between p-[30px] pt-10 '>
-        <div className='mx-auto my-0 h-[100px] w-[200px]'>
-          <img src='/prax-white-vertical.svg' alt='prax logo' />
+        <div className='mx-auto my-0 flex flex-col items-center'>
+          <h1 className='bg-text-linear bg-clip-text font-headline text-3xl font-bold text-transparent'>
+            Zafu
+          </h1>
         </div>
         <form onSubmit={handleUnlock} className='grid gap-4'>
           <PasswordInput
@@ -65,14 +67,14 @@ export const Login = () => {
         </form>
         <div className='flex flex-col gap-2'>
           <p className='text-center text-muted-foreground'>
-            Need help? Contact{' '}
+            Need help? Visit{' '}
             <a
               className='cursor-pointer text-teal hover:underline'
               target='_blank'
-              href='https://discord.com/channels/824484045370818580/1245108769143394457'
+              href='https://rotko.net'
               rel='noreferrer'
             >
-              Penumbra Support
+              rotko.net
             </a>
           </p>
         </div>

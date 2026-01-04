@@ -15,13 +15,18 @@ export const OnboardingStart = () => {
 
   return (
     <FadeTransition>
-      <img src='/prax-white-vertical.svg' alt='prax logo' className='mb-5 w-60 self-center' />
+      <div className='mb-5 flex flex-col items-center gap-2'>
+        <h1 className='bg-text-linear bg-clip-text font-headline text-4xl font-bold text-transparent'>
+          Zafu
+        </h1>
+        <p className='text-muted-foreground'>Privacy-first multi-chain wallet</p>
+      </div>
       <Card className='w-[400px] ' gradient>
         <CardHeader className='items-center'>
-          <CardTitle>Explore Private Trading</CardTitle>
+          <CardTitle>Your Keys, Your Privacy</CardTitle>
           <CardDescription className='text-center'>
-            Securely transact, stake, swap, or marketmake without broadcasting your personal
-            information to the world.
+            Securely transact across Penumbra, Zcash, and more privacy-focused networks.
+            Your keys never leave your device.
           </CardDescription>
         </CardHeader>
         <CardContent className='mt-6 grid gap-4'>

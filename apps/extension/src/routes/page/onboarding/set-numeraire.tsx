@@ -19,7 +19,7 @@ export const SetNumerairesPage = () => {
         <CardHeader>
           <CardTitle>In which token denomination would you prefer to price assets?</CardTitle>
           <CardDescription>
-            Prax does not use third-party price providers for privacy reasons. Instead, Prax indexes
+            Zafu does not use third-party price providers for privacy reasons. Instead, it indexes
             asset prices locally by selected denomination.
           </CardDescription>
         </CardHeader>

@@ -170,7 +170,7 @@ export const SettingsZigner = () => {
         {/* Info Box */}
         <div className='rounded-lg border border-border bg-card-radial p-4'>
           <p className='text-sm text-muted-foreground'>
-            Zigner is a cold wallet that keeps your spending keys offline. Prax stores only the
+            Zigner is a cold wallet that keeps your spending keys offline. Zafu stores only the
             viewing key to show balances. Transactions require QR code signing with your Zigner
             device.
           </p>

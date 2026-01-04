@@ -73,7 +73,7 @@ export const GrantCamera = () => {
             <CardDescription className='text-center mt-2'>
               {state === 'granted' && (
                 <>
-                  <p>You can now scan QR codes in the Prax extension.</p>
+                  <p>You can now scan QR codes in Zafu.</p>
                   <p className='mt-2 font-medium text-foreground'>
                     Close this tab and return to the extension popup.
                   </p>
@@ -91,7 +91,7 @@ export const GrantCamera = () => {
               {state === 'not-granted' && (
                 <>
                   <p>
-                    Prax needs camera access to scan QR codes from your Zigner device.
+                    Zafu needs camera access to scan QR codes from your Zigner device.
                   </p>
                   <p className='mt-2 text-muted-foreground text-sm'>
                     Click the button below to grant access. Your browser will show

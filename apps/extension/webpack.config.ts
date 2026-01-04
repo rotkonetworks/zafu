@@ -220,20 +220,20 @@ export default ({
       // html entry points
       new HtmlWebpackPlugin({
         favicon: 'public/favicon/icon128.png',
-        title: 'Prax Wallet',
+        title: 'Zafu Wallet',
         template: 'react-root.html',
         filename: 'page.html',
         chunks: ['page-root'],
       }),
       new HtmlWebpackPlugin({
-        title: 'Prax Wallet',
+        title: 'Zafu Wallet',
         template: 'react-root.html',
         rootId: 'popup-root',
         filename: 'popup.html',
         chunks: ['popup-root'],
       }),
       new HtmlWebpackPlugin({
-        title: 'Penumbra Offscreen',
+        title: 'Zafu Offscreen',
         filename: 'offscreen.html',
         chunks: ['offscreen-handler'],
       }),
