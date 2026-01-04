@@ -1,9 +1,23 @@
 export enum PopupPath {
+  // Main tabs (Keplr-style)
   INDEX = '/',
+  STAKE = '/stake',
+  SWAP = '/swap',
+  HISTORY = '/history',
+  SETTINGS = '/settings',
+
+  // Auth
   LOGIN = '/login',
+
+  // Approvals
   TRANSACTION_APPROVAL = '/approval/tx',
   ORIGIN_APPROVAL = '/approval/origin',
-  SETTINGS = '/settings',
+
+  // Send/Receive
+  SEND = '/send',
+  RECEIVE = '/receive',
+
+  // Settings sub-pages
   SETTINGS_ADVANCED = '/settings/advanced',
   SETTINGS_RPC = '/settings/rpc',
   SETTINGS_DEFAULT_FRONTEND = '/settings/default-frontend',
@@ -13,5 +27,5 @@ export enum PopupPath {
   SETTINGS_RECOVERY_PASSPHRASE = '/settings/recovery-passphrase',
   SETTINGS_NUMERAIRES = '/settings/numeraires',
   SETTINGS_ZIGNER = '/settings/zigner',
-  // RESET_PASSWORD = '/settings/reset-password',
+  SETTINGS_NETWORKS = '/settings/networks',
 }

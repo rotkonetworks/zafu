@@ -15,10 +15,15 @@ const OriginApproval = lazy(() =>
   import('./approval/origin').then(m => ({ default: m.OriginApproval })),
 );
 
+// lazy load tab pages
+const StakePage = lazy(() => import('./stake').then(m => ({ default: m.StakePage })));
+const SwapPage = lazy(() => import('./swap').then(m => ({ default: m.SwapPage })));
+const HistoryPage = lazy(() => import('./history').then(m => ({ default: m.HistoryPage })));
+
 // suspense fallback for lazy routes
 const LazyFallback = () => (
-  <div className="flex h-full items-center justify-center">
-    <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+  <div className='flex h-full items-center justify-center'>
+    <div className='h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent' />
   </div>
 );
 
@@ -26,15 +31,35 @@ export const popupRoutes: RouteObject[] = [
   {
     element: <PopupLayout />,
     children: [
+      // Main tabs
       {
         path: PopupPath.INDEX,
         element: <PopupIndex />,
         loader: popupIndexLoader,
       },
       {
-        path: PopupPath.LOGIN,
-        element: <Login />,
-        loader: popupLoginLoader,
+        path: PopupPath.STAKE,
+        element: (
+          <Suspense fallback={<LazyFallback />}>
+            <StakePage />
+          </Suspense>
+        ),
+      },
+      {
+        path: PopupPath.SWAP,
+        element: (
+          <Suspense fallback={<LazyFallback />}>
+            <SwapPage />
+          </Suspense>
+        ),
+      },
+      {
+        path: PopupPath.HISTORY,
+        element: (
+          <Suspense fallback={<LazyFallback />}>
+            <HistoryPage />
+          </Suspense>
+        ),
       },
       {
         path: PopupPath.SETTINGS,
@@ -45,6 +70,15 @@ export const popupRoutes: RouteObject[] = [
         ),
         children: settingsRoutes,
       },
+
+      // Auth
+      {
+        path: PopupPath.LOGIN,
+        element: <Login />,
+        loader: popupLoginLoader,
+      },
+
+      // Approvals
       {
         path: PopupPath.TRANSACTION_APPROVAL,
         element: (

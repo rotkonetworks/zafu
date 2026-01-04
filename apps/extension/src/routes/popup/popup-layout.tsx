@@ -1,23 +1,50 @@
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { usePopupReady } from '../../hooks/popup-ready';
+import { BottomTabs, BOTTOM_TABS_HEIGHT } from '../../components/bottom-tabs';
+import { PopupPath } from './paths';
+import {
+  HomeIcon,
+  StackIcon,
+  MixIcon,
+  ClockIcon,
+  GearIcon,
+} from '@radix-ui/react-icons';
 
-/**
- * @todo: Fix the issue where the detached popup isn't sized correctly. This
- * happens because #popup-root is hard-coded to a 600px width, which _should_
- * only be used for the attached popup. But it's also used for the detached
- * popup, which means that resizing the detached popup doesn't result in the UI
- * resizing with it.
- *
- * This can be fixed by detecting whether we're in the attached or detached
- * routes here in `PopupLayout`, and using a different root class name for each,
- * then removing the hard-coded width from `globals.css`.
- */
+const mainTabs = [
+  { path: PopupPath.INDEX, icon: <HomeIcon className='h-5 w-5' />, label: 'Home' },
+  { path: PopupPath.STAKE, icon: <StackIcon className='h-5 w-5' />, label: 'Stake' },
+  { path: PopupPath.SWAP, icon: <MixIcon className='h-5 w-5' />, label: 'Swap' },
+  { path: PopupPath.HISTORY, icon: <ClockIcon className='h-5 w-5' />, label: 'History' },
+  { path: PopupPath.SETTINGS, icon: <GearIcon className='h-5 w-5' />, label: 'Settings' },
+];
+
+// Routes where bottom tabs should NOT be shown
+const hiddenTabRoutes = [
+  PopupPath.LOGIN,
+  PopupPath.TRANSACTION_APPROVAL,
+  PopupPath.ORIGIN_APPROVAL,
+  PopupPath.SEND,
+  PopupPath.RECEIVE,
+];
+
 export const PopupLayout = () => {
   usePopupReady();
+  const location = useLocation();
+
+  // Hide tabs on login, approval, and transaction pages
+  const showTabs = !hiddenTabRoutes.some(
+    route => location.pathname === route || location.pathname.startsWith(route + '/')
+  );
 
   return (
     <div className='relative flex grow flex-col bg-card-radial'>
-      <Outlet />
+      <div
+        className='flex-1 overflow-y-auto'
+        style={{ paddingBottom: showTabs ? BOTTOM_TABS_HEIGHT : 0 }}
+      >
+        <Outlet />
+      </div>
+      {showTabs && <BottomTabs tabs={mainTabs} />}
     </div>
   );
 };

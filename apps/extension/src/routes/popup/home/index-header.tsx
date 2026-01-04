@@ -1,36 +1,35 @@
-import { HamburgerMenuIcon } from '@radix-ui/react-icons';
-import { usePopupNav } from '../../../utils/navigate';
-import { PopupPath } from '../paths';
-import { Network } from '@repo/ui/components/ui/network';
-import { useChainIdQuery } from '../../../hooks/chain-id';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { useStore } from '../../../state';
 import { WalletSwitcher } from './wallet-switcher';
+import { NetworkSelector, NetworkInfo, SUPPORTED_NETWORKS } from '../../../components/network-selector';
 
 export const IndexHeader = () => {
-  const navigate = usePopupNav();
-  const { chainId } = useChainIdQuery();
-  const statusPageUrl = useStore(state => state.network.grpcEndpoint);
+  const [currentNetwork, setCurrentNetwork] = useState<NetworkInfo>(SUPPORTED_NETWORKS[0]!);
+
+  const handleNetworkChange = (network: NetworkInfo) => {
+    setCurrentNetwork(network);
+    // TODO: Update global network state and refresh data
+  };
 
   return (
-    <header className='top-0 z-40 w-full'>
-      <div className='flex items-center justify-between gap-4 py-4'>
-        <HamburgerMenuIcon
-          onClick={() => navigate(PopupPath.SETTINGS)}
-          className='size-6 shrink-0 cursor-pointer hover:opacity-50'
-        />
-        <WalletSwitcher />
-        {chainId ? (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1, transition: { duration: 0.5, ease: 'easeOut' } }}
-            className='overflow-hidden'
-          >
-            <Network name={chainId} href={statusPageUrl} />
-          </motion.div>
-        ) : (
-          <div className='m-[19px]' />
-        )}
+    <header className='sticky top-0 z-40 w-full bg-background/80 backdrop-blur-sm'>
+      <div className='flex items-center justify-between gap-2 px-4 py-3'>
+        {/* Wallet Switcher - Left */}
+        <div className='flex-1'>
+          <WalletSwitcher />
+        </div>
+
+        {/* Network Selector - Right */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1, transition: { duration: 0.3 } }}
+        >
+          <NetworkSelector
+            currentNetwork={currentNetwork}
+            onNetworkChange={handleNetworkChange}
+            networks={SUPPORTED_NETWORKS}
+          />
+        </motion.div>
       </div>
     </header>
   );
