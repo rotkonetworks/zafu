@@ -1,9 +1,19 @@
+import { lazy, Suspense } from 'react';
 import { createHashRouter, Outlet, RouteObject } from 'react-router-dom';
 import { PageIndex, pageIndexLoader } from '.';
-import { Onboarding } from './onboarding';
 import { onboardingRoutes } from './onboarding/routes';
 import { PagePath } from './paths';
-import { GrantCamera } from './grant-camera';
+
+// lazy load onboarding flow (only needed once per install)
+const Onboarding = lazy(() => import('./onboarding').then(m => ({ default: m.Onboarding })));
+const GrantCamera = lazy(() => import('./grant-camera').then(m => ({ default: m.GrantCamera })));
+
+// suspense fallback
+const LazyFallback = () => (
+  <div className="flex h-full items-center justify-center">
+    <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+  </div>
+);
 
 export const pageRoutes: RouteObject[] = [
   {
@@ -16,12 +26,20 @@ export const pageRoutes: RouteObject[] = [
       },
       {
         path: PagePath.WELCOME,
-        element: <Onboarding />,
+        element: (
+          <Suspense fallback={<LazyFallback />}>
+            <Onboarding />
+          </Suspense>
+        ),
         children: onboardingRoutes,
       },
       {
         path: PagePath.GRANT_CAMERA,
-        element: <GrantCamera />,
+        element: (
+          <Suspense fallback={<LazyFallback />}>
+            <GrantCamera />
+          </Suspense>
+        ),
       },
     ],
   },
