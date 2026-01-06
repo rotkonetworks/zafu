@@ -145,6 +145,8 @@ export default ({
     DefinePlugin,
   ];
 
+  const workersDir = path.join(srcDir, 'workers');
+
   // Browser config for DOM-based entries (pages, popups, offscreen, injected scripts)
   const browserConfig: webpack.Configuration = {
     name: 'browser',
@@ -154,6 +156,8 @@ export default ({
       'offscreen-handler': path.join(entryDir, 'offscreen-handler.ts'),
       'page-root': path.join(entryDir, 'page-root.tsx'),
       'popup-root': path.join(entryDir, 'popup-root.tsx'),
+      // network workers (isolated sync per network)
+      'workers/zcash-worker': path.join(workersDir, 'zcash-worker.ts'),
     },
     output: {
       path: distDir,
@@ -162,7 +166,8 @@ export default ({
     optimization: {
       splitChunks: {
         chunks: chunk => {
-          const filesNotToChunk = ['injected-session', 'injected-penumbra-global'];
+          // workers must be self-contained (no chunk splitting)
+          const filesNotToChunk = ['injected-session', 'injected-penumbra-global', 'workers/zcash-worker'];
           return chunk.name ? !filesNotToChunk.includes(chunk.name) : false;
         },
       },
@@ -215,6 +220,20 @@ export default ({
             from: path.join(wasmPackage, 'wasm-parallel'),
             to: 'wasm-parallel',
           },
+          // zafu-wasm for zcash key derivation and scanning
+          {
+            from: '/steam/rotko/zeratul/crates/bin/zidecar/www/pkg/zafu_wasm.js',
+            to: 'zafu-wasm/zafu_wasm.js',
+          },
+          {
+            from: '/steam/rotko/zeratul/crates/bin/zidecar/www/pkg/zafu_wasm_bg.wasm',
+            to: 'zafu-wasm/zafu_wasm_bg.wasm',
+          },
+          // worker snippet for rayon parallel scanning
+          {
+            from: '/steam/rotko/zeratul/crates/bin/zidecar/www/pkg/snippets',
+            to: 'zafu-wasm/snippets',
+          },
         ],
       }),
       // html entry points
@@ -261,6 +280,11 @@ export default ({
     output: {
       path: distDir,
       filename: '[name].js',
+    },
+    optimization: {
+      // service workers cannot use importScripts for dynamic chunks
+      // everything must be bundled into a single file
+      splitChunks: false,
     },
     module: {
       rules: sharedModuleRules,
