@@ -70,3 +70,4 @@ scripts/private
 
 # nix
 /result
+*.zip
