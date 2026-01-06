@@ -17,8 +17,8 @@ export const BottomTabs = ({ tabs }: BottomTabsProps) => {
   const location = useLocation();
 
   return (
-    <nav className='fixed bottom-0 left-0 right-0 z-50 border-t border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60'>
-      <div className='flex h-14 items-center justify-around px-2'>
+    <nav className='fixed bottom-0 left-0 right-0 z-50 border-t border-border/40 bg-background'>
+      <div className='flex h-12 items-center justify-around'>
         {tabs.map(tab => {
           const isActive = location.pathname === tab.path ||
             (tab.path !== '/' && location.pathname.startsWith(tab.path));
@@ -28,19 +28,12 @@ export const BottomTabs = ({ tabs }: BottomTabsProps) => {
               key={tab.path}
               to={tab.path}
               className={cn(
-                'flex flex-1 flex-col items-center justify-center gap-0.5 py-1 transition-colors',
-                isActive ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
+                'flex flex-1 flex-col items-center justify-center gap-0.5 transition-colors duration-100',
+                isActive ? 'text-primary' : 'text-muted-foreground'
               )}
             >
-              <div className='flex h-6 w-6 items-center justify-center'>
-                {isActive && tab.activeIcon ? tab.activeIcon : tab.icon}
-              </div>
-              <span className={cn(
-                'text-[10px] font-medium',
-                isActive && 'font-semibold'
-              )}>
-                {tab.label}
-              </span>
+              {isActive && tab.activeIcon ? tab.activeIcon : tab.icon}
+              <span className='text-[10px]'>{tab.label}</span>
             </NavLink>
           );
         })}
@@ -49,4 +42,4 @@ export const BottomTabs = ({ tabs }: BottomTabsProps) => {
   );
 };
 
-export const BOTTOM_TABS_HEIGHT = '3.5rem';
+export const BOTTOM_TABS_HEIGHT = '3rem';

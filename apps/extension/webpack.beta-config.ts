@@ -16,14 +16,14 @@ const BetaManifestReplacerPlugin = new CopyPlugin({
   ],
 });
 
-const PRAX_ID = 'ejpfkiblcablembkdhcofhokccbbppnc';
+const ZIGNER_ID = 'ejpfkiblcablembkdhcofhokccbbppnc';
 
 /**
- * This config defines the Prax Chrome ID, changes the output directory,
+ * This config defines the zigner-web Chrome ID, changes the output directory,
  * and modifies the `manifest.json` file to use the correct extension information
  */
 export default ({ WEBPACK_WATCH = false }: { ['WEBPACK_WATCH']?: boolean }) => {
-  const configs = config({ PRAX_ID, WEBPACK_WATCH });
+  const configs = config({ ZIGNER_ID, WEBPACK_WATCH });
   const distPath = path.join(__dirname, 'beta-dist');
 
   return configs.map((cfg, index) => ({

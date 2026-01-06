@@ -1,6 +1,6 @@
 import { CRSessionManager } from '@penumbra-zone/transport-chrome/session-manager';
 import { removeOriginRecord } from '@repo/storage-chrome/origin';
-import { PraxControl } from '../content-scripts/message/prax-control';
+import { ZignerControl } from '../content-scripts/message/zigner-control';
 import { sendTabs } from '../message/send/tab';
 
 /**
@@ -8,7 +8,7 @@ import { sendTabs } from '../message/send/tab';
  * manager to immediately kill sessions associated with the origin.
  *
  * The session manager returns a list of senders associated with killed
- * sessions. A `PraxConnection.End` message is sent to the content scripts in
+ * sessions. A `ZignerConnection.End` message is sent to the content scripts in
  * those senders.
  */
 export const revokeOrigin = (targetOrigin: string) => {
@@ -22,7 +22,7 @@ export const revokeOrigin = (targetOrigin: string) => {
     //
     // This informs the content scripts they are actually disconnected, so they
     // can clean up.
-    sendTabs(killedSenders, PraxControl.End),
+    sendTabs(killedSenders, ZignerControl.End),
   ).catch(failure => {
     // This should never happen, but if it does, hopefully restarting the
     // extension will stop anything weird happening.

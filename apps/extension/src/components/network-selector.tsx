@@ -1,33 +1,50 @@
 import { useState, useRef, useEffect } from 'react';
-import { ChevronDownIcon, CheckIcon } from '@radix-ui/react-icons';
+import { ChevronDownIcon, PlusIcon } from '@radix-ui/react-icons';
 import { cn } from '@repo/ui/lib/utils';
+import { useStore } from '../state';
+import { keyRingSelector, NetworkType } from '../state/keyring';
+
+export type Ecosystem = 'penumbra' | 'zcash' | 'polkadot' | 'bitcoin' | 'nostr';
 
 export interface NetworkInfo {
   id: string;
   name: string;
   icon?: string;
-  ecosystem: 'penumbra' | 'zcash' | 'polkadot' | 'bitcoin' | 'nostr';
+  ecosystem: Ecosystem;
   color?: string;
+  testnet?: boolean;
 }
 
 export const SUPPORTED_NETWORKS: NetworkInfo[] = [
   {
     id: 'penumbra-1',
-    name: 'Penumbra',
+    name: 'penumbra',
     ecosystem: 'penumbra',
     color: '#7B68EE',
   },
   {
     id: 'zcash-mainnet',
-    name: 'Zcash',
+    name: 'zcash',
     ecosystem: 'zcash',
     color: '#F4B728',
   },
   {
     id: 'polkadot',
-    name: 'Polkadot',
+    name: 'polkadot',
     ecosystem: 'polkadot',
     color: '#E6007A',
+  },
+  {
+    id: 'bitcoin-mainnet',
+    name: 'bitcoin',
+    ecosystem: 'bitcoin',
+    color: '#F7931A',
+  },
+  {
+    id: 'nostr',
+    name: 'nostr',
+    ecosystem: 'nostr',
+    color: '#8B5CF6',
   },
 ];
 
@@ -35,6 +52,7 @@ interface NetworkSelectorProps {
   currentNetwork: NetworkInfo;
   onNetworkChange: (network: NetworkInfo) => void;
   networks?: NetworkInfo[];
+  onAddNetwork?: () => void;
   className?: string;
 }
 
@@ -42,12 +60,13 @@ export const NetworkSelector = ({
   currentNetwork,
   onNetworkChange,
   networks = SUPPORTED_NETWORKS,
+  onAddNetwork,
   className,
 }: NetworkSelectorProps) => {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const { enabledNetworks, toggleNetwork } = useStore(keyRingSelector);
 
-  // Close on click outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
@@ -58,72 +77,112 @@ export const NetworkSelector = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const groupedNetworks = networks.reduce(
-    (acc, network) => {
-      if (!acc[network.ecosystem]) {
-        acc[network.ecosystem] = [];
-      }
-      acc[network.ecosystem]!.push(network);
-      return acc;
-    },
-    {} as Record<string, NetworkInfo[]>
+  // only show enabled networks
+  const activeNetworks = networks.filter(n =>
+    enabledNetworks.includes(n.ecosystem as NetworkType)
   );
-
-  const ecosystemLabels: Record<string, string> = {
-    penumbra: 'Penumbra',
-    zcash: 'Zcash',
-    polkadot: 'Polkadot',
-    bitcoin: 'Bitcoin',
-    nostr: 'Nostr',
-  };
 
   return (
     <div ref={containerRef} className='relative'>
       <button
         onClick={() => setOpen(!open)}
         className={cn(
-          'flex items-center gap-2 rounded-full border border-border/50 bg-background/50 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent',
+          'flex items-center gap-2 border border-border/50 bg-background/50 px-2.5 py-1.5 text-sm',
+          'transition-colors duration-75 hover:bg-accent',
           className
         )}
       >
         <div
-          className='h-2.5 w-2.5 rounded-full'
+          className='h-2.5 w-2.5'
           style={{ backgroundColor: currentNetwork.color }}
         />
-        <span className='max-w-[80px] truncate'>{currentNetwork.name}</span>
-        <ChevronDownIcon className={cn('h-4 w-4 text-muted-foreground transition-transform', open && 'rotate-180')} />
+        <span className='max-w-[80px] truncate font-medium'>{currentNetwork.name}</span>
+        {currentNetwork.testnet && (
+          <span className='text-[10px] text-muted-foreground'>testnet</span>
+        )}
+        <ChevronDownIcon className={cn('h-4 w-4 text-muted-foreground transition-transform duration-75', open && 'rotate-180')} />
       </button>
 
       {open && (
-        <div className='absolute right-0 top-full z-50 mt-2 w-48 rounded-lg border border-border bg-popover p-1 shadow-lg'>
-          {Object.entries(groupedNetworks).map(([ecosystem, networkList]) => (
-            <div key={ecosystem}>
-              <div className='px-2 py-1.5 text-xs font-medium text-muted-foreground'>
-                {ecosystemLabels[ecosystem] || ecosystem}
-              </div>
-              {networkList.map(network => (
+        <div className='absolute right-0 top-full z-50 mt-1 w-52 border border-border bg-popover shadow-lg'>
+          <div className='p-1'>
+            <div className='px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground'>
+              active networks
+            </div>
+            {activeNetworks.map(network => (
+              <button
+                key={network.id}
+                onClick={() => {
+                  onNetworkChange(network);
+                  setOpen(false);
+                }}
+                className={cn(
+                  'flex w-full items-center justify-between px-2 py-1.5 text-sm transition-colors duration-75',
+                  network.id === currentNetwork.id ? 'bg-accent' : 'hover:bg-accent/50'
+                )}
+              >
+                <div className='flex items-center gap-2'>
+                  <div
+                    className='h-2 w-2'
+                    style={{ backgroundColor: network.color }}
+                  />
+                  <span>{network.name}</span>
+                  {network.testnet && (
+                    <span className='text-[10px] text-muted-foreground'>testnet</span>
+                  )}
+                </div>
+                {network.id === currentNetwork.id && (
+                  <div className='h-1.5 w-1.5 bg-primary' />
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* manage networks */}
+          <div className='border-t border-border p-1'>
+            <div className='px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground'>
+              toggle networks
+            </div>
+            {networks.map(network => {
+              const isEnabled = enabledNetworks.includes(network.ecosystem as NetworkType);
+              return (
                 <button
-                  key={network.id}
-                  onClick={() => {
-                    onNetworkChange(network);
-                    setOpen(false);
-                  }}
-                  className='flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm hover:bg-accent'
+                  key={`toggle-${network.id}`}
+                  onClick={() => void toggleNetwork(network.ecosystem as NetworkType)}
+                  className='flex w-full items-center justify-between px-2 py-1.5 text-sm transition-colors duration-75 hover:bg-accent/50'
                 >
                   <div className='flex items-center gap-2'>
                     <div
-                      className='h-2.5 w-2.5 rounded-full'
-                      style={{ backgroundColor: network.color }}
+                      className='h-2 w-2'
+                      style={{ backgroundColor: network.color, opacity: isEnabled ? 1 : 0.3 }}
                     />
-                    <span>{network.name}</span>
+                    <span className={isEnabled ? '' : 'text-muted-foreground'}>{network.name}</span>
                   </div>
-                  {network.id === currentNetwork.id && (
-                    <CheckIcon className='h-4 w-4 text-primary' />
-                  )}
+                  <div className={cn(
+                    'h-3 w-3 border border-border flex items-center justify-center',
+                    isEnabled && 'bg-primary border-primary'
+                  )}>
+                    {isEnabled && <span className='text-[8px] text-primary-foreground'>✓</span>}
+                  </div>
                 </button>
-              ))}
+              );
+            })}
+          </div>
+
+          {onAddNetwork && (
+            <div className='border-t border-border p-1'>
+              <button
+                onClick={() => {
+                  setOpen(false);
+                  onAddNetwork();
+                }}
+                className='flex w-full items-center gap-2 px-2 py-1.5 text-sm text-muted-foreground transition-colors duration-75 hover:bg-accent hover:text-foreground'
+              >
+                <PlusIcon className='h-4 w-4' />
+                <span>add network</span>
+              </button>
             </div>
-          ))}
+          )}
         </div>
       )}
     </div>

@@ -6,7 +6,7 @@ export const encrypt = async (
 ): Promise<Uint8Array> => {
   const enc = new TextEncoder();
   const buffer = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv: nonce },
+    { name: 'AES-GCM', iv: nonce as BufferSource },
     key,
     enc.encode(message),
   );

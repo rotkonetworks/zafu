@@ -25,6 +25,9 @@ const SettingsNumeraires = lazy(() =>
 const SettingsZigner = lazy(() =>
   import('./settings-zigner').then(m => ({ default: m.SettingsZigner })),
 );
+const SettingsNetworkEndpoints = lazy(() =>
+  import('./settings-network-endpoints').then(m => ({ default: m.SettingsNetworkEndpoints })),
+);
 
 const LazyFallback = () => (
   <div className="flex h-full items-center justify-center p-4">
@@ -74,5 +77,9 @@ export const settingsRoutes = [
   {
     path: PopupPath.SETTINGS_ZIGNER,
     element: withSuspense(SettingsZigner),
+  },
+  {
+    path: PopupPath.SETTINGS_NETWORK_ENDPOINTS,
+    element: withSuspense(SettingsNetworkEndpoints),
   },
 ];

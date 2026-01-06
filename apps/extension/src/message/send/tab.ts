@@ -1,10 +1,10 @@
-import { PraxControl } from '../../content-scripts/message/prax-control';
+import { ZignerControl } from '../../content-scripts/message/zigner-control';
 import { uniqueTabs } from '../../senders/unique-tabs';
 import { suppressChromeResponderDroppedError } from '../../utils/chrome-errors';
 
 export const sendTab = async (
   target: chrome.runtime.MessageSender,
-  message: PraxControl,
+  message: ZignerControl,
 ): Promise<null> => {
   const { documentId, tab } = target;
 
@@ -15,7 +15,7 @@ export const sendTab = async (
   }
 
   const response = await chrome.tabs
-    .sendMessage<PraxControl, unknown>(tab.id, message, { documentId })
+    .sendMessage<ZignerControl, unknown>(tab.id, message, { documentId })
     .catch(suppressChromeResponderDroppedError);
 
   switch (response) {
@@ -28,7 +28,7 @@ export const sendTab = async (
   }
 };
 
-export function* sendTabs(targets: Iterable<chrome.runtime.MessageSender>, message: PraxControl) {
+export function* sendTabs(targets: Iterable<chrome.runtime.MessageSender>, message: ZignerControl) {
   for (const target of uniqueTabs(targets)) {
     yield sendTab(target, message);
   }

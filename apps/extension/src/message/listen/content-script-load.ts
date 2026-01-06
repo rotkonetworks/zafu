@@ -1,5 +1,5 @@
-import { PraxConnection } from '../../content-scripts/message/prax-connection';
-import { PraxControl } from '../../content-scripts/message/prax-control';
+import { ZignerConnection } from '../../content-scripts/message/zigner-connection';
+import { ZignerControl } from '../../content-scripts/message/zigner-control';
 import { alreadyApprovedSender } from '../../senders/approve';
 import {
   isPrerenderingExternalSender,
@@ -16,7 +16,7 @@ export const contentScriptLoadListener = (
   // responds with null
   respond: (r: null) => void,
 ): boolean => {
-  if (req !== PraxConnection.Load) {
+  if (req !== ZignerConnection.Load) {
     return false;
   }
 
@@ -32,7 +32,7 @@ const handle = (sender: ValidExternalSender | PrerenderingExternalSender) =>
   alreadyApprovedSender(sender).then(hasApproval => {
     if (hasApproval) {
       // preconnect only the specific document
-      void sendTab(sender, PraxControl.Preconnect);
+      void sendTab(sender, ZignerControl.Preconnect);
     }
 
     // handler is done

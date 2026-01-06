@@ -87,8 +87,23 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
     },
   });
 
-  if (isLoading || error || !balances?.length) {
-    return null;
+  if (isLoading) {
+    return (
+      <div className='flex items-center justify-center py-8 text-xs text-muted-foreground'>
+        Loading...
+      </div>
+    );
+  }
+
+  if (error || !balances?.length) {
+    return (
+      <div className='flex flex-col items-center justify-center gap-1 py-8 text-center'>
+        <span className='text-sm text-muted-foreground'>No assets yet</span>
+        <span className='text-xs text-muted-foreground/70'>
+          Receive funds to get started
+        </span>
+      </div>
+    );
   }
 
   return (

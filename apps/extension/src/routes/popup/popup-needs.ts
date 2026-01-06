@@ -13,11 +13,12 @@ export const needsLogin = async (): Promise<Response | null> => {
 };
 
 export const needsOnboard = async () => {
+  // check keyring vaults (new system) or legacy wallets
+  const vaults = await localExtStorage.get('vaults');
   const wallets = await localExtStorage.get('wallets');
-  const grpcEndpoint = await localExtStorage.get('grpcEndpoint');
-  const frontendUrl = await localExtStorage.get('frontendUrl');
+  const hasWallet = (vaults && vaults.length > 0) || (wallets && wallets.length > 0);
 
-  if (wallets.length && grpcEndpoint !== undefined && frontendUrl !== undefined) {
+  if (hasWallet) {
     return null;
   }
 

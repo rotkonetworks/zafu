@@ -1,14 +1,14 @@
 import { PenumbraRequestFailure } from '@penumbra-zone/client/error';
 import { CRSessionClient } from '@penumbra-zone/transport-chrome/session-client';
-import { isPraxConnection } from './message/prax-connection';
-import { isPraxControl, PraxControl } from './message/prax-control';
-import { PraxMessageEvent, unwrapPraxMessageEvent } from './message/prax-message-event';
+import { isZignerConnection } from './message/zigner-connection';
+import { isZignerControl, ZignerControl } from './message/zigner-control';
+import { ZignerMessageEvent, unwrapZignerMessageEvent } from './message/zigner-message-event';
 import { listenBackground, sendBackground } from './message/send-background';
 import { listenWindow, sendWindow } from './message/send-window';
 
-const praxDocumentListener = (ev: PraxMessageEvent): void => {
-  const request = unwrapPraxMessageEvent(ev);
-  if (isPraxConnection(request)) {
+const zignerDocumentListener = (ev: ZignerMessageEvent): void => {
+  const request = unwrapZignerMessageEvent(ev);
+  if (isZignerConnection(request)) {
     ev.stopImmediatePropagation();
     void sendBackground(request).then(response => {
       if (response != null) {
@@ -18,21 +18,21 @@ const praxDocumentListener = (ev: PraxMessageEvent): void => {
   }
 };
 
-const praxExtensionListener = (message: unknown, responder: (response: null) => void): boolean => {
-  if (!isPraxControl(message)) {
+const zignerExtensionListener = (message: unknown, responder: (response: null) => void): boolean => {
+  if (!isZignerControl(message)) {
     return false;
   }
 
   switch (message) {
-    case PraxControl.Init:
-      sendWindow<MessagePort>(CRSessionClient.init(PRAX));
+    case ZignerControl.Init:
+      sendWindow<MessagePort>(CRSessionClient.init(ZIGNER));
       break;
-    case PraxControl.End:
-      CRSessionClient.end(PRAX);
-      sendWindow<PraxControl>(PraxControl.End);
+    case ZignerControl.End:
+      CRSessionClient.end(ZIGNER);
+      sendWindow<ZignerControl>(ZignerControl.End);
       break;
-    case PraxControl.Preconnect:
-      sendWindow<PraxControl>(PraxControl.Preconnect);
+    case ZignerControl.Preconnect:
+      sendWindow<ZignerControl>(ZignerControl.Preconnect);
       break;
   }
   responder(null);
@@ -40,5 +40,5 @@ const praxExtensionListener = (message: unknown, responder: (response: null) => 
   return true;
 };
 
-listenWindow(undefined, praxDocumentListener);
-listenBackground<null>(undefined, praxExtensionListener);
+listenWindow(undefined, zignerDocumentListener);
+listenBackground<null>(undefined, zignerExtensionListener);

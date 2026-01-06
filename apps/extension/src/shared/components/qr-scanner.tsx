@@ -100,9 +100,9 @@ export const QrScanner = ({
   };
 
   return (
-    <div className='fixed inset-0 z-50 bg-black flex flex-col'>
+    <div className='fixed inset-0 z-50 bg-black flex flex-col overflow-hidden'>
       {/* Header */}
-      <div className='flex items-center justify-between p-4 bg-black/80'>
+      <div className='flex-none flex items-center justify-between p-4 bg-black/80'>
         <div>
           <h2 className='text-lg font-bold text-white'>{title}</h2>
           <p className='text-sm text-gray-400'>{description}</p>
@@ -116,10 +116,10 @@ export const QrScanner = ({
       </div>
 
       {/* Scanner viewport */}
-      <div className='flex-1 relative'>
+      <div className='flex-1 relative min-h-0 overflow-hidden'>
         <div
           id='qr-scanner-viewport'
-          className='absolute inset-0'
+          className='absolute inset-0 overflow-hidden [&>video]:!object-cover [&>video]:!h-full [&>video]:!w-full'
         />
 
         {/* Scanning overlay with frame */}
@@ -174,7 +174,7 @@ export const QrScanner = ({
 
       {/* Bottom hint */}
       {isScanning && (
-        <div className='p-4 bg-black/80 text-center'>
+        <div className='flex-none p-4 bg-black/80 text-center'>
           <p className='text-sm text-gray-400'>
             Position the QR code within the frame
           </p>

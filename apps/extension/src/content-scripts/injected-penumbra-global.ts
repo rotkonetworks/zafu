@@ -24,9 +24,9 @@ import { createPenumbraStateEvent } from '@penumbra-zone/client/event';
 import type { PenumbraProvider } from '@penumbra-zone/client/provider';
 import { PenumbraState } from '@penumbra-zone/client/state';
 import { PenumbraSymbol } from '@penumbra-zone/client/symbol';
-import { PraxConnection } from './message/prax-connection';
-import { PraxControl } from './message/prax-control';
-import { PraxMessageEvent, unwrapPraxMessageEvent } from './message/prax-message-event';
+import { ZignerConnection } from './message/zigner-connection';
+import { ZignerControl } from './message/zigner-control';
+import { ZignerMessageEvent, unwrapZignerMessageEvent } from './message/zigner-message-event';
 import { listenWindow, sendWindow } from './message/send-window';
 
 const isPenumbraRequestFailure = (data: unknown): data is PenumbraRequestFailure =>
@@ -38,15 +38,15 @@ const prerenderComplete = new Promise<void>(resolve =>
     : resolve(),
 );
 
-class PraxInjection {
-  private static singleton?: PraxInjection = new PraxInjection();
+class ZignerInjection {
+  private static singleton?: ZignerInjection = new ZignerInjection();
 
   public static get penumbra() {
-    return new PraxInjection().injection;
+    return new ZignerInjection().injection;
   }
 
   private presentState: PenumbraState = PenumbraState.Disconnected;
-  private manifestUrl = `${PRAX_ORIGIN}/manifest.json`;
+  private manifestUrl = `${ZIGNER_ORIGIN}/manifest.json`;
   private stateEvents = new EventTarget();
 
   private readonly injection: Readonly<PenumbraProvider> = Object.freeze({
@@ -60,27 +60,27 @@ class PraxInjection {
   });
 
   private constructor() {
-    if (PraxInjection.singleton) {
-      return PraxInjection.singleton;
+    if (ZignerInjection.singleton) {
+      return ZignerInjection.singleton;
     }
 
     // ambient end listener
-    const ambientEndListener = (ev: PraxMessageEvent): void => {
-      const content = unwrapPraxMessageEvent(ev);
-      if (content === PraxControl.End) {
+    const ambientEndListener = (ev: ZignerMessageEvent): void => {
+      const content = unwrapZignerMessageEvent(ev);
+      if (content === ZignerControl.End) {
         this.setState(PenumbraState.Disconnected);
       }
     };
     listenWindow(undefined, ambientEndListener);
 
     const listenAc = new AbortController();
-    const preconnectListener = (ev: PraxMessageEvent): void => {
-      const content = unwrapPraxMessageEvent(ev);
-      if (content !== PraxConnection.Load) {
+    const preconnectListener = (ev: ZignerMessageEvent): void => {
+      const content = unwrapZignerMessageEvent(ev);
+      if (content !== ZignerConnection.Load) {
         // anything other than our own announcement will remove the listener
         listenAc.abort();
 
-        if (content === PraxControl.Preconnect) {
+        if (content === ZignerControl.Preconnect) {
           ev.stopImmediatePropagation();
           this.setState(PenumbraState.Connected);
         } else if (globalThis.__DEV__) {
@@ -91,13 +91,13 @@ class PraxInjection {
     listenWindow(listenAc.signal, preconnectListener);
 
     // announce load (does not need to wait for prerendering)
-    sendWindow<PraxConnection>(PraxConnection.Load);
+    sendWindow<ZignerConnection>(ZignerConnection.Load);
   }
 
   private setState(state: PenumbraState) {
     if (this.presentState !== state) {
       this.presentState = state;
-      this.stateEvents.dispatchEvent(createPenumbraStateEvent(PRAX_ORIGIN, this.presentState));
+      this.stateEvents.dispatchEvent(createPenumbraStateEvent(ZIGNER_ORIGIN, this.presentState));
     }
   }
 
@@ -106,13 +106,13 @@ class PraxInjection {
       this.setState(PenumbraState.Pending);
     }
     const attempt = this.listenPortMessage();
-    void prerenderComplete.then(() => sendWindow<PraxConnection>(PraxConnection.Connect));
+    void prerenderComplete.then(() => sendWindow<ZignerConnection>(ZignerConnection.Connect));
     return attempt;
   }
 
   private postDisconnectRequest() {
     const attempt = this.listenEndMessage();
-    void prerenderComplete.then(() => sendWindow<PraxConnection>(PraxConnection.Disconnect));
+    void prerenderComplete.then(() => sendWindow<ZignerConnection>(ZignerConnection.Disconnect));
     return attempt;
   }
 
@@ -120,8 +120,8 @@ class PraxInjection {
     const connection = Promise.withResolvers<MessagePort>();
 
     const listenAc = new AbortController();
-    const portListener = (ev: PraxMessageEvent): void => {
-      const content = unwrapPraxMessageEvent(ev);
+    const portListener = (ev: ZignerMessageEvent): void => {
+      const content = unwrapZignerMessageEvent(ev);
       if (content instanceof MessagePort) {
         ev.stopImmediatePropagation();
         connection.resolve(content);
@@ -144,9 +144,9 @@ class PraxInjection {
     const disconnection = Promise.withResolvers<void>();
 
     const listenAc = new AbortController();
-    const endListener = (ev: PraxMessageEvent): void => {
-      const content = unwrapPraxMessageEvent(ev);
-      if (content === PraxControl.End) {
+    const endListener = (ev: ZignerMessageEvent): void => {
+      const content = unwrapZignerMessageEvent(ev);
+      if (content === ZignerControl.End) {
         ev.stopImmediatePropagation();
         disconnection.resolve();
       } else if (isPenumbraRequestFailure(content)) {
@@ -165,14 +165,14 @@ class PraxInjection {
   }
 }
 
-// inject prax
+// inject zigner
 Object.defineProperty(
   window[PenumbraSymbol] ??
     // create the global if not present
     Object.defineProperty(window, PenumbraSymbol, { value: {}, writable: false })[PenumbraSymbol],
-  PRAX_ORIGIN,
+  ZIGNER_ORIGIN,
   {
-    value: PraxInjection.penumbra,
+    value: ZignerInjection.penumbra,
     writable: false,
     enumerable: true,
   },

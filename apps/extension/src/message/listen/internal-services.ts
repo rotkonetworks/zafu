@@ -1,7 +1,7 @@
 import { AssetId } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { Services } from '@repo/context';
 import {
-  isPraxServicesMessage,
+  isZignerServicesMessage,
   ServicesMessage,
   type ClearCacheProgress,
   type ClearCacheStep,
@@ -30,7 +30,7 @@ export const internalServiceListener = (
   sender: chrome.runtime.MessageSender,
   respond: (response?: unknown) => void,
 ): boolean => {
-  if (!isValidInternalSender(sender) || !isPraxServicesMessage(req)) {
+  if (!isValidInternalSender(sender) || !isZignerServicesMessage(req)) {
     return false;
   }
 

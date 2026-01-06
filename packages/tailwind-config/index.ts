@@ -1,6 +1,7 @@
 import type { Config } from 'tailwindcss';
 import plugin from 'tailwindcss/plugin';
-import tailwindCssAnimatePlugin from 'tailwindcss-animate';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const tailwindCssAnimatePlugin = require('tailwindcss-animate');
 
 export default {
   content: [
@@ -100,6 +101,19 @@ export default {
         brown: {
           DEFAULT: 'var(--brown)',
         },
+        /* zigner brand colors */
+        zigner: {
+          gold: 'var(--zigner-gold)',
+          'gold-light': 'var(--zigner-gold-light)',
+          'gold-dark': 'var(--zigner-gold-dark)',
+          dark: 'var(--zigner-dark)',
+          darker: 'var(--zigner-darker)',
+        },
+        /* semantic */
+        success: 'var(--success)',
+        warning: 'var(--warning)',
+        error: 'var(--error)',
+        info: 'var(--info)',
       },
       borderRadius: {
         lg: 'var(--radius)',

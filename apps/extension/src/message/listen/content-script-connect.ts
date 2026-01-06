@@ -1,8 +1,8 @@
 import { Code, ConnectError } from '@connectrpc/connect';
 import { PenumbraRequestFailure } from '@penumbra-zone/client';
 import { UserChoice } from '@repo/storage-chrome/records';
-import { PraxConnection } from '../../content-scripts/message/prax-connection';
-import { PraxControl } from '../../content-scripts/message/prax-control';
+import { ZignerConnection } from '../../content-scripts/message/zigner-connection';
+import { ZignerControl } from '../../content-scripts/message/zigner-control';
 import { approveSender } from '../../senders/approve';
 import { isValidExternalSender, ValidExternalSender } from '../../senders/external';
 import { sendTab } from '../send/tab';
@@ -14,7 +14,7 @@ export const contentScriptConnectListener = (
   // responds with null or an enumerated failure
   respond: (r: null | PenumbraRequestFailure) => void,
 ): boolean => {
-  if (req !== PraxConnection.Connect) {
+  if (req !== ZignerConnection.Connect) {
     return false;
   }
 
@@ -32,7 +32,7 @@ const handle = (sender: ValidExternalSender) =>
       // origin is already known, or popup choice was made
       if (status === UserChoice.Approved) {
         // init only the specific document
-        void sendTab(sender, PraxControl.Init);
+        void sendTab(sender, ZignerControl.Init);
         return null; // no failure
       } else {
         // any other choice is a denial

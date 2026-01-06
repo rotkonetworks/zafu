@@ -1,21 +1,26 @@
 import { useStore } from '../state';
-import { passwordSelector } from '../state/password';
 import { generateSelector } from '../state/seed-phrase/generate';
 import { importSelector } from '../state/seed-phrase/import';
-import { walletsSelector } from '../state/wallets';
+import { keyRingSelector } from '../state/keyring';
 
-// Saves hashed password, uses that hash to encrypt the seed phrase
-// and then saves that to session + local storage
+/**
+ * creates a new wallet using the keyring system
+ * stores mnemonic encrypted, networks are derived lazily
+ */
 export const useAddWallet = () => {
-  const { setPassword } = useStore(passwordSelector);
   const { phrase: generatedPhrase } = useStore(generateSelector);
   const { phrase: importedPhrase } = useStore(importSelector);
-  const { addWallet } = useStore(walletsSelector);
+  const { setPassword, newMnemonicKey } = useStore(keyRingSelector);
 
   return async (plaintextPassword: string) => {
-    // Determine which routes it came through to get here
+    // determine which route user came through
     const seedPhrase = generatedPhrase.length ? generatedPhrase : importedPhrase;
+    const mnemonic = seedPhrase.join(' ');
+
+    // set master password (creates encryption key)
     await setPassword(plaintextPassword);
-    await addWallet({ label: 'Wallet #1', seedPhrase });
+
+    // store mnemonic in encrypted vault (network-agnostic)
+    await newMnemonicKey(mnemonic, 'Wallet 1');
   };
 };

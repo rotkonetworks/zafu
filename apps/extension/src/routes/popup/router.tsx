@@ -19,6 +19,8 @@ const OriginApproval = lazy(() =>
 const StakePage = lazy(() => import('./stake').then(m => ({ default: m.StakePage })));
 const SwapPage = lazy(() => import('./swap').then(m => ({ default: m.SwapPage })));
 const HistoryPage = lazy(() => import('./history').then(m => ({ default: m.HistoryPage })));
+const SendPage = lazy(() => import('./send').then(m => ({ default: m.SendPage })));
+const ReceivePage = lazy(() => import('./receive').then(m => ({ default: m.ReceivePage })));
 
 // suspense fallback for lazy routes
 const LazyFallback = () => (
@@ -69,6 +71,24 @@ export const popupRoutes: RouteObject[] = [
           </Suspense>
         ),
         children: settingsRoutes,
+      },
+
+      // Send/Receive
+      {
+        path: PopupPath.SEND,
+        element: (
+          <Suspense fallback={<LazyFallback />}>
+            <SendPage />
+          </Suspense>
+        ),
+      },
+      {
+        path: PopupPath.RECEIVE,
+        element: (
+          <Suspense fallback={<LazyFallback />}>
+            <ReceivePage />
+          </Suspense>
+        ),
       },
 
       // Auth

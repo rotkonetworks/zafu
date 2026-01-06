@@ -1,7 +1,7 @@
 export type ValidInternalSender = chrome.runtime.MessageSender & {
-  id: typeof PRAX;
-  url?: `${typeof PRAX_ORIGIN}/${string}`;
-  origin?: typeof PRAX_ORIGIN;
+  id: typeof ZIGNER;
+  url?: `${typeof ZIGNER_ORIGIN}/${string}`;
+  origin?: typeof ZIGNER_ORIGIN;
 };
 
 /**
@@ -27,18 +27,18 @@ export function assertValidInternalSender(
   sender?: chrome.runtime.MessageSender,
 ): asserts sender is ValidInternalSender {
   // all internal senders will possess the extension id
-  if (sender?.id !== PRAX) {
-    throw new Error(`Sender id is not ${PRAX}`, { cause: sender });
+  if (sender?.id !== ZIGNER) {
+    throw new Error(`Sender id is not ${ZIGNER}`, { cause: sender });
   }
   // but so will content scripts, so there's more to check.
 
   // all extension pages have the extension origin,
   if (sender.origin) {
     // check the origin
-    if (sender.origin === PRAX_ORIGIN) {
+    if (sender.origin === ZIGNER_ORIGIN) {
       return; // valid
     }
-    throw new Error(`Sender origin is not ${PRAX_ORIGIN}`, { cause: sender });
+    throw new Error(`Sender origin is not ${ZIGNER_ORIGIN}`, { cause: sender });
   }
   // but extension workers don't have any origin, so there's more to check.
 
@@ -48,10 +48,10 @@ export function assertValidInternalSender(
   // - and aren't in a tab
   if (!sender.documentId && !sender.tab && sender.url) {
     // check the url's origin
-    if (new URL(sender.url).origin === PRAX_ORIGIN) {
+    if (new URL(sender.url).origin === ZIGNER_ORIGIN) {
       return; //valid
     }
-    throw new Error(`Sender URL is from ${PRAX_ORIGIN}`, { cause: sender });
+    throw new Error(`Sender URL is from ${ZIGNER_ORIGIN}`, { cause: sender });
   }
 
   // anything else

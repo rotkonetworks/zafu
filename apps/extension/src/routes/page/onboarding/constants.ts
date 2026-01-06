@@ -8,4 +8,4 @@ export const DEFAULT_GRPC = 'https://penumbra-1.radiantcommons.com';
 export const DEFAULT_FRONTEND = 'https://dex.penumbra.zone';
 
 // Define a canonical default landing page.
-export const DEFAULT_LANDING_PAGE = 'https://praxwallet.com/welcome';
+export const DEFAULT_LANDING_PAGE = 'https://zigner.dev/welcome';

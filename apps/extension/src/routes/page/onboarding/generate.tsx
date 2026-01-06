@@ -4,7 +4,7 @@ import { useStore } from '../../../state';
 import { generateSelector } from '../../../state/seed-phrase/generate';
 import { usePageNav } from '../../../utils/navigate';
 import { SEED_PHRASE_ORIGIN } from './password/types';
-import { navigateToPasswordPage } from './password/utils';
+import { navigateToNetworkSelection } from './password/utils';
 
 export const GenerateSeedPhrase = () => {
   const navigate = usePageNav();
@@ -19,7 +19,7 @@ export const GenerateSeedPhrase = () => {
 
   useEffect(() => {
     if (phrase.length === Number(SeedPhraseLength.TWELVE_WORDS)) {
-      navigateToPasswordPage(navigate, SEED_PHRASE_ORIGIN.NEWLY_GENERATED);
+      navigateToNetworkSelection(navigate, SEED_PHRASE_ORIGIN.NEWLY_GENERATED);
     }
   }, [phrase.length, navigate]);
 

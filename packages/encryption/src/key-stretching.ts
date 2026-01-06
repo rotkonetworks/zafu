@@ -13,7 +13,7 @@ export const keyStretchingHash = async (password: string, salt: Uint8Array): Pro
   return crypto.subtle.deriveKey(
     {
       name: 'PBKDF2',
-      salt,
+      salt: salt as BufferSource,
       iterations: 210000,
       hash: 'SHA-512',
     },

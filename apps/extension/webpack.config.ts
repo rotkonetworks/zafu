@@ -15,10 +15,10 @@ import WatchExternalFilesPlugin from 'webpack-watch-external-files-plugin';
 
 export default ({
   WEBPACK_WATCH = false,
-  PRAX_ID,
+  ZIGNER_ID,
 }: {
   ['WEBPACK_WATCH']?: boolean;
-  PRAX_ID: string;
+  ZIGNER_ID: string;
 }): webpack.Configuration[] => {
   const keysPackage = path.dirname(url.fileURLToPath(import.meta.resolve('@penumbra-zone/keys')));
   // Resolve wasm package via a known export, then go up to package root
@@ -51,13 +51,13 @@ export default ({
 
   /*
    * The DefinePlugin replaces specified tokens with specified values.
-   * - These should be declared in `prax.d.ts` for TypeScript awareness.
+   * - These should be declared in `zigner.d.ts` for TypeScript awareness.
    * - `process.env.NODE_ENV` and other env vars are implicitly defined.
    * - Replacement is literal, so the values must be stringified.
    */
   const DefinePlugin = new webpack.DefinePlugin({
-    PRAX: JSON.stringify(PRAX_ID),
-    PRAX_ORIGIN: JSON.stringify(`chrome-extension://${PRAX_ID}`),
+    ZIGNER: JSON.stringify(ZIGNER_ID),
+    ZIGNER_ORIGIN: JSON.stringify(`chrome-extension://${ZIGNER_ID}`),
     'globalThis.__DEV__': JSON.stringify(process.env['NODE_ENV'] !== 'production'),
     'globalThis.__ASSERT_ROOT__': JSON.stringify(false),
   });

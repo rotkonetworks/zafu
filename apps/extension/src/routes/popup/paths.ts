@@ -28,4 +28,5 @@ export enum PopupPath {
   SETTINGS_NUMERAIRES = '/settings/numeraires',
   SETTINGS_ZIGNER = '/settings/zigner',
   SETTINGS_NETWORKS = '/settings/networks',
+  SETTINGS_NETWORK_ENDPOINTS = '/settings/network-endpoints',
 }

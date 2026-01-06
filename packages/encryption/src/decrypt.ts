@@ -6,6 +6,10 @@ export const decrypt = async (
   key: CryptoKey,
 ): Promise<string> => {
   const dec = new TextDecoder();
-  const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: nonce }, key, ciphertext);
+  const decrypted = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: nonce as BufferSource },
+    key,
+    ciphertext as BufferSource,
+  );
   return dec.decode(decrypted);
 };

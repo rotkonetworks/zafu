@@ -20,7 +20,7 @@
     },
     "build": {
       "dependsOn": ["^build"],
-      "env": ["PRAX"],
+      "env": ["ZIGNER"],
       "outputs": ["dist/**"]
     },
     "clean": {

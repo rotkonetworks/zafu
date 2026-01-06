@@ -12,12 +12,23 @@
     ".": "./src/wallet.ts",
     "./airgap-signer": "./src/airgap-signer.ts",
     "./airgap-signer-ui": "./src/airgap-signer-ui.ts",
-    "./zigner-signer": "./src/zigner-signer.ts"
+    "./zigner-signer": "./src/zigner-signer.ts",
+    "./networks": "./src/networks/index.ts",
+    "./networks/penumbra/adapter": "./src/networks/penumbra/adapter.ts",
+    "./networks/zcash/adapter": "./src/networks/zcash/adapter.ts",
+    "./networks/polkadot/adapter": "./src/networks/polkadot/adapter.ts",
+    "./networks/cosmos/adapter": "./src/networks/cosmos/adapter.ts"
   },
   "dependencies": {
+    "@cosmjs/amino": "^0.38.1",
+    "@cosmjs/encoding": "^0.38.1",
+    "@cosmjs/proto-signing": "^0.38.1",
+    "@cosmjs/stargate": "^0.32.4",
+    "@noble/hashes": "^1.3.3",
     "@penumbra-zone/bech32m": "18.0.0",
     "@penumbra-zone/protobuf": "11.0.0",
-    "@noble/hashes": "^1.3.3",
+    "@polkadot-api/merkleize-metadata": "^1.1.27",
+    "polkadot-api": "^1.23.1",
     "qrcode": "^1.5.3"
   },
   "devDependencies": {

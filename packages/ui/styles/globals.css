@@ -4,86 +4,97 @@
 
 @layer base {
   :root {
-    --background: 0, 0%, 0%; /* black bg */
-    --foreground: 0, 4%, 73%;
+    /* zigner dark theme - zafu blue + zcash yellow, 90s volvo pragmatic */
+    --background: 220 20% 7%;
+    --foreground: 210 15% 85%;
 
-    --muted: 0, 0%, 100%; /* white text */
-    --muted-foreground: 0, 4%, 73%; /* #BDB8B8 text*/
+    /* muted text - visible but subdued */
+    --muted: 220 15% 14%;
+    --muted-foreground: 210 10% 55%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    /* popover/dropdown - slightly lighter than bg */
+    --popover: 220 18% 10%;
+    --popover-foreground: 210 15% 85%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    /* card - subtle elevation */
+    --card: 220 18% 9%;
+    --card-foreground: 210 15% 85%;
 
-    --border: 0, 2%, 21%; /* border as light-brown */
-    --border-secondary: rgba(75, 75, 75, 0.5); /* border as light-brown */
-    --input: 214.3 31.8% 91.4%;
+    /* border - visible, pragmatic */
+    --border: 220 12% 18%;
+    --border-secondary: 220 12% 14%;
+    --input: 220 18% 12%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* primary - zcash yellow/gold */
+    --primary: 45 95% 50%;
+    --primary-foreground: 220 20% 7%;
 
-    --secondary: 0, 2%, 21%; /* secondary btn bg  */
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    /* secondary - zafu blue */
+    --secondary: 210 60% 45%;
+    --secondary-foreground: 210 15% 95%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    /* accent - zafu blue tint for hover states */
+    --accent: 210 40% 18%;
+    --accent-foreground: 210 15% 90%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    /* status colors */
+    --destructive: 0 65% 50%;
+    --destructive-foreground: 0 0% 100%;
 
-    --ring: 215 20.2% 65.1%;
+    --ring: 45 95% 50%;
+    --radius: 0; /* no rounded corners - 90s pragmatic */
 
-    --radius: 0.5rem;
+    /* brand colors */
+    --zigner-gold: #f4b728; /* zcash yellow */
+    --zigner-gold-light: #fcd34d;
+    --zigner-gold-dark: #b8860b;
+    --zafu-blue: #3b82f6; /* zafu cushion blue */
+    --zafu-blue-light: #60a5fa;
+    --zafu-blue-dark: #1d4ed8;
+    --zigner-dark: #0f1419;
+    --zigner-darker: #0a0d10;
 
-    --text-secondary: 0, 0%, 100%;
+    /* semantic colors */
+    --success: #22c55e;
+    --warning: #f4b728;
+    --error: #dc2626;
+    --info: #3b82f6;
 
-    /* Penumbra base color palette */
-    --charcoal: #1d1d1d;
-    --charcoal-secondary: #141010;
+    /* legacy compat */
+    --charcoal: #0f1419;
+    --charcoal-secondary: #0a0d10;
     --teal: #629994;
     --sand: #847a5b;
     --rust: #8d5728;
-    --teal-700: rgba(139, 228, 217, 0.7);
-    --sand-700: rgba(200, 184, 128, 0.7);
-    --rust-600: rgba(255, 144, 47, 0.6);
-    --teal-420: rgba(139, 228, 217, 0.42);
-    --sand-420: rgba(200, 184, 128, 0.42);
-    --rust-420: rgba(255, 144, 47, 0.36);
-    --black: #000000;
-    --green: #23be4e;
-    --red: #af4545;
-    --light-brown: #363434;
-    --light-grey: #e3e3e3;
-    --brown: rgba(29, 29, 29, 0.7);
+    --green: #22c55e;
+    --red: #dc2626;
+    --light-brown: #1e2328;
+    --light-grey: #d1d5db;
+    --brown: rgba(15, 20, 25, 0.8);
   }
 
+  /* popup container */
   #popup-root {
     min-width: 400px;
     min-height: 600px;
     height: 100%;
     display: flex;
     flex-direction: column;
-    @apply bg-charcoal;
+    background: hsl(var(--background));
   }
 
+  /* scrollbar - minimal */
   ::-webkit-scrollbar {
-    width: 4px;
+    width: 3px;
   }
-
-  /* Track */
   ::-webkit-scrollbar-track {
-    background: rgba(0, 0, 0, 0.25);
+    background: transparent;
   }
-
-  /* Handle */
   ::-webkit-scrollbar-thumb {
-    background: #888;
+    background: hsl(var(--border));
   }
-
-  /* Handle on hover */
   ::-webkit-scrollbar-thumb:hover {
-    background: #555;
+    background: hsl(var(--muted-foreground));
   }
 
   * {
@@ -91,61 +102,119 @@
   }
 
   body {
-    @apply bg-background text-muted min-h-screen text-[15px] leading-[22px] font-normal font-body;
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+    font-size: 13px;
+    line-height: 1.5;
+    letter-spacing: -0.01em;
   }
 
-  @font-face {
-    font-family: 'Faktum';
-    font-weight: 700;
-    src: url('../fonts/Faktum-Bold.ttf') format('truetype');
+  /* ensure text is always visible */
+  h1, h2, h3, h4, h5, h6 {
+    @apply text-foreground font-medium;
   }
 
-  @font-face {
-    font-family: 'Faktum';
-    font-weight: 500;
-    src: url('../fonts/Faktum-Medium.ttf') format('truetype');
+  p {
+    @apply text-foreground;
   }
 
-  @font-face {
-    font-family: 'Faktum';
-    font-weight: 600;
-    src: url('../fonts/Faktum-SemiBold.ttf') format('truetype');
+  a {
+    @apply text-secondary hover:text-secondary/80 transition-colors duration-75;
   }
 
+  /* form elements - sharp, no radius */
+  input, textarea, select {
+    @apply bg-input text-foreground placeholder:text-muted-foreground rounded-none;
+  }
+
+  /* buttons - no radius, pragmatic */
+  button {
+    @apply rounded-none;
+  }
+
+  /* code/mono */
+  code, pre {
+    font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+    @apply text-foreground;
+  }
+
+  /* custom fonts - fallback to system */
   @font-face {
-    font-family: 'Devanagari Sangam';
+    font-family: 'Inter';
     font-weight: 400;
-    src: url('../fonts/Devanagari-Sangam-Regular.ttf') format('truetype');
+    src: local('Inter'), local('Inter-Regular');
   }
-
   @font-face {
-    font-family: 'Devanagari Sangam';
-    font-weight: 700;
-    src: url('../fonts/Devanagari-Sangam-Bold.ttf') format('truetype');
+    font-family: 'Inter';
+    font-weight: 500;
+    src: local('Inter Medium'), local('Inter-Medium');
   }
-
+  @font-face {
+    font-family: 'Inter';
+    font-weight: 600;
+    src: local('Inter SemiBold'), local('Inter-SemiBold');
+  }
   @font-face {
     font-family: 'Iosevka Term';
     font-weight: 400;
     src: url('../fonts/iosevka-term-ss03-regular.woff2') format('woff2');
   }
-
   @font-face {
     font-family: 'Iosevka Term';
     font-style: italic;
     font-weight: 400;
     src: url('../fonts/iosevka-term-ss03-italic.woff2') format('woff2');
   }
+}
 
-  .background-size-200 {
-    background-size: 200%;
+@layer utilities {
+  /* text contrast helpers */
+  .text-high-contrast {
+    @apply text-foreground;
+  }
+  .text-medium-contrast {
+    @apply text-muted-foreground;
+  }
+  .text-low-contrast {
+    @apply text-muted-foreground/60;
   }
 
-  .border-mask {
-    mask:
-      linear-gradient(#fff 0 0) content-box,
-      linear-gradient(#fff 0 0);
-    mask-composite: xor;
-    mask-composite: exclude;
+  /* brand utilities */
+  .text-zigner-gold {
+    color: var(--zigner-gold);
+  }
+  .bg-zigner-gold {
+    background-color: var(--zigner-gold);
+  }
+  .border-zigner-gold {
+    border-color: var(--zigner-gold);
+  }
+  .text-zafu-blue {
+    color: var(--zafu-blue);
+  }
+  .bg-zafu-blue {
+    background-color: var(--zafu-blue);
+  }
+  .border-zafu-blue {
+    border-color: var(--zafu-blue);
+  }
+
+  /* gradient backgrounds */
+  .bg-card-gradient {
+    background: linear-gradient(
+      135deg,
+      hsl(var(--card)) 0%,
+      hsl(var(--card) / 0.9) 100%
+    );
+  }
+
+  /* focus ring - pragmatic */
+  .focus-ring {
+    @apply outline-none ring-1 ring-primary ring-offset-1 ring-offset-background;
+  }
+
+  /* 90s volvo pragmatic - sharp edges everywhere */
+  .sharp {
+    @apply rounded-none;
   }
 }

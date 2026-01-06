@@ -14,7 +14,7 @@ import { importSelector } from '../../../state/seed-phrase/import';
 import { usePageNav } from '../../../utils/navigate';
 import { ImportForm } from '../../../shared/containers/import-form';
 import { FormEvent, MouseEvent } from 'react';
-import { navigateToPasswordPage } from './password/utils';
+import { navigateToNetworkSelection } from './password/utils';
 import { SEED_PHRASE_ORIGIN } from './password/types';
 
 export const ImportSeedPhrase = () => {
@@ -23,7 +23,7 @@ export const ImportSeedPhrase = () => {
 
   const handleSubmit = (event: MouseEvent | FormEvent) => {
     event.preventDefault();
-    navigateToPasswordPage(navigate, SEED_PHRASE_ORIGIN.IMPORTED);
+    navigateToNetworkSelection(navigate, SEED_PHRASE_ORIGIN.IMPORTED);
   };
 
   return (

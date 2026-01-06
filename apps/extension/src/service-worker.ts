@@ -129,12 +129,12 @@ const handler = await backOff(() => initHandler(), {
   numOfAttempts: Infinity,
   maxDelay: 20_000, // 20 seconds
   retry: (e, attemptNumber) => {
-    console.log("Prax couldn't start wallet services", attemptNumber, e);
+    console.log("zigner couldn't start wallet services", attemptNumber, e);
     return true;
   },
 });
 
-CRSessionManager.init(PRAX, handler, validateSessionPort);
+CRSessionManager.init(ZIGNER, handler, validateSessionPort);
 
 // listen for content script activity
 chrome.runtime.onMessage.addListener(contentScriptConnectListener);

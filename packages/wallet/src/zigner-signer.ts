@@ -5,9 +5,9 @@
  * with a Zigner (air-gapped phone) cold wallet.
  *
  * QR Code Types:
- * - 0x01: FVK Export (Zigner → Prax) - Import viewing key
- * - 0x10: Transaction (Prax → Zigner) - Send tx to sign
- * - 0x10: Authorization (Zigner → Prax) - Receive signatures
+ * - 0x01: FVK Export (Zigner → zigner-web) - Import viewing key
+ * - 0x10: Transaction (zigner-web → Zigner) - Send tx to sign
+ * - 0x10: Authorization (Zigner → zigner-web) - Receive signatures
  */
 
 import {

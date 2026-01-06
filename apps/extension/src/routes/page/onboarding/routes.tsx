@@ -10,6 +10,9 @@ const ImportSeedPhrase = lazy(() =>
   import('./import').then(m => ({ default: m.ImportSeedPhrase })),
 );
 const ImportZigner = lazy(() => import('./import-zigner').then(m => ({ default: m.ImportZigner })));
+const SelectNetworks = lazy(() =>
+  import('./select-networks').then(m => ({ default: m.SelectNetworks })),
+);
 const SetPassword = lazy(() => import('./password').then(m => ({ default: m.SetPassword })));
 const OnboardingSuccess = lazy(() =>
   import('./success').then(m => ({ default: m.OnboardingSuccess })),
@@ -43,6 +46,10 @@ export const onboardingRoutes = [
   {
     path: PagePath.IMPORT_ZIGNER,
     element: withSuspense(ImportZigner),
+  },
+  {
+    path: PagePath.SELECT_NETWORKS,
+    element: withSuspense(SelectNetworks),
   },
   {
     path: PagePath.SET_PASSWORD,

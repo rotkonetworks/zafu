@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+/* Zafu minimalistic theme */
+@theme {
+  --font-body: Arial, Helvetica, sans-serif;
+  --font-headline: Arial, Helvetica, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", "Courier New", monospace;
+
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --radius-full: 0;
+
+  /* Light mode accent */
+  --color-accent-light: #000066;
+  --color-accent-light-50: #e6e6f2;
+  --color-accent-light-100: #ccccdf;
+  --color-accent-light-200: #9999bf;
+  --color-accent-light-300: #66669f;
+  --color-accent-light-400: #333380;
+  --color-accent-light-500: #000066;
+  --color-accent-light-600: #000052;
+  --color-accent-light-700: #00003d;
+  --color-accent-light-800: #000029;
+  --color-accent-light-900: #000014;
+
+  /* Dark mode accent */
+  --color-accent-dark: #f4a31e;
+  --color-accent-dark-50: #fef6e6;
+  --color-accent-dark-100: #fdeacc;
+  --color-accent-dark-200: #fbd699;
+  --color-accent-dark-300: #f8c166;
+  --color-accent-dark-400: #f6ad33;
+  --color-accent-dark-500: #f4a31e;
+  --color-accent-dark-600: #c4830e;
+  --color-accent-dark-700: #936200;
+  --color-accent-dark-800: #624100;
+  --color-accent-dark-900: #312100;
+
+}
+
+/* Custom utilities */
+@utility grid-std-spacing {
+  gap: 1.5rem;
+  @media (min-width: 768px) {
+    gap: 1rem;
+  }
+  @media (min-width: 1280px) {
+    gap: 1.25rem;
+  }
+}
+
+@utility background-size-200 {
+  background-size: 200%;
+}
+
+@utility border-mask {
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: xor;
+  mask-composite: exclude;
+}

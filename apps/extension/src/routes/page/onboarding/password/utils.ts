@@ -16,6 +16,12 @@ export const getSeedPhraseOrigin = (location: Location): SEED_PHRASE_ORIGIN => {
   return SEED_PHRASE_ORIGIN.IMPORTED;
 };
 
+/** navigate to network selection (which then goes to password) */
+export const navigateToNetworkSelection = (
+  nav: ReturnType<typeof usePageNav>,
+  origin: SEED_PHRASE_ORIGIN,
+) => nav(PagePath.SELECT_NETWORKS, { state: { origin } });
+
 export const navigateToPasswordPage = (
   nav: ReturnType<typeof usePageNav>,
   origin: SEED_PHRASE_ORIGIN,

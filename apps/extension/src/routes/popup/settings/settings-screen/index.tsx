@@ -16,7 +16,7 @@ export const SettingsScreen = ({
 }) => {
   return (
     <FadeTransition>
-      <div className='flex min-h-screen w-screen flex-col gap-6'>
+      <div className='flex min-h-full w-full flex-col gap-6'>
         <SettingsHeader title={title} />
 
         {!!IconComponent && (
@@ -25,7 +25,7 @@ export const SettingsScreen = ({
           </div>
         )}
 
-        <div className='flex grow flex-col px-[30px] pb-[30px]'>{children}</div>
+        <div className='flex grow flex-col px-[30px] pb-4'>{children}</div>
       </div>
     </FadeTransition>
   );

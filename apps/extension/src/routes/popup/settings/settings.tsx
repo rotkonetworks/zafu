@@ -1,4 +1,4 @@
-import { DashboardIcon, ExitIcon, FileTextIcon, Link1Icon } from '@radix-ui/react-icons';
+import { DashboardIcon, ExitIcon, FileTextIcon, GlobeIcon, Link1Icon } from '@radix-ui/react-icons';
 import { CustomLink } from '../../../shared/components/link';
 import { useStore } from '../../../state';
 import { passwordSelector } from '../../../state/password';
@@ -14,11 +14,11 @@ const links = [
     icon: <FileTextIcon className='size-5 text-muted-foreground' />,
     href: PopupPath.SETTINGS_RECOVERY_PASSPHRASE,
   },
-  // {
-  //   title: 'Reset Password',
-  //   icon: <LockClosedIcon className='size-5 text-muted-foreground' />,
-  //   href: PopupPath.RESET_PASSWORD,
-  // },
+  {
+    title: 'Network Endpoints',
+    icon: <GlobeIcon className='size-5 text-muted-foreground' />,
+    href: PopupPath.SETTINGS_NETWORK_ENDPOINTS,
+  },
   {
     title: 'Connected Sites',
     icon: <Link1Icon className='size-5 text-muted-foreground' />,
@@ -53,7 +53,7 @@ export const Settings = () => {
           ))}
         </div>
 
-        <div className='mx-[-30px] border-t border-[rgba(75,75,75,0.50)] p-[30px] pb-0'>
+        <div className='mt-4 border-t border-border/50 pt-4'>
           <CustomLink
             title='Lock Wallet'
             icon={<ExitIcon className='size-5 text-muted-foreground' />}

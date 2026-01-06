@@ -3,7 +3,7 @@ export enum ServicesMessage {
   ChangeNumeraires = 'ChangeNumeraires',
 }
 
-export const isPraxServicesMessage = (msg: unknown): msg is ServicesMessage => {
+export const isZignerServicesMessage = (msg: unknown): msg is ServicesMessage => {
   return typeof msg === 'string' && Object.values(ServicesMessage).includes(msg as ServicesMessage);
 };
 

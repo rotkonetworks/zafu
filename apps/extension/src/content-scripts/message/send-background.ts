@@ -1,11 +1,11 @@
 import { PenumbraRequestFailure } from '@penumbra-zone/client/error';
-import type { PraxConnection } from './prax-connection';
+import type { ZignerConnection } from './zigner-connection';
 
 export const sendBackground = async (
-  request: PraxConnection,
+  request: ZignerConnection,
 ): Promise<null | PenumbraRequestFailure> => {
   try {
-    const response = await chrome.runtime.sendMessage<PraxConnection, unknown>(request);
+    const response = await chrome.runtime.sendMessage<ZignerConnection, unknown>(request);
 
     switch (response) {
       case undefined:
@@ -36,7 +36,7 @@ export function listenBackground<R = never>(
     sender: chrome.runtime.MessageSender,
     respond: (response: R) => void,
   ): boolean => {
-    if (sender.id !== PRAX) {
+    if (sender.id !== ZIGNER) {
       return false;
     }
 

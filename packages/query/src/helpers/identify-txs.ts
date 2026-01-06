@@ -149,7 +149,7 @@ type RecoveredSourceRecords = (SpendableNoteRecord | SwapRecord)[];
 
 const generateTxId = async (tx: Transaction): Promise<TransactionId> => {
   return new TransactionId({
-    inner: new Uint8Array(await crypto.subtle.digest('SHA-256', tx.toBinary())),
+    inner: new Uint8Array(await crypto.subtle.digest('SHA-256', tx.toBinary() as BufferSource)),
   });
 };
 
