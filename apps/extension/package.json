@@ -40,6 +40,7 @@
     "@repo/storage-chrome": "workspace:*",
     "@repo/ui": "workspace:*",
     "@repo/wallet": "workspace:*",
+    "@repo/zcash-wasm": "workspace:*",
     "@tanstack/react-query": "5.55.0",
     "exponential-backoff": "^3.1.1",
     "framer-motion": "^11.15.0",
