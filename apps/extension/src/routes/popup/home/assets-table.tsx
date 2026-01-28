@@ -14,7 +14,7 @@ import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances
 import { asValueView } from '@penumbra-zone/getters/equivalent-value';
 import { useQuery } from '@tanstack/react-query';
 import { viewClient } from '../../../clients';
-import { assetPatterns } from '@penumbra-zone/types/assets';
+import { assetPatterns } from '@rotko/penumbra-types/assets';
 import type { BalancesResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 
 /** memoized equivalent values display */

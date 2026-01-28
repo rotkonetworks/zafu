@@ -91,7 +91,7 @@ export const createKeyRingSlice = (
 
     const key = await Key.fromJson(keyJson);
     const box = await key.seal(data);
-    return JSON.stringify(box);
+    return JSON.stringify(box.toJson());
   };
 
   /** generate unique vault id */
@@ -191,7 +191,7 @@ export const createKeyRingSlice = (
 
             return {
               ...vault,
-              encryptedData: JSON.stringify(newBox),
+              encryptedData: JSON.stringify(newBox.toJson()),
               insensitive: newInsensitive,
             };
           }),
@@ -342,14 +342,14 @@ export const createKeyRingSlice = (
         throw new Error('keyring locked - unlock first or use password flow');
       }
 
-      const encryptedData = await key.seal(JSON.stringify(data));
+      const encryptedBox = await key.seal(JSON.stringify(data));
 
       const vault: EncryptedVault = {
         id: vaultId,
         type: 'zigner-zafu',
         name,
         createdAt: Date.now(),
-        encryptedData: JSON.stringify(encryptedData),
+        encryptedData: JSON.stringify(encryptedBox.toJson()),
         salt: '',
         insensitive: {
           deviceId: data.deviceId,

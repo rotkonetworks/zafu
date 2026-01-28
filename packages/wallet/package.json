@@ -43,7 +43,7 @@
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
-    "@penumbra-zone/wasm": "53.0.0",
+    "@rotko/penumbra-wasm": "55.0.0",
     "@repo/encryption": "workspace:*",
     "@types/chrome": "0.0.270",
     "@types/qrcode": "^1.5.6"

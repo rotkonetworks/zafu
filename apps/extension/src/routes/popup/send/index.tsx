@@ -20,8 +20,8 @@ import { useIbcChains, isValidIbcAddress, type IbcChain } from '../../../hooks/i
 import { viewClient } from '../../../clients';
 import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances-response';
 import { getDisplayDenomFromView } from '@penumbra-zone/getters/value-view';
-import { fromValueView } from '@penumbra-zone/types/amount';
-import { assetPatterns } from '@penumbra-zone/types/assets';
+import { fromValueView } from '@rotko/penumbra-types/amount';
+import { assetPatterns } from '@rotko/penumbra-types/assets';
 import { useSkipRoute, useSkipChains } from '../../../hooks/skip-route';
 import { useCosmosSend, useCosmosIbcTransfer } from '../../../hooks/cosmos-signer';
 import { useCosmosAssets, type CosmosAsset } from '../../../hooks/cosmos-balance';

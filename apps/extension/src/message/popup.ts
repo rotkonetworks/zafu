@@ -1,5 +1,5 @@
 import type { AuthorizeRequest } from '@penumbra-zone/protobuf/penumbra/custody/v1/custody_pb';
-import type { Jsonified } from '@penumbra-zone/types/jsonified';
+import type { Jsonified } from '@rotko/penumbra-types/jsonified';
 import type { OriginRecord, UserChoice } from '@repo/storage-chrome/records';
 import type { JsonValue } from '@bufbuild/protobuf';
 

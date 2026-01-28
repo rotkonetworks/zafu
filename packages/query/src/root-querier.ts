@@ -6,7 +6,7 @@ import { IbcClientQuerier } from './queriers/ibc-client';
 import { IbcChannelQuerier } from './queriers/ibc-channel';
 import { CnidariumQuerier } from './queriers/cnidarium';
 import { StakeQuerier } from './queriers/staking';
-import type { RootQuerierInterface } from '@penumbra-zone/types/querier';
+import type { RootQuerierInterface } from '@rotko/penumbra-types/querier';
 import { AuctionQuerier } from './queriers/auction';
 import { SctQuerier } from './queriers/sct';
 import { FundingQuerier } from './queriers/funding';

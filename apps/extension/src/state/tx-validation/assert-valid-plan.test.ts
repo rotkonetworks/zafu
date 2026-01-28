@@ -2,7 +2,7 @@
 import { ActionPlan } from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
 import type { Address } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
 import type { FullViewingKey } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
-import { generateSpendKey, getAddressByIndex, getFullViewingKey } from '@penumbra-zone/wasm/keys';
+import { generateSpendKey, getAddressByIndex, getFullViewingKey } from '@rotko/penumbra-wasm/keys';
 import { describe, expect, it, beforeAll } from 'vitest';
 import { assertValidActionPlans } from './assert-valid-plan.js';
 

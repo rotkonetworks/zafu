@@ -9,7 +9,7 @@ import {
 } from '@penumbra-zone/getters/swap-claim-view';
 import { getAmount } from '@penumbra-zone/getters/value-view';
 import { getAmount as getAmountFee } from '@penumbra-zone/getters/fee';
-import { isZero, joinLoHiAmount } from '@penumbra-zone/types/amount';
+import { isZero, joinLoHiAmount } from '@rotko/penumbra-types/amount';
 import { ValueViewComponent } from '../../../value';
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
 

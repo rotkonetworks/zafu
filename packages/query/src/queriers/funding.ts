@@ -1,7 +1,7 @@
 import { Client } from '@connectrpc/connect';
 import { createClient } from './utils';
 import { FundingService } from '@penumbra-zone/protobuf';
-import { FundingQuerierInterface } from '@penumbra-zone/types/querier';
+import { FundingQuerierInterface } from '@rotko/penumbra-types/querier';
 import { Nullifier } from '@penumbra-zone/protobuf/penumbra/core/component/sct/v1/sct_pb';
 import {
   LqtCheckNullifierRequest,

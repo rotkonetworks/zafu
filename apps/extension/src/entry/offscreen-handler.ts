@@ -5,7 +5,7 @@ import {
   ParallelBuildResponse,
   isParallelBuildRequest,
   isOffscreenRequest,
-} from '@penumbra-zone/types/internal-msg/offscreen';
+} from '@rotko/penumbra-types/internal-msg/offscreen';
 
 chrome.runtime.onMessage.addListener((req, _sender, respond) => {
   if (!isOffscreenRequest(req)) {

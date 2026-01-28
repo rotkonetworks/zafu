@@ -1,4 +1,4 @@
-import { base64ToUint8Array, uint8ArrayToBase64 } from '@penumbra-zone/types/base64';
+import { base64ToUint8Array, uint8ArrayToBase64 } from '@rotko/penumbra-types/base64';
 
 export interface KeyPrintJson {
   hash: string;

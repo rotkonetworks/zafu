@@ -2,7 +2,7 @@ import { TransactionId } from '@penumbra-zone/protobuf/penumbra/core/txhash/v1/t
 import { Pill } from '../../../pill';
 import { useMemo } from 'react';
 import { shorten } from '../../../../../lib/utils';
-import { uint8ArrayToHex } from '@penumbra-zone/types/hex';
+import { uint8ArrayToHex } from '@rotko/penumbra-types/hex';
 
 /**
  * Renders a SHA-256 hash of a transaction ID in a pill.

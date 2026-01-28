@@ -2,7 +2,7 @@ import { ViewBox } from '../viewbox';
 import { ActionDetails } from './action-details';
 import { PositionWithdraw } from '@penumbra-zone/protobuf/penumbra/core/component/dex/v1/dex_pb';
 import { bech32mPositionId } from '@penumbra-zone/bech32m/plpid';
-import { uint8ArrayToBase64 } from '@penumbra-zone/types/base64';
+import { uint8ArrayToBase64 } from '@rotko/penumbra-types/base64';
 
 export const PositionWithdrawComponent = ({ value }: { value: PositionWithdraw }) => {
   return (

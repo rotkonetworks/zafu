@@ -14,8 +14,8 @@ import {
   TransactionView,
 } from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
 import { AuthorizeRequest } from '@penumbra-zone/protobuf/penumbra/custody/v1/custody_pb';
-import type { Jsonified } from '@penumbra-zone/types/jsonified';
-import { UserChoice } from '@penumbra-zone/types/user-choice';
+import type { Jsonified } from '@rotko/penumbra-types/jsonified';
+import { UserChoice } from '@rotko/penumbra-types/user-choice';
 import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
 import { AllSlices, SliceCreator } from '.';

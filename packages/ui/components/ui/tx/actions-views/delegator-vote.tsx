@@ -12,7 +12,7 @@ import { getDelegatorVoteBody } from '@penumbra-zone/getters/delegator-vote-view
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
 import { Metadata, ValueView } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { AddressViewComponent } from '../../address-view';
-import { base64ToUint8Array } from '@penumbra-zone/types/base64';
+import { base64ToUint8Array } from '@rotko/penumbra-types/base64';
 
 // TODO: This is sad, but at the moment, we aren't provided the metadata to have a rich display.
 //       Given the high-priority of getting action view support, this is added.

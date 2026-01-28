@@ -15,8 +15,8 @@ import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
 import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances-response';
 import { getDisplayDenomFromView, getAssetIdFromValueView, getDisplayDenomExponentFromValueView } from '@penumbra-zone/getters/value-view';
-import { fromValueView } from '@penumbra-zone/types/amount';
-import { assetPatterns } from '@penumbra-zone/types/assets';
+import { fromValueView } from '@rotko/penumbra-types/amount';
+import { assetPatterns } from '@rotko/penumbra-types/assets';
 import { cn } from '@repo/ui/lib/utils';
 import { ValidatorState_ValidatorStateEnum, type ValidatorInfo } from '@penumbra-zone/protobuf/penumbra/core/component/stake/v1/stake_pb';
 import type { BalancesResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';

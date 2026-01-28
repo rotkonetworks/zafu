@@ -11,10 +11,10 @@ const MainPage = () => {
   const [wasmReady, setWasmReady] = useState(false);
 
   useEffect(() => {
-    // initialize wasm module before rendering routes
-    // all wasm functions (keys, transactions, etc.) now use wasm-parallel
-    import('@penumbra-zone/wasm/init')
-      .then(({ ensureWasmReady }) => ensureWasmReady())
+    // initialize standard wasm module for keys, addresses
+    // parallel wasm will be initialized on-demand when needed for tx building
+    import('@rotko/penumbra-wasm/init')
+      .then(({ initWasm }) => initWasm())
       .then(() => setWasmReady(true))
       .catch(err => {
         console.error('failed to init wasm:', err);

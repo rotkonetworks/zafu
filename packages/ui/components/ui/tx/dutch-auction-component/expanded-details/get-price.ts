@@ -1,8 +1,8 @@
 import { DutchAuctionDescription } from '@penumbra-zone/protobuf/penumbra/core/component/auction/v1/auction_pb';
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
 import { getStepIndex } from './get-step-index';
-import { joinLoHiAmount } from '@penumbra-zone/types/amount';
-import { splitLoHi } from '@penumbra-zone/types/lo-hi';
+import { joinLoHiAmount } from '@rotko/penumbra-types/amount';
+import { splitLoHi } from '@rotko/penumbra-types/lo-hi';
 import { getDisplayDenomExponent } from '@penumbra-zone/getters/metadata';
 import { Metadata } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 

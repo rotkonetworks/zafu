@@ -15,7 +15,7 @@ import {
   WitnessData,
 } from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
 import type { JsonValue } from '@bufbuild/protobuf';
-import type { ParallelBuildRequest } from '@penumbra-zone/types/internal-msg/offscreen';
+import type { ParallelBuildRequest } from '@rotko/penumbra-types/internal-msg/offscreen';
 import { FullViewingKey } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
 import actionKeys from '@penumbra-zone/keys';
 
@@ -61,7 +61,7 @@ const initParallelWasm = async () => {
 
   wasmInitPromise = (async () => {
     try {
-      const wasmInit = await import('@penumbra-zone/wasm/init');
+      const wasmInit = await import('@rotko/penumbra-wasm/init');
 
       if (typeof SharedArrayBuffer === 'undefined') {
         throw new Error('SharedArrayBuffer not available - parallel WASM requires it');
@@ -188,7 +188,7 @@ async function executeWorker(
   await initParallelWasm();
 
   // Import parallel WASM module directly - keys must be loaded into the same module that uses them
-  const parallelWasm = await import('@penumbra-zone/wasm/wasm-parallel');
+  const parallelWasm = await import('@rotko/penumbra-wasm/wasm-parallel');
 
   // Load all required proving keys into the parallel WASM module
   const requiredKeys = getRequiredProvingKeys(transactionPlan);

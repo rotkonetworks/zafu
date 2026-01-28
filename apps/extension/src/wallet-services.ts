@@ -6,7 +6,7 @@ import { FullViewingKey, WalletId } from '@penumbra-zone/protobuf/penumbra/core/
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { onboardGrpcEndpoint, onboardWallet } from '@repo/storage-chrome/onboard';
 import { Services } from '@repo/context';
-import { WalletServices } from '@penumbra-zone/types/services';
+import { WalletServices } from '@rotko/penumbra-types/services';
 import { AssetId } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { SENTINEL_U64_MAX } from './utils/sentinel';
 
@@ -28,20 +28,32 @@ export const startWalletServices = async () => {
   // privacy gate: check if penumbra is enabled before making network connections
   const enabled = await isPenumbraEnabled();
   if (!enabled) {
-    console.log('penumbra not enabled, skipping wallet services initialization');
+    console.log('[sync] penumbra not enabled, skipping wallet services initialization');
     // return a stub services object that throws on access
     return {
       getWalletServices: () => Promise.reject(new Error('penumbra network not enabled')),
     } as Services;
   }
 
+  console.log('[sync] starting wallet services...');
+
   const wallet = await onboardWallet();
+  console.log('[sync] wallet loaded:', wallet.id.slice(0, 20) + '...');
+
   const grpcEndpoint = await onboardGrpcEndpoint();
+  console.log('[sync] grpc endpoint:', grpcEndpoint);
+
   const numeraires = await localExtStorage.get('numeraires');
+  console.log('[sync] getting chainId from endpoint...');
   const chainId = await getChainId(grpcEndpoint);
+  console.log('[sync] chainId:', chainId);
+
   const walletCreationBlockHeight = await localExtStorage.get('walletCreationBlockHeight');
   const compactFrontierBlockHeight = await localExtStorage.get('compactFrontierBlockHeight');
+  console.log('[sync] walletCreationBlockHeight:', walletCreationBlockHeight);
+  console.log('[sync] compactFrontierBlockHeight:', compactFrontierBlockHeight);
 
+  console.log('[sync] creating Services instance...');
   const services = new Services({
     grpcEndpoint,
     chainId,
@@ -52,7 +64,11 @@ export const startWalletServices = async () => {
     compactFrontierBlockHeight,
   });
 
-  void syncLastBlockToStorage(await services.getWalletServices());
+  console.log('[sync] getting wallet services (this starts syncing)...');
+  const walletServices = await services.getWalletServices();
+  console.log('[sync] wallet services ready, starting block sync subscription...');
+
+  void syncLastBlockToStorage(walletServices);
 
   return services;
 };

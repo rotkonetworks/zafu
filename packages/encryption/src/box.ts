@@ -1,4 +1,4 @@
-import { uint8ArrayToBase64, base64ToUint8Array } from '@penumbra-zone/types/base64';
+import { uint8ArrayToBase64, base64ToUint8Array } from '@rotko/penumbra-types/base64';
 
 // Public, stored representation of Box
 export interface BoxJson {

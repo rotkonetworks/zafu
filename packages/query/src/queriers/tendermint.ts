@@ -3,7 +3,7 @@ import { createClient } from './utils';
 import { TendermintProxyService } from '@penumbra-zone/protobuf';
 import { TransactionId } from '@penumbra-zone/protobuf/penumbra/core/txhash/v1/txhash_pb';
 import { Transaction } from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
-import type { TendermintQuerierInterface } from '@penumbra-zone/types/querier';
+import type { TendermintQuerierInterface } from '@rotko/penumbra-types/querier';
 
 declare global {
   // eslint-disable-next-line no-var -- expected globals

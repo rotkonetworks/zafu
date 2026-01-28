@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { NobleClientInterface, NobleRegistrationResponse } from './client';
 import { getNextSequence, MAX_SEQUENCE_NUMBER } from './sequence-search';
-import { generateSpendKey, getFullViewingKey } from '@penumbra-zone/wasm/keys';
+import { generateSpendKey, getFullViewingKey } from '@rotko/penumbra-wasm/keys';
 
 const seedPhrase =
   'benefit cherry cannon tooth exhibit law avocado spare tooth that amount pumpkin scene foil tape mobile shine apology add crouch situate sun business explain';

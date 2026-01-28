@@ -14,7 +14,7 @@ import { NETWORK_CONFIGS, type IbcNetwork, isIbcNetwork } from '../state/keyring
 
 /** get penumbra address from FVK */
 async function getPenumbraAddress(fvkBytes: Uint8Array, index = 0): Promise<string> {
-  const { getAddressByIndex } = await import('@penumbra-zone/wasm/keys');
+  const { getAddressByIndex } = await import('@rotko/penumbra-wasm/keys');
   const { bech32mAddress } = await import('@penumbra-zone/bech32m/penumbra');
   const { FullViewingKey } = await import('@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb');
 
@@ -41,7 +41,7 @@ async function derivePolkadotAddress(
 
 /** derive penumbra address from mnemonic */
 async function derivePenumbraAddress(mnemonic: string, index = 0): Promise<string> {
-  const { generateSpendKey, getFullViewingKey, getAddressByIndex } = await import('@penumbra-zone/wasm/keys');
+  const { generateSpendKey, getFullViewingKey, getAddressByIndex } = await import('@rotko/penumbra-wasm/keys');
   const { bech32mAddress } = await import('@penumbra-zone/bech32m/penumbra');
 
   const spendKey = await generateSpendKey(mnemonic);
@@ -50,10 +50,13 @@ async function derivePenumbraAddress(mnemonic: string, index = 0): Promise<strin
   return bech32mAddress(address);
 }
 
-/** derive zcash orchard address from mnemonic */
+/** derive zcash orchard address from mnemonic (requires 24-word seed) */
 async function deriveZcashAddress(mnemonic: string, account = 0, mainnet = true): Promise<string> {
-  const zcashWasm = await import('@repo/zcash-wasm');
-  await zcashWasm.default();
+  // load from extension root where CopyPlugin places the WASM
+  const wasmJsUrl = chrome.runtime.getURL('zafu-wasm/zafu_wasm.js');
+  const wasmBinaryUrl = chrome.runtime.getURL('zafu-wasm/zafu_wasm_bg.wasm');
+  const zcashWasm = await import(/* webpackIgnore: true */ wasmJsUrl);
+  await zcashWasm.default(wasmBinaryUrl);
   return zcashWasm.derive_zcash_address(mnemonic, account, mainnet);
 }
 

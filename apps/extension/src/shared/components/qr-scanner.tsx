@@ -27,6 +27,7 @@ export const QrScanner = ({
   const readerRef = useRef<BrowserQRCodeReader | null>(null);
   const controlsRef = useRef<{ stop: () => void } | null>(null);
   const mountedRef = useRef(true);
+  const startingRef = useRef(false);
 
   const stopScanning = useCallback(() => {
     if (controlsRef.current) {
@@ -39,16 +40,29 @@ export const QrScanner = ({
   }, []);
 
   const startScanning = useCallback(async () => {
-    if (!videoRef.current) return;
+    if (!videoRef.current) {
+      console.error('[QrScanner] No video element ref');
+      return;
+    }
+
+    // Prevent double starts (React StrictMode, fast re-renders)
+    if (startingRef.current) {
+      console.log('[QrScanner] Already starting, skipping');
+      return;
+    }
+    startingRef.current = true;
 
     try {
       setError(null);
+      console.log('[QrScanner] Starting camera...');
 
       const reader = new BrowserQRCodeReader();
       readerRef.current = reader;
 
       // Get back camera
       const devices = await BrowserQRCodeReader.listVideoInputDevices();
+      console.log('[QrScanner] Available cameras:', devices.map(d => ({ id: d.deviceId, label: d.label })));
+
       const backCamera = devices.find((d: MediaDeviceInfo) =>
         d.label.toLowerCase().includes('back') ||
         d.label.toLowerCase().includes('rear') ||
@@ -58,6 +72,8 @@ export const QrScanner = ({
       if (!backCamera) {
         throw new Error('No camera found');
       }
+
+      console.log('[QrScanner] Using camera:', backCamera.label || backCamera.deviceId);
 
       const controls = await reader.decodeFromVideoDevice(
         backCamera.deviceId,
@@ -88,11 +104,15 @@ export const QrScanner = ({
       );
 
       controlsRef.current = controls;
+      console.log('[QrScanner] Camera started successfully');
+      startingRef.current = false;
 
       if (mountedRef.current) {
         setIsScanning(true);
       }
     } catch (err) {
+      console.error('[QrScanner] Camera error:', err);
+      startingRef.current = false;
       const message = err instanceof Error ? err.message : 'Failed to start camera';
 
       if (message.includes('Permission') || message.includes('NotAllowed')) {

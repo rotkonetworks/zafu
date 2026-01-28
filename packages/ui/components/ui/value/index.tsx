@@ -1,6 +1,6 @@
 import { ValueView } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { ValueComponent } from './value';
-import { getFormattedAmtFromValueView } from '@penumbra-zone/types/value-view';
+import { getFormattedAmtFromValueView } from '@rotko/penumbra-types/value-view';
 
 interface ValueViewProps {
   view: ValueView | undefined;

@@ -7,8 +7,8 @@ import {
   AuthorizationData,
   TransactionPlan,
 } from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
-import { authorizePlan } from '@penumbra-zone/wasm/build';
-import { generateSpendKey } from '@penumbra-zone/wasm/keys';
+import { authorizePlan } from '@rotko/penumbra-wasm/build';
+import { generateSpendKey } from '@rotko/penumbra-wasm/keys';
 import { Box, BoxJson } from '@repo/encryption/box';
 import { Key } from '@repo/encryption/key';
 import {
@@ -76,8 +76,8 @@ export class Wallet<T extends CustodyTypeName = CustodyTypeName> {
         switch (this.custodyType) {
           case 'encryptedSeedPhrase': {
             // unsealed is the seed phrase string
-            const spendKey = generateSpendKey(unsealed);
-            return Promise.resolve(authorizePlan(spendKey, plan));
+            const spendKey = await generateSpendKey(unsealed);
+            return authorizePlan(spendKey, plan);
           }
           case 'encryptedSpendKey': {
             // unsealed is the spend key string

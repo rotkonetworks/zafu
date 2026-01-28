@@ -4,7 +4,7 @@ import {
   TransactionPlan,
 } from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
 import { AuthorizeRequest } from '@penumbra-zone/protobuf/penumbra/custody/v1/custody_pb';
-import { Jsonified } from '@penumbra-zone/types/jsonified';
+import { Jsonified } from '@rotko/penumbra-types/jsonified';
 import { Key } from '@repo/encryption/key';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { UserChoice } from '@repo/storage-chrome/records';

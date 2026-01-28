@@ -1,7 +1,7 @@
 import { FullViewingKey } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
 import { MsgRegisterAccount } from '@penumbra-zone/protobuf/noble/forwarding/v1/tx_pb';
 import { bech32mAddress } from '@penumbra-zone/bech32m/penumbra';
-import { getNobleForwardingAddr } from '@penumbra-zone/wasm/keys';
+import { getNobleForwardingAddr } from '@rotko/penumbra-wasm/keys';
 import { StargateClient } from '@cosmjs/stargate';
 import { Any } from '@bufbuild/protobuf';
 import { Tx } from '@penumbra-zone/protobuf/cosmos/tx/v1beta1/tx_pb';
