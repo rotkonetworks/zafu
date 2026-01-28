@@ -11,14 +11,15 @@ export const GenerateSeedPhrase = () => {
   const { phrase, generateRandomSeedPhrase } = useStore(generateSelector);
 
   // On render, asynchronously generate a new seed phrase
+  // Use 24 words for better entropy and zcash compatibility
   useEffect(() => {
     if (!phrase.length) {
-      generateRandomSeedPhrase(SeedPhraseLength.TWELVE_WORDS);
+      generateRandomSeedPhrase(SeedPhraseLength.TWENTY_FOUR_WORDS);
     }
   }, [generateRandomSeedPhrase, phrase.length]);
 
   useEffect(() => {
-    if (phrase.length === Number(SeedPhraseLength.TWELVE_WORDS)) {
+    if (phrase.length === Number(SeedPhraseLength.TWENTY_FOUR_WORDS)) {
       navigateToNetworkSelection(navigate, SEED_PHRASE_ORIGIN.NEWLY_GENERATED);
     }
   }, [phrase.length, navigate]);
