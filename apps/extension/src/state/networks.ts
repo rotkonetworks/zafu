@@ -192,6 +192,33 @@ const DEFAULT_NETWORKS: Record<NetworkId, NetworkConfig> = {
 export const createNetworksSlice =
   (local: ExtensionStorage<LocalStorageState>): SliceCreator<NetworksSlice> =>
   (set, get) => {
+    // Hydrate networks from storage on init
+    void (async () => {
+      const enabledNetworks = await local.get('enabledNetworks');
+      const networkEndpoints = await local.get('networkEndpoints');
+
+      if (enabledNetworks || networkEndpoints) {
+        set(state => {
+          // Apply enabled state from storage
+          if (enabledNetworks) {
+            for (const id of enabledNetworks) {
+              if (state.networks.networks[id as NetworkId]) {
+                state.networks.networks[id as NetworkId].enabled = true;
+              }
+            }
+          }
+          // Apply custom endpoints from storage
+          if (networkEndpoints) {
+            for (const [id, endpoint] of Object.entries(networkEndpoints)) {
+              if (state.networks.networks[id as NetworkId]) {
+                state.networks.networks[id as NetworkId].endpoint = endpoint as string;
+              }
+            }
+          }
+        });
+      }
+    })();
+
     return {
       networks: DEFAULT_NETWORKS,
 

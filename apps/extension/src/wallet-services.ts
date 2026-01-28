@@ -4,7 +4,7 @@ import { createGrpcWebTransport } from '@connectrpc/connect-web';
 import { createClient } from '@connectrpc/connect';
 import { FullViewingKey, WalletId } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
 import { localExtStorage } from '@repo/storage-chrome/local';
-import { onboardGrpcEndpoint, onboardWallet } from '@repo/storage-chrome/onboard';
+import { onboardWallet } from '@repo/storage-chrome/onboard';
 import { Services } from '@repo/context';
 import { WalletServices } from '@rotko/penumbra-types/services';
 import { AssetId } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
@@ -24,9 +24,34 @@ export const isPenumbraEnabled = async (): Promise<boolean> => {
   return enabledNetworks.includes('penumbra');
 };
 
+// Default Penumbra gRPC endpoint
+const DEFAULT_PENUMBRA_ENDPOINT = 'https://penumbra.rotko.net';
+
+/**
+ * Get the Penumbra gRPC endpoint from storage or use default
+ */
+const getPenumbraEndpoint = async (): Promise<string> => {
+  // First try the legacy grpcEndpoint field
+  const legacyEndpoint = await localExtStorage.get('grpcEndpoint');
+  if (legacyEndpoint) {
+    return legacyEndpoint;
+  }
+
+  // Then try the new networkEndpoints object
+  const networkEndpoints = await localExtStorage.get('networkEndpoints');
+  if (networkEndpoints?.penumbra) {
+    return networkEndpoints.penumbra;
+  }
+
+  // Fall back to default and save it for future use
+  await localExtStorage.set('grpcEndpoint', DEFAULT_PENUMBRA_ENDPOINT);
+  return DEFAULT_PENUMBRA_ENDPOINT;
+};
+
 export const startWalletServices = async () => {
   // privacy gate: check if penumbra is enabled before making network connections
   const enabled = await isPenumbraEnabled();
+  console.log('[sync] isPenumbraEnabled:', enabled);
   if (!enabled) {
     console.log('[sync] penumbra not enabled, skipping wallet services initialization');
     // return a stub services object that throws on access
@@ -40,7 +65,7 @@ export const startWalletServices = async () => {
   const wallet = await onboardWallet();
   console.log('[sync] wallet loaded:', wallet.id.slice(0, 20) + '...');
 
-  const grpcEndpoint = await onboardGrpcEndpoint();
+  const grpcEndpoint = await getPenumbraEndpoint();
   console.log('[sync] grpc endpoint:', grpcEndpoint);
 
   const numeraires = await localExtStorage.get('numeraires');
@@ -106,15 +131,19 @@ const getChainId = async (baseUrl: string) => {
  */
 const syncLastBlockToStorage = async ({ indexedDb }: Pick<WalletServices, 'indexedDb'>) => {
   const dbHeight = await indexedDb.getFullSyncHeight();
+  console.log('[sync] initial dbHeight from indexedDb:', dbHeight);
 
   if (dbHeight != null && dbHeight !== SENTINEL_U64_MAX) {
     await localExtStorage.set('fullSyncHeight', Number(dbHeight));
+    console.log('[sync] saved initial fullSyncHeight:', Number(dbHeight));
   }
 
+  console.log('[sync] subscribing to FULL_SYNC_HEIGHT updates...');
   const sub = indexedDb.subscribe('FULL_SYNC_HEIGHT');
   for await (const { value } of sub) {
     if (value !== SENTINEL_U64_MAX) {
       await localExtStorage.set('fullSyncHeight', Number(value));
+      console.log('[sync] fullSyncHeight updated:', Number(value));
     }
   }
 };
