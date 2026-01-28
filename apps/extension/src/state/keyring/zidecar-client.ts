@@ -26,6 +26,7 @@ export interface CompactAction {
   ephemeralKey: Uint8Array;
   ciphertext: Uint8Array;
   nullifier: Uint8Array;
+  txid: Uint8Array;
 }
 
 export interface ChainTip {
@@ -316,6 +317,7 @@ export class ZidecarClient {
       ephemeralKey: new Uint8Array(0),
       ciphertext: new Uint8Array(0),
       nullifier: new Uint8Array(0),
+      txid: new Uint8Array(0),
     };
     let pos = 0;
 
@@ -337,10 +339,103 @@ export class ZidecarClient {
         else if (field === 2) a.ephemeralKey = data;
         else if (field === 3) a.ciphertext = data;
         else if (field === 4) a.nullifier = data;
+        else if (field === 5) a.txid = data;
         pos += len;
       } else break;
     }
 
     return a;
+  }
+
+  /** get raw transaction by hash (reveals txid to server - use getBlockTransactions for privacy) */
+  async getTransaction(txid: Uint8Array): Promise<{ data: Uint8Array; height: number }> {
+    // encode TxFilter proto: field 1 = hash (bytes)
+    const parts: number[] = [0x0a, ...this.lengthDelimited(txid)];
+    const resp = await this.grpcCall('GetTransaction', new Uint8Array(parts));
+    return this.parseRawTransaction(resp);
+  }
+
+  /**
+   * privacy-preserving transaction fetch
+   * fetches all transactions at a block height - server doesn't learn which tx we care about
+   */
+  async getBlockTransactions(height: number): Promise<{ height: number; hash: Uint8Array; txs: Array<{ data: Uint8Array; height: number }> }> {
+    // encode BlockId proto: field 1 = height (uint32)
+    const parts: number[] = [0x08, ...this.varint(height)];
+    const resp = await this.grpcCall('GetBlockTransactions', new Uint8Array(parts));
+    return this.parseBlockTransactions(resp);
+  }
+
+  private parseBlockTransactions(buf: Uint8Array): { height: number; hash: Uint8Array; txs: Array<{ data: Uint8Array; height: number }> } {
+    let height = 0;
+    let hash = new Uint8Array(0);
+    const txs: Array<{ data: Uint8Array; height: number }> = [];
+    let pos = 0;
+
+    while (pos < buf.length) {
+      const tag = buf[pos++]!;
+      const field = tag >> 3;
+      const wire = tag & 0x7;
+
+      if (wire === 0) {
+        let v = 0, s = 0;
+        while (pos < buf.length) {
+          const b = buf[pos++]!;
+          v |= (b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7;
+        }
+        if (field === 1) height = v;
+      } else if (wire === 2) {
+        let len = 0, s = 0;
+        while (pos < buf.length) {
+          const b = buf[pos++]!;
+          len |= (b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7;
+        }
+        const data = buf.slice(pos, pos + len);
+        if (field === 2) hash = data;
+        else if (field === 3) txs.push(this.parseRawTransaction(data));
+        pos += len;
+      } else break;
+    }
+
+    return { height, hash, txs };
+  }
+
+  private parseRawTransaction(buf: Uint8Array): { data: Uint8Array; height: number } {
+    let data = new Uint8Array(0);
+    let height = 0;
+    let pos = 0;
+
+    while (pos < buf.length) {
+      const tag = buf[pos++]!;
+      const field = tag >> 3;
+      const wire = tag & 0x7;
+
+      if (wire === 0) {
+        let v = 0, s = 0;
+        while (pos < buf.length) {
+          const b = buf[pos++]!;
+          v |= (b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7;
+        }
+        if (field === 2) height = v;
+      } else if (wire === 2) {
+        let len = 0, s = 0;
+        while (pos < buf.length) {
+          const b = buf[pos++]!;
+          len |= (b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7;
+        }
+        if (field === 1) data = buf.slice(pos, pos + len);
+        pos += len;
+      } else break;
+    }
+
+    return { data, height };
   }
 }

@@ -1,3 +1,4 @@
+import { useMemo, memo } from 'react';
 import {
   Table,
   TableBody,
@@ -14,10 +15,13 @@ import { asValueView } from '@penumbra-zone/getters/equivalent-value';
 import { useQuery } from '@tanstack/react-query';
 import { viewClient } from '../../../clients';
 import { assetPatterns } from '@penumbra-zone/types/assets';
+import type { BalancesResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 
-const EquivalentValues = ({ valueView }: { valueView?: ValueView }) => {
-  const equivalentValuesAsValueViews = (getEquivalentValues.optional(valueView) ?? []).map(
-    asValueView,
+/** memoized equivalent values display */
+const EquivalentValues = memo(({ valueView }: { valueView?: ValueView }) => {
+  const equivalentValuesAsValueViews = useMemo(
+    () => (getEquivalentValues.optional(valueView) ?? []).map(asValueView),
+    [valueView]
   );
 
   return (
@@ -31,61 +35,66 @@ const EquivalentValues = ({ valueView }: { valueView?: ValueView }) => {
       ))}
     </div>
   );
-};
+});
+EquivalentValues.displayName = 'EquivalentValues';
+
+/** memoized row component */
+const AssetRow = memo(({ balance }: { balance: BalancesResponse }) => (
+  <TableRow className='group'>
+    <TableCell>
+      <ValueViewComponent view={balance.balanceView} />
+    </TableCell>
+    <TableCell>
+      <EquivalentValues valueView={balance.balanceView} />
+    </TableCell>
+  </TableRow>
+));
+AssetRow.displayName = 'AssetRow';
+
+/** filter out non-displayable assets */
+const filterBalances = (balances: BalancesResponse[]): BalancesResponse[] =>
+  balances.filter(balance => {
+    const metadata = getMetadataFromBalancesResponse.optional(balance);
+    if (!metadata?.base || typeof metadata.base !== 'string') return true;
+
+    return !(
+      assetPatterns.auctionNft.matches(metadata.base) ||
+      assetPatterns.lpNft.matches(metadata.base) ||
+      assetPatterns.proposalNft.matches(metadata.base) ||
+      assetPatterns.votingReceipt.matches(metadata.base)
+    );
+  });
+
+/** sort by priority score descending */
+const sortBalances = (balances: BalancesResponse[]): BalancesResponse[] =>
+  [...balances].sort((a, b) => {
+    const aScore = getMetadataFromBalancesResponse.optional(a)?.priorityScore ?? 0n;
+    const bScore = getMetadataFromBalancesResponse.optional(b)?.priorityScore ?? 0n;
+    return Number(bScore - aScore);
+  });
 
 export interface AssetsTableProps {
   account: number;
 }
 
 export const AssetsTable = ({ account }: AssetsTableProps) => {
-  const {
-    data: balances,
-    isLoading,
-    error,
-  } = useQuery({
+  const { data: rawBalances, isLoading, error } = useQuery({
     queryKey: ['balances', account],
     staleTime: Infinity,
     queryFn: async () => {
       try {
-        const allBalances = await Array.fromAsync(
-          viewClient.balances({ accountFilter: { account } }),
-        );
-
-        // Filter out auction, voted, and LP NFT assets by checking for relevant identifiers in the base metadata field.
-        const filteredBalances = allBalances.filter(balance => {
-          const metadata = getMetadataFromBalancesResponse.optional(balance);
-
-          // We probably want to display unknown assets
-          if (!metadata) {
-            return true;
-          }
-
-          if (metadata.base && typeof metadata.base === 'string') {
-            if (
-              assetPatterns.auctionNft.matches(metadata.base) ||
-              assetPatterns.lpNft.matches(metadata.base) ||
-              assetPatterns.proposalNft.matches(metadata.base) ||
-              assetPatterns.votingReceipt.matches(metadata.base)
-            ) {
-              return false;
-            }
-          }
-
-          return true;
-        });
-
-        filteredBalances.sort((a, b) => {
-          const aScore = getMetadataFromBalancesResponse.optional(a)?.priorityScore ?? 0n;
-          const bScore = getMetadataFromBalancesResponse.optional(b)?.priorityScore ?? 0n;
-          return Number(bScore - aScore);
-        });
-
-        return filteredBalances;
-      } catch (_) {
+        return await Array.fromAsync(viewClient.balances({ accountFilter: { account } }));
+      } catch {
         return [];
       }
     },
   });
+
+  // memoize expensive filter + sort operations
+  const balances = useMemo(() => {
+    if (!rawBalances?.length) return [];
+    return sortBalances(filterBalances(rawBalances));
+  }, [rawBalances]);
 
   if (isLoading) {
     return (
@@ -95,7 +104,7 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
     );
   }
 
-  if (error || !balances?.length) {
+  if (error || !balances.length) {
     return (
       <div className='flex flex-col items-center justify-center gap-1 py-8 text-center'>
         <span className='text-sm text-muted-foreground'>No assets yet</span>
@@ -115,15 +124,8 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {balances.map((assetBalance, index) => (
-          <TableRow className='group' key={index}>
-            <TableCell>
-              <ValueViewComponent view={assetBalance.balanceView} />
-            </TableCell>
-            <TableCell>
-              <EquivalentValues valueView={assetBalance.balanceView} />
-            </TableCell>
-          </TableRow>
+        {balances.map((balance, i) => (
+          <AssetRow key={i} balance={balance} />
         ))}
       </TableBody>
     </Table>

@@ -82,7 +82,7 @@ const DEFAULT_NETWORKS: Record<NetworkId, NetworkConfig> = {
     decimals: 6,
     denom: 'upenumbra',
     enabled: false,
-    endpoint: 'https://grpc.penumbra.zone',
+    endpoint: 'https://penumbra.rotko.net',
     chainId: 'penumbra-1',
     requiresTrustedEndpoint: true,
     bech32Prefix: 'penumbra',

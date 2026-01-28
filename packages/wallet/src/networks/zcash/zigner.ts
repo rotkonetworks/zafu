@@ -10,24 +10,31 @@
  * - 0x03: Signatures (Zigner → Zafu) - Receive signatures
  */
 
-// ============================================================================
-// Chain ID Constants
-// ============================================================================
+import {
+  hexToBytes,
+  bytesToHex,
+  readUint16LE,
+  readUint32LE,
+  writeUint16LE,
+  writeUint32LE,
+  SUBSTRATE_COMPAT,
+} from '../common/qr';
+import { CHAIN_IDS, QR_TYPES } from '../common/types';
 
-/** Substrate compatibility byte in QR prelude */
-export const SUBSTRATE_COMPAT = 0x53;
+// re-export for backwards compat
+export { SUBSTRATE_COMPAT };
 
 /** Chain IDs for different networks */
 export const CHAIN_ID = {
-  PENUMBRA: 0x03,
-  ZCASH: 0x04,
+  PENUMBRA: CHAIN_IDS.PENUMBRA,
+  ZCASH: CHAIN_IDS.ZCASH,
 } as const;
 
 /** QR operation types */
 export const QR_TYPE = {
-  FVK_EXPORT: 0x01,
-  SIGN_REQUEST: 0x02,
-  SIGNATURES: 0x03,
+  FVK_EXPORT: QR_TYPES.FVK_EXPORT,
+  SIGN_REQUEST: QR_TYPES.SIGN_REQUEST,
+  SIGNATURES: QR_TYPES.SIGNATURES,
 } as const;
 
 // ============================================================================
@@ -383,68 +390,6 @@ export function isZcashSignatureQR(hex: string): boolean {
   } catch {
     return false;
   }
-}
-
-// ============================================================================
-// Utility Functions
-// ============================================================================
-
-/**
- * Convert hex string to Uint8Array
- */
-function hexToBytes(hex: string): Uint8Array {
-  const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex;
-  const bytes = new Uint8Array(cleanHex.length / 2);
-  for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = parseInt(cleanHex.substring(i * 2, i * 2 + 2), 16);
-  }
-  return bytes;
-}
-
-/**
- * Convert Uint8Array to hex string
- */
-function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes)
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-/**
- * Read uint32 little-endian from Uint8Array
- */
-function readUint32LE(data: Uint8Array, offset: number): number {
-  return (
-    (data[offset]!) |
-    (data[offset + 1]! << 8) |
-    (data[offset + 2]! << 16) |
-    (data[offset + 3]! << 24)
-  ) >>> 0;
-}
-
-/**
- * Read uint16 little-endian from Uint8Array
- */
-function readUint16LE(data: Uint8Array, offset: number): number {
-  return data[offset]! | (data[offset + 1]! << 8);
-}
-
-/**
- * Write uint32 little-endian to Uint8Array
- */
-function writeUint32LE(data: Uint8Array, offset: number, value: number): void {
-  data[offset] = value & 0xff;
-  data[offset + 1] = (value >> 8) & 0xff;
-  data[offset + 2] = (value >> 16) & 0xff;
-  data[offset + 3] = (value >> 24) & 0xff;
-}
-
-/**
- * Write uint16 little-endian to Uint8Array
- */
-function writeUint16LE(data: Uint8Array, offset: number, value: number): void {
-  data[offset] = value & 0xff;
-  data[offset + 1] = (value >> 8) & 0xff;
 }
 
 // ============================================================================

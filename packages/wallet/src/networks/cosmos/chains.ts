@@ -35,8 +35,10 @@ export interface CosmosChainConfig {
   restEndpoint: string;
   /** gas price in native denom */
   gasPrice: string;
-  /** IBC channel to penumbra (if available) */
+  /** IBC channel on the cosmos chain pointing to penumbra */
   penumbraChannel?: string;
+  /** IBC channel on penumbra pointing to this chain (for IBC withdrawals) */
+  penumbraSourceChannel?: string;
 }
 
 export const COSMOS_CHAINS: Record<CosmosChainId, CosmosChainConfig> = {

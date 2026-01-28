@@ -7,6 +7,7 @@
  */
 
 import { createClient } from 'polkadot-api';
+import { bytesToHex } from '../common/qr';
 import { getSmProvider } from 'polkadot-api/sm-provider';
 import { start } from 'polkadot-api/smoldot';
 import type { PolkadotNetworkKeys } from '../common/types';
@@ -149,6 +150,96 @@ export function getChainsForNetwork(network: PolkadotNetwork): SupportedChain[] 
     .map(([chain]) => chain);
 }
 
+/** get all ecosystem parachains (for unified UX) */
+export function getEcosystemParachains(relay: RelayChain): SupportedChain[] {
+  return (Object.entries(CHAIN_INFO) as [SupportedChain, ChainInfo][])
+    .filter(([, info]) => info.relay === relay)
+    .map(([chain]) => chain);
+}
+
+/**
+ * polkadot unified addresses - same public key works on ALL parachains
+ *
+ * the ss58 prefix is just for display/encoding:
+ * - prefix 0 = polkadot format (works everywhere in polkadot ecosystem)
+ * - prefix 2 = kusama format (works everywhere in kusama ecosystem)
+ * - chain-specific prefixes (63 for hydration, etc.) are optional display formats
+ *
+ * the underlying 32-byte public key is the SAME account across all chains.
+ * so you can query hydration balance with your polkadot address.
+ */
+
+/** detect relay chain from ss58 address prefix */
+export function detectRelayFromAddress(address: string): RelayChain | null {
+  try {
+    // simple base58 decode to extract prefix byte
+    const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+    let num = BigInt(0);
+    for (const char of address) {
+      const idx = ALPHABET.indexOf(char);
+      if (idx === -1) return null;
+      num = num * 58n + BigInt(idx);
+    }
+    // extract prefix from first bytes
+    const bytes = [];
+    while (num > 0) {
+      bytes.unshift(Number(num % 256n));
+      num = num / 256n;
+    }
+    // ss58 prefix is in first 1-2 bytes
+    const prefix = bytes[0]! < 64 ? bytes[0] : ((bytes[0]! & 0x3f) << 2) | (bytes[1]! >> 6);
+
+    // check which relay ecosystem this belongs to
+    // polkadot: prefix 0 or any polkadot parachain prefix
+    // kusama: prefix 2 or any kusama parachain prefix
+    for (const [chain, info] of Object.entries(CHAIN_INFO) as [SupportedChain, ChainInfo][]) {
+      if (info.ss58Prefix === prefix) {
+        return info.relay || (chain as RelayChain);
+      }
+    }
+
+    // default: polkadot (prefix 0 is generic substrate)
+    if (prefix === 0 || prefix === 42) return 'polkadot';
+    if (prefix === 2) return 'kusama';
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** detect specific chain from ss58 address prefix (for display purposes) */
+export function detectChainFromAddress(address: string): SupportedChain | null {
+  try {
+    const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+    let num = BigInt(0);
+    for (const char of address) {
+      const idx = ALPHABET.indexOf(char);
+      if (idx === -1) return null;
+      num = num * 58n + BigInt(idx);
+    }
+    const bytes = [];
+    while (num > 0) {
+      bytes.unshift(Number(num % 256n));
+      num = num / 256n;
+    }
+    const prefix = bytes[0]! < 64 ? bytes[0] : ((bytes[0]! & 0x3f) << 2) | (bytes[1]! >> 6);
+
+    for (const [chain, info] of Object.entries(CHAIN_INFO) as [SupportedChain, ChainInfo][]) {
+      if (info.ss58Prefix === prefix) {
+        return chain;
+      }
+    }
+    // generic substrate address (prefix 42) or polkadot (0) -> polkadot
+    if (prefix === 0 || prefix === 42) return 'polkadot';
+    if (prefix === 2) return 'kusama';
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /** get default chain for transfers */
 export function getDefaultChain(network: PolkadotNetwork): SupportedChain {
   return POLKADOT_NETWORKS[network].defaultChain;
@@ -200,18 +291,108 @@ const CHAINSPEC_SOURCES: Record<SupportedChain, ChainSpecSource> = {
 /** cache for fetched chain specs */
 const chainSpecCache: Map<string, string> = new Map();
 
-/** dynamically load chain spec */
-async function loadChainSpec(chain: SupportedChain): Promise<string> {
-  // check cache first
+/** custom chainspecs registered by user (from storage) */
+const customChainSpecs: Map<string, {
+  chainspec: string;
+  relay: RelayChain | 'standalone';
+  name: string;
+  symbol?: string;
+  decimals?: number;
+}> = new Map();
+
+/**
+ * register a custom chainspec from user upload
+ *
+ * allows connecting to any substrate chain by providing its chainspec JSON.
+ * for parachains, specify the relay chain to connect through.
+ */
+export function registerCustomChainspec(
+  id: string,
+  chainspec: string,
+  relay: RelayChain | 'standalone',
+  name: string,
+  symbol?: string,
+  decimals?: number
+): void {
+  customChainSpecs.set(id, { chainspec, relay, name, symbol, decimals });
+  // also cache the raw chainspec
+  chainSpecCache.set(id, chainspec);
+  console.log(`[polkadot] registered custom chainspec: ${name} (${id})`);
+}
+
+/** unregister a custom chainspec */
+export function unregisterCustomChainspec(id: string): void {
+  customChainSpecs.delete(id);
+  chainSpecCache.delete(id);
+}
+
+/** get all registered custom chainspecs */
+export function getCustomChainspecs(): Map<string, { name: string; relay: string }> {
+  const result = new Map<string, { name: string; relay: string }>();
+  for (const [id, spec] of customChainSpecs) {
+    result.set(id, { name: spec.name, relay: spec.relay });
+  }
+  return result;
+}
+
+/** check if chain is a custom chainspec */
+export function isCustomChain(chain: string): boolean {
+  return customChainSpecs.has(chain);
+}
+
+/** static imports for chain specs from @polkadot-api/known-chains */
+const CHAINSPEC_LOADERS: Record<string, () => Promise<{ chainSpec: string }>> = {
+  polkadot: () => import('@polkadot-api/known-chains/polkadot'),
+  ksmcc3: () => import('@polkadot-api/known-chains/ksmcc3'),
+  paseo: () => import('@polkadot-api/known-chains/paseo'),
+  polkadot_asset_hub: () => import('@polkadot-api/known-chains/polkadot_asset_hub'),
+  polkadot_bridge_hub: () => import('@polkadot-api/known-chains/polkadot_bridge_hub'),
+  polkadot_collectives: () => import('@polkadot-api/known-chains/polkadot_collectives'),
+  polkadot_coretime: () => import('@polkadot-api/known-chains/polkadot_coretime'),
+  polkadot_people: () => import('@polkadot-api/known-chains/polkadot_people'),
+  ksmcc3_asset_hub: () => import('@polkadot-api/known-chains/ksmcc3_asset_hub'),
+  ksmcc3_bridge_hub: () => import('@polkadot-api/known-chains/ksmcc3_bridge_hub'),
+  ksmcc3_coretime: () => import('@polkadot-api/known-chains/ksmcc3_coretime'),
+  ksmcc3_encointer: () => import('@polkadot-api/known-chains/ksmcc3_encointer'),
+  ksmcc3_people: () => import('@polkadot-api/known-chains/ksmcc3_people'),
+  paseo_asset_hub: () => import('@polkadot-api/known-chains/paseo_asset_hub'),
+  paseo_coretime: () => import('@polkadot-api/known-chains/paseo_coretime'),
+  paseo_people: () => import('@polkadot-api/known-chains/paseo_people'),
+};
+
+/**
+ * dynamically load chain spec
+ *
+ * supports:
+ * - built-in chains (SupportedChain) from CHAINSPEC_SOURCES
+ * - custom chains registered via registerCustomChainspec()
+ */
+async function loadChainSpec(chain: string): Promise<string> {
+  // check cache first (includes custom chainspecs)
   const cached = chainSpecCache.get(chain);
   if (cached) return cached;
 
-  const source = CHAINSPEC_SOURCES[chain];
+  // check if this is a custom chain
+  const customSpec = customChainSpecs.get(chain);
+  if (customSpec) {
+    chainSpecCache.set(chain, customSpec.chainspec);
+    return customSpec.chainspec;
+  }
+
+  // look up in built-in sources
+  const source = CHAINSPEC_SOURCES[chain as SupportedChain];
+  if (!source) {
+    throw new Error(`unknown chain: ${chain} (not in built-in sources or custom registry)`);
+  }
 
   let spec: string;
   if (source.type === 'module') {
-    // load from polkadot-api/chains
-    const module = await import(`polkadot-api/chains/${source.path}`);
+    // load from @polkadot-api/known-chains using static import map
+    const loader = CHAINSPEC_LOADERS[source.path];
+    if (!loader) {
+      throw new Error(`unknown chain spec module: ${source.path}`);
+    }
+    const module = await loader();
     spec = module.chainSpec;
   } else {
     // fetch from parity chainspecs
@@ -434,7 +615,7 @@ export class PolkadotLightClient {
 
     // submit via light client
     // polkadot-api submit expects hex string and returns TxFinalizedPayload
-    const hexTx = '0x' + Buffer.from(signedTx).toString('hex');
+    const hexTx = '0x' + bytesToHex(signedTx);
     const result = await this.chainClient.submit(hexTx);
     // return the transaction hash
     return result.txHash;
@@ -507,15 +688,162 @@ export function getLightClient(chain: SupportedChain = 'polkadot'): PolkadotLigh
   return client;
 }
 
+/** custom chain light clients (keyed by custom chain id) */
+const customClients: Map<string, PolkadotLightClient> = new Map();
+
+/**
+ * get light client for a custom chainspec
+ *
+ * custom chains must be registered via registerCustomChainspec() first.
+ * returns null if chain is not registered.
+ */
+export function getCustomLightClient(chainId: string): PolkadotLightClient | null {
+  if (!customChainSpecs.has(chainId)) {
+    return null;
+  }
+
+  let client = customClients.get(chainId);
+  if (!client) {
+    // custom chains use a modified light client that accepts string chain ID
+    client = new PolkadotLightClient(chainId as SupportedChain);
+    customClients.set(chainId, client);
+  }
+  return client;
+}
+
+/**
+ * connect to a custom chain by ID
+ *
+ * registers the chainspec if provided, then returns connected light client.
+ */
+export async function connectCustomChain(
+  chainId: string,
+  chainspec?: string,
+  relay?: RelayChain | 'standalone',
+  name?: string,
+  symbol?: string,
+  decimals?: number
+): Promise<PolkadotLightClient> {
+  // register if provided
+  if (chainspec && relay && name) {
+    registerCustomChainspec(chainId, chainspec, relay, name, symbol, decimals);
+  }
+
+  const client = getCustomLightClient(chainId);
+  if (!client) {
+    throw new Error(`custom chain ${chainId} not registered`);
+  }
+
+  await client.connect();
+  return client;
+}
+
 /** cleanup all clients (for extension unload) */
 export async function disconnectAll(): Promise<void> {
+  // disconnect built-in chain clients
   for (const client of clients.values()) {
     await client.disconnect();
   }
   clients.clear();
 
+  // disconnect custom chain clients
+  for (const client of customClients.values()) {
+    await client.disconnect();
+  }
+  customClients.clear();
+
   if (smoldotInstance) {
     smoldotInstance.terminate();
     smoldotInstance = null;
   }
+}
+
+// =============================================================================
+// unified ecosystem balance (seamless multi-parachain UX)
+// =============================================================================
+
+/** asset balance on a specific chain */
+export interface ChainAsset {
+  chain: SupportedChain;
+  chainName: string;
+  symbol: string;
+  decimals: number;
+  balance: bigint;
+}
+
+/**
+ * get aggregated balances across all parachains in an ecosystem
+ *
+ * this is the key for "seamless one network" UX - when user selects
+ * "Polkadot", they see all their HDX, GLMR, ACA, DOT etc. in one view
+ */
+export async function getUnifiedBalance(
+  relay: RelayChain,
+  publicKey: Uint8Array,
+): Promise<ChainAsset[]> {
+  const parachains = getEcosystemParachains(relay);
+  const results: ChainAsset[] = [];
+
+  // fetch balances in parallel with error tolerance
+  const fetchResults = await Promise.allSettled(
+    parachains.map(async (chain) => {
+      const info = CHAIN_INFO[chain];
+      const client = getLightClient(chain);
+
+      try {
+        // connect if needed
+        if (client.state.state !== 'ready') {
+          await client.connect();
+        }
+
+        const balance = await client.getBalance({ publicKey } as any);
+
+        return {
+          chain,
+          chainName: info.name,
+          symbol: info.symbol,
+          decimals: info.decimals,
+          balance,
+        };
+      } catch (err) {
+        // chain unavailable, return zero balance
+        return {
+          chain,
+          chainName: info.name,
+          symbol: info.symbol,
+          decimals: info.decimals,
+          balance: 0n,
+        };
+      }
+    })
+  );
+
+  // collect successful results
+  for (const result of fetchResults) {
+    if (result.status === 'fulfilled' && result.value.balance > 0n) {
+      results.push(result.value);
+    }
+  }
+
+  // sort by balance (highest first)
+  return results.sort((a, b) => Number(b.balance - a.balance));
+}
+
+/**
+ * get total value in relay token (DOT/KSM)
+ * approximation - assumes 1:1 for simplicity, real app would use price feeds
+ */
+export function getTotalInRelayToken(assets: ChainAsset[], relay: RelayChain): bigint {
+  const relayInfo = CHAIN_INFO[relay];
+  let total = 0n;
+
+  for (const asset of assets) {
+    if (asset.chain === relay || asset.symbol === relayInfo.symbol) {
+      // native relay token - add directly
+      total += asset.balance;
+    }
+    // for parachain tokens, would need price oracle - skip for now
+  }
+
+  return total;
 }

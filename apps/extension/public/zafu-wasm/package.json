@@ -1,0 +1,17 @@
+{
+  "name": "zafu-wasm",
+  "type": "module",
+  "description": "WASM bindings for Zafu Zcash wallet - parallel trial decryption with SIMD",
+  "version": "0.2.0",
+  "license": "MIT",
+  "files": [
+    "zafu_wasm_bg.wasm",
+    "zafu_wasm.js",
+    "zafu_wasm.d.ts"
+  ],
+  "main": "zafu_wasm.js",
+  "types": "zafu_wasm.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

@@ -4,8 +4,20 @@ import { encrypt } from './encrypt';
 import { keyStretchingHash } from './key-stretching';
 import { KeyPrint } from './key-print';
 
-const uintArraysEqual = (a: Uint8Array, b: Uint8Array): boolean =>
-  a.length === b.length && a.every((num, i) => b[i] === num);
+/**
+ * constant-time comparison to prevent timing attacks.
+ * always compares all bytes regardless of mismatch position.
+ */
+const constantTimeEqual = (a: Uint8Array, b: Uint8Array): boolean => {
+  if (a.length !== b.length) {
+    return false;
+  }
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a[i]! ^ b[i]!;
+  }
+  return result === 0;
+};
 
 export interface KeyJson {
   _inner: JsonWebKey;
@@ -36,7 +48,7 @@ export class Key {
     const buffer = await crypto.subtle.exportKey('raw', key);
     const hashedKey = await crypto.subtle.digest('SHA-256', buffer);
 
-    if (!uintArraysEqual(print.hash, new Uint8Array(hashedKey))) {
+    if (!constantTimeEqual(print.hash, new Uint8Array(hashedKey))) {
       return null;
     }
     return new Key(key);

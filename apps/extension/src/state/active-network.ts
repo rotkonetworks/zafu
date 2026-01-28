@@ -2,7 +2,8 @@ import type { LocalStorageState } from '@repo/storage-chrome/local';
 import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import { AllSlices, SliceCreator } from '.';
 
-export type NetworkType = 'penumbra' | 'zcash' | 'polkadot' | 'cosmos';
+/** @deprecated use keyRing.activeNetwork instead */
+export type NetworkType = 'penumbra' | 'zcash' | 'polkadot' | 'kusama' | 'osmosis' | 'noble' | 'nomic' | 'celestia' | 'ethereum' | 'bitcoin';
 
 export interface ActiveNetworkSlice {
   /** Currently active network */

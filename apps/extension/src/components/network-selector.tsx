@@ -1,52 +1,44 @@
-import { useState, useRef, useEffect } from 'react';
+/**
+ * network selector for send/receive pages
+ * solidjs-style: atomic selectors, composable primitives
+ */
+
 import { ChevronDownIcon, PlusIcon } from '@radix-ui/react-icons';
 import { cn } from '@repo/ui/lib/utils';
 import { useStore } from '../state';
-import { keyRingSelector, NetworkType } from '../state/keyring';
-
-export type Ecosystem = 'penumbra' | 'zcash' | 'polkadot' | 'bitcoin' | 'nostr';
+import { selectEnabledNetworks, type NetworkType } from '../state/keyring';
+import { NETWORKS } from '../config/networks';
+import { Dropdown } from './primitives/dropdown';
 
 export interface NetworkInfo {
-  id: string;
+  id: NetworkType;
   name: string;
-  icon?: string;
-  ecosystem: Ecosystem;
-  color?: string;
+  color: string;
   testnet?: boolean;
 }
 
-export const SUPPORTED_NETWORKS: NetworkInfo[] = [
-  {
-    id: 'penumbra-1',
-    name: 'penumbra',
-    ecosystem: 'penumbra',
-    color: '#7B68EE',
-  },
-  {
-    id: 'zcash-mainnet',
-    name: 'zcash',
-    ecosystem: 'zcash',
-    color: '#F4B728',
-  },
-  {
-    id: 'polkadot',
-    name: 'polkadot',
-    ecosystem: 'polkadot',
-    color: '#E6007A',
-  },
-  {
-    id: 'bitcoin-mainnet',
-    name: 'bitcoin',
-    ecosystem: 'bitcoin',
-    color: '#F7931A',
-  },
-  {
-    id: 'nostr',
-    name: 'nostr',
-    ecosystem: 'nostr',
-    color: '#8B5CF6',
-  },
-];
+/** derive supported networks from config */
+export const SUPPORTED_NETWORKS: NetworkInfo[] = (Object.keys(NETWORKS) as NetworkType[]).map(id => ({
+  id,
+  name: NETWORKS[id].name,
+  color: NETWORKS[id].color.replace('bg-', ''), // strip tailwind prefix for inline style
+}));
+
+/** color map for inline styles */
+const NETWORK_COLORS: Record<string, string> = {
+  'purple-500': '#8B5CF6',
+  'yellow-500': '#EAB308',
+  'pink-500': '#EC4899',
+  'gray-500': '#6B7280',
+  'purple-400': '#A78BFA',
+  'blue-400': '#60A5FA',
+  'orange-500': '#F97316',
+  'purple-600': '#9333EA',
+  'blue-500': '#3B82F6',
+  'orange-400': '#FB923C',
+};
+
+const getColorHex = (color: string): string => NETWORK_COLORS[color] ?? '#6B7280';
 
 interface NetworkSelectorProps {
   currentNetwork: NetworkInfo;
@@ -63,47 +55,38 @@ export const NetworkSelector = ({
   onAddNetwork,
   className,
 }: NetworkSelectorProps) => {
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const { enabledNetworks, toggleNetwork } = useStore(keyRingSelector);
+  // atomic selector - only re-renders when enabledNetworks changes
+  const enabledNetworks = useStore(selectEnabledNetworks);
 
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  // only show enabled networks
+  // filter to only enabled networks
   const activeNetworks = networks.filter(n =>
-    enabledNetworks.includes(n.ecosystem as NetworkType)
+    enabledNetworks.includes(n.id)
   );
 
   return (
-    <div ref={containerRef} className='relative'>
-      <button
-        onClick={() => setOpen(!open)}
-        className={cn(
-          'flex items-center gap-2 border border-border/50 bg-background/50 px-2.5 py-1.5 text-sm',
-          'transition-colors duration-75 hover:bg-accent',
-          className
-        )}
-      >
-        <div
-          className='h-2.5 w-2.5'
-          style={{ backgroundColor: currentNetwork.color }}
-        />
-        <span className='max-w-[80px] truncate font-medium'>{currentNetwork.name}</span>
-        {currentNetwork.testnet && (
-          <span className='text-[10px] text-muted-foreground'>testnet</span>
-        )}
-        <ChevronDownIcon className={cn('h-4 w-4 text-muted-foreground transition-transform duration-75', open && 'rotate-180')} />
-      </button>
-
-      {open && (
+    <Dropdown
+      trigger={({ toggle, open }) => (
+        <button
+          onClick={toggle}
+          className={cn(
+            'flex items-center gap-2 border border-border/50 bg-background/50 px-2.5 py-1.5 text-sm',
+            'transition-colors duration-75 hover:bg-accent',
+            className
+          )}
+        >
+          <div
+            className='h-2.5 w-2.5'
+            style={{ backgroundColor: getColorHex(currentNetwork.color) }}
+          />
+          <span className='max-w-[80px] truncate font-medium'>{currentNetwork.name}</span>
+          {currentNetwork.testnet && (
+            <span className='text-[10px] text-muted-foreground'>testnet</span>
+          )}
+          <ChevronDownIcon className={cn('h-4 w-4 text-muted-foreground transition-transform duration-75', open && 'rotate-180')} />
+        </button>
+      )}
+    >
+      {({ close }) => (
         <div className='absolute right-0 top-full z-50 mt-1 w-52 border border-border bg-popover shadow-lg'>
           <div className='p-1'>
             <div className='px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground'>
@@ -114,7 +97,7 @@ export const NetworkSelector = ({
                 key={network.id}
                 onClick={() => {
                   onNetworkChange(network);
-                  setOpen(false);
+                  close();
                 }}
                 className={cn(
                   'flex w-full items-center justify-between px-2 py-1.5 text-sm transition-colors duration-75',
@@ -122,10 +105,7 @@ export const NetworkSelector = ({
                 )}
               >
                 <div className='flex items-center gap-2'>
-                  <div
-                    className='h-2 w-2'
-                    style={{ backgroundColor: network.color }}
-                  />
+                  <div className='h-2 w-2' style={{ backgroundColor: getColorHex(network.color) }} />
                   <span>{network.name}</span>
                   {network.testnet && (
                     <span className='text-[10px] text-muted-foreground'>testnet</span>
@@ -138,42 +118,11 @@ export const NetworkSelector = ({
             ))}
           </div>
 
-          {/* manage networks */}
-          <div className='border-t border-border p-1'>
-            <div className='px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground'>
-              toggle networks
-            </div>
-            {networks.map(network => {
-              const isEnabled = enabledNetworks.includes(network.ecosystem as NetworkType);
-              return (
-                <button
-                  key={`toggle-${network.id}`}
-                  onClick={() => void toggleNetwork(network.ecosystem as NetworkType)}
-                  className='flex w-full items-center justify-between px-2 py-1.5 text-sm transition-colors duration-75 hover:bg-accent/50'
-                >
-                  <div className='flex items-center gap-2'>
-                    <div
-                      className='h-2 w-2'
-                      style={{ backgroundColor: network.color, opacity: isEnabled ? 1 : 0.3 }}
-                    />
-                    <span className={isEnabled ? '' : 'text-muted-foreground'}>{network.name}</span>
-                  </div>
-                  <div className={cn(
-                    'h-3 w-3 border border-border flex items-center justify-center',
-                    isEnabled && 'bg-primary border-primary'
-                  )}>
-                    {isEnabled && <span className='text-[8px] text-primary-foreground'>✓</span>}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
           {onAddNetwork && (
             <div className='border-t border-border p-1'>
               <button
                 onClick={() => {
-                  setOpen(false);
+                  close();
                   onAddNetwork();
                 }}
                 className='flex w-full items-center gap-2 px-2 py-1.5 text-sm text-muted-foreground transition-colors duration-75 hover:bg-accent hover:text-foreground'
@@ -185,6 +134,6 @@ export const NetworkSelector = ({
           )}
         </div>
       )}
-    </div>
+    </Dropdown>
   );
 };

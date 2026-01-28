@@ -10,6 +10,7 @@
 
 import type { PolkadotNetworkKeys } from '../common/types';
 import { CHAIN_IDS, QR_TYPES } from '../common/types';
+import { hexToBytes, bytesToHex } from '../common/qr';
 import { getLightClient, CHAIN_INFO, type SupportedChain } from './light-client';
 import {
   generateExtrinsicProof,
@@ -57,13 +58,14 @@ export interface SignedPolkadotTx {
  * UOS format: [0x53][crypto_type][payload_type][pubkey][payload]
  * - 0x53 = substrate prefix
  * - crypto_type: 0x00=ed25519, 0x01=sr25519
- * - payload_type: 0x06=transaction_with_proof (backwards compatible with polkadot vault)
+ * - payload_type: 0x06=transaction_with_proof (modern polkadot vault)
  * - pubkey: 32 bytes
  * - payload: [proof][call][extensions]
  */
 export function buildSignRequestQr(
   keys: PolkadotNetworkKeys,
-  tx: UnsignedPolkadotTx
+  tx: UnsignedPolkadotTx,
+  legacyMode = false
 ): string {
   const cryptoType = keys.scheme === 'sr25519'
     ? UOS_CRYPTO_CODE.SR25519
@@ -72,7 +74,13 @@ export function buildSignRequestQr(
   // public key (32 bytes)
   const pubkey = hexToBytes(keys.publicKey);
 
-  // build UOS payload: header + pubkey + tx payload
+  if (legacyMode) {
+    // legacy format for older polkadot vault / parity signer
+    // payload type 0x00 = raw transaction (no metadata proof)
+    return buildLegacySignRequestQr(keys, tx, cryptoType, pubkey);
+  }
+
+  // modern format with merkleized metadata proof
   const header = new Uint8Array([
     0x53, // substrate
     cryptoType,
@@ -87,25 +95,66 @@ export function buildSignRequestQr(
   offset += pubkey.length;
   payload.set(tx.uosPayload, offset);
 
-  return Buffer.from(payload).toString('hex');
+  return bytesToHex(payload);
 }
 
-/** convert hex string to bytes */
-function hexToBytes(hex: string): Uint8Array {
-  const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex;
-  const bytes = new Uint8Array(cleanHex.length / 2);
-  for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = parseInt(cleanHex.substr(i * 2, 2), 16);
-  }
-  return bytes;
+/**
+ * build legacy sign request for older parity signer / polkadot vault
+ *
+ * format: [0x53][crypto][0x00 or 0x02][genesis_prefix][pubkey][call+extensions]
+ * - 0x00 = mortal transaction
+ * - 0x02 = immortal transaction
+ *
+ * older vaults need full metadata stored on device to decode this
+ */
+function buildLegacySignRequestQr(
+  _keys: PolkadotNetworkKeys,
+  tx: UnsignedPolkadotTx,
+  cryptoType: number,
+  pubkey: Uint8Array
+): string {
+  // legacy payload: call + extensions (no proof)
+  const legacyPayload = new Uint8Array(tx.callData.length + tx.signedExtensions.length);
+  legacyPayload.set(tx.callData, 0);
+  legacyPayload.set(tx.signedExtensions, tx.callData.length);
+
+  // genesis hash prefix (first 4 bytes) to identify chain
+  const genesisPrefix = hexToBytes(tx.genesisHash).slice(0, 4);
+
+  // determine if immortal (0x00 era = immortal)
+  const isImmortal = tx.signedExtensions[0] === 0x00;
+  const payloadType = isImmortal
+    ? UOS_PAYLOAD_CODE.TRANSACTION // 0x00 for legacy
+    : 0x02; // mortal
+
+  const header = new Uint8Array([
+    0x53, // substrate
+    cryptoType,
+    payloadType,
+  ]);
+
+  const payload = new Uint8Array(
+    header.length + genesisPrefix.length + pubkey.length + legacyPayload.length
+  );
+  let offset = 0;
+  payload.set(header, offset);
+  offset += header.length;
+  payload.set(genesisPrefix, offset);
+  offset += genesisPrefix.length;
+  payload.set(pubkey, offset);
+  offset += pubkey.length;
+  payload.set(legacyPayload, offset);
+
+  return bytesToHex(payload);
 }
+
 
 /**
  * parse signature qr from zigner
  * format: [0x53][chain_id][SIGNATURES][signature]
  */
 export function parseSignatureQr(qrHex: string): SignedPolkadotTx {
-  const bytes = Buffer.from(qrHex, 'hex');
+  const bytes = hexToBytes(qrHex);
 
   if (bytes[0] !== 0x53) {
     throw new Error('invalid qr prefix');

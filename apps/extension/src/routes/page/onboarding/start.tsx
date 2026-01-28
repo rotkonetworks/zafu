@@ -49,7 +49,7 @@ export const OnboardingStart = () => {
             className='w-full'
             onClick={() => navigate(PagePath.IMPORT_ZIGNER)}
           >
-            Connect Zigner (watch-only)
+Connect Zafu Zigner (watch-only)
           </Button>
         </CardContent>
       </Card>

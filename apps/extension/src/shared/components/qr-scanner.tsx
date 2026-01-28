@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Html5Qrcode } from 'html5-qrcode';
+import { BrowserQRCodeReader } from '@zxing/browser';
 import { CameraIcon, Cross1Icon } from '@radix-ui/react-icons';
 import { Button } from '@repo/ui/components/ui/button';
 
@@ -12,7 +12,7 @@ interface QrScannerProps {
 }
 
 /**
- * Full-screen QR Code scanner overlay using device camera
+ * Full-screen QR Code scanner using ZXing (fast, reliable)
  */
 export const QrScanner = ({
   onScan,
@@ -23,18 +23,15 @@ export const QrScanner = ({
 }: QrScannerProps) => {
   const [isScanning, setIsScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const readerRef = useRef<BrowserQRCodeReader | null>(null);
+  const controlsRef = useRef<{ stop: () => void } | null>(null);
   const mountedRef = useRef(true);
 
-  const stopScanning = useCallback(async () => {
-    if (scannerRef.current) {
-      try {
-        await scannerRef.current.stop();
-        scannerRef.current.clear();
-      } catch {
-        // Ignore stop errors
-      }
-      scannerRef.current = null;
+  const stopScanning = useCallback(() => {
+    if (controlsRef.current) {
+      controlsRef.current.stop();
+      controlsRef.current = null;
     }
     if (mountedRef.current) {
       setIsScanning(false);
@@ -42,28 +39,55 @@ export const QrScanner = ({
   }, []);
 
   const startScanning = useCallback(async () => {
+    if (!videoRef.current) return;
+
     try {
       setError(null);
 
-      const scanner = new Html5Qrcode('qr-scanner-viewport');
-      scannerRef.current = scanner;
+      const reader = new BrowserQRCodeReader();
+      readerRef.current = reader;
 
-      await scanner.start(
-        { facingMode: 'environment' },
-        {
-          fps: 10,
-          qrbox: { width: 250, height: 250 },
-          aspectRatio: 1,
-        },
-        (decodedText) => {
-          // Success - stop scanning and return result
-          void stopScanning();
-          onScan(decodedText);
-        },
-        () => {
-          // QR code not found in frame - ignore
+      // Get back camera
+      const devices = await BrowserQRCodeReader.listVideoInputDevices();
+      const backCamera = devices.find((d: MediaDeviceInfo) =>
+        d.label.toLowerCase().includes('back') ||
+        d.label.toLowerCase().includes('rear') ||
+        d.label.toLowerCase().includes('environment')
+      ) || devices[0];
+
+      if (!backCamera) {
+        throw new Error('No camera found');
+      }
+
+      const controls = await reader.decodeFromVideoDevice(
+        backCamera.deviceId,
+        videoRef.current,
+        (result) => {
+          if (result) {
+            stopScanning();
+            const text = result.getText();
+
+            // Check if this is binary data (Zigner format starts with 'S' = 0x53)
+            // ZXing decodes BYTE mode QR codes as Latin-1, so 'S' indicates our binary format
+            if (text.length > 0 && text.charCodeAt(0) === 0x53) {
+              // Convert Latin-1 text back to hex bytes
+              const hex = Array.from(text)
+                .map(c => c.charCodeAt(0).toString(16).padStart(2, '0'))
+                .join('');
+              onScan(hex);
+            } else if (/^[0-9a-fA-F]+$/.test(text)) {
+              // Already hex-encoded
+              onScan(text);
+            } else {
+              // Text/URL QR code - pass as-is
+              onScan(text);
+            }
+          }
+          // Ignore decode errors (no QR in frame)
         }
       );
+
+      controlsRef.current = controls;
 
       if (mountedRef.current) {
         setIsScanning(true);
@@ -72,7 +96,7 @@ export const QrScanner = ({
       const message = err instanceof Error ? err.message : 'Failed to start camera';
 
       if (message.includes('Permission') || message.includes('NotAllowed')) {
-        setError('Camera permission denied. Enable camera access in browser settings and try again.');
+        setError('Camera permission denied. Enable camera access in browser settings.');
       } else if (message.includes('NotFound') || message.includes('no camera')) {
         setError('No camera found on this device.');
       } else {
@@ -83,19 +107,19 @@ export const QrScanner = ({
     }
   }, [onScan, onError, stopScanning]);
 
-  // Cleanup on unmount
+  // Start on mount, cleanup on unmount
   useEffect(() => {
     mountedRef.current = true;
     void startScanning();
 
     return () => {
       mountedRef.current = false;
-      void stopScanning();
+      stopScanning();
     };
   }, [startScanning, stopScanning]);
 
   const handleClose = () => {
-    void stopScanning();
+    stopScanning();
     onClose();
   };
 
@@ -117,15 +141,16 @@ export const QrScanner = ({
 
       {/* Scanner viewport */}
       <div className='flex-1 relative min-h-0 overflow-hidden'>
-        <div
-          id='qr-scanner-viewport'
-          className='absolute inset-0 overflow-hidden [&>video]:!object-cover [&>video]:!h-full [&>video]:!w-full'
+        <video
+          ref={videoRef}
+          className='absolute inset-0 w-full h-full object-cover'
+          playsInline
+          muted
         />
 
         {/* Scanning overlay with frame */}
         {isScanning && (
           <div className='absolute inset-0 pointer-events-none'>
-            {/* Dark overlay with transparent center */}
             <div className='absolute inset-0 flex items-center justify-center'>
               <div className='relative w-64 h-64'>
                 {/* Corner markers */}

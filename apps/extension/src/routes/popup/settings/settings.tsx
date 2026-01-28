@@ -1,12 +1,10 @@
-import { DashboardIcon, ExitIcon, FileTextIcon, GlobeIcon, Link1Icon } from '@radix-ui/react-icons';
+import { ExitIcon, FileTextIcon, GlobeIcon, Link1Icon, InfoCircledIcon, TrashIcon } from '@radix-ui/react-icons';
 import { CustomLink } from '../../../shared/components/link';
 import { useStore } from '../../../state';
 import { passwordSelector } from '../../../state/password';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { SettingsScreen } from './settings-screen';
-import { useChainIdQuery } from '../../../hooks/chain-id';
-import { useNumeraires } from '../../../hooks/numeraires-query';
 
 const links = [
   {
@@ -25,18 +23,20 @@ const links = [
     href: PopupPath.SETTINGS_CONNECTED_SITES,
   },
   {
-    title: 'Advanced',
-    icon: <DashboardIcon className='size-5 text-muted-foreground' />,
-    href: PopupPath.SETTINGS_ADVANCED,
+    title: 'Clear Cache',
+    icon: <TrashIcon className='size-5 text-muted-foreground' />,
+    href: PopupPath.SETTINGS_CLEAR_CACHE,
+  },
+  {
+    title: 'About',
+    icon: <InfoCircledIcon className='size-5 text-muted-foreground' />,
+    href: PopupPath.SETTINGS_ABOUT,
   },
 ];
 
 export const Settings = () => {
   const navigate = usePopupNav();
   const { clearSessionPassword } = useStore(passwordSelector);
-
-  const { chainId } = useChainIdQuery();
-  const { numeraires } = useNumeraires(chainId);
 
   return (
     <SettingsScreen title='Settings and Security'>
@@ -48,7 +48,6 @@ export const Settings = () => {
               title={i.title}
               icon={i.icon}
               onClick={() => navigate(i.href)}
-              disabled={i.href === PopupPath.SETTINGS_NUMERAIRES && numeraires.length === 0}
             />
           ))}
         </div>

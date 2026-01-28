@@ -7,9 +7,17 @@ import { CHAIN_IDS, QR_TYPES, type NetworkType } from './types';
 /** Substrate compatibility byte (0x53 = 'S') */
 export const SUBSTRATE_COMPAT = 0x53;
 
-/** Convert hex string to Uint8Array */
+/** Convert hex string to Uint8Array. Throws on invalid input. */
 export function hexToBytes(hex: string): Uint8Array {
   const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex;
+
+  if (cleanHex.length % 2 !== 0) {
+    throw new Error(`invalid hex: odd length (${cleanHex.length})`);
+  }
+  if (!/^[0-9a-fA-F]*$/.test(cleanHex)) {
+    throw new Error('invalid hex: contains non-hex characters');
+  }
+
   const bytes = new Uint8Array(cleanHex.length / 2);
   for (let i = 0; i < bytes.length; i++) {
     bytes[i] = parseInt(cleanHex.substring(i * 2, i * 2 + 2), 16);

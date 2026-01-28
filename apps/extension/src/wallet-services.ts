@@ -10,7 +10,31 @@ import { WalletServices } from '@penumbra-zone/types/services';
 import { AssetId } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { SENTINEL_U64_MAX } from './utils/sentinel';
 
+/**
+ * check if penumbra network is enabled
+ * privacy-first: don't make network connections unless user has opted in
+ */
+export const isPenumbraEnabled = async (): Promise<boolean> => {
+  const enabledNetworks = await localExtStorage.get('enabledNetworks');
+  // if no networks configured yet, check if we have wallets (backwards compat)
+  if (!enabledNetworks) {
+    const wallets = await localExtStorage.get('wallets');
+    return wallets && wallets.length > 0;
+  }
+  return enabledNetworks.includes('penumbra');
+};
+
 export const startWalletServices = async () => {
+  // privacy gate: check if penumbra is enabled before making network connections
+  const enabled = await isPenumbraEnabled();
+  if (!enabled) {
+    console.log('penumbra not enabled, skipping wallet services initialization');
+    // return a stub services object that throws on access
+    return {
+      getWalletServices: () => Promise.reject(new Error('penumbra network not enabled')),
+    } as Services;
+  }
+
   const wallet = await onboardWallet();
   const grpcEndpoint = await onboardGrpcEndpoint();
   const numeraires = await localExtStorage.get('numeraires');

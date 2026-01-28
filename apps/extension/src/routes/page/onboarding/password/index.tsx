@@ -16,6 +16,7 @@ import { useFinalizeOnboarding } from './hooks';
 import { PagePath } from '../../paths';
 import { useLocation } from 'react-router-dom';
 import { SEED_PHRASE_ORIGIN } from './types';
+import { getSeedPhraseOrigin } from './utils';
 
 export const SetPassword = () => {
   const navigate = usePageNav();
@@ -24,7 +25,7 @@ export const SetPassword = () => {
   const { handleSubmit, error, loading } = useFinalizeOnboarding();
 
   const location = useLocation();
-  const origin = (location.state as { origin?: SEED_PHRASE_ORIGIN }).origin;
+  const origin = getSeedPhraseOrigin(location);
 
   return (
     <FadeTransition>

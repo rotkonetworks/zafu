@@ -51,7 +51,7 @@ export function SettingsPrivacy() {
         {/* info box */}
         <div className="rounded-lg border border-border bg-card-radial p-4">
           <p className="text-sm text-muted-foreground">
-            zafu operates as a minimal qr bridge for zigner by default.
+zafu operates as a minimal qr bridge for zafu zigner by default.
             these settings control opt-in features that query the network.
           </p>
         </div>

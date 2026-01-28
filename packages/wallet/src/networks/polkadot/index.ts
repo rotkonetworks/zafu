@@ -28,6 +28,14 @@ export {
   type ChainInfo,
   type ConnectionState,
   type LightClientState,
+
+  // custom chainspec support
+  registerCustomChainspec,
+  unregisterCustomChainspec,
+  getCustomChainspecs,
+  isCustomChain,
+  getCustomLightClient,
+  connectCustomChain,
 } from './light-client';
 
 export {
@@ -50,3 +58,17 @@ export {
   UOS_PAYLOAD_CODE,
   UOS_CRYPTO_CODE,
 } from './metadata-proof';
+
+export {
+  // balance cache
+  setEnabledChains,
+  getEnabledChainsForRelay,
+  getBalances,
+  refreshChains,
+  refreshChain,
+  getCachedBalance,
+  clearCache as clearBalanceCache,
+  markChainActive,
+  getNonZeroBalances,
+  type ChainBalance,
+} from './balance-cache';

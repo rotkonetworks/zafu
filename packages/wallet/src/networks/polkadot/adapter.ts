@@ -12,7 +12,17 @@ import type {
   SendParams,
 } from '../adapter';
 import type { ZignerWallet, PendingTransaction } from '../common/types';
-import { getLightClient, disconnectAll, CHAIN_INFO, type SupportedChain } from './light-client';
+import {
+  getLightClient,
+  disconnectAll,
+  CHAIN_INFO,
+  getUnifiedBalance,
+  detectChainFromAddress,
+  type SupportedChain,
+  type RelayChain,
+  type ChainAsset,
+} from './light-client';
+import { hexToBytes } from '../common/qr';
 import { isValidSs58 } from './zigner';
 
 export class PolkadotAdapter implements NetworkAdapter {
@@ -21,6 +31,29 @@ export class PolkadotAdapter implements NetworkAdapter {
 
   private ready = false;
   private defaultChain: SupportedChain = 'polkadot';
+
+  /**
+   * active relay network - must be explicitly set
+   *
+   * polkadot and paseo use same ss58 prefix (0), so we can't
+   * auto-detect from address. user must choose their network.
+   */
+  private relay: RelayChain = 'polkadot';
+
+  /** cached unified balances for seamless UX */
+  private cachedAssets: ChainAsset[] = [];
+
+  /** set active relay network (polkadot/kusama/paseo) */
+  setRelay(relay: RelayChain): void {
+    this.relay = relay;
+    this.defaultChain = relay;
+    this.cachedAssets = []; // clear cache on network switch
+  }
+
+  /** get current relay network */
+  getRelay(): RelayChain {
+    return this.relay;
+  }
 
   async initialize(): Promise<void> {
     console.log('[polkadot] initializing adapter with smoldot light client');
@@ -35,6 +68,21 @@ export class PolkadotAdapter implements NetworkAdapter {
 
   isReady(): boolean {
     return this.ready;
+  }
+
+  /**
+   * get all assets across all parachains - unified "one network" UX
+   *
+   * when user selects "Polkadot", they see HDX, GLMR, ACA, DOT etc. all together
+   */
+  async getAllEcosystemAssets(wallet: ZignerWallet): Promise<ChainAsset[]> {
+    const polkadotKeys = wallet.networks.polkadot;
+    if (!polkadotKeys) {
+      return [];
+    }
+
+    this.cachedAssets = await getUnifiedBalance(this.relay, hexToBytes(polkadotKeys.publicKey));
+    return this.cachedAssets;
   }
 
   async getBalance(wallet: ZignerWallet): Promise<NetworkBalance> {
@@ -88,8 +136,22 @@ export class PolkadotAdapter implements NetworkAdapter {
       throw new Error('Wallet has no Polkadot keys');
     }
 
-    const chain = (polkadotKeys.chain || 'polkadot') as SupportedChain;
+    // detect chain from recipient address ss58 prefix
+    // note: polkadot/paseo share prefix 0, so use user's selected relay for those
+    const detectedChain = detectChainFromAddress(params.recipient);
+    let chain: SupportedChain;
+
+    if (detectedChain && detectedChain !== 'polkadot') {
+      // specific parachain detected (hydration, moonbeam, etc.) - use it
+      chain = detectedChain;
+    } else {
+      // generic polkadot address (prefix 0) or unknown - use user's selected relay
+      // this handles polkadot vs paseo ambiguity
+      chain = (polkadotKeys.chain || this.relay) as SupportedChain;
+    }
+
     const chainInfo = CHAIN_INFO[chain];
+    console.log(`[polkadot] sending on ${chain} (relay: ${this.relay})`);
 
     // Build the unsigned transfer transaction
     const client = await getLightClient(chain);

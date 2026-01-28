@@ -28,6 +28,8 @@ export interface KeyRingSlice {
   keyInfos: KeyInfo[];
   /** currently selected key info */
   selectedKeyInfo: KeyInfo | undefined;
+  /** currently active network */
+  activeNetwork: NetworkType;
   /** enabled networks for display */
   enabledNetworks: NetworkType[];
 
@@ -44,8 +46,10 @@ export interface KeyRingSlice {
 
   /** create new mnemonic account */
   newMnemonicKey: (mnemonic: string, name: string) => Promise<string>;
-  /** import zigner zafu (watch-only) */
+  /** import zigner zafu (watch-only, encrypted) */
   newZignerZafuKey: (data: ZignerZafuImport, name: string) => Promise<string>;
+  /** import zigner zafu (watch-only, unencrypted - no password required) */
+  addZignerUnencrypted: (data: ZignerZafuImport, name: string) => Promise<string>;
   /** select a different account */
   selectKeyRing: (vaultId: string) => Promise<void>;
   /** rename an account */
@@ -60,6 +64,8 @@ export interface KeyRingSlice {
 
   /** toggle network visibility */
   toggleNetwork: (network: NetworkType) => Promise<void>;
+  /** set active network */
+  setActiveNetwork: (network: NetworkType) => Promise<void>;
 }
 
 export const createKeyRingSlice = (
@@ -109,45 +115,111 @@ export const createKeyRingSlice = (
     status: 'not-loaded',
     keyInfos: [],
     selectedKeyInfo: undefined,
-    enabledNetworks: ['penumbra', 'zcash', 'polkadot'],
+    activeNetwork: 'penumbra',
+    enabledNetworks: ['penumbra', 'zcash'],
 
     init: async () => {
       const keyPrint = await local.get('passwordKeyPrint');
-      const vaults = (await local.get('vaults')) ?? [];
+      const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
       const selectedId = await local.get('selectedVaultId');
-      const enabledNetworks = (await local.get('enabledNetworks')) ?? ['penumbra', 'zcash', 'polkadot'];
+      const enabledNetworks = (await local.get('enabledNetworks')) ?? ['penumbra', 'zcash'];
+      const activeNetwork = (await local.get('activeNetwork')) ?? 'penumbra';
+
+      // check if all vaults are airgap-only (use default password)
+      const hasOnlyAirgap = vaults.length > 0 &&
+        vaults.every(v => v.insensitive?.['airgapOnly'] === true);
 
       if (!keyPrint) {
         set(state => {
           state.keyRing.status = 'empty';
           state.keyRing.keyInfos = [];
           state.keyRing.selectedKeyInfo = undefined;
+          state.keyRing.activeNetwork = activeNetwork as NetworkType;
           state.keyRing.enabledNetworks = enabledNetworks as NetworkType[];
         });
         return;
       }
 
-      const sessionKey = await session.get('passwordKey');
-      const keyInfos = vaultsToKeyInfos(vaults as EncryptedVault[], selectedId as string);
+      let sessionKey = await session.get('passwordKey');
+      const keyInfos = vaultsToKeyInfos(vaults, selectedId as string);
+
+      // auto-unlock if only airgap signers (use default password)
+      if (!sessionKey && hasOnlyAirgap) {
+        const DEFAULT_AIRGAP_PASSWORD = '';
+        const key = await Key.recreate(DEFAULT_AIRGAP_PASSWORD, KeyPrint.fromJson(keyPrint));
+        if (key) {
+          const keyJson = await key.toJson();
+          await session.set('passwordKey', keyJson);
+          sessionKey = keyJson;
+        }
+      }
 
       set(state => {
         state.keyRing.status = sessionKey ? 'unlocked' : 'locked';
         state.keyRing.keyInfos = keyInfos;
         state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
+        state.keyRing.activeNetwork = activeNetwork as NetworkType;
         state.keyRing.enabledNetworks = enabledNetworks as NetworkType[];
       });
     },
 
     setPassword: async (password: string) => {
-      const { key, keyPrint } = await Key.create(password);
-      const keyJson = await key.toJson();
+      const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+      const existingKeyPrint = await local.get('passwordKeyPrint');
 
-      await session.set('passwordKey', keyJson);
-      await local.set('passwordKeyPrint', keyPrint.toJson());
+      // check if we're upgrading from airgap-only (default password) setup
+      const hasAirgapOnly = vaults.some(v => v.insensitive?.['airgapOnly'] === true);
 
-      set(state => {
-        state.keyRing.status = 'unlocked';
-      });
+      if (hasAirgapOnly && existingKeyPrint) {
+        // migrate: decrypt with old default key, re-encrypt with new password
+        const DEFAULT_AIRGAP_PASSWORD = '';
+        const oldKey = await Key.recreate(DEFAULT_AIRGAP_PASSWORD, KeyPrint.fromJson(existingKeyPrint));
+        if (!oldKey) throw new Error('failed to decrypt existing vaults for migration');
+
+        const { key: newKey, keyPrint: newKeyPrint } = await Key.create(password);
+
+        // re-encrypt all vaults with new key
+        const migratedVaults = await Promise.all(
+          vaults.map(async vault => {
+            const oldBox = Box.fromJson(JSON.parse(vault.encryptedData));
+            const decrypted = await oldKey.unseal(oldBox);
+            if (!decrypted) throw new Error(`failed to decrypt vault ${vault.id}`);
+
+            const newBox = await newKey.seal(decrypted);
+            const newInsensitive = { ...vault.insensitive };
+            delete newInsensitive['airgapOnly']; // remove airgap marker - now password protected
+
+            return {
+              ...vault,
+              encryptedData: JSON.stringify(newBox),
+              insensitive: newInsensitive,
+            };
+          }),
+        );
+
+        await local.set('vaults', migratedVaults);
+        await local.set('passwordKeyPrint', newKeyPrint.toJson());
+        await session.set('passwordKey', await newKey.toJson());
+
+        const selectedId = await local.get('selectedVaultId');
+        const keyInfos = vaultsToKeyInfos(migratedVaults, selectedId as string);
+        set(state => {
+          state.keyRing.status = 'unlocked';
+          state.keyRing.keyInfos = keyInfos;
+          state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
+        });
+      } else {
+        // fresh setup or no migration needed
+        const { key, keyPrint } = await Key.create(password);
+        const keyJson = await key.toJson();
+
+        await session.set('passwordKey', keyJson);
+        await local.set('passwordKeyPrint', keyPrint.toJson());
+
+        set(state => {
+          state.keyRing.status = 'unlocked';
+        });
+      }
     },
 
     unlock: async (password: string) => {
@@ -241,6 +313,68 @@ export const createKeyRingSlice = (
       return vaultId;
     },
 
+    addZignerUnencrypted: async (data: ZignerZafuImport, name: string) => {
+      const vaultId = generateVaultId();
+
+      // check if we already have a key setup (user has existing vaults)
+      const existingKeyPrint = await local.get('passwordKeyPrint');
+      const existingSessionKey = await session.get('passwordKey');
+
+      let key: Key;
+      let isNewSetup = false;
+
+      if (existingKeyPrint && existingSessionKey) {
+        // already have a password setup and unlocked - use existing key
+        key = await Key.fromJson(existingSessionKey);
+      } else if (!existingKeyPrint) {
+        // fresh install - create default key for airgap-only setup
+        const DEFAULT_AIRGAP_PASSWORD = '';
+        const created = await Key.create(DEFAULT_AIRGAP_PASSWORD);
+        key = created.key;
+        isNewSetup = true;
+
+        // set session key and store keyprint
+        const keyJson = await key.toJson();
+        await session.set('passwordKey', keyJson);
+        await local.set('passwordKeyPrint', created.keyPrint.toJson());
+      } else {
+        // keyPrint exists but not unlocked - shouldn't happen in normal flow
+        throw new Error('keyring locked - unlock first or use password flow');
+      }
+
+      const encryptedData = await key.seal(JSON.stringify(data));
+
+      const vault: EncryptedVault = {
+        id: vaultId,
+        type: 'zigner-zafu',
+        name,
+        createdAt: Date.now(),
+        encryptedData: JSON.stringify(encryptedData),
+        salt: '',
+        insensitive: {
+          deviceId: data.deviceId,
+          accountIndex: data.accountIndex,
+          // only mark as airgapOnly if this is a fresh setup with default password
+          // if user already has a real password, this vault uses that password too
+          ...(isNewSetup ? { airgapOnly: true } : {}),
+        },
+      };
+
+      const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+      const newVaults = [vault, ...vaults];
+      await local.set('vaults', newVaults);
+      await local.set('selectedVaultId', vaultId);
+
+      const keyInfos = vaultsToKeyInfos(newVaults, vaultId);
+      set(state => {
+        state.keyRing.keyInfos = keyInfos;
+        state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
+        state.keyRing.status = 'unlocked';
+      });
+
+      return vaultId;
+    },
+
     selectKeyRing: async (vaultId: string) => {
       await local.set('selectedVaultId', vaultId);
 
@@ -327,7 +461,28 @@ export const createKeyRingSlice = (
         state.keyRing.enabledNetworks = newNetworks;
       });
     },
+
+    setActiveNetwork: async (network: NetworkType) => {
+      await local.set('activeNetwork', network);
+      set(state => {
+        state.keyRing.activeNetwork = network;
+      });
+    },
   };
 };
 
+/** coarse selector - use sparingly, causes re-render on any keyring change */
 export const keyRingSelector = (state: AllSlices) => state.keyRing;
+
+/**
+ * fine-grained atomic selectors - solidjs style
+ * each selector only triggers re-render when its specific value changes
+ */
+export const selectActiveNetwork = (state: AllSlices) => state.keyRing.activeNetwork;
+export const selectEnabledNetworks = (state: AllSlices) => state.keyRing.enabledNetworks;
+export const selectSetActiveNetwork = (state: AllSlices) => state.keyRing.setActiveNetwork;
+export const selectSelectedKeyInfo = (state: AllSlices) => state.keyRing.selectedKeyInfo;
+export const selectKeyInfos = (state: AllSlices) => state.keyRing.keyInfos;
+export const selectStatus = (state: AllSlices) => state.keyRing.status;
+export const selectLock = (state: AllSlices) => state.keyRing.lock;
+export const selectUnlock = (state: AllSlices) => state.keyRing.unlock;

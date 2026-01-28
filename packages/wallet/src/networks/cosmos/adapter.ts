@@ -16,6 +16,7 @@ import type {
   NetworkTransaction,
   SendParams,
 } from '../adapter';
+import { bytesToHex } from '../common/qr';
 import type { ZignerWallet, PendingTransaction } from '../common/types';
 import {
   getBalance,
@@ -183,7 +184,7 @@ export class CosmosAdapter implements NetworkAdapter {
       network: 'cosmos',
       walletId: wallet.id,
       summary: `Send ${amountDisplay} on ${targetChain.name}`,
-      signRequestQr: Buffer.from(signDoc).toString('hex'),
+      signRequestQr: bytesToHex(new TextEncoder().encode(signDoc)),
       status: 'awaiting_signature',
       createdAt: Date.now(),
     };

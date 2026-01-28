@@ -1,5 +1,6 @@
 import { BackIcon } from '@repo/ui/components/ui/icons/back-icon';
 import { usePopupNav } from '../../../../utils/navigate';
+import { PopupPath } from '../../paths';
 
 export const SettingsHeader = ({ title }: { title: string }) => {
   const navigate = usePopupNav();
@@ -7,7 +8,7 @@ export const SettingsHeader = ({ title }: { title: string }) => {
     <>
       <BackIcon
         className='absolute ml-[30px] mt-6 size-6 text-muted-foreground'
-        onClick={() => navigate(-1)}
+        onClick={() => navigate(PopupPath.INDEX)}
       />
       <h1 className='flex h-[70px] items-center justify-center border-b border-border-secondary font-headline text-xl font-semibold leading-[30px]'>
         {title}

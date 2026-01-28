@@ -185,22 +185,27 @@ const getEvmBalance = async (address: string, rpcUrl: string): Promise<BalanceRe
 
 const deriveCosmosAddress = async (
   network: IbcNetwork,
-  _mnemonic: string,
-  accountIndex: number,
+  mnemonic: string,
+  _accountIndex: number,
   bech32Prefix: string,
 ): Promise<TransparentWallet> => {
-  // TODO: use @cosmjs/crypto and @cosmjs/encoding
-  // import { Secp256k1HdWallet } from '@cosmjs/amino';
-  // const wallet = await Secp256k1HdWallet.fromMnemonic(_mnemonic, { prefix: bech32Prefix });
-  // const [account] = await wallet.getAccounts();
+  // use real derivation via @repo/wallet
+  const { deriveCosmosWallet } = await import('@repo/wallet/networks/cosmos/signer');
+  const wallet = await deriveCosmosWallet(mnemonic, 0, bech32Prefix);
 
-  console.log(`[transparent] deriving ${network} address for account ${accountIndex}, prefix: ${bech32Prefix}`);
   return {
     network,
-    address: `${bech32Prefix}1stub${accountIndex}...`,
-    publicKey: '0x...',
+    address: wallet.address,
+    publicKey: bytesToHex(wallet.pubkey),
   };
 };
+
+/** convert bytes to hex string */
+function bytesToHex(bytes: Uint8Array): string {
+  return '0x' + Array.from(bytes)
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
 
 const getCosmosBalance = async (address: string, rpcUrl: string, denom?: string): Promise<BalanceResult> => {
   // cosmos lcd/rest api

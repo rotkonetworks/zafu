@@ -20,6 +20,7 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
   void (async function () {
     // Part 1: Get storage values and sync them to store
     const wallets = await localExtStorage.get('wallets');
+    const zcashWallets = await localExtStorage.get('zcashWallets');
     const grpcEndpoint = await localExtStorage.get('grpcEndpoint');
     const knownSites = await localExtStorage.get('knownSites');
     const frontendUrl = await localExtStorage.get('frontendUrl');
@@ -29,6 +30,7 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
     set(
       produce((state: AllSlices) => {
         state.wallets.all = wallets;
+        state.wallets.zcashWallets = zcashWallets ?? [];
         state.network.grpcEndpoint = grpcEndpoint;
         state.connectedSites.knownSites = knownSites as OriginRecord[];
         state.defaultFrontend.url = frontendUrl;
@@ -36,6 +38,9 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
         state.zigner.cameraEnabled = zignerCameraEnabled ?? false;
       }),
     );
+
+    // Initialize keyring from storage (loads vaults, selected key, networks)
+    await get().keyRing.init();
 
     // Part 2: when chrome.storage changes sync select fields to store
     localExtStorage.addListener(changes => {
@@ -111,6 +116,20 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
             state.zigner.cameraEnabled = stored ?? false;
           }),
         );
+      }
+
+      if (changes.zcashWallets) {
+        const stored = changes.zcashWallets.newValue;
+        set(
+          produce((state: AllSlices) => {
+            state.wallets.zcashWallets = stored ?? [];
+          }),
+        );
+      }
+
+      // re-init keyring if vaults or selected vault changes
+      if (changes.vaults || changes.selectedVaultId) {
+        void get().keyRing.init();
       }
     });
   })();

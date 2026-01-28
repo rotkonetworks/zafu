@@ -78,17 +78,18 @@ export const SettingsNetworkEndpoints = () => {
           ))
         )}
 
-        <div className="mt-4 border-t pt-4">
-          <h3 className="text-sm font-medium mb-2">Default Endpoints</h3>
-          <div className="text-xs text-muted-foreground space-y-1">
-            <p><strong>Zcash:</strong> https://zcash.rotko.net (zidecar)</p>
-            <p><strong>Penumbra:</strong> https://grpc.penumbra.zone</p>
-            <p><strong>Polkadot:</strong> wss://rpc.polkadot.io (or light client)</p>
-            <p><strong>Ethereum:</strong> https://eth.llamarpc.com</p>
-            <p><strong>Cosmos:</strong> https://cosmos-rest.publicnode.com</p>
-            <p><strong>Bitcoin:</strong> https://mempool.space</p>
+        {enabledNetworks.length > 0 && (
+          <div className="mt-4 border-t pt-4">
+            <h3 className="text-sm font-medium mb-2">Default Endpoints</h3>
+            <div className="text-xs text-muted-foreground space-y-1">
+              {networks.zcash?.enabled && <p><strong>Zcash:</strong> https://zcash.rotko.net (zidecar)</p>}
+              {networks.penumbra?.enabled && <p><strong>Penumbra:</strong> https://penumbra.rotko.net</p>}
+              {networks.polkadot?.enabled && <p><strong>Polkadot:</strong> wss://rpc.polkadot.io (light client)</p>}
+              {networks.ethereum?.enabled && <p><strong>Ethereum:</strong> https://eth.llamarpc.com</p>}
+              {networks.bitcoin?.enabled && <p><strong>Bitcoin:</strong> https://mempool.space</p>}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </SettingsScreen>
   );

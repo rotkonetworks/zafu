@@ -4,6 +4,8 @@ export enum PopupPath {
   STAKE = '/stake',
   SWAP = '/swap',
   HISTORY = '/history',
+  INBOX = '/inbox',
+  CONTACTS = '/contacts',
   SETTINGS = '/settings',
 
   // Auth
@@ -18,7 +20,6 @@ export enum PopupPath {
   RECEIVE = '/receive',
 
   // Settings sub-pages
-  SETTINGS_ADVANCED = '/settings/advanced',
   SETTINGS_RPC = '/settings/rpc',
   SETTINGS_DEFAULT_FRONTEND = '/settings/default-frontend',
   SETTINGS_CONNECTED_SITES = '/settings/connected-sites',
@@ -29,4 +30,6 @@ export enum PopupPath {
   SETTINGS_ZIGNER = '/settings/zigner',
   SETTINGS_NETWORKS = '/settings/networks',
   SETTINGS_NETWORK_ENDPOINTS = '/settings/network-endpoints',
+  SETTINGS_PARACHAINS = '/settings/parachains',
+  SETTINGS_ABOUT = '/settings/about',
 }

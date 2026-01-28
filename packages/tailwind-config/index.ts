@@ -179,6 +179,16 @@ export default {
         '.grid-std-spacing': {
           '@apply gap-6 md:gap-4 xl:gap-5': {},
         },
+        // CSS containment utilities for performance
+        '.contain-none': { contain: 'none' },
+        '.contain-strict': { contain: 'strict' },
+        '.contain-content': { contain: 'content' },
+        '.contain-size': { contain: 'size' },
+        '.contain-layout': { contain: 'layout' },
+        '.contain-style': { contain: 'style' },
+        '.contain-paint': { contain: 'paint' },
+        // GPU acceleration hints
+        '.transform-gpu': { transform: 'translateZ(0)' },
       });
     }),
   ],

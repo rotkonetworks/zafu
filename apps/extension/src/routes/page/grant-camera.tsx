@@ -90,8 +90,8 @@ export const GrantCamera = () => {
               )}
               {state === 'not-granted' && (
                 <>
-                  <p>
-                    Zafu needs camera access to scan QR codes from your Zigner device.
+<p>
+                    Zafu needs camera access to scan QR codes from your Zafu Zigner device.
                   </p>
                   <p className='mt-2 text-muted-foreground text-sm'>
                     Click the button below to grant access. Your browser will show

@@ -21,6 +21,11 @@ import { createZignerSigningSlice, ZignerSigningSlice } from './zigner-signing';
 import { createPrivacySlice, PrivacySlice } from './privacy';
 import { createNetworksSlice, NetworksSlice } from './networks';
 import { createKeyRingSlice, KeyRingSlice } from './keyring';
+import { createIbcWithdrawSlice, IbcWithdrawSlice } from './ibc-withdraw';
+import { createPenumbraSendSlice, PenumbraSendSlice } from './penumbra-send';
+import { createContactsSlice, ContactsSlice } from './contacts';
+import { createMessagesSlice, MessagesSlice } from './messages';
+import { createRecentAddressesSlice, RecentAddressesSlice } from './recent-addresses';
 
 export interface AllSlices {
   wallets: WalletsSlice;
@@ -40,6 +45,11 @@ export interface AllSlices {
   privacy: PrivacySlice;
   networks: NetworksSlice;
   keyRing: KeyRingSlice;
+  ibcWithdraw: IbcWithdrawSlice;
+  penumbraSend: PenumbraSendSlice;
+  contacts: ContactsSlice;
+  messages: MessagesSlice;
+  recentAddresses: RecentAddressesSlice;
 }
 
 export type SliceCreator<SliceInterface> = StateCreator<
@@ -71,6 +81,11 @@ export const initializeStore = (
     privacy: createPrivacySlice(local)(setState, getState, store),
     networks: createNetworksSlice(local)(setState, getState, store),
     keyRing: createKeyRingSlice(session, local)(setState, getState, store),
+    ibcWithdraw: createIbcWithdrawSlice(setState, getState, store),
+    penumbraSend: createPenumbraSendSlice(setState, getState, store),
+    contacts: createContactsSlice(local)(setState, getState, store),
+    messages: createMessagesSlice(local)(setState, getState, store),
+    recentAddresses: createRecentAddressesSlice(local)(setState, getState, store),
   }));
 };
 

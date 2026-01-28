@@ -19,6 +19,20 @@ import {
   type ZignerFvkExportData,
   type ZignerWalletImport,
 } from '@repo/wallet/zigner-signer';
+import {
+  parseZcashFvkQR,
+  createZcashWalletImport,
+  isZcashFvkQR,
+  detectQRNetwork,
+  type ZcashFvkExportData,
+  type ZcashWalletImport,
+} from '@repo/wallet/zcash-zigner';
+import {
+  isUrString,
+  getUrType,
+  parsePenumbraUr,
+  parseZcashUr,
+} from '@repo/wallet/ur-parser';
 
 // ============================================================================
 // Types
@@ -28,6 +42,9 @@ import {
  * Scan state for Zigner QR code scanning.
  */
 export type ZignerScanState = 'idle' | 'scanning' | 'scanned' | 'importing' | 'complete' | 'error';
+
+/** Detected network type from QR code */
+export type DetectedNetwork = 'penumbra' | 'zcash' | 'backup' | 'unknown';
 
 /**
  * Combined Zigner state slice including camera settings and scanning state.
@@ -44,8 +61,12 @@ export interface ZignerSlice {
   scanState: ZignerScanState;
   /** Raw QR code hex data after successful scan */
   qrData?: string;
-  /** Parsed FVK export data from QR code (raw data, not protobuf) */
-  parsedExport?: ZignerFvkExportData;
+  /** Detected network from QR code */
+  detectedNetwork?: DetectedNetwork;
+  /** Parsed Penumbra FVK export data from QR code */
+  parsedPenumbraExport?: ZignerFvkExportData;
+  /** Parsed Zcash FVK export data from QR code */
+  parsedZcashExport?: ZcashFvkExportData;
   /** User-provided label for the wallet */
   walletLabel: string;
   /** Error message if something went wrong */
@@ -54,7 +75,7 @@ export interface ZignerSlice {
   // Scanning actions
   /**
    * Process scanned QR code data.
-   * Validates format and parses the FVK export.
+   * Validates format and parses the FVK export (supports Penumbra and Zcash).
    */
   processQrData: (qrData: string) => void;
   /** Set the wallet label */
@@ -87,36 +108,167 @@ export const createZignerSlice =
     scanState: 'idle',
     walletLabel: '',
     qrData: undefined,
-    parsedExport: undefined,
+    detectedNetwork: undefined,
+    parsedPenumbraExport: undefined,
+    parsedZcashExport: undefined,
     errorMessage: undefined,
 
     processQrData: (qrData: string) => {
       const trimmed = qrData.trim();
 
-      if (!isZignerFvkQR(trimmed)) {
+      // Check for UR format first (preferred format)
+      if (isUrString(trimmed)) {
+        const urType = getUrType(trimmed);
+
+        if (urType === 'penumbra-accounts') {
+          try {
+            const urExport = parsePenumbraUr(trimmed);
+            // UR format gives us bech32m FVK string - we need to decode it
+            // For now, store the string and let createWalletImport handle conversion
+            // The bech32m FVK can be decoded to get ak||nk bytes
+            const exportData: ZignerFvkExportData = {
+              walletIdBytes: urExport.walletId,
+              fvkBytes: new Uint8Array(64), // placeholder - will be decoded from bech32m
+              accountIndex: urExport.accountIndex,
+              label: urExport.label,
+              fvkBech32m: urExport.fvk, // store bech32m for decoding
+            };
+            const defaultLabel = urExport.label || 'zigner penumbra';
+
+            set(state => {
+              state.zigner.qrData = trimmed;
+              state.zigner.detectedNetwork = 'penumbra';
+              state.zigner.parsedPenumbraExport = exportData;
+              state.zigner.parsedZcashExport = undefined;
+              state.zigner.walletLabel = defaultLabel;
+              state.zigner.scanState = 'scanned';
+              state.zigner.errorMessage = undefined;
+            });
+          } catch (cause) {
+            const message = cause instanceof Error ? cause.message : String(cause);
+            set(state => {
+              state.zigner.scanState = 'error';
+              state.zigner.errorMessage = `failed to parse penumbra ur: ${message}`;
+            });
+          }
+          return;
+        }
+
+        if (urType === 'zcash-accounts') {
+          try {
+            const urExport = parseZcashUr(trimmed);
+            const exportData: ZcashFvkExportData = {
+              accountIndex: urExport.accountIndex,
+              label: urExport.label,
+              orchardFvk: null, // UR format uses UFVK string, not raw FVK bytes
+              transparentXpub: null,
+              mainnet: urExport.ufvk.startsWith('uview1'), // mainnet starts with uview1, testnet with uviewtest1
+              address: null, // not included in UR format
+              ufvk: urExport.ufvk, // store the UFVK string
+            };
+            const defaultLabel = urExport.label || 'zigner zcash';
+
+            set(state => {
+              state.zigner.qrData = trimmed;
+              state.zigner.detectedNetwork = 'zcash';
+              state.zigner.parsedZcashExport = exportData;
+              state.zigner.parsedPenumbraExport = undefined;
+              state.zigner.walletLabel = defaultLabel;
+              state.zigner.scanState = 'scanned';
+              state.zigner.errorMessage = undefined;
+            });
+          } catch (cause) {
+            const message = cause instanceof Error ? cause.message : String(cause);
+            set(state => {
+              state.zigner.scanState = 'error';
+              state.zigner.errorMessage = `failed to parse zcash ur: ${message}`;
+            });
+          }
+          return;
+        }
+
+        // Unknown UR type
         set(state => {
           state.zigner.scanState = 'error';
-          state.zigner.errorMessage = 'Invalid QR code format. Expected Zigner FVK export.';
+          state.zigner.errorMessage = `unsupported ur type: ${urType}. expected penumbra-accounts or zcash-accounts`;
         });
         return;
       }
 
-      try {
-        const exportData = parseZignerFvkQR(trimmed);
-        const defaultLabel = exportData.label || 'Zigner Wallet';
+      // Legacy binary format support (for backwards compatibility)
+      const network = detectQRNetwork(trimmed);
+
+      if (network === 'penumbra' && isZignerFvkQR(trimmed)) {
+        try {
+          const exportData = parseZignerFvkQR(trimmed);
+          const defaultLabel = exportData.label || 'zigner penumbra';
+
+          set(state => {
+            state.zigner.qrData = trimmed;
+            state.zigner.detectedNetwork = 'penumbra';
+            state.zigner.parsedPenumbraExport = exportData;
+            state.zigner.parsedZcashExport = undefined;
+            state.zigner.walletLabel = defaultLabel;
+            state.zigner.scanState = 'scanned';
+            state.zigner.errorMessage = undefined;
+          });
+        } catch (cause) {
+          const message = cause instanceof Error ? cause.message : String(cause);
+          set(state => {
+            state.zigner.scanState = 'error';
+            state.zigner.errorMessage = `failed to parse penumbra fvk: ${message}`;
+          });
+        }
+      } else if (network === 'zcash' && isZcashFvkQR(trimmed)) {
+        try {
+          const exportData = parseZcashFvkQR(trimmed);
+          const defaultLabel = exportData.label || 'zigner zcash';
+
+          set(state => {
+            state.zigner.qrData = trimmed;
+            state.zigner.detectedNetwork = 'zcash';
+            state.zigner.parsedZcashExport = exportData;
+            state.zigner.parsedPenumbraExport = undefined;
+            state.zigner.walletLabel = defaultLabel;
+            state.zigner.scanState = 'scanned';
+            state.zigner.errorMessage = undefined;
+          });
+        } catch (cause) {
+          const message = cause instanceof Error ? cause.message : String(cause);
+          set(state => {
+            state.zigner.scanState = 'error';
+            state.zigner.errorMessage = `failed to parse zcash fvk: ${message}`;
+          });
+        }
+      } else {
+        // Build detailed error message
+        const preview = trimmed.slice(0, 24);
+        const len = trimmed.length;
+        let hint = '';
+
+        if (len < 6) {
+          hint = 'qr data too short';
+        } else if (/^[0-9a-fA-F]+$/.test(trimmed)) {
+          // It's hex but not recognized format
+          const byte0 = trimmed.slice(0, 2);
+          const byte1 = trimmed.slice(2, 4);
+          const byte2 = trimmed.slice(4, 6);
+          if (byte0 !== '53') {
+            hint = `expected 0x53, got 0x${byte0}`;
+          } else if (byte1 !== '03' && byte1 !== '04') {
+            hint = `unknown chain 0x${byte1} (penumbra=03, zcash=04)`;
+          } else if (byte2 !== '01') {
+            hint = `unknown op type 0x${byte2} (fvk export=01)`;
+          } else {
+            hint = `network=${network}, format check failed`;
+          }
+        } else {
+          hint = 'expected ur:penumbra-accounts or ur:zcash-accounts format';
+        }
 
         set(state => {
-          state.zigner.qrData = trimmed;
-          state.zigner.parsedExport = exportData;
-          state.zigner.walletLabel = defaultLabel;
-          state.zigner.scanState = 'scanned';
-          state.zigner.errorMessage = undefined;
-        });
-      } catch (cause) {
-        const message = cause instanceof Error ? cause.message : String(cause);
-        set(state => {
           state.zigner.scanState = 'error';
-          state.zigner.errorMessage = `Failed to parse QR code: ${message}`;
+          state.zigner.errorMessage = `invalid qr: ${hint}. got: ${preview}...`;
         });
       }
     },
@@ -147,7 +299,9 @@ export const createZignerSlice =
       set(state => {
         state.zigner.scanState = 'idle';
         state.zigner.qrData = undefined;
-        state.zigner.parsedExport = undefined;
+        state.zigner.detectedNetwork = undefined;
+        state.zigner.parsedPenumbraExport = undefined;
+        state.zigner.parsedZcashExport = undefined;
         state.zigner.walletLabel = '';
         state.zigner.errorMessage = undefined;
       });
@@ -169,22 +323,30 @@ export const zignerSettingsSelector = (state: AllSlices) => ({
 /**
  * Selector for Zigner scanning state.
  * Creates protobuf wallet import on demand to avoid immer WritableDraft issues.
+ * Supports both Penumbra and Zcash networks.
  */
 export const zignerConnectSelector = (state: AllSlices) => {
   const slice = state.zigner;
 
-  // Create wallet import from raw export data if available
-  const walletImport: ZignerWalletImport | undefined = slice.parsedExport
-    ? createWalletImport(slice.parsedExport, slice.walletLabel || 'Zigner Wallet')
+  // Create wallet import from raw export data based on detected network
+  const walletImport: ZignerWalletImport | undefined = slice.parsedPenumbraExport
+    ? createWalletImport(slice.parsedPenumbraExport, slice.walletLabel || 'zigner penumbra')
+    : undefined;
+
+  const zcashWalletImport: ZcashWalletImport | undefined = slice.parsedZcashExport
+    ? createZcashWalletImport(slice.parsedZcashExport, slice.walletLabel || 'zigner zcash')
     : undefined;
 
   return {
     scanState: slice.scanState,
     qrData: slice.qrData,
-    parsedExport: slice.parsedExport,
+    detectedNetwork: slice.detectedNetwork,
+    parsedPenumbraExport: slice.parsedPenumbraExport,
+    parsedZcashExport: slice.parsedZcashExport,
     walletLabel: slice.walletLabel,
     errorMessage: slice.errorMessage,
     walletImport,
+    zcashWalletImport,
     processQrData: slice.processQrData,
     setWalletLabel: slice.setWalletLabel,
     setScanState: slice.setScanState,
@@ -195,3 +357,4 @@ export const zignerConnectSelector = (state: AllSlices) => {
 
 // Legacy export for backwards compatibility
 export type { ZignerSlice as ZignerConnectSlice };
+export type { ZcashWalletImport };

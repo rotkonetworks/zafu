@@ -3,9 +3,6 @@ import { PopupPath } from '../paths';
 
 // lazy load all settings screens
 const SettingsMain = lazy(() => import('./settings').then(m => ({ default: m.Settings })));
-const SettingsAdvanced = lazy(() =>
-  import('./settings-advanced').then(m => ({ default: m.SettingsAdvanced })),
-);
 const SettingsClearCache = lazy(() =>
   import('./settings-clear-cache').then(m => ({ default: m.SettingsClearCache })),
 );
@@ -28,6 +25,15 @@ const SettingsZigner = lazy(() =>
 const SettingsNetworkEndpoints = lazy(() =>
   import('./settings-network-endpoints').then(m => ({ default: m.SettingsNetworkEndpoints })),
 );
+const SettingsNetworks = lazy(() =>
+  import('./settings-networks').then(m => ({ default: m.SettingsNetworks })),
+);
+const SettingsParachains = lazy(() =>
+  import('./settings-parachains').then(m => ({ default: m.SettingsParachains })),
+);
+const SettingsAbout = lazy(() =>
+  import('./settings-about').then(m => ({ default: m.SettingsAbout })),
+);
 
 const LazyFallback = () => (
   <div className="flex h-full items-center justify-center p-4">
@@ -45,10 +51,6 @@ export const settingsRoutes = [
   {
     path: PopupPath.SETTINGS,
     element: withSuspense(SettingsMain),
-  },
-  {
-    path: PopupPath.SETTINGS_ADVANCED,
-    element: withSuspense(SettingsAdvanced),
   },
   {
     path: PopupPath.SETTINGS_RPC,
@@ -81,5 +83,17 @@ export const settingsRoutes = [
   {
     path: PopupPath.SETTINGS_NETWORK_ENDPOINTS,
     element: withSuspense(SettingsNetworkEndpoints),
+  },
+  {
+    path: PopupPath.SETTINGS_NETWORKS,
+    element: withSuspense(SettingsNetworks),
+  },
+  {
+    path: PopupPath.SETTINGS_PARACHAINS,
+    element: withSuspense(SettingsParachains),
+  },
+  {
+    path: PopupPath.SETTINGS_ABOUT,
+    element: withSuspense(SettingsAbout),
   },
 ];

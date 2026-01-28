@@ -291,12 +291,21 @@ function bytesToHex(bytes: Uint8Array): string {
 }
 
 /**
- * Convert hex string to Uint8Array
+ * Convert hex string to Uint8Array. Throws on invalid input.
  */
 function hexToBytes(hex: string): Uint8Array {
-  const bytes = new Uint8Array(hex.length / 2);
+  const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex;
+
+  if (cleanHex.length % 2 !== 0) {
+    throw new Error(`invalid hex: odd length (${cleanHex.length})`);
+  }
+  if (!/^[0-9a-fA-F]*$/.test(cleanHex)) {
+    throw new Error('invalid hex: contains non-hex characters');
+  }
+
+  const bytes = new Uint8Array(cleanHex.length / 2);
   for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
+    bytes[i] = parseInt(cleanHex.substring(i * 2, i * 2 + 2), 16);
   }
   return bytes;
 }

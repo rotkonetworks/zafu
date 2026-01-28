@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { BackIcon } from '@repo/ui/components/ui/icons/back-icon';
 import { Button } from '@repo/ui/components/ui/button';
 import {
@@ -14,6 +15,7 @@ import { usePageNav } from '../../../utils/navigate';
 import { PagePath } from '../paths';
 import { useStore } from '../../../state';
 import { NetworkType } from '../../../state/keyring';
+import { getSeedPhraseOrigin } from './password/utils';
 
 interface NetworkOption {
   id: NetworkType;
@@ -37,18 +39,34 @@ const NETWORK_OPTIONS: NetworkOption[] = [
     icon: 'P',
   },
   {
+    id: 'kusama',
+    name: 'Kusama',
+    description: 'expect chaos',
+    icon: 'K',
+  },
+  {
+    id: 'polkadot',
+    name: 'Polkadot',
+    description: 'multi-chain ecosystem',
+    icon: 'D',
+  },
+  {
     id: 'osmosis',
     name: 'Osmosis',
     description: 'cosmos dex hub',
     icon: 'O',
-    comingSoon: true,
+  },
+  {
+    id: 'noble',
+    name: 'Noble',
+    description: 'native usdc',
+    icon: 'U',
   },
   {
     id: 'nomic',
     name: 'Nomic',
     description: 'bitcoin bridge (nBTC)',
     icon: 'N',
-    comingSoon: true,
   },
   {
     id: 'bitcoin',
@@ -57,19 +75,16 @@ const NETWORK_OPTIONS: NetworkOption[] = [
     icon: 'B',
     comingSoon: true,
   },
-  {
-    id: 'polkadot',
-    name: 'Polkadot',
-    description: 'multi-chain ecosystem',
-    icon: 'D',
-    comingSoon: true,
-  },
 ];
 
 export const SelectNetworks = () => {
   const navigate = usePageNav();
+  const location = useLocation();
   const { enabledNetworks, toggleNetwork } = useStore(state => state.keyRing);
   const [selected, setSelected] = useState<Set<NetworkType>>(new Set(enabledNetworks));
+
+  // get origin from incoming state, default to NEWLY_GENERATED
+  const origin = getSeedPhraseOrigin(location);
 
   const handleToggle = (network: NetworkType) => {
     const newSelected = new Set(selected);
@@ -91,14 +106,17 @@ export const SelectNetworks = () => {
         await toggleNetwork(network.id);
       }
     }
-    navigate(PagePath.SET_PASSWORD);
+    // pass origin state to password page
+    navigate(PagePath.SET_PASSWORD, { state: { origin } });
   };
 
-  const availableCount = selected.size;
+  // only count networks that are actually available (not comingSoon)
+  const availableNetworks = NETWORK_OPTIONS.filter(n => !n.comingSoon).map(n => n.id);
+  const availableCount = [...selected].filter(id => availableNetworks.includes(id)).length;
 
   return (
     <FadeTransition>
-      <BackIcon className='float-left mb-4' onClick={() => navigate(-1)} />
+      <BackIcon className='float-left mb-4' onClick={() => navigate(PagePath.WELCOME)} />
       <Card className={cn('p-6', 'w-[500px]')} gradient>
         <CardHeader className='items-center'>
           <CardTitle className='font-semibold'>Select Networks</CardTitle>

@@ -18,6 +18,7 @@ import {
   AuthorizationData,
   TransactionPlan,
 } from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
+import { fullViewingKeyFromBech32m } from '@penumbra-zone/bech32m/penumbrafullviewingkey';
 import { encodePlanToQR, parseAuthorizationQR, validateAuthorization } from './airgap-signer';
 
 // ============================================================================
@@ -42,10 +43,12 @@ export interface ZignerFvkExportData {
   accountIndex: number;
   /** Optional wallet label from Zigner */
   label: string | null;
-  /** Full viewing key bytes (64 bytes: ak || nk) */
+  /** Full viewing key bytes (64 bytes: ak || nk) - from legacy binary format */
   fvkBytes: Uint8Array;
   /** Wallet ID bytes (32 bytes) */
   walletIdBytes: Uint8Array;
+  /** Full viewing key as bech32m string - from UR format */
+  fvkBech32m?: string;
 }
 
 /**
@@ -153,11 +156,20 @@ export function createWalletImport(
   exportData: ZignerFvkExportData,
   defaultLabel = 'Zigner Wallet',
 ): ZignerWalletImport {
-  // Create FullViewingKey protobuf
-  // FVK bytes are: ak (32 bytes) || nk (32 bytes)
-  const fullViewingKey = new FullViewingKey({
-    inner: exportData.fvkBytes,
-  });
+  let fullViewingKey: FullViewingKey;
+
+  // Check if we have bech32m FVK (from UR format) or raw bytes (legacy binary)
+  if (exportData.fvkBech32m) {
+    // Decode bech32m FVK string - returns inner bytes, wrap in FullViewingKey
+    const fvkInner = fullViewingKeyFromBech32m(exportData.fvkBech32m);
+    fullViewingKey = new FullViewingKey(fvkInner);
+  } else {
+    // Create FullViewingKey from raw bytes
+    // FVK bytes are: ak (32 bytes) || nk (32 bytes)
+    fullViewingKey = new FullViewingKey({
+      inner: exportData.fvkBytes,
+    });
+  }
 
   // Create WalletId protobuf
   const walletId = new WalletId({
@@ -330,10 +342,18 @@ export async function zignerAuthorize(plan: TransactionPlan): Promise<Authorizat
 // ============================================================================
 
 /**
- * Convert hex string to Uint8Array
+ * Convert hex string to Uint8Array. Throws on invalid input.
  */
 function hexToBytes(hex: string): Uint8Array {
   const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex;
+
+  if (cleanHex.length % 2 !== 0) {
+    throw new Error(`invalid hex: odd length (${cleanHex.length})`);
+  }
+  if (!/^[0-9a-fA-F]*$/.test(cleanHex)) {
+    throw new Error('invalid hex: contains non-hex characters');
+  }
+
   const bytes = new Uint8Array(cleanHex.length / 2);
   for (let i = 0; i < bytes.length; i++) {
     bytes[i] = parseInt(cleanHex.substring(i * 2, i * 2 + 2), 16);

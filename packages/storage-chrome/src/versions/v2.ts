@@ -45,7 +45,7 @@ type LOCAL = {
   /** Flag indicating cache clearing is in progress (survives extension restart) */
   clearingCache?: boolean;
   /** Active network type for multi-network wallet */
-  activeNetwork?: 'penumbra' | 'zcash' | 'polkadot' | 'cosmos';
+  activeNetwork?: 'penumbra' | 'zcash' | 'polkadot' | 'kusama' | 'osmosis' | 'noble' | 'nomic' | 'celestia' | 'ethereum' | 'bitcoin';
   /** Zcash-specific wallets */
   zcashWallets?: {
     id: string;
@@ -111,4 +111,87 @@ type LOCAL = {
   }[];
   /** currently selected vault id */
   selectedVaultId?: string;
+
+  /** address book contacts */
+  contacts?: {
+    id: string;
+    name: string;
+    /** network type for this contact */
+    network: 'penumbra' | 'zcash' | 'cosmos' | 'polkadot' | 'ethereum' | 'bitcoin';
+    /** bech32 or other address format */
+    address: string;
+    /** optional notes */
+    notes?: string;
+    /** for cosmos, which chain (osmosis, noble, etc) */
+    chainId?: string;
+    /** when was this contact added */
+    createdAt: number;
+    /** when was this contact last used */
+    lastUsedAt?: number;
+    /** is this a favorite */
+    favorite?: boolean;
+  }[];
+
+  /** recently used addresses for quick access */
+  recentAddresses?: {
+    address: string;
+    network: 'penumbra' | 'zcash' | 'cosmos' | 'polkadot' | 'ethereum' | 'bitcoin';
+    chainId?: string;
+    useCount: number;
+    lastUsedAt: number;
+    firstUsedAt: number;
+  }[];
+
+  /** addresses user declined to save as contacts */
+  dismissedContactSuggestions?: string[];
+
+  /** enabled parachains per relay network */
+  enabledParachains?: {
+    polkadot?: string[];
+    kusama?: string[];
+  };
+
+  /** custom chainspecs added by user */
+  customChainspecs?: {
+    id: string;
+    name: string;
+    relay: 'polkadot' | 'kusama' | 'paseo' | 'standalone';
+    symbol?: string;
+    decimals?: number;
+    chainspec: string; // full JSON chainspec
+    addedAt: number;
+  }[];
+
+  /** polkadot vault settings */
+  polkadotVaultSettings?: {
+    /** use legacy qr format for older parity signer / polkadot vault */
+    legacyMode: boolean;
+  };
+
+  /** encrypted message inbox (from tx memos) */
+  messages?: {
+    id: string;
+    /** network this message was sent on */
+    network: 'penumbra' | 'zcash';
+    /** sender address (if known, might be shielded) */
+    senderAddress?: string;
+    /** recipient address (our address) */
+    recipientAddress: string;
+    /** the message content (decrypted memo) */
+    content: string;
+    /** transaction id/hash */
+    txId: string;
+    /** block height */
+    blockHeight: number;
+    /** timestamp */
+    timestamp: number;
+    /** whether we sent or received this message */
+    direction: 'sent' | 'received';
+    /** whether this message has been read */
+    read: boolean;
+    /** optional amount if this was a payment with memo */
+    amount?: string;
+    /** asset/denom */
+    asset?: string;
+  }[];
 };

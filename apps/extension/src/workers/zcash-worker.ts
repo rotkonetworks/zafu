@@ -16,17 +16,27 @@
 const workerSelf = globalThis as any as DedicatedWorkerGlobalScope;
 
 interface WorkerMessage {
-  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'get-balance' | 'send-tx' | 'list-wallets' | 'delete-wallet';
+  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'get-balance' | 'send-tx' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos';
   id: string;
   network: 'zcash';
   walletId?: string; // identifies which wallet this message is for
   payload?: unknown;
 }
 
+interface FoundNoteWithMemo {
+  index: number;
+  value: number;
+  nullifier: string;
+  cmx: string;
+  memo: string;
+  memo_is_text: boolean;
+}
+
 interface WalletKeys {
   get_receiving_address_at(index: number, mainnet: boolean): string;
   scan_actions_parallel(actionsBytes: Uint8Array): DecryptedNote[];
   calculate_balance(notes: unknown, spent: unknown): bigint;
+  decrypt_transaction_memos(txBytes: Uint8Array): FoundNoteWithMemo[];
   free(): void;
 }
 
@@ -35,6 +45,7 @@ interface DecryptedNote {
   value: string;
   nullifier: string;
   cmx: string;
+  txid: string; // transaction hash for memo retrieval
 }
 
 // state - per wallet
@@ -365,11 +376,20 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
 
       const blocks = await client.getCompactBlocks(currentHeight + 1, endHeight);
 
-      // collect all actions for batch scanning
+      // collect all actions for batch scanning and build cmx -> txid map
       const allActions: { height: number; action: unknown }[] = [];
+      const cmxToTxid = new Map<string, string>();
+
       for (const block of blocks) {
         for (const action of block.actions) {
           allActions.push({ height: block.height, action });
+          // map cmx (hex) -> txid (hex) for memo retrieval
+          const compactAction = action as { cmx: Uint8Array; txid: Uint8Array };
+          if (compactAction.cmx && compactAction.txid) {
+            const cmxHex = Array.from(compactAction.cmx).map(b => b.toString(16).padStart(2, '0')).join('');
+            const txidHex = Array.from(compactAction.txid).map(b => b.toString(16).padStart(2, '0')).join('');
+            cmxToTxid.set(cmxHex, txidHex);
+          }
         }
       }
 
@@ -383,8 +403,15 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
         const foundNotes = state.keys.scan_actions_parallel(binaryActions);
 
         for (const note of foundNotes) {
-          state.notes.push(note);
-          await saveNote(walletId, note);
+          // look up txid from cmx
+          const txid = cmxToTxid.get(note.cmx) ?? '';
+          const noteWithTxid: DecryptedNote = {
+            ...note,
+            txid,
+          };
+
+          state.notes.push(noteWithTxid);
+          await saveNote(walletId, noteWithTxid);
 
           // check if this nullifier spends one of our notes
           const spentNote = state.notes.find(n => n.nullifier === note.nullifier);
@@ -496,6 +523,43 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         }
         await deleteWallet(walletId);
         workerSelf.postMessage({ type: 'wallet-deleted', id, network: 'zcash', walletId });
+        return;
+      }
+
+      case 'get-notes': {
+        if (!walletId) throw new Error('walletId required for get-notes');
+        const state = await loadState(walletId);
+        // return notes with txids for memo retrieval
+        workerSelf.postMessage({
+          type: 'notes',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: state.notes,
+        });
+        return;
+      }
+
+      case 'decrypt-memos': {
+        if (!walletId) throw new Error('walletId required for decrypt-memos');
+        const state = walletStates.get(walletId);
+        if (!state?.keys) throw new Error('wallet keys not loaded - run sync first');
+
+        const { txBytes } = payload as { txBytes: number[] };
+        const txBytesArray = new Uint8Array(txBytes);
+
+        try {
+          const memos = state.keys.decrypt_transaction_memos(txBytesArray);
+          workerSelf.postMessage({
+            type: 'memos',
+            id,
+            network: 'zcash',
+            walletId,
+            payload: memos,
+          });
+        } catch (err) {
+          throw new Error(`memo decryption failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
         return;
       }
 

@@ -42,12 +42,16 @@ export interface ZcashFvkExportData {
   accountIndex: number;
   /** Optional wallet label from Zigner */
   label: string | null;
-  /** Orchard FVK bytes (96 bytes) - if present */
+  /** Orchard FVK bytes (96 bytes) - if present (legacy binary format) */
   orchardFvk: Uint8Array | null;
-  /** Transparent xpub bytes - if present */
+  /** Transparent xpub bytes - if present (legacy binary format) */
   transparentXpub: Uint8Array | null;
   /** Network: true = mainnet, false = testnet */
   mainnet: boolean;
+  /** Unified address (u1... or utest1...) - if present */
+  address: string | null;
+  /** Unified Full Viewing Key (uview1... or uviewtest1...) - from UR format */
+  ufvk?: string;
 }
 
 /**
@@ -56,12 +60,16 @@ export interface ZcashFvkExportData {
 export interface ZcashWalletImport {
   /** Wallet label (from QR or default) */
   label: string;
-  /** Orchard FVK bytes (96 bytes) */
+  /** Orchard FVK bytes (96 bytes) - legacy binary format */
   orchardFvk: Uint8Array | null;
   /** Original account index from Zigner */
   accountIndex: number;
   /** Network: true = mainnet, false = testnet */
   mainnet: boolean;
+  /** Unified address (u1... or utest1...) */
+  address: string | null;
+  /** Unified Full Viewing Key (uview1... or uviewtest1...) - from UR format */
+  ufvk?: string;
 }
 
 // ============================================================================
@@ -154,6 +162,18 @@ export function parseZcashFvkQR(hex: string): ZcashFvkExportData {
       throw new Error('Invalid Zcash QR: transparent xpub truncated');
     }
     transparentXpub = new Uint8Array(data.subarray(offset, offset + xpubLen));
+    offset += xpubLen;
+  }
+
+  // Parse unified address if present (bit 3 = 0x08)
+  const hasAddress = (flags & 0x08) !== 0;
+  let address: string | null = null;
+  if (hasAddress && offset + 2 <= data.length) {
+    const addrLen = readUint16LE(data, offset);
+    offset += 2;
+    if (offset + addrLen <= data.length) {
+      address = new TextDecoder().decode(data.subarray(offset, offset + addrLen));
+    }
   }
 
   return {
@@ -162,6 +182,7 @@ export function parseZcashFvkQR(hex: string): ZcashFvkExportData {
     orchardFvk,
     transparentXpub,
     mainnet,
+    address,
   };
 }
 
@@ -181,6 +202,8 @@ export function createZcashWalletImport(
     orchardFvk: exportData.orchardFvk,
     accountIndex: exportData.accountIndex,
     mainnet: exportData.mainnet,
+    address: exportData.address,
+    ufvk: exportData.ufvk,
   };
 }
 
@@ -390,10 +413,20 @@ export function isZcashSignatureQR(hex: string): boolean {
 // ============================================================================
 
 /**
- * Convert hex string to Uint8Array
+ * Convert hex string to Uint8Array.
+ * Throws on invalid input (odd length, non-hex chars).
  */
 function hexToBytes(hex: string): Uint8Array {
   const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex;
+
+  if (cleanHex.length % 2 !== 0) {
+    throw new Error(`invalid hex: odd length (${cleanHex.length})`);
+  }
+
+  if (!/^[0-9a-fA-F]*$/.test(cleanHex)) {
+    throw new Error('invalid hex: contains non-hex characters');
+  }
+
   const bytes = new Uint8Array(cleanHex.length / 2);
   for (let i = 0; i < bytes.length; i++) {
     bytes[i] = parseInt(cleanHex.substring(i * 2, i * 2 + 2), 16);

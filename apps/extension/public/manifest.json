@@ -1,12 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "zigner web",
+  "name": "zafu",
   "version": "1.0.0",
   "description": "multi-chain privacy wallet for penumbra, zcash, and more",
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvnucOJi878TGZYnTNTrvXd9krAcpSDR/EgHcQhvjNZrKfRRsKA9O0DnbyM492c3hiicYPevRPLPoKsLgVghGDYPr8eNO7ee165keD5XLxq0wpWu14gHEPdQSRNZPLeawLp4s/rUwtzMcxhVIUYYaa2xZri4Tqx9wpR7YR1mQTAL8UsdjyitrnzTM20ciKXq1pd82MU74YaZzrcQCOmcjJtjHFdMEAYme+LuZuEugAgef9RiE/8kLQ6T7W9feYfQOky1OPjBkflpRXRgW6cACdl+MeYhKJCOHijglFsPOXX6AvnoJSeAJYRXOMVJi0ejLKEcrLpaeHgh+1WXUvc5G4wIDAQAB",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2cbPgeYh8Wze10Nhjx2Skq7Vdjw2b35oLfFzSG3GRBYVqEf0jYEAxc3JtECBOMK5I7UwPMuOCu2oF6+Z4JCx9fZ/pGqW/6+nkX+1xBwRoKihb/toDwxMacL4fko+jN8NX47OeMkWGhOi5JtqV3EkpCOWUf1YzoVhR4ft9COoiXbty7QWzWlbr1ixQgzDnLc3TYIDRQGi6d3nvA45hf6yUixGVhNq91o4qa2xi6ftDx69HnfWGNSJcuxbbah623hdhnJpJouVjfbBgSivw3VXwbv5qwTKpg1bjNN8uaFkaKAf5lvUQnIaDaXQbR4MgN1g5qeXWnpuKM0XV2ueghUqswIDAQAB",
   "minimum_chrome_version": "119",
   "action": {
     "default_popup": "popup.html"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
   },
   "icons": {
     "16": "favicon/icon16.png",
@@ -41,7 +44,7 @@
       "matches": ["<all_urls>"]
     }
   ],
-  "permissions": ["storage", "unlimitedStorage", "offscreen", "alarms"],
+  "permissions": ["storage", "unlimitedStorage", "offscreen", "alarms", "sidePanel", "contextMenus"],
   "host_permissions": ["<all_urls>"],
   "externally_connectable": {
     "matches": ["<all_urls>"]

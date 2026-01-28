@@ -17,7 +17,7 @@
 import type { NetworkType } from './types';
 
 export interface NetworkWorkerMessage {
-  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'get-balance' | 'send-tx' | 'list-wallets' | 'delete-wallet';
+  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'get-balance' | 'send-tx' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -25,7 +25,7 @@ export interface NetworkWorkerMessage {
 }
 
 export interface NetworkWorkerResponse {
-  type: 'ready' | 'address' | 'sync-progress' | 'sync-started' | 'sync-stopped' | 'balance' | 'tx-result' | 'wallets' | 'wallet-deleted' | 'error';
+  type: 'ready' | 'address' | 'sync-progress' | 'sync-started' | 'sync-stopped' | 'balance' | 'tx-result' | 'wallets' | 'wallet-deleted' | 'notes' | 'memos' | 'error';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -221,6 +221,44 @@ export const listWalletsInWorker = async (network: NetworkType): Promise<string[
  */
 export const deleteWalletInWorker = async (network: NetworkType, walletId: string): Promise<void> => {
   return callWorker(network, 'delete-wallet', {}, walletId);
+};
+
+/** note with txid for memo retrieval */
+export interface DecryptedNoteWithTxid {
+  height: number;
+  value: string;
+  nullifier: string;
+  cmx: string;
+  txid: string;
+}
+
+/**
+ * get all notes for a wallet (includes txid for memo retrieval)
+ */
+export const getNotesInWorker = async (network: NetworkType, walletId: string): Promise<DecryptedNoteWithTxid[]> => {
+  return callWorker(network, 'get-notes', {}, walletId);
+};
+
+/** decrypted memo from transaction */
+export interface FoundNoteWithMemo {
+  index: number;
+  value: number;
+  nullifier: string;
+  cmx: string;
+  memo: string;
+  memo_is_text: boolean;
+}
+
+/**
+ * decrypt memos from a raw transaction (runs in worker using wallet keys)
+ */
+export const decryptMemosInWorker = async (
+  network: NetworkType,
+  walletId: string,
+  txBytes: Uint8Array
+): Promise<FoundNoteWithMemo[]> => {
+  // convert to array for postMessage serialization
+  return callWorker(network, 'decrypt-memos', { txBytes: Array.from(txBytes) }, walletId);
 };
 
 /**

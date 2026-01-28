@@ -9,14 +9,16 @@
  * 5. broadcast transaction
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useStore } from '../../../state';
 import { zignerSigningSelector } from '../../../state/zigner-signing';
+import { recentAddressesSelector } from '../../../state/recent-addresses';
+import { contactsSelector } from '../../../state/contacts';
 import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
 import { QrDisplay } from '../../../shared/components/qr-display';
 import { QrScanner } from '../../../shared/components/qr-scanner';
-import { ArrowLeftIcon, CheckIcon, Cross1Icon } from '@radix-ui/react-icons';
+import { ArrowLeftIcon, CheckIcon, Cross1Icon, PersonIcon } from '@radix-ui/react-icons';
 import {
   encodeZcashSignRequest,
   isZcashSignatureQR,
@@ -27,11 +29,17 @@ interface ZcashSendProps {
   onClose: () => void;
   accountIndex: number;
   mainnet: boolean;
+  /** pre-filled values from inbox compose */
+  prefill?: {
+    recipient?: string;
+    amount?: string;
+    memo?: string;
+  };
 }
 
 type SendStep = 'form' | 'review' | 'sign' | 'scan' | 'broadcast' | 'complete' | 'error';
 
-export function ZcashSend({ onClose, accountIndex, mainnet }: ZcashSendProps) {
+export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSendProps) {
   const {
     txHash,
     error: signingError,
@@ -43,12 +51,22 @@ export function ZcashSend({ onClose, accountIndex, mainnet }: ZcashSendProps) {
     reset,
   } = useStore(zignerSigningSelector);
 
+  // recent addresses and contacts
+  const { recordUsage, shouldSuggestSave, dismissSuggestion, getRecent } = useStore(recentAddressesSelector);
+  const { addContact, addAddress, findByAddress } = useStore(contactsSelector);
+
   const [step, setStep] = useState<SendStep>('form');
-  const [recipient, setRecipient] = useState('');
-  const [amount, setAmount] = useState('');
-  const [memo, setMemo] = useState('');
+  const [recipient, setRecipient] = useState(prefill?.recipient ?? '');
+  const [amount, setAmount] = useState(prefill?.amount ?? '');
+  const [memo, setMemo] = useState(prefill?.memo ?? '');
   const [formError, setFormError] = useState<string | null>(null);
   const [signRequestQr, setSignRequestQr] = useState<string | null>(null);
+  const [showSavePrompt, setShowSavePrompt] = useState(false);
+  const [contactName, setContactName] = useState('');
+  const [showContactModal, setShowContactModal] = useState(false);
+
+  // get recent zcash addresses
+  const recentAddresses = useMemo(() => getRecent('zcash', 3), [getRecent]);
 
   // mock fee for now
   const fee = '0.0001';
@@ -139,6 +157,12 @@ export function ZcashSend({ onClose, accountIndex, mainnet }: ZcashSendProps) {
           const mockTxHash = 'zcash_tx_' + Math.random().toString(36).substring(2, 15);
           complete(mockTxHash);
           setStep('complete');
+          // record address usage
+          void recordUsage(recipient, 'zcash');
+          // check if we should prompt to save as contact
+          if (shouldSuggestSave(recipient)) {
+            setShowSavePrompt(true);
+          }
         }, 2000);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'failed to parse signature');
@@ -191,6 +215,26 @@ export function ZcashSend({ onClose, accountIndex, mainnet }: ZcashSendProps) {
                   onChange={(e) => setRecipient(e.target.value)}
                   className="font-mono text-sm"
                 />
+                {/* recent addresses */}
+                {!recipient && recentAddresses.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-xs text-muted-foreground mb-1">recent:</p>
+                    <div className="flex flex-wrap gap-1">
+                      {recentAddresses.map(r => {
+                        const result = findByAddress(r.address);
+                        return (
+                          <button
+                            key={r.address}
+                            onClick={() => setRecipient(r.address)}
+                            className="rounded bg-muted/50 px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                          >
+                            {result ? result.contact.name : `${r.address.slice(0, 8)}...${r.address.slice(-4)}`}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -279,7 +323,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet }: ZcashSendProps) {
                 back
               </Button>
               <Button variant="gradient" onClick={handleSign} className="flex-1">
-                sign with zigner
+sign with zafu zigner
               </Button>
             </div>
           </div>
@@ -292,7 +336,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet }: ZcashSendProps) {
               <button onClick={handleBack} className="p-1 hover:bg-muted rounded">
                 <ArrowLeftIcon className="w-5 h-5" />
               </button>
-              <h2 className="text-xl font-bold">sign with zigner</h2>
+<h2 className="text-xl font-bold">sign with zafu zigner</h2>
             </div>
 
             <div className="flex flex-col items-center gap-4 py-4">
@@ -300,14 +344,14 @@ export function ZcashSend({ onClose, accountIndex, mainnet }: ZcashSendProps) {
                 <QrDisplay
                   data={signRequestQr}
                   size={220}
-                  title="scan with zigner"
-                  description="open zigner camera and scan this qr code to sign the transaction"
+title="scan with zafu zigner"
+                  description="open zafu zigner camera and scan this qr code to sign the transaction"
                 />
               )}
 
               <div className="text-center">
                 <p className="text-sm text-muted-foreground">
-                  1. open zigner app on your phone
+1. open zafu zigner app on your phone
                 </p>
                 <p className="text-sm text-muted-foreground">
                   2. scan this qr code
@@ -319,7 +363,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet }: ZcashSendProps) {
             </div>
 
             <Button variant="gradient" onClick={handleScanSignature} className="w-full">
-              scan signature from zigner
+scan signature from zafu zigner
             </Button>
           </div>
         );
@@ -334,7 +378,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet }: ZcashSendProps) {
             }}
             onClose={() => setStep('sign')}
             title="scan signature"
-            description="point camera at zigner's signature qr code"
+description="point camera at zafu zigner's signature qr code"
           />
         );
 
@@ -366,6 +410,82 @@ export function ZcashSend({ onClose, accountIndex, mainnet }: ZcashSendProps) {
                 {txHash}
               </p>
             )}
+
+            {/* save contact prompt */}
+            {showSavePrompt && recipient && !findByAddress(recipient) && !showContactModal && (
+              <div className="w-full rounded-lg border border-primary/30 bg-primary/10 p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <PersonIcon className="h-4 w-4 text-primary" />
+                  <p className="text-sm">save to contacts?</p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="gradient"
+                    size="sm"
+                    onClick={() => setShowContactModal(true)}
+                    className="flex-1"
+                  >
+                    save
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      void dismissSuggestion(recipient);
+                      setShowSavePrompt(false);
+                    }}
+                    className="flex-1"
+                  >
+                    skip
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* contact name input */}
+            {showContactModal && (
+              <div className="w-full rounded-lg border border-border bg-card p-3">
+                <p className="text-sm font-medium mb-2">name this contact</p>
+                <Input
+                  value={contactName}
+                  onChange={e => setContactName(e.target.value)}
+                  placeholder="enter name..."
+                  className="mb-2"
+                  autoFocus
+                />
+                <div className="flex gap-2">
+                  <Button
+                    variant="gradient"
+                    size="sm"
+                    onClick={async () => {
+                      if (contactName.trim()) {
+                        const newContact = await addContact({ name: contactName.trim() });
+                        await addAddress(newContact.id, { network: 'zcash', address: recipient });
+                        setShowContactModal(false);
+                        setShowSavePrompt(false);
+                        setContactName('');
+                      }
+                    }}
+                    disabled={!contactName.trim()}
+                    className="flex-1"
+                  >
+                    save
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setShowContactModal(false);
+                      setContactName('');
+                    }}
+                    className="flex-1"
+                  >
+                    cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+
             <Button variant="gradient" onClick={handleClose} className="w-full mt-4">
               done
             </Button>

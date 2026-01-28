@@ -53,7 +53,54 @@ import { backOff } from 'exponential-backoff';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { localMigrations } from '@repo/storage-chrome/migrations';
 
+// polkadot custom chainspec support
+import {
+  registerCustomChainspec,
+  unregisterCustomChainspec,
+  getCustomChainspecs,
+  type RelayChain,
+} from '@repo/wallet/networks/polkadot';
+
 localExtStorage.enableMigration(localMigrations);
+
+/**
+ * load custom chainspecs from storage and register with polkadot light client
+ *
+ * called on startup and when chainspecs change in storage.
+ */
+async function loadCustomChainspecs(): Promise<void> {
+  const specs = await localExtStorage.get('customChainspecs') ?? [];
+  const registered = getCustomChainspecs();
+
+  // register new chainspecs
+  for (const spec of specs) {
+    if (!registered.has(spec.id)) {
+      // map 'standalone' to null relay, others to RelayChain
+      const relay = spec.relay === 'standalone' ? 'standalone' : spec.relay as RelayChain;
+      registerCustomChainspec(
+        spec.id,
+        spec.chainspec,
+        relay,
+        spec.name,
+        spec.symbol,
+        spec.decimals
+      );
+    }
+  }
+
+  // unregister removed chainspecs
+  const specIds = new Set(specs.map(s => s.id));
+  for (const [id] of registered) {
+    if (!specIds.has(id)) {
+      unregisterCustomChainspec(id);
+    }
+  }
+
+  console.log(`[polkadot] loaded ${specs.length} custom chainspecs`);
+}
+
+// load custom chainspecs on startup
+void loadCustomChainspecs();
 
 let walletServices: Promise<Services>;
 let currentWalletIndex: number | undefined;
@@ -78,6 +125,11 @@ localExtStorage.addListener(changes => {
     } else {
       currentWalletIndex = newIndex;
     }
+  }
+
+  // sync custom chainspecs when they change
+  if (changes.customChainspecs !== undefined) {
+    void loadCustomChainspecs();
   }
 });
 
@@ -158,10 +210,52 @@ void chrome.alarms.create('blockSync', {
   delayInMinutes: 0,
 });
 
-chrome.alarms.onAlarm.addListener(alarm => {
+chrome.alarms.onAlarm.addListener(async alarm => {
   if (alarm.name === 'blockSync') {
+    // privacy check: only run background sync if user has enabled it
+    const privacySettings = await localExtStorage.get('privacySettings');
+    if (privacySettings?.enableBackgroundSync === false) {
+      if (globalThis.__DEV__) {
+        console.info('Background sync disabled by user privacy settings');
+      }
+      return;
+    }
+
     if (globalThis.__DEV__) {
       console.info('Background sync scheduled');
     }
+
+    // trigger sync for enabled networks only
+    try {
+      const services = await walletServices;
+      const ws = await services.getWalletServices();
+      void ws.blockProcessor.sync();
+    } catch (e) {
+      // services not initialized or network not enabled - this is expected
+      if (globalThis.__DEV__) {
+        console.info('Skipping background sync:', e);
+      }
+    }
+  }
+});
+
+// side panel setup
+// allow opening side panel from popup or context menu
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(() => {
+  // side panel not supported in this browser version
+});
+
+// context menu to open side panel
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.create({
+    id: 'open-side-panel',
+    title: 'Open Zafu in Side Panel',
+    contexts: ['action'],
+  });
+});
+
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId === 'open-side-panel' && tab?.windowId) {
+    void chrome.sidePanel.open({ windowId: tab.windowId });
   }
 });

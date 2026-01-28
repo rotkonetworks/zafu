@@ -8,19 +8,40 @@ import type { LocalStorageState } from '@repo/storage-chrome/local';
 import type { SessionStorageState } from '@repo/storage-chrome/session';
 import { AllSlices, SliceCreator } from '.';
 import type { ZignerWalletImport } from '@repo/wallet/zigner-signer';
+import type { ZcashWalletImport } from '@repo/wallet/zcash-zigner';
+
+/** Zcash wallet stored in extension */
+export interface ZcashWalletJson {
+  id: string;
+  label: string;
+  orchardFvk: string;
+  address: string;
+  accountIndex: number;
+  mainnet: boolean;
+}
 
 export interface WalletsSlice {
-  /** Wallets can be encryptedSeedPhrase or airgapSigner (watch-only) */
+  /** Penumbra wallets - can be encryptedSeedPhrase or airgapSigner (watch-only) */
   all: WalletJson<'encryptedSeedPhrase' | 'airgapSigner'>[];
-  /** Index of the currently active wallet */
+  /** Zcash wallets - watch-only orchard FVK wallets */
+  zcashWallets: ZcashWalletJson[];
+  /** Index of the currently active Penumbra wallet */
   activeIndex: number;
+  /** Index of the currently active Zcash wallet */
+  activeZcashIndex: number;
   addWallet: (toAdd: { label: string; seedPhrase: string[] }) => Promise<void>;
   /** Add a watch-only wallet from airgap signer (e.g., Zigner) FVK export */
   addAirgapSignerWallet: (walletImport: ZignerWalletImport) => Promise<void>;
+  /** Add a Zcash watch-only wallet from Zigner FVK export */
+  addZcashWallet: (walletImport: ZcashWalletImport) => Promise<void>;
   /** Remove a wallet by index. Cannot remove the last remaining wallet. */
   removeWallet: (index: number) => Promise<void>;
+  /** Remove a Zcash wallet by index */
+  removeZcashWallet: (index: number) => Promise<void>;
   /** Switch to a different wallet by index */
   setActiveWallet: (index: number) => Promise<void>;
+  /** Switch to a different Zcash wallet by index */
+  setActiveZcashWallet: (index: number) => Promise<void>;
   getSeedPhrase: () => Promise<string[]>;
 }
 
@@ -32,7 +53,9 @@ export const createWalletsSlice =
   (set, get) => {
     return {
       all: [],
+      zcashWallets: [],
       activeIndex: 0,
+      activeZcashIndex: 0,
       addWallet: async ({ label, seedPhrase }) => {
         // Dynamic import to avoid bundling WASM into initial chunks (service worker)
         const { generateSpendKey, getFullViewingKey, getWalletId } = await import(
@@ -62,18 +85,21 @@ export const createWalletsSlice =
       },
 
       addAirgapSignerWallet: async (walletImport) => {
-        // For airgap signer (watch-only) wallets, we store metadata in a Box.
-        // No password needed - we just need consistent Box format.
-        // Use a static key for non-sensitive metadata.
+        // airgap signer metadata - encrypted with password key for consistency
+        // the password is required to access custody() for any wallet type
         const metadata = JSON.stringify({
           accountIndex: walletImport.accountIndex,
           importedAt: Date.now(),
           signerType: 'zigner',
         });
 
-        // Create a deterministic box for non-sensitive airgap metadata
-        // This just wraps the metadata in the expected Box format
-        const metadataBox = Box.fromPlaintext(metadata);
+        const passwordKey = await session.get('passwordKey');
+        if (passwordKey === undefined) {
+          throw new Error('password key not in storage');
+        }
+
+        const key = await Key.fromJson(passwordKey);
+        const metadataBox = await key.seal(metadata);
 
         const newWallet = new Wallet(
           walletImport.label,
@@ -90,6 +116,79 @@ export const createWalletsSlice =
 
         const wallets = await local.get('wallets');
         await local.set('wallets', [newWallet.toJson(), ...wallets]);
+      },
+
+      addZcashWallet: async (walletImport: ZcashWalletImport) => {
+        const existingZcashWallets = (await local.get('zcashWallets')) ?? [];
+
+        // generate unique ID with collision check (defense in depth)
+        let id: string;
+        let attempts = 0;
+        do {
+          id = crypto.randomUUID();
+          attempts++;
+          if (attempts > 10) {
+            throw new Error('failed to generate unique wallet id');
+          }
+        } while (existingZcashWallets.some((w: ZcashWalletJson) => w.id === id));
+
+        // convert FVK bytes to base64 for storage (more efficient than hex)
+        const orchardFvkBase64 = walletImport.orchardFvk
+          ? btoa(String.fromCharCode(...walletImport.orchardFvk))
+          : '';
+
+        // use address from QR if available
+        const address = walletImport.address ?? '';
+
+        const newZcashWallet: ZcashWalletJson = {
+          id,
+          label: walletImport.label,
+          orchardFvk: orchardFvkBase64,
+          address,
+          accountIndex: walletImport.accountIndex,
+          mainnet: walletImport.mainnet,
+        };
+
+        set(state => {
+          state.wallets.zcashWallets.unshift(newZcashWallet);
+        });
+
+        await local.set('zcashWallets', [newZcashWallet, ...existingZcashWallets]);
+      },
+
+      removeZcashWallet: async (index: number) => {
+        const { zcashWallets, activeZcashIndex } = get().wallets;
+
+        if (index < 0 || index >= zcashWallets.length) {
+          throw new Error(`invalid zcash wallet index: ${index}`);
+        }
+
+        const newWallets = zcashWallets.filter((_, i) => i !== index);
+
+        let newActiveIndex = activeZcashIndex;
+        if (index < activeZcashIndex) {
+          newActiveIndex = activeZcashIndex - 1;
+        } else if (index === activeZcashIndex) {
+          newActiveIndex = Math.max(0, activeZcashIndex - 1);
+        }
+
+        set(state => {
+          state.wallets.zcashWallets = newWallets;
+          state.wallets.activeZcashIndex = newActiveIndex;
+        });
+
+        await local.set('zcashWallets', newWallets);
+      },
+
+      setActiveZcashWallet: async (index: number) => {
+        const { zcashWallets } = get().wallets;
+        if (index < 0 || index >= zcashWallets.length) {
+          throw new Error(`invalid zcash wallet index: ${index}`);
+        }
+
+        set(state => {
+          state.wallets.activeZcashIndex = index;
+        });
       },
 
       removeWallet: async (index: number) => {
@@ -171,7 +270,21 @@ export const createWalletsSlice =
     };
   };
 
+/** coarse selector - use sparingly */
 export const walletsSelector = (state: AllSlices) => state.wallets;
+
+/**
+ * fine-grained atomic selectors - solidjs style
+ */
+export const selectZcashWallets = (state: AllSlices) => state.wallets.zcashWallets;
+export const selectActiveZcashIndex = (state: AllSlices) => state.wallets.activeZcashIndex;
+export const selectActiveZcashWallet = (state: AllSlices) => {
+  const { zcashWallets, activeZcashIndex } = state.wallets;
+  return zcashWallets[activeZcashIndex];
+};
+export const selectPenumbraWallets = (state: AllSlices) => state.wallets.all;
+export const selectActivePenumbraIndex = (state: AllSlices) => state.wallets.activeIndex;
+
 export const getActiveWallet = (state: AllSlices) => {
   const { all, activeIndex } = state.wallets;
   const walletJson = all[activeIndex];

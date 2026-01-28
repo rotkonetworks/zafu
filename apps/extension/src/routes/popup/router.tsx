@@ -19,6 +19,8 @@ const OriginApproval = lazy(() =>
 const StakePage = lazy(() => import('./stake').then(m => ({ default: m.StakePage })));
 const SwapPage = lazy(() => import('./swap').then(m => ({ default: m.SwapPage })));
 const HistoryPage = lazy(() => import('./history').then(m => ({ default: m.HistoryPage })));
+const InboxPage = lazy(() => import('./inbox').then(m => ({ default: m.InboxPage })));
+const ContactsPage = lazy(() => import('./contacts').then(m => ({ default: m.ContactsPage })));
 const SendPage = lazy(() => import('./send').then(m => ({ default: m.SendPage })));
 const ReceivePage = lazy(() => import('./receive').then(m => ({ default: m.ReceivePage })));
 
@@ -60,6 +62,22 @@ export const popupRoutes: RouteObject[] = [
         element: (
           <Suspense fallback={<LazyFallback />}>
             <HistoryPage />
+          </Suspense>
+        ),
+      },
+      {
+        path: PopupPath.INBOX,
+        element: (
+          <Suspense fallback={<LazyFallback />}>
+            <InboxPage />
+          </Suspense>
+        ),
+      },
+      {
+        path: PopupPath.CONTACTS,
+        element: (
+          <Suspense fallback={<LazyFallback />}>
+            <ContactsPage />
           </Suspense>
         ),
       },

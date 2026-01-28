@@ -7,8 +7,11 @@ import rootPackageJson from '../../package.json' with { type: 'json' };
 import CopyPlugin from 'copy-webpack-plugin';
 import HtmlWebpackPlugin from 'html-webpack-plugin';
 import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import url from 'node:url';
+
+const require = createRequire(import.meta.url);
 import { type WebExtRunner, cmd as WebExtCmd } from 'web-ext';
 import webpack from 'webpack';
 import WatchExternalFilesPlugin from 'webpack-watch-external-files-plugin';
@@ -150,6 +153,10 @@ export default ({
   // Browser config for DOM-based entries (pages, popups, offscreen, injected scripts)
   const browserConfig: webpack.Configuration = {
     name: 'browser',
+    mode: 'production',
+    performance: {
+      hints: false, // disable size warnings - WASM crypto libs are big by nature
+    },
     entry: {
       'injected-session': path.join(injectDir, 'injected-session.ts'),
       'injected-penumbra-global': path.join(injectDir, 'injected-penumbra-global.ts'),
@@ -200,10 +207,14 @@ export default ({
         },
       ],
     },
-    resolve: {
+resolve: {
       extensions: ['.ts', '.tsx', '.js'],
       alias: {
         '@ui': path.resolve(__dirname, '../../packages/ui'),
+      },
+      fallback: {
+        crypto: false, // use webcrypto instead of node crypto
+        buffer: require.resolve('buffer/'),
       },
     },
     plugins: [
@@ -252,6 +263,13 @@ export default ({
         chunks: ['popup-root'],
       }),
       new HtmlWebpackPlugin({
+        title: 'Zafu Wallet',
+        template: 'react-root.html',
+        rootId: 'popup-root',
+        filename: 'sidepanel.html',
+        chunks: ['popup-root'],
+      }),
+      new HtmlWebpackPlugin({
         title: 'Zafu Offscreen',
         filename: 'offscreen.html',
         chunks: ['offscreen-handler'],
@@ -271,6 +289,10 @@ export default ({
   // Depends on 'browser' to ensure it runs after browser config (which cleans the dist)
   const workerConfig: webpack.Configuration = {
     name: 'worker',
+    mode: 'production',
+    performance: {
+      hints: false,
+    },
     dependencies: ['browser'],
     target: 'webworker',
     entry: {

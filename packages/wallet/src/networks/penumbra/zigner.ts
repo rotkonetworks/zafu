@@ -22,6 +22,7 @@ import {
   type PenumbraSignRequest,
   type PenumbraSignatureResponse,
 } from './types';
+import { hexToBytes, bytesToHex, readUint16LE, readUint32LE, writeUint16LE, writeUint32LE } from '../common/qr';
 
 // =============================================================================
 // FVK Import (Zigner → Zafu)
@@ -334,47 +335,9 @@ export function getPenumbraQRType(
   }
 }
 
-// =============================================================================
-// Utility Functions
-// =============================================================================
-
-function hexToBytes(hex: string): Uint8Array {
-  const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex;
-  const bytes = new Uint8Array(cleanHex.length / 2);
-  for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = parseInt(cleanHex.substring(i * 2, i * 2 + 2), 16);
-  }
-  return bytes;
-}
-
-function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-function readU16LE(data: Uint8Array, offset: number): number {
-  return data[offset]! | (data[offset + 1]! << 8);
-}
-
-function readU32LE(data: Uint8Array, offset: number): number {
-  return (
-    (data[offset]! |
-      (data[offset + 1]! << 8) |
-      (data[offset + 2]! << 16) |
-      (data[offset + 3]! << 24)) >>>
-    0
-  );
-}
-
-function writeU16LE(arr: Uint8Array, offset: number, value: number): void {
-  arr[offset] = value & 0xff;
-  arr[offset + 1] = (value >> 8) & 0xff;
-}
-
-function writeU32LE(arr: Uint8Array, offset: number, value: number): void {
-  arr[offset] = value & 0xff;
-  arr[offset + 1] = (value >> 8) & 0xff;
-  arr[offset + 2] = (value >> 16) & 0xff;
-  arr[offset + 3] = (value >> 24) & 0xff;
-}
+// utility functions imported from ../common/qr
+// aliased for backwards compat with existing code
+const readU16LE = readUint16LE;
+const readU32LE = readUint32LE;
+const writeU16LE = writeUint16LE;
+const writeU32LE = writeUint32LE;
