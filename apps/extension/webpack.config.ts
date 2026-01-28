@@ -231,19 +231,14 @@ resolve: {
             from: path.join(wasmPackage, 'wasm-parallel'),
             to: 'wasm-parallel',
           },
-          // zafu-wasm for zcash key derivation and scanning
+          // zcash-wasm for zcash key derivation and scanning
           {
-            from: '/steam/rotko/zeratul/crates/bin/zidecar/www/pkg/zafu_wasm.js',
+            from: path.join(__dirname, '../../packages/zcash-wasm/zcash_wasm.js'),
             to: 'zafu-wasm/zafu_wasm.js',
           },
           {
-            from: '/steam/rotko/zeratul/crates/bin/zidecar/www/pkg/zafu_wasm_bg.wasm',
+            from: path.join(__dirname, '../../packages/zcash-wasm/zcash_wasm_bg.wasm'),
             to: 'zafu-wasm/zafu_wasm_bg.wasm',
-          },
-          // worker snippet for rayon parallel scanning
-          {
-            from: '/steam/rotko/zeratul/crates/bin/zidecar/www/pkg/snippets',
-            to: 'zafu-wasm/snippets',
           },
         ],
       }),

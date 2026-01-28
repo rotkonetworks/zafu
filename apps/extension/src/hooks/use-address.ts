@@ -19,7 +19,7 @@ async function getPenumbraAddress(fvkBytes: Uint8Array, index = 0): Promise<stri
   const { FullViewingKey } = await import('@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb');
 
   const fvk = new FullViewingKey({ inner: fvkBytes });
-  const address = getAddressByIndex(fvk, index);
+  const address = await getAddressByIndex(fvk, index);
   return bech32mAddress(address);
 }
 
@@ -44,9 +44,9 @@ async function derivePenumbraAddress(mnemonic: string, index = 0): Promise<strin
   const { generateSpendKey, getFullViewingKey, getAddressByIndex } = await import('@penumbra-zone/wasm/keys');
   const { bech32mAddress } = await import('@penumbra-zone/bech32m/penumbra');
 
-  const spendKey = generateSpendKey(mnemonic);
-  const fvk = getFullViewingKey(spendKey);
-  const address = getAddressByIndex(fvk, index);
+  const spendKey = await generateSpendKey(mnemonic);
+  const fvk = await getFullViewingKey(spendKey);
+  const address = await getAddressByIndex(fvk, index);
   return bech32mAddress(address);
 }
 

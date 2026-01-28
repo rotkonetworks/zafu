@@ -14,7 +14,7 @@ const MainPage = () => {
     // initialize wasm module before rendering routes
     // all wasm functions (keys, transactions, etc.) now use wasm-parallel
     import('@penumbra-zone/wasm/init')
-      .then(wasmInit => wasmInit.default())
+      .then(({ ensureWasmReady }) => ensureWasmReady())
       .then(() => setWasmReady(true))
       .catch(err => {
         console.error('failed to init wasm:', err);
