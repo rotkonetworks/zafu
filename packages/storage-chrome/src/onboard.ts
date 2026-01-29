@@ -46,3 +46,14 @@ export const onboardWallet = async (): Promise<WalletJson> => {
     localExtStorage.addListener(storageListener);
   });
 };
+
+/**
+ * Get wallet from storage without blocking.
+ * Unlike onboardWallet which waits forever, this returns undefined if no wallet exists.
+ * Use this for multi-network wallets where penumbra wallet may not exist yet.
+ */
+export const getWalletFromStorage = async (): Promise<WalletJson | undefined> => {
+  const wallets = await localExtStorage.get('wallets');
+  const activeIndex = (await localExtStorage.get('activeWalletIndex')) ?? 0;
+  return wallets[activeIndex] ?? wallets[0];
+};

@@ -1,8 +1,7 @@
 import { BlockProcessor } from '@penumbra-zone/query/block-processor';
 import { RootQuerier } from '@penumbra-zone/query/root-querier';
 import { IndexedDb } from '@penumbra-zone/storage/indexed-db';
-// ViewServer imported dynamically to avoid loading WASM before it's initialized
-import type { ViewServer as ViewServerType } from '@rotko/penumbra-wasm/view-server';
+import { ViewServer } from '@rotko/penumbra-wasm/view-server';
 import { ServicesInterface, WalletServices } from '@rotko/penumbra-types/services';
 import { FullViewingKey, WalletId } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
 import { ChainRegistryClient } from '@penumbra-labs/registry';
@@ -67,9 +66,7 @@ export class Services implements ServicesInterface {
       registryClient,
     });
 
-    // Dynamic import to avoid loading WASM before it's initialized
-    const { ViewServer } = await import('@rotko/penumbra-wasm/view-server');
-    let viewServer: ViewServerType | undefined;
+    let viewServer: ViewServer | undefined;
 
     // 'fullSyncHeight' will always be undefined after onboarding independent
     // of the wallet type. On subsequent service worker inits, the field will

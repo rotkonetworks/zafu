@@ -273,6 +273,37 @@ export const createKeyRingSlice = (
       await local.set('vaults', newVaults);
       await local.set('selectedVaultId', vaultId);
 
+      // Also populate Prax-compatible wallets array for penumbra sync
+      // This stores the FVK (view-only, safe) while mnemonic stays encrypted
+      try {
+        const { generateSpendKey, getFullViewingKey, getWalletId } = await import(
+          '@rotko/penumbra-wasm/keys'
+        );
+        const spendKey = await generateSpendKey(mnemonic);
+        const fullViewingKey = await getFullViewingKey(spendKey);
+        const walletId = await getWalletId(fullViewingKey);
+
+        // Get password key to encrypt seed phrase for custody
+        const keyJson = await session.get('passwordKey');
+        if (keyJson) {
+          const key = await Key.fromJson(keyJson);
+          const encryptedSeedPhrase = await key.seal(mnemonic);
+
+          const praxWallet = {
+            id: walletId.toJsonString(),
+            label: name,
+            fullViewingKey: fullViewingKey.toJsonString(),
+            custody: { encryptedSeedPhrase: encryptedSeedPhrase.toJson() },
+          };
+
+          const wallets = await local.get('wallets');
+          await local.set('wallets', [praxWallet, ...wallets]);
+        }
+      } catch (e) {
+        // Non-fatal: penumbra sync won't work but other networks will
+        console.warn('[keyring] failed to create prax-compatible wallet:', e);
+      }
+
       const keyInfos = vaultsToKeyInfos(newVaults, vaultId);
       set(state => {
         state.keyRing.keyInfos = keyInfos;

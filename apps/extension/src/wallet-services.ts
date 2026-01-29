@@ -4,7 +4,7 @@ import { createGrpcWebTransport } from '@connectrpc/connect-web';
 import { createClient } from '@connectrpc/connect';
 import { FullViewingKey, WalletId } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
 import { localExtStorage } from '@repo/storage-chrome/local';
-import { onboardWallet } from '@repo/storage-chrome/onboard';
+import { getWalletFromStorage } from '@repo/storage-chrome/onboard';
 import { Services } from '@repo/context';
 import { WalletServices } from '@rotko/penumbra-types/services';
 import { AssetId } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
@@ -62,7 +62,15 @@ export const startWalletServices = async () => {
 
   console.log('[sync] starting wallet services...');
 
-  const wallet = await onboardWallet();
+  // Non-blocking wallet check (unlike onboardWallet which waits forever)
+  const wallet = await getWalletFromStorage();
+  if (!wallet) {
+    console.log('[sync] no penumbra wallet found in storage, sync will start when wallet is created');
+    // Return stub - sync will be triggered when wallet is created via keyring
+    return {
+      getWalletServices: () => Promise.reject(new Error('no penumbra wallet configured')),
+    } as Services;
+  }
   console.log('[sync] wallet loaded:', wallet.id.slice(0, 20) + '...');
 
   const grpcEndpoint = await getPenumbraEndpoint();
