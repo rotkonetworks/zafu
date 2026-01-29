@@ -31,20 +31,19 @@ const DEFAULT_PENUMBRA_ENDPOINT = 'https://penumbra.rotko.net';
  * Get the Penumbra gRPC endpoint from storage or use default
  */
 const getPenumbraEndpoint = async (): Promise<string> => {
-  // First try the legacy grpcEndpoint field
-  const legacyEndpoint = await localExtStorage.get('grpcEndpoint');
-  if (legacyEndpoint) {
-    return legacyEndpoint;
-  }
-
-  // Then try the new networkEndpoints object
+  // First try the new networkEndpoints object (from Network Endpoints UI)
   const networkEndpoints = await localExtStorage.get('networkEndpoints');
   if (networkEndpoints?.penumbra) {
     return networkEndpoints.penumbra;
   }
 
-  // Fall back to default and save it for future use
-  await localExtStorage.set('grpcEndpoint', DEFAULT_PENUMBRA_ENDPOINT);
+  // Then try the legacy grpcEndpoint field (for backwards compat)
+  const legacyEndpoint = await localExtStorage.get('grpcEndpoint');
+  if (legacyEndpoint) {
+    return legacyEndpoint;
+  }
+
+  // Fall back to default
   return DEFAULT_PENUMBRA_ENDPOINT;
 };
 
