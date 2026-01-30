@@ -28,6 +28,7 @@ import { useCosmosAssets, type CosmosAsset } from '../../../hooks/cosmos-balance
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
 import { COSMOS_CHAINS, type CosmosChainId, isValidCosmosAddress, getChainFromAddress } from '@repo/wallet/networks/cosmos/chains';
 import { cn } from '@repo/ui/lib/utils';
+import { isDedicatedWindow } from '../../../utils/popup-detection';
 
 /** IBC chain selector dropdown */
 function ChainSelector({
@@ -672,7 +673,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
 type PenumbraMode = 'send' | 'ibc';
 
 /** Combined Penumbra send with tabs */
-function PenumbraSend() {
+function PenumbraSend({ onSuccess }: { onSuccess?: () => void }) {
   const [mode, setMode] = useState<PenumbraMode>('send');
 
   return (
@@ -703,13 +704,13 @@ function PenumbraSend() {
         </button>
       </div>
 
-      {mode === 'send' ? <PenumbraNativeSend /> : <PenumbraIbcSend />}
+      {mode === 'send' ? <PenumbraNativeSend onSuccess={onSuccess} /> : <PenumbraIbcSend onSuccess={onSuccess} />}
     </div>
   );
 }
 
 /** Penumbra native send form (penumbra -> penumbra) */
-function PenumbraNativeSend() {
+function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
   const sendState = useStore(selectPenumbraSend);
   const [txStatus, setTxStatus] = useState<'idle' | 'planning' | 'signing' | 'broadcasting' | 'success' | 'error'>('idle');
   const [txHash, setTxHash] = useState<string | undefined>();
@@ -975,7 +976,9 @@ function PenumbraNativeSend() {
       {/* submit */}
       <button
         onClick={() => {
-          if (txStatus === 'success' || txStatus === 'error') {
+          if (txStatus === 'success') {
+            onSuccess ? onSuccess() : handleReset();
+          } else if (txStatus === 'error') {
             handleReset();
           } else {
             void handleSubmit();
@@ -997,7 +1000,7 @@ function PenumbraNativeSend() {
         {txStatus === 'signing' && 'signing...'}
         {txStatus === 'broadcasting' && 'broadcasting...'}
         {txStatus === 'idle' && 'send'}
-        {txStatus === 'success' && 'send another'}
+        {txStatus === 'success' && (onSuccess ? 'close' : 'send another')}
         {txStatus === 'error' && 'retry'}
       </button>
 
@@ -1013,7 +1016,7 @@ function PenumbraNativeSend() {
 }
 
 /** Penumbra IBC send form */
-function PenumbraIbcSend() {
+function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
   const { data: chains = [], isLoading: chainsLoading } = useIbcChains();
   const ibcState = useStore(selectIbcWithdraw);
   const [txStatus, setTxStatus] = useState<'idle' | 'planning' | 'signing' | 'broadcasting' | 'success' | 'error'>('idle');
@@ -1232,7 +1235,9 @@ function PenumbraIbcSend() {
       {/* submit */}
       <button
         onClick={() => {
-          if (txStatus === 'success' || txStatus === 'error') {
+          if (txStatus === 'success') {
+            onSuccess ? onSuccess() : handleReset();
+          } else if (txStatus === 'error') {
             handleReset();
           } else {
             void handleSubmit();
@@ -1254,7 +1259,7 @@ function PenumbraIbcSend() {
         {txStatus === 'signing' && 'signing...'}
         {txStatus === 'broadcasting' && 'broadcasting...'}
         {txStatus === 'idle' && 'send via ibc'}
-        {txStatus === 'success' && 'send another'}
+        {txStatus === 'success' && (onSuccess ? 'close' : 'send another')}
         {txStatus === 'error' && 'retry'}
       </button>
 
@@ -1282,6 +1287,8 @@ export function SendPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { activeNetwork } = useStore(activeNetworkSelector);
+  // dedicated window should close on completion, side panel navigates normally
+  const [inDedicatedWindow] = useState(() => isDedicatedWindow());
 
   // get prefill from location state (from inbox compose)
   const locationState = location.state as SendLocationState | undefined;
@@ -1291,7 +1298,7 @@ export function SendPage() {
     memo: locationState.prefillMemo,
   } : undefined;
 
-  const goBack = () => navigate(PopupPath.INDEX);
+  const goBack = () => inDedicatedWindow ? window.close() : navigate(PopupPath.INDEX);
   const isPenumbra = activeNetwork === 'penumbra';
   const isCosmos = COSMOS_CHAIN_IDS.includes(activeNetwork as CosmosChainId);
   const isZcash = activeNetwork === 'zcash';
@@ -1319,19 +1326,21 @@ export function SendPage() {
     <div className='flex flex-col'>
       {/* Header */}
       <div className='flex items-center gap-3 border-b border-border/40 px-4 py-3'>
-        <button
-          onClick={goBack}
-          className='text-muted-foreground transition-colors duration-75 hover:text-foreground'
-        >
-          <ArrowLeftIcon className='h-5 w-5' />
-        </button>
+        {!inDedicatedWindow && (
+          <button
+            onClick={goBack}
+            className='text-muted-foreground transition-colors duration-75 hover:text-foreground'
+          >
+            <ArrowLeftIcon className='h-5 w-5' />
+          </button>
+        )}
         <h1 className='text-lg font-medium text-foreground'>{getTitle()}</h1>
       </div>
 
       {/* Content */}
       <div className='p-4'>
         {isPenumbra ? (
-          <PenumbraSend />
+          <PenumbraSend onSuccess={inDedicatedWindow ? () => window.close() : undefined} />
         ) : isCosmos ? (
           <CosmosSend sourceChainId={activeNetwork as CosmosChainId} />
         ) : (

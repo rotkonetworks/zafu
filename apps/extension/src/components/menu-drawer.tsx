@@ -12,11 +12,13 @@ import {
   QuestionMarkCircledIcon,
   MobileIcon,
   GearIcon,
+  ViewVerticalIcon,
 } from '@radix-ui/react-icons';
 import { useStore } from '../state';
 import { selectLock } from '../state/keyring';
 import { PopupPath } from '../routes/popup/paths';
 import { cn } from '@repo/ui/lib/utils';
+import { isSidePanel } from '../utils/popup-detection';
 
 interface MenuDrawerProps {
   open: boolean;
@@ -26,6 +28,7 @@ interface MenuDrawerProps {
 export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
   const navigate = useNavigate();
   const lock = useStore(selectLock);
+  const inSidePanel = isSidePanel();
 
   // don't render anything when closed
   if (!open) return null;
@@ -34,6 +37,20 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
     lock();
     onClose();
     navigate(PopupPath.LOGIN);
+  };
+
+  const handleOpenSidePanel = async () => {
+    onClose();
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab?.windowId) {
+        await chrome.sidePanel.open({ windowId: tab.windowId });
+        // close the popup after opening side panel
+        window.close();
+      }
+    } catch (e) {
+      console.error('Failed to open side panel:', e);
+    }
   };
 
   const menuItems = [
@@ -77,6 +94,16 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
         onClose();
       },
     },
+    // only show "Open in Side Panel" when not already in side panel
+    ...(!inSidePanel
+      ? [
+          {
+            icon: <ViewVerticalIcon className='h-4 w-4' />,
+            label: 'Open in Side Panel',
+            onClick: handleOpenSidePanel,
+          },
+        ]
+      : []),
     {
       icon: <LockClosedIcon className='h-4 w-4' />,
       label: 'Lock Wallet',

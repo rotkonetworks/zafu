@@ -3,6 +3,7 @@ import { StrictMode, useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router-dom';
 import { popupRouter } from '../routes/popup/router';
+import { isSidePanel } from '../utils/popup-detection';
 
 import '@repo/ui/styles/globals.css';
 
@@ -20,6 +21,23 @@ const MainPopup = () => {
         console.error('failed to init wasm:', err);
         setWasmReady(true); // continue anyway, some routes don't need wasm
       });
+  }, []);
+
+  // check for pending side panel navigation
+  useEffect(() => {
+    if (isSidePanel()) {
+      chrome.storage.local.get('sidePanelNavigateTo').then(result => {
+        const path = result['sidePanelNavigateTo'] as string | undefined;
+        if (path) {
+          // clear the stored path
+          void chrome.storage.local.remove('sidePanelNavigateTo');
+          // navigate to the stored path
+          popupRouter.navigate(path);
+        }
+      }).catch(() => {
+        // ignore errors
+      });
+    }
   }, []);
 
   if (!wasmReady) {

@@ -1,6 +1,6 @@
-import { lazy, Suspense, useState, useCallback, useEffect } from 'react';
+import { lazy, Suspense, useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowUpIcon, ArrowDownIcon, CopyIcon, CheckIcon } from '@radix-ui/react-icons';
+import { ArrowUpIcon, ArrowDownIcon, CopyIcon, CheckIcon, DesktopIcon, ViewVerticalIcon } from '@radix-ui/react-icons';
 
 import { useStore } from '../../../state';
 import { selectActiveNetwork, selectSelectedKeyInfo, type NetworkType } from '../../../state/keyring';
@@ -8,6 +8,8 @@ import { selectActiveZcashWallet } from '../../../state/wallets';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { needsLogin, needsOnboard } from '../popup-needs';
 import { PopupPath } from '../paths';
+import { openInDedicatedWindow, openInSidePanel } from '../../../utils/navigate';
+import { isSidePanel, isDedicatedWindow } from '../../../utils/popup-detection';
 import { AssetListSkeleton } from '../../../components/primitives/skeleton';
 import { usePreloadBalances } from '../../../hooks/use-preload';
 import { useActiveAddress } from '../../../hooks/use-address';
@@ -38,10 +40,37 @@ export const PopupIndex = () => {
   const { publicKey: polkadotPublicKey } = usePolkadotPublicKey();
 
   const [copied, setCopied] = useState(false);
+  const [sendMenuOpen, setSendMenuOpen] = useState(false);
+  const sendMenuRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+
+  // check if we're in side panel or dedicated window (can navigate normally)
+  const [canNavigateNormally] = useState(() => isSidePanel() || isDedicatedWindow());
 
   // preload balances in background for instant display
   usePreloadBalances();
+
+  // close send menu when clicking outside
+  useEffect(() => {
+    if (!sendMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (sendMenuRef.current && !sendMenuRef.current.contains(e.target as Node)) {
+        setSendMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [sendMenuOpen]);
+
+  const handleSendClick = useCallback(() => {
+    if (canNavigateNormally) {
+      // in side panel or dedicated window - navigate normally
+      navigate(PopupPath.SEND);
+    } else {
+      // in popup - show menu
+      setSendMenuOpen(prev => !prev);
+    }
+  }, [canNavigateNormally, navigate]);
 
   // dismiss backup reminder on first load
   useEffect(() => {
@@ -95,13 +124,40 @@ export const PopupIndex = () => {
             >
               <ArrowDownIcon className='h-5 w-5' />
             </button>
-            <button
-              onClick={() => navigate(PopupPath.SEND)}
-              className='flex h-10 w-10 items-center justify-center bg-primary text-primary-foreground transition-all duration-100 hover:bg-primary/90 active:scale-95'
-              title='send'
-            >
-              <ArrowUpIcon className='h-5 w-5' />
-            </button>
+            <div className='relative' ref={sendMenuRef}>
+              <button
+                onClick={handleSendClick}
+                className='flex h-10 w-10 items-center justify-center bg-primary text-primary-foreground transition-all duration-100 hover:bg-primary/90 active:scale-95'
+                title='send'
+              >
+                <ArrowUpIcon className='h-5 w-5' />
+              </button>
+              {/* send options menu - only shown in popup mode */}
+              {sendMenuOpen && (
+                <div className='absolute right-0 top-full mt-1 z-20 w-48 rounded-lg border border-border bg-background shadow-lg py-1'>
+                  <button
+                    onClick={() => {
+                      setSendMenuOpen(false);
+                      void openInDedicatedWindow(PopupPath.SEND);
+                    }}
+                    className='flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors'
+                  >
+                    <DesktopIcon className='h-4 w-4' />
+                    open in new window
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSendMenuOpen(false);
+                      void openInSidePanel(PopupPath.SEND);
+                    }}
+                    className='flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors'
+                  >
+                    <ViewVerticalIcon className='h-4 w-4' />
+                    open in side panel
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
