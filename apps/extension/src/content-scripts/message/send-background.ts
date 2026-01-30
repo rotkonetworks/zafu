@@ -36,7 +36,8 @@ export function listenBackground<R = never>(
     sender: chrome.runtime.MessageSender,
     respond: (response: R) => void,
   ): boolean => {
-    if (sender.id !== ZIGNER) {
+    // In dev mode, use runtime ID (Chrome assigns dynamic ID for unpacked extensions)
+    if (sender.id !== (globalThis.__DEV__ ? chrome.runtime.id : ZIGNER)) {
       return false;
     }
 

@@ -186,7 +186,8 @@ const handler = await backOff(() => initHandler(), {
   },
 });
 
-CRSessionManager.init(ZIGNER, handler, validateSessionPort);
+// In dev mode, use runtime ID (Chrome assigns dynamic ID for unpacked extensions)
+CRSessionManager.init(globalThis.__DEV__ ? chrome.runtime.id : ZIGNER, handler, validateSessionPort);
 
 // listen for content script activity
 chrome.runtime.onMessage.addListener(contentScriptConnectListener);

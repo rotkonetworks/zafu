@@ -38,6 +38,9 @@ const prerenderComplete = new Promise<void>(resolve =>
     : resolve(),
 );
 
+// In dev mode, use runtime ID (Chrome assigns dynamic ID for unpacked extensions)
+const extensionOrigin = globalThis.__DEV__ ? `chrome-extension://${chrome.runtime.id}` : ZIGNER_ORIGIN;
+
 class ZignerInjection {
   private static singleton?: ZignerInjection = new ZignerInjection();
 
@@ -46,7 +49,7 @@ class ZignerInjection {
   }
 
   private presentState: PenumbraState = PenumbraState.Disconnected;
-  private manifestUrl = `${ZIGNER_ORIGIN}/manifest.json`;
+  private manifestUrl = `${extensionOrigin}/manifest.json`;
   private stateEvents = new EventTarget();
 
   private readonly injection: Readonly<PenumbraProvider> = Object.freeze({
@@ -97,7 +100,7 @@ class ZignerInjection {
   private setState(state: PenumbraState) {
     if (this.presentState !== state) {
       this.presentState = state;
-      this.stateEvents.dispatchEvent(createPenumbraStateEvent(ZIGNER_ORIGIN, this.presentState));
+      this.stateEvents.dispatchEvent(createPenumbraStateEvent(extensionOrigin, this.presentState));
     }
   }
 
@@ -170,7 +173,7 @@ Object.defineProperty(
   window[PenumbraSymbol] ??
     // create the global if not present
     Object.defineProperty(window, PenumbraSymbol, { value: {}, writable: false })[PenumbraSymbol],
-  ZIGNER_ORIGIN,
+  extensionOrigin,
   {
     value: ZignerInjection.penumbra,
     writable: false,

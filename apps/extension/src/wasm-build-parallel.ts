@@ -20,10 +20,11 @@ import { FullViewingKey } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/ke
 import actionKeys from '@penumbra-zone/keys';
 
 // Map action types to proving key URLs
+// In dev mode, use self.location.origin (Chrome assigns dynamic ID for unpacked extensions)
 const keyFileNames: Partial<Record<string, URL>> = Object.fromEntries(
   Object.entries(actionKeys).map(([action, keyFile]) => [
     action,
-    new URL('keys/' + keyFile, ZIGNER_ORIGIN),
+    new URL('keys/' + keyFile, globalThis.__DEV__ ? self.location.origin : ZIGNER_ORIGIN),
   ]),
 );
 

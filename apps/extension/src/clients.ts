@@ -4,11 +4,21 @@ import { createChannelTransport } from '@penumbra-zone/transport-dom/create';
 import { CRSessionClient } from '@penumbra-zone/transport-chrome/session-client';
 import { internalTransportOptions } from './transport-options';
 
-const port = CRSessionClient.init(ZIGNER);
+// Initialize session client - this creates a MessageChannel and connects to the service worker
+let sessionPort: MessagePort | undefined;
+
+const getOrCreatePort = (): Promise<MessagePort> => {
+  if (!sessionPort) {
+    // In dev mode, use runtime ID (Chrome assigns dynamic ID for unpacked extensions)
+    const extensionId = globalThis.__DEV__ ? chrome.runtime.id : ZIGNER;
+    sessionPort = CRSessionClient.init(extensionId);
+  }
+  return Promise.resolve(sessionPort);
+};
 
 const extensionPageTransport = createChannelTransport({
   ...internalTransportOptions,
-  getPort: () => Promise.resolve(port),
+  getPort: getOrCreatePort,
 });
 
 export const viewClient = createClient(ViewService, extensionPageTransport);
