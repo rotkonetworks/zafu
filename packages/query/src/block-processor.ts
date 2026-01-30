@@ -252,11 +252,11 @@ export class BlockProcessor implements BlockProcessorInterface {
         }
       }
 
-      if (appParams.shieldedPoolParams?.fmdMetaParams) {
+      if (appParams.shieldedPoolParams?.fixedFmdParams) {
         await this.indexedDb.saveFmdParams(
           new FmdParameters({
-            precisionBits: 0,
-            asOfBlockHeight: appParams.shieldedPoolParams.fmdMetaParams.fmdGracePeriodBlocks,
+            precisionBits: appParams.shieldedPoolParams.fixedFmdParams.precisionBits,
+            asOfBlockHeight: appParams.shieldedPoolParams.fixedFmdParams.asOfBlockHeight,
           }),
         );
       }
