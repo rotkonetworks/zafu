@@ -26,6 +26,7 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
     const frontendUrl = await localExtStorage.get('frontendUrl');
     const numeraires = await localExtStorage.get('numeraires');
     const zignerCameraEnabled = await localExtStorage.get('zignerCameraEnabled');
+    const contacts = await localExtStorage.get('contacts');
 
     set(
       produce((state: AllSlices) => {
@@ -36,6 +37,7 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
         state.defaultFrontend.url = frontendUrl;
         state.numeraires.selectedNumeraires = numeraires;
         state.zigner.cameraEnabled = zignerCameraEnabled ?? false;
+        state.contacts.contacts = contacts ?? [];
       }),
     );
 
@@ -123,6 +125,15 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
         set(
           produce((state: AllSlices) => {
             state.wallets.zcashWallets = stored ?? [];
+          }),
+        );
+      }
+
+      if (changes.contacts) {
+        const stored = changes.contacts.newValue;
+        set(
+          produce((state: AllSlices) => {
+            state.contacts.contacts = stored ?? [];
           }),
         );
       }

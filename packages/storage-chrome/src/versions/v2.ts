@@ -112,24 +112,30 @@ type LOCAL = {
   /** currently selected vault id */
   selectedVaultId?: string;
 
-  /** address book contacts */
+  /** address book contacts - each contact can have multiple addresses */
   contacts?: {
     id: string;
     name: string;
-    /** network type for this contact */
-    network: 'penumbra' | 'zcash' | 'cosmos' | 'polkadot' | 'ethereum' | 'bitcoin';
-    /** bech32 or other address format */
-    address: string;
-    /** optional notes */
+    /** general notes about the contact */
     notes?: string;
-    /** for cosmos, which chain (osmosis, noble, etc) */
-    chainId?: string;
-    /** when was this contact added */
-    createdAt: number;
-    /** when was this contact last used */
-    lastUsedAt?: number;
     /** is this a favorite */
     favorite?: boolean;
+    /** when was this contact added */
+    createdAt: number;
+    /** addresses across different networks */
+    addresses: {
+      id: string;
+      /** network type for this address */
+      network: 'penumbra' | 'zcash' | 'cosmos' | 'polkadot' | 'kusama' | 'ethereum' | 'bitcoin';
+      /** bech32 or other address format */
+      address: string;
+      /** for cosmos, which chain (osmosis, noble, etc) */
+      chainId?: string;
+      /** notes specific to this address */
+      notes?: string;
+      /** last time this address was used for sending */
+      lastUsedAt?: number;
+    }[];
   }[];
 
   /** recently used addresses for quick access */

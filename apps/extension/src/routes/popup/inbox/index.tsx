@@ -15,6 +15,7 @@ import {
   CheckIcon,
   TrashIcon,
   ReloadIcon,
+  PersonIcon,
 } from '@radix-ui/react-icons';
 import { useStore } from '../../../state';
 import { messagesSelector, type Message } from '../../../state/messages';
@@ -30,6 +31,7 @@ import { FeeTier_Tier } from '@penumbra-zone/protobuf/penumbra/core/component/fe
 import { viewClient } from '../../../clients';
 import { cn } from '@repo/ui/lib/utils';
 import { PopupPath } from '../paths';
+import { AddContactDialog } from '../../../components/add-contact-dialog';
 
 type TabType = 'inbox' | 'sent';
 
@@ -64,12 +66,16 @@ function MessageRow({
   onClick,
   onMarkRead,
   onDelete,
+  onAddToContacts,
+  isInContacts,
 }: {
   message: Message;
   contactName?: string;
   onClick: () => void;
   onMarkRead: () => void;
   onDelete: () => void;
+  onAddToContacts?: () => void;
+  isInContacts: boolean;
 }) {
   const [showMenu, setShowMenu] = useState(false);
 
@@ -80,6 +86,9 @@ function MessageRow({
   const truncatedAddress = displayAddress.length > 20
     ? `${displayAddress.slice(0, 8)}...${displayAddress.slice(-6)}`
     : displayAddress;
+
+  // can add to contacts if we have a valid address and it's not already in contacts
+  const canAddToContacts = !isInContacts && onAddToContacts && displayAddress !== 'shielded sender';
 
   return (
     <div
@@ -151,7 +160,7 @@ function MessageRow({
         </button>
 
         {showMenu && (
-          <div className='absolute right-0 top-full mt-1 z-10 rounded-lg border border-border bg-background shadow-lg py-1 min-w-[120px]'>
+          <div className='absolute right-0 top-full mt-1 z-10 rounded-lg border border-border bg-background shadow-lg py-1 min-w-[140px]'>
             {!message.read && (
               <button
                 onClick={(e) => {
@@ -163,6 +172,19 @@ function MessageRow({
               >
                 <CheckIcon className='h-4 w-4' />
                 mark read
+              </button>
+            )}
+            {canAddToContacts && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddToContacts();
+                  setShowMenu(false);
+                }}
+                className='flex items-center gap-2 w-full px-3 py-1.5 text-sm hover:bg-muted'
+              >
+                <PersonIcon className='h-4 w-4' />
+                add to contacts
               </button>
             )}
             <button
@@ -188,15 +210,21 @@ function MessageDetail({
   contactName,
   onClose,
   onReply,
+  onAddToContacts,
+  isInContacts,
 }: {
   message: Message;
   contactName?: string;
   onClose: () => void;
   onReply: () => void;
+  onAddToContacts?: () => void;
+  isInContacts: boolean;
 }) {
   const displayAddress = message.direction === 'received'
     ? message.senderAddress ?? 'shielded sender'
     : message.recipientAddress;
+
+  const canAddToContacts = !isInContacts && onAddToContacts && displayAddress !== 'shielded sender';
 
   return (
     <div className='flex flex-col h-full'>
@@ -214,12 +242,31 @@ function MessageDetail({
       {/* message content */}
       <div className='flex-1 overflow-y-auto p-4'>
         <div className='space-y-4'>
+          {/* sender address - full width clickable */}
+          <div className='break-all text-sm font-mono text-muted-foreground'>
+            {displayAddress}
+          </div>
+
           {/* metadata */}
           <div className='space-y-2'>
             <div className='flex items-center justify-between'>
-              <span className='text-sm font-medium'>
-                {contactName ?? displayAddress}
-              </span>
+              <div className='flex items-center gap-2'>
+                <span className='text-sm font-medium'>
+                  {contactName ?? (displayAddress.length > 20
+                    ? `${displayAddress.slice(0, 8)}...${displayAddress.slice(-6)}`
+                    : displayAddress)}
+                </span>
+                {canAddToContacts && (
+                  <button
+                    onClick={onAddToContacts}
+                    className='flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors'
+                    title='add to contacts'
+                  >
+                    <PersonIcon className='h-3 w-3' />
+                    add
+                  </button>
+                )}
+              </div>
               <span className='text-xs text-muted-foreground'>
                 {new Date(message.timestamp).toLocaleString()}
               </span>
@@ -506,6 +553,7 @@ export function InboxPage() {
   const [selectedMessage, setSelectedMessage] = useState<Message | undefined>();
   const [showCompose, setShowCompose] = useState(false);
   const [replyTo, setReplyTo] = useState<{ address: string; network: 'zcash' | 'penumbra' } | undefined>();
+  const [addContactData, setAddContactData] = useState<{ address: string; network: 'zcash' | 'penumbra' } | null>(null);
 
   // memo sync hooks
   const { syncMemos: syncPenumbraMemos, isSyncing: isPenumbraSyncing, syncProgress } = usePenumbraMemos();
@@ -565,18 +613,51 @@ export function InboxPage() {
     }
   }, [selectedMessage]);
 
+  const handleAddToContacts = useCallback(
+    (address: string, network: 'zcash' | 'penumbra') => {
+      // check if already in contacts
+      if (contacts.findByAddress(address)) return;
+      // show dialog to add contact
+      setAddContactData({ address, network });
+    },
+    [contacts]
+  );
+
+  const isAddressInContacts = useCallback(
+    (address: string | undefined) => {
+      if (!address) return true; // treat undefined as "in contacts" to hide button
+      return !!contacts.findByAddress(address);
+    },
+    [contacts]
+  );
+
+  // compute selected message address for MessageDetail
+  const selectedAddress = selectedMessage
+    ? selectedMessage.direction === 'received'
+      ? selectedMessage.senderAddress
+      : selectedMessage.recipientAddress
+    : undefined;
+
   // show message detail
   if (selectedMessage) {
-    const address = selectedMessage.direction === 'received'
-      ? selectedMessage.senderAddress
-      : selectedMessage.recipientAddress;
     return (
-      <MessageDetail
-        message={selectedMessage}
-        contactName={getContactName(address)}
-        onClose={() => setSelectedMessage(undefined)}
-        onReply={handleReply}
-      />
+      <>
+        <MessageDetail
+          message={selectedMessage}
+          contactName={getContactName(selectedAddress)}
+          onClose={() => setSelectedMessage(undefined)}
+          onReply={handleReply}
+          onAddToContacts={selectedAddress ? () => handleAddToContacts(selectedAddress, selectedMessage.network) : undefined}
+          isInContacts={isAddressInContacts(selectedAddress)}
+        />
+        {addContactData && (
+          <AddContactDialog
+            address={addContactData.address}
+            network={addContactData.network}
+            onClose={() => setAddContactData(null)}
+          />
+        )}
+      </>
     );
   }
 
@@ -715,12 +796,23 @@ export function InboxPage() {
                   onClick={() => handleSelectMessage(message)}
                   onMarkRead={() => void messages.markRead(message.id)}
                   onDelete={() => void messages.deleteMessage(message.id)}
+                  onAddToContacts={address ? () => handleAddToContacts(address, message.network) : undefined}
+                  isInContacts={isAddressInContacts(address)}
                 />
               );
             })}
           </div>
         )}
       </div>
+
+      {/* add to contacts dialog */}
+      {addContactData && (
+        <AddContactDialog
+          address={addContactData.address}
+          network={addContactData.network}
+          onClose={() => setAddContactData(null)}
+        />
+      )}
     </div>
   );
 }
