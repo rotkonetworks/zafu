@@ -6,7 +6,7 @@
 
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { viewClient } from '../clients';
+import { viewClient, sctClient } from '../clients';
 import { useStore } from '../state';
 import { messagesSelector } from '../state/messages';
 import { bech32mAddress } from '@penumbra-zone/bech32m/penumbra';
@@ -67,18 +67,45 @@ function extractMemoFromTransaction(txInfo: TransactionInfo): ExtractedMemo | nu
     }
   }
 
-  // determine direction by checking action types
-  // if we have OutputView actions, we likely sent this
-  // if we have SpendView actions with notes to us, we received it
-  let direction: 'sent' | 'received' = 'received';
+  // determine direction:
+  // - if we have visible SPEND actions, we funded this tx = we SENT
+  // - if we only have visible OUTPUT actions (no spends), we RECEIVED
+  let hasVisibleSpend = false;
+  let direction: 'sent' | 'received' = 'received'; // default to received
   let recipientAddress = '';
+  let ourAddress: string | undefined;
   let amount: string | undefined;
   let asset: string | undefined;
 
+  // check for spend actions (if we have spends, we sent this tx)
+  for (const action of view.bodyView?.actionViews ?? []) {
+    if (action.actionView.case === 'spend') {
+      const spend = action.actionView.value;
+      if (spend.spendView?.case === 'visible') {
+        hasVisibleSpend = true;
+        const note = spend.spendView.value.note;
+        if (note?.address) {
+          try {
+            const address = getAddressFromView(note.address);
+            if (address) {
+              ourAddress = bech32mAddress(address);
+            }
+          } catch {
+            // invalid
+          }
+        }
+      }
+    }
+  }
+
+  // if we have visible spends, we funded this = we sent it
+  if (hasVisibleSpend) {
+    direction = 'sent';
+  }
+
+  // extract output info (recipient address and amount)
   for (const action of view.bodyView?.actionViews ?? []) {
     if (action.actionView.case === 'output') {
-      // we sent to someone
-      direction = 'sent';
       const output = action.actionView.value;
       if (output.outputView?.case === 'visible') {
         const note = output.outputView.value.note;
@@ -86,7 +113,17 @@ function extractMemoFromTransaction(txInfo: TransactionInfo): ExtractedMemo | nu
           try {
             const address = getAddressFromView(note.address);
             if (address) {
-              recipientAddress = bech32mAddress(address);
+              const outputAddr = bech32mAddress(address);
+              // for sent: recipient is the output that's NOT our address (skip change outputs)
+              // for received: recipient is us (the output address)
+              if (direction === 'sent') {
+                if (outputAddr !== ourAddress) {
+                  recipientAddress = outputAddr;
+                }
+              } else {
+                // received - the output is to us
+                recipientAddress = outputAddr;
+              }
             }
           } catch {
             // invalid
@@ -102,34 +139,15 @@ function extractMemoFromTransaction(txInfo: TransactionInfo): ExtractedMemo | nu
           }
         }
       }
-    } else if (action.actionView.case === 'spend') {
-      // check if this is our spend (we received)
-      const spend = action.actionView.value;
-      if (spend.spendView?.case === 'visible') {
-        const note = spend.spendView.value.note;
-        if (note?.address) {
-          try {
-            const address = getAddressFromView(note.address);
-            if (address) {
-              recipientAddress = bech32mAddress(address);
-            }
-          } catch {
-            // invalid
-          }
-        }
-      }
     }
   }
 
-  // estimate timestamp from block height (roughly 5 seconds per block)
   const blockHeight = Number(txInfo.height ?? 0);
-  const genesisTime = 1700000000000; // approximate penumbra genesis
-  const timestamp = genesisTime + blockHeight * 5000;
 
   return {
     txId,
     blockHeight,
-    timestamp,
+    timestamp: 0, // will be fetched from SctService
     content: plaintext.text,
     senderAddress,
     recipientAddress,
@@ -175,8 +193,30 @@ export function usePenumbraMemos() {
         }
       }
 
-      // add all new memos to messages store
+      // fetch real timestamps from SctService for unique heights
       if (extracted.length > 0) {
+        const uniqueHeights = [...new Set(extracted.map(m => m.blockHeight))];
+        const timestampMap = new Map<number, number>();
+
+        await Promise.all(
+          uniqueHeights.map(async height => {
+            try {
+              const { timestamp } = await sctClient.timestampByHeight({ height: BigInt(height) });
+              if (timestamp) {
+                timestampMap.set(height, timestamp.toDate().getTime());
+              }
+            } catch {
+              // timestamp unavailable
+            }
+          })
+        );
+
+        // update memos with real timestamps
+        for (const memo of extracted) {
+          memo.timestamp = timestampMap.get(memo.blockHeight) ?? memo.timestamp;
+        }
+
+        // add all new memos to messages store
         await messages.addMessages(
           extracted.map(m => ({
             network: 'penumbra' as const,

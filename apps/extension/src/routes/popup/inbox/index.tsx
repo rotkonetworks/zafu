@@ -35,18 +35,26 @@ type TabType = 'inbox' | 'sent';
 function formatTimestamp(ts: number): string {
   const date = new Date(ts);
   const now = new Date();
-  const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+
+  // Compare calendar days, not 24-hour periods
+  const dateDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diffDays = Math.floor((today.getTime() - dateDay.getTime()) / (1000 * 60 * 60 * 24));
+
+  const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   if (diffDays === 0) {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return `Today ${time}`;
   }
   if (diffDays === 1) {
-    return 'yesterday';
+    return `Yesterday ${time}`;
   }
   if (diffDays < 7) {
-    return date.toLocaleDateString([], { weekday: 'short' });
+    const weekday = date.toLocaleDateString([], { weekday: 'short' });
+    return `${weekday} ${time}`;
   }
-  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  const dateStr = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  return `${dateStr} ${time}`;
 }
 
 function MessageRow({
