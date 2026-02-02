@@ -13,10 +13,11 @@ import { getDisplayDenomFromView, getEquivalentValues } from '@penumbra-zone/get
 import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances-response';
 import { asValueView } from '@penumbra-zone/getters/equivalent-value';
 import { useQuery } from '@tanstack/react-query';
-import { viewClient } from '../../../clients';
+import { viewClient, stakeClient } from '../../../clients';
 import { assetPatterns } from '@rotko/penumbra-types/assets';
 import type { BalancesResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { useSyncProgress } from '../../../hooks/full-sync-height';
+import { bech32mIdentityKey } from '@penumbra-zone/bech32m/penumbravalid';
 
 /** memoized equivalent values display */
 const EquivalentValues = memo(({ valueView }: { valueView?: ValueView }) => {
@@ -40,10 +41,10 @@ const EquivalentValues = memo(({ valueView }: { valueView?: ValueView }) => {
 EquivalentValues.displayName = 'EquivalentValues';
 
 /** memoized row component */
-const AssetRow = memo(({ balance, currentBlockHeight }: { balance: BalancesResponse; currentBlockHeight?: number }) => (
+const AssetRow = memo(({ balance, currentBlockHeight, validatorName }: { balance: BalancesResponse; currentBlockHeight?: number; validatorName?: string }) => (
   <TableRow className='group'>
     <TableCell>
-      <ValueViewComponent view={balance.balanceView} currentBlockHeight={currentBlockHeight} />
+      <ValueViewComponent view={balance.balanceView} currentBlockHeight={currentBlockHeight} validatorName={validatorName} />
     </TableCell>
     <TableCell>
       <EquivalentValues valueView={balance.balanceView} />
@@ -78,8 +79,37 @@ export interface AssetsTableProps {
   account: number;
 }
 
+/** get validator name from unbonding token */
+const getUnbondingValidatorId = (balance: BalancesResponse): string | undefined => {
+  const metadata = getMetadataFromBalancesResponse.optional(balance);
+  if (!metadata?.display) return undefined;
+  const captured = assetPatterns.unbondingToken.capture(metadata.display);
+  return captured?.idKey;
+};
+
 export const AssetsTable = ({ account }: AssetsTableProps) => {
   const { latestBlockHeight } = useSyncProgress();
+
+  // fetch validators for name lookup
+  const { data: validatorNames } = useQuery({
+    queryKey: ['validator-names'],
+    staleTime: 300_000, // 5 minutes
+    queryFn: async () => {
+      const map = new Map<string, string>();
+      try {
+        for await (const v of stakeClient.validatorInfo({})) {
+          if (!v.validatorInfo?.validator?.identityKey?.ik) continue;
+          const name = v.validatorInfo.validator.name || 'Unknown';
+          const bech32 = bech32mIdentityKey({ ik: v.validatorInfo.validator.identityKey.ik });
+          map.set(bech32, name);
+        }
+      } catch {
+        // ignore errors
+      }
+      return map;
+    },
+  });
+
   const { data: rawBalances, isLoading, error } = useQuery({
     queryKey: ['balances', account],
     staleTime: Infinity,
@@ -126,9 +156,13 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {balances.map((balance, i) => (
-          <AssetRow key={i} balance={balance} currentBlockHeight={latestBlockHeight} />
-        ))}
+        {balances.map((balance, i) => {
+          const validatorId = getUnbondingValidatorId(balance);
+          const validatorName = validatorId ? validatorNames?.get(validatorId) : undefined;
+          return (
+            <AssetRow key={i} balance={balance} currentBlockHeight={latestBlockHeight} validatorName={validatorName} />
+          );
+        })}
       </TableBody>
     </Table>
   );

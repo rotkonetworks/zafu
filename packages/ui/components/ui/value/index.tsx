@@ -10,6 +10,7 @@ interface ValueViewProps {
   showIcon?: boolean;
   size?: 'default' | 'sm';
   currentBlockHeight?: number;
+  validatorName?: string;
 }
 
 export const ValueViewComponent = ({
@@ -20,6 +21,7 @@ export const ValueViewComponent = ({
   showIcon = true,
   size = 'default',
   currentBlockHeight,
+  validatorName,
 }: ValueViewProps) => {
   if (!view) {
     return null;
@@ -41,6 +43,7 @@ export const ValueViewComponent = ({
         showDenom={showDenom}
         size={size}
         currentBlockHeight={currentBlockHeight}
+        validatorName={validatorName}
       />
     );
   }
@@ -56,6 +59,7 @@ export const ValueViewComponent = ({
         showDenom={showDenom}
         size={size}
         currentBlockHeight={currentBlockHeight}
+        validatorName={validatorName}
       />
     );
   }

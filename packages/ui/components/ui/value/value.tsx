@@ -3,14 +3,7 @@ import { AssetIcon } from '../asset-icon';
 import { Pill } from '../pill';
 import { cn } from '../../../lib/utils';
 import { assetPatterns } from '@rotko/penumbra-types/assets';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTrigger,
-  DialogTitle,
-  DialogDescription,
-} from '../dialog';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../tooltip';
 
 const UNBONDING_DELAY_BLOCKS = 120_960;
 const SECONDS_PER_BLOCK = 5;
@@ -31,6 +24,7 @@ interface UnbondingInfo {
   startAt: number;
   claimableAt: number;
   validatorId: string;
+  validatorName?: string;
 }
 
 const parseUnbondingToken = (metadata?: Metadata): UnbondingInfo | null => {
@@ -58,9 +52,10 @@ interface ValueComponentProps {
   showDenom: boolean;
   size: 'default' | 'sm';
   currentBlockHeight?: number;
+  validatorName?: string;
 }
 
-const UnbondingDialogContent = ({
+const UnbondingTooltipContent = ({
   info,
   currentBlockHeight,
 }: {
@@ -72,39 +67,43 @@ const UnbondingDialogContent = ({
     : undefined;
 
   return (
-    <div className='flex flex-col gap-3 p-4'>
+    <div className='flex flex-col gap-2 font-normal text-left'>
+      <div className='font-bold text-white'>Unbonding Token</div>
       <div>
-        <span className='text-muted-foreground text-sm'>Started at block</span>
-        <div className='text-white font-mono'>{info.startAt.toLocaleString()}</div>
+        <span className='text-muted-foreground'>Start: </span>
+        <span className='text-white font-mono'>{info.startAt.toLocaleString()}</span>
       </div>
       <div>
-        <span className='text-muted-foreground text-sm'>Claimable at block</span>
-        <div className='text-white font-mono'>{info.claimableAt.toLocaleString()}</div>
+        <span className='text-muted-foreground'>End: </span>
+        <span className='text-white font-mono'>{info.claimableAt.toLocaleString()}</span>
       </div>
       {currentBlockHeight !== undefined && blocksRemaining !== undefined && (
         <div>
-          <span className='text-muted-foreground text-sm'>Current block</span>
-          <div className='text-white font-mono'>{currentBlockHeight.toLocaleString()}</div>
+          <span className='text-muted-foreground'>Current: </span>
+          <span className='text-white font-mono'>{currentBlockHeight.toLocaleString()}</span>
           {blocksRemaining === 0 ? (
-            <div className='text-green-400 text-sm mt-1'>Ready to claim!</div>
+            <span className='text-green-400 ml-2'>Ready!</span>
           ) : (
-            <div className='text-orange-400 text-sm mt-1'>
-              {blocksRemaining.toLocaleString()} blocks remaining ({formatDuration(blocksRemaining)})
+            <div className='text-orange-400 text-xs mt-1'>
+              {blocksRemaining.toLocaleString()} blocks ({formatDuration(blocksRemaining)})
             </div>
           )}
         </div>
       )}
       <div>
-        <span className='text-muted-foreground text-sm'>Validator</span>
-        <div className='text-white break-all text-xs font-mono'>{info.validatorId}</div>
+        <span className='text-muted-foreground'>Validator: </span>
+        {info.validatorName && (
+          <div className='text-white font-medium'>{info.validatorName}</div>
+        )}
+        <div className='text-white break-all text-[10px] font-mono'>{info.validatorId}</div>
       </div>
       <a
         href={UNBONDING_DOCS_URL}
         target='_blank'
         rel='noopener noreferrer'
-        className='text-xs text-teal hover:underline mt-2'
+        className='text-[10px] text-teal hover:underline'
       >
-        Learn more about unbonding delay
+        Learn more
       </a>
     </div>
   );
@@ -120,8 +119,10 @@ export const ValueComponent = ({
   showDenom,
   size,
   currentBlockHeight,
+  validatorName,
 }: ValueComponentProps) => {
-  const unbondingInfo = parseUnbondingToken(metadata);
+  const parsed = parseUnbondingToken(metadata);
+  const unbondingInfo = parsed ? { ...parsed, validatorName } : null;
 
   const content = (
     <Pill variant={variant === 'default' ? 'default' : 'dashed'}>
@@ -154,21 +155,18 @@ export const ValueComponent = ({
 
   if (unbondingInfo) {
     return (
-      <Dialog>
-        <DialogTrigger asChild>
-          <button type='button' className='cursor-pointer'>
-            {content}
-          </button>
-        </DialogTrigger>
-        <DialogContent>
-          <DialogHeader>Unbonding Token</DialogHeader>
-          <DialogTitle className='sr-only'>Unbonding Token Details</DialogTitle>
-          <DialogDescription className='sr-only'>
-            Information about this unbonding token including start block, claimable block, and validator.
-          </DialogDescription>
-          <UnbondingDialogContent info={unbondingInfo} currentBlockHeight={currentBlockHeight} />
-        </DialogContent>
-      </Dialog>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button type='button' className='cursor-pointer'>
+              {content}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side='top' sideOffset={8} className='max-w-[280px]'>
+            <UnbondingTooltipContent info={unbondingInfo} currentBlockHeight={currentBlockHeight} />
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     );
   }
 
