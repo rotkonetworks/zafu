@@ -16,6 +16,7 @@ import { useQuery } from '@tanstack/react-query';
 import { viewClient } from '../../../clients';
 import { assetPatterns } from '@rotko/penumbra-types/assets';
 import type { BalancesResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
+import { useSyncProgress } from '../../../hooks/full-sync-height';
 
 /** memoized equivalent values display */
 const EquivalentValues = memo(({ valueView }: { valueView?: ValueView }) => {
@@ -39,10 +40,10 @@ const EquivalentValues = memo(({ valueView }: { valueView?: ValueView }) => {
 EquivalentValues.displayName = 'EquivalentValues';
 
 /** memoized row component */
-const AssetRow = memo(({ balance }: { balance: BalancesResponse }) => (
+const AssetRow = memo(({ balance, currentBlockHeight }: { balance: BalancesResponse; currentBlockHeight?: number }) => (
   <TableRow className='group'>
     <TableCell>
-      <ValueViewComponent view={balance.balanceView} />
+      <ValueViewComponent view={balance.balanceView} currentBlockHeight={currentBlockHeight} />
     </TableCell>
     <TableCell>
       <EquivalentValues valueView={balance.balanceView} />
@@ -78,6 +79,7 @@ export interface AssetsTableProps {
 }
 
 export const AssetsTable = ({ account }: AssetsTableProps) => {
+  const { latestBlockHeight } = useSyncProgress();
   const { data: rawBalances, isLoading, error } = useQuery({
     queryKey: ['balances', account],
     staleTime: Infinity,
@@ -125,7 +127,7 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
       </TableHeader>
       <TableBody>
         {balances.map((balance, i) => (
-          <AssetRow key={i} balance={balance} />
+          <AssetRow key={i} balance={balance} currentBlockHeight={latestBlockHeight} />
         ))}
       </TableBody>
     </Table>

@@ -9,6 +9,7 @@ interface ValueViewProps {
   showValue?: boolean;
   showIcon?: boolean;
   size?: 'default' | 'sm';
+  currentBlockHeight?: number;
 }
 
 export const ValueViewComponent = ({
@@ -18,6 +19,7 @@ export const ValueViewComponent = ({
   showValue = true,
   showIcon = true,
   size = 'default',
+  currentBlockHeight,
 }: ValueViewProps) => {
   if (!view) {
     return null;
@@ -38,6 +40,7 @@ export const ValueViewComponent = ({
         showValue={showValue}
         showDenom={showDenom}
         size={size}
+        currentBlockHeight={currentBlockHeight}
       />
     );
   }
@@ -52,6 +55,7 @@ export const ValueViewComponent = ({
         showValue={showValue}
         showDenom={showDenom}
         size={size}
+        currentBlockHeight={currentBlockHeight}
       />
     );
   }
