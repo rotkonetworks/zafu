@@ -50,7 +50,7 @@
     "@radix-ui/react-toggle": "^1.1.10",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@rotko/penumbra-types": "37.0.0",
-    "@rotko/penumbra-wasm": "file:../../../penumbra-web/packages/wasm/penumbra-zone-wasm-53.0.0.tgz",
+    "@rotko/penumbra-wasm": "55.0.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@textea/json-viewer": "^4.0.1",
     "bignumber.js": "^9.3.1",

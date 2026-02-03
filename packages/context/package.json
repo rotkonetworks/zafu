@@ -30,7 +30,7 @@
     "@penumbra-zone/transport-dom": "7.5.2",
     "@rotko/penumbra-services": "70.0.0",
     "@rotko/penumbra-types": "37.0.0",
-    "@rotko/penumbra-wasm": "55.0.0",
+    "@rotko/penumbra-wasm": "55.0.1",
     "exponential-backoff": "^3.1.1"
   }
 }

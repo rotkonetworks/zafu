@@ -38,8 +38,8 @@
     "overrides": {
       "@bufbuild/protobuf": "^1.10.1",
       "@penumbra-zone/types": "npm:@rotko/penumbra-types@37.0.0",
-      "@penumbra-zone/wasm": "file:../penumbra-web/packages/wasm/penumbra-zone-wasm-53.0.0.tgz",
-      "@rotko/penumbra-wasm": "file:../penumbra-web/packages/wasm/penumbra-zone-wasm-53.0.0.tgz",
+      "@penumbra-zone/wasm": "npm:@rotko/penumbra-wasm@55.0.1",
+      "@rotko/penumbra-wasm": "55.0.1",
       "@penumbra-zone/services": "npm:@rotko/penumbra-services@70.0.0"
     }
   },
