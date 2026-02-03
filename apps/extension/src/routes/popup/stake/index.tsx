@@ -10,7 +10,7 @@ import { StackIcon, ChevronDownIcon, Cross2Icon, UpdateIcon } from '@radix-ui/re
 import { viewClient, stakeClient } from '../../../clients';
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
 import { useStore } from '../../../state';
-import { activeNetworkSelector } from '../../../state/active-network';
+import { selectActiveNetwork } from '../../../state/keyring';
 import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
 import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances-response';
@@ -98,7 +98,7 @@ const findValidatorForDelegation = (
 
 /** Penumbra staking page */
 export const StakePage = () => {
-  const { activeNetwork } = useStore(activeNetworkSelector);
+  const activeNetwork = useStore(selectActiveNetwork);
   const [action, setAction] = useState<StakeAction>(undefined);
   const [amount, setAmount] = useState('');
   const [selectedValidator, setSelectedValidator] = useState<ValidatorRow | undefined>();

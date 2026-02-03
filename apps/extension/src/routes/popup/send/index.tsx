@@ -11,7 +11,7 @@ import { PopupPath } from '../paths';
 import { useQuery } from '@tanstack/react-query';
 import { ZcashSend } from './zcash-send';
 import { useStore } from '../../../state';
-import { activeNetworkSelector } from '../../../state/active-network';
+import { selectActiveNetwork } from '../../../state/keyring';
 import { recentAddressesSelector, type AddressNetwork } from '../../../state/recent-addresses';
 import { contactsSelector } from '../../../state/contacts';
 import { selectIbcWithdraw } from '../../../state/ibc-withdraw';
@@ -1286,7 +1286,7 @@ interface SendLocationState {
 export function SendPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { activeNetwork } = useStore(activeNetworkSelector);
+  const activeNetwork = useStore(selectActiveNetwork);
   // dedicated window should close on completion, side panel navigates normally
   const [inDedicatedWindow] = useState(() => isDedicatedWindow());
 

@@ -11,7 +11,7 @@ import { MixIcon, ChevronDownIcon, UpdateIcon, ArrowDownIcon } from '@radix-ui/r
 import { viewClient, simulationClient } from '../../../clients';
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
 import { useStore } from '../../../state';
-import { activeNetworkSelector } from '../../../state/active-network';
+import { selectActiveNetwork } from '../../../state/keyring';
 import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
 import { Value } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
@@ -41,7 +41,7 @@ interface OutputAsset {
 
 /** Penumbra swap page */
 export const SwapPage = () => {
-  const { activeNetwork } = useStore(activeNetworkSelector);
+  const activeNetwork = useStore(selectActiveNetwork);
   const [amountIn, setAmountIn] = useState('');
   const [assetInOpen, setAssetInOpen] = useState(false);
   const [assetOutOpen, setAssetOutOpen] = useState(false);
