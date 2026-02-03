@@ -12,17 +12,6 @@ import { selectActiveNetwork, selectSelectedKeyInfo, keyRingSelector } from '../
 import { getActiveWalletJson, selectActiveZcashWallet } from '../state/wallets';
 import { NETWORK_CONFIGS, type IbcNetwork, isIbcNetwork } from '../state/keyring/network-types';
 
-/** get penumbra address from FVK */
-async function getPenumbraAddress(fvkBytes: Uint8Array, index = 0): Promise<string> {
-  const { getAddressByIndex } = await import('@rotko/penumbra-wasm/keys');
-  const { bech32mAddress } = await import('@penumbra-zone/bech32m/penumbra');
-  const { FullViewingKey } = await import('@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb');
-
-  const fvk = new FullViewingKey({ inner: fvkBytes });
-  const address = await getAddressByIndex(fvk, index);
-  return bech32mAddress(address);
-}
-
 /** derive cosmos/ibc address from mnemonic */
 async function deriveCosmosAddress(mnemonic: string, prefix: string): Promise<string> {
   const { deriveCosmosWallet } = await import('@repo/wallet/networks/cosmos/signer');
@@ -135,11 +124,14 @@ export function useActiveAddress() {
 
         // zigner-zafu vault or fallback - use stored viewing keys
         if (activeNetwork === 'penumbra' && penumbraWallet?.fullViewingKey) {
-          const fvkHex = penumbraWallet.fullViewingKey;
-          const fvkBytes = new Uint8Array(
-            fvkHex.match(/.{1,2}/g)?.map(byte => parseInt(byte, 16)) ?? []
-          );
-          const addr = await getPenumbraAddress(fvkBytes, 0);
+          const { FullViewingKey } = await import('@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb');
+          const { getAddressByIndex } = await import('@rotko/penumbra-wasm/keys');
+          const { bech32mAddress } = await import('@penumbra-zone/bech32m/penumbra');
+
+          // fullViewingKey is stored as JSON string: {"inner":"base64..."}
+          const fvk = FullViewingKey.fromJsonString(penumbraWallet.fullViewingKey);
+          const address = await getAddressByIndex(fvk, 0);
+          const addr = bech32mAddress(address);
           if (!cancelled) setAddress(addr);
           if (!cancelled) setLoading(false);
           return;

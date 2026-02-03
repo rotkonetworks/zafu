@@ -114,8 +114,9 @@ const reinitializeServices = async () => {
   void ws.blockProcessor.sync();
 };
 
-// Listen for active wallet changes
+// Listen for wallet and network changes
 localExtStorage.addListener(changes => {
+  // Reinitialize when active wallet changes
   if (changes.activeWalletIndex !== undefined) {
     const newIndex = changes.activeWalletIndex.newValue ?? 0;
     if (currentWalletIndex !== undefined && currentWalletIndex !== newIndex) {
@@ -124,6 +125,26 @@ localExtStorage.addListener(changes => {
       void reinitializeServices();
     } else {
       currentWalletIndex = newIndex;
+    }
+  }
+
+  // Reinitialize when wallets are created (first wallet triggers sync)
+  if (changes.wallets !== undefined) {
+    const oldWallets = changes.wallets.oldValue ?? [];
+    const newWallets = changes.wallets.newValue ?? [];
+    if (oldWallets.length === 0 && newWallets.length > 0) {
+      console.log('[sync] first wallet created, initializing services...');
+      void reinitializeServices();
+    }
+  }
+
+  // Reinitialize when penumbra network is enabled
+  if (changes.enabledNetworks !== undefined) {
+    const newNetworks = changes.enabledNetworks.newValue ?? [];
+    const oldNetworks = changes.enabledNetworks.oldValue ?? [];
+    if (!oldNetworks.includes('penumbra') && newNetworks.includes('penumbra')) {
+      console.log('[sync] penumbra network enabled, initializing services...');
+      void reinitializeServices();
     }
   }
 
