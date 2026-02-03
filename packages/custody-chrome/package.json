@@ -15,7 +15,7 @@
     "@repo/wallet": "workspace:*"
   },
   "devDependencies": {
-    "@connectrpc/connect": "^1.7.0",
+    "@connectrpc/connect": "^1.6.1",
     "@penumbra-zone/protobuf": "11.0.0"
   }
 }

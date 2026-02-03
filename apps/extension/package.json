@@ -16,9 +16,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@bufbuild/protobuf": "^1.10.1",
-    "@connectrpc/connect": "^1.7.0",
-    "@connectrpc/connect-web": "^1.7.0",
+    "@bufbuild/protobuf": "^1.10.0",
+    "@connectrpc/connect": "^1.6.1",
+    "@connectrpc/connect-web": "^1.6.1",
     "@penumbra-labs/registry": "^12.8.0",
     "@penumbra-zone/bech32m": "18.0.0",
     "@penumbra-zone/client": "29.0.0",
