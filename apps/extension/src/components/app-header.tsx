@@ -32,8 +32,9 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
   const activeZcashWallet = useStore(selectActiveZcashWallet);
 
   const networkInfo = getNetwork(activeNetwork);
+  // for zcash: use stored wallet label, or fall back to mnemonic wallet name
   const walletName = activeNetwork === 'zcash'
-    ? activeZcashWallet?.label ?? 'No wallet'
+    ? activeZcashWallet?.label ?? selectedKeyInfo?.name ?? 'No wallet'
     : selectedKeyInfo?.name ?? 'No wallet';
 
   return (

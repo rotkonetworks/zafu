@@ -167,6 +167,7 @@ export const PopupIndex = () => {
             network={activeNetwork}
             zcashWallet={activeZcashWallet}
             polkadotPublicKey={polkadotPublicKey}
+            hasMnemonic={selectedKeyInfo?.type === 'mnemonic'}
           />
         </Suspense>
       </div>
@@ -179,10 +180,12 @@ const NetworkContent = ({
   network,
   zcashWallet,
   polkadotPublicKey,
+  hasMnemonic,
 }: {
   network: NetworkType;
   zcashWallet?: { label: string; mainnet: boolean };
   polkadotPublicKey?: string;
+  hasMnemonic?: boolean;
 }) => {
   switch (network) {
     case 'penumbra':
@@ -200,7 +203,7 @@ const NetworkContent = ({
       );
 
     case 'zcash':
-      return <ZcashContent wallet={zcashWallet} />;
+      return <ZcashContent wallet={zcashWallet} hasMnemonic={hasMnemonic} />;
 
     case 'polkadot':
       return <PolkadotContent publicKey={polkadotPublicKey} />;
@@ -214,12 +217,15 @@ const NetworkContent = ({
 };
 
 /** zcash-specific content */
-const ZcashContent = ({ wallet }: { wallet?: { label: string; mainnet: boolean } }) => {
-  if (!wallet) {
+const ZcashContent = ({ wallet, hasMnemonic }: { wallet?: { label: string; mainnet: boolean }; hasMnemonic?: boolean }) => {
+  // show zcash UI if we have a stored wallet OR a mnemonic (can derive address)
+  const hasZcashAccess = wallet || hasMnemonic;
+
+  if (!hasZcashAccess) {
     return (
       <div className='flex flex-col items-center justify-center py-8 text-center'>
         <div className='text-sm text-muted-foreground'>no zcash wallet</div>
-<div className='text-xs text-muted-foreground mt-1'>add a wallet from zafu zigner to get started</div>
+        <div className='text-xs text-muted-foreground mt-1'>add a wallet from zafu zigner to get started</div>
       </div>
     );
   }
@@ -236,7 +242,7 @@ const ZcashContent = ({ wallet }: { wallet?: { label: string; mainnet: boolean }
             <div>
               <div className='text-sm font-medium'>orchard</div>
               <div className='text-xs text-muted-foreground'>
-                {wallet.mainnet ? 'mainnet' : 'testnet'}
+                {wallet?.mainnet ?? true ? 'mainnet' : 'testnet'}
               </div>
             </div>
           </div>
