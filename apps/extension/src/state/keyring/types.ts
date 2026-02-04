@@ -157,6 +157,10 @@ export interface ZignerZafuImport {
   viewingKey?: string;
   /** public key for other networks */
   publicKey?: string;
+  /** ss58 address for polkadot/kusama (watch-only) */
+  polkadotSs58?: string;
+  /** genesis hash for the polkadot network */
+  polkadotGenesisHash?: string;
   /** account index on zafu device */
   accountIndex: number;
   /** device identifier */

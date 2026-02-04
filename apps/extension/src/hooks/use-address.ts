@@ -8,7 +8,7 @@
 
 import { useState, useEffect } from 'react';
 import { useStore } from '../state';
-import { selectActiveNetwork, selectSelectedKeyInfo, keyRingSelector } from '../state/keyring';
+import { selectActiveNetwork, selectEffectiveKeyInfo, keyRingSelector } from '../state/keyring';
 import { getActiveWalletJson, selectActiveZcashWallet } from '../state/wallets';
 import { NETWORK_CONFIGS, type IbcNetwork, isIbcNetwork } from '../state/keyring/network-types';
 
@@ -51,7 +51,7 @@ async function deriveZcashAddress(mnemonic: string, account = 0, mainnet = true)
 
 export function useActiveAddress() {
   const activeNetwork = useStore(selectActiveNetwork);
-  const selectedKeyInfo = useStore(selectSelectedKeyInfo);
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const keyRing = useStore(keyRingSelector);
   const penumbraWallet = useStore(getActiveWalletJson);
   const zcashWallet = useStore(selectActiveZcashWallet);

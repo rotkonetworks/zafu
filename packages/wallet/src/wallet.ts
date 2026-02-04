@@ -30,6 +30,8 @@ export interface WalletJson<T extends CustodyTypeName = CustodyTypeName> {
   label: string;
   fullViewingKey: string;
   custody: CustodyNamedValue<BoxJson, T>;
+  /** Links this wallet to a keyring vault */
+  vaultId?: string;
 }
 
 export class Wallet<T extends CustodyTypeName = CustodyTypeName> {

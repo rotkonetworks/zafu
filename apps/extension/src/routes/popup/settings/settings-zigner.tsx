@@ -1,21 +1,16 @@
-import { CameraIcon, EyeOpenIcon, TrashIcon, ExternalLinkIcon, Link2Icon } from '@radix-ui/react-icons';
+import { EyeOpenIcon, TrashIcon, ExternalLinkIcon, Link2Icon } from '@radix-ui/react-icons';
 import { useStore } from '../../../state';
 import { walletsSelector } from '../../../state/wallets';
 import { zignerConnectSelector } from '../../../state/zigner';
+import { keyRingSelector, type ZignerZafuImport } from '../../../state/keyring';
 import { SettingsScreen } from './settings-screen';
 import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
 import { Switch } from '@repo/ui/components/ui/switch';
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { localExtStorage } from '@repo/storage-chrome/local';
-import { QrScanner } from '../../../shared/components/qr-scanner';
 import { PagePath } from '../../page/paths';
-import {
-  isPopup,
-  openPageInTab,
-  checkCameraPermission,
-  requestCameraPermission,
-} from '../../../utils/popup-detection';
+import { openPageInTab } from '../../../utils/popup-detection';
 
 /** Check if a wallet custody is watch-only (Zigner) */
 function isZignerWallet(custody: { encryptedSeedPhrase?: unknown; airgapSigner?: unknown }): boolean {
@@ -35,6 +30,7 @@ export const SettingsZigner = () => {
     walletLabel,
     walletImport,
     zcashWalletImport,
+    parsedPolkadotExport,
     detectedNetwork,
     errorMessage,
     processQrData,
@@ -43,13 +39,12 @@ export const SettingsZigner = () => {
     setError,
     clearZignerState,
   } = useStore(zignerConnectSelector);
+  const { addZignerUnencrypted } = useStore(keyRingSelector);
 
   const [success, setSuccess] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
-  const [cameraGranted, setCameraGranted] = useState<boolean | null>(null);
-  const [requestingCamera, setRequestingCamera] = useState(false);
   const [vaultLegacyMode, setVaultLegacyMode] = useState(false);
 
   // Get list of Zigner wallets with their indices
@@ -61,11 +56,6 @@ export const SettingsZigner = () => {
   const clickCountRef = useRef(0);
   const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const manualInputRef = useRef(false);
-
-  // Check camera permission on mount
-  useEffect(() => {
-    void checkCameraPermission().then(setCameraGranted);
-  }, []);
 
   // Load polkadot vault settings
   useEffect(() => {
@@ -103,13 +93,6 @@ export const SettingsZigner = () => {
     }
   };
 
-  const handleScan = useCallback(
-    (data: string) => {
-      processQrData(data);
-    },
-    [processQrData],
-  );
-
   const handleManualInput = (value: string) => {
     if (value.trim()) {
       processQrData(value);
@@ -117,7 +100,7 @@ export const SettingsZigner = () => {
   };
 
   const handleAddWallet = async () => {
-    if (!walletImport && !zcashWalletImport) {
+    if (!walletImport && !zcashWalletImport && !parsedPolkadotExport) {
       setError('please scan a qr code first');
       return;
     }
@@ -129,6 +112,15 @@ export const SettingsZigner = () => {
         await addAirgapSignerWallet(walletImport);
       } else if (detectedNetwork === 'zcash' && zcashWalletImport) {
         await addZcashWallet(zcashWalletImport);
+      } else if (detectedNetwork === 'polkadot' && parsedPolkadotExport) {
+        // polkadot zigner import - watch-only address via keyring
+        const zignerData: ZignerZafuImport = {
+          polkadotSs58: parsedPolkadotExport.address,
+          polkadotGenesisHash: parsedPolkadotExport.genesisHash,
+          accountIndex: 0,
+          deviceId: `polkadot-${Date.now()}`,
+        };
+        await addZignerUnencrypted(zignerData, walletLabel || 'zigner polkadot');
       }
 
       setSuccess(true);
@@ -162,21 +154,8 @@ export const SettingsZigner = () => {
     }
   };
 
-  // Full-screen scanner mode - camera permission is requested automatically by QrScanner
-  if (scanState === 'scanning') {
-    return (
-      <QrScanner
-        onScan={handleScan}
-        onError={setError}
-        onClose={() => setScanState('idle')}
-title="Scan Zafu Zigner QR"
-        description="Point camera at your Zafu Zigner's FVK QR code"
-      />
-    );
-  }
-
   const showManualInput = manualInputRef.current && scanState !== 'scanned';
-  const showScannedState = scanState === 'scanned' && (walletImport || zcashWalletImport);
+  const showScannedState = scanState === 'scanned' && (walletImport || zcashWalletImport || parsedPolkadotExport);
   const showInitialState = scanState === 'idle' && !showManualInput;
 
   return (
@@ -357,7 +336,7 @@ wallet added successfully!
                   variant='gradient'
                   className='flex-1'
                   onClick={handleAddWallet}
-                  disabled={!walletImport || isAdding}
+                  disabled={(!walletImport && !zcashWalletImport && !parsedPolkadotExport) || isAdding}
                 >
                   {isAdding ? 'Adding...' : 'Add Wallet'}
                 </Button>
@@ -376,11 +355,19 @@ wallet added successfully!
                   </span>
                 </div>
                 <p className='text-xs text-muted-foreground mt-1'>
-                  account #{walletImport?.accountIndex ?? zcashWalletImport?.accountIndex ?? 0}
-                  {zcashWalletImport && (
-                    <span className='ml-2'>
-                      {zcashWalletImport.mainnet ? 'mainnet' : 'testnet'}
+                  {parsedPolkadotExport ? (
+                    <span className='font-mono'>
+                      {parsedPolkadotExport.address.slice(0, 8)}...{parsedPolkadotExport.address.slice(-6)}
                     </span>
+                  ) : (
+                    <>
+                      account #{walletImport?.accountIndex ?? zcashWalletImport?.accountIndex ?? 0}
+                      {zcashWalletImport && (
+                        <span className='ml-2'>
+                          {zcashWalletImport.mainnet ? 'mainnet' : 'testnet'}
+                        </span>
+                      )}
+                    </>
                   )}
                 </p>
               </div>
@@ -412,55 +399,18 @@ wallet added successfully!
           {/* Initial state - show scan button */}
           {showInitialState && (
             <div className='flex flex-col gap-2'>
-              {/* Camera permission not granted and we're in popup - need to open full page */}
-              {!cameraGranted && isPopup() ? (
-                <>
-                  <p className='text-xs text-muted-foreground text-center mb-2'>
-                    Camera access requires opening in a new tab
-                  </p>
-                  <Button
-                    variant='secondary'
-                    className='w-full'
-                    onClick={() => openPageInTab(PagePath.GRANT_CAMERA)}
-                  >
-                    <ExternalLinkIcon className='size-4 mr-2' />
-                    Grant Camera Access
-                  </Button>
-                </>
-              ) : !cameraGranted ? (
-                // We're in a full page - can request camera permission
-                <>
-                  <Button
-                    variant='secondary'
-                    className='w-full'
-                    onClick={async () => {
-                      setRequestingCamera(true);
-                      const granted = await requestCameraPermission();
-                      setCameraGranted(granted);
-                      setRequestingCamera(false);
-                      if (granted) {
-                        setScanState('scanning');
-                      } else {
-                        setError('Camera permission denied. Please allow camera access and try again.');
-                      }
-                    }}
-                    disabled={requestingCamera}
-                  >
-                    <CameraIcon className='size-4 mr-2' />
-                    {requestingCamera ? 'Requesting...' : 'Grant Camera Access'}
-                  </Button>
-                </>
-              ) : (
-                // Camera already granted - can scan directly
-                <Button
-                  variant='secondary'
-                  className='w-full'
-                  onClick={() => setScanState('scanning')}
-                >
-                  <CameraIcon className='size-4 mr-2' />
-scan QR code
-                </Button>
-              )}
+              {/* Always open scanner in new tab for better camera experience */}
+              <p className='text-xs text-muted-foreground text-center mb-2'>
+                Opens camera in a new tab for scanning
+              </p>
+              <Button
+                variant='secondary'
+                className='w-full'
+                onClick={() => openPageInTab(PagePath.IMPORT_ZIGNER)}
+              >
+                <ExternalLinkIcon className='size-4 mr-2' />
+                Scan QR Code
+              </Button>
               {errorMessage && <p className='text-xs text-red-400 text-center'>{errorMessage}</p>}
             </div>
           )}

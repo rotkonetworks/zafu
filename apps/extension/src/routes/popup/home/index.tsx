@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowUpIcon, ArrowDownIcon, CopyIcon, CheckIcon, DesktopIcon, ViewVerticalIcon } from '@radix-ui/react-icons';
 
 import { useStore } from '../../../state';
-import { selectActiveNetwork, selectSelectedKeyInfo, type NetworkType } from '../../../state/keyring';
+import { selectActiveNetwork, selectEffectiveKeyInfo, type NetworkType } from '../../../state/keyring';
 import { selectActiveZcashWallet } from '../../../state/wallets';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { needsLogin, needsOnboard } from '../popup-needs';
@@ -34,7 +34,7 @@ export const popupIndexLoader = async (): Promise<Response | PopupLoaderData> =>
 export const PopupIndex = () => {
   // atomic selectors - each only re-renders when its value changes
   const activeNetwork = useStore(selectActiveNetwork);
-  const selectedKeyInfo = useStore(selectSelectedKeyInfo);
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const activeZcashWallet = useStore(selectActiveZcashWallet);
   const { address } = useActiveAddress();
   const { publicKey: polkadotPublicKey } = usePolkadotPublicKey();

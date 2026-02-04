@@ -9,7 +9,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useStore } from '../state';
-import { selectSelectedKeyInfo, keyRingSelector } from '../state/keyring';
+import { selectEffectiveKeyInfo, keyRingSelector } from '../state/keyring';
 import { canFetchTransparentBalances } from '../state/privacy';
 import { createSigningClient, deriveAllChainAddresses } from '@repo/wallet/networks/cosmos/signer';
 import { getBalance, getAllBalances } from '@repo/wallet/networks/cosmos/client';
@@ -17,7 +17,7 @@ import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/
 
 /** hook to get balance for a specific cosmos chain */
 export const useCosmosBalance = (chainId: CosmosChainId, accountIndex = 0) => {
-  const selectedKeyInfo = useStore(selectSelectedKeyInfo);
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const { getMnemonic } = useStore(keyRingSelector);
   // privacy gate: only fetch if user has opted in
   const canFetch = useStore(canFetchTransparentBalances);
@@ -56,7 +56,7 @@ export const useCosmosBalance = (chainId: CosmosChainId, accountIndex = 0) => {
 
 /** hook to get balances for all cosmos chains */
 export const useAllCosmosBalances = (accountIndex = 0) => {
-  const selectedKeyInfo = useStore(selectSelectedKeyInfo);
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const { getMnemonic } = useStore(keyRingSelector);
   // privacy gate: only fetch if user has opted in
   const canFetch = useStore(canFetchTransparentBalances);
@@ -136,7 +136,7 @@ export interface CosmosAsset {
 
 /** hook to get all assets (native + IBC tokens) for a cosmos chain */
 export const useCosmosAssets = (chainId: CosmosChainId, accountIndex = 0) => {
-  const selectedKeyInfo = useStore(selectSelectedKeyInfo);
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const { getMnemonic } = useStore(keyRingSelector);
   // privacy gate: only fetch if user has opted in
   const canFetch = useStore(canFetchTransparentBalances);

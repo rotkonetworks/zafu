@@ -11,9 +11,12 @@ import {
   selectActiveNetwork,
   selectEnabledNetworks,
   selectSetActiveNetwork,
-  selectSelectedKeyInfo,
+  selectEffectiveKeyInfo,
+  selectKeyInfosForActiveNetwork,
+  selectSelectKeyRing,
 } from '../state/keyring';
 import { selectActiveZcashWallet } from '../state/wallets';
+import { CheckIcon } from '@radix-ui/react-icons';
 import { getNetwork } from '../config/networks';
 import { Dropdown } from './primitives/dropdown';
 import { cn } from '@repo/ui/lib/utils';
@@ -28,7 +31,9 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
   const activeNetwork = useStore(selectActiveNetwork);
   const enabledNetworks = useStore(selectEnabledNetworks);
   const setActiveNetwork = useStore(selectSetActiveNetwork);
-  const selectedKeyInfo = useStore(selectSelectedKeyInfo);
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  const keyInfos = useStore(selectKeyInfosForActiveNetwork);
+  const selectKeyRing = useStore(selectSelectKeyRing);
   const activeZcashWallet = useStore(selectActiveZcashWallet);
 
   const networkInfo = getNetwork(activeNetwork);
@@ -91,7 +96,41 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
         )}
       >
         {({ close }) => (
-          <div className='absolute left-1/2 -translate-x-1/2 top-full mt-1 z-50 min-w-[180px] rounded border border-border bg-popover p-1 shadow-lg'>
+          <div className='absolute left-1/2 -translate-x-1/2 top-full mt-1 z-50 min-w-[180px] max-h-[300px] overflow-y-auto rounded border border-border bg-popover p-1 shadow-lg'>
+            {keyInfos.length > 0 && (
+              <>
+                <div className='px-2 py-1 text-xs text-muted-foreground font-medium'>
+                  wallets
+                </div>
+                {keyInfos.map(keyInfo => {
+                  const isActive = keyInfo.id === selectedKeyInfo?.id;
+                  return (
+                    <button
+                      key={keyInfo.id}
+                      onClick={() => {
+                        void selectKeyRing(keyInfo.id);
+                        close();
+                      }}
+                      className={cn(
+                        'flex w-full items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-muted/50',
+                        isActive && 'bg-muted/50'
+                      )}
+                    >
+                      {isActive ? (
+                        <CheckIcon className='h-3 w-3 text-primary' />
+                      ) : (
+                        <div className='h-3 w-3' />
+                      )}
+                      <span className='truncate'>{keyInfo.name}</span>
+                      <span className='ml-auto text-xs text-muted-foreground'>
+                        {keyInfo.type === 'mnemonic' ? 'seed' : 'zigner'}
+                      </span>
+                    </button>
+                  );
+                })}
+                <div className='border-t border-border/40 my-1' />
+              </>
+            )}
             <button
               onClick={() => {
                 navigate(PopupPath.SETTINGS_ZIGNER);
@@ -102,10 +141,6 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
               <PlusIcon className='h-3 w-3' />
               <span>add wallet via zigner</span>
             </button>
-            <div className='border-t border-border/40 my-1' />
-            <div className='px-2 py-1 text-xs text-muted-foreground'>
-              account selection coming soon
-            </div>
           </div>
         )}
       </Dropdown>

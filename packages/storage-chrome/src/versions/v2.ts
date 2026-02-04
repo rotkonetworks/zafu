@@ -20,6 +20,8 @@ type LOCAL = {
     /** Stringified WalletId */
     id: string;
     label: string;
+    /** Links this wallet to a keyring vault */
+    vaultId?: string;
   }[];
 
   // optional values
@@ -55,6 +57,16 @@ type LOCAL = {
     accountIndex: number;
     mainnet: boolean;
   }[];
+  /** Polkadot zigner watch-only accounts */
+  polkadotZignerAccounts?: {
+    id: string;
+    label: string;
+    ss58Address: string;
+    genesisHash: string;
+    importedAt: number;
+  }[];
+  /** Active polkadot zigner account index */
+  activePolkadotZignerIndex?: number;
   /** Multi-network zigner wallets */
   zignerWallets?: {
     id: string;
