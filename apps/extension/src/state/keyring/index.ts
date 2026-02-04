@@ -500,6 +500,19 @@ export const createKeyRingSlice = (
       const updatedVaults = vaults.filter(v => v.id !== vaultId);
       await local.set('vaults', updatedVaults);
 
+      // Also remove associated penumbra wallet (linked via vaultId)
+      const wallets = (await local.get('wallets')) ?? [];
+      const updatedWallets = wallets.filter((w: { vaultId?: string }) => w.vaultId !== vaultId);
+      if (updatedWallets.length !== wallets.length) {
+        await local.set('wallets', updatedWallets);
+
+        // Adjust activeWalletIndex if needed
+        const activeWalletIndex = await local.get('activeWalletIndex') ?? 0;
+        if (activeWalletIndex >= updatedWallets.length) {
+          await local.set('activeWalletIndex', Math.max(0, updatedWallets.length - 1));
+        }
+      }
+
       // if deleted was selected, select first remaining
       let selectedId = await local.get('selectedVaultId');
       if (selectedId === vaultId) {
@@ -511,6 +524,11 @@ export const createKeyRingSlice = (
       set(state => {
         state.keyRing.keyInfos = keyInfos;
         state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
+        // Also update wallets state
+        state.wallets.all = updatedWallets;
+        if (state.wallets.activeIndex >= updatedWallets.length) {
+          state.wallets.activeIndex = Math.max(0, updatedWallets.length - 1);
+        }
       });
     },
 

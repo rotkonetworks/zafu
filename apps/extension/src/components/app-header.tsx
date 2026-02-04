@@ -3,8 +3,9 @@
  * solidjs-style: atomic selectors, composable primitives
  */
 
-import { ChevronDownIcon, HamburgerMenuIcon, PlusIcon } from '@radix-ui/react-icons';
+import { ChevronDownIcon, HamburgerMenuIcon, PlusIcon, TrashIcon } from '@radix-ui/react-icons';
 import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import { useStore } from '../state';
 import { PopupPath } from '../routes/popup/paths';
 import {
@@ -14,6 +15,8 @@ import {
   selectEffectiveKeyInfo,
   selectKeyInfosForActiveNetwork,
   selectSelectKeyRing,
+  selectKeyInfos,
+  keyRingSelector,
 } from '../state/keyring';
 import { selectActiveZcashWallet } from '../state/wallets';
 import { CheckIcon } from '@radix-ui/react-icons';
@@ -33,8 +36,27 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
   const setActiveNetwork = useStore(selectSetActiveNetwork);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const keyInfos = useStore(selectKeyInfosForActiveNetwork);
+  const allKeyInfos = useStore(selectKeyInfos); // all wallets, not filtered by network
   const selectKeyRing = useStore(selectSelectKeyRing);
+  const { deleteKeyRing } = useStore(keyRingSelector);
   const activeZcashWallet = useStore(selectActiveZcashWallet);
+
+  // State for delete confirmation
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async (vaultId: string, close: () => void) => {
+    try {
+      setDeleting(true);
+      await deleteKeyRing(vaultId);
+      setConfirmDeleteId(null);
+      close();
+    } catch (err) {
+      console.error('Failed to delete wallet:', err);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const networkInfo = getNetwork(activeNetwork);
   // for zcash: use stored wallet label, or fall back to mnemonic wallet name
@@ -104,28 +126,78 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
                 </div>
                 {keyInfos.map(keyInfo => {
                   const isActive = keyInfo.id === selectedKeyInfo?.id;
+                  // Find the original (first created) wallet - cannot be deleted
+                  const oldestCreatedAt = Math.min(...allKeyInfos.map(k => k.createdAt));
+                  const isOriginal = keyInfo.createdAt === oldestCreatedAt;
+                  // Can only delete if: 1) more than one wallet, 2) more than one for current network, 3) not the original
+                  const canDelete = allKeyInfos.length > 1 && keyInfos.length > 1 && !isOriginal;
+                  const isConfirming = confirmDeleteId === keyInfo.id;
+
+                  if (isConfirming) {
+                    return (
+                      <div
+                        key={keyInfo.id}
+                        className='flex flex-col gap-1 px-2 py-1.5 text-sm rounded bg-destructive/10 border border-destructive/30'
+                      >
+                        <span className='text-xs text-destructive'>Delete "{keyInfo.name}"?</span>
+                        <div className='flex gap-1'>
+                          <button
+                            onClick={() => setConfirmDeleteId(null)}
+                            disabled={deleting}
+                            className='flex-1 px-2 py-0.5 text-xs rounded bg-muted hover:bg-muted/80'
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => void handleDelete(keyInfo.id, close)}
+                            disabled={deleting}
+                            className='flex-1 px-2 py-0.5 text-xs rounded bg-destructive text-destructive-foreground hover:bg-destructive/90'
+                          >
+                            {deleting ? '...' : 'Delete'}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
                   return (
-                    <button
+                    <div
                       key={keyInfo.id}
-                      onClick={() => {
-                        void selectKeyRing(keyInfo.id);
-                        close();
-                      }}
                       className={cn(
-                        'flex w-full items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-muted/50',
+                        'group flex w-full items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-muted/50',
                         isActive && 'bg-muted/50'
                       )}
                     >
-                      {isActive ? (
-                        <CheckIcon className='h-3 w-3 text-primary' />
-                      ) : (
-                        <div className='h-3 w-3' />
+                      <button
+                        onClick={() => {
+                          void selectKeyRing(keyInfo.id);
+                          close();
+                        }}
+                        className='flex flex-1 items-center gap-2 min-w-0'
+                      >
+                        {isActive ? (
+                          <CheckIcon className='h-3 w-3 text-primary flex-shrink-0' />
+                        ) : (
+                          <div className='h-3 w-3 flex-shrink-0' />
+                        )}
+                        <span className='truncate'>{keyInfo.name}</span>
+                        <span className='ml-auto text-xs text-muted-foreground flex-shrink-0'>
+                          {keyInfo.type === 'mnemonic' ? 'seed' : 'zigner'}
+                        </span>
+                      </button>
+                      {canDelete && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConfirmDeleteId(keyInfo.id);
+                          }}
+                          className='p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-opacity'
+                          title='Delete wallet'
+                        >
+                          <TrashIcon className='h-3 w-3' />
+                        </button>
                       )}
-                      <span className='truncate'>{keyInfo.name}</span>
-                      <span className='ml-auto text-xs text-muted-foreground'>
-                        {keyInfo.type === 'mnemonic' ? 'seed' : 'zigner'}
-                      </span>
-                    </button>
+                    </div>
                   );
                 })}
                 <div className='border-t border-border/40 my-1' />
