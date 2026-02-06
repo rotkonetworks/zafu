@@ -51,7 +51,7 @@ export const typeOfPopupRequest = <M extends PopupType>(req: PopupRequest<M>): M
 };
 
 interface PopupRequestMap {
-  TxApproval: { authorizeRequest: Jsonified<AuthorizeRequest> };
+  TxApproval: { authorizeRequest: Jsonified<AuthorizeRequest>; isAirgap?: boolean };
   OriginApproval: {
     origin: string;
     favIconUrl?: string;
@@ -64,6 +64,7 @@ interface PopupResponseMap {
   TxApproval: {
     authorizeRequest: Jsonified<AuthorizeRequest>;
     choice: UserChoice;
+    authorizationData?: JsonValue;
   };
   OriginApproval: OriginRecord;
 }

@@ -1,4 +1,4 @@
-import { PlainMessage, toPlainMessage } from '@bufbuild/protobuf';
+import { type JsonValue, PlainMessage, toPlainMessage } from '@bufbuild/protobuf';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { viewTransactionPlan } from '@penumbra-zone/perspective/plan/view-transaction-plan';
 import { TransactionClassification } from '@penumbra-zone/perspective/transaction/classification';
@@ -29,6 +29,9 @@ export interface TxApprovalSlice {
   transactionView?: PlainMessage<TransactionView>;
   invalidPlan?: Error;
   choice?: UserChoice;
+  isAirgap?: boolean;
+  // Stored as unknown to avoid TS2589 with Zustand's Draft<JsonValue> recursion
+  authorizationData?: unknown;
 
   asSender?: PlainMessage<TransactionView>;
   asReceiver?: PlainMessage<TransactionView>;
@@ -40,6 +43,7 @@ export interface TxApprovalSlice {
   ) => Promise<PopupResponse<PopupType.TxApproval>[PopupType.TxApproval]>;
 
   setChoice: (choice: UserChoice) => void;
+  setAuthorizationData: (data: unknown) => void;
 
   sendResponse: () => void;
 }
@@ -110,8 +114,10 @@ export const createTxApprovalSlice =
         state.txApproval.asReceiver = toPlainMessage(asReceiver);
         state.txApproval.invalidPlan = invalidPlan;
         state.txApproval.transactionClassification = transactionClassification.type;
+        state.txApproval.isAirgap = req.isAirgap ?? false;
 
         state.txApproval.choice = undefined;
+        state.txApproval.authorizationData = undefined;
       });
 
       return responder.promise;
@@ -123,8 +129,15 @@ export const createTxApprovalSlice =
       });
     },
 
+    setAuthorizationData: data => {
+      set(state => {
+        state.txApproval.authorizationData = data;
+      });
+    },
+
     sendResponse: () => {
-      const { responder, choice, authorizeRequest, invalidPlan } = get().txApproval;
+      const { responder, choice, authorizeRequest, invalidPlan, authorizationData } =
+        get().txApproval;
 
       try {
         if (!responder) {
@@ -145,6 +158,7 @@ export const createTxApprovalSlice =
             authorizeRequest: new AuthorizeRequest(
               authorizeRequest,
             ).toJson() as Jsonified<AuthorizeRequest>,
+            authorizationData: authorizationData as JsonValue | undefined,
           });
         } catch (e) {
           responder.reject(e);
@@ -156,6 +170,8 @@ export const createTxApprovalSlice =
           state.txApproval.transactionView = undefined;
           state.txApproval.choice = undefined;
           state.txApproval.invalidPlan = undefined;
+          state.txApproval.isAirgap = undefined;
+          state.txApproval.authorizationData = undefined;
 
           state.txApproval.asSender = undefined;
           state.txApproval.asReceiver = undefined;

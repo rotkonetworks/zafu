@@ -19,6 +19,7 @@ import {
 } from './custody';
 
 // Re-export custody types for external use
+export { getCustodyTypeName };
 export type { CustodyTypeName, CustodyNamedValue };
 
 export interface WalletCustody {

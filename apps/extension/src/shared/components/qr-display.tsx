@@ -39,10 +39,23 @@ export function QrDisplay({
   useEffect(() => {
     if (!canvasRef.current || !data) return;
 
-    // encode hex data as qr code
+    // Convert hex string to binary bytes for more efficient QR encoding.
+    // Binary mode fits ~2900 bytes per QR vs ~1800 for alphanumeric text.
+    const bytes = new Uint8Array(data.length / 2);
+    for (let i = 0; i < bytes.length; i++) {
+      bytes[i] = parseInt(data.substring(i * 2, i * 2 + 2), 16);
+    }
+
+    // qrcode library needs Buffer for byte mode in some builds
+    const bufData = typeof Buffer !== 'undefined'
+      ? Buffer.from(bytes)
+      : bytes;
+
+    console.log(`[qr-display] payload: ${bytes.length} bytes, hex: ${data.length} chars`);
+
     QRCode.toCanvas(
       canvasRef.current,
-      data,
+      [{ data: bufData, mode: 'byte' }],
       {
         width: size,
         margin: 2,
@@ -50,12 +63,14 @@ export function QrDisplay({
           dark: '#000000',
           light: '#ffffff',
         },
-        errorCorrectionLevel: 'M',
+        errorCorrectionLevel: 'L',
       },
       (err: Error | null) => {
         if (err) {
           setError('failed to generate qr code');
           console.error('qr generation error:', err);
+        } else {
+          console.log(`[qr-display] QR generated successfully at ${size}px`);
         }
       }
     );
