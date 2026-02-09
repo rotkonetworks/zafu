@@ -1,10 +1,12 @@
 import { Ics20Withdrawal } from '@penumbra-zone/protobuf/penumbra/core/component/ibc/v1/ibc_pb';
 import { ViewBox } from '../viewbox';
 import { ActionDetails } from './action-details';
-import { joinLoHiAmount } from '@penumbra-zone/types/amount';
-import { getTransmissionKeyByAddress } from '@penumbra-zone/wasm/keys';
+import { joinLoHiAmount } from '@rotko/penumbra-types/amount';
+import { getTransmissionKeyByAddress } from '@rotko/penumbra-wasm/keys';
 import { bech32TransparentAddress } from '@penumbra-zone/bech32m/tpenumbra';
 import { bech32mAddress } from '@penumbra-zone/bech32m/penumbra';
+import { Address } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
+import { useEffect, useState } from 'react';
 
 const getUtcTime = (time: bigint) => {
   const formatter = new Intl.DateTimeFormat('en-US', {
@@ -14,6 +16,28 @@ const getUtcTime = (time: bigint) => {
   });
   const date = new Date(Number(time / 1_000_000n));
   return formatter.format(date);
+};
+
+const ReturnAddressDisplay = ({
+  returnAddress,
+  useTransparentAddress,
+}: {
+  returnAddress: Address;
+  useTransparentAddress: boolean;
+}) => {
+  const [displayAddress, setDisplayAddress] = useState<string>('...');
+
+  useEffect(() => {
+    if (useTransparentAddress) {
+      getTransmissionKeyByAddress(returnAddress).then(inner => {
+        setDisplayAddress(bech32TransparentAddress({ inner }));
+      });
+    } else {
+      setDisplayAddress(bech32mAddress(returnAddress));
+    }
+  }, [returnAddress, useTransparentAddress]);
+
+  return <span className='truncate max-w-[125px]'>{displayAddress}</span>;
 };
 
 export const Ics20WithdrawalComponent = ({ value }: { value: Ics20Withdrawal }) => {
@@ -38,13 +62,10 @@ export const Ics20WithdrawalComponent = ({ value }: { value: Ics20Withdrawal }) 
 
           {value.returnAddress && (
             <ActionDetails.Row label='Return Address'>
-              <span className='truncate max-w-[125px]'>
-                {value.useTransparentAddress
-                  ? bech32TransparentAddress({
-                      inner: getTransmissionKeyByAddress(value.returnAddress),
-                    })
-                  : bech32mAddress(value.returnAddress)}
-              </span>
+              <ReturnAddressDisplay
+                returnAddress={value.returnAddress}
+                useTransparentAddress={value.useTransparentAddress}
+              />
             </ActionDetails.Row>
           )}
 

@@ -1,6 +1,6 @@
 import { Delegate } from '@penumbra-zone/protobuf/penumbra/core/component/stake/v1/stake_pb';
 import { ViewBox } from '../viewbox';
-import { joinLoHiAmount } from '@penumbra-zone/types/amount';
+import { joinLoHiAmount } from '@rotko/penumbra-types/amount';
 import { bech32mIdentityKey } from '@penumbra-zone/bech32m/penumbravalid';
 import { ActionDetails } from './action-details';
 

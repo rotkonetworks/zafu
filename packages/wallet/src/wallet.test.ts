@@ -1,7 +1,7 @@
 import { toPlainMessage } from '@bufbuild/protobuf';
 import { SpendKey } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
 import { TransactionPlan } from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
-import { generateSpendKey, getFullViewingKey, getWalletId } from '@penumbra-zone/wasm/keys';
+import { generateSpendKey, getFullViewingKey, getWalletId } from '@rotko/penumbra-wasm/keys';
 import { Box, BoxJson } from '@repo/encryption/box';
 import { Key } from '@repo/encryption/key';
 import { beforeAll, describe, expect, test } from 'vitest';

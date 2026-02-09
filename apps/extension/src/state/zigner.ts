@@ -44,7 +44,17 @@ import {
 export type ZignerScanState = 'idle' | 'scanning' | 'scanned' | 'importing' | 'complete' | 'error';
 
 /** Detected network type from QR code */
-export type DetectedNetwork = 'penumbra' | 'zcash' | 'backup' | 'unknown';
+export type DetectedNetwork = 'penumbra' | 'zcash' | 'polkadot' | 'backup' | 'unknown';
+
+/** Polkadot address import data from Zigner QR */
+export interface PolkadotImportData {
+  /** SS58 encoded address */
+  address: string;
+  /** Genesis hash (hex with 0x prefix) */
+  genesisHash: string;
+  /** Label for the wallet */
+  label: string;
+}
 
 /**
  * Combined Zigner state slice including camera settings and scanning state.
@@ -67,6 +77,8 @@ export interface ZignerSlice {
   parsedPenumbraExport?: ZignerFvkExportData;
   /** Parsed Zcash FVK export data from QR code */
   parsedZcashExport?: ZcashFvkExportData;
+  /** Parsed Polkadot address data from QR code */
+  parsedPolkadotExport?: PolkadotImportData;
   /** User-provided label for the wallet */
   walletLabel: string;
   /** Error message if something went wrong */
@@ -111,10 +123,48 @@ export const createZignerSlice =
     detectedNetwork: undefined,
     parsedPenumbraExport: undefined,
     parsedZcashExport: undefined,
+    parsedPolkadotExport: undefined,
     errorMessage: undefined,
 
     processQrData: (qrData: string) => {
       const trimmed = qrData.trim();
+
+      // Check for Substrate/Polkadot address format: substrate:address:0xgenesishash
+      if (trimmed.startsWith('substrate:')) {
+        const parts = trimmed.split(':');
+        if (parts.length >= 3) {
+          const address = parts[1]!;
+          const genesisHash = parts.slice(2).join(':'); // handle case where genesis has colons
+
+          // Validate the format
+          if (address && genesisHash && genesisHash.startsWith('0x')) {
+            const exportData: PolkadotImportData = {
+              address,
+              genesisHash,
+              label: 'zigner polkadot',
+            };
+
+            set(state => {
+              state.zigner.qrData = trimmed;
+              state.zigner.detectedNetwork = 'polkadot';
+              state.zigner.parsedPolkadotExport = exportData;
+              state.zigner.parsedPenumbraExport = undefined;
+              state.zigner.parsedZcashExport = undefined;
+              state.zigner.walletLabel = 'zigner polkadot';
+              state.zigner.scanState = 'scanned';
+              state.zigner.errorMessage = undefined;
+            });
+            return;
+          }
+        }
+
+        // Invalid substrate format
+        set(state => {
+          state.zigner.scanState = 'error';
+          state.zigner.errorMessage = 'invalid substrate qr format. expected: substrate:address:0xgenesishash';
+        });
+        return;
+      }
 
       // Check for UR format first (preferred format)
       if (isUrString(trimmed)) {
@@ -302,6 +352,7 @@ export const createZignerSlice =
         state.zigner.detectedNetwork = undefined;
         state.zigner.parsedPenumbraExport = undefined;
         state.zigner.parsedZcashExport = undefined;
+        state.zigner.parsedPolkadotExport = undefined;
         state.zigner.walletLabel = '';
         state.zigner.errorMessage = undefined;
       });
@@ -343,6 +394,7 @@ export const zignerConnectSelector = (state: AllSlices) => {
     detectedNetwork: slice.detectedNetwork,
     parsedPenumbraExport: slice.parsedPenumbraExport,
     parsedZcashExport: slice.parsedZcashExport,
+    parsedPolkadotExport: slice.parsedPolkadotExport,
     walletLabel: slice.walletLabel,
     errorMessage: slice.errorMessage,
     walletImport,

@@ -34,6 +34,8 @@ export const ImportZigner = () => {
     walletLabel,
     walletImport,
     zcashWalletImport,
+    parsedPolkadotExport,
+    detectedNetwork,
     errorMessage,
     processQrData,
     setWalletLabel,
@@ -86,7 +88,7 @@ export const ImportZigner = () => {
 
   // skip password - use default encryption
   const handleSkip = async () => {
-    if (!walletImport && !zcashWalletImport) {
+    if (!walletImport && !zcashWalletImport && !parsedPolkadotExport) {
       setError('please scan a valid QR code first');
       return;
     }
@@ -114,6 +116,15 @@ export const ImportZigner = () => {
           deviceId: `zcash-${Date.now()}`,
         };
         await addZignerUnencrypted(zignerData, walletLabel || 'zigner zcash');
+      } else if (parsedPolkadotExport) {
+        // polkadot zigner import - watch-only address
+        const zignerData: ZignerZafuImport = {
+          polkadotSs58: parsedPolkadotExport.address,
+          polkadotGenesisHash: parsedPolkadotExport.genesisHash,
+          accountIndex: 0,
+          deviceId: `polkadot-${Date.now()}`,
+        };
+        await addZignerUnencrypted(zignerData, walletLabel || 'zigner polkadot');
       }
 
       await setOnboardingValuesInStorage(SEED_PHRASE_ORIGIN.ZIGNER);
@@ -129,7 +140,7 @@ export const ImportZigner = () => {
 
   // set custom password - navigate to password page
   const handleSetPassword = () => {
-    if (!walletImport && !zcashWalletImport) {
+    if (!walletImport && !zcashWalletImport && !parsedPolkadotExport) {
       setError('please scan a valid QR code first');
       return;
     }
@@ -236,7 +247,7 @@ title="Scan Zafu Zigner QR"
                   <Button
                     variant='gradient'
                     className='flex-1'
-                    disabled={!walletImport && !zcashWalletImport}
+                    disabled={!walletImport && !zcashWalletImport && !parsedPolkadotExport}
                     onClick={handleSkip}
                   >
                     Import
@@ -245,8 +256,8 @@ title="Scan Zafu Zigner QR"
               </div>
             )}
 
-            {/* Scanned state - show wallet info and confirm */}
-            {scanState === 'scanned' && walletImport && (
+            {/* Scanned state - show wallet info and confirm (Penumbra) */}
+            {scanState === 'scanned' && detectedNetwork === 'penumbra' && walletImport && (
               <div className='flex flex-col gap-4'>
                 <div className='p-6'>
                   <div className='font-headline text-lg'>Success!</div>
@@ -266,6 +277,127 @@ title="Scan Zafu Zigner QR"
                   <p className='font-medium'>Airgap Signer</p>
                   <p className='mt-1 text-muted-foreground text-xs'>
                     View balances and create transactions. Signing requires your Zafu Zigner device.
+                  </p>
+                </div>
+
+                {errorMessage && (
+                  <div className='text-red-400 text-sm'>{errorMessage}</div>
+                )}
+
+                <div className='flex flex-col gap-2 mt-2'>
+                  <Button
+                    variant='gradient'
+                    className='w-full'
+                    onClick={handleSetPassword}
+                    disabled={importing}
+                  >
+                    Set Password
+                  </Button>
+                  <p className='text-xs text-muted-foreground text-center'>
+                    Requires login to use apps. More secure.
+                  </p>
+
+                  <Button
+                    variant='secondary'
+                    className='w-full mt-2'
+                    onClick={handleSkip}
+                    disabled={importing}
+                  >
+                    {importing ? 'Importing...' : 'Skip Password'}
+                  </Button>
+                  <p className='text-xs text-muted-foreground text-center'>
+                    No login required. Less secure.
+                  </p>
+
+                  <Button variant='ghost' className='w-full mt-2' onClick={resetState} disabled={importing}>
+                    Scan Again
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Scanned state - Zcash */}
+            {scanState === 'scanned' && detectedNetwork === 'zcash' && zcashWalletImport && (
+              <div className='flex flex-col gap-4'>
+                <div className='p-6'>
+                  <div className='font-headline text-lg'>Zcash Wallet Detected!</div>
+                  <div className={cn('font-mono text-muted-foreground', 'text-xs', 'break-all', 'mt-2')}>
+                    Account #{zcashWalletImport.accountIndex}
+                    <span className='ml-2'>{zcashWalletImport.mainnet ? '(mainnet)' : '(testnet)'}</span>
+                  </div>
+                </div>
+
+                <Input
+                  placeholder='Wallet label'
+                  value={walletLabel}
+                  onChange={e => setWalletLabel(e.target.value)}
+                  className='text-center'
+                />
+
+                <div className='rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3 text-sm text-yellow-200 text-left'>
+                  <p className='font-medium'>Airgap Signer</p>
+                  <p className='mt-1 text-muted-foreground text-xs'>
+                    View balances and create transactions. Signing requires your Zafu Zigner device.
+                  </p>
+                </div>
+
+                {errorMessage && (
+                  <div className='text-red-400 text-sm'>{errorMessage}</div>
+                )}
+
+                <div className='flex flex-col gap-2 mt-2'>
+                  <Button
+                    variant='gradient'
+                    className='w-full'
+                    onClick={handleSetPassword}
+                    disabled={importing}
+                  >
+                    Set Password
+                  </Button>
+                  <p className='text-xs text-muted-foreground text-center'>
+                    Requires login to use apps. More secure.
+                  </p>
+
+                  <Button
+                    variant='secondary'
+                    className='w-full mt-2'
+                    onClick={handleSkip}
+                    disabled={importing}
+                  >
+                    {importing ? 'Importing...' : 'Skip Password'}
+                  </Button>
+                  <p className='text-xs text-muted-foreground text-center'>
+                    No login required. Less secure.
+                  </p>
+
+                  <Button variant='ghost' className='w-full mt-2' onClick={resetState} disabled={importing}>
+                    Scan Again
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Scanned state - Polkadot */}
+            {scanState === 'scanned' && detectedNetwork === 'polkadot' && parsedPolkadotExport && (
+              <div className='flex flex-col gap-4'>
+                <div className='p-6'>
+                  <div className='font-headline text-lg'>Polkadot Account Detected!</div>
+                  <div className={cn('font-mono text-muted-foreground', 'text-xs', 'break-all', 'mt-2')}>
+                    {parsedPolkadotExport.address.slice(0, 12)}...{parsedPolkadotExport.address.slice(-8)}
+                  </div>
+                </div>
+
+                <Input
+                  placeholder='Wallet label'
+                  value={walletLabel}
+                  onChange={e => setWalletLabel(e.target.value)}
+                  className='text-center'
+                />
+
+                <div className='rounded-lg border border-pink-500/30 bg-pink-500/10 p-3 text-sm text-pink-200 text-left'>
+                  <p className='font-medium'>Watch-Only Account</p>
+                  <p className='mt-1 text-muted-foreground text-xs'>
+                    View balances and create unsigned transactions. Signing requires your Zafu Zigner device via QR codes.
                   </p>
                 </div>
 

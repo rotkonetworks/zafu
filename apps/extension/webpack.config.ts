@@ -26,7 +26,7 @@ export default ({
   const keysPackage = path.dirname(url.fileURLToPath(import.meta.resolve('@penumbra-zone/keys')));
   // Resolve wasm package via a known export, then go up to package root
   const wasmPackage = path.dirname(
-    path.dirname(url.fileURLToPath(import.meta.resolve('@penumbra-zone/wasm/build'))),
+    path.dirname(url.fileURLToPath(import.meta.resolve('@rotko/penumbra-wasm/build'))),
   );
 
   const localPackages = [
@@ -211,6 +211,10 @@ resolve: {
       extensions: ['.ts', '.tsx', '.js'],
       alias: {
         '@ui': path.resolve(__dirname, '../../packages/ui'),
+        // Redirect @penumbra-zone packages to @rotko equivalents (async API)
+        '@penumbra-zone/types': '@rotko/penumbra-types',
+        '@penumbra-zone/wasm': '@rotko/penumbra-wasm',
+        '@penumbra-zone/services': '@rotko/penumbra-services',
       },
       fallback: {
         crypto: false, // use webcrypto instead of node crypto
@@ -231,19 +235,14 @@ resolve: {
             from: path.join(wasmPackage, 'wasm-parallel'),
             to: 'wasm-parallel',
           },
-          // zafu-wasm for zcash key derivation and scanning
+          // zcash-wasm for zcash key derivation and scanning
           {
-            from: '/steam/rotko/zeratul/crates/bin/zidecar/www/pkg/zafu_wasm.js',
+            from: path.join(__dirname, '../../packages/zcash-wasm/zcash_wasm.js'),
             to: 'zafu-wasm/zafu_wasm.js',
           },
           {
-            from: '/steam/rotko/zeratul/crates/bin/zidecar/www/pkg/zafu_wasm_bg.wasm',
+            from: path.join(__dirname, '../../packages/zcash-wasm/zcash_wasm_bg.wasm'),
             to: 'zafu-wasm/zafu_wasm_bg.wasm',
-          },
-          // worker snippet for rayon parallel scanning
-          {
-            from: '/steam/rotko/zeratul/crates/bin/zidecar/www/pkg/snippets',
-            to: 'zafu-wasm/snippets',
           },
         ],
       }),
@@ -313,6 +312,12 @@ resolve: {
     },
     resolve: {
       extensions: ['.ts', '.tsx', '.js'],
+      alias: {
+        // Redirect @penumbra-zone packages to @rotko equivalents (async API)
+        '@penumbra-zone/types': '@rotko/penumbra-types',
+        '@penumbra-zone/wasm': '@rotko/penumbra-wasm',
+        '@penumbra-zone/services': '@rotko/penumbra-services',
+      },
     },
     plugins: [...sharedPlugins],
     experiments: {

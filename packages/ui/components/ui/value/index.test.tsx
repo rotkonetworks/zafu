@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { ValueViewComponent } from '.';
 import { render } from '@testing-library/react';
 import { Metadata, ValueView } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
-import { base64ToUint8Array } from '@penumbra-zone/types/base64';
+import { base64ToUint8Array } from '@rotko/penumbra-types/base64';
 
 describe('<ValueViewComponent />', () => {
   const penumbraMetadata = new Metadata({

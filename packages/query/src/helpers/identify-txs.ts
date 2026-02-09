@@ -12,8 +12,8 @@ import {
   MsgTimeout,
 } from '@penumbra-zone/protobuf/ibc/core/channel/v1/tx_pb';
 import { FungibleTokenPacketData } from '@penumbra-zone/protobuf/penumbra/core/component/ibc/v1/ibc_pb';
-import { ViewServerInterface } from '@penumbra-zone/types/servers';
-import { parseIntoAddr } from '@penumbra-zone/types/address';
+import { ViewServerInterface } from '@rotko/penumbra-types/servers';
+import { parseIntoAddr } from '@rotko/penumbra-types/address';
 import { Packet } from '@penumbra-zone/protobuf/ibc/core/channel/v1/channel_pb';
 import { AddressIndex } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
 
@@ -29,66 +29,68 @@ export const BLANK_TX_SOURCE = new CommitmentSource({
  * - MsgAcknowledgement (containing an error acknowledgement, thus triggering a refund on our end)
  * - MsgTimeout
  */
-const hasRelevantIbcRelay = (
+const hasRelevantIbcRelay = async (
   tx: Transaction,
   isControlledAddr: ViewServerInterface['isControlledAddress'],
-): boolean => {
-  return (
-    tx.body?.actions.some(action => {
-      if (action.action.case !== 'ibcRelayAction') {
-        return false;
-      }
+): Promise<boolean> => {
+  for (const action of tx.body?.actions ?? []) {
+    if (action.action.case !== 'ibcRelayAction') {
+      continue;
+    }
 
-      const rawAction = action.action.value.rawAction;
-      if (!rawAction) {
-        return false;
-      }
+    const rawAction = action.action.value.rawAction;
+    if (!rawAction) {
+      continue;
+    }
 
-      if (rawAction.is(MsgRecvPacket.typeName)) {
-        const recvPacket = new MsgRecvPacket();
-        rawAction.unpackTo(recvPacket);
-        if (!recvPacket.packet) {
-          return false;
-        }
-        return isControlledByUser(recvPacket.packet, isControlledAddr, 'receiver');
+    if (rawAction.is(MsgRecvPacket.typeName)) {
+      const recvPacket = new MsgRecvPacket();
+      rawAction.unpackTo(recvPacket);
+      if (!recvPacket.packet) {
+        continue;
       }
-
-      if (rawAction.is(MsgAcknowledgement.typeName)) {
-        const ackPacket = new MsgAcknowledgement();
-        rawAction.unpackTo(ackPacket);
-        if (!ackPacket.packet) {
-          return false;
-        }
-        return isControlledByUser(ackPacket.packet, isControlledAddr, 'sender');
+      if (await isControlledByUser(recvPacket.packet, isControlledAddr, 'receiver')) {
+        return true;
       }
+    }
 
-      if (rawAction.is(MsgTimeout.typeName)) {
-        const timeout = new MsgTimeout();
-        rawAction.unpackTo(timeout);
-        if (!timeout.packet) {
-          return false;
-        }
-        return isControlledByUser(timeout.packet, isControlledAddr, 'sender');
+    if (rawAction.is(MsgAcknowledgement.typeName)) {
+      const ackPacket = new MsgAcknowledgement();
+      rawAction.unpackTo(ackPacket);
+      if (!ackPacket.packet) {
+        continue;
       }
+      if (await isControlledByUser(ackPacket.packet, isControlledAddr, 'sender')) {
+        return true;
+      }
+    }
 
-      // Not a potentially relevant ibc relay action
-      return false;
-    }) ?? false
-  );
+    if (rawAction.is(MsgTimeout.typeName)) {
+      const timeout = new MsgTimeout();
+      rawAction.unpackTo(timeout);
+      if (!timeout.packet) {
+        continue;
+      }
+      if (await isControlledByUser(timeout.packet, isControlledAddr, 'sender')) {
+        return true;
+      }
+    }
+  }
+  return false;
 };
 
 // Determines if the packet data points to the user as the receiver
-const isControlledByUser = (
+const isControlledByUser = async (
   packet: Packet,
   isControlledAddr: ViewServerInterface['isControlledAddress'],
   entityToCheck: 'sender' | 'receiver',
-): boolean => {
+): Promise<boolean> => {
   try {
     const dataString = new TextDecoder().decode(packet.data);
     const { sender, receiver } = FungibleTokenPacketData.fromJsonString(dataString);
     const addrStr = entityToCheck === 'sender' ? sender : receiver;
     const addrToCheck = parseIntoAddr(addrStr);
-    return isControlledAddr(addrToCheck);
+    return await isControlledAddr(addrToCheck);
   } catch {
     return false;
   }
@@ -229,7 +231,7 @@ const searchRelevant = async (
   }
 
   // finds if either source or destination of an IBC relay action is controlled by the user
-  if (hasRelevantIbcRelay(tx, isControlledAddr)) {
+  if (await hasRelevantIbcRelay(tx, isControlledAddr)) {
     txId ??= await generateTxId(tx);
   }
 

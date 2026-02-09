@@ -27,8 +27,8 @@ import { connectChannelAdapter } from '@penumbra-zone/transport-dom/adapter';
 import { validateSessionPort } from './senders/session';
 
 // context
-import { fvkCtx } from '@penumbra-zone/services/ctx/full-viewing-key';
-import { servicesCtx } from '@penumbra-zone/services/ctx/prax';
+import { fvkCtx } from '@rotko/penumbra-services/ctx/full-viewing-key';
+import { servicesCtx } from '@rotko/penumbra-services/ctx/prax';
 import { getFullViewingKey } from './ctx/full-viewing-key';
 import { getWalletId } from './ctx/wallet-id';
 
@@ -38,13 +38,13 @@ import { getAuthorization } from './ctx/authorization';
 
 // context clients
 import { CustodyService, StakeService } from '@penumbra-zone/protobuf';
-import { custodyClientCtx } from '@penumbra-zone/services/ctx/custody-client';
-import { stakeClientCtx } from '@penumbra-zone/services/ctx/stake-client';
+import { custodyClientCtx } from '@rotko/penumbra-services/ctx/custody-client';
+import { stakeClientCtx } from '@rotko/penumbra-services/ctx/stake-client';
 import { createDirectClient } from '@penumbra-zone/transport-dom/direct';
 import { internalTransportOptions } from './transport-options';
 
 // idb, querier, block processor
-import { walletIdCtx } from '@penumbra-zone/services/ctx/wallet-id';
+import { walletIdCtx } from '@rotko/penumbra-services/ctx/wallet-id';
 import type { Services } from '@repo/context';
 import { startWalletServices } from './wallet-services';
 
@@ -114,8 +114,9 @@ const reinitializeServices = async () => {
   void ws.blockProcessor.sync();
 };
 
-// Listen for active wallet changes
+// Listen for wallet and network changes
 localExtStorage.addListener(changes => {
+  // Reinitialize when active wallet changes
   if (changes.activeWalletIndex !== undefined) {
     const newIndex = changes.activeWalletIndex.newValue ?? 0;
     if (currentWalletIndex !== undefined && currentWalletIndex !== newIndex) {
@@ -124,6 +125,26 @@ localExtStorage.addListener(changes => {
       void reinitializeServices();
     } else {
       currentWalletIndex = newIndex;
+    }
+  }
+
+  // Reinitialize when wallets are created (first wallet triggers sync)
+  if (changes.wallets !== undefined) {
+    const oldWallets = changes.wallets.oldValue ?? [];
+    const newWallets = changes.wallets.newValue ?? [];
+    if (oldWallets.length === 0 && newWallets.length > 0) {
+      console.log('[sync] first wallet created, initializing services...');
+      void reinitializeServices();
+    }
+  }
+
+  // Reinitialize when penumbra network is enabled
+  if (changes.enabledNetworks !== undefined) {
+    const newNetworks = changes.enabledNetworks.newValue ?? [];
+    const oldNetworks = changes.enabledNetworks.oldValue ?? [];
+    if (!oldNetworks.includes('penumbra') && newNetworks.includes('penumbra')) {
+      console.log('[sync] penumbra network enabled, initializing services...');
+      void reinitializeServices();
     }
   }
 
@@ -186,7 +207,8 @@ const handler = await backOff(() => initHandler(), {
   },
 });
 
-CRSessionManager.init(ZIGNER, handler, validateSessionPort);
+// In dev mode, use runtime ID (Chrome assigns dynamic ID for unpacked extensions)
+CRSessionManager.init(globalThis.__DEV__ ? chrome.runtime.id : ZIGNER, handler, validateSessionPort);
 
 // listen for content script activity
 chrome.runtime.onMessage.addListener(contentScriptConnectListener);

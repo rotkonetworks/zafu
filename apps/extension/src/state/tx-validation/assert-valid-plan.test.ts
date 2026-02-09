@@ -1,20 +1,29 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any -- test file */
 import { ActionPlan } from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
-import { generateSpendKey, getAddressByIndex, getFullViewingKey } from '@penumbra-zone/wasm/keys';
-import { describe, expect, it } from 'vitest';
+import type { Address } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
+import type { FullViewingKey } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
+import { generateSpendKey, getAddressByIndex, getFullViewingKey } from '@rotko/penumbra-wasm/keys';
+import { describe, expect, it, beforeAll } from 'vitest';
 import { assertValidActionPlans } from './assert-valid-plan.js';
 
 const currentUserSeedPhrase =
   'benefit cherry cannon tooth exhibit law avocado spare tooth that amount pumpkin scene foil tape mobile shine apology add crouch situate sun business explain';
-const currentUserFullViewingKey = getFullViewingKey(generateSpendKey(currentUserSeedPhrase));
-const currentUserAddress = getAddressByIndex(currentUserFullViewingKey, 1);
+let currentUserFullViewingKey: FullViewingKey;
+let currentUserAddress: Address;
 
 const otherUserSeedPhrase =
   'cancel tilt shallow way roast utility profit satoshi mushroom seek shift helmet';
-const otherUserAddress = getAddressByIndex(
-  getFullViewingKey(generateSpendKey(otherUserSeedPhrase)),
-  1,
-);
+let otherUserAddress: Address;
+
+beforeAll(async () => {
+  const currentSpendKey = await generateSpendKey(currentUserSeedPhrase);
+  currentUserFullViewingKey = await getFullViewingKey(currentSpendKey);
+  currentUserAddress = await getAddressByIndex(currentUserFullViewingKey, 1);
+
+  const otherSpendKey = await generateSpendKey(otherUserSeedPhrase);
+  const otherFvk = await getFullViewingKey(otherSpendKey);
+  otherUserAddress = await getAddressByIndex(otherFvk, 1);
+});
 
 describe('individual plans', () => {
   it('rejects an empty action plan', () => {

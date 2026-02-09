@@ -1,6 +1,6 @@
 import { BatchSwapOutputData } from '@penumbra-zone/protobuf/penumbra/core/component/dex/v1/dex_pb';
-import { IndexedDbInterface } from '@penumbra-zone/types/indexed-db';
-import { divideAmounts, isZero, subtractAmounts } from '@penumbra-zone/types/amount';
+import { IndexedDbInterface } from '@rotko/penumbra-types/indexed-db';
+import { divideAmounts, isZero, subtractAmounts } from '@rotko/penumbra-types/amount';
 import { AssetId } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
 import {

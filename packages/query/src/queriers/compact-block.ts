@@ -8,7 +8,7 @@ import { createClient } from './utils';
 import type {
   CompactBlockQuerierInterface,
   CompactBlockRangeParams,
-} from '@penumbra-zone/types/querier';
+} from '@rotko/penumbra-types/querier';
 
 export class CompactBlockQuerier implements CompactBlockQuerierInterface {
   private readonly client: Client<typeof CompactBlockService>;

@@ -18,19 +18,19 @@
   },
   "peerDependencies": {
     "@bufbuild/protobuf": "^1.10.0",
-    "@penumbra-labs/registry": "^12.7.2",
+    "@penumbra-labs/registry": "^12.8.0",
     "@penumbra-zone/bech32m": "18.0.0",
     "@penumbra-zone/getters": "28.0.0",
     "@penumbra-zone/keys": "4.2.3",
     "@penumbra-zone/perspective": "61.1.1",
     "@penumbra-zone/protobuf": "11.0.0",
     "@penumbra-zone/query": "workspace:*",
-    "@penumbra-zone/services": "69.0.0",
     "@penumbra-zone/storage": "62.0.0",
     "@penumbra-zone/transport-chrome": "9.0.1",
     "@penumbra-zone/transport-dom": "7.5.2",
-    "@penumbra-zone/types": "36.0.0",
-    "@penumbra-zone/wasm": "53.0.0",
-    "exponential-backoff": "^3.1.1"
+    "@rotko/penumbra-services": "70.0.0",
+    "@rotko/penumbra-types": "37.0.0",
+    "@rotko/penumbra-wasm": "55.0.1",
+    "exponential-backoff": "^3.1.3"
   }
 }

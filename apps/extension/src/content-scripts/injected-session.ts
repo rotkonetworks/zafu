@@ -23,12 +23,14 @@ const zignerExtensionListener = (message: unknown, responder: (response: null) =
     return false;
   }
 
+  // In dev mode, use runtime ID (Chrome assigns dynamic ID for unpacked extensions)
+  const extensionId = globalThis.__DEV__ ? chrome.runtime.id : ZIGNER;
   switch (message) {
     case ZignerControl.Init:
-      sendWindow<MessagePort>(CRSessionClient.init(ZIGNER));
+      sendWindow<MessagePort>(CRSessionClient.init(extensionId));
       break;
     case ZignerControl.End:
-      CRSessionClient.end(ZIGNER);
+      CRSessionClient.end(extensionId);
       sendWindow<ZignerControl>(ZignerControl.End);
       break;
     case ZignerControl.Preconnect:

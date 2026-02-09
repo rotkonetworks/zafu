@@ -27,6 +27,7 @@ export const QrScanner = ({
   const readerRef = useRef<BrowserQRCodeReader | null>(null);
   const controlsRef = useRef<{ stop: () => void } | null>(null);
   const mountedRef = useRef(true);
+  const startingRef = useRef(false);
 
   const stopScanning = useCallback(() => {
     if (controlsRef.current) {
@@ -40,6 +41,10 @@ export const QrScanner = ({
 
   const startScanning = useCallback(async () => {
     if (!videoRef.current) return;
+
+    // Prevent double starts (React StrictMode, fast re-renders)
+    if (startingRef.current) return;
+    startingRef.current = true;
 
     try {
       setError(null);
@@ -67,20 +72,27 @@ export const QrScanner = ({
             stopScanning();
             const text = result.getText();
 
-            // Check if this is binary data (Zigner format starts with 'S' = 0x53)
-            // ZXing decodes BYTE mode QR codes as Latin-1, so 'S' indicates our binary format
-            if (text.length > 0 && text.charCodeAt(0) === 0x53) {
-              // Convert Latin-1 text back to hex bytes
-              const hex = Array.from(text)
-                .map(c => c.charCodeAt(0).toString(16).padStart(2, '0'))
-                .join('');
-              onScan(hex);
-            } else if (/^[0-9a-fA-F]+$/.test(text)) {
-              // Already hex-encoded
+            // Check if already valid hex string
+            if (/^[0-9a-fA-F]+$/.test(text) && text.length % 2 === 0) {
               onScan(text);
             } else {
-              // Text/URL QR code - pass as-is
-              onScan(text);
+              // Check if this is binary data decoded as Latin-1 by ZXing
+              // Binary QR data will have characters outside printable ASCII (0x20-0x7E)
+              const hasBinaryChars = Array.from(text).some(c => {
+                const code = c.charCodeAt(0);
+                return code < 0x20 || code > 0x7E;
+              });
+
+              if (hasBinaryChars) {
+                // Convert Latin-1 text back to hex bytes
+                const hex = Array.from(text)
+                  .map(c => c.charCodeAt(0).toString(16).padStart(2, '0'))
+                  .join('');
+                onScan(hex);
+              } else {
+                // Text/URL QR code - pass as-is
+                onScan(text);
+              }
             }
           }
           // Ignore decode errors (no QR in frame)
@@ -88,11 +100,13 @@ export const QrScanner = ({
       );
 
       controlsRef.current = controls;
+      startingRef.current = false;
 
       if (mountedRef.current) {
         setIsScanning(true);
       }
     } catch (err) {
+      startingRef.current = false;
       const message = err instanceof Error ? err.message : 'Failed to start camera';
 
       if (message.includes('Permission') || message.includes('NotAllowed')) {

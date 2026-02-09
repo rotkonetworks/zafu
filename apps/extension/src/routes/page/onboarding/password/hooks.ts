@@ -6,7 +6,7 @@ import { getSeedPhraseOrigin } from './utils';
 import { SEED_PHRASE_ORIGIN } from './types';
 import { PagePath } from '../../paths';
 import { localExtStorage } from '@repo/storage-chrome/local';
-import { setOnboardingValuesInStorage } from '../persist-parameters';
+import { setOnboardingValuesInStorage, setFreshWalletBlockHeights } from '../persist-parameters';
 import { useStore } from '../../../../state';
 import { keyRingSelector } from '../../../../state/keyring';
 import { zignerConnectSelector } from '../../../../state/zigner';
@@ -59,6 +59,10 @@ export const useFinalizeOnboarding = () => {
         clearZignerState();
       } else {
         // standard mnemonic flow
+        // For fresh wallets, set block heights BEFORE creating wallet to avoid race condition
+        if (origin === SEED_PHRASE_ORIGIN.NEWLY_GENERATED) {
+          await setFreshWalletBlockHeights();
+        }
         await addWallet(password);
       }
 

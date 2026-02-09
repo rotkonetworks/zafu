@@ -37,7 +37,7 @@ export const loadNetworkFeatures = async (network: NetworkType): Promise<void> =
       case 'penumbra':
         // lazy import penumbra wasm - use initWasmWithParallel if available
         try {
-          const wasmInit = await import('@penumbra-zone/wasm/init');
+          const wasmInit = await import('@rotko/penumbra-wasm/init');
           const numThreads = typeof navigator !== 'undefined' ? (navigator.hardwareConcurrency || 4) : 4;
           await wasmInit.initWasmWithParallel(numThreads);
           loadedNetworks.set('penumbra', { wasmLoaded: true, providers: {} });

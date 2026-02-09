@@ -10,6 +10,72 @@
  */
 
 /**
+ * Check if we're in a dedicated window (standalone popup window, not extension popup).
+ * Dedicated windows are opened via chrome.windows.create() and won't close on focus loss.
+ */
+export function isDedicatedWindow(): boolean {
+  // Extension popup views are returned by getViews({ type: 'popup' })
+  // If our window is NOT among them but uses popup.html, we're in a dedicated window
+  if (typeof chrome !== 'undefined' && chrome.extension?.getViews) {
+    try {
+      const popupViews = chrome.extension.getViews({ type: 'popup' });
+      const isExtensionPopup = popupViews.some(view => view === window);
+      const isPopupUrl = window.location.pathname.includes('popup');
+      // We're in dedicated window if: using popup.html but NOT in extension popup views
+      return isPopupUrl && !isExtensionPopup;
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+/**
+ * Check if we're running in a Chrome side panel.
+ * Side panels don't close on focus loss, so we can navigate normally.
+ */
+export function isSidePanel(): boolean {
+  // Side panel URL contains 'sidepanel' or we can check the window type
+  if (window.location.pathname.includes('sidepanel')) {
+    return true;
+  }
+
+  // Alternative: check if opened via side panel API by looking at document URL
+  // Side panels typically have a specific URL pattern
+  if (typeof chrome !== 'undefined' && chrome.extension?.getViews) {
+    try {
+      // Side panel views are not returned by getViews({ type: 'popup' })
+      // and window dimensions are typically different
+      const popupViews = chrome.extension.getViews({ type: 'popup' });
+      const isExtensionPopup = popupViews.some(view => view === window);
+
+      // If we're not in popup views and not a tab, we might be in side panel
+      // Check window properties - side panels are usually taller
+      if (!isExtensionPopup && window.innerHeight > 700) {
+        return true;
+      }
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+/**
+ * Open the extension in the side panel for the current tab.
+ */
+export async function openInSidePanel(): Promise<void> {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab?.windowId) {
+      await chrome.sidePanel.open({ windowId: tab.windowId });
+    }
+  } catch (e) {
+    console.error('Failed to open side panel:', e);
+  }
+}
+
+/**
  * Check if the current window is a popup.
  * Popups cannot request camera permissions - the permission dialog won't appear.
  */

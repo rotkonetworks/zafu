@@ -2,7 +2,7 @@ import { Key } from '@repo/encryption/key';
 import { Box } from '@repo/encryption/box';
 import { Wallet, type WalletJson } from '@repo/wallet';
 // Dynamic import to avoid bundling WASM into initial chunks
-// import { generateSpendKey, getFullViewingKey, getWalletId } from '@penumbra-zone/wasm/keys';
+// import { generateSpendKey, getFullViewingKey, getWalletId } from '@rotko/penumbra-wasm/keys';
 import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
 import type { SessionStorageState } from '@repo/storage-chrome/session';
@@ -59,12 +59,12 @@ export const createWalletsSlice =
       addWallet: async ({ label, seedPhrase }) => {
         // Dynamic import to avoid bundling WASM into initial chunks (service worker)
         const { generateSpendKey, getFullViewingKey, getWalletId } = await import(
-          '@penumbra-zone/wasm/keys'
+          '@rotko/penumbra-wasm/keys'
         );
 
         const seedPhraseStr = seedPhrase.join(' ');
-        const spendKey = generateSpendKey(seedPhraseStr);
-        const fullViewingKey = getFullViewingKey(spendKey);
+        const spendKey = await generateSpendKey(seedPhraseStr);
+        const fullViewingKey = await getFullViewingKey(spendKey);
 
         const passwordKey = await session.get('passwordKey');
         if (passwordKey === undefined) {
@@ -72,7 +72,8 @@ export const createWalletsSlice =
         }
 
         const key = await Key.fromJson(passwordKey);
-        const newWallet = new Wallet(label, getWalletId(fullViewingKey), fullViewingKey, {
+        const walletId = await getWalletId(fullViewingKey);
+        const newWallet = new Wallet(label, walletId, fullViewingKey, {
           encryptedSeedPhrase: await key.seal(seedPhraseStr),
         });
 

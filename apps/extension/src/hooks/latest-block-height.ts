@@ -7,20 +7,31 @@ import { useStore } from '../state';
 import { networkSelector } from '../state/network';
 import { DEFAULT_GRPC } from '../routes/page/onboarding/constants';
 
-// Utility function to fetch the block height by randomly querying one of the RPC endpoints
-// from the chain registry (if default is unavailable), using a recursive callback to try
-// another endpoint for liveness if the current one fails. Additionally, this implements a
-// timeout mechanism at the request level to avoid hanging from stalled requests.
+// Utility function to fetch the block height by querying RPC endpoints.
+// Always tries DEFAULT_GRPC first (even if not in registry), then falls back to registry endpoints.
+// Implements a timeout mechanism at the request level to avoid hanging from stalled requests.
 export const fetchBlockHeightWithFallback = async (
   endpoints: string[],
   transport?: Transport, // Deps injection mostly for unit tests
+  triedDefault = false, // Track if we've tried the default
 ): Promise<{ blockHeight: number; rpc: string }> => {
+  // Always try DEFAULT_GRPC first, regardless of whether it's in the registry
+  if (!triedDefault) {
+    try {
+      const blockHeight = await fetchBlockHeightWithTimeout(DEFAULT_GRPC, transport);
+      return { blockHeight, rpc: DEFAULT_GRPC };
+    } catch {
+      // Default failed, fall through to registry endpoints
+      return fetchBlockHeightWithFallback(endpoints, transport, true);
+    }
+  }
+
   if (endpoints.length === 0) {
     throw new Error('All RPC endpoints failed to fetch the block height.');
   }
 
-  // If default RPC is not found, randomly sample an RPC endpoint from the chain registry.
-  const selectedGrpc = endpoints.includes(DEFAULT_GRPC) ? DEFAULT_GRPC : sample(endpoints);
+  // Randomly sample an RPC endpoint from the remaining registry endpoints
+  const selectedGrpc = sample(endpoints);
   if (!selectedGrpc) {
     throw new Error('No RPC endpoints found.');
   }
@@ -28,10 +39,10 @@ export const fetchBlockHeightWithFallback = async (
   try {
     const blockHeight = await fetchBlockHeightWithTimeout(selectedGrpc, transport);
     return { blockHeight, rpc: selectedGrpc };
-  } catch (e) {
+  } catch {
     // Remove the current endpoint from the list and retry with remaining endpoints
     const remainingEndpoints = endpoints.filter(endpoint => endpoint !== selectedGrpc);
-    return fetchBlockHeightWithFallback(remainingEndpoints, transport);
+    return fetchBlockHeightWithFallback(remainingEndpoints, transport, true);
   }
 };
 

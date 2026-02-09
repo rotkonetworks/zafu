@@ -13,7 +13,7 @@ export const ImportForm = () => {
 
   useEffect(() => {
     if (!phrase.length) {
-      setLength(SeedPhraseLength.TWELVE_WORDS);
+      setLength(SeedPhraseLength.TWENTY_FOUR_WORDS);
     }
     cleanup(); // Ensures no competing state from generate path
   }, [cleanup, phrase.length, setLength]);

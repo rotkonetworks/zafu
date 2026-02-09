@@ -10,16 +10,17 @@ import { StackIcon, ChevronDownIcon, Cross2Icon, UpdateIcon } from '@radix-ui/re
 import { viewClient, stakeClient } from '../../../clients';
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
 import { useStore } from '../../../state';
-import { activeNetworkSelector } from '../../../state/active-network';
+import { selectActiveNetwork } from '../../../state/keyring';
 import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
 import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances-response';
 import { getDisplayDenomFromView, getAssetIdFromValueView, getDisplayDenomExponentFromValueView } from '@penumbra-zone/getters/value-view';
-import { fromValueView } from '@penumbra-zone/types/amount';
-import { assetPatterns } from '@penumbra-zone/types/assets';
+import { fromValueView } from '@rotko/penumbra-types/amount';
+import { assetPatterns } from '@rotko/penumbra-types/assets';
 import { cn } from '@repo/ui/lib/utils';
 import { ValidatorState_ValidatorStateEnum, type ValidatorInfo } from '@penumbra-zone/protobuf/penumbra/core/component/stake/v1/stake_pb';
 import type { BalancesResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
+import { bech32mIdentityKey } from '@penumbra-zone/bech32m/penumbravalid';
 
 /** staking token symbol */
 const STAKING_TOKEN = 'UM';
@@ -50,21 +51,54 @@ const getValidatorState = (info: ValidatorInfo): string => {
 };
 
 /** check if a balance is a delegation token */
-const isDelegationToken = (meta: { base?: string } | undefined): boolean => {
-  if (!meta?.base) return false;
-  return assetPatterns.delegationToken.matches(meta.base);
+const isDelegationToken = (meta: { base?: string; symbol?: string } | undefined): boolean => {
+  if (!meta) return false;
+  // check base denom pattern - can be "delegation_" or "udelegation_" (micro-unit prefix)
+  if (meta.base && (
+    assetPatterns.delegationToken.matches(meta.base) ||
+    meta.base.includes('delegation_penumbravalid1')
+  )) {
+    return true;
+  }
+  // fallback: check symbol
+  if (meta.symbol && meta.symbol.includes('delegation_penumbravalid1')) {
+    return true;
+  }
+  return false;
 };
 
-/** extract validator identity from delegation token */
-const getValidatorFromDelegation = (meta: { base?: string } | undefined): string | undefined => {
+/** extract validator bech32 identity from delegation token base denom */
+const getValidatorBech32FromDelegation = (meta: { base?: string } | undefined): string | undefined => {
   if (!meta?.base) return undefined;
-  const match = assetPatterns.delegationToken.capture(meta.base);
-  return match?.id;
+  // base denom can be "delegation_penumbravalid1..." or "udelegation_penumbravalid1..." (with micro-unit prefix)
+  // extract the bech32 part (penumbravalid1...)
+  const match = meta.base.match(/u?delegation_(penumbravalid1[a-z0-9]+)/);
+  return match?.[1];
+};
+
+/** find validator by matching delegation token to validator identity */
+const findValidatorForDelegation = (
+  meta: { base?: string } | undefined,
+  validators: ValidatorRow[]
+): ValidatorRow | undefined => {
+  const delegationBech32 = getValidatorBech32FromDelegation(meta);
+  if (!delegationBech32) return undefined;
+
+  return validators.find(v => {
+    if (!v.info.validator?.identityKey?.ik) return false;
+    try {
+      // convert validator identity key to bech32 and compare
+      const validatorBech32 = bech32mIdentityKey({ ik: v.info.validator.identityKey.ik });
+      return validatorBech32 === delegationBech32;
+    } catch {
+      return false;
+    }
+  });
 };
 
 /** Penumbra staking page */
 export const StakePage = () => {
-  const { activeNetwork } = useStore(activeNetworkSelector);
+  const activeNetwork = useStore(selectActiveNetwork);
   const [action, setAction] = useState<StakeAction>(undefined);
   const [amount, setAmount] = useState('');
   const [selectedValidator, setSelectedValidator] = useState<ValidatorRow | undefined>();
@@ -224,11 +258,7 @@ export const StakePage = () => {
 
       // find the validator for this delegation
       const meta = getMetadataFromBalancesResponse.optional(selectedDelegation);
-      const validatorId = getValidatorFromDelegation(meta);
-      const validator = validators.find(v =>
-        v.info.validator?.identityKey?.ik &&
-        Buffer.from(v.info.validator.identityKey.ik).toString('base64').startsWith(validatorId || '')
-      );
+      const validator = findValidatorForDelegation(meta, validators);
 
       if (!validator) {
         throw new Error('validator not found for delegation');
@@ -446,24 +476,34 @@ export const StakePage = () => {
         ) : (
           <div className='flex flex-col gap-2'>
             {delegations.map((d, i) => {
-              const symbol = d.balanceView ? getDisplayDenomFromView(d.balanceView) : 'Unknown';
               const bal = d.balanceView ? fromValueView(d.balanceView) : '0';
               const balStr = typeof bal === 'string' ? bal : bal.toString();
+
+              // find matching validator by delegation token
+              const meta = getMetadataFromBalancesResponse.optional(d);
+              const matchedValidator = findValidatorForDelegation(meta, validators);
+
+              // show validator name, or fallback to truncated address
+              const fallbackAddr = meta?.base?.replace(/u?delegation_/, '').slice(0, 20) + '...';
+              const displayName = matchedValidator?.name || fallbackAddr;
+
               return (
                 <div
                   key={i}
                   className='flex items-center justify-between rounded-lg border border-border/50 bg-muted/10 p-3'
                 >
-                  <div>
-                    <p className='text-sm font-medium'>{symbol}</p>
-                    <p className='text-xs text-muted-foreground'>{balStr}</p>
+                  <div className='min-w-0 flex-1'>
+                    <p className='text-sm font-medium truncate'>{displayName}</p>
+                    <p className='text-xs text-muted-foreground'>
+                      {balStr} staked
+                    </p>
                   </div>
                   <button
                     onClick={() => {
                       setSelectedDelegation(d);
                       setAction('undelegate');
                     }}
-                    className='rounded bg-muted/50 px-3 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground'
+                    className='ml-2 rounded bg-muted/50 px-3 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground'
                   >
                     undelegate
                   </button>

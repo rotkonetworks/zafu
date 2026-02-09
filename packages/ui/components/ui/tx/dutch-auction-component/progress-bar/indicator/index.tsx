@@ -2,7 +2,7 @@ import { DutchAuction } from '@penumbra-zone/protobuf/penumbra/core/component/au
 import { CircleArrowRight, CircleCheck, CircleX } from 'lucide-react';
 import { getProgress } from './get-progress';
 import { getDescription } from '@penumbra-zone/getters/dutch-auction';
-import { isZero } from '@penumbra-zone/types/amount';
+import { isZero } from '@rotko/penumbra-types/amount';
 
 export const Indicator = ({
   dutchAuction,

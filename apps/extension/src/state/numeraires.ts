@@ -1,7 +1,7 @@
 import type { LocalStorageState } from '@repo/storage-chrome/local';
 import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import { AllSlices, SliceCreator } from '.';
-import { Stringified } from '@penumbra-zone/types/jsonified';
+import { Stringified } from '@rotko/penumbra-types/jsonified';
 import { AssetId } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 
 export interface NumerairesSlice {

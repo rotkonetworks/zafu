@@ -1,22 +1,22 @@
 {
   "name": "@repo/zcash-wasm",
-  "private": true,
-  "type": "module",
-  "description": "minimal zcash orchard key derivation for wasm",
   "version": "0.1.0",
+  "private": true,
   "license": "(MIT OR Apache-2.0)",
+  "description": "minimal zcash orchard key derivation for wasm",
+  "type": "module",
+  "main": "zcash_wasm.js",
   "files": [
     "zcash_wasm_bg.wasm",
     "zcash_wasm.js",
     "zcash_wasm.d.ts"
   ],
-  "main": "zcash_wasm.js",
-  "types": "zcash_wasm.d.ts",
   "exports": {
     ".": "./zcash_wasm.js",
     "./wasm": "./zcash_wasm_bg.wasm"
   },
   "sideEffects": [
     "./snippets/*"
-  ]
+  ],
+  "types": "zcash_wasm.d.ts"
 }

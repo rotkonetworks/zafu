@@ -8,20 +8,9 @@
 
 import { useState, useEffect } from 'react';
 import { useStore } from '../state';
-import { selectActiveNetwork, selectSelectedKeyInfo, keyRingSelector } from '../state/keyring';
+import { selectActiveNetwork, selectEffectiveKeyInfo, keyRingSelector } from '../state/keyring';
 import { getActiveWalletJson, selectActiveZcashWallet } from '../state/wallets';
 import { NETWORK_CONFIGS, type IbcNetwork, isIbcNetwork } from '../state/keyring/network-types';
-
-/** get penumbra address from FVK */
-async function getPenumbraAddress(fvkBytes: Uint8Array, index = 0): Promise<string> {
-  const { getAddressByIndex } = await import('@penumbra-zone/wasm/keys');
-  const { bech32mAddress } = await import('@penumbra-zone/bech32m/penumbra');
-  const { FullViewingKey } = await import('@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb');
-
-  const fvk = new FullViewingKey({ inner: fvkBytes });
-  const address = getAddressByIndex(fvk, index);
-  return bech32mAddress(address);
-}
 
 /** derive cosmos/ibc address from mnemonic */
 async function deriveCosmosAddress(mnemonic: string, prefix: string): Promise<string> {
@@ -41,25 +30,28 @@ async function derivePolkadotAddress(
 
 /** derive penumbra address from mnemonic */
 async function derivePenumbraAddress(mnemonic: string, index = 0): Promise<string> {
-  const { generateSpendKey, getFullViewingKey, getAddressByIndex } = await import('@penumbra-zone/wasm/keys');
+  const { generateSpendKey, getFullViewingKey, getAddressByIndex } = await import('@rotko/penumbra-wasm/keys');
   const { bech32mAddress } = await import('@penumbra-zone/bech32m/penumbra');
 
-  const spendKey = generateSpendKey(mnemonic);
-  const fvk = getFullViewingKey(spendKey);
-  const address = getAddressByIndex(fvk, index);
+  const spendKey = await generateSpendKey(mnemonic);
+  const fvk = await getFullViewingKey(spendKey);
+  const address = await getAddressByIndex(fvk, index);
   return bech32mAddress(address);
 }
 
-/** derive zcash orchard address from mnemonic */
+/** derive zcash orchard address from mnemonic (requires 24-word seed) */
 async function deriveZcashAddress(mnemonic: string, account = 0, mainnet = true): Promise<string> {
-  const zcashWasm = await import('@repo/zcash-wasm');
-  await zcashWasm.default();
+  // load from extension root where CopyPlugin places the WASM
+  const wasmJsUrl = chrome.runtime.getURL('zafu-wasm/zafu_wasm.js');
+  const wasmBinaryUrl = chrome.runtime.getURL('zafu-wasm/zafu_wasm_bg.wasm');
+  const zcashWasm = await import(/* webpackIgnore: true */ wasmJsUrl);
+  await zcashWasm.default(wasmBinaryUrl);
   return zcashWasm.derive_zcash_address(mnemonic, account, mainnet);
 }
 
 export function useActiveAddress() {
   const activeNetwork = useStore(selectActiveNetwork);
-  const selectedKeyInfo = useStore(selectSelectedKeyInfo);
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const keyRing = useStore(keyRingSelector);
   const penumbraWallet = useStore(getActiveWalletJson);
   const zcashWallet = useStore(selectActiveZcashWallet);
@@ -132,11 +124,14 @@ export function useActiveAddress() {
 
         // zigner-zafu vault or fallback - use stored viewing keys
         if (activeNetwork === 'penumbra' && penumbraWallet?.fullViewingKey) {
-          const fvkHex = penumbraWallet.fullViewingKey;
-          const fvkBytes = new Uint8Array(
-            fvkHex.match(/.{1,2}/g)?.map(byte => parseInt(byte, 16)) ?? []
-          );
-          const addr = await getPenumbraAddress(fvkBytes, 0);
+          const { FullViewingKey } = await import('@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb');
+          const { getAddressByIndex } = await import('@rotko/penumbra-wasm/keys');
+          const { bech32mAddress } = await import('@penumbra-zone/bech32m/penumbra');
+
+          // fullViewingKey is stored as JSON string: {"inner":"base64..."}
+          const fvk = FullViewingKey.fromJsonString(penumbraWallet.fullViewingKey);
+          const address = await getAddressByIndex(fvk, 0);
+          const addr = bech32mAddress(address);
           if (!cancelled) setAddress(addr);
           if (!cancelled) setLoading(false);
           return;

@@ -1,6 +1,6 @@
 import { ValueView } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { ValueComponent } from './value';
-import { getFormattedAmtFromValueView } from '@penumbra-zone/types/value-view';
+import { getFormattedAmtFromValueView } from '@rotko/penumbra-types/value-view';
 
 interface ValueViewProps {
   view: ValueView | undefined;
@@ -9,6 +9,8 @@ interface ValueViewProps {
   showValue?: boolean;
   showIcon?: boolean;
   size?: 'default' | 'sm';
+  currentBlockHeight?: number;
+  validatorName?: string;
 }
 
 export const ValueViewComponent = ({
@@ -18,6 +20,8 @@ export const ValueViewComponent = ({
   showValue = true,
   showIcon = true,
   size = 'default',
+  currentBlockHeight,
+  validatorName,
 }: ValueViewProps) => {
   if (!view) {
     return null;
@@ -38,6 +42,8 @@ export const ValueViewComponent = ({
         showValue={showValue}
         showDenom={showDenom}
         size={size}
+        currentBlockHeight={currentBlockHeight}
+        validatorName={validatorName}
       />
     );
   }
@@ -52,6 +58,8 @@ export const ValueViewComponent = ({
         showValue={showValue}
         showDenom={showDenom}
         size={size}
+        currentBlockHeight={currentBlockHeight}
+        validatorName={validatorName}
       />
     );
   }

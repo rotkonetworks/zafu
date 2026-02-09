@@ -24,19 +24,19 @@ import {
   getExchangeRateFromValidatorInfoResponse,
   getIdentityKeyFromValidatorInfoResponse,
 } from '@penumbra-zone/getters/validator-info-response';
-import { addAmounts, toDecimalExchangeRate } from '@penumbra-zone/types/amount';
-import { assetPatterns, PRICE_RELEVANCE_THRESHOLDS } from '@penumbra-zone/types/assets';
-import type { BlockProcessorInterface } from '@penumbra-zone/types/block-processor';
-import { uint8ArrayToHex } from '@penumbra-zone/types/hex';
-import type { IndexedDbInterface } from '@penumbra-zone/types/indexed-db';
-import type { ViewServerInterface } from '@penumbra-zone/types/servers';
-import { ScanBlockResult } from '@penumbra-zone/types/state-commitment-tree';
+import { addAmounts, toDecimalExchangeRate } from '@rotko/penumbra-types/amount';
+import { assetPatterns, PRICE_RELEVANCE_THRESHOLDS } from '@rotko/penumbra-types/assets';
+import type { BlockProcessorInterface } from '@rotko/penumbra-types/block-processor';
+import { uint8ArrayToHex } from '@rotko/penumbra-types/hex';
+import type { IndexedDbInterface } from '@rotko/penumbra-types/indexed-db';
+import type { ViewServerInterface } from '@rotko/penumbra-types/servers';
+import { ScanBlockResult } from '@rotko/penumbra-types/state-commitment-tree';
 import {
   computePositionId,
   getLpNftMetadata,
   decryptPositionMetadata,
-} from '@penumbra-zone/wasm/dex';
-import { customizeSymbol } from '@penumbra-zone/wasm/metadata';
+} from '@rotko/penumbra-wasm/dex';
+import { customizeSymbol } from '@rotko/penumbra-wasm/metadata';
 import { backOff } from 'exponential-backoff';
 import { updatePricesFromSwaps } from './helpers/price-indexer';
 import { processActionDutchAuctionEnd } from './helpers/process-action-dutch-auction-end';
@@ -48,7 +48,7 @@ import {
   FullViewingKey,
   IdentityKey,
 } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
-import { getDelegationTokenMetadata } from '@penumbra-zone/wasm/stake';
+import { getDelegationTokenMetadata } from '@rotko/penumbra-wasm/stake';
 import { toPlainMessage } from '@bufbuild/protobuf';
 import { getAssetIdFromGasPrices } from '@penumbra-zone/getters/compact-block';
 import { getSpendableNoteRecordCommitment } from '@penumbra-zone/getters/spendable-note-record';
@@ -59,7 +59,7 @@ import { TransactionId } from '@penumbra-zone/protobuf/penumbra/core/txhash/v1/t
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
 import { FmdParameters } from '@penumbra-zone/protobuf/penumbra/core/component/shielded_pool/v1/shielded_pool_pb';
 import { shouldSkipTrialDecrypt } from './helpers/skip-trial-decrypt';
-import { assetIdFromBaseDenom } from '@penumbra-zone/wasm/asset';
+import { assetIdFromBaseDenom } from '@rotko/penumbra-wasm/asset';
 
 declare global {
   // eslint-disable-next-line no-var -- expected globals
@@ -252,11 +252,11 @@ export class BlockProcessor implements BlockProcessorInterface {
         }
       }
 
-      if (appParams.shieldedPoolParams?.fmdMetaParams) {
+      if (appParams.shieldedPoolParams?.fixedFmdParams) {
         await this.indexedDb.saveFmdParams(
           new FmdParameters({
-            precisionBits: 0,
-            asOfBlockHeight: appParams.shieldedPoolParams.fmdMetaParams.fmdGracePeriodBlocks,
+            precisionBits: appParams.shieldedPoolParams.fixedFmdParams.precisionBits,
+            asOfBlockHeight: appParams.shieldedPoolParams.fixedFmdParams.asOfBlockHeight,
           }),
         );
       }

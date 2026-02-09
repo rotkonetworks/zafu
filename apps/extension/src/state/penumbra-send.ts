@@ -11,6 +11,7 @@ import { Address } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
 import { Value } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
 import { MemoPlaintext } from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
+import { FeeTier_Tier } from '@penumbra-zone/protobuf/penumbra/core/component/fee/v1/fee_pb';
 import { getAssetIdFromValueView, getDisplayDenomExponentFromValueView } from '@penumbra-zone/getters/value-view';
 import { viewClient } from '../clients';
 
@@ -91,6 +92,7 @@ export const createPenumbraSendSlice: SliceCreator<PenumbraSendSlice> = (set, ge
       }
 
       const planRequest = new TransactionPlannerRequest({
+        source: { account: 0 }, // spend from account 0
         outputs: [
           {
             address: new Address({ altBech32m: recipient }),
@@ -106,7 +108,7 @@ export const createPenumbraSendSlice: SliceCreator<PenumbraSendSlice> = (set, ge
         }) : undefined,
         feeMode: {
           case: 'autoFee',
-          value: { feeTier: 0 }, // low fee
+          value: { feeTier: FeeTier_Tier.LOW },
         },
       });
 

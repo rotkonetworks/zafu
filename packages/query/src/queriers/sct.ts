@@ -1,7 +1,7 @@
 import { Client } from '@connectrpc/connect';
 import { createClient } from './utils';
 import { SctService } from '@penumbra-zone/protobuf';
-import { SctQuerierInterface } from '@penumbra-zone/types/querier';
+import { SctQuerierInterface } from '@rotko/penumbra-types/querier';
 import {
   TimestampByHeightRequest,
   TimestampByHeightResponse,

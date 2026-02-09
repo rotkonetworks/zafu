@@ -4,9 +4,9 @@ import { createGrpcWebTransport } from '@connectrpc/connect-web';
 import { createClient } from '@connectrpc/connect';
 import { FullViewingKey, WalletId } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
 import { localExtStorage } from '@repo/storage-chrome/local';
-import { onboardGrpcEndpoint, onboardWallet } from '@repo/storage-chrome/onboard';
+import { getWalletFromStorage } from '@repo/storage-chrome/onboard';
 import { Services } from '@repo/context';
-import { WalletServices } from '@penumbra-zone/types/services';
+import { WalletServices } from '@rotko/penumbra-types/services';
 import { AssetId } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { SENTINEL_U64_MAX } from './utils/sentinel';
 
@@ -24,24 +24,68 @@ export const isPenumbraEnabled = async (): Promise<boolean> => {
   return enabledNetworks.includes('penumbra');
 };
 
+// Default Penumbra gRPC endpoint
+const DEFAULT_PENUMBRA_ENDPOINT = 'https://penumbra.rotko.net';
+
+/**
+ * Get the Penumbra gRPC endpoint from storage or use default
+ */
+const getPenumbraEndpoint = async (): Promise<string> => {
+  // First try the new networkEndpoints object (from Network Endpoints UI)
+  const networkEndpoints = await localExtStorage.get('networkEndpoints');
+  if (networkEndpoints?.penumbra) {
+    return networkEndpoints.penumbra;
+  }
+
+  // Then try the legacy grpcEndpoint field (for backwards compat)
+  const legacyEndpoint = await localExtStorage.get('grpcEndpoint');
+  if (legacyEndpoint) {
+    return legacyEndpoint;
+  }
+
+  // Fall back to default
+  return DEFAULT_PENUMBRA_ENDPOINT;
+};
+
 export const startWalletServices = async () => {
   // privacy gate: check if penumbra is enabled before making network connections
   const enabled = await isPenumbraEnabled();
+  console.log('[sync] isPenumbraEnabled:', enabled);
   if (!enabled) {
-    console.log('penumbra not enabled, skipping wallet services initialization');
+    console.log('[sync] penumbra not enabled, skipping wallet services initialization');
     // return a stub services object that throws on access
     return {
       getWalletServices: () => Promise.reject(new Error('penumbra network not enabled')),
     } as Services;
   }
 
-  const wallet = await onboardWallet();
-  const grpcEndpoint = await onboardGrpcEndpoint();
+  console.log('[sync] starting wallet services...');
+
+  // Non-blocking wallet check (unlike onboardWallet which waits forever)
+  const wallet = await getWalletFromStorage();
+  if (!wallet) {
+    console.log('[sync] no penumbra wallet found in storage, sync will start when wallet is created');
+    // Return stub - sync will be triggered when wallet is created via keyring
+    return {
+      getWalletServices: () => Promise.reject(new Error('no penumbra wallet configured')),
+    } as Services;
+  }
+  console.log('[sync] wallet loaded:', wallet.id.slice(0, 20) + '...');
+
+  const grpcEndpoint = await getPenumbraEndpoint();
+  console.log('[sync] grpc endpoint:', grpcEndpoint);
+
   const numeraires = await localExtStorage.get('numeraires');
+  console.log('[sync] getting chainId from endpoint...');
   const chainId = await getChainId(grpcEndpoint);
+  console.log('[sync] chainId:', chainId);
+
   const walletCreationBlockHeight = await localExtStorage.get('walletCreationBlockHeight');
   const compactFrontierBlockHeight = await localExtStorage.get('compactFrontierBlockHeight');
+  console.log('[sync] walletCreationBlockHeight:', walletCreationBlockHeight);
+  console.log('[sync] compactFrontierBlockHeight:', compactFrontierBlockHeight);
 
+  console.log('[sync] creating Services instance...');
   const services = new Services({
     grpcEndpoint,
     chainId,
@@ -52,7 +96,11 @@ export const startWalletServices = async () => {
     compactFrontierBlockHeight,
   });
 
-  void syncLastBlockToStorage(await services.getWalletServices());
+  console.log('[sync] getting wallet services (this starts syncing)...');
+  const walletServices = await services.getWalletServices();
+  console.log('[sync] wallet services ready, starting block sync subscription...');
+
+  void syncLastBlockToStorage(walletServices);
 
   return services;
 };
@@ -90,15 +138,19 @@ const getChainId = async (baseUrl: string) => {
  */
 const syncLastBlockToStorage = async ({ indexedDb }: Pick<WalletServices, 'indexedDb'>) => {
   const dbHeight = await indexedDb.getFullSyncHeight();
+  console.log('[sync] initial dbHeight from indexedDb:', dbHeight);
 
   if (dbHeight != null && dbHeight !== SENTINEL_U64_MAX) {
     await localExtStorage.set('fullSyncHeight', Number(dbHeight));
+    console.log('[sync] saved initial fullSyncHeight:', Number(dbHeight));
   }
 
+  console.log('[sync] subscribing to FULL_SYNC_HEIGHT updates...');
   const sub = indexedDb.subscribe('FULL_SYNC_HEIGHT');
   for await (const { value } of sub) {
     if (value !== SENTINEL_U64_MAX) {
       await localExtStorage.set('fullSyncHeight', Number(value));
+      console.log('[sync] fullSyncHeight updated:', Number(value));
     }
   }
 };

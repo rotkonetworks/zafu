@@ -7,13 +7,13 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeftIcon, CopyIcon, CheckIcon } from '@radix-ui/react-icons';
 import { PopupPath } from '../paths';
 import { useStore } from '../../../state';
-import { activeNetworkSelector } from '../../../state/active-network';
+import { selectActiveNetwork } from '../../../state/keyring';
 import { useActiveAddress } from '../../../hooks/use-address';
 import QRCode from 'qrcode';
 
 export function ReceivePage() {
   const navigate = useNavigate();
-  const { activeNetwork } = useStore(activeNetworkSelector);
+  const activeNetwork = useStore(selectActiveNetwork);
   const { address, loading } = useActiveAddress();
   const [copied, setCopied] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);

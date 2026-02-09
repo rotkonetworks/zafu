@@ -3,7 +3,7 @@ import { bech32mAddress } from '@penumbra-zone/bech32m/penumbra';
 import { Address, FullViewingKey } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
 import { ActionPlan } from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
 // Dynamic import to avoid bundling WASM into initial chunks (service worker)
-// import { isControlledAddress } from '@penumbra-zone/wasm/address';
+// import { isControlledAddress } from '@rotko/penumbra-wasm/address';
 import { Code, ConnectError } from '@connectrpc/connect';
 
 /** guard nonzero inner */
@@ -91,7 +91,7 @@ export async function assertValidActionPlan(
         }
 
         // Dynamic import to avoid bundling WASM into initial chunks (service worker)
-        const { isControlledAddress } = await import('@penumbra-zone/wasm/address');
+        const { isControlledAddress } = await import('@rotko/penumbra-wasm/address');
 
         if (
           !isControlledAddress(

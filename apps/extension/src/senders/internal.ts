@@ -1,7 +1,12 @@
+// In dev mode, use runtime ID (Chrome assigns dynamic ID for unpacked extensions)
+// In prod, use the hardcoded ZIGNER constant
+const getExtensionId = () => (globalThis.__DEV__ ? chrome.runtime.id : ZIGNER);
+const getExtensionOrigin = () => (globalThis.__DEV__ ? `chrome-extension://${chrome.runtime.id}` : ZIGNER_ORIGIN);
+
 export type ValidInternalSender = chrome.runtime.MessageSender & {
-  id: typeof ZIGNER;
-  url?: `${typeof ZIGNER_ORIGIN}/${string}`;
-  origin?: typeof ZIGNER_ORIGIN;
+  id: string;
+  url?: string;
+  origin?: string;
 };
 
 /**
@@ -26,19 +31,22 @@ export const isValidInternalSender = (
 export function assertValidInternalSender(
   sender?: chrome.runtime.MessageSender,
 ): asserts sender is ValidInternalSender {
+  const extensionId = getExtensionId();
+  const extensionOrigin = getExtensionOrigin();
+
   // all internal senders will possess the extension id
-  if (sender?.id !== ZIGNER) {
-    throw new Error(`Sender id is not ${ZIGNER}`, { cause: sender });
+  if (sender?.id !== extensionId) {
+    throw new Error(`Sender id is not ${extensionId}`, { cause: sender });
   }
   // but so will content scripts, so there's more to check.
 
   // all extension pages have the extension origin,
   if (sender.origin) {
     // check the origin
-    if (sender.origin === ZIGNER_ORIGIN) {
+    if (sender.origin === extensionOrigin) {
       return; // valid
     }
-    throw new Error(`Sender origin is not ${ZIGNER_ORIGIN}`, { cause: sender });
+    throw new Error(`Sender origin is not ${extensionOrigin}`, { cause: sender });
   }
   // but extension workers don't have any origin, so there's more to check.
 
@@ -48,10 +56,10 @@ export function assertValidInternalSender(
   // - and aren't in a tab
   if (!sender.documentId && !sender.tab && sender.url) {
     // check the url's origin
-    if (new URL(sender.url).origin === ZIGNER_ORIGIN) {
+    if (new URL(sender.url).origin === extensionOrigin) {
       return; //valid
     }
-    throw new Error(`Sender URL is from ${ZIGNER_ORIGIN}`, { cause: sender });
+    throw new Error(`Sender URL is from ${extensionOrigin}`, { cause: sender });
   }
 
   // anything else
