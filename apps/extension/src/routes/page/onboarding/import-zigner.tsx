@@ -111,7 +111,7 @@ export const ImportZigner = () => {
         const zignerData: ZignerZafuImport = {
           viewingKey: zcashWalletImport.orchardFvk
             ? btoa(String.fromCharCode(...zcashWalletImport.orchardFvk))
-            : undefined,
+            : zcashWalletImport.ufvk ?? undefined,
           accountIndex: zcashWalletImport.accountIndex,
           deviceId: `zcash-${Date.now()}`,
         };

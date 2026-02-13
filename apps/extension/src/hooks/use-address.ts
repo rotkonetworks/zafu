@@ -39,14 +39,28 @@ async function derivePenumbraAddress(mnemonic: string, index = 0): Promise<strin
   return bech32mAddress(address);
 }
 
-/** derive zcash orchard address from mnemonic (requires 24-word seed) */
-async function deriveZcashAddress(mnemonic: string, account = 0, mainnet = true): Promise<string> {
-  // load from extension root where CopyPlugin places the WASM
+/** load zcash wasm module from extension root (cached after first init) */
+let zcashWasmCache: unknown;
+async function loadZcashWasm() {
+  if (zcashWasmCache) return zcashWasmCache;
   const wasmJsUrl = chrome.runtime.getURL('zafu-wasm/zafu_wasm.js');
   const wasmBinaryUrl = chrome.runtime.getURL('zafu-wasm/zafu_wasm_bg.wasm');
   const zcashWasm = await import(/* webpackIgnore: true */ wasmJsUrl);
   await zcashWasm.default(wasmBinaryUrl);
+  zcashWasmCache = zcashWasm;
+  return zcashWasm;
+}
+
+/** derive zcash orchard address from mnemonic (requires 24-word seed) */
+async function deriveZcashAddress(mnemonic: string, account = 0, mainnet = true): Promise<string> {
+  const zcashWasm = await loadZcashWasm();
   return zcashWasm.derive_zcash_address(mnemonic, account, mainnet);
+}
+
+/** derive zcash address from UFVK string (for watch-only wallets) */
+async function deriveZcashAddressFromUfvk(ufvk: string): Promise<string> {
+  const zcashWasm = await loadZcashWasm();
+  return zcashWasm.address_from_ufvk(ufvk);
 }
 
 export function useActiveAddress() {
@@ -137,10 +151,24 @@ export function useActiveAddress() {
           return;
         }
 
-        if (activeNetwork === 'zcash' && zcashWallet?.address) {
-          if (!cancelled) setAddress(zcashWallet.address);
-          if (!cancelled) setLoading(false);
-          return;
+        if (activeNetwork === 'zcash' && zcashWallet) {
+          // use stored address if available
+          if (zcashWallet.address) {
+            if (!cancelled) setAddress(zcashWallet.address);
+            if (!cancelled) setLoading(false);
+            return;
+          }
+          // derive from UFVK if orchardFvk is a ufvk string (uview1.../uviewtest1...)
+          if (zcashWallet.orchardFvk?.startsWith('uview')) {
+            try {
+              const addr = await deriveZcashAddressFromUfvk(zcashWallet.orchardFvk);
+              if (!cancelled) setAddress(addr);
+              if (!cancelled) setLoading(false);
+              return;
+            } catch (err) {
+              console.error('failed to derive address from ufvk:', err);
+            }
+          }
         }
 
         // zigner-zafu vault - check insensitive data for stored keys
@@ -167,7 +195,7 @@ export function useActiveAddress() {
 
     void deriveAddress();
     return () => { cancelled = true; };
-  }, [activeNetwork, selectedKeyInfo?.id, selectedKeyInfo?.type, penumbraWallet?.fullViewingKey, zcashWallet?.address, keyRing]);
+  }, [activeNetwork, selectedKeyInfo?.id, selectedKeyInfo?.type, penumbraWallet?.fullViewingKey, zcashWallet?.address, zcashWallet?.orchardFvk, keyRing]);
 
   return { address, loading };
 }

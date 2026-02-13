@@ -1,17 +1,23 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
+ * derive zcash unified full viewing key (ufvk) from mnemonic
+ *
+ * returns ufvk string (uview1...) for watch-only wallet import
+ */
+export function derive_zcash_ufvk(mnemonic: string, account: number, mainnet: boolean): string;
+/**
  * derive zcash orchard full viewing key bytes from mnemonic
  *
  * returns 96-byte fvk as hex string
  */
 export function derive_zcash_fvk_bytes(mnemonic: string, account: number): string;
 /**
- * derive zcash unified full viewing key (ufvk) from mnemonic
+ * derive zcash unified address from a UFVK string (uview1... or uviewtest1...)
  *
- * returns ufvk string (uview1...) for watch-only wallet import
+ * used by watch-only wallets (zigner import) to display receive address
  */
-export function derive_zcash_ufvk(mnemonic: string, account: number, mainnet: boolean): string;
+export function address_from_ufvk(ufvk_str: string): string;
 /**
  * derive zcash orchard address from mnemonic
  *
@@ -23,6 +29,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
+  readonly address_from_ufvk: (a: number, b: number) => [number, number, number, number];
   readonly derive_zcash_address: (a: number, b: number, c: number, d: number) => [number, number, number, number];
   readonly derive_zcash_fvk_bytes: (a: number, b: number, c: number) => [number, number, number, number];
   readonly derive_zcash_ufvk: (a: number, b: number, c: number, d: number) => [number, number, number, number];
