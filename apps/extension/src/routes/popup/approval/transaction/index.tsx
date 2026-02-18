@@ -53,6 +53,7 @@ export const TransactionApproval = () => {
     sendResponse,
     invalidPlan,
     isAirgap,
+    effectHash,
     setAuthorizationData,
   } = useStore(txApprovalSelector);
 
@@ -80,8 +81,16 @@ export const TransactionApproval = () => {
   };
 
   const startAirgapSigning = () => {
+    if (!effectHash) {
+      throw new Error('Effect hash not available for airgap signing');
+    }
     const plan = new TransactionPlan(authorizeRequest.plan);
-    const hex = encodePlanToQR(plan);
+    // Convert hex string back to bytes
+    const hashBytes = new Uint8Array(effectHash.length / 2);
+    for (let i = 0; i < hashBytes.length; i++) {
+      hashBytes[i] = parseInt(effectHash.substring(i * 2, i * 2 + 2), 16);
+    }
+    const hex = encodePlanToQR(plan, hashBytes);
     setQrHex(hex);
     setAirgapStep('show-qr');
   };

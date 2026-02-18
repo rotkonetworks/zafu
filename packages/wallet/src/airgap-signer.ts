@@ -2,7 +2,6 @@ import {
   AuthorizationData,
   TransactionPlan,
 } from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
-import { blake2b } from '@noble/hashes/blake2b';
 import { SpendAuthSignature } from '@penumbra-zone/protobuf/penumbra/crypto/decaf377_rdsa/v1/decaf377_rdsa_pb';
 import { EffectHash } from '@penumbra-zone/protobuf/penumbra/core/txhash/v1/txhash_pb';
 
@@ -34,9 +33,15 @@ import { EffectHash } from '@penumbra-zone/protobuf/penumbra/core/txhash/v1/txha
  */
 
 /**
- * Encode a TransactionPlan to hex format for QR code display
+ * Encode a TransactionPlan to hex format for QR code display.
+ * The effectHash must be pre-computed using WASM (computeEffectHash from @rotko/penumbra-wasm)
+ * since it requires the FullViewingKey to build the correct Penumbra structured hash.
  */
-export function encodePlanToQR(plan: TransactionPlan): string {
+export function encodePlanToQR(plan: TransactionPlan, effectHash: Uint8Array): string {
+  if (effectHash.length !== 64) {
+    throw new Error(`Effect hash must be 64 bytes, got ${effectHash.length}`);
+  }
+
   const metadata = extractAssetNames(plan);
 
   // Prelude: Substrate format (0x53) + Penumbra (0x03) + Transaction (0x10)
@@ -51,9 +56,6 @@ export function encodePlanToQR(plan: TransactionPlan): string {
   // Plan length as 4-byte LE
   const planLenBytes = new Uint8Array(4);
   new DataView(planLenBytes.buffer).setUint32(0, planBytes.length, true);
-
-  // Compute effect hash
-  const effectHash = computeEffectHash(plan);
 
   // Extract randomizers from plan actions
   const spendRandomizers = extractSpendRandomizers(plan);
@@ -183,12 +185,11 @@ export function parseAuthorizationQR(hex: string): AuthorizationData {
 }
 
 /**
- * Validate that the AuthorizationData matches the TransactionPlan
+ * Validate that the AuthorizationData matches the expected effect hash and plan structure.
+ * The expectedEffectHash must be pre-computed using WASM.
  */
-export function validateAuthorization(plan: TransactionPlan, auth: AuthorizationData): void {
-  const expectedHash = computeEffectHash(plan);
-
-  if (!auth.effectHash?.inner || !arraysEqual(expectedHash, auth.effectHash.inner)) {
+export function validateAuthorization(plan: TransactionPlan, auth: AuthorizationData, expectedEffectHash: Uint8Array): void {
+  if (!auth.effectHash?.inner || !arraysEqual(expectedEffectHash, auth.effectHash.inner)) {
     throw new Error('Effect hash mismatch - signatures do not match transaction plan');
   }
 
@@ -213,16 +214,6 @@ export function validateAuthorization(plan: TransactionPlan, auth: Authorization
 export function estimateQRCodeCount(bytes: number): number {
   const BYTES_PER_QR = 2900;
   return Math.ceil(bytes / BYTES_PER_QR);
-}
-
-/**
- * Compute the effect hash of a transaction plan
- *
- * Effect hash = BLAKE2b-512(plan_bytes)
- */
-export function computeEffectHash(plan: TransactionPlan): Uint8Array {
-  const planBytes = plan.toBinary();
-  return blake2b(planBytes, { dkLen: 64 });
 }
 
 function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {

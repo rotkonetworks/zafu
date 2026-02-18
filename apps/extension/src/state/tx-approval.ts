@@ -30,6 +30,7 @@ export interface TxApprovalSlice {
   invalidPlan?: Error;
   choice?: UserChoice;
   isAirgap?: boolean;
+  effectHash?: string;
   // Stored as unknown to avoid TS2589 with Zustand's Draft<JsonValue> recursion
   authorizationData?: unknown;
 
@@ -115,6 +116,7 @@ export const createTxApprovalSlice =
         state.txApproval.invalidPlan = invalidPlan;
         state.txApproval.transactionClassification = transactionClassification.type;
         state.txApproval.isAirgap = req.isAirgap ?? false;
+        state.txApproval.effectHash = req.effectHash;
 
         state.txApproval.choice = undefined;
         state.txApproval.authorizationData = undefined;
@@ -171,6 +173,7 @@ export const createTxApprovalSlice =
           state.txApproval.choice = undefined;
           state.txApproval.invalidPlan = undefined;
           state.txApproval.isAirgap = undefined;
+          state.txApproval.effectHash = undefined;
           state.txApproval.authorizationData = undefined;
 
           state.txApproval.asSender = undefined;
