@@ -7,11 +7,11 @@
   "scripts": {
     "add:tgz": "tsx scripts/add-tgz.ts",
     "all-check": "pnpm clean && pnpm install && pnpm lint:strict && pnpm build && pnpm test",
-    "build": "turbo build",
+    "build": "NODE_OPTIONS='--max-old-space-size=8192' turbo build",
     "clean": "turbo clean",
     "clean:modules": "rm -rf node_modules apps/*/node_modules packages/*/node_modules pnpm-lock.yaml",
     "clean:vitest-mjs": "find . -type f -name 'vite*.config.ts.timestamp-*-*.mjs' -ls -delete",
-    "dev": "turbo dev",
+    "dev": "NODE_OPTIONS='--max-old-space-size=8192' turbo dev",
     "format": "turbo format",
     "format:prettier": "prettier --write .",
     "format:syncpack": "syncpack format",

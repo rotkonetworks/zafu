@@ -53,18 +53,23 @@ interface ValueComponentProps {
   size: 'default' | 'sm';
   currentBlockHeight?: number;
   validatorName?: string;
+  onClaim?: () => void;
 }
 
 const UnbondingTooltipContent = ({
   info,
   currentBlockHeight,
+  onClaim,
 }: {
   info: UnbondingInfo;
   currentBlockHeight?: number;
+  onClaim?: () => void;
 }) => {
   const blocksRemaining = currentBlockHeight !== undefined
     ? Math.max(0, info.claimableAt - currentBlockHeight)
     : undefined;
+
+  const isReady = blocksRemaining === 0;
 
   return (
     <div className='flex flex-col gap-2 font-normal text-left'>
@@ -81,7 +86,7 @@ const UnbondingTooltipContent = ({
         <div>
           <span className='text-muted-foreground'>Current: </span>
           <span className='text-white font-mono'>{currentBlockHeight.toLocaleString()}</span>
-          {blocksRemaining === 0 ? (
+          {isReady ? (
             <span className='text-green-400 ml-2'>Ready!</span>
           ) : (
             <div className='text-orange-400 text-xs mt-1'>
@@ -97,6 +102,15 @@ const UnbondingTooltipContent = ({
         )}
         <div className='text-white break-all text-[10px] font-mono'>{info.validatorId}</div>
       </div>
+      {isReady && onClaim && (
+        <button
+          type='button'
+          onClick={e => { e.stopPropagation(); onClaim(); }}
+          className='mt-1 rounded-md bg-teal px-3 py-1.5 text-sm font-medium text-black hover:bg-teal/80 transition-colors'
+        >
+          Claim
+        </button>
+      )}
       <a
         href={UNBONDING_DOCS_URL}
         target='_blank'
@@ -120,6 +134,7 @@ export const ValueComponent = ({
   size,
   currentBlockHeight,
   validatorName,
+  onClaim,
 }: ValueComponentProps) => {
   const parsed = parseUnbondingToken(metadata);
   const unbondingInfo = parsed ? { ...parsed, validatorName } : null;
@@ -163,7 +178,7 @@ export const ValueComponent = ({
             </button>
           </TooltipTrigger>
           <TooltipContent side='top' sideOffset={8} className='max-w-[280px]'>
-            <UnbondingTooltipContent info={unbondingInfo} currentBlockHeight={currentBlockHeight} />
+            <UnbondingTooltipContent info={unbondingInfo} currentBlockHeight={currentBlockHeight} onClaim={onClaim} />
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
