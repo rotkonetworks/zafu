@@ -63,7 +63,7 @@
       "@bufbuild/protobuf": "^1.10.0",
       "@penumbra-zone/types": "npm:@rotko/penumbra-types@37.0.0",
       "@penumbra-zone/wasm": "npm:@rotko/penumbra-wasm@55.0.2",
-      "@rotko/penumbra-wasm": "../penumbra-web/packages/wasm/rotko-penumbra-wasm-55.0.2.tgz",
+      "@rotko/penumbra-wasm": "55.0.2",
       "@penumbra-zone/services": "npm:@rotko/penumbra-services@70.0.0"
     },
     "peerDependencyRules": {

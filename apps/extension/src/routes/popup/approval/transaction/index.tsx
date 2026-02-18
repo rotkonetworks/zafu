@@ -15,7 +15,7 @@ import { ChainRegistryClient } from '@penumbra-labs/registry';
 import { viewClient } from '../../../../clients';
 import { TransactionView } from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
 import { ConnectError } from '@connectrpc/connect';
-import { encodePlanToQR, parseAuthorizationQR } from '@repo/wallet/airgap-signer';
+import { encodePlanToQR, parseAuthorizationQR, validateAuthorization } from '@repo/wallet/airgap-signer';
 import { QrDisplay } from '../../../../shared/components/qr-display';
 import { QrScanner } from '../../../../shared/components/qr-scanner';
 import { Button } from '@repo/ui/components/ui/button';
@@ -80,16 +80,21 @@ export const TransactionApproval = () => {
     window.close();
   };
 
+  const hexToBytes = (h: string): Uint8Array => {
+    const bytes = new Uint8Array(h.length / 2);
+    for (let i = 0; i < bytes.length; i++) {
+      bytes[i] = parseInt(h.substring(i * 2, i * 2 + 2), 16);
+    }
+    return bytes;
+  };
+
   const startAirgapSigning = () => {
     if (!effectHash) {
-      throw new Error('Effect hash not available for airgap signing');
+      setScanError('Effect hash not available for airgap signing');
+      return;
     }
     const plan = new TransactionPlan(authorizeRequest.plan);
-    // Convert hex string back to bytes
-    const hashBytes = new Uint8Array(effectHash.length / 2);
-    for (let i = 0; i < hashBytes.length; i++) {
-      hashBytes[i] = parseInt(effectHash.substring(i * 2, i * 2 + 2), 16);
-    }
+    const hashBytes = hexToBytes(effectHash);
     const hex = encodePlanToQR(plan, hashBytes);
     setQrHex(hex);
     setAirgapStep('show-qr');
@@ -98,6 +103,10 @@ export const TransactionApproval = () => {
   const handleAirgapScan = (hex: string) => {
     try {
       const authData = parseAuthorizationQR(hex);
+      // Validate effect hash and signature counts match the plan
+      const plan = new TransactionPlan(authorizeRequest.plan);
+      const expectedHash = hexToBytes(effectHash!);
+      validateAuthorization(plan, authData, expectedHash);
       setAuthorizationData(authData.toJson());
       setChoice(UserChoice.Approved);
       sendResponse();

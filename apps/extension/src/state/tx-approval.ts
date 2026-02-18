@@ -60,11 +60,13 @@ export const createTxApprovalSlice =
         throw new Error('Another request is still pending');
       }
 
-      const fvk = await local.get('wallets').then(([wallet0]) => {
-        if (!wallet0) {
+      const fvk = await local.get('wallets').then(async wallets => {
+        const activeIdx = (await local.get('activeWalletIndex')) ?? 0;
+        const wallet = wallets[activeIdx];
+        if (!wallet) {
           throw new Error('No found wallet');
         }
-        return FullViewingKey.fromJsonString(wallet0.fullViewingKey);
+        return FullViewingKey.fromJsonString(wallet.fullViewingKey);
       });
 
       let invalidPlan: ConnectError | undefined;

@@ -25,7 +25,7 @@ export const getAuthorization = async (plan: TransactionPlan): Promise<Authoriza
   if (activeWallet) {
     const custodyType = getCustodyTypeName(activeWallet.custody);
     if (custodyType === 'airgapSigner') {
-      return getAirgapAuthorization(plan);
+      return getAirgapAuthorization(plan, activeWallet);
     }
   }
 
@@ -56,11 +56,12 @@ export const getAuthorization = async (plan: TransactionPlan): Promise<Authoriza
 };
 
 // Airgap flow: popup handles QR display/scan, returns AuthorizationData
-const getAirgapAuthorization = async (plan: TransactionPlan): Promise<AuthorizationData> => {
+const getAirgapAuthorization = async (
+  plan: TransactionPlan,
+  activeWallet: { fullViewingKey: string },
+): Promise<AuthorizationData> => {
   // Compute the correct effect hash using WASM (requires FVK, not spend key)
-  const wallets = await localExtStorage.get('wallets');
-  const activeIdx = (await localExtStorage.get('activeWalletIndex')) ?? 0;
-  const fvk = FullViewingKey.fromJsonString(wallets[activeIdx]!.fullViewingKey);
+  const fvk = FullViewingKey.fromJsonString(activeWallet.fullViewingKey);
   const effectHashBytes = await computeEffectHash(fvk, plan);
   const effectHashHex = Array.from(effectHashBytes, (b: number) => b.toString(16).padStart(2, '0')).join('');
 
@@ -88,7 +89,10 @@ const openWallet = async () => {
     .get('passwordKey')
     .then(passKeyJson => Key.fromJson(passKeyJson!));
 
-  const wallet = localExtStorage.get('wallets').then(wallets => Wallet.fromJson(wallets[0]!));
+  const wallet = localExtStorage.get('wallets').then(async wallets => {
+    const activeIdx = (await localExtStorage.get('activeWalletIndex')) ?? 0;
+    return Wallet.fromJson(wallets[activeIdx]!);
+  });
 
   return (await wallet).custody(await passKey);
 };
