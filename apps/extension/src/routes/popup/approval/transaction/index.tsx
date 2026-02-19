@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { MetadataFetchFn, TransactionViewComponent } from '@repo/ui/components/ui/tx';
 import { useStore } from '../../../../state';
 import { txApprovalSelector } from '../../../../state/tx-approval';
+import { PasswordGateModal } from '../../../../shared/components/password-gate';
 import { JsonViewer } from '@repo/ui/components/ui/json-viewer';
 import { AuthorizeRequest } from '@penumbra-zone/protobuf/penumbra/custody/v1/custody_pb';
 import { TransactionPlan } from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
@@ -63,6 +64,7 @@ export const TransactionApproval = () => {
   const [airgapStep, setAirgapStep] = useState<AirgapStep>('review');
   const [qrHex, setQrHex] = useState<string>('');
   const [scanError, setScanError] = useState<string | null>(null);
+  const [showPasswordGate, setShowPasswordGate] = useState(false);
 
   if (!authorizeRequest?.plan || !selectedTransactionView) {
     return null;
@@ -267,7 +269,18 @@ export const TransactionApproval = () => {
             </Button>
           </div>
         ) : (
-          <ApproveDeny approve={invalidPlan ? undefined : approve} deny={deny} wait={3} />
+          <>
+            <PasswordGateModal
+              open={showPasswordGate}
+              onConfirm={() => { setShowPasswordGate(false); approve(); }}
+              onCancel={() => setShowPasswordGate(false)}
+            />
+            <ApproveDeny
+              approve={invalidPlan ? undefined : () => setShowPasswordGate(true)}
+              deny={deny}
+              wait={3}
+            />
+          </>
         )}
       </div>
     </div>

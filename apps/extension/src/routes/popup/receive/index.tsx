@@ -23,6 +23,7 @@ import { useIbcChains, type IbcChain } from '../../../hooks/ibc-chains';
 import { useCosmosAssets, type CosmosAsset } from '../../../hooks/cosmos-balance';
 import { useCosmosIbcTransfer } from '../../../hooks/cosmos-signer';
 import { type CosmosChainId, COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
+import { usePasswordGate } from '../../../hooks/password-gate';
 import QRCode from 'qrcode';
 
 /** small copy button with feedback */
@@ -131,6 +132,7 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
   const chainBtnRef = useRef<HTMLButtonElement>(null);
   const assetBtnRef = useRef<HTMLButtonElement>(null);
   const cosmosIbc = useCosmosIbcTransfer();
+  const { requestAuth, PasswordModal } = usePasswordGate();
 
   // generate ephemeral deposit address when chain is selected
   useEffect(() => {
@@ -178,6 +180,9 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
   const handleShield = useCallback(async () => {
     if (!canSubmit || !selectedIbcChain || !selectedAsset || !cosmosChainId) return;
 
+    const authorized = await requestAuth();
+    if (!authorized) return;
+
     setTxStatus('signing');
     setTxError('');
 
@@ -197,7 +202,7 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
       setTxStatus('error');
       setTxError(err instanceof Error ? err.message : 'transaction failed');
     }
-  }, [canSubmit, selectedIbcChain, selectedAsset, cosmosChainId, depositAddress, amount, cosmosIbc]);
+  }, [canSubmit, selectedIbcChain, selectedAsset, cosmosChainId, depositAddress, amount, cosmosIbc, requestAuth]);
 
   const handleReset = useCallback(() => {
     setTxStatus('idle');
@@ -208,6 +213,7 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
 
   return (
     <div className='w-full border-t border-border/40 pt-4'>
+      {PasswordModal}
       <div className='mb-3 text-sm font-medium'>Shield Assets via IBC</div>
 
       {/* source chain selector */}

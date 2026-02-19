@@ -28,6 +28,7 @@ import { useCosmosAssets, type CosmosAsset } from '../../../hooks/cosmos-balance
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
 import { COSMOS_CHAINS, type CosmosChainId, isValidCosmosAddress, getChainFromAddress } from '@repo/wallet/networks/cosmos/chains';
 import { cn } from '@repo/ui/lib/utils';
+import { usePasswordGate } from '../../../hooks/password-gate';
 import { isDedicatedWindow } from '../../../utils/popup-detection';
 
 /** IBC chain selector dropdown */
@@ -310,6 +311,7 @@ function CosmosSend({ sourceChainId }: { sourceChainId: CosmosChainId }) {
   // signing hooks
   const cosmosSend = useCosmosSend();
   const cosmosIbcTransfer = useCosmosIbcTransfer();
+  const { requestAuth, PasswordModal } = usePasswordGate();
 
   // set max amount for selected asset
   const handleSetMax = useCallback(() => {
@@ -367,6 +369,9 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
   const handleSubmit = useCallback(async () => {
     if (!canSubmit || !selectedAsset) return;
 
+    const authorized = await requestAuth();
+    if (!authorized) return;
+
     setTxStatus('signing');
     setTxError(undefined);
 
@@ -415,10 +420,11 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
       setTxStatus('error');
       setTxError(err instanceof Error ? err.message : 'transaction failed');
     }
-  }, [canSubmit, isSameChain, sourceChainId, effectiveDestChainId, recipient, amount, selectedAsset, accountIndex, route, cosmosSend, cosmosIbcTransfer, refetchAssets, recordUsage, shouldSuggestSave]);
+  }, [canSubmit, isSameChain, sourceChainId, effectiveDestChainId, recipient, amount, selectedAsset, accountIndex, route, cosmosSend, cosmosIbcTransfer, refetchAssets, recordUsage, shouldSuggestSave, requestAuth]);
 
   return (
     <div className='flex flex-col gap-4'>
+      {PasswordModal}
       {/* account selector */}
       <div>
         <label className='mb-1 block text-xs text-muted-foreground'>account</label>
