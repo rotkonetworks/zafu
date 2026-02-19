@@ -72,16 +72,13 @@ export const PopupLayout = () => {
   const showTabs = showChrome && !matchesRoute(location.pathname, hiddenTabRoutes);
 
   return (
-    <div className='relative flex grow flex-col bg-card-radial contain-layout'>
+    <div className='relative flex h-full flex-col bg-card-radial contain-layout overflow-hidden'>
       {showChrome && <AppHeader onMenuClick={() => setMenuOpen(true)} />}
       <div
-        className='flex-1 overflow-y-auto transform-gpu'
+        className='min-h-0 flex-1 overflow-y-auto transform-gpu'
         style={{ paddingBottom: showTabs ? BOTTOM_TABS_HEIGHT : 0 }}
       >
-        {/* content area with CSS containment for isolated repaints */}
-        <div className='contain-content'>
-          <Outlet />
-        </div>
+        <Outlet />
       </div>
       {showTabs && <BottomTabs tabs={tabs} />}
       {showChrome && <MenuDrawer open={menuOpen} onClose={() => setMenuOpen(false)} />}

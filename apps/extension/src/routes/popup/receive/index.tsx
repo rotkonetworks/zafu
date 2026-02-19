@@ -71,18 +71,33 @@ function getKnownIbcChains(): IbcChain[] {
     }));
 }
 
-/** merge registry chains with our known chains (dedup by chainId) */
+/** merge registry chains with our known chains (prefer known data for channel info) */
 function mergeIbcChains(registryChains: IbcChain[]): IbcChain[] {
   const known = getKnownIbcChains();
-  const seen = new Set(registryChains.map(c => c.chainId));
-  // add any known chains not already in the registry
+  const result: IbcChain[] = [];
+  const seen = new Set<string>();
+
+  // start with known chains (they have correct counterpartyChannelId)
   for (const chain of known) {
-    if (!seen.has(chain.chainId)) {
-      registryChains.push(chain);
+    // enrich with registry images if available
+    const reg = registryChains.find(r => r.chainId === chain.chainId);
+    result.push({
+      ...chain,
+      images: reg?.images ?? chain.images,
+      channelId: reg?.channelId ?? chain.channelId,
+    });
+    seen.add(chain.chainId);
+  }
+
+  // add any registry chains we don't already have (if they have a cosmos mapping)
+  for (const chain of registryChains) {
+    if (!seen.has(chain.chainId) && ibcChainToCosmosId(chain) !== undefined) {
+      result.push(chain);
+      seen.add(chain.chainId);
     }
   }
-  // filter to only chains we have a CosmosChainId mapping for
-  return registryChains.filter(c => ibcChainToCosmosId(c) !== undefined);
+
+  return result;
 }
 
 /** IBC deposit section - shield assets from cosmos into penumbra */
@@ -113,6 +128,8 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
   );
   const assetsEnabled = !!cosmosChainId;
 
+  const chainBtnRef = useRef<HTMLButtonElement>(null);
+  const assetBtnRef = useRef<HTMLButtonElement>(null);
   const cosmosIbc = useCosmosIbcTransfer();
 
   // generate ephemeral deposit address when chain is selected
@@ -196,17 +213,22 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
       {/* source chain selector */}
       <div className='mb-3'>
         <div className='mb-1 text-xs text-muted-foreground'>source chain</div>
-        <div className='relative'>
-          <button
-            onClick={() => setShowChainDropdown(prev => !prev)}
-            disabled={chainsLoading}
-            className='flex w-full items-center justify-between rounded-lg border border-border bg-input px-3 py-2.5 text-sm text-foreground transition-colors duration-100 hover:border-zigner-gold disabled:opacity-50'
-          >
-            <span>{selectedIbcChain?.displayName ?? (chainsLoading ? 'loading...' : 'select source chain')}</span>
-            <ChevronDownIcon className='h-4 w-4 text-muted-foreground' />
-          </button>
-          {showChainDropdown && (
-            <div className='absolute left-0 top-full z-50 mt-1 w-full rounded-lg border border-border bg-popover shadow-lg'>
+        <button
+          ref={chainBtnRef}
+          onClick={() => setShowChainDropdown(prev => !prev)}
+          disabled={chainsLoading}
+          className='flex w-full items-center justify-between rounded-lg border border-border bg-input px-3 py-2.5 text-sm text-foreground transition-colors duration-100 hover:border-zigner-gold disabled:opacity-50'
+        >
+          <span>{selectedIbcChain?.displayName ?? (chainsLoading ? 'loading...' : 'select source chain')}</span>
+          <ChevronDownIcon className='h-4 w-4 text-muted-foreground' />
+        </button>
+        {showChainDropdown && chainBtnRef.current && (() => {
+          const rect = chainBtnRef.current!.getBoundingClientRect();
+          return (
+            <div
+              className='fixed z-[999] rounded-lg border border-border bg-popover shadow-lg'
+              style={{ top: rect.bottom + 4, left: rect.left, width: rect.width }}
+            >
               {ibcChains.map(chain => (
                 <button
                   key={chain.chainId}
@@ -225,8 +247,8 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
                 </button>
               ))}
             </div>
-          )}
-        </div>
+          );
+        })()}
       </div>
 
       {/* wallet info + balances when chain is selected */}
@@ -279,8 +301,9 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
             <div className='mb-2 text-xs font-medium'>Initiate Shielding Transfer</div>
             <div className='flex gap-2'>
               {/* asset selector */}
-              <div className='relative flex-1'>
+              <div className='flex-1'>
                 <button
+                  ref={assetBtnRef}
                   onClick={() => setShowAssetDropdown(prev => !prev)}
                   disabled={!assetsData?.assets.length}
                   className='flex w-full items-center justify-between rounded-lg border border-border bg-input px-3 py-2 text-xs disabled:opacity-50'
@@ -288,23 +311,29 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
                   <span>{selectedAsset?.symbol ?? 'select asset'}</span>
                   <ChevronDownIcon className='h-3 w-3 text-muted-foreground' />
                 </button>
-                {showAssetDropdown && assetsData?.assets && (
-                  <div className='absolute left-0 top-full z-50 mt-1 w-full rounded-lg border border-border bg-popover shadow-lg'>
-                    {assetsData.assets.map(asset => (
-                      <button
-                        key={asset.denom}
-                        onClick={() => {
-                          setSelectedAsset(asset);
-                          setShowAssetDropdown(false);
-                        }}
-                        className='flex w-full items-center justify-between px-3 py-2 text-xs hover:bg-muted/50 first:rounded-t-lg last:rounded-b-lg'
-                      >
-                        <span>{asset.symbol}</span>
-                        <span className='text-muted-foreground'>{asset.formatted}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
+                {showAssetDropdown && assetsData?.assets && assetBtnRef.current && (() => {
+                  const rect = assetBtnRef.current!.getBoundingClientRect();
+                  return (
+                    <div
+                      className='fixed z-[999] rounded-lg border border-border bg-popover shadow-lg'
+                      style={{ top: rect.bottom + 4, left: rect.left, width: rect.width }}
+                    >
+                      {assetsData.assets.map(asset => (
+                        <button
+                          key={asset.denom}
+                          onClick={() => {
+                            setSelectedAsset(asset);
+                            setShowAssetDropdown(false);
+                          }}
+                          className='flex w-full items-center justify-between px-3 py-2 text-xs hover:bg-muted/50 first:rounded-t-lg last:rounded-b-lg'
+                        >
+                          <span>{asset.symbol}</span>
+                          <span className='text-muted-foreground'>{asset.formatted}</span>
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* amount input */}
@@ -375,14 +404,12 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
   );
 }
 
-export function ReceivePage() {
-  const navigate = useNavigate();
-  const activeNetwork = useStore(selectActiveNetwork);
-  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
-  const keyRing = useStore(keyRingSelector);
-  const penumbraWallet = useStore(getActiveWalletJson);
-
-  const { address, loading } = useActiveAddress();
+/** receive tab - QR code + address display */
+function ReceiveTab({ address, loading, activeNetwork }: {
+  address: string;
+  loading: boolean;
+  activeNetwork: string;
+}) {
   const [copied, setCopied] = useState(false);
   const [ibcDeposit, setIbcDeposit] = useState(false);
   const [ephemeralAddress, setEphemeralAddress] = useState<string>('');
@@ -390,11 +417,14 @@ export function ReceivePage() {
   const [showTooltip, setShowTooltip] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  const keyRing = useStore(keyRingSelector);
+  const penumbraWallet = useStore(getActiveWalletJson);
+
   const isPenumbra = activeNetwork === 'penumbra';
   const displayAddress = ibcDeposit && ephemeralAddress ? ephemeralAddress : address;
   const isLoading = ibcDeposit ? ephemeralLoading : loading;
 
-  // generate QR code for whichever address is active
   useEffect(() => {
     if (canvasRef.current && displayAddress) {
       QRCode.toCanvas(canvasRef.current, displayAddress, {
@@ -405,7 +435,6 @@ export function ReceivePage() {
     }
   }, [displayAddress]);
 
-  // generate ephemeral address when toggle is turned ON
   useEffect(() => {
     if (!ibcDeposit || !isPenumbra) return;
 
@@ -445,7 +474,6 @@ export function ReceivePage() {
     setTimeout(() => setCopied(false), 1500);
   }, [displayAddress]);
 
-  // reset ephemeral state when toggling off
   const handleToggle = useCallback(() => {
     setIbcDeposit(prev => {
       if (prev) setEphemeralAddress('');
@@ -453,6 +481,107 @@ export function ReceivePage() {
     });
     setCopied(false);
   }, []);
+
+  return (
+    <div className='flex flex-col items-center gap-4'>
+      <div className='rounded-xl border border-border bg-white p-2'>
+        {isLoading ? (
+          <div className='flex h-48 w-48 items-center justify-center'>
+            <span className='text-xs text-muted-foreground'>loading...</span>
+          </div>
+        ) : displayAddress ? (
+          <canvas ref={canvasRef} className='h-48 w-48' />
+        ) : (
+          <div className='flex h-48 w-48 items-center justify-center'>
+            <span className='text-xs text-muted-foreground'>no wallet</span>
+          </div>
+        )}
+      </div>
+
+      <span className='rounded-full bg-muted px-3 py-1 text-xs font-medium capitalize'>
+        {activeNetwork}
+      </span>
+
+      {isPenumbra && (
+        <div className='flex w-full items-center justify-between'>
+          <div className='flex items-center gap-1.5'>
+            <span className='text-sm font-medium'>IBC Deposit Address</span>
+            <div className='relative'>
+              <button
+                onClick={() => setShowTooltip(prev => !prev)}
+                className='text-muted-foreground transition-colors duration-75 hover:text-foreground'
+              >
+                <InfoCircledIcon className='h-3.5 w-3.5' />
+              </button>
+              {showTooltip && (
+                <div className='absolute left-1/2 top-6 z-50 w-64 -translate-x-1/2 rounded-lg border border-border bg-popover p-3 text-xs text-popover-foreground shadow-lg'>
+                  IBC transfers post the destination address publicly on the source chain. Use this randomized deposit address to preserve privacy when transferring funds into Penumbra.
+                </div>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={handleToggle}
+            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ${
+              ibcDeposit ? 'bg-green-500' : 'bg-muted-foreground/30'
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${
+                ibcDeposit ? 'translate-x-[18px]' : 'translate-x-0.5'
+              }`}
+            />
+          </button>
+        </div>
+      )}
+
+      <div className='w-full'>
+        <div className='mb-1 text-xs text-muted-foreground'>
+          {ibcDeposit && isPenumbra ? 'ibc deposit address' : 'address'}
+        </div>
+        <div className={`flex items-center gap-2 rounded-lg border p-3 ${
+          ibcDeposit && isPenumbra
+            ? 'border-green-500/40 bg-green-500/5'
+            : 'border-border/40 bg-muted/30'
+        }`}>
+          <code className={`flex-1 break-all text-xs ${
+            ibcDeposit && isPenumbra ? 'text-green-400' : ''
+          }`}>
+            {isLoading ? 'generating...' : displayAddress || 'no wallet selected'}
+          </code>
+          {displayAddress && (
+            <button
+              onClick={copyAddress}
+              className='shrink-0 text-muted-foreground transition-colors duration-75 hover:text-foreground'
+            >
+              {copied ? <CheckIcon className='h-4 w-4' /> : <CopyIcon className='h-4 w-4' />}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <p className='text-center text-xs text-muted-foreground'>
+        {ibcDeposit && isPenumbra
+          ? 'Use this address to receive IBC deposits privately. A new address is generated each time.'
+          : `Only send ${activeNetwork?.toUpperCase() ?? ''} assets to this address.`
+        }
+      </p>
+    </div>
+  );
+}
+
+type ReceiveMode = 'receive' | 'shield';
+
+export function ReceivePage() {
+  const navigate = useNavigate();
+  const activeNetwork = useStore(selectActiveNetwork);
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  const keyRing = useStore(keyRingSelector);
+  const penumbraWallet = useStore(getActiveWalletJson);
+
+  const { address, loading } = useActiveAddress();
+  const isPenumbra = activeNetwork === 'penumbra';
+  const [mode, setMode] = useState<ReceiveMode>('receive');
 
   return (
     <div className='flex h-full flex-col'>
@@ -466,93 +595,37 @@ export function ReceivePage() {
         <h1 className='text-lg font-medium text-foreground'>receive</h1>
       </div>
 
-      <div className='flex flex-1 flex-col items-center gap-4 overflow-y-auto p-6'>
-        <div className='rounded-xl border border-border bg-white p-2'>
-          {isLoading ? (
-            <div className='flex h-48 w-48 items-center justify-center'>
-              <span className='text-xs text-muted-foreground'>loading...</span>
-            </div>
-          ) : displayAddress ? (
-            <canvas ref={canvasRef} className='h-48 w-48' />
-          ) : (
-            <div className='flex h-48 w-48 items-center justify-center'>
-              <span className='text-xs text-muted-foreground'>no wallet</span>
-            </div>
-          )}
-        </div>
-
-        <span className='rounded-full bg-muted px-3 py-1 text-xs font-medium capitalize'>
-          {activeNetwork}
-        </span>
-
-        {/* IBC Deposit Address toggle - Penumbra only */}
+      <div className='flex flex-1 flex-col p-4'>
+        {/* tabs - Penumbra only */}
         {isPenumbra && (
-          <div className='flex w-full items-center justify-between'>
-            <div className='flex items-center gap-1.5'>
-              <span className='text-sm font-medium'>IBC Deposit Address</span>
-              <div className='relative'>
-                <button
-                  onClick={() => setShowTooltip(prev => !prev)}
-                  className='text-muted-foreground transition-colors duration-75 hover:text-foreground'
-                >
-                  <InfoCircledIcon className='h-3.5 w-3.5' />
-                </button>
-                {showTooltip && (
-                  <div className='absolute left-1/2 top-6 z-50 w-64 -translate-x-1/2 rounded-lg border border-border bg-popover p-3 text-xs text-popover-foreground shadow-lg'>
-                    IBC transfers post the destination address publicly on the source chain. Use this randomized deposit address to preserve privacy when transferring funds into Penumbra.
-                  </div>
-                )}
-              </div>
-            </div>
+          <div className='mb-4 flex rounded-lg bg-muted/30 p-1'>
             <button
-              onClick={handleToggle}
-              className={`relative h-5 w-9 rounded-full transition-colors duration-200 ${
-                ibcDeposit ? 'bg-green-500' : 'bg-muted-foreground/30'
+              onClick={() => setMode('receive')}
+              className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
+                mode === 'receive'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              <span
-                className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${
-                  ibcDeposit ? 'translate-x-4' : 'translate-x-0.5'
-                }`}
-              />
+              receive
+            </button>
+            <button
+              onClick={() => setMode('shield')}
+              className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
+                mode === 'shield'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              ibc shield
             </button>
           </div>
         )}
 
-        <div className='w-full'>
-          <div className='mb-1 text-xs text-muted-foreground'>
-            {ibcDeposit && isPenumbra ? 'ibc deposit address' : 'address'}
-          </div>
-          <div className={`flex items-center gap-2 rounded-lg border p-3 ${
-            ibcDeposit && isPenumbra
-              ? 'border-green-500/40 bg-green-500/5'
-              : 'border-border/40 bg-muted/30'
-          }`}>
-            <code className={`flex-1 break-all text-xs ${
-              ibcDeposit && isPenumbra ? 'text-green-400' : ''
-            }`}>
-              {isLoading ? 'generating...' : displayAddress || 'no wallet selected'}
-            </code>
-            {displayAddress && (
-              <button
-                onClick={copyAddress}
-                className='shrink-0 text-muted-foreground transition-colors duration-75 hover:text-foreground'
-              >
-                {copied ? <CheckIcon className='h-4 w-4' /> : <CopyIcon className='h-4 w-4' />}
-              </button>
-            )}
-          </div>
-        </div>
-
-        <p className='text-center text-xs text-muted-foreground'>
-          {ibcDeposit && isPenumbra
-            ? 'Use this address to receive IBC deposits privately. A new address is generated each time.'
-            : `Only send ${activeNetwork?.toUpperCase() ?? ''} assets to this address.`
-          }
-        </p>
-
-        {/* IBC Deposit / Shield section - Penumbra only */}
-        {isPenumbra && (
+        {/* content */}
+        {mode === 'receive' || !isPenumbra ? (
+          <ReceiveTab address={address} loading={loading} activeNetwork={activeNetwork} />
+        ) : (
           <IbcDepositSection
             selectedKeyInfo={selectedKeyInfo}
             keyRing={keyRing}
