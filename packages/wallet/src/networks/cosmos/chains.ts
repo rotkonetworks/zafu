@@ -52,7 +52,7 @@ export const COSMOS_CHAINS: Record<CosmosChainId, CosmosChainConfig> = {
     decimals: 6,
     rpcEndpoint: 'https://rpc.osmosis.zone',
     restEndpoint: 'https://lcd.osmosis.zone',
-    gasPrice: '0.025uosmo',
+    gasPrice: '0.05uosmo',
     penumbraChannel: 'channel-1279', // osmosis -> penumbra
   },
   noble: {

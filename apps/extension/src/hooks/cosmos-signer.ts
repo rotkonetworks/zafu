@@ -147,12 +147,9 @@ const messages = [
         }),
       ];
 
-      // estimate gas (IBC transfers need more)
-      const gas = 150000;
-      const fee = calculateFee(params.sourceChainId, gas);
-
       try {
-        const result = await client.signAndBroadcast(fromAddress, messages, fee, params.memo ?? '');
+        // use 'auto' fee estimation - simulates tx to get correct gas
+        const result = await client.signAndBroadcast(fromAddress, messages, 'auto', params.memo ?? '');
 
         return {
           txHash: result.transactionHash,
