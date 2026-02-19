@@ -63,7 +63,7 @@ export const COSMOS_CHAINS: Record<CosmosChainId, CosmosChainConfig> = {
     symbol: 'USDC',
     denom: 'uusdc',
     decimals: 6,
-    rpcEndpoint: 'https://rpc.noble.strange.love',
+    rpcEndpoint: 'https://noble-rpc.polkachu.com',
     restEndpoint: 'https://noble-api.polkachu.com',
     gasPrice: '0.1uusdc',
     penumbraChannel: 'channel-4', // noble -> penumbra
@@ -88,7 +88,7 @@ export const COSMOS_CHAINS: Record<CosmosChainId, CosmosChainConfig> = {
     symbol: 'TIA',
     denom: 'utia',
     decimals: 6,
-    rpcEndpoint: 'https://rpc.celestia.strange.love',
+    rpcEndpoint: 'https://celestia-rpc.polkachu.com',
     restEndpoint: 'https://celestia-api.polkachu.com',
     gasPrice: '0.002utia',
   },

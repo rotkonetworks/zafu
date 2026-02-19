@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeftIcon, CheckIcon, PlusIcon, ChevronRightIcon } from '@radix-ui/react-icons';
 import { useStore } from '../../../state';
 import { selectEnabledNetworks, type NetworkType } from '../../../state/keyring';
+import { isIbcNetwork } from '../../../state/keyring/network-types';
 import { NETWORKS } from '../../../config/networks';
 import { PopupPath } from '../paths';
 import { cn } from '@repo/ui/lib/utils';
@@ -28,18 +29,24 @@ const getColorHex = (color: string): string =>
   NETWORK_COLORS[color] ?? '#6B7280';
 
 /** networks that are fully implemented */
-const READY_NETWORKS: NetworkType[] = ['penumbra', 'zcash', 'polkadot'];
+const READY_NETWORKS: NetworkType[] = ['penumbra', 'zcash', 'polkadot', 'osmosis', 'noble', 'nomic', 'celestia'];
 
 /** networks coming soon */
-const COMING_SOON: NetworkType[] = ['kusama', 'osmosis', 'noble', 'nomic', 'celestia', 'ethereum', 'bitcoin'];
+const COMING_SOON: NetworkType[] = ['kusama', 'ethereum', 'bitcoin'];
 
 export const SettingsNetworks = () => {
   const navigate = useNavigate();
   const enabledNetworks = useStore(selectEnabledNetworks);
   const toggleNetwork = useStore(state => state.keyRing.toggleNetwork);
+  const privacySetSetting = useStore(state => state.privacy.setSetting);
+  const transparentEnabled = useStore(state => state.privacy.settings.enableTransparentBalances);
 
   const handleToggle = async (network: NetworkType) => {
     await toggleNetwork(network);
+    // auto-enable transparent balance fetching when enabling an IBC chain
+    if (isIbcNetwork(network) && !transparentEnabled) {
+      await privacySetSetting('enableTransparentBalances', true);
+    }
   };
 
   return (

@@ -7,7 +7,7 @@
  * - transaction broadcast
  */
 
-import { Secp256k1HdWallet } from '@cosmjs/amino';
+import { Secp256k1HdWallet, makeCosmoshubPath } from '@cosmjs/amino';
 import { SigningStargateClient, GasPrice } from '@cosmjs/stargate';
 import { fromBech32, toBech32 } from '@cosmjs/encoding';
 import type { Coin, StdFee } from '@cosmjs/amino';
@@ -20,8 +20,11 @@ export interface EncodeObject {
   value: unknown;
 }
 
-/** cosmos HD path - uses account index at position 2 */
-const COSMOS_HD_PATH = (accountIndex: number) => `m/44'/118'/${accountIndex}'/0/0`;
+/**
+ * Cosmos HD path m/44'/118'/0'/0/{accountIndex}
+ * Uses makeCosmoshubPath from @cosmjs/amino which returns proper HdPath type
+ */
+const cosmosHdPath = (accountIndex: number) => makeCosmoshubPath(accountIndex);
 
 /** derived cosmos wallet */
 export interface CosmosWallet {
@@ -38,7 +41,7 @@ export async function deriveCosmosWallet(
 ): Promise<CosmosWallet> {
   const signer = await Secp256k1HdWallet.fromMnemonic(mnemonic, {
     prefix,
-    hdPaths: [{ coinType: 118, account: accountIndex, change: 0, addressIndex: 0 } as any],
+    hdPaths: [cosmosHdPath(accountIndex)],
   });
 
   const [account] = await signer.getAccounts();
@@ -111,7 +114,7 @@ export async function createSigningClient(
 
   const signer = await Secp256k1HdWallet.fromMnemonic(mnemonic, {
     prefix: config.bech32Prefix,
-    hdPaths: [COSMOS_HD_PATH(accountIndex) as any],
+    hdPaths: [cosmosHdPath(accountIndex)],
   });
 
   const [account] = await signer.getAccounts();
