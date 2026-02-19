@@ -155,14 +155,23 @@ function CosmosChainSelector({
   selected,
   onSelect,
   currentChainId,
+  autoLabel,
 }: {
   chains: Array<{ chainId: string; chainName: string; bech32Prefix?: string; logoUri?: string }>;
   selected: string | undefined;
   onSelect: (chainId: string) => void;
   currentChainId: string;
+  autoLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [manuallySelected, setManuallySelected] = useState(false);
   const filteredChains = chains.filter(c => c.chainId !== currentChainId);
+
+  const displayName = manuallySelected && selected
+    ? chains.find(c => c.chainId === selected)?.chainName ?? selected
+    : selected
+      ? autoLabel ?? chains.find(c => c.chainId === selected)?.chainName ?? selected
+      : autoLabel ?? 'auto-detect from address';
 
   return (
     <div className='relative'>
@@ -170,26 +179,39 @@ function CosmosChainSelector({
         onClick={() => setOpen(!open)}
         className='flex w-full items-center justify-between rounded-lg border border-border bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50'
       >
-        {selected ? (
-          <span>{chains.find(c => c.chainId === selected)?.chainName ?? selected}</span>
-        ) : (
-          <span className='text-muted-foreground'>select destination</span>
-        )}
+        <span className={!manuallySelected && !selected ? 'text-muted-foreground' : ''}>
+          {displayName}
+        </span>
         <ChevronDownIcon className={cn('h-4 w-4 transition-transform', open && 'rotate-180')} />
       </button>
 
       {open && (
         <div className='absolute top-full left-0 right-0 z-10 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border bg-background shadow-lg'>
+          {/* auto-detect option */}
+          <button
+            onClick={() => {
+              onSelect('');
+              setManuallySelected(false);
+              setOpen(false);
+            }}
+            className={cn(
+              'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-muted/50',
+              !manuallySelected && 'bg-muted/30'
+            )}
+          >
+            <span className='text-muted-foreground'>auto-detect from address</span>
+          </button>
           {filteredChains.map(chain => (
             <button
               key={chain.chainId}
               onClick={() => {
                 onSelect(chain.chainId);
+                setManuallySelected(true);
                 setOpen(false);
               }}
               className={cn(
                 'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-muted/50',
-                selected === chain.chainId && 'bg-muted/30'
+                manuallySelected && selected === chain.chainId && 'bg-muted/30'
               )}
             >
               {chain.logoUri && (
@@ -338,7 +360,9 @@ function CosmosSend({ sourceChainId }: { sourceChainId: CosmosChainId }) {
   }, [recipient, destChainId, skipChains]);
 
 const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selectedAsset && txStatus === 'idle';
-  const isSameChain = !destChainId || destChainId === sourceChain.chainId;
+  // effective destination: manual selection > auto-detect > same chain
+  const effectiveDestChainId = destChainId || detectedChain?.chainId || sourceChain.chainId;
+  const isSameChain = effectiveDestChainId === sourceChain.chainId;
 
   const handleSubmit = useCallback(async () => {
     if (!canSubmit || !selectedAsset) return;
@@ -368,7 +392,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
 
         result = await cosmosIbcTransfer.mutateAsync({
           sourceChainId,
-          destChainId: destChainId!,
+          destChainId: effectiveDestChainId,
           sourceChannel: channel,
           toAddress: recipient,
           amount,
@@ -391,7 +415,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
       setTxStatus('error');
       setTxError(err instanceof Error ? err.message : 'transaction failed');
     }
-  }, [canSubmit, isSameChain, sourceChainId, destChainId, recipient, amount, selectedAsset, accountIndex, route, cosmosSend, cosmosIbcTransfer, refetchAssets, recordUsage, shouldSuggestSave]);
+  }, [canSubmit, isSameChain, sourceChainId, effectiveDestChainId, recipient, amount, selectedAsset, accountIndex, route, cosmosSend, cosmosIbcTransfer, refetchAssets, recordUsage, shouldSuggestSave]);
 
   return (
     <div className='flex flex-col gap-4'>
@@ -418,21 +442,6 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
         </div>
       </div>
 
-      {/* destination chain */}
-      <div>
-        <label className='mb-1 block text-xs text-muted-foreground'>destination chain</label>
-        {chainsLoading ? (
-          <div className='h-10 rounded-lg bg-muted/30 animate-pulse' />
-        ) : (
-          <CosmosChainSelector
-            chains={skipChains}
-            selected={destChainId}
-            onSelect={setDestChainId}
-            currentChainId={sourceChain.chainId}
-          />
-        )}
-      </div>
-
       {/* recipient */}
       <div>
         <label className='mb-1 block text-xs text-muted-foreground'>recipient</label>
@@ -451,7 +460,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
         {recipient && !recipientValid && (
           <p className='mt-1 text-xs text-red-500'>invalid cosmos address</p>
         )}
-        {detectedChain && (
+        {detectedChain && !destChainId && (
           <p className='mt-1 text-xs text-muted-foreground'>
             detected: {detectedChain.name}
           </p>
@@ -475,6 +484,22 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
               })}
             </div>
           </div>
+        )}
+      </div>
+
+      {/* destination chain */}
+      <div>
+        <label className='mb-1 block text-xs text-muted-foreground'>destination chain</label>
+        {chainsLoading ? (
+          <div className='h-10 rounded-lg bg-muted/30 animate-pulse' />
+        ) : (
+          <CosmosChainSelector
+            chains={skipChains}
+            selected={destChainId ?? detectedChain?.chainId}
+            onSelect={(id) => setDestChainId(id || undefined)}
+            currentChainId={sourceChain.chainId}
+            autoLabel={detectedChain ? `auto (${detectedChain.name})` : 'auto-detect from address'}
+          />
         )}
       </div>
 
@@ -662,7 +687,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
       </button>
 
       <p className='text-center text-xs text-muted-foreground'>
-        {destChainId && destChainId !== sourceChain.chainId
+        {!isSameChain
           ? 'ibc transfer via skip'
           : 'local transfer'}
       </p>
