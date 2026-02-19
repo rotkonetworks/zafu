@@ -39,6 +39,30 @@ async function derivePenumbraAddress(mnemonic: string, index = 0): Promise<strin
   return bech32mAddress(address);
 }
 
+/** derive a random ephemeral penumbra address from mnemonic (each call returns a different address) */
+async function derivePenumbraEphemeralFromMnemonic(mnemonic: string, index = 0): Promise<string> {
+  const { generateSpendKey, getFullViewingKey, getEphemeralByIndex } = await import('@rotko/penumbra-wasm/keys');
+  const { bech32mAddress } = await import('@penumbra-zone/bech32m/penumbra');
+
+  const spendKey = await generateSpendKey(mnemonic);
+  const fvk = await getFullViewingKey(spendKey);
+  const address = await getEphemeralByIndex(fvk, index);
+  return bech32mAddress(address);
+}
+
+/** derive a random ephemeral penumbra address from stored FVK JSON */
+async function derivePenumbraEphemeralFromFvk(fvkJson: string, index = 0): Promise<string> {
+  const { FullViewingKey } = await import('@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb');
+  const { getEphemeralByIndex } = await import('@rotko/penumbra-wasm/keys');
+  const { bech32mAddress } = await import('@penumbra-zone/bech32m/penumbra');
+
+  const fvk = FullViewingKey.fromJsonString(fvkJson);
+  const address = await getEphemeralByIndex(fvk, index);
+  return bech32mAddress(address);
+}
+
+export { derivePenumbraEphemeralFromMnemonic, derivePenumbraEphemeralFromFvk };
+
 /** load zcash wasm module from extension root (cached after first init) */
 let zcashWasmCache: unknown;
 async function loadZcashWasm() {
