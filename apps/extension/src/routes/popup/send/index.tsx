@@ -1030,6 +1030,14 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
 
   const penumbraTx = usePenumbraTransaction();
 
+  // default denom to upenumbra if not set
+  useEffect(() => {
+    if (!ibcState.denom) {
+      ibcState.setDenom('upenumbra');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ibcState.denom]);
+
   // recent addresses and contacts
   const { recordUsage, shouldSuggestSave, dismissSuggestion, getRecent } = useStore(recentAddressesSelector);
   const { addContact, addAddress, findByAddress } = useStore(contactsSelector);
