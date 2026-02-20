@@ -72,20 +72,21 @@ function getKnownIbcChains(): IbcChain[] {
     }));
 }
 
-/** merge registry chains with our known chains (prefer known data for channel info) */
+/** merge registry chains with our known chains — registry data is authoritative for channels */
 function mergeIbcChains(registryChains: IbcChain[]): IbcChain[] {
   const known = getKnownIbcChains();
   const result: IbcChain[] = [];
   const seen = new Set<string>();
 
-  // start with known chains (they have correct counterpartyChannelId)
+  // start with known chains, but prefer registry channel data when available
   for (const chain of known) {
-    // enrich with registry images if available
     const reg = registryChains.find(r => r.chainId === chain.chainId);
     result.push({
       ...chain,
+      // registry is authoritative for channel IDs (prevents IBC refunds)
+      channelId: reg?.channelId || chain.channelId,
+      counterpartyChannelId: reg?.counterpartyChannelId || chain.counterpartyChannelId,
       images: reg?.images ?? chain.images,
-      channelId: reg?.channelId ?? chain.channelId,
     });
     seen.add(chain.chainId);
   }
