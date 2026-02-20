@@ -504,6 +504,7 @@ export const createKeyRingSlice = (
       if (data.fullViewingKey) supportedNetworks.push('penumbra');
       if (data.viewingKey) supportedNetworks.push('zcash');
       if (data.polkadotSs58) supportedNetworks.push('polkadot');
+      if (data.cosmosAddresses?.length) supportedNetworks.push('osmosis');
 
       const vault: EncryptedVault = {
         id: vaultId,
@@ -519,6 +520,8 @@ export const createKeyRingSlice = (
           // Store polkadot ss58 address in insensitive for watch-only display
           ...(data.polkadotSs58 ? { polkadotSs58: data.polkadotSs58 } : {}),
           ...(data.polkadotGenesisHash ? { polkadotGenesisHash: data.polkadotGenesisHash } : {}),
+          // Store cosmos addresses in insensitive for watch-only display
+          ...(data.cosmosAddresses?.length ? { cosmosAddresses: data.cosmosAddresses } : {}),
           // only mark as airgapOnly if this is a fresh setup with default password
           // if user already has a real password, this vault uses that password too
           ...(isNewSetup ? { airgapOnly: true } : {}),

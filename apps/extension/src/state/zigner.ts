@@ -44,7 +44,7 @@ import {
 export type ZignerScanState = 'idle' | 'scanning' | 'scanned' | 'importing' | 'complete' | 'error';
 
 /** Detected network type from QR code */
-export type DetectedNetwork = 'penumbra' | 'zcash' | 'polkadot' | 'backup' | 'unknown';
+export type DetectedNetwork = 'penumbra' | 'zcash' | 'polkadot' | 'cosmos' | 'backup' | 'unknown';
 
 /** Polkadot address import data from Zigner QR */
 export interface PolkadotImportData {
@@ -54,6 +54,18 @@ export interface PolkadotImportData {
   genesisHash: string;
   /** Label for the wallet */
   label: string;
+}
+
+/** Cosmos accounts import data from Zigner QR */
+export interface CosmosImportData {
+  /** Hex-encoded compressed secp256k1 public key */
+  publicKey: string;
+  /** Account index */
+  accountIndex: number;
+  /** Label for the wallet */
+  label: string;
+  /** Addresses for each chain */
+  addresses: { chainId: string; address: string; prefix: string }[];
 }
 
 /**
@@ -79,6 +91,8 @@ export interface ZignerSlice {
   parsedZcashExport?: ZcashFvkExportData;
   /** Parsed Polkadot address data from QR code */
   parsedPolkadotExport?: PolkadotImportData;
+  /** Parsed Cosmos accounts data from QR code */
+  parsedCosmosExport?: CosmosImportData;
   /** User-provided label for the wallet */
   walletLabel: string;
   /** Error message if something went wrong */
@@ -124,10 +138,53 @@ export const createZignerSlice =
     parsedPenumbraExport: undefined,
     parsedZcashExport: undefined,
     parsedPolkadotExport: undefined,
+    parsedCosmosExport: undefined,
     errorMessage: undefined,
 
     processQrData: (qrData: string) => {
       const trimmed = qrData.trim();
+
+      // Check for Cosmos accounts JSON format from Zigner
+      if (trimmed.startsWith('{') && trimmed.includes('"cosmos-accounts"')) {
+        try {
+          const parsed = JSON.parse(trimmed) as {
+            type: string;
+            version: number;
+            label: string;
+            account_index: number;
+            public_key: string;
+            addresses: { chain_id: string; address: string; prefix: string }[];
+          };
+
+          if (parsed.type === 'cosmos-accounts' && parsed.public_key && parsed.addresses?.length) {
+            const cosmosData: CosmosImportData = {
+              publicKey: parsed.public_key,
+              accountIndex: parsed.account_index ?? 0,
+              label: parsed.label || 'zigner cosmos',
+              addresses: parsed.addresses.map(a => ({
+                chainId: a.chain_id,
+                address: a.address,
+                prefix: a.prefix,
+              })),
+            };
+
+            set(state => {
+              state.zigner.qrData = trimmed;
+              state.zigner.detectedNetwork = 'cosmos';
+              state.zigner.parsedCosmosExport = cosmosData;
+              state.zigner.parsedPenumbraExport = undefined;
+              state.zigner.parsedZcashExport = undefined;
+              state.zigner.parsedPolkadotExport = undefined;
+              state.zigner.walletLabel = cosmosData.label;
+              state.zigner.scanState = 'scanned';
+              state.zigner.errorMessage = undefined;
+            });
+            return;
+          }
+        } catch {
+          // Not valid JSON, fall through to other checks
+        }
+      }
 
       // Check for Substrate/Polkadot address format: substrate:address:0xgenesishash
       if (trimmed.startsWith('substrate:')) {
@@ -162,6 +219,49 @@ export const createZignerSlice =
         set(state => {
           state.zigner.scanState = 'error';
           state.zigner.errorMessage = 'invalid substrate qr format. expected: substrate:address:0xgenesishash';
+        });
+        return;
+      }
+
+      // Check for Cosmos address format: cosmos:address:0xgenesishash
+      if (trimmed.startsWith('cosmos:')) {
+        const parts = trimmed.split(':');
+        if (parts.length >= 3) {
+          const address = parts[1]!;
+          const genesisHash = parts.slice(2).join(':');
+
+          if (address && genesisHash && genesisHash.startsWith('0x')) {
+            // Detect chain from address prefix
+            const chainId = address.startsWith('osmo') ? 'osmosis'
+              : address.startsWith('noble') ? 'noble'
+              : address.startsWith('celestia') ? 'celestia'
+              : 'cosmos';
+
+            const cosmosData: CosmosImportData = {
+              publicKey: '', // not available from address-only QR
+              accountIndex: 0,
+              label: `zigner ${chainId}`,
+              addresses: [{ chainId, address, prefix: address.split('1')[0]! }],
+            };
+
+            set(state => {
+              state.zigner.qrData = trimmed;
+              state.zigner.detectedNetwork = 'cosmos';
+              state.zigner.parsedCosmosExport = cosmosData;
+              state.zigner.parsedPenumbraExport = undefined;
+              state.zigner.parsedZcashExport = undefined;
+              state.zigner.parsedPolkadotExport = undefined;
+              state.zigner.walletLabel = cosmosData.label;
+              state.zigner.scanState = 'scanned';
+              state.zigner.errorMessage = undefined;
+            });
+            return;
+          }
+        }
+
+        set(state => {
+          state.zigner.scanState = 'error';
+          state.zigner.errorMessage = 'invalid cosmos qr format. expected: cosmos:address:0xgenesishash';
         });
         return;
       }
@@ -353,6 +453,7 @@ export const createZignerSlice =
         state.zigner.parsedPenumbraExport = undefined;
         state.zigner.parsedZcashExport = undefined;
         state.zigner.parsedPolkadotExport = undefined;
+        state.zigner.parsedCosmosExport = undefined;
         state.zigner.walletLabel = '';
         state.zigner.errorMessage = undefined;
       });
@@ -395,6 +496,7 @@ export const zignerConnectSelector = (state: AllSlices) => {
     parsedPenumbraExport: slice.parsedPenumbraExport,
     parsedZcashExport: slice.parsedZcashExport,
     parsedPolkadotExport: slice.parsedPolkadotExport,
+    parsedCosmosExport: slice.parsedCosmosExport,
     walletLabel: slice.walletLabel,
     errorMessage: slice.errorMessage,
     walletImport,

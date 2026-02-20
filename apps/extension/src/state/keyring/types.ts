@@ -161,6 +161,8 @@ export interface ZignerZafuImport {
   polkadotSs58?: string;
   /** genesis hash for the polkadot network */
   polkadotGenesisHash?: string;
+  /** cosmos chain addresses (watch-only) */
+  cosmosAddresses?: { chainId: string; address: string; prefix: string }[];
   /** account index on zafu device */
   accountIndex: number;
   /** device identifier */
