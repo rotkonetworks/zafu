@@ -19,7 +19,7 @@ export const useFinalizeOnboarding = () => {
   const [loading, setLoading] = useState(false);
   const location = useLocation();
   const { setPassword, newZignerZafuKey } = useStore(keyRingSelector);
-  const { walletImport, zcashWalletImport, parsedPolkadotExport, walletLabel, clearZignerState } = useStore(zignerConnectSelector);
+  const { walletImport, zcashWalletImport, parsedPolkadotExport, parsedCosmosExport, walletLabel, clearZignerState } = useStore(zignerConnectSelector);
 
   const handleSubmit = useCallback(async (event: FormEvent, password: string) => {
     event.preventDefault();
@@ -52,6 +52,15 @@ export const useFinalizeOnboarding = () => {
             deviceId: `zcash-${Date.now()}`,
           };
           await newZignerZafuKey(zignerData, walletLabel || 'zigner zcash');
+        } else if (parsedCosmosExport) {
+          // cosmos zigner import
+          const zignerData: ZignerZafuImport = {
+            cosmosAddresses: parsedCosmosExport.addresses,
+            publicKey: parsedCosmosExport.publicKey || undefined,
+            accountIndex: parsedCosmosExport.accountIndex,
+            deviceId: `cosmos-${Date.now()}`,
+          };
+          await newZignerZafuKey(zignerData, walletLabel || 'zigner cosmos');
         } else if (parsedPolkadotExport) {
           // polkadot zigner import
           const zignerData: ZignerZafuImport = {
@@ -85,7 +94,7 @@ export const useFinalizeOnboarding = () => {
     } finally {
       setLoading(false);
     }
-  }, [walletImport, zcashWalletImport, parsedPolkadotExport, walletLabel]);
+  }, [walletImport, zcashWalletImport, parsedPolkadotExport, parsedCosmosExport, walletLabel]);
 
   return { handleSubmit, error, loading };
 };
