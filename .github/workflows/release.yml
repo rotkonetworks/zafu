@@ -13,22 +13,15 @@ env:
 jobs:
   release:
     name: Build and release
-    runs-on: buildjet-16vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
       - uses: actions/checkout@v4
 
-      - id: built
-        uses: buildjet/cache@v4
-        with:
-          path: .turbo
-          key: ${{ hashFiles('pnpm-lock.yaml') }}-${{ github.ref }}-${{ github.sha }}-release
-          restore-keys: ${{ hashFiles('pnpm-lock.yaml') }}
-
       - uses: pnpm/action-setup@v4
-      - uses: buildjet/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'pnpm'
