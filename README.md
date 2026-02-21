@@ -1,103 +1,103 @@
-# Prax Wallet
+<div align="center">
 
-The [Prax Wallet](https://praxwallet.com/) monorepo for all things Prax.
+# Zafu
 
-![ci status](https://github.com/prax-wallet/web/actions/workflows/turbo-ci.yml/badge.svg?branch=main)
+Multi-network browser extension for Penumbra, Zcash, Noble, Osmosis, and Celestia
 
-This is a monolithic repository of Prax code, a monorepo. Multiple apps and packages are developed in this repository, to
-simplify work and make broad cross-package changes more feasible.
+Part of the [Zafu Zigner](https://zigner.rotko.net) ecosystem
 
-Install the Prax extension
-[Prax](https://chrome.google.com/webstore/detail/penumbra-wallet/lkpmkhpnhknhmibgnmmhdhgdilepfghe)
-from the Chrome Web Store.
+</div>
 
-You can talk to us on [Discord](https://discord.gg/hKvkrqa3zC).
+## what is zafu
 
-## What's in here
+Zafu is a browser extension wallet forked from [Prax](https://github.com/prax-wallet/prax).
+It acts as the hot wallet counterpart to [Zigner](https://github.com/rotkonetworks/zigner),
+the air-gapped cold signer.
 
-### [Prax Extension](https://chrome.google.com/webstore/detail/penumbra-wallet/lkpmkhpnhknhmibgnmmhdhgdilepfghe): Extension for Chrome that provides key custody, manages chain activity, and hosts services used by dapps.
+Zafu holds only viewing keys. it can build unsigned transactions and display
+balances, but cannot sign without the air-gapped device. when used standalone
+(without Zigner), it can also hold spending keys directly.
 
-### [Prax Marketing Site](https://praxwallet.com/): Marketing site for the Prax wallet
+## supported networks
 
-## Documentation
+- **penumbra** - shielded transactions, DEX swaps, staking, IBC
+- **zcash** - orchard shielded + transparent via PCZT
+- **noble** - USDC transfers and IBC
+- **osmosis** - swaps and liquidity
+- **celestia** - data availability and staking
 
-General documentation is available in [docs/README.md](docs/README.md). Package-specific documentation is available in
-each respective package.
+## how it works with zigner
 
-## Getting Started
+1. zafu builds an unsigned transaction
+2. displays it as a QR code
+3. zigner (air-gapped phone) scans, reviews, signs
+4. zafu scans the signed QR back and broadcasts
 
-### Prerequisites
+the only communication channel between hot and cold wallet is QR codes.
+no bluetooth, wifi, or USB.
 
-- [Install Node.js](https://nodejs.org/en/download/package-manager) version 22 or greater
-- [Install pnpm](https://pnpm.io/installation) (probably via corepack)
-- Install Google Chrome (Chromium works but we have encountered behavioral differences)
+see [zigner.rotko.net](https://zigner.rotko.net) for setup instructions.
 
-Or you can use [nix](https://nixos.org/download/) to create a devshell via `nix develop`.
+## wire formats
 
-### Building
+| chain | format | viewing key |
+|-------|--------|-------------|
+| penumbra | UR / CBOR | full viewing key (bech32m) |
+| zcash | UR / PCZT / ZIP-316 | UFVK |
+| substrate | UOS | public key |
 
-Once you have all these tools, you can
+## development
+
+### prerequisites
+
+- node.js 22+
+- pnpm (via corepack)
+- google chrome or chromium
+
+or use nix: `nix develop`
+
+### building
 
 ```sh
-git clone https://github.com/prax-wallet/prax
+git clone https://github.com/rotkonetworks/zafu
+cd zafu
 pnpm install && pnpm dev
+```
+
+optionally launch a dedicated browser profile with the extension loaded:
+
+```sh
 CHROMIUM_PROFILE=chromium-profile pnpm dev
 ```
 
-The env var `CHROMIUM_PROFILE` is optional. You may simply execute `pnpm dev`,
-or set the var to any path. Presence of a path will create and launch a
-dedicated browser profile with the extension. The directory 'chromium-profile'
-is gitignored.
+the extension build output is at `apps/extension/dist`. to manually load it:
 
-`CHROMIUM_PROFILE` names 'Chromium' but will launch Google Chrome if installed.
-If you want to use a specific binary, you may need to specify a path with the
-var `CHROME_PATH`.
+1. go to `chrome://extensions`
+2. enable developer mode
+3. click "load unpacked" and select `apps/extension/dist`
 
-You now have a local copy of the marketing site available at
-[`https://localhost:5175`](https://localhost:5173) and an unbundled Prax is
-available at [`apps/extension/dist`](apps/extension/dist).
+### monorepo structure
 
-If you're working on Prax, Chrome will show extension page changes after a
-manual page refresh, but it cannot simply reload the extension worker scripts or
-content scripts. For worker script changes, you may need to manually reload the
-extension. For content script changes, you must also manually reload pages
-hosting the injected scripts.
+```
+apps/
+  extension/          browser extension (chrome)
+packages/
+  context/            shared react context
+  custody-chrome/     key custody in chrome storage
+  encryption/         encryption utilities
+  noble/              noble chain support
+  query/              chain query layer
+  storage-chrome/     chrome storage abstraction
+  ui/                 shared UI components
+  wallet/             wallet logic
+  zcash-wasm/         zcash orchard derivation (WASM)
+```
 
-#### Building against feature branches
+## upstream
 
-When testing Prax locally, you may want to depend on as-yet unreleased
-software changes, e.g. in the [web repo]. To do so:
+forked from [prax-wallet/prax](https://github.com/prax-wallet/prax).
+penumbra-specific packages from [@penumbra-zone/web](https://github.com/penumbra-zone/web).
 
-1. In the [web repo], run `pnpm install && pnpm build && pnpm dev:pack`.
+## license
 
-2. In a separate terminal, navigate to `apps/minifront` within the [web repo], run `pnpm dev:build && pnpm dev:app`.
-
-3. In a separate terminal, navigate to `apps/veil` within the [web repo], run `pnpm install && pnpm dev`.
-
-4. In the [prax repo], run `pnpm -w add:tgz ~/PATH_TO_WEB_REPO/web/packages/*/penumbra-zone-*.tgz && pnpm -w syncpack fix-mismatches && pnpm dev`.
-
-Provided you configured `CHROMIUM_PROFILE`, you should see a browser launch,
-running the local builds. You must also ensure that the desired feature branches
-are checked out in the local git repos.
-
-#### Manually loading your unbundled build of Prax into Chrome
-
-If you don't want to use the profile tool, you must manually load the extension.
-
-1. Go to the Extensions page [`chrome://extensions`](chrome://extensions)
-2. Enable _Developer Mode_ by clicking the toggle switch at the top right
-3. Click the button _Load unpacked extension_ at the top and locate your cloned
-   repository. Select the extension's build output directory
-   [`apps/extension/dist`](../apps/extension/dist).
-4. Activate the extension to enter onboarding.
-   - You may set a blank password.
-   - You can pin the Prax extension button to your toolbar for quick access.
-
-## Security
-
-If you believe you've found a security-related issue with Penumbra,
-please disclose responsibly by contacting the Penumbra Labs team at
-security@penumbralabs.xyz.
-
-[web repo]: https://github.com/penumbra-zone/web
-[prax repo]: https://github.com/prax-wallet/prax
+[MIT](LICENSE-MIT) / [Apache-2.0](LICENSE-APACHE)
