@@ -42,8 +42,8 @@ export const SettingsNetworkEndpoints = () => {
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium">
                   {network.name}
-                  {network.requiresTrustedEndpoint && (
-                    <span className="ml-2 text-xs text-orange-500">(trusted)</span>
+                  {network.syncDescription && (
+                    <span className="ml-2 text-xs text-green-500">(trustless)</span>
                   )}
                 </label>
                 <span className="text-xs text-muted-foreground">{network.symbol}</span>
@@ -69,9 +69,9 @@ export const SettingsNetworkEndpoints = () => {
                   </button>
                 )}
               </div>
-              {network.requiresTrustedEndpoint && (
+              {network.syncDescription && (
                 <p className="text-xs text-muted-foreground">
-                  Privacy network - requires a trusted sync server. Your viewing keys are sent to this endpoint.
+                  {network.syncDescription}
                 </p>
               )}
             </div>
