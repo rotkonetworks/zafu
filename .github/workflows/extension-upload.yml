@@ -1,16 +1,9 @@
-# Uploads extension dist to chrome dev dashboard when a release is made in github.
-# Admins can log into https://chrome.google.com/webstore/devconsole to submit for approval.
-# Note: `maniftest.json` should already be updated to the desired version before release.
-
-# Prod: https://chrome.google.com/webstore/detail/penumbra-wallet/lkpmkhpnhknhmibgnmmhdhgdilepfghe
-# Beta: https://chrome.google.com/webstore/detail/penumbra-wallet/ejpfkiblcablembkdhcofhokccbbppnc
-name: Upload extension
+name: Release
 
 on:
   push:
     tags:
-      - '*-?v[0-9]+*'
-  workflow_call:
+      - 'v*'
   workflow_dispatch:
 
 env:
@@ -18,47 +11,73 @@ env:
   NODE_ENV: production
 
 jobs:
-  publish:
-    environment: ext-publish
-    name: Upload extension dist
+  release:
+    name: Build and release
     runs-on: buildjet-16vcpu-ubuntu-2204
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
+
       - id: built
         uses: buildjet/cache@v4
         with:
           path: .turbo
-          key: ${{ hashFiles('pnpm-lock.yaml') }}-${{ github.ref }}-${{ github.sha }}-publish
-          restore-keys: ${{ hashFiles('pnpm-lock.yaml') }}-${{ github.ref }}-${{ github.sha }}-test
+          key: ${{ hashFiles('pnpm-lock.yaml') }}-${{ github.ref }}-${{ github.sha }}-release
+          restore-keys: ${{ hashFiles('pnpm-lock.yaml') }}
+
       - uses: pnpm/action-setup@v4
       - uses: buildjet/setup-node@v4
         with:
           node-version: '22'
           cache: 'pnpm'
-      - run: pnpm install --frozen-lockfile --prod false # will install devDeps as well
-      - run: pnpm turbo build --cache-dir=.turbo
 
-      # Outputs beta.zip and prod.zip
-      - name: Zip extension versions
-        run: pnpm zip
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo build --filter=zafu --cache-dir=.turbo
 
-      - name: Upload beta version
-        uses: prax-wallet/chrome-extension-upload@v1
-        with:
-          file-path: beta.zip
-          extension-id: ejpfkiblcablembkdhcofhokccbbppnc
-          client-id: ${{ secrets.GOOGLE_CLIENT_ID }}
-          client-secret: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-          refresh-token: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
-          publish: false
+      - name: Zip extension
+        run: |
+          cd apps/extension/dist
+          zip -r "$GITHUB_WORKSPACE/zafu-${{ github.ref_name }}.zip" .
 
-      - name: Upload prod version
-        uses: prax-wallet/chrome-extension-upload@v1
-        with:
-          file-path: prod.zip
-          extension-id: lkpmkhpnhknhmibgnmmhdhgdilepfghe
-          client-id: ${{ secrets.GOOGLE_CLIENT_ID }}
-          client-secret: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-          refresh-token: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
-          publish: false
+      - name: Checksum
+        id: checksum
+        run: |
+          sha256sum "zafu-${{ github.ref_name }}.zip" > "zafu-${{ github.ref_name }}.zip.sha256"
+          echo "sha256=$(cut -d ' ' -f 1 zafu-${{ github.ref_name }}.zip.sha256)" >> "$GITHUB_OUTPUT"
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          is_prerelease=""
+          if echo "${{ github.ref_name }}" | grep -qE '(alpha|beta|rc)'; then
+            is_prerelease="--prerelease"
+          fi
+
+          gh release create "${{ github.ref_name }}" \
+            "zafu-${{ github.ref_name }}.zip" \
+            "zafu-${{ github.ref_name }}.zip.sha256" \
+            --title "zafu ${{ github.ref_name }}" \
+            $is_prerelease \
+            --notes "$(cat <<EOF
+          ## zafu ${{ github.ref_name }}
+
+          multi-chain privacy wallet for penumbra, zcash, and more.
+
+          ### install (chrome sideload)
+
+          1. download \`zafu-${{ github.ref_name }}.zip\`
+          2. unzip
+          3. go to \`chrome://extensions\`
+          4. enable "developer mode" (top right)
+          5. click "load unpacked" and select the unzipped folder
+
+          ### sha256
+
+          \`\`\`
+          ${{ steps.checksum.outputs.sha256 }}  zafu-${{ github.ref_name }}.zip
+          \`\`\`
+          EOF
+          )"
