@@ -16,7 +16,7 @@ const BetaManifestReplacerPlugin = new CopyPlugin({
   ],
 });
 
-const ZIGNER_ID = 'ejpfkiblcablembkdhcofhokccbbppnc';
+const ZIGNER_ID = 'ppgbkpjgpggkibdojjocgndbbhiempjf';
 
 /**
  * This config defines the zigner-web Chrome ID, changes the output directory,

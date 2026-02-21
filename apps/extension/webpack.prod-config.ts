@@ -3,7 +3,7 @@ import config from './webpack.config.js';
 
 const __dirname = new URL('.', import.meta.url).pathname;
 
-const ZIGNER_ID = 'lkpmkhpnhknhmibgnmmhdhgdilepfghe';
+const ZIGNER_ID = 'oojfeopgoeapfgcfhmlpfgabcbhkglck';
 
 /**
  * This config defines the zigner-web Chrome ID and the output directory

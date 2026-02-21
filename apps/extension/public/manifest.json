@@ -3,7 +3,7 @@
   "name": "zafu",
   "version": "0.1.0",
   "description": "multi-chain privacy wallet for penumbra, zcash, and more",
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2cbPgeYh8Wze10Nhjx2Skq7Vdjw2b35oLfFzSG3GRBYVqEf0jYEAxc3JtECBOMK5I7UwPMuOCu2oF6+Z4JCx9fZ/pGqW/6+nkX+1xBwRoKihb/toDwxMacL4fko+jN8NX47OeMkWGhOi5JtqV3EkpCOWUf1YzoVhR4ft9COoiXbty7QWzWlbr1ixQgzDnLc3TYIDRQGi6d3nvA45hf6yUixGVhNq91o4qa2xi6ftDx69HnfWGNSJcuxbbah623hdhnJpJouVjfbBgSivw3VXwbv5qwTKpg1bjNN8uaFkaKAf5lvUQnIaDaXQbR4MgN1g5qeXWnpuKM0XV2ueghUqswIDAQAB",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAkVV+yJmnHK0aOHhG2cb+PG7LBy3em5/9Uis2/tJtWO/X7g1llBOoarrvZPMeKTGT81k1c8HmyTCioN0QMFd3Yw/sYVXN/iRA4RL/YZg9lYT9jvI4mw5GJytuqoo3JGs/q47mf9EQTEacIittFzqmk3fM7MVrYFT05TgyQaUuavyIsuin+u8jWn3dvaFxdjX6FYfbHLckddNqWL326yf0MsK1Bt0eD7Ws4ii9Ckv/BC1CZF2knJ981ln0GLiX3Aj6+RjhTtE6NFWKfhKyCDbY9XfAoZGdwo0YKtHqkBVrk++UVBxgDhu4Ncy2nSIyzmtKeq5tHcEiOuU8UuUO8GIolwIDAQAB",
   "minimum_chrome_version": "119",
   "action": {
     "default_popup": "popup.html"
