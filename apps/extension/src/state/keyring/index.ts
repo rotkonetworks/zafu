@@ -504,7 +504,13 @@ export const createKeyRingSlice = (
       if (data.fullViewingKey) supportedNetworks.push('penumbra');
       if (data.viewingKey) supportedNetworks.push('zcash');
       if (data.polkadotSs58) supportedNetworks.push('polkadot');
-      if (data.cosmosAddresses?.length) supportedNetworks.push('osmosis');
+      if (data.cosmosAddresses?.length) {
+        for (const addr of data.cosmosAddresses) {
+          if (!supportedNetworks.includes(addr.chainId)) {
+            supportedNetworks.push(addr.chainId);
+          }
+        }
+      }
 
       const vault: EncryptedVault = {
         id: vaultId,

@@ -31,6 +31,7 @@ export const SettingsZigner = () => {
     walletImport,
     zcashWalletImport,
     parsedPolkadotExport,
+    parsedCosmosExport,
     detectedNetwork,
     errorMessage,
     processQrData,
@@ -39,18 +40,28 @@ export const SettingsZigner = () => {
     setError,
     clearZignerState,
   } = useStore(zignerConnectSelector);
-  const { addZignerUnencrypted } = useStore(keyRingSelector);
+  const { addZignerUnencrypted, keyInfos, deleteKeyRing } = useStore(keyRingSelector);
 
   const [success, setSuccess] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
+  const [deletingVaultId, setDeletingVaultId] = useState<string | null>(null);
+  const [confirmDeleteVault, setConfirmDeleteVault] = useState<string | null>(null);
   const [vaultLegacyMode, setVaultLegacyMode] = useState(false);
 
   // Get list of Zigner wallets with their indices
   const zignerWallets = all
     .map((wallet, index) => ({ wallet, index }))
     .filter(({ wallet }) => isZignerWallet(wallet.custody));
+
+  // Get cosmos and polkadot vaults from keyring
+  const cosmosVaults = keyInfos.filter(k =>
+    k.type === 'zigner-zafu' && Array.isArray(k.insensitive['cosmosAddresses'])
+  );
+  const polkadotVaults = keyInfos.filter(k =>
+    k.type === 'zigner-zafu' && typeof k.insensitive['polkadotSs58'] === 'string'
+  );
 
   // Hidden paste mode - activated by clicking icon 10 times
   const clickCountRef = useRef(0);
@@ -99,8 +110,21 @@ export const SettingsZigner = () => {
     }
   };
 
+  const handleDeleteVault = async (vaultId: string) => {
+    try {
+      setDeletingVaultId(vaultId);
+      await deleteKeyRing(vaultId);
+      setConfirmDeleteVault(null);
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setError(`Failed to remove wallet: ${message}`);
+    } finally {
+      setDeletingVaultId(null);
+    }
+  };
+
   const handleAddWallet = async () => {
-    if (!walletImport && !zcashWalletImport && !parsedPolkadotExport) {
+    if (!walletImport && !zcashWalletImport && !parsedPolkadotExport && !parsedCosmosExport) {
       setError('please scan a qr code first');
       return;
     }
@@ -112,8 +136,15 @@ export const SettingsZigner = () => {
         await addAirgapSignerWallet(walletImport);
       } else if (detectedNetwork === 'zcash' && zcashWalletImport) {
         await addZcashWallet(zcashWalletImport);
+      } else if (detectedNetwork === 'cosmos' && parsedCosmosExport) {
+        const zignerData: ZignerZafuImport = {
+          cosmosAddresses: parsedCosmosExport.addresses,
+          publicKey: parsedCosmosExport.publicKey || undefined,
+          accountIndex: parsedCosmosExport.accountIndex,
+          deviceId: `cosmos-${Date.now()}`,
+        };
+        await addZignerUnencrypted(zignerData, walletLabel || 'zigner cosmos');
       } else if (detectedNetwork === 'polkadot' && parsedPolkadotExport) {
-        // polkadot zigner import - watch-only address via keyring
         const zignerData: ZignerZafuImport = {
           polkadotSs58: parsedPolkadotExport.address,
           polkadotGenesisHash: parsedPolkadotExport.genesisHash,
@@ -155,7 +186,7 @@ export const SettingsZigner = () => {
   };
 
   const showManualInput = manualInputRef.current && scanState !== 'scanned';
-  const showScannedState = scanState === 'scanned' && (walletImport || zcashWalletImport || parsedPolkadotExport);
+  const showScannedState = scanState === 'scanned' && (walletImport || zcashWalletImport || parsedPolkadotExport || parsedCosmosExport);
   const showInitialState = scanState === 'idle' && !showManualInput;
 
   return (
@@ -260,6 +291,121 @@ Zafu Zigner is a cold wallet that keeps your spending keys offline. Zafu stores 
           </div>
         )}
 
+        {/* Cosmos Wallets */}
+        {cosmosVaults.length > 0 && (
+          <div className='border-t border-border pt-4'>
+            <p className='text-sm font-bold mb-3'>cosmos wallets</p>
+            <div className='flex flex-col gap-2'>
+              {cosmosVaults.map(vault => {
+                const addrs = vault.insensitive['cosmosAddresses'] as
+                  { chainId: string; address: string; prefix: string }[];
+                return (
+                  <div
+                    key={vault.id}
+                    className='flex items-center justify-between border border-border bg-card-radial p-3'
+                  >
+                    <div className='flex flex-col gap-1 min-w-0'>
+                      <div className='flex items-center gap-2'>
+                        <EyeOpenIcon className='size-4 text-pink-500 flex-shrink-0' />
+                        <span className='text-sm truncate'>{vault.name}</span>
+                      </div>
+                      {addrs.map(a => (
+                        <span key={a.chainId} className='text-[10px] font-mono text-muted-foreground pl-6'>
+                          {a.chainId}: {a.address.slice(0, 10)}...{a.address.slice(-6)}
+                        </span>
+                      ))}
+                    </div>
+
+                    {confirmDeleteVault === vault.id ? (
+                      <div className='flex items-center gap-2'>
+                        <Button
+                          variant='destructive'
+                          size='sm'
+                          onClick={() => void handleDeleteVault(vault.id)}
+                          disabled={deletingVaultId === vault.id}
+                        >
+                          {deletingVaultId === vault.id ? 'removing...' : 'confirm'}
+                        </Button>
+                        <Button
+                          variant='secondary'
+                          size='sm'
+                          onClick={() => setConfirmDeleteVault(null)}
+                          disabled={deletingVaultId === vault.id}
+                        >
+                          cancel
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        variant='ghost'
+                        size='sm'
+                        onClick={() => setConfirmDeleteVault(vault.id)}
+                      >
+                        <TrashIcon className='size-4 text-muted-foreground hover:text-red-400' />
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Polkadot Wallets */}
+        {polkadotVaults.length > 0 && (
+          <div className='border-t border-border pt-4'>
+            <p className='text-sm font-bold mb-3'>polkadot wallets</p>
+            <div className='flex flex-col gap-2'>
+              {polkadotVaults.map(vault => {
+                const ss58 = vault.insensitive['polkadotSs58'] as string;
+                return (
+                  <div
+                    key={vault.id}
+                    className='flex items-center justify-between border border-border bg-card-radial p-3'
+                  >
+                    <div className='flex items-center gap-2 min-w-0'>
+                      <EyeOpenIcon className='size-4 text-pink-500 flex-shrink-0' />
+                      <span className='text-sm truncate'>{vault.name}</span>
+                      <span className='text-[10px] font-mono text-muted-foreground'>
+                        {ss58.slice(0, 8)}...{ss58.slice(-6)}
+                      </span>
+                    </div>
+
+                    {confirmDeleteVault === vault.id ? (
+                      <div className='flex items-center gap-2'>
+                        <Button
+                          variant='destructive'
+                          size='sm'
+                          onClick={() => void handleDeleteVault(vault.id)}
+                          disabled={deletingVaultId === vault.id}
+                        >
+                          {deletingVaultId === vault.id ? 'removing...' : 'confirm'}
+                        </Button>
+                        <Button
+                          variant='secondary'
+                          size='sm'
+                          onClick={() => setConfirmDeleteVault(null)}
+                          disabled={deletingVaultId === vault.id}
+                        >
+                          cancel
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        variant='ghost'
+                        size='sm'
+                        onClick={() => setConfirmDeleteVault(vault.id)}
+                      >
+                        <TrashIcon className='size-4 text-muted-foreground hover:text-red-400' />
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Polkadot Vault Settings */}
         <div className='border-t border-border pt-4'>
           <p className='text-sm font-bold mb-3'>polkadot vault</p>
@@ -336,7 +482,7 @@ wallet added successfully!
                   variant='gradient'
                   className='flex-1'
                   onClick={handleAddWallet}
-                  disabled={(!walletImport && !zcashWalletImport && !parsedPolkadotExport) || isAdding}
+                  disabled={(!walletImport && !zcashWalletImport && !parsedPolkadotExport && !parsedCosmosExport) || isAdding}
                 >
                   {isAdding ? 'Adding...' : 'Add Wallet'}
                 </Button>
@@ -355,7 +501,11 @@ wallet added successfully!
                   </span>
                 </div>
                 <p className='text-xs text-muted-foreground mt-1'>
-                  {parsedPolkadotExport ? (
+                  {parsedCosmosExport ? (
+                    <span className='font-mono'>
+                      {parsedCosmosExport.addresses.map(a => a.address.slice(0, 10)).join(', ')}...
+                    </span>
+                  ) : parsedPolkadotExport ? (
                     <span className='font-mono'>
                       {parsedPolkadotExport.address.slice(0, 8)}...{parsedPolkadotExport.address.slice(-6)}
                     </span>

@@ -11,6 +11,7 @@ import { useStore } from '../state';
 import { selectActiveNetwork, selectEffectiveKeyInfo, keyRingSelector } from '../state/keyring';
 import { getActiveWalletJson, selectActiveZcashWallet } from '../state/wallets';
 import { NETWORK_CONFIGS, type IbcNetwork, isIbcNetwork } from '../state/keyring/network-types';
+import type { CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 
 /** derive cosmos/ibc address from mnemonic */
 async function deriveCosmosAddress(mnemonic: string, prefix: string): Promise<string> {
@@ -198,6 +199,32 @@ export function useActiveAddress() {
         // zigner-zafu vault - check insensitive data for stored keys
         if (selectedKeyInfo?.type === 'zigner-zafu') {
           const insensitive = selectedKeyInfo.insensitive ?? {};
+
+          // check for stored cosmos/ibc address
+          if (isIbcNetwork(activeNetwork)) {
+            const addrs = insensitive['cosmosAddresses'] as
+              { chainId: string; address: string; prefix: string }[] | undefined;
+            if (addrs) {
+              const match = addrs.find(a => a.chainId === activeNetwork);
+              if (match) {
+                if (!cancelled) setAddress(match.address);
+                if (!cancelled) setLoading(false);
+                return;
+              }
+              // derive from any stored address using bech32 prefix conversion
+              if (addrs.length > 0) {
+                try {
+                  const { deriveChainAddress } = await import('@repo/wallet/networks/cosmos/signer');
+                  const addr = deriveChainAddress(addrs[0]!.address, activeNetwork as CosmosChainId);
+                  if (!cancelled) setAddress(addr);
+                  if (!cancelled) setLoading(false);
+                  return;
+                } catch (err) {
+                  console.error('failed to derive cosmos address:', err);
+                }
+              }
+            }
+          }
 
           // check for stored polkadot key
           if ((activeNetwork === 'polkadot' || activeNetwork === 'kusama') && insensitive['polkadotSs58']) {
