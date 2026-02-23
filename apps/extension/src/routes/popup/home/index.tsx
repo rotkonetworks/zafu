@@ -298,15 +298,6 @@ const PolkadotContent = ({
 /** cosmos chain content - shows balances from public RPC */
 const CosmosContent = ({ chainId }: { chainId: CosmosChainId }) => {
   const config = COSMOS_CHAINS[chainId];
-  const transparentEnabled = useStore(state => state.privacy.settings.enableTransparentBalances);
-  const setSetting = useStore(state => state.privacy.setSetting);
-
-  // auto-enable transparent balance fetching - user opted in by enabling the chain
-  useEffect(() => {
-    if (!transparentEnabled) {
-      void setSetting('enableTransparentBalances', true);
-    }
-  }, [transparentEnabled, setSetting]);
 
   const { data: assetsData, isLoading, error } = useCosmosAssets(chainId, 0);
 

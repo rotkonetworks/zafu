@@ -5,14 +5,14 @@ import { PopupPath } from '../../paths';
 export const SettingsHeader = ({ title }: { title: string }) => {
   const navigate = usePopupNav();
   return (
-    <>
+    <div className='flex h-[70px] items-center border-b border-border-secondary px-4'>
       <BackIcon
-        className='absolute ml-[30px] mt-6 size-6 text-muted-foreground'
+        className='size-5 shrink-0 text-foreground'
         onClick={() => navigate(PopupPath.INDEX)}
       />
-      <h1 className='flex h-[70px] items-center justify-center border-b border-border-secondary font-headline text-xl font-semibold leading-[30px]'>
+      <h1 className='flex-1 text-center font-headline text-xl font-semibold leading-[30px] pr-5'>
         {title}
       </h1>
-    </>
+    </div>
   );
 };

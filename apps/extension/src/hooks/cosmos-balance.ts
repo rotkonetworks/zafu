@@ -3,24 +3,34 @@
  *
  * fetches balance for cosmos chains using RPC.
  *
- * privacy note: these queries leak address activity to rpc nodes.
- * only runs when user has opted in via privacy settings.
+ * cosmos chains are inherently transparent — selecting one means the user
+ * consented to public RPC queries. no additional privacy gate needed.
  */
 
+import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useStore } from '../state';
 import { selectEffectiveKeyInfo, keyRingSelector } from '../state/keyring';
-import { canFetchTransparentBalances } from '../state/privacy';
 import { createSigningClient, deriveAllChainAddresses, deriveChainAddress } from '@repo/wallet/networks/cosmos/signer';
 import { getBalance, getAllBalances } from '@repo/wallet/networks/cosmos/client';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+
+/** auto-enable transparent balance fetching when using cosmos hooks */
+function useAutoEnableTransparent() {
+  const enabled = useStore(state => state.privacy.settings.enableTransparentBalances);
+  const setSetting = useStore(state => state.privacy.setSetting);
+  useEffect(() => {
+    if (!enabled) {
+      void setSetting('enableTransparentBalances', true);
+    }
+  }, [enabled, setSetting]);
+}
 
 /** hook to get balance for a specific cosmos chain */
 export const useCosmosBalance = (chainId: CosmosChainId, accountIndex = 0) => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const { getMnemonic } = useStore(keyRingSelector);
-  // privacy gate: only fetch if user has opted in
-  const canFetch = useStore(canFetchTransparentBalances);
+  useAutoEnableTransparent();
 
   return useQuery({
     queryKey: ['cosmosBalance', chainId, selectedKeyInfo?.id, accountIndex],
@@ -47,8 +57,7 @@ export const useCosmosBalance = (chainId: CosmosChainId, accountIndex = 0) => {
         formatted: formatBalance(balance.amount, config.decimals, config.symbol),
       };
     },
-    // privacy gate: require user opt-in before making rpc queries
-    enabled: canFetch && !!selectedKeyInfo && (selectedKeyInfo.type === 'mnemonic' || selectedKeyInfo.type === 'zigner-zafu'),
+    enabled: !!selectedKeyInfo && (selectedKeyInfo.type === 'mnemonic' || selectedKeyInfo.type === 'zigner-zafu'),
     staleTime: 30_000, // 30 seconds
     refetchInterval: 60_000, // refetch every minute
   });
@@ -58,8 +67,7 @@ export const useCosmosBalance = (chainId: CosmosChainId, accountIndex = 0) => {
 export const useAllCosmosBalances = (accountIndex = 0) => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const { getMnemonic } = useStore(keyRingSelector);
-  // privacy gate: only fetch if user has opted in
-  const canFetch = useStore(canFetchTransparentBalances);
+  useAutoEnableTransparent();
 
   return useQuery({
     queryKey: ['allCosmosBalances', selectedKeyInfo?.id, accountIndex],
@@ -113,8 +121,7 @@ export const useAllCosmosBalances = (accountIndex = 0) => {
         (typeof results)[0]
       >;
     },
-    // privacy gate: require user opt-in before making rpc queries
-    enabled: canFetch && !!selectedKeyInfo && (selectedKeyInfo.type === 'mnemonic' || selectedKeyInfo.type === 'zigner-zafu'),
+    enabled: !!selectedKeyInfo && (selectedKeyInfo.type === 'mnemonic' || selectedKeyInfo.type === 'zigner-zafu'),
     staleTime: 30_000,
     refetchInterval: 60_000,
   });
@@ -154,8 +161,7 @@ function getZignerCosmosAddress(keyInfo: { insensitive: Record<string, unknown> 
 export const useCosmosAssets = (chainId: CosmosChainId, accountIndex = 0) => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const { getMnemonic } = useStore(keyRingSelector);
-  // privacy gate: only fetch if user has opted in
-  const canFetch = useStore(canFetchTransparentBalances);
+  useAutoEnableTransparent();
 
   return useQuery({
     queryKey: ['cosmosAssets', chainId, selectedKeyInfo?.id, accountIndex],
@@ -217,8 +223,7 @@ export const useCosmosAssets = (chainId: CosmosChainId, accountIndex = 0) => {
         nativeAsset: assets.find(a => a.isNative) ?? null,
       };
     },
-    // privacy gate: require user opt-in before making rpc queries
-    enabled: canFetch && !!selectedKeyInfo && (selectedKeyInfo.type === 'mnemonic' || selectedKeyInfo.type === 'zigner-zafu'),
+    enabled: !!selectedKeyInfo && (selectedKeyInfo.type === 'mnemonic' || selectedKeyInfo.type === 'zigner-zafu'),
     staleTime: 30_000,
     refetchInterval: 60_000,
   });

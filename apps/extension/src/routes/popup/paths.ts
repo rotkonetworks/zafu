@@ -34,5 +34,6 @@ export enum PopupPath {
   SETTINGS_NETWORKS = '/settings/networks',
   SETTINGS_NETWORK_ENDPOINTS = '/settings/network-endpoints',
   SETTINGS_PARACHAINS = '/settings/parachains',
+  SETTINGS_PRIVACY = '/settings/privacy',
   SETTINGS_ABOUT = '/settings/about',
 }
