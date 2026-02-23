@@ -94,25 +94,43 @@ function getZignerPubkey(insensitive: Record<string, unknown>): Uint8Array | nul
   return bytes;
 }
 
+/** find a keyInfo with cosmos capability — effective first, then any wallet */
+function findCosmosKey(
+  keyInfos: { id: string; type: string; insensitive: Record<string, unknown> }[],
+  effective: { id: string; type: string; insensitive: Record<string, unknown> } | undefined,
+  chainId: CosmosChainId,
+) {
+  if (effective) {
+    if (effective.type === 'mnemonic') return effective;
+    if (effective.type === 'zigner-zafu' && getZignerAddress(effective.insensitive ?? {}, chainId)) return effective;
+  }
+  for (const ki of keyInfos) {
+    if (ki === effective) continue;
+    if (ki.type === 'mnemonic') return ki;
+    if (ki.type === 'zigner-zafu' && getZignerAddress(ki.insensitive ?? {}, chainId)) return ki;
+  }
+  return null;
+}
+
 /** hook for cosmos send transactions */
 export const useCosmosSend = () => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  const allKeyInfos = useStore(state => state.keyRing.keyInfos);
   const { getMnemonic } = useStore(keyRingSelector);
 
   return useMutation({
     mutationFn: async (params: CosmosSendParams): Promise<CosmosTxResult | CosmosZignerSignResult> => {
-      if (!selectedKeyInfo) {
-        throw new Error('no wallet selected');
-      }
-
       const config = COSMOS_CHAINS[params.chainId];
       const denom = params.denom ?? config.denom;
       const accountIndex = params.accountIndex ?? 0;
       const amountInBase = Math.floor(parseFloat(params.amount) * Math.pow(10, config.decimals));
 
-      if (selectedKeyInfo.type === 'mnemonic') {
+      const key = findCosmosKey(allKeyInfos, selectedKeyInfo, params.chainId);
+      if (!key) throw new Error('no cosmos-capable wallet found');
+
+      if (key.type === 'mnemonic') {
         // mnemonic path: direct sign+broadcast
-        const mnemonic = await getMnemonic(selectedKeyInfo.id);
+        const mnemonic = await getMnemonic(key.id);
         const { address: fromAddress } = await createSigningClient(
           params.chainId, mnemonic, accountIndex,
         ).then(r => ({ address: r.address }));
@@ -141,9 +159,9 @@ export const useCosmosSend = () => {
         };
       }
 
-      if (selectedKeyInfo.type === 'zigner-zafu') {
+      if (key.type === 'zigner-zafu') {
         // zigner path: build sign request for QR
-        const insensitive = selectedKeyInfo.insensitive ?? {};
+        const insensitive = key.insensitive ?? {};
         const fromAddress = getZignerAddress(insensitive, params.chainId);
         if (!fromAddress) throw new Error('no cosmos address found for zigner wallet');
 
@@ -188,23 +206,23 @@ export const useCosmosSend = () => {
 /** hook for IBC transfers */
 export const useCosmosIbcTransfer = () => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  const allKeyInfos = useStore(state => state.keyRing.keyInfos);
   const { getMnemonic } = useStore(keyRingSelector);
 
   return useMutation({
     mutationFn: async (params: CosmosIbcTransferParams): Promise<CosmosTxResult | CosmosZignerSignResult> => {
-      if (!selectedKeyInfo) {
-        throw new Error('no wallet selected');
-      }
-
       const config = COSMOS_CHAINS[params.sourceChainId];
       const denom = params.denom ?? config.denom;
       const accountIndex = params.accountIndex ?? 0;
       const amountInBase = Math.floor(parseFloat(params.amount) * Math.pow(10, config.decimals));
       const timeoutTimestamp = BigInt(Date.now() + 10 * 60 * 1000) * 1_000_000n;
 
-      if (selectedKeyInfo.type === 'mnemonic') {
+      const key = findCosmosKey(allKeyInfos, selectedKeyInfo, params.sourceChainId);
+      if (!key) throw new Error('no cosmos-capable wallet found');
+
+      if (key.type === 'mnemonic') {
         // mnemonic path: direct sign+broadcast
-        const mnemonic = await getMnemonic(selectedKeyInfo.id);
+        const mnemonic = await getMnemonic(key.id);
         const { client, address: fromAddress } = await createSigningClient(
           params.sourceChainId, mnemonic, accountIndex,
         );
@@ -235,9 +253,9 @@ export const useCosmosIbcTransfer = () => {
         }
       }
 
-      if (selectedKeyInfo.type === 'zigner-zafu') {
+      if (key.type === 'zigner-zafu') {
         // zigner path: build sign request for QR
-        const insensitive = selectedKeyInfo.insensitive ?? {};
+        const insensitive = key.insensitive ?? {};
         const fromAddress = getZignerAddress(insensitive, params.sourceChainId);
         if (!fromAddress) throw new Error('no cosmos address found for zigner wallet');
 

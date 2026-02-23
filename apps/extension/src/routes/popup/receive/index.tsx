@@ -24,6 +24,7 @@ import { useCosmosAssets, type CosmosAsset } from '../../../hooks/cosmos-balance
 import { useCosmosIbcTransfer } from '../../../hooks/cosmos-signer';
 import { type CosmosChainId, COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
 import { usePasswordGate } from '../../../hooks/password-gate';
+import { openInDedicatedWindow } from '../../../utils/navigate';
 import QRCode from 'qrcode';
 
 /** small copy button with feedback */
@@ -128,8 +129,6 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
     cosmosChainId ?? 'osmosis',
     0,
   );
-  const assetsEnabled = !!cosmosChainId;
-
   const chainBtnRef = useRef<HTMLButtonElement>(null);
   const assetBtnRef = useRef<HTMLButtonElement>(null);
   const cosmosIbc = useCosmosIbcTransfer();
@@ -198,7 +197,19 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
       });
 
       if (result.type === 'zigner') {
-        throw new Error('zigner signing not supported for shielding — use a mnemonic wallet');
+        // open dedicated cosmos-sign window for QR flow
+        const serializable = {
+          ...result,
+          pubkey: Array.from(result.pubkey),
+          signRequest: {
+            ...result.signRequest,
+            signDocBytes: Array.from(result.signRequest.signDocBytes),
+          },
+        };
+        await chrome.storage.session.set({ cosmosSignData: serializable });
+        await openInDedicatedWindow(PopupPath.COSMOS_SIGN, { width: 400, height: 628 });
+        setTxStatus('idle');
+        return;
       }
 
       setTxStatus('success');
@@ -272,7 +283,7 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
             </div>
             <div className='flex items-center gap-2 rounded-lg border border-border/40 bg-muted/30 p-3'>
               <code className='flex-1 break-all text-xs'>
-                {assetsData?.address ?? 'loading...'}
+                {assetsLoading ? 'loading...' : assetsData?.address ?? 'no cosmos wallet found'}
               </code>
               {assetsData?.address && <CopyButton text={assetsData.address} />}
             </div>
@@ -283,13 +294,15 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
             <div className='mb-1 text-xs text-muted-foreground'>
               balances on {selectedIbcChain.displayName}
             </div>
-            {!assetsEnabled ? (
-              <p className='text-xs text-muted-foreground'>enable transparent balance fetching in settings</p>
-            ) : assetsLoading ? (
+            {assetsLoading ? (
               <div className='rounded-lg border border-border/40 bg-muted/30 p-3'>
                 <span className='text-xs text-muted-foreground'>loading balances...</span>
               </div>
-            ) : assetsData?.assets.length === 0 ? (
+            ) : !assetsData ? (
+              <div className='rounded-lg border border-border/40 bg-muted/30 p-3'>
+                <span className='text-xs text-muted-foreground'>no cosmos wallet found — import from Zigner</span>
+              </div>
+            ) : assetsData.assets.length === 0 ? (
               <div className='rounded-lg border border-border/40 bg-muted/30 p-3'>
                 <span className='text-xs text-muted-foreground'>no assets found</span>
               </div>

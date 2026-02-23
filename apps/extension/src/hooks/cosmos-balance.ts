@@ -157,28 +157,49 @@ function getZignerCosmosAddress(keyInfo: { insensitive: Record<string, unknown> 
   return null;
 }
 
+/** find a keyInfo with cosmos capability — effective first, then any wallet that has cosmos addresses */
+function findCosmosCapableKey(
+  keyInfos: { id: string; type: string; insensitive: Record<string, unknown> }[],
+  effective: { id: string; type: string; insensitive: Record<string, unknown> } | undefined,
+  chainId: CosmosChainId,
+): { id: string; type: string; insensitive: Record<string, unknown> } | null {
+  // try effective first
+  if (effective) {
+    if (effective.type === 'mnemonic') return effective;
+    if (effective.type === 'zigner-zafu' && getZignerCosmosAddress(effective, chainId)) return effective;
+  }
+  // fallback: search all keyInfos for one with cosmos capability
+  for (const ki of keyInfos) {
+    if (ki === effective) continue;
+    if (ki.type === 'mnemonic') return ki;
+    if (ki.type === 'zigner-zafu' && getZignerCosmosAddress(ki, chainId)) return ki;
+  }
+  return null;
+}
+
 /** hook to get all assets (native + IBC tokens) for a cosmos chain */
 export const useCosmosAssets = (chainId: CosmosChainId, accountIndex = 0) => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  const allKeyInfos = useStore(state => state.keyRing.keyInfos);
   const { getMnemonic } = useStore(keyRingSelector);
   useAutoEnableTransparent();
 
+  // find a wallet with cosmos capability (may differ from effective when active network is penumbra)
+  const cosmosKey = findCosmosCapableKey(allKeyInfos, selectedKeyInfo, chainId);
+
   return useQuery({
-    queryKey: ['cosmosAssets', chainId, selectedKeyInfo?.id, accountIndex],
+    queryKey: ['cosmosAssets', chainId, cosmosKey?.id ?? null, accountIndex],
     queryFn: async () => {
-      if (!selectedKeyInfo) {
-        throw new Error('no wallet selected');
-      }
+      if (!cosmosKey) return null;
 
       let address: string;
 
-      if (selectedKeyInfo.type === 'zigner-zafu') {
-        // zigner wallet - get address from stored insensitive data
-        const storedAddr = getZignerCosmosAddress(selectedKeyInfo, chainId);
+      if (cosmosKey.type === 'zigner-zafu') {
+        const storedAddr = getZignerCosmosAddress(cosmosKey, chainId);
         if (!storedAddr) return null;
         address = storedAddr;
-      } else if (selectedKeyInfo.type === 'mnemonic') {
-        const mnemonic = await getMnemonic(selectedKeyInfo.id);
+      } else if (cosmosKey.type === 'mnemonic') {
+        const mnemonic = await getMnemonic(cosmosKey.id);
         const client = await createSigningClient(chainId, mnemonic, accountIndex);
         address = client.address;
       } else {
@@ -186,21 +207,14 @@ export const useCosmosAssets = (chainId: CosmosChainId, accountIndex = 0) => {
       }
 
       const config = COSMOS_CHAINS[chainId];
-
       const balances = await getAllBalances(chainId, address);
 
-      // map balances to asset info
       const assets: CosmosAsset[] = balances
         .filter(b => b.amount > 0n)
         .map(b => {
           const isNative = b.denom === config.denom;
-          // derive symbol from denom
-          const symbol = isNative
-            ? config.symbol
-            : denomToSymbol(b.denom);
-          // assume 6 decimals for most cosmos assets
+          const symbol = isNative ? config.symbol : denomToSymbol(b.denom);
           const decimals = isNative ? config.decimals : 6;
-
           return {
             denom: b.denom,
             amount: b.amount,
@@ -210,7 +224,6 @@ export const useCosmosAssets = (chainId: CosmosChainId, accountIndex = 0) => {
             isNative,
           };
         })
-        // sort: native first, then by amount
         .sort((a, b) => {
           if (a.isNative && !b.isNative) return -1;
           if (!a.isNative && b.isNative) return 1;
@@ -223,7 +236,7 @@ export const useCosmosAssets = (chainId: CosmosChainId, accountIndex = 0) => {
         nativeAsset: assets.find(a => a.isNative) ?? null,
       };
     },
-    enabled: !!selectedKeyInfo && (selectedKeyInfo.type === 'mnemonic' || selectedKeyInfo.type === 'zigner-zafu'),
+    enabled: !!cosmosKey,
     staleTime: 30_000,
     refetchInterval: 60_000,
   });
