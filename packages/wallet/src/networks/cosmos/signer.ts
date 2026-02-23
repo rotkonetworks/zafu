@@ -210,11 +210,13 @@ export function estimateGas(
   messages: EncodeObject[],
   _memo = ''
 ): number {
-  // simple estimation based on message count
+  // simple estimation based on message type
   // real estimation would need simulation
-  const baseGas = 80000;
-  const perMsgGas = 20000;
-  return baseGas + messages.length * perMsgGas;
+  const gasPerMsg = messages.map(m => {
+    if (m.typeUrl === '/ibc.applications.transfer.v1.MsgTransfer') return 200000;
+    return 150000; // MsgSend and others
+  });
+  return gasPerMsg.reduce((sum, g) => sum + g, 0);
 }
 
 /** calculate fee from gas */

@@ -284,12 +284,14 @@ function CosmosSend({ sourceChainId }: { sourceChainId: CosmosChainId }) {
   const [amount, setAmount] = useState('');
   const [selectedAsset, setSelectedAsset] = useState<CosmosAsset | undefined>();
   const [accountIndex, setAccountIndex] = useState(0);
-  const [txStatus, setTxStatus] = useState<'idle' | 'signing' | 'broadcasting' | 'success' | 'error'>('idle');
+  const [txStatus, setTxStatus] = useState<'idle' | 'confirm' | 'signing' | 'broadcasting' | 'success' | 'error'>('idle');
   const [txHash, setTxHash] = useState<string | undefined>();
   const [txError, setTxError] = useState<string | undefined>();
   const [showSavePrompt, setShowSavePrompt] = useState(false);
   const [contactName, setContactName] = useState('');
   const [showContactModal, setShowContactModal] = useState(false);
+  const [txPreview, setTxPreview] = useState<Record<string, unknown> | null>(null);
+  const [showRawJson, setShowRawJson] = useState(false);
 
   // detect wallet type
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
@@ -392,11 +394,50 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
     return () => chrome.storage.session.onChanged.removeListener(listener);
   }, [refetchAssets, recordUsage, recipient, sourceChainId, shouldSuggestSave]);
 
-  const handleSubmit = useCallback(async () => {
+  // show confirmation screen with tx preview
+  const handleReview = useCallback(() => {
     if (!canSubmit || !selectedAsset) return;
+    setTxError(undefined);
+    setShowRawJson(false);
+
+    // build preview of what will be signed
+    const amtBase = Math.floor(parseFloat(amount) * Math.pow(10, selectedAsset.decimals));
+    const denom = selectedAsset.denom;
+
+    if (isSameChain) {
+      setTxPreview({
+        type: 'cosmos-sdk/MsgSend',
+        chain_id: sourceChain.chainId,
+        from: assetsData?.address ?? '...',
+        to: recipient,
+        amount: [{ denom, amount: String(amtBase) }],
+        gas: '150000',
+      });
+    } else {
+      const channel = route?.operations.find(op => op.transfer)?.transfer?.channel;
+      setTxPreview({
+        type: 'cosmos-sdk/MsgTransfer',
+        chain_id: sourceChain.chainId,
+        from: assetsData?.address ?? '...',
+        to: recipient,
+        token: { denom, amount: String(amtBase) },
+        source_channel: channel ?? 'unknown',
+        gas: '200000',
+      });
+    }
+
+    setTxStatus('confirm');
+  }, [canSubmit, selectedAsset, amount, sourceChainId, sourceChain, isSameChain, recipient, assetsData, route]);
+
+  // confirmed — ask password then sign+broadcast
+  const handleConfirm = useCallback(async () => {
+    if (!selectedAsset) return;
 
     const authorized = await requestAuth();
-    if (!authorized) return;
+    if (!authorized) {
+      setTxStatus('confirm');
+      return;
+    }
 
     setTxStatus('signing');
     setTxError(undefined);
@@ -405,7 +446,6 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
       let result;
 
       if (isSameChain) {
-        // same chain send
         result = await cosmosSend.mutateAsync({
           chainId: sourceChainId,
           toAddress: recipient,
@@ -414,8 +454,6 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
           accountIndex,
         });
       } else {
-        // need to find IBC channel for destination
-        // for now, try to find channel from route
         const channel = route?.operations.find(op => op.transfer)?.transfer?.channel;
         if (!channel) {
           throw new Error('no ibc route found');
@@ -434,8 +472,6 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
 
       // check if this is a zigner sign request (needs QR flow in dedicated window)
       if (result.type === 'zigner') {
-        // chrome.storage.session uses JSON serialization — Uint8Array becomes {0:x,1:y,...}
-        // convert to plain arrays so they survive round-trip
         const serializable = {
           ...result,
           pubkey: Array.from(result.pubkey),
@@ -452,11 +488,8 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
 
       setTxStatus('success');
       setTxHash(result.txHash);
-      // refetch assets after tx
       void refetchAssets();
-      // record address usage for contact suggestions
       void recordUsage(recipient, 'cosmos', sourceChainId);
-      // check if we should prompt to save as contact
       if (shouldSuggestSave(recipient)) {
         setShowSavePrompt(true);
       }
@@ -464,7 +497,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
       setTxStatus('error');
       setTxError(err instanceof Error ? err.message : 'transaction failed');
     }
-  }, [canSubmit, isSameChain, sourceChainId, effectiveDestChainId, recipient, amount, selectedAsset, accountIndex, route, cosmosSend, cosmosIbcTransfer, refetchAssets, recordUsage, shouldSuggestSave, requestAuth]);
+  }, [isSameChain, sourceChainId, effectiveDestChainId, recipient, amount, selectedAsset, accountIndex, route, cosmosSend, cosmosIbcTransfer, refetchAssets, recordUsage, shouldSuggestSave, requestAuth]);
 
   return (
     <div className='flex flex-col gap-4'>
@@ -695,6 +728,72 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
         </div>
       )}
 
+      {/* confirmation summary */}
+      {txStatus === 'confirm' && selectedAsset && (
+        <div className='rounded-lg border border-zigner-gold/30 bg-card/50 p-3'>
+          <p className='text-xs font-medium text-zigner-gold mb-2'>confirm transaction</p>
+          <div className='flex flex-col gap-1.5 text-xs'>
+            <div className='flex justify-between'>
+              <span className='text-muted-foreground'>type</span>
+              <span>{isSameChain ? 'send' : 'ibc transfer'}</span>
+            </div>
+            <div className='flex justify-between'>
+              <span className='text-muted-foreground'>chain</span>
+              <span>{sourceChain.name}</span>
+            </div>
+            <div className='flex justify-between gap-2'>
+              <span className='text-muted-foreground shrink-0'>to</span>
+              <span className='font-mono text-right break-all'>{recipient}</span>
+            </div>
+            <div className='flex justify-between'>
+              <span className='text-muted-foreground'>amount</span>
+              <span>{amount} {selectedAsset.symbol}</span>
+            </div>
+            {!isSameChain && effectiveDestChainId && (
+              <div className='flex justify-between'>
+                <span className='text-muted-foreground'>destination</span>
+                <span>{skipChains.find(c => c.chainId === effectiveDestChainId)?.chainName ?? effectiveDestChainId}</span>
+              </div>
+            )}
+          </div>
+
+          {/* raw tx json toggle */}
+          {txPreview && (
+            <div className='mt-2'>
+              <button
+                onClick={() => setShowRawJson(!showRawJson)}
+                className='text-xs text-muted-foreground hover:text-foreground transition-colors'
+              >
+                {showRawJson ? 'hide' : 'view'} raw transaction json
+              </button>
+              {showRawJson && (
+                <pre className='mt-2 max-h-48 overflow-auto rounded bg-background p-2 text-[10px] font-mono text-muted-foreground leading-relaxed'>
+                  {JSON.stringify(txPreview, null, 2)}
+                </pre>
+              )}
+            </div>
+          )}
+
+          <div className='flex gap-2 mt-3'>
+            <button
+              onClick={() => void handleConfirm()}
+              className={cn(
+                'flex-1 rounded-lg bg-zigner-gold py-2.5 text-sm font-medium text-zigner-dark',
+                'transition-all duration-100 hover:bg-zigner-gold-light active:scale-[0.99]'
+              )}
+            >
+              confirm & sign
+            </button>
+            <button
+              onClick={() => setTxStatus('idle')}
+              className='flex-1 rounded-lg border border-border py-2.5 text-sm text-muted-foreground hover:text-foreground transition-colors'
+            >
+              back
+            </button>
+          </div>
+        </div>
+      )}
+
       {txStatus === 'error' && txError && (
         <div className='rounded-lg border border-red-500/30 bg-red-500/10 p-3'>
           <p className='text-sm text-red-400'>transaction failed</p>
@@ -715,34 +814,38 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
               setAmount('');
             }
           } else {
-            void handleSubmit();
+            handleReview();
           }
         }}
         disabled={
           (txStatus === 'idle' && !canSubmit) ||
+          txStatus === 'confirm' ||
           txStatus === 'signing' ||
           txStatus === 'broadcasting'
         }
         className={cn(
           'mt-2 w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark',
           'transition-all duration-100 hover:bg-zigner-gold-light active:scale-[0.99]',
-          'disabled:opacity-50 disabled:cursor-not-allowed'
+          'disabled:opacity-50 disabled:cursor-not-allowed',
+          txStatus === 'confirm' && 'hidden'
         )}
       >
         {txStatus === 'signing' && 'building transaction...'}
         {txStatus === 'broadcasting' && 'broadcasting...'}
-        {txStatus === 'idle' && (routeLoading ? 'finding route...' : 'send')}
+        {txStatus === 'idle' && (routeLoading ? 'finding route...' : 'review')}
         {txStatus === 'success' && 'send another'}
         {txStatus === 'error' && 'retry'}
       </button>
 
-      <p className='text-center text-xs text-muted-foreground'>
-        {!isSameChain
-          ? 'ibc transfer via skip'
-          : isZigner
-            ? 'sign with zafu zigner'
-            : 'local transfer'}
-      </p>
+      {txStatus !== 'confirm' && (
+        <p className='text-center text-xs text-muted-foreground'>
+          {!isSameChain
+            ? 'ibc transfer via skip'
+            : isZigner
+              ? 'sign with zafu zigner'
+              : 'local transfer'}
+        </p>
+      )}
     </div>
   );
 }
