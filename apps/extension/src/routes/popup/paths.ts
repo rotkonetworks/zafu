@@ -19,6 +19,9 @@ export enum PopupPath {
   SEND = '/send',
   RECEIVE = '/receive',
 
+  // Cosmos airgap signing (dedicated window)
+  COSMOS_SIGN = '/cosmos-sign',
+
   // Settings sub-pages
   SETTINGS_RPC = '/settings/rpc',
   SETTINGS_DEFAULT_FRONTEND = '/settings/default-frontend',

@@ -425,6 +425,15 @@ export const createKeyRingSlice = (
       if (data.viewingKey) supportedNetworks.push('zcash');
       if (data.polkadotSs58) supportedNetworks.push('polkadot');
 
+      // Determine cosmos networks from imported addresses
+      if (data.cosmosAddresses?.length) {
+        for (const addr of data.cosmosAddresses) {
+          if (!supportedNetworks.includes(addr.chainId)) {
+            supportedNetworks.push(addr.chainId);
+          }
+        }
+      }
+
       const vault: EncryptedVault = {
         id: vaultId,
         type: 'zigner-zafu',
@@ -438,6 +447,8 @@ export const createKeyRingSlice = (
           supportedNetworks,
           ...(data.polkadotSs58 ? { polkadotSs58: data.polkadotSs58 } : {}),
           ...(data.polkadotGenesisHash ? { polkadotGenesisHash: data.polkadotGenesisHash } : {}),
+          ...(data.cosmosAddresses?.length ? { cosmosAddresses: data.cosmosAddresses } : {}),
+          ...(data.publicKey ? { cosmosPublicKey: data.publicKey } : {}),
         },
       };
 
@@ -526,8 +537,9 @@ export const createKeyRingSlice = (
           // Store polkadot ss58 address in insensitive for watch-only display
           ...(data.polkadotSs58 ? { polkadotSs58: data.polkadotSs58 } : {}),
           ...(data.polkadotGenesisHash ? { polkadotGenesisHash: data.polkadotGenesisHash } : {}),
-          // Store cosmos addresses in insensitive for watch-only display
+          // Store cosmos addresses and pubkey in insensitive for watch-only display and signing
           ...(data.cosmosAddresses?.length ? { cosmosAddresses: data.cosmosAddresses } : {}),
+          ...(data.publicKey ? { cosmosPublicKey: data.publicKey } : {}),
           // only mark as airgapOnly if this is a fresh setup with default password
           // if user already has a real password, this vault uses that password too
           ...(isNewSetup ? { airgapOnly: true } : {}),

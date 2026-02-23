@@ -30,6 +30,8 @@ import { COSMOS_CHAINS, type CosmosChainId, isValidCosmosAddress, getChainFromAd
 import { cn } from '@repo/ui/lib/utils';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { isDedicatedWindow } from '../../../utils/popup-detection';
+import { openInDedicatedWindow } from '../../../utils/navigate';
+import { selectEffectiveKeyInfo } from '../../../state/keyring';
 
 /** IBC chain selector dropdown */
 function ChainSelector({
@@ -289,6 +291,10 @@ function CosmosSend({ sourceChainId }: { sourceChainId: CosmosChainId }) {
   const [contactName, setContactName] = useState('');
   const [showContactModal, setShowContactModal] = useState(false);
 
+  // detect wallet type
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  const isZigner = selectedKeyInfo?.type === 'zigner-zafu';
+
   // recent addresses and contacts
   const { recordUsage, shouldSuggestSave, dismissSuggestion, getRecent } = useStore(recentAddressesSelector);
   const { addContact, addAddress, findByAddress } = useStore(contactsSelector);
@@ -366,6 +372,26 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
   const effectiveDestChainId = destChainId || detectedChain?.chainId || sourceChain.chainId;
   const isSameChain = effectiveDestChainId === sourceChain.chainId;
 
+  // Listen for cosmos sign result from dedicated window
+  useEffect(() => {
+    const listener = (changes: { [key: string]: chrome.storage.StorageChange }) => {
+      if (changes['cosmosSignResult']?.newValue) {
+        const result = changes['cosmosSignResult'].newValue as { txHash: string; code: number };
+        setTxStatus('success');
+        setTxHash(result.txHash);
+        void refetchAssets();
+        void recordUsage(recipient, 'cosmos', sourceChainId);
+        if (shouldSuggestSave(recipient)) {
+          setShowSavePrompt(true);
+        }
+        // Clean up
+        void chrome.storage.session.remove('cosmosSignResult');
+      }
+    };
+    chrome.storage.session.onChanged.addListener(listener);
+    return () => chrome.storage.session.onChanged.removeListener(listener);
+  }, [refetchAssets, recordUsage, recipient, sourceChainId, shouldSuggestSave]);
+
   const handleSubmit = useCallback(async () => {
     if (!canSubmit || !selectedAsset) return;
 
@@ -404,6 +430,24 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
           denom: selectedAsset.denom,
           accountIndex,
         });
+      }
+
+      // check if this is a zigner sign request (needs QR flow in dedicated window)
+      if (result.type === 'zigner') {
+        // chrome.storage.session uses JSON serialization — Uint8Array becomes {0:x,1:y,...}
+        // convert to plain arrays so they survive round-trip
+        const serializable = {
+          ...result,
+          pubkey: Array.from(result.pubkey),
+          signRequest: {
+            ...result.signRequest,
+            signDocBytes: Array.from(result.signRequest.signDocBytes),
+          },
+        };
+        await chrome.storage.session.set({ cosmosSignData: serializable });
+        await openInDedicatedWindow(PopupPath.COSMOS_SIGN, { width: 400, height: 628 });
+        setTxStatus('idle');
+        return;
       }
 
       setTxStatus('success');
@@ -685,7 +729,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
           'disabled:opacity-50 disabled:cursor-not-allowed'
         )}
       >
-        {txStatus === 'signing' && 'signing...'}
+        {txStatus === 'signing' && 'building transaction...'}
         {txStatus === 'broadcasting' && 'broadcasting...'}
         {txStatus === 'idle' && (routeLoading ? 'finding route...' : 'send')}
         {txStatus === 'success' && 'send another'}
@@ -695,7 +739,9 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
       <p className='text-center text-xs text-muted-foreground'>
         {!isSameChain
           ? 'ibc transfer via skip'
-          : 'local transfer'}
+          : isZigner
+            ? 'sign with zafu zigner'
+            : 'local transfer'}
       </p>
     </div>
   );

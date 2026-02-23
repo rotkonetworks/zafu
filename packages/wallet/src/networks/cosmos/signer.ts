@@ -8,8 +8,11 @@
  */
 
 import { Secp256k1HdWallet, makeCosmoshubPath } from '@cosmjs/amino';
-import { SigningStargateClient, GasPrice } from '@cosmjs/stargate';
-import { fromBech32, toBech32 } from '@cosmjs/encoding';
+import { makeSignDoc as makeAminoSignDoc, serializeSignDoc } from '@cosmjs/amino';
+import type { AminoMsg, StdSignDoc } from '@cosmjs/amino';
+import { SigningStargateClient, StargateClient, GasPrice } from '@cosmjs/stargate';
+import { fromBech32, toBech32, toBase64 } from '@cosmjs/encoding';
+import { encodePubkey, makeAuthInfoBytes } from '@cosmjs/proto-signing';
 import type { Coin, StdFee } from '@cosmjs/amino';
 import type { DeliverTxResponse } from '@cosmjs/stargate';
 import { COSMOS_CHAINS, type CosmosChainId } from './chains';
@@ -230,4 +233,175 @@ export function calculateFee(chainId: CosmosChainId, gas: number): StdFee {
     amount: [{ denom: denom!, amount: amount.toString() }],
     gas: gas.toString(),
   };
+}
+
+// ============================================================================
+// Zigner (airgap) signing support
+// ============================================================================
+
+/** convert proto EncodeObject to amino AminoMsg */
+function toAminoMsg(msg: EncodeObject): AminoMsg {
+  const v = msg.value as Record<string, unknown>;
+
+  if (msg.typeUrl === '/cosmos.bank.v1beta1.MsgSend') {
+    return {
+      type: 'cosmos-sdk/MsgSend',
+      value: {
+        from_address: v['fromAddress'],
+        to_address: v['toAddress'],
+        amount: v['amount'],
+      },
+    };
+  }
+
+  if (msg.typeUrl === '/ibc.applications.transfer.v1.MsgTransfer') {
+    return {
+      type: 'cosmos-sdk/MsgTransfer',
+      value: {
+        source_port: v['sourcePort'],
+        source_channel: v['sourceChannel'],
+        token: v['token'],
+        sender: v['sender'],
+        receiver: v['receiver'],
+        timeout_height: v['timeoutHeight'] ?? {},
+        timeout_timestamp: v['timeoutTimestamp'] ?? '0',
+        memo: v['memo'] ?? '',
+      },
+    };
+  }
+
+  throw new Error(`unsupported message type for amino: ${msg.typeUrl}`);
+}
+
+/** result from building a zigner sign request */
+export interface ZignerSignRequest {
+  /** amino SignDoc as canonical JSON bytes */
+  signDocBytes: Uint8Array;
+  /** amino SignDoc object (for reference) */
+  signDoc: StdSignDoc;
+  /** fee used */
+  fee: StdFee;
+  /** account number from chain */
+  accountNumber: number;
+  /** sequence from chain */
+  sequence: number;
+  /** the proto messages (for TxRaw reconstruction) */
+  messages: EncodeObject[];
+  /** memo */
+  memo: string;
+}
+
+/**
+ * build amino SignDoc for zigner signing (no mnemonic needed)
+ *
+ * queries account info from chain, builds the SignDoc, and serializes it.
+ * the serialized bytes are what Zigner signs: SHA256(signDocBytes).
+ */
+export async function buildZignerSignDoc(
+  chainId: CosmosChainId,
+  fromAddress: string,
+  messages: EncodeObject[],
+  fee: StdFee,
+  memo = '',
+): Promise<ZignerSignRequest> {
+  const config = COSMOS_CHAINS[chainId];
+
+  // query account info from chain (read-only client)
+  const client = await StargateClient.connect(config.rpcEndpoint);
+  try {
+    const account = await client.getAccount(fromAddress);
+    if (!account) {
+      throw new Error(`account not found on chain: ${fromAddress}`);
+    }
+
+    // convert messages to amino format
+    const aminoMsgs = messages.map(toAminoMsg);
+
+    // build the amino SignDoc
+    const signDoc = makeAminoSignDoc(
+      aminoMsgs,
+      fee,
+      config.chainId,
+      memo,
+      account.accountNumber,
+      account.sequence,
+    );
+
+    // serialize to canonical JSON bytes (this is what gets signed)
+    const signDocBytes = serializeSignDoc(signDoc);
+
+    return {
+      signDocBytes,
+      signDoc,
+      fee,
+      accountNumber: account.accountNumber,
+      sequence: account.sequence,
+      messages,
+      memo,
+    };
+  } finally {
+    client.disconnect();
+  }
+}
+
+/**
+ * broadcast a transaction signed by Zigner
+ *
+ * reconstructs TxRaw from the amino SignDoc + signature + pubkey and broadcasts.
+ */
+export async function broadcastZignerSignedTx(
+  chainId: CosmosChainId,
+  signRequest: ZignerSignRequest,
+  signature: Uint8Array,
+  pubkey: Uint8Array,
+): Promise<DeliverTxResponse> {
+  const config = COSMOS_CHAINS[chainId];
+
+  // build amino-style pubkey for proto encoding
+  const aminoPubkey = {
+    type: 'tendermint/PubKeySecp256k1',
+    value: toBase64(pubkey),
+  };
+  const pubkeyAny = encodePubkey(aminoPubkey);
+
+  // dynamic imports for proto types (transitive deps of @cosmjs/stargate)
+  const { TxRaw } = await import('cosmjs-types/cosmos/tx/v1beta1/tx');
+  const { SignMode } = await import('cosmjs-types/cosmos/tx/signing/v1beta1/signing');
+
+  // build AuthInfo bytes
+  const authInfoBytes = makeAuthInfoBytes(
+    [{ pubkey: pubkeyAny, sequence: signRequest.sequence }],
+    signRequest.fee.amount,
+    parseInt(signRequest.fee.gas),
+    signRequest.fee.granter,
+    signRequest.fee.payer,
+    SignMode.SIGN_MODE_LEGACY_AMINO_JSON,
+  );
+
+  // build TxBody from the proto messages
+  // use defaultRegistryTypes which includes MsgSend, MsgTransfer, etc.
+  const { Registry: CosmosRegistry } = await import('@cosmjs/proto-signing');
+  const { defaultRegistryTypes } = await import('@cosmjs/stargate');
+  const registry = new CosmosRegistry(defaultRegistryTypes);
+  const txBodyBytes = registry.encodeTxBody({
+    messages: signRequest.messages,
+    memo: signRequest.memo,
+  });
+
+  // construct TxRaw
+  const txRaw = TxRaw.fromPartial({
+    bodyBytes: txBodyBytes,
+    authInfoBytes,
+    signatures: [signature],
+  });
+
+  const txBytes = TxRaw.encode(txRaw).finish();
+
+  // broadcast via read-only client
+  const client = await StargateClient.connect(config.rpcEndpoint);
+  try {
+    return await client.broadcastTx(txBytes);
+  } finally {
+    client.disconnect();
+  }
 }

@@ -197,6 +197,10 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
         denom: selectedAsset.denom,
       });
 
+      if (result.type === 'zigner') {
+        throw new Error('zigner signing not supported for shielding — use a mnemonic wallet');
+      }
+
       setTxStatus('success');
       setTxHash(result.txHash);
     } catch (err) {

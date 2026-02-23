@@ -24,6 +24,7 @@
     "./networks/cosmos/adapter": "./src/networks/cosmos/adapter.ts",
     "./networks/cosmos/chains": "./src/networks/cosmos/chains.ts",
     "./networks/cosmos/signer": "./src/networks/cosmos/signer.ts",
+    "./networks/cosmos/airgap": "./src/networks/cosmos/airgap.ts",
     "./networks/cosmos/client": "./src/networks/cosmos/client.ts",
     "./networks/polkadot/parachain-registry": "./src/networks/polkadot/parachain-registry.ts"
   },
@@ -32,6 +33,7 @@
     "@cosmjs/encoding": "^0.32.4",
     "@cosmjs/proto-signing": "^0.32.4",
     "@cosmjs/stargate": "^0.32.4",
+    "cosmjs-types": "^0.9.0",
     "@noble/curves": "^1.9.7",
     "@noble/hashes": "^1.8.0",
     "@penumbra-zone/bech32m": "18.0.0",
