@@ -33,7 +33,6 @@
     "@cosmjs/encoding": "^0.32.4",
     "@cosmjs/proto-signing": "^0.32.4",
     "@cosmjs/stargate": "^0.32.4",
-    "cosmjs-types": "^0.9.0",
     "@noble/curves": "^1.9.7",
     "@noble/hashes": "^1.8.0",
     "@penumbra-zone/bech32m": "18.0.0",
@@ -41,6 +40,7 @@
     "@polkadot-api/known-chains": "^0.9.18",
     "@polkadot-api/merkleize-metadata": "^1.1.29",
     "bip39": "^3.1.0",
+    "cosmjs-types": "^0.9.0",
     "polkadot-api": "^1.23.3",
     "qrcode": "^1.5.4"
   },
