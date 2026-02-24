@@ -2,12 +2,10 @@
  * cosmos balance hook
  *
  * fetches balance for cosmos chains using RPC.
- *
- * cosmos chains are inherently transparent — selecting one means the user
- * consented to public RPC queries. no additional privacy gate needed.
+ * transparent balance fetching is enabled per-user via settings-networks
+ * when they explicitly toggle on a cosmos/IBC chain.
  */
 
-import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useStore } from '../state';
 import { selectEffectiveKeyInfo, keyRingSelector } from '../state/keyring';
@@ -15,22 +13,10 @@ import { createSigningClient, deriveAllChainAddresses, deriveChainAddress } from
 import { getBalance, getAllBalances } from '@repo/wallet/networks/cosmos/client';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 
-/** auto-enable transparent balance fetching when using cosmos hooks */
-function useAutoEnableTransparent() {
-  const enabled = useStore(state => state.privacy.settings.enableTransparentBalances);
-  const setSetting = useStore(state => state.privacy.setSetting);
-  useEffect(() => {
-    if (!enabled) {
-      void setSetting('enableTransparentBalances', true);
-    }
-  }, [enabled, setSetting]);
-}
-
 /** hook to get balance for a specific cosmos chain */
 export const useCosmosBalance = (chainId: CosmosChainId, accountIndex = 0) => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const { getMnemonic } = useStore(keyRingSelector);
-  useAutoEnableTransparent();
 
   return useQuery({
     queryKey: ['cosmosBalance', chainId, selectedKeyInfo?.id, accountIndex],
@@ -67,7 +53,6 @@ export const useCosmosBalance = (chainId: CosmosChainId, accountIndex = 0) => {
 export const useAllCosmosBalances = (accountIndex = 0) => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const { getMnemonic } = useStore(keyRingSelector);
-  useAutoEnableTransparent();
 
   return useQuery({
     queryKey: ['allCosmosBalances', selectedKeyInfo?.id, accountIndex],
@@ -182,7 +167,6 @@ export const useCosmosAssets = (chainId: CosmosChainId, accountIndex = 0) => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const allKeyInfos = useStore(state => state.keyRing.keyInfos);
   const { getMnemonic } = useStore(keyRingSelector);
-  useAutoEnableTransparent();
 
   // find a wallet with cosmos capability (may differ from effective when active network is penumbra)
   const cosmosKey = findCosmosCapableKey(allKeyInfos, selectedKeyInfo, chainId);

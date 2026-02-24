@@ -228,10 +228,14 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
         sctClient.epochByHeight({ height: BigInt(latestBlockHeight ?? 0) }),
       ]);
 
+      if (!startEpochRes.epoch || !currentEpochRes.epoch) {
+        throw new Error('failed to resolve epoch for unbonding claim');
+      }
+
       const penaltyRes = await stakeClient.validatorPenalty({
         identityKey,
-        startEpochIndex: startEpochRes.epoch?.index ?? 0n,
-        endEpochIndex: currentEpochRes.epoch?.index ?? 0n,
+        startEpochIndex: startEpochRes.epoch.index,
+        endEpochIndex: currentEpochRes.epoch.index,
       });
 
       const planRequest = new TransactionPlannerRequest({

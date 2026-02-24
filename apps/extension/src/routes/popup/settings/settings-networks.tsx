@@ -42,9 +42,10 @@ export const SettingsNetworks = () => {
   const transparentEnabled = useStore(state => state.privacy.settings.enableTransparentBalances);
 
   const handleToggle = async (network: NetworkType) => {
+    const wasEnabled = enabledNetworks.includes(network);
     await toggleNetwork(network);
-    // auto-enable transparent balance fetching when enabling an IBC chain
-    if (isIbcNetwork(network) && !transparentEnabled) {
+    // auto-enable transparent balance fetching when enabling (not disabling) an IBC chain
+    if (!wasEnabled && isIbcNetwork(network) && !transparentEnabled) {
       await privacySetSetting('enableTransparentBalances', true);
     }
   };

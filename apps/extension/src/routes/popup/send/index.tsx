@@ -24,6 +24,7 @@ import { fromValueView } from '@rotko/penumbra-types/amount';
 import { assetPatterns } from '@rotko/penumbra-types/assets';
 import { useSkipRoute, useSkipChains } from '../../../hooks/skip-route';
 import { useCosmosSend, useCosmosIbcTransfer } from '../../../hooks/cosmos-signer';
+import { parseAmountToBaseUnits } from '@repo/wallet/networks/cosmos/signer';
 import { useCosmosAssets, type CosmosAsset } from '../../../hooks/cosmos-balance';
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
 import { COSMOS_CHAINS, type CosmosChainId, isValidCosmosAddress, getChainFromAddress } from '@repo/wallet/networks/cosmos/chains';
@@ -329,10 +330,10 @@ function CosmosSend({ sourceChainId }: { sourceChainId: CosmosChainId }) {
     }
   }, [selectedAsset]);
 
-  // convert amount to base units
+  // convert amount to base units (integer math, no float precision loss)
   const amountInBase = useMemo(() => {
     if (!amount || isNaN(parseFloat(amount)) || !selectedAsset) return '0';
-    return String(Math.floor(parseFloat(amount) * Math.pow(10, selectedAsset.decimals)));
+    return parseAmountToBaseUnits(amount, selectedAsset.decimals);
   }, [amount, selectedAsset]);
 
   // find route via skip
@@ -401,7 +402,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
     setShowRawJson(false);
 
     // build preview of what will be signed
-    const amtBase = Math.floor(parseFloat(amount) * Math.pow(10, selectedAsset.decimals));
+    const amtBase = parseAmountToBaseUnits(amount, selectedAsset.decimals);
     const denom = selectedAsset.denom;
 
     if (isSameChain) {

@@ -24,8 +24,11 @@ export interface EncodeObject {
 }
 
 /**
- * Cosmos HD path m/44'/118'/0'/0/{accountIndex}
- * Uses makeCosmoshubPath from @cosmjs/amino which returns proper HdPath type
+ * Cosmos HD path: m/44'/118'/0'/0/{accountIndex}
+ *
+ * Standard cosmoshub path per SLIP-044. accountIndex is the BIP44 address_index.
+ * All callers currently use accountIndex=0 only; no users have derived addresses
+ * with accountIndex>0, so there is no migration concern.
  */
 const cosmosHdPath = (accountIndex: number) => makeCosmoshubPath(accountIndex);
 
@@ -203,6 +206,22 @@ export function buildMsgTransfer(params: IbcTransferParams): EncodeObject {
   };
 }
 
+/**
+ * parse a decimal amount string into integer base units.
+ * avoids floating-point: splits on '.', pads/truncates fractional part,
+ * concatenates, and parses as bigint.
+ *
+ * e.g. parseAmountToBaseUnits("0.3", 6) => "300000"
+ *      parseAmountToBaseUnits("1.23", 6) => "1230000"
+ *      parseAmountToBaseUnits("100", 6)  => "100000000"
+ */
+export function parseAmountToBaseUnits(amount: string, decimals: number): string {
+  const [whole = '0', frac = ''] = amount.split('.');
+  const padded = frac.slice(0, decimals).padEnd(decimals, '0');
+  const raw = BigInt(whole + padded);
+  return raw.toString();
+}
+
 /** estimate gas for messages */
 export function estimateGas(
   _chainId: CosmosChainId,
@@ -265,7 +284,7 @@ function toAminoMsg(msg: EncodeObject): AminoMsg {
         token: v['token'],
         sender: v['sender'],
         receiver: v['receiver'],
-        timeout_height: v['timeoutHeight'] ?? {},
+        timeout_height: v['timeoutHeight'] ?? { revision_number: '0', revision_height: '0' },
         timeout_timestamp: v['timeoutTimestamp'] ?? '0',
         memo: v['memo'] ?? '',
       },

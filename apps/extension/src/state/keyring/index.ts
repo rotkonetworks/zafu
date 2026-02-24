@@ -17,7 +17,7 @@ import type {
   DerivedKey,
   ZignerZafuImport,
 } from './types';
-import { isIbcNetwork } from './network-types';
+
 
 export * from './types';
 export * from './network-loader';
@@ -703,11 +703,6 @@ export const createKeyRingSlice = (
 
     setActiveNetwork: async (network: NetworkType) => {
       await local.set('activeNetwork', network);
-
-      // Cosmos/IBC chains need transparent balance fetching — auto-enable
-      if (isIbcNetwork(network) && !get().privacy.settings.enableTransparentBalances) {
-        await get().privacy.setSetting('enableTransparentBalances', true);
-      }
 
       // Check if current selected vault supports the new network
       const { keyInfos, selectedKeyInfo } = get().keyRing;

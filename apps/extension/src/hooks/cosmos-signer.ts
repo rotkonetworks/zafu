@@ -19,6 +19,7 @@ import {
   estimateGas,
   buildZignerSignDoc,
   broadcastZignerSignedTx,
+  parseAmountToBaseUnits,
 } from '@repo/wallet/networks/cosmos/signer';
 import type { ZignerSignRequest, EncodeObject } from '@repo/wallet/networks/cosmos/signer';
 import { encodeCosmosSignRequest } from '@repo/wallet/networks/cosmos/airgap';
@@ -86,7 +87,7 @@ function getZignerAddress(
 /** get cosmos pubkey from zigner insensitive data (hex-encoded compressed secp256k1) */
 function getZignerPubkey(insensitive: Record<string, unknown>): Uint8Array | null {
   const hex = insensitive['cosmosPublicKey'] as string | undefined;
-  if (!hex) return null;
+  if (!hex || hex.length % 2 !== 0 || !/^[0-9a-fA-F]+$/.test(hex)) return null;
   const bytes = new Uint8Array(hex.length / 2);
   for (let i = 0; i < bytes.length; i++) {
     bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
@@ -123,7 +124,7 @@ export const useCosmosSend = () => {
       const config = COSMOS_CHAINS[params.chainId];
       const denom = params.denom ?? config.denom;
       const accountIndex = params.accountIndex ?? 0;
-      const amountInBase = Math.floor(parseFloat(params.amount) * Math.pow(10, config.decimals));
+      const amountInBase = parseAmountToBaseUnits(params.amount, config.decimals);
 
       const key = findCosmosKey(allKeyInfos, selectedKeyInfo, params.chainId);
       if (!key) throw new Error('no cosmos-capable wallet found');
@@ -139,7 +140,7 @@ export const useCosmosSend = () => {
           buildMsgSend({
             fromAddress,
             toAddress: params.toAddress,
-            amount: [{ denom, amount: amountInBase.toString() }],
+            amount: [{ denom, amount: amountInBase }],
           }),
         ];
 
@@ -172,7 +173,7 @@ export const useCosmosSend = () => {
           buildMsgSend({
             fromAddress,
             toAddress: params.toAddress,
-            amount: [{ denom, amount: amountInBase.toString() }],
+            amount: [{ denom, amount: amountInBase }],
           }),
         ];
 
@@ -214,7 +215,7 @@ export const useCosmosIbcTransfer = () => {
       const config = COSMOS_CHAINS[params.sourceChainId];
       const denom = params.denom ?? config.denom;
       const accountIndex = params.accountIndex ?? 0;
-      const amountInBase = Math.floor(parseFloat(params.amount) * Math.pow(10, config.decimals));
+      const amountInBase = parseAmountToBaseUnits(params.amount, config.decimals);
       const timeoutTimestamp = BigInt(Date.now() + 10 * 60 * 1000) * 1_000_000n;
 
       const key = findCosmosKey(allKeyInfos, selectedKeyInfo, params.sourceChainId);
@@ -231,7 +232,7 @@ export const useCosmosIbcTransfer = () => {
           buildMsgTransfer({
             sourcePort: 'transfer',
             sourceChannel: params.sourceChannel,
-            token: { denom, amount: amountInBase.toString() },
+            token: { denom, amount: amountInBase },
             sender: fromAddress,
             receiver: params.toAddress,
             timeoutTimestamp,
@@ -266,7 +267,7 @@ export const useCosmosIbcTransfer = () => {
           buildMsgTransfer({
             sourcePort: 'transfer',
             sourceChannel: params.sourceChannel,
-            token: { denom, amount: amountInBase.toString() },
+            token: { denom, amount: amountInBase },
             sender: fromAddress,
             receiver: params.toAddress,
             timeoutTimestamp,
