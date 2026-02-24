@@ -88,9 +88,9 @@ export const PopupIndex = () => {
     setTimeout(() => setCopied(false), 1200);
   }, [address]);
 
-  // derive wallet name - no extra state needed
+  // derive wallet name - zcash can come from zigner import OR mnemonic derivation
   const walletName = activeNetwork === 'zcash'
-    ? activeZcashWallet?.label ?? 'no wallet'
+    ? activeZcashWallet?.label ?? selectedKeyInfo?.name ?? 'no wallet'
     : selectedKeyInfo?.name ?? 'no wallet';
 
   // truncate address for display
@@ -106,7 +106,7 @@ export const PopupIndex = () => {
           <div>
             <div className='text-xs text-muted-foreground'>balance</div>
             <div className='text-2xl font-semibold tabular-nums text-foreground'>
-              {activeNetwork === 'zcash' ? '0 ZEC' : '$0.00'}
+              {activeNetwork === 'zcash' ? '— ZEC' : '$0.00'}
             </div>
             <button
               onClick={copyAddress}
@@ -205,7 +205,7 @@ const NetworkContent = ({
       );
 
     case 'zcash':
-      return <ZcashContent wallet={zcashWallet} hasMnemonic={hasMnemonic} />;
+      return <ZcashContent hasMnemonic={hasMnemonic} watchOnly={zcashWallet} />;
 
     case 'polkadot':
       return <PolkadotContent publicKey={polkadotPublicKey} />;
@@ -225,18 +225,26 @@ const NetworkContent = ({
 };
 
 /** zcash-specific content */
-const ZcashContent = ({ wallet, hasMnemonic }: { wallet?: { label: string; mainnet: boolean }; hasMnemonic?: boolean }) => {
-  // show zcash UI if we have a stored wallet OR a mnemonic (can derive address)
-  const hasZcashAccess = wallet || hasMnemonic;
-
-  if (!hasZcashAccess) {
+const ZcashContent = ({
+  hasMnemonic,
+  watchOnly,
+}: {
+  hasMnemonic?: boolean;
+  watchOnly?: { label: string; mainnet: boolean };
+}) => {
+  if (!hasMnemonic && !watchOnly) {
     return (
       <div className='flex flex-col items-center justify-center py-8 text-center'>
         <div className='text-sm text-muted-foreground'>no zcash wallet</div>
-        <div className='text-xs text-muted-foreground mt-1'>add a wallet from zafu zigner to get started</div>
+        <div className='text-xs text-muted-foreground mt-1'>
+          create a wallet or import a viewing key from zigner
+        </div>
       </div>
     );
   }
+
+  const isMainnet = watchOnly?.mainnet ?? true;
+  const custodyMode = hasMnemonic ? 'hot' : 'watch-only';
 
   return (
     <div className='flex-1'>
@@ -250,18 +258,60 @@ const ZcashContent = ({ wallet, hasMnemonic }: { wallet?: { label: string; mainn
             <div>
               <div className='text-sm font-medium'>orchard</div>
               <div className='text-xs text-muted-foreground'>
-                {wallet?.mainnet ?? true ? 'mainnet' : 'testnet'}
+                {isMainnet ? 'mainnet' : 'testnet'} · {custodyMode}
               </div>
             </div>
           </div>
           <div className='text-right'>
-            <div className='text-sm font-medium tabular-nums'>0.00000000 ZEC</div>
-            <div className='text-xs text-muted-foreground'>$0.00</div>
+            <div className='text-sm font-medium tabular-nums'>—</div>
+            <div className='text-xs text-muted-foreground'>awaiting sync</div>
           </div>
         </div>
       </div>
-      <div className='mt-4 text-xs text-muted-foreground text-center'>
-        balance syncing coming soon
+
+      {/* zidecar trustless sync pipeline */}
+      <div className='mt-3 border border-border bg-card p-3'>
+        <div className='text-xs font-medium mb-2'>zidecar trustless sync</div>
+        <div className='space-y-1.5 text-xs text-muted-foreground'>
+          <SyncStep label='ligerito header proof' status='pending' detail='polynomial commitment over header chain' />
+          <SyncStep label='nomt nullifier proof' status='pending' detail='merkle proof of spent note set' />
+          <SyncStep label='compact block scan' status='pending' detail='trial-decrypt orchard actions locally' />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/** sync step indicator for zidecar pipeline */
+const SyncStep = ({
+  label,
+  status,
+  detail,
+}: {
+  label: string;
+  status: 'pending' | 'verifying' | 'verified' | 'failed';
+  detail: string;
+}) => {
+  const icon = {
+    pending: '○',
+    verifying: '◎',
+    verified: '●',
+    failed: '✕',
+  }[status];
+
+  const color = {
+    pending: 'text-muted-foreground',
+    verifying: 'text-yellow-500',
+    verified: 'text-green-500',
+    failed: 'text-red-500',
+  }[status];
+
+  return (
+    <div className='flex items-start gap-2'>
+      <span className={`${color} font-mono leading-none mt-0.5`}>{icon}</span>
+      <div>
+        <span className='text-foreground'>{label}</span>
+        <span className='text-muted-foreground'> — {detail}</span>
       </div>
     </div>
   );

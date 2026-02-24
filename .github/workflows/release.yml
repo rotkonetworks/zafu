@@ -1,0 +1,134 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+env:
+  DO_NOT_TRACK: 1
+  NODE_ENV: production
+
+jobs:
+  release:
+    name: Build and release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo build --filter=zafu --cache-dir=.turbo
+
+      - name: Zip extensions
+        run: |
+          cd apps/extension/dist
+          zip -r "$GITHUB_WORKSPACE/zafu-${{ github.ref_name }}.zip" .
+          cd "$GITHUB_WORKSPACE"
+          cd apps/extension/beta-dist
+          zip -r "$GITHUB_WORKSPACE/zafu-${{ github.ref_name }}-beta.zip" .
+
+      - name: Sign CRX
+        run: |
+          npm install -g crx3
+          echo "$CRX_PROD_KEY" > /tmp/prod.pem
+          echo "$CRX_BETA_KEY" > /tmp/beta.pem
+          crx3 pack apps/extension/dist -k /tmp/prod.pem -o "zafu-${{ github.ref_name }}.crx"
+          crx3 pack apps/extension/beta-dist -k /tmp/beta.pem -o "zafu-${{ github.ref_name }}-beta.crx"
+          rm -f /tmp/prod.pem /tmp/beta.pem
+        env:
+          CRX_PROD_KEY: ${{ secrets.CRX_PROD_KEY }}
+          CRX_BETA_KEY: ${{ secrets.CRX_BETA_KEY }}
+
+      - name: Checksums
+        run: |
+          sha256sum zafu-${{ github.ref_name }}.zip \
+                    zafu-${{ github.ref_name }}-beta.zip \
+                    zafu-${{ github.ref_name }}.crx \
+                    zafu-${{ github.ref_name }}-beta.crx \
+                    > zafu-${{ github.ref_name }}.sha256
+          cat zafu-${{ github.ref_name }}.sha256
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          is_prerelease=""
+          if echo "${{ github.ref_name }}" | grep -qE '(alpha|beta|rc)'; then
+            is_prerelease="--prerelease"
+          fi
+
+          gh release create "${{ github.ref_name }}" \
+            "zafu-${{ github.ref_name }}.zip" \
+            "zafu-${{ github.ref_name }}-beta.zip" \
+            "zafu-${{ github.ref_name }}.crx" \
+            "zafu-${{ github.ref_name }}-beta.crx" \
+            "zafu-${{ github.ref_name }}.sha256" \
+            --title "zafu ${{ github.ref_name }}" \
+            $is_prerelease \
+            --notes "$(cat <<EOF
+          ## zafu ${{ github.ref_name }}
+
+          multi-chain privacy wallet for penumbra, zcash, and more.
+
+          ### artifacts
+
+          | file | description |
+          |------|-------------|
+          | \`zafu-${{ github.ref_name }}.zip\` | production build (chrome sideload) |
+          | \`zafu-${{ github.ref_name }}-beta.zip\` | beta build (chrome sideload) |
+          | \`zafu-${{ github.ref_name }}.crx\` | signed production CRX |
+          | \`zafu-${{ github.ref_name }}-beta.crx\` | signed beta CRX |
+          | \`zafu-${{ github.ref_name }}.sha256\` | sha256 checksums |
+
+          ### install (chrome sideload)
+
+          1. download \`zafu-${{ github.ref_name }}.zip\`
+          2. unzip
+          3. go to \`chrome://extensions\`
+          4. enable "developer mode" (top right)
+          5. click "load unpacked" and select the unzipped folder
+
+          ### verify
+
+          \`\`\`
+          $(cat zafu-${{ github.ref_name }}.sha256)
+          \`\`\`
+          EOF
+          )"
+
+      - name: Upload to Chrome Web Store
+        if: "!contains(github.ref_name, 'alpha')"
+        run: |
+          npm install -g chrome-webstore-upload-cli
+
+          # upload prod
+          chrome-webstore-upload upload \
+            --source "zafu-${{ github.ref_name }}.zip" \
+            --extension-id oojfeopgoeapfgcfhmlpfgabcbhkglck \
+            --client-id "$GOOGLE_CLIENT_ID" \
+            --client-secret "$GOOGLE_CLIENT_SECRET" \
+            --refresh-token "$GOOGLE_REFRESH_TOKEN" \
+            || echo "prod upload failed (listing may not exist yet)"
+
+          # upload beta
+          chrome-webstore-upload upload \
+            --source "zafu-${{ github.ref_name }}-beta.zip" \
+            --extension-id ppgbkpjgpggkibdojjocgndbbhiempjf \
+            --client-id "$GOOGLE_CLIENT_ID" \
+            --client-secret "$GOOGLE_CLIENT_SECRET" \
+            --refresh-token "$GOOGLE_REFRESH_TOKEN" \
+            || echo "beta upload failed (listing may not exist yet)"
+        env:
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}

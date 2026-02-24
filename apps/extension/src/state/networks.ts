@@ -44,8 +44,8 @@ export interface NetworkConfig {
   restEndpoint?: string;
   /** Chain ID */
   chainId?: string;
-  /** Whether this network requires a trusted sync endpoint (privacy networks) */
-  requiresTrustedEndpoint?: boolean;
+  /** Short description of the sync model shown in endpoint settings */
+  syncDescription?: string;
   /** Whether this is a cosmos/IBC chain */
   isIbcChain?: boolean;
   /** Bech32 address prefix for cosmos chains */
@@ -74,7 +74,7 @@ export interface NetworksSlice {
 }
 
 const DEFAULT_NETWORKS: Record<NetworkId, NetworkConfig> = {
-  // === Privacy Networks (require trusted sync endpoint) ===
+  // === Privacy Networks (compact block sync, client-side decryption) ===
   penumbra: {
     id: 'penumbra',
     name: 'Penumbra',
@@ -84,7 +84,7 @@ const DEFAULT_NETWORKS: Record<NetworkId, NetworkConfig> = {
     enabled: false,
     endpoint: 'https://penumbra.rotko.net',
     chainId: 'penumbra-1',
-    requiresTrustedEndpoint: true,
+    syncDescription: 'Compact blocks verified by state commitment tree. Trial-decrypted locally — keys never leave this device.',
     bech32Prefix: 'penumbra',
   },
   zcash: {
@@ -93,9 +93,8 @@ const DEFAULT_NETWORKS: Record<NetworkId, NetworkConfig> = {
     symbol: 'ZEC',
     decimals: 8,
     enabled: false,
-    // zidecar endpoint - our own trustless sync server
     endpoint: 'https://zcash.rotko.net',
-    requiresTrustedEndpoint: true,
+    syncDescription: 'Zidecar trustless sync — header chain proven via Ligerito polynomial commitments, nullifier set verified by NOMT merkle proofs. Compact blocks are trial-decrypted locally — keys never leave this device.',
   },
 
   // === IBC/Cosmos Chains (for Penumbra deposits/withdrawals) ===

@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "zafu BETA",
-  "version": "19.3.0",
+  "version": "0.1.0",
   "description": "beta testing - multi-chain privacy wallet",
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAhxDXNrlRB72kw+MeeofiBvJuuSkcMI+ZshYS9jve+Zhm0YlYUF/3mriz1D7jdK/U11EjKYMYCTQQEDLmSdQ8Q52ur3ei4u4gjyEpl/+QnjciR7msoziKH48Bia1U+wd53eW3TWNP/vpSJiBsAfOisEPox6w4lC5a03aCXV3xtkzfW0rebZrOLf1xhZD8mc4N9LU289E3cYRlBmfI4qxkBM1r7t9N4KsXle3VWXSn18joKzgzAWK+VhZtZu3xrwMQGpUqn+KyYFvawSGmYdDsnT6y0KS96V3CPp6rQHNfjItB/F4d1JQv1tskc959jiK9CuGbU57D9JHJ+1C9aOb0BwIDAQAB",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2C3cc89NGTgKUPm4zu77Ah2ObjlQU+D4HCwZkMyRRPaVa0N6AmFfwMdkzf5Vas3Zlvw/55QVlsr773LvstWdysdr647hNPl21mUyLREyW5wsHShh8ZdgJdilVbpF406TtOobvbAOQIRsF5ypLsFhz7xP7uroNs9nDTv2KtVjQXFHjjUZV0dgJDuVWf166UCDdLXCO/Pq9avfOBYtSqhPvzy6oXDZ/MnxKHcqsSYC9ILUWsiH0jKVmhfrjnisFcgz5eIzHCfkdQyKfTCBGHPjDMKvSuzoZmh8IYsiuyuRupKcjb1J2qqS4+hTrkvG57bIe02y//w5C2dsKF/c3K56xQIDAQAB",
   "minimum_chrome_version": "119",
   "action": {
     "default_popup": "popup.html"

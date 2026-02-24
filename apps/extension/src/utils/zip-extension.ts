@@ -7,8 +7,8 @@ const DIST_BETA_PATH = path.join(WORKING_DIR, 'apps/extension/beta-dist');
 const PROD_ZIP_PATH = path.join(WORKING_DIR, 'prod.zip');
 const BETA_ZIP_PATH = path.join(WORKING_DIR, 'beta.zip');
 
-const zipDirectory = (path: string, dist: string) => {
-  child_process.execSync(`zip -r ${path} .`, { cwd: dist, stdio: 'inherit' });
+const zipDirectory = (zipPath: string, dist: string) => {
+  child_process.execSync(`zip -r ${zipPath} .`, { cwd: dist, stdio: 'inherit' });
 };
 
 const main = () => {

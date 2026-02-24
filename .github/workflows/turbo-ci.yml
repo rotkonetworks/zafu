@@ -14,27 +14,19 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# this is pretty verbose and repetitive, but github workflows require it
-# the first action is commented, most of those comments apply to all actions
-# every 'turbo' call is cached and essentially no-op if the inputs match
-
-# pnpm cached by lock hash
-# turbo cached pnpm lock
-
 jobs:
   turbo-lint:
     name: Lint
-    runs-on: buildjet-8vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - id: lint
-        uses: buildjet/cache@v4
+      - uses: actions/cache@v4
         with:
           path: .turbo
           key: ${{ hashFiles('pnpm-lock.yaml') }}-${{ github.ref }}-${{ github.sha }}-lint
           restore-keys: ${{ hashFiles('pnpm-lock.yaml') }}
       - uses: pnpm/action-setup@v4
-      - uses: buildjet/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -43,17 +35,16 @@ jobs:
 
   turbo-build:
     name: Build
-    runs-on: buildjet-8vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - id: built
-        uses: buildjet/cache@v4
+      - uses: actions/cache@v4
         with:
           path: .turbo
           key: ${{ hashFiles('pnpm-lock.yaml') }}-${{ github.ref }}-${{ github.sha }}-built
           restore-keys: ${{ hashFiles('pnpm-lock.yaml') }}
       - uses: pnpm/action-setup@v4
-      - uses: buildjet/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -62,17 +53,16 @@ jobs:
 
   turbo-test:
     name: test
-    runs-on: buildjet-4vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - id: tested
-        uses: buildjet/cache@v4
+      - uses: actions/cache@v4
         with:
           path: .turbo
           key: ${{ hashFiles('pnpm-lock.yaml') }}-${{ github.ref }}-${{ github.sha }}-test
           restore-keys: ${{ hashFiles('pnpm-lock.yaml') }}
       - uses: pnpm/action-setup@v4
-      - uses: buildjet/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'pnpm'
