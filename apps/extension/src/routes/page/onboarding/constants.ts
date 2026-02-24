@@ -8,4 +8,4 @@ export const DEFAULT_GRPC = 'https://penumbra.rotko.net';
 export const DEFAULT_FRONTEND = 'https://dex.penumbra.zone';
 
 // Define a canonical default landing page.
-export const DEFAULT_LANDING_PAGE = 'https://zigner.dev/welcome';
+export const DEFAULT_LANDING_PAGE = 'https://zigner.rotko.net';
