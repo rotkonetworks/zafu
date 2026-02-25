@@ -21,7 +21,7 @@
     "lint:rust": "turbo lint:rust",
     "lint:strict": "turbo lint:strict",
     "lint:syncpack": "syncpack lint",
-    "postinstall": "syncpack list-mismatches",
+    "postinstall": "if command -v syncpack >/dev/null 2>&1; then syncpack list-mismatches; fi",
     "pretest": "playwright install",
     "test": "turbo test",
     "test:rust": "turbo test:rust",
