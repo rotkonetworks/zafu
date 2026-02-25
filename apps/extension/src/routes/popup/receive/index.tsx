@@ -9,15 +9,16 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeftIcon, CopyIcon, CheckIcon, InfoCircledIcon, ChevronDownIcon } from '@radix-ui/react-icons';
+import { ArrowLeftIcon, CopyIcon, CheckIcon, InfoCircledIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from '@radix-ui/react-icons';
 import { PopupPath } from '../paths';
 import { useStore } from '../../../state';
-import { selectActiveNetwork, selectEffectiveKeyInfo, keyRingSelector } from '../../../state/keyring';
+import { selectActiveNetwork, selectEffectiveKeyInfo, selectPenumbraAccount, keyRingSelector } from '../../../state/keyring';
 import { getActiveWalletJson } from '../../../state/wallets';
 import { useActiveAddress } from '../../../hooks/use-address';
 import {
   derivePenumbraEphemeralFromMnemonic,
   derivePenumbraEphemeralFromFvk,
+  deriveZcashTransparent,
 } from '../../../hooks/use-address';
 import { useIbcChains, type IbcChain } from '../../../hooks/ibc-chains';
 import { useCosmosAssets, type CosmosAsset } from '../../../hooks/cosmos-balance';
@@ -109,6 +110,7 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
   keyRing: { getMnemonic: (id: string) => Promise<string> };
   penumbraWallet: { fullViewingKey?: string } | undefined;
 }) {
+  const penumbraAccount = useStore(selectPenumbraAccount);
   const { data: registryChains = [], isLoading: chainsLoading } = useIbcChains();
   const ibcChains = mergeIbcChains([...registryChains]);
   const [selectedIbcChain, setSelectedIbcChain] = useState<IbcChain | undefined>();
@@ -146,9 +148,9 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
         let addr: string;
         if (selectedKeyInfo?.type === 'mnemonic') {
           const mnemonic = await keyRing.getMnemonic(selectedKeyInfo.id);
-          addr = await derivePenumbraEphemeralFromMnemonic(mnemonic, 0);
+          addr = await derivePenumbraEphemeralFromMnemonic(mnemonic, penumbraAccount);
         } else if (penumbraWallet?.fullViewingKey) {
-          addr = await derivePenumbraEphemeralFromFvk(penumbraWallet.fullViewingKey, 0);
+          addr = await derivePenumbraEphemeralFromFvk(penumbraWallet.fullViewingKey, penumbraAccount);
         } else {
           return;
         }
@@ -163,7 +165,7 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
     void generate();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedIbcChain]);
+  }, [selectedIbcChain, penumbraAccount]);
 
   // reset asset when chain changes
   useEffect(() => {
@@ -376,10 +378,12 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
           <div className='mb-3'>
             <div className='mb-1 flex items-center gap-1.5 text-xs text-muted-foreground'>
               <span>sending to</span>
-              <span className='font-medium text-foreground'>Main Account</span>
+              <span className='font-medium text-foreground'>{penumbraAccount === 0 ? 'Main Account' : `Sub-Account #${penumbraAccount}`}</span>
+              <span>(ephemeral)</span>
             </div>
             <p className='text-xs text-muted-foreground'>
-              The deposit will be made to a freshly generated address belonging to you.{' '}
+              The destination address is visible in plaintext on the source chain.
+              This ephemeral address is unlinkable to your main address — source chain observers cannot correlate your deposits.{' '}
               {depositAddress && (
                 <button
                   onClick={() => navigator.clipboard.writeText(depositAddress)}
@@ -435,19 +439,38 @@ function ReceiveTab({ address, loading, activeNetwork }: {
   activeNetwork: string;
 }) {
   const [copied, setCopied] = useState(false);
-  const [ibcDeposit, setIbcDeposit] = useState(false);
+  const [ephemeral, setEphemeral] = useState(false);
   const [ephemeralAddress, setEphemeralAddress] = useState<string>('');
   const [ephemeralLoading, setEphemeralLoading] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  const penumbraAccount = useStore(selectPenumbraAccount);
   const keyRing = useStore(keyRingSelector);
   const penumbraWallet = useStore(getActiveWalletJson);
 
   const isPenumbra = activeNetwork === 'penumbra';
-  const displayAddress = ibcDeposit && ephemeralAddress ? ephemeralAddress : address;
-  const isLoading = ibcDeposit ? ephemeralLoading : loading;
+  const isZcash = activeNetwork === 'zcash';
+  const isMnemonic = selectedKeyInfo?.type === 'mnemonic';
+
+  // zcash transparent address state
+  const [transparent, setTransparent] = useState(false);
+  const [transparentIndex, setTransparentIndex] = useState(0);
+  const [transparentAddress, setTransparentAddress] = useState('');
+  const [transparentLoading, setTransparentLoading] = useState(false);
+  const [showTransparentTooltip, setShowTransparentTooltip] = useState(false);
+
+  const displayAddress = transparent && isZcash && transparentAddress
+    ? transparentAddress
+    : ephemeral && ephemeralAddress
+      ? ephemeralAddress
+      : address;
+  const isLoading = transparent && isZcash
+    ? transparentLoading
+    : ephemeral
+      ? ephemeralLoading
+      : loading;
 
   useEffect(() => {
     if (canvasRef.current && displayAddress) {
@@ -460,7 +483,7 @@ function ReceiveTab({ address, loading, activeNetwork }: {
   }, [displayAddress]);
 
   useEffect(() => {
-    if (!ibcDeposit || !isPenumbra) return;
+    if (!ephemeral || !isPenumbra) return;
 
     let cancelled = false;
     setEphemeralLoading(true);
@@ -470,9 +493,9 @@ function ReceiveTab({ address, loading, activeNetwork }: {
         let addr: string;
         if (selectedKeyInfo?.type === 'mnemonic') {
           const mnemonic = await keyRing.getMnemonic(selectedKeyInfo.id);
-          addr = await derivePenumbraEphemeralFromMnemonic(mnemonic, 0);
+          addr = await derivePenumbraEphemeralFromMnemonic(mnemonic, penumbraAccount);
         } else if (penumbraWallet?.fullViewingKey) {
-          addr = await derivePenumbraEphemeralFromFvk(penumbraWallet.fullViewingKey, 0);
+          addr = await derivePenumbraEphemeralFromFvk(penumbraWallet.fullViewingKey, penumbraAccount);
         } else {
           return;
         }
@@ -489,7 +512,33 @@ function ReceiveTab({ address, loading, activeNetwork }: {
     void generate();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ibcDeposit]);
+  }, [ephemeral, penumbraAccount]);
+
+  // derive zcash transparent address when toggled on or index changes
+  useEffect(() => {
+    if (!transparent || !isZcash || !isMnemonic) return;
+
+    let cancelled = false;
+    setTransparentLoading(true);
+
+    const derive = async () => {
+      try {
+        const mnemonic = await keyRing.getMnemonic(selectedKeyInfo!.id);
+        const addr = await deriveZcashTransparent(mnemonic, 0, transparentIndex, true);
+        if (!cancelled) {
+          setTransparentAddress(addr);
+          setTransparentLoading(false);
+        }
+      } catch (err) {
+        console.error('failed to derive transparent address:', err);
+        if (!cancelled) setTransparentLoading(false);
+      }
+    };
+
+    void derive();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transparent, transparentIndex, isZcash, isMnemonic]);
 
   const copyAddress = useCallback(async () => {
     if (!displayAddress) return;
@@ -499,8 +548,16 @@ function ReceiveTab({ address, loading, activeNetwork }: {
   }, [displayAddress]);
 
   const handleToggle = useCallback(() => {
-    setIbcDeposit(prev => {
+    setEphemeral(prev => {
       if (prev) setEphemeralAddress('');
+      return !prev;
+    });
+    setCopied(false);
+  }, []);
+
+  const handleTransparentToggle = useCallback(() => {
+    setTransparent(prev => {
+      if (prev) setTransparentAddress('');
       return !prev;
     });
     setCopied(false);
@@ -529,7 +586,7 @@ function ReceiveTab({ address, loading, activeNetwork }: {
       {isPenumbra && (
         <div className='flex w-full items-center justify-between'>
           <div className='flex items-center gap-1.5'>
-            <span className='text-sm font-medium'>IBC Deposit Address</span>
+            <span className='text-sm font-medium'>Ephemeral Address</span>
             <div className='relative'>
               <button
                 onClick={() => setShowTooltip(prev => !prev)}
@@ -538,8 +595,16 @@ function ReceiveTab({ address, loading, activeNetwork }: {
                 <InfoCircledIcon className='h-3.5 w-3.5' />
               </button>
               {showTooltip && (
-                <div className='absolute left-1/2 top-6 z-50 w-64 -translate-x-1/2 rounded-lg border border-border bg-popover p-3 text-xs text-popover-foreground shadow-lg'>
-                  IBC transfers post the destination address publicly on the source chain. Use this randomized deposit address to preserve privacy when transferring funds into Penumbra.
+                <div className='absolute left-1/2 top-6 z-50 w-72 -translate-x-1/2 rounded-lg border border-border bg-popover p-3 text-xs text-popover-foreground shadow-lg'>
+                  <p className='mb-1.5 font-medium'>Your main address is stable.</p>
+                  <p className='mb-1.5 text-muted-foreground'>
+                    Anyone you share it with can recognize future payments to the same address.
+                    On IBC source chains (Osmosis, Noble, etc.) the destination address is posted in plaintext — visible to all chain observers.
+                  </p>
+                  <p className='mb-1.5 font-medium'>Ephemeral addresses are randomized and unlinkable.</p>
+                  <p className='text-muted-foreground'>
+                    Only your full viewing key can detect incoming funds. Counterparties and chain observers cannot link them to your main address or to each other.
+                  </p>
                 </div>
               )}
             </div>
@@ -547,29 +612,100 @@ function ReceiveTab({ address, loading, activeNetwork }: {
           <button
             onClick={handleToggle}
             className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ${
-              ibcDeposit ? 'bg-green-500' : 'bg-muted-foreground/30'
+              ephemeral ? 'bg-green-500' : 'bg-muted-foreground/30'
             }`}
           >
             <span
               className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${
-                ibcDeposit ? 'translate-x-[18px]' : 'translate-x-0.5'
+                ephemeral ? 'translate-x-[18px]' : 'translate-x-0.5'
               }`}
             />
           </button>
         </div>
       )}
 
+      {isZcash && isMnemonic && (
+        <>
+          <div className='flex w-full items-center justify-between'>
+            <div className='flex items-center gap-1.5'>
+              <span className='text-sm font-medium'>Transparent Address</span>
+              <div className='relative'>
+                <button
+                  onClick={() => setShowTransparentTooltip(prev => !prev)}
+                  className='text-muted-foreground transition-colors duration-75 hover:text-foreground'
+                >
+                  <InfoCircledIcon className='h-3.5 w-3.5' />
+                </button>
+                {showTransparentTooltip && (
+                  <div className='absolute left-1/2 top-6 z-50 w-72 -translate-x-1/2 rounded-lg border border-border bg-popover p-3 text-xs text-popover-foreground shadow-lg'>
+                    <p className='mb-1.5 font-medium'>Transparent addresses are fully visible on-chain.</p>
+                    <p className='mb-1.5 text-muted-foreground'>
+                      Anyone can see your balance and transaction history.
+                      Use them only when required (e.g. exchange withdrawals).
+                    </p>
+                    <p className='mb-1.5 font-medium'>Each index gives a unique address.</p>
+                    <p className='text-muted-foreground'>
+                      Use one per exchange to track where funds come from.
+                      After receiving, shield to your main (orchard) address for privacy.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={handleTransparentToggle}
+              className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ${
+                transparent ? 'bg-amber-500' : 'bg-muted-foreground/30'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${
+                  transparent ? 'translate-x-[18px]' : 'translate-x-0.5'
+                }`}
+              />
+            </button>
+          </div>
+
+          {transparent && (
+            <div className='flex w-full items-center justify-center gap-1'>
+              <button
+                disabled={transparentIndex <= 0}
+                onClick={() => setTransparentIndex(i => i - 1)}
+                className='p-1 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30'
+              >
+                <ChevronLeftIcon className='h-4 w-4' />
+              </button>
+              <span className='min-w-[110px] text-center text-xs font-medium text-muted-foreground'>
+                Address #{transparentIndex}
+              </span>
+              <button
+                onClick={() => setTransparentIndex(i => i + 1)}
+                className='p-1 text-muted-foreground transition-colors hover:text-foreground'
+              >
+                <ChevronRightIcon className='h-4 w-4' />
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
       <div className='w-full'>
         <div className='mb-1 text-xs text-muted-foreground'>
-          {ibcDeposit && isPenumbra ? 'ibc deposit address' : 'address'}
+          {ephemeral && isPenumbra
+            ? 'ephemeral address'
+            : transparent && isZcash
+              ? `transparent address #${transparentIndex}`
+              : 'address'}
         </div>
         <div className={`flex items-center gap-2 rounded-lg border p-3 ${
-          ibcDeposit && isPenumbra
+          ephemeral && isPenumbra
             ? 'border-green-500/40 bg-green-500/5'
-            : 'border-border/40 bg-muted/30'
+            : transparent && isZcash
+              ? 'border-amber-500/40 bg-amber-500/5'
+              : 'border-border/40 bg-muted/30'
         }`}>
           <code className={`flex-1 break-all text-xs ${
-            ibcDeposit && isPenumbra ? 'text-green-400' : ''
+            ephemeral && isPenumbra ? 'text-green-400' : transparent && isZcash ? 'text-amber-400' : ''
           }`}>
             {isLoading ? 'generating...' : displayAddress || 'no wallet selected'}
           </code>
@@ -585,9 +721,11 @@ function ReceiveTab({ address, loading, activeNetwork }: {
       </div>
 
       <p className='text-center text-xs text-muted-foreground'>
-        {ibcDeposit && isPenumbra
-          ? 'Use this address to receive IBC deposits privately. A new address is generated each time.'
-          : `Only send ${activeNetwork?.toUpperCase() ?? ''} assets to this address.`
+        {ephemeral && isPenumbra
+          ? 'Randomized address, unlinkable to your identity. Can be reused, but sharing with multiple parties lets them see they paid the same address.'
+          : transparent && isZcash
+            ? 'Transparent address — balance and history are publicly visible. Use one index per exchange. Shield funds to orchard after receiving.'
+            : `Only send ${activeNetwork?.toUpperCase() ?? ''} assets to this address.`
         }
       </p>
     </div>

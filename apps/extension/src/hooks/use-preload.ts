@@ -11,23 +11,23 @@ import { viewClient } from '../clients';
  * preload balances for account 0
  * called on popup open to have data ready
  */
-export const usePreloadBalances = () => {
+export const usePreloadBalances = (account = 0) => {
   const queryClient = useQueryClient();
 
   useEffect(() => {
     // prefetch in background - don't block render
     void queryClient.prefetchQuery({
-      queryKey: ['balances', 0],
+      queryKey: ['balances', account],
       staleTime: 30_000, // 30 seconds
       queryFn: async () => {
         try {
-          return await Array.fromAsync(viewClient.balances({ accountFilter: { account: 0 } }));
+          return await Array.fromAsync(viewClient.balances({ accountFilter: { account } }));
         } catch {
           return [];
         }
       },
     });
-  }, [queryClient]);
+  }, [queryClient, account]);
 };
 
 /**

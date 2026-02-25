@@ -67,6 +67,10 @@ export interface KeyRingSlice {
   toggleNetwork: (network: NetworkType) => Promise<void>;
   /** set active network */
   setActiveNetwork: (network: NetworkType) => Promise<void>;
+
+  /** penumbra sub-account index (defaults to 0 each session) */
+  penumbraAccount: number;
+  setPenumbraAccount: (account: number) => void;
 }
 
 /** create wallet entries and enable networks for a zigner import */
@@ -198,6 +202,8 @@ export const createKeyRingSlice = (
     selectedKeyInfo: undefined,
     activeNetwork: 'penumbra',
     enabledNetworks: ['penumbra', 'zcash'],
+    penumbraAccount: 0,
+    setPenumbraAccount: (account: number) => set(state => { state.keyRing.penumbraAccount = account; }),
 
     init: async () => {
       const keyPrint = await local.get('passwordKeyPrint');
@@ -771,6 +777,8 @@ export const selectStatus = (state: AllSlices) => state.keyRing.status;
 export const selectLock = (state: AllSlices) => state.keyRing.lock;
 export const selectUnlock = (state: AllSlices) => state.keyRing.unlock;
 export const selectSelectKeyRing = (state: AllSlices) => state.keyRing.selectKeyRing;
+export const selectPenumbraAccount = (state: AllSlices) => state.keyRing.penumbraAccount;
+export const selectSetPenumbraAccount = (state: AllSlices) => state.keyRing.setPenumbraAccount;
 
 /** Helper to check if a keyInfo supports a given network */
 const keyInfoSupportsNetwork = (k: KeyInfo, network: NetworkType): boolean => {

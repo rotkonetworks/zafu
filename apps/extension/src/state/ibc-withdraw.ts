@@ -56,8 +56,6 @@ export interface IbcWithdrawSlice {
   amount: string;
   /** selected asset denom */
   denom: string;
-  /** source account index */
-  sourceIndex: number;
   /** loading state */
   loading: boolean;
   /** error message */
@@ -67,7 +65,6 @@ export interface IbcWithdrawSlice {
   setDestinationAddress: (address: string) => void;
   setAmount: (amount: string) => void;
   setDenom: (denom: string) => void;
-  setSourceIndex: (index: number) => void;
   reset: () => void;
 
   /** build the transaction planner request */
@@ -87,7 +84,6 @@ const initialState = {
   destinationAddress: '',
   amount: '',
   denom: '',
-  sourceIndex: 0,
   loading: false,
   error: undefined as string | undefined,
 };
@@ -99,20 +95,19 @@ export const createIbcWithdrawSlice: SliceCreator<IbcWithdrawSlice> = (set, get)
   setDestinationAddress: (address) => set(state => { state.ibcWithdraw.destinationAddress = address; }),
   setAmount: (amount) => set(state => { state.ibcWithdraw.amount = amount; }),
   setDenom: (denom) => set(state => { state.ibcWithdraw.denom = denom; }),
-  setSourceIndex: (index) => set(state => { state.ibcWithdraw.sourceIndex = index; }),
 
   reset: () => set(state => {
     state.ibcWithdraw.chain = initialState.chain;
     state.ibcWithdraw.destinationAddress = initialState.destinationAddress;
     state.ibcWithdraw.amount = initialState.amount;
     state.ibcWithdraw.denom = initialState.denom;
-    state.ibcWithdraw.sourceIndex = initialState.sourceIndex;
     state.ibcWithdraw.loading = initialState.loading;
     state.ibcWithdraw.error = initialState.error;
   }),
 
   buildPlanRequest: async () => {
-    const { chain, destinationAddress, amount, denom, sourceIndex } = get().ibcWithdraw;
+    const { chain, destinationAddress, amount, denom } = get().ibcWithdraw;
+    const sourceIndex = get().keyRing.penumbraAccount;
 
     if (!chain) throw new Error('no chain selected');
     if (!destinationAddress) throw new Error('no destination address');

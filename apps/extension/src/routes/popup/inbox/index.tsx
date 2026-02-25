@@ -20,7 +20,7 @@ import {
 import { useStore } from '../../../state';
 import { messagesSelector, type Message } from '../../../state/messages';
 import { contactsSelector } from '../../../state/contacts';
-import { selectActiveNetwork } from '../../../state/keyring';
+import { selectActiveNetwork, selectPenumbraAccount } from '../../../state/keyring';
 import { usePenumbraMemos } from '../../../hooks/penumbra-memos';
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
 import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
@@ -325,6 +325,7 @@ function ComposeMessage({
 }) {
   const navigate = useNavigate();
   const penumbraTx = usePenumbraTransaction();
+  const penumbraAccount = useStore(selectPenumbraAccount);
   const [recipient, setRecipient] = useState(replyTo?.address ?? '');
   const [network, setNetwork] = useState<'zcash' | 'penumbra'>(replyTo?.network ?? 'penumbra');
   const [message, setMessage] = useState('');
@@ -344,7 +345,7 @@ function ComposeMessage({
     try {
       // get our address for return address in memo
       const addressResponse = await viewClient.addressByIndex({
-        addressIndex: { account: 0 },
+        addressIndex: { account: penumbraAccount },
       });
 
       if (!addressResponse.address) {
@@ -358,7 +359,7 @@ function ComposeMessage({
 
       // create transaction plan request
       const planRequest = new TransactionPlannerRequest({
-        source: { account: 0 }, // spend from account 0
+        source: { account: penumbraAccount },
         outputs: [
           {
             address: new Address({ altBech32m: recipient }),

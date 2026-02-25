@@ -11,7 +11,7 @@ import { PopupPath } from '../paths';
 import { useQuery } from '@tanstack/react-query';
 import { ZcashSend } from './zcash-send';
 import { useStore } from '../../../state';
-import { selectActiveNetwork } from '../../../state/keyring';
+import { selectActiveNetwork, selectPenumbraAccount } from '../../../state/keyring';
 import { recentAddressesSelector, type AddressNetwork } from '../../../state/recent-addresses';
 import { contactsSelector } from '../../../state/contacts';
 import { selectIbcWithdraw } from '../../../state/ibc-withdraw';
@@ -893,6 +893,7 @@ function PenumbraSend({ onSuccess }: { onSuccess?: () => void }) {
 /** Penumbra native send form (penumbra -> penumbra) */
 function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
   const sendState = useStore(selectPenumbraSend);
+  const penumbraAccount = useStore(selectPenumbraAccount);
   const [txStatus, setTxStatus] = useState<'idle' | 'planning' | 'signing' | 'broadcasting' | 'success' | 'error'>('idle');
   const [txHash, setTxHash] = useState<string | undefined>();
   const [txError, setTxError] = useState<string | undefined>();
@@ -902,11 +903,11 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
 
   // fetch balances
   const { data: balances = [], isLoading: balancesLoading } = useQuery({
-    queryKey: ['balances', 0],
+    queryKey: ['balances', penumbraAccount],
     staleTime: 30_000,
     queryFn: async () => {
       try {
-        const raw = await Array.fromAsync(viewClient.balances({ accountFilter: { account: 0 } }));
+        const raw = await Array.fromAsync(viewClient.balances({ accountFilter: { account: penumbraAccount } }));
         // filter and sort
         return raw
           .filter(b => {

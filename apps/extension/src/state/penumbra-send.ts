@@ -61,6 +61,7 @@ export const createPenumbraSendSlice: SliceCreator<PenumbraSendSlice> = (set, ge
 
   buildPlanRequest: async (selectedAsset: BalancesResponse) => {
     const { recipient, amount, memo } = get().penumbraSend;
+    const account = get().keyRing.penumbraAccount;
 
     if (!recipient) throw new Error('no recipient address');
     if (!amount || amount === '0') throw new Error('no amount specified');
@@ -86,13 +87,13 @@ export const createPenumbraSendSlice: SliceCreator<PenumbraSendSlice> = (set, ge
       });
 
       // get return address for memo
-      const addressResponse = await viewClient.addressByIndex({ addressIndex: { account: 0 } });
+      const addressResponse = await viewClient.addressByIndex({ addressIndex: { account } });
       if (!addressResponse.address) {
         throw new Error('failed to get return address');
       }
 
       const planRequest = new TransactionPlannerRequest({
-        source: { account: 0 }, // spend from account 0
+        source: { account },
         outputs: [
           {
             address: new Address({ altBech32m: recipient }),

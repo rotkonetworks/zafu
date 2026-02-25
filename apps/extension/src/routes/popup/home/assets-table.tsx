@@ -245,7 +245,7 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
           unbondingAmount: amount,
           penalty: penaltyRes.penalty,
         }],
-        source: { account: 0 },
+        source: { account },
       });
 
       setClaimStatus('signing');

@@ -8,7 +8,7 @@
 
 import { useState, useEffect } from 'react';
 import { useStore } from '../state';
-import { selectActiveNetwork, selectEffectiveKeyInfo, keyRingSelector } from '../state/keyring';
+import { selectActiveNetwork, selectEffectiveKeyInfo, selectPenumbraAccount, keyRingSelector } from '../state/keyring';
 import { getActiveWalletJson, selectActiveZcashWallet } from '../state/wallets';
 import { NETWORK_CONFIGS, type IbcNetwork, isIbcNetwork } from '../state/keyring/network-types';
 import type { CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
@@ -64,6 +64,17 @@ async function derivePenumbraEphemeralFromFvk(fvkJson: string, index = 0): Promi
 
 export { derivePenumbraEphemeralFromMnemonic, derivePenumbraEphemeralFromFvk };
 
+/** derive zcash transparent (t1) address from mnemonic */
+export async function deriveZcashTransparent(
+  mnemonic: string,
+  account: number,
+  index: number,
+  mainnet = true,
+): Promise<string> {
+  const { deriveZcashTransparentAddress } = await import('@repo/wallet/networks/zcash/derive');
+  return deriveZcashTransparentAddress(mnemonic, account, index, mainnet);
+}
+
 /** load zcash wasm module from extension root (cached after first init) */
 let zcashWasmCache: unknown;
 async function loadZcashWasm() {
@@ -91,6 +102,7 @@ async function deriveZcashAddressFromUfvk(ufvk: string): Promise<string> {
 export function useActiveAddress() {
   const activeNetwork = useStore(selectActiveNetwork);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  const penumbraAccount = useStore(selectPenumbraAccount);
   const keyRing = useStore(keyRingSelector);
   const penumbraWallet = useStore(getActiveWalletJson);
   const zcashWallet = useStore(selectActiveZcashWallet);
@@ -112,7 +124,7 @@ export function useActiveAddress() {
 
             // penumbra - derive from seed
             if (activeNetwork === 'penumbra') {
-              const addr = await derivePenumbraAddress(mnemonic, 0);
+              const addr = await derivePenumbraAddress(mnemonic, penumbraAccount);
               if (!cancelled) setAddress(addr);
               if (!cancelled) setLoading(false);
               return;
@@ -169,7 +181,7 @@ export function useActiveAddress() {
 
           // fullViewingKey is stored as JSON string: {"inner":"base64..."}
           const fvk = FullViewingKey.fromJsonString(penumbraWallet.fullViewingKey);
-          const address = await getAddressByIndex(fvk, 0);
+          const address = await getAddressByIndex(fvk, penumbraAccount);
           const addr = bech32mAddress(address);
           if (!cancelled) setAddress(addr);
           if (!cancelled) setLoading(false);
@@ -246,7 +258,7 @@ export function useActiveAddress() {
 
     void deriveAddress();
     return () => { cancelled = true; };
-  }, [activeNetwork, selectedKeyInfo?.id, selectedKeyInfo?.type, penumbraWallet?.fullViewingKey, zcashWallet?.address, zcashWallet?.orchardFvk, keyRing]);
+  }, [activeNetwork, selectedKeyInfo?.id, selectedKeyInfo?.type, penumbraAccount, penumbraWallet?.fullViewingKey, zcashWallet?.address, zcashWallet?.orchardFvk, keyRing]);
 
   return { address, loading };
 }

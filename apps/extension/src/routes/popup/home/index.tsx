@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowUpIcon, ArrowDownIcon, CopyIcon, CheckIcon, DesktopIcon, ViewVerticalIcon } from '@radix-ui/react-icons';
 
 import { useStore } from '../../../state';
-import { selectActiveNetwork, selectEffectiveKeyInfo, type NetworkType } from '../../../state/keyring';
+import { selectActiveNetwork, selectEffectiveKeyInfo, selectPenumbraAccount, selectSetPenumbraAccount, type NetworkType } from '../../../state/keyring';
+import { PenumbraAccountPicker } from '../../../components/penumbra-account-picker';
 import { selectActiveZcashWallet } from '../../../state/wallets';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { needsLogin, needsOnboard } from '../popup-needs';
@@ -37,6 +38,8 @@ export const PopupIndex = () => {
   // atomic selectors - each only re-renders when its value changes
   const activeNetwork = useStore(selectActiveNetwork);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  const penumbraAccount = useStore(selectPenumbraAccount);
+  const setPenumbraAccount = useStore(selectSetPenumbraAccount);
   const activeZcashWallet = useStore(selectActiveZcashWallet);
   const { address } = useActiveAddress();
   const { publicKey: polkadotPublicKey } = usePolkadotPublicKey();
@@ -50,7 +53,7 @@ export const PopupIndex = () => {
   const [canNavigateNormally] = useState(() => isSidePanel() || isDedicatedWindow());
 
   // preload balances in background for instant display
-  usePreloadBalances();
+  usePreloadBalances(penumbraAccount);
 
   // close send menu when clicking outside
   useEffect(() => {
@@ -101,6 +104,9 @@ export const PopupIndex = () => {
   return (
     <div className='flex min-h-full flex-col'>
       <div className='flex flex-col gap-3 p-4'>
+        {activeNetwork === 'penumbra' && (
+          <PenumbraAccountPicker account={penumbraAccount} onChange={setPenumbraAccount} />
+        )}
         {/* balance + actions row */}
         <div className='flex items-center justify-between border border-border/40 bg-card p-4'>
           <div>
@@ -167,6 +173,7 @@ export const PopupIndex = () => {
         <Suspense fallback={<AssetListSkeleton rows={4} />}>
           <NetworkContent
             network={activeNetwork}
+            penumbraAccount={penumbraAccount}
             zcashWallet={activeZcashWallet}
             polkadotPublicKey={polkadotPublicKey}
             hasMnemonic={selectedKeyInfo?.type === 'mnemonic'}
@@ -180,11 +187,13 @@ export const PopupIndex = () => {
 /** network-specific content - split out to minimize re-renders */
 const NetworkContent = ({
   network,
+  penumbraAccount,
   zcashWallet,
   polkadotPublicKey,
   hasMnemonic,
 }: {
   network: NetworkType;
+  penumbraAccount: number;
   zcashWallet?: { label: string; mainnet: boolean };
   polkadotPublicKey?: string;
   hasMnemonic?: boolean;
@@ -200,7 +209,7 @@ const NetworkContent = ({
             </div>
           </Suspense>
           <div className='mb-2 text-xs font-medium text-muted-foreground'>assets</div>
-          <AssetsTable account={0} />
+          <AssetsTable account={penumbraAccount} />
         </div>
       );
 
