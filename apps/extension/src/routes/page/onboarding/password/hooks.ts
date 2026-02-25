@@ -19,7 +19,7 @@ export const useFinalizeOnboarding = () => {
   const [loading, setLoading] = useState(false);
   const location = useLocation();
   const { setPassword, newZignerZafuKey } = useStore(keyRingSelector);
-  const { walletImport, zcashWalletImport, walletLabel, clearZignerState } = useStore(zignerConnectSelector);
+  const { walletImport, zcashWalletImport, parsedPolkadotExport, parsedCosmosExport, walletLabel, clearZignerState } = useStore(zignerConnectSelector);
 
   const handleSubmit = useCallback(async (event: FormEvent, password: string) => {
     event.preventDefault();
@@ -47,11 +47,29 @@ export const useFinalizeOnboarding = () => {
           const zignerData: ZignerZafuImport = {
             viewingKey: zcashWalletImport.orchardFvk
               ? btoa(String.fromCharCode(...zcashWalletImport.orchardFvk))
-              : undefined,
+              : zcashWalletImport.ufvk ?? undefined,
             accountIndex: zcashWalletImport.accountIndex,
             deviceId: `zcash-${Date.now()}`,
           };
           await newZignerZafuKey(zignerData, walletLabel || 'zigner zcash');
+        } else if (parsedCosmosExport) {
+          // cosmos zigner import
+          const zignerData: ZignerZafuImport = {
+            cosmosAddresses: parsedCosmosExport.addresses,
+            publicKey: parsedCosmosExport.publicKey || undefined,
+            accountIndex: parsedCosmosExport.accountIndex,
+            deviceId: `cosmos-${Date.now()}`,
+          };
+          await newZignerZafuKey(zignerData, walletLabel || 'zigner cosmos');
+        } else if (parsedPolkadotExport) {
+          // polkadot zigner import
+          const zignerData: ZignerZafuImport = {
+            polkadotSs58: parsedPolkadotExport.address,
+            polkadotGenesisHash: parsedPolkadotExport.genesisHash,
+            accountIndex: 0,
+            deviceId: `polkadot-${Date.now()}`,
+          };
+          await newZignerZafuKey(zignerData, walletLabel || 'zigner polkadot');
         } else {
           throw new Error('no zigner wallet data found');
         }
@@ -76,7 +94,7 @@ export const useFinalizeOnboarding = () => {
     } finally {
       setLoading(false);
     }
-  }, [walletImport, zcashWalletImport, walletLabel]);
+  }, [walletImport, zcashWalletImport, parsedPolkadotExport, parsedCosmosExport, walletLabel]);
 
   return { handleSubmit, error, loading };
 };

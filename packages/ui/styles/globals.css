@@ -73,13 +73,22 @@
     --brown: rgba(15, 20, 25, 0.8);
   }
 
+  /* ensure full height for side panel and popup */
+  html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
   /* popup container */
   #popup-root {
     min-width: 400px;
     min-height: 600px;
-    height: 100%;
+    height: 100vh;
+    max-height: 100vh;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
     background: hsl(var(--background));
   }
 

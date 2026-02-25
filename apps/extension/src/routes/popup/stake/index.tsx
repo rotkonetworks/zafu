@@ -10,7 +10,7 @@ import { StackIcon, ChevronDownIcon, Cross2Icon, UpdateIcon } from '@radix-ui/re
 import { viewClient, stakeClient } from '../../../clients';
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
 import { useStore } from '../../../state';
-import { selectActiveNetwork } from '../../../state/keyring';
+import { selectActiveNetwork, selectPenumbraAccount } from '../../../state/keyring';
 import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
 import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances-response';
@@ -99,6 +99,7 @@ const findValidatorForDelegation = (
 /** Penumbra staking page */
 export const StakePage = () => {
   const activeNetwork = useStore(selectActiveNetwork);
+  const penumbraAccount = useStore(selectPenumbraAccount);
   const [action, setAction] = useState<StakeAction>(undefined);
   const [amount, setAmount] = useState('');
   const [selectedValidator, setSelectedValidator] = useState<ValidatorRow | undefined>();
@@ -160,12 +161,12 @@ export const StakePage = () => {
 
   // fetch user balances to find delegations
   const { data: delegations = [], isLoading: delegationsLoading, refetch: refetchDelegations } = useQuery({
-    queryKey: ['delegations', 0],
+    queryKey: ['delegations', penumbraAccount],
     staleTime: 30_000,
     queryFn: async () => {
       const result: BalancesResponse[] = [];
       try {
-        for await (const b of viewClient.balances({ accountFilter: { account: 0 } })) {
+        for await (const b of viewClient.balances({ accountFilter: { account: penumbraAccount } })) {
           const meta = getMetadataFromBalancesResponse.optional(b);
           if (isDelegationToken(meta)) {
             result.push(b);
@@ -180,11 +181,11 @@ export const StakePage = () => {
 
   // fetch staking token balance
   const { data: stakingBalance } = useQuery({
-    queryKey: ['staking-balance', 0],
+    queryKey: ['staking-balance', penumbraAccount],
     staleTime: 30_000,
     queryFn: async () => {
       try {
-        for await (const b of viewClient.balances({ accountFilter: { account: 0 } })) {
+        for await (const b of viewClient.balances({ accountFilter: { account: penumbraAccount } })) {
           const meta = getMetadataFromBalancesResponse.optional(b);
           if (meta?.symbol === STAKING_TOKEN) {
             if (!b.balanceView) return '0';
@@ -220,7 +221,7 @@ export const StakePage = () => {
           amount: new Amount({ lo: baseAmount, hi: 0n }),
           rateData: selectedValidator.info.rateData,
         }],
-        source: { account: 0 },
+        source: { account: penumbraAccount },
       });
 
       setTxStatus('signing');
@@ -272,7 +273,7 @@ export const StakePage = () => {
             assetId,
           },
         }],
-        source: { account: 0 },
+        source: { account: penumbraAccount },
       });
 
       setTxStatus('signing');

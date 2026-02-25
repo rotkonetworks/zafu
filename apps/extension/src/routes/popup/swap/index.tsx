@@ -11,7 +11,7 @@ import { MixIcon, ChevronDownIcon, UpdateIcon, ArrowDownIcon } from '@radix-ui/r
 import { viewClient, simulationClient } from '../../../clients';
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
 import { useStore } from '../../../state';
-import { selectActiveNetwork } from '../../../state/keyring';
+import { selectActiveNetwork, selectPenumbraAccount } from '../../../state/keyring';
 import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
 import { Value } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
@@ -42,6 +42,7 @@ interface OutputAsset {
 /** Penumbra swap page */
 export const SwapPage = () => {
   const activeNetwork = useStore(selectActiveNetwork);
+  const penumbraAccount = useStore(selectPenumbraAccount);
   const [amountIn, setAmountIn] = useState('');
   const [assetInOpen, setAssetInOpen] = useState(false);
   const [assetOutOpen, setAssetOutOpen] = useState(false);
@@ -72,11 +73,11 @@ export const SwapPage = () => {
 
   // fetch balances
   const { data: balances = [], isLoading: balancesLoading, refetch: refetchBalances } = useQuery({
-    queryKey: ['balances', 0],
+    queryKey: ['balances', penumbraAccount],
     staleTime: 30_000,
     queryFn: async () => {
       try {
-        const raw = await Array.fromAsync(viewClient.balances({ accountFilter: { account: 0 } }));
+        const raw = await Array.fromAsync(viewClient.balances({ accountFilter: { account: penumbraAccount } }));
         return raw
           .filter(b => {
             const meta = getMetadataFromBalancesResponse.optional(b);
@@ -265,7 +266,7 @@ export const SwapPage = () => {
           }),
           claimAddress: undefined, // use default address
         }],
-        source: { account: 0 },
+        source: { account: penumbraAccount },
       });
 
       setTxStatus('signing');

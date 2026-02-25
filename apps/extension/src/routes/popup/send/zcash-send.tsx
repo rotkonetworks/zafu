@@ -76,8 +76,11 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       setFormError('recipient address is required');
       return false;
     }
-    if (!recipient.startsWith('u1') && !recipient.startsWith('u')) {
-      setFormError('invalid unified address format');
+    const r = recipient.trim();
+    const validPrefix = r.startsWith('u1') || r.startsWith('utest1')
+      || r.startsWith('zs') || r.startsWith('t1') || r.startsWith('t3');
+    if (!validPrefix) {
+      setFormError('invalid zcash address — expected unified (u1), sapling (zs), or transparent (t1/t3)');
       return false;
     }
     if (!amount.trim() || isNaN(Number(amount)) || Number(amount) <= 0) {
@@ -210,7 +213,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                   recipient address
                 </label>
                 <Input
-                  placeholder="u1..."
+                  placeholder="u1... / zs... / t1..."
                   value={recipient}
                   onChange={(e) => setRecipient(e.target.value)}
                   className="font-mono text-sm"

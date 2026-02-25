@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { FullViewingKey } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
 import { NobleClientInterface, NobleRegistrationResponse } from './client';
 import { getNextSequence, MAX_SEQUENCE_NUMBER } from './sequence-search';
-import { generateSpendKey, getFullViewingKey } from '@rotko/penumbra-wasm/keys';
 
-const seedPhrase =
-  'benefit cherry cannon tooth exhibit law avocado spare tooth that amount pumpkin scene foil tape mobile shine apology add crouch situate sun business explain';
-const spendKey = generateSpendKey(seedPhrase);
-const fvk = getFullViewingKey(spendKey);
+// mock client never reads fvk, so a stub is sufficient
+const fvk = new FullViewingKey();
 
 class MockNobleClient implements NobleClientInterface {
   private readonly responses = new Map<string, NobleRegistrationResponse>();

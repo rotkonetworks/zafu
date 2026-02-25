@@ -31,6 +31,9 @@ const SettingsNetworks = lazy(() =>
 const SettingsParachains = lazy(() =>
   import('./settings-parachains').then(m => ({ default: m.SettingsParachains })),
 );
+const SettingsPrivacy = lazy(() =>
+  import('./settings-privacy').then(m => ({ default: m.SettingsPrivacy })),
+);
 const SettingsAbout = lazy(() =>
   import('./settings-about').then(m => ({ default: m.SettingsAbout })),
 );
@@ -91,6 +94,10 @@ export const settingsRoutes = [
   {
     path: PopupPath.SETTINGS_PARACHAINS,
     element: withSuspense(SettingsParachains),
+  },
+  {
+    path: PopupPath.SETTINGS_PRIVACY,
+    element: withSuspense(SettingsPrivacy),
   },
   {
     path: PopupPath.SETTINGS_ABOUT,

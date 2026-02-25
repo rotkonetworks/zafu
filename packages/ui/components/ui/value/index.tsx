@@ -11,6 +11,7 @@ interface ValueViewProps {
   size?: 'default' | 'sm';
   currentBlockHeight?: number;
   validatorName?: string;
+  onClaim?: () => void;
 }
 
 export const ValueViewComponent = ({
@@ -22,6 +23,7 @@ export const ValueViewComponent = ({
   size = 'default',
   currentBlockHeight,
   validatorName,
+  onClaim,
 }: ValueViewProps) => {
   if (!view) {
     return null;
@@ -44,6 +46,7 @@ export const ValueViewComponent = ({
         size={size}
         currentBlockHeight={currentBlockHeight}
         validatorName={validatorName}
+        onClaim={onClaim}
       />
     );
   }

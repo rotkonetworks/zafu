@@ -80,6 +80,36 @@ function takeFromExternrefTable0(idx) {
     return value;
 }
 /**
+ * derive zcash unified full viewing key (ufvk) from mnemonic
+ *
+ * returns ufvk string (uview1...) for watch-only wallet import
+ * @param {string} mnemonic
+ * @param {number} account
+ * @param {boolean} mainnet
+ * @returns {string}
+ */
+export function derive_zcash_ufvk(mnemonic, account, mainnet) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(mnemonic, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.derive_zcash_ufvk(ptr0, len0, account, mainnet);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
  * derive zcash orchard full viewing key bytes from mnemonic
  *
  * returns 96-byte fvk as hex string
@@ -109,21 +139,19 @@ export function derive_zcash_fvk_bytes(mnemonic, account) {
 }
 
 /**
- * derive zcash unified full viewing key (ufvk) from mnemonic
+ * derive zcash unified address from a UFVK string (uview1... or uviewtest1...)
  *
- * returns ufvk string (uview1...) for watch-only wallet import
- * @param {string} mnemonic
- * @param {number} account
- * @param {boolean} mainnet
+ * used by watch-only wallets (zigner import) to display receive address
+ * @param {string} ufvk_str
  * @returns {string}
  */
-export function derive_zcash_ufvk(mnemonic, account, mainnet) {
+export function address_from_ufvk(ufvk_str) {
     let deferred3_0;
     let deferred3_1;
     try {
-        const ptr0 = passStringToWasm0(mnemonic, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.derive_zcash_ufvk(ptr0, len0, account, mainnet);
+        const ret = wasm.address_from_ufvk(ptr0, len0);
         var ptr2 = ret[0];
         var len2 = ret[1];
         if (ret[3]) {

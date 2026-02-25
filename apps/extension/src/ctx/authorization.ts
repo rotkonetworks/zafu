@@ -3,6 +3,7 @@ import {
   AuthorizationData,
   TransactionPlan,
 } from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
+import { FullViewingKey } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
 import { AuthorizeRequest } from '@penumbra-zone/protobuf/penumbra/custody/v1/custody_pb';
 import { Jsonified } from '@rotko/penumbra-types/jsonified';
 import { Key } from '@repo/encryption/key';
@@ -10,6 +11,7 @@ import { localExtStorage } from '@repo/storage-chrome/local';
 import { UserChoice } from '@repo/storage-chrome/records';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { Wallet, getCustodyTypeName } from '@repo/wallet';
+import { computeEffectHash } from '@rotko/penumbra-wasm/build';
 import { PopupType } from '../message/popup';
 import { throwIfNeedsLogin } from '../needs-login';
 import { popup } from '../popup';
@@ -23,7 +25,7 @@ export const getAuthorization = async (plan: TransactionPlan): Promise<Authoriza
   if (activeWallet) {
     const custodyType = getCustodyTypeName(activeWallet.custody);
     if (custodyType === 'airgapSigner') {
-      return getAirgapAuthorization(plan);
+      return getAirgapAuthorization(plan, activeWallet);
     }
   }
 
@@ -54,10 +56,19 @@ export const getAuthorization = async (plan: TransactionPlan): Promise<Authoriza
 };
 
 // Airgap flow: popup handles QR display/scan, returns AuthorizationData
-const getAirgapAuthorization = async (plan: TransactionPlan): Promise<AuthorizationData> => {
+const getAirgapAuthorization = async (
+  plan: TransactionPlan,
+  activeWallet: { fullViewingKey: string },
+): Promise<AuthorizationData> => {
+  // Compute the correct effect hash using WASM (requires FVK, not spend key)
+  const fvk = FullViewingKey.fromJsonString(activeWallet.fullViewingKey);
+  const effectHashBytes = await computeEffectHash(fvk, plan);
+  const effectHashHex = Array.from(effectHashBytes, (b: number) => b.toString(16).padStart(2, '0')).join('');
+
   const response = await popup(PopupType.TxApproval, {
     authorizeRequest: new AuthorizeRequest({ plan }).toJson() as Jsonified<AuthorizeRequest>,
     isAirgap: true,
+    effectHash: effectHashHex,
   });
 
   if (response?.choice !== UserChoice.Approved) {
@@ -78,7 +89,10 @@ const openWallet = async () => {
     .get('passwordKey')
     .then(passKeyJson => Key.fromJson(passKeyJson!));
 
-  const wallet = localExtStorage.get('wallets').then(wallets => Wallet.fromJson(wallets[0]!));
+  const wallet = localExtStorage.get('wallets').then(async wallets => {
+    const activeIdx = (await localExtStorage.get('activeWalletIndex')) ?? 0;
+    return Wallet.fromJson(wallets[activeIdx]!);
+  });
 
   return (await wallet).custody(await passKey);
 };

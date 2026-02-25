@@ -7,9 +7,12 @@
  * - transaction broadcast
  */
 
-import { Secp256k1HdWallet } from '@cosmjs/amino';
-import { SigningStargateClient, GasPrice } from '@cosmjs/stargate';
-import { fromBech32, toBech32 } from '@cosmjs/encoding';
+import { Secp256k1HdWallet, makeCosmoshubPath } from '@cosmjs/amino';
+import { makeSignDoc as makeAminoSignDoc, serializeSignDoc } from '@cosmjs/amino';
+import type { AminoMsg, StdSignDoc } from '@cosmjs/amino';
+import { SigningStargateClient, StargateClient, GasPrice } from '@cosmjs/stargate';
+import { fromBech32, toBech32, toBase64 } from '@cosmjs/encoding';
+import { encodePubkey, makeAuthInfoBytes } from '@cosmjs/proto-signing';
 import type { Coin, StdFee } from '@cosmjs/amino';
 import type { DeliverTxResponse } from '@cosmjs/stargate';
 import { COSMOS_CHAINS, type CosmosChainId } from './chains';
@@ -20,8 +23,14 @@ export interface EncodeObject {
   value: unknown;
 }
 
-/** cosmos HD path - uses account index at position 2 */
-const COSMOS_HD_PATH = (accountIndex: number) => `m/44'/118'/${accountIndex}'/0/0`;
+/**
+ * Cosmos HD path: m/44'/118'/0'/0/{accountIndex}
+ *
+ * Standard cosmoshub path per SLIP-044. accountIndex is the BIP44 address_index.
+ * All callers currently use accountIndex=0 only; no users have derived addresses
+ * with accountIndex>0, so there is no migration concern.
+ */
+const cosmosHdPath = (accountIndex: number) => makeCosmoshubPath(accountIndex);
 
 /** derived cosmos wallet */
 export interface CosmosWallet {
@@ -38,7 +47,7 @@ export async function deriveCosmosWallet(
 ): Promise<CosmosWallet> {
   const signer = await Secp256k1HdWallet.fromMnemonic(mnemonic, {
     prefix,
-    hdPaths: [{ coinType: 118, account: accountIndex, change: 0, addressIndex: 0 } as any],
+    hdPaths: [cosmosHdPath(accountIndex)],
   });
 
   const [account] = await signer.getAccounts();
@@ -111,7 +120,7 @@ export async function createSigningClient(
 
   const signer = await Secp256k1HdWallet.fromMnemonic(mnemonic, {
     prefix: config.bech32Prefix,
-    hdPaths: [COSMOS_HD_PATH(accountIndex) as any],
+    hdPaths: [cosmosHdPath(accountIndex)],
   });
 
   const [account] = await signer.getAccounts();
@@ -197,6 +206,22 @@ export function buildMsgTransfer(params: IbcTransferParams): EncodeObject {
   };
 }
 
+/**
+ * parse a decimal amount string into integer base units.
+ * avoids floating-point: splits on '.', pads/truncates fractional part,
+ * concatenates, and parses as bigint.
+ *
+ * e.g. parseAmountToBaseUnits("0.3", 6) => "300000"
+ *      parseAmountToBaseUnits("1.23", 6) => "1230000"
+ *      parseAmountToBaseUnits("100", 6)  => "100000000"
+ */
+export function parseAmountToBaseUnits(amount: string, decimals: number): string {
+  const [whole = '0', frac = ''] = amount.split('.');
+  const padded = frac.slice(0, decimals).padEnd(decimals, '0');
+  const raw = BigInt(whole + padded);
+  return raw.toString();
+}
+
 /** estimate gas for messages */
 export function estimateGas(
   _chainId: CosmosChainId,
@@ -204,11 +229,13 @@ export function estimateGas(
   messages: EncodeObject[],
   _memo = ''
 ): number {
-  // simple estimation based on message count
+  // simple estimation based on message type
   // real estimation would need simulation
-  const baseGas = 80000;
-  const perMsgGas = 20000;
-  return baseGas + messages.length * perMsgGas;
+  const gasPerMsg = messages.map(m => {
+    if (m.typeUrl === '/ibc.applications.transfer.v1.MsgTransfer') return 200000;
+    return 150000; // MsgSend and others
+  });
+  return gasPerMsg.reduce((sum, g) => sum + g, 0);
 }
 
 /** calculate fee from gas */
@@ -227,4 +254,175 @@ export function calculateFee(chainId: CosmosChainId, gas: number): StdFee {
     amount: [{ denom: denom!, amount: amount.toString() }],
     gas: gas.toString(),
   };
+}
+
+// ============================================================================
+// Zigner (airgap) signing support
+// ============================================================================
+
+/** convert proto EncodeObject to amino AminoMsg */
+function toAminoMsg(msg: EncodeObject): AminoMsg {
+  const v = msg.value as Record<string, unknown>;
+
+  if (msg.typeUrl === '/cosmos.bank.v1beta1.MsgSend') {
+    return {
+      type: 'cosmos-sdk/MsgSend',
+      value: {
+        from_address: v['fromAddress'],
+        to_address: v['toAddress'],
+        amount: v['amount'],
+      },
+    };
+  }
+
+  if (msg.typeUrl === '/ibc.applications.transfer.v1.MsgTransfer') {
+    return {
+      type: 'cosmos-sdk/MsgTransfer',
+      value: {
+        source_port: v['sourcePort'],
+        source_channel: v['sourceChannel'],
+        token: v['token'],
+        sender: v['sender'],
+        receiver: v['receiver'],
+        timeout_height: v['timeoutHeight'] ?? { revision_number: '0', revision_height: '0' },
+        timeout_timestamp: v['timeoutTimestamp'] ?? '0',
+        memo: v['memo'] ?? '',
+      },
+    };
+  }
+
+  throw new Error(`unsupported message type for amino: ${msg.typeUrl}`);
+}
+
+/** result from building a zigner sign request */
+export interface ZignerSignRequest {
+  /** amino SignDoc as canonical JSON bytes */
+  signDocBytes: Uint8Array;
+  /** amino SignDoc object (for reference) */
+  signDoc: StdSignDoc;
+  /** fee used */
+  fee: StdFee;
+  /** account number from chain */
+  accountNumber: number;
+  /** sequence from chain */
+  sequence: number;
+  /** the proto messages (for TxRaw reconstruction) */
+  messages: EncodeObject[];
+  /** memo */
+  memo: string;
+}
+
+/**
+ * build amino SignDoc for zigner signing (no mnemonic needed)
+ *
+ * queries account info from chain, builds the SignDoc, and serializes it.
+ * the serialized bytes are what Zigner signs: SHA256(signDocBytes).
+ */
+export async function buildZignerSignDoc(
+  chainId: CosmosChainId,
+  fromAddress: string,
+  messages: EncodeObject[],
+  fee: StdFee,
+  memo = '',
+): Promise<ZignerSignRequest> {
+  const config = COSMOS_CHAINS[chainId];
+
+  // query account info from chain (read-only client)
+  const client = await StargateClient.connect(config.rpcEndpoint);
+  try {
+    const account = await client.getAccount(fromAddress);
+    if (!account) {
+      throw new Error(`account not found on chain: ${fromAddress}`);
+    }
+
+    // convert messages to amino format
+    const aminoMsgs = messages.map(toAminoMsg);
+
+    // build the amino SignDoc
+    const signDoc = makeAminoSignDoc(
+      aminoMsgs,
+      fee,
+      config.chainId,
+      memo,
+      account.accountNumber,
+      account.sequence,
+    );
+
+    // serialize to canonical JSON bytes (this is what gets signed)
+    const signDocBytes = serializeSignDoc(signDoc);
+
+    return {
+      signDocBytes,
+      signDoc,
+      fee,
+      accountNumber: account.accountNumber,
+      sequence: account.sequence,
+      messages,
+      memo,
+    };
+  } finally {
+    client.disconnect();
+  }
+}
+
+/**
+ * broadcast a transaction signed by Zigner
+ *
+ * reconstructs TxRaw from the amino SignDoc + signature + pubkey and broadcasts.
+ */
+export async function broadcastZignerSignedTx(
+  chainId: CosmosChainId,
+  signRequest: ZignerSignRequest,
+  signature: Uint8Array,
+  pubkey: Uint8Array,
+): Promise<DeliverTxResponse> {
+  const config = COSMOS_CHAINS[chainId];
+
+  // build amino-style pubkey for proto encoding
+  const aminoPubkey = {
+    type: 'tendermint/PubKeySecp256k1',
+    value: toBase64(pubkey),
+  };
+  const pubkeyAny = encodePubkey(aminoPubkey);
+
+  // dynamic imports for proto types (transitive deps of @cosmjs/stargate)
+  const { TxRaw } = await import('cosmjs-types/cosmos/tx/v1beta1/tx');
+  const { SignMode } = await import('cosmjs-types/cosmos/tx/signing/v1beta1/signing');
+
+  // build AuthInfo bytes
+  const authInfoBytes = makeAuthInfoBytes(
+    [{ pubkey: pubkeyAny, sequence: signRequest.sequence }],
+    signRequest.fee.amount,
+    parseInt(signRequest.fee.gas),
+    signRequest.fee.granter,
+    signRequest.fee.payer,
+    SignMode.SIGN_MODE_LEGACY_AMINO_JSON,
+  );
+
+  // build TxBody from the proto messages
+  // use defaultRegistryTypes which includes MsgSend, MsgTransfer, etc.
+  const { Registry: CosmosRegistry } = await import('@cosmjs/proto-signing');
+  const { defaultRegistryTypes } = await import('@cosmjs/stargate');
+  const registry = new CosmosRegistry(defaultRegistryTypes);
+  const txBodyBytes = registry.encodeTxBody({
+    messages: signRequest.messages,
+    memo: signRequest.memo,
+  });
+
+  // construct TxRaw
+  const txRaw = TxRaw.fromPartial({
+    bodyBytes: txBodyBytes,
+    authInfoBytes,
+    signatures: [signature],
+  });
+
+  const txBytes = TxRaw.encode(txRaw).finish();
+
+  // broadcast via read-only client
+  const client = await StargateClient.connect(config.rpcEndpoint);
+  try {
+    return await client.broadcastTx(txBytes);
+  } finally {
+    client.disconnect();
+  }
 }

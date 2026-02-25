@@ -18,6 +18,7 @@ import type {
   ZignerZafuImport,
 } from './types';
 
+
 export * from './types';
 export * from './network-loader';
 
@@ -66,6 +67,90 @@ export interface KeyRingSlice {
   toggleNetwork: (network: NetworkType) => Promise<void>;
   /** set active network */
   setActiveNetwork: (network: NetworkType) => Promise<void>;
+
+  /** penumbra sub-account index (defaults to 0 each session) */
+  penumbraAccount: number;
+  setPenumbraAccount: (account: number) => void;
+}
+
+/** create wallet entries and enable networks for a zigner import */
+async function createZignerWalletEntries(
+  data: ZignerZafuImport,
+  name: string,
+  key: Key,
+  vaultId: string,
+  supportedNetworks: string[],
+  existingVaultCount: number,
+  local: ExtensionStorage<LocalStorageState>,
+): Promise<NetworkType[]> {
+  // Create penumbra wallet entry for sync (prax-compatible format)
+  if (data.fullViewingKey) {
+    try {
+      const { FullViewingKey } = await import(
+        '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb'
+      );
+      const { getWalletId } = await import('@rotko/penumbra-wasm/keys');
+
+      const fvkBytes = Uint8Array.from(atob(data.fullViewingKey), c => c.charCodeAt(0));
+      const fvk = new FullViewingKey({ inner: fvkBytes });
+      const walletId = await getWalletId(fvk);
+
+      const metadata = JSON.stringify({
+        accountIndex: data.accountIndex,
+        importedAt: Date.now(),
+        signerType: 'zigner',
+      });
+      const metadataBox = await key.seal(metadata);
+
+      const praxWallet = {
+        id: walletId.toJsonString(),
+        label: name,
+        fullViewingKey: fvk.toJsonString(),
+        custody: { airgapSigner: metadataBox.toJson() },
+        vaultId,
+      };
+
+      const existingWallets = await local.get('wallets');
+      await local.set('wallets', [praxWallet, ...existingWallets]);
+      await local.set('activeWalletIndex', 0);
+    } catch (e) {
+      console.warn('[keyring] failed to create penumbra wallet entry for zigner:', e);
+    }
+  }
+
+  // Create zcash wallet entry
+  if (data.viewingKey) {
+    try {
+      const existingZcashWallets = (await local.get('zcashWallets')) ?? [];
+      const zcashWallet = {
+        id: `zcash-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        label: name,
+        orchardFvk: data.viewingKey,
+        address: '',
+        accountIndex: data.accountIndex,
+        mainnet: !data.viewingKey.startsWith('uviewtest'),
+      };
+      await local.set('zcashWallets', [zcashWallet, ...existingZcashWallets]);
+    } catch (e) {
+      console.warn('[keyring] failed to create zcash wallet entry for zigner:', e);
+    }
+  }
+
+  // Ensure enabled networks include the imported wallet's networks
+  const currentEnabled = await local.get('enabledNetworks');
+  const networkSet = new Set<string>(currentEnabled ?? ['penumbra', 'zcash']);
+  for (const network of supportedNetworks) {
+    networkSet.add(network);
+  }
+  const newEnabledNetworks = [...networkSet] as NetworkType[];
+  await local.set('enabledNetworks', newEnabledNetworks);
+
+  // Set active network on first wallet
+  if (existingVaultCount === 0 && supportedNetworks.length > 0) {
+    await local.set('activeNetwork', supportedNetworks[0] as NetworkType);
+  }
+
+  return newEnabledNetworks;
 }
 
 export const createKeyRingSlice = (
@@ -117,6 +202,8 @@ export const createKeyRingSlice = (
     selectedKeyInfo: undefined,
     activeNetwork: 'penumbra',
     enabledNetworks: ['penumbra', 'zcash'],
+    penumbraAccount: 0,
+    setPenumbraAccount: (account: number) => set(state => { state.keyRing.penumbraAccount = account; }),
 
     init: async () => {
       const keyPrint = await local.get('passwordKeyPrint');
@@ -339,6 +426,21 @@ export const createKeyRingSlice = (
       const vaultId = generateVaultId();
       const encryptedData = await encryptData(JSON.stringify(data));
 
+      // Determine which networks this zigner wallet supports
+      const supportedNetworks: string[] = [];
+      if (data.fullViewingKey) supportedNetworks.push('penumbra');
+      if (data.viewingKey) supportedNetworks.push('zcash');
+      if (data.polkadotSs58) supportedNetworks.push('polkadot');
+
+      // Determine cosmos networks from imported addresses
+      if (data.cosmosAddresses?.length) {
+        for (const addr of data.cosmosAddresses) {
+          if (!supportedNetworks.includes(addr.chainId)) {
+            supportedNetworks.push(addr.chainId);
+          }
+        }
+      }
+
       const vault: EncryptedVault = {
         id: vaultId,
         type: 'zigner-zafu',
@@ -349,6 +451,11 @@ export const createKeyRingSlice = (
         insensitive: {
           deviceId: data.deviceId,
           accountIndex: data.accountIndex,
+          supportedNetworks,
+          ...(data.polkadotSs58 ? { polkadotSs58: data.polkadotSs58 } : {}),
+          ...(data.polkadotGenesisHash ? { polkadotGenesisHash: data.polkadotGenesisHash } : {}),
+          ...(data.cosmosAddresses?.length ? { cosmosAddresses: data.cosmosAddresses } : {}),
+          ...(data.publicKey ? { cosmosPublicKey: data.publicKey } : {}),
         },
       };
 
@@ -357,10 +464,23 @@ export const createKeyRingSlice = (
       await local.set('vaults', newVaults);
       await local.set('selectedVaultId', vaultId);
 
+      const keyJson = await session.get('passwordKey');
+      const key = keyJson ? await Key.fromJson(keyJson) : undefined;
+      const newEnabledNetworks = key
+        ? await createZignerWalletEntries(data, name, key, vaultId, supportedNetworks, vaults.length, local)
+        : await (async () => {
+            const currentEnabled = await local.get('enabledNetworks');
+            return [...new Set<string>([...(currentEnabled ?? ['penumbra', 'zcash']), ...supportedNetworks])] as NetworkType[];
+          })();
+
       const keyInfos = vaultsToKeyInfos(newVaults, vaultId);
       set(state => {
         state.keyRing.keyInfos = keyInfos;
         state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
+        state.keyRing.enabledNetworks = newEnabledNetworks;
+        if (vaults.length === 0 && supportedNetworks.length > 0) {
+          state.keyRing.activeNetwork = supportedNetworks[0] as NetworkType;
+        }
       });
 
       return vaultId;
@@ -402,6 +522,13 @@ export const createKeyRingSlice = (
       if (data.fullViewingKey) supportedNetworks.push('penumbra');
       if (data.viewingKey) supportedNetworks.push('zcash');
       if (data.polkadotSs58) supportedNetworks.push('polkadot');
+      if (data.cosmosAddresses?.length) {
+        for (const addr of data.cosmosAddresses) {
+          if (!supportedNetworks.includes(addr.chainId)) {
+            supportedNetworks.push(addr.chainId);
+          }
+        }
+      }
 
       const vault: EncryptedVault = {
         id: vaultId,
@@ -417,6 +544,9 @@ export const createKeyRingSlice = (
           // Store polkadot ss58 address in insensitive for watch-only display
           ...(data.polkadotSs58 ? { polkadotSs58: data.polkadotSs58 } : {}),
           ...(data.polkadotGenesisHash ? { polkadotGenesisHash: data.polkadotGenesisHash } : {}),
+          // Store cosmos addresses and pubkey in insensitive for watch-only display and signing
+          ...(data.cosmosAddresses?.length ? { cosmosAddresses: data.cosmosAddresses } : {}),
+          ...(data.publicKey ? { cosmosPublicKey: data.publicKey } : {}),
           // only mark as airgapOnly if this is a fresh setup with default password
           // if user already has a real password, this vault uses that password too
           ...(isNewSetup ? { airgapOnly: true } : {}),
@@ -440,12 +570,20 @@ export const createKeyRingSlice = (
         await local.set('selectedVaultId', vaultId);
       }
 
+      const newEnabledNetworks = await createZignerWalletEntries(
+        data, name, key, vaultId, supportedNetworks, vaults.length, local,
+      );
+
       const selectedId = shouldAutoSelect ? vaultId : (currentSelectedId as string);
       const keyInfos = vaultsToKeyInfos(newVaults, selectedId);
       set(state => {
         state.keyRing.keyInfos = keyInfos;
         state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
         state.keyRing.status = 'unlocked';
+        state.keyRing.enabledNetworks = newEnabledNetworks;
+        if (vaults.length === 0 && supportedNetworks.length > 0) {
+          state.keyRing.activeNetwork = supportedNetworks[0] as NetworkType;
+        }
       });
 
       return vaultId;
@@ -639,6 +777,8 @@ export const selectStatus = (state: AllSlices) => state.keyRing.status;
 export const selectLock = (state: AllSlices) => state.keyRing.lock;
 export const selectUnlock = (state: AllSlices) => state.keyRing.unlock;
 export const selectSelectKeyRing = (state: AllSlices) => state.keyRing.selectKeyRing;
+export const selectPenumbraAccount = (state: AllSlices) => state.keyRing.penumbraAccount;
+export const selectSetPenumbraAccount = (state: AllSlices) => state.keyRing.setPenumbraAccount;
 
 /** Helper to check if a keyInfo supports a given network */
 const keyInfoSupportsNetwork = (k: KeyInfo, network: NetworkType): boolean => {

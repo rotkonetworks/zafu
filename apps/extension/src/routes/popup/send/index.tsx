@@ -11,7 +11,7 @@ import { PopupPath } from '../paths';
 import { useQuery } from '@tanstack/react-query';
 import { ZcashSend } from './zcash-send';
 import { useStore } from '../../../state';
-import { selectActiveNetwork } from '../../../state/keyring';
+import { selectActiveNetwork, selectPenumbraAccount } from '../../../state/keyring';
 import { recentAddressesSelector, type AddressNetwork } from '../../../state/recent-addresses';
 import { contactsSelector } from '../../../state/contacts';
 import { selectIbcWithdraw } from '../../../state/ibc-withdraw';
@@ -24,11 +24,15 @@ import { fromValueView } from '@rotko/penumbra-types/amount';
 import { assetPatterns } from '@rotko/penumbra-types/assets';
 import { useSkipRoute, useSkipChains } from '../../../hooks/skip-route';
 import { useCosmosSend, useCosmosIbcTransfer } from '../../../hooks/cosmos-signer';
+import { parseAmountToBaseUnits } from '@repo/wallet/networks/cosmos/signer';
 import { useCosmosAssets, type CosmosAsset } from '../../../hooks/cosmos-balance';
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
 import { COSMOS_CHAINS, type CosmosChainId, isValidCosmosAddress, getChainFromAddress } from '@repo/wallet/networks/cosmos/chains';
 import { cn } from '@repo/ui/lib/utils';
+import { usePasswordGate } from '../../../hooks/password-gate';
 import { isDedicatedWindow } from '../../../utils/popup-detection';
+import { openInDedicatedWindow } from '../../../utils/navigate';
+import { selectEffectiveKeyInfo } from '../../../state/keyring';
 
 /** IBC chain selector dropdown */
 function ChainSelector({
@@ -155,14 +159,23 @@ function CosmosChainSelector({
   selected,
   onSelect,
   currentChainId,
+  autoLabel,
 }: {
   chains: Array<{ chainId: string; chainName: string; bech32Prefix?: string; logoUri?: string }>;
   selected: string | undefined;
   onSelect: (chainId: string) => void;
   currentChainId: string;
+  autoLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [manuallySelected, setManuallySelected] = useState(false);
   const filteredChains = chains.filter(c => c.chainId !== currentChainId);
+
+  const displayName = manuallySelected && selected
+    ? chains.find(c => c.chainId === selected)?.chainName ?? selected
+    : selected
+      ? autoLabel ?? chains.find(c => c.chainId === selected)?.chainName ?? selected
+      : autoLabel ?? 'auto-detect from address';
 
   return (
     <div className='relative'>
@@ -170,26 +183,39 @@ function CosmosChainSelector({
         onClick={() => setOpen(!open)}
         className='flex w-full items-center justify-between rounded-lg border border-border bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50'
       >
-        {selected ? (
-          <span>{chains.find(c => c.chainId === selected)?.chainName ?? selected}</span>
-        ) : (
-          <span className='text-muted-foreground'>select destination</span>
-        )}
+        <span className={!manuallySelected && !selected ? 'text-muted-foreground' : ''}>
+          {displayName}
+        </span>
         <ChevronDownIcon className={cn('h-4 w-4 transition-transform', open && 'rotate-180')} />
       </button>
 
       {open && (
         <div className='absolute top-full left-0 right-0 z-10 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border bg-background shadow-lg'>
+          {/* auto-detect option */}
+          <button
+            onClick={() => {
+              onSelect('');
+              setManuallySelected(false);
+              setOpen(false);
+            }}
+            className={cn(
+              'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-muted/50',
+              !manuallySelected && 'bg-muted/30'
+            )}
+          >
+            <span className='text-muted-foreground'>auto-detect from address</span>
+          </button>
           {filteredChains.map(chain => (
             <button
               key={chain.chainId}
               onClick={() => {
                 onSelect(chain.chainId);
+                setManuallySelected(true);
                 setOpen(false);
               }}
               className={cn(
                 'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-muted/50',
-                selected === chain.chainId && 'bg-muted/30'
+                manuallySelected && selected === chain.chainId && 'bg-muted/30'
               )}
             >
               {chain.logoUri && (
@@ -259,12 +285,18 @@ function CosmosSend({ sourceChainId }: { sourceChainId: CosmosChainId }) {
   const [amount, setAmount] = useState('');
   const [selectedAsset, setSelectedAsset] = useState<CosmosAsset | undefined>();
   const [accountIndex, setAccountIndex] = useState(0);
-  const [txStatus, setTxStatus] = useState<'idle' | 'signing' | 'broadcasting' | 'success' | 'error'>('idle');
+  const [txStatus, setTxStatus] = useState<'idle' | 'confirm' | 'signing' | 'broadcasting' | 'success' | 'error'>('idle');
   const [txHash, setTxHash] = useState<string | undefined>();
   const [txError, setTxError] = useState<string | undefined>();
   const [showSavePrompt, setShowSavePrompt] = useState(false);
   const [contactName, setContactName] = useState('');
   const [showContactModal, setShowContactModal] = useState(false);
+  const [txPreview, setTxPreview] = useState<Record<string, unknown> | null>(null);
+  const [showRawJson, setShowRawJson] = useState(false);
+
+  // detect wallet type
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  const isZigner = selectedKeyInfo?.type === 'zigner-zafu';
 
   // recent addresses and contacts
   const { recordUsage, shouldSuggestSave, dismissSuggestion, getRecent } = useStore(recentAddressesSelector);
@@ -288,6 +320,7 @@ function CosmosSend({ sourceChainId }: { sourceChainId: CosmosChainId }) {
   // signing hooks
   const cosmosSend = useCosmosSend();
   const cosmosIbcTransfer = useCosmosIbcTransfer();
+  const { requestAuth, PasswordModal } = usePasswordGate();
 
   // set max amount for selected asset
   const handleSetMax = useCallback(() => {
@@ -297,10 +330,10 @@ function CosmosSend({ sourceChainId }: { sourceChainId: CosmosChainId }) {
     }
   }, [selectedAsset]);
 
-  // convert amount to base units
+  // convert amount to base units (integer math, no float precision loss)
   const amountInBase = useMemo(() => {
     if (!amount || isNaN(parseFloat(amount)) || !selectedAsset) return '0';
-    return String(Math.floor(parseFloat(amount) * Math.pow(10, selectedAsset.decimals)));
+    return parseAmountToBaseUnits(amount, selectedAsset.decimals);
   }, [amount, selectedAsset]);
 
   // find route via skip
@@ -338,10 +371,74 @@ function CosmosSend({ sourceChainId }: { sourceChainId: CosmosChainId }) {
   }, [recipient, destChainId, skipChains]);
 
 const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selectedAsset && txStatus === 'idle';
-  const isSameChain = !destChainId || destChainId === sourceChain.chainId;
+  // effective destination: manual selection > auto-detect > same chain
+  const effectiveDestChainId = destChainId || detectedChain?.chainId || sourceChain.chainId;
+  const isSameChain = effectiveDestChainId === sourceChain.chainId;
 
-  const handleSubmit = useCallback(async () => {
+  // Listen for cosmos sign result from dedicated window
+  useEffect(() => {
+    const listener = (changes: { [key: string]: chrome.storage.StorageChange }) => {
+      if (changes['cosmosSignResult']?.newValue) {
+        const result = changes['cosmosSignResult'].newValue as { txHash: string; code: number };
+        setTxStatus('success');
+        setTxHash(result.txHash);
+        void refetchAssets();
+        void recordUsage(recipient, 'cosmos', sourceChainId);
+        if (shouldSuggestSave(recipient)) {
+          setShowSavePrompt(true);
+        }
+        // Clean up
+        void chrome.storage.session.remove('cosmosSignResult');
+      }
+    };
+    chrome.storage.session.onChanged.addListener(listener);
+    return () => chrome.storage.session.onChanged.removeListener(listener);
+  }, [refetchAssets, recordUsage, recipient, sourceChainId, shouldSuggestSave]);
+
+  // show confirmation screen with tx preview
+  const handleReview = useCallback(() => {
     if (!canSubmit || !selectedAsset) return;
+    setTxError(undefined);
+    setShowRawJson(false);
+
+    // build preview of what will be signed
+    const amtBase = parseAmountToBaseUnits(amount, selectedAsset.decimals);
+    const denom = selectedAsset.denom;
+
+    if (isSameChain) {
+      setTxPreview({
+        type: 'cosmos-sdk/MsgSend',
+        chain_id: sourceChain.chainId,
+        from: assetsData?.address ?? '...',
+        to: recipient,
+        amount: [{ denom, amount: String(amtBase) }],
+        gas: '150000',
+      });
+    } else {
+      const channel = route?.operations.find(op => op.transfer)?.transfer?.channel;
+      setTxPreview({
+        type: 'cosmos-sdk/MsgTransfer',
+        chain_id: sourceChain.chainId,
+        from: assetsData?.address ?? '...',
+        to: recipient,
+        token: { denom, amount: String(amtBase) },
+        source_channel: channel ?? 'unknown',
+        gas: '200000',
+      });
+    }
+
+    setTxStatus('confirm');
+  }, [canSubmit, selectedAsset, amount, sourceChainId, sourceChain, isSameChain, recipient, assetsData, route]);
+
+  // confirmed — ask password then sign+broadcast
+  const handleConfirm = useCallback(async () => {
+    if (!selectedAsset) return;
+
+    const authorized = await requestAuth();
+    if (!authorized) {
+      setTxStatus('confirm');
+      return;
+    }
 
     setTxStatus('signing');
     setTxError(undefined);
@@ -350,7 +447,6 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
       let result;
 
       if (isSameChain) {
-        // same chain send
         result = await cosmosSend.mutateAsync({
           chainId: sourceChainId,
           toAddress: recipient,
@@ -359,8 +455,6 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
           accountIndex,
         });
       } else {
-        // need to find IBC channel for destination
-        // for now, try to find channel from route
         const channel = route?.operations.find(op => op.transfer)?.transfer?.channel;
         if (!channel) {
           throw new Error('no ibc route found');
@@ -368,7 +462,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
 
         result = await cosmosIbcTransfer.mutateAsync({
           sourceChainId,
-          destChainId: destChainId!,
+          destChainId: effectiveDestChainId,
           sourceChannel: channel,
           toAddress: recipient,
           amount,
@@ -377,13 +471,26 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
         });
       }
 
+      // check if this is a zigner sign request (needs QR flow in dedicated window)
+      if (result.type === 'zigner') {
+        const serializable = {
+          ...result,
+          pubkey: Array.from(result.pubkey),
+          signRequest: {
+            ...result.signRequest,
+            signDocBytes: Array.from(result.signRequest.signDocBytes),
+          },
+        };
+        await chrome.storage.session.set({ cosmosSignData: serializable });
+        await openInDedicatedWindow(PopupPath.COSMOS_SIGN, { width: 400, height: 628 });
+        setTxStatus('idle');
+        return;
+      }
+
       setTxStatus('success');
       setTxHash(result.txHash);
-      // refetch assets after tx
       void refetchAssets();
-      // record address usage for contact suggestions
       void recordUsage(recipient, 'cosmos', sourceChainId);
-      // check if we should prompt to save as contact
       if (shouldSuggestSave(recipient)) {
         setShowSavePrompt(true);
       }
@@ -391,10 +498,11 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
       setTxStatus('error');
       setTxError(err instanceof Error ? err.message : 'transaction failed');
     }
-  }, [canSubmit, isSameChain, sourceChainId, destChainId, recipient, amount, selectedAsset, accountIndex, route, cosmosSend, cosmosIbcTransfer, refetchAssets, recordUsage, shouldSuggestSave]);
+  }, [isSameChain, sourceChainId, effectiveDestChainId, recipient, amount, selectedAsset, accountIndex, route, cosmosSend, cosmosIbcTransfer, refetchAssets, recordUsage, shouldSuggestSave, requestAuth]);
 
   return (
     <div className='flex flex-col gap-4'>
+      {PasswordModal}
       {/* account selector */}
       <div>
         <label className='mb-1 block text-xs text-muted-foreground'>account</label>
@@ -418,21 +526,6 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
         </div>
       </div>
 
-      {/* destination chain */}
-      <div>
-        <label className='mb-1 block text-xs text-muted-foreground'>destination chain</label>
-        {chainsLoading ? (
-          <div className='h-10 rounded-lg bg-muted/30 animate-pulse' />
-        ) : (
-          <CosmosChainSelector
-            chains={skipChains}
-            selected={destChainId}
-            onSelect={setDestChainId}
-            currentChainId={sourceChain.chainId}
-          />
-        )}
-      </div>
-
       {/* recipient */}
       <div>
         <label className='mb-1 block text-xs text-muted-foreground'>recipient</label>
@@ -451,7 +544,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
         {recipient && !recipientValid && (
           <p className='mt-1 text-xs text-red-500'>invalid cosmos address</p>
         )}
-        {detectedChain && (
+        {detectedChain && !destChainId && (
           <p className='mt-1 text-xs text-muted-foreground'>
             detected: {detectedChain.name}
           </p>
@@ -475,6 +568,22 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
               })}
             </div>
           </div>
+        )}
+      </div>
+
+      {/* destination chain */}
+      <div>
+        <label className='mb-1 block text-xs text-muted-foreground'>destination chain</label>
+        {chainsLoading ? (
+          <div className='h-10 rounded-lg bg-muted/30 animate-pulse' />
+        ) : (
+          <CosmosChainSelector
+            chains={skipChains}
+            selected={destChainId ?? detectedChain?.chainId}
+            onSelect={(id) => setDestChainId(id || undefined)}
+            currentChainId={sourceChain.chainId}
+            autoLabel={detectedChain ? `auto (${detectedChain.name})` : 'auto-detect from address'}
+          />
         )}
       </div>
 
@@ -620,6 +729,72 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
         </div>
       )}
 
+      {/* confirmation summary */}
+      {txStatus === 'confirm' && selectedAsset && (
+        <div className='rounded-lg border border-zigner-gold/30 bg-card/50 p-3'>
+          <p className='text-xs font-medium text-zigner-gold mb-2'>confirm transaction</p>
+          <div className='flex flex-col gap-1.5 text-xs'>
+            <div className='flex justify-between'>
+              <span className='text-muted-foreground'>type</span>
+              <span>{isSameChain ? 'send' : 'ibc transfer'}</span>
+            </div>
+            <div className='flex justify-between'>
+              <span className='text-muted-foreground'>chain</span>
+              <span>{sourceChain.name}</span>
+            </div>
+            <div className='flex justify-between gap-2'>
+              <span className='text-muted-foreground shrink-0'>to</span>
+              <span className='font-mono text-right break-all'>{recipient}</span>
+            </div>
+            <div className='flex justify-between'>
+              <span className='text-muted-foreground'>amount</span>
+              <span>{amount} {selectedAsset.symbol}</span>
+            </div>
+            {!isSameChain && effectiveDestChainId && (
+              <div className='flex justify-between'>
+                <span className='text-muted-foreground'>destination</span>
+                <span>{skipChains.find(c => c.chainId === effectiveDestChainId)?.chainName ?? effectiveDestChainId}</span>
+              </div>
+            )}
+          </div>
+
+          {/* raw tx json toggle */}
+          {txPreview && (
+            <div className='mt-2'>
+              <button
+                onClick={() => setShowRawJson(!showRawJson)}
+                className='text-xs text-muted-foreground hover:text-foreground transition-colors'
+              >
+                {showRawJson ? 'hide' : 'view'} raw transaction json
+              </button>
+              {showRawJson && (
+                <pre className='mt-2 max-h-48 overflow-auto rounded bg-background p-2 text-[10px] font-mono text-muted-foreground leading-relaxed'>
+                  {JSON.stringify(txPreview, null, 2)}
+                </pre>
+              )}
+            </div>
+          )}
+
+          <div className='flex gap-2 mt-3'>
+            <button
+              onClick={() => void handleConfirm()}
+              className={cn(
+                'flex-1 rounded-lg bg-zigner-gold py-2.5 text-sm font-medium text-zigner-dark',
+                'transition-all duration-100 hover:bg-zigner-gold-light active:scale-[0.99]'
+              )}
+            >
+              confirm & sign
+            </button>
+            <button
+              onClick={() => setTxStatus('idle')}
+              className='flex-1 rounded-lg border border-border py-2.5 text-sm text-muted-foreground hover:text-foreground transition-colors'
+            >
+              back
+            </button>
+          </div>
+        </div>
+      )}
+
       {txStatus === 'error' && txError && (
         <div className='rounded-lg border border-red-500/30 bg-red-500/10 p-3'>
           <p className='text-sm text-red-400'>transaction failed</p>
@@ -640,32 +815,38 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
               setAmount('');
             }
           } else {
-            void handleSubmit();
+            handleReview();
           }
         }}
         disabled={
           (txStatus === 'idle' && !canSubmit) ||
+          txStatus === 'confirm' ||
           txStatus === 'signing' ||
           txStatus === 'broadcasting'
         }
         className={cn(
           'mt-2 w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark',
           'transition-all duration-100 hover:bg-zigner-gold-light active:scale-[0.99]',
-          'disabled:opacity-50 disabled:cursor-not-allowed'
+          'disabled:opacity-50 disabled:cursor-not-allowed',
+          txStatus === 'confirm' && 'hidden'
         )}
       >
-        {txStatus === 'signing' && 'signing...'}
+        {txStatus === 'signing' && 'building transaction...'}
         {txStatus === 'broadcasting' && 'broadcasting...'}
-        {txStatus === 'idle' && (routeLoading ? 'finding route...' : 'send')}
+        {txStatus === 'idle' && (routeLoading ? 'finding route...' : 'review')}
         {txStatus === 'success' && 'send another'}
         {txStatus === 'error' && 'retry'}
       </button>
 
-      <p className='text-center text-xs text-muted-foreground'>
-        {destChainId && destChainId !== sourceChain.chainId
-          ? 'ibc transfer via skip'
-          : 'local transfer'}
-      </p>
+      {txStatus !== 'confirm' && (
+        <p className='text-center text-xs text-muted-foreground'>
+          {!isSameChain
+            ? 'ibc transfer via skip'
+            : isZigner
+              ? 'sign with zafu zigner'
+              : 'local transfer'}
+        </p>
+      )}
     </div>
   );
 }
@@ -712,6 +893,7 @@ function PenumbraSend({ onSuccess }: { onSuccess?: () => void }) {
 /** Penumbra native send form (penumbra -> penumbra) */
 function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
   const sendState = useStore(selectPenumbraSend);
+  const penumbraAccount = useStore(selectPenumbraAccount);
   const [txStatus, setTxStatus] = useState<'idle' | 'planning' | 'signing' | 'broadcasting' | 'success' | 'error'>('idle');
   const [txHash, setTxHash] = useState<string | undefined>();
   const [txError, setTxError] = useState<string | undefined>();
@@ -721,11 +903,11 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
 
   // fetch balances
   const { data: balances = [], isLoading: balancesLoading } = useQuery({
-    queryKey: ['balances', 0],
+    queryKey: ['balances', penumbraAccount],
     staleTime: 30_000,
     queryFn: async () => {
       try {
-        const raw = await Array.fromAsync(viewClient.balances({ accountFilter: { account: 0 } }));
+        const raw = await Array.fromAsync(viewClient.balances({ accountFilter: { account: penumbraAccount } }));
         // filter and sort
         return raw
           .filter(b => {
@@ -1029,6 +1211,14 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
   const [sentToChainId, setSentToChainId] = useState<string | undefined>();
 
   const penumbraTx = usePenumbraTransaction();
+
+  // default denom to upenumbra if not set
+  useEffect(() => {
+    if (!ibcState.denom) {
+      ibcState.setDenom('upenumbra');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ibcState.denom]);
 
   // recent addresses and contacts
   const { recordUsage, shouldSuggestSave, dismissSuggestion, getRecent } = useStore(recentAddressesSelector);

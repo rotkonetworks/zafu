@@ -19,7 +19,6 @@ import {
   TransactionPlan,
 } from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
 import { fullViewingKeyFromBech32m } from '@penumbra-zone/bech32m/penumbrafullviewingkey';
-import { encodePlanToQR, parseAuthorizationQR, validateAuthorization } from './airgap-signer';
 
 // ============================================================================
 // Constants
@@ -205,136 +204,16 @@ export function isZignerFvkQR(hex: string): boolean {
 }
 
 // ============================================================================
-// Transaction Signing
+// Transaction Signing (legacy stub)
 // ============================================================================
 
 /**
- * UI callback interface for Zigner signing flow
- *
- * The extension must provide these callbacks to handle the QR code UI.
+ * Legacy stub — the actual signing flow is handled by the extension's popup-based
+ * flow (authorization.ts → tx-approval → transaction/index.tsx) which computes
+ * the correct effect hash via WASM using the FVK.
  */
-export interface ZignerSigningUI {
-  /**
-   * Display transaction QR code for user to scan with Zigner
-   * @param qrHex - Hex string to encode as QR
-   * @param planSummary - Human-readable summary of the transaction
-   */
-  showTransactionQR: (qrHex: string, planSummary: string) => Promise<void>;
-
-  /**
-   * Prompt user to scan signature QR from Zigner
-   * @returns Hex string from scanned QR code
-   */
-  scanSignatureQR: () => Promise<string>;
-
-  /**
-   * Called on error during signing flow
-   */
-  onError: (error: Error) => void;
-
-  /**
-   * Called when signing is complete
-   */
-  onComplete: () => void;
-}
-
-// Global UI callback - set by the extension
-let signingUI: ZignerSigningUI | null = null;
-
-/**
- * Set the Zigner signing UI callbacks
- *
- * Must be called by the extension before any signing operations.
- */
-export function setZignerSigningUI(ui: ZignerSigningUI): void {
-  signingUI = ui;
-}
-
-/**
- * Get a summary of a transaction plan for display
- *
- * @param plan - Transaction plan to summarize
- * @returns Human-readable summary
- */
-function getTransactionSummary(plan: TransactionPlan): string {
-  const spendCount = plan.actions.filter(a => a.action?.case === 'spend').length;
-  const outputCount = plan.actions.filter(a => a.action?.case === 'output').length;
-  const swapCount = plan.actions.filter(a => a.action?.case === 'swap').length;
-  const delegateCount = plan.actions.filter(a => a.action?.case === 'delegate').length;
-  const undelegateCount = plan.actions.filter(a => a.action?.case === 'undelegate').length;
-  const voteCount = plan.actions.filter(a => a.action?.case === 'delegatorVote').length;
-
-  const parts: string[] = [];
-
-  if (spendCount > 0 || outputCount > 0) {
-    parts.push(`${spendCount} spend(s), ${outputCount} output(s)`);
-  }
-  if (swapCount > 0) {
-    parts.push(`${swapCount} swap(s)`);
-  }
-  if (delegateCount > 0) {
-    parts.push(`${delegateCount} delegation(s)`);
-  }
-  if (undelegateCount > 0) {
-    parts.push(`${undelegateCount} undelegation(s)`);
-  }
-  if (voteCount > 0) {
-    parts.push(`${voteCount} vote(s)`);
-  }
-
-  return parts.length > 0 ? parts.join(', ') : 'Transaction';
-}
-
-/**
- * Authorize a transaction plan using Zigner via QR codes
- *
- * Flow:
- * 1. Encode transaction plan to QR hex
- * 2. Display QR for user to scan with Zigner
- * 3. User reviews and signs on Zigner
- * 4. Scan signature QR from Zigner
- * 5. Parse and validate signatures
- * 6. Return AuthorizationData
- *
- * @param plan - Transaction plan to authorize
- * @returns AuthorizationData with signatures from Zigner
- * @throws Error if signing fails or is cancelled
- */
-export async function zignerAuthorize(plan: TransactionPlan): Promise<AuthorizationData> {
-  if (!signingUI) {
-    throw new Error(
-      'Zigner signing UI not initialized. Call setZignerSigningUI() first.',
-    );
-  }
-
-  try {
-    // 1. Encode transaction plan to QR hex (reuse airgap-signer encoder)
-    const planHex = encodePlanToQR(plan);
-    const summary = getTransactionSummary(plan);
-
-    // 2. Display QR for user to scan with Zigner
-    await signingUI.showTransactionQR(planHex, summary);
-
-    // 3. User scans and signs on Zigner device (external)
-
-    // 4. Scan signature QR from Zigner
-    const signatureHex = await signingUI.scanSignatureQR();
-
-    // 5. Parse authorization data (reuse airgap-signer parser)
-    const authData = parseAuthorizationQR(signatureHex);
-
-    // 6. Validate signatures match plan
-    validateAuthorization(plan, authData);
-
-    // Success!
-    signingUI.onComplete();
-
-    return authData;
-  } catch (error) {
-    const err = error instanceof Error ? error : new Error(String(error));
-    signingUI.onError(err);
-    throw err;
-  }
+export async function zignerAuthorize(_plan: TransactionPlan): Promise<AuthorizationData> {
+  throw new Error('Legacy Zigner signing is not supported. Use the popup-based flow instead.');
 }
 
 // ============================================================================

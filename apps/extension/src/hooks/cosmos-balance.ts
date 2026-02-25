@@ -2,16 +2,14 @@
  * cosmos balance hook
  *
  * fetches balance for cosmos chains using RPC.
- *
- * privacy note: these queries leak address activity to rpc nodes.
- * only runs when user has opted in via privacy settings.
+ * transparent balance fetching is enabled per-user via settings-networks
+ * when they explicitly toggle on a cosmos/IBC chain.
  */
 
 import { useQuery } from '@tanstack/react-query';
 import { useStore } from '../state';
 import { selectEffectiveKeyInfo, keyRingSelector } from '../state/keyring';
-import { canFetchTransparentBalances } from '../state/privacy';
-import { createSigningClient, deriveAllChainAddresses } from '@repo/wallet/networks/cosmos/signer';
+import { createSigningClient, deriveAllChainAddresses, deriveChainAddress } from '@repo/wallet/networks/cosmos/signer';
 import { getBalance, getAllBalances } from '@repo/wallet/networks/cosmos/client';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 
@@ -19,8 +17,6 @@ import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/
 export const useCosmosBalance = (chainId: CosmosChainId, accountIndex = 0) => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const { getMnemonic } = useStore(keyRingSelector);
-  // privacy gate: only fetch if user has opted in
-  const canFetch = useStore(canFetchTransparentBalances);
 
   return useQuery({
     queryKey: ['cosmosBalance', chainId, selectedKeyInfo?.id, accountIndex],
@@ -47,8 +43,7 @@ export const useCosmosBalance = (chainId: CosmosChainId, accountIndex = 0) => {
         formatted: formatBalance(balance.amount, config.decimals, config.symbol),
       };
     },
-    // privacy gate: require user opt-in before making rpc queries
-    enabled: canFetch && !!selectedKeyInfo && selectedKeyInfo.type === 'mnemonic',
+    enabled: !!selectedKeyInfo && (selectedKeyInfo.type === 'mnemonic' || selectedKeyInfo.type === 'zigner-zafu'),
     staleTime: 30_000, // 30 seconds
     refetchInterval: 60_000, // refetch every minute
   });
@@ -58,8 +53,6 @@ export const useCosmosBalance = (chainId: CosmosChainId, accountIndex = 0) => {
 export const useAllCosmosBalances = (accountIndex = 0) => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const { getMnemonic } = useStore(keyRingSelector);
-  // privacy gate: only fetch if user has opted in
-  const canFetch = useStore(canFetchTransparentBalances);
 
   return useQuery({
     queryKey: ['allCosmosBalances', selectedKeyInfo?.id, accountIndex],
@@ -113,8 +106,7 @@ export const useAllCosmosBalances = (accountIndex = 0) => {
         (typeof results)[0]
       >;
     },
-    // privacy gate: require user opt-in before making rpc queries
-    enabled: canFetch && !!selectedKeyInfo && selectedKeyInfo.type === 'mnemonic',
+    enabled: !!selectedKeyInfo && (selectedKeyInfo.type === 'mnemonic' || selectedKeyInfo.type === 'zigner-zafu'),
     staleTime: 30_000,
     refetchInterval: 60_000,
   });
@@ -134,41 +126,79 @@ export interface CosmosAsset {
   isNative: boolean;
 }
 
+/** get cosmos address from zigner vault insensitive data */
+function getZignerCosmosAddress(keyInfo: { insensitive: Record<string, unknown> }, chainId: CosmosChainId): string | null {
+  const addrs = keyInfo.insensitive['cosmosAddresses'] as
+    { chainId: string; address: string; prefix: string }[] | undefined;
+  if (!addrs) return null;
+  const match = addrs.find(a => a.chainId === chainId);
+  if (match) return match.address;
+  // try to derive from any stored address using bech32 prefix swap
+  if (addrs.length > 0) {
+    try {
+      return deriveChainAddress(addrs[0]!.address, chainId);
+    } catch { return null; }
+  }
+  return null;
+}
+
+/** find a keyInfo with cosmos capability — effective first, then any wallet that has cosmos addresses */
+function findCosmosCapableKey(
+  keyInfos: { id: string; type: string; insensitive: Record<string, unknown> }[],
+  effective: { id: string; type: string; insensitive: Record<string, unknown> } | undefined,
+  chainId: CosmosChainId,
+): { id: string; type: string; insensitive: Record<string, unknown> } | null {
+  // try effective first
+  if (effective) {
+    if (effective.type === 'mnemonic') return effective;
+    if (effective.type === 'zigner-zafu' && getZignerCosmosAddress(effective, chainId)) return effective;
+  }
+  // fallback: search all keyInfos for one with cosmos capability
+  for (const ki of keyInfos) {
+    if (ki === effective) continue;
+    if (ki.type === 'mnemonic') return ki;
+    if (ki.type === 'zigner-zafu' && getZignerCosmosAddress(ki, chainId)) return ki;
+  }
+  return null;
+}
+
 /** hook to get all assets (native + IBC tokens) for a cosmos chain */
 export const useCosmosAssets = (chainId: CosmosChainId, accountIndex = 0) => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  const allKeyInfos = useStore(state => state.keyRing.keyInfos);
   const { getMnemonic } = useStore(keyRingSelector);
-  // privacy gate: only fetch if user has opted in
-  const canFetch = useStore(canFetchTransparentBalances);
+
+  // find a wallet with cosmos capability (may differ from effective when active network is penumbra)
+  const cosmosKey = findCosmosCapableKey(allKeyInfos, selectedKeyInfo, chainId);
 
   return useQuery({
-    queryKey: ['cosmosAssets', chainId, selectedKeyInfo?.id, accountIndex],
+    queryKey: ['cosmosAssets', chainId, cosmosKey?.id ?? null, accountIndex],
     queryFn: async () => {
-      if (!selectedKeyInfo) {
-        throw new Error('no wallet selected');
-      }
-      if (selectedKeyInfo.type !== 'mnemonic') {
+      if (!cosmosKey) return null;
+
+      let address: string;
+
+      if (cosmosKey.type === 'zigner-zafu') {
+        const storedAddr = getZignerCosmosAddress(cosmosKey, chainId);
+        if (!storedAddr) return null;
+        address = storedAddr;
+      } else if (cosmosKey.type === 'mnemonic') {
+        const mnemonic = await getMnemonic(cosmosKey.id);
+        const client = await createSigningClient(chainId, mnemonic, accountIndex);
+        address = client.address;
+      } else {
         return null;
       }
 
-      const mnemonic = await getMnemonic(selectedKeyInfo.id);
-      const { address } = await createSigningClient(chainId, mnemonic, accountIndex);
       const config = COSMOS_CHAINS[chainId];
-
       const balances = await getAllBalances(chainId, address);
 
-      // map balances to asset info
       const assets: CosmosAsset[] = balances
         .filter(b => b.amount > 0n)
         .map(b => {
           const isNative = b.denom === config.denom;
-          // derive symbol from denom
-          const symbol = isNative
-            ? config.symbol
-            : denomToSymbol(b.denom);
-          // assume 6 decimals for most cosmos assets
+          const symbol = isNative ? config.symbol : denomToSymbol(b.denom);
           const decimals = isNative ? config.decimals : 6;
-
           return {
             denom: b.denom,
             amount: b.amount,
@@ -178,7 +208,6 @@ export const useCosmosAssets = (chainId: CosmosChainId, accountIndex = 0) => {
             isNative,
           };
         })
-        // sort: native first, then by amount
         .sort((a, b) => {
           if (a.isNative && !b.isNative) return -1;
           if (!a.isNative && b.isNative) return 1;
@@ -191,8 +220,7 @@ export const useCosmosAssets = (chainId: CosmosChainId, accountIndex = 0) => {
         nativeAsset: assets.find(a => a.isNative) ?? null,
       };
     },
-    // privacy gate: require user opt-in before making rpc queries
-    enabled: canFetch && !!selectedKeyInfo && selectedKeyInfo.type === 'mnemonic',
+    enabled: !!cosmosKey,
     staleTime: 30_000,
     refetchInterval: 60_000,
   });

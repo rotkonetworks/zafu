@@ -18,12 +18,14 @@
     "./networks": "./src/networks/index.ts",
     "./networks/penumbra/adapter": "./src/networks/penumbra/adapter.ts",
     "./networks/zcash/adapter": "./src/networks/zcash/adapter.ts",
+    "./networks/zcash/derive": "./src/networks/zcash/derive.ts",
     "./networks/polkadot": "./src/networks/polkadot/index.ts",
     "./networks/polkadot/adapter": "./src/networks/polkadot/adapter.ts",
     "./networks/polkadot/derive": "./src/networks/polkadot/derive.ts",
     "./networks/cosmos/adapter": "./src/networks/cosmos/adapter.ts",
     "./networks/cosmos/chains": "./src/networks/cosmos/chains.ts",
     "./networks/cosmos/signer": "./src/networks/cosmos/signer.ts",
+    "./networks/cosmos/airgap": "./src/networks/cosmos/airgap.ts",
     "./networks/cosmos/client": "./src/networks/cosmos/client.ts",
     "./networks/polkadot/parachain-registry": "./src/networks/polkadot/parachain-registry.ts"
   },
@@ -39,6 +41,7 @@
     "@polkadot-api/known-chains": "^0.9.18",
     "@polkadot-api/merkleize-metadata": "^1.1.29",
     "bip39": "^3.1.0",
+    "cosmjs-types": "^0.9.0",
     "polkadot-api": "^1.23.3",
     "qrcode": "^1.5.4"
   },

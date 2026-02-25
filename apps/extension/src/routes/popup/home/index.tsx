@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowUpIcon, ArrowDownIcon, CopyIcon, CheckIcon, DesktopIcon, ViewVerticalIcon } from '@radix-ui/react-icons';
 
 import { useStore } from '../../../state';
-import { selectActiveNetwork, selectEffectiveKeyInfo, type NetworkType } from '../../../state/keyring';
+import { selectActiveNetwork, selectEffectiveKeyInfo, selectPenumbraAccount, selectSetPenumbraAccount, type NetworkType } from '../../../state/keyring';
+import { PenumbraAccountPicker } from '../../../components/penumbra-account-picker';
 import { selectActiveZcashWallet } from '../../../state/wallets';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { needsLogin, needsOnboard } from '../popup-needs';
@@ -14,6 +15,8 @@ import { AssetListSkeleton } from '../../../components/primitives/skeleton';
 import { usePreloadBalances } from '../../../hooks/use-preload';
 import { useActiveAddress } from '../../../hooks/use-address';
 import { usePolkadotPublicKey } from '../../../hooks/use-polkadot-key';
+import { useCosmosAssets } from '../../../hooks/cosmos-balance';
+import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 
 /** lazy load network-specific content - only load when needed */
 const AssetsTable = lazy(() => import('./assets-table').then(m => ({ default: m.AssetsTable })));
@@ -35,6 +38,8 @@ export const PopupIndex = () => {
   // atomic selectors - each only re-renders when its value changes
   const activeNetwork = useStore(selectActiveNetwork);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  const penumbraAccount = useStore(selectPenumbraAccount);
+  const setPenumbraAccount = useStore(selectSetPenumbraAccount);
   const activeZcashWallet = useStore(selectActiveZcashWallet);
   const { address } = useActiveAddress();
   const { publicKey: polkadotPublicKey } = usePolkadotPublicKey();
@@ -48,7 +53,7 @@ export const PopupIndex = () => {
   const [canNavigateNormally] = useState(() => isSidePanel() || isDedicatedWindow());
 
   // preload balances in background for instant display
-  usePreloadBalances();
+  usePreloadBalances(penumbraAccount);
 
   // close send menu when clicking outside
   useEffect(() => {
@@ -99,6 +104,9 @@ export const PopupIndex = () => {
   return (
     <div className='flex min-h-full flex-col'>
       <div className='flex flex-col gap-3 p-4'>
+        {activeNetwork === 'penumbra' && (
+          <PenumbraAccountPicker account={penumbraAccount} onChange={setPenumbraAccount} />
+        )}
         {/* balance + actions row */}
         <div className='flex items-center justify-between border border-border/40 bg-card p-4'>
           <div>
@@ -165,6 +173,7 @@ export const PopupIndex = () => {
         <Suspense fallback={<AssetListSkeleton rows={4} />}>
           <NetworkContent
             network={activeNetwork}
+            penumbraAccount={penumbraAccount}
             zcashWallet={activeZcashWallet}
             polkadotPublicKey={polkadotPublicKey}
             hasMnemonic={selectedKeyInfo?.type === 'mnemonic'}
@@ -178,11 +187,13 @@ export const PopupIndex = () => {
 /** network-specific content - split out to minimize re-renders */
 const NetworkContent = ({
   network,
+  penumbraAccount,
   zcashWallet,
   polkadotPublicKey,
   hasMnemonic,
 }: {
   network: NetworkType;
+  penumbraAccount: number;
   zcashWallet?: { label: string; mainnet: boolean };
   polkadotPublicKey?: string;
   hasMnemonic?: boolean;
@@ -198,7 +209,7 @@ const NetworkContent = ({
             </div>
           </Suspense>
           <div className='mb-2 text-xs font-medium text-muted-foreground'>assets</div>
-          <AssetsTable account={0} />
+          <AssetsTable account={penumbraAccount} />
         </div>
       );
 
@@ -210,6 +221,12 @@ const NetworkContent = ({
 
     case 'kusama':
       return <PolkadotContent publicKey={polkadotPublicKey} relay='kusama' />;
+
+    case 'osmosis':
+    case 'noble':
+    case 'nomic':
+    case 'celestia':
+      return <CosmosContent chainId={network as CosmosChainId} />;
 
     default:
       return <NetworkPlaceholder network={network} />;
@@ -333,6 +350,77 @@ const PolkadotContent = ({
       <Suspense fallback={<AssetListSkeleton rows={3} />}>
         <PolkadotAssets publicKey={publicKey} relay={relay} />
       </Suspense>
+    </div>
+  );
+};
+
+/** cosmos chain content - shows balances from public RPC */
+const CosmosContent = ({ chainId }: { chainId: CosmosChainId }) => {
+  const config = COSMOS_CHAINS[chainId];
+
+  const { data: assetsData, isLoading, error } = useCosmosAssets(chainId, 0);
+
+  if (error) {
+    return (
+      <div className='flex flex-col items-center justify-center py-8 text-center'>
+        <div className='text-sm text-muted-foreground'>failed to load balances</div>
+        <div className='text-xs text-muted-foreground mt-1'>{error instanceof Error ? error.message : 'unknown error'}</div>
+      </div>
+    );
+  }
+
+  if (!assetsData && !isLoading) {
+    return (
+      <div className='flex flex-col items-center justify-center py-8 text-center'>
+        <div className='text-sm text-muted-foreground'>enable transparent balance fetching in privacy settings to view {config.name} balances</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className='flex-1'>
+      <div className='mb-2 text-xs font-medium text-muted-foreground'>assets</div>
+      {isLoading ? (
+        <AssetListSkeleton rows={2} />
+      ) : assetsData?.assets.length === 0 ? (
+        <div className='border border-border bg-card p-4'>
+          <div className='flex items-center justify-between'>
+            <div className='flex items-center gap-2'>
+              <div className='h-8 w-8 bg-muted flex items-center justify-center'>
+                <span className='text-sm font-bold'>{config.symbol[0]}</span>
+              </div>
+              <div>
+                <div className='text-sm font-medium'>{config.symbol}</div>
+                <div className='text-xs text-muted-foreground'>{config.name}</div>
+              </div>
+            </div>
+            <div className='text-right'>
+              <div className='text-sm font-medium tabular-nums'>0 {config.symbol}</div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className='flex flex-col gap-1'>
+          {assetsData?.assets.map(asset => (
+            <div key={asset.denom} className='border border-border bg-card p-4'>
+              <div className='flex items-center justify-between'>
+                <div className='flex items-center gap-2'>
+                  <div className='h-8 w-8 bg-muted flex items-center justify-center'>
+                    <span className='text-sm font-bold'>{asset.symbol[0]}</span>
+                  </div>
+                  <div>
+                    <div className='text-sm font-medium'>{asset.symbol}</div>
+                    <div className='text-xs text-muted-foreground truncate max-w-[120px]'>{asset.denom}</div>
+                  </div>
+                </div>
+                <div className='text-right'>
+                  <div className='text-sm font-medium tabular-nums'>{asset.formatted}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

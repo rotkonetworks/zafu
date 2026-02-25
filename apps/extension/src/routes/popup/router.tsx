@@ -23,6 +23,7 @@ const InboxPage = lazy(() => import('./inbox').then(m => ({ default: m.InboxPage
 const ContactsPage = lazy(() => import('./contacts').then(m => ({ default: m.ContactsPage })));
 const SendPage = lazy(() => import('./send').then(m => ({ default: m.SendPage })));
 const ReceivePage = lazy(() => import('./receive').then(m => ({ default: m.ReceivePage })));
+const CosmosSign = lazy(() => import('./cosmos-sign').then(m => ({ default: m.CosmosSign })));
 
 // suspense fallback for lazy routes
 const LazyFallback = () => (
@@ -105,6 +106,16 @@ export const popupRoutes: RouteObject[] = [
         element: (
           <Suspense fallback={<LazyFallback />}>
             <ReceivePage />
+          </Suspense>
+        ),
+      },
+
+      // Cosmos airgap signing (dedicated window)
+      {
+        path: PopupPath.COSMOS_SIGN,
+        element: (
+          <Suspense fallback={<LazyFallback />}>
+            <CosmosSign />
           </Suspense>
         ),
       },

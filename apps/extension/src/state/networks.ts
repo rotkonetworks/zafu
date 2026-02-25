@@ -118,7 +118,7 @@ const DEFAULT_NETWORKS: Record<NetworkId, NetworkConfig> = {
     decimals: 6,
     denom: 'uusdc', // native USDC
     enabled: false,
-    endpoint: 'https://rpc.noble.strange.love',
+    endpoint: 'https://noble-rpc.polkachu.com',
     restEndpoint: 'https://noble-api.polkachu.com',
     chainId: 'noble-1',
     isIbcChain: true,
@@ -144,7 +144,7 @@ const DEFAULT_NETWORKS: Record<NetworkId, NetworkConfig> = {
     decimals: 6,
     denom: 'utia',
     enabled: false,
-    endpoint: 'https://rpc.celestia.strange.love',
+    endpoint: 'https://celestia-rpc.polkachu.com',
     restEndpoint: 'https://celestia-api.polkachu.com',
     chainId: 'celestia',
     isIbcChain: true,

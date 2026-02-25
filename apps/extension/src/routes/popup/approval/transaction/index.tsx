@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { MetadataFetchFn, TransactionViewComponent } from '@repo/ui/components/ui/tx';
 import { useStore } from '../../../../state';
 import { txApprovalSelector } from '../../../../state/tx-approval';
+import { PasswordGateModal } from '../../../../shared/components/password-gate';
 import { JsonViewer } from '@repo/ui/components/ui/json-viewer';
 import { AuthorizeRequest } from '@penumbra-zone/protobuf/penumbra/custody/v1/custody_pb';
 import { TransactionPlan } from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
@@ -15,7 +16,7 @@ import { ChainRegistryClient } from '@penumbra-labs/registry';
 import { viewClient } from '../../../../clients';
 import { TransactionView } from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
 import { ConnectError } from '@connectrpc/connect';
-import { encodePlanToQR, parseAuthorizationQR } from '@repo/wallet/airgap-signer';
+import { encodePlanToQR, parseAuthorizationQR, validateAuthorization } from '@repo/wallet/airgap-signer';
 import { QrDisplay } from '../../../../shared/components/qr-display';
 import { QrScanner } from '../../../../shared/components/qr-scanner';
 import { Button } from '@repo/ui/components/ui/button';
@@ -53,6 +54,7 @@ export const TransactionApproval = () => {
     sendResponse,
     invalidPlan,
     isAirgap,
+    effectHash,
     setAuthorizationData,
   } = useStore(txApprovalSelector);
 
@@ -62,6 +64,7 @@ export const TransactionApproval = () => {
   const [airgapStep, setAirgapStep] = useState<AirgapStep>('review');
   const [qrHex, setQrHex] = useState<string>('');
   const [scanError, setScanError] = useState<string | null>(null);
+  const [showPasswordGate, setShowPasswordGate] = useState(false);
 
   if (!authorizeRequest?.plan || !selectedTransactionView) {
     return null;
@@ -79,9 +82,22 @@ export const TransactionApproval = () => {
     window.close();
   };
 
+  const hexToBytes = (h: string): Uint8Array => {
+    const bytes = new Uint8Array(h.length / 2);
+    for (let i = 0; i < bytes.length; i++) {
+      bytes[i] = parseInt(h.substring(i * 2, i * 2 + 2), 16);
+    }
+    return bytes;
+  };
+
   const startAirgapSigning = () => {
+    if (!effectHash) {
+      setScanError('Effect hash not available for airgap signing');
+      return;
+    }
     const plan = new TransactionPlan(authorizeRequest.plan);
-    const hex = encodePlanToQR(plan);
+    const hashBytes = hexToBytes(effectHash);
+    const hex = encodePlanToQR(plan, hashBytes);
     setQrHex(hex);
     setAirgapStep('show-qr');
   };
@@ -89,6 +105,10 @@ export const TransactionApproval = () => {
   const handleAirgapScan = (hex: string) => {
     try {
       const authData = parseAuthorizationQR(hex);
+      // Validate effect hash and signature counts match the plan
+      const plan = new TransactionPlan(authorizeRequest.plan);
+      const expectedHash = hexToBytes(effectHash!);
+      validateAuthorization(plan, authData, expectedHash);
       setAuthorizationData(authData.toJson());
       setChoice(UserChoice.Approved);
       sendResponse();
@@ -249,7 +269,18 @@ export const TransactionApproval = () => {
             </Button>
           </div>
         ) : (
-          <ApproveDeny approve={invalidPlan ? undefined : approve} deny={deny} wait={3} />
+          <>
+            <PasswordGateModal
+              open={showPasswordGate}
+              onConfirm={() => { setShowPasswordGate(false); approve(); }}
+              onCancel={() => setShowPasswordGate(false)}
+            />
+            <ApproveDeny
+              approve={invalidPlan ? undefined : () => setShowPasswordGate(true)}
+              deny={deny}
+              wait={3}
+            />
+          </>
         )}
       </div>
     </div>
