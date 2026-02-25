@@ -8,7 +8,6 @@ on:
 
 env:
   DO_NOT_TRACK: 1
-  NODE_ENV: production
 
 jobs:
   release:
@@ -27,7 +26,7 @@ jobs:
           cache: 'pnpm'
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm turbo build --filter=zafu --cache-dir=.turbo
+      - run: NODE_ENV=production pnpm turbo build --filter=zafu --cache-dir=.turbo
 
       - name: Zip extensions
         run: |
