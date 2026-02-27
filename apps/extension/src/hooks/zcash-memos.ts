@@ -34,7 +34,7 @@ interface MemoSyncResult {
 }
 
 // default zidecar server (can be overridden)
-const DEFAULT_ZIDECAR_URL = 'https://zidecar.rotko.net';
+const DEFAULT_ZIDECAR_URL = 'https://zcash.rotko.net';
 
 // parallel fetch concurrency limit
 const FETCH_CONCURRENCY = 4;

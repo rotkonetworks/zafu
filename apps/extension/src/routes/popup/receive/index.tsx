@@ -9,7 +9,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeftIcon, CopyIcon, CheckIcon, InfoCircledIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from '@radix-ui/react-icons';
+import { ArrowLeftIcon, CopyIcon, CheckIcon, InfoCircledIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ReloadIcon } from '@radix-ui/react-icons';
 import { PopupPath } from '../paths';
 import { useStore } from '../../../state';
 import { selectActiveNetwork, selectEffectiveKeyInfo, selectPenumbraAccount, keyRingSelector } from '../../../state/keyring';
@@ -461,6 +461,23 @@ function ReceiveTab({ address, loading, activeNetwork }: {
   const [transparentLoading, setTransparentLoading] = useState(false);
   const [showTransparentTooltip, setShowTransparentTooltip] = useState(false);
 
+  // auto-rotate zcash addresses on mount: bump both indices
+  useEffect(() => {
+    if (!isZcash || !isMnemonic) return;
+
+    (async () => {
+      const r = await chrome.storage.local.get(['zcashShieldedIndex', 'zcashTransparentIndex']);
+      const nextShielded = (r['zcashShieldedIndex'] ?? 0) + 1;
+      const nextTransparent = (r['zcashTransparentIndex'] ?? 0) + 1;
+      await chrome.storage.local.set({
+        zcashShieldedIndex: nextShielded,
+        zcashTransparentIndex: nextTransparent,
+      });
+      setTransparentIndex(nextTransparent);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isZcash, isMnemonic]);
+
   const displayAddress = transparent && isZcash && transparentAddress
     ? transparentAddress
     : ephemeral && ephemeralAddress
@@ -563,6 +580,13 @@ function ReceiveTab({ address, loading, activeNetwork }: {
     setCopied(false);
   }, []);
 
+  // manually rotate shielded address — bump index in storage
+  const handleRotateShielded = useCallback(async () => {
+    const r = await chrome.storage.local.get('zcashShieldedIndex');
+    const next = (r['zcashShieldedIndex'] ?? 0) + 1;
+    await chrome.storage.local.set({ zcashShieldedIndex: next });
+  }, []);
+
   return (
     <div className='flex flex-col items-center gap-4'>
       <div className='rounded-xl border border-border bg-white p-2'>
@@ -624,6 +648,17 @@ function ReceiveTab({ address, loading, activeNetwork }: {
         </div>
       )}
 
+      {isZcash && isMnemonic && !transparent && (
+        <button
+          onClick={() => void handleRotateShielded()}
+          disabled={loading}
+          className='flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-foreground hover:text-foreground disabled:opacity-50'
+        >
+          <ReloadIcon className='h-3 w-3' />
+          new address
+        </button>
+      )}
+
       {isZcash && isMnemonic && (
         <>
           <div className='flex w-full items-center justify-between'>
@@ -679,7 +714,18 @@ function ReceiveTab({ address, loading, activeNetwork }: {
                 Address #{transparentIndex}
               </span>
               <button
-                onClick={() => setTransparentIndex(i => i + 1)}
+                onClick={() => {
+                  setTransparentIndex(i => {
+                    const next = i + 1;
+                    // persist highest-seen index
+                    chrome.storage.local.get('zcashTransparentIndex').then(r => {
+                      if (next > (r['zcashTransparentIndex'] ?? 0)) {
+                        void chrome.storage.local.set({ zcashTransparentIndex: next });
+                      }
+                    });
+                    return next;
+                  });
+                }}
                 className='p-1 text-muted-foreground transition-colors hover:text-foreground'
               >
                 <ChevronRightIcon className='h-4 w-4' />

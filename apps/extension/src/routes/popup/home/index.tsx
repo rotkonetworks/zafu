@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowUpIcon, ArrowDownIcon, CopyIcon, CheckIcon, DesktopIcon, ViewVerticalIcon } from '@radix-ui/react-icons';
 
 import { useStore } from '../../../state';
-import { selectActiveNetwork, selectEffectiveKeyInfo, selectPenumbraAccount, selectSetPenumbraAccount, type NetworkType } from '../../../state/keyring';
+import { selectActiveNetwork, selectEffectiveKeyInfo, selectPenumbraAccount, selectSetPenumbraAccount, keyRingSelector, type NetworkType } from '../../../state/keyring';
 import { PenumbraAccountPicker } from '../../../components/penumbra-account-picker';
 import { selectActiveZcashWallet } from '../../../state/wallets';
 import { localExtStorage } from '@repo/storage-chrome/local';
@@ -13,9 +13,18 @@ import { openInDedicatedWindow, openInSidePanel } from '../../../utils/navigate'
 import { isSidePanel, isDedicatedWindow } from '../../../utils/popup-detection';
 import { AssetListSkeleton } from '../../../components/primitives/skeleton';
 import { usePreloadBalances } from '../../../hooks/use-preload';
-import { useActiveAddress } from '../../../hooks/use-address';
+import { useActiveAddress, deriveZcashTransparent } from '../../../hooks/use-address';
 import { usePolkadotPublicKey } from '../../../hooks/use-polkadot-key';
 import { useCosmosAssets } from '../../../hooks/cosmos-balance';
+import { useZcashSyncStatus } from '../../../hooks/zcash-sync';
+import { useTransparentBalance } from '../../../hooks/zcash-transparent-balance';
+import {
+  shieldInWorker,
+  spawnNetworkWorker,
+  startSyncInWorker,
+  isWalletSyncing,
+  getBalanceInWorker,
+} from '../../../state/keyring/network-worker';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 
 /** lazy load network-specific content - only load when needed */
@@ -107,13 +116,15 @@ export const PopupIndex = () => {
         {activeNetwork === 'penumbra' && (
           <PenumbraAccountPicker account={penumbraAccount} onChange={setPenumbraAccount} />
         )}
-        {/* balance + actions row */}
+        {/* address + actions row */}
         <div className='flex items-center justify-between border border-border/40 bg-card p-4'>
           <div>
-            <div className='text-xs text-muted-foreground'>balance</div>
-            <div className='text-2xl font-semibold tabular-nums text-foreground'>
-              {activeNetwork === 'zcash' ? '— ZEC' : '$0.00'}
-            </div>
+            {activeNetwork !== 'zcash' && (
+              <>
+                <div className='text-xs text-muted-foreground'>balance</div>
+                <div className='text-2xl font-semibold tabular-nums text-foreground'>$0.00</div>
+              </>
+            )}
             <button
               onClick={copyAddress}
               disabled={!address}
@@ -233,7 +244,7 @@ const NetworkContent = ({
   }
 };
 
-/** zcash-specific content */
+/** zcash-specific content — zashi-inspired combined balance */
 const ZcashContent = ({
   hasMnemonic,
   watchOnly,
@@ -253,75 +264,253 @@ const ZcashContent = ({
   }
 
   const isMainnet = watchOnly?.mainnet ?? true;
-  const custodyMode = hasMnemonic ? 'hot' : 'watch-only';
+  const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
+  const { syncStatus, chainTip, workerSyncHeight, error: syncError } = useZcashSyncStatus();
+
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  const keyRing = useStore(keyRingSelector);
+
+  // orchard balance from worker (zatoshi string)
+  const [orchardZat, setOrchardZat] = useState(0n);
+
+  // wallet birthday — used to show progress relative to start, not block 0
+  const [walletBirthday, setWalletBirthday] = useState(0);
+  useEffect(() => {
+    if (!selectedKeyInfo) return;
+    const key = `zcashBirthday_${selectedKeyInfo.id}`;
+    chrome.storage.local.get(key, r => {
+      if (typeof r[key] === 'number') setWalletBirthday(r[key] as number);
+    });
+  }, [selectedKeyInfo?.id]);
+
+  // auto-start zcash sync — delay 3s so penumbra service worker stabilizes first
+  useEffect(() => {
+    if (!hasMnemonic || !selectedKeyInfo || selectedKeyInfo.type !== 'mnemonic') return;
+    const walletId = selectedKeyInfo.id;
+    if (isWalletSyncing('zcash', walletId)) return;
+
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      (async () => {
+        try {
+          await spawnNetworkWorker('zcash');
+          if (cancelled) return;
+          const mnemonic = await keyRing.getMnemonic(walletId);
+          if (cancelled) return;
+
+          // wallet birthday: use stored birthday or set from tip
+          const birthdayKey = `zcashBirthday_${walletId}`;
+          const stored = await chrome.storage.local.get([birthdayKey, 'zcashSyncHeight']);
+          let startHeight: number | undefined;
+          if (!stored['zcashSyncHeight'] || stored['zcashSyncHeight'] === 0) {
+            if (stored[birthdayKey]) {
+              startHeight = stored[birthdayKey] as number;
+            } else {
+              // first sync — record current tip as birthday (rounded for privacy)
+              try {
+                const { ZidecarClient } = await import('../../../state/keyring/zidecar-client');
+                const tip = await new ZidecarClient(zidecarUrl).getTip();
+                startHeight = Math.floor(Math.max(0, tip.height - 100) / 10000) * 10000;
+                await chrome.storage.local.set({ [birthdayKey]: startHeight });
+              } catch { /* fall through to full scan */ }
+            }
+          }
+
+          if (cancelled) return;
+          await startSyncInWorker('zcash', walletId, mnemonic, zidecarUrl, startHeight);
+        } catch (err) {
+          console.error('[zcash] auto-sync failed:', err);
+        }
+      })();
+    }, 3000);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [hasMnemonic, selectedKeyInfo?.id, selectedKeyInfo?.type, keyRing, zidecarUrl]);
+
+  // fetch orchard balance from worker on each sync-progress event
+  useEffect(() => {
+    if (!selectedKeyInfo) return;
+    const walletId = selectedKeyInfo.id;
+
+    const fetchBalance = () => {
+      getBalanceInWorker('zcash', walletId)
+        .then(bal => setOrchardZat(BigInt(bal)))
+        .catch(() => {}); // worker not ready yet, ignore
+    };
+
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.network !== 'zcash') return;
+      fetchBalance();
+    };
+
+    window.addEventListener('network-sync-progress', handler);
+    // also fetch once on mount in case sync already ran
+    fetchBalance();
+    return () => window.removeEventListener('network-sync-progress', handler);
+  }, [selectedKeyInfo?.id]);
+
+  // derive transparent addresses for UTXO lookup
+  const [tAddresses, setTAddresses] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!hasMnemonic || !selectedKeyInfo || selectedKeyInfo.type !== 'mnemonic') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await chrome.storage.local.get('zcashTransparentIndex');
+        const storedIdx = r['zcashTransparentIndex'] ?? 0;
+        const maxIdx = Math.max(4, storedIdx);
+        const indices = Array.from({ length: maxIdx + 1 }, (_, i) => i);
+        const mnemonic = await keyRing.getMnemonic(selectedKeyInfo.id);
+        const addrs = await Promise.all(
+          indices.map(i => deriveZcashTransparent(mnemonic, 0, i, isMainnet)),
+        );
+        if (!cancelled) setTAddresses(addrs);
+      } catch (err) {
+        console.error('failed to derive t-addrs:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [hasMnemonic, selectedKeyInfo?.id, selectedKeyInfo?.type, isMainnet, keyRing]);
+
+  const { totalZat: transparentZat, isLoading: utxoLoading } = useTransparentBalance(tAddresses);
+
+  // shielding state
+  const [shielding, setShielding] = useState(false);
+  const [shieldTxid, setShieldTxid] = useState<string | null>(null);
+  const [shieldError, setShieldError] = useState<string | null>(null);
+
+  const handleShield = useCallback(async () => {
+    if (!hasMnemonic || !selectedKeyInfo || selectedKeyInfo.type !== 'mnemonic') return;
+    if (shielding || transparentZat <= 0n) return;
+
+    setShielding(true);
+    setShieldTxid(null);
+    setShieldError(null);
+
+    try {
+      const mnemonic = await keyRing.getMnemonic(selectedKeyInfo.id);
+      const walletId = selectedKeyInfo.id;
+      const result = await shieldInWorker(
+        'zcash', walletId, mnemonic,
+        zidecarUrl, tAddresses, isMainnet,
+      );
+      setShieldTxid(result.txid);
+    } catch (err) {
+      setShieldError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setShielding(false);
+    }
+  }, [hasMnemonic, selectedKeyInfo, keyRing, shielding, transparentZat, tAddresses, isMainnet]);
+
+  // sync progress
+  const chainHeight = chainTip?.height ?? syncStatus?.currentHeight ?? 0;
+  const gigaproofStatus = syncStatus?.gigaproofStatus ?? 0;
+  const lastGigaproofHeight = syncStatus?.lastGigaproofHeight ?? 0;
+  const blocksUntilReady = syncStatus?.blocksUntilReady ?? 1;
+
+  const nomtPct = gigaproofStatus >= 1 ? 100 : 0;
+  const ligeritoPct = gigaproofStatus >= 2
+    ? (blocksUntilReady <= 0 ? 100 : Math.min(100, Math.round((1 - (chainHeight - lastGigaproofHeight) / Math.max(blocksUntilReady, 1)) * 100)))
+    : gigaproofStatus === 1 ? 50 : 0;
+  const scanRange = Math.max(1, chainHeight - walletBirthday);
+  const scanProgress = Math.max(0, workerSyncHeight - walletBirthday);
+  const scanPct = chainHeight > 0
+    ? Math.min(100, Math.round((scanProgress / scanRange) * 100))
+    : 0;
+
+  const allSynced = scanPct >= 100 && ligeritoPct >= 100;
+
+  // combined balance
+  const totalZat = orchardZat + transparentZat;
+  const totalZec = Number(totalZat) / 1e8;
+  const tZec = Number(transparentZat) / 1e8;
+
+  // sync status label
+  const syncLabel = allSynced
+    ? 'synced'
+    : chainHeight > 0
+      ? `syncing · ${scanProgress.toLocaleString()} / ${scanRange.toLocaleString()}`
+      : 'connecting...';
 
   return (
-    <div className='flex-1'>
-      <div className='mb-2 text-xs font-medium text-muted-foreground'>shielded pool</div>
-      <div className='border border-border bg-card p-4'>
-        <div className='flex items-center justify-between'>
-          <div className='flex items-center gap-2'>
-            <div className='h-8 w-8 bg-zigner-gold/20 flex items-center justify-center'>
-              <span className='text-zigner-gold text-sm font-bold'>Z</span>
+    <div className='flex-1 flex flex-col gap-3'>
+      {/* combined balance */}
+      <div className='border border-border/40 bg-card p-4'>
+        <div className='text-3xl font-semibold tabular-nums text-foreground'>
+          {totalZat > 0n || allSynced
+            ? `${totalZec.toFixed(8)} ZEC`
+            : '— ZEC'}
+        </div>
+        <div className='mt-1 text-xs text-muted-foreground'>{syncLabel}</div>
+      </div>
+
+      {/* transparent pool detail — only shown when transparent > 0 */}
+      {hasMnemonic && transparentZat > 0n && (
+        <div className='border border-amber-500/30 bg-card p-3'>
+          <div className='flex items-center justify-between'>
+            <div className='flex items-center gap-2'>
+              <span className='text-xs text-amber-500'>transparent</span>
+              <span className='text-xs font-medium tabular-nums'>
+                {utxoLoading ? '...' : `${tZec.toFixed(8)} ZEC`}
+              </span>
             </div>
-            <div>
-              <div className='text-sm font-medium'>orchard</div>
-              <div className='text-xs text-muted-foreground'>
-                {isMainnet ? 'mainnet' : 'testnet'} · {custodyMode}
-              </div>
+            <button
+              onClick={() => void handleShield()}
+              disabled={shielding}
+              className='text-xs font-medium text-amber-500 hover:text-amber-400 transition-colors disabled:opacity-50'
+            >
+              {shielding ? 'shielding...' : 'shield'}
+            </button>
+          </div>
+          {shieldTxid && (
+            <div className='text-[10px] text-green-500 mt-1.5 font-mono'>
+              shielded: {shieldTxid.slice(0, 16)}...
+            </div>
+          )}
+          {shieldError && (
+            <div className='text-[10px] text-red-400 mt-1.5'>{shieldError}</div>
+          )}
+        </div>
+      )}
+
+      {/* sync pipeline — hidden when fully synced */}
+      {!allSynced && (
+        <div className='border border-border/40 bg-card p-3'>
+          <div className='text-xs font-medium mb-2'>zidecar sync</div>
+          {syncError && (
+            <div className='text-xs text-red-400 mb-2'>sync error: {syncError.message}</div>
+          )}
+
+          <div className='flex gap-3 mb-2 text-[10px]'>
+            <div className='flex items-center gap-1'>
+              <div className={`h-1.5 w-1.5 rounded-full ${nomtPct >= 100 ? 'bg-blue-500' : 'bg-muted-foreground/30'}`} />
+              <span className={nomtPct >= 100 ? 'text-blue-500' : 'text-muted-foreground'}>nomt</span>
+            </div>
+            <div className='flex items-center gap-1'>
+              <div className={`h-1.5 w-1.5 rounded-full ${gigaproofStatus >= 2 ? 'bg-amber-500' : gigaproofStatus === 1 ? 'bg-amber-500/50' : 'bg-muted-foreground/30'}`} />
+              <span className={gigaproofStatus >= 1 ? 'text-amber-500' : 'text-muted-foreground'}>ligerito</span>
+              {gigaproofStatus === 1 && <span className='text-muted-foreground'>(proving...)</span>}
+              {gigaproofStatus >= 2 && blocksUntilReady > 0 && (
+                <span className='text-muted-foreground'>({blocksUntilReady} to tip)</span>
+              )}
             </div>
           </div>
-          <div className='text-right'>
-            <div className='text-sm font-medium tabular-nums'>—</div>
-            <div className='text-xs text-muted-foreground'>awaiting sync</div>
+
+          <div className='h-3 w-full overflow-hidden rounded-sm bg-muted'>
+            <div
+              className='h-full bg-green-500 transition-all duration-500 ease-out'
+              style={{ width: `${Math.max(0, Math.min(100, scanPct))}%` }}
+            />
+          </div>
+
+          <div className='mt-1.5 text-xs text-muted-foreground tabular-nums'>
+            {chainHeight > 0
+              ? `${scanProgress.toLocaleString()} / ${scanRange.toLocaleString()} blocks`
+              : 'waiting for chain tip...'}
           </div>
         </div>
-      </div>
-
-      {/* zidecar trustless sync pipeline */}
-      <div className='mt-3 border border-border bg-card p-3'>
-        <div className='text-xs font-medium mb-2'>zidecar trustless sync</div>
-        <div className='space-y-1.5 text-xs text-muted-foreground'>
-          <SyncStep label='ligerito header proof' status='pending' detail='polynomial commitment over header chain' />
-          <SyncStep label='nomt nullifier proof' status='pending' detail='merkle proof of spent note set' />
-          <SyncStep label='compact block scan' status='pending' detail='trial-decrypt orchard actions locally' />
-        </div>
-      </div>
-    </div>
-  );
-};
-
-/** sync step indicator for zidecar pipeline */
-const SyncStep = ({
-  label,
-  status,
-  detail,
-}: {
-  label: string;
-  status: 'pending' | 'verifying' | 'verified' | 'failed';
-  detail: string;
-}) => {
-  const icon = {
-    pending: '○',
-    verifying: '◎',
-    verified: '●',
-    failed: '✕',
-  }[status];
-
-  const color = {
-    pending: 'text-muted-foreground',
-    verifying: 'text-yellow-500',
-    verified: 'text-green-500',
-    failed: 'text-red-500',
-  }[status];
-
-  return (
-    <div className='flex items-start gap-2'>
-      <span className={`${color} font-mono leading-none mt-0.5`}>{icon}</span>
-      <div>
-        <span className='text-foreground'>{label}</span>
-        <span className='text-muted-foreground'> — {detail}</span>
-      </div>
+      )}
     </div>
   );
 };
