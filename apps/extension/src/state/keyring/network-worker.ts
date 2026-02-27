@@ -17,7 +17,7 @@
 import type { NetworkType } from './types';
 
 export interface NetworkWorkerMessage {
-  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'get-balance' | 'send-tx' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos';
+  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'get-balance' | 'send-tx' | 'shield' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -25,7 +25,7 @@ export interface NetworkWorkerMessage {
 }
 
 export interface NetworkWorkerResponse {
-  type: 'ready' | 'address' | 'sync-progress' | 'sync-started' | 'sync-stopped' | 'balance' | 'tx-result' | 'wallets' | 'wallet-deleted' | 'notes' | 'memos' | 'error';
+  type: 'ready' | 'address' | 'sync-progress' | 'sync-started' | 'sync-stopped' | 'balance' | 'tx-result' | 'shield-result' | 'wallets' | 'wallet-deleted' | 'notes' | 'memos' | 'error';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -44,6 +44,7 @@ interface WorkerState {
 }
 
 const workers = new Map<NetworkType, WorkerState>();
+const spawnPromises = new Map<NetworkType, Promise<void>>();
 
 let messageId = 0;
 const nextId = () => `msg_${++messageId}`;
@@ -51,10 +52,25 @@ const nextId = () => `msg_${++messageId}`;
 /**
  * spawn a dedicated worker for a network
  * worker loads its own wasm and handles sync independently
+ * concurrent callers share the same spawn promise (no race condition)
  */
 export const spawnNetworkWorker = async (network: NetworkType): Promise<void> => {
-  if (workers.has(network)) return;
+  if (workers.get(network)?.ready) return;
 
+  // deduplicate concurrent spawn calls
+  const existing = spawnPromises.get(network);
+  if (existing) return existing;
+
+  const promise = spawnNetworkWorkerInner(network);
+  spawnPromises.set(network, promise);
+  try {
+    await promise;
+  } finally {
+    spawnPromises.delete(network);
+  }
+};
+
+const spawnNetworkWorkerInner = async (network: NetworkType): Promise<void> => {
   // each network has its own worker script
   const workerUrl = getWorkerUrl(network);
   if (!workerUrl) {
@@ -259,6 +275,27 @@ export const decryptMemosInWorker = async (
 ): Promise<FoundNoteWithMemo[]> => {
   // convert to array for postMessage serialization
   return callWorker(network, 'decrypt-memos', { txBytes: Array.from(txBytes) }, walletId);
+};
+
+export interface ShieldResult {
+  txid: string;
+  shieldedZat: string;
+  feeZat: string;
+  utxoCount: number;
+}
+
+/**
+ * shield transparent funds to orchard (runs in worker with halo 2 proving)
+ */
+export const shieldInWorker = async (
+  network: NetworkType,
+  walletId: string,
+  mnemonic: string,
+  serverUrl: string,
+  tAddresses: string[],
+  mainnet: boolean,
+): Promise<ShieldResult> => {
+  return callWorker(network, 'shield', { mnemonic, serverUrl, tAddresses, mainnet }, walletId);
 };
 
 /**

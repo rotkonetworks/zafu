@@ -11,15 +11,14 @@
 
 /// <reference lib="webworker" />
 
-// worker-specific globals - cast to worker type
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const workerSelf = globalThis as any as DedicatedWorkerGlobalScope;
 
 interface WorkerMessage {
-  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'get-balance' | 'send-tx' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos';
+  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'get-balance' | 'send-tx' | 'shield' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos';
   id: string;
   network: 'zcash';
-  walletId?: string; // identifies which wallet this message is for
+  walletId?: string;
   payload?: unknown;
 }
 
@@ -33,7 +32,9 @@ interface FoundNoteWithMemo {
 }
 
 interface WalletKeys {
+  get_receiving_address(mainnet: boolean): string;
   get_receiving_address_at(index: number, mainnet: boolean): string;
+  scan_actions(actionsJson: unknown): DecryptedNote[];
   scan_actions_parallel(actionsBytes: Uint8Array): DecryptedNote[];
   calculate_balance(notes: unknown, spent: unknown): bigint;
   decrypt_transaction_memos(txBytes: Uint8Array): FoundNoteWithMemo[];
@@ -45,81 +46,66 @@ interface DecryptedNote {
   value: string;
   nullifier: string;
   cmx: string;
-  txid: string; // transaction hash for memo retrieval
+  txid: string;
 }
 
-// state - per wallet
 interface WalletState {
   keys: WalletKeys | null;
   syncing: boolean;
   syncAbort: boolean;
   notes: DecryptedNote[];
-  spentNullifiers: string[];
+  spentNullifiers: Set<string>;
 }
 
-let wasmModule: { WalletKeys: new (seed: string) => WalletKeys } | null = null;
+interface WasmModule {
+  WalletKeys: new (seed: string) => WalletKeys;
+  build_shielding_transaction(utxos_json: string, privkey_hex: string, recipient: string, amount: bigint, fee: bigint, anchor_height: number, mainnet: boolean): string;
+  derive_transparent_privkey(seed_phrase: string, account: number, index: number): string;
+}
+
+let wasmModule: WasmModule | null = null;
 const walletStates = new Map<string, WalletState>();
+
+const hexEncode = (b: Uint8Array): string => {
+  let s = '';
+  for (let i = 0; i < b.length; i++) s += b[i]!.toString(16).padStart(2, '0');
+  return s;
+};
 
 const getOrCreateWalletState = (walletId: string): WalletState => {
   let state = walletStates.get(walletId);
   if (!state) {
-    state = {
-      keys: null,
-      syncing: false,
-      syncAbort: false,
-      notes: [],
-      spentNullifiers: [],
-    };
+    state = { keys: null, syncing: false, syncAbort: false, notes: [], spentNullifiers: new Set() };
     walletStates.set(walletId, state);
   }
   return state;
 };
 
-// indexeddb for persistence - multi-wallet schema
-const DB_NAME = 'zafu-zcash';
-const DB_VERSION = 2; // bumped for multi-wallet schema
+// ── indexeddb ──
+// single connection held open during sync, closed when idle
 
-const openDb = (): Promise<IDBDatabase> => {
+const DB_NAME = 'zafu-zcash';
+const DB_VERSION = 2;
+
+let sharedDb: IDBDatabase | null = null;
+
+const getDb = (): Promise<IDBDatabase> => {
+  if (sharedDb) return Promise.resolve(sharedDb);
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onerror = () => reject(req.error);
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => { sharedDb = req.result; resolve(sharedDb); };
     req.onupgradeneeded = (event) => {
       const db = req.result;
-      const oldVersion = event.oldVersion;
-
-      // notes: compound key [walletId, nullifier]
-      if (!db.objectStoreNames.contains('notes')) {
-        const notesStore = db.createObjectStore('notes', { keyPath: ['walletId', 'nullifier'] });
-        notesStore.createIndex('byWallet', 'walletId', { unique: false });
-      } else if (oldVersion < 2) {
-        // migrate from v1 - delete old store and recreate
-        db.deleteObjectStore('notes');
-        const notesStore = db.createObjectStore('notes', { keyPath: ['walletId', 'nullifier'] });
-        notesStore.createIndex('byWallet', 'walletId', { unique: false });
+      const old = event.oldVersion;
+      for (const name of ['notes', 'spent', 'meta'] as const) {
+        if (db.objectStoreNames.contains(name) && old < 2) db.deleteObjectStore(name);
+        if (!db.objectStoreNames.contains(name)) {
+          const keyPath = name === 'meta' ? ['walletId', 'key'] : ['walletId', 'nullifier'];
+          const store = db.createObjectStore(name, { keyPath });
+          store.createIndex('byWallet', 'walletId', { unique: false });
+        }
       }
-
-      // spent: compound key [walletId, nullifier]
-      if (!db.objectStoreNames.contains('spent')) {
-        const spentStore = db.createObjectStore('spent', { keyPath: ['walletId', 'nullifier'] });
-        spentStore.createIndex('byWallet', 'walletId', { unique: false });
-      } else if (oldVersion < 2) {
-        db.deleteObjectStore('spent');
-        const spentStore = db.createObjectStore('spent', { keyPath: ['walletId', 'nullifier'] });
-        spentStore.createIndex('byWallet', 'walletId', { unique: false });
-      }
-
-      // meta: compound key [walletId, key]
-      if (!db.objectStoreNames.contains('meta')) {
-        const metaStore = db.createObjectStore('meta', { keyPath: ['walletId', 'key'] });
-        metaStore.createIndex('byWallet', 'walletId', { unique: false });
-      } else if (oldVersion < 2) {
-        db.deleteObjectStore('meta');
-        const metaStore = db.createObjectStore('meta', { keyPath: ['walletId', 'key'] });
-        metaStore.createIndex('byWallet', 'walletId', { unique: false });
-      }
-
-      // wallets: list of wallet ids for this network
       if (!db.objectStoreNames.contains('wallets')) {
         db.createObjectStore('wallets', { keyPath: 'walletId' });
       }
@@ -127,336 +113,272 @@ const openDb = (): Promise<IDBDatabase> => {
   });
 };
 
-// register wallet in db
-const registerWallet = async (walletId: string): Promise<void> => {
-  const db = await openDb();
-  const tx = db.transaction('wallets', 'readwrite');
-  const store = tx.objectStore('wallets');
-  store.put({ walletId, createdAt: Date.now() });
-  await new Promise<void>((resolve, reject) => {
+const closeDb = () => {
+  if (sharedDb) { sharedDb.close(); sharedDb = null; }
+};
+
+const txComplete = (tx: IDBTransaction): Promise<void> =>
+  new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
-  db.close();
+
+const idbGet = async <T>(store: string, key: IDBValidKey): Promise<T | undefined> => {
+  const db = await getDb();
+  const tx = db.transaction(store, 'readonly');
+  return new Promise((resolve, reject) => {
+    const req = tx.objectStore(store).get(key);
+    req.onsuccess = () => resolve(req.result as T | undefined);
+    req.onerror = () => reject(req.error);
+  });
 };
 
-// list all wallets for this network
+const idbGetAllByIndex = async <T>(store: string, indexName: string, key: IDBValidKey): Promise<T[]> => {
+  const db = await getDb();
+  const tx = db.transaction(store, 'readonly');
+  return new Promise((resolve, reject) => {
+    const req = tx.objectStore(store).index(indexName).getAll(key);
+    req.onsuccess = () => resolve(req.result as T[]);
+    req.onerror = () => reject(req.error);
+  });
+};
+
+const registerWallet = async (walletId: string): Promise<void> => {
+  const db = await getDb();
+  const tx = db.transaction('wallets', 'readwrite');
+  tx.objectStore('wallets').put({ walletId, createdAt: Date.now() });
+  await txComplete(tx);
+};
+
 const listWallets = async (): Promise<string[]> => {
-  const db = await openDb();
+  const db = await getDb();
   const tx = db.transaction('wallets', 'readonly');
-  const store = tx.objectStore('wallets');
   const wallets: { walletId: string }[] = await new Promise((resolve, reject) => {
-    const req = store.getAll();
+    const req = tx.objectStore('wallets').getAll();
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
-  db.close();
   return wallets.map(w => w.walletId);
 };
 
-// delete wallet and all its data
 const deleteWallet = async (walletId: string): Promise<void> => {
-  const db = await openDb();
-
-  // delete from wallets store
-  const walletTx = db.transaction('wallets', 'readwrite');
-  walletTx.objectStore('wallets').delete(walletId);
-  await new Promise<void>((resolve, reject) => {
-    walletTx.oncomplete = () => resolve();
-    walletTx.onerror = () => reject(walletTx.error);
-  });
-
-  // delete notes by wallet index
-  const notesTx = db.transaction('notes', 'readwrite');
-  const notesStore = notesTx.objectStore('notes');
-  const notesIndex = notesStore.index('byWallet');
-  const notesKeys: IDBValidKey[] = await new Promise((resolve, reject) => {
-    const req = notesIndex.getAllKeys(walletId);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-  for (const key of notesKeys) {
-    notesStore.delete(key);
+  const db = await getDb();
+  // delete across all stores in parallel transactions
+  for (const storeName of ['wallets', 'notes', 'spent', 'meta'] as const) {
+    const tx = db.transaction(storeName, 'readwrite');
+    const store = tx.objectStore(storeName);
+    if (storeName === 'wallets') {
+      store.delete(walletId);
+    } else {
+      const keys: IDBValidKey[] = await new Promise((resolve, reject) => {
+        const req = store.index('byWallet').getAllKeys(walletId);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+      for (const key of keys) store.delete(key);
+    }
+    await txComplete(tx);
   }
-  await new Promise<void>((resolve, reject) => {
-    notesTx.oncomplete = () => resolve();
-    notesTx.onerror = () => reject(notesTx.error);
-  });
-
-  // delete spent by wallet index
-  const spentTx = db.transaction('spent', 'readwrite');
-  const spentStore = spentTx.objectStore('spent');
-  const spentIndex = spentStore.index('byWallet');
-  const spentKeys: IDBValidKey[] = await new Promise((resolve, reject) => {
-    const req = spentIndex.getAllKeys(walletId);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-  for (const key of spentKeys) {
-    spentStore.delete(key);
-  }
-  await new Promise<void>((resolve, reject) => {
-    spentTx.oncomplete = () => resolve();
-    spentTx.onerror = () => reject(spentTx.error);
-  });
-
-  // delete meta by wallet index
-  const metaTx = db.transaction('meta', 'readwrite');
-  const metaStore = metaTx.objectStore('meta');
-  const metaIndex = metaStore.index('byWallet');
-  const metaKeys: IDBValidKey[] = await new Promise((resolve, reject) => {
-    const req = metaIndex.getAllKeys(walletId);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-  for (const key of metaKeys) {
-    metaStore.delete(key);
-  }
-  await new Promise<void>((resolve, reject) => {
-    metaTx.oncomplete = () => resolve();
-    metaTx.onerror = () => reject(metaTx.error);
-  });
-
-  db.close();
-
-  // clear in-memory state
   walletStates.delete(walletId);
 };
 
 const loadState = async (walletId: string): Promise<WalletState> => {
   const state = getOrCreateWalletState(walletId);
-  const db = await openDb();
-
-  // load notes for this wallet
-  const notesTx = db.transaction('notes', 'readonly');
-  const notesStore = notesTx.objectStore('notes');
-  const notesIndex = notesStore.index('byWallet');
-  state.notes = await new Promise((resolve, reject) => {
-    const req = notesIndex.getAll(walletId);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-
-  // load spent nullifiers for this wallet
-  const spentTx = db.transaction('spent', 'readonly');
-  const spentStore = spentTx.objectStore('spent');
-  const spentIndex = spentStore.index('byWallet');
-  const spentRecords: { walletId: string; nullifier: string }[] = await new Promise((resolve, reject) => {
-    const req = spentIndex.getAll(walletId);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-  state.spentNullifiers = spentRecords.map(r => r.nullifier);
-
-  db.close();
+  state.notes = await idbGetAllByIndex<DecryptedNote>('notes', 'byWallet', walletId);
+  const spentRecords = await idbGetAllByIndex<{ nullifier: string }>('spent', 'byWallet', walletId);
+  state.spentNullifiers = new Set(spentRecords.map(r => r.nullifier));
   return state;
 };
 
-const saveNote = async (walletId: string, note: DecryptedNote): Promise<void> => {
-  const db = await openDb();
-  const tx = db.transaction('notes', 'readwrite');
-  const store = tx.objectStore('notes');
-  store.put({ ...note, walletId });
-  await new Promise<void>((resolve, reject) => {
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-  db.close();
-};
-
-const saveSpent = async (walletId: string, nullifier: string): Promise<void> => {
-  const db = await openDb();
-  const tx = db.transaction('spent', 'readwrite');
-  const store = tx.objectStore('spent');
-  store.put({ walletId, nullifier });
-  await new Promise<void>((resolve, reject) => {
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-  db.close();
-};
-
 const getSyncHeight = async (walletId: string): Promise<number> => {
-  const db = await openDb();
-  const tx = db.transaction('meta', 'readonly');
-  const store = tx.objectStore('meta');
-  const result: { walletId: string; key: string; value: number } | undefined = await new Promise((resolve, reject) => {
-    const req = store.get([walletId, 'syncHeight']);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-  db.close();
-  return result?.value ?? 0;
+  const r = await idbGet<{ value: number }>('meta', [walletId, 'syncHeight']);
+  return r?.value ?? 0;
 };
 
-const setSyncHeight = async (walletId: string, height: number): Promise<void> => {
-  const db = await openDb();
-  const tx = db.transaction('meta', 'readwrite');
-  const store = tx.objectStore('meta');
-  store.put({ walletId, key: 'syncHeight', value: height });
-  await new Promise<void>((resolve, reject) => {
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-  db.close();
+/** batch-save notes + spent + sync height in one transaction */
+const saveBatch = async (
+  walletId: string,
+  notes: DecryptedNote[],
+  spent: string[],
+  syncHeight: number,
+): Promise<void> => {
+  const db = await getDb();
+  const tx = db.transaction(['notes', 'spent', 'meta'], 'readwrite');
+  const notesStore = tx.objectStore('notes');
+  const spentStore = tx.objectStore('spent');
+  const metaStore = tx.objectStore('meta');
+  for (const note of notes) notesStore.put({ ...note, walletId });
+  for (const nf of spent) spentStore.put({ walletId, nullifier: nf });
+  metaStore.put({ walletId, key: 'syncHeight', value: syncHeight });
+  await txComplete(tx);
 };
 
-// init wasm
+// ── wasm ──
+
 const initWasm = async (): Promise<void> => {
   if (wasmModule) return;
-
-  // import from worker context - use webpackIgnore to load from extension root at runtime
-  // @ts-expect-error - dynamic import in worker
+  // @ts-expect-error — dynamic import in worker
   const wasm = await import(/* webpackIgnore: true */ '/zafu-wasm/zafu_wasm.js');
   await wasm.default('/zafu-wasm/zafu_wasm_bg.wasm');
   wasm.init();
-
-  // init thread pool (in worker, use 2 threads to not starve main)
-  const threads = Math.min(navigator.hardwareConcurrency || 2, 4);
-  await wasm.initThreadPool(threads);
-
   wasmModule = wasm;
-  console.log('[zcash-worker] wasm initialized with', threads, 'threads');
+  console.log('[zcash-worker] wasm ready');
 };
 
-// derive address
 const deriveAddress = (mnemonic: string, accountIndex: number): string => {
   if (!wasmModule) throw new Error('wasm not initialized');
-
   const keys = new wasmModule.WalletKeys(mnemonic);
-  try {
-    return keys.get_receiving_address_at(accountIndex, true); // mainnet
-  } finally {
-    keys.free();
-  }
+  try { return keys.get_receiving_address_at(accountIndex, true); }
+  finally { keys.free(); }
 };
 
-// sync loop for a specific wallet
+// ── sync ──
+
 const runSync = async (walletId: string, mnemonic: string, serverUrl: string, startHeight?: number): Promise<void> => {
   if (!wasmModule) throw new Error('wasm not initialized');
 
   const state = getOrCreateWalletState(walletId);
 
-  // register wallet in db
+  // free old keys if re-syncing
+  if (state.keys) { state.keys.free(); state.keys = null; }
+
   await registerWallet(walletId);
-
-  // create wallet keys for scanning
   state.keys = new wasmModule.WalletKeys(mnemonic);
-
-  // load persisted state
   await loadState(walletId);
 
   const syncedHeight = await getSyncHeight(walletId);
   let currentHeight = startHeight ?? syncedHeight;
 
-  // import zidecar client - bundled with worker
   const { ZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
   const client = new ZidecarClient(serverUrl);
 
-  console.log(`[zcash-worker] starting sync for wallet ${walletId} from height`, currentHeight);
+  console.log(`[zcash-worker] sync start wallet=${walletId} height=${currentHeight}`);
 
   state.syncing = true;
   state.syncAbort = false;
+  let consecutiveErrors = 0;
 
   while (!state.syncAbort) {
     try {
-      // get chain tip
       const tip = await client.getTip();
       const chainHeight = tip.height;
 
       if (currentHeight >= chainHeight) {
-        // caught up, wait for new blocks
+        workerSelf.postMessage({
+          type: 'sync-progress', id: '', network: 'zcash', walletId,
+          payload: { currentHeight, chainHeight, notesFound: state.notes.length, blocksScanned: 0 },
+        });
         await new Promise(r => setTimeout(r, 10000));
         continue;
       }
 
-      // fetch blocks in batches
-      const batchSize = 1000;
+      // small batches — 50 blocks max to keep memory bounded
+      const batchSize = 50;
       const endHeight = Math.min(currentHeight + batchSize, chainHeight);
 
+      console.log(`[zcash-worker] blocks ${currentHeight + 1}..${endHeight}`);
       const blocks = await client.getCompactBlocks(currentHeight + 1, endHeight);
 
-      // collect all actions for batch scanning and build cmx -> txid map
-      const allActions: { height: number; action: unknown }[] = [];
+      // build cmx→txid lookup only from raw block data (for found note matching)
       const cmxToTxid = new Map<string, string>();
+      let actionCount = 0;
 
-      for (const block of blocks) {
-        for (const action of block.actions) {
-          allActions.push({ height: block.height, action });
-          // map cmx (hex) -> txid (hex) for memo retrieval
-          const compactAction = action as { cmx: Uint8Array; txid: Uint8Array };
-          if (compactAction.cmx && compactAction.txid) {
-            const cmxHex = Array.from(compactAction.cmx).map(b => b.toString(16).padStart(2, '0')).join('');
-            const txidHex = Array.from(compactAction.txid).map(b => b.toString(16).padStart(2, '0')).join('');
-            cmxToTxid.set(cmxHex, txidHex);
+      // pack actions into binary format for scan_actions_parallel
+      // layout: [u32le count][per action: 32B nullifier | 32B cmx | 32B epk | 52B ct]
+      const ACTION_SIZE = 32 + 32 + 32 + 52;
+      for (const block of blocks) actionCount += block.actions.length;
+
+      const newNotes: DecryptedNote[] = [];
+      const newSpent: string[] = [];
+
+      if (actionCount > 0 && state.keys) {
+        // build binary buffer — single allocation, no JS object overhead
+        const buf = new Uint8Array(4 + actionCount * ACTION_SIZE);
+        const view = new DataView(buf.buffer);
+        view.setUint32(0, actionCount, true);
+        let off = 4;
+        for (const block of blocks) {
+          for (const a of block.actions) {
+            if (a.nullifier.length === 32) buf.set(a.nullifier, off); off += 32;
+            if (a.cmx.length === 32) buf.set(a.cmx, off); off += 32;
+            if (a.ephemeralKey.length === 32) buf.set(a.ephemeralKey, off); off += 32;
+            if (a.ciphertext.length >= 52) buf.set(a.ciphertext.subarray(0, 52), off); off += 52;
+            // build cmx→txid map only during packing (one pass)
+            cmxToTxid.set(hexEncode(a.cmx), hexEncode(a.txid));
           }
         }
-      }
 
-      if (allActions.length > 0 && state.keys) {
-        // build binary format for parallel scanning
-        const binaryActions = ZidecarClient.buildBinaryActions(
-          allActions.map(a => a.action as Parameters<typeof ZidecarClient.buildBinaryActions>[0][0])
-        );
+        console.log(`[zcash-worker] scanning ${actionCount} actions (binary)`);
+        const t0 = performance.now();
 
-        // scan in parallel
-        const foundNotes = state.keys.scan_actions_parallel(binaryActions);
+        let foundNotes: DecryptedNote[];
+        try {
+          foundNotes = state.keys.scan_actions_parallel(buf);
+        } catch (err) {
+          console.error('[zcash-worker] scan_actions_parallel crashed:', err);
+          currentHeight = endHeight;
+          continue;
+        }
+
+        console.log(`[zcash-worker] scanned in ${(performance.now() - t0).toFixed(0)}ms, found ${foundNotes.length}`);
 
         for (const note of foundNotes) {
-          // look up txid from cmx
-          const txid = cmxToTxid.get(note.cmx) ?? '';
-          const noteWithTxid: DecryptedNote = {
-            ...note,
-            txid,
-          };
+          const full: DecryptedNote = { ...note, txid: cmxToTxid.get(note.cmx) ?? '' };
+          newNotes.push(full);
+          state.notes.push(full);
 
-          state.notes.push(noteWithTxid);
-          await saveNote(walletId, noteWithTxid);
-
-          // check if this nullifier spends one of our notes
-          const spentNote = state.notes.find(n => n.nullifier === note.nullifier);
-          if (spentNote && !state.spentNullifiers.includes(note.nullifier)) {
-            state.spentNullifiers.push(note.nullifier);
-            await saveSpent(walletId, note.nullifier);
+          if (!state.spentNullifiers.has(note.nullifier)) {
+            const spent = state.notes.find(n => n.nullifier === note.nullifier && n !== full);
+            if (spent) {
+              state.spentNullifiers.add(note.nullifier);
+              newSpent.push(note.nullifier);
+            }
           }
         }
       }
 
+      // single batched db write for entire batch
       currentHeight = endHeight;
-      await setSyncHeight(walletId, currentHeight);
+      await saveBatch(walletId, newNotes, newSpent, currentHeight);
 
-      // report progress
+      // persist to chrome.storage for popup reactivity
+      try { chrome.storage?.local?.set({ zcashSyncHeight: currentHeight }); } catch {}
+
       workerSelf.postMessage({
-        type: 'sync-progress',
-        id: '',
-        network: 'zcash',
-        walletId,
-        payload: {
-          currentHeight,
-          chainHeight,
-          notesFound: state.notes.length,
-          blocksScanned: blocks.length,
-        },
+        type: 'sync-progress', id: '', network: 'zcash', walletId,
+        payload: { currentHeight, chainHeight, notesFound: state.notes.length, blocksScanned: blocks.length },
       });
 
+      consecutiveErrors = 0;
+      // yield between batches
+      await new Promise(r => setTimeout(r, 10));
+
     } catch (err) {
-      console.error(`[zcash-worker] sync error for wallet ${walletId}:`, err);
-      await new Promise(r => setTimeout(r, 5000)); // retry after 5s
+      consecutiveErrors++;
+      console.error(`[zcash-worker] sync error (${consecutiveErrors}):`, err);
+      // back off exponentially, max 30s
+      const backoff = Math.min(30000, 2000 * Math.pow(2, consecutiveErrors - 1));
+      await new Promise(r => setTimeout(r, backoff));
+      // after 10 consecutive errors, give up
+      if (consecutiveErrors >= 10) {
+        console.error('[zcash-worker] too many errors, stopping sync');
+        break;
+      }
     }
   }
 
   state.syncing = false;
-  console.log(`[zcash-worker] sync stopped for wallet ${walletId}`);
+  console.log(`[zcash-worker] sync stopped wallet=${walletId}`);
 };
 
-// calculate balance for a specific wallet
 const getBalance = (walletId: string): bigint => {
   const state = walletStates.get(walletId);
   if (!state?.keys) return 0n;
-  return state.keys.calculate_balance(state.notes, state.spentNullifiers);
+  return state.keys.calculate_balance(state.notes, [...state.spentNullifiers]);
 };
 
-// message handler
+// ── message handler ──
+
 workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
   const { type, id, walletId, payload } = e.data;
 
@@ -476,31 +398,28 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       }
 
       case 'sync': {
-        if (!walletId) throw new Error('walletId required for sync');
+        if (!walletId) throw new Error('walletId required');
         await initWasm();
         const { mnemonic, serverUrl, startHeight } = payload as {
-          mnemonic: string;
-          serverUrl: string;
-          startHeight?: number;
+          mnemonic: string; serverUrl: string; startHeight?: number;
         };
-        // run sync in background (don't await)
-        runSync(walletId, mnemonic, serverUrl, startHeight).catch(console.error);
+        runSync(walletId, mnemonic, serverUrl, startHeight).catch(err =>
+          console.error('[zcash-worker] runSync fatal:', err),
+        );
         workerSelf.postMessage({ type: 'sync-started', id, network: 'zcash', walletId });
         return;
       }
 
       case 'stop-sync': {
-        if (!walletId) throw new Error('walletId required for stop-sync');
+        if (!walletId) throw new Error('walletId required');
         const state = walletStates.get(walletId);
-        if (state) {
-          state.syncAbort = true;
-        }
+        if (state) state.syncAbort = true;
         workerSelf.postMessage({ type: 'sync-stopped', id, network: 'zcash', walletId });
         return;
       }
 
       case 'get-balance': {
-        if (!walletId) throw new Error('walletId required for get-balance');
+        if (!walletId) throw new Error('walletId required');
         const balance = getBalance(walletId);
         workerSelf.postMessage({ type: 'balance', id, network: 'zcash', walletId, payload: balance.toString() });
         return;
@@ -513,53 +432,80 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       }
 
       case 'delete-wallet': {
-        if (!walletId) throw new Error('walletId required for delete-wallet');
-        // stop sync first if running
+        if (!walletId) throw new Error('walletId required');
         const state = walletStates.get(walletId);
         if (state?.syncing) {
           state.syncAbort = true;
-          // wait a bit for sync to stop
-          await new Promise(r => setTimeout(r, 100));
+          await new Promise(r => setTimeout(r, 200));
         }
+        if (state?.keys) { state.keys.free(); state.keys = null; }
         await deleteWallet(walletId);
         workerSelf.postMessage({ type: 'wallet-deleted', id, network: 'zcash', walletId });
         return;
       }
 
       case 'get-notes': {
-        if (!walletId) throw new Error('walletId required for get-notes');
-        const state = await loadState(walletId);
-        // return notes with txids for memo retrieval
-        workerSelf.postMessage({
-          type: 'notes',
-          id,
-          network: 'zcash',
-          walletId,
-          payload: state.notes,
-        });
+        if (!walletId) throw new Error('walletId required');
+        const noteState = await loadState(walletId);
+        workerSelf.postMessage({ type: 'notes', id, network: 'zcash', walletId, payload: noteState.notes });
         return;
       }
 
       case 'decrypt-memos': {
-        if (!walletId) throw new Error('walletId required for decrypt-memos');
-        const state = walletStates.get(walletId);
-        if (!state?.keys) throw new Error('wallet keys not loaded - run sync first');
-
+        if (!walletId) throw new Error('walletId required');
+        const memoState = walletStates.get(walletId);
+        if (!memoState?.keys) throw new Error('wallet keys not loaded');
         const { txBytes } = payload as { txBytes: number[] };
-        const txBytesArray = new Uint8Array(txBytes);
+        const memos = memoState.keys.decrypt_transaction_memos(new Uint8Array(txBytes));
+        workerSelf.postMessage({ type: 'memos', id, network: 'zcash', walletId, payload: memos });
+        return;
+      }
 
-        try {
-          const memos = state.keys.decrypt_transaction_memos(txBytesArray);
-          workerSelf.postMessage({
-            type: 'memos',
-            id,
-            network: 'zcash',
-            walletId,
-            payload: memos,
-          });
-        } catch (err) {
-          throw new Error(`memo decryption failed: ${err instanceof Error ? err.message : String(err)}`);
-        }
+      case 'shield': {
+        if (!walletId) throw new Error('walletId required');
+        await initWasm();
+        if (!wasmModule) throw new Error('wasm not initialized');
+
+        const { mnemonic, serverUrl, tAddresses, mainnet } = payload as {
+          mnemonic: string; serverUrl: string; tAddresses: string[]; mainnet: boolean;
+        };
+
+        const { ZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
+        const client = new ZidecarClient(serverUrl);
+        const tip = await client.getTip();
+        const utxos = await client.getAddressUtxos(tAddresses);
+        if (utxos.length === 0) throw new Error('no transparent UTXOs to shield');
+
+        const totalZat = utxos.reduce((sum, u) => sum + u.valueZat, 0n);
+        const logicalActions = 2 + utxos.length;
+        const fee = BigInt(5000 * Math.max(logicalActions, 2));
+        if (totalZat <= fee) throw new Error(`insufficient: ${totalZat} zat, need > ${fee} fee`);
+
+        const shieldAmount = totalZat - fee;
+        const privkeyHex = wasmModule.derive_transparent_privkey(mnemonic, 0, 0);
+        const keys = new wasmModule.WalletKeys(mnemonic);
+        const recipient = keys.get_receiving_address(mainnet);
+        keys.free();
+
+        const utxosJson = JSON.stringify(utxos.map(u => ({
+          txid: hexEncode(u.txid),
+          vout: u.outputIndex,
+          value: Number(u.valueZat),
+          script: hexEncode(u.script),
+        })));
+
+        const txHex = wasmModule.build_shielding_transaction(
+          utxosJson, privkeyHex, recipient, shieldAmount, fee, tip.height, mainnet,
+        );
+        const txData = new Uint8Array(txHex.match(/.{2}/g)!.map(b => parseInt(b, 16)));
+        const result = await client.sendTransaction(txData);
+        const txidHex = hexEncode(result.txid);
+        if (result.errorCode !== 0) throw new Error(`broadcast failed (${result.errorCode}): ${result.errorMessage}`);
+
+        workerSelf.postMessage({
+          type: 'shield-result', id, network: 'zcash', walletId,
+          payload: { txid: txidHex, shieldedZat: shieldAmount.toString(), feeZat: fee.toString(), utxoCount: utxos.length },
+        });
         return;
       }
 
@@ -568,16 +514,14 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
     }
   } catch (err) {
     workerSelf.postMessage({
-      type: 'error',
-      id,
-      network: 'zcash',
-      walletId,
+      type: 'error', id, network: 'zcash', walletId,
       error: err instanceof Error ? err.message : String(err),
     });
   }
 };
 
-// signal ready after wasm init
 initWasm().then(() => {
   workerSelf.postMessage({ type: 'ready', id: '', network: 'zcash' });
-}).catch(console.error);
+}).catch(err => {
+  console.error('[zcash-worker] wasm init failed:', err);
+});

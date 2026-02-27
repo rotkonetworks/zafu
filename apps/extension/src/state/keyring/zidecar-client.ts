@@ -34,6 +34,15 @@ export interface ChainTip {
   hash: Uint8Array;
 }
 
+export interface Utxo {
+  address: string;
+  txid: Uint8Array;
+  outputIndex: number;
+  script: Uint8Array;
+  valueZat: bigint;
+  height: number;
+}
+
 export class ZidecarClient {
   private serverUrl: string;
 
@@ -129,7 +138,7 @@ export class ZidecarClient {
       off += 32;
       if (a.ephemeralKey.length === 32) buf.set(a.ephemeralKey, off);
       off += 32;
-      if (a.ciphertext.length >= 52) buf.set(a.ciphertext.slice(0, 52), off);
+      if (a.ciphertext.length >= 52) buf.set(a.ciphertext.subarray(0, 52), off);
       off += 52;
     }
 
@@ -167,7 +176,7 @@ export class ZidecarClient {
 
     // extract first frame
     const len = (buf[1]! << 24) | (buf[2]! << 16) | (buf[3]! << 8) | buf[4]!;
-    return buf.slice(5, 5 + len);
+    return buf.subarray(5, 5 + len);
   }
 
   private varint(n: number): number[] {
@@ -268,7 +277,7 @@ export class ZidecarClient {
       pos += 5;
       if (pos + len > buf.length) break;
 
-      blocks.push(this.parseBlock(buf.slice(pos, pos + len)));
+      blocks.push(this.parseBlock(buf.subarray(pos, pos + len)));
       pos += len;
     }
 
@@ -301,7 +310,7 @@ export class ZidecarClient {
           if (!(b & 0x80)) break;
           s += 7;
         }
-        const data = buf.slice(pos, pos + len);
+        const data = buf.subarray(pos, pos + len);
         if (field === 2) block.hash = data;
         else if (field === 3) block.actions.push(this.parseAction(data));
         pos += len;
@@ -334,7 +343,7 @@ export class ZidecarClient {
           if (!(b & 0x80)) break;
           s += 7;
         }
-        const data = buf.slice(pos, pos + len);
+        const data = buf.subarray(pos, pos + len);
         if (field === 1) a.cmx = data;
         else if (field === 2) a.ephemeralKey = data;
         else if (field === 3) a.ciphertext = data;
@@ -345,6 +354,29 @@ export class ZidecarClient {
     }
 
     return a;
+  }
+
+  /** get transparent address UTXOs */
+  async getAddressUtxos(addresses: string[], startHeight = 0, maxEntries = 0): Promise<Utxo[]> {
+    // encode GetAddressUtxosArg proto
+    const parts: number[] = [];
+    const encoder = new TextEncoder();
+    for (const addr of addresses) {
+      const addrBytes = encoder.encode(addr);
+      // field 1: repeated string addresses
+      parts.push(0x0a, ...this.lengthDelimited(addrBytes));
+    }
+    if (startHeight > 0) {
+      // field 2: uint32 startHeight
+      parts.push(0x10, ...this.varint(startHeight));
+    }
+    if (maxEntries > 0) {
+      // field 3: uint32 maxEntries
+      parts.push(0x18, ...this.varint(maxEntries));
+    }
+
+    const resp = await this.grpcCall('GetAddressUtxos', new Uint8Array(parts));
+    return this.parseUtxoList(resp);
   }
 
   /** get raw transaction by hash (reveals txid to server - use getBlockTransactions for privacy) */
@@ -437,5 +469,92 @@ export class ZidecarClient {
     }
 
     return { data, height };
+  }
+
+  private parseUtxoList(buf: Uint8Array): Utxo[] {
+    // GetAddressUtxosReplyList: field 1 repeated GetAddressUtxosReply
+    const utxos: Utxo[] = [];
+    let pos = 0;
+
+    while (pos < buf.length) {
+      const tag = buf[pos++]!;
+      const field = tag >> 3;
+      const wire = tag & 0x7;
+
+      if (wire === 2) {
+        let len = 0, s = 0;
+        while (pos < buf.length) {
+          const b = buf[pos++]!;
+          len |= (b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7;
+        }
+        if (field === 1) {
+          utxos.push(this.parseUtxo(buf.subarray(pos, pos + len)));
+        }
+        pos += len;
+      } else if (wire === 0) {
+        // skip varint
+        while (pos < buf.length && (buf[pos++]! & 0x80)) { /* skip */ }
+      } else break;
+    }
+
+    return utxos;
+  }
+
+  private parseUtxo(buf: Uint8Array): Utxo {
+    // GetAddressUtxosReply:
+    //   field 1: string address
+    //   field 2: bytes txid
+    //   field 3: int32 output_index (index)
+    //   field 4: bytes script
+    //   field 5: uint64 value_zat
+    //   field 6: uint64 height
+    const utxo: Utxo = {
+      address: '',
+      txid: new Uint8Array(0),
+      outputIndex: 0,
+      script: new Uint8Array(0),
+      valueZat: 0n,
+      height: 0,
+    };
+    let pos = 0;
+    const decoder = new TextDecoder();
+
+    while (pos < buf.length) {
+      const tag = buf[pos++]!;
+      const field = tag >> 3;
+      const wire = tag & 0x7;
+
+      if (wire === 0) {
+        // varint — need to handle uint64 for valueZat
+        let v = 0n;
+        let s = 0n;
+        while (pos < buf.length) {
+          const b = buf[pos++]!;
+          v |= BigInt(b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7n;
+        }
+        if (field === 3) utxo.outputIndex = Number(v);
+        else if (field === 5) utxo.valueZat = v;
+        else if (field === 6) utxo.height = Number(v);
+      } else if (wire === 2) {
+        let len = 0, s = 0;
+        while (pos < buf.length) {
+          const b = buf[pos++]!;
+          len |= (b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7;
+        }
+        const data = buf.subarray(pos, pos + len);
+        if (field === 1) utxo.address = decoder.decode(data);
+        else if (field === 2) utxo.txid = data;
+        else if (field === 4) utxo.script = data;
+        pos += len;
+      } else break;
+    }
+
+    return utxo;
   }
 }
