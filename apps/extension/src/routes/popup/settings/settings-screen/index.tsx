@@ -1,32 +1,22 @@
-import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
 import { SettingsHeader } from './settings-header';
 import { ReactNode } from 'react';
+import { PopupPath } from '../../paths';
 
-/**
- * A base settings screen template.
- */
 export const SettingsScreen = ({
   title,
-  IconComponent,
   children,
+  backPath,
 }: {
   title: string;
+  /** @deprecated no longer rendered */
   IconComponent?: () => JSX.Element;
   children: ReactNode;
+  backPath?: PopupPath;
 }) => {
   return (
-    <FadeTransition>
-      <div className='flex min-h-full w-full flex-col gap-6'>
-        <SettingsHeader title={title} />
-
-        {!!IconComponent && (
-          <div className='mx-auto size-20'>
-            <IconComponent />
-          </div>
-        )}
-
-        <div className='flex grow flex-col px-[30px] pb-4'>{children}</div>
-      </div>
-    </FadeTransition>
+    <div className='flex min-h-full w-full flex-col'>
+      <SettingsHeader title={title} backPath={backPath} />
+      <div className='flex grow flex-col px-4 pb-4 pt-4'>{children}</div>
+    </div>
   );
 };
