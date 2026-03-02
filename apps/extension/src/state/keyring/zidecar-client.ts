@@ -75,7 +75,8 @@ export class ZidecarClient {
       parts.push(...this.varint(endHeight));
     }
 
-    const resp = await this.grpcCall('GetCompactBlocks', new Uint8Array(parts));
+    // streaming RPC — need raw response with gRPC frames intact
+    const resp = await this.grpcCallStream('GetCompactBlocks', new Uint8Array(parts));
     return this.parseBlockStream(resp);
   }
 
@@ -174,9 +175,35 @@ export class ZidecarClient {
     const buf = new Uint8Array(await resp.arrayBuffer());
     if (buf.length < 5) throw new Error('empty grpc response');
 
-    // extract first frame
+    // extract first frame (unary RPCs only)
     const len = (buf[1]! << 24) | (buf[2]! << 16) | (buf[3]! << 8) | buf[4]!;
     return buf.subarray(5, 5 + len);
+  }
+
+  /** raw gRPC-web call for server-streaming RPCs — returns full response with frame headers */
+  private async grpcCallStream(method: string, msg: Uint8Array): Promise<Uint8Array> {
+    const path = `${this.serverUrl}/zidecar.v1.Zidecar/${method}`;
+
+    const body = new Uint8Array(5 + msg.length);
+    body[0] = 0;
+    body[1] = (msg.length >> 24) & 0xff;
+    body[2] = (msg.length >> 16) & 0xff;
+    body[3] = (msg.length >> 8) & 0xff;
+    body[4] = msg.length & 0xff;
+    body.set(msg, 5);
+
+    const resp = await fetch(path, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/grpc-web+proto',
+        'Accept': 'application/grpc-web+proto',
+        'x-grpc-web': '1',
+      },
+      body,
+    });
+
+    if (!resp.ok) throw new Error(`gRPC HTTP ${resp.status}`);
+    return new Uint8Array(await resp.arrayBuffer());
   }
 
   private varint(n: number): number[] {

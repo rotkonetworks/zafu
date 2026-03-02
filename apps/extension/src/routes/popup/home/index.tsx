@@ -252,17 +252,7 @@ const ZcashContent = ({
   hasMnemonic?: boolean;
   watchOnly?: { label: string; mainnet: boolean };
 }) => {
-  if (!hasMnemonic && !watchOnly) {
-    return (
-      <div className='flex flex-col items-center justify-center py-8 text-center'>
-        <div className='text-sm text-muted-foreground'>no zcash wallet</div>
-        <div className='text-xs text-muted-foreground mt-1'>
-          create a wallet or import a viewing key from zigner
-        </div>
-      </div>
-    );
-  }
-
+  const hasWallet = !!(hasMnemonic || watchOnly);
   const isMainnet = watchOnly?.mainnet ?? true;
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const { syncStatus, chainTip, workerSyncHeight, error: syncError } = useZcashSyncStatus();
@@ -276,12 +266,12 @@ const ZcashContent = ({
   // wallet birthday — used to show progress relative to start, not block 0
   const [walletBirthday, setWalletBirthday] = useState(0);
   useEffect(() => {
-    if (!selectedKeyInfo) return;
+    if (!hasWallet || !selectedKeyInfo) return;
     const key = `zcashBirthday_${selectedKeyInfo.id}`;
     chrome.storage.local.get(key, r => {
       if (typeof r[key] === 'number') setWalletBirthday(r[key] as number);
     });
-  }, [selectedKeyInfo?.id]);
+  }, [hasWallet, selectedKeyInfo?.id]);
 
   // auto-start zcash sync — delay 3s so penumbra service worker stabilizes first
   useEffect(() => {
@@ -402,6 +392,17 @@ const ZcashContent = ({
       setShielding(false);
     }
   }, [hasMnemonic, selectedKeyInfo, keyRing, shielding, transparentZat, tAddresses, isMainnet]);
+
+  if (!hasWallet) {
+    return (
+      <div className='flex flex-col items-center justify-center py-8 text-center'>
+        <div className='text-sm text-muted-foreground'>no zcash wallet</div>
+        <div className='text-xs text-muted-foreground mt-1'>
+          create a wallet or import a viewing key from zigner
+        </div>
+      </div>
+    );
+  }
 
   // sync progress
   const chainHeight = chainTip?.height ?? syncStatus?.currentHeight ?? 0;
