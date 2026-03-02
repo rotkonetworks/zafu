@@ -219,7 +219,7 @@ const initWasm = async (): Promise<void> => {
   if (wasmModule) return;
   // @ts-expect-error — dynamic import in worker
   const wasm = await import(/* webpackIgnore: true */ '/zafu-wasm/zafu_wasm.js');
-  await wasm.default('/zafu-wasm/zafu_wasm_bg.wasm');
+  await wasm.default({ module_or_path: '/zafu-wasm/zafu_wasm_bg.wasm' });
   wasm.init();
   wasmModule = wasm;
   console.log('[zcash-worker] wasm ready');

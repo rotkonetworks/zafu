@@ -83,7 +83,7 @@ async function loadZcashWasm() {
   const wasmJsUrl = chrome.runtime.getURL('zafu-wasm/zafu_wasm.js');
   const wasmBinaryUrl = chrome.runtime.getURL('zafu-wasm/zafu_wasm_bg.wasm');
   const zcashWasm = await import(/* webpackIgnore: true */ wasmJsUrl);
-  await zcashWasm.default(wasmBinaryUrl);
+  await zcashWasm.default({ module_or_path: wasmBinaryUrl });
   zcashWasmCache = zcashWasm;
   return zcashWasm;
 }

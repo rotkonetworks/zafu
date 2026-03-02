@@ -12,7 +12,6 @@ interface ZafuWasm {
     from_qr_hex(qrHex: string): WatchOnlyWallet;
     new (fvkBytes: Uint8Array, accountIndex: number, mainnet: boolean): WatchOnlyWallet;
   };
-  initThreadPool(numThreads: number): Promise<void>;
   validate_seed_phrase(seedPhrase: string): boolean;
   generate_seed_phrase(): string;
   init(): void;
@@ -72,19 +71,15 @@ export const initZcashWasm = async (): Promise<void> => {
     // webpack copies this to dist/zafu-wasm/
     // @ts-expect-error - dynamic import from extension root
     const wasm = await import(/* webpackIgnore: true */ '/zafu-wasm/zafu_wasm.js');
-    await wasm.default('/zafu-wasm/zafu_wasm_bg.wasm');
+    await wasm.default({ module_or_path: '/zafu-wasm/zafu_wasm_bg.wasm' });
 
     // init panic hook
     wasm.init();
 
-    // init thread pool for parallel scanning
-    const numThreads = navigator.hardwareConcurrency || 4;
-    await wasm.initThreadPool(numThreads);
-
     wasmModule = wasm as ZafuWasm;
     wasmInitialized = true;
 
-    console.log('[zcash] wasm initialized with', numThreads, 'threads');
+    console.log('[zcash] wasm initialized');
   } catch (err) {
     console.error('[zcash] failed to init wasm:', err);
     throw err;
