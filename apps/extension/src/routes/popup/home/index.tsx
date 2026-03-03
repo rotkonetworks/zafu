@@ -22,6 +22,8 @@ import {
   shieldInWorker,
   spawnNetworkWorker,
   startSyncInWorker,
+  stopSyncInWorker,
+  resetSyncInWorker,
   isWalletSyncing,
   getBalanceInWorker,
 } from '../../../state/keyring/network-worker';
@@ -370,6 +372,42 @@ const ZcashContent = ({
   const [shieldTxid, setShieldTxid] = useState<string | null>(null);
   const [shieldError, setShieldError] = useState<string | null>(null);
 
+  // rescan state
+  const [rescanOpen, setRescanOpen] = useState(false);
+  const [rescanHeight, setRescanHeight] = useState('');
+  const [rescanning, setRescanning] = useState(false);
+
+  const handleRescan = useCallback(async () => {
+    if (!hasMnemonic || !selectedKeyInfo || selectedKeyInfo.type !== 'mnemonic') return;
+    const newHeight = parseInt(rescanHeight, 10);
+    if (isNaN(newHeight) || newHeight < 0) return;
+
+    setRescanning(true);
+    try {
+      const walletId = selectedKeyInfo.id;
+      const mnemonic = await keyRing.getMnemonic(walletId);
+      const birthdayKey = `zcashBirthday_${walletId}`;
+
+      // stop active sync
+      await stopSyncInWorker('zcash', walletId);
+      // clear IDB data
+      await resetSyncInWorker('zcash', walletId);
+      // update birthday and clear persisted sync height
+      await chrome.storage.local.set({ [birthdayKey]: newHeight });
+      await chrome.storage.local.remove('zcashSyncHeight');
+      setWalletBirthday(newHeight);
+      // restart sync from new height
+      await startSyncInWorker('zcash', walletId, mnemonic, zidecarUrl, newHeight);
+
+      setRescanOpen(false);
+      setRescanHeight('');
+    } catch (err) {
+      console.error('[zcash] rescan failed:', err);
+    } finally {
+      setRescanning(false);
+    }
+  }, [hasMnemonic, selectedKeyInfo, keyRing, rescanHeight, zidecarUrl]);
+
   const handleShield = useCallback(async () => {
     if (!hasMnemonic || !selectedKeyInfo || selectedKeyInfo.type !== 'mnemonic') return;
     if (shielding || transparentZat <= 0n) return;
@@ -510,6 +548,50 @@ const ZcashContent = ({
               ? `${scanProgress.toLocaleString()} / ${scanRange.toLocaleString()} blocks`
               : 'waiting for chain tip...'}
           </div>
+        </div>
+      )}
+
+      {/* rescan from custom height */}
+      {hasMnemonic && (
+        <div className='border border-border/40 bg-card p-3'>
+          {!rescanOpen ? (
+            <button
+              onClick={() => setRescanOpen(true)}
+              className='text-xs text-muted-foreground hover:text-foreground transition-colors'
+            >
+              rescan from height...
+            </button>
+          ) : (
+            <div className='flex flex-col gap-2'>
+              <div className='text-xs text-muted-foreground'>
+                enter block height to rescan from (clears local notes)
+              </div>
+              <div className='flex gap-2'>
+                <input
+                  type='number'
+                  min={0}
+                  value={rescanHeight}
+                  onChange={e => setRescanHeight(e.target.value)}
+                  placeholder={String(walletBirthday || 0)}
+                  className='flex-1 bg-muted px-2 py-1 text-xs font-mono text-foreground placeholder:text-muted-foreground/50 outline-none'
+                />
+                <button
+                  onClick={() => void handleRescan()}
+                  disabled={rescanning || !rescanHeight}
+                  className='px-3 py-1 text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors'
+                >
+                  {rescanning ? 'resetting...' : 'rescan'}
+                </button>
+                <button
+                  onClick={() => { setRescanOpen(false); setRescanHeight(''); }}
+                  disabled={rescanning}
+                  className='px-2 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors'
+                >
+                  cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

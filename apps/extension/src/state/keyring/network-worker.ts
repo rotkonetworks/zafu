@@ -17,7 +17,7 @@
 import type { NetworkType } from './types';
 
 export interface NetworkWorkerMessage {
-  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'get-balance' | 'send-tx' | 'shield' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos';
+  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'shield' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -25,7 +25,7 @@ export interface NetworkWorkerMessage {
 }
 
 export interface NetworkWorkerResponse {
-  type: 'ready' | 'address' | 'sync-progress' | 'sync-started' | 'sync-stopped' | 'balance' | 'tx-result' | 'shield-result' | 'wallets' | 'wallet-deleted' | 'notes' | 'memos' | 'error';
+  type: 'ready' | 'address' | 'sync-progress' | 'sync-started' | 'sync-stopped' | 'sync-reset' | 'balance' | 'tx-result' | 'shield-result' | 'wallets' | 'wallet-deleted' | 'notes' | 'memos' | 'error';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -216,6 +216,13 @@ export const startSyncInWorker = async (
  */
 export const stopSyncInWorker = async (network: NetworkType, walletId: string): Promise<void> => {
   return callWorker(network, 'stop-sync', {}, walletId);
+};
+
+/**
+ * reset sync for a wallet — clears IDB notes/spent/meta and in-memory state
+ */
+export const resetSyncInWorker = async (network: NetworkType, walletId: string): Promise<void> => {
+  return callWorker(network, 'reset-sync', {}, walletId);
 };
 
 /**

@@ -423,6 +423,29 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         return;
       }
 
+      case 'reset-sync': {
+        if (!walletId) throw new Error('walletId required');
+        const resetState = walletStates.get(walletId);
+        if (resetState) {
+          resetState.syncAbort = true;
+          if (resetState.keys) { resetState.keys.free(); resetState.keys = null; }
+        }
+        // wait briefly for sync loop to notice abort
+        await new Promise(r => setTimeout(r, 300));
+        // clear IDB data for this wallet
+        await deleteWallet(walletId);
+        // re-register so future sync can start clean
+        await registerWallet(walletId);
+        // reset in-memory state
+        const freshState = getOrCreateWalletState(walletId);
+        freshState.notes = [];
+        freshState.spentNullifiers = new Set();
+        freshState.syncing = false;
+        freshState.syncAbort = false;
+        workerSelf.postMessage({ type: 'sync-reset', id, network: 'zcash', walletId });
+        return;
+      }
+
       case 'get-balance': {
         if (!walletId) throw new Error('walletId required');
         const balance = getBalance(walletId);
