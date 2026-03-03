@@ -115,7 +115,8 @@ const getDb = (): Promise<IDBDatabase> => {
   });
 };
 
-const closeDb = () => {
+/** close shared db connection — called when worker is idle */
+export const closeDb = () => {
   if (sharedDb) { sharedDb.close(); sharedDb = null; }
 };
 
