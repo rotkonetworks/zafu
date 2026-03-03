@@ -11,11 +11,13 @@
 
 /// <reference lib="webworker" />
 
+import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const workerSelf = globalThis as any as DedicatedWorkerGlobalScope;
 
 interface WorkerMessage {
-  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'get-balance' | 'send-tx' | 'shield' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos';
+  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'shield' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos';
   id: string;
   network: 'zcash';
   walletId?: string;
@@ -228,7 +230,10 @@ const initWasm = async (): Promise<void> => {
 const deriveAddress = (mnemonic: string, accountIndex: number): string => {
   if (!wasmModule) throw new Error('wasm not initialized');
   const keys = new wasmModule.WalletKeys(mnemonic);
-  try { return keys.get_receiving_address_at(accountIndex, true); }
+  try {
+    const raw = keys.get_receiving_address_at(accountIndex, true);
+    return fixOrchardAddress(raw, true);
+  }
   finally { keys.free(); }
 };
 

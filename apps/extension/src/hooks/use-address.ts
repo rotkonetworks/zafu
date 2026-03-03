@@ -13,6 +13,7 @@ import { getActiveWalletJson, selectActiveZcashWallet } from '../state/wallets';
 import { NETWORK_CONFIGS, type IbcNetwork, isIbcNetwork } from '../state/keyring/network-types';
 import type { CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { spawnNetworkWorker, deriveAddressInWorker } from '../state/keyring/network-worker';
+import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
 
 /** derive cosmos/ibc address from mnemonic */
 async function deriveCosmosAddress(mnemonic: string, prefix: string): Promise<string> {
@@ -160,7 +161,8 @@ export function useActiveAddress() {
             // zcash - derive orchard address via worker (avoids main-thread wasm)
             if (activeNetwork === 'zcash') {
               await spawnNetworkWorker('zcash');
-              const addr = await deriveAddressInWorker('zcash', mnemonic, shieldedIndex);
+              const rawAddr = await deriveAddressInWorker('zcash', mnemonic, shieldedIndex);
+              const addr = fixOrchardAddress(rawAddr, true);
               if (!cancelled) setAddress(addr);
               if (!cancelled) setLoading(false);
               return;
@@ -219,7 +221,7 @@ export function useActiveAddress() {
         if (activeNetwork === 'zcash' && zcashWallet) {
           // use stored address if available (watch-only without ufvk — no rotation)
           if (zcashWallet.address && !zcashWallet.orchardFvk?.startsWith('uview')) {
-            if (!cancelled) setAddress(zcashWallet.address);
+            if (!cancelled) setAddress(fixOrchardAddress(zcashWallet.address, true));
             if (!cancelled) setLoading(false);
             return;
           }
