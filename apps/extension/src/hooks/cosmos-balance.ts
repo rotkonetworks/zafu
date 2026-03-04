@@ -44,6 +44,7 @@ export const useCosmosBalance = (chainId: CosmosChainId, accountIndex = 0) => {
       };
     },
     enabled: !!selectedKeyInfo && (selectedKeyInfo.type === 'mnemonic' || selectedKeyInfo.type === 'zigner-zafu'),
+    structuralSharing: false, // balance.amount is bigint — not JSON-serializable
     staleTime: 30_000, // 30 seconds
     refetchInterval: 60_000, // refetch every minute
   });
@@ -107,6 +108,7 @@ export const useAllCosmosBalances = (accountIndex = 0) => {
       >;
     },
     enabled: !!selectedKeyInfo && (selectedKeyInfo.type === 'mnemonic' || selectedKeyInfo.type === 'zigner-zafu'),
+    structuralSharing: false, // balances contain bigint — not JSON-serializable
     staleTime: 30_000,
     refetchInterval: 60_000,
   });
@@ -221,6 +223,7 @@ export const useCosmosAssets = (chainId: CosmosChainId, accountIndex = 0) => {
       };
     },
     enabled: !!cosmosKey,
+    structuralSharing: false, // CosmosAsset.amount is bigint — not JSON-serializable
     staleTime: 30_000,
     refetchInterval: 60_000,
   });

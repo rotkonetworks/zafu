@@ -37,6 +37,8 @@ export function useTransparentBalance(addresses: string[]): TransparentBalance {
     staleTime: 30_000,
     refetchInterval: 60_000,
     retry: 2,
+    // BigInt is not JSON serializable — disable structural sharing
+    structuralSharing: false,
   });
 
   return {
