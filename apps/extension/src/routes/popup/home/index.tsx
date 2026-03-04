@@ -431,9 +431,12 @@ const ZcashContent = ({
     try {
       const mnemonic = await keyRing.getMnemonic(selectedKeyInfo.id);
       const walletId = selectedKeyInfo.id;
+      // map each address to its BIP44 derivation index so the worker signs with the correct key
+      const addressIndexMap: Record<string, number> = {};
+      tAddresses.forEach((addr, i) => { addressIndexMap[addr] = i; });
       const result = await shieldInWorker(
         'zcash', walletId, mnemonic,
-        zidecarUrl, tAddresses, isMainnet,
+        zidecarUrl, tAddresses, isMainnet, addressIndexMap,
       );
       setShieldTxid(result.txid);
     } catch (err) {
@@ -517,15 +520,15 @@ const ZcashContent = ({
             </div>
             <button
               onClick={() => void handleShield()}
-              disabled={shielding}
+              disabled={shielding || !!shieldTxid}
               className='text-xs font-medium text-amber-500 hover:text-amber-400 transition-colors disabled:opacity-50'
             >
-              {shielding ? 'shielding...' : 'shield'}
+              {shielding ? 'shielding...' : shieldTxid ? 'pending...' : 'shield'}
             </button>
           </div>
           {shieldTxid && (
             <div className='text-[10px] text-green-500 mt-1.5 font-mono'>
-              shielded: {shieldTxid.slice(0, 16)}...
+              shielded: {shieldTxid.slice(0, 16)}... (wait for confirmation)
             </div>
           )}
           {shieldError && (

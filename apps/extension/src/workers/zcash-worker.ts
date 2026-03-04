@@ -522,46 +522,89 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         await initWasm();
         if (!wasmModule) throw new Error('wasm not initialized');
 
-        const { mnemonic, serverUrl, tAddresses, mainnet } = payload as {
+        const { mnemonic, serverUrl, tAddresses, mainnet, addressIndexMap } = payload as {
           mnemonic: string; serverUrl: string; tAddresses: string[]; mainnet: boolean;
+          addressIndexMap?: Record<string, number>;
         };
 
         const { ZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
         const client = new ZidecarClient(serverUrl);
         const tip = await client.getTip();
-        const utxos = await client.getAddressUtxos(tAddresses);
-        if (utxos.length === 0) throw new Error('no transparent UTXOs to shield');
+        const allUtxos = await client.getAddressUtxos(tAddresses);
+        if (allUtxos.length === 0) throw new Error('no transparent UTXOs to shield');
 
-        const totalZat = utxos.reduce((sum, u) => sum + u.valueZat, 0n);
-        const logicalActions = 2 + utxos.length;
-        const fee = BigInt(5000 * Math.max(logicalActions, 2));
-        if (totalZat <= fee) throw new Error(`insufficient: ${totalZat} zat, need > ${fee} fee`);
+        // build address → derivation index lookup
+        const addrToIndex = new Map<string, number>();
+        if (addressIndexMap) {
+          for (const [addr, idx] of Object.entries(addressIndexMap)) {
+            addrToIndex.set(addr, idx);
+          }
+        } else {
+          for (const addr of tAddresses) addrToIndex.set(addr, 0);
+        }
 
-        const shieldAmount = totalZat - fee;
-        const privkeyHex = wasmModule.derive_transparent_privkey(mnemonic, 0, 0);
+        // group UTXOs by derivation index (WASM signs all inputs with one key)
+        const byIndex = new Map<number, typeof allUtxos>();
+        for (const utxo of allUtxos) {
+          const idx = addrToIndex.get(utxo.address) ?? 0;
+          let group = byIndex.get(idx);
+          if (!group) { group = []; byIndex.set(idx, group); }
+          group.push(utxo);
+        }
+
+        // orchard recipient (same for all txs)
         const keys = new wasmModule.WalletKeys(mnemonic);
-        const rawRecipient = keys.get_receiving_address(mainnet);
-        keys.free();
+        let rawRecipient: string;
+        try {
+          rawRecipient = keys.get_receiving_address(mainnet);
+        } finally {
+          keys.free();
+        }
         const recipient = fixOrchardAddress(rawRecipient, mainnet);
 
-        const utxosJson = JSON.stringify(utxos.map(u => ({
-          txid: hexEncode(u.txid),
-          vout: u.outputIndex,
-          value: Number(u.valueZat),
-          script: hexEncode(u.script),
-        })));
+        // shield each group with its matching privkey
+        let totalShielded = 0n;
+        let totalFee = 0n;
+        let totalUtxos = 0;
+        let lastTxid = '';
 
-        const txHex = wasmModule.build_shielding_transaction(
-          utxosJson, privkeyHex, recipient, shieldAmount, fee, tip.height, mainnet,
-        );
-        const txData = new Uint8Array(txHex.match(/.{2}/g)!.map(b => parseInt(b, 16)));
-        const result = await client.sendTransaction(txData);
-        const txidHex = hexEncode(result.txid);
-        if (result.errorCode !== 0) throw new Error(`broadcast failed (${result.errorCode}): ${result.errorMessage}`);
+        for (const [addrIndex, utxos] of byIndex) {
+          const groupZat = utxos.reduce((sum, u) => sum + u.valueZat, 0n);
+          const logicalActions = 2 + utxos.length;
+          const fee = BigInt(5000 * Math.max(logicalActions, 2));
+          if (groupZat <= fee) {
+            console.warn(`[zcash-worker] skipping index ${addrIndex}: ${groupZat} zat <= ${fee} fee`);
+            continue;
+          }
+
+          const shieldAmount = groupZat - fee;
+          const privkeyHex = wasmModule.derive_transparent_privkey(mnemonic, 0, addrIndex);
+
+          const utxosJson = JSON.stringify(utxos.map(u => ({
+            txid: hexEncode(u.txid),
+            vout: u.outputIndex,
+            value: Number(u.valueZat),
+            script: hexEncode(u.script),
+          })));
+
+          const txHex = wasmModule.build_shielding_transaction(
+            utxosJson, privkeyHex, recipient, shieldAmount, fee, tip.height, mainnet,
+          );
+          const txData = new Uint8Array(txHex.match(/.{2}/g)!.map(b => parseInt(b, 16)));
+          const result = await client.sendTransaction(txData);
+          if (result.errorCode !== 0) throw new Error(`broadcast failed (${result.errorCode}): ${result.errorMessage}`);
+
+          lastTxid = hexEncode(result.txid);
+          totalShielded += shieldAmount;
+          totalFee += fee;
+          totalUtxos += utxos.length;
+        }
+
+        if (totalUtxos === 0) throw new Error('all UTXO groups too small to cover fees');
 
         workerSelf.postMessage({
           type: 'shield-result', id, network: 'zcash', walletId,
-          payload: { txid: txidHex, shieldedZat: shieldAmount.toString(), feeZat: fee.toString(), utxoCount: utxos.length },
+          payload: { txid: lastTxid, shieldedZat: totalShielded.toString(), feeZat: totalFee.toString(), utxoCount: totalUtxos },
         });
         return;
       }

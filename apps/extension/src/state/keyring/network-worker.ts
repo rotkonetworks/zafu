@@ -301,8 +301,9 @@ export const shieldInWorker = async (
   serverUrl: string,
   tAddresses: string[],
   mainnet: boolean,
+  addressIndexMap?: Record<string, number>,
 ): Promise<ShieldResult> => {
-  return callWorker(network, 'shield', { mnemonic, serverUrl, tAddresses, mainnet }, walletId);
+  return callWorker(network, 'shield', { mnemonic, serverUrl, tAddresses, mainnet, addressIndexMap }, walletId);
 };
 
 /**
