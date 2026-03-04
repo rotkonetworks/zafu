@@ -275,7 +275,8 @@ const ZcashContent = ({
     });
   }, [hasWallet, selectedKeyInfo?.id]);
 
-  // auto-start zcash sync — delay 3s so penumbra service worker stabilizes first
+  // auto-start zcash sync — short delay so UI renders first
+  // stops sync on unmount (when switching away from zcash)
   useEffect(() => {
     if (!hasMnemonic || !selectedKeyInfo || selectedKeyInfo.type !== 'mnemonic') return;
     const walletId = selectedKeyInfo.id;
@@ -314,8 +315,15 @@ const ZcashContent = ({
           console.error('[zcash] auto-sync failed:', err);
         }
       })();
-    }, 3000);
-    return () => { cancelled = true; clearTimeout(timer); };
+    }, 500);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      // stop zcash sync when switching away from this network
+      if (isWalletSyncing('zcash', walletId)) {
+        void stopSyncInWorker('zcash', walletId).catch(() => {});
+      }
+    };
   }, [hasMnemonic, selectedKeyInfo?.id, selectedKeyInfo?.type, keyRing, zidecarUrl]);
 
   // fetch orchard balance from worker on each sync-progress event
@@ -336,9 +344,13 @@ const ZcashContent = ({
     };
 
     window.addEventListener('network-sync-progress', handler);
-    // also fetch once on mount in case sync already ran
+    // fetch on mount in case sync already ran, plus retry after worker init delay
     fetchBalance();
-    return () => window.removeEventListener('network-sync-progress', handler);
+    const retryTimer = setTimeout(fetchBalance, 2000);
+    return () => {
+      window.removeEventListener('network-sync-progress', handler);
+      clearTimeout(retryTimer);
+    };
   }, [selectedKeyInfo?.id]);
 
   // derive transparent addresses for UTXO lookup
@@ -466,22 +478,31 @@ const ZcashContent = ({
   const tZec = Number(transparentZat) / 1e8;
 
   // sync status label
-  const syncLabel = allSynced
-    ? 'synced'
-    : chainHeight > 0
-      ? `syncing · ${scanProgress.toLocaleString()} / ${scanRange.toLocaleString()}`
-      : 'connecting...';
+  const isSyncing = chainHeight > 0 && !allSynced;
 
   return (
     <div className='flex-1 flex flex-col gap-3'>
       {/* combined balance */}
       <div className='border border-border/40 bg-card p-4'>
         <div className='text-3xl font-semibold tabular-nums text-foreground'>
-          {totalZat > 0n || allSynced
+          {workerSyncHeight > 0 || totalZat > 0n
             ? `${totalZec.toFixed(8)} ZEC`
             : '— ZEC'}
         </div>
-        <div className='mt-1 text-xs text-muted-foreground'>{syncLabel}</div>
+        <div className='mt-1 flex items-center gap-1.5 text-xs text-muted-foreground'>
+          {/* pulsing dot — green when synced, amber when syncing */}
+          <span
+            className={`inline-block h-1.5 w-1.5 rounded-full ${
+              allSynced ? 'bg-green-500' : isSyncing ? 'bg-amber-500 animate-pulse' : 'bg-muted-foreground/30 animate-pulse'
+            }`}
+          />
+          {allSynced
+            ? <span>synced · block {workerSyncHeight.toLocaleString()}</span>
+            : chainHeight > 0
+              ? <span>syncing · {scanProgress.toLocaleString()} / {scanRange.toLocaleString()} · block {workerSyncHeight.toLocaleString()}</span>
+              : <span>connecting...</span>
+          }
+        </div>
       </div>
 
       {/* transparent pool detail — only shown when transparent > 0 */}
