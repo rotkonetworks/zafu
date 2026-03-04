@@ -245,6 +245,13 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
 
   const state = getOrCreateWalletState(walletId);
 
+  // abort existing sync if running — prevents concurrent loops
+  if (state.syncing) {
+    state.syncAbort = true;
+    // wait for the loop to notice the abort
+    await new Promise(r => setTimeout(r, 200));
+  }
+
   // free old keys if re-syncing
   if (state.keys) { state.keys.free(); state.keys = null; }
 
@@ -253,12 +260,19 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
   await loadState(walletId);
 
   const syncedHeight = await getSyncHeight(walletId);
-  let currentHeight = startHeight ?? syncedHeight;
+  // use whichever is higher — prevents re-scanning if chrome.storage was stale
+  let currentHeight = Math.max(startHeight ?? 0, syncedHeight);
 
   const { ZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
   const client = new ZidecarClient(serverUrl);
 
-  console.log(`[zcash-worker] sync start wallet=${walletId} height=${currentHeight}`);
+  console.log(`[zcash-worker] sync start wallet=${walletId} height=${currentHeight} (idb=${syncedHeight}, requested=${startHeight ?? 'none'})`);
+
+  // emit initial sync-progress so UI gets persisted height + can fetch balance immediately
+  workerSelf.postMessage({
+    type: 'sync-progress', id: '', network: 'zcash', walletId,
+    payload: { currentHeight, chainHeight: currentHeight, notesFound: state.notes.length, blocksScanned: 0 },
+  });
 
   state.syncing = true;
   state.syncAbort = false;
