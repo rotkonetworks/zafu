@@ -74,6 +74,19 @@ const hexEncode = (b: Uint8Array): string => {
   return s;
 };
 
+/** Wait for sync loop to stop after setting syncAbort=true. Polls state.syncing with 50ms interval, max 2s. */
+const waitForSyncStop = (state: WalletState, timeoutMs = 2000): Promise<void> => {
+  if (!state.syncing) return Promise.resolve();
+  return new Promise(resolve => {
+    const start = Date.now();
+    const check = () => {
+      if (!state.syncing || Date.now() - start > timeoutMs) resolve();
+      else setTimeout(check, 50);
+    };
+    check();
+  });
+};
+
 const getOrCreateWalletState = (walletId: string): WalletState => {
   let state = walletStates.get(walletId);
   if (!state) {
@@ -248,8 +261,7 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
   // abort existing sync if running — prevents concurrent loops
   if (state.syncing) {
     state.syncAbort = true;
-    // wait for the loop to notice the abort
-    await new Promise(r => setTimeout(r, 200));
+    await waitForSyncStop(state);
   }
 
   // free old keys if re-syncing
@@ -362,7 +374,9 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
       await saveBatch(walletId, newNotes, newSpent, currentHeight);
 
       // persist to chrome.storage for popup reactivity
-      try { chrome.storage?.local?.set({ zcashSyncHeight: currentHeight }); } catch {}
+      try { chrome.storage?.local?.set({ zcashSyncHeight: currentHeight }); } catch (e) {
+        console.warn('[zcash-worker] chrome.storage set failed:', e);
+      }
 
       workerSelf.postMessage({
         type: 'sync-progress', id: '', network: 'zcash', walletId,
@@ -445,8 +459,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           resetState.syncAbort = true;
           if (resetState.keys) { resetState.keys.free(); resetState.keys = null; }
         }
-        // wait briefly for sync loop to notice abort
-        await new Promise(r => setTimeout(r, 300));
+        await waitForSyncStop(resetState ?? getOrCreateWalletState(walletId));
         // clear IDB data for this wallet
         await deleteWallet(walletId);
         // re-register so future sync can start clean
@@ -479,7 +492,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const state = walletStates.get(walletId);
         if (state?.syncing) {
           state.syncAbort = true;
-          await new Promise(r => setTimeout(r, 200));
+          await waitForSyncStop(state);
         }
         if (state?.keys) { state.keys.free(); state.keys = null; }
         await deleteWallet(walletId);
@@ -527,8 +540,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const shieldAmount = totalZat - fee;
         const privkeyHex = wasmModule.derive_transparent_privkey(mnemonic, 0, 0);
         const keys = new wasmModule.WalletKeys(mnemonic);
-        const recipient = keys.get_receiving_address(mainnet);
+        const rawRecipient = keys.get_receiving_address(mainnet);
         keys.free();
+        const recipient = fixOrchardAddress(rawRecipient, mainnet);
 
         const utxosJson = JSON.stringify(utxos.map(u => ({
           txid: hexEncode(u.txid),

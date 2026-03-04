@@ -418,7 +418,7 @@ const ZcashContent = ({
     } finally {
       setRescanning(false);
     }
-  }, [hasMnemonic, selectedKeyInfo, keyRing, rescanHeight, zidecarUrl]);
+  }, [hasMnemonic, selectedKeyInfo?.id, selectedKeyInfo?.type, keyRing, rescanHeight, zidecarUrl]);
 
   const handleShield = useCallback(async () => {
     if (!hasMnemonic || !selectedKeyInfo || selectedKeyInfo.type !== 'mnemonic') return;

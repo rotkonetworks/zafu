@@ -76,94 +76,103 @@ function bech32mEncode(hrp: string, data: Uint8Array, limit = 1023): string {
 }
 
 // ── F4Jumble (ZIP-316) ──
+// Reference: https://zips.z.cash/zip-0316#jumbling
+// Matches librustzcash f4jumble implementation exactly.
 
-const PERS_H = (i: number, l: number): Uint8Array => {
+const OUTBYTES = 64; // BLAKE2b max output
+
+/**
+ * H personalization: "UA_F4Jumble_H" (13 bytes) + round (1 byte) + 0x0000 (2 bytes)
+ * Per spec: H_i has no chunk counter — bytes 14-15 are always zero.
+ */
+const hPers = (round: number): Uint8Array => {
+  // [85,65,95,70,52,74,117,109,98,108,101,95,72, round, 0, 0]
   const p = new Uint8Array(16);
-  const dv = new DataView(p.buffer);
-  // "UA_F4Jumble_H" + i (1 byte) + length (2 bytes LE)
   const tag = 'UA_F4Jumble_H';
-  for (let j = 0; j < tag.length; j++) p[j] = tag.charCodeAt(j);
-  p[13] = i;
-  dv.setUint16(14, l, true);
+  for (let i = 0; i < tag.length; i++) p[i] = tag.charCodeAt(i);
+  p[13] = round;
+  // bytes 14-15 remain 0
   return p;
 };
 
-const PERS_G = (i: number, l: number): Uint8Array => {
+/**
+ * G personalization: "UA_F4Jumble_G" (13 bytes) + round (1 byte) + chunk_j (2 bytes LE)
+ * Per spec: G_i uses chunk counter j in bytes 14-15 for long-output PRF.
+ */
+const gPers = (round: number, chunkJ: number): Uint8Array => {
+  // [85,65,95,70,52,74,117,109,98,108,101,95,71, round, j_lo, j_hi]
   const p = new Uint8Array(16);
-  const dv = new DataView(p.buffer);
   const tag = 'UA_F4Jumble_G';
-  for (let j = 0; j < tag.length; j++) p[j] = tag.charCodeAt(j);
-  p[13] = i;
-  dv.setUint16(14, l, true);
+  for (let i = 0; i < tag.length; i++) p[i] = tag.charCodeAt(i);
+  p[13] = round;
+  p[14] = chunkJ & 0xff;
+  p[15] = (chunkJ >>> 8) & 0xff;
   return p;
 };
 
-/** BLAKE2b-based PRF: hash `input` with personalization, producing `outputLen` bytes */
-function hashBlake2b(personalization: Uint8Array, input: Uint8Array, outputLen: number): Uint8Array {
-  if (outputLen <= 64) {
-    return blake2b(input, { dkLen: outputLen, personalization });
-  }
-  // long output: concatenate ceil(outputLen/32) hashes of 64 bytes each,
-  // with incrementing counter in personalization
+/**
+ * H round: BLAKE2b-lL(right, personalization=hPers(round))
+ * H always produces <= 64 bytes (since lL <= 64), so single hash call.
+ */
+function hRound(round: number, input: Uint8Array, outputLen: number): Uint8Array {
+  return blake2b(input, { dkLen: outputLen, personalization: hPers(round) });
+}
+
+/**
+ * G round: long-output PRF using BLAKE2b-64 with chunk counter in personalization.
+ * For outputLen <= 64: single BLAKE2b call with j=0.
+ * For outputLen > 64: concatenate ceil(outputLen/64) BLAKE2b-64 blocks,
+ * each with chunk counter j in bytes 14-15 of the personalization.
+ */
+function gRound(round: number, input: Uint8Array, outputLen: number): Uint8Array {
+  // Always hash with dkLen=OUTBYTES (matches librustzcash: hash_length(OUTBYTES)).
+  // BLAKE2b encodes dkLen in the parameter block, so dkLen=24 != truncate(dkLen=64, 24).
   const result = new Uint8Array(outputLen);
   let offset = 0;
-  let counter = 0;
+  let j = 0;
   while (offset < outputLen) {
-    // personalization with counter appended
-    const pers = new Uint8Array(personalization);
-    // the counter is embedded in the personalization byte at position 13
-    // Actually per ZIP-316, for long outputs: produce ceil(n/B2_HASH_LEN) blocks
-    // We hash (counter || input) with the personalization
-    const counterBuf = new Uint8Array(4);
-    new DataView(counterBuf.buffer).setUint32(0, counter, true);
-    const msg = new Uint8Array(4 + input.length);
-    msg.set(counterBuf, 0);
-    msg.set(input, 4);
-    const chunk = blake2b(msg, { dkLen: 64, personalization: pers });
-    const take = Math.min(64, outputLen - offset);
-    result.set(chunk.subarray(0, take), offset);
+    const chunk = blake2b(input, { dkLen: OUTBYTES, personalization: gPers(round, j) });
+    const take = Math.min(OUTBYTES, outputLen - offset);
+    for (let k = 0; k < take; k++) result[offset + k] = chunk[k]!;
     offset += take;
-    counter++;
+    j++;
   }
   return result;
 }
 
+/** XOR b into a in-place */
+function xorInPlace(a: Uint8Array, b: Uint8Array): void {
+  for (let i = 0; i < a.length; i++) a[i]! ^= b[i]!;
+}
+
 /**
  * F4Jumble forward transform per ZIP-316.
- * Two-round unbalanced Feistel cipher.
+ * 4-round unbalanced Feistel: G, H, G, H
+ * Matches librustzcash: g_round(0), h_round(0), g_round(1), h_round(1)
  */
 export function f4Jumble(M: Uint8Array): Uint8Array {
   const l = M.length;
   if (l < 48 || l > 4194368) throw new Error(`f4Jumble: invalid length ${l}`);
 
-  const lL = Math.min(Math.floor(l / 2), 64);
+  const lL = Math.min(Math.floor(l / 2), OUTBYTES);
   const lR = l - lL;
 
-  // split into left (a) and right (b)
-  let a: Uint8Array = Uint8Array.from(M.slice(0, lL));
-  let b: Uint8Array = Uint8Array.from(M.slice(lL));
+  // split into left and right (mutable copies)
+  const left = M.slice(0, lL);
+  const right = M.slice(lL);
 
-  // round 1: b = b XOR G(a)
-  b = xor(b, Uint8Array.from(hashBlake2b(PERS_G(0, lL), a, lR)));
-
-  // round 2: a = a XOR H(b)
-  a = xor(a, Uint8Array.from(hashBlake2b(PERS_H(0, lR), b, lL)));
-
-  // round 3: b = b XOR G(a)
-  b = xor(b, Uint8Array.from(hashBlake2b(PERS_G(1, lL), a, lR)));
-
-  // round 4: a = a XOR H(b)
-  a = xor(a, Uint8Array.from(hashBlake2b(PERS_H(1, lR), b, lL)));
+  // round 1: right ^= G_0(left)
+  xorInPlace(right, gRound(0, left, lR));
+  // round 2: left ^= H_0(right)
+  xorInPlace(left, hRound(0, right, lL));
+  // round 3: right ^= G_1(left)
+  xorInPlace(right, gRound(1, left, lR));
+  // round 4: left ^= H_1(right)
+  xorInPlace(left, hRound(1, right, lL));
 
   const result = new Uint8Array(l);
-  result.set(a, 0);
-  result.set(b, lL);
-  return result;
-}
-
-function xor(a: Uint8Array, b: Uint8Array): Uint8Array {
-  const result = new Uint8Array(a.length);
-  for (let i = 0; i < a.length; i++) result[i] = a[i]! ^ b[i]!;
+  result.set(left, 0);
+  result.set(right, lL);
   return result;
 }
 
@@ -180,16 +189,20 @@ export function encodeOrchardUnifiedAddress(rawBytes: Uint8Array, mainnet = true
     throw new Error(`orchard receiver must be 43 bytes, got ${rawBytes.length}`);
   }
 
+  const hrp = mainnet ? 'u' : 'utest';
+
   // unified address container: typecode (CompactSize) + length (CompactSize) + data + 16-byte padding
   // orchard typecode = 0x03, length = 0x2b (43)
+  // padding = HRP in US-ASCII, right-padded with 0x00 to 16 bytes (ZIP-316)
   const container = new Uint8Array(1 + 1 + 43 + 16);
   container[0] = 0x03; // typecode: orchard
   container[1] = 43; // length
   container.set(rawBytes, 2);
-  // last 16 bytes are zero padding (already zeroed)
+  // write HRP padding at offset 45 (= 1 + 1 + 43)
+  const padOffset = 1 + 1 + rawBytes.length;
+  for (let i = 0; i < hrp.length; i++) container[padOffset + i] = hrp.charCodeAt(i);
 
   const jumbled = f4Jumble(container);
-  const hrp = mainnet ? 'u' : 'utest';
   return bech32mEncode(hrp, jumbled);
 }
 
