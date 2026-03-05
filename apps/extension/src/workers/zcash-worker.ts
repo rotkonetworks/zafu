@@ -17,7 +17,7 @@ import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
 const workerSelf = globalThis as any as DedicatedWorkerGlobalScope;
 
 interface WorkerMessage {
-  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'shield' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos';
+  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-complete' | 'shield' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos';
   id: string;
   network: 'zcash';
   walletId?: string;
@@ -49,6 +49,9 @@ interface DecryptedNote {
   nullifier: string;
   cmx: string;
   txid: string;
+  position: number;
+  rseed?: string;
+  rho?: string;
 }
 
 interface WalletState {
@@ -62,7 +65,13 @@ interface WalletState {
 interface WasmModule {
   WalletKeys: new (seed: string) => WalletKeys;
   build_shielding_transaction(utxos_json: string, privkey_hex: string, recipient: string, amount: bigint, fee: bigint, anchor_height: number, mainnet: boolean): string;
+  build_unsigned_transaction(notes_json: string, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: string, account_index: number, mainnet: boolean): string;
+  build_signed_spend_transaction(seed_phrase: string, notes_json: unknown, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: unknown, account_index: number, mainnet: boolean): string;
+  complete_transaction(unsigned_tx_json: string, signatures_json: string): string;
   derive_transparent_privkey(seed_phrase: string, account: number, index: number): string;
+  build_merkle_paths(tree_state_hex: string, compact_blocks_json: string, note_positions_json: string, anchor_height: number): unknown;
+  frontier_tree_size(tree_state_hex: string): bigint;
+  tree_root_hex(tree_state_hex: string): string;
 }
 
 let wasmModule: WasmModule | null = null;
@@ -239,6 +248,132 @@ const initWasm = async (): Promise<void> => {
   wasm.init();
   wasmModule = wasm;
   console.log('[zcash-worker] wasm ready');
+};
+
+// ── ZIP-317 fee computation ──
+
+const MARGINAL_FEE = 5000n;
+const GRACE_ACTIONS = 2;
+const MIN_ORCHARD_ACTIONS = 2;
+
+const computeFee = (nSpends: number, nZOutputs: number, nTOutputs: number, hasChange: boolean): bigint => {
+  const nOrchardOutputs = nZOutputs + (hasChange ? 1 : 0);
+  const nOrchardActions = Math.max(nSpends, nOrchardOutputs, MIN_ORCHARD_ACTIONS);
+  const logicalActions = nOrchardActions + nTOutputs;
+  return MARGINAL_FEE * BigInt(Math.max(logicalActions, GRACE_ACTIONS));
+};
+
+// ── note selection (largest first) ──
+
+const selectNotes = (notes: DecryptedNote[], spentNullifiers: Set<string>, target: bigint): DecryptedNote[] => {
+  const unspent = notes.filter(n => !spentNullifiers.has(n.nullifier));
+  unspent.sort((a, b) => Number(BigInt(b.value) - BigInt(a.value)));
+  const selected: DecryptedNote[] = [];
+  let total = 0n;
+  for (const note of unspent) {
+    total += BigInt(note.value);
+    selected.push(note);
+    if (total >= target) return selected;
+  }
+  throw new Error(`insufficient funds: have ${total} zat, need ${target} zat`);
+};
+
+// ── witness building helpers ──
+
+const WITNESS_BATCH_SIZE = 1000;
+
+/** binary search for checkpoint height whose tree size is just before target_position */
+const findCheckpointHeight = async (
+  client: { getTreeState(h: number): Promise<{ height: number; orchardTree: string }> },
+  targetPosition: number,
+  activation: number,
+  tip: number,
+): Promise<{ height: number; size: number }> => {
+  if (!wasmModule) throw new Error('wasm not initialized');
+  let lo = activation;
+  let hi = tip;
+  let bestHeight = activation;
+  let bestSize = 0;
+
+  while (lo + 100 < hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    const ts = await client.getTreeState(mid);
+    const size = Number(wasmModule!.frontier_tree_size(ts.orchardTree));
+    if (size <= targetPosition) {
+      bestHeight = ts.height;
+      bestSize = size;
+      lo = mid + 1;
+    } else {
+      hi = mid;
+    }
+  }
+
+  return { height: bestHeight, size: bestSize };
+};
+
+/** build merkle witnesses by replaying blocks from checkpoint to anchor */
+const buildWitnesses = async (
+  client: {
+    getTreeState(h: number): Promise<{ height: number; orchardTree: string }>;
+    getCompactBlocks(start: number, end: number): Promise<Array<{ height: number; actions: Array<{ cmx: Uint8Array }> }>>;
+  },
+  notes: DecryptedNote[],
+  anchorHeight: number,
+  mainnet: boolean,
+): Promise<{ anchorHex: string; paths: string }> => {
+  if (!wasmModule) throw new Error('wasm not initialized');
+
+  const activation = mainnet ? 1_687_104 : 1_842_420;
+  const earliestPosition = Math.min(...notes.map(n => n.position));
+
+  console.log(`[zcash-worker] earliest note position: ${earliestPosition}`);
+
+  // find checkpoint
+  const checkpoint = await findCheckpointHeight(client, earliestPosition, activation, anchorHeight);
+  console.log(`[zcash-worker] checkpoint: height=${checkpoint.height} size=${checkpoint.size}`);
+
+  // get tree state at checkpoint
+  const ts = await client.getTreeState(checkpoint.height);
+
+  // replay blocks from checkpoint+1 to anchorHeight
+  const replayStart = checkpoint.height + 1;
+  const compactBlocks: Array<{ height: number; actions: Array<{ cmx_hex: string }> }> = [];
+
+  let current = replayStart;
+  while (current <= anchorHeight) {
+    const end = Math.min(current + WITNESS_BATCH_SIZE - 1, anchorHeight);
+    const blocks = await client.getCompactBlocks(current, end);
+    for (const block of blocks) {
+      compactBlocks.push({
+        height: block.height,
+        actions: block.actions.map(a => ({ cmx_hex: hexEncode(a.cmx) })),
+      });
+    }
+    current = end + 1;
+  }
+
+  console.log(`[zcash-worker] replayed ${compactBlocks.length} blocks for witnesses`);
+
+  // call witness WASM
+  const positions = notes.map(n => n.position);
+  const resultRaw = wasmModule!.build_merkle_paths(
+    ts.orchardTree,
+    JSON.stringify(compactBlocks),
+    JSON.stringify(positions),
+    anchorHeight,
+  );
+
+  // WASM returns JsValue::from_str(json) — comes through as a string
+  const result = JSON.parse(resultRaw as string) as { anchor_hex: string; paths: unknown[] };
+
+  // verify anchor matches network state
+  const anchorTs = await client.getTreeState(anchorHeight);
+  const networkRoot = wasmModule!.tree_root_hex(anchorTs.orchardTree);
+  if (result.anchor_hex !== networkRoot) {
+    throw new Error(`tree root mismatch at height ${anchorHeight} (ours=${result.anchor_hex}, network=${networkRoot})`);
+  }
+
+  return { anchorHex: result.anchor_hex, paths: JSON.stringify(result.paths) };
 };
 
 const deriveAddress = (mnemonic: string, accountIndex: number): string => {
@@ -514,6 +649,162 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const { txBytes } = payload as { txBytes: number[] };
         const memos = memoState.keys.decrypt_transaction_memos(new Uint8Array(txBytes));
         workerSelf.postMessage({ type: 'memos', id, network: 'zcash', walletId, payload: memos });
+        return;
+      }
+
+      case 'send-tx': {
+        if (!walletId) throw new Error('walletId required');
+        await initWasm();
+        if (!wasmModule) throw new Error('wasm not initialized');
+
+        const sendPayload = payload as {
+          serverUrl: string; recipient: string; amount: string; memo: string;
+          accountIndex: number; mainnet: boolean;
+          mnemonic?: string;
+        };
+
+        // load wallet state from IDB
+        const sendState = await loadState(walletId);
+        const amountZat = BigInt(sendPayload.amount);
+
+        // determine recipient type for fee calc
+        const isTransparent = sendPayload.recipient.startsWith('t1') || sendPayload.recipient.startsWith('tm');
+        const nZOutputs = isTransparent ? 0 : 1;
+        const nTOutputs = isTransparent ? 1 : 0;
+
+        // estimate fee and select notes
+        const estFee = computeFee(1, nZOutputs, nTOutputs, true);
+        const selected = selectNotes(sendState.notes, sendState.spentNullifiers, amountZat + estFee);
+
+        // compute exact fee
+        const totalIn = selected.reduce((sum, n) => sum + BigInt(n.value), 0n);
+        const hasChange = totalIn > amountZat + computeFee(selected.length, nZOutputs, nTOutputs, true);
+        const fee = computeFee(selected.length, nZOutputs, nTOutputs, hasChange);
+        if (totalIn < amountZat + fee) {
+          throw new Error(`insufficient funds: have ${totalIn} zat, need ${amountZat + fee} zat`);
+        }
+
+        console.log(`[zcash-worker] send: ${selected.length} notes, amount=${amountZat}, fee=${fee}`);
+
+        // build merkle witnesses
+        const { ZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
+        const sendClient = new ZidecarClient(sendPayload.serverUrl);
+        const sendTip = await sendClient.getTip();
+
+        const { anchorHex, paths } = await buildWitnesses(
+          sendClient, selected, sendTip.height, sendPayload.mainnet,
+        );
+
+        if (sendPayload.mnemonic) {
+          // mnemonic wallet: build fully signed transaction and broadcast directly
+          const notesJson = selected.map(n => ({
+            value: Number(n.value),
+            nullifier: n.nullifier,
+            cmx: n.cmx,
+            position: n.position,
+            rseed_hex: n.rseed ?? '',
+            rho_hex: n.rho ?? '',
+          }));
+
+          // parse merkle paths result for WASM
+          const pathsResult = JSON.parse(paths) as Array<{ position: number; path: Array<{ hash: string }> }>;
+          const merklePathsForWasm = pathsResult.map(p => ({
+            path: p.path.map(e => e.hash),
+            position: p.position,
+          }));
+
+          const txHex = wasmModule.build_signed_spend_transaction(
+            sendPayload.mnemonic,
+            notesJson,
+            sendPayload.recipient,
+            amountZat,
+            fee,
+            anchorHex,
+            merklePathsForWasm,
+            sendPayload.accountIndex,
+            sendPayload.mainnet,
+          );
+
+          // broadcast
+          const txData = new Uint8Array(txHex.match(/.{2}/g)!.map(b => parseInt(b, 16)));
+          const { ZidecarClient: ZC2 } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
+          const broadcastClient = new ZC2(sendPayload.serverUrl);
+          const result = await broadcastClient.sendTransaction(txData);
+          if (result.errorCode !== 0) {
+            throw new Error(`broadcast failed (${result.errorCode}): ${result.errorMessage}`);
+          }
+
+          const txid = hexEncode(result.txid);
+          workerSelf.postMessage({
+            type: 'tx-result', id, network: 'zcash', walletId,
+            payload: { txid, fee: fee.toString() },
+          });
+          return;
+        }
+
+        // zigner wallet: build unsigned transaction for cold signing
+        const notesJson = JSON.stringify(selected.map(n => ({
+          value: n.value,
+          nullifier: n.nullifier,
+          cmx: n.cmx,
+          position: n.position,
+        })));
+
+        // build unsigned transaction
+        const unsignedResult = wasmModule.build_unsigned_transaction(
+          notesJson,
+          sendPayload.recipient,
+          amountZat,
+          fee,
+          anchorHex,
+          paths,
+          sendPayload.accountIndex,
+          sendPayload.mainnet,
+        );
+
+        const parsed = JSON.parse(unsignedResult) as {
+          sighash: string; alphas: string[]; unsigned_tx: string; summary: string;
+        };
+
+        workerSelf.postMessage({
+          type: 'send-tx-unsigned', id, network: 'zcash', walletId,
+          payload: {
+            sighash: parsed.sighash,
+            alphas: parsed.alphas,
+            summary: parsed.summary,
+            fee: fee.toString(),
+            unsignedTx: parsed.unsigned_tx,
+          },
+        });
+        return;
+      }
+
+      case 'send-tx-complete': {
+        if (!walletId) throw new Error('walletId required');
+        await initWasm();
+        if (!wasmModule) throw new Error('wasm not initialized');
+
+        const completePayload = payload as {
+          serverUrl: string; unsignedTx: string;
+          signatures: { orchardSigs: string[]; transparentSigs: string[] };
+        };
+
+        const signaturesJson = JSON.stringify(completePayload.signatures);
+        const txHex = wasmModule.complete_transaction(completePayload.unsignedTx, signaturesJson);
+        const txData = new Uint8Array(txHex.match(/.{2}/g)!.map(b => parseInt(b, 16)));
+
+        const { ZidecarClient: ZC } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
+        const completeClient = new ZC(completePayload.serverUrl);
+        const result = await completeClient.sendTransaction(txData);
+        if (result.errorCode !== 0) {
+          throw new Error(`broadcast failed (${result.errorCode}): ${result.errorMessage}`);
+        }
+
+        const txid = hexEncode(result.txid);
+        workerSelf.postMessage({
+          type: 'tx-result', id, network: 'zcash', walletId,
+          payload: { txid },
+        });
         return;
       }
 

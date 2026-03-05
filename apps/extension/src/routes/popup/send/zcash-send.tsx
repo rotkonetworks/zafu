@@ -9,11 +9,17 @@
  * 5. broadcast transaction
  */
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import { useStore } from '../../../state';
 import { zignerSigningSelector } from '../../../state/zigner-signing';
 import { recentAddressesSelector } from '../../../state/recent-addresses';
 import { contactsSelector } from '../../../state/contacts';
+import { selectEffectiveKeyInfo, keyRingSelector } from '../../../state/keyring';
+import {
+  buildSendTxInWorker,
+  completeSendTxInWorker,
+  type SendTxUnsignedResult,
+} from '../../../state/keyring/network-worker';
 import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
 import { QrDisplay } from '../../../shared/components/qr-display';
@@ -23,6 +29,8 @@ import {
   encodeZcashSignRequest,
   isZcashSignatureQR,
   parseZcashSignatureResponse,
+  hexToBytes,
+  bytesToHex,
 } from '@repo/wallet/networks';
 
 interface ZcashSendProps {
@@ -37,7 +45,7 @@ interface ZcashSendProps {
   };
 }
 
-type SendStep = 'form' | 'review' | 'sign' | 'scan' | 'broadcast' | 'complete' | 'error';
+type SendStep = 'form' | 'review' | 'building' | 'sign' | 'scan' | 'broadcast' | 'complete' | 'error';
 
 export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSendProps) {
   const {
@@ -64,12 +72,16 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const [showSavePrompt, setShowSavePrompt] = useState(false);
   const [contactName, setContactName] = useState('');
   const [showContactModal, setShowContactModal] = useState(false);
+  const [fee, setFee] = useState('0.0001');
+  const unsignedTxRef = useRef<SendTxUnsignedResult | null>(null);
+
+  // store access for wallet id and server url
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  const { getMnemonic } = useStore(keyRingSelector);
+  const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
 
   // get recent zcash addresses
   const recentAddresses = useMemo(() => getRecent('zcash', 3), [getRecent]);
-
-  // mock fee for now
-  const fee = '0.0001';
 
   const validateForm = (): boolean => {
     if (!recipient.trim()) {
@@ -97,39 +109,81 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     }
   };
 
-  const handleSign = () => {
-    // create sign request qr
-    // in real implementation, this would:
-    // 1. fetch spendable notes
-    // 2. build unsigned transaction
-    // 3. compute sighash and alphas
-    // for now, create a mock sign request
+  const handleSign = async () => {
+    if (!selectedKeyInfo) {
+      setFormError('no wallet selected');
+      return;
+    }
 
-    const mockSighash = new Uint8Array(32).fill(0x42);
-    const mockAlpha = new Uint8Array(32).fill(0x13);
+    setStep('building');
+    setFormError(null);
 
-    const signRequest = encodeZcashSignRequest({
-      accountIndex,
-      sighash: mockSighash,
-      orchardAlphas: [mockAlpha],
-      summary: `send ${amount} zec to ${recipient.slice(0, 20)}...`,
-      mainnet,
-    });
+    try {
+      const walletId = selectedKeyInfo.id;
+      const amountZat = Math.round(Number(amount) * 1e8).toString();
 
-    setSignRequestQr(signRequest);
+      if (selectedKeyInfo.type === 'mnemonic') {
+        // mnemonic wallet: build signed tx + broadcast directly (no QR flow)
+        const mnemonic = await getMnemonic(walletId);
+        const result = await buildSendTxInWorker(
+          'zcash', walletId, zidecarUrl, recipient.trim(), amountZat, memo,
+          accountIndex, mainnet, mnemonic,
+        );
 
-    startSigning({
-      id: `zcash-${Date.now()}`,
-      network: 'zcash',
-      summary: `send ${amount} zec`,
-      signRequestQr: signRequest,
-      recipient,
-      amount,
-      fee,
-      createdAt: Date.now(),
-    });
+        if ('txid' in result) {
+          const feeZec = (Number(result.fee) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
+          setFee(feeZec);
+          complete(result.txid);
+          setStep('complete');
+          void recordUsage(recipient, 'zcash');
+          if (shouldSuggestSave(recipient)) {
+            setShowSavePrompt(true);
+          }
+        }
+      } else {
+        // zigner wallet: build unsigned tx → QR signing flow
+        const result = await buildSendTxInWorker(
+          'zcash', walletId, zidecarUrl, recipient.trim(), amountZat, memo, accountIndex, mainnet,
+        );
 
-    setStep('sign');
+        if (!('sighash' in result)) {
+          throw new Error('unexpected result from unsigned tx build');
+        }
+
+        unsignedTxRef.current = result;
+        const feeZec = (Number(result.fee) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
+        setFee(feeZec);
+
+        const sighashBytes = hexToBytes(result.sighash);
+        const alphaBytes = result.alphas.map(a => hexToBytes(a));
+
+        const signRequest = encodeZcashSignRequest({
+          accountIndex,
+          sighash: sighashBytes,
+          orchardAlphas: alphaBytes,
+          summary: result.summary || `send ${amount} zec to ${recipient.slice(0, 20)}...`,
+          mainnet,
+        });
+
+        setSignRequestQr(signRequest);
+
+        startSigning({
+          id: `zcash-${Date.now()}`,
+          network: 'zcash',
+          summary: `send ${amount} zec`,
+          signRequestQr: signRequest,
+          recipient,
+          amount,
+          fee: feeZec,
+          createdAt: Date.now(),
+        });
+
+        setStep('sign');
+      }
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'failed to build transaction');
+      setStep('error');
+    }
   };
 
   const handleScanSignature = () => {
@@ -138,7 +192,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   };
 
   const handleSignatureScanned = useCallback(
-    (data: string) => {
+    async (data: string) => {
       if (!isZcashSignatureQR(data)) {
         setError('invalid signature qr code');
         setStep('error');
@@ -155,30 +209,42 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         processSignature(data);
         setStep('broadcast');
 
-        // simulate broadcast
-        setTimeout(() => {
-          const mockTxHash = 'zcash_tx_' + Math.random().toString(36).substring(2, 15);
-          complete(mockTxHash);
-          setStep('complete');
-          // record address usage
-          void recordUsage(recipient, 'zcash');
-          // check if we should prompt to save as contact
-          if (shouldSuggestSave(recipient)) {
-            setShowSavePrompt(true);
-          }
-        }, 2000);
+        if (!unsignedTxRef.current || !selectedKeyInfo) {
+          throw new Error('missing unsigned transaction data');
+        }
+
+        // convert signatures to hex strings for worker
+        const signatures = {
+          orchardSigs: sigResponse.orchardSigs.map(s => bytesToHex(s)),
+          transparentSigs: sigResponse.transparentSigs.map(s => bytesToHex(s)),
+        };
+
+        const result = await completeSendTxInWorker(
+          'zcash', selectedKeyInfo.id, zidecarUrl,
+          unsignedTxRef.current.unsignedTx, signatures,
+        );
+
+        complete(result.txid);
+        setStep('complete');
+        void recordUsage(recipient, 'zcash');
+        if (shouldSuggestSave(recipient)) {
+          setShowSavePrompt(true);
+        }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'failed to parse signature');
+        setError(err instanceof Error ? err.message : 'failed to broadcast transaction');
         setStep('error');
       }
     },
-    [processSignature, complete, setError]
+    [processSignature, complete, setError, selectedKeyInfo, zidecarUrl, recipient, recordUsage, shouldSuggestSave]
   );
 
   const handleBack = () => {
     switch (step) {
       case 'review':
         setStep('form');
+        break;
+      case 'building':
+        setStep('review');
         break;
       case 'sign':
         setStep('review');
@@ -187,7 +253,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         setStep('sign');
         break;
       case 'error':
-        setStep('sign');
+        setStep('review');
         break;
       default:
         onClose();
@@ -325,10 +391,24 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               <Button variant="secondary" onClick={handleBack} className="flex-1">
                 back
               </Button>
-              <Button variant="gradient" onClick={handleSign} className="flex-1">
-sign with zafu zigner
+              <Button variant="gradient" onClick={() => void handleSign()} className="flex-1">
+                {selectedKeyInfo?.type === 'mnemonic' ? 'sign & send' : 'sign with zafu zigner'}
               </Button>
             </div>
+          </div>
+        );
+
+      case 'building':
+        return (
+          <div className="flex flex-col items-center gap-4 p-8">
+            <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center animate-pulse">
+              <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+            <h2 className="text-xl font-bold">building transaction</h2>
+            <p className="text-sm text-muted-foreground text-center">
+              selecting notes, building merkle witnesses, and preparing transaction for signing...
+            </p>
+            <p className="text-xs text-muted-foreground">this may take a moment</p>
           </div>
         );
 

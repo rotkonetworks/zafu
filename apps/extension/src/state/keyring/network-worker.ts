@@ -17,7 +17,7 @@
 import type { NetworkType } from './types';
 
 export interface NetworkWorkerMessage {
-  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'shield' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos';
+  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-complete' | 'shield' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -25,7 +25,7 @@ export interface NetworkWorkerMessage {
 }
 
 export interface NetworkWorkerResponse {
-  type: 'ready' | 'address' | 'sync-progress' | 'sync-started' | 'sync-stopped' | 'sync-reset' | 'balance' | 'tx-result' | 'shield-result' | 'wallets' | 'wallet-deleted' | 'notes' | 'memos' | 'error';
+  type: 'ready' | 'address' | 'sync-progress' | 'sync-started' | 'sync-stopped' | 'sync-reset' | 'balance' | 'tx-result' | 'send-tx-unsigned' | 'shield-result' | 'wallets' | 'wallet-deleted' | 'notes' | 'memos' | 'error';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -304,6 +304,48 @@ export const shieldInWorker = async (
   addressIndexMap?: Record<string, number>,
 ): Promise<ShieldResult> => {
   return callWorker(network, 'shield', { mnemonic, serverUrl, tAddresses, mainnet, addressIndexMap }, walletId);
+};
+
+/** result of building an unsigned send transaction */
+export interface SendTxUnsignedResult {
+  sighash: string;
+  alphas: string[];
+  summary: string;
+  fee: string;
+  unsignedTx: string;
+}
+
+/**
+ * build a send transaction (runs in worker with witness building)
+ *
+ * if mnemonic is provided: builds fully signed tx + broadcasts, returns { txid, fee }
+ * if no mnemonic: builds unsigned tx for cold signing via QR
+ */
+export const buildSendTxInWorker = async (
+  network: NetworkType,
+  walletId: string,
+  serverUrl: string,
+  recipient: string,
+  amount: string,
+  memo: string,
+  accountIndex: number,
+  mainnet: boolean,
+  mnemonic?: string,
+): Promise<SendTxUnsignedResult | { txid: string; fee: string }> => {
+  return callWorker(network, 'send-tx', { serverUrl, recipient, amount, memo, accountIndex, mainnet, mnemonic }, walletId);
+};
+
+/**
+ * complete a send transaction with signatures and broadcast
+ */
+export const completeSendTxInWorker = async (
+  network: NetworkType,
+  walletId: string,
+  serverUrl: string,
+  unsignedTx: string,
+  signatures: { orchardSigs: string[]; transparentSigs: string[] },
+): Promise<{ txid: string }> => {
+  return callWorker(network, 'send-tx-complete', { serverUrl, unsignedTx, signatures }, walletId);
 };
 
 /**

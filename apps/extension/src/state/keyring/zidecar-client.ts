@@ -383,6 +383,14 @@ export class ZidecarClient {
     return a;
   }
 
+  /** get tree state at a specific height (orchard frontier for witness building) */
+  async getTreeState(height: number): Promise<{ height: number; orchardTree: string }> {
+    // encode BlockId proto: field 1 = height (varint)
+    const parts: number[] = [0x08, ...this.varint(height)];
+    const resp = await this.grpcCall('GetTreeState', new Uint8Array(parts));
+    return this.parseTreeState(resp);
+  }
+
   /** get transparent address UTXOs */
   async getAddressUtxos(addresses: string[], startHeight = 0, maxEntries = 0): Promise<Utxo[]> {
     // encode GetAddressUtxosArg proto
@@ -583,5 +591,48 @@ export class ZidecarClient {
     }
 
     return utxo;
+  }
+
+  private parseTreeState(buf: Uint8Array): { height: number; orchardTree: string } {
+    // TreeState proto:
+    //   field 1: uint32 height (varint, tag 0x08)
+    //   field 2: bytes hash (length-delimited, tag 0x12)
+    //   field 3: uint64 time (varint, tag 0x18)
+    //   field 4: string sapling_tree (length-delimited, tag 0x22)
+    //   field 5: string orchard_tree (length-delimited, tag 0x2a)
+    let height = 0;
+    let orchardTree = '';
+    let pos = 0;
+    const decoder = new TextDecoder();
+
+    while (pos < buf.length) {
+      const tag = buf[pos++]!;
+      const field = tag >> 3;
+      const wire = tag & 0x7;
+
+      if (wire === 0) {
+        let v = 0, s = 0;
+        while (pos < buf.length) {
+          const b = buf[pos++]!;
+          v |= (b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7;
+        }
+        if (field === 1) height = v;
+      } else if (wire === 2) {
+        let len = 0, s = 0;
+        while (pos < buf.length) {
+          const b = buf[pos++]!;
+          len |= (b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7;
+        }
+        const data = buf.subarray(pos, pos + len);
+        if (field === 5) orchardTree = decoder.decode(data);
+        pos += len;
+      } else break;
+    }
+
+    return { height, orchardTree };
   }
 }
