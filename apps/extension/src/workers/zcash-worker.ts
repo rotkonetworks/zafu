@@ -52,6 +52,7 @@ interface DecryptedNote {
   position: number;
   rseed?: string;
   rho?: string;
+  recipient?: string;
 }
 
 interface WalletState {
@@ -220,12 +221,18 @@ const getSyncHeight = async (walletId: string): Promise<number> => {
   return r?.value ?? 0;
 };
 
-/** batch-save notes + spent + sync height in one transaction */
+const getTreeSize = async (walletId: string): Promise<number> => {
+  const r = await idbGet<{ value: number }>('meta', [walletId, 'orchardTreeSize']);
+  return r?.value ?? 0;
+};
+
+/** batch-save notes + spent + sync height + tree size in one transaction */
 const saveBatch = async (
   walletId: string,
   notes: DecryptedNote[],
   spent: string[],
   syncHeight: number,
+  orchardTreeSize?: number,
 ): Promise<void> => {
   const db = await getDb();
   const tx = db.transaction(['notes', 'spent', 'meta'], 'readwrite');
@@ -235,6 +242,9 @@ const saveBatch = async (
   for (const note of notes) notesStore.put({ ...note, walletId });
   for (const nf of spent) spentStore.put({ walletId, nullifier: nf });
   metaStore.put({ walletId, key: 'syncHeight', value: syncHeight });
+  if (orchardTreeSize !== undefined) {
+    metaStore.put({ walletId, key: 'orchardTreeSize', value: orchardTreeSize });
+  }
   await txComplete(tx);
 };
 
@@ -356,20 +366,29 @@ const buildWitnesses = async (
 
   // call witness WASM
   const positions = notes.map(n => n.position);
-  const resultRaw = wasmModule!.build_merkle_paths(
-    ts.orchardTree,
-    JSON.stringify(compactBlocks),
-    JSON.stringify(positions),
-    anchorHeight,
-  );
+  console.log(`[zcash-worker] building merkle paths: positions=${JSON.stringify(positions)}, anchorHeight=${anchorHeight}, blocks=${compactBlocks.length}`);
+  let resultRaw: unknown;
+  try {
+    resultRaw = wasmModule!.build_merkle_paths(
+      ts.orchardTree,
+      JSON.stringify(compactBlocks),
+      JSON.stringify(positions),
+      anchorHeight,
+    );
+  } catch (e) {
+    console.error('[zcash-worker] build_merkle_paths failed:', e);
+    throw e;
+  }
 
   // WASM returns JsValue::from_str(json) — comes through as a string
   const result = JSON.parse(resultRaw as string) as { anchor_hex: string; paths: unknown[] };
+  console.log(`[zcash-worker] merkle paths built, anchor=${result.anchor_hex}`);
 
   // verify anchor matches network state
   const anchorTs = await client.getTreeState(anchorHeight);
   const networkRoot = wasmModule!.tree_root_hex(anchorTs.orchardTree);
   if (result.anchor_hex !== networkRoot) {
+    console.error(`[zcash-worker] tree root mismatch: ours=${result.anchor_hex}, network=${networkRoot}`);
     throw new Error(`tree root mismatch at height ${anchorHeight} (ours=${result.anchor_hex}, network=${networkRoot})`);
   }
 
@@ -413,7 +432,21 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
   const { ZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
   const client = new ZidecarClient(serverUrl);
 
-  console.log(`[zcash-worker] sync start wallet=${walletId} height=${currentHeight} (idb=${syncedHeight}, requested=${startHeight ?? 'none'})`);
+  // track orchard commitment tree size for note position computation
+  let orchardTreeSize = await getTreeSize(walletId);
+
+  // if we don't have a tree size yet, fetch it from the network
+  if (orchardTreeSize === 0 && currentHeight > 0) {
+    try {
+      const ts = await client.getTreeState(currentHeight);
+      orchardTreeSize = Number(wasmModule!.frontier_tree_size(ts.orchardTree));
+      console.log(`[zcash-worker] initial tree size from network: ${orchardTreeSize} at height ${currentHeight}`);
+    } catch (e) {
+      console.warn('[zcash-worker] failed to get initial tree size:', e);
+    }
+  }
+
+  console.log(`[zcash-worker] sync start wallet=${walletId} height=${currentHeight} treeSize=${orchardTreeSize} (idb=${syncedHeight}, requested=${startHeight ?? 'none'})`);
 
   // emit initial sync-progress so UI gets persisted height + can fetch balance immediately
   workerSelf.postMessage({
@@ -448,6 +481,7 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
 
       // build cmx→txid lookup only from raw block data (for found note matching)
       const cmxToTxid = new Map<string, string>();
+      const actionNullifiers = new Set<string>();
       let actionCount = 0;
 
       // pack actions into binary format for scan_actions_parallel
@@ -470,8 +504,9 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
             if (a.cmx.length === 32) buf.set(a.cmx, off); off += 32;
             if (a.ephemeralKey.length === 32) buf.set(a.ephemeralKey, off); off += 32;
             if (a.ciphertext.length >= 52) buf.set(a.ciphertext.subarray(0, 52), off); off += 52;
-            // build cmx→txid map only during packing (one pass)
+            // build cmx→txid map + collect action nullifiers (one pass)
             cmxToTxid.set(hexEncode(a.cmx), hexEncode(a.txid));
+            actionNullifiers.add(hexEncode(a.nullifier));
           }
         }
 
@@ -490,23 +525,29 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
         console.log(`[zcash-worker] scanned in ${(performance.now() - t0).toFixed(0)}ms, found ${foundNotes.length}`);
 
         for (const note of foundNotes) {
-          const full: DecryptedNote = { ...note, txid: cmxToTxid.get(note.cmx) ?? '' };
+          // compute absolute tree position: batch start + index within batch
+          const position = orchardTreeSize + (note as unknown as { index: number }).index;
+          const full: DecryptedNote = { ...note, position, txid: cmxToTxid.get(note.cmx) ?? '' };
+          console.log(`[zcash-worker] found note: value=${note.value}, pos=${position}, hasRseed=${!!note.rseed}, hasRho=${!!note.rho}, hasRecipient=${!!(note as unknown as { recipient?: string }).recipient}`);
           newNotes.push(full);
           state.notes.push(full);
+        }
 
-          if (!state.spentNullifiers.has(note.nullifier)) {
-            const spent = state.notes.find(n => n.nullifier === note.nullifier && n !== full);
-            if (spent) {
-              state.spentNullifiers.add(note.nullifier);
-              newSpent.push(note.nullifier);
-            }
+        // detect spent notes: check if any action nullifier matches an owned note's nullifier
+        for (const note of state.notes) {
+          if (!state.spentNullifiers.has(note.nullifier) && actionNullifiers.has(note.nullifier)) {
+            state.spentNullifiers.add(note.nullifier);
+            newSpent.push(note.nullifier);
           }
         }
       }
 
+      // advance tree size by total actions in this batch
+      orchardTreeSize += actionCount;
+
       // single batched db write for entire batch
       currentHeight = endHeight;
-      await saveBatch(walletId, newNotes, newSpent, currentHeight);
+      await saveBatch(walletId, newNotes, newSpent, currentHeight, orchardTreeSize);
 
       // persist to chrome.storage for popup reactivity
       try { chrome.storage?.local?.set({ zcashSyncHeight: currentHeight }); } catch (e) {
@@ -684,7 +725,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           throw new Error(`insufficient funds: have ${totalIn} zat, need ${amountZat + fee} zat`);
         }
 
-        console.log(`[zcash-worker] send: ${selected.length} notes, amount=${amountZat}, fee=${fee}`);
+        console.log(`[zcash-worker] send: ${selected.length} notes, amount=${amountZat}, fee=${fee}, totalNotes=${sendState.notes.length}, spentNullifiers=${sendState.spentNullifiers.size}`);
 
         // build merkle witnesses
         const { ZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
@@ -704,6 +745,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             position: n.position,
             rseed_hex: n.rseed ?? '',
             rho_hex: n.rho ?? '',
+            recipient_hex: n.recipient ?? '',
           }));
 
           // parse merkle paths result for WASM
@@ -713,28 +755,45 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             position: p.position,
           }));
 
-          const txHex = wasmModule.build_signed_spend_transaction(
-            sendPayload.mnemonic,
-            notesJson,
-            sendPayload.recipient,
-            amountZat,
-            fee,
-            anchorHex,
-            merklePathsForWasm,
-            sendPayload.accountIndex,
-            sendPayload.mainnet,
-          );
+          console.log(`[zcash-worker] building signed tx: notes=${JSON.stringify(notesJson.map(n => ({ value: n.value, pos: n.position, nf: n.nullifier.slice(0, 8) })))}, recipient=${sendPayload.recipient}, amount=${amountZat}, fee=${fee}, anchor=${anchorHex.slice(0, 16)}...`);
+
+          let txHex: string;
+          try {
+            txHex = wasmModule.build_signed_spend_transaction(
+              sendPayload.mnemonic,
+              notesJson,
+              sendPayload.recipient,
+              amountZat,
+              fee,
+              anchorHex,
+              merklePathsForWasm,
+              sendPayload.accountIndex,
+              sendPayload.mainnet,
+            );
+          } catch (e) {
+            console.error('[zcash-worker] build_signed_spend_transaction failed:', e);
+            throw e;
+          }
+
+          console.log(`[zcash-worker] signed tx built, ${txHex.length / 2} bytes`);
 
           // broadcast
           const txData = new Uint8Array(txHex.match(/.{2}/g)!.map(b => parseInt(b, 16)));
           const { ZidecarClient: ZC2 } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
           const broadcastClient = new ZC2(sendPayload.serverUrl);
-          const result = await broadcastClient.sendTransaction(txData);
+          let result: { errorCode: number; errorMessage: string; txid: Uint8Array };
+          try {
+            result = await broadcastClient.sendTransaction(txData);
+          } catch (e) {
+            console.error('[zcash-worker] broadcast RPC failed:', e);
+            throw e;
+          }
           if (result.errorCode !== 0) {
             throw new Error(`broadcast failed (${result.errorCode}): ${result.errorMessage}`);
           }
 
-          const txid = hexEncode(result.txid);
+          const txid = new TextDecoder().decode(result.txid);
+          console.log(`[zcash-worker] broadcast success, txid=${txid}`);
           workerSelf.postMessage({
             type: 'tx-result', id, network: 'zcash', walletId,
             payload: { txid, fee: fee.toString() },
@@ -800,7 +859,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           throw new Error(`broadcast failed (${result.errorCode}): ${result.errorMessage}`);
         }
 
-        const txid = hexEncode(result.txid);
+        const txid = new TextDecoder().decode(result.txid);
         workerSelf.postMessage({
           type: 'tx-result', id, network: 'zcash', walletId,
           payload: { txid },
@@ -885,7 +944,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           const result = await client.sendTransaction(txData);
           if (result.errorCode !== 0) throw new Error(`broadcast failed (${result.errorCode}): ${result.errorMessage}`);
 
-          lastTxid = hexEncode(result.txid);
+          lastTxid = new TextDecoder().decode(result.txid);
           totalShielded += shieldAmount;
           totalFee += fee;
           totalUtxos += utxos.length;
