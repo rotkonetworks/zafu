@@ -95,7 +95,8 @@ async function deriveZcashAddressFromUfvk(ufvk: string, diversifierIndex = 0): P
   // WatchOnlyWallet expects raw FVK bytes, but if we have a ufvk string
   // we need to use address_from_ufvk if it exists, otherwise fall back
   if (typeof zcashWasm.address_from_ufvk === 'function') {
-    return zcashWasm.address_from_ufvk(ufvk, diversifierIndex);
+    const raw = zcashWasm.address_from_ufvk(ufvk, diversifierIndex);
+    return fixOrchardAddress(raw, !ufvk.startsWith('uviewtest'));
   }
   // fallback: try WatchOnlyWallet if the ufvk is in qr hex format
   const wallet = zcashWasm.WatchOnlyWallet.from_qr_hex(ufvk);
@@ -104,6 +105,13 @@ async function deriveZcashAddressFromUfvk(ufvk: string, diversifierIndex = 0): P
   } finally {
     wallet.free();
   }
+}
+
+/** derive transparent address from UFVK (uses cached wasm) */
+export async function deriveZcashTransparentFromUfvk(ufvk: string): Promise<string> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const zcashWasm = await loadZcashWasm() as any;
+  return zcashWasm.transparent_address_from_ufvk(ufvk) as string;
 }
 
 export function useActiveAddress() {
@@ -219,22 +227,43 @@ export function useActiveAddress() {
         }
 
         if (activeNetwork === 'zcash' && zcashWallet) {
-          // use stored address if available (watch-only without ufvk — no rotation)
-          if (zcashWallet.address && !zcashWallet.orchardFvk?.startsWith('uview')) {
-            if (!cancelled) setAddress(fixOrchardAddress(zcashWallet.address, true));
-            if (!cancelled) setLoading(false);
-            return;
-          }
-          // derive from UFVK if orchardFvk is a ufvk string (uview1.../uviewtest1...)
-          if (zcashWallet.orchardFvk?.startsWith('uview')) {
+          const mainnet = zcashWallet.mainnet ?? true;
+          console.log('[use-address] zcash wallet:', { orchardFvk: zcashWallet.orchardFvk?.slice(0, 20), ufvk: zcashWallet.ufvk?.slice(0, 20), address: zcashWallet.address?.slice(0, 20), label: zcashWallet.label });
+          // derive from UFVK string (stored in ufvk field or orchardFvk field)
+          const ufvkStr = zcashWallet.ufvk ?? (zcashWallet.orchardFvk?.startsWith('uview') ? zcashWallet.orchardFvk : undefined);
+          if (ufvkStr) {
             try {
-              const addr = await deriveZcashAddressFromUfvk(zcashWallet.orchardFvk, shieldedIndex);
+              const addr = await deriveZcashAddressFromUfvk(ufvkStr, shieldedIndex);
               if (!cancelled) setAddress(addr);
               if (!cancelled) setLoading(false);
               return;
             } catch (err) {
               console.error('failed to derive address from ufvk:', err);
             }
+          }
+          // orchardFvk is base64 FVK bytes (from zigner QR binary) — derive via WatchOnlyWallet
+          if (zcashWallet.orchardFvk && !zcashWallet.orchardFvk.startsWith('uview')) {
+            try {
+              const zcashWasm = await loadZcashWasm() as any;
+              const fvkBytes = Uint8Array.from(atob(zcashWallet.orchardFvk), c => c.charCodeAt(0));
+              const wallet = new zcashWasm.WatchOnlyWallet(fvkBytes, zcashWallet.accountIndex ?? 0, mainnet);
+              try {
+                const raw = wallet.get_address_at(shieldedIndex);
+                if (!cancelled) setAddress(fixOrchardAddress(raw, mainnet));
+                if (!cancelled) setLoading(false);
+              } finally {
+                wallet.free();
+              }
+              return;
+            } catch (err) {
+              console.error('failed to derive address from base64 fvk:', err);
+            }
+          }
+          // fallback: use stored address if available
+          if (zcashWallet.address) {
+            if (!cancelled) setAddress(fixOrchardAddress(zcashWallet.address, mainnet));
+            if (!cancelled) setLoading(false);
+            return;
           }
         }
 
@@ -288,7 +317,7 @@ export function useActiveAddress() {
 
     void deriveAddress();
     return () => { cancelled = true; };
-  }, [activeNetwork, selectedKeyInfo?.id, selectedKeyInfo?.type, penumbraAccount, penumbraWallet?.fullViewingKey, zcashWallet?.address, zcashWallet?.orchardFvk, keyRing, shieldedIndex]);
+  }, [activeNetwork, selectedKeyInfo?.id, selectedKeyInfo?.type, penumbraAccount, penumbraWallet?.fullViewingKey, zcashWallet?.address, zcashWallet?.orchardFvk, zcashWallet?.ufvk, keyRing, shieldedIndex]);
 
   return { address, loading };
 }

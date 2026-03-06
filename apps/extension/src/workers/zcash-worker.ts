@@ -33,14 +33,26 @@ interface FoundNoteWithMemo {
   memo_is_text: boolean;
 }
 
-interface WalletKeys {
+/** Common scanning interface shared by WalletKeys and WatchOnlyWallet */
+interface ScannerKeys {
+  scan_actions_parallel(actionsBytes: Uint8Array): DecryptedNote[];
+  decrypt_transaction_memos(txBytes: Uint8Array): FoundNoteWithMemo[];
+  free(): void;
+}
+
+interface WalletKeys extends ScannerKeys {
   get_receiving_address(mainnet: boolean): string;
   get_receiving_address_at(index: number, mainnet: boolean): string;
   scan_actions(actionsJson: unknown): DecryptedNote[];
-  scan_actions_parallel(actionsBytes: Uint8Array): DecryptedNote[];
   calculate_balance(notes: unknown, spent: unknown): bigint;
-  decrypt_transaction_memos(txBytes: Uint8Array): FoundNoteWithMemo[];
-  free(): void;
+}
+
+interface WatchOnlyWallet extends ScannerKeys {
+  get_address(): string;
+  get_address_at(diversifierIndex: number): string;
+  get_account_index(): number;
+  is_mainnet(): boolean;
+  export_fvk_hex(): string;
 }
 
 interface DecryptedNote {
@@ -56,7 +68,7 @@ interface DecryptedNote {
 }
 
 interface WalletState {
-  keys: WalletKeys | null;
+  keys: ScannerKeys | null;
   syncing: boolean;
   syncAbort: boolean;
   notes: DecryptedNote[];
@@ -65,6 +77,11 @@ interface WalletState {
 
 interface WasmModule {
   WalletKeys: new (seed: string) => WalletKeys;
+  WatchOnlyWallet: {
+    from_ufvk(ufvk: string): WatchOnlyWallet;
+    from_qr_hex(qrHex: string): WatchOnlyWallet;
+    new (fvkBytes: Uint8Array, accountIndex: number, mainnet: boolean): WatchOnlyWallet;
+  };
   build_shielding_transaction(utxos_json: string, privkey_hex: string, recipient: string, amount: bigint, fee: bigint, anchor_height: number, mainnet: boolean): string;
   build_unsigned_transaction(notes_json: string, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: string, account_index: number, mainnet: boolean): string;
   build_signed_spend_transaction(seed_phrase: string, notes_json: unknown, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: unknown, account_index: number, mainnet: boolean): string;
@@ -407,7 +424,7 @@ const deriveAddress = (mnemonic: string, accountIndex: number): string => {
 
 // ── sync ──
 
-const runSync = async (walletId: string, mnemonic: string, serverUrl: string, startHeight?: number): Promise<void> => {
+const runSync = async (walletId: string, mnemonic: string, serverUrl: string, startHeight?: number, ufvk?: string): Promise<void> => {
   if (!wasmModule) throw new Error('wasm not initialized');
 
   const state = getOrCreateWalletState(walletId);
@@ -422,7 +439,13 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
   if (state.keys) { state.keys.free(); state.keys = null; }
 
   await registerWallet(walletId);
-  state.keys = new wasmModule.WalletKeys(mnemonic);
+  // use WatchOnlyWallet for UFVK (zigner), WalletKeys for mnemonic
+  if (ufvk) {
+    state.keys = wasmModule.WatchOnlyWallet.from_ufvk(ufvk);
+    console.log(`[zcash-worker] created WatchOnlyWallet from UFVK for wallet=${walletId}`);
+  } else {
+    state.keys = new wasmModule.WalletKeys(mnemonic);
+  }
   await loadState(walletId);
 
   const syncedHeight = await getSyncHeight(walletId);
@@ -583,8 +606,14 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
 
 const getBalance = (walletId: string): bigint => {
   const state = walletStates.get(walletId);
-  if (!state?.keys) return 0n;
-  return state.keys.calculate_balance(state.notes, [...state.spentNullifiers]);
+  if (!state) return 0n;
+  let balance = 0n;
+  for (const note of state.notes) {
+    if (!state.spentNullifiers.has(note.nullifier)) {
+      balance += BigInt(note.value);
+    }
+  }
+  return balance;
 };
 
 // ── message handler ──
@@ -610,10 +639,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       case 'sync': {
         if (!walletId) throw new Error('walletId required');
         await initWasm();
-        const { mnemonic, serverUrl, startHeight } = payload as {
-          mnemonic: string; serverUrl: string; startHeight?: number;
+        const { mnemonic, serverUrl, startHeight, ufvk } = payload as {
+          mnemonic: string; serverUrl: string; startHeight?: number; ufvk?: string;
         };
-        runSync(walletId, mnemonic, serverUrl, startHeight).catch(err =>
+        runSync(walletId, mnemonic, serverUrl, startHeight, ufvk).catch(err =>
           console.error('[zcash-worker] runSync fatal:', err),
         );
         workerSelf.postMessage({ type: 'sync-started', id, network: 'zcash', walletId });
@@ -704,6 +733,18 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           mnemonic?: string;
         };
 
+        const sendStart = performance.now();
+        const emitProgress = (step: string, detail?: string) => {
+          const elapsed = ((performance.now() - sendStart) / 1000).toFixed(1);
+          console.log(`[zcash-worker] send [${elapsed}s] ${step}${detail ? ': ' + detail : ''}`);
+          workerSelf.postMessage({
+            type: 'send-progress', id: '', network: 'zcash', walletId,
+            payload: { step, detail, elapsedMs: Math.round(performance.now() - sendStart) },
+          });
+        };
+
+        emitProgress('loading wallet state');
+
         // load wallet state from IDB
         const sendState = await loadState(walletId);
         const amountZat = BigInt(sendPayload.amount);
@@ -712,6 +753,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const isTransparent = sendPayload.recipient.startsWith('t1') || sendPayload.recipient.startsWith('tm');
         const nZOutputs = isTransparent ? 0 : 1;
         const nTOutputs = isTransparent ? 1 : 0;
+
+        emitProgress('selecting notes', `${sendState.notes.length} notes available`);
 
         // estimate fee and select notes
         const estFee = computeFee(1, nZOutputs, nTOutputs, true);
@@ -725,16 +768,24 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           throw new Error(`insufficient funds: have ${totalIn} zat, need ${amountZat + fee} zat`);
         }
 
-        console.log(`[zcash-worker] send: ${selected.length} notes, amount=${amountZat}, fee=${fee}, totalNotes=${sendState.notes.length}, spentNullifiers=${sendState.spentNullifiers.size}`);
+        emitProgress('notes selected', `${selected.length} notes, fee=${fee}`);
 
         // build merkle witnesses
         const { ZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
         const sendClient = new ZidecarClient(sendPayload.serverUrl);
+
+        emitProgress('fetching chain tip');
         const sendTip = await sendClient.getTip();
+
+        emitProgress('building merkle witnesses', `anchor=${sendTip.height}`);
+        const witnessStart = performance.now();
 
         const { anchorHex, paths } = await buildWitnesses(
           sendClient, selected, sendTip.height, sendPayload.mainnet,
         );
+
+        const witnessDuration = ((performance.now() - witnessStart) / 1000).toFixed(1);
+        emitProgress('witnesses built', `${witnessDuration}s`);
 
         if (sendPayload.mnemonic) {
           // mnemonic wallet: build fully signed transaction and broadcast directly
@@ -755,7 +806,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             position: p.position,
           }));
 
-          console.log(`[zcash-worker] building signed tx: notes=${JSON.stringify(notesJson.map(n => ({ value: n.value, pos: n.position, nf: n.nullifier.slice(0, 8) })))}, recipient=${sendPayload.recipient}, amount=${amountZat}, fee=${fee}, anchor=${anchorHex.slice(0, 16)}...`);
+          emitProgress('building & proving transaction (halo2)', `${selected.length} spends`);
+          const proveStart = performance.now();
 
           let txHex: string;
           try {
@@ -775,9 +827,11 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             throw e;
           }
 
-          console.log(`[zcash-worker] signed tx built, ${txHex.length / 2} bytes`);
+          const proveDuration = ((performance.now() - proveStart) / 1000).toFixed(1);
+          emitProgress('transaction proved', `${proveDuration}s, ${txHex.length / 2} bytes`);
 
           // broadcast
+          emitProgress('broadcasting transaction');
           const txData = new Uint8Array(txHex.match(/.{2}/g)!.map(b => parseInt(b, 16)));
           const { ZidecarClient: ZC2 } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
           const broadcastClient = new ZC2(sendPayload.serverUrl);
@@ -793,7 +847,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           }
 
           const txid = new TextDecoder().decode(result.txid);
-          console.log(`[zcash-worker] broadcast success, txid=${txid}`);
+          const totalDuration = ((performance.now() - sendStart) / 1000).toFixed(1);
+          emitProgress('complete', `txid=${txid}, total=${totalDuration}s`);
+
           workerSelf.postMessage({
             type: 'tx-result', id, network: 'zcash', walletId,
             payload: { txid, fee: fee.toString() },
@@ -802,6 +858,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         }
 
         // zigner wallet: build unsigned transaction for cold signing
+        emitProgress('building unsigned transaction');
+
         const notesJson = JSON.stringify(selected.map(n => ({
           value: n.value,
           nullifier: n.nullifier,
@@ -824,6 +882,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const parsed = JSON.parse(unsignedResult) as {
           sighash: string; alphas: string[]; unsigned_tx: string; summary: string;
         };
+
+        const totalDuration = ((performance.now() - sendStart) / 1000).toFixed(1);
+        emitProgress('unsigned tx ready', `total=${totalDuration}s`);
 
         workerSelf.postMessage({
           type: 'send-tx-unsigned', id, network: 'zcash', walletId,

@@ -101,6 +101,11 @@ export class WatchOnlyWallet {
 }
 
 /**
+ * Derive an Orchard receiving address from a UFVK string (uview1.../uviewtest1...)
+ */
+export function address_from_ufvk(ufvk_str: string, diversifier_index: number): string;
+
+/**
  * Build merkle paths for note positions by replaying compact blocks from a checkpoint.
  *
  * # Arguments
@@ -255,6 +260,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
     readonly __wbg_walletkeys_free: (a: number, b: number) => void;
     readonly __wbg_watchonlywallet_free: (a: number, b: number) => void;
+    readonly address_from_ufvk: (a: number, b: number, c: number) => [number, number, number, number];
     readonly build_merkle_paths: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
     readonly build_shielding_transaction: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number) => [number, number, number, number];
     readonly build_signed_spend_transaction: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number) => [number, number, number, number];

@@ -13,12 +13,13 @@ import { ArrowLeftIcon, CopyIcon, CheckIcon, InfoCircledIcon, ChevronDownIcon, C
 import { PopupPath } from '../paths';
 import { useStore } from '../../../state';
 import { selectActiveNetwork, selectEffectiveKeyInfo, selectPenumbraAccount, keyRingSelector } from '../../../state/keyring';
-import { getActiveWalletJson } from '../../../state/wallets';
+import { getActiveWalletJson, selectActiveZcashWallet } from '../../../state/wallets';
 import { useActiveAddress } from '../../../hooks/use-address';
 import {
   derivePenumbraEphemeralFromMnemonic,
   derivePenumbraEphemeralFromFvk,
   deriveZcashTransparent,
+  deriveZcashTransparentFromUfvk,
 } from '../../../hooks/use-address';
 import { useIbcChains, type IbcChain } from '../../../hooks/ibc-chains';
 import { useCosmosAssets, type CosmosAsset } from '../../../hooks/cosmos-balance';
@@ -450,9 +451,12 @@ function ReceiveTab({ address, loading, activeNetwork }: {
   const keyRing = useStore(keyRingSelector);
   const penumbraWallet = useStore(getActiveWalletJson);
 
+  const zcashWallet = useStore(selectActiveZcashWallet);
   const isPenumbra = activeNetwork === 'penumbra';
   const isZcash = activeNetwork === 'zcash';
   const isMnemonic = selectedKeyInfo?.type === 'mnemonic';
+  const zcashUfvk = zcashWallet?.ufvk ?? (zcashWallet?.orchardFvk?.startsWith('uview') ? zcashWallet.orchardFvk : undefined);
+  const canTransparent = isMnemonic || !!zcashUfvk;
 
   // zcash transparent address state
   const [transparent, setTransparent] = useState(false);
@@ -463,7 +467,7 @@ function ReceiveTab({ address, loading, activeNetwork }: {
 
   // auto-rotate zcash addresses on mount: bump both indices
   useEffect(() => {
-    if (!isZcash || !isMnemonic) return;
+    if (!isZcash || !canTransparent) return;
 
     (async () => {
       const r = await chrome.storage.local.get(['zcashShieldedIndex', 'zcashTransparentIndex']);
@@ -476,7 +480,7 @@ function ReceiveTab({ address, loading, activeNetwork }: {
       setTransparentIndex(nextTransparent);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isZcash, isMnemonic]);
+  }, [isZcash, canTransparent]);
 
   const displayAddress = transparent && isZcash && transparentAddress
     ? transparentAddress
@@ -533,18 +537,28 @@ function ReceiveTab({ address, loading, activeNetwork }: {
 
   // derive zcash transparent address when toggled on or index changes
   useEffect(() => {
-    if (!transparent || !isZcash || !isMnemonic) return;
+    if (!transparent || !isZcash || !canTransparent) return;
 
     let cancelled = false;
     setTransparentLoading(true);
 
     const derive = async () => {
       try {
-        const mnemonic = await keyRing.getMnemonic(selectedKeyInfo!.id);
-        const addr = await deriveZcashTransparent(mnemonic, 0, transparentIndex, true);
-        if (!cancelled) {
-          setTransparentAddress(addr);
-          setTransparentLoading(false);
+        if (isMnemonic && selectedKeyInfo) {
+          // mnemonic wallet: derive from seed (supports multiple indices)
+          const mnemonic = await keyRing.getMnemonic(selectedKeyInfo.id);
+          const addr = await deriveZcashTransparent(mnemonic, 0, transparentIndex, true);
+          if (!cancelled) {
+            setTransparentAddress(addr);
+            setTransparentLoading(false);
+          }
+        } else if (zcashUfvk) {
+          // watch-only wallet: derive from UFVK (default address only)
+          const addr = await deriveZcashTransparentFromUfvk(zcashUfvk);
+          if (!cancelled) {
+            setTransparentAddress(addr);
+            setTransparentLoading(false);
+          }
         }
       } catch (err) {
         console.error('failed to derive transparent address:', err);
@@ -555,7 +569,7 @@ function ReceiveTab({ address, loading, activeNetwork }: {
     void derive();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [transparent, transparentIndex, isZcash, isMnemonic]);
+  }, [transparent, transparentIndex, isZcash, canTransparent, isMnemonic, zcashUfvk]);
 
   const copyAddress = useCallback(async () => {
     if (!displayAddress) return;
@@ -648,7 +662,7 @@ function ReceiveTab({ address, loading, activeNetwork }: {
         </div>
       )}
 
-      {isZcash && isMnemonic && !transparent && (
+      {isZcash && canTransparent && !transparent && (
         <button
           onClick={() => void handleRotateShielded()}
           disabled={loading}
@@ -659,7 +673,7 @@ function ReceiveTab({ address, loading, activeNetwork }: {
         </button>
       )}
 
-      {isZcash && isMnemonic && (
+      {isZcash && canTransparent && (
         <>
           <div className='flex w-full items-center justify-between'>
             <div className='flex items-center gap-1.5'>
@@ -701,7 +715,7 @@ function ReceiveTab({ address, loading, activeNetwork }: {
             </button>
           </div>
 
-          {transparent && (
+          {transparent && isMnemonic && (
             <div className='flex w-full items-center justify-center gap-1'>
               <button
                 disabled={transparentIndex <= 0}

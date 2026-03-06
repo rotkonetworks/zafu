@@ -330,6 +330,33 @@ export class WatchOnlyWallet {
 if (Symbol.dispose) WatchOnlyWallet.prototype[Symbol.dispose] = WatchOnlyWallet.prototype.free;
 
 /**
+ * Derive an Orchard receiving address from a UFVK string (uview1.../uviewtest1...)
+ * @param {string} ufvk_str
+ * @param {number} diversifier_index
+ * @returns {string}
+ */
+export function address_from_ufvk(ufvk_str, diversifier_index) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.address_from_ufvk(ptr0, len0, diversifier_index);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
  * Build merkle paths for note positions by replaying compact blocks from a checkpoint.
  *
  * # Arguments
@@ -1106,7 +1133,7 @@ function __wbg_get_imports(memory) {
             table.set(offset + 2, true);
             table.set(offset + 3, false);
         },
-        memory: memory || new WebAssembly.Memory({initial:26,maximum:16384,shared:true}),
+        memory: memory || new WebAssembly.Memory({initial:27,maximum:16384,shared:true}),
     };
     return {
         __proto__: null,

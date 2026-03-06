@@ -9,7 +9,7 @@
  * 5. broadcast transaction
  */
 
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useStore } from '../../../state';
 import { zignerSigningSelector } from '../../../state/zigner-signing';
 import { recentAddressesSelector } from '../../../state/recent-addresses';
@@ -74,6 +74,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const [showContactModal, setShowContactModal] = useState(false);
   const [fee, setFee] = useState('0.0001');
   const unsignedTxRef = useRef<SendTxUnsignedResult | null>(null);
+  const [sendSteps, setSendSteps] = useState<Array<{ step: string; detail?: string; elapsedMs: number }>>([]);
 
   // store access for wallet id and server url
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
@@ -82,6 +83,17 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
   // get recent zcash addresses
   const recentAddresses = useMemo(() => getRecent('zcash', 3), [getRecent]);
+
+  // listen for send progress events from worker
+  useEffect(() => {
+    if (step !== 'building' && step !== 'broadcast') return;
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { step: string; detail?: string; elapsedMs: number };
+      setSendSteps(prev => [...prev, detail]);
+    };
+    window.addEventListener('zcash-send-progress', handler);
+    return () => window.removeEventListener('zcash-send-progress', handler);
+  }, [step]);
 
   const validateForm = (): boolean => {
     if (!recipient.trim()) {
@@ -117,6 +129,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
     setStep('building');
     setFormError(null);
+    setSendSteps([]);
 
     try {
       const walletId = selectedKeyInfo.id;
@@ -400,15 +413,39 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
       case 'building':
         return (
-          <div className="flex flex-col items-center gap-4 p-8">
+          <div className="flex flex-col items-center gap-4 p-6">
             <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center animate-pulse">
               <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
             </div>
             <h2 className="text-xl font-bold">building transaction</h2>
-            <p className="text-sm text-muted-foreground text-center">
-              selecting notes, building merkle witnesses, and preparing transaction for signing...
-            </p>
-            <p className="text-xs text-muted-foreground">this may take a moment</p>
+
+            {sendSteps.length > 0 ? (
+              <div className="w-full max-w-sm flex flex-col gap-1">
+                {sendSteps.map((s, i) => {
+                  const isLast = i === sendSteps.length - 1;
+                  const prevMs = i > 0 ? sendSteps[i - 1]!.elapsedMs : 0;
+                  const stepDuration = ((s.elapsedMs - prevMs) / 1000).toFixed(1);
+                  return (
+                    <div key={i} className={`flex items-start gap-2 text-xs ${isLast ? 'text-foreground' : 'text-muted-foreground'}`}>
+                      <span className="font-mono w-12 text-right shrink-0">
+                        {(s.elapsedMs / 1000).toFixed(1)}s
+                      </span>
+                      <span className={isLast ? 'animate-pulse' : ''}>
+                        {s.step}
+                        {s.detail && <span className="text-muted-foreground ml-1">({s.detail})</span>}
+                        {!isLast && Number(stepDuration) >= 0.5 && (
+                          <span className="text-muted-foreground ml-1">+{stepDuration}s</span>
+                        )}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center">
+                preparing...
+              </p>
+            )}
           </div>
         );
 

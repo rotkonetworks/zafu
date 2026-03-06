@@ -25,7 +25,7 @@ export interface NetworkWorkerMessage {
 }
 
 export interface NetworkWorkerResponse {
-  type: 'ready' | 'address' | 'sync-progress' | 'sync-started' | 'sync-stopped' | 'sync-reset' | 'balance' | 'tx-result' | 'send-tx-unsigned' | 'shield-result' | 'wallets' | 'wallet-deleted' | 'notes' | 'memos' | 'error';
+  type: 'ready' | 'address' | 'sync-progress' | 'send-progress' | 'sync-started' | 'sync-stopped' | 'sync-reset' | 'balance' | 'tx-result' | 'send-tx-unsigned' | 'shield-result' | 'wallets' | 'wallet-deleted' | 'notes' | 'memos' | 'error';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -98,6 +98,13 @@ const spawnNetworkWorkerInner = async (network: NetworkType): Promise<void> => {
     if (msg.type === 'sync-progress') {
       // emit progress event with walletId
       window.dispatchEvent(new CustomEvent('network-sync-progress', {
+        detail: { network, walletId: msg.walletId, ...msg.payload as object }
+      }));
+      return;
+    }
+
+    if (msg.type === 'send-progress') {
+      window.dispatchEvent(new CustomEvent('zcash-send-progress', {
         detail: { network, walletId: msg.walletId, ...msg.payload as object }
       }));
       return;
@@ -209,6 +216,19 @@ export const startSyncInWorker = async (
   startHeight?: number,
 ): Promise<void> => {
   return callWorker(network, 'sync', { mnemonic, serverUrl, startHeight }, walletId);
+};
+
+/**
+ * start watch-only sync for a wallet using UFVK (no mnemonic needed)
+ */
+export const startWatchOnlySyncInWorker = async (
+  network: NetworkType,
+  walletId: string,
+  ufvk: string,
+  serverUrl: string,
+  startHeight?: number,
+): Promise<void> => {
+  return callWorker(network, 'sync', { mnemonic: '', serverUrl, startHeight, ufvk }, walletId);
 };
 
 /**

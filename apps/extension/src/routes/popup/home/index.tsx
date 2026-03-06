@@ -22,6 +22,7 @@ import {
   shieldInWorker,
   spawnNetworkWorker,
   startSyncInWorker,
+  startWatchOnlySyncInWorker,
   stopSyncInWorker,
   resetSyncInWorker,
   isWalletSyncing,
@@ -207,7 +208,7 @@ const NetworkContent = ({
 }: {
   network: NetworkType;
   penumbraAccount: number;
-  zcashWallet?: { label: string; mainnet: boolean };
+  zcashWallet?: { label: string; mainnet: boolean; orchardFvk?: string; ufvk?: string; id?: string };
   polkadotPublicKey?: string;
   hasMnemonic?: boolean;
 }) => {
@@ -252,7 +253,7 @@ const ZcashContent = ({
   watchOnly,
 }: {
   hasMnemonic?: boolean;
-  watchOnly?: { label: string; mainnet: boolean };
+  watchOnly?: { label: string; mainnet: boolean; orchardFvk?: string; ufvk?: string; id?: string };
 }) => {
   const hasWallet = !!(hasMnemonic || watchOnly);
   const isMainnet = watchOnly?.mainnet ?? true;
@@ -326,6 +327,55 @@ const ZcashContent = ({
     };
   }, [hasMnemonic, selectedKeyInfo?.id, selectedKeyInfo?.type, keyRing, zidecarUrl]);
 
+  // auto-start watch-only sync for zigner wallets (uses UFVK instead of mnemonic)
+  useEffect(() => {
+    if (hasMnemonic) return; // mnemonic sync handles this
+    if (!watchOnly) return;
+    const ufvkStr = watchOnly.ufvk ?? (watchOnly.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
+    if (!ufvkStr) return;
+    if (!selectedKeyInfo) return;
+    const walletId = selectedKeyInfo.id;
+    if (isWalletSyncing('zcash', walletId)) return;
+
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      (async () => {
+        try {
+          await spawnNetworkWorker('zcash');
+          if (cancelled) return;
+
+          const birthdayKey = `zcashBirthday_${walletId}`;
+          const stored = await chrome.storage.local.get([birthdayKey, 'zcashSyncHeight']);
+          let startHeight: number | undefined;
+          if (!stored['zcashSyncHeight'] || stored['zcashSyncHeight'] === 0) {
+            if (stored[birthdayKey]) {
+              startHeight = stored[birthdayKey] as number;
+            } else {
+              try {
+                const { ZidecarClient } = await import('../../../state/keyring/zidecar-client');
+                const tip = await new ZidecarClient(zidecarUrl).getTip();
+                startHeight = Math.floor(Math.max(0, tip.height - 100) / 10000) * 10000;
+                await chrome.storage.local.set({ [birthdayKey]: startHeight });
+              } catch { /* fall through to full scan */ }
+            }
+          }
+
+          if (cancelled) return;
+          await startWatchOnlySyncInWorker('zcash', walletId, ufvkStr, zidecarUrl, startHeight);
+        } catch (err) {
+          console.error('[zcash] watch-only auto-sync failed:', err);
+        }
+      })();
+    }, 500);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      if (isWalletSyncing('zcash', walletId)) {
+        void stopSyncInWorker('zcash', walletId).catch(() => {});
+      }
+    };
+  }, [hasMnemonic, watchOnly?.ufvk, watchOnly?.orchardFvk, selectedKeyInfo?.id, zidecarUrl]);
+
   // fetch orchard balance from worker on each sync-progress event
   useEffect(() => {
     if (!selectedKeyInfo) return;
@@ -390,14 +440,14 @@ const ZcashContent = ({
   const [rescanning, setRescanning] = useState(false);
 
   const handleRescan = useCallback(async () => {
-    if (!hasMnemonic || !selectedKeyInfo || selectedKeyInfo.type !== 'mnemonic') return;
+    if (!selectedKeyInfo) return;
+    if (!hasMnemonic && !watchOnly) return;
     const newHeight = parseInt(rescanHeight, 10);
     if (isNaN(newHeight) || newHeight < 0) return;
 
     setRescanning(true);
     try {
       const walletId = selectedKeyInfo.id;
-      const mnemonic = await keyRing.getMnemonic(walletId);
       const birthdayKey = `zcashBirthday_${walletId}`;
 
       // stop active sync
@@ -408,8 +458,16 @@ const ZcashContent = ({
       await chrome.storage.local.set({ [birthdayKey]: newHeight });
       await chrome.storage.local.remove('zcashSyncHeight');
       setWalletBirthday(newHeight);
-      // restart sync from new height
-      await startSyncInWorker('zcash', walletId, mnemonic, zidecarUrl, newHeight);
+      // restart sync — mnemonic or watch-only
+      if (hasMnemonic && selectedKeyInfo.type === 'mnemonic') {
+        const mnemonic = await keyRing.getMnemonic(walletId);
+        await startSyncInWorker('zcash', walletId, mnemonic, zidecarUrl, newHeight);
+      } else {
+        const ufvkStr = watchOnly?.ufvk ?? (watchOnly?.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
+        if (ufvkStr) {
+          await startWatchOnlySyncInWorker('zcash', walletId, ufvkStr, zidecarUrl, newHeight);
+        }
+      }
 
       setRescanOpen(false);
       setRescanHeight('');
@@ -418,7 +476,7 @@ const ZcashContent = ({
     } finally {
       setRescanning(false);
     }
-  }, [hasMnemonic, selectedKeyInfo?.id, selectedKeyInfo?.type, keyRing, rescanHeight, zidecarUrl]);
+  }, [hasMnemonic, watchOnly, selectedKeyInfo?.id, selectedKeyInfo?.type, keyRing, rescanHeight, zidecarUrl]);
 
   const handleShield = useCallback(async () => {
     if (!hasMnemonic || !selectedKeyInfo || selectedKeyInfo.type !== 'mnemonic') return;
@@ -576,7 +634,7 @@ const ZcashContent = ({
       )}
 
       {/* rescan from custom height */}
-      {hasMnemonic && (
+      {hasWallet && (
         <div className='border border-border/40 bg-card p-3'>
           {!rescanOpen ? (
             <button

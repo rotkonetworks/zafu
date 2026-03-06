@@ -264,6 +264,20 @@ export class WatchOnlyWallet {
         return WatchOnlyWallet.__wrap(ret[0]);
     }
     /**
+     * Import from a UFVK string (uview1.../uviewtest1...)
+     * @param {string} ufvk_str
+     * @returns {WatchOnlyWallet}
+     */
+    static from_ufvk(ufvk_str) {
+        const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.watchonlywallet_from_ufvk(ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return WatchOnlyWallet.__wrap(ret[0]);
+    }
+    /**
      * Get account index
      * @returns {number}
      */
@@ -328,6 +342,33 @@ export class WatchOnlyWallet {
     }
 }
 if (Symbol.dispose) WatchOnlyWallet.prototype[Symbol.dispose] = WatchOnlyWallet.prototype.free;
+
+/**
+ * Derive an Orchard receiving address from a UFVK string (uview1.../uviewtest1...)
+ * @param {string} ufvk_str
+ * @param {number} diversifier_index
+ * @returns {string}
+ */
+export function address_from_ufvk(ufvk_str, diversifier_index) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.address_from_ufvk(ptr0, len0, diversifier_index);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
 
 /**
  * Build merkle paths for note positions by replaying compact blocks from a checkpoint.
@@ -694,6 +735,33 @@ export function parse_signature_response(qr_hex) {
         throw takeFromExternrefTable0(ret[1]);
     }
     return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Derive a transparent (t1.../tm...) address from a UFVK string, if the UFVK has a transparent component.
+ * Returns the base58check-encoded P2PKH address.
+ * @param {string} ufvk_str
+ * @returns {string}
+ */
+export function transparent_address_from_ufvk(ufvk_str) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.transparent_address_from_ufvk(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
 }
 
 /**
@@ -1106,7 +1174,7 @@ function __wbg_get_imports(memory) {
             table.set(offset + 2, true);
             table.set(offset + 3, false);
         },
-        memory: memory || new WebAssembly.Memory({initial:26,maximum:16384,shared:true}),
+        memory: memory || new WebAssembly.Memory({initial:43,maximum:16384,shared:true}),
     };
     return {
         __proto__: null,
