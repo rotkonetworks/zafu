@@ -75,6 +75,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const [fee, setFee] = useState('0.0001');
   const unsignedTxRef = useRef<SendTxUnsignedResult | null>(null);
   const [sendSteps, setSendSteps] = useState<Array<{ step: string; detail?: string; elapsedMs: number }>>([]);
+  const [totalElapsedSec, setTotalElapsedSec] = useState<number | null>(null);
+  const buildStartRef = useRef<number>(0);
 
   // store access for wallet id and server url
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
@@ -130,6 +132,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     setStep('building');
     setFormError(null);
     setSendSteps([]);
+    buildStartRef.current = Date.now();
 
     try {
       const walletId = selectedKeyInfo.id;
@@ -147,6 +150,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           const feeZec = (Number(result.fee) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
           setFee(feeZec);
           complete(result.txid);
+          setTotalElapsedSec(Math.round((Date.now() - buildStartRef.current) / 1000));
           setStep('complete');
           void recordUsage(recipient, 'zcash');
           if (shouldSuggestSave(recipient)) {
@@ -524,6 +528,7 @@ description="point camera at zafu zigner's signature qr code"
             <h2 className="text-xl font-bold">transaction sent!</h2>
             <p className="text-sm text-muted-foreground text-center">
               {amount} zec sent successfully
+              {totalElapsedSec !== null && ` in ${totalElapsedSec}s`}
             </p>
             {txHash && (
               <p className="font-mono text-xs text-muted-foreground break-all">
