@@ -463,6 +463,7 @@ function ReceiveTab({ address, loading, activeNetwork }: {
   const [transparentIndex, setTransparentIndex] = useState(0);
   const [transparentAddress, setTransparentAddress] = useState('');
   const [transparentLoading, setTransparentLoading] = useState(false);
+  const [transparentError, setTransparentError] = useState<string | null>(null);
   const [showTransparentTooltip, setShowTransparentTooltip] = useState(false);
 
   // auto-rotate zcash addresses on mount: bump both indices
@@ -541,6 +542,7 @@ function ReceiveTab({ address, loading, activeNetwork }: {
 
     let cancelled = false;
     setTransparentLoading(true);
+    setTransparentError(null);
 
     const derive = async () => {
       try {
@@ -553,8 +555,10 @@ function ReceiveTab({ address, loading, activeNetwork }: {
             setTransparentLoading(false);
           }
         } else if (zcashUfvk) {
-          // watch-only wallet: derive from UFVK (default address only)
-          const addr = await deriveZcashTransparentFromUfvk(zcashUfvk);
+          // watch-only wallet: derive from UFVK at selected index
+          console.log('[receive] deriving transparent from ufvk, index:', transparentIndex);
+          const addr = await deriveZcashTransparentFromUfvk(zcashUfvk, transparentIndex);
+          console.log('[receive] transparent address:', addr);
           if (!cancelled) {
             setTransparentAddress(addr);
             setTransparentLoading(false);
@@ -562,7 +566,16 @@ function ReceiveTab({ address, loading, activeNetwork }: {
         }
       } catch (err) {
         console.error('failed to derive transparent address:', err);
-        if (!cancelled) setTransparentLoading(false);
+        if (!cancelled) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (msg.includes('no transparent component')) {
+            setTransparentError('this wallet key does not include a transparent key — re-import from an updated zigner to enable transparent addresses');
+          } else {
+            setTransparentError(msg);
+          }
+          setTransparentAddress('');
+          setTransparentLoading(false);
+        }
       }
     };
 
@@ -715,7 +728,11 @@ function ReceiveTab({ address, loading, activeNetwork }: {
             </button>
           </div>
 
-          {transparent && isMnemonic && (
+          {transparent && transparentError && (
+            <p className='w-full text-xs text-amber-400'>{transparentError}</p>
+          )}
+
+          {transparent && canTransparent && !transparentError && (
             <div className='flex w-full items-center justify-center gap-1'>
               <button
                 disabled={transparentIndex <= 0}

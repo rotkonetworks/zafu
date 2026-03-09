@@ -738,18 +738,19 @@ export function parse_signature_response(qr_hex) {
 }
 
 /**
- * Derive a transparent (t1.../tm...) address from a UFVK string, if the UFVK has a transparent component.
+ * Derive a transparent (t1.../tm...) address from a UFVK string at a given address index.
  * Returns the base58check-encoded P2PKH address.
  * @param {string} ufvk_str
+ * @param {number} address_index
  * @returns {string}
  */
-export function transparent_address_from_ufvk(ufvk_str) {
+export function transparent_address_from_ufvk(ufvk_str, address_index) {
     let deferred3_0;
     let deferred3_1;
     try {
         const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.transparent_address_from_ufvk(ptr0, len0);
+        const ret = wasm.transparent_address_from_ufvk(ptr0, len0, address_index);
         var ptr2 = ret[0];
         var len2 = ret[1];
         if (ret[3]) {

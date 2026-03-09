@@ -235,15 +235,8 @@ resolve: {
             from: path.join(wasmPackage, 'wasm-parallel'),
             to: 'wasm-parallel',
           },
-          // zcash-wasm for zcash key derivation, scanning, witness building, and tx signing
-          {
-            from: path.join(__dirname, '../../packages/zcash-wasm/zcash_wasm.js'),
-            to: 'zafu-wasm/zafu_wasm.js',
-          },
-          {
-            from: path.join(__dirname, '../../packages/zcash-wasm/zcash_wasm_bg.wasm'),
-            to: 'zafu-wasm/zafu_wasm_bg.wasm',
-          },
+          // zcash-wasm: main WASM files come from public/zafu-wasm/ (via 'public' pattern above)
+          // only snippets (rayon worker helpers) need explicit copy from packages/
           {
             from: path.join(__dirname, '../../packages/zcash-wasm/snippets'),
             to: 'zafu-wasm/snippets',
