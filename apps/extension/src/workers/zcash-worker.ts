@@ -17,7 +17,7 @@ import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
 const workerSelf = globalThis as any as DedicatedWorkerGlobalScope;
 
 interface WorkerMessage {
-  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-complete' | 'shield' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos';
+  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos';
   id: string;
   network: 'zcash';
   walletId?: string;
@@ -86,6 +86,8 @@ interface WasmModule {
   build_unsigned_transaction(notes_json: string, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: string, account_index: number, mainnet: boolean): string;
   build_signed_spend_transaction(seed_phrase: string, notes_json: unknown, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: unknown, account_index: number, mainnet: boolean): string;
   complete_transaction(unsigned_tx_json: string, signatures_json: string): string;
+  build_unsigned_shielding_transaction(utxos_json: string, recipient: string, amount: bigint, fee: bigint, anchor_height: number, mainnet: boolean): string;
+  complete_shielding_transaction(unsigned_tx_hex: string, signatures_json: string): string;
   derive_transparent_privkey(seed_phrase: string, account: number, index: number): string;
   build_merkle_paths(tree_state_hex: string, compact_blocks_json: string, note_positions_json: string, anchor_height: number): unknown;
   frontier_tree_size(tree_state_hex: string): bigint;
@@ -994,7 +996,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           const utxosJson = JSON.stringify(utxos.map(u => ({
             txid: hexEncode(u.txid),
             vout: u.outputIndex,
-            value: Number(u.valueZat),
+            value: u.valueZat.toString(),
             script: hexEncode(u.script),
           })));
 
@@ -1016,6 +1018,114 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         workerSelf.postMessage({
           type: 'shield-result', id, network: 'zcash', walletId,
           payload: { txid: lastTxid, shieldedZat: totalShielded.toString(), feeZat: totalFee.toString(), utxoCount: totalUtxos },
+        });
+        return;
+      }
+
+      case 'shield-unsigned': {
+        if (!walletId) throw new Error('walletId required');
+        await initWasm();
+        if (!wasmModule) throw new Error('wasm not initialized');
+
+        const shieldUnsignedPayload = payload as {
+          serverUrl: string; tAddresses: string[]; mainnet: boolean;
+          ufvk: string; addressIndexMap?: Record<string, number>;
+        };
+
+        const { ZidecarClient: ZCShieldU } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
+        const shieldUClient = new ZCShieldU(shieldUnsignedPayload.serverUrl);
+        const shieldUTip = await shieldUClient.getTip();
+        const shieldUUtxos = await shieldUClient.getAddressUtxos(shieldUnsignedPayload.tAddresses);
+        if (shieldUUtxos.length === 0) throw new Error('no transparent UTXOs to shield');
+
+        // build address → derivation index lookup
+        const shieldUAddrToIndex = new Map<string, number>();
+        if (shieldUnsignedPayload.addressIndexMap) {
+          for (const [addr, idx] of Object.entries(shieldUnsignedPayload.addressIndexMap)) {
+            shieldUAddrToIndex.set(addr, idx);
+          }
+        } else {
+          for (const addr of shieldUnsignedPayload.tAddresses) shieldUAddrToIndex.set(addr, 0);
+        }
+
+        // orchard recipient from watch-only wallet
+        const shieldUWatch = wasmModule.WatchOnlyWallet.from_ufvk(shieldUnsignedPayload.ufvk);
+        let shieldURecipient: string;
+        try {
+          shieldURecipient = shieldUWatch.get_address();
+        } finally {
+          shieldUWatch.free();
+        }
+        shieldURecipient = fixOrchardAddress(shieldURecipient, shieldUnsignedPayload.mainnet);
+
+        // for simplicity, shield all UTXOs in a single tx
+        const shieldUTotal = shieldUUtxos.reduce((sum, u) => sum + u.valueZat, 0n);
+        const shieldULogicalActions = 2 + shieldUUtxos.length;
+        const shieldUFee = BigInt(5000 * Math.max(shieldULogicalActions, 2));
+        if (shieldUTotal <= shieldUFee) throw new Error('UTXOs too small to cover fee');
+        const shieldUAmount = shieldUTotal - shieldUFee;
+
+        // collect address indices in UTXO order
+        const shieldUAddrIndices = shieldUUtxos.map(u => shieldUAddrToIndex.get(u.address) ?? 0);
+
+        const shieldUUtxosJson = JSON.stringify(shieldUUtxos.map(u => ({
+          txid: hexEncode(u.txid),
+          vout: u.outputIndex,
+          value: Number(u.valueZat),
+          script: hexEncode(u.script),
+        })));
+
+        const shieldUResult = wasmModule.build_unsigned_shielding_transaction(
+          shieldUUtxosJson, shieldURecipient, shieldUAmount, shieldUFee,
+          shieldUTip.height, shieldUnsignedPayload.mainnet,
+        );
+
+        const shieldUParsed = JSON.parse(shieldUResult) as {
+          sighashes: string[]; unsigned_tx_hex: string; summary: string;
+        };
+
+        workerSelf.postMessage({
+          type: 'shield-unsigned-result', id, network: 'zcash', walletId,
+          payload: {
+            sighashes: shieldUParsed.sighashes,
+            unsignedTxHex: shieldUParsed.unsigned_tx_hex,
+            summary: shieldUParsed.summary,
+            fee: shieldUFee.toString(),
+            addressIndices: shieldUAddrIndices,
+          },
+        });
+        return;
+      }
+
+      case 'shield-complete': {
+        if (!walletId) throw new Error('walletId required');
+        await initWasm();
+        if (!wasmModule) throw new Error('wasm not initialized');
+
+        const shieldCompletePayload = payload as {
+          serverUrl: string; unsignedTxHex: string;
+          signatures: { sig_hex: string; pubkey_hex: string }[];
+        };
+
+        const signaturesJson = JSON.stringify(shieldCompletePayload.signatures);
+        const shieldCompleteTxHex = wasmModule.complete_shielding_transaction(
+          shieldCompletePayload.unsignedTxHex, signaturesJson,
+        );
+        const shieldCompleteTxData = new Uint8Array(
+          shieldCompleteTxHex.match(/.{2}/g)!.map((b: string) => parseInt(b, 16)),
+        );
+
+        const { ZidecarClient: ZCShieldC } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
+        const shieldCompleteClient = new ZCShieldC(shieldCompletePayload.serverUrl);
+        const shieldCompleteResult = await shieldCompleteClient.sendTransaction(shieldCompleteTxData);
+        if (shieldCompleteResult.errorCode !== 0) {
+          throw new Error(`broadcast failed (${shieldCompleteResult.errorCode}): ${shieldCompleteResult.errorMessage}`);
+        }
+
+        const shieldCompleteTxid = new TextDecoder().decode(shieldCompleteResult.txid);
+        workerSelf.postMessage({
+          type: 'tx-result', id, network: 'zcash', walletId,
+          payload: { txid: shieldCompleteTxid },
         });
         return;
       }

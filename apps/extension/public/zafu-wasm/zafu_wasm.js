@@ -264,6 +264,20 @@ export class WatchOnlyWallet {
         return WatchOnlyWallet.__wrap(ret[0]);
     }
     /**
+     * Import from a UFVK string (uview1.../uviewtest1...)
+     * @param {string} ufvk_str
+     * @returns {WatchOnlyWallet}
+     */
+    static from_ufvk(ufvk_str) {
+        const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.watchonlywallet_from_ufvk(ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return WatchOnlyWallet.__wrap(ret[0]);
+    }
+    /**
      * Get account index
      * @returns {number}
      */
@@ -495,6 +509,44 @@ export function build_signed_spend_transaction(seed_phrase, notes_json, recipien
 }
 
 /**
+ * Build an unsigned shielding transaction (transparent → orchard) for cold-wallet signing.
+ *
+ * Same as `build_shielding_transaction` but does NOT sign the transparent inputs.
+ * Instead, returns the per-input sighashes so an external signer (e.g. Zigner) can sign them.
+ *
+ * Returns JSON: `{ sighashes: [hex], unsigned_tx_hex: hex, summary: string }`
+ * @param {string} utxos_json
+ * @param {string} recipient
+ * @param {bigint} amount
+ * @param {bigint} fee
+ * @param {number} anchor_height
+ * @param {boolean} mainnet
+ * @returns {string}
+ */
+export function build_unsigned_shielding_transaction(utxos_json, recipient, amount, fee, anchor_height, mainnet) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(utxos_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.build_unsigned_shielding_transaction(ptr0, len0, ptr1, len1, amount, fee, anchor_height, mainnet);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
  * Build an unsigned transaction and return the data needed for cold signing
  * This is called by the online watch-only wallet.
  *
@@ -523,6 +575,39 @@ export function build_unsigned_transaction(notes_json, recipient, amount, fee, a
         throw takeFromExternrefTable0(ret[1]);
     }
     return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Complete an unsigned shielding transaction by patching in transparent signatures.
+ *
+ * Takes the unsigned tx hex (with empty scriptSigs) and an array of `{sig_hex, pubkey_hex}`
+ * per transparent input. Constructs the P2PKH scriptSig for each input and returns the
+ * final signed transaction hex.
+ * @param {string} unsigned_tx_hex
+ * @param {string} signatures_json
+ * @returns {string}
+ */
+export function complete_shielding_transaction(unsigned_tx_hex, signatures_json) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(unsigned_tx_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(signatures_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.complete_shielding_transaction(ptr0, len0, ptr1, len1);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
 }
 
 /**
@@ -721,6 +806,64 @@ export function parse_signature_response(qr_hex) {
         throw takeFromExternrefTable0(ret[1]);
     }
     return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Derive a transparent (t1.../tm...) address from a UFVK string at a given address index.
+ * Returns the base58check-encoded P2PKH address.
+ * @param {string} ufvk_str
+ * @param {number} address_index
+ * @returns {string}
+ */
+export function transparent_address_from_ufvk(ufvk_str, address_index) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.transparent_address_from_ufvk(ptr0, len0, address_index);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * Derive compressed public key from UFVK transparent component for a given address index.
+ *
+ * Uses BIP44 external path: `m/44'/133'/account'/0/<address_index>`
+ * Returns hex-encoded 33-byte compressed secp256k1 public key.
+ * @param {string} ufvk_str
+ * @param {number} address_index
+ * @returns {string}
+ */
+export function transparent_pubkey_from_ufvk(ufvk_str, address_index) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.transparent_pubkey_from_ufvk(ptr0, len0, address_index);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
 }
 
 /**
@@ -1133,7 +1276,7 @@ function __wbg_get_imports(memory) {
             table.set(offset + 2, true);
             table.set(offset + 3, false);
         },
-        memory: memory || new WebAssembly.Memory({initial:27,maximum:16384,shared:true}),
+        memory: memory || new WebAssembly.Memory({initial:43,maximum:16384,shared:true}),
     };
     return {
         __proto__: null,

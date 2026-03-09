@@ -13,13 +13,15 @@ import { openInDedicatedWindow, openInSidePanel } from '../../../utils/navigate'
 import { isSidePanel, isDedicatedWindow } from '../../../utils/popup-detection';
 import { AssetListSkeleton } from '../../../components/primitives/skeleton';
 import { usePreloadBalances } from '../../../hooks/use-preload';
-import { useActiveAddress, deriveZcashTransparent } from '../../../hooks/use-address';
+import { useActiveAddress, deriveZcashTransparent, deriveZcashTransparentFromUfvk } from '../../../hooks/use-address';
 import { usePolkadotPublicKey } from '../../../hooks/use-polkadot-key';
 import { useCosmosAssets } from '../../../hooks/cosmos-balance';
 import { useZcashSyncStatus } from '../../../hooks/zcash-sync';
 import { useTransparentBalance } from '../../../hooks/zcash-transparent-balance';
 import {
   shieldInWorker,
+  buildUnsignedShieldInWorker,
+  completeShieldInWorker,
   spawnNetworkWorker,
   startSyncInWorker,
   startWatchOnlySyncInWorker,
@@ -27,7 +29,15 @@ import {
   resetSyncInWorker,
   isWalletSyncing,
   getBalanceInWorker,
+  type ShieldUnsignedResult,
 } from '../../../state/keyring/network-worker';
+import {
+  encodeZcashShieldingSignRequest,
+  isZcashSignatureQR,
+  parseZcashSignatureResponse,
+} from '@repo/wallet/zcash-zigner';
+import { QrDisplay } from '../../../shared/components/qr-display';
+import { QrScanner } from '../../../shared/components/qr-scanner';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 
 /** lazy load network-specific content - only load when needed */
@@ -407,7 +417,7 @@ const ZcashContent = ({
   const [tAddresses, setTAddresses] = useState<string[]>([]);
 
   useEffect(() => {
-    if (!hasMnemonic || !selectedKeyInfo || selectedKeyInfo.type !== 'mnemonic') return;
+    if (!selectedKeyInfo) return;
     let cancelled = false;
     (async () => {
       try {
@@ -415,17 +425,33 @@ const ZcashContent = ({
         const storedIdx = r['zcashTransparentIndex'] ?? 0;
         const maxIdx = Math.max(4, storedIdx);
         const indices = Array.from({ length: maxIdx + 1 }, (_, i) => i);
-        const mnemonic = await keyRing.getMnemonic(selectedKeyInfo.id);
-        const addrs = await Promise.all(
-          indices.map(i => deriveZcashTransparent(mnemonic, 0, i, isMainnet)),
-        );
-        if (!cancelled) setTAddresses(addrs);
+
+        if (hasMnemonic && selectedKeyInfo.type === 'mnemonic') {
+          // mnemonic wallet: derive from seed
+          const mnemonic = await keyRing.getMnemonic(selectedKeyInfo.id);
+          const addrs = await Promise.all(
+            indices.map(i => deriveZcashTransparent(mnemonic, 0, i, isMainnet)),
+          );
+          if (!cancelled) setTAddresses(addrs);
+        } else if (watchOnly) {
+          // watch-only: derive from UFVK transparent component
+          const ufvk = watchOnly.ufvk ?? (watchOnly.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
+          if (!ufvk) return;
+          try {
+            const addrs = await Promise.all(
+              indices.map(i => deriveZcashTransparentFromUfvk(ufvk, i)),
+            );
+            if (!cancelled) setTAddresses(addrs);
+          } catch {
+            // UFVK may lack transparent component — silently ignore
+          }
+        }
       } catch (err) {
         console.error('failed to derive t-addrs:', err);
       }
     })();
     return () => { cancelled = true; };
-  }, [hasMnemonic, selectedKeyInfo?.id, selectedKeyInfo?.type, isMainnet, keyRing]);
+  }, [hasMnemonic, selectedKeyInfo?.id, selectedKeyInfo?.type, isMainnet, keyRing, watchOnly?.ufvk, watchOnly?.orchardFvk]);
 
   const { totalZat: transparentZat, isLoading: utxoLoading } = useTransparentBalance(tAddresses);
 
@@ -433,6 +459,103 @@ const ZcashContent = ({
   const [shielding, setShielding] = useState(false);
   const [shieldTxid, setShieldTxid] = useState<string | null>(null);
   const [shieldError, setShieldError] = useState<string | null>(null);
+
+  // zigner shielding state
+  const [zignerShieldStep, setZignerShieldStep] = useState<
+    'idle' | 'building' | 'show_qr' | 'scanning' | 'broadcasting' | 'complete' | 'error'
+  >('idle');
+  const [shieldSignRequestQr, setShieldSignRequestQr] = useState<string | null>(null);
+  const [shieldUnsignedData, setShieldUnsignedData] = useState<ShieldUnsignedResult | null>(null);
+  const [zignerShieldTxid, setZignerShieldTxid] = useState<string | null>(null);
+  const [zignerShieldError, setZignerShieldError] = useState<string | null>(null);
+
+  const handleZignerShield = useCallback(async () => {
+    if (!watchOnly || !selectedKeyInfo) return;
+    const ufvk = watchOnly.ufvk ?? (watchOnly.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
+    if (!ufvk) return;
+
+    setZignerShieldStep('building');
+    setZignerShieldTxid(null);
+    setZignerShieldError(null);
+
+    try {
+      await spawnNetworkWorker('zcash');
+      const addressIndexMap: Record<string, number> = {};
+      tAddresses.forEach((addr, i) => { addressIndexMap[addr] = i; });
+
+      const result = await buildUnsignedShieldInWorker(
+        'zcash', selectedKeyInfo.id, zidecarUrl,
+        tAddresses, isMainnet, ufvk, addressIndexMap,
+      );
+      setShieldUnsignedData(result);
+
+      // encode QR sign request
+      const sighashBytes = result.sighashes.map(h => {
+        const bytes = new Uint8Array(32);
+        for (let i = 0; i < 32; i++) bytes[i] = parseInt(h.substring(i * 2, i * 2 + 2), 16);
+        return bytes;
+      });
+
+      const qrHex = encodeZcashShieldingSignRequest({
+        accountIndex: watchOnly.id ? 0 : 0,
+        sighashes: sighashBytes,
+        addressIndices: result.addressIndices,
+        summary: result.summary,
+        mainnet: isMainnet,
+      });
+
+      setShieldSignRequestQr(qrHex);
+      setZignerShieldStep('show_qr');
+    } catch (err) {
+      setZignerShieldError(err instanceof Error ? err.message : String(err));
+      setZignerShieldStep('error');
+    }
+  }, [watchOnly, selectedKeyInfo, tAddresses, isMainnet, zidecarUrl]);
+
+  const handleZignerShieldSigScanned = useCallback(async (data: string) => {
+    if (!isZcashSignatureQR(data)) {
+      setZignerShieldError('invalid signature QR code');
+      setZignerShieldStep('error');
+      return;
+    }
+
+    try {
+      const sigResponse = parseZcashSignatureResponse(data);
+
+      if (!shieldUnsignedData || !selectedKeyInfo) {
+        throw new Error('missing unsigned transaction data');
+      }
+
+      // verify the returned sighash matches what we sent
+      const toHex = (b: Uint8Array) => Array.from(b).map(x => x.toString(16).padStart(2, '0')).join('');
+      const responseSighash = toHex(sigResponse.sighash);
+      if (shieldUnsignedData.sighashes.length > 0 && responseSighash !== shieldUnsignedData.sighashes[0]) {
+        throw new Error('sighash mismatch — signature is for a different transaction');
+      }
+
+      setZignerShieldStep('broadcasting');
+
+      // zigner returns each transparent sig as: DER_sig + 0x01(hashtype) + compressed_pubkey(33 bytes)
+      // split into sig (with hashtype) and pubkey
+      const signatures = sigResponse.transparentSigs.map(combined => {
+        const pubkey = combined.slice(-33);
+        const sig = combined.slice(0, -33);
+        const toHex = (b: Uint8Array) => Array.from(b).map(x => x.toString(16).padStart(2, '0')).join('');
+        return { sig_hex: toHex(sig), pubkey_hex: toHex(pubkey) };
+      });
+
+      const result = await completeShieldInWorker(
+        'zcash', selectedKeyInfo.id, zidecarUrl,
+        shieldUnsignedData.unsignedTxHex, signatures,
+      );
+
+      setZignerShieldTxid(result.txid);
+      setZignerShieldStep('complete');
+    } catch (err) {
+      setZignerShieldError(err instanceof Error ? err.message : String(err));
+      setZignerShieldStep('error');
+    }
+  }, [shieldUnsignedData, selectedKeyInfo, watchOnly, zidecarUrl]);
 
   // rescan state
   const [rescanOpen, setRescanOpen] = useState(false);
@@ -567,7 +690,7 @@ const ZcashContent = ({
       </div>
 
       {/* transparent pool detail — only shown when transparent > 0 */}
-      {hasMnemonic && transparentZat > 0n && (
+      {transparentZat > 0n && (
         <div className='border border-amber-500/30 bg-card p-3'>
           <div className='flex items-center justify-between'>
             <div className='flex items-center gap-2'>
@@ -576,13 +699,25 @@ const ZcashContent = ({
                 {utxoLoading ? '...' : `${tZec.toFixed(8)} ZEC`}
               </span>
             </div>
-            <button
-              onClick={() => void handleShield()}
-              disabled={shielding || !!shieldTxid}
-              className='text-xs font-medium text-amber-500 hover:text-amber-400 transition-colors disabled:opacity-50'
-            >
-              {shielding ? 'shielding...' : shieldTxid ? 'pending...' : 'shield'}
-            </button>
+            {hasMnemonic ? (
+              <button
+                onClick={() => void handleShield()}
+                disabled={shielding || !!shieldTxid}
+                className='text-xs font-medium text-amber-500 hover:text-amber-400 transition-colors disabled:opacity-50'
+              >
+                {shielding ? 'shielding...' : shieldTxid ? 'pending...' : 'shield'}
+              </button>
+            ) : (
+              <button
+                onClick={() => void handleZignerShield()}
+                disabled={zignerShieldStep !== 'idle' && zignerShieldStep !== 'error' && zignerShieldStep !== 'complete'}
+                className='text-xs font-medium text-amber-500 hover:text-amber-400 transition-colors disabled:opacity-50'
+              >
+                {zignerShieldStep === 'building' ? 'building...' :
+                 zignerShieldStep === 'broadcasting' ? 'broadcasting...' :
+                 zignerShieldStep === 'complete' ? 'pending...' : 'shield via zigner'}
+              </button>
+            )}
           </div>
           {shieldTxid && (
             <div className='text-[10px] text-green-500 mt-1.5 font-mono'>
@@ -591,6 +726,64 @@ const ZcashContent = ({
           )}
           {shieldError && (
             <div className='text-[10px] text-red-400 mt-1.5'>{shieldError}</div>
+          )}
+
+          {/* zigner shielding QR flow */}
+          {zignerShieldStep === 'show_qr' && shieldSignRequestQr && (
+            <div className='mt-3 flex flex-col items-center gap-2'>
+              <QrDisplay
+                data={shieldSignRequestQr}
+                size={180}
+                title='scan with zafu zigner'
+                description='scan to sign shielding transaction'
+              />
+              <div className='flex gap-2 w-full'>
+                <button
+                  onClick={() => setZignerShieldStep('scanning')}
+                  className='flex-1 text-xs font-medium bg-primary text-primary-foreground py-1.5 hover:bg-primary/90 transition-colors'
+                >
+                  scan signature
+                </button>
+                <button
+                  onClick={() => { setZignerShieldStep('idle'); setShieldSignRequestQr(null); }}
+                  className='text-xs text-muted-foreground hover:text-foreground px-2 transition-colors'
+                >
+                  cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {zignerShieldStep === 'scanning' && (
+            <div className='mt-3'>
+              <QrScanner
+                onScan={(data) => void handleZignerShieldSigScanned(data)}
+                onError={(err) => {
+                  setZignerShieldError(err);
+                  setZignerShieldStep('error');
+                }}
+                onClose={() => setZignerShieldStep('show_qr')}
+                title='scan signature'
+                description='point camera at zafu zigner signature qr'
+              />
+            </div>
+          )}
+
+          {zignerShieldStep === 'complete' && zignerShieldTxid && (
+            <div className='text-[10px] text-green-500 mt-1.5 font-mono'>
+              shielded: {zignerShieldTxid.slice(0, 16)}... (wait for confirmation)
+            </div>
+          )}
+          {zignerShieldStep === 'error' && zignerShieldError && (
+            <div className='text-[10px] text-red-400 mt-1.5'>
+              {zignerShieldError}
+              <button
+                onClick={() => { setZignerShieldStep('idle'); setZignerShieldError(null); }}
+                className='ml-2 underline'
+              >
+                dismiss
+              </button>
+            </div>
           )}
         </div>
       )}

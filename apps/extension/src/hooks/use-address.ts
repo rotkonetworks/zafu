@@ -107,11 +107,11 @@ async function deriveZcashAddressFromUfvk(ufvk: string, diversifierIndex = 0): P
   }
 }
 
-/** derive transparent address from UFVK (uses cached wasm) */
-export async function deriveZcashTransparentFromUfvk(ufvk: string): Promise<string> {
+/** derive transparent address from UFVK at given index (uses cached wasm) */
+export async function deriveZcashTransparentFromUfvk(ufvk: string, addressIndex = 0): Promise<string> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const zcashWasm = await loadZcashWasm() as any;
-  return zcashWasm.transparent_address_from_ufvk(ufvk) as string;
+  return zcashWasm.transparent_address_from_ufvk(ufvk, addressIndex) as string;
 }
 
 export function useActiveAddress() {
@@ -228,7 +228,6 @@ export function useActiveAddress() {
 
         if (activeNetwork === 'zcash' && zcashWallet) {
           const mainnet = zcashWallet.mainnet ?? true;
-          console.log('[use-address] zcash wallet:', { orchardFvk: zcashWallet.orchardFvk?.slice(0, 20), ufvk: zcashWallet.ufvk?.slice(0, 20), address: zcashWallet.address?.slice(0, 20), label: zcashWallet.label });
           // derive from UFVK string (stored in ufvk field or orchardFvk field)
           const ufvkStr = zcashWallet.ufvk ?? (zcashWallet.orchardFvk?.startsWith('uview') ? zcashWallet.orchardFvk : undefined);
           if (ufvkStr) {

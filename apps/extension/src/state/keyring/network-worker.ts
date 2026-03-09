@@ -17,7 +17,7 @@
 import type { NetworkType } from './types';
 
 export interface NetworkWorkerMessage {
-  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-complete' | 'shield' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos';
+  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -25,7 +25,7 @@ export interface NetworkWorkerMessage {
 }
 
 export interface NetworkWorkerResponse {
-  type: 'ready' | 'address' | 'sync-progress' | 'send-progress' | 'sync-started' | 'sync-stopped' | 'sync-reset' | 'balance' | 'tx-result' | 'send-tx-unsigned' | 'shield-result' | 'wallets' | 'wallet-deleted' | 'notes' | 'memos' | 'error';
+  type: 'ready' | 'address' | 'sync-progress' | 'send-progress' | 'sync-started' | 'sync-stopped' | 'sync-reset' | 'balance' | 'tx-result' | 'send-tx-unsigned' | 'shield-result' | 'shield-unsigned-result' | 'wallets' | 'wallet-deleted' | 'notes' | 'memos' | 'error';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -366,6 +366,43 @@ export const completeSendTxInWorker = async (
   signatures: { orchardSigs: string[]; transparentSigs: string[] },
 ): Promise<{ txid: string }> => {
   return callWorker(network, 'send-tx-complete', { serverUrl, unsignedTx, signatures }, walletId);
+};
+
+/** result of building an unsigned shielding transaction */
+export interface ShieldUnsignedResult {
+  sighashes: string[];
+  unsignedTxHex: string;
+  summary: string;
+  fee: string;
+  addressIndices: number[];
+}
+
+/**
+ * build unsigned shielding transaction for cold-wallet signing
+ */
+export const buildUnsignedShieldInWorker = async (
+  network: NetworkType,
+  walletId: string,
+  serverUrl: string,
+  tAddresses: string[],
+  mainnet: boolean,
+  ufvk: string,
+  addressIndexMap?: Record<string, number>,
+): Promise<ShieldUnsignedResult> => {
+  return callWorker(network, 'shield-unsigned', { serverUrl, tAddresses, mainnet, ufvk, addressIndexMap }, walletId);
+};
+
+/**
+ * complete shielding transaction with signatures and broadcast
+ */
+export const completeShieldInWorker = async (
+  network: NetworkType,
+  walletId: string,
+  serverUrl: string,
+  unsignedTxHex: string,
+  signatures: { sig_hex: string; pubkey_hex: string }[],
+): Promise<{ txid: string }> => {
+  return callWorker(network, 'shield-complete', { serverUrl, unsignedTxHex, signatures }, walletId);
 };
 
 /**

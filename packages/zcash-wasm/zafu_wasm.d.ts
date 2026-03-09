@@ -79,6 +79,10 @@ export class WatchOnlyWallet {
      */
     static from_qr_hex(qr_hex: string): WatchOnlyWallet;
     /**
+     * Import from a UFVK string (uview1.../uviewtest1...)
+     */
+    static from_ufvk(ufvk_str: string): WatchOnlyWallet;
+    /**
      * Get account index
      */
     get_account_index(): number;
@@ -163,6 +167,16 @@ export function build_shielding_transaction(utxos_json: string, privkey_hex: str
 export function build_signed_spend_transaction(seed_phrase: string, notes_json: any, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: any, account_index: number, mainnet: boolean): string;
 
 /**
+ * Build an unsigned shielding transaction (transparent → orchard) for cold-wallet signing.
+ *
+ * Same as `build_shielding_transaction` but does NOT sign the transparent inputs.
+ * Instead, returns the per-input sighashes so an external signer (e.g. Zigner) can sign them.
+ *
+ * Returns JSON: `{ sighashes: [hex], unsigned_tx_hex: hex, summary: string }`
+ */
+export function build_unsigned_shielding_transaction(utxos_json: string, recipient: string, amount: bigint, fee: bigint, anchor_height: number, mainnet: boolean): string;
+
+/**
  * Build an unsigned transaction and return the data needed for cold signing
  * This is called by the online watch-only wallet.
  *
@@ -173,6 +187,15 @@ export function build_signed_spend_transaction(seed_phrase: string, notes_json: 
  * - summary: human-readable transaction summary
  */
 export function build_unsigned_transaction(notes_json: any, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: any, account_index: number, _mainnet: boolean): any;
+
+/**
+ * Complete an unsigned shielding transaction by patching in transparent signatures.
+ *
+ * Takes the unsigned tx hex (with empty scriptSigs) and an array of `{sig_hex, pubkey_hex}`
+ * per transparent input. Constructs the P2PKH scriptSig for each input and returns the
+ * final signed transaction hex.
+ */
+export function complete_shielding_transaction(unsigned_tx_hex: string, signatures_json: string): string;
 
 /**
  * Complete a transaction by applying signatures from cold wallet
@@ -230,6 +253,20 @@ export function num_threads(): number;
 export function parse_signature_response(qr_hex: string): any;
 
 /**
+ * Derive a transparent (t1.../tm...) address from a UFVK string at a given address index.
+ * Returns the base58check-encoded P2PKH address.
+ */
+export function transparent_address_from_ufvk(ufvk_str: string, address_index: number): string;
+
+/**
+ * Derive compressed public key from UFVK transparent component for a given address index.
+ *
+ * Uses BIP44 external path: `m/44'/133'/account'/0/<address_index>`
+ * Returns hex-encoded 33-byte compressed secp256k1 public key.
+ */
+export function transparent_pubkey_from_ufvk(ufvk_str: string, address_index: number): string;
+
+/**
  * Compute the tree root from a hex-encoded frontier.
  */
 export function tree_root_hex(tree_state_hex: string): string;
@@ -264,7 +301,9 @@ export interface InitOutput {
     readonly build_merkle_paths: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
     readonly build_shielding_transaction: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number) => [number, number, number, number];
     readonly build_signed_spend_transaction: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number) => [number, number, number, number];
+    readonly build_unsigned_shielding_transaction: (a: number, b: number, c: number, d: number, e: bigint, f: bigint, g: number, h: number) => [number, number, number, number];
     readonly build_unsigned_transaction: (a: any, b: number, c: number, d: bigint, e: bigint, f: number, g: number, h: any, i: number, j: number) => [number, number, number];
+    readonly complete_shielding_transaction: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly complete_transaction: (a: number, b: number, c: any) => [number, number, number, number];
     readonly create_sign_request: (a: number, b: number, c: number, d: any, e: number, f: number) => [number, number, number, number];
     readonly derive_transparent_privkey: (a: number, b: number, c: number, d: number) => [number, number, number, number];
@@ -272,6 +311,8 @@ export interface InitOutput {
     readonly generate_seed_phrase: () => [number, number, number, number];
     readonly get_commitment_proof_request: (a: number, b: number) => [number, number, number, number];
     readonly parse_signature_response: (a: number, b: number) => [number, number, number];
+    readonly transparent_address_from_ufvk: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly transparent_pubkey_from_ufvk: (a: number, b: number, c: number) => [number, number, number, number];
     readonly tree_root_hex: (a: number, b: number) => [number, number, number, number];
     readonly validate_seed_phrase: (a: number, b: number) => number;
     readonly version: () => [number, number];
@@ -289,6 +330,7 @@ export interface InitOutput {
     readonly watchonlywallet_export_fvk_hex: (a: number) => [number, number];
     readonly watchonlywallet_from_fvk_bytes: (a: number, b: number, c: number, d: number) => [number, number, number];
     readonly watchonlywallet_from_qr_hex: (a: number, b: number) => [number, number, number];
+    readonly watchonlywallet_from_ufvk: (a: number, b: number) => [number, number, number];
     readonly watchonlywallet_get_account_index: (a: number) => number;
     readonly watchonlywallet_get_address: (a: number) => [number, number];
     readonly watchonlywallet_get_address_at: (a: number, b: number) => [number, number];
