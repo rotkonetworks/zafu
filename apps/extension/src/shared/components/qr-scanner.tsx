@@ -28,6 +28,7 @@ export const QrScanner = ({
   const controlsRef = useRef<{ stop: () => void } | null>(null);
   const mountedRef = useRef(true);
   const startingRef = useRef(false);
+  const scannedRef = useRef(false);
 
   const stopScanning = useCallback(() => {
     if (controlsRef.current) {
@@ -68,7 +69,8 @@ export const QrScanner = ({
         backCamera.deviceId,
         videoRef.current,
         (result) => {
-          if (result) {
+          if (result && !scannedRef.current) {
+            scannedRef.current = true;
             stopScanning();
             const text = result.getText();
 

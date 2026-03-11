@@ -333,13 +333,15 @@ export interface SendTxUnsignedResult {
   summary: string;
   fee: string;
   unsignedTx: string;
+  /** action indices that need external spend auth signatures */
+  spendIndices: number[];
 }
 
 /**
  * build a send transaction (runs in worker with witness building)
  *
  * if mnemonic is provided: builds fully signed tx + broadcasts, returns { txid, fee }
- * if no mnemonic: builds unsigned tx for cold signing via QR
+ * if no mnemonic: builds unsigned tx for cold signing via QR (requires ufvk)
  */
 export const buildSendTxInWorker = async (
   network: NetworkType,
@@ -351,8 +353,9 @@ export const buildSendTxInWorker = async (
   accountIndex: number,
   mainnet: boolean,
   mnemonic?: string,
+  ufvk?: string,
 ): Promise<SendTxUnsignedResult | { txid: string; fee: string }> => {
-  return callWorker(network, 'send-tx', { serverUrl, recipient, amount, memo, accountIndex, mainnet, mnemonic }, walletId);
+  return callWorker(network, 'send-tx', { serverUrl, recipient, amount, memo, accountIndex, mainnet, mnemonic, ufvk }, walletId);
 };
 
 /**
@@ -364,8 +367,9 @@ export const completeSendTxInWorker = async (
   serverUrl: string,
   unsignedTx: string,
   signatures: { orchardSigs: string[]; transparentSigs: string[] },
+  spendIndices: number[],
 ): Promise<{ txid: string }> => {
-  return callWorker(network, 'send-tx-complete', { serverUrl, unsignedTx, signatures }, walletId);
+  return callWorker(network, 'send-tx-complete', { serverUrl, unsignedTx, signatures, spendIndices }, walletId);
 };
 
 /** result of building an unsigned shielding transaction */

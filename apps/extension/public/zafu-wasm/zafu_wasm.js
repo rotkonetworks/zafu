@@ -547,30 +547,35 @@ export function build_unsigned_shielding_transaction(utxos_json, recipient, amou
 }
 
 /**
- * Build an unsigned transaction and return the data needed for cold signing
- * This is called by the online watch-only wallet.
+ * Build an unsigned transaction and return the data needed for cold signing.
+ * Uses the PCZT (Partially Constructed Zcash Transaction) flow from the orchard
+ * crate to produce real v5 transaction bytes with Halo 2 proofs.
  *
  * Returns JSON with:
- * - sighash: the transaction sighash (hex)
- * - alphas: array of alpha randomizers for each orchard action (hex)
- * - unsigned_tx: the serialized unsigned transaction (hex)
+ * - sighash: the transaction sighash (hex, 32 bytes)
+ * - alphas: array of alpha randomizers for real spend actions only (hex, 32 bytes each)
+ * - unsigned_tx: the serialized v5 transaction with dummy spend auth sigs (hex)
+ * - spend_indices: array of action indices that need external signatures
  * - summary: human-readable transaction summary
+ * @param {string} ufvk_str
  * @param {any} notes_json
  * @param {string} recipient
  * @param {bigint} amount
  * @param {bigint} fee
  * @param {string} anchor_hex
  * @param {any} merkle_paths_json
- * @param {number} account_index
- * @param {boolean} _mainnet
+ * @param {number} _account_index
+ * @param {boolean} mainnet
  * @returns {any}
  */
-export function build_unsigned_transaction(notes_json, recipient, amount, fee, anchor_hex, merkle_paths_json, account_index, _mainnet) {
-    const ptr0 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+export function build_unsigned_transaction(ufvk_str, notes_json, recipient, amount, fee, anchor_hex, merkle_paths_json, _account_index, mainnet) {
+    const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const ptr1 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len1 = WASM_VECTOR_LEN;
-    const ret = wasm.build_unsigned_transaction(notes_json, ptr0, len0, amount, fee, ptr1, len1, merkle_paths_json, account_index, _mainnet);
+    const ptr2 = passStringToWasm0(anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ret = wasm.build_unsigned_transaction(ptr0, len0, notes_json, ptr1, len1, amount, fee, ptr2, len2, merkle_paths_json, _account_index, mainnet);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
@@ -611,19 +616,31 @@ export function complete_shielding_transaction(unsigned_tx_hex, signatures_json)
 }
 
 /**
- * Complete a transaction by applying signatures from cold wallet
- * Returns the serialized signed transaction ready for broadcast
- * @param {string} unsigned_tx_json
+ * Complete a transaction by patching in spend auth signatures from cold wallet.
+ *
+ * Takes the unsigned v5 tx hex (with zero spend auth sigs for real spends) and an
+ * array of hex-encoded 64-byte RedPallas signatures. Patches them into the correct
+ * offsets in the orchard bundle.
+ *
+ * # Arguments
+ * * `unsigned_tx_hex` - hex-encoded v5 transaction bytes from build_unsigned_transaction
+ * * `signatures_json` - JSON array of hex-encoded 64-byte signatures, one per spend_index
+ * * `spend_indices_json` - JSON array of action indices that need signatures (from build result)
+ *
+ * # Returns
+ * Hex-encoded signed v5 transaction bytes ready for broadcast
+ * @param {string} unsigned_tx_hex
  * @param {any} signatures_json
+ * @param {any} spend_indices_json
  * @returns {string}
  */
-export function complete_transaction(unsigned_tx_json, signatures_json) {
+export function complete_transaction(unsigned_tx_hex, signatures_json, spend_indices_json) {
     let deferred3_0;
     let deferred3_1;
     try {
-        const ptr0 = passStringToWasm0(unsigned_tx_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const ptr0 = passStringToWasm0(unsigned_tx_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.complete_transaction(ptr0, len0, signatures_json);
+        const ret = wasm.complete_transaction(ptr0, len0, signatures_json, spend_indices_json);
         var ptr2 = ret[0];
         var len2 = ret[1];
         if (ret[3]) {
@@ -1151,6 +1168,9 @@ function __wbg_get_imports(memory) {
         __wbg_length_a31e05262e09b7f8: function(arg0) {
             const ret = arg0.length;
             return ret;
+        },
+        __wbg_log_5bad81a8c5e4232f: function(arg0, arg1) {
+            console.log(getStringFromWasm0(arg0, arg1));
         },
         __wbg_msCrypto_8c6d45a75ef1d3da: function(arg0) {
             const ret = arg0.msCrypto;

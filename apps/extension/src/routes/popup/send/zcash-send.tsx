@@ -15,6 +15,7 @@ import { zignerSigningSelector } from '../../../state/zigner-signing';
 import { recentAddressesSelector } from '../../../state/recent-addresses';
 import { contactsSelector } from '../../../state/contacts';
 import { selectEffectiveKeyInfo, keyRingSelector } from '../../../state/keyring';
+import { selectActiveZcashWallet } from '../../../state/wallets';
 import {
   buildSendTxInWorker,
   completeSendTxInWorker,
@@ -82,6 +83,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const { getMnemonic } = useStore(keyRingSelector);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
+  const activeZcashWallet = useStore(selectActiveZcashWallet);
+  const ufvk = activeZcashWallet?.ufvk ?? (activeZcashWallet?.orchardFvk?.startsWith('uview') ? activeZcashWallet.orchardFvk : undefined);
 
   // get recent zcash addresses
   const recentAddresses = useMemo(() => getRecent('zcash', 3), [getRecent]);
@@ -161,6 +164,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         // zigner wallet: build unsigned tx → QR signing flow
         const result = await buildSendTxInWorker(
           'zcash', walletId, zidecarUrl, recipient.trim(), amountZat, memo, accountIndex, mainnet,
+          undefined, ufvk,
         );
 
         if (!('sighash' in result)) {
@@ -239,8 +243,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         const result = await completeSendTxInWorker(
           'zcash', selectedKeyInfo.id, zidecarUrl,
           unsignedTxRef.current.unsignedTx, signatures,
+          unsignedTxRef.current.spendIndices,
         );
 
+        unsignedTxRef.current = null;
         complete(result.txid);
         setStep('complete');
         void recordUsage(recipient, 'zcash');
@@ -248,6 +254,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           setShowSavePrompt(true);
         }
       } catch (err) {
+        unsignedTxRef.current = null;
         setError(err instanceof Error ? err.message : 'failed to broadcast transaction');
         setStep('error');
       }
@@ -625,7 +632,7 @@ description="point camera at zafu zigner's signature qr code"
             </div>
             <h2 className="text-xl font-bold">transaction failed</h2>
             <p className="text-sm text-red-400 text-center">
-              {signingError || 'an error occurred'}
+              {formError || signingError || 'an error occurred'}
             </p>
             <div className="flex gap-2 w-full mt-4">
               <Button variant="secondary" onClick={handleClose} className="flex-1">

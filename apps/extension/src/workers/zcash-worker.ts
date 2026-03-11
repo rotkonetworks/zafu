@@ -83,9 +83,9 @@ interface WasmModule {
     new (fvkBytes: Uint8Array, accountIndex: number, mainnet: boolean): WatchOnlyWallet;
   };
   build_shielding_transaction(utxos_json: string, privkey_hex: string, recipient: string, amount: bigint, fee: bigint, anchor_height: number, mainnet: boolean): string;
-  build_unsigned_transaction(notes_json: string, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: string, account_index: number, mainnet: boolean): string;
+  build_unsigned_transaction(ufvk_str: string, notes_json: unknown, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: unknown, account_index: number, mainnet: boolean): unknown;
   build_signed_spend_transaction(seed_phrase: string, notes_json: unknown, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: unknown, account_index: number, mainnet: boolean): string;
-  complete_transaction(unsigned_tx_json: string, signatures_json: string): string;
+  complete_transaction(unsigned_tx_hex: string, signatures: unknown, spend_indices: unknown): string;
   build_unsigned_shielding_transaction(utxos_json: string, recipient: string, amount: bigint, fee: bigint, anchor_height: number, mainnet: boolean): string;
   complete_shielding_transaction(unsigned_tx_hex: string, signatures_json: string): string;
   derive_transparent_privkey(seed_phrase: string, account: number, index: number): string;
@@ -101,6 +101,12 @@ const hexEncode = (b: Uint8Array): string => {
   let s = '';
   for (let i = 0; i < b.length; i++) s += b[i]!.toString(16).padStart(2, '0');
   return s;
+};
+
+const hexDecode = (hex: string): Uint8Array => {
+  const out = new Uint8Array(hex.length >> 1);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
+  return out;
 };
 
 /** Wait for sync loop to stop after setting syncAbort=true. Polls state.syncing with 50ms interval, max 2s. */
@@ -349,13 +355,13 @@ const buildWitnesses = async (
   notes: DecryptedNote[],
   anchorHeight: number,
   mainnet: boolean,
-): Promise<{ anchorHex: string; paths: string }> => {
+): Promise<{ anchorHex: string; paths: unknown[] }> => {
   if (!wasmModule) throw new Error('wasm not initialized');
 
   const activation = mainnet ? 1_687_104 : 1_842_420;
   const earliestPosition = Math.min(...notes.map(n => n.position));
 
-  console.log(`[zcash-worker] earliest note position: ${earliestPosition}`);
+  console.log(`[zcash-worker] earliest note position: ${earliestPosition}, all positions: ${JSON.stringify(notes.map(n => n.position))}`);
 
   // find checkpoint
   const checkpoint = await findCheckpointHeight(client, earliestPosition, activation, anchorHeight);
@@ -363,16 +369,20 @@ const buildWitnesses = async (
 
   // get tree state at checkpoint
   const ts = await client.getTreeState(checkpoint.height);
+  const checkpointTreeSize = Number(wasmModule!.frontier_tree_size(ts.orchardTree));
+  console.log(`[zcash-worker] checkpoint tree: height=${checkpoint.height}, frontier_size=${checkpointTreeSize}, orchardTree=${ts.orchardTree.substring(0, 40)}...`);
 
   // replay blocks from checkpoint+1 to anchorHeight
   const replayStart = checkpoint.height + 1;
   const compactBlocks: Array<{ height: number; actions: Array<{ cmx_hex: string }> }> = [];
 
+  let totalActions = 0;
   let current = replayStart;
   while (current <= anchorHeight) {
     const end = Math.min(current + WITNESS_BATCH_SIZE - 1, anchorHeight);
     const blocks = await client.getCompactBlocks(current, end);
     for (const block of blocks) {
+      totalActions += block.actions.length;
       compactBlocks.push({
         height: block.height,
         actions: block.actions.map(a => ({ cmx_hex: hexEncode(a.cmx) })),
@@ -381,11 +391,12 @@ const buildWitnesses = async (
     current = end + 1;
   }
 
-  console.log(`[zcash-worker] replayed ${compactBlocks.length} blocks for witnesses`);
+  console.log(`[zcash-worker] replayed ${compactBlocks.length} blocks, ${totalActions} actions (heights ${replayStart}..${anchorHeight})`);
+  console.log(`[zcash-worker] expected tree size at anchor: ${checkpointTreeSize + totalActions}`);
 
   // call witness WASM
   const positions = notes.map(n => n.position);
-  console.log(`[zcash-worker] building merkle paths: positions=${JSON.stringify(positions)}, anchorHeight=${anchorHeight}, blocks=${compactBlocks.length}`);
+  console.log(`[zcash-worker] building merkle paths: positions=${JSON.stringify(positions)}, anchorHeight=${anchorHeight}`);
   let resultRaw: unknown;
   try {
     resultRaw = wasmModule!.build_merkle_paths(
@@ -405,13 +416,15 @@ const buildWitnesses = async (
 
   // verify anchor matches network state
   const anchorTs = await client.getTreeState(anchorHeight);
+  const anchorTreeSize = Number(wasmModule!.frontier_tree_size(anchorTs.orchardTree));
   const networkRoot = wasmModule!.tree_root_hex(anchorTs.orchardTree);
+  console.log(`[zcash-worker] anchor verify: height=${anchorHeight}, networkSize=${anchorTreeSize}, networkRoot=${networkRoot}, ourRoot=${result.anchor_hex}`);
   if (result.anchor_hex !== networkRoot) {
-    console.error(`[zcash-worker] tree root mismatch: ours=${result.anchor_hex}, network=${networkRoot}`);
+    console.error(`[zcash-worker] tree root mismatch: ours=${result.anchor_hex}, network=${networkRoot}, replayedActions=${totalActions}, expectedSize=${checkpointTreeSize + totalActions}, networkSize=${anchorTreeSize}`);
     throw new Error(`tree root mismatch at height ${anchorHeight} (ours=${result.anchor_hex}, network=${networkRoot})`);
   }
 
-  return { anchorHex: result.anchor_hex, paths: JSON.stringify(result.paths) };
+  return { anchorHex: result.anchor_hex, paths: result.paths };
 };
 
 const deriveAddress = (mnemonic: string, accountIndex: number): string => {
@@ -732,7 +745,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const sendPayload = payload as {
           serverUrl: string; recipient: string; amount: string; memo: string;
           accountIndex: number; mainnet: boolean;
-          mnemonic?: string;
+          mnemonic?: string; ufvk?: string;
         };
 
         const sendStart = performance.now();
@@ -802,7 +815,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           }));
 
           // parse merkle paths result for WASM
-          const pathsResult = JSON.parse(paths) as Array<{ position: number; path: Array<{ hash: string }> }>;
+          const pathsResult = paths as Array<{ position: number; path: Array<{ hash: string }> }>;
           const merklePathsForWasm = pathsResult.map(p => ({
             path: p.path.map(e => e.hash),
             position: p.position,
@@ -834,7 +847,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
           // broadcast
           emitProgress('broadcasting transaction');
-          const txData = new Uint8Array(txHex.match(/.{2}/g)!.map(b => parseInt(b, 16)));
+          const txData = hexDecode(txHex);
           const { ZidecarClient: ZC2 } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
           const broadcastClient = new ZC2(sendPayload.serverUrl);
           let result: { errorCode: number; errorMessage: string; txid: Uint8Array };
@@ -859,30 +872,49 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           return;
         }
 
-        // zigner wallet: build unsigned transaction for cold signing
-        emitProgress('building unsigned transaction');
+        // zigner wallet: build unsigned transaction for cold signing (real v5 tx bytes)
+        if (!sendPayload.ufvk) {
+          throw new Error('UFVK required for zigner wallet send');
+        }
 
-        const notesJson = JSON.stringify(selected.map(n => ({
-          value: n.value,
+        emitProgress('building & proving unsigned transaction (halo2)', `${selected.length} spends`);
+        const proveStartZ = performance.now();
+
+        // pass full note data (with rseed, rho, recipient) for real Orchard bundle construction
+        const notesForWasm = selected.map(n => ({
+          value: Number(n.value),
           nullifier: n.nullifier,
           cmx: n.cmx,
           position: n.position,
-        })));
+          rseed_hex: n.rseed ?? '',
+          rho_hex: n.rho ?? '',
+          recipient_hex: n.recipient ?? '',
+        }));
 
-        // build unsigned transaction
+        const pathsForWasm = (paths as Array<{ position: number; path: Array<{ hash: string }> }>).map(p => ({
+          path: p.path.map(e => e.hash),
+          position: p.position,
+        }));
+
+        // build unsigned transaction with real Halo 2 proofs
         const unsignedResult = wasmModule.build_unsigned_transaction(
-          notesJson,
+          sendPayload.ufvk,
+          notesForWasm,
           sendPayload.recipient,
           amountZat,
           fee,
           anchorHex,
-          paths,
+          pathsForWasm,
           sendPayload.accountIndex,
           sendPayload.mainnet,
         );
 
-        const parsed = JSON.parse(unsignedResult) as {
-          sighash: string; alphas: string[]; unsigned_tx: string; summary: string;
+        const proveDurationZ = ((performance.now() - proveStartZ) / 1000).toFixed(1);
+        emitProgress('unsigned transaction proved', `${proveDurationZ}s`);
+
+        const parsed = unsignedResult as unknown as {
+          sighash: string; alphas: string[]; unsigned_tx: string;
+          spend_indices: number[]; summary: string;
         };
 
         const totalDuration = ((performance.now() - sendStart) / 1000).toFixed(1);
@@ -896,6 +928,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             summary: parsed.summary,
             fee: fee.toString(),
             unsignedTx: parsed.unsigned_tx,
+            spendIndices: parsed.spend_indices,
           },
         });
         return;
@@ -909,11 +942,16 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const completePayload = payload as {
           serverUrl: string; unsignedTx: string;
           signatures: { orchardSigs: string[]; transparentSigs: string[] };
+          spendIndices: number[];
         };
 
-        const signaturesJson = JSON.stringify(completePayload.signatures);
-        const txHex = wasmModule.complete_transaction(completePayload.unsignedTx, signaturesJson);
-        const txData = new Uint8Array(txHex.match(/.{2}/g)!.map(b => parseInt(b, 16)));
+        // pass orchard spend auth signatures and their action indices
+        const txHex = wasmModule.complete_transaction(
+          completePayload.unsignedTx,
+          completePayload.signatures.orchardSigs,
+          completePayload.spendIndices,
+        );
+        const txData = hexDecode(txHex);
 
         const { ZidecarClient: ZC } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
         const completeClient = new ZC(completePayload.serverUrl);
@@ -996,14 +1034,14 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           const utxosJson = JSON.stringify(utxos.map(u => ({
             txid: hexEncode(u.txid),
             vout: u.outputIndex,
-            value: u.valueZat.toString(),
+            value: Number(u.valueZat),
             script: hexEncode(u.script),
           })));
 
           const txHex = wasmModule.build_shielding_transaction(
             utxosJson, privkeyHex, recipient, shieldAmount, fee, tip.height, mainnet,
           );
-          const txData = new Uint8Array(txHex.match(/.{2}/g)!.map(b => parseInt(b, 16)));
+          const txData = hexDecode(txHex);
           const result = await client.sendTransaction(txData);
           if (result.errorCode !== 0) throw new Error(`broadcast failed (${result.errorCode}): ${result.errorMessage}`);
 
@@ -1111,9 +1149,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const shieldCompleteTxHex = wasmModule.complete_shielding_transaction(
           shieldCompletePayload.unsignedTxHex, signaturesJson,
         );
-        const shieldCompleteTxData = new Uint8Array(
-          shieldCompleteTxHex.match(/.{2}/g)!.map((b: string) => parseInt(b, 16)),
-        );
+        const shieldCompleteTxData = hexDecode(shieldCompleteTxHex);
 
         const { ZidecarClient: ZCShieldC } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
         const shieldCompleteClient = new ZCShieldC(shieldCompletePayload.serverUrl);

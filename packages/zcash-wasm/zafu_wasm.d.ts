@@ -177,16 +177,18 @@ export function build_signed_spend_transaction(seed_phrase: string, notes_json: 
 export function build_unsigned_shielding_transaction(utxos_json: string, recipient: string, amount: bigint, fee: bigint, anchor_height: number, mainnet: boolean): string;
 
 /**
- * Build an unsigned transaction and return the data needed for cold signing
- * This is called by the online watch-only wallet.
+ * Build an unsigned transaction and return the data needed for cold signing.
+ * Uses the PCZT (Partially Constructed Zcash Transaction) flow from the orchard
+ * crate to produce real v5 transaction bytes with Halo 2 proofs.
  *
  * Returns JSON with:
- * - sighash: the transaction sighash (hex)
- * - alphas: array of alpha randomizers for each orchard action (hex)
- * - unsigned_tx: the serialized unsigned transaction (hex)
+ * - sighash: the transaction sighash (hex, 32 bytes)
+ * - alphas: array of alpha randomizers for real spend actions only (hex, 32 bytes each)
+ * - unsigned_tx: the serialized v5 transaction with dummy spend auth sigs (hex)
+ * - spend_indices: array of action indices that need external signatures
  * - summary: human-readable transaction summary
  */
-export function build_unsigned_transaction(notes_json: any, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: any, account_index: number, _mainnet: boolean): any;
+export function build_unsigned_transaction(ufvk_str: string, notes_json: any, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: any, _account_index: number, mainnet: boolean): any;
 
 /**
  * Complete an unsigned shielding transaction by patching in transparent signatures.
@@ -198,10 +200,21 @@ export function build_unsigned_transaction(notes_json: any, recipient: string, a
 export function complete_shielding_transaction(unsigned_tx_hex: string, signatures_json: string): string;
 
 /**
- * Complete a transaction by applying signatures from cold wallet
- * Returns the serialized signed transaction ready for broadcast
+ * Complete a transaction by patching in spend auth signatures from cold wallet.
+ *
+ * Takes the unsigned v5 tx hex (with zero spend auth sigs for real spends) and an
+ * array of hex-encoded 64-byte RedPallas signatures. Patches them into the correct
+ * offsets in the orchard bundle.
+ *
+ * # Arguments
+ * * `unsigned_tx_hex` - hex-encoded v5 transaction bytes from build_unsigned_transaction
+ * * `signatures_json` - JSON array of hex-encoded 64-byte signatures, one per spend_index
+ * * `spend_indices_json` - JSON array of action indices that need signatures (from build result)
+ *
+ * # Returns
+ * Hex-encoded signed v5 transaction bytes ready for broadcast
  */
-export function complete_transaction(unsigned_tx_json: string, signatures_json: any): string;
+export function complete_transaction(unsigned_tx_hex: string, signatures_json: any, spend_indices_json: any): string;
 
 /**
  * Create a PCZT sign request from transaction parameters
@@ -302,9 +315,9 @@ export interface InitOutput {
     readonly build_shielding_transaction: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number) => [number, number, number, number];
     readonly build_signed_spend_transaction: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number) => [number, number, number, number];
     readonly build_unsigned_shielding_transaction: (a: number, b: number, c: number, d: number, e: bigint, f: bigint, g: number, h: number) => [number, number, number, number];
-    readonly build_unsigned_transaction: (a: any, b: number, c: number, d: bigint, e: bigint, f: number, g: number, h: any, i: number, j: number) => [number, number, number];
+    readonly build_unsigned_transaction: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number) => [number, number, number];
     readonly complete_shielding_transaction: (a: number, b: number, c: number, d: number) => [number, number, number, number];
-    readonly complete_transaction: (a: number, b: number, c: any) => [number, number, number, number];
+    readonly complete_transaction: (a: number, b: number, c: any, d: any) => [number, number, number, number];
     readonly create_sign_request: (a: number, b: number, c: number, d: any, e: number, f: number) => [number, number, number, number];
     readonly derive_transparent_privkey: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly frontier_tree_size: (a: number, b: number) => [bigint, number, number];
