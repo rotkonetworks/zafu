@@ -1,0 +1,130 @@
+/**
+ * zcash auto-sync hook — manages sync lifecycle at the layout level
+ *
+ * this hook persists across tab navigation (home → history → inbox)
+ * so the sync doesn't stop when switching pages.
+ *
+ * use in PopupLayout, not in individual page components.
+ */
+
+import { useEffect, useRef } from 'react';
+import { useStore } from '../state';
+import { selectActiveNetwork, selectEffectiveKeyInfo, keyRingSelector } from '../state/keyring';
+import { selectActiveZcashWallet } from '../state/wallets';
+import {
+  spawnNetworkWorker,
+  startSyncInWorker,
+  startWatchOnlySyncInWorker,
+  stopSyncInWorker,
+  isWalletSyncing,
+} from '../state/keyring/network-worker';
+
+/** resolve wallet birthday height from storage or chain tip */
+async function resolveBirthday(walletId: string, zidecarUrl: string): Promise<number | undefined> {
+  const birthdayKey = `zcashBirthday_${walletId}`;
+  const stored = await chrome.storage.local.get([birthdayKey, 'zcashSyncHeight']);
+  if (stored['zcashSyncHeight'] && stored['zcashSyncHeight'] !== 0) return undefined;
+  if (stored[birthdayKey]) return stored[birthdayKey] as number;
+  try {
+    const { ZidecarClient } = await import('../state/keyring/zidecar-client');
+    const tip = await new ZidecarClient(zidecarUrl).getTip();
+    const height = Math.floor(Math.max(0, tip.height - 100) / 10000) * 10000;
+    await chrome.storage.local.set({ [birthdayKey]: height });
+    return height;
+  } catch { return undefined; }
+}
+
+export function useZcashAutoSync() {
+  const activeNetwork = useStore(selectActiveNetwork);
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  const keyRing = useStore(keyRingSelector);
+  const activeZcashWallet = useStore(selectActiveZcashWallet);
+  const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
+
+  const hasMnemonic = selectedKeyInfo?.type === 'mnemonic';
+  const watchOnly = activeZcashWallet;
+  const walletId = selectedKeyInfo?.id;
+
+  // track which walletId we started sync for, to avoid double-start
+  const syncingWalletRef = useRef<string | null>(null);
+
+  // mnemonic wallet sync
+  useEffect(() => {
+    if (activeNetwork !== 'zcash') return;
+    if (!hasMnemonic || !walletId) return;
+    if (isWalletSyncing('zcash', walletId)) {
+      syncingWalletRef.current = walletId;
+      return;
+    }
+
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      (async () => {
+        try {
+          await spawnNetworkWorker('zcash');
+          if (cancelled) return;
+          const mnemonic = await keyRing.getMnemonic(walletId);
+          if (cancelled) return;
+          const startHeight = await resolveBirthday(walletId, zidecarUrl);
+          if (cancelled) return;
+          syncingWalletRef.current = walletId;
+          console.log('[zcash-sync] starting mnemonic sync for', walletId);
+          await startSyncInWorker('zcash', walletId, mnemonic, zidecarUrl, startHeight);
+        } catch (err) {
+          console.error('[zcash-sync] auto-sync failed:', err);
+        }
+      })();
+    }, 500);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [activeNetwork, hasMnemonic, walletId, keyRing, zidecarUrl]);
+
+  // watch-only wallet sync
+  useEffect(() => {
+    if (activeNetwork !== 'zcash') return;
+    if (hasMnemonic) return;
+    if (!watchOnly) return;
+    const ufvkStr = watchOnly.ufvk ?? (watchOnly.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
+    if (!ufvkStr || !walletId) return;
+    if (isWalletSyncing('zcash', walletId)) {
+      syncingWalletRef.current = walletId;
+      return;
+    }
+
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      (async () => {
+        try {
+          await spawnNetworkWorker('zcash');
+          if (cancelled) return;
+          const startHeight = await resolveBirthday(walletId, zidecarUrl);
+          if (cancelled) return;
+          syncingWalletRef.current = walletId;
+          console.log('[zcash-sync] starting watch-only sync for', walletId);
+          await startWatchOnlySyncInWorker('zcash', walletId, ufvkStr, zidecarUrl, startHeight);
+        } catch (err) {
+          console.error('[zcash-sync] watch-only auto-sync failed:', err);
+        }
+      })();
+    }, 500);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [activeNetwork, hasMnemonic, watchOnly?.ufvk, watchOnly?.orchardFvk, walletId, zidecarUrl]);
+
+  // stop sync when switching away from zcash network
+  useEffect(() => {
+    if (activeNetwork === 'zcash') return;
+    const syncedWallet = syncingWalletRef.current;
+    if (syncedWallet && isWalletSyncing('zcash', syncedWallet)) {
+      console.log('[zcash-sync] stopping sync (switched away from zcash)');
+      void stopSyncInWorker('zcash', syncedWallet).catch(() => {});
+      syncingWalletRef.current = null;
+    }
+  }, [activeNetwork]);
+}

@@ -414,6 +414,23 @@ export class ZidecarClient {
     return this.parseUtxoList(resp);
   }
 
+  /** get transparent transaction IDs for addresses */
+  async getTaddressTxids(addresses: string[], startHeight = 0): Promise<Uint8Array[]> {
+    // encode TransparentAddressFilter proto (same as GetAddressUtxos)
+    const parts: number[] = [];
+    const encoder = new TextEncoder();
+    for (const addr of addresses) {
+      const addrBytes = encoder.encode(addr);
+      parts.push(0x0a, ...this.lengthDelimited(addrBytes));
+    }
+    if (startHeight > 0) {
+      parts.push(0x10, ...this.varint(startHeight));
+    }
+
+    const resp = await this.grpcCall('GetTaddressTxids', new Uint8Array(parts));
+    return this.parseTxidList(resp);
+  }
+
   /** get raw transaction by hash (reveals txid to server - use getBlockTransactions for privacy) */
   async getTransaction(txid: Uint8Array): Promise<{ data: Uint8Array; height: number }> {
     // encode TxFilter proto: field 1 = hash (bytes)
@@ -634,5 +651,35 @@ export class ZidecarClient {
     }
 
     return { height, orchardTree };
+  }
+
+  private parseTxidList(buf: Uint8Array): Uint8Array[] {
+    // TxidList: field 1 repeated bytes txids
+    const txids: Uint8Array[] = [];
+    let pos = 0;
+
+    while (pos < buf.length) {
+      const tag = buf[pos++]!;
+      const field = tag >> 3;
+      const wire = tag & 0x7;
+
+      if (wire === 2) {
+        let len = 0, s = 0;
+        while (pos < buf.length) {
+          const b = buf[pos++]!;
+          len |= (b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7;
+        }
+        if (field === 1) {
+          txids.push(buf.subarray(pos, pos + len));
+        }
+        pos += len;
+      } else if (wire === 0) {
+        while (pos < buf.length && (buf[pos++]! & 0x80)) { /* skip varint */ }
+      } else break;
+    }
+
+    return txids;
   }
 }

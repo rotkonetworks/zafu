@@ -20,8 +20,9 @@ import {
 import { useStore } from '../../../state';
 import { messagesSelector, type Message } from '../../../state/messages';
 import { contactsSelector } from '../../../state/contacts';
-import { selectActiveNetwork, selectPenumbraAccount } from '../../../state/keyring';
+import { selectActiveNetwork, selectPenumbraAccount, selectEffectiveKeyInfo } from '../../../state/keyring';
 import { usePenumbraMemos } from '../../../hooks/penumbra-memos';
+import { useZcashMemos } from '../../../hooks/zcash-memos';
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
 import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { Address } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
@@ -549,6 +550,8 @@ export function InboxPage() {
   const messages = useStore(messagesSelector);
   const contacts = useStore(contactsSelector);
   const activeNetwork = useStore(selectActiveNetwork);
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const [tab, setTab] = useState<TabType>('inbox');
   const [search, setSearch] = useState('');
   const [selectedMessage, setSelectedMessage] = useState<Message | undefined>();
@@ -556,17 +559,27 @@ export function InboxPage() {
   const [replyTo, setReplyTo] = useState<{ address: string; network: 'zcash' | 'penumbra' } | undefined>();
   const [addContactData, setAddContactData] = useState<{ address: string; network: 'zcash' | 'penumbra' } | null>(null);
 
+  const walletId = selectedKeyInfo?.id ?? '';
+
   // memo sync hooks
   const { syncMemos: syncPenumbraMemos, isSyncing: isPenumbraSyncing, syncProgress } = usePenumbraMemos();
+  const { syncMemos: syncZcashMemos, isSyncing: isZcashSyncing, syncProgress: zcashSyncProgress } = useZcashMemos(walletId, zidecarUrl);
+
+  const isSyncing = isPenumbraSyncing || isZcashSyncing;
+  const currentSyncProgress = activeNetwork === 'zcash' ? zcashSyncProgress : syncProgress;
 
   const unreadCount = messages.getUnreadCount();
 
-  // auto-sync on mount for penumbra
+  // auto-sync on mount
   useEffect(() => {
     if (activeNetwork === 'penumbra') {
+      console.log('[inbox] auto-syncing penumbra memos');
       syncPenumbraMemos();
+    } else if (activeNetwork === 'zcash' && walletId) {
+      console.log('[inbox] auto-syncing zcash memos for wallet', walletId);
+      syncZcashMemos();
     }
-  }, [activeNetwork, syncPenumbraMemos]);
+  }, [activeNetwork, walletId, syncPenumbraMemos, syncZcashMemos]);
 
   const displayedMessages = useMemo(() => {
     let result = tab === 'inbox' ? messages.getInbox() : messages.getSent();
@@ -681,21 +694,27 @@ export function InboxPage() {
       <div className='flex items-center justify-between px-4 py-3 border-b border-border/40'>
         <div className='flex items-center gap-2'>
           <h1 className='text-lg font-medium'>inbox</h1>
-          {isPenumbraSyncing && (
+          {isSyncing && (
             <span className='flex items-center gap-1 text-xs text-muted-foreground'>
               <ReloadIcon className='h-3 w-3 animate-spin' />
-              syncing{syncProgress ? ` (${syncProgress.current})` : '...'}
+              syncing{currentSyncProgress ? ` (${currentSyncProgress.current})` : '...'}
             </span>
           )}
         </div>
         <div className='flex items-center gap-2'>
           <button
-            onClick={() => syncPenumbraMemos()}
-            disabled={isPenumbraSyncing}
+            onClick={() => {
+              if (activeNetwork === 'zcash' && walletId) {
+                syncZcashMemos();
+              } else {
+                syncPenumbraMemos();
+              }
+            }}
+            disabled={isSyncing}
             className='rounded-lg p-1.5 hover:bg-muted transition-colors disabled:opacity-50'
             title='sync messages'
           >
-            <ReloadIcon className={cn('h-4 w-4', isPenumbraSyncing && 'animate-spin')} />
+            <ReloadIcon className={cn('h-4 w-4', isSyncing && 'animate-spin')} />
           </button>
           <button
             onClick={() => setShowCompose(true)}

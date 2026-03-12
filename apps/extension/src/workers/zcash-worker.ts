@@ -17,7 +17,7 @@ import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
 const workerSelf = globalThis as any as DedicatedWorkerGlobalScope;
 
 interface WorkerMessage {
-  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos';
+  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos' | 'get-transparent-history';
   id: string;
   network: 'zcash';
   walletId?: string;
@@ -62,6 +62,8 @@ interface DecryptedNote {
   cmx: string;
   txid: string;
   position: number;
+  is_change?: boolean;
+  spent_by_txid?: string;
   rseed?: string;
   rho?: string;
   recipient?: string;
@@ -109,6 +111,23 @@ const hexDecode = (hex: string): Uint8Array => {
   return out;
 };
 
+/**
+ * patch consensus branch ID in a v5 tx to NU5 (0xC2D6D0B4)
+ * allows older zcash_primitives to parse NU6+ transactions
+ * v5 layout: [4B header][4B versionGroupId][4B consensusBranchId]...
+ * NU5 branch ID in LE: B4 D0 D6 C2
+ */
+const NU5_BRANCH_ID_LE = [0xb4, 0xd0, 0xd6, 0xc2];
+const patchBranchId = (buf: Uint8Array): void => {
+  // only patch v5 transactions (header byte 0 = 0x05, byte 3 = 0x80 for fOverwintered)
+  if (buf.length > 12 && buf[0] === 0x05 && buf[3] === 0x80) {
+    buf[8] = NU5_BRANCH_ID_LE[0]!;
+    buf[9] = NU5_BRANCH_ID_LE[1]!;
+    buf[10] = NU5_BRANCH_ID_LE[2]!;
+    buf[11] = NU5_BRANCH_ID_LE[3]!;
+  }
+};
+
 /** Wait for sync loop to stop after setting syncAbort=true. Polls state.syncing with 50ms interval, max 2s. */
 const waitForSyncStop = (state: WalletState, timeoutMs = 2000): Promise<void> => {
   if (!state.syncing) return Promise.resolve();
@@ -129,6 +148,108 @@ const getOrCreateWalletState = (walletId: string): WalletState => {
     walletStates.set(walletId, state);
   }
   return state;
+};
+
+// ── base58check decode (for transparent address → pubkey hash) ──
+
+const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+const base58checkDecode = (addr: string): Uint8Array | null => {
+  // decode base58 to bytes
+  let num = 0n;
+  for (const c of addr) {
+    const idx = BASE58_ALPHABET.indexOf(c);
+    if (idx < 0) return null;
+    num = num * 58n + BigInt(idx);
+  }
+  // zcash t-addresses: 2-byte version + 20-byte hash + 4-byte checksum = 26 bytes
+  const bytes = new Uint8Array(26);
+  for (let i = 25; i >= 0; i--) {
+    bytes[i] = Number(num & 0xffn);
+    num >>= 8n;
+  }
+  // skip 2-byte version prefix, return 20-byte pubkey hash (ignore 4-byte checksum)
+  return bytes.subarray(2, 22);
+};
+
+// ── parse transparent inputs/outputs from raw zcash v5 transaction ──
+
+/** read a compactSize uint from buf at offset, returns [value, newOffset] */
+const readCompactSize = (buf: Uint8Array, off: number): [number, number] => {
+  const first = buf[off]!;
+  if (first < 0xfd) return [first, off + 1];
+  if (first === 0xfd) {
+    return [buf[off + 1]! | (buf[off + 2]! << 8), off + 3];
+  }
+  if (first === 0xfe) {
+    return [buf[off + 1]! | (buf[off + 2]! << 8) | (buf[off + 3]! << 16) | (buf[off + 4]! << 24), off + 5];
+  }
+  // 0xff — 8 byte, unlikely for tx counts
+  return [0, off + 9];
+};
+
+/** read little-endian u64 as bigint */
+const readU64LE = (buf: Uint8Array, off: number): bigint => {
+  let v = 0n;
+  for (let i = 0; i < 8; i++) v |= BigInt(buf[off + i]!) << BigInt(i * 8);
+  return v;
+};
+
+/**
+ * parse a zcash v5 transaction's transparent outputs to find amounts
+ * matching our scripts (scriptPubKey hex strings in ourScripts set)
+ *
+ * returns total zatoshis received by our addresses
+ */
+const parseTransparentTx = (
+  data: Uint8Array,
+  ourScripts: Set<string>,
+): bigint => {
+  let received = 0n;
+  let off = 0;
+
+  // v5 tx format: https://zips.z.cash/zip-0225
+  // header (4 bytes) + nVersionGroupId (4 bytes) + nConsensusBranchId (4 bytes)
+  // + nLockTime (4 bytes) + nExpiryHeight (4 bytes)
+  off += 4 + 4 + 4 + 4 + 4; // = 20 bytes header
+
+  // transparent bundle
+  const [nVin, vinOff] = readCompactSize(data, off);
+  off = vinOff;
+
+  // parse inputs — check scriptSig for our pubkey hash
+  for (let i = 0; i < nVin; i++) {
+    // prevout: txid(32) + index(4)
+    off += 36;
+    // scriptSig
+    const [sigLen, sigOff] = readCompactSize(data, off);
+    off = sigOff;
+    // note: transparent inputs don't carry value — we can't determine sent amount
+    // from the tx alone without looking up the referenced UTXOs
+    off += sigLen;
+    // nSequence
+    off += 4;
+  }
+
+  // parse outputs
+  const [nVout, voutOff] = readCompactSize(data, off);
+  off = voutOff;
+
+  for (let i = 0; i < nVout; i++) {
+    // value: 8 bytes LE
+    const value = readU64LE(data, off);
+    off += 8;
+    // scriptPubKey
+    const [scriptLen, scriptOff] = readCompactSize(data, off);
+    off = scriptOff;
+    const scriptHex = hexEncode(data.subarray(off, off + scriptLen));
+    const isOurs = ourScripts.has(scriptHex);
+    if (isOurs) {
+      received += value;
+    }
+    off += scriptLen;
+  }
+
+  return received;
 };
 
 // ── indexeddb ──
@@ -258,6 +379,7 @@ const saveBatch = async (
   spent: string[],
   syncHeight: number,
   orchardTreeSize?: number,
+  updatedNotes?: DecryptedNote[],
 ): Promise<void> => {
   const db = await getDb();
   const tx = db.transaction(['notes', 'spent', 'meta'], 'readwrite');
@@ -265,6 +387,10 @@ const saveBatch = async (
   const spentStore = tx.objectStore('spent');
   const metaStore = tx.objectStore('meta');
   for (const note of notes) notesStore.put({ ...note, walletId });
+  // re-save notes that were updated (e.g. spent_by_txid added)
+  if (updatedNotes) {
+    for (const note of updatedNotes) notesStore.put({ ...note, walletId });
+  }
   for (const nf of spent) spentStore.put({ walletId, nullifier: nf });
   metaStore.put({ walletId, key: 'syncHeight', value: syncHeight });
   if (orchardTreeSize !== undefined) {
@@ -517,8 +643,10 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
       console.log(`[zcash-worker] blocks ${currentHeight + 1}..${endHeight}`);
       const blocks = await client.getCompactBlocks(currentHeight + 1, endHeight);
 
-      // build cmx→txid lookup only from raw block data (for found note matching)
+      // build cmx→txid, cmx→height, and nullifier→txid lookups from raw block data
       const cmxToTxid = new Map<string, string>();
+      const cmxToHeight = new Map<string, number>();
+      const nfToTxid = new Map<string, string>();
       const actionNullifiers = new Set<string>();
       let actionCount = 0;
 
@@ -529,6 +657,7 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
 
       const newNotes: DecryptedNote[] = [];
       const newSpent: string[] = [];
+      let spentUpdatedNotes: DecryptedNote[] = [];
 
       if (actionCount > 0 && state.keys) {
         // build binary buffer — single allocation, no JS object overhead
@@ -542,9 +671,14 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
             if (a.cmx.length === 32) buf.set(a.cmx, off); off += 32;
             if (a.ephemeralKey.length === 32) buf.set(a.ephemeralKey, off); off += 32;
             if (a.ciphertext.length >= 52) buf.set(a.ciphertext.subarray(0, 52), off); off += 52;
-            // build cmx→txid map + collect action nullifiers (one pass)
-            cmxToTxid.set(hexEncode(a.cmx), hexEncode(a.txid));
-            actionNullifiers.add(hexEncode(a.nullifier));
+            // build cmx→txid/height + nullifier→txid maps, collect action nullifiers (one pass)
+            const cmxHex = hexEncode(a.cmx);
+            const nfHex = hexEncode(a.nullifier);
+            const txidHex = hexEncode(a.txid);
+            cmxToTxid.set(cmxHex, txidHex);
+            cmxToHeight.set(cmxHex, block.height);
+            nfToTxid.set(nfHex, txidHex);
+            actionNullifiers.add(nfHex);
           }
         }
 
@@ -565,17 +699,21 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
         for (const note of foundNotes) {
           // compute absolute tree position: batch start + index within batch
           const position = orchardTreeSize + (note as unknown as { index: number }).index;
-          const full: DecryptedNote = { ...note, position, txid: cmxToTxid.get(note.cmx) ?? '' };
+          const full: DecryptedNote = { ...note, position, txid: cmxToTxid.get(note.cmx) ?? '', height: cmxToHeight.get(note.cmx) ?? 0 };
           console.log(`[zcash-worker] found note: value=${note.value}, pos=${position}, hasRseed=${!!note.rseed}, hasRho=${!!note.rho}, hasRecipient=${!!(note as unknown as { recipient?: string }).recipient}`);
           newNotes.push(full);
           state.notes.push(full);
         }
 
         // detect spent notes: check if any action nullifier matches an owned note's nullifier
+        spentUpdatedNotes = [];
         for (const note of state.notes) {
           if (!state.spentNullifiers.has(note.nullifier) && actionNullifiers.has(note.nullifier)) {
             state.spentNullifiers.add(note.nullifier);
+            // record which txid spent this note
+            note.spent_by_txid = nfToTxid.get(note.nullifier) ?? '';
             newSpent.push(note.nullifier);
+            spentUpdatedNotes.push(note);
           }
         }
       }
@@ -585,7 +723,7 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
 
       // single batched db write for entire batch
       currentHeight = endHeight;
-      await saveBatch(walletId, newNotes, newSpent, currentHeight, orchardTreeSize);
+      await saveBatch(walletId, newNotes, newSpent, currentHeight, orchardTreeSize, spentUpdatedNotes.length > 0 ? spentUpdatedNotes : undefined);
 
       // persist to chrome.storage for popup reactivity
       try { chrome.storage?.local?.set({ zcashSyncHeight: currentHeight }); } catch (e) {
@@ -723,7 +861,11 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       case 'get-notes': {
         if (!walletId) throw new Error('walletId required');
         const noteState = await loadState(walletId);
-        workerSelf.postMessage({ type: 'notes', id, network: 'zcash', walletId, payload: noteState.notes });
+        const notesWithSpent = noteState.notes.map(n => ({
+          ...n,
+          spent: noteState.spentNullifiers.has(n.nullifier),
+        }));
+        workerSelf.postMessage({ type: 'notes', id, network: 'zcash', walletId, payload: notesWithSpent });
         return;
       }
 
@@ -732,8 +874,60 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const memoState = walletStates.get(walletId);
         if (!memoState?.keys) throw new Error('wallet keys not loaded');
         const { txBytes } = payload as { txBytes: number[] };
-        const memos = memoState.keys.decrypt_transaction_memos(new Uint8Array(txBytes));
+        const txBuf = new Uint8Array(txBytes);
+        // patch consensus branch ID to NU5 (0xC2D6D0B4) so older zcash_primitives can parse it
+        // v5 tx layout: [4B header][4B versionGroupId][4B consensusBranchId]...
+        // the v5 structure is identical across NU5/NU6/NU7, only the branch ID differs
+        patchBranchId(txBuf);
+        const memos = memoState.keys.decrypt_transaction_memos(txBuf);
         workerSelf.postMessage({ type: 'memos', id, network: 'zcash', walletId, payload: memos });
+        return;
+      }
+
+      case 'get-transparent-history': {
+        const { serverUrl, tAddresses } = payload as { serverUrl: string; tAddresses: string[] };
+        if (!tAddresses?.length) {
+          workerSelf.postMessage({ type: 'transparent-history', id, network: 'zcash', payload: [] });
+          return;
+        }
+
+        const { ZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
+        const tClient = new ZidecarClient(serverUrl);
+
+        // build script set for our addresses (p2pkh: OP_DUP OP_HASH160 <20> <hash> OP_EQUALVERIFY OP_CHECKSIG)
+        const ourScripts = new Set<string>();
+        for (const addr of tAddresses) {
+          const decoded = base58checkDecode(addr);
+          if (decoded) {
+            ourScripts.add('76a914' + hexEncode(decoded) + '88ac');
+          }
+        }
+
+        const txids = await tClient.getTaddressTxids(tAddresses);
+
+        // fetch raw txs in parallel (concurrency-limited to avoid overwhelming server)
+        const CONCURRENCY = 5;
+        const history: Array<{ txid: string; height: number; received: string }> = [];
+
+        for (let i = 0; i < txids.length; i += CONCURRENCY) {
+          const batch = txids.slice(i, i + CONCURRENCY);
+          const results = await Promise.allSettled(
+            batch.map(async (txidBytes) => {
+              const rawTx = await tClient.getTransaction(txidBytes);
+              const parsed = parseTransparentTx(rawTx.data, ourScripts);
+              return {
+                txid: hexEncode(txidBytes),
+                height: rawTx.height,
+                received: parsed.toString(),
+              };
+            }),
+          );
+          for (const r of results) {
+            if (r.status === 'fulfilled') history.push(r.value);
+          }
+        }
+
+        workerSelf.postMessage({ type: 'transparent-history', id, network: 'zcash', payload: history });
         return;
       }
 

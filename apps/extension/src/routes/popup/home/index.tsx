@@ -27,7 +27,6 @@ import {
   startWatchOnlySyncInWorker,
   stopSyncInWorker,
   resetSyncInWorker,
-  isWalletSyncing,
   getBalanceInWorker,
   type ShieldUnsignedResult,
 } from '../../../state/keyring/network-worker';
@@ -286,105 +285,8 @@ const ZcashContent = ({
     });
   }, [hasWallet, selectedKeyInfo?.id]);
 
-  // auto-start zcash sync — short delay so UI renders first
-  // stops sync on unmount (when switching away from zcash)
-  useEffect(() => {
-    if (!hasMnemonic || !selectedKeyInfo || selectedKeyInfo.type !== 'mnemonic') return;
-    const walletId = selectedKeyInfo.id;
-    if (isWalletSyncing('zcash', walletId)) return;
-
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      (async () => {
-        try {
-          await spawnNetworkWorker('zcash');
-          if (cancelled) return;
-          const mnemonic = await keyRing.getMnemonic(walletId);
-          if (cancelled) return;
-
-          // wallet birthday: use stored birthday or set from tip
-          const birthdayKey = `zcashBirthday_${walletId}`;
-          const stored = await chrome.storage.local.get([birthdayKey, 'zcashSyncHeight']);
-          let startHeight: number | undefined;
-          if (!stored['zcashSyncHeight'] || stored['zcashSyncHeight'] === 0) {
-            if (stored[birthdayKey]) {
-              startHeight = stored[birthdayKey] as number;
-            } else {
-              // first sync — record current tip as birthday (rounded for privacy)
-              try {
-                const { ZidecarClient } = await import('../../../state/keyring/zidecar-client');
-                const tip = await new ZidecarClient(zidecarUrl).getTip();
-                startHeight = Math.floor(Math.max(0, tip.height - 100) / 10000) * 10000;
-                await chrome.storage.local.set({ [birthdayKey]: startHeight });
-              } catch { /* fall through to full scan */ }
-            }
-          }
-
-          if (cancelled) return;
-          await startSyncInWorker('zcash', walletId, mnemonic, zidecarUrl, startHeight);
-        } catch (err) {
-          console.error('[zcash] auto-sync failed:', err);
-        }
-      })();
-    }, 500);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-      // stop zcash sync when switching away from this network
-      if (isWalletSyncing('zcash', walletId)) {
-        void stopSyncInWorker('zcash', walletId).catch(() => {});
-      }
-    };
-  }, [hasMnemonic, selectedKeyInfo?.id, selectedKeyInfo?.type, keyRing, zidecarUrl]);
-
-  // auto-start watch-only sync for zigner wallets (uses UFVK instead of mnemonic)
-  useEffect(() => {
-    if (hasMnemonic) return; // mnemonic sync handles this
-    if (!watchOnly) return;
-    const ufvkStr = watchOnly.ufvk ?? (watchOnly.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
-    if (!ufvkStr) return;
-    if (!selectedKeyInfo) return;
-    const walletId = selectedKeyInfo.id;
-    if (isWalletSyncing('zcash', walletId)) return;
-
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      (async () => {
-        try {
-          await spawnNetworkWorker('zcash');
-          if (cancelled) return;
-
-          const birthdayKey = `zcashBirthday_${walletId}`;
-          const stored = await chrome.storage.local.get([birthdayKey, 'zcashSyncHeight']);
-          let startHeight: number | undefined;
-          if (!stored['zcashSyncHeight'] || stored['zcashSyncHeight'] === 0) {
-            if (stored[birthdayKey]) {
-              startHeight = stored[birthdayKey] as number;
-            } else {
-              try {
-                const { ZidecarClient } = await import('../../../state/keyring/zidecar-client');
-                const tip = await new ZidecarClient(zidecarUrl).getTip();
-                startHeight = Math.floor(Math.max(0, tip.height - 100) / 10000) * 10000;
-                await chrome.storage.local.set({ [birthdayKey]: startHeight });
-              } catch { /* fall through to full scan */ }
-            }
-          }
-
-          if (cancelled) return;
-          await startWatchOnlySyncInWorker('zcash', walletId, ufvkStr, zidecarUrl, startHeight);
-        } catch (err) {
-          console.error('[zcash] watch-only auto-sync failed:', err);
-        }
-      })();
-    }, 500);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-      if (isWalletSyncing('zcash', walletId)) {
-        void stopSyncInWorker('zcash', walletId).catch(() => {});
-      }
-    };
-  }, [hasMnemonic, watchOnly?.ufvk, watchOnly?.orchardFvk, selectedKeyInfo?.id, zidecarUrl]);
+  // sync lifecycle managed by useZcashAutoSync in PopupLayout
+  // this component only reads sync status and balance
 
   // fetch orchard balance from worker on each sync-progress event
   useEffect(() => {

@@ -17,7 +17,7 @@
 import type { NetworkType } from './types';
 
 export interface NetworkWorkerMessage {
-  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos';
+  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos' | 'get-transparent-history';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -25,7 +25,7 @@ export interface NetworkWorkerMessage {
 }
 
 export interface NetworkWorkerResponse {
-  type: 'ready' | 'address' | 'sync-progress' | 'send-progress' | 'sync-started' | 'sync-stopped' | 'sync-reset' | 'balance' | 'tx-result' | 'send-tx-unsigned' | 'shield-result' | 'shield-unsigned-result' | 'wallets' | 'wallet-deleted' | 'notes' | 'memos' | 'error';
+  type: 'ready' | 'address' | 'sync-progress' | 'send-progress' | 'sync-started' | 'sync-stopped' | 'sync-reset' | 'balance' | 'tx-result' | 'send-tx-unsigned' | 'shield-result' | 'shield-unsigned-result' | 'wallets' | 'wallet-deleted' | 'notes' | 'memos' | 'transparent-history' | 'error';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -273,6 +273,10 @@ export interface DecryptedNoteWithTxid {
   nullifier: string;
   cmx: string;
   txid: string;
+  position: number;
+  is_change?: boolean;
+  spent?: boolean;
+  spent_by_txid?: string;
 }
 
 /**
@@ -302,6 +306,24 @@ export const decryptMemosInWorker = async (
 ): Promise<FoundNoteWithMemo[]> => {
   // convert to array for postMessage serialization
   return callWorker(network, 'decrypt-memos', { txBytes: Array.from(txBytes) }, walletId);
+};
+
+/** transparent transaction history entry */
+export interface TransparentHistoryEntry {
+  txid: string;
+  height: number;
+  received: string; // zatoshis received by our addresses
+}
+
+/**
+ * get transparent transaction history for addresses
+ */
+export const getTransparentHistoryInWorker = async (
+  network: NetworkType,
+  serverUrl: string,
+  tAddresses: string[],
+): Promise<TransparentHistoryEntry[]> => {
+  return callWorker(network, 'get-transparent-history', { serverUrl, tAddresses });
 };
 
 export interface ShieldResult {

@@ -235,6 +235,7 @@ async function processBucket(
       const heightNotes = notesByHeight.get(height);
       if (!heightNotes || heightNotes.length === 0) continue;
 
+
       // build cmx set for quick lookup
       const cmxSet = new Set(heightNotes.map(n => n.cmx));
 
@@ -370,13 +371,23 @@ export function useZcashMemos(walletId: string, zidecarUrl: string = DEFAULT_ZID
       }
 
       // 6. filter out already-cached buckets
+      //    on first sync (0 messages, notes exist), clear cache once and re-fetch
+      //    (previous sync may have cached with wrong heights or before memos arrived)
+      const resyncKey = `zcashMemoResynced_${walletId}`;
+      const { [resyncKey]: alreadyResynced } = await chrome.storage.local.get(resyncKey);
+      const forceResync = !alreadyResynced && existingMessages.length === 0 && notesToProcess.length > 0;
+      if (forceResync) {
+        await clearMemoCache(walletId);
+        await chrome.storage.local.set({ [resyncKey]: true });
+      }
+
       const allBuckets = Array.from(bucketSet).sort((a, b) => a - b);
       const uncachedBuckets: number[] = [];
       const cachedBucketSet = new Set<number>();
       let cached = 0;
 
       for (const bucket of allBuckets) {
-        if (await isBucketProcessed(db, walletId, bucket)) {
+        if (!forceResync && await isBucketProcessed(db, walletId, bucket)) {
           cached++;
           cachedBucketSet.add(bucket);
         } else {
