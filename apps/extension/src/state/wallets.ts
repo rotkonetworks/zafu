@@ -18,6 +18,7 @@ export interface ZcashWalletJson {
   address: string;
   accountIndex: number;
   mainnet: boolean;
+  ufvk?: string;
 }
 
 export interface WalletsSlice {
@@ -148,6 +149,7 @@ export const createWalletsSlice =
           address,
           accountIndex: walletImport.accountIndex,
           mainnet: walletImport.mainnet,
+          ufvk: walletImport.ufvk,
         };
 
         set(state => {

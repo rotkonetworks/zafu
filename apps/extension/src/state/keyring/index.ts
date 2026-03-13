@@ -631,24 +631,59 @@ export const createKeyRingSlice = (
 
     deleteKeyRing: async (vaultId: string) => {
       const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
-      if (vaults.length <= 1) {
-        throw new Error('cannot delete last account');
-      }
-
       const updatedVaults = vaults.filter(v => v.id !== vaultId);
       await local.set('vaults', updatedVaults);
 
-      // Also remove associated penumbra wallet (linked via vaultId)
+      // remove associated penumbra wallet (linked via vaultId)
       const wallets = (await local.get('wallets')) ?? [];
       const updatedWallets = wallets.filter((w: { vaultId?: string }) => w.vaultId !== vaultId);
       if (updatedWallets.length !== wallets.length) {
         await local.set('wallets', updatedWallets);
 
-        // Adjust activeWalletIndex if needed
         const activeWalletIndex = await local.get('activeWalletIndex') ?? 0;
         if (activeWalletIndex >= updatedWallets.length) {
           await local.set('activeWalletIndex', Math.max(0, updatedWallets.length - 1));
         }
+      }
+
+      // last vault deleted — nuke all wallet data and return to onboarding
+      if (updatedVaults.length === 0) {
+        // clear session
+        await session.set('passwordKey', undefined);
+
+        // clear wallet-specific chrome.storage.local keys
+        const allLocalKeys = await chrome.storage.local.get(null);
+        const keysToRemove = Object.keys(allLocalKeys).filter(k =>
+          k.startsWith('zcashBirthday_') ||
+          k === 'zcashSyncHeight' ||
+          k === 'zcashShieldedIndex' ||
+          k === 'zcashTransparentIndex' ||
+          k === 'fullSyncHeight' ||
+          k === 'compactFrontierBlockHeight' ||
+          k === 'pendingClaim' ||
+          k === 'params'
+        );
+        if (keysToRemove.length > 0) {
+          await chrome.storage.local.remove(keysToRemove);
+        }
+
+        // delete IndexedDB databases (zcash sync data + memo cache)
+        try { indexedDB.deleteDatabase('zafu-zcash'); } catch {}
+        try { indexedDB.deleteDatabase('zafu-memo-cache'); } catch {}
+
+        // clear keyring storage
+        await local.set('selectedVaultId', undefined);
+        await local.set('wallets', []);
+        await local.set('activeWalletIndex', 0);
+
+        set(state => {
+          state.keyRing.keyInfos = [];
+          state.keyRing.selectedKeyInfo = undefined;
+          state.keyRing.status = 'empty';
+          state.wallets.all = [];
+          state.wallets.activeIndex = 0;
+        });
+        return;
       }
 
       // if deleted was selected, select first remaining
@@ -662,7 +697,6 @@ export const createKeyRingSlice = (
       set(state => {
         state.keyRing.keyInfos = keyInfos;
         state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
-        // Also update wallets state
         state.wallets.all = updatedWallets;
         if (state.wallets.activeIndex >= updatedWallets.length) {
           state.wallets.activeIndex = Math.max(0, updatedWallets.length - 1);

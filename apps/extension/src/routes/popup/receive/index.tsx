@@ -9,16 +9,17 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeftIcon, CopyIcon, CheckIcon, InfoCircledIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from '@radix-ui/react-icons';
+import { ArrowLeftIcon, CopyIcon, CheckIcon, InfoCircledIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ReloadIcon } from '@radix-ui/react-icons';
 import { PopupPath } from '../paths';
 import { useStore } from '../../../state';
 import { selectActiveNetwork, selectEffectiveKeyInfo, selectPenumbraAccount, keyRingSelector } from '../../../state/keyring';
-import { getActiveWalletJson } from '../../../state/wallets';
+import { getActiveWalletJson, selectActiveZcashWallet } from '../../../state/wallets';
 import { useActiveAddress } from '../../../hooks/use-address';
 import {
   derivePenumbraEphemeralFromMnemonic,
   derivePenumbraEphemeralFromFvk,
   deriveZcashTransparent,
+  deriveZcashTransparentFromUfvk,
 } from '../../../hooks/use-address';
 import { useIbcChains, type IbcChain } from '../../../hooks/ibc-chains';
 import { useCosmosAssets, type CosmosAsset } from '../../../hooks/cosmos-balance';
@@ -450,16 +451,37 @@ function ReceiveTab({ address, loading, activeNetwork }: {
   const keyRing = useStore(keyRingSelector);
   const penumbraWallet = useStore(getActiveWalletJson);
 
+  const zcashWallet = useStore(selectActiveZcashWallet);
   const isPenumbra = activeNetwork === 'penumbra';
   const isZcash = activeNetwork === 'zcash';
   const isMnemonic = selectedKeyInfo?.type === 'mnemonic';
+  const zcashUfvk = zcashWallet?.ufvk ?? (zcashWallet?.orchardFvk?.startsWith('uview') ? zcashWallet.orchardFvk : undefined);
+  const canTransparent = isMnemonic || !!zcashUfvk;
 
   // zcash transparent address state
   const [transparent, setTransparent] = useState(false);
   const [transparentIndex, setTransparentIndex] = useState(0);
   const [transparentAddress, setTransparentAddress] = useState('');
   const [transparentLoading, setTransparentLoading] = useState(false);
+  const [transparentError, setTransparentError] = useState<string | null>(null);
   const [showTransparentTooltip, setShowTransparentTooltip] = useState(false);
+
+  // auto-rotate zcash addresses on mount: bump both indices
+  useEffect(() => {
+    if (!isZcash || !canTransparent) return;
+
+    (async () => {
+      const r = await chrome.storage.local.get(['zcashShieldedIndex', 'zcashTransparentIndex']);
+      const nextShielded = (r['zcashShieldedIndex'] ?? 0) + 1;
+      const nextTransparent = (r['zcashTransparentIndex'] ?? 0) + 1;
+      await chrome.storage.local.set({
+        zcashShieldedIndex: nextShielded,
+        zcashTransparentIndex: nextTransparent,
+      });
+      setTransparentIndex(nextTransparent);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isZcash, canTransparent]);
 
   const displayAddress = transparent && isZcash && transparentAddress
     ? transparentAddress
@@ -516,29 +538,51 @@ function ReceiveTab({ address, loading, activeNetwork }: {
 
   // derive zcash transparent address when toggled on or index changes
   useEffect(() => {
-    if (!transparent || !isZcash || !isMnemonic) return;
+    if (!transparent || !isZcash || !canTransparent) return;
 
     let cancelled = false;
     setTransparentLoading(true);
+    setTransparentError(null);
 
     const derive = async () => {
       try {
-        const mnemonic = await keyRing.getMnemonic(selectedKeyInfo!.id);
-        const addr = await deriveZcashTransparent(mnemonic, 0, transparentIndex, true);
-        if (!cancelled) {
-          setTransparentAddress(addr);
-          setTransparentLoading(false);
+        if (isMnemonic && selectedKeyInfo) {
+          // mnemonic wallet: derive from seed (supports multiple indices)
+          const mnemonic = await keyRing.getMnemonic(selectedKeyInfo.id);
+          const addr = await deriveZcashTransparent(mnemonic, 0, transparentIndex, true);
+          if (!cancelled) {
+            setTransparentAddress(addr);
+            setTransparentLoading(false);
+          }
+        } else if (zcashUfvk) {
+          // watch-only wallet: derive from UFVK at selected index
+          console.log('[receive] deriving transparent from ufvk, index:', transparentIndex);
+          const addr = await deriveZcashTransparentFromUfvk(zcashUfvk, transparentIndex);
+          console.log('[receive] transparent address:', addr);
+          if (!cancelled) {
+            setTransparentAddress(addr);
+            setTransparentLoading(false);
+          }
         }
       } catch (err) {
         console.error('failed to derive transparent address:', err);
-        if (!cancelled) setTransparentLoading(false);
+        if (!cancelled) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (msg.includes('no transparent component')) {
+            setTransparentError('this wallet key does not include a transparent key — re-import from an updated zigner to enable transparent addresses');
+          } else {
+            setTransparentError(msg);
+          }
+          setTransparentAddress('');
+          setTransparentLoading(false);
+        }
       }
     };
 
     void derive();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [transparent, transparentIndex, isZcash, isMnemonic]);
+  }, [transparent, transparentIndex, isZcash, canTransparent, isMnemonic, zcashUfvk]);
 
   const copyAddress = useCallback(async () => {
     if (!displayAddress) return;
@@ -561,6 +605,13 @@ function ReceiveTab({ address, loading, activeNetwork }: {
       return !prev;
     });
     setCopied(false);
+  }, []);
+
+  // manually rotate shielded address — bump index in storage
+  const handleRotateShielded = useCallback(async () => {
+    const r = await chrome.storage.local.get('zcashShieldedIndex');
+    const next = (r['zcashShieldedIndex'] ?? 0) + 1;
+    await chrome.storage.local.set({ zcashShieldedIndex: next });
   }, []);
 
   return (
@@ -624,7 +675,18 @@ function ReceiveTab({ address, loading, activeNetwork }: {
         </div>
       )}
 
-      {isZcash && isMnemonic && (
+      {isZcash && canTransparent && !transparent && (
+        <button
+          onClick={() => void handleRotateShielded()}
+          disabled={loading}
+          className='flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-foreground hover:text-foreground disabled:opacity-50'
+        >
+          <ReloadIcon className='h-3 w-3' />
+          new address
+        </button>
+      )}
+
+      {isZcash && canTransparent && (
         <>
           <div className='flex w-full items-center justify-between'>
             <div className='flex items-center gap-1.5'>
@@ -666,7 +728,11 @@ function ReceiveTab({ address, loading, activeNetwork }: {
             </button>
           </div>
 
-          {transparent && (
+          {transparent && transparentError && (
+            <p className='w-full text-xs text-amber-400'>{transparentError}</p>
+          )}
+
+          {transparent && canTransparent && !transparentError && (
             <div className='flex w-full items-center justify-center gap-1'>
               <button
                 disabled={transparentIndex <= 0}
@@ -679,7 +745,18 @@ function ReceiveTab({ address, loading, activeNetwork }: {
                 Address #{transparentIndex}
               </span>
               <button
-                onClick={() => setTransparentIndex(i => i + 1)}
+                onClick={() => {
+                  setTransparentIndex(i => {
+                    const next = i + 1;
+                    // persist highest-seen index
+                    chrome.storage.local.get('zcashTransparentIndex').then(r => {
+                      if (next > (r['zcashTransparentIndex'] ?? 0)) {
+                        void chrome.storage.local.set({ zcashTransparentIndex: next });
+                      }
+                    });
+                    return next;
+                  });
+                }}
                 className='p-1 text-muted-foreground transition-colors hover:text-foreground'
               >
                 <ChevronRightIcon className='h-4 w-4' />

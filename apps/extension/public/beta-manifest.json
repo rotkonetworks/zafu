@@ -8,6 +8,9 @@
   "action": {
     "default_popup": "popup.html"
   },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
   "icons": {
     "16": "favicon/beta/icon16.png",
     "32": "favicon/beta/icon32.png",
@@ -41,7 +44,7 @@
       "matches": ["<all_urls>"]
     }
   ],
-  "permissions": ["storage", "unlimitedStorage", "offscreen", "alarms"],
+  "permissions": ["storage", "unlimitedStorage", "offscreen", "alarms", "sidePanel", "contextMenus"],
   "host_permissions": ["<all_urls>"],
   "externally_connectable": {
     "matches": ["<all_urls>"]

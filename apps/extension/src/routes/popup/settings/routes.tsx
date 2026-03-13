@@ -34,6 +34,9 @@ const SettingsParachains = lazy(() =>
 const SettingsPrivacy = lazy(() =>
   import('./settings-privacy').then(m => ({ default: m.SettingsPrivacy })),
 );
+const SettingsWallets = lazy(() =>
+  import('./settings-wallets').then(m => ({ default: m.SettingsWallets })),
+);
 const SettingsAbout = lazy(() =>
   import('./settings-about').then(m => ({ default: m.SettingsAbout })),
 );
@@ -98,6 +101,10 @@ export const settingsRoutes = [
   {
     path: PopupPath.SETTINGS_PRIVACY,
     element: withSuspense(SettingsPrivacy),
+  },
+  {
+    path: PopupPath.SETTINGS_WALLETS,
+    element: withSuspense(SettingsWallets),
   },
   {
     path: PopupPath.SETTINGS_ABOUT,

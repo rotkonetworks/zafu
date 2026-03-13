@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { usePopupReady } from '../../hooks/popup-ready';
+import { useZcashAutoSync } from '../../hooks/zcash-auto-sync';
 import { BottomTabs, BOTTOM_TABS_HEIGHT } from '../../components/bottom-tabs';
 import { AppHeader } from '../../components/app-header';
 import { MenuDrawer } from '../../components/menu-drawer';
@@ -65,6 +66,7 @@ const matchesRoute = (pathname: string, routes: string[]) =>
 
 export const PopupLayout = () => {
   usePopupReady();
+  useZcashAutoSync();
   const location = useLocation();
   const activeNetwork = useStore(selectActiveNetwork);
   const [menuOpen, setMenuOpen] = useState(false);

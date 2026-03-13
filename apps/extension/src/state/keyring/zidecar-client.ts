@@ -34,6 +34,15 @@ export interface ChainTip {
   hash: Uint8Array;
 }
 
+export interface Utxo {
+  address: string;
+  txid: Uint8Array;
+  outputIndex: number;
+  script: Uint8Array;
+  valueZat: bigint;
+  height: number;
+}
+
 export class ZidecarClient {
   private serverUrl: string;
 
@@ -66,7 +75,8 @@ export class ZidecarClient {
       parts.push(...this.varint(endHeight));
     }
 
-    const resp = await this.grpcCall('GetCompactBlocks', new Uint8Array(parts));
+    // streaming RPC — need raw response with gRPC frames intact
+    const resp = await this.grpcCallStream('GetCompactBlocks', new Uint8Array(parts));
     return this.parseBlockStream(resp);
   }
 
@@ -129,7 +139,7 @@ export class ZidecarClient {
       off += 32;
       if (a.ephemeralKey.length === 32) buf.set(a.ephemeralKey, off);
       off += 32;
-      if (a.ciphertext.length >= 52) buf.set(a.ciphertext.slice(0, 52), off);
+      if (a.ciphertext.length >= 52) buf.set(a.ciphertext.subarray(0, 52), off);
       off += 52;
     }
 
@@ -165,9 +175,35 @@ export class ZidecarClient {
     const buf = new Uint8Array(await resp.arrayBuffer());
     if (buf.length < 5) throw new Error('empty grpc response');
 
-    // extract first frame
+    // extract first frame (unary RPCs only)
     const len = (buf[1]! << 24) | (buf[2]! << 16) | (buf[3]! << 8) | buf[4]!;
-    return buf.slice(5, 5 + len);
+    return buf.subarray(5, 5 + len);
+  }
+
+  /** raw gRPC-web call for server-streaming RPCs — returns full response with frame headers */
+  private async grpcCallStream(method: string, msg: Uint8Array): Promise<Uint8Array> {
+    const path = `${this.serverUrl}/zidecar.v1.Zidecar/${method}`;
+
+    const body = new Uint8Array(5 + msg.length);
+    body[0] = 0;
+    body[1] = (msg.length >> 24) & 0xff;
+    body[2] = (msg.length >> 16) & 0xff;
+    body[3] = (msg.length >> 8) & 0xff;
+    body[4] = msg.length & 0xff;
+    body.set(msg, 5);
+
+    const resp = await fetch(path, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/grpc-web+proto',
+        'Accept': 'application/grpc-web+proto',
+        'x-grpc-web': '1',
+      },
+      body,
+    });
+
+    if (!resp.ok) throw new Error(`gRPC HTTP ${resp.status}`);
+    return new Uint8Array(await resp.arrayBuffer());
   }
 
   private varint(n: number): number[] {
@@ -268,7 +304,7 @@ export class ZidecarClient {
       pos += 5;
       if (pos + len > buf.length) break;
 
-      blocks.push(this.parseBlock(buf.slice(pos, pos + len)));
+      blocks.push(this.parseBlock(buf.subarray(pos, pos + len)));
       pos += len;
     }
 
@@ -301,7 +337,7 @@ export class ZidecarClient {
           if (!(b & 0x80)) break;
           s += 7;
         }
-        const data = buf.slice(pos, pos + len);
+        const data = buf.subarray(pos, pos + len);
         if (field === 2) block.hash = data;
         else if (field === 3) block.actions.push(this.parseAction(data));
         pos += len;
@@ -334,7 +370,7 @@ export class ZidecarClient {
           if (!(b & 0x80)) break;
           s += 7;
         }
-        const data = buf.slice(pos, pos + len);
+        const data = buf.subarray(pos, pos + len);
         if (field === 1) a.cmx = data;
         else if (field === 2) a.ephemeralKey = data;
         else if (field === 3) a.ciphertext = data;
@@ -345,6 +381,87 @@ export class ZidecarClient {
     }
 
     return a;
+  }
+
+  /** get tree state at a specific height (orchard frontier for witness building) */
+  async getTreeState(height: number): Promise<{ height: number; orchardTree: string; time: number }> {
+    // encode BlockId proto: field 1 = height (varint)
+    const parts: number[] = [0x08, ...this.varint(height)];
+    const resp = await this.grpcCall('GetTreeState', new Uint8Array(parts));
+    return this.parseTreeState(resp);
+  }
+
+  /** get block time (unix seconds) from compact block */
+  async getBlockTime(height: number): Promise<number> {
+    const parts: number[] = [0x08, ...this.varint(height)];
+    const resp = await this.grpcCall('GetBlock', new Uint8Array(parts));
+    // CompactBlock proto: field 5 = time (varint)
+    let pos = 0;
+    while (pos < resp.length) {
+      const tag = resp[pos++]!;
+      const field = tag >> 3;
+      const wire = tag & 0x7;
+      if (wire === 0) {
+        let v = 0, s = 0;
+        while (pos < resp.length) {
+          const b = resp[pos++]!;
+          v |= (b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7;
+        }
+        if (field === 5) return v;
+      } else if (wire === 2) {
+        let len = 0, s = 0;
+        while (pos < resp.length) {
+          const b = resp[pos++]!;
+          len |= (b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7;
+        }
+        pos += len;
+      } else break;
+    }
+    return 0;
+  }
+
+  /** get transparent address UTXOs */
+  async getAddressUtxos(addresses: string[], startHeight = 0, maxEntries = 0): Promise<Utxo[]> {
+    // encode GetAddressUtxosArg proto
+    const parts: number[] = [];
+    const encoder = new TextEncoder();
+    for (const addr of addresses) {
+      const addrBytes = encoder.encode(addr);
+      // field 1: repeated string addresses
+      parts.push(0x0a, ...this.lengthDelimited(addrBytes));
+    }
+    if (startHeight > 0) {
+      // field 2: uint32 startHeight
+      parts.push(0x10, ...this.varint(startHeight));
+    }
+    if (maxEntries > 0) {
+      // field 3: uint32 maxEntries
+      parts.push(0x18, ...this.varint(maxEntries));
+    }
+
+    const resp = await this.grpcCall('GetAddressUtxos', new Uint8Array(parts));
+    return this.parseUtxoList(resp);
+  }
+
+  /** get transparent transaction IDs for addresses */
+  async getTaddressTxids(addresses: string[], startHeight = 0): Promise<Uint8Array[]> {
+    // encode TransparentAddressFilter proto (same as GetAddressUtxos)
+    const parts: number[] = [];
+    const encoder = new TextEncoder();
+    for (const addr of addresses) {
+      const addrBytes = encoder.encode(addr);
+      parts.push(0x0a, ...this.lengthDelimited(addrBytes));
+    }
+    if (startHeight > 0) {
+      parts.push(0x10, ...this.varint(startHeight));
+    }
+
+    const resp = await this.grpcCall('GetTaddressTxids', new Uint8Array(parts));
+    return this.parseTxidList(resp);
   }
 
   /** get raw transaction by hash (reveals txid to server - use getBlockTransactions for privacy) */
@@ -437,5 +554,168 @@ export class ZidecarClient {
     }
 
     return { data, height };
+  }
+
+  private parseUtxoList(buf: Uint8Array): Utxo[] {
+    // GetAddressUtxosReplyList: field 1 repeated GetAddressUtxosReply
+    const utxos: Utxo[] = [];
+    let pos = 0;
+
+    while (pos < buf.length) {
+      const tag = buf[pos++]!;
+      const field = tag >> 3;
+      const wire = tag & 0x7;
+
+      if (wire === 2) {
+        let len = 0, s = 0;
+        while (pos < buf.length) {
+          const b = buf[pos++]!;
+          len |= (b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7;
+        }
+        if (field === 1) {
+          utxos.push(this.parseUtxo(buf.subarray(pos, pos + len)));
+        }
+        pos += len;
+      } else if (wire === 0) {
+        // skip varint
+        while (pos < buf.length && (buf[pos++]! & 0x80)) { /* skip */ }
+      } else break;
+    }
+
+    return utxos;
+  }
+
+  private parseUtxo(buf: Uint8Array): Utxo {
+    // GetAddressUtxosReply:
+    //   field 1: string address
+    //   field 2: bytes txid
+    //   field 3: int32 output_index (index)
+    //   field 4: bytes script
+    //   field 5: uint64 value_zat
+    //   field 6: uint64 height
+    const utxo: Utxo = {
+      address: '',
+      txid: new Uint8Array(0),
+      outputIndex: 0,
+      script: new Uint8Array(0),
+      valueZat: 0n,
+      height: 0,
+    };
+    let pos = 0;
+    const decoder = new TextDecoder();
+
+    while (pos < buf.length) {
+      const tag = buf[pos++]!;
+      const field = tag >> 3;
+      const wire = tag & 0x7;
+
+      if (wire === 0) {
+        // varint — need to handle uint64 for valueZat
+        let v = 0n;
+        let s = 0n;
+        while (pos < buf.length) {
+          const b = buf[pos++]!;
+          v |= BigInt(b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7n;
+        }
+        if (field === 3) utxo.outputIndex = Number(v);
+        else if (field === 5) utxo.valueZat = v;
+        else if (field === 6) utxo.height = Number(v);
+      } else if (wire === 2) {
+        let len = 0, s = 0;
+        while (pos < buf.length) {
+          const b = buf[pos++]!;
+          len |= (b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7;
+        }
+        const data = buf.subarray(pos, pos + len);
+        if (field === 1) utxo.address = decoder.decode(data);
+        else if (field === 2) utxo.txid = data;
+        else if (field === 4) utxo.script = data;
+        pos += len;
+      } else break;
+    }
+
+    return utxo;
+  }
+
+  private parseTreeState(buf: Uint8Array): { height: number; orchardTree: string; time: number } {
+    // TreeState proto:
+    //   field 1: string network (length-delimited)
+    //   field 2: uint32 height (varint)
+    //   field 3: bytes hash (length-delimited)
+    //   field 4: uint32 time (varint)
+    //   field 5: string sapling_tree (length-delimited)
+    //   field 6: string orchard_tree (length-delimited)
+    let height = 0;
+    let time = 0;
+    let orchardTree = '';
+    let pos = 0;
+    const decoder = new TextDecoder();
+
+    while (pos < buf.length) {
+      const tag = buf[pos++]!;
+      const field = tag >> 3;
+      const wire = tag & 0x7;
+
+      if (wire === 0) {
+        let v = 0, s = 0;
+        while (pos < buf.length) {
+          const b = buf[pos++]!;
+          v |= (b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7;
+        }
+        if (field === 2) height = v;
+        if (field === 4) time = v;
+      } else if (wire === 2) {
+        let len = 0, s = 0;
+        while (pos < buf.length) {
+          const b = buf[pos++]!;
+          len |= (b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7;
+        }
+        const data = buf.subarray(pos, pos + len);
+        if (field === 6) orchardTree = decoder.decode(data);
+        pos += len;
+      } else break;
+    }
+
+    return { height, orchardTree, time };
+  }
+
+  private parseTxidList(buf: Uint8Array): Uint8Array[] {
+    // TxidList: field 1 repeated bytes txids
+    const txids: Uint8Array[] = [];
+    let pos = 0;
+
+    while (pos < buf.length) {
+      const tag = buf[pos++]!;
+      const field = tag >> 3;
+      const wire = tag & 0x7;
+
+      if (wire === 2) {
+        let len = 0, s = 0;
+        while (pos < buf.length) {
+          const b = buf[pos++]!;
+          len |= (b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7;
+        }
+        if (field === 1) {
+          txids.push(buf.subarray(pos, pos + len));
+        }
+        pos += len;
+      } else if (wire === 0) {
+        while (pos < buf.length && (buf[pos++]! & 0x80)) { /* skip varint */ }
+      } else break;
+    }
+
+    return txids;
   }
 }

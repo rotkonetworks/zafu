@@ -1,17 +1,19 @@
 import { useState, useEffect } from 'react';
-import { ClockIcon, ReloadIcon, ArrowUpIcon, ArrowDownIcon } from '@radix-ui/react-icons';
+import { ClockIcon, ReloadIcon, ArrowUpIcon, ArrowDownIcon, WidthIcon } from '@radix-ui/react-icons';
 import { useQuery } from '@tanstack/react-query';
 import { viewClient, sctClient } from '../../../clients';
 import { useStore } from '../../../state';
-import { selectActiveNetwork } from '../../../state/keyring';
+import { selectActiveNetwork, selectEffectiveKeyInfo } from '../../../state/keyring';
+import { getHistoryInWorker } from '../../../state/keyring/network-worker';
+import { useTransparentAddresses } from '../../../hooks/use-transparent-addresses';
 import { cn } from '@repo/ui/lib/utils';
 import type { TransactionInfo } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 
 interface ParsedTransaction {
   id: string;
   height: number;
-  timestamp: number | null; // null until fetched from SctService
-  type: 'send' | 'receive' | 'swap' | 'delegate' | 'undelegate' | 'unknown';
+  timestamp: number | null;
+  type: 'send' | 'receive' | 'shield' | 'swap' | 'delegate' | 'undelegate' | 'unknown';
   description: string;
   amount?: string;
   asset?: string;
@@ -35,7 +37,6 @@ function parseTransaction(txInfo: TransactionInfo): ParsedTransaction {
     const actionCase = action.actionView.case;
 
     if (actionCase === 'spend') {
-      // only count VISIBLE spends (spends we can see = we funded this tx)
       if (action.actionView.value.spendView?.case === 'visible') {
         hasVisibleSpend = true;
       }
@@ -53,9 +54,6 @@ function parseTransaction(txInfo: TransactionInfo): ParsedTransaction {
     }
   }
 
-  // determine send/receive based on visible spends
-  // if we have visible spends, we funded this = we sent
-  // if we only have outputs (no visible spends), we received
   if (type === 'unknown') {
     if (hasVisibleSpend) {
       type = 'send';
@@ -69,24 +67,27 @@ function parseTransaction(txInfo: TransactionInfo): ParsedTransaction {
   return { id, height, timestamp: null, type, description };
 }
 
+function zatoshiToZec(zatoshis: bigint | string): string {
+  const val = typeof zatoshis === 'string' ? BigInt(zatoshis) : zatoshis;
+  const whole = val / 100_000_000n;
+  const frac = val % 100_000_000n;
+  const fracStr = frac.toString().padStart(8, '0').replace(/0+$/, '') || '0';
+  return `${whole}.${fracStr}`;
+}
+
 function formatTimestamp(ts: number | null): string {
   if (ts === null) return '...';
   const date = new Date(ts);
   const now = new Date();
 
-  // Compare calendar days, not 24-hour periods
   const dateDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const diffDays = Math.floor((today.getTime() - dateDay.getTime()) / (1000 * 60 * 60 * 24));
 
   const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-  if (diffDays === 0) {
-    return `Today ${time}`;
-  }
-  if (diffDays === 1) {
-    return `Yesterday ${time}`;
-  }
+  if (diffDays === 0) return `Today ${time}`;
+  if (diffDays === 1) return `Yesterday ${time}`;
   if (diffDays < 7) {
     const weekday = date.toLocaleDateString([], { weekday: 'short' });
     return `${weekday} ${time}`;
@@ -97,14 +98,17 @@ function formatTimestamp(ts: number | null): string {
 
 function TransactionRow({ tx }: { tx: ParsedTransaction }) {
   const isIncoming = tx.type === 'receive';
+  const isShield = tx.type === 'shield';
 
   return (
     <div className='flex items-center gap-3 rounded-lg border border-border/30 bg-card p-3 hover:border-border transition-colors'>
       <div className={cn(
         'flex h-10 w-10 items-center justify-center rounded-full',
-        isIncoming ? 'bg-green-500/10' : 'bg-muted/50'
+        isShield ? 'bg-blue-500/10' : isIncoming ? 'bg-green-500/10' : 'bg-muted/50'
       )}>
-        {isIncoming ? (
+        {isShield ? (
+          <WidthIcon className='h-5 w-5 text-blue-500' />
+        ) : isIncoming ? (
           <ArrowDownIcon className='h-5 w-5 text-green-500' />
         ) : (
           <ArrowUpIcon className='h-5 w-5 text-muted-foreground' />
@@ -114,11 +118,22 @@ function TransactionRow({ tx }: { tx: ParsedTransaction }) {
       <div className='flex-1 min-w-0'>
         <div className='flex items-center justify-between gap-2'>
           <span className='text-sm font-medium'>{tx.description}</span>
-          <span className='text-xs text-muted-foreground'>{formatTimestamp(tx.timestamp)}</span>
+          {tx.amount && (
+            <span className={cn('text-sm font-mono',
+              isShield ? 'text-blue-500' : isIncoming ? 'text-green-500' : 'text-muted-foreground'
+            )}>
+              {isIncoming ? '+' : ''}{tx.amount} {tx.asset ?? ''}
+            </span>
+          )}
         </div>
-        <p className='text-xs text-muted-foreground mt-0.5 font-mono truncate'>
-          {tx.id.slice(0, 16)}...
-        </p>
+        <div className='flex items-center justify-between gap-2 mt-0.5'>
+          <p className='text-xs text-muted-foreground font-mono truncate'>
+            {tx.id.slice(0, 16)}...
+          </p>
+          <span className='text-xs text-muted-foreground whitespace-nowrap'>
+            {tx.height > 0 ? `#${tx.height}` : formatTimestamp(tx.timestamp)}
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -126,10 +141,17 @@ function TransactionRow({ tx }: { tx: ParsedTransaction }) {
 
 export const HistoryPage = () => {
   const activeNetwork = useStore(selectActiveNetwork);
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const [transactions, setTransactions] = useState<ParsedTransaction[]>([]);
 
-  const { isLoading, error, refetch } = useQuery({
-    queryKey: ['transactionHistory', activeNetwork],
+  const walletId = selectedKeyInfo?.id;
+  const isMainnet = !zidecarUrl.includes('testnet');
+  const { tAddresses } = useTransparentAddresses(isMainnet);
+
+  // penumbra history
+  const penumbraQuery = useQuery({
+    queryKey: ['transactionHistory', 'penumbra'],
     enabled: activeNetwork === 'penumbra',
     staleTime: 30_000,
     queryFn: async () => {
@@ -141,7 +163,6 @@ export const HistoryPage = () => {
         }
       }
 
-      // fetch real timestamps from SctService for unique heights
       const uniqueHeights = [...new Set(txs.map(tx => tx.height))];
       const timestampMap = new Map<number, number>();
 
@@ -153,45 +174,54 @@ export const HistoryPage = () => {
               timestampMap.set(height, timestamp.toDate().getTime());
             }
           } catch {
-            // timestamp unavailable - will show "..."
+            // timestamp unavailable
           }
         })
       );
 
-      // update transactions with real timestamps
       for (const tx of txs) {
         tx.timestamp = timestampMap.get(tx.height) ?? null;
       }
 
-      // sort by height descending (newest first)
       txs.sort((a, b) => b.height - a.height);
       setTransactions(txs);
       return txs;
     },
   });
 
-  // auto-fetch on mount for penumbra
-  useEffect(() => {
-    if (activeNetwork === 'penumbra') {
-      void refetch();
-    }
-  }, [activeNetwork, refetch]);
+  // zcash history (shielded + transparent)
+  const zcashQuery = useQuery({
+    queryKey: ['transactionHistory', 'zcash', walletId, tAddresses.length],
+    enabled: activeNetwork === 'zcash' && !!walletId,
+    staleTime: 0,
+    queryFn: async () => {
+      if (!walletId) return [];
+      console.log('[history] fetching zcash history for wallet', walletId);
 
-  if (activeNetwork !== 'penumbra') {
-    return (
-      <div className='flex flex-col items-center justify-center gap-4 p-6 pt-16 text-center'>
-        <div className='rounded-full bg-primary/10 p-4'>
-          <ClockIcon className='h-8 w-8 text-primary' />
-        </div>
-        <div>
-          <h2 className='text-lg font-semibold'>Transaction History</h2>
-          <p className='mt-1 text-sm text-muted-foreground'>
-            Transaction history is only available for Penumbra.
-          </p>
-        </div>
-      </div>
-    );
-  }
+      const entries = await getHistoryInWorker('zcash', walletId, zidecarUrl, tAddresses);
+
+      const txs: ParsedTransaction[] = entries.map(e => ({
+        id: e.id,
+        height: e.height,
+        timestamp: null,
+        type: e.type as ParsedTransaction['type'],
+        description: e.type === 'send' ? 'Sent' : e.type === 'shield' ? 'Shielded' : 'Received',
+        amount: zatoshiToZec(BigInt(e.amount)),
+        asset: e.asset,
+      }));
+
+      setTransactions(txs);
+      return txs;
+    },
+  });
+
+  const isLoading = activeNetwork === 'penumbra' ? penumbraQuery.isLoading : zcashQuery.isLoading;
+  const error = activeNetwork === 'penumbra' ? penumbraQuery.error : zcashQuery.error;
+  const refetch = activeNetwork === 'penumbra' ? penumbraQuery.refetch : zcashQuery.refetch;
+
+  useEffect(() => {
+    void refetch();
+  }, [activeNetwork, walletId, refetch]);
 
   return (
     <div className='flex flex-col h-full'>

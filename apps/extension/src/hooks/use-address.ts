@@ -12,6 +12,8 @@ import { selectActiveNetwork, selectEffectiveKeyInfo, selectPenumbraAccount, key
 import { getActiveWalletJson, selectActiveZcashWallet } from '../state/wallets';
 import { NETWORK_CONFIGS, type IbcNetwork, isIbcNetwork } from '../state/keyring/network-types';
 import type { CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { spawnNetworkWorker, deriveAddressInWorker } from '../state/keyring/network-worker';
+import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
 
 /** derive cosmos/ibc address from mnemonic */
 async function deriveCosmosAddress(mnemonic: string, prefix: string): Promise<string> {
@@ -82,21 +84,34 @@ async function loadZcashWasm() {
   const wasmJsUrl = chrome.runtime.getURL('zafu-wasm/zafu_wasm.js');
   const wasmBinaryUrl = chrome.runtime.getURL('zafu-wasm/zafu_wasm_bg.wasm');
   const zcashWasm = await import(/* webpackIgnore: true */ wasmJsUrl);
-  await zcashWasm.default(wasmBinaryUrl);
+  await zcashWasm.default({ module_or_path: wasmBinaryUrl });
   zcashWasmCache = zcashWasm;
   return zcashWasm;
 }
 
-/** derive zcash orchard address from mnemonic (requires 24-word seed) */
-async function deriveZcashAddress(mnemonic: string, account = 0, mainnet = true): Promise<string> {
-  const zcashWasm = await loadZcashWasm();
-  return zcashWasm.derive_zcash_address(mnemonic, account, mainnet);
+/** derive zcash address from UFVK string (for watch-only wallets) */
+async function deriveZcashAddressFromUfvk(ufvk: string, diversifierIndex = 0): Promise<string> {
+  const zcashWasm = await loadZcashWasm() as any;
+  // WatchOnlyWallet expects raw FVK bytes, but if we have a ufvk string
+  // we need to use address_from_ufvk if it exists, otherwise fall back
+  if (typeof zcashWasm.address_from_ufvk === 'function') {
+    const raw = zcashWasm.address_from_ufvk(ufvk, diversifierIndex);
+    return fixOrchardAddress(raw, !ufvk.startsWith('uviewtest'));
+  }
+  // fallback: try WatchOnlyWallet if the ufvk is in qr hex format
+  const wallet = zcashWasm.WatchOnlyWallet.from_qr_hex(ufvk);
+  try {
+    return wallet.get_address_at(diversifierIndex);
+  } finally {
+    wallet.free();
+  }
 }
 
-/** derive zcash address from UFVK string (for watch-only wallets) */
-async function deriveZcashAddressFromUfvk(ufvk: string): Promise<string> {
-  const zcashWasm = await loadZcashWasm();
-  return zcashWasm.address_from_ufvk(ufvk);
+/** derive transparent address from UFVK at given index (uses cached wasm) */
+export async function deriveZcashTransparentFromUfvk(ufvk: string, addressIndex = 0): Promise<string> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const zcashWasm = await loadZcashWasm() as any;
+  return zcashWasm.transparent_address_from_ufvk(ufvk, addressIndex) as string;
 }
 
 export function useActiveAddress() {
@@ -109,6 +124,27 @@ export function useActiveAddress() {
 
   const [address, setAddress] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const [shieldedIndex, setShieldedIndex] = useState(0);
+
+  // read stored shielded diversifier index
+  useEffect(() => {
+    if (activeNetwork !== 'zcash') return;
+    chrome.storage.local.get('zcashShieldedIndex').then(r => {
+      setShieldedIndex(r['zcashShieldedIndex'] ?? 0);
+    });
+  }, [activeNetwork]);
+
+  // listen for storage changes so receive page bumps propagate here
+  useEffect(() => {
+    if (activeNetwork !== 'zcash') return;
+    const listener = (changes: Record<string, chrome.storage.StorageChange>) => {
+      if (changes['zcashShieldedIndex']?.newValue !== undefined) {
+        setShieldedIndex(changes['zcashShieldedIndex'].newValue);
+      }
+    };
+    chrome.storage.local.onChanged.addListener(listener);
+    return () => chrome.storage.local.onChanged.removeListener(listener);
+  }, [activeNetwork]);
 
   useEffect(() => {
     let cancelled = false;
@@ -130,9 +166,11 @@ export function useActiveAddress() {
               return;
             }
 
-            // zcash - derive orchard address from seed
+            // zcash - derive orchard address via worker (avoids main-thread wasm)
             if (activeNetwork === 'zcash') {
-              const addr = await deriveZcashAddress(mnemonic, 0, true);
+              await spawnNetworkWorker('zcash');
+              const rawAddr = await deriveAddressInWorker('zcash', mnemonic, shieldedIndex);
+              const addr = fixOrchardAddress(rawAddr, true);
               if (!cancelled) setAddress(addr);
               if (!cancelled) setLoading(false);
               return;
@@ -189,22 +227,42 @@ export function useActiveAddress() {
         }
 
         if (activeNetwork === 'zcash' && zcashWallet) {
-          // use stored address if available
-          if (zcashWallet.address) {
-            if (!cancelled) setAddress(zcashWallet.address);
-            if (!cancelled) setLoading(false);
-            return;
-          }
-          // derive from UFVK if orchardFvk is a ufvk string (uview1.../uviewtest1...)
-          if (zcashWallet.orchardFvk?.startsWith('uview')) {
+          const mainnet = zcashWallet.mainnet ?? true;
+          // derive from UFVK string (stored in ufvk field or orchardFvk field)
+          const ufvkStr = zcashWallet.ufvk ?? (zcashWallet.orchardFvk?.startsWith('uview') ? zcashWallet.orchardFvk : undefined);
+          if (ufvkStr) {
             try {
-              const addr = await deriveZcashAddressFromUfvk(zcashWallet.orchardFvk);
+              const addr = await deriveZcashAddressFromUfvk(ufvkStr, shieldedIndex);
               if (!cancelled) setAddress(addr);
               if (!cancelled) setLoading(false);
               return;
             } catch (err) {
               console.error('failed to derive address from ufvk:', err);
             }
+          }
+          // orchardFvk is base64 FVK bytes (from zigner QR binary) — derive via WatchOnlyWallet
+          if (zcashWallet.orchardFvk && !zcashWallet.orchardFvk.startsWith('uview')) {
+            try {
+              const zcashWasm = await loadZcashWasm() as any;
+              const fvkBytes = Uint8Array.from(atob(zcashWallet.orchardFvk), c => c.charCodeAt(0));
+              const wallet = new zcashWasm.WatchOnlyWallet(fvkBytes, zcashWallet.accountIndex ?? 0, mainnet);
+              try {
+                const raw = wallet.get_address_at(shieldedIndex);
+                if (!cancelled) setAddress(fixOrchardAddress(raw, mainnet));
+                if (!cancelled) setLoading(false);
+              } finally {
+                wallet.free();
+              }
+              return;
+            } catch (err) {
+              console.error('failed to derive address from base64 fvk:', err);
+            }
+          }
+          // fallback: use stored address if available
+          if (zcashWallet.address) {
+            if (!cancelled) setAddress(fixOrchardAddress(zcashWallet.address, mainnet));
+            if (!cancelled) setLoading(false);
+            return;
           }
         }
 
@@ -258,7 +316,7 @@ export function useActiveAddress() {
 
     void deriveAddress();
     return () => { cancelled = true; };
-  }, [activeNetwork, selectedKeyInfo?.id, selectedKeyInfo?.type, penumbraAccount, penumbraWallet?.fullViewingKey, zcashWallet?.address, zcashWallet?.orchardFvk, keyRing]);
+  }, [activeNetwork, selectedKeyInfo?.id, selectedKeyInfo?.type, penumbraAccount, penumbraWallet?.fullViewingKey, zcashWallet?.address, zcashWallet?.orchardFvk, zcashWallet?.ufvk, keyRing, shieldedIndex]);
 
   return { address, loading };
 }

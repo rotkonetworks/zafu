@@ -304,6 +304,90 @@ export function encodeZcashSignRequest(request: ZcashSignRequest): string {
 }
 
 // ============================================================================
+// Zcash Shielding Sign Request Types
+// ============================================================================
+
+/**
+ * Zcash shielding sign request for transparent → orchard via Zigner
+ */
+export interface ZcashShieldingSignRequest {
+  /** Account index for key derivation */
+  accountIndex: number;
+  /** Per-input sighashes (32 bytes each) */
+  sighashes: Uint8Array[];
+  /** BIP44 address index per input */
+  addressIndices: number[];
+  /** Human-readable summary for display */
+  summary: string;
+  /** Network: true = mainnet, false = testnet */
+  mainnet: boolean;
+}
+
+/**
+ * Encode a shielding sign request to QR hex
+ *
+ * Format:
+ * ```
+ * [0x53][0x04][0x02]              - prelude (same type as send sign request)
+ * [flags: 1 byte]                 - bit 0: mainnet, bit 1: shielding mode
+ * [account_index: 4 bytes LE]
+ * [input_count: 2 bytes LE]
+ * [per input: sighash(32B) + address_index(4B LE)]
+ * [action_count: 2 bytes LE] = 0  - no orchard alphas
+ * [summary_len: 2 bytes LE]
+ * [summary: summary_len bytes]
+ * ```
+ */
+export function encodeZcashShieldingSignRequest(request: ZcashShieldingSignRequest): string {
+  if (request.sighashes.length !== request.addressIndices.length) {
+    throw new Error('sighashes and addressIndices must have same length');
+  }
+
+  const summaryBytes = new TextEncoder().encode(request.summary);
+  const inputCount = request.sighashes.length;
+
+  // 3 (prelude) + 1 (flags) + 4 (account) + 2 (input_count) + inputCount*(32+4) + 2 (action_count=0) + 2 (summary_len) + summary
+  const totalLen = 3 + 1 + 4 + 2 + (inputCount * 36) + 2 + 2 + summaryBytes.length;
+  const output = new Uint8Array(totalLen);
+  let offset = 0;
+
+  // Prelude
+  output[offset++] = SUBSTRATE_COMPAT;
+  output[offset++] = CHAIN_ID.ZCASH;
+  output[offset++] = QR_TYPE.SIGN_REQUEST;
+
+  // Flags: bit 0 = mainnet, bit 1 = shielding
+  output[offset++] = (request.mainnet ? 0x01 : 0x00) | 0x02;
+
+  // Account index
+  writeUint32LE(output, offset, request.accountIndex);
+  offset += 4;
+
+  // Input count
+  writeUint16LE(output, offset, inputCount);
+  offset += 2;
+
+  // Per-input: sighash (32 bytes) + address_index (4 bytes LE)
+  for (let i = 0; i < inputCount; i++) {
+    output.set(request.sighashes[i]!, offset);
+    offset += 32;
+    writeUint32LE(output, offset, request.addressIndices[i]!);
+    offset += 4;
+  }
+
+  // Action count = 0 (no orchard alphas for shielding)
+  writeUint16LE(output, offset, 0);
+  offset += 2;
+
+  // Summary
+  writeUint16LE(output, offset, summaryBytes.length);
+  offset += 2;
+  output.set(summaryBytes, offset);
+
+  return bytesToHex(output);
+}
+
+// ============================================================================
 // Zcash Signature Response Types
 // ============================================================================
 

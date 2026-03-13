@@ -19,6 +19,7 @@
     "./networks/penumbra/adapter": "./src/networks/penumbra/adapter.ts",
     "./networks/zcash/adapter": "./src/networks/zcash/adapter.ts",
     "./networks/zcash/derive": "./src/networks/zcash/derive.ts",
+    "./networks/zcash/unified-address": "./src/networks/zcash/unified-address.ts",
     "./networks/polkadot": "./src/networks/polkadot/index.ts",
     "./networks/polkadot/adapter": "./src/networks/polkadot/adapter.ts",
     "./networks/polkadot/derive": "./src/networks/polkadot/derive.ts",

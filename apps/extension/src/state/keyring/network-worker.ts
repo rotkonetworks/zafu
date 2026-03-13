@@ -17,7 +17,7 @@
 import type { NetworkType } from './types';
 
 export interface NetworkWorkerMessage {
-  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'get-balance' | 'send-tx' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos';
+  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -25,7 +25,7 @@ export interface NetworkWorkerMessage {
 }
 
 export interface NetworkWorkerResponse {
-  type: 'ready' | 'address' | 'sync-progress' | 'sync-started' | 'sync-stopped' | 'balance' | 'tx-result' | 'wallets' | 'wallet-deleted' | 'notes' | 'memos' | 'error';
+  type: 'ready' | 'address' | 'sync-progress' | 'send-progress' | 'sync-started' | 'sync-stopped' | 'sync-reset' | 'balance' | 'tx-result' | 'send-tx-unsigned' | 'shield-result' | 'shield-unsigned-result' | 'wallets' | 'wallet-deleted' | 'notes' | 'memos' | 'transparent-history' | 'history' | 'memos-result' | 'sync-memos-progress' | 'error';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -44,6 +44,7 @@ interface WorkerState {
 }
 
 const workers = new Map<NetworkType, WorkerState>();
+const spawnPromises = new Map<NetworkType, Promise<void>>();
 
 let messageId = 0;
 const nextId = () => `msg_${++messageId}`;
@@ -51,10 +52,25 @@ const nextId = () => `msg_${++messageId}`;
 /**
  * spawn a dedicated worker for a network
  * worker loads its own wasm and handles sync independently
+ * concurrent callers share the same spawn promise (no race condition)
  */
 export const spawnNetworkWorker = async (network: NetworkType): Promise<void> => {
-  if (workers.has(network)) return;
+  if (workers.get(network)?.ready) return;
 
+  // deduplicate concurrent spawn calls
+  const existing = spawnPromises.get(network);
+  if (existing) return existing;
+
+  const promise = spawnNetworkWorkerInner(network);
+  spawnPromises.set(network, promise);
+  try {
+    await promise;
+  } finally {
+    spawnPromises.delete(network);
+  }
+};
+
+const spawnNetworkWorkerInner = async (network: NetworkType): Promise<void> => {
   // each network has its own worker script
   const workerUrl = getWorkerUrl(network);
   if (!workerUrl) {
@@ -82,6 +98,20 @@ export const spawnNetworkWorker = async (network: NetworkType): Promise<void> =>
     if (msg.type === 'sync-progress') {
       // emit progress event with walletId
       window.dispatchEvent(new CustomEvent('network-sync-progress', {
+        detail: { network, walletId: msg.walletId, ...msg.payload as object }
+      }));
+      return;
+    }
+
+    if (msg.type === 'send-progress') {
+      window.dispatchEvent(new CustomEvent('zcash-send-progress', {
+        detail: { network, walletId: msg.walletId, ...msg.payload as object }
+      }));
+      return;
+    }
+
+    if (msg.type === 'sync-memos-progress') {
+      window.dispatchEvent(new CustomEvent('zcash-memo-sync-progress', {
         detail: { network, walletId: msg.walletId, ...msg.payload as object }
       }));
       return;
@@ -196,10 +226,30 @@ export const startSyncInWorker = async (
 };
 
 /**
+ * start watch-only sync for a wallet using UFVK (no mnemonic needed)
+ */
+export const startWatchOnlySyncInWorker = async (
+  network: NetworkType,
+  walletId: string,
+  ufvk: string,
+  serverUrl: string,
+  startHeight?: number,
+): Promise<void> => {
+  return callWorker(network, 'sync', { mnemonic: '', serverUrl, startHeight, ufvk }, walletId);
+};
+
+/**
  * stop sync for a wallet on a network
  */
 export const stopSyncInWorker = async (network: NetworkType, walletId: string): Promise<void> => {
   return callWorker(network, 'stop-sync', {}, walletId);
+};
+
+/**
+ * reset sync for a wallet — clears IDB notes/spent/meta and in-memory state
+ */
+export const resetSyncInWorker = async (network: NetworkType, walletId: string): Promise<void> => {
+  return callWorker(network, 'reset-sync', {}, walletId);
 };
 
 /**
@@ -230,6 +280,10 @@ export interface DecryptedNoteWithTxid {
   nullifier: string;
   cmx: string;
   txid: string;
+  position: number;
+  is_change?: boolean;
+  spent?: boolean;
+  spent_by_txid?: string;
 }
 
 /**
@@ -246,6 +300,7 @@ export interface FoundNoteWithMemo {
   nullifier: string;
   cmx: string;
   memo: string;
+  is_outgoing: boolean;
   memo_is_text: boolean;
 }
 
@@ -259,6 +314,173 @@ export const decryptMemosInWorker = async (
 ): Promise<FoundNoteWithMemo[]> => {
   // convert to array for postMessage serialization
   return callWorker(network, 'decrypt-memos', { txBytes: Array.from(txBytes) }, walletId);
+};
+
+/** transparent transaction history entry */
+export interface TransparentHistoryEntry {
+  txid: string;
+  height: number;
+  received: string; // zatoshis received by our addresses
+}
+
+/**
+ * get transparent transaction history for addresses
+ */
+export const getTransparentHistoryInWorker = async (
+  network: NetworkType,
+  serverUrl: string,
+  tAddresses: string[],
+): Promise<TransparentHistoryEntry[]> => {
+  return callWorker(network, 'get-transparent-history', { serverUrl, tAddresses });
+};
+
+/** computed history entry from worker */
+export interface HistoryEntry {
+  id: string;
+  height: number;
+  type: 'send' | 'receive' | 'shield';
+  amount: string; // zatoshis as string
+  asset: string;
+}
+
+/**
+ * compute full transaction history in worker (shielded + transparent)
+ */
+export const getHistoryInWorker = async (
+  network: NetworkType,
+  walletId: string,
+  serverUrl: string,
+  tAddresses: string[],
+): Promise<HistoryEntry[]> => {
+  return callWorker(network, 'get-history', { serverUrl, tAddresses }, walletId);
+};
+
+/** memo result from worker sync */
+export interface MemoSyncEntry {
+  txId: string;
+  blockHeight: number;
+  timestamp: number; // actual block time (unix ms) from server
+  content: string;
+  direction: string;
+  amount: string;
+}
+
+/**
+ * sync memos in worker (bucket fetch + noise + decrypt — no round-trips)
+ */
+export const syncMemosInWorker = async (
+  network: NetworkType,
+  walletId: string,
+  serverUrl: string,
+  existingTxIds: string[],
+  forceResync: boolean,
+): Promise<MemoSyncEntry[]> => {
+  return callWorker(network, 'sync-memos', { serverUrl, existingTxIds, forceResync }, walletId);
+};
+
+export interface ShieldResult {
+  txid: string;
+  shieldedZat: string;
+  feeZat: string;
+  utxoCount: number;
+}
+
+/**
+ * shield transparent funds to orchard (runs in worker with halo 2 proving)
+ */
+export const shieldInWorker = async (
+  network: NetworkType,
+  walletId: string,
+  mnemonic: string,
+  serverUrl: string,
+  tAddresses: string[],
+  mainnet: boolean,
+  addressIndexMap?: Record<string, number>,
+): Promise<ShieldResult> => {
+  return callWorker(network, 'shield', { mnemonic, serverUrl, tAddresses, mainnet, addressIndexMap }, walletId);
+};
+
+/** result of building an unsigned send transaction */
+export interface SendTxUnsignedResult {
+  sighash: string;
+  alphas: string[];
+  summary: string;
+  fee: string;
+  unsignedTx: string;
+  /** action indices that need external spend auth signatures */
+  spendIndices: number[];
+}
+
+/**
+ * build a send transaction (runs in worker with witness building)
+ *
+ * if mnemonic is provided: builds fully signed tx + broadcasts, returns { txid, fee }
+ * if no mnemonic: builds unsigned tx for cold signing via QR (requires ufvk)
+ */
+export const buildSendTxInWorker = async (
+  network: NetworkType,
+  walletId: string,
+  serverUrl: string,
+  recipient: string,
+  amount: string,
+  memo: string,
+  accountIndex: number,
+  mainnet: boolean,
+  mnemonic?: string,
+  ufvk?: string,
+): Promise<SendTxUnsignedResult | { txid: string; fee: string }> => {
+  return callWorker(network, 'send-tx', { serverUrl, recipient, amount, memo, accountIndex, mainnet, mnemonic, ufvk }, walletId);
+};
+
+/**
+ * complete a send transaction with signatures and broadcast
+ */
+export const completeSendTxInWorker = async (
+  network: NetworkType,
+  walletId: string,
+  serverUrl: string,
+  unsignedTx: string,
+  signatures: { orchardSigs: string[]; transparentSigs: string[] },
+  spendIndices: number[],
+): Promise<{ txid: string }> => {
+  return callWorker(network, 'send-tx-complete', { serverUrl, unsignedTx, signatures, spendIndices }, walletId);
+};
+
+/** result of building an unsigned shielding transaction */
+export interface ShieldUnsignedResult {
+  sighashes: string[];
+  unsignedTxHex: string;
+  summary: string;
+  fee: string;
+  addressIndices: number[];
+}
+
+/**
+ * build unsigned shielding transaction for cold-wallet signing
+ */
+export const buildUnsignedShieldInWorker = async (
+  network: NetworkType,
+  walletId: string,
+  serverUrl: string,
+  tAddresses: string[],
+  mainnet: boolean,
+  ufvk: string,
+  addressIndexMap?: Record<string, number>,
+): Promise<ShieldUnsignedResult> => {
+  return callWorker(network, 'shield-unsigned', { serverUrl, tAddresses, mainnet, ufvk, addressIndexMap }, walletId);
+};
+
+/**
+ * complete shielding transaction with signatures and broadcast
+ */
+export const completeShieldInWorker = async (
+  network: NetworkType,
+  walletId: string,
+  serverUrl: string,
+  unsignedTxHex: string,
+  signatures: { sig_hex: string; pubkey_hex: string }[],
+): Promise<{ txid: string }> => {
+  return callWorker(network, 'shield-complete', { serverUrl, unsignedTxHex, signatures }, walletId);
 };
 
 /**
