@@ -41,7 +41,13 @@ const initParallelWasm = async (): Promise<WasmModule> => {
     wasmModule = wasm;
   })();
 
-  await initPromise;
+  try {
+    await initPromise;
+  } catch (e) {
+    // allow retry on next call
+    initPromise = null;
+    throw e;
+  }
   return wasmModule!;
 };
 

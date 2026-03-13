@@ -426,13 +426,12 @@ interface ZcashBuildRequest {
   args: unknown[];
 }
 
-let offscreenReady = false;
-
 const proveViaOffscreen = async (req: ZcashBuildRequest): Promise<unknown> => {
-  // ensure offscreen document exists (only service worker can create it)
-  if (!offscreenReady) {
-    await chrome.runtime.sendMessage({ type: 'ZCASH_ENSURE_OFFSCREEN' });
-    offscreenReady = true;
+  // ensure offscreen document exists (only service worker can create it).
+  // always check — penumbra's releaseOffscreen() can close it between calls.
+  const ensureResult = await chrome.runtime.sendMessage({ type: 'ZCASH_ENSURE_OFFSCREEN' });
+  if (!ensureResult?.ok) {
+    throw new Error(`failed to activate offscreen: ${ensureResult?.error ?? 'unknown'}`);
   }
   // send directly to offscreen handler
   const response = await chrome.runtime.sendMessage({
@@ -442,7 +441,10 @@ const proveViaOffscreen = async (req: ZcashBuildRequest): Promise<unknown> => {
   if (response?.error) {
     throw new Error(response.error.message ?? JSON.stringify(response.error));
   }
-  return response?.data;
+  if (response?.data === undefined) {
+    throw new Error('offscreen returned no data — document may have been closed');
+  }
+  return response.data;
 };
 
 // ── ZIP-317 fee computation ──
