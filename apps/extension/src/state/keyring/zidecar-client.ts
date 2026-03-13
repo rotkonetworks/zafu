@@ -384,11 +384,44 @@ export class ZidecarClient {
   }
 
   /** get tree state at a specific height (orchard frontier for witness building) */
-  async getTreeState(height: number): Promise<{ height: number; orchardTree: string }> {
+  async getTreeState(height: number): Promise<{ height: number; orchardTree: string; time: number }> {
     // encode BlockId proto: field 1 = height (varint)
     const parts: number[] = [0x08, ...this.varint(height)];
     const resp = await this.grpcCall('GetTreeState', new Uint8Array(parts));
     return this.parseTreeState(resp);
+  }
+
+  /** get block time (unix seconds) from compact block */
+  async getBlockTime(height: number): Promise<number> {
+    const parts: number[] = [0x08, ...this.varint(height)];
+    const resp = await this.grpcCall('GetBlock', new Uint8Array(parts));
+    // CompactBlock proto: field 5 = time (varint)
+    let pos = 0;
+    while (pos < resp.length) {
+      const tag = resp[pos++]!;
+      const field = tag >> 3;
+      const wire = tag & 0x7;
+      if (wire === 0) {
+        let v = 0, s = 0;
+        while (pos < resp.length) {
+          const b = resp[pos++]!;
+          v |= (b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7;
+        }
+        if (field === 5) return v;
+      } else if (wire === 2) {
+        let len = 0, s = 0;
+        while (pos < resp.length) {
+          const b = resp[pos++]!;
+          len |= (b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7;
+        }
+        pos += len;
+      } else break;
+    }
+    return 0;
   }
 
   /** get transparent address UTXOs */
@@ -610,14 +643,16 @@ export class ZidecarClient {
     return utxo;
   }
 
-  private parseTreeState(buf: Uint8Array): { height: number; orchardTree: string } {
+  private parseTreeState(buf: Uint8Array): { height: number; orchardTree: string; time: number } {
     // TreeState proto:
-    //   field 1: uint32 height (varint, tag 0x08)
-    //   field 2: bytes hash (length-delimited, tag 0x12)
-    //   field 3: uint64 time (varint, tag 0x18)
-    //   field 4: string sapling_tree (length-delimited, tag 0x22)
-    //   field 5: string orchard_tree (length-delimited, tag 0x2a)
+    //   field 1: string network (length-delimited)
+    //   field 2: uint32 height (varint)
+    //   field 3: bytes hash (length-delimited)
+    //   field 4: uint32 time (varint)
+    //   field 5: string sapling_tree (length-delimited)
+    //   field 6: string orchard_tree (length-delimited)
     let height = 0;
+    let time = 0;
     let orchardTree = '';
     let pos = 0;
     const decoder = new TextDecoder();
@@ -635,7 +670,8 @@ export class ZidecarClient {
           if (!(b & 0x80)) break;
           s += 7;
         }
-        if (field === 1) height = v;
+        if (field === 2) height = v;
+        if (field === 4) time = v;
       } else if (wire === 2) {
         let len = 0, s = 0;
         while (pos < buf.length) {
@@ -645,12 +681,12 @@ export class ZidecarClient {
           s += 7;
         }
         const data = buf.subarray(pos, pos + len);
-        if (field === 5) orchardTree = decoder.decode(data);
+        if (field === 6) orchardTree = decoder.decode(data);
         pos += len;
       } else break;
     }
 
-    return { height, orchardTree };
+    return { height, orchardTree, time };
   }
 
   private parseTxidList(buf: Uint8Array): Uint8Array[] {

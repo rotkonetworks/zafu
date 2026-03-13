@@ -17,7 +17,7 @@ import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
 const workerSelf = globalThis as any as DedicatedWorkerGlobalScope;
 
 interface WorkerMessage {
-  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos' | 'get-transparent-history';
+  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos';
   id: string;
   network: 'zcash';
   walletId?: string;
@@ -31,6 +31,7 @@ interface FoundNoteWithMemo {
   cmx: string;
   memo: string;
   memo_is_text: boolean;
+  is_outgoing: boolean;
 }
 
 /** Common scanning interface shared by WalletKeys and WatchOnlyWallet */
@@ -64,6 +65,7 @@ interface DecryptedNote {
   position: number;
   is_change?: boolean;
   spent_by_txid?: string;
+  spent_at_height?: number;
   rseed?: string;
   rho?: string;
   recipient?: string;
@@ -256,7 +258,7 @@ const parseTransparentTx = (
 // single connection held open during sync, closed when idle
 
 const DB_NAME = 'zafu-zcash';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 let sharedDb: IDBDatabase | null = null;
 
@@ -279,6 +281,9 @@ const getDb = (): Promise<IDBDatabase> => {
       }
       if (!db.objectStoreNames.contains('wallets')) {
         db.createObjectStore('wallets', { keyPath: 'walletId' });
+      }
+      if (!db.objectStoreNames.contains('memo-cache')) {
+        db.createObjectStore('memo-cache');
       }
     };
   });
@@ -647,6 +652,7 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
       const cmxToTxid = new Map<string, string>();
       const cmxToHeight = new Map<string, number>();
       const nfToTxid = new Map<string, string>();
+      const nfToHeight = new Map<string, number>();
       const actionNullifiers = new Set<string>();
       let actionCount = 0;
 
@@ -678,6 +684,7 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
             cmxToTxid.set(cmxHex, txidHex);
             cmxToHeight.set(cmxHex, block.height);
             nfToTxid.set(nfHex, txidHex);
+            nfToHeight.set(nfHex, block.height);
             actionNullifiers.add(nfHex);
           }
         }
@@ -710,8 +717,9 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
         for (const note of state.notes) {
           if (!state.spentNullifiers.has(note.nullifier) && actionNullifiers.has(note.nullifier)) {
             state.spentNullifiers.add(note.nullifier);
-            // record which txid spent this note
+            // record which txid spent this note and at which height
             note.spent_by_txid = nfToTxid.get(note.nullifier) ?? '';
+            note.spent_at_height = nfToHeight.get(note.nullifier) ?? 0;
             newSpent.push(note.nullifier);
             spentUpdatedNotes.push(note);
           }
@@ -928,6 +936,432 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         }
 
         workerSelf.postMessage({ type: 'transparent-history', id, network: 'zcash', payload: history });
+        return;
+      }
+
+      case 'get-history': {
+        if (!walletId) throw new Error('walletId required');
+        const { serverUrl: histServerUrl, tAddresses: histTAddresses } = payload as { serverUrl: string; tAddresses: string[] };
+
+        // load shielded notes from IDB
+        const histState = await loadState(walletId);
+        const histNotes = histState.notes.map(n => ({
+          ...n,
+          spent: histState.spentNullifiers.has(n.nullifier),
+        }));
+
+        // fetch transparent history
+        const tHistory: Array<{ txid: string; height: number; received: string }> = [];
+        if (histTAddresses?.length) {
+          try {
+            const { ZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
+            const tClient = new ZidecarClient(histServerUrl);
+
+            const ourScripts = new Set<string>();
+            for (const addr of histTAddresses) {
+              const decoded = base58checkDecode(addr);
+              if (decoded) {
+                ourScripts.add('76a914' + hexEncode(decoded) + '88ac');
+              }
+            }
+
+            const txids = await tClient.getTaddressTxids(histTAddresses);
+            const CONCURRENCY = 5;
+            for (let i = 0; i < txids.length; i += CONCURRENCY) {
+              const batch = txids.slice(i, i + CONCURRENCY);
+              const results = await Promise.allSettled(
+                batch.map(async (txidBytes) => {
+                  const rawTx = await tClient.getTransaction(txidBytes);
+                  const parsed = parseTransparentTx(rawTx.data, ourScripts);
+                  return {
+                    txid: hexEncode(txidBytes),
+                    height: rawTx.height,
+                    received: parsed.toString(),
+                  };
+                }),
+              );
+              for (const r of results) {
+                if (r.status === 'fulfilled') tHistory.push(r.value);
+              }
+            }
+          } catch (e) {
+            console.warn('[zcash-worker] get-history: transparent history failed:', e);
+          }
+        }
+
+        // build maps for sent amount calculation
+        const histTxMap = new Map<string, { height: number; position: number; changeValue: bigint; receiveValue: bigint; isChange: boolean }>();
+        const histSpentByMap = new Map<string, bigint>();
+
+        for (const note of histNotes) {
+          if (note.spent && note.spent_by_txid) {
+            const prev = histSpentByMap.get(note.spent_by_txid) ?? 0n;
+            histSpentByMap.set(note.spent_by_txid, prev + BigInt(note.value));
+          }
+
+          const existing = histTxMap.get(note.txid);
+          if (existing) {
+            existing.position = Math.max(existing.position, note.position ?? 0);
+            if (note.is_change) {
+              existing.isChange = true;
+              existing.changeValue += BigInt(note.value);
+            } else {
+              existing.receiveValue += BigInt(note.value);
+            }
+          } else {
+            histTxMap.set(note.txid, {
+              height: note.height ?? 0,
+              position: note.position ?? 0,
+              changeValue: note.is_change ? BigInt(note.value) : 0n,
+              receiveValue: note.is_change ? 0n : BigInt(note.value),
+              isChange: !!note.is_change,
+            });
+          }
+        }
+
+        // build result array (amounts as zatoshi strings)
+        const histTxs: Array<{ id: string; height: number; type: string; amount: string; asset: string }> = [];
+        for (const [txid, info] of histTxMap) {
+          const isSend = info.isChange;
+          let amount: bigint;
+          if (isSend) {
+            const inputTotal = histSpentByMap.get(txid) ?? 0n;
+            if (inputTotal > 0n) {
+              amount = inputTotal - info.changeValue;
+            } else {
+              amount = info.changeValue;
+            }
+          } else {
+            amount = info.receiveValue;
+          }
+          histTxs.push({
+            id: txid,
+            height: info.height || info.position,
+            type: isSend ? 'send' : 'receive',
+            amount: amount.toString(),
+            asset: 'ZEC',
+          });
+        }
+
+        // merge transparent history
+        const seenTxids = new Map(histTxs.map((tx, i) => [tx.id, i]));
+        for (const tTx of tHistory) {
+          const existingIdx = seenTxids.get(tTx.txid);
+          if (existingIdx !== undefined) {
+            histTxs[existingIdx]!.type = 'shield';
+            continue;
+          }
+          const receivedZat = BigInt(tTx.received);
+          if (receivedZat > 0n) {
+            histTxs.push({
+              id: tTx.txid,
+              height: tTx.height,
+              type: 'receive',
+              amount: receivedZat.toString(),
+              asset: 'ZEC',
+            });
+          }
+        }
+
+        // sort by height descending (newest first)
+        histTxs.sort((a, b) => b.height - a.height);
+
+        workerSelf.postMessage({ type: 'history', id, network: 'zcash', walletId, payload: histTxs });
+        return;
+      }
+
+      case 'sync-memos': {
+        if (!walletId) throw new Error('walletId required');
+        const { serverUrl: memoServerUrl, existingTxIds, forceResync } = payload as {
+          serverUrl: string; existingTxIds: string[]; forceResync: boolean;
+        };
+
+        const memoState = await loadState(walletId);
+        const memoKeys = walletStates.get(walletId)?.keys;
+        if (!memoKeys) throw new Error('wallet keys not loaded');
+
+        const memoNotes = memoState.notes.map(n => ({
+          ...n,
+          spent: memoState.spentNullifiers.has(n.nullifier),
+        }));
+
+        if (memoNotes.length === 0) {
+          workerSelf.postMessage({ type: 'memos-result', id, network: 'zcash', walletId, payload: [] });
+          return;
+        }
+
+        // load persisted set of note txids already scanned (no memo found)
+        const db = await getDb();
+        const scannedKey = `${walletId}:scanned-txids`;
+        const scannedTxids: Set<string> = await new Promise(resolve => {
+          const tx = db.transaction('memo-cache', 'readonly');
+          const req = tx.objectStore('memo-cache').get(scannedKey);
+          req.onsuccess = () => resolve(new Set(req.result as string[] ?? []));
+          req.onerror = () => resolve(new Set());
+        });
+
+        // filter notes not yet processed
+        const processedTxids = new Set([...existingTxIds, ...scannedTxids]);
+        const notesToProcess = memoNotes.filter(n => n.txid && !processedTxids.has(n.txid));
+        // also check spent_by_txids that haven't been processed
+        const unprocessedSpent = memoNotes.some(n => n.spent_by_txid && !processedTxids.has(n.spent_by_txid));
+        if (notesToProcess.length === 0 && !unprocessedSpent) {
+          workerSelf.postMessage({ type: 'memos-result', id, network: 'zcash', walletId, payload: [] });
+          return;
+        }
+
+        // group notes by block height (received notes)
+        const notesByHeight = new Map<number, typeof notesToProcess>();
+        for (const note of notesToProcess) {
+          const existing = notesByHeight.get(note.height) ?? [];
+          existing.push(note);
+          notesByHeight.set(note.height, existing);
+        }
+
+        // collect heights where notes were spent (for sent memo detection via OVK)
+        // build txid→height map from all notes (change notes share txid with spending tx)
+        const txidToHeight = new Map<string, number>();
+        for (const note of memoNotes) {
+          if (note.txid) txidToHeight.set(note.txid, note.height);
+        }
+
+        const spentHeights = new Set<number>();
+        const spentTxIds = new Map<number, Set<string>>(); // height → spent_by_txids
+        for (const note of memoNotes) {
+          if (!note.spent_by_txid || processedTxids.has(note.spent_by_txid)) continue;
+          const h = note.spent_at_height || txidToHeight.get(note.spent_by_txid);
+          if (h) {
+            spentHeights.add(h);
+            let set = spentTxIds.get(h);
+            if (!set) { set = new Set(); spentTxIds.set(h, set); }
+            set.add(note.spent_by_txid);
+          }
+        }
+
+        // determine which buckets we need
+        const BUCKET_SIZE = 100;
+        const ORCHARD_ACTIVATION_HEIGHT = 1687104;
+        const NOISE_BUCKET_RATIO = 2;
+        const FETCH_CONCURRENCY = 4;
+
+        const getBucketStart = (h: number) => Math.floor(h / BUCKET_SIZE) * BUCKET_SIZE;
+
+        const bucketSet = new Set<number>();
+        for (const height of notesByHeight.keys()) {
+          bucketSet.add(getBucketStart(height));
+        }
+        for (const height of spentHeights) {
+          bucketSet.add(getBucketStart(height));
+        }
+
+        // check memo-cache in IDB (db already opened above)
+        const isBucketCached = (bucketStart: number): Promise<boolean> =>
+          new Promise(resolve => {
+            const tx = db.transaction('memo-cache', 'readonly');
+            const req = tx.objectStore('memo-cache').get(`${walletId}:${bucketStart}`);
+            req.onsuccess = () => resolve(req.result !== undefined);
+            req.onerror = () => resolve(false);
+          });
+        const markBucketCached = (bucketStart: number): Promise<void> =>
+          new Promise((resolve, reject) => {
+            const tx = db.transaction('memo-cache', 'readwrite');
+            const req = tx.objectStore('memo-cache').put(Date.now(), `${walletId}:${bucketStart}`);
+            req.onsuccess = () => resolve();
+            req.onerror = () => reject(req.error);
+          });
+
+        // clear cache on force resync
+        if (forceResync) {
+          await new Promise<void>((resolve, reject) => {
+            const tx = db.transaction('memo-cache', 'readwrite');
+            const store = tx.objectStore('memo-cache');
+            const req = store.openCursor();
+            req.onsuccess = () => {
+              const cursor = req.result;
+              if (cursor) {
+                if ((cursor.key as string).startsWith(`${walletId}:`)) cursor.delete();
+                cursor.continue();
+              } else resolve();
+            };
+            req.onerror = () => reject(req.error);
+          });
+        }
+
+        // buckets containing spent heights must always be fetched (for OVK decryption)
+        const spentBucketSet = new Set<number>();
+        for (const h of spentHeights) spentBucketSet.add(getBucketStart(h));
+
+        const allBuckets = Array.from(bucketSet).sort((a, b) => a - b);
+        const uncachedBuckets: number[] = [];
+        const cachedBucketSet = new Set<number>();
+        for (const bucket of allBuckets) {
+          if (spentBucketSet.has(bucket)) {
+            // always re-fetch spent buckets for OVK decryption
+            uncachedBuckets.push(bucket);
+          } else if (!forceResync && await isBucketCached(bucket)) {
+            cachedBucketSet.add(bucket);
+          } else {
+            uncachedBuckets.push(bucket);
+          }
+        }
+
+        if (uncachedBuckets.length === 0) {
+          workerSelf.postMessage({ type: 'memos-result', id, network: 'zcash', walletId, payload: [] });
+          return;
+        }
+
+        // generate noise buckets
+        const { ZidecarClient: MemoZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
+        const memoClient = new MemoZidecarClient(memoServerUrl);
+        const { height: currentTip } = await memoClient.getTip();
+
+        // estimate block time from tip (no per-height GetBlock calls — preserves bucket privacy)
+        const tipTimeMs = Date.now();
+        const estimateBlockTimeMs = (h: number): number =>
+          tipTimeMs + (h - currentTip) * 75000;
+
+        const noiseCount = uncachedBuckets.length * NOISE_BUCKET_RATIO;
+        const noiseBuckets: number[] = [];
+        const realSet = new Set(uncachedBuckets);
+        const minBucket = getBucketStart(ORCHARD_ACTIVATION_HEIGHT);
+        const maxBucket = getBucketStart(currentTip);
+        const bucketRange = (maxBucket - minBucket) / BUCKET_SIZE;
+
+        const noiseBucketSet = new Set<number>();
+        if (bucketRange >= noiseCount * 2) {
+          const randomBytes = new Uint32Array(noiseCount * 2);
+          crypto.getRandomValues(randomBytes);
+          for (let i = 0; i < randomBytes.length && noiseBuckets.length < noiseCount; i++) {
+            const bucketIndex = randomBytes[i]! % bucketRange;
+            const bucket = minBucket + bucketIndex * BUCKET_SIZE;
+            if (realSet.has(bucket) || cachedBucketSet.has(bucket) || noiseBucketSet.has(bucket)) continue;
+            noiseBuckets.push(bucket);
+            noiseBucketSet.add(bucket);
+          }
+        }
+
+        // shuffle real + noise buckets
+        const allFetchBuckets = [...uncachedBuckets, ...noiseBuckets];
+        {
+          const rnd = new Uint32Array(allFetchBuckets.length);
+          crypto.getRandomValues(rnd);
+          for (let i = allFetchBuckets.length - 1; i > 0; i--) {
+            const j = rnd[i]! % (i + 1);
+            [allFetchBuckets[i], allFetchBuckets[j]] = [allFetchBuckets[j]!, allFetchBuckets[i]!];
+          }
+        }
+
+        // process buckets sequentially to avoid race conditions on processedTxids
+        const results: Array<{ txId: string; blockHeight: number; timestamp: number; content: string; direction: string; amount: string }> = [];
+        const totalBuckets = allFetchBuckets.length;
+
+        for (let i = 0; i < allFetchBuckets.length; i += FETCH_CONCURRENCY) {
+          const batch = allFetchBuckets.slice(i, i + FETCH_CONCURRENCY);
+
+          // fetch all blocks in parallel (network I/O)
+          const batchResults = await Promise.all(batch.map(async (bucketStart) => {
+            const isNoise = noiseBucketSet.has(bucketStart);
+            const bucketEnd = Math.min(bucketStart + BUCKET_SIZE - 1, currentTip);
+            let hadError = false;
+
+            const blockData: Array<{ height: number; txs: Array<{ data: Uint8Array }> }> = [];
+            for (let height = bucketStart; height <= bucketEnd; height++) {
+              try {
+                const { txs } = await memoClient.getBlockTransactions(height);
+                if (!isNoise) blockData.push({ height, txs });
+              } catch (err) {
+                if (!isNoise) {
+                  hadError = true;
+                  console.error(`[zcash-worker] memo: failed block ${height}:`, err);
+                }
+              }
+            }
+
+            return { bucketStart, isNoise, blockData, hadError };
+          }));
+
+          // process results sequentially (no race on processedTxids)
+          for (const { bucketStart, isNoise, blockData, hadError } of batchResults) {
+            if (isNoise) continue;
+
+            for (const { height, txs } of blockData) {
+              const heightNotes = notesByHeight.get(height);
+              const isSpentHeight = spentHeights.has(height);
+              if ((!heightNotes || heightNotes.length === 0) && !isSpentHeight) continue;
+
+              const cmxSet = new Set(heightNotes?.map(n => n.cmx) ?? []);
+
+              for (const { data: txBytes } of txs) {
+                if (txBytes.length < 200) continue;
+
+                const txBuf = new Uint8Array(txBytes);
+                patchBranchId(txBuf);
+                const foundMemos = memoKeys.decrypt_transaction_memos(txBuf);
+
+                for (const memo of foundMemos) {
+                  if (!memo.memo_is_text || !memo.memo.trim()) continue;
+
+                  if (memo.is_outgoing) {
+                    const heightTxIds = spentTxIds.get(height);
+                    if (heightTxIds) {
+                      for (const spentTxId of heightTxIds) {
+                        if (!processedTxids.has(spentTxId)) {
+                          results.push({
+                            txId: spentTxId,
+                            blockHeight: height,
+                            timestamp: estimateBlockTimeMs(height),
+                            content: memo.memo,
+                            direction: 'sent',
+                            amount: (memo.value / 100_000_000).toFixed(8),
+                          });
+                          processedTxids.add(spentTxId);
+                        }
+                      }
+                    }
+                  } else {
+                    if (!cmxSet.has(memo.cmx)) continue;
+                    const matchingNote = heightNotes?.find(n => n.cmx === memo.cmx);
+                    if (!matchingNote) continue;
+                    if (processedTxids.has(matchingNote.txid)) continue;
+
+                    results.push({
+                      txId: matchingNote.txid,
+                      blockHeight: height,
+                      timestamp: estimateBlockTimeMs(height),
+                      content: memo.memo,
+                      direction: 'received',
+                      amount: (memo.value / 100_000_000).toFixed(8),
+                    });
+                    processedTxids.add(matchingNote.txid);
+                  }
+                }
+              }
+            }
+
+            // only cache bucket if no blocks errored
+            if (!hadError) {
+              await markBucketCached(bucketStart);
+            }
+          }
+
+          workerSelf.postMessage({
+            type: 'sync-memos-progress', id: '', network: 'zcash', walletId,
+            payload: { current: Math.min(i + FETCH_CONCURRENCY, totalBuckets), total: totalBuckets },
+          });
+        }
+
+        // persist all scanned note txids + spent_by_txids so we don't re-scan next time
+        const allScanned = new Set(scannedTxids);
+        for (const n of notesToProcess) if (n.txid) allScanned.add(n.txid);
+        for (const n of memoNotes) if (n.spent_by_txid) allScanned.add(n.spent_by_txid);
+        await new Promise<void>((resolve, reject) => {
+          const tx = db.transaction('memo-cache', 'readwrite');
+          const req = tx.objectStore('memo-cache').put([...allScanned], scannedKey);
+          req.onsuccess = () => resolve();
+          req.onerror = () => reject(req.error);
+        });
+
+        workerSelf.postMessage({ type: 'memos-result', id, network: 'zcash', walletId, payload: results });
         return;
       }
 

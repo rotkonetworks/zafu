@@ -320,15 +320,16 @@ function MessageDetail({
 function ComposeMessage({
   onClose,
   replyTo,
+  network,
 }: {
   onClose: () => void;
   replyTo?: { address: string; network: 'zcash' | 'penumbra' };
+  network: 'zcash' | 'penumbra';
 }) {
   const navigate = useNavigate();
   const penumbraTx = usePenumbraTransaction();
   const penumbraAccount = useStore(selectPenumbraAccount);
   const [recipient, setRecipient] = useState(replyTo?.address ?? '');
-  const [network, setNetwork] = useState<'zcash' | 'penumbra'>(replyTo?.network ?? 'penumbra');
   const [message, setMessage] = useState('');
   const [amount, setAmount] = useState('');
   const [txStatus, setTxStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
@@ -428,19 +429,6 @@ function ComposeMessage({
 
       {/* form */}
       <div className='flex-1 overflow-y-auto p-4 space-y-4'>
-        <div>
-          <label className='block text-xs text-muted-foreground mb-1'>network</label>
-          <select
-            value={network}
-            onChange={(e) => setNetwork(e.target.value as 'zcash' | 'penumbra')}
-            disabled={!!replyTo || txStatus !== 'idle'}
-            className='w-full rounded-lg border border-border bg-input px-3 py-2 text-sm focus:border-zigner-gold focus:outline-none disabled:opacity-50'
-          >
-            <option value='penumbra'>penumbra</option>
-            <option value='zcash'>zcash</option>
-          </select>
-        </div>
-
         <div>
           <label className='block text-xs text-muted-foreground mb-1'>to</label>
           <input
@@ -568,7 +556,8 @@ export function InboxPage() {
   const isSyncing = isPenumbraSyncing || isZcashSyncing;
   const currentSyncProgress = activeNetwork === 'zcash' ? zcashSyncProgress : syncProgress;
 
-  const unreadCount = messages.getUnreadCount();
+  const unreadCount = messages.getByNetwork(activeNetwork as 'zcash' | 'penumbra')
+    .filter(m => !m.read && m.direction === 'received').length;
 
   // auto-sync on mount
   useEffect(() => {
@@ -584,6 +573,9 @@ export function InboxPage() {
   const displayedMessages = useMemo(() => {
     let result = tab === 'inbox' ? messages.getInbox() : messages.getSent();
 
+    // filter by active network
+    result = result.filter(m => m.network === activeNetwork);
+
     if (search) {
       const q = search.toLowerCase();
       result = result.filter(
@@ -595,7 +587,7 @@ export function InboxPage() {
     }
 
     return result;
-  }, [messages, tab, search]);
+  }, [messages, tab, search, activeNetwork]);
 
   const getContactName = useCallback(
     (address: string | undefined) => {
@@ -684,6 +676,7 @@ export function InboxPage() {
           setReplyTo(undefined);
         }}
         replyTo={replyTo}
+        network={activeNetwork as 'zcash' | 'penumbra'}
       />
     );
   }

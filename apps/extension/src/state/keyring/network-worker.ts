@@ -17,7 +17,7 @@
 import type { NetworkType } from './types';
 
 export interface NetworkWorkerMessage {
-  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos' | 'get-transparent-history';
+  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -25,7 +25,7 @@ export interface NetworkWorkerMessage {
 }
 
 export interface NetworkWorkerResponse {
-  type: 'ready' | 'address' | 'sync-progress' | 'send-progress' | 'sync-started' | 'sync-stopped' | 'sync-reset' | 'balance' | 'tx-result' | 'send-tx-unsigned' | 'shield-result' | 'shield-unsigned-result' | 'wallets' | 'wallet-deleted' | 'notes' | 'memos' | 'transparent-history' | 'error';
+  type: 'ready' | 'address' | 'sync-progress' | 'send-progress' | 'sync-started' | 'sync-stopped' | 'sync-reset' | 'balance' | 'tx-result' | 'send-tx-unsigned' | 'shield-result' | 'shield-unsigned-result' | 'wallets' | 'wallet-deleted' | 'notes' | 'memos' | 'transparent-history' | 'history' | 'memos-result' | 'sync-memos-progress' | 'error';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -105,6 +105,13 @@ const spawnNetworkWorkerInner = async (network: NetworkType): Promise<void> => {
 
     if (msg.type === 'send-progress') {
       window.dispatchEvent(new CustomEvent('zcash-send-progress', {
+        detail: { network, walletId: msg.walletId, ...msg.payload as object }
+      }));
+      return;
+    }
+
+    if (msg.type === 'sync-memos-progress') {
+      window.dispatchEvent(new CustomEvent('zcash-memo-sync-progress', {
         detail: { network, walletId: msg.walletId, ...msg.payload as object }
       }));
       return;
@@ -293,6 +300,7 @@ export interface FoundNoteWithMemo {
   nullifier: string;
   cmx: string;
   memo: string;
+  is_outgoing: boolean;
   memo_is_text: boolean;
 }
 
@@ -324,6 +332,50 @@ export const getTransparentHistoryInWorker = async (
   tAddresses: string[],
 ): Promise<TransparentHistoryEntry[]> => {
   return callWorker(network, 'get-transparent-history', { serverUrl, tAddresses });
+};
+
+/** computed history entry from worker */
+export interface HistoryEntry {
+  id: string;
+  height: number;
+  type: 'send' | 'receive' | 'shield';
+  amount: string; // zatoshis as string
+  asset: string;
+}
+
+/**
+ * compute full transaction history in worker (shielded + transparent)
+ */
+export const getHistoryInWorker = async (
+  network: NetworkType,
+  walletId: string,
+  serverUrl: string,
+  tAddresses: string[],
+): Promise<HistoryEntry[]> => {
+  return callWorker(network, 'get-history', { serverUrl, tAddresses }, walletId);
+};
+
+/** memo result from worker sync */
+export interface MemoSyncEntry {
+  txId: string;
+  blockHeight: number;
+  timestamp: number; // actual block time (unix ms) from server
+  content: string;
+  direction: string;
+  amount: string;
+}
+
+/**
+ * sync memos in worker (bucket fetch + noise + decrypt — no round-trips)
+ */
+export const syncMemosInWorker = async (
+  network: NetworkType,
+  walletId: string,
+  serverUrl: string,
+  existingTxIds: string[],
+  forceResync: boolean,
+): Promise<MemoSyncEntry[]> => {
+  return callWorker(network, 'sync-memos', { serverUrl, existingTxIds, forceResync }, walletId);
 };
 
 export interface ShieldResult {

@@ -13,7 +13,8 @@ import { openInDedicatedWindow, openInSidePanel } from '../../../utils/navigate'
 import { isSidePanel, isDedicatedWindow } from '../../../utils/popup-detection';
 import { AssetListSkeleton } from '../../../components/primitives/skeleton';
 import { usePreloadBalances } from '../../../hooks/use-preload';
-import { useActiveAddress, deriveZcashTransparent, deriveZcashTransparentFromUfvk } from '../../../hooks/use-address';
+import { useActiveAddress } from '../../../hooks/use-address';
+import { useTransparentAddresses } from '../../../hooks/use-transparent-addresses';
 import { usePolkadotPublicKey } from '../../../hooks/use-polkadot-key';
 import { useCosmosAssets } from '../../../hooks/cosmos-balance';
 import { useZcashSyncStatus } from '../../../hooks/zcash-sync';
@@ -315,45 +316,8 @@ const ZcashContent = ({
     };
   }, [selectedKeyInfo?.id]);
 
-  // derive transparent addresses for UTXO lookup
-  const [tAddresses, setTAddresses] = useState<string[]>([]);
-
-  useEffect(() => {
-    if (!selectedKeyInfo) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const r = await chrome.storage.local.get('zcashTransparentIndex');
-        const storedIdx = r['zcashTransparentIndex'] ?? 0;
-        const maxIdx = Math.max(4, storedIdx);
-        const indices = Array.from({ length: maxIdx + 1 }, (_, i) => i);
-
-        if (hasMnemonic && selectedKeyInfo.type === 'mnemonic') {
-          // mnemonic wallet: derive from seed
-          const mnemonic = await keyRing.getMnemonic(selectedKeyInfo.id);
-          const addrs = await Promise.all(
-            indices.map(i => deriveZcashTransparent(mnemonic, 0, i, isMainnet)),
-          );
-          if (!cancelled) setTAddresses(addrs);
-        } else if (watchOnly) {
-          // watch-only: derive from UFVK transparent component
-          const ufvk = watchOnly.ufvk ?? (watchOnly.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
-          if (!ufvk) return;
-          try {
-            const addrs = await Promise.all(
-              indices.map(i => deriveZcashTransparentFromUfvk(ufvk, i)),
-            );
-            if (!cancelled) setTAddresses(addrs);
-          } catch {
-            // UFVK may lack transparent component — silently ignore
-          }
-        }
-      } catch (err) {
-        console.error('failed to derive t-addrs:', err);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [hasMnemonic, selectedKeyInfo?.id, selectedKeyInfo?.type, isMainnet, keyRing, watchOnly?.ufvk, watchOnly?.orchardFvk]);
+  // derive transparent addresses for UTXO lookup (shared hook with caching)
+  const { tAddresses } = useTransparentAddresses(isMainnet);
 
   const { totalZat: transparentZat, isLoading: utxoLoading } = useTransparentBalance(tAddresses);
 

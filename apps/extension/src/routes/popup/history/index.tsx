@@ -4,9 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { viewClient, sctClient } from '../../../clients';
 import { useStore } from '../../../state';
 import { selectActiveNetwork, selectEffectiveKeyInfo } from '../../../state/keyring';
-import { selectActiveZcashWallet } from '../../../state/wallets';
-import { getNotesInWorker, getTransparentHistoryInWorker } from '../../../state/keyring/network-worker';
-import { deriveZcashTransparent, deriveZcashTransparentFromUfvk } from '../../../hooks/use-address';
+import { getHistoryInWorker } from '../../../state/keyring/network-worker';
+import { useTransparentAddresses } from '../../../hooks/use-transparent-addresses';
 import { cn } from '@repo/ui/lib/utils';
 import type { TransactionInfo } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 
@@ -143,45 +142,12 @@ function TransactionRow({ tx }: { tx: ParsedTransaction }) {
 export const HistoryPage = () => {
   const activeNetwork = useStore(selectActiveNetwork);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
-  const getMnemonic = useStore(s => s.keyRing.getMnemonic);
-  const watchOnly = useStore(selectActiveZcashWallet);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const [transactions, setTransactions] = useState<ParsedTransaction[]>([]);
-  const [tAddresses, setTAddresses] = useState<string[]>([]);
 
   const walletId = selectedKeyInfo?.id;
-  const isMnemonic = selectedKeyInfo?.type === 'mnemonic';
   const isMainnet = !zidecarUrl.includes('testnet');
-
-  // derive transparent addresses for history lookup
-  useEffect(() => {
-    if (activeNetwork !== 'zcash' || !selectedKeyInfo) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const r = await chrome.storage.local.get('zcashTransparentIndex');
-        const storedIdx = r['zcashTransparentIndex'] ?? 0;
-        const maxIdx = Math.max(4, storedIdx);
-        const indices = Array.from({ length: maxIdx + 1 }, (_, i) => i);
-
-        if (isMnemonic) {
-          const mnemonic = await getMnemonic(selectedKeyInfo.id);
-          const addrs = await Promise.all(indices.map(i => deriveZcashTransparent(mnemonic, 0, i, isMainnet)));
-          if (!cancelled) setTAddresses(addrs);
-        } else if (watchOnly) {
-          const ufvk = watchOnly.ufvk ?? (watchOnly.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
-          if (!ufvk) return;
-          try {
-            const addrs = await Promise.all(indices.map(i => deriveZcashTransparentFromUfvk(ufvk, i)));
-            if (!cancelled) setTAddresses(addrs);
-          } catch { /* UFVK may lack transparent component */ }
-        }
-      } catch (err) {
-        console.error('[history] failed to derive t-addrs:', err);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [activeNetwork, isMnemonic, selectedKeyInfo?.id, isMainnet, getMnemonic, watchOnly?.ufvk, watchOnly?.orchardFvk]);
+  const { tAddresses } = useTransparentAddresses(isMainnet);
 
   // penumbra history
   const penumbraQuery = useQuery({
@@ -230,111 +196,20 @@ export const HistoryPage = () => {
     staleTime: 0,
     queryFn: async () => {
       if (!walletId) return [];
-      console.log('[history] fetching zcash notes for wallet', walletId);
+      console.log('[history] fetching zcash history for wallet', walletId);
 
-      // fetch shielded notes + transparent history in parallel
-      const [notes, tHistory] = await Promise.all([
-        getNotesInWorker('zcash', walletId),
-        tAddresses.length > 0
-          ? getTransparentHistoryInWorker('zcash', zidecarUrl, tAddresses).catch(e => {
-              console.warn('[history] transparent history failed:', e);
-              return [];
-            })
-          : Promise.resolve([]),
-      ]);
-      console.log('[history] got', notes.length, 'notes,', tHistory.length, 'transparent txs');
+      const entries = await getHistoryInWorker('zcash', walletId, zidecarUrl, tAddresses);
 
-      // build maps for sent amount calculation:
-      // 1. txMap: group notes belonging to each txid (change notes from sends, received notes)
-      // 2. spentByMap: notes indexed by spent_by_txid (input notes consumed by a send)
-      const txMap = new Map<string, { height: number; position: number; changeValue: bigint; receiveValue: bigint; isChange: boolean }>();
-      const spentByMap = new Map<string, bigint>(); // spent_by_txid → total input value
+      const txs: ParsedTransaction[] = entries.map(e => ({
+        id: e.id,
+        height: e.height,
+        timestamp: null,
+        type: e.type as ParsedTransaction['type'],
+        description: e.type === 'send' ? 'Sent' : e.type === 'shield' ? 'Shielded' : 'Received',
+        amount: zatoshiToZec(BigInt(e.amount)),
+        asset: e.asset,
+      }));
 
-      for (const note of notes) {
-        // track input values: if this note was spent by another tx, accumulate its value
-        if (note.spent && note.spent_by_txid) {
-          const prev = spentByMap.get(note.spent_by_txid) ?? 0n;
-          spentByMap.set(note.spent_by_txid, prev + BigInt(note.value));
-        }
-
-        // group notes by the txid they appear in
-        const existing = txMap.get(note.txid);
-        if (existing) {
-          existing.position = Math.max(existing.position, note.position ?? 0);
-          if (note.is_change) {
-            existing.isChange = true;
-            existing.changeValue += BigInt(note.value);
-          } else {
-            existing.receiveValue += BigInt(note.value);
-          }
-        } else {
-          txMap.set(note.txid, {
-            height: note.height ?? 0,
-            position: note.position ?? 0,
-            changeValue: note.is_change ? BigInt(note.value) : 0n,
-            receiveValue: note.is_change ? 0n : BigInt(note.value),
-            isChange: !!note.is_change,
-          });
-        }
-      }
-
-      const txs: ParsedTransaction[] = [];
-      for (const [txid, info] of txMap) {
-        const isSend = info.isChange;
-        let amount: bigint;
-        if (isSend) {
-          // sent amount = total inputs consumed by this tx - change returned
-          const inputTotal = spentByMap.get(txid) ?? 0n;
-          if (inputTotal > 0n) {
-            // sent = inputs - change (fee is included in the difference)
-            amount = inputTotal - info.changeValue;
-          } else {
-            // fallback: no spent_by_txid data yet (pre-rescan), show change value
-            amount = info.changeValue;
-          }
-        } else {
-          amount = info.receiveValue;
-        }
-        txs.push({
-          id: txid,
-          height: info.height || info.position,
-          timestamp: null,
-          type: isSend ? 'send' : 'receive',
-          description: isSend ? 'Sent' : 'Received',
-          amount: zatoshiToZec(amount),
-          asset: 'ZEC',
-        });
-      }
-
-      // merge transparent history:
-      // - txids in both shielded + transparent = shielding tx → relabel as "Shielded"
-      // - txids only in transparent = transparent receive → add as "Received"
-      const seenTxids = new Map(txs.map((tx, i) => [tx.id, i]));
-      for (const tTx of tHistory) {
-        const existingIdx = seenTxids.get(tTx.txid);
-        if (existingIdx !== undefined) {
-          // this tx appears in both shielded notes and transparent history → shielding tx
-          const existing = txs[existingIdx]!;
-          existing.type = 'shield';
-          existing.description = 'Shielded';
-          continue;
-        }
-        const receivedZat = BigInt(tTx.received);
-        if (receivedZat > 0n) {
-          txs.push({
-            id: tTx.txid,
-            height: tTx.height,
-            timestamp: null,
-            type: 'receive',
-            description: 'Received',
-            amount: zatoshiToZec(receivedZat),
-            asset: 'ZEC',
-          });
-        }
-      }
-
-      // sort by height/position descending (newest first)
-      txs.sort((a, b) => b.height - a.height);
       setTransactions(txs);
       return txs;
     },
