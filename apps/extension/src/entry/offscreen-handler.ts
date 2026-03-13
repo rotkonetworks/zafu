@@ -9,6 +9,12 @@ import {
 
 chrome.runtime.onMessage.addListener((req, _sender, respond) => {
   if (!isOffscreenRequest(req)) {
+    // check for zcash build requests (from zcash-worker)
+    if (req?.type === 'ZCASH_BUILD' && req?.request?.fn) {
+      console.log('[Offscreen] Received ZCASH_BUILD request:', req.request.fn);
+      void handleZcashBuild(req.request, respond);
+      return true;
+    }
     return false;
   }
   const { type, request } = req;
@@ -113,3 +119,55 @@ const spawnParallelBuildWorker = (req: ParallelBuildRequest) => {
 
   return promise;
 };
+
+// ── zcash parallel proving ──
+
+let zcashWorker: Worker | null = null;
+
+const getOrCreateZcashWorker = (): Worker => {
+  if (!zcashWorker) {
+    console.log('[Offscreen] Creating persistent zcash build worker');
+    zcashWorker = new Worker('zcash-build-parallel.js');
+    zcashWorker.addEventListener('error', (e) => {
+      console.error('[Offscreen] Zcash worker error, will recreate:', e.message);
+      zcashWorker = null;
+    });
+  }
+  return zcashWorker;
+};
+
+interface ZcashBuildRequest {
+  fn: string;
+  args: unknown[];
+}
+
+async function handleZcashBuild(
+  req: ZcashBuildRequest,
+  respond: (response: { type: string; data?: unknown; error?: unknown }) => void,
+): Promise<void> {
+  try {
+    const { promise, resolve, reject } = Promise.withResolvers<unknown>();
+    const worker = getOrCreateZcashWorker();
+
+    worker.addEventListener('message', (e: MessageEvent) => {
+      const msg = e.data as { data?: unknown; error?: { message: string } };
+      if (msg.error) {
+        reject(new Error(msg.error.message));
+      } else {
+        resolve(msg.data);
+      }
+    }, { once: true });
+    worker.addEventListener('error', ({ message }: ErrorEvent) => {
+      reject(new Error(message));
+    }, { once: true });
+
+    worker.postMessage(req);
+    const data = await promise;
+    respond({ type: 'ZCASH_BUILD', data });
+  } catch (e) {
+    respond({
+      type: 'ZCASH_BUILD',
+      error: { message: e instanceof Error ? e.message : String(e) },
+    });
+  }
+}

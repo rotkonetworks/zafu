@@ -410,21 +410,39 @@ const initWasm = async (): Promise<void> => {
   if (wasmModule) return;
   // @ts-expect-error — dynamic import in worker
   const wasm = await import(/* webpackIgnore: true */ '/zafu-wasm/zafu_wasm.js');
-
-  // shared memory for rayon thread pool (parallel Halo 2 proving)
-  const memory = new WebAssembly.Memory({ initial: 43, maximum: 16384, shared: true });
-  await wasm.default({ module_or_path: '/zafu-wasm/zafu_wasm_bg.wasm', memory });
+  await wasm.default({ module_or_path: '/zafu-wasm/zafu_wasm_bg.wasm' });
   wasm.init();
-
-  // initialize rayon thread pool so halo2's MSM/FFT runs in parallel
-  if (typeof SharedArrayBuffer !== 'undefined') {
-    const numThreads = navigator.hardwareConcurrency || 4;
-    await wasm.initThreadPool(numThreads);
-    console.log(`[zcash-worker] rayon thread pool: ${numThreads} threads`);
-  }
-
   wasmModule = wasm;
   console.log('[zcash-worker] wasm ready');
+};
+
+// ── offscreen proving ──
+// Halo 2 proving is CPU-intensive (~2min single-threaded). Route it through
+// the offscreen document which has a persistent rayon thread pool, so MSM/FFT
+// runs in parallel across all cores. The offscreen survives popup close.
+
+interface ZcashBuildRequest {
+  fn: 'build_signed_spend' | 'build_unsigned' | 'build_shielding' | 'build_unsigned_shielding';
+  args: unknown[];
+}
+
+let offscreenReady = false;
+
+const proveViaOffscreen = async (req: ZcashBuildRequest): Promise<unknown> => {
+  // ensure offscreen document exists (only service worker can create it)
+  if (!offscreenReady) {
+    await chrome.runtime.sendMessage({ type: 'ZCASH_ENSURE_OFFSCREEN' });
+    offscreenReady = true;
+  }
+  // send directly to offscreen handler
+  const response = await chrome.runtime.sendMessage({
+    type: 'ZCASH_BUILD',
+    request: req,
+  });
+  if (response?.error) {
+    throw new Error(response.error.message ?? JSON.stringify(response.error));
+  }
+  return response?.data;
 };
 
 // ── ZIP-317 fee computation ──
@@ -1460,22 +1478,19 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             position: p.position,
           }));
 
-          emitProgress('building & proving transaction (halo2)', `${selected.length} spends`);
+          emitProgress('building & proving transaction (halo2, parallel)', `${selected.length} spends`);
           const proveStart = performance.now();
 
           let txHex: string;
           try {
-            txHex = wasmModule.build_signed_spend_transaction(
-              sendPayload.mnemonic,
-              notesJson,
-              sendPayload.recipient,
-              amountZat,
-              fee,
-              anchorHex,
-              merklePathsForWasm,
-              sendPayload.accountIndex,
-              sendPayload.mainnet,
-            );
+            txHex = await proveViaOffscreen({
+              fn: 'build_signed_spend',
+              args: [
+                sendPayload.mnemonic, notesJson, sendPayload.recipient,
+                amountZat.toString(), fee.toString(), anchorHex,
+                merklePathsForWasm, sendPayload.accountIndex, sendPayload.mainnet,
+              ],
+            }) as string;
           } catch (e) {
             console.error('[zcash-worker] build_signed_spend_transaction failed:', e);
             throw e;
@@ -1535,18 +1550,15 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           position: p.position,
         }));
 
-        // build unsigned transaction with real Halo 2 proofs
-        const unsignedResult = wasmModule.build_unsigned_transaction(
-          sendPayload.ufvk,
-          notesForWasm,
-          sendPayload.recipient,
-          amountZat,
-          fee,
-          anchorHex,
-          pathsForWasm,
-          sendPayload.accountIndex,
-          sendPayload.mainnet,
-        );
+        // build unsigned transaction with real Halo 2 proofs (parallel via offscreen)
+        const unsignedResult = await proveViaOffscreen({
+          fn: 'build_unsigned',
+          args: [
+            sendPayload.ufvk, notesForWasm, sendPayload.recipient,
+            amountZat.toString(), fee.toString(), anchorHex,
+            pathsForWasm, sendPayload.accountIndex, sendPayload.mainnet,
+          ],
+        });
 
         const proveDurationZ = ((performance.now() - proveStartZ) / 1000).toFixed(1);
         emitProgress('unsigned transaction proved', `${proveDurationZ}s`);
@@ -1677,9 +1689,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             script: hexEncode(u.script),
           })));
 
-          const txHex = wasmModule.build_shielding_transaction(
-            utxosJson, privkeyHex, recipient, shieldAmount, fee, tip.height, mainnet,
-          );
+          const txHex = await proveViaOffscreen({
+            fn: 'build_shielding',
+            args: [utxosJson, privkeyHex, recipient, shieldAmount.toString(), fee.toString(), tip.height, mainnet],
+          }) as string;
           const txData = hexDecode(txHex);
           const result = await client.sendTransaction(txData);
           if (result.errorCode !== 0) throw new Error(`broadcast failed (${result.errorCode}): ${result.errorMessage}`);
@@ -1752,10 +1765,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           script: hexEncode(u.script),
         })));
 
-        const shieldUResult = wasmModule.build_unsigned_shielding_transaction(
-          shieldUUtxosJson, shieldURecipient, shieldUAmount, shieldUFee,
-          shieldUTip.height, shieldUnsignedPayload.mainnet,
-        );
+        const shieldUResult = await proveViaOffscreen({
+          fn: 'build_unsigned_shielding',
+          args: [shieldUUtxosJson, shieldURecipient, shieldUAmount.toString(), shieldUFee.toString(), shieldUTip.height, shieldUnsignedPayload.mainnet],
+        }) as string;
 
         const shieldUParsed = JSON.parse(shieldUResult) as {
           sighashes: string[]; unsigned_tx_hex: string; summary: string;

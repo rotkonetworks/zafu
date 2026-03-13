@@ -294,6 +294,7 @@ resolve: {
     entry: {
       'service-worker': path.join(srcDir, 'service-worker.ts'),
       'wasm-build-parallel': path.join(srcDir, 'wasm-build-parallel.ts'),
+      'zcash-build-parallel': path.join(srcDir, 'zcash-build-parallel.ts'),
     },
     output: {
       path: distDir,

@@ -261,6 +261,33 @@ chrome.alarms.onAlarm.addListener(async alarm => {
   }
 });
 
+// ── zcash offscreen proving ──
+// The zcash-worker requests offscreen activation before sending prove requests.
+// Only the service worker can call chrome.offscreen.createDocument().
+const OFFSCREEN_PATH = '/offscreen.html';
+
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg?.type !== 'ZCASH_ENSURE_OFFSCREEN') return false;
+  void (async () => {
+    try {
+      const contexts = await chrome.runtime.getContexts({
+        contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT],
+      });
+      if (!contexts.length) {
+        await chrome.offscreen.createDocument({
+          url: chrome.runtime.getURL(OFFSCREEN_PATH),
+          reasons: [chrome.offscreen.Reason.WORKERS],
+          justification: 'Zcash Halo 2 parallel proving via rayon thread pool',
+        }).catch(() => { /* already exists */ });
+      }
+      sendResponse({ ok: true });
+    } catch (e) {
+      sendResponse({ ok: false, error: String(e) });
+    }
+  })();
+  return true;
+});
+
 // side panel setup
 // allow opening side panel from popup or context menu
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(() => {
