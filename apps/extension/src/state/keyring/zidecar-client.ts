@@ -19,6 +19,7 @@ export interface CompactBlock {
   height: number;
   hash: Uint8Array;
   actions: CompactAction[];
+  actionsRoot?: Uint8Array;
 }
 
 export interface CompactAction {
@@ -41,6 +42,22 @@ export interface Utxo {
   script: Uint8Array;
   valueZat: bigint;
   height: number;
+}
+
+export interface CommitmentProofData {
+  cmx: Uint8Array;
+  treeRoot: Uint8Array;
+  pathProofRaw: Uint8Array;
+  valueHash: Uint8Array;
+  exists: boolean;
+}
+
+export interface NullifierProofData {
+  nullifier: Uint8Array;
+  nullifierRoot: Uint8Array;
+  isSpent: boolean;
+  pathProofRaw: Uint8Array;
+  valueHash: Uint8Array;
 }
 
 export class ZidecarClient {
@@ -122,6 +139,49 @@ export class ZidecarClient {
     }
 
     return { txid, errorCode, errorMessage };
+  }
+
+  /** get header proof (ligerito epoch + tip) */
+  async getHeaderProof(): Promise<{ proofBytes: Uint8Array; fromHeight: number; toHeight: number }> {
+    // ProofRequest: field 1 = from_height (0), field 2 = to_height (0 = current tip)
+    const resp = await this.grpcCall('GetHeaderProof', new Uint8Array(0));
+    return this.parseHeaderProof(resp);
+  }
+
+  /** get NOMT commitment proofs for a batch of cmxs */
+  async getCommitmentProofs(
+    cmxs: Uint8Array[],
+    positions: number[],
+    height: number,
+  ): Promise<{ proofs: CommitmentProofData[]; treeRoot: Uint8Array }> {
+    const parts: number[] = [];
+    for (const cmx of cmxs) {
+      parts.push(0x0a, ...this.lengthDelimited(cmx)); // field 1 repeated bytes
+    }
+    for (const pos of positions) {
+      parts.push(0x10, ...this.varint(pos)); // field 2 repeated uint64
+    }
+    if (height > 0) {
+      parts.push(0x18, ...this.varint(height)); // field 3 uint32
+    }
+    const resp = await this.grpcCall('GetCommitmentProofs', new Uint8Array(parts));
+    return this.parseCommitmentProofsResponse(resp);
+  }
+
+  /** get NOMT nullifier proofs for a batch of nullifiers */
+  async getNullifierProofs(
+    nullifiers: Uint8Array[],
+    height: number,
+  ): Promise<{ proofs: NullifierProofData[]; nullifierRoot: Uint8Array }> {
+    const parts: number[] = [];
+    for (const nf of nullifiers) {
+      parts.push(0x0a, ...this.lengthDelimited(nf)); // field 1 repeated bytes
+    }
+    if (height > 0) {
+      parts.push(0x10, ...this.varint(height)); // field 2 uint32
+    }
+    const resp = await this.grpcCall('GetNullifierProofs', new Uint8Array(parts));
+    return this.parseNullifierProofsResponse(resp);
   }
 
   /** build binary format for parallel scanning */
@@ -340,6 +400,7 @@ export class ZidecarClient {
         const data = buf.subarray(pos, pos + len);
         if (field === 2) block.hash = data;
         else if (field === 3) block.actions.push(this.parseAction(data));
+        else if (field === 4) block.actionsRoot = buf.slice(pos, pos + len);
         pos += len;
       } else break;
     }
@@ -687,6 +748,187 @@ export class ZidecarClient {
     }
 
     return { height, orchardTree, time };
+  }
+
+  private parseHeaderProof(buf: Uint8Array): { proofBytes: Uint8Array; fromHeight: number; toHeight: number } {
+    let proofBytes = new Uint8Array(0);
+    let fromHeight = 0;
+    let toHeight = 0;
+    let pos = 0;
+
+    while (pos < buf.length) {
+      const tag = buf[pos++]!;
+      const field = tag >> 3;
+      const wire = tag & 0x7;
+
+      if (wire === 0) {
+        let v = 0, s = 0;
+        while (pos < buf.length) {
+          const b = buf[pos++]!;
+          v |= (b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7;
+        }
+        if (field === 2) fromHeight = v;
+        else if (field === 3) toHeight = v;
+      } else if (wire === 2) {
+        let len = 0, s = 0;
+        while (pos < buf.length) {
+          const b = buf[pos++]!;
+          len |= (b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7;
+        }
+        if (field === 1) proofBytes = buf.slice(pos, pos + len);
+        pos += len;
+      } else break;
+    }
+
+    return { proofBytes, fromHeight, toHeight };
+  }
+
+  private parseCommitmentProof(buf: Uint8Array): CommitmentProofData {
+    const proof: CommitmentProofData = {
+      cmx: new Uint8Array(0),
+      treeRoot: new Uint8Array(0),
+      pathProofRaw: new Uint8Array(0),
+      valueHash: new Uint8Array(0),
+      exists: false,
+    };
+    let pos = 0;
+
+    while (pos < buf.length) {
+      const tag = buf[pos++]!;
+      const field = tag >> 3;
+      const wire = tag & 0x7;
+
+      if (wire === 0) {
+        let v = 0, s = 0;
+        while (pos < buf.length) {
+          const b = buf[pos++]!;
+          v |= (b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7;
+        }
+        if (field === 7) proof.exists = v !== 0;
+      } else if (wire === 2) {
+        let len = 0, s = 0;
+        while (pos < buf.length) {
+          const b = buf[pos++]!;
+          len |= (b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7;
+        }
+        const data = buf.slice(pos, pos + len);
+        if (field === 1) proof.cmx = data;
+        else if (field === 3) proof.treeRoot = data;
+        else if (field === 8) proof.pathProofRaw = data;
+        else if (field === 9) proof.valueHash = data;
+        pos += len;
+      } else break;
+    }
+
+    return proof;
+  }
+
+  private parseCommitmentProofsResponse(buf: Uint8Array): { proofs: CommitmentProofData[]; treeRoot: Uint8Array } {
+    const proofs: CommitmentProofData[] = [];
+    let treeRoot = new Uint8Array(0);
+    let pos = 0;
+
+    while (pos < buf.length) {
+      const tag = buf[pos++]!;
+      const field = tag >> 3;
+      const wire = tag & 0x7;
+
+      if (wire === 2) {
+        let len = 0, s = 0;
+        while (pos < buf.length) {
+          const b = buf[pos++]!;
+          len |= (b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7;
+        }
+        const data = buf.subarray(pos, pos + len);
+        if (field === 1) proofs.push(this.parseCommitmentProof(data));
+        else if (field === 2) treeRoot = buf.slice(pos, pos + len);
+        pos += len;
+      } else break;
+    }
+
+    return { proofs, treeRoot };
+  }
+
+  private parseNullifierProof(buf: Uint8Array): NullifierProofData {
+    const proof: NullifierProofData = {
+      nullifier: new Uint8Array(0),
+      nullifierRoot: new Uint8Array(0),
+      isSpent: false,
+      pathProofRaw: new Uint8Array(0),
+      valueHash: new Uint8Array(0),
+    };
+    let pos = 0;
+
+    while (pos < buf.length) {
+      const tag = buf[pos++]!;
+      const field = tag >> 3;
+      const wire = tag & 0x7;
+
+      if (wire === 0) {
+        let v = 0, s = 0;
+        while (pos < buf.length) {
+          const b = buf[pos++]!;
+          v |= (b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7;
+        }
+        if (field === 6) proof.isSpent = v !== 0;
+      } else if (wire === 2) {
+        let len = 0, s = 0;
+        while (pos < buf.length) {
+          const b = buf[pos++]!;
+          len |= (b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7;
+        }
+        const data = buf.slice(pos, pos + len);
+        if (field === 1) proof.nullifier = data;
+        else if (field === 2) proof.nullifierRoot = data;
+        else if (field === 7) proof.pathProofRaw = data;
+        else if (field === 8) proof.valueHash = data;
+        pos += len;
+      } else break;
+    }
+
+    return proof;
+  }
+
+  private parseNullifierProofsResponse(buf: Uint8Array): { proofs: NullifierProofData[]; nullifierRoot: Uint8Array } {
+    const proofs: NullifierProofData[] = [];
+    let nullifierRoot = new Uint8Array(0);
+    let pos = 0;
+
+    while (pos < buf.length) {
+      const tag = buf[pos++]!;
+      const field = tag >> 3;
+      const wire = tag & 0x7;
+
+      if (wire === 2) {
+        let len = 0, s = 0;
+        while (pos < buf.length) {
+          const b = buf[pos++]!;
+          len |= (b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7;
+        }
+        const data = buf.subarray(pos, pos + len);
+        if (field === 1) proofs.push(this.parseNullifierProof(data));
+        else if (field === 2) nullifierRoot = buf.slice(pos, pos + len);
+        pos += len;
+      } else break;
+    }
+
+    return { proofs, nullifierRoot };
   }
 
   private parseTxidList(buf: Uint8Array): Uint8Array[] {

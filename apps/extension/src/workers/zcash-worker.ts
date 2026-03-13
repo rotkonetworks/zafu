@@ -377,6 +377,106 @@ const getTreeSize = async (walletId: string): Promise<number> => {
   return r?.value ?? 0;
 };
 
+const getActionsCommitment = async (walletId: string): Promise<string> => {
+  const r = await idbGet<{ value: string }>('meta', [walletId, 'actionsCommitment']);
+  return r?.value ?? '0'.repeat(64); // genesis: all zeros
+};
+
+const saveActionsCommitment = async (walletId: string, commitment: string): Promise<void> => {
+  const db = await getDb();
+  const tx = db.transaction('meta', 'readwrite');
+  tx.objectStore('meta').put({ walletId, key: 'actionsCommitment', value: commitment });
+  await txComplete(tx);
+};
+
+/** verify header proof + commitment proofs + nullifier proofs after sync catches up */
+const verifySyncProofs = async (
+  client: InstanceType<typeof import('../state/keyring/zidecar-client').ZidecarClient>,
+  tip: number,
+  mainnet: boolean,
+  pendingCmxs: Uint8Array[],
+  pendingPositions: number[],
+  state: WalletState,
+  actionsCommitment: string,
+): Promise<void> => {
+  if (!zyncModule) return;
+  console.log(`[zcash-worker] verifying proofs: ${pendingCmxs.length} notes`);
+  const t0 = performance.now();
+
+  // 1. verify header proof
+  const proven = await verifyHeaderProof(client, tip, mainnet);
+  console.log(`[zcash-worker] header proof valid, roots: tree=${proven.tree_root.slice(0, 16)}...`);
+
+  // 2. verify commitment proofs for found notes
+  if (pendingCmxs.length > 0) {
+    const { proofs, treeRoot } = await client.getCommitmentProofs(pendingCmxs, pendingPositions, tip);
+    const treeRootHex = hexEncode(treeRoot);
+
+    // bind server root to proven root
+    if (treeRootHex !== proven.tree_root) {
+      throw new Error(`commitment tree root mismatch: server=${treeRootHex.slice(0, 16)} proven=${proven.tree_root.slice(0, 16)}`);
+    }
+
+    // verify each proof
+    for (const proof of proofs) {
+      const valid = zyncModule.verify_commitment_proof(
+        hexEncode(proof.cmx),
+        hexEncode(proof.treeRoot),
+        proof.pathProofRaw,
+        hexEncode(proof.valueHash),
+      ) as boolean;
+      if (!valid) {
+        throw new Error(`commitment proof invalid for cmx ${hexEncode(proof.cmx).slice(0, 16)}`);
+      }
+    }
+    console.log(`[zcash-worker] ${proofs.length} commitment proofs verified`);
+  }
+
+  // 3. verify nullifier proofs for unspent notes
+  const unspentNfs = state.notes
+    .filter(n => !state.spentNullifiers.has(n.nullifier))
+    .map(n => hexDecode(n.nullifier));
+
+  if (unspentNfs.length > 0) {
+    const { proofs: nfProofs, nullifierRoot } = await client.getNullifierProofs(unspentNfs, tip);
+    const nfRootHex = hexEncode(nullifierRoot);
+
+    if (nfRootHex !== proven.nullifier_root) {
+      throw new Error(`nullifier root mismatch: server=${nfRootHex.slice(0, 16)} proven=${proven.nullifier_root.slice(0, 16)}`);
+    }
+
+    let newlySpent = 0;
+    for (const proof of nfProofs) {
+      const valid = zyncModule.verify_nullifier_proof(
+        hexEncode(proof.nullifier),
+        hexEncode(proof.nullifierRoot),
+        proof.isSpent,
+        proof.pathProofRaw,
+        hexEncode(proof.valueHash),
+      ) as boolean;
+      if (!valid) {
+        throw new Error(`nullifier proof invalid for ${hexEncode(proof.nullifier).slice(0, 16)}`);
+      }
+      if (proof.isSpent) {
+        const nfHex = hexEncode(proof.nullifier);
+        if (!state.spentNullifiers.has(nfHex)) {
+          state.spentNullifiers.add(nfHex);
+          newlySpent++;
+        }
+      }
+    }
+    console.log(`[zcash-worker] ${nfProofs.length} nullifier proofs verified (${newlySpent} newly spent)`);
+  }
+
+  // 4. verify actions commitment chain
+  const hasSaved = actionsCommitment !== '0'.repeat(64);
+  zyncModule.verify_actions_commitment(actionsCommitment, proven.actions_commitment, hasSaved);
+  console.log(`[zcash-worker] actions commitment verified`);
+
+  const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+  console.log(`[zcash-worker] all proofs verified in ${elapsed}s`);
+};
+
 /** batch-save notes + spent + sync height + tree size in one transaction */
 const saveBatch = async (
   walletId: string,
@@ -414,6 +514,39 @@ const initWasm = async (): Promise<void> => {
   wasm.init();
   wasmModule = wasm;
   console.log('[zcash-worker] wasm ready');
+};
+
+// ── zync-core (verification) ──
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let zyncModule: Record<string, any> | null = null;
+
+const initZync = async (): Promise<void> => {
+  if (zyncModule) return;
+  // @ts-expect-error dynamic import in worker
+  const zync = await import(/* webpackIgnore: true */ '/zync-core/zync_core.js');
+  await zync.default({ module_or_path: '/zync-core/zync_core_bg.wasm' });
+  zync.wasm_init();
+  zyncModule = zync;
+  console.log('[zcash-worker] zync-core ready');
+};
+
+interface ProvenRoots {
+  tree_root: string;
+  nullifier_root: string;
+  actions_commitment: string;
+}
+
+/** fetch and verify header proof from zidecar, returns proven NOMT roots */
+const verifyHeaderProof = async (
+  client: InstanceType<typeof import('../state/keyring/zidecar-client').ZidecarClient>,
+  tip: number,
+  mainnet: boolean,
+): Promise<ProvenRoots> => {
+  if (!zyncModule) throw new Error('zync-core not initialized');
+  const { proofBytes } = await client.getHeaderProof();
+  const json = zyncModule.verify_header_proof(proofBytes, tip, mainnet) as string;
+  return JSON.parse(json) as ProvenRoots;
 };
 
 // ── offscreen proving ──
@@ -648,6 +781,13 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
 
   console.log(`[zcash-worker] sync start wallet=${walletId} height=${currentHeight} treeSize=${orchardTreeSize} (idb=${syncedHeight}, requested=${startHeight ?? 'none'})`);
 
+  // initialize zync-core for verification
+  try {
+    await initZync();
+  } catch (e) {
+    console.warn('[zcash-worker] zync-core init failed, syncing without verification:', e);
+  }
+
   // emit initial sync-progress so UI gets persisted height + can fetch balance immediately
   workerSelf.postMessage({
     type: 'sync-progress', id: '', network: 'zcash', walletId,
@@ -658,12 +798,29 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
   state.syncAbort = false;
   let consecutiveErrors = 0;
 
+  // running actions commitment for integrity verification
+  let actionsCommitment = await getActionsCommitment(walletId);
+  // notes found since last header proof verification
+  const pendingCmxs: Uint8Array[] = [];
+  const pendingPositions: number[] = [];
+
   while (!state.syncAbort) {
     try {
       const tip = await client.getTip();
       const chainHeight = tip.height;
 
       if (currentHeight >= chainHeight) {
+        // caught up: verify proofs if we have pending notes and zync-core
+        if (zyncModule && pendingCmxs.length > 0) {
+          try {
+            await verifySyncProofs(client, tip.height, true, pendingCmxs, pendingPositions, state, actionsCommitment);
+            pendingCmxs.length = 0;
+            pendingPositions.length = 0;
+          } catch (e) {
+            console.error('[zcash-worker] proof verification failed:', e);
+          }
+        }
+
         workerSelf.postMessage({
           type: 'sync-progress', id: '', network: 'zcash', walletId,
           payload: { currentHeight, chainHeight, notesFound: state.notes.length, blocksScanned: 0 },
@@ -672,14 +829,14 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
         continue;
       }
 
-      // small batches — 50 blocks max to keep memory bounded
+      // small batches, 50 blocks max to keep memory bounded
       const batchSize = 50;
       const endHeight = Math.min(currentHeight + batchSize, chainHeight);
 
       console.log(`[zcash-worker] blocks ${currentHeight + 1}..${endHeight}`);
       const blocks = await client.getCompactBlocks(currentHeight + 1, endHeight);
 
-      // build cmx→txid, cmx→height, and nullifier→txid lookups from raw block data
+      // build cmx->txid, cmx->height, and nullifier->txid lookups from raw block data
       const cmxToTxid = new Map<string, string>();
       const cmxToHeight = new Map<string, number>();
       const nfToTxid = new Map<string, string>();
@@ -697,7 +854,7 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
       let spentUpdatedNotes: DecryptedNote[] = [];
 
       if (actionCount > 0 && state.keys) {
-        // build binary buffer — single allocation, no JS object overhead
+        // build binary buffer, single allocation, no JS object overhead
         const buf = new Uint8Array(4 + actionCount * ACTION_SIZE);
         const view = new DataView(buf.buffer);
         view.setUint32(0, actionCount, true);
@@ -708,7 +865,7 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
             if (a.cmx.length === 32) buf.set(a.cmx, off); off += 32;
             if (a.ephemeralKey.length === 32) buf.set(a.ephemeralKey, off); off += 32;
             if (a.ciphertext.length >= 52) buf.set(a.ciphertext.subarray(0, 52), off); off += 52;
-            // build cmx→txid/height + nullifier→txid maps, collect action nullifiers (one pass)
+            // build cmx->txid/height + nullifier->txid maps, collect action nullifiers (one pass)
             const cmxHex = hexEncode(a.cmx);
             const nfHex = hexEncode(a.nullifier);
             const txidHex = hexEncode(a.txid);
@@ -717,6 +874,34 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
             nfToTxid.set(nfHex, txidHex);
             nfToHeight.set(nfHex, block.height);
             actionNullifiers.add(nfHex);
+          }
+        }
+
+        // compute running actions commitment (integrity chain)
+        if (zyncModule) {
+          for (const block of blocks) {
+            if (block.actions.length > 0) {
+              // pack actions for compute_actions_root: [count_u32_le][cmx(32)|nf(32)|epk(32)] * count
+              const abuf = new Uint8Array(4 + block.actions.length * 96);
+              const aview = new DataView(abuf.buffer);
+              aview.setUint32(0, block.actions.length, true);
+              let aoff = 4;
+              for (const a of block.actions) {
+                abuf.set(a.cmx, aoff); aoff += 32;
+                abuf.set(a.nullifier, aoff); aoff += 32;
+                abuf.set(a.ephemeralKey, aoff); aoff += 32;
+              }
+              const actionsRoot = zyncModule.compute_actions_root(abuf) as string;
+              actionsCommitment = zyncModule.update_actions_commitment(
+                actionsCommitment, actionsRoot, block.height,
+              ) as string;
+            } else {
+              // empty block: all-zeros root
+              const zeroRoot = '0'.repeat(64);
+              actionsCommitment = zyncModule.update_actions_commitment(
+                actionsCommitment, zeroRoot, block.height,
+              ) as string;
+            }
           }
         }
 
@@ -741,6 +926,10 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
           console.log(`[zcash-worker] found note: value=${note.value}, pos=${position}, hasRseed=${!!note.rseed}, hasRho=${!!note.rho}, hasRecipient=${!!(note as unknown as { recipient?: string }).recipient}`);
           newNotes.push(full);
           state.notes.push(full);
+
+          // track for verification
+          pendingCmxs.push(hexDecode(note.cmx));
+          pendingPositions.push(position);
         }
 
         // detect spent notes: check if any action nullifier matches an owned note's nullifier
@@ -763,6 +952,11 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
       // single batched db write for entire batch
       currentHeight = endHeight;
       await saveBatch(walletId, newNotes, newSpent, currentHeight, orchardTreeSize, spentUpdatedNotes.length > 0 ? spentUpdatedNotes : undefined);
+
+      // persist actions commitment
+      if (zyncModule) {
+        await saveActionsCommitment(walletId, actionsCommitment);
+      }
 
       // persist to chrome.storage for popup reactivity
       try { chrome.storage?.local?.set({ zcashSyncHeight: currentHeight }); } catch (e) {
