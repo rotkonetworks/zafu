@@ -410,8 +410,19 @@ const initWasm = async (): Promise<void> => {
   if (wasmModule) return;
   // @ts-expect-error — dynamic import in worker
   const wasm = await import(/* webpackIgnore: true */ '/zafu-wasm/zafu_wasm.js');
-  await wasm.default({ module_or_path: '/zafu-wasm/zafu_wasm_bg.wasm' });
+
+  // shared memory for rayon thread pool (parallel Halo 2 proving)
+  const memory = new WebAssembly.Memory({ initial: 43, maximum: 16384, shared: true });
+  await wasm.default({ module_or_path: '/zafu-wasm/zafu_wasm_bg.wasm', memory });
   wasm.init();
+
+  // initialize rayon thread pool so halo2's MSM/FFT runs in parallel
+  if (typeof SharedArrayBuffer !== 'undefined') {
+    const numThreads = navigator.hardwareConcurrency || 4;
+    await wasm.initThreadPool(numThreads);
+    console.log(`[zcash-worker] rayon thread pool: ${numThreads} threads`);
+  }
+
   wasmModule = wasm;
   console.log('[zcash-worker] wasm ready');
 };
