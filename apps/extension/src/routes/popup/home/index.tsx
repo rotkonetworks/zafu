@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowUpIcon, ArrowDownIcon, CopyIcon, CheckIcon, ReloadIcon, ClockIcon, WidthIcon, ChevronDownIcon } from '@radix-ui/react-icons';
+import { ArrowUpIcon, ArrowDownIcon, CopyIcon, CheckIcon, ReloadIcon, ClockIcon, WidthIcon, ChevronDownIcon, MixIcon } from '@radix-ui/react-icons';
 
 import { useStore } from '../../../state';
 import { selectActiveNetwork, selectEffectiveKeyInfo, selectPenumbraAccount, selectSetPenumbraAccount, keyRingSelector, type NetworkType } from '../../../state/keyring';
@@ -134,6 +134,13 @@ export const PopupIndex = () => {
               title='receive'
             >
               <ArrowDownIcon className='h-5 w-5' />
+            </button>
+            <button
+              onClick={() => navigate(PopupPath.SWAP)}
+              className='flex h-10 w-10 items-center justify-center bg-muted transition-all duration-100 hover:bg-muted/80 active:scale-95'
+              title='swap'
+            >
+              <MixIcon className='h-5 w-5' />
             </button>
             <button
               onClick={() => navigate(PopupPath.SEND)}
