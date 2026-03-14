@@ -717,7 +717,7 @@ function ReceiveTab({ address, loading, activeNetwork }: {
             <button
               onClick={handleTransparentToggle}
               className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ${
-                transparent ? 'bg-amber-500' : 'bg-muted-foreground/30'
+                transparent ? 'bg-red-500' : 'bg-muted-foreground/30'
               }`}
             >
               <span
@@ -729,7 +729,7 @@ function ReceiveTab({ address, loading, activeNetwork }: {
           </div>
 
           {transparent && transparentError && (
-            <p className='w-full text-xs text-amber-400'>{transparentError}</p>
+            <p className='w-full text-xs text-red-400'>{transparentError}</p>
           )}
 
           {transparent && canTransparent && !transparentError && (
@@ -771,18 +771,18 @@ function ReceiveTab({ address, loading, activeNetwork }: {
           {ephemeral && isPenumbra
             ? 'ephemeral address'
             : transparent && isZcash
-              ? `transparent address #${transparentIndex}`
+              ? <span className='flex items-center gap-1.5'>transparent address #{transparentIndex} <span className='text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-500 font-medium leading-none'>public</span></span>
               : 'address'}
         </div>
         <div className={`flex items-center gap-2 rounded-lg border p-3 ${
           ephemeral && isPenumbra
             ? 'border-green-500/40 bg-green-500/5'
             : transparent && isZcash
-              ? 'border-amber-500/40 bg-amber-500/5'
+              ? 'border-red-500/40 bg-red-500/5'
               : 'border-border/40 bg-muted/30'
         }`}>
           <code className={`flex-1 break-all text-xs ${
-            ephemeral && isPenumbra ? 'text-green-400' : transparent && isZcash ? 'text-amber-400' : ''
+            ephemeral && isPenumbra ? 'text-green-400' : transparent && isZcash ? 'text-red-400' : ''
           }`}>
             {isLoading ? 'generating...' : displayAddress || 'no wallet selected'}
           </code>

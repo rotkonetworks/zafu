@@ -84,6 +84,11 @@ export const SettingsNetworks = () => {
                       style={{ backgroundColor: getColorHex(network.color) }}
                     />
                     <span className='font-medium'>{network.name}</span>
+                    {network.transparent && (
+                      <span className='text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-500 font-medium leading-none'>
+                        public
+                      </span>
+                    )}
                   </div>
                   <div
                     className={cn(

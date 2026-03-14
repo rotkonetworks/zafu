@@ -8,6 +8,8 @@ import type { NetworkType } from '../state/keyring';
 export interface NetworkConfig {
   name: string;
   color: string;
+  /** transparent chains have fully public ledgers — all balances and transactions visible */
+  transparent: boolean;
   features: {
     stake: boolean;
     swap: boolean;
@@ -21,58 +23,68 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
   penumbra: {
     name: 'Penumbra',
     color: 'bg-purple-500',
+    transparent: false,
     features: { stake: true, swap: true, inbox: true },
   },
   zcash: {
     name: 'Zcash',
     color: 'bg-yellow-500',
+    transparent: false,
     features: { stake: false, swap: false, inbox: true },
   },
   polkadot: {
     name: 'Polkadot',
     color: 'bg-pink-500',
+    transparent: true,
     features: { stake: true, swap: false, inbox: false },
   },
   kusama: {
     name: 'Kusama',
     color: 'bg-gray-500',
+    transparent: true,
     features: { stake: true, swap: false, inbox: false },
   },
   osmosis: {
     name: 'Osmosis',
     color: 'bg-purple-400',
+    transparent: true,
     features: { stake: true, swap: true, inbox: false },
   },
   noble: {
     name: 'Noble',
     color: 'bg-blue-400',
+    transparent: true,
     features: { stake: false, swap: false, inbox: false },
   },
   nomic: {
     name: 'Nomic',
     color: 'bg-orange-500',
+    transparent: true,
     features: { stake: false, swap: false, inbox: false },
   },
   celestia: {
     name: 'Celestia',
     color: 'bg-purple-600',
+    transparent: true,
     features: { stake: true, swap: false, inbox: false },
   },
   ethereum: {
     name: 'Ethereum',
     color: 'bg-blue-500',
+    transparent: true,
     features: { stake: false, swap: true, inbox: false },
   },
   bitcoin: {
     name: 'Bitcoin',
     color: 'bg-orange-400',
+    transparent: true,
     features: { stake: false, swap: false, inbox: false },
   },
 };
 
 /** derive display info - computed once, no runtime overhead */
 export const getNetwork = (network: NetworkType): NetworkConfig =>
-  NETWORKS[network] ?? { name: network, color: 'bg-gray-500', features: { stake: false, swap: false, inbox: false } };
+  NETWORKS[network] ?? { name: network, color: 'bg-gray-500', transparent: true, features: { stake: false, swap: false, inbox: false } };
 
 /** check feature support */
 export const hasFeature = (network: NetworkType, feature: keyof NetworkConfig['features']): boolean =>

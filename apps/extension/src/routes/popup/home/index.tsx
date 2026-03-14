@@ -511,10 +511,11 @@ const ZcashContent = ({
 
       {/* transparent pool detail — only shown when transparent > 0 */}
       {transparentZat > 0n && (
-        <div className='border border-amber-500/30 bg-card p-3'>
+        <div className='border border-red-500/30 bg-red-500/5 p-3'>
           <div className='flex items-center justify-between'>
             <div className='flex items-center gap-2'>
-              <span className='text-xs text-amber-500'>transparent</span>
+              <span className='text-xs text-red-500'>transparent</span>
+              <span className='text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-500 font-medium leading-none'>public</span>
               <span className='text-xs font-medium tabular-nums'>
                 {utxoLoading ? '...' : `${tZec.toFixed(8)} ZEC`}
               </span>
@@ -523,7 +524,7 @@ const ZcashContent = ({
               <button
                 onClick={() => void handleShield()}
                 disabled={shielding || !!shieldTxid}
-                className='text-xs font-medium text-amber-500 hover:text-amber-400 transition-colors disabled:opacity-50'
+                className='text-xs font-medium text-red-500 hover:text-red-400 transition-colors disabled:opacity-50'
               >
                 {shielding ? 'shielding...' : shieldTxid ? 'pending...' : 'shield'}
               </button>
@@ -531,7 +532,7 @@ const ZcashContent = ({
               <button
                 onClick={() => void handleZignerShield()}
                 disabled={zignerShieldStep !== 'idle' && zignerShieldStep !== 'error' && zignerShieldStep !== 'complete'}
-                className='text-xs font-medium text-amber-500 hover:text-amber-400 transition-colors disabled:opacity-50'
+                className='text-xs font-medium text-red-500 hover:text-red-400 transition-colors disabled:opacity-50'
               >
                 {zignerShieldStep === 'building' ? 'building...' :
                  zignerShieldStep === 'broadcasting' ? 'broadcasting...' :

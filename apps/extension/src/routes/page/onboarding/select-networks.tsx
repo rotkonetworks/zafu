@@ -16,6 +16,7 @@ import { PagePath } from '../paths';
 import { useStore } from '../../../state';
 import { NetworkType } from '../../../state/keyring';
 import { getSeedPhraseOrigin } from './password/utils';
+import { NETWORKS } from '../../../config/networks';
 
 interface NetworkOption {
   id: NetworkType;
@@ -165,6 +166,11 @@ export const SelectNetworks = () => {
                   <div className='flex-1'>
                     <div className='font-medium flex items-center gap-2'>
                       {network.name}
+                      {NETWORKS[network.id]?.transparent && (
+                        <span className='text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-500 font-medium leading-none'>
+                          public
+                        </span>
+                      )}
                       {network.comingSoon && (
                         <span className='text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground'>
                           coming soon
