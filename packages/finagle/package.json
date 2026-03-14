@@ -1,0 +1,14 @@
+{
+  "name": "@repo/finagle",
+  "version": "0.0.1",
+  "private": true,
+  "license": "(MIT OR Apache-2.0)",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./filters/*": "./src/filters/*.ts",
+    "./bridge/*": "./src/bridge/*.ts",
+    "./peer": "./src/peer/index.ts",
+    "./peer/*": "./src/peer/*.ts"
+  }
+}
