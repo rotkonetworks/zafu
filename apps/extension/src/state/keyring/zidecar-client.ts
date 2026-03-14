@@ -737,13 +737,12 @@ export class ZidecarClient {
   }
 
   private parseTreeState(buf: Uint8Array): { height: number; orchardTree: string; time: number } {
-    // TreeState proto:
-    //   field 1: string network (length-delimited)
-    //   field 2: uint32 height (varint)
-    //   field 3: bytes hash (length-delimited)
-    //   field 4: uint32 time (varint)
-    //   field 5: string sapling_tree (length-delimited)
-    //   field 6: string orchard_tree (length-delimited)
+    // TreeState proto (zidecar.proto):
+    //   field 1: uint32 height (varint)
+    //   field 2: bytes hash (length-delimited)
+    //   field 3: uint64 time (varint)
+    //   field 4: string sapling_tree (length-delimited)
+    //   field 5: string orchard_tree (length-delimited)
     let height = 0;
     let time = 0;
     let orchardTree = '';
@@ -763,8 +762,8 @@ export class ZidecarClient {
           if (!(b & 0x80)) break;
           s += 7;
         }
-        if (field === 2) height = v;
-        if (field === 4) time = v;
+        if (field === 1) height = v;
+        if (field === 3) time = v;
       } else if (wire === 2) {
         let len = 0, s = 0;
         while (pos < buf.length) {
@@ -774,7 +773,7 @@ export class ZidecarClient {
           s += 7;
         }
         const data = buf.subarray(pos, pos + len);
-        if (field === 6) orchardTree = decoder.decode(data);
+        if (field === 5) orchardTree = decoder.decode(data);
         pos += len;
       } else break;
     }
