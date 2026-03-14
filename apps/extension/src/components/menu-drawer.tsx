@@ -9,7 +9,6 @@ import {
   PersonIcon,
   GlobeIcon,
   LockClosedIcon,
-  QuestionMarkCircledIcon,
   MobileIcon,
   GearIcon,
   ViewVerticalIcon,
@@ -76,14 +75,6 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
       label: 'Zigner',
       onClick: () => {
         navigate(PopupPath.SETTINGS_ZIGNER);
-        onClose();
-      },
-    },
-    {
-      icon: <QuestionMarkCircledIcon className='h-4 w-4' />,
-      label: 'About',
-      onClick: () => {
-        navigate(PopupPath.SETTINGS_ABOUT);
         onClose();
       },
     },

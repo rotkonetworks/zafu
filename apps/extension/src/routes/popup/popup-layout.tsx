@@ -45,16 +45,12 @@ const hiddenTabRoutes = [
   PopupPath.CONTACTS,
 ];
 
-/** routes where header should NOT be shown (have their own headers) */
+/** routes where header should NOT be shown (auth/approval flows only) */
 const hiddenHeaderRoutes = [
   PopupPath.LOGIN,
   PopupPath.TRANSACTION_APPROVAL,
   PopupPath.ORIGIN_APPROVAL,
   PopupPath.COSMOS_SIGN,
-  PopupPath.SETTINGS,
-  PopupPath.CONTACTS,
-  PopupPath.SEND,
-  PopupPath.RECEIVE,
 ];
 
 /** check if current path matches any hidden routes */
@@ -73,7 +69,7 @@ export const PopupLayout = () => {
   const showTabs = showChrome && !matchesRoute(location.pathname, hiddenTabRoutes);
 
   return (
-    <div className='relative flex h-full flex-col bg-card-radial contain-layout overflow-hidden'>
+    <div className='relative flex h-full flex-col bg-background contain-layout overflow-hidden'>
       {showChrome && <AppHeader onMenuClick={() => setMenuOpen(true)} />}
       <div
         className='min-h-0 flex-1 overflow-y-auto transform-gpu'
