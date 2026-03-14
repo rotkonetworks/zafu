@@ -117,14 +117,30 @@ export const PopupIndex = () => {
                 <div className='text-2xl font-semibold tabular-nums text-foreground'>$0.00</div>
               </>
             )}
-            <button
-              onClick={copyAddress}
-              disabled={!address}
-              className='mt-1 flex items-center gap-1 text-xs text-muted-foreground transition-colors duration-100 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed'
-            >
-              <span className='font-mono'>{displayAddress}</span>
-              {address && (copied ? <CheckIcon className='h-3 w-3' /> : <CopyIcon className='h-3 w-3' />)}
-            </button>
+            <div className='mt-1 flex items-center gap-1'>
+              <button
+                onClick={copyAddress}
+                disabled={!address}
+                className='flex items-center gap-1 text-xs text-muted-foreground transition-colors duration-100 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed'
+              >
+                <span className='font-mono'>{displayAddress}</span>
+                {address && (copied ? <CheckIcon className='h-3 w-3' /> : <CopyIcon className='h-3 w-3' />)}
+              </button>
+              {address && activeNetwork === 'zcash' && (
+                <button
+                  onClick={() => {
+                    chrome.storage.local.get('zcashShieldedIndex', r => {
+                      const next = ((r['zcashShieldedIndex'] as number) ?? 0) + 1;
+                      void chrome.storage.local.set({ zcashShieldedIndex: next });
+                    });
+                  }}
+                  className='p-0.5 text-muted-foreground transition-colors hover:text-foreground'
+                  title='rotate address'
+                >
+                  <ReloadIcon className='h-3 w-3' />
+                </button>
+              )}
+            </div>
           </div>
 
           <div className='flex gap-2'>
@@ -387,49 +403,39 @@ const ZcashContent = ({
     }
   }, [shieldUnsignedData, selectedKeyInfo, watchOnly, zidecarUrl]);
 
-  // rescan state
-  const [rescanOpen, setRescanOpen] = useState(false);
-  const [rescanHeight, setRescanHeight] = useState('');
-  const [rescanning, setRescanning] = useState(false);
+  // rescan via custom event from HistoryContent
+  useEffect(() => {
+    const handler = async (e: Event) => {
+      const height = (e as CustomEvent<number>).detail;
+      if (!selectedKeyInfo || (!hasMnemonic && !watchOnly)) return;
+      if (isNaN(height) || height < 0) return;
 
-  const handleRescan = useCallback(async () => {
-    if (!selectedKeyInfo) return;
-    if (!hasMnemonic && !watchOnly) return;
-    const newHeight = parseInt(rescanHeight, 10);
-    if (isNaN(newHeight) || newHeight < 0) return;
+      try {
+        const walletId = selectedKeyInfo.id;
+        const birthdayKey = `zcashBirthday_${walletId}`;
 
-    setRescanning(true);
-    try {
-      const walletId = selectedKeyInfo.id;
-      const birthdayKey = `zcashBirthday_${walletId}`;
+        await stopSyncInWorker('zcash', walletId);
+        await resetSyncInWorker('zcash', walletId);
+        await chrome.storage.local.set({ [birthdayKey]: height });
+        await chrome.storage.local.remove('zcashSyncHeight');
+        setWalletBirthday(height);
 
-      // stop active sync
-      await stopSyncInWorker('zcash', walletId);
-      // clear IDB data
-      await resetSyncInWorker('zcash', walletId);
-      // update birthday and clear persisted sync height
-      await chrome.storage.local.set({ [birthdayKey]: newHeight });
-      await chrome.storage.local.remove('zcashSyncHeight');
-      setWalletBirthday(newHeight);
-      // restart sync — mnemonic or watch-only
-      if (hasMnemonic && selectedKeyInfo.type === 'mnemonic') {
-        const mnemonic = await keyRing.getMnemonic(walletId);
-        await startSyncInWorker('zcash', walletId, mnemonic, zidecarUrl, newHeight);
-      } else {
-        const ufvkStr = watchOnly?.ufvk ?? (watchOnly?.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
-        if (ufvkStr) {
-          await startWatchOnlySyncInWorker('zcash', walletId, ufvkStr, zidecarUrl, newHeight);
+        if (hasMnemonic && selectedKeyInfo.type === 'mnemonic') {
+          const mnemonic = await keyRing.getMnemonic(walletId);
+          await startSyncInWorker('zcash', walletId, mnemonic, zidecarUrl, height);
+        } else {
+          const ufvkStr = watchOnly?.ufvk ?? (watchOnly?.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
+          if (ufvkStr) {
+            await startWatchOnlySyncInWorker('zcash', walletId, ufvkStr, zidecarUrl, height);
+          }
         }
+      } catch (err) {
+        console.error('[zcash] rescan failed:', err);
       }
-
-      setRescanOpen(false);
-      setRescanHeight('');
-    } catch (err) {
-      console.error('[zcash] rescan failed:', err);
-    } finally {
-      setRescanning(false);
-    }
-  }, [hasMnemonic, watchOnly, selectedKeyInfo?.id, selectedKeyInfo?.type, keyRing, rescanHeight, zidecarUrl]);
+    };
+    window.addEventListener('zcash-rescan', handler);
+    return () => window.removeEventListener('zcash-rescan', handler);
+  }, [hasMnemonic, watchOnly, selectedKeyInfo?.id, selectedKeyInfo?.type, keyRing, zidecarUrl]);
 
   const handleShield = useCallback(async () => {
     if (!hasMnemonic || !selectedKeyInfo || selectedKeyInfo.type !== 'mnemonic') return;
@@ -642,49 +648,7 @@ const ZcashContent = ({
         </div>
       )}
 
-      {/* rescan from custom height */}
-      {hasWallet && (
-        <div className='border border-border/40 bg-card p-3'>
-          {!rescanOpen ? (
-            <button
-              onClick={() => setRescanOpen(true)}
-              className='text-xs text-muted-foreground hover:text-foreground transition-colors'
-            >
-              rescan from height...
-            </button>
-          ) : (
-            <div className='flex flex-col gap-2'>
-              <div className='text-xs text-muted-foreground'>
-                enter block height to rescan from (clears local notes)
-              </div>
-              <div className='flex gap-2'>
-                <input
-                  type='number'
-                  min={0}
-                  value={rescanHeight}
-                  onChange={e => setRescanHeight(e.target.value)}
-                  placeholder={String(walletBirthday || 0)}
-                  className='flex-1 bg-muted px-2 py-1 text-xs font-mono text-foreground placeholder:text-muted-foreground/50 outline-none'
-                />
-                <button
-                  onClick={() => void handleRescan()}
-                  disabled={rescanning || !rescanHeight}
-                  className='px-3 py-1 text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors'
-                >
-                  {rescanning ? 'resetting...' : 'rescan'}
-                </button>
-                <button
-                  onClick={() => { setRescanOpen(false); setRescanHeight(''); }}
-                  disabled={rescanning}
-                  className='px-2 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors'
-                >
-                  cancel
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+      {/* rescan is now in the recent activity header */}
     </div>
   );
 };
@@ -921,6 +885,20 @@ const HistoryContent = ({ network }: { network: NetworkType }) => {
   const walletId = selectedKeyInfo?.id;
   const isMainnet = !zidecarUrl.includes('testnet');
   const { tAddresses } = useTransparentAddresses(isMainnet);
+  const { workerSyncHeight } = useZcashSyncStatus();
+
+  // editable start block for zcash rescan
+  const [editingStart, setEditingStart] = useState(false);
+  const [startBlockInput, setStartBlockInput] = useState('');
+  const [walletBirthday, setWalletBirthday] = useState(0);
+
+  useEffect(() => {
+    if (network !== 'zcash' || !walletId) return;
+    const key = `zcashBirthday_${walletId}`;
+    chrome.storage.local.get(key, r => {
+      if (typeof r[key] === 'number') setWalletBirthday(r[key] as number);
+    });
+  }, [network, walletId]);
 
   // build txId→memo lookup from messages store (for zcash)
   const memoByTxId = useMemo(() => {
@@ -1008,7 +986,62 @@ const HistoryContent = ({ network }: { network: NetworkType }) => {
 
   return (
     <div className='flex flex-col gap-1'>
-      <div className='mb-1 text-xs font-medium text-muted-foreground'>recent activity</div>
+      <div className='mb-1 flex items-center justify-between'>
+        <span className='text-xs font-medium text-muted-foreground'>recent activity</span>
+        {network === 'zcash' && (
+          <div className='flex items-center gap-1.5'>
+            {editingStart ? (
+              <div className='flex items-center gap-1'>
+                <input
+                  type='number'
+                  min={0}
+                  value={startBlockInput}
+                  onChange={e => setStartBlockInput(e.target.value)}
+                  placeholder={String(walletBirthday)}
+                  className='w-20 bg-muted px-1.5 py-0.5 text-[10px] font-mono text-foreground placeholder:text-muted-foreground/50 outline-none'
+                  autoFocus
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && startBlockInput) {
+                      window.dispatchEvent(new CustomEvent('zcash-rescan', { detail: parseInt(startBlockInput, 10) }));
+                      setEditingStart(false);
+                      setStartBlockInput('');
+                    } else if (e.key === 'Escape') {
+                      setEditingStart(false);
+                      setStartBlockInput('');
+                    }
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    if (startBlockInput) {
+                      window.dispatchEvent(new CustomEvent('zcash-rescan', { detail: parseInt(startBlockInput, 10) }));
+                    }
+                    setEditingStart(false);
+                    setStartBlockInput('');
+                  }}
+                  className='text-[10px] text-primary hover:underline'
+                >
+                  go
+                </button>
+                <button
+                  onClick={() => { setEditingStart(false); setStartBlockInput(''); }}
+                  className='text-[10px] text-muted-foreground hover:text-foreground'
+                >
+                  &times;
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => { setEditingStart(true); setStartBlockInput(String(walletBirthday)); }}
+                className='text-[10px] font-mono text-muted-foreground hover:text-foreground transition-colors'
+                title='click to change start block'
+              >
+                {walletBirthday > 0 ? walletBirthday.toLocaleString() : '0'}..{workerSyncHeight > 0 ? workerSyncHeight.toLocaleString() : '?'}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
       {recent.map(tx => <TxRow key={tx.id} tx={tx} />)}
       {txs.length > 20 && (
         <div className='py-2 text-center text-xs text-muted-foreground'>
