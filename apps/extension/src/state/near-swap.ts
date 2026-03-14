@@ -191,3 +191,19 @@ export function toBaseUnits(displayAmount: string, decimals: number): string {
   if (isNaN(n) || n <= 0) return '0';
   return Math.floor(n * 10 ** decimals).toString();
 }
+
+/** Map NEAR 1Click blockchain name to our ContactNetwork type. */
+const BLOCKCHAIN_TO_NETWORK: Record<string, string> = {
+  ethereum: 'ethereum',
+  bitcoin: 'bitcoin',
+  solana: 'solana',
+  near: 'near',
+  base: 'base',
+  arbitrum: 'arbitrum',
+  avalanche: 'avalanche',
+  polygon: 'polygon',
+};
+
+export function blockchainToContactNetwork(blockchain: string): string | undefined {
+  return BLOCKCHAIN_TO_NETWORK[blockchain.toLowerCase()];
+}

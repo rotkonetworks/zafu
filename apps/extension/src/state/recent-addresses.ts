@@ -9,7 +9,7 @@ import type { AllSlices, SliceCreator } from '.';
 import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
 
-export type AddressNetwork = 'penumbra' | 'zcash' | 'cosmos' | 'polkadot' | 'ethereum' | 'bitcoin';
+export type AddressNetwork = 'penumbra' | 'zcash' | 'cosmos' | 'polkadot' | 'kusama' | 'ethereum' | 'bitcoin' | 'solana' | 'near' | 'base' | 'arbitrum' | 'avalanche' | 'polygon';
 
 export interface RecentAddress {
   address: string;

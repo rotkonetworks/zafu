@@ -40,6 +40,12 @@ const NETWORK_LABELS: Record<ContactNetwork, string> = {
   kusama: 'kusama',
   ethereum: 'ethereum',
   bitcoin: 'bitcoin',
+  solana: 'solana',
+  near: 'near',
+  base: 'base',
+  arbitrum: 'arbitrum',
+  avalanche: 'avalanche',
+  polygon: 'polygon',
 };
 
 const NETWORK_COLORS: Record<ContactNetwork, string> = {
@@ -50,6 +56,12 @@ const NETWORK_COLORS: Record<ContactNetwork, string> = {
   kusama: 'bg-red-500/20 text-red-400',
   ethereum: 'bg-indigo-500/20 text-indigo-400',
   bitcoin: 'bg-orange-500/20 text-orange-400',
+  solana: 'bg-violet-500/20 text-violet-400',
+  near: 'bg-cyan-500/20 text-cyan-400',
+  base: 'bg-blue-600/20 text-blue-300',
+  arbitrum: 'bg-sky-500/20 text-sky-400',
+  avalanche: 'bg-red-600/20 text-red-300',
+  polygon: 'bg-purple-600/20 text-purple-300',
 };
 
 /** modal for adding/editing a contact (name only) */
