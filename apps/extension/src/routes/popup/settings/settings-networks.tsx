@@ -3,12 +3,11 @@
  */
 
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeftIcon, CheckIcon, PlusIcon, ChevronRightIcon } from '@radix-ui/react-icons';
+import { ArrowLeftIcon, CheckIcon, PlusIcon } from '@radix-ui/react-icons';
 import { useStore } from '../../../state';
 import { selectEnabledNetworks, type NetworkType } from '../../../state/keyring';
 import { isIbcNetwork } from '../../../state/keyring/network-types';
 import { NETWORKS } from '../../../config/networks';
-import { PopupPath } from '../paths';
 import { cn } from '@repo/ui/lib/utils';
 
 /** color map for network indicators */
@@ -29,10 +28,7 @@ const getColorHex = (color: string): string =>
   NETWORK_COLORS[color] ?? '#6B7280';
 
 /** networks that are fully implemented */
-const READY_NETWORKS: NetworkType[] = ['penumbra', 'zcash', 'polkadot', 'osmosis', 'noble', 'nomic', 'celestia'];
-
-/** networks coming soon */
-const COMING_SOON: NetworkType[] = ['kusama', 'ethereum', 'bitcoin'];
+const READY_NETWORKS: NetworkType[] = ['penumbra', 'zcash', 'osmosis', 'noble', 'nomic', 'celestia'];
 
 export const SettingsNetworks = () => {
   const navigate = useNavigate();
@@ -102,57 +98,6 @@ export const SettingsNetworks = () => {
             })}
           </div>
         </div>
-
-        {/* coming soon */}
-        <div>
-          <div className='mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground'>
-            coming soon
-          </div>
-          <div className='flex flex-col gap-1'>
-            {COMING_SOON.map(networkId => {
-              const network = NETWORKS[networkId];
-              if (!network) return null;
-
-              return (
-                <div
-                  key={networkId}
-                  className='flex items-center justify-between p-3 border border-border/40 opacity-50'
-                >
-                  <div className='flex items-center gap-3'>
-                    <div
-                      className='h-3 w-3 rounded-full'
-                      style={{ backgroundColor: getColorHex(network.color) }}
-                    />
-                    <span className='font-medium'>{network.name}</span>
-                  </div>
-                  <span className='text-xs text-muted-foreground'>soon</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* polkadot/kusama parachains - unified access */}
-        {enabledNetworks.includes('polkadot') && (
-          <div>
-            <div className='mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground'>
-              included parachains
-            </div>
-            <button
-              onClick={() => navigate(PopupPath.SETTINGS_PARACHAINS)}
-              className='flex items-center justify-between w-full p-3 border border-border/40 hover:bg-muted/30 transition-colors'
-            >
-              <div className='flex items-center gap-3'>
-                <div className='h-3 w-3 rounded-full bg-gradient-to-r from-pink-500 to-purple-500' />
-                <span className='font-medium'>manage parachains</span>
-              </div>
-              <ChevronRightIcon className='h-4 w-4 text-muted-foreground' />
-            </button>
-            <p className='mt-1 text-xs text-muted-foreground px-1'>
-              all 65+ parachains enabled by default. hydration, moonbeam, acala, etc.
-            </p>
-          </div>
-        )}
 
         {/* add custom chain - placeholder */}
         <button

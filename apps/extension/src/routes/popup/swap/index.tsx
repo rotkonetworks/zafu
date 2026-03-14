@@ -64,7 +64,7 @@ export const SwapPage = () => {
         <div>
           <h2 className='text-lg font-semibold'>swap</h2>
           <p className='mt-1 text-sm text-muted-foreground'>
-            swapping is only available for penumbra network.
+            swapping is not available for this network.
           </p>
         </div>
       </div>

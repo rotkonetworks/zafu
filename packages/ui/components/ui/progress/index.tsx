@@ -38,7 +38,7 @@ const Progress = ({
   <ProgressPrimitive.Root
     className={cn(
       'relative',
-      size === 'lg' && 'h-3',
+      size === 'lg' && 'h-4',
       size === 'sm' && 'h-1',
       'w-full overflow-hidden',
       progressVariants({ shape }),

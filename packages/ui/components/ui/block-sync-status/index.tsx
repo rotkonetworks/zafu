@@ -44,13 +44,13 @@ export const CondensedBlockSyncStatus = ({
 const BlockSyncErrorState = () => {
   return (
     <motion.div
-      className='flex w-full select-none flex-col'
+      className='relative flex w-full select-none flex-col'
       initial={{ opacity: 0.6 }}
       animate={{ opacity: 1, transition: { duration: 0.5, ease: 'easeOut' } }}
     >
       <Progress status='error' value={100} shape='squared' />
-      <div className='absolute flex w-full justify-between px-2'>
-        <div className='mt-[-5.5px] font-mono text-[10px] text-red-300'>
+      <div className='absolute inset-0 z-10 flex items-center px-2'>
+        <div className='font-mono text-[10px] text-red-300 leading-none'>
           Block sync error. Ensure your internet connection is stable
         </div>
       </div>
@@ -60,18 +60,17 @@ const BlockSyncErrorState = () => {
 
 const AwaitingSyncState = ({ genesisSyncing }: { genesisSyncing: boolean }) => {
   return (
-    <div className='flex select-none flex-col'>
+    <div className='relative flex select-none flex-col'>
       <Progress status='in-progress' background='stone' shape='squared' value={0} />
-      <div className='absolute flex w-full justify-between px-2'>
-        <div className='mt-[-5.5px] font-mono text-[10px] text-stone-400'>
+      <div className='absolute inset-0 z-10 flex items-center justify-between px-2'>
+        <div className='font-mono text-[10px] text-stone-400 leading-none'>
           {genesisSyncing ? 'Genesis state syncing...' : 'Loading sync state...'}
         </div>
         <LineWave
           visible={true}
-          height='20'
-          width='20'
+          height='16'
+          width='16'
           color='#a8a29e'
-          wrapperClass='mt-[-7.5px]'
         />
       </div>
     </div>
@@ -95,7 +94,7 @@ const SyncingState = ({
 
   return (
     <motion.div
-      className='flex w-full flex-col'
+      className='relative flex w-full flex-col'
       initial={{ opacity: 0.6 }}
       animate={{ opacity: 1, transition: { duration: 0.5, ease: 'easeOut' } }}
     >
@@ -105,19 +104,19 @@ const SyncingState = ({
         background='stone'
         shape='squared'
       />
-      <div className='absolute flex w-full justify-between px-2 font-mono text-[10px] text-[#4a4127] mix-blend-plus-lighter'>
-        <div className='mt-[-5.5px]'>Syncing blocks...</div>
-        <div className='mt-[-5.5px] flex gap-2'>
+      <div className='absolute inset-0 z-10 flex items-center justify-between px-2 font-mono text-[10px] text-[#4a4127] leading-none mix-blend-plus-lighter'>
+        <div>Syncing blocks...</div>
+        <div className='flex gap-2'>
           <span
             className={cn(
-              'font-mono transition-all duration-300',
+              'transition-all duration-300',
               confident ? 'opacity-100' : 'opacity-0',
             )}
           >
             {formattedTimeRemaining}
           </span>
           <span className={confident ? 'opacity-100' : 'opacity-0'}>::</span>
-          <span className='font-mono'>
+          <span>
             {String(fullSyncHeight)} / {String(latestKnownBlockHeight)}
           </span>
         </div>
@@ -148,25 +147,23 @@ const FullySyncedState = ({
         value={fullSyncHeight.dividedBy(latestKnownBlockHeight).multipliedBy(100).toNumber()}
         shape='squared'
       />
-      <div className='absolute flex w-full justify-between px-2'>
-        <div className='mt-[-5.5px] font-mono text-[10px] text-teal-900'>
-          <div className='flex items-center'>
-            <p>Blocks synced</p>
-            <CheckIcon className='size-3 text-teal-900' />
-          </div>
+      <div className='absolute inset-0 z-10 flex items-center justify-between px-2'>
+        <div className='font-mono text-[10px] text-teal-900 leading-none flex items-center'>
+          <p>Blocks synced</p>
+          <CheckIcon className='size-3 text-teal-900' />
         </div>
-        <div className='flex'>
+        <div className='flex items-center'>
           <LineWave
             visible={true}
-            height='20'
-            width='20'
+            height='16'
+            width='16'
             color='#134e4a'
             wrapperClass={cn(
-              'transition-all duration-300 mt-[-7px] mr-[-7px]',
+              'transition-all duration-300',
               showLoader ? 'opacity-100' : 'opacity-0',
             )}
           />
-          <div className='mt-[-5.5px] font-mono text-[10px] text-teal-900'>
+          <div className='font-mono text-[10px] text-teal-900 leading-none'>
             Block {String(fullSyncHeight)}
           </div>
         </div>

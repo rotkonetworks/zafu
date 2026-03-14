@@ -9,6 +9,7 @@ import { useStore } from '../state';
 import { selectEnabledNetworks, type NetworkType } from '../state/keyring';
 import { NETWORKS } from '../config/networks';
 import { Dropdown } from './primitives/dropdown';
+import { NetworkIcon } from './network-icons';
 
 export interface NetworkInfo {
   id: NetworkType;
@@ -23,22 +24,6 @@ export const SUPPORTED_NETWORKS: NetworkInfo[] = (Object.keys(NETWORKS) as Netwo
   name: NETWORKS[id].name,
   color: NETWORKS[id].color.replace('bg-', ''), // strip tailwind prefix for inline style
 }));
-
-/** color map for inline styles */
-const NETWORK_COLORS: Record<string, string> = {
-  'purple-500': '#8B5CF6',
-  'yellow-500': '#EAB308',
-  'pink-500': '#EC4899',
-  'gray-500': '#6B7280',
-  'purple-400': '#A78BFA',
-  'blue-400': '#60A5FA',
-  'orange-500': '#F97316',
-  'purple-600': '#9333EA',
-  'blue-500': '#3B82F6',
-  'orange-400': '#FB923C',
-};
-
-const getColorHex = (color: string): string => NETWORK_COLORS[color] ?? '#6B7280';
 
 interface NetworkSelectorProps {
   currentNetwork: NetworkInfo;
@@ -74,10 +59,7 @@ export const NetworkSelector = ({
             className
           )}
         >
-          <div
-            className='h-2.5 w-2.5'
-            style={{ backgroundColor: getColorHex(currentNetwork.color) }}
-          />
+          <NetworkIcon network={currentNetwork.id} color={currentNetwork.color} size='sm' />
           <span className='max-w-[80px] truncate font-medium'>{currentNetwork.name}</span>
           {currentNetwork.testnet && (
             <span className='text-[10px] text-muted-foreground'>testnet</span>
@@ -105,7 +87,7 @@ export const NetworkSelector = ({
                 )}
               >
                 <div className='flex items-center gap-2'>
-                  <div className='h-2 w-2' style={{ backgroundColor: getColorHex(network.color) }} />
+                  <NetworkIcon network={network.id} color={network.color} size='sm' />
                   <span>{network.name}</span>
                   {network.testnet && (
                     <span className='text-[10px] text-muted-foreground'>testnet</span>

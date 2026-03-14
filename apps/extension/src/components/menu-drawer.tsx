@@ -39,17 +39,18 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
     navigate(PopupPath.LOGIN);
   };
 
-  const handleOpenSidePanel = async () => {
+  const handleOpenPopupWindow = async () => {
     onClose();
     try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (tab?.windowId) {
-        await chrome.sidePanel.open({ windowId: tab.windowId });
-        // close the popup after opening side panel
-        window.close();
-      }
+      await chrome.windows.create({
+        url: chrome.runtime.getURL('popup.html'),
+        type: 'popup',
+        width: 400,
+        height: 628,
+      });
+      window.close();
     } catch (e) {
-      console.error('Failed to open side panel:', e);
+      console.error('Failed to open popup window:', e);
     }
   };
 
@@ -94,13 +95,13 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
         onClose();
       },
     },
-    // only show "Open in Side Panel" when not already in side panel
-    ...(!inSidePanel
+    // offer popup window when in side panel
+    ...(inSidePanel
       ? [
           {
             icon: <ViewVerticalIcon className='h-4 w-4' />,
-            label: 'Open in Side Panel',
-            onClick: handleOpenSidePanel,
+            label: 'Open as Popup',
+            onClick: handleOpenPopupWindow,
           },
         ]
       : []),

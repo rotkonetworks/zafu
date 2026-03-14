@@ -16,7 +16,7 @@ export const createActiveNetworkSlice =
   (local: ExtensionStorage<LocalStorageState>): SliceCreator<ActiveNetworkSlice> =>
   (set) => {
     return {
-      activeNetwork: 'penumbra', // default to penumbra for backwards compat
+      activeNetwork: '' as NetworkType, // hydrated from storage in init()
       setActiveNetwork: async (network: NetworkType) => {
         set((state) => {
           state.activeNetwork.activeNetwork = network;

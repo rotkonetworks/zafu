@@ -182,7 +182,7 @@ const initHandler = async () => {
 
       // remaining context for all services
       contextValues.set(fvkCtx, getFullViewingKey);
-      contextValues.set(servicesCtx, () => walletServices);
+      contextValues.set(servicesCtx, (() => walletServices) as never);
       contextValues.set(walletIdCtx, getWalletId);
 
       // discriminate context available to specific services
@@ -288,23 +288,27 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   return true;
 });
 
-// side panel setup
-// allow opening side panel from popup or context menu
-chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(() => {
+// default to side panel when clicking the extension icon
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {
   // side panel not supported in this browser version
 });
 
-// context menu to open side panel
+// context menu to open in popup window (for users who prefer it)
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
-    id: 'open-side-panel',
-    title: 'Open Zafu in Side Panel',
+    id: 'open-popup-window',
+    title: 'Open Zafu in Popup Window',
     contexts: ['action'],
   });
 });
 
-chrome.contextMenus.onClicked.addListener((info, tab) => {
-  if (info.menuItemId === 'open-side-panel' && tab?.windowId) {
-    void chrome.sidePanel.open({ windowId: tab.windowId });
+chrome.contextMenus.onClicked.addListener((_info, _tab) => {
+  if (_info.menuItemId === 'open-popup-window') {
+    void chrome.windows.create({
+      url: chrome.runtime.getURL('popup.html'),
+      type: 'popup',
+      width: 400,
+      height: 628,
+    });
   }
 });

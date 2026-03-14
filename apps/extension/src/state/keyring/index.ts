@@ -138,7 +138,7 @@ async function createZignerWalletEntries(
 
   // Ensure enabled networks include the imported wallet's networks
   const currentEnabled = await local.get('enabledNetworks');
-  const networkSet = new Set<string>(currentEnabled ?? ['penumbra', 'zcash']);
+  const networkSet = new Set<string>(currentEnabled ?? []);
   for (const network of supportedNetworks) {
     networkSet.add(network);
   }
@@ -200,8 +200,8 @@ export const createKeyRingSlice = (
     status: 'not-loaded',
     keyInfos: [],
     selectedKeyInfo: undefined,
-    activeNetwork: 'penumbra',
-    enabledNetworks: ['penumbra', 'zcash'],
+    activeNetwork: '' as NetworkType,
+    enabledNetworks: [],
     penumbraAccount: 0,
     setPenumbraAccount: (account: number) => set(state => { state.keyRing.penumbraAccount = account; }),
 
@@ -209,8 +209,8 @@ export const createKeyRingSlice = (
       const keyPrint = await local.get('passwordKeyPrint');
       const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
       const selectedId = await local.get('selectedVaultId');
-      const enabledNetworks = (await local.get('enabledNetworks')) ?? ['penumbra', 'zcash'];
-      const activeNetwork = (await local.get('activeNetwork')) ?? 'penumbra';
+      const enabledNetworks = (await local.get('enabledNetworks')) ?? [];
+      const activeNetwork = (await local.get('activeNetwork')) ?? (enabledNetworks[0] ?? '');
       const wallets = await local.get('wallets');
 
       // check if all vaults are airgap-only (use default password)
@@ -414,9 +414,19 @@ export const createKeyRingSlice = (
       }
 
       const keyInfos = vaultsToKeyInfos(newVaults, vaultId);
+
+      // Set activeNetwork to first enabled network on first wallet creation
+      const enabledNetworks = (await local.get('enabledNetworks')) ?? [];
+      if (vaults.length === 0 && enabledNetworks.length > 0) {
+        await local.set('activeNetwork', enabledNetworks[0]);
+      }
+
       set(state => {
         state.keyRing.keyInfos = keyInfos;
         state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
+        if (vaults.length === 0 && enabledNetworks.length > 0) {
+          state.keyRing.activeNetwork = enabledNetworks[0] as NetworkType;
+        }
       });
 
       return vaultId;
@@ -470,7 +480,7 @@ export const createKeyRingSlice = (
         ? await createZignerWalletEntries(data, name, key, vaultId, supportedNetworks, vaults.length, local)
         : await (async () => {
             const currentEnabled = await local.get('enabledNetworks');
-            return [...new Set<string>([...(currentEnabled ?? ['penumbra', 'zcash']), ...supportedNetworks])] as NetworkType[];
+            return [...new Set<string>([...(currentEnabled ?? []), ...supportedNetworks])] as NetworkType[];
           })();
 
       const keyInfos = vaultsToKeyInfos(newVaults, vaultId);
@@ -561,9 +571,10 @@ export const createKeyRingSlice = (
       // 1. It's the first vault (fresh install), OR
       // 2. The current active network is supported by this vault
       const currentSelectedId = await local.get('selectedVaultId');
-      const activeNetwork = await local.get('activeNetwork') ?? 'penumbra';
+      const activeNetwork = await local.get('activeNetwork') ?? '';
       const shouldAutoSelect = !currentSelectedId ||
         vaults.length === 0 ||
+        !activeNetwork ||
         supportedNetworks.includes(activeNetwork);
 
       if (shouldAutoSelect) {

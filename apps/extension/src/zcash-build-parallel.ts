@@ -22,16 +22,10 @@ const initParallelWasm = async (): Promise<WasmModule> => {
   }
 
   initPromise = (async () => {
-    // @ts-expect-error dynamic import
-    const wasm = await import(/* webpackIgnore: true */ '/zafu-wasm/zafu_wasm.js');
-
-    if (typeof SharedArrayBuffer === 'undefined') {
-      throw new Error('SharedArrayBuffer not available');
-    }
-
-    // shared memory matching zafu_wasm.js defaults
+    // @ts-expect-error dynamic import — parallel WASM build with rayon + shared memory
+    const wasm = await import(/* webpackIgnore: true */ '/zafu-wasm-parallel/zafu_wasm.js');
     const memory = new WebAssembly.Memory({ initial: 43, maximum: 16384, shared: true });
-    await wasm.default({ module_or_path: '/zafu-wasm/zafu_wasm_bg.wasm', memory });
+    await wasm.default({ module_or_path: '/zafu-wasm-parallel/zafu_wasm_bg.wasm', memory });
     wasm.init();
 
     const numThreads = navigator.hardwareConcurrency || 4;
@@ -73,7 +67,7 @@ async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
   switch (req.fn) {
     case 'build_signed_spend':
       // args: [mnemonic, notes, recipient, amount, fee, anchor, paths, accountIndex, mainnet]
-      result = wasm.build_signed_spend_transaction(
+      result = wasm['build_signed_spend_transaction'](
         a[0], a[1], a[2], BigInt(a[3] as string), BigInt(a[4] as string),
         a[5], a[6], a[7], a[8],
       );
@@ -81,7 +75,7 @@ async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
 
     case 'build_unsigned':
       // args: [ufvk, notes, recipient, amount, fee, anchor, paths, accountIndex, mainnet]
-      result = wasm.build_unsigned_transaction(
+      result = wasm['build_unsigned_transaction'](
         a[0], a[1], a[2], BigInt(a[3] as string), BigInt(a[4] as string),
         a[5], a[6], a[7], a[8],
       );
@@ -89,7 +83,7 @@ async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
 
     case 'build_shielding':
       // args: [utxosJson, privkeyHex, recipient, amount, fee, anchorHeight, mainnet]
-      result = wasm.build_shielding_transaction(
+      result = wasm['build_shielding_transaction'](
         a[0], a[1], a[2], BigInt(a[3] as string), BigInt(a[4] as string),
         a[5], a[6],
       );
@@ -97,7 +91,7 @@ async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
 
     case 'build_unsigned_shielding':
       // args: [utxosJson, recipient, amount, fee, anchorHeight, mainnet]
-      result = wasm.build_unsigned_shielding_transaction(
+      result = wasm['build_unsigned_shielding_transaction'](
         a[0], a[1], BigInt(a[2] as string), BigInt(a[3] as string),
         a[4], a[5],
       );

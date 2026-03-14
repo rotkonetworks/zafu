@@ -120,7 +120,7 @@ export const StakePage = () => {
         <div>
           <h2 className='text-lg font-semibold'>staking</h2>
           <p className='mt-1 text-sm text-muted-foreground'>
-            staking is only available for penumbra network.
+            staking is not available for this network.
           </p>
         </div>
       </div>
@@ -150,8 +150,13 @@ export const StakePage = () => {
           const state = getValidatorState(info);
           result.push({ info, name, identity, votingPower, commission, state });
         }
-        // sort by voting power
-        result.sort((a, b) => b.votingPower - a.votingPower);
+        // sort by voting power, but always keep rotko.net first
+        result.sort((a, b) => {
+          const aRotko = a.name.toLowerCase().includes('rotko') ? 1 : 0;
+          const bRotko = b.name.toLowerCase().includes('rotko') ? 1 : 0;
+          if (aRotko !== bRotko) return bRotko - aRotko;
+          return b.votingPower - a.votingPower;
+        });
       } catch (err) {
         console.error('failed to fetch validators:', err);
       }

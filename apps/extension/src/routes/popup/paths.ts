@@ -3,7 +3,6 @@ export enum PopupPath {
   INDEX = '/',
   STAKE = '/stake',
   SWAP = '/swap',
-  HISTORY = '/history',
   INBOX = '/inbox',
   CONTACTS = '/contacts',
   SETTINGS = '/settings',

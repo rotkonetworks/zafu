@@ -80,7 +80,7 @@ const NETWORK_OPTIONS: NetworkOption[] = [
 export const SelectNetworks = () => {
   const navigate = usePageNav();
   const location = useLocation();
-  const { enabledNetworks, toggleNetwork } = useStore(state => state.keyRing);
+  const { enabledNetworks, toggleNetwork, setActiveNetwork } = useStore(state => state.keyRing);
   const [selected, setSelected] = useState<Set<NetworkType>>(new Set(enabledNetworks));
 
   // get origin from incoming state, default to NEWLY_GENERATED
@@ -106,6 +106,13 @@ export const SelectNetworks = () => {
         await toggleNetwork(network.id);
       }
     }
+
+    // set activeNetwork to the first selected network
+    const firstSelected = NETWORK_OPTIONS.find(n => !n.comingSoon && selected.has(n.id));
+    if (firstSelected) {
+      await setActiveNetwork(firstSelected.id);
+    }
+
     // pass origin state to password page
     navigate(PagePath.SET_PASSWORD, { state: { origin } });
   };

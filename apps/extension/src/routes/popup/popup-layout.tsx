@@ -10,7 +10,6 @@ import {
   HomeIcon,
   StackIcon,
   MixIcon,
-  ClockIcon,
   EnvelopeClosedIcon,
 } from '@radix-ui/react-icons';
 import { useStore } from '../../state';
@@ -31,9 +30,7 @@ const getTabsForNetwork = (network: NetworkType) => {
   if (hasFeature(network, 'swap')) {
     tabs.push({ path: PopupPath.SWAP, icon: <MixIcon className='h-5 w-5' />, label: 'Swap' });
   }
-  if (hasFeature(network, 'history')) {
-    tabs.push({ path: PopupPath.HISTORY, icon: <ClockIcon className='h-5 w-5' />, label: 'History' });
-  }
+  // history is shown inline on the home page — no separate tab
   return tabs;
 };
 

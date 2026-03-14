@@ -7,7 +7,6 @@ import {
   TrashIcon,
   EyeClosedIcon,
   ChevronRightIcon,
-  ComponentInstanceIcon,
   PersonIcon,
 } from '@radix-ui/react-icons';
 import { useStore } from '../../../state';
@@ -47,12 +46,6 @@ const links: SettingsLink[] = [
     icon: <Link1Icon className='size-5 text-muted-foreground' />,
     href: PopupPath.SETTINGS_CONNECTED_SITES,
     networks: ['penumbra'],
-  },
-  {
-    title: 'Parachains',
-    icon: <ComponentInstanceIcon className='size-5 text-muted-foreground' />,
-    href: PopupPath.SETTINGS_PARACHAINS,
-    networks: ['polkadot', 'kusama'],
   },
   {
     title: 'Privacy',

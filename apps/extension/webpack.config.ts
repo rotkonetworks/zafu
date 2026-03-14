@@ -235,12 +235,8 @@ resolve: {
             from: path.join(wasmPackage, 'wasm-parallel'),
             to: 'wasm-parallel',
           },
-          // zcash-wasm: main WASM files come from public/zafu-wasm/ (via 'public' pattern above)
-          // only snippets (rayon worker helpers) need explicit copy from packages/
-          {
-            from: path.join(__dirname, '../../packages/zcash-wasm/snippets'),
-            to: 'zafu-wasm/snippets',
-          },
+          // zcash-wasm: both zafu-wasm/ (scanning) and zafu-wasm-parallel/ (proving)
+          // come from public/ via the 'public' pattern above
         ],
       }),
       // html entry points

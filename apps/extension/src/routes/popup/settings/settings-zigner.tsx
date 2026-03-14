@@ -2,7 +2,7 @@ import { EyeOpenIcon, TrashIcon, ExternalLinkIcon, Link2Icon } from '@radix-ui/r
 import { useStore } from '../../../state';
 import { walletsSelector } from '../../../state/wallets';
 import { zignerConnectSelector } from '../../../state/zigner';
-import { keyRingSelector, type ZignerZafuImport } from '../../../state/keyring';
+import { keyRingSelector, selectEnabledNetworks, type ZignerZafuImport } from '../../../state/keyring';
 import { SettingsScreen } from './settings-screen';
 import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
@@ -41,6 +41,8 @@ export const SettingsZigner = () => {
     clearZignerState,
   } = useStore(zignerConnectSelector);
   const { addZignerUnencrypted, keyInfos, deleteKeyRing } = useStore(keyRingSelector);
+  const enabledNetworks = useStore(selectEnabledNetworks);
+  const hasPolkadot = enabledNetworks.includes('polkadot') || enabledNetworks.includes('kusama');
 
   const [success, setSuccess] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
@@ -202,10 +204,17 @@ title='Zafu Zigner'
         {/* Info Box */}
         <div className='rounded-lg border border-border bg-card-radial p-4'>
           <p className='text-sm text-muted-foreground'>
-Zafu Zigner is a cold wallet that keeps your spending keys offline. Zafu stores only the
-            viewing key to show balances. Transactions require QR code signing with your Zafu Zigner
-            device.
+            zafu zigner keeps spending keys offline. transactions require QR code signing with your device.
           </p>
+          <a
+            href='https://zigner.rotko.net'
+            target='_blank'
+            rel='noopener noreferrer'
+            className='flex items-center gap-1.5 text-xs text-primary hover:underline mt-2'
+          >
+            <ExternalLinkIcon className='h-3 w-3' />
+            download zafu zigner
+          </a>
         </div>
 
         {/* Existing Penumbra Zigner Wallets */}
@@ -406,8 +415,8 @@ Zafu Zigner is a cold wallet that keeps your spending keys offline. Zafu stores 
           </div>
         )}
 
-        {/* Polkadot Vault Settings */}
-        <div className='border-t border-border pt-4'>
+        {/* Polkadot Vault Settings — only for polkadot/kusama users */}
+        {hasPolkadot && (<div className='border-t border-border pt-4'>
           <p className='text-sm font-bold mb-3'>polkadot vault</p>
           <div className='flex flex-col gap-3'>
             <div className='flex items-center justify-between border border-border bg-card-radial p-3'>
@@ -440,7 +449,7 @@ Zafu Zigner is a cold wallet that keeps your spending keys offline. Zafu stores 
               </div>
             )}
           </div>
-        </div>
+        </div>)}
 
         {/* Success message */}
         {success && (

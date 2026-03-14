@@ -4,73 +4,73 @@
 
 @layer base {
   :root {
-    /* zigner dark theme - zafu blue + zcash yellow, 90s volvo pragmatic */
-    --background: 220 20% 7%;
-    --foreground: 210 15% 85%;
+    /* terminal dark theme - black bg, gold accent, monospace */
+    --background: 0 0% 0%;
+    --foreground: 0 0% 80%;
 
-    /* muted text - visible but subdued */
-    --muted: 220 15% 14%;
-    --muted-foreground: 210 10% 55%;
+    /* muted text */
+    --muted: 0 0% 6%;
+    --muted-foreground: 0 0% 40%;
 
-    /* popover/dropdown - slightly lighter than bg */
-    --popover: 220 18% 10%;
-    --popover-foreground: 210 15% 85%;
+    /* popover/dropdown */
+    --popover: 0 0% 4%;
+    --popover-foreground: 0 0% 80%;
 
     /* card - subtle elevation */
-    --card: 220 18% 9%;
-    --card-foreground: 210 15% 85%;
+    --card: 0 0% 4%;
+    --card-foreground: 0 0% 80%;
 
-    /* border - visible, pragmatic */
-    --border: 220 12% 18%;
-    --border-secondary: 220 12% 14%;
-    --input: 220 18% 12%;
+    /* border */
+    --border: 0 0% 13%;
+    --border-secondary: 0 0% 10%;
+    --input: 0 0% 6%;
 
-    /* primary - zcash yellow/gold */
-    --primary: 45 95% 50%;
-    --primary-foreground: 220 20% 7%;
+    /* primary - zcash gold */
+    --primary: 42 91% 55%;
+    --primary-foreground: 0 0% 0%;
 
-    /* secondary - zafu blue */
-    --secondary: 210 60% 45%;
-    --secondary-foreground: 210 15% 95%;
+    /* secondary - dimmer gold */
+    --secondary: 42 70% 50%;
+    --secondary-foreground: 0 0% 0%;
 
-    /* accent - zafu blue tint for hover states */
-    --accent: 210 40% 18%;
-    --accent-foreground: 210 15% 90%;
+    /* accent - dark gold tint for hover */
+    --accent: 42 30% 10%;
+    --accent-foreground: 0 0% 85%;
 
     /* status colors */
-    --destructive: 0 65% 50%;
+    --destructive: 0 85% 55%;
     --destructive-foreground: 0 0% 100%;
 
-    --ring: 45 95% 50%;
-    --radius: 0; /* no rounded corners - 90s pragmatic */
+    --ring: 42 91% 55%;
+    --radius: 0;
 
     /* brand colors */
-    --zigner-gold: #f4b728; /* zcash yellow */
+    --zigner-gold: #f4b728;
     --zigner-gold-light: #fcd34d;
     --zigner-gold-dark: #b8860b;
-    --zafu-blue: #3b82f6; /* zafu cushion blue */
+    --zafu-blue: #3b82f6;
     --zafu-blue-light: #60a5fa;
     --zafu-blue-dark: #1d4ed8;
-    --zigner-dark: #0f1419;
-    --zigner-darker: #0a0d10;
+    --zigner-dark: #0a0a0a;
+    --zigner-darker: #000000;
 
     /* semantic colors */
-    --success: #22c55e;
+    --success: #5f5;
     --warning: #f4b728;
-    --error: #dc2626;
-    --info: #3b82f6;
+    --error: #f55;
+    --info: #f4b728;
 
     /* legacy compat */
-    --charcoal: #0f1419;
-    --charcoal-secondary: #0a0d10;
+    --charcoal: #0a0a0a;
+    --charcoal-secondary: #000000;
     --teal: #629994;
     --sand: #847a5b;
     --rust: #8d5728;
-    --green: #22c55e;
-    --red: #dc2626;
-    --light-brown: #1e2328;
-    --light-grey: #d1d5db;
-    --brown: rgba(15, 20, 25, 0.8);
+    --green: #5f5;
+    --red: #f55;
+    --light-brown: #0a0a0a;
+    --light-grey: #ccc;
+    --brown: rgba(0, 0, 0, 0.8);
   }
 
   /* ensure full height for side panel and popup */
@@ -92,18 +92,23 @@
     background: hsl(var(--background));
   }
 
-  /* scrollbar - minimal */
+  /* scrollbar */
   ::-webkit-scrollbar {
-    width: 3px;
+    width: 6px;
+    height: 6px;
   }
   ::-webkit-scrollbar-track {
-    background: transparent;
+    background: #0a0a0a;
   }
   ::-webkit-scrollbar-thumb {
-    background: hsl(var(--border));
+    background: #332a00;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--muted-foreground));
+    background: #f4b728;
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #332a00 #0a0a0a;
   }
 
   * {
@@ -111,16 +116,15 @@
   }
 
   body {
-    @apply bg-background text-foreground antialiased;
-    font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+    @apply bg-background text-foreground;
+    font-family: 'Iosevka Term', 'Courier New', Courier, monospace;
     font-size: 13px;
     line-height: 1.5;
-    letter-spacing: -0.01em;
   }
 
-  /* ensure text is always visible */
   h1, h2, h3, h4, h5, h6 {
-    @apply text-foreground font-medium;
+    color: var(--zigner-gold);
+    font-weight: normal;
   }
 
   p {
@@ -128,7 +132,11 @@
   }
 
   a {
-    @apply text-secondary hover:text-secondary/80 transition-colors duration-75;
+    color: var(--zigner-gold);
+    text-decoration: none;
+  }
+  a:hover {
+    text-decoration: underline;
   }
 
   /* form elements - sharp, no radius */
@@ -141,10 +149,18 @@
     @apply rounded-none;
   }
 
-  /* code/mono */
   code, pre {
-    font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-    @apply text-foreground;
+    font-family: 'Iosevka Term', 'Courier New', Courier, monospace;
+    color: var(--zigner-gold);
+  }
+  pre {
+    background: #0a0a0a;
+    border: 1px solid #222;
+    padding: 0.8em;
+    margin: 0.5em 0;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
   }
 
   /* custom fonts - fallback to system */

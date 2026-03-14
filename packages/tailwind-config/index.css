@@ -2,9 +2,9 @@
 
 /* Zafu minimalistic theme */
 @theme {
-  --font-body: Arial, Helvetica, sans-serif;
-  --font-headline: Arial, Helvetica, sans-serif;
-  --font-mono: "JetBrains Mono", "Fira Code", "Courier New", monospace;
+  --font-body: "Iosevka Term", "Courier New", Courier, monospace;
+  --font-headline: "Iosevka Term", "Courier New", Courier, monospace;
+  --font-mono: "Iosevka Term", "Courier New", Courier, monospace;
 
   --radius-sm: 0;
   --radius-md: 0;
