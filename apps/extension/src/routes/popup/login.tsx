@@ -65,7 +65,7 @@ export const Login = () => {
             Unlock
           </Button>
         </form>
-        <div className='flex flex-col gap-2'>
+        <div className='flex flex-col gap-1'>
           <p className='text-center text-muted-foreground'>
             Need help? Visit{' '}
             <a
@@ -76,6 +76,9 @@ export const Login = () => {
             >
               rotko.net
             </a>
+          </p>
+          <p className='text-center text-xs text-muted-foreground/50'>
+            {BUILD_COMMIT}-{BUILD_DATE}
           </p>
         </div>
       </div>

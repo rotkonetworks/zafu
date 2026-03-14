@@ -13,6 +13,7 @@ import url from 'node:url';
 
 const require = createRequire(import.meta.url);
 import { type WebExtRunner, cmd as WebExtCmd } from 'web-ext';
+import { execSync } from 'node:child_process';
 import webpack from 'webpack';
 import WatchExternalFilesPlugin from 'webpack-watch-external-files-plugin';
 
@@ -23,6 +24,9 @@ export default ({
   ['WEBPACK_WATCH']?: boolean;
   ZIGNER_ID: string;
 }): webpack.Configuration[] => {
+  const gitCommit = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
+  const gitDate = execSync('git log -1 --format=%cd --date=short', { encoding: 'utf-8' }).trim();
+
   const keysPackage = path.dirname(url.fileURLToPath(import.meta.resolve('@penumbra-zone/keys')));
   // Resolve wasm package via a known export, then go up to package root
   const wasmPackage = path.dirname(
@@ -63,6 +67,8 @@ export default ({
     ZIGNER_ORIGIN: JSON.stringify(`chrome-extension://${ZIGNER_ID}`),
     'globalThis.__DEV__': JSON.stringify(process.env['NODE_ENV'] !== 'production'),
     'globalThis.__ASSERT_ROOT__': JSON.stringify(false),
+    BUILD_COMMIT: JSON.stringify(gitCommit),
+    BUILD_DATE: JSON.stringify(gitDate),
   });
 
   const WebExtReloadPlugin = {
