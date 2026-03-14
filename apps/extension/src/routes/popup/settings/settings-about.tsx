@@ -35,7 +35,7 @@ export const SettingsAbout = () => {
               rotko.net
             </a>
             <a
-              href="https://github.com/nicrotko/zafu"
+              href="https://github.com/rotkonetworks/zafu"
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1.5 text-xs text-primary hover:underline"
