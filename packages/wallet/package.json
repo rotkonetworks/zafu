@@ -28,7 +28,9 @@
     "./networks/cosmos/signer": "./src/networks/cosmos/signer.ts",
     "./networks/cosmos/airgap": "./src/networks/cosmos/airgap.ts",
     "./networks/cosmos/client": "./src/networks/cosmos/client.ts",
-    "./networks/polkadot/parachain-registry": "./src/networks/polkadot/parachain-registry.ts"
+    "./networks/polkadot/parachain-registry": "./src/networks/polkadot/parachain-registry.ts",
+    "./networks/ethereum/derive": "./src/networks/ethereum/derive.ts",
+    "./networks/bitcoin/derive": "./src/networks/bitcoin/derive.ts"
   },
   "dependencies": {
     "@cosmjs/amino": "^0.32.4",

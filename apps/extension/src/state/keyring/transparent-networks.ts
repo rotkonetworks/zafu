@@ -10,11 +10,11 @@
 
 import { type TransparentNetwork, type IbcNetwork, NETWORK_CONFIGS } from './network-types';
 
-// we'll use these libs when available:
-// - @cosmjs for cosmos/ibc chains
-// - @polkadot/util-crypto for substrate
-// - ethers or viem for evm
-// for now, stub the interface
+// derivation uses @repo/wallet per-network modules:
+// - @repo/wallet/networks/polkadot/derive for substrate (ed25519/SLIP-10)
+// - @repo/wallet/networks/ethereum/derive for EVM (secp256k1/BIP-44)
+// - @repo/wallet/networks/bitcoin/derive for BTC (secp256k1/BIP-84, native segwit)
+// - @repo/wallet/networks/cosmos/signer for cosmos/IBC chains
 
 export interface TransparentWallet {
   network: TransparentNetwork | IbcNetwork;
@@ -100,22 +100,20 @@ export const getTransparentBalance = async (
 
 const deriveSubstrateAddress = async (
   network: TransparentNetwork,
-  _mnemonic: string,
+  mnemonic: string,
   accountIndex: number,
-  ss58Prefix: number,
+  _ss58Prefix: number,
 ): Promise<TransparentWallet> => {
-  // TODO: use @polkadot/util-crypto
-  // const { mnemonicToMiniSecret, sr25519PairFromSeed, encodeAddress } = await import('@polkadot/util-crypto');
-  // const seed = mnemonicToMiniSecret(_mnemonic);
-  // const pair = sr25519PairFromSeed(seed);
-  // const address = encodeAddress(pair.publicKey, ss58Prefix);
+  const { derivePolkadotWallet } = await import('@repo/wallet/networks/polkadot/derive');
+  const substrateNetwork = network as 'polkadot' | 'kusama';
+  const wallet = await derivePolkadotWallet(mnemonic, substrateNetwork, accountIndex);
+  // clear private key from memory
+  wallet.privateKey.fill(0);
 
-  // stub for now
-  console.log(`[transparent] deriving ${network} address for account ${accountIndex}, ss58: ${ss58Prefix}`);
   return {
     network,
-    address: `${ss58Prefix === 0 ? '1' : 'D'}stub${accountIndex}...`,
-    publicKey: '0x...',
+    address: wallet.address,
+    publicKey: bytesToHex(wallet.publicKey),
   };
 };
 
@@ -140,19 +138,18 @@ const getSubstrateBalance = async (address: string, rpcUrl: string): Promise<Bal
 
 const deriveEvmAddress = async (
   network: TransparentNetwork,
-  _mnemonic: string,
+  mnemonic: string,
   accountIndex: number,
 ): Promise<TransparentWallet> => {
-  // TODO: use ethers or viem
-  // import { HDNodeWallet } from 'ethers';
-  // const path = `m/44'/60'/0'/0/${accountIndex}`;
-  // const wallet = HDNodeWallet.fromMnemonic(_mnemonic, path);
+  const { deriveEthWallet } = await import('@repo/wallet/networks/ethereum/derive');
+  const wallet = await deriveEthWallet(mnemonic, accountIndex);
+  // clear private key from memory
+  wallet.privateKey.fill(0);
 
-  console.log(`[transparent] deriving ${network} address for account ${accountIndex}`);
   return {
     network,
-    address: `0xstub${accountIndex}...`,
-    publicKey: '0x...',
+    address: wallet.address,
+    publicKey: bytesToHex(wallet.publicKey),
   };
 };
 
@@ -229,20 +226,18 @@ const getCosmosBalance = async (address: string, rpcUrl: string, denom?: string)
 
 const deriveBitcoinAddress = async (
   network: TransparentNetwork,
-  _mnemonic: string,
+  mnemonic: string,
   accountIndex: number,
 ): Promise<TransparentWallet> => {
-  // TODO: use bitcoinjs-lib
-  // import * as bitcoin from 'bitcoinjs-lib';
-  // import { BIP32Factory } from 'bip32';
-  // const path = `m/84'/0'/0'/0/${accountIndex}`;
-  // derive native segwit (bc1...) address
+  const { deriveBtcWallet } = await import('@repo/wallet/networks/bitcoin/derive');
+  const wallet = await deriveBtcWallet(mnemonic, accountIndex);
+  // clear private key from memory
+  wallet.privateKey.fill(0);
 
-  console.log(`[transparent] deriving ${network} address for account ${accountIndex}`);
   return {
     network,
-    address: `bc1stub${accountIndex}...`,
-    publicKey: '0x...',
+    address: wallet.address,
+    publicKey: bytesToHex(wallet.publicKey),
   };
 };
 

@@ -5,7 +5,10 @@
  * and a rayon thread pool so halo2's MSM/FFT operations use all cores.
  * The proving key is built once (OnceLock) and stays cached.
  *
- * Mirrors the penumbra wasm-build-parallel.ts pattern.
+ * The key difference from penumbra's wasm-build-parallel.ts: the zcash WASM
+ * is loaded from public/ via dynamic import (not webpack-bundled), so rayon's
+ * workerHelpers.js can't resolve its nested Worker URLs via import.meta.url.
+ * We patch the global Worker constructor to fix the URLs before init.
  */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -13,6 +16,8 @@ type WasmModule = Record<string, any>;
 
 let wasmModule: WasmModule | null = null;
 let initPromise: Promise<void> | null = null;
+
+const WASM_BASE = '/zafu-wasm-parallel';
 
 const initParallelWasm = async (): Promise<WasmModule> => {
   if (wasmModule) return wasmModule;
@@ -22,23 +27,49 @@ const initParallelWasm = async (): Promise<WasmModule> => {
   }
 
   initPromise = (async () => {
-    // @ts-expect-error dynamic import — parallel WASM build with rayon + shared memory
-    const wasm = await import(/* webpackIgnore: true */ '/zafu-wasm-parallel/zafu_wasm.js');
-    const memory = new WebAssembly.Memory({ initial: 43, maximum: 16384, shared: true });
-    await wasm.default({ module_or_path: '/zafu-wasm-parallel/zafu_wasm_bg.wasm', memory });
-    wasm.init();
+    // patch Worker constructor so rayon's workerHelpers.js can spawn sub-workers.
+    // the helpers do `new Worker(new URL('./workerHelpers.js', import.meta.url), { type: 'module' })`
+    // but import.meta.url in the offscreen context resolves wrong.
+    // we intercept and rewrite the URL to the correct absolute extension path.
+    const OriginalWorker = globalThis.Worker;
+    const extOrigin = chrome.runtime.getURL('/');
+    globalThis.Worker = class PatchedWorker extends OriginalWorker {
+      constructor(url: string | URL, options?: WorkerOptions) {
+        let urlStr = url instanceof URL ? url.href : String(url);
+        // rayon's workerHelpers.js uses import.meta.url which resolves wrong
+        // in extension offscreen context. ensure all worker URLs are absolute
+        // chrome-extension:// paths.
+        if (!urlStr.startsWith(extOrigin) && !urlStr.startsWith('blob:')) {
+          // strip leading slash, make absolute
+          const relative = urlStr.startsWith('/') ? urlStr.slice(1) : urlStr;
+          urlStr = chrome.runtime.getURL(relative);
+          console.log('[zcash-build-parallel] patching worker URL →', urlStr);
+        }
+        super(urlStr, options);
+      }
+    };
 
-    const numThreads = navigator.hardwareConcurrency || 4;
-    await wasm.initThreadPool(numThreads);
-    console.log(`[zcash-build-parallel] rayon: ${numThreads} threads`);
+    try {
+      // @ts-expect-error dynamic import — parallel WASM build with rayon + shared memory
+      const wasm = await import(/* webpackIgnore: true */ '/zafu-wasm-parallel/zafu_wasm.js');
+      const memory = new WebAssembly.Memory({ initial: 43, maximum: 16384, shared: true });
+      await wasm.default({ module_or_path: `${WASM_BASE}/zafu_wasm_bg.wasm`, memory });
+      wasm.init();
 
-    wasmModule = wasm;
+      const numThreads = navigator.hardwareConcurrency || 4;
+      await wasm.initThreadPool(numThreads);
+      console.log(`[zcash-build-parallel] rayon: ${numThreads} threads`);
+
+      wasmModule = wasm;
+    } finally {
+      // restore original Worker constructor
+      globalThis.Worker = OriginalWorker;
+    }
   })();
 
   try {
     await initPromise;
   } catch (e) {
-    // allow retry on next call
     initPromise = null;
     throw e;
   }
@@ -66,7 +97,6 @@ async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
 
   switch (req.fn) {
     case 'build_signed_spend':
-      // args: [mnemonic, notes, recipient, amount, fee, anchor, paths, accountIndex, mainnet]
       result = wasm['build_signed_spend_transaction'](
         a[0], a[1], a[2], BigInt(a[3] as string), BigInt(a[4] as string),
         a[5], a[6], a[7], a[8],
@@ -74,7 +104,6 @@ async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
       break;
 
     case 'build_unsigned':
-      // args: [ufvk, notes, recipient, amount, fee, anchor, paths, accountIndex, mainnet]
       result = wasm['build_unsigned_transaction'](
         a[0], a[1], a[2], BigInt(a[3] as string), BigInt(a[4] as string),
         a[5], a[6], a[7], a[8],
@@ -82,7 +111,6 @@ async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
       break;
 
     case 'build_shielding':
-      // args: [utxosJson, privkeyHex, recipient, amount, fee, anchorHeight, mainnet]
       result = wasm['build_shielding_transaction'](
         a[0], a[1], a[2], BigInt(a[3] as string), BigInt(a[4] as string),
         a[5], a[6],
@@ -90,7 +118,6 @@ async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
       break;
 
     case 'build_unsigned_shielding':
-      // args: [utxosJson, recipient, amount, fee, anchorHeight, mainnet]
       result = wasm['build_unsigned_shielding_transaction'](
         a[0], a[1], BigInt(a[2] as string), BigInt(a[3] as string),
         a[4], a[5],
