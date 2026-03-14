@@ -97,6 +97,12 @@ export class ZidecarClient {
     return this.parseBlockStream(resp);
   }
 
+  /** get mempool as compact blocks (height=0, hash=txid) for trial decryption */
+  async getMempoolStream(): Promise<CompactBlock[]> {
+    const resp = await this.grpcCallStream('GetMempoolStream', new Uint8Array(0));
+    return this.parseBlockStream(resp);
+  }
+
   /** send raw transaction */
   async sendTransaction(txData: Uint8Array): Promise<{ txid: Uint8Array; errorCode: number; errorMessage: string }> {
     // encode RawTransaction proto
@@ -230,12 +236,38 @@ export class ZidecarClient {
       body,
     });
 
-    if (!resp.ok) throw new Error(`gRPC HTTP ${resp.status}`);
+    if (!resp.ok) throw new Error(`gRPC ${method}: HTTP ${resp.status}`);
 
     const buf = new Uint8Array(await resp.arrayBuffer());
-    if (buf.length < 5) throw new Error('empty grpc response');
 
-    // extract first frame (unary RPCs only)
+    if (buf.length < 5) {
+      // check HTTP headers for grpc-status (trailer-only response)
+      const grpcStatus = resp.headers.get('grpc-status');
+      const grpcMessage = resp.headers.get('grpc-message');
+      if (grpcStatus && grpcStatus !== '0') {
+        throw new Error(`gRPC ${method}: ${decodeURIComponent(grpcMessage ?? `status ${grpcStatus}`)}`);
+      }
+      throw new Error(`gRPC ${method}: empty response from ${this.serverUrl}`);
+    }
+
+    const flags = buf[0]!;
+
+    // if first frame is a trailer frame (flags & 0x80), parse grpc-status from it
+    if (flags & 0x80) {
+      const trailerLen = (buf[1]! << 24) | (buf[2]! << 16) | (buf[3]! << 8) | buf[4]!;
+      const trailerText = new TextDecoder().decode(buf.subarray(5, 5 + trailerLen));
+      const statusMatch = trailerText.match(/grpc-status:\s*(\d+)/);
+      const messageMatch = trailerText.match(/grpc-message:\s*(.+)/);
+      const status = statusMatch?.[1] ?? '0';
+      if (status !== '0') {
+        const msg = messageMatch?.[1]?.trim();
+        throw new Error(`gRPC ${method}: ${decodeURIComponent(msg ?? `status ${status}`)}`);
+      }
+      // status 0 but no data frame — treat as empty success
+      return new Uint8Array(0);
+    }
+
+    // extract first data frame (unary RPCs only)
     const len = (buf[1]! << 24) | (buf[2]! << 16) | (buf[3]! << 8) | buf[4]!;
     return buf.subarray(5, 5 + len);
   }

@@ -25,7 +25,7 @@ export interface NetworkWorkerMessage {
 }
 
 export interface NetworkWorkerResponse {
-  type: 'ready' | 'address' | 'sync-progress' | 'send-progress' | 'sync-started' | 'sync-stopped' | 'sync-reset' | 'balance' | 'tx-result' | 'send-tx-unsigned' | 'shield-result' | 'shield-unsigned-result' | 'wallets' | 'wallet-deleted' | 'notes' | 'memos' | 'transparent-history' | 'history' | 'memos-result' | 'sync-memos-progress' | 'error';
+  type: 'ready' | 'address' | 'sync-progress' | 'send-progress' | 'sync-started' | 'sync-stopped' | 'sync-reset' | 'balance' | 'tx-result' | 'send-tx-unsigned' | 'shield-result' | 'shield-unsigned-result' | 'wallets' | 'wallet-deleted' | 'notes' | 'memos' | 'transparent-history' | 'history' | 'memos-result' | 'sync-memos-progress' | 'mempool-update' | 'error';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -112,6 +112,13 @@ const spawnNetworkWorkerInner = async (network: NetworkType): Promise<void> => {
 
     if (msg.type === 'sync-memos-progress') {
       window.dispatchEvent(new CustomEvent('zcash-memo-sync-progress', {
+        detail: { network, walletId: msg.walletId, ...msg.payload as object }
+      }));
+      return;
+    }
+
+    if (msg.type === 'mempool-update') {
+      window.dispatchEvent(new CustomEvent('zcash-mempool-update', {
         detail: { network, walletId: msg.walletId, ...msg.payload as object }
       }));
       return;

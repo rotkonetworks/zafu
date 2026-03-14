@@ -419,7 +419,7 @@ const verifySyncProofs = async (
 
     // verify each proof
     for (const proof of proofs) {
-      const valid = zyncModule.verify_commitment_proof(
+      const valid = zyncModule['verify_commitment_proof'](
         hexEncode(proof.cmx),
         hexEncode(proof.treeRoot),
         proof.pathProofRaw,
@@ -447,7 +447,7 @@ const verifySyncProofs = async (
 
     let newlySpent = 0;
     for (const proof of nfProofs) {
-      const valid = zyncModule.verify_nullifier_proof(
+      const valid = zyncModule['verify_nullifier_proof'](
         hexEncode(proof.nullifier),
         hexEncode(proof.nullifierRoot),
         proof.isSpent,
@@ -470,7 +470,7 @@ const verifySyncProofs = async (
 
   // 4. verify actions commitment chain
   const hasSaved = actionsCommitment !== '0'.repeat(64);
-  zyncModule.verify_actions_commitment(actionsCommitment, proven.actions_commitment, hasSaved);
+  zyncModule['verify_actions_commitment'](actionsCommitment, proven.actions_commitment, hasSaved);
   console.log(`[zcash-worker] actions commitment verified`);
 
   const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
@@ -545,7 +545,7 @@ const verifyHeaderProof = async (
 ): Promise<ProvenRoots> => {
   if (!zyncModule) throw new Error('zync-core not initialized');
   const { proofBytes } = await client.getHeaderProof();
-  const json = zyncModule.verify_header_proof(proofBytes, tip, mainnet) as string;
+  const json = zyncModule['verify_header_proof'](proofBytes, tip, mainnet) as string;
   return JSON.parse(json) as ProvenRoots;
 };
 
@@ -821,6 +821,74 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
           }
         }
 
+        // scan mempool for pending incoming/spends
+        try {
+          const mempoolBlocks = await client.getMempoolStream();
+          let mempoolActions = 0;
+          for (const mb of mempoolBlocks) mempoolActions += mb.actions.length;
+
+          if (mempoolActions > 0 && state.keys) {
+            // build binary buffer for trial decryption (same format as block scanning)
+            const ACTION_SIZE = 32 + 32 + 32 + 52;
+            const mbuf = new Uint8Array(4 + mempoolActions * ACTION_SIZE);
+            const mview = new DataView(mbuf.buffer);
+            mview.setUint32(0, mempoolActions, true);
+            let moff = 4;
+
+            // collect mempool nullifiers for spend detection
+            const mempoolNullifiers = new Map<string, string>(); // nfHex -> txidHex
+
+            for (const mb of mempoolBlocks) {
+              const txidHex = hexEncode(mb.hash); // hash = txid for mempool blocks
+              for (const a of mb.actions) {
+                if (a.nullifier.length === 32) mbuf.set(a.nullifier, moff); moff += 32;
+                if (a.cmx.length === 32) mbuf.set(a.cmx, moff); moff += 32;
+                if (a.ephemeralKey.length === 32) mbuf.set(a.ephemeralKey, moff); moff += 32;
+                if (a.ciphertext.length >= 52) mbuf.set(a.ciphertext.subarray(0, 52), moff); moff += 52;
+                mempoolNullifiers.set(hexEncode(a.nullifier), txidHex);
+              }
+            }
+
+            // trial decrypt mempool actions
+            const pendingIncoming: Array<{ value: string; txid: string; isChange: boolean }> = [];
+            const pendingSpends: Array<{ nullifier: string; txid: string }> = [];
+
+            try {
+              const found = state.keys.scan_actions_parallel(mbuf);
+              for (const note of found) {
+                pendingIncoming.push({
+                  value: note.value,
+                  txid: note.cmx, // use cmx as identifier since no confirmed txid yet
+                  isChange: note.is_change ?? false,
+                });
+              }
+            } catch (err) {
+              console.log('[zcash-worker] mempool scan decrypt error:', err);
+            }
+
+            // check if any wallet nullifiers appear in mempool (pending spends)
+            for (const note of state.notes) {
+              if (!state.spentNullifiers.has(note.nullifier) && mempoolNullifiers.has(note.nullifier)) {
+                pendingSpends.push({
+                  nullifier: note.nullifier,
+                  txid: mempoolNullifiers.get(note.nullifier)!,
+                });
+              }
+            }
+
+            if (pendingIncoming.length > 0 || pendingSpends.length > 0) {
+              console.log(`[zcash-worker] mempool: ${pendingIncoming.length} incoming, ${pendingSpends.length} pending spends`);
+              workerSelf.postMessage({
+                type: 'mempool-update', id: '', network: 'zcash', walletId,
+                payload: { pendingIncoming, pendingSpends },
+              });
+            }
+          }
+        } catch (e) {
+          // mempool scan is best-effort, don't break the sync loop
+          console.log('[zcash-worker] mempool scan skipped:', e);
+        }
+
         workerSelf.postMessage({
           type: 'sync-progress', id: '', network: 'zcash', walletId,
           payload: { currentHeight, chainHeight, notesFound: state.notes.length, blocksScanned: 0 },
@@ -891,14 +959,14 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
                 abuf.set(a.nullifier, aoff); aoff += 32;
                 abuf.set(a.ephemeralKey, aoff); aoff += 32;
               }
-              const actionsRoot = zyncModule.compute_actions_root(abuf) as string;
-              actionsCommitment = zyncModule.update_actions_commitment(
+              const actionsRoot = zyncModule['compute_actions_root'](abuf) as string;
+              actionsCommitment = zyncModule['update_actions_commitment'](
                 actionsCommitment, actionsRoot, block.height,
               ) as string;
             } else {
               // empty block: all-zeros root
               const zeroRoot = '0'.repeat(64);
-              actionsCommitment = zyncModule.update_actions_commitment(
+              actionsCommitment = zyncModule['update_actions_commitment'](
                 actionsCommitment, zeroRoot, block.height,
               ) as string;
             }
@@ -956,11 +1024,6 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
       // persist actions commitment
       if (zyncModule) {
         await saveActionsCommitment(walletId, actionsCommitment);
-      }
-
-      // persist to chrome.storage for popup reactivity
-      try { chrome.storage?.local?.set({ zcashSyncHeight: currentHeight }); } catch (e) {
-        console.warn('[zcash-worker] chrome.storage set failed:', e);
       }
 
       workerSelf.postMessage({
