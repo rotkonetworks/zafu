@@ -18,6 +18,26 @@ import {
 
 const DEFAULT_ZIDECAR_URL = 'https://zcash.rotko.net';
 
+/**
+ * Parse a Zcash memo for an embedded return address.
+ *
+ * Convention: the last line of the memo may be `reply:<address>` where
+ * <address> is a unified (u1...) or Sapling (zs1...) address. If found,
+ * the return address is extracted and stripped from the displayed content.
+ */
+function parseReturnAddress(raw: string): { content: string; returnAddress?: string } {
+  const lines = raw.trimEnd().split('\n');
+  const last = lines[lines.length - 1]?.trim() ?? '';
+  const match = last.match(/^reply:(u1[a-z0-9]+|zs1[a-z0-9]+)$/i);
+  if (match) {
+    return {
+      content: lines.slice(0, -1).join('\n').trimEnd(),
+      returnAddress: match[1],
+    };
+  }
+  return { content: raw };
+}
+
 interface MemoSyncResult {
   synced: number;
 }
@@ -72,12 +92,14 @@ export function useZcashMemos(walletId: string, zidecarUrl: string = DEFAULT_ZID
 
       // insert returned memos into zustand store
       for (const memo of results) {
+        const { content, returnAddress } = parseReturnAddress(memo.content);
         await messages.addMessage({
           network: 'zcash',
           txId: memo.txId,
           blockHeight: memo.blockHeight,
           timestamp: memo.timestamp,
-          content: memo.content,
+          content,
+          senderAddress: returnAddress,
           recipientAddress: '',
           direction: memo.direction as 'sent' | 'received',
           read: memo.direction === 'sent',

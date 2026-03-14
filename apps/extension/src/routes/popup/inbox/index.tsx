@@ -24,6 +24,7 @@ import { selectActiveNetwork, selectPenumbraAccount, selectEffectiveKeyInfo } fr
 import { usePenumbraMemos } from '../../../hooks/penumbra-memos';
 import { useZcashMemos } from '../../../hooks/zcash-memos';
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
+import { useActiveAddress } from '../../../hooks/use-address';
 import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { Address } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
 import { MemoPlaintext } from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
@@ -301,9 +302,13 @@ function MessageDetail({
         </div>
       </div>
 
-      {/* reply button */}
+      {/* reply button — shown when message has a return address */}
       {message.direction === 'received' && message.senderAddress && (
         <div className='p-4 border-t border-border/40'>
+          <div className='mb-2 flex items-center gap-1.5 text-xs text-muted-foreground'>
+            <PaperPlaneIcon className='h-3 w-3' />
+            <span>return address available — you can reply</span>
+          </div>
           <button
             onClick={onReply}
             className='w-full flex items-center justify-center gap-2 rounded-lg bg-zigner-gold py-2.5 text-sm font-medium text-zigner-dark'
@@ -329,6 +334,7 @@ function ComposeMessage({
   const navigate = useNavigate();
   const penumbraTx = usePenumbraTransaction();
   const penumbraAccount = useStore(selectPenumbraAccount);
+  const { address: ownAddress } = useActiveAddress();
   const [recipient, setRecipient] = useState(replyTo?.address ?? '');
   const [message, setMessage] = useState('');
   const [amount, setAmount] = useState('');
@@ -392,17 +398,21 @@ function ComposeMessage({
   }, [recipient, message, amount, penumbraTx]);
 
   const handleSendZcash = useCallback(() => {
-    // navigate to zcash send page with pre-filled memo
-    // the zcash send page will handle the actual transaction
+    // append return address so the recipient can reply
+    // convention: last line is `reply:<our-address>`
+    const memoWithReply = ownAddress
+      ? `${message}\nreply:${ownAddress}`
+      : message;
+
     navigate(PopupPath.SEND, {
       state: {
-        prefillMemo: message,
+        prefillMemo: memoWithReply,
         prefillRecipient: recipient,
         prefillAmount: amount,
       },
     });
     onClose();
-  }, [navigate, message, recipient, amount, onClose]);
+  }, [navigate, message, recipient, amount, ownAddress, onClose]);
 
   const handleSend = () => {
     if (!canSend) return;
@@ -465,12 +475,15 @@ function ComposeMessage({
             onChange={(e) => setMessage(e.target.value)}
             placeholder='write your encrypted message...'
             rows={6}
-            maxLength={512}
+            maxLength={network === 'zcash' && ownAddress ? 512 - ownAddress.length - 7 : 512}
             disabled={txStatus !== 'idle'}
             className='w-full rounded-lg border border-border bg-input px-3 py-2 text-sm focus:border-zigner-gold focus:outline-none resize-none disabled:opacity-50'
           />
           <p className='text-xs text-muted-foreground mt-1'>
-            {message.length}/512 characters
+            {message.length}/{network === 'zcash' && ownAddress ? 512 - ownAddress.length - 7 : 512} characters
+            {network === 'zcash' && ownAddress && (
+              <span className='ml-1 text-muted-foreground/60'>(return address reserved)</span>
+            )}
           </p>
         </div>
 
@@ -790,7 +803,7 @@ export function InboxPage() {
               </p>
               <p className='text-xs text-muted-foreground'>
                 {tab === 'inbox'
-                  ? 'encrypted messages from zcash and penumbra will appear here'
+                  ? `encrypted ${activeNetwork} messages will appear here`
                   : 'messages you send will appear here'}
               </p>
             </div>

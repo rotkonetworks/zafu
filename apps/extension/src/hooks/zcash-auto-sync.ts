@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useStore } from '../state';
 import { selectActiveNetwork, selectEffectiveKeyInfo, keyRingSelector } from '../state/keyring';
 import { selectActiveZcashWallet } from '../state/wallets';
@@ -35,12 +36,14 @@ async function resolveBirthday(walletId: string, zidecarUrl: string): Promise<nu
 }
 
 export function useZcashAutoSync() {
+  const location = useLocation();
   const activeNetwork = useStore(selectActiveNetwork);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const keyRing = useStore(keyRingSelector);
   const activeZcashWallet = useStore(selectActiveZcashWallet);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
 
+  const onLoginPage = location.pathname === '/login';
   const hasMnemonic = selectedKeyInfo?.type === 'mnemonic';
   const watchOnly = activeZcashWallet;
   const walletId = selectedKeyInfo?.id;
@@ -51,6 +54,7 @@ export function useZcashAutoSync() {
   // mnemonic wallet sync
   useEffect(() => {
     if (activeNetwork !== 'zcash') return;
+    if (onLoginPage) return; // keyring not yet unlocked
     if (!hasMnemonic || !walletId) return;
     if (isWalletSyncing('zcash', walletId)) {
       syncingWalletRef.current = walletId;
@@ -71,7 +75,12 @@ export function useZcashAutoSync() {
           console.log('[zcash-sync] starting mnemonic sync for', walletId);
           await startSyncInWorker('zcash', walletId, mnemonic, zidecarUrl, startHeight);
         } catch (err) {
-          console.error('[zcash-sync] auto-sync failed:', err);
+          // keyring locked is expected before login — don't spam console
+          if (err instanceof Error && err.message.includes('keyring locked')) {
+            console.log('[zcash-sync] waiting for unlock');
+          } else {
+            console.error('[zcash-sync] auto-sync failed:', err);
+          }
         }
       })();
     }, 500);
@@ -80,11 +89,12 @@ export function useZcashAutoSync() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [activeNetwork, hasMnemonic, walletId, keyRing, zidecarUrl]);
+  }, [activeNetwork, onLoginPage, hasMnemonic, walletId, keyRing, zidecarUrl]);
 
   // watch-only wallet sync
   useEffect(() => {
     if (activeNetwork !== 'zcash') return;
+    if (onLoginPage) return;
     if (hasMnemonic) return;
     if (!watchOnly) return;
     const ufvkStr = watchOnly.ufvk ?? (watchOnly.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
@@ -115,7 +125,7 @@ export function useZcashAutoSync() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [activeNetwork, hasMnemonic, watchOnly?.ufvk, watchOnly?.orchardFvk, walletId, zidecarUrl]);
+  }, [activeNetwork, onLoginPage, hasMnemonic, watchOnly?.ufvk, watchOnly?.orchardFvk, walletId, zidecarUrl]);
 
   // stop sync when switching away from zcash network
   useEffect(() => {

@@ -9,7 +9,7 @@
  * 5. broadcast transaction
  */
 
-import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useStore } from '../../../state';
 import { zignerSigningSelector } from '../../../state/zigner-signing';
 import { recentAddressesSelector } from '../../../state/recent-addresses';
@@ -19,6 +19,7 @@ import { selectActiveZcashWallet } from '../../../state/wallets';
 import {
   buildSendTxInWorker,
   completeSendTxInWorker,
+  getBalanceInWorker,
   type SendTxUnsignedResult,
 } from '../../../state/keyring/network-worker';
 import { Button } from '@repo/ui/components/ui/button';
@@ -26,6 +27,7 @@ import { Input } from '@repo/ui/components/ui/input';
 import { QrDisplay } from '../../../shared/components/qr-display';
 import { QrScanner } from '../../../shared/components/qr-scanner';
 import { ArrowLeftIcon, CheckIcon, Cross1Icon, PersonIcon } from '@radix-ui/react-icons';
+import { RecipientPicker } from '../../../components/recipient-picker';
 import {
   encodeZcashSignRequest,
   isZcashSignatureQR,
@@ -61,7 +63,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   } = useStore(zignerSigningSelector);
 
   // recent addresses and contacts
-  const { recordUsage, shouldSuggestSave, dismissSuggestion, getRecent } = useStore(recentAddressesSelector);
+  const { recordUsage, shouldSuggestSave, dismissSuggestion } = useStore(recentAddressesSelector);
   const { addContact, addAddress, findByAddress } = useStore(contactsSelector);
 
   const [step, setStep] = useState<SendStep>('form');
@@ -74,6 +76,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const [contactName, setContactName] = useState('');
   const [showContactModal, setShowContactModal] = useState(false);
   const [fee, setFee] = useState('0.0001');
+  const [showContacts, setShowContacts] = useState(false);
   const unsignedTxRef = useRef<SendTxUnsignedResult | null>(null);
   const [sendSteps, setSendSteps] = useState<Array<{ step: string; detail?: string; elapsedMs: number }>>([]);
   const [totalElapsedSec, setTotalElapsedSec] = useState<number | null>(null);
@@ -86,8 +89,21 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const activeZcashWallet = useStore(selectActiveZcashWallet);
   const ufvk = activeZcashWallet?.ufvk ?? (activeZcashWallet?.orchardFvk?.startsWith('uview') ? activeZcashWallet.orchardFvk : undefined);
 
-  // get recent zcash addresses
-  const recentAddresses = useMemo(() => getRecent('zcash', 3), [getRecent]);
+
+  // fetch spendable balance on mount
+  const [balanceZat, setBalanceZat] = useState<bigint | null>(null);
+  useEffect(() => {
+    if (!selectedKeyInfo) return;
+    getBalanceInWorker('zcash', selectedKeyInfo.id)
+      .then(bal => setBalanceZat(BigInt(bal)))
+      .catch(() => {}); // worker not ready
+  }, [selectedKeyInfo?.id]);
+
+  const balanceZec = balanceZat !== null ? Number(balanceZat) / 1e8 : null;
+  const FEE_ZAT = 10_000n; // standard 0.0001 ZEC fee
+  const maxSendZec = balanceZat !== null && balanceZat > FEE_ZAT
+    ? Number(balanceZat - FEE_ZAT) / 1e8
+    : 0;
 
   // listen for send progress events from worker
   useEffect(() => {
@@ -302,46 +318,63 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 <label className="text-sm text-muted-foreground mb-1 block">
                   recipient address
                 </label>
-                <Input
-                  placeholder="u1... / zs... / t1..."
-                  value={recipient}
-                  onChange={(e) => setRecipient(e.target.value)}
-                  className="font-mono text-sm"
+                <div className="flex gap-1">
+                  <Input
+                    placeholder="u1... / zs... / t1..."
+                    value={recipient}
+                    onChange={(e) => setRecipient(e.target.value)}
+                    className="font-mono text-sm flex-1"
+                  />
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    type="button"
+                    onClick={() => setShowContacts(s => !s)}
+                    title="address book"
+                    className="shrink-0"
+                  >
+                    <PersonIcon className="h-4 w-4" />
+                  </Button>
+                </div>
+                <RecipientPicker
+                  network='zcash'
+                  onSelect={(addr) => { setRecipient(addr); setShowContacts(false); }}
+                  show={showContacts || !recipient}
                 />
-                {/* recent addresses */}
-                {!recipient && recentAddresses.length > 0 && (
-                  <div className="mt-2">
-                    <p className="text-xs text-muted-foreground mb-1">recent:</p>
-                    <div className="flex flex-wrap gap-1">
-                      {recentAddresses.map(r => {
-                        const result = findByAddress(r.address);
-                        return (
-                          <button
-                            key={r.address}
-                            onClick={() => setRecipient(r.address)}
-                            className="rounded bg-muted/50 px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                          >
-                            {result ? result.contact.name : `${r.address.slice(0, 8)}...${r.address.slice(-4)}`}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
               </div>
 
               <div>
-                <label className="text-sm text-muted-foreground mb-1 block">
-                  amount (zec)
-                </label>
-                <Input
-                  type="number"
-                  placeholder="0.0"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  step="0.0001"
-                  min="0"
-                />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-sm text-muted-foreground">
+                    amount (zec)
+                  </label>
+                  {balanceZec !== null && (
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      balance: {balanceZec.toFixed(8)} ZEC
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-1">
+                  <Input
+                    type="number"
+                    placeholder="0.0"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    step="0.0001"
+                    min="0"
+                    className="flex-1"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    type="button"
+                    onClick={() => setAmount(maxSendZec > 0 ? maxSendZec.toFixed(8) : '0')}
+                    disabled={maxSendZec <= 0}
+                    className="shrink-0 text-xs"
+                  >
+                    max
+                  </Button>
+                </div>
               </div>
 
               <div>

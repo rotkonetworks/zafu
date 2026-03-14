@@ -33,6 +33,7 @@ import { usePasswordGate } from '../../../hooks/password-gate';
 import { isDedicatedWindow } from '../../../utils/popup-detection';
 import { openInDedicatedWindow } from '../../../utils/navigate';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
+import { RecipientPicker } from '../../../components/recipient-picker';
 
 /** IBC chain selector dropdown */
 function ChainSelector({
@@ -299,11 +300,8 @@ function CosmosSend({ sourceChainId }: { sourceChainId: CosmosChainId }) {
   const isZigner = selectedKeyInfo?.type === 'zigner-zafu';
 
   // recent addresses and contacts
-  const { recordUsage, shouldSuggestSave, dismissSuggestion, getRecent } = useStore(recentAddressesSelector);
+  const { recordUsage, shouldSuggestSave, dismissSuggestion } = useStore(recentAddressesSelector);
   const { addContact, addAddress, findByAddress } = useStore(contactsSelector);
-
-  // get recent addresses for cosmos network
-  const recentAddresses = useMemo(() => getRecent('cosmos', 3), [getRecent]);
 
   const { data: skipChains = [], isLoading: chainsLoading } = useSkipChains();
 
@@ -549,26 +547,11 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
             detected: {detectedChain.name}
           </p>
         )}
-        {/* recent addresses */}
-        {!recipient && recentAddresses.length > 0 && (
-          <div className='mt-2'>
-            <p className='text-xs text-muted-foreground mb-1'>recent:</p>
-            <div className='flex flex-wrap gap-1'>
-              {recentAddresses.map(r => {
-                const result = findByAddress(r.address);
-                return (
-                  <button
-                    key={r.address}
-                    onClick={() => setRecipient(r.address)}
-                    className='rounded bg-muted/50 px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors'
-                  >
-                    {result ? result.contact.name : `${r.address.slice(0, 8)}...${r.address.slice(-4)}`}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
+        <RecipientPicker
+          network='cosmos'
+          onSelect={setRecipient}
+          show={!recipient}
+        />
       </div>
 
       {/* destination chain */}
@@ -942,10 +925,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
   }, [balances, selectedAsset]);
 
   // recent addresses
-  const { recordUsage, getRecent } = useStore(recentAddressesSelector);
-  const { findByAddress } = useStore(contactsSelector);
-
-  const recentAddresses = useMemo(() => getRecent('penumbra', 3), [getRecent]);
+  const { recordUsage } = useStore(recentAddressesSelector);
 
   const addressValid = useMemo(
     () => !sendState.recipient || sendState.recipient.startsWith('penumbra1'),
@@ -1081,26 +1061,11 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
         {sendState.recipient && !addressValid && (
           <p className='mt-1 text-xs text-red-500'>invalid penumbra address</p>
         )}
-        {/* recent addresses */}
-        {!sendState.recipient && recentAddresses.length > 0 && (
-          <div className='mt-2'>
-            <p className='text-xs text-muted-foreground mb-1'>recent:</p>
-            <div className='flex flex-wrap gap-1'>
-              {recentAddresses.map(r => {
-                const result = findByAddress(r.address);
-                return (
-                  <button
-                    key={r.address}
-                    onClick={() => sendState.setRecipient(r.address)}
-                    className='rounded bg-muted/50 px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors'
-                  >
-                    {result ? result.contact.name : `${r.address.slice(0, 12)}...${r.address.slice(-4)}`}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
+        <RecipientPicker
+          network='penumbra'
+          onSelect={sendState.setRecipient}
+          show={!sendState.recipient}
+        />
       </div>
 
       {/* amount */}
@@ -1221,11 +1186,8 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
   }, [ibcState.denom]);
 
   // recent addresses and contacts
-  const { recordUsage, shouldSuggestSave, dismissSuggestion, getRecent } = useStore(recentAddressesSelector);
+  const { recordUsage, shouldSuggestSave, dismissSuggestion } = useStore(recentAddressesSelector);
   const { addContact, addAddress, findByAddress } = useStore(contactsSelector);
-
-  // get recent addresses for cosmos (IBC destinations are cosmos chains)
-  const recentAddresses = useMemo(() => getRecent('cosmos', 3), [getRecent]);
 
   const addressValid = useMemo(
     () => isValidIbcAddress(ibcState.chain, ibcState.destinationAddress),
@@ -1314,26 +1276,11 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
         {ibcState.destinationAddress && !addressValid && (
           <p className='mt-1 text-xs text-red-500'>invalid address for {ibcState.chain?.displayName}</p>
         )}
-        {/* recent addresses */}
-        {!ibcState.destinationAddress && recentAddresses.length > 0 && (
-          <div className='mt-2'>
-            <p className='text-xs text-muted-foreground mb-1'>recent:</p>
-            <div className='flex flex-wrap gap-1'>
-              {recentAddresses.map(r => {
-                const result = findByAddress(r.address);
-                return (
-                  <button
-                    key={r.address}
-                    onClick={() => ibcState.setDestinationAddress(r.address)}
-                    className='rounded bg-muted/50 px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors'
-                  >
-                    {result ? result.contact.name : `${r.address.slice(0, 8)}...${r.address.slice(-4)}`}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
+        <RecipientPicker
+          network='cosmos'
+          onSelect={ibcState.setDestinationAddress}
+          show={!ibcState.destinationAddress}
+        />
       </div>
 
       {/* amount */}

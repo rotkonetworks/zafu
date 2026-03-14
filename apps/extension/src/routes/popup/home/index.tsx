@@ -1,6 +1,6 @@
-import { lazy, Suspense, useState, useCallback, useEffect, useRef } from 'react';
+import { lazy, Suspense, useState, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowUpIcon, ArrowDownIcon, CopyIcon, CheckIcon, DesktopIcon, ViewVerticalIcon } from '@radix-ui/react-icons';
+import { ArrowUpIcon, ArrowDownIcon, CopyIcon, CheckIcon, ReloadIcon, ClockIcon, WidthIcon, ChevronDownIcon } from '@radix-ui/react-icons';
 
 import { useStore } from '../../../state';
 import { selectActiveNetwork, selectEffectiveKeyInfo, selectPenumbraAccount, selectSetPenumbraAccount, keyRingSelector, type NetworkType } from '../../../state/keyring';
@@ -9,8 +9,6 @@ import { selectActiveZcashWallet } from '../../../state/wallets';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { needsLogin, needsOnboard } from '../popup-needs';
 import { PopupPath } from '../paths';
-import { openInDedicatedWindow, openInSidePanel } from '../../../utils/navigate';
-import { isSidePanel, isDedicatedWindow } from '../../../utils/popup-detection';
 import { AssetListSkeleton } from '../../../components/primitives/skeleton';
 import { usePreloadBalances } from '../../../hooks/use-preload';
 import { useActiveAddress } from '../../../hooks/use-address';
@@ -39,6 +37,12 @@ import {
 import { QrDisplay } from '../../../shared/components/qr-display';
 import { QrScanner } from '../../../shared/components/qr-scanner';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { useQuery } from '@tanstack/react-query';
+import { viewClient, sctClient } from '../../../clients';
+import { getHistoryInWorker } from '../../../state/keyring/network-worker';
+import { cn } from '@repo/ui/lib/utils';
+import { messagesSelector } from '../../../state/messages';
+import type { TransactionInfo } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 
 /** lazy load network-specific content - only load when needed */
 const AssetsTable = lazy(() => import('./assets-table').then(m => ({ default: m.AssetsTable })));
@@ -67,37 +71,12 @@ export const PopupIndex = () => {
   const { publicKey: polkadotPublicKey } = usePolkadotPublicKey();
 
   const [copied, setCopied] = useState(false);
-  const [sendMenuOpen, setSendMenuOpen] = useState(false);
-  const sendMenuRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
   // check if we're in side panel or dedicated window (can navigate normally)
-  const [canNavigateNormally] = useState(() => isSidePanel() || isDedicatedWindow());
-
   // preload balances in background for instant display
   usePreloadBalances(penumbraAccount);
 
-  // close send menu when clicking outside
-  useEffect(() => {
-    if (!sendMenuOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (sendMenuRef.current && !sendMenuRef.current.contains(e.target as Node)) {
-        setSendMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [sendMenuOpen]);
-
-  const handleSendClick = useCallback(() => {
-    if (canNavigateNormally) {
-      // in side panel or dedicated window - navigate normally
-      navigate(PopupPath.SEND);
-    } else {
-      // in popup - show menu
-      setSendMenuOpen(prev => !prev);
-    }
-  }, [canNavigateNormally, navigate]);
 
   // dismiss backup reminder on first load
   useEffect(() => {
@@ -156,40 +135,13 @@ export const PopupIndex = () => {
             >
               <ArrowDownIcon className='h-5 w-5' />
             </button>
-            <div className='relative' ref={sendMenuRef}>
-              <button
-                onClick={handleSendClick}
-                className='flex h-10 w-10 items-center justify-center bg-primary text-primary-foreground transition-all duration-100 hover:bg-primary/90 active:scale-95'
-                title='send'
-              >
-                <ArrowUpIcon className='h-5 w-5' />
-              </button>
-              {/* send options menu - only shown in popup mode */}
-              {sendMenuOpen && (
-                <div className='absolute right-0 top-full mt-1 z-20 w-48 rounded-lg border border-border bg-background shadow-lg py-1'>
-                  <button
-                    onClick={() => {
-                      setSendMenuOpen(false);
-                      void openInDedicatedWindow(PopupPath.SEND);
-                    }}
-                    className='flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors'
-                  >
-                    <DesktopIcon className='h-4 w-4' />
-                    open in new window
-                  </button>
-                  <button
-                    onClick={() => {
-                      setSendMenuOpen(false);
-                      void openInSidePanel(PopupPath.SEND);
-                    }}
-                    className='flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors'
-                  >
-                    <ViewVerticalIcon className='h-4 w-4' />
-                    open in side panel
-                  </button>
-                </div>
-              )}
-            </div>
+            <button
+              onClick={() => navigate(PopupPath.SEND)}
+              className='flex h-10 w-10 items-center justify-center bg-primary text-primary-foreground transition-all duration-100 hover:bg-primary/90 active:scale-95'
+              title='send'
+            >
+              <ArrowUpIcon className='h-5 w-5' />
+            </button>
           </div>
         </div>
 
@@ -202,6 +154,11 @@ export const PopupIndex = () => {
             polkadotPublicKey={polkadotPublicKey}
             hasMnemonic={selectedKeyInfo?.type === 'mnemonic'}
           />
+        </Suspense>
+
+        {/* recent history */}
+        <Suspense fallback={<AssetListSkeleton rows={3} />}>
+          <HistoryContent network={activeNetwork} />
         </Suspense>
       </div>
     </div>
@@ -527,9 +484,6 @@ const ZcashContent = ({
   const totalZec = Number(totalZat) / 1e8;
   const tZec = Number(transparentZat) / 1e8;
 
-  // sync status label
-  const isSyncing = chainHeight > 0 && !allSynced;
-
   return (
     <div className='flex-1 flex flex-col gap-3'>
       {/* combined balance */}
@@ -539,19 +493,12 @@ const ZcashContent = ({
             ? `${totalZec.toFixed(8)} ZEC`
             : '— ZEC'}
         </div>
-        <div className='mt-1 flex items-center gap-1.5 text-xs text-muted-foreground'>
-          {/* pulsing dot — green when synced, amber when syncing */}
-          <span
-            className={`inline-block h-1.5 w-1.5 rounded-full ${
-              allSynced ? 'bg-green-500' : isSyncing ? 'bg-amber-500 animate-pulse' : 'bg-muted-foreground/30 animate-pulse'
-            }`}
-          />
-          {allSynced
-            ? <span>synced · block {workerSyncHeight.toLocaleString()}</span>
-            : chainHeight > 0
-              ? <span>syncing · {scanProgress.toLocaleString()} / {scanRange.toLocaleString()} · block {workerSyncHeight.toLocaleString()}</span>
-              : <span>connecting...</span>
-          }
+        <div className='mt-1 text-xs text-muted-foreground'>
+          {chainHeight <= 0
+            ? 'connecting...'
+            : scanPct >= 100
+              ? `block ${workerSyncHeight.toLocaleString()}`
+              : `syncing · block ${workerSyncHeight.toLocaleString()}`}
         </div>
       </div>
 
@@ -657,37 +604,32 @@ const ZcashContent = ({
       {/* sync pipeline — hidden when fully synced */}
       {!allSynced && (
         <div className='border border-border/40 bg-card p-3'>
-          <div className='text-xs font-medium mb-2'>zidecar sync</div>
           {syncError && (
-            <div className='text-xs text-red-400 mb-2'>sync error: {syncError.message}</div>
+            <div className='text-xs text-red-400 mb-2'>{syncError.message}</div>
           )}
 
-          <div className='flex gap-3 mb-2 text-[10px]'>
-            <div className='flex items-center gap-1'>
-              <div className={`h-1.5 w-1.5 rounded-full ${nomtPct >= 100 ? 'bg-blue-500' : 'bg-muted-foreground/30'}`} />
-              <span className={nomtPct >= 100 ? 'text-blue-500' : 'text-muted-foreground'}>nomt</span>
-            </div>
-            <div className='flex items-center gap-1'>
-              <div className={`h-1.5 w-1.5 rounded-full ${gigaproofStatus >= 2 ? 'bg-amber-500' : gigaproofStatus === 1 ? 'bg-amber-500/50' : 'bg-muted-foreground/30'}`} />
-              <span className={gigaproofStatus >= 1 ? 'text-amber-500' : 'text-muted-foreground'}>ligerito</span>
-              {gigaproofStatus === 1 && <span className='text-muted-foreground'>(proving...)</span>}
-              {gigaproofStatus >= 2 && blocksUntilReady > 0 && (
-                <span className='text-muted-foreground'>({blocksUntilReady} to tip)</span>
-              )}
-            </div>
-          </div>
-
-          <div className='h-3 w-full overflow-hidden rounded-sm bg-muted'>
+          {/* bar color reflects proof state: muted=waiting, gold=proving, green=scanning */}
+          <div className='h-2 w-full overflow-hidden bg-muted'>
             <div
-              className='h-full bg-green-500 transition-all duration-500 ease-out'
-              style={{ width: `${Math.max(0, Math.min(100, scanPct))}%` }}
+              className={`h-full transition-all duration-500 ease-out ${
+                scanPct > 0 ? 'bg-green-500' : ligeritoPct > 0 ? 'bg-primary' : 'bg-muted-foreground/30'
+              }`}
+              style={{ width: `${Math.max(scanPct > 0 ? scanPct : ligeritoPct > 0 ? ligeritoPct : nomtPct, 2)}%` }}
             />
           </div>
 
           <div className='mt-1.5 text-xs text-muted-foreground tabular-nums'>
-            {chainHeight > 0
-              ? `${scanProgress.toLocaleString()} / ${scanRange.toLocaleString()} blocks`
-              : 'waiting for chain tip...'}
+            {chainHeight <= 0
+              ? 'connecting...'
+              : scanPct > 0
+                ? `scanning ${scanProgress.toLocaleString()} / ${scanRange.toLocaleString()}`
+                : gigaproofStatus >= 2
+                  ? blocksUntilReady > 0 ? `ligerito ${blocksUntilReady} blocks to tip` : 'ligerito verified'
+                  : gigaproofStatus === 1
+                    ? 'ligerito proving...'
+                    : nomtPct >= 100
+                      ? 'nomt verified, waiting for ligerito'
+                      : 'verifying nomt...'}
           </div>
         </div>
       )}
@@ -832,6 +774,237 @@ const CosmosContent = ({ chainId }: { chainId: CosmosChainId }) => {
               </div>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── history ──
+
+interface ParsedTransaction {
+  id: string;
+  height: number;
+  timestamp: number | null;
+  type: 'send' | 'receive' | 'shield' | 'swap' | 'delegate' | 'undelegate' | 'unknown';
+  description: string;
+  amount?: string;
+  asset?: string;
+  memo?: string;
+}
+
+function parsePenumbraTx(txInfo: TransactionInfo): ParsedTransaction {
+  const id = txInfo.id?.inner
+    ? Array.from(txInfo.id.inner).map(b => b.toString(16).padStart(2, '0')).join('')
+    : '';
+  const height = Number(txInfo.height ?? 0);
+  let type: ParsedTransaction['type'] = 'unknown';
+  let description = 'Transaction';
+  let hasVisibleSpend = false;
+  let hasOutput = false;
+
+  for (const action of txInfo.view?.bodyView?.actionViews ?? []) {
+    const c = action.actionView.case;
+    if (c === 'spend' && action.actionView.value.spendView?.case === 'visible') hasVisibleSpend = true;
+    else if (c === 'output') hasOutput = true;
+    else if (c === 'swap') { type = 'swap'; description = 'Swap'; }
+    else if (c === 'delegate') { type = 'delegate'; description = 'Delegate'; }
+    else if (c === 'undelegate') { type = 'undelegate'; description = 'Undelegate'; }
+  }
+  if (type === 'unknown') {
+    if (hasVisibleSpend) { type = 'send'; description = 'Send'; }
+    else if (hasOutput) { type = 'receive'; description = 'Receive'; }
+  }
+
+  // extract memo text if visible
+  let memo: string | undefined;
+  const memoView = txInfo.view?.bodyView?.memoView?.memoView;
+  if (memoView?.case === 'visible' && memoView.value.plaintext?.text) {
+    const text = memoView.value.plaintext.text.trim();
+    if (text) memo = text;
+  }
+
+  return { id, height, timestamp: null, type, description, memo };
+}
+
+function zatToZec(zat: bigint | string): string {
+  const v = typeof zat === 'string' ? BigInt(zat) : zat;
+  const w = v / 100_000_000n;
+  const f = (v % 100_000_000n).toString().padStart(8, '0').replace(/0+$/, '') || '0';
+  return `${w}.${f}`;
+}
+
+function fmtTime(ts: number | null): string {
+  if (ts === null) return '...';
+  const d = new Date(ts);
+  const now = new Date();
+  const diff = Math.floor((new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+    - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / 86400000);
+  const t = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (diff === 0) return `Today ${t}`;
+  if (diff === 1) return `Yesterday ${t}`;
+  if (diff < 7) return `${d.toLocaleDateString([], { weekday: 'short' })} ${t}`;
+  return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${t}`;
+}
+
+function TxRow({ tx }: { tx: ParsedTransaction }) {
+  const [expanded, setExpanded] = useState(false);
+  const isIn = tx.type === 'receive';
+  const isSh = tx.type === 'shield';
+  const hasMemo = !!tx.memo;
+
+  return (
+    <div
+      className={cn(
+        'border border-border/30 bg-card p-3 transition-colors',
+        hasMemo ? 'cursor-pointer hover:border-border' : '',
+      )}
+      onClick={hasMemo ? () => setExpanded(e => !e) : undefined}
+    >
+      <div className='flex items-center gap-3'>
+        <div className={cn(
+          'flex h-8 w-8 items-center justify-center rounded-full',
+          isSh ? 'bg-blue-500/10' : isIn ? 'bg-green-500/10' : 'bg-muted/50',
+        )}>
+          {isSh ? <WidthIcon className='h-4 w-4 text-blue-500' />
+            : isIn ? <ArrowDownIcon className='h-4 w-4 text-green-500' />
+            : <ArrowUpIcon className='h-4 w-4 text-muted-foreground' />}
+        </div>
+        <div className='flex-1 min-w-0'>
+          <div className='flex items-center justify-between gap-2'>
+            <span className='text-xs font-medium'>{tx.description}</span>
+            <div className='flex items-center gap-1'>
+              {tx.amount && (
+                <span className={cn('text-xs font-mono',
+                  isSh ? 'text-blue-500' : isIn ? 'text-green-500' : 'text-muted-foreground',
+                )}>
+                  {isIn ? '+' : ''}{tx.amount} {tx.asset ?? ''}
+                </span>
+              )}
+              {hasMemo && (
+                <ChevronDownIcon className={cn(
+                  'h-3 w-3 text-muted-foreground transition-transform',
+                  expanded && 'rotate-180',
+                )} />
+              )}
+            </div>
+          </div>
+          <div className='flex items-center justify-between gap-2 mt-0.5'>
+            <span className='text-[10px] text-muted-foreground font-mono truncate'>{tx.id.slice(0, 16)}...</span>
+            <span className='text-[10px] text-muted-foreground whitespace-nowrap'>
+              {tx.height > 0 ? `#${tx.height}` : fmtTime(tx.timestamp)}
+            </span>
+          </div>
+        </div>
+      </div>
+      {expanded && tx.memo && (
+        <div className='mt-2 ml-11 border-l-2 border-border/40 pl-3'>
+          <p className='text-xs text-muted-foreground whitespace-pre-wrap break-words'>{tx.memo}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const HistoryContent = ({ network }: { network: NetworkType }) => {
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
+  const messages = useStore(messagesSelector);
+  const walletId = selectedKeyInfo?.id;
+  const isMainnet = !zidecarUrl.includes('testnet');
+  const { tAddresses } = useTransparentAddresses(isMainnet);
+
+  // build txId→memo lookup from messages store (for zcash)
+  const memoByTxId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const m of messages.getByNetwork(network as 'zcash' | 'penumbra')) {
+      if (m.content) map.set(m.txId, m.content);
+    }
+    return map;
+  }, [messages, network]);
+
+  const penumbraQ = useQuery({
+    queryKey: ['homeHistory', 'penumbra'],
+    enabled: network === 'penumbra',
+    staleTime: 30_000,
+    queryFn: async () => {
+      const txs: ParsedTransaction[] = [];
+      for await (const r of viewClient.transactionInfo({})) {
+        if (r.txInfo) txs.push(parsePenumbraTx(r.txInfo));
+      }
+      const heights = [...new Set(txs.map(t => t.height))];
+      const tsMap = new Map<number, number>();
+      await Promise.all(heights.map(async h => {
+        try {
+          const { timestamp } = await sctClient.timestampByHeight({ height: BigInt(h) });
+          if (timestamp) tsMap.set(h, timestamp.toDate().getTime());
+        } catch { /* */ }
+      }));
+      for (const t of txs) t.timestamp = tsMap.get(t.height) ?? null;
+      txs.sort((a, b) => b.height - a.height);
+      return txs;
+    },
+  });
+
+  const zcashQ = useQuery({
+    queryKey: ['homeHistory', 'zcash', walletId, tAddresses.length],
+    enabled: network === 'zcash' && !!walletId,
+    staleTime: 0,
+    queryFn: async () => {
+      if (!walletId) return [];
+      const entries = await getHistoryInWorker('zcash', walletId, zidecarUrl, tAddresses);
+      return entries.map(e => ({
+        id: e.id,
+        height: e.height,
+        timestamp: null,
+        type: e.type as ParsedTransaction['type'],
+        description: e.type === 'send' ? 'Sent' : e.type === 'shield' ? 'Shielded' : 'Received',
+        amount: zatToZec(BigInt(e.amount)),
+        asset: e.asset,
+        memo: memoByTxId.get(e.id),
+      }));
+    },
+  });
+
+  const q = network === 'penumbra' ? penumbraQ : zcashQ;
+  const txs = q.data ?? [];
+
+  if (q.isLoading && txs.length === 0) {
+    return (
+      <div className='flex flex-col items-center justify-center gap-2 py-8'>
+        <ReloadIcon className='h-5 w-5 animate-spin text-muted-foreground' />
+        <span className='text-xs text-muted-foreground'>loading...</span>
+      </div>
+    );
+  }
+
+  if (q.error) {
+    return (
+      <div className='flex flex-col items-center justify-center gap-2 py-8'>
+        <span className='text-xs text-red-400'>failed to load</span>
+        <button onClick={() => void q.refetch()} className='text-xs text-primary hover:underline'>retry</button>
+      </div>
+    );
+  }
+
+  if (txs.length === 0) {
+    return (
+      <div className='flex flex-col items-center justify-center gap-2 py-4'>
+        <ClockIcon className='h-5 w-5 text-muted-foreground' />
+        <span className='text-xs text-muted-foreground'>no transactions yet</span>
+      </div>
+    );
+  }
+
+  const recent = txs.slice(0, 20);
+
+  return (
+    <div className='flex flex-col gap-1'>
+      <div className='mb-1 text-xs font-medium text-muted-foreground'>recent activity</div>
+      {recent.map(tx => <TxRow key={tx.id} tx={tx} />)}
+      {txs.length > 20 && (
+        <div className='py-2 text-center text-xs text-muted-foreground'>
+          {txs.length - 20} more transactions
         </div>
       )}
     </div>
