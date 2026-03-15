@@ -54,6 +54,13 @@
     --zigner-dark: #0a0a0a;
     --zigner-darker: #000000;
 
+    /* penumbra brand */
+    --penumbra-purple: #7c3aed;
+    --penumbra-purple-light: #a78bfa;
+    --penumbra-purple-dark: #5b21b6;
+    --penumbra-teal: #2dd4bf;
+    --penumbra-teal-dark: #0d9488;
+
     /* semantic colors */
     --success: #5f5;
     --warning: #f4b728;

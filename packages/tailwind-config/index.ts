@@ -109,6 +109,14 @@ export default {
           dark: 'var(--zigner-dark)',
           darker: 'var(--zigner-darker)',
         },
+        /* penumbra brand */
+        penumbra: {
+          purple: 'var(--penumbra-purple)',
+          'purple-light': 'var(--penumbra-purple-light)',
+          'purple-dark': 'var(--penumbra-purple-dark)',
+          teal: 'var(--penumbra-teal)',
+          'teal-dark': 'var(--penumbra-teal-dark)',
+        },
         /* semantic */
         success: 'var(--success)',
         warning: 'var(--warning)',

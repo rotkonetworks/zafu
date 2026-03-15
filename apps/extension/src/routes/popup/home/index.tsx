@@ -42,12 +42,13 @@ import { viewClient, sctClient } from '../../../clients';
 import { getHistoryInWorker } from '../../../state/keyring/network-worker';
 import { cn } from '@repo/ui/lib/utils';
 import { messagesSelector } from '../../../state/messages';
+import { SyncProgressBar } from '../../../components/sync-progress-bar';
+import { useSyncProgress } from '../../../hooks/full-sync-height';
 import type { TransactionInfo } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 
 /** lazy load network-specific content - only load when needed */
 const AssetsTable = lazy(() => import('./assets-table').then(m => ({ default: m.AssetsTable })));
 const PolkadotAssets = lazy(() => import('./polkadot-assets').then(m => ({ default: m.PolkadotAssets })));
-const BlockSync = lazy(() => import('./block-sync').then(m => ({ default: m.BlockSync })));
 
 export interface PopupLoaderData {
   fullSyncHeight?: number;
@@ -111,13 +112,7 @@ export const PopupIndex = () => {
         {/* address + actions row */}
         <div className='flex items-center justify-between rounded-lg border border-border/40 bg-card p-4'>
           <div>
-            {activeNetwork !== 'zcash' && (
-              <>
-                <div className='text-xs text-muted-foreground'>balance</div>
-                <div className='text-2xl font-semibold tabular-nums text-foreground'>$0.00</div>
-              </>
-            )}
-            <div className='mt-1 flex items-center gap-1'>
+            <div className='flex items-center gap-1'>
               <button
                 onClick={copyAddress}
                 disabled={!address}
@@ -160,7 +155,12 @@ export const PopupIndex = () => {
             </button>
             <button
               onClick={() => navigate(PopupPath.SEND)}
-              className='flex h-10 w-10 items-center justify-center bg-primary text-primary-foreground transition-all duration-100 hover:bg-primary/90 active:scale-95'
+              className={cn(
+                'flex h-10 w-10 items-center justify-center transition-all duration-100 active:scale-95',
+                activeNetwork === 'penumbra'
+                  ? 'bg-penumbra-purple text-white hover:bg-penumbra-purple-dark'
+                  : 'bg-primary text-primary-foreground hover:bg-primary/90',
+              )}
               title='send'
             >
               <ArrowUpIcon className='h-5 w-5' />
@@ -204,18 +204,7 @@ const NetworkContent = ({
 }) => {
   switch (network) {
     case 'penumbra':
-      return (
-        <div className='flex-1'>
-          {/* sync status bar */}
-          <Suspense fallback={null}>
-            <div className='mb-3'>
-              <BlockSync />
-            </div>
-          </Suspense>
-          <div className='mb-2 text-xs font-medium text-muted-foreground'>assets</div>
-          <AssetsTable account={penumbraAccount} />
-        </div>
-      );
+      return <PenumbraContent account={penumbraAccount} />;
 
     case 'zcash':
       return <ZcashContent hasMnemonic={hasMnemonic} watchOnly={zcashWallet} />;
@@ -235,6 +224,51 @@ const NetworkContent = ({
     default:
       return <NetworkPlaceholder network={network} />;
   }
+};
+
+/** penumbra-specific content — balance card + sync bar + assets */
+const PenumbraContent = ({ account }: { account: number }) => {
+  const { latestBlockHeight, fullSyncHeight, error } = useSyncProgress();
+
+  const isSyncing = (latestBlockHeight ?? 0) - (fullSyncHeight ?? 0) > 10;
+  const syncPct = latestBlockHeight && fullSyncHeight
+    ? Math.min(100, Math.round((Number(fullSyncHeight) / Number(latestBlockHeight)) * 100))
+    : 0;
+
+  const syncLabel = !latestBlockHeight
+    ? 'connecting...'
+    : isSyncing
+      ? `syncing · block ${(fullSyncHeight ?? 0).toLocaleString()} / ${latestBlockHeight.toLocaleString()}`
+      : `block ${(fullSyncHeight ?? latestBlockHeight).toLocaleString()}`;
+
+  return (
+    <div className='flex-1 flex flex-col gap-3'>
+      {/* balance card */}
+      <div className='rounded-lg border border-penumbra-purple/20 bg-card p-4'>
+        <div className='text-xs text-muted-foreground'>balance</div>
+        <div className='text-3xl font-semibold tabular-nums text-foreground'>
+          {fullSyncHeight ? '—' : '—'} UM
+        </div>
+        <div className='mt-1 text-xs text-muted-foreground'>{syncLabel}</div>
+      </div>
+
+      {/* sync bar — hidden when synced */}
+      {isSyncing && (
+        <SyncProgressBar
+          percent={syncPct}
+          label={syncLabel}
+          error={error ? String(error) : undefined}
+          barColor='bg-penumbra-purple'
+          barDoneColor='bg-penumbra-teal'
+        />
+      )}
+
+      <div className='mb-2 text-xs font-medium text-muted-foreground'>assets</div>
+      <Suspense fallback={<AssetListSkeleton rows={4} />}>
+        <AssetsTable account={account} />
+      </Suspense>
+    </div>
+  );
 };
 
 /** zcash-specific content — zashi-inspired combined balance */
@@ -500,7 +534,8 @@ const ZcashContent = ({
   return (
     <div className='flex-1 flex flex-col gap-3'>
       {/* combined balance */}
-      <div className='rounded-lg border border-border/40 bg-card p-4'>
+      <div className='rounded-lg border border-primary/20 bg-card p-4'>
+        <div className='text-xs text-muted-foreground'>balance</div>
         <div className='text-3xl font-semibold tabular-nums text-foreground'>
           {workerSyncHeight > 0 || totalZat > 0n
             ? `${totalZec.toFixed(8)} ZEC`
@@ -617,35 +652,23 @@ const ZcashContent = ({
 
       {/* sync pipeline — hidden when fully synced */}
       {!allSynced && (
-        <div className='rounded-lg border border-border/40 bg-card p-3'>
-          {syncError && (
-            <div className='text-xs text-red-400 mb-2'>{syncError.message}</div>
-          )}
-
-          {/* bar color reflects proof state: muted=waiting, gold=proving, green=scanning */}
-          <div className='h-2 w-full overflow-hidden bg-muted'>
-            <div
-              className={`h-full transition-all duration-500 ease-out ${
-                scanPct > 0 ? 'bg-green-500' : ligeritoPct > 0 ? 'bg-primary' : 'bg-muted-foreground/30'
-              }`}
-              style={{ width: `${Math.max(scanPct > 0 ? scanPct : ligeritoPct > 0 ? ligeritoPct : nomtPct, 2)}%` }}
-            />
-          </div>
-
-          <div className='mt-1.5 text-xs text-muted-foreground tabular-nums'>
-            {chainHeight <= 0
-              ? 'connecting...'
-              : scanPct > 0
-                ? `scanning ${scanProgress.toLocaleString()} / ${scanRange.toLocaleString()}`
-                : gigaproofStatus >= 2
-                  ? blocksUntilReady > 0 ? `ligerito ${blocksUntilReady} blocks to tip` : 'ligerito verified'
-                  : gigaproofStatus === 1
-                    ? 'ligerito proving...'
-                    : nomtPct >= 100
-                      ? 'nomt verified, waiting for ligerito'
-                      : 'verifying nomt...'}
-          </div>
-        </div>
+        <SyncProgressBar
+          percent={Math.max(scanPct > 0 ? scanPct : ligeritoPct > 0 ? ligeritoPct : nomtPct, 2)}
+          label={chainHeight <= 0
+            ? 'connecting...'
+            : scanPct > 0
+              ? `scanning ${scanProgress.toLocaleString()} / ${scanRange.toLocaleString()}`
+              : gigaproofStatus >= 2
+                ? blocksUntilReady > 0 ? `ligerito ${blocksUntilReady} blocks to tip` : 'ligerito verified'
+                : gigaproofStatus === 1
+                  ? 'ligerito proving...'
+                  : nomtPct >= 100
+                    ? 'nomt verified, waiting for ligerito'
+                    : 'verifying nomt...'}
+          error={syncError?.message}
+          barColor={scanPct > 0 ? 'bg-green-500' : ligeritoPct > 0 ? 'bg-primary' : 'bg-muted-foreground/30'}
+          barDoneColor='bg-green-500'
+        />
       )}
 
       {/* rescan is now in the recent activity header */}
