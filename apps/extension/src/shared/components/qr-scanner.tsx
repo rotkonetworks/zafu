@@ -9,6 +9,8 @@ interface QrScannerProps {
   onClose: () => void;
   title?: string;
   description?: string;
+  /** render inline (card) instead of fullscreen overlay */
+  inline?: boolean;
 }
 
 /** Convert ZXing result text to hex — handles binary QR (Latin-1) and plain hex */
@@ -30,8 +32,9 @@ export const QrScanner = ({
   onScan,
   onError,
   onClose,
-  title = 'Scan QR Code',
-  description = 'Point your camera at the QR code',
+  title = 'scan QR code',
+  description,
+  inline = false,
 }: QrScannerProps) => {
   const [isScanning, setIsScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -117,12 +120,95 @@ export const QrScanner = ({
     onClose();
   };
 
+  // corner bracket color
+  const cornerColor = inline ? 'border-yellow-500' : 'border-green-500';
+  const scanLineColor = inline ? 'bg-yellow-500' : 'bg-green-500';
+
+  // shared camera viewport
+  const cameraView = (
+    <>
+      <video
+        ref={videoRef}
+        className='absolute inset-0 w-full h-full object-cover'
+        playsInline
+        muted
+      />
+
+      {isScanning && (
+        <div className='absolute inset-0 pointer-events-none flex items-center justify-center'>
+          <div className={`relative ${inline ? 'w-44 h-44' : 'w-64 h-64'}`}>
+            <div className={`absolute top-0 left-0 w-6 h-6 border-t-[3px] border-l-[3px] ${cornerColor} rounded-tl-lg`} />
+            <div className={`absolute top-0 right-0 w-6 h-6 border-t-[3px] border-r-[3px] ${cornerColor} rounded-tr-lg`} />
+            <div className={`absolute bottom-0 left-0 w-6 h-6 border-b-[3px] border-l-[3px] ${cornerColor} rounded-bl-lg`} />
+            <div className={`absolute bottom-0 right-0 w-6 h-6 border-b-[3px] border-r-[3px] ${cornerColor} rounded-br-lg`} />
+            <div className={`absolute inset-x-0 top-0 h-0.5 ${scanLineColor} animate-scan`} />
+          </div>
+        </div>
+      )}
+
+      {!isScanning && !error && (
+        <div className='absolute inset-0 flex items-center justify-center bg-black'>
+          <div className='flex flex-col items-center gap-2 text-white'>
+            <CameraIcon className='size-8 animate-pulse' />
+            <span className='text-sm'>starting camera...</span>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div className='absolute inset-0 flex items-center justify-center bg-black p-4'>
+          <div className='flex flex-col items-center gap-3 text-center'>
+            <div className='p-3 rounded-full bg-red-500/20'>
+              <CameraIcon className='size-6 text-red-400' />
+            </div>
+            <p className='text-xs text-red-400'>{error}</p>
+            <div className='flex gap-2'>
+              <Button variant='secondary' size='sm' onClick={handleClose}>cancel</Button>
+              <Button size='sm' onClick={startScanning}>retry</Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+
+  // inline mode: compact card with rounded camera
+  if (inline) {
+    return (
+      <div className='flex flex-col gap-2'>
+        <div className='flex items-center justify-between'>
+          <span className='text-xs text-muted-foreground'>{title}</span>
+          <button
+            onClick={handleClose}
+            className='p-0.5 text-muted-foreground hover:text-foreground transition-colors'
+          >
+            <Cross1Icon className='h-3.5 w-3.5' />
+          </button>
+        </div>
+        <div className='relative aspect-square w-full overflow-hidden rounded-lg border border-yellow-500/30 bg-black'>
+          {cameraView}
+        </div>
+        {description && (
+          <p className='text-[10px] text-muted-foreground text-center'>{description}</p>
+        )}
+        <style>{`
+          @keyframes scan {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(170px); }
+          }
+          .animate-scan { animation: scan 2s ease-in-out infinite; }
+        `}</style>
+      </div>
+    );
+  }
+
+  // fullscreen overlay mode (used by zcash-send etc.)
   return (
     <div className='fixed inset-0 z-50 bg-black flex flex-col overflow-hidden'>
       <div className='flex-none flex items-center justify-between p-4 bg-black/80'>
         <div>
           <h2 className='text-lg font-bold text-white'>{title}</h2>
-          <p className='text-sm text-gray-400'>{description}</p>
+          {description && <p className='text-sm text-gray-400'>{description}</p>}
         </div>
         <button
           onClick={handleClose}
@@ -133,59 +219,12 @@ export const QrScanner = ({
       </div>
 
       <div className='flex-1 relative min-h-0 overflow-hidden'>
-        <video
-          ref={videoRef}
-          className='absolute inset-0 w-full h-full object-cover'
-          playsInline
-          muted
-        />
-
-        {isScanning && (
-          <div className='absolute inset-0 pointer-events-none'>
-            <div className='absolute inset-0 flex items-center justify-center'>
-              <div className='relative w-64 h-64'>
-                <div className='absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-green-500 rounded-tl' />
-                <div className='absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-green-500 rounded-tr' />
-                <div className='absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-green-500 rounded-bl' />
-                <div className='absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-green-500 rounded-br' />
-                <div className='absolute inset-x-0 top-0 h-0.5 bg-green-500 animate-scan' />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {!isScanning && !error && (
-          <div className='absolute inset-0 flex items-center justify-center bg-black'>
-            <div className='flex flex-col items-center gap-3 text-white'>
-              <CameraIcon className='size-12 animate-pulse' />
-              <span className='text-base'>Starting camera...</span>
-            </div>
-          </div>
-        )}
-
-        {error && (
-          <div className='absolute inset-0 flex items-center justify-center bg-black p-6'>
-            <div className='flex flex-col items-center gap-4 text-center max-w-sm'>
-              <div className='p-4 rounded-full bg-red-500/20'>
-                <CameraIcon className='size-8 text-red-400' />
-              </div>
-              <p className='text-red-400'>{error}</p>
-              <div className='flex gap-3'>
-                <Button variant='secondary' onClick={handleClose}>
-                  Cancel
-                </Button>
-                <Button variant='gradient' onClick={startScanning}>
-                  Try Again
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
+        {cameraView}
       </div>
 
       {isScanning && (
         <div className='flex-none p-4 bg-black/80 text-center'>
-          <p className='text-sm text-gray-400'>Position the QR code within the frame</p>
+          <p className='text-sm text-gray-400'>position the QR code within the frame</p>
         </div>
       )}
 

@@ -472,13 +472,16 @@ export const SettingsZigner = () => {
       </div>
 
       {scanning && (
-        <QrScanner
-          onScan={handleQrScan}
-          onError={(err) => { setError(err); setScanning(false); }}
-          onClose={() => setScanning(false)}
-          title='scan zigner QR'
-          description='point camera at your zigner device FVK QR code'
-        />
+        <div className='border-t border-border pt-4'>
+          <QrScanner
+            inline
+            onScan={handleQrScan}
+            onError={(err) => { setError(err); setScanning(false); }}
+            onClose={() => setScanning(false)}
+            title='scan zigner QR'
+            description='point camera at your zigner FVK QR code'
+          />
+        </div>
       )}
     </SettingsScreen>
   );
