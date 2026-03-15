@@ -251,7 +251,7 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
           const rect = chainBtnRef.current!.getBoundingClientRect();
           return (
             <div
-              className='fixed z-[999] rounded-lg border border-border bg-background shadow-lg'
+              className='fixed z-50 rounded-lg border border-border bg-background shadow-lg'
               style={{ top: rect.bottom + 4, left: rect.left, width: rect.width }}
             >
               {ibcChains.map(chain => (
@@ -342,7 +342,7 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
                   const rect = assetBtnRef.current!.getBoundingClientRect();
                   return (
                     <div
-                      className='fixed z-[999] rounded-lg border border-border bg-background shadow-lg'
+                      className='fixed z-50 rounded-lg border border-border bg-background shadow-lg'
                       style={{ top: rect.bottom + 4, left: rect.left, width: rect.width }}
                     >
                       {assetsData.assets.map(asset => (
@@ -737,7 +737,7 @@ function ReceiveTab({ address, loading, activeNetwork }: {
               <button
                 disabled={transparentIndex <= 0}
                 onClick={() => setTransparentIndex(i => i - 1)}
-                className='p-1 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30'
+                className='p-1 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50'
               >
                 <ChevronLeftIcon className='h-4 w-4' />
               </button>

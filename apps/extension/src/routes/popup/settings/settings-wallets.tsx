@@ -243,7 +243,7 @@ const VaultRow = ({ vault, onRemove, onRename, disabled }: {
         )}
       </div>
       <button onClick={onRemove} disabled={disabled}
-        className='p-1 text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-red-400 transition-colors duration-75 disabled:opacity-30'>
+        className='p-1 text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-red-400 transition-colors duration-75 disabled:opacity-50'>
         <TrashIcon className='size-3.5' />
       </button>
     </div>
@@ -267,7 +267,7 @@ const Btn = ({ children, onClick, submit, destructive, disabled }: {
   disabled?: boolean;
 }) => (
   <button type={submit ? 'submit' : 'button'} onClick={onClick} disabled={disabled}
-    className={`flex-1 py-2 text-xs transition-colors duration-100 disabled:opacity-30 ${
+    className={`flex-1 py-2 text-xs transition-colors duration-100 disabled:opacity-50 ${
       destructive
         ? 'bg-red-500/15 text-red-400 border border-red-500/25 hover:bg-red-500/25'
         : 'border border-border/40 hover:bg-muted'

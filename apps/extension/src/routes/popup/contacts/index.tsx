@@ -208,7 +208,7 @@ function AddressModal({
               value={address}
               onChange={(e) => setAddress(e.target.value)}
               placeholder='paste address...'
-              className='w-full rounded-lg border border-border bg-input px-3 py-2 text-sm font-mono text-xs focus:border-zigner-gold focus:outline-none'
+              className='w-full rounded-lg border border-border bg-input px-3 py-2 text-xs font-mono focus:border-zigner-gold focus:outline-none'
             />
           </div>
 

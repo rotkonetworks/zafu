@@ -223,7 +223,7 @@ export const SettingsZigner = () => {
                       onClick={() => setConfirmDelete(index)}
                       disabled={all.length <= 1}
                       title={all.length <= 1 ? 'cannot remove the last wallet' : 'remove wallet'}
-                      className='p-1 text-muted-foreground hover:text-red-400 transition-colors disabled:opacity-30'
+                      className='p-1 text-muted-foreground hover:text-red-400 transition-colors disabled:opacity-50'
                     >
                       <TrashIcon className='size-4' />
                     </button>

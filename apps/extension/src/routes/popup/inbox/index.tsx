@@ -447,7 +447,7 @@ function ComposeMessage({
             onChange={(e) => setRecipient(e.target.value)}
             placeholder={network === 'zcash' ? 'z-address or unified address' : 'penumbra1...'}
             disabled={!!replyTo || txStatus !== 'idle'}
-            className='w-full rounded-lg border border-border bg-input px-3 py-2 text-sm font-mono text-xs focus:border-zigner-gold focus:outline-none disabled:opacity-50'
+            className='w-full rounded-lg border border-border bg-input px-3 py-2 text-xs font-mono focus:border-zigner-gold focus:outline-none disabled:opacity-50'
           />
         </div>
 
