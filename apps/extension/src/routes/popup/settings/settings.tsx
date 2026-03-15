@@ -1,25 +1,14 @@
-import {
-  ExitIcon,
-  FileTextIcon,
-  GlobeIcon,
-  Link1Icon,
-  InfoCircledIcon,
-  TrashIcon,
-  EyeClosedIcon,
-  ChevronRightIcon,
-  PersonIcon,
-} from '@radix-ui/react-icons';
 import { useStore } from '../../../state';
 import { passwordSelector } from '../../../state/password';
 import { selectActiveNetwork } from '../../../state/keyring';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { SettingsScreen } from './settings-screen';
-import type { ReactElement } from 'react';
+import { cn } from '@repo/ui/lib/utils';
 
 interface SettingsLink {
   title: string;
-  icon: ReactElement;
+  icon: string;
   href: PopupPath;
   /** which networks show this link. undefined = always visible */
   networks?: string[];
@@ -27,39 +16,39 @@ interface SettingsLink {
 
 const links: SettingsLink[] = [
   {
-    title: 'Wallets',
-    icon: <PersonIcon className='size-5 text-muted-foreground' />,
+    title: 'wallets',
+    icon: 'i-lucide-user',
     href: PopupPath.SETTINGS_WALLETS,
   },
   {
-    title: 'Recovery Passphrase',
-    icon: <FileTextIcon className='size-5 text-muted-foreground' />,
+    title: 'recovery passphrase',
+    icon: 'i-lucide-file-text',
     href: PopupPath.SETTINGS_RECOVERY_PASSPHRASE,
   },
   {
-    title: 'Network Endpoints',
-    icon: <GlobeIcon className='size-5 text-muted-foreground' />,
-    href: PopupPath.SETTINGS_NETWORK_ENDPOINTS,
+    title: 'networks & endpoints',
+    icon: 'i-lucide-globe',
+    href: PopupPath.SETTINGS_NETWORKS,
   },
   {
-    title: 'Connected Sites',
-    icon: <Link1Icon className='size-5 text-muted-foreground' />,
+    title: 'connected sites',
+    icon: 'i-lucide-link',
     href: PopupPath.SETTINGS_CONNECTED_SITES,
     networks: ['penumbra'],
   },
   {
-    title: 'Privacy',
-    icon: <EyeClosedIcon className='size-5 text-muted-foreground' />,
+    title: 'privacy',
+    icon: 'i-lucide-eye-off',
     href: PopupPath.SETTINGS_PRIVACY,
   },
   {
-    title: 'Clear Cache',
-    icon: <TrashIcon className='size-5 text-muted-foreground' />,
+    title: 'clear cache',
+    icon: 'i-lucide-trash-2',
     href: PopupPath.SETTINGS_CLEAR_CACHE,
   },
   {
-    title: 'About',
-    icon: <InfoCircledIcon className='size-5 text-muted-foreground' />,
+    title: 'about',
+    icon: 'i-lucide-info',
     href: PopupPath.SETTINGS_ABOUT,
   },
 ];
@@ -69,18 +58,18 @@ function SettingsRow({
   title,
   onClick,
 }: {
-  icon: ReactElement;
+  icon: string;
   title: string;
   onClick: () => void;
 }) {
   return (
     <button
       onClick={onClick}
-      className='flex w-full items-center gap-3 py-3 text-left transition-colors duration-75 hover:bg-muted/30'
+      className='flex w-full items-center gap-3 py-3 text-left transition-colors hover:bg-muted/50'
     >
-      {icon}
+      <span className={cn(icon, 'size-5 text-muted-foreground')} />
       <span className='flex-1 text-sm text-foreground'>{title}</span>
-      <ChevronRightIcon className='size-4 text-muted-foreground' />
+      <span className='i-lucide-chevron-right size-4 text-muted-foreground' />
     </button>
   );
 }
@@ -95,9 +84,9 @@ export const Settings = () => {
   );
 
   return (
-    <SettingsScreen title='Settings' backPath={PopupPath.INDEX}>
+    <SettingsScreen title='settings' backPath={PopupPath.INDEX}>
       <div className='flex grow flex-col justify-between'>
-        <div className='flex flex-col divide-y divide-border/30'>
+        <div className='flex flex-col divide-y divide-border/40'>
           {visibleLinks.map(l => (
             <SettingsRow
               key={l.href}
@@ -110,8 +99,8 @@ export const Settings = () => {
 
         <div className='mt-4 border-t border-border/40 pt-4'>
           <SettingsRow
-            icon={<ExitIcon className='size-5 text-muted-foreground' />}
-            title='Lock Wallet'
+            icon='i-lucide-log-out'
+            title='lock wallet'
             onClick={() => {
               clearSessionPassword();
               chrome.runtime.reload();

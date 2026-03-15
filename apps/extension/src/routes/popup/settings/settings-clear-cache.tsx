@@ -1,6 +1,3 @@
-import { ExclamationTriangleIcon } from '@radix-ui/react-icons';
-import { Button } from '@repo/ui/components/ui/button';
-import { TrashGradientIcon } from '../../../icons/trash-gradient';
 import {
   ServicesMessage,
   getClearCacheStepLabel,
@@ -31,24 +28,20 @@ const useCacheClear = () => {
     total: CLEAR_CACHE_STEPS.length,
   });
 
-  // Check if clearing was interrupted on mount
   useEffect(() => {
     void localExtStorage.get('clearingCache').then(wasClearing => {
       if (wasClearing) {
-        // Previous clear was interrupted - resume display
         setClearingState({
           inProgress: true,
           step: 'clearing-database',
           completed: 2,
           total: CLEAR_CACHE_STEPS.length,
         });
-        // Trigger another clear to complete the operation
         void chrome.runtime.sendMessage(ServicesMessage.ClearCache);
       }
     });
   }, []);
 
-  // Listen for progress updates
   useEffect(() => {
     const handleMessage = (message: unknown) => {
       if (
@@ -94,58 +87,43 @@ export const SettingsClearCache = () => {
     : 0;
 
   return (
-    <SettingsScreen title='Clear Cache' IconComponent={TrashGradientIcon}>
-      <div className='flex flex-1 flex-col items-start justify-between px-[30px] pb-5'>
+    <SettingsScreen title='clear cache'>
+      <div className='flex flex-col gap-4'>
         {clearingState.inProgress ? (
-          // Progress view
-          <div className='flex flex-col items-center gap-4 w-full'>
-            <p className='font-headline text-base font-semibold'>Clearing Cache</p>
-
-            {/* Progress bar */}
-            <div className='w-full'>
-              <div className='h-2 w-full rounded-full bg-secondary overflow-hidden'>
-                <div
-                  className='h-full bg-gradient-to-r from-teal-400 to-teal-600 transition-all duration-300 ease-out'
-                  style={{ width: `${progressPercent}%` }}
-                />
-              </div>
-              <div className='flex justify-between mt-2'>
-                <p className='text-sm text-muted-foreground'>
-                  {getClearCacheStepLabel(clearingState.step)}
-                </p>
-                <p className='text-sm text-muted-foreground'>
-                  {progressPercent}%
-                </p>
-              </div>
+          <div className='flex flex-col gap-3'>
+            <div className='h-1.5 w-full rounded-full bg-muted overflow-hidden'>
+              <div
+                className='h-full bg-primary transition-all duration-300 ease-out'
+                style={{ width: `${progressPercent}%` }}
+              />
             </div>
-
-            <p className='text-xs text-muted-foreground text-center mt-2'>
-              Please wait. Do not close the extension.
+            <div className='flex justify-between text-xs text-muted-foreground'>
+              <span>{getClearCacheStepLabel(clearingState.step)}</span>
+              <span>{progressPercent}%</span>
+            </div>
+            <p className='text-[10px] text-muted-foreground'>
+              do not close the extension.
             </p>
           </div>
         ) : (
-          // Confirmation view
-          <div className='flex flex-col items-center gap-2'>
-            <p className='font-headline text-base font-semibold'>Are you sure?</p>
-            <p className='text-center text-muted-foreground'>
-              Do you really want to clear cache? All local data will be deleted and resynchronized.
+          <div className='flex flex-col gap-3'>
+            <p className='text-sm text-muted-foreground'>
+              all local data will be deleted and resynchronized.
             </p>
-            <p className='mt-2 flex items-center gap-2 font-headline text-base font-semibold text-rust'>
-              <ExclamationTriangleIcon className='size-[30px] text-rust' /> Your private keys won't be
-              lost!
+            <p className='flex items-center gap-2 text-xs text-rust'>
+              <span className='i-lucide-triangle-alert size-4' />
+              your private keys won't be lost
             </p>
           </div>
         )}
 
-        <Button
+        <button
           disabled={clearingState.inProgress}
-          variant='gradient'
-          size='lg'
-          className='w-full'
           onClick={handleCacheClear}
+          className='w-full rounded-lg border border-red-500/25 bg-red-500/15 py-2.5 text-sm text-red-400 transition-colors hover:bg-red-500/25 disabled:opacity-50'
         >
-          {clearingState.inProgress ? 'Clearing...' : 'Confirm'}
-        </Button>
+          {clearingState.inProgress ? 'clearing...' : 'clear cache'}
+        </button>
       </div>
     </SettingsScreen>
   );

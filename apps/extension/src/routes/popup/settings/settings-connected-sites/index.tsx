@@ -1,6 +1,4 @@
-import { MagnifyingGlassIcon } from '@radix-ui/react-icons';
 import { Input } from '@repo/ui/components/ui/input';
-import { LinkGradientIcon } from '../../../../icons/link-gradient';
 import { OriginRecord, UserChoice } from '@repo/storage-chrome/records';
 import { AllSlices, useStore } from '../../../../state';
 import { SettingsScreen } from '../settings-screen';
@@ -38,10 +36,10 @@ export const SettingsConnectedSites = () => {
   };
 
   return (
-    <SettingsScreen title='Connected Sites' IconComponent={LinkGradientIcon}>
+    <SettingsScreen title='connected sites'>
       <div className='relative mt-5 flex w-full items-center justify-center'>
         <div className='absolute inset-y-0 left-3 flex items-center'>
-          <MagnifyingGlassIcon className='size-5 text-muted-foreground' />
+          <span className='i-lucide-search size-5 text-muted-foreground' />
         </div>
         <Input
           disabled={!knownSites.length}
@@ -53,9 +51,9 @@ export const SettingsConnectedSites = () => {
       </div>
       <div className='text-muted-foreground'>
         {!knownSites.length ? (
-          <div className='py-[2em] text-center text-lg font-bold'>Not connected to any sites.</div>
+          <div className='py-12 text-center text-sm'>Not connected to any sites.</div>
         ) : allSitesFilteredOut ? (
-          <div className='py-[2em] text-center text-lg font-bold text-yellow-500'>
+          <div className='py-12 text-center text-sm text-yellow-400'>
             all known sites filtered
           </div>
         ) : (
@@ -67,7 +65,7 @@ export const SettingsConnectedSites = () => {
               <div className='mt-6 flex justify-center'>
                 <button
                   onClick={handleDisconnectAll}
-                  className='inline-flex items-center justify-center rounded-full border border-destructive px-4 py-2 text-sm font-semibold text-destructive transition hover:bg-destructive/10'
+                  className='inline-flex items-center justify-center rounded-md border border-destructive px-4 py-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10'
                 >
                   Disconnect All
                 </button>

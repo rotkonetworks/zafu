@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { ShareGradientIcon } from '../../../icons/share-gradient';
 import { SettingsScreen } from './settings-screen';
 import { useStore } from '../../../state';
 import { networksSelector, type NetworkConfig, type NetworkId } from '../../../state/networks';
@@ -30,7 +29,7 @@ export const SettingsNetworkEndpoints = () => {
   const enabledNetworks: NetworkConfig[] = Object.values(networks).filter((n): n is NetworkConfig => n.enabled);
 
   return (
-    <SettingsScreen title="Network Endpoints" IconComponent={ShareGradientIcon}>
+    <SettingsScreen title='network endpoints'>
       <div className="flex flex-col gap-4">
         {enabledNetworks.length === 0 ? (
           <p className="text-muted-foreground text-sm">
@@ -43,7 +42,7 @@ export const SettingsNetworkEndpoints = () => {
                 <label className="text-sm font-medium">
                   {network.name}
                   {network.syncDescription && (
-                    <span className="ml-2 text-xs text-green-500">(trustless)</span>
+                    <span className="ml-2 text-xs text-green-400">(trustless)</span>
                   )}
                 </label>
                 <span className="text-xs text-muted-foreground">{network.symbol}</span>
@@ -57,7 +56,7 @@ export const SettingsNetworkEndpoints = () => {
                     [network.id]: e.target.value,
                   }))}
                   placeholder={`Enter ${network.name} endpoint`}
-                  className="flex-1 rounded-lg border border-border bg-input px-3 py-2 text-sm focus:border-zigner-gold focus:outline-none"
+                  className="flex-1 rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none"
                 />
                 {editingEndpoints[network.id] !== undefined && (
                   <button
@@ -79,7 +78,7 @@ export const SettingsNetworkEndpoints = () => {
         )}
 
         {enabledNetworks.length > 0 && (
-          <div className="mt-4 border-t pt-4">
+          <div className="mt-4 border-t border-border/40 pt-4">
             <h3 className="text-sm font-medium mb-2">Default Endpoints</h3>
             <div className="text-xs text-muted-foreground space-y-1">
               {networks.zcash?.enabled && <p><strong>Zcash:</strong> https://zcash.rotko.net (zidecar)</p>}

@@ -1,10 +1,9 @@
-import { ExternalLinkIcon } from '@radix-ui/react-icons';
 import { SettingsScreen } from './settings-screen';
 import { PopupPath } from '../paths';
 
 export const SettingsAbout = () => {
   return (
-    <SettingsScreen title="About" backPath={PopupPath.SETTINGS}>
+    <SettingsScreen title='about' backPath={PopupPath.SETTINGS}>
       <div className="flex flex-col gap-4">
         <div>
           <h3 className="text-sm font-medium mb-1">zafu wallet</h3>
@@ -31,7 +30,7 @@ export const SettingsAbout = () => {
               rel="noopener noreferrer"
               className="flex items-center gap-1.5 text-xs text-primary hover:underline transition-colors"
             >
-              <ExternalLinkIcon className="h-3 w-3" />
+              <span className="i-lucide-external-link h-3 w-3" />
               rotko.net
             </a>
             <a
@@ -40,7 +39,7 @@ export const SettingsAbout = () => {
               rel="noopener noreferrer"
               className="flex items-center gap-1.5 text-xs text-primary hover:underline transition-colors"
             >
-              <ExternalLinkIcon className="h-3 w-3" />
+              <span className="i-lucide-external-link h-3 w-3" />
               github
             </a>
             <a
@@ -49,7 +48,7 @@ export const SettingsAbout = () => {
               rel="noopener noreferrer"
               className="flex items-center gap-1.5 text-xs text-primary hover:underline transition-colors"
             >
-              <ExternalLinkIcon className="h-3 w-3" />
+              <span className="i-lucide-external-link h-3 w-3" />
               zigner cold wallet
             </a>
           </div>

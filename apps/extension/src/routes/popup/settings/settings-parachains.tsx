@@ -4,7 +4,6 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeftIcon, CheckIcon, ReloadIcon, TrashIcon, UploadIcon } from '@radix-ui/react-icons';
 import { cn } from '@repo/ui/lib/utils';
 import {
   fetchAvailableParachains,
@@ -148,7 +147,7 @@ export const SettingsParachains = () => {
           onClick={() => navigate(-1)}
           className='text-muted-foreground transition-colors hover:text-foreground'
         >
-          <ArrowLeftIcon className='h-5 w-5' />
+          <span className='i-lucide-arrow-left h-5 w-5' />
         </button>
         <h1 className='text-lg font-medium'>parachains</h1>
       </div>
@@ -185,14 +184,14 @@ export const SettingsParachains = () => {
             />
             <button
               onClick={() => fileInputRef.current?.click()}
-              className='flex items-center justify-center gap-2 p-3 rounded-lg border border-dashed border-border/40 hover:border-primary/50 hover:bg-muted/30 transition-colors'
+              className='flex items-center justify-center gap-2 p-3 rounded-lg border border-dashed border-border/40 hover:border-primary/50 hover:bg-muted/50 transition-colors'
             >
-              <UploadIcon className='h-4 w-4' />
+              <span className='i-lucide-upload h-4 w-4' />
               <span className='text-sm'>upload chainspec json</span>
             </button>
 
             {customChains.length === 0 ? (
-              <div className='text-center text-sm text-muted-foreground py-8'>
+              <div className='text-center text-sm text-muted-foreground py-12'>
                 no custom chainspecs added
               </div>
             ) : (
@@ -215,7 +214,7 @@ export const SettingsParachains = () => {
                       onClick={() => void handleDeleteCustom(chain.id)}
                       className='p-2 text-muted-foreground hover:text-destructive transition-colors'
                     >
-                      <TrashIcon className='h-4 w-4' />
+                      <span className='i-lucide-trash-2 h-4 w-4' />
                     </button>
                   </div>
                 ))}
@@ -223,11 +222,11 @@ export const SettingsParachains = () => {
             )}
           </div>
         ) : loading ? (
-          <div className='flex items-center justify-center py-8'>
-            <ReloadIcon className='h-5 w-5 animate-spin text-muted-foreground' />
+          <div className='flex items-center justify-center py-12'>
+            <span className='i-lucide-refresh-cw h-5 w-5 animate-spin text-muted-foreground' />
           </div>
         ) : parachains.length === 0 ? (
-          <div className='text-center text-sm text-muted-foreground py-8'>
+          <div className='text-center text-sm text-muted-foreground py-12'>
             no parachains available
           </div>
         ) : (
@@ -243,7 +242,7 @@ export const SettingsParachains = () => {
                   onClick={() => void handleToggle(chain.id)}
                   className={cn(
                     'flex items-center justify-between p-3 rounded-lg border border-border/40 transition-colors text-left',
-                    isEnabled ? 'bg-primary/5 border-primary/30' : 'hover:bg-muted/30'
+                    isEnabled ? 'bg-primary/5 border-primary/40' : 'hover:bg-muted/50'
                   )}
                 >
                   <div className='flex flex-col'>
@@ -258,7 +257,7 @@ export const SettingsParachains = () => {
                       isEnabled ? 'border-primary bg-primary' : 'border-muted-foreground/50'
                     )}
                   >
-                    {isEnabled && <CheckIcon className='h-3 w-3 text-primary-foreground' />}
+                    {isEnabled && <span className='i-lucide-check h-3 w-3 text-primary-foreground' />}
                   </div>
                 </button>
               );

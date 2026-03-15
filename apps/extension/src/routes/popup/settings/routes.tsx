@@ -12,24 +12,14 @@ const SettingsConnectedSites = lazy(() =>
 const SettingsPassphrase = lazy(() =>
   import('./settings-passphrase').then(m => ({ default: m.SettingsPassphrase })),
 );
-const SettingsRPC = lazy(() => import('./settings-rpc').then(m => ({ default: m.SettingsRPC })));
 const SettingsDefaultFrontend = lazy(() =>
   import('./settings-default-frontend').then(m => ({ default: m.SettingsDefaultFrontend })),
-);
-const SettingsNumeraires = lazy(() =>
-  import('./settings-numeraires').then(m => ({ default: m.SettingsNumeraires })),
 );
 const SettingsZigner = lazy(() =>
   import('./settings-zigner').then(m => ({ default: m.SettingsZigner })),
 );
-const SettingsNetworkEndpoints = lazy(() =>
-  import('./settings-network-endpoints').then(m => ({ default: m.SettingsNetworkEndpoints })),
-);
 const SettingsNetworks = lazy(() =>
   import('./settings-networks').then(m => ({ default: m.SettingsNetworks })),
-);
-const SettingsParachains = lazy(() =>
-  import('./settings-parachains').then(m => ({ default: m.SettingsParachains })),
 );
 const SettingsPrivacy = lazy(() =>
   import('./settings-privacy').then(m => ({ default: m.SettingsPrivacy })),
@@ -43,7 +33,7 @@ const SettingsAbout = lazy(() =>
 
 const LazyFallback = () => (
   <div className="flex h-full items-center justify-center p-4">
-    <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+    <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
   </div>
 );
 
@@ -57,10 +47,6 @@ export const settingsRoutes = [
   {
     path: PopupPath.SETTINGS,
     element: withSuspense(SettingsMain),
-  },
-  {
-    path: PopupPath.SETTINGS_RPC,
-    element: withSuspense(SettingsRPC),
   },
   {
     path: PopupPath.SETTINGS_DEFAULT_FRONTEND,
@@ -79,24 +65,12 @@ export const settingsRoutes = [
     element: withSuspense(SettingsPassphrase),
   },
   {
-    path: PopupPath.SETTINGS_NUMERAIRES,
-    element: withSuspense(SettingsNumeraires),
-  },
-  {
     path: PopupPath.SETTINGS_ZIGNER,
     element: withSuspense(SettingsZigner),
   },
   {
-    path: PopupPath.SETTINGS_NETWORK_ENDPOINTS,
-    element: withSuspense(SettingsNetworkEndpoints),
-  },
-  {
     path: PopupPath.SETTINGS_NETWORKS,
     element: withSuspense(SettingsNetworks),
-  },
-  {
-    path: PopupPath.SETTINGS_PARACHAINS,
-    element: withSuspense(SettingsParachains),
   },
   {
     path: PopupPath.SETTINGS_PRIVACY,

@@ -8,8 +8,6 @@ export const SettingsScreen = ({
   backPath,
 }: {
   title: string;
-  /** @deprecated no longer rendered */
-  IconComponent?: () => JSX.Element;
   children: ReactNode;
   backPath?: PopupPath;
 }) => {

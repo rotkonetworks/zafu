@@ -29,8 +29,8 @@ export function SettingsPrivacy() {
   const { settings, setSetting } = useStore(privacySelector);
 
   return (
-    <SettingsScreen title='Privacy'>
-      <div className='flex flex-col divide-y divide-border/30'>
+    <SettingsScreen title='privacy'>
+      <div className='flex flex-col divide-y divide-border/40'>
         <Row
           label='cosmos balance queries'
           note='leaks addresses to rpc nodes'

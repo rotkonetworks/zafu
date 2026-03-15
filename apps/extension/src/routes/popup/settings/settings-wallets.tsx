@@ -1,4 +1,3 @@
-import { TrashIcon } from '@radix-ui/react-icons';
 import { useState, useRef, useEffect, type KeyboardEvent } from 'react';
 import { useStore } from '../../../state';
 import { keyRingSelector, type KeyInfo } from '../../../state/keyring';
@@ -97,13 +96,13 @@ export const SettingsWallets = () => {
             disabled={step !== 'idle'} />
         )}
         {keyInfos.length === 0 && (
-          <p className='py-6 text-center text-sm text-muted-foreground'>no wallets</p>
+          <p className='py-12 text-center text-sm text-muted-foreground'>no wallets</p>
         )}
 
         {/* add */}
         <button
           onClick={() => chrome.runtime.openOptionsPage()}
-          className='w-full border border-dashed border-border/40 py-2.5 text-xs text-muted-foreground hover:text-foreground hover:border-border transition-colors duration-100'
+          className='w-full rounded-lg border border-dashed border-border/40 py-2.5 text-xs text-muted-foreground hover:text-foreground hover:border-border/40 transition-colors duration-100'
         >
           + add wallet
         </button>
@@ -120,7 +119,7 @@ export const SettingsWallets = () => {
               <input type='password' value={password} autoFocus
                 onChange={e => { setPassword(e.target.value); setPasswordError(false); }}
                 placeholder='password'
-                className='w-full bg-input border border-border px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-zigner-gold' />
+                className='w-full bg-input border border-border/40 px-3 py-2.5 text-sm rounded-lg focus:outline-none focus:border-zigner-gold' />
               {passwordError && <span className='text-xs text-red-400'>wrong password</span>}
               <div className='flex gap-2 mt-1'>
                 <Btn onClick={reset}>cancel</Btn>
@@ -133,7 +132,7 @@ export const SettingsWallets = () => {
         {/* step 2: backup phrase (mnemonic only) */}
         {removingVault && removingType === 'mnemonic' && step === 'backup' && (
           <RemovalCard title='back up recovery phrase'>
-            <div className='grid grid-cols-3 gap-1.5 bg-background border border-border/40 p-3 mb-3'>
+            <div className='grid grid-cols-3 gap-1.5 rounded-lg bg-background border border-border/40 p-3 mb-3'>
               {phrase.map((w, i) => (
                 <div key={i} className='flex text-xs'>
                   <span className='w-5 text-right text-muted-foreground mr-1'>{i + 1}.</span>
@@ -191,7 +190,7 @@ const VaultSection = ({ label, vaults, onRemove, onRename, disabled }: {
 }) => (
   <div>
     <div className='text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5'>{label}</div>
-    <div className='flex flex-col divide-y divide-border/30 border border-border/40 bg-card'>
+    <div className='flex flex-col divide-y divide-border/40 rounded-lg border border-border/40 bg-card'>
       {vaults.map(v => (
         <VaultRow key={v.id} vault={v}
           onRemove={() => onRemove(v)}
@@ -237,14 +236,14 @@ const VaultRow = ({ vault, onRemove, onRename, disabled }: {
             className='w-full text-sm bg-transparent border-b border-primary/50 outline-none' />
         ) : (
           <button onClick={() => { setDraft(vault.name); setEditing(true); }}
-            className='text-sm text-left truncate w-full hover:text-primary transition-colors duration-75'>
+            className='text-sm text-left truncate w-full hover:text-primary transition-colors'>
             {vault.name}
           </button>
         )}
       </div>
       <button onClick={onRemove} disabled={disabled}
-        className='p-1 text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-red-400 transition-colors duration-75 disabled:opacity-50'>
-        <TrashIcon className='size-3.5' />
+        className='p-1 text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-red-400 transition-colors disabled:opacity-50'>
+        <span className='i-lucide-trash-2 size-3.5' />
       </button>
     </div>
   );
@@ -267,10 +266,10 @@ const Btn = ({ children, onClick, submit, destructive, disabled }: {
   disabled?: boolean;
 }) => (
   <button type={submit ? 'submit' : 'button'} onClick={onClick} disabled={disabled}
-    className={`flex-1 py-2 text-xs transition-colors duration-100 disabled:opacity-50 ${
+    className={`flex-1 rounded-lg py-2 text-xs transition-colors duration-100 disabled:opacity-50 ${
       destructive
         ? 'bg-red-500/15 text-red-400 border border-red-500/25 hover:bg-red-500/25'
-        : 'border border-border/40 hover:bg-muted'
+        : 'border border-border/40 hover:bg-muted/50'
     }`}>
     {children}
   </button>

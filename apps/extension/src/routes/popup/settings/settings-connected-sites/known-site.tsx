@@ -1,6 +1,5 @@
 import { OriginRecord, UserChoice } from '@repo/storage-chrome/records';
 import { Button } from '@repo/ui/components/ui/button';
-import { TrashIcon } from 'lucide-react';
 import { DisplayOriginURL } from '../../../../shared/components/display-origin-url';
 
 export const KnownSite = ({
@@ -18,12 +17,12 @@ export const KnownSite = ({
         </a>
       )}
       {site.choice === UserChoice.Denied && (
-        <span className='brightness-75'>
+        <span className='truncate brightness-75'>
           <DisplayOriginURL url={new URL(site.origin)} />
         </span>
       )}
       {site.choice === UserChoice.Ignored && (
-        <span className='line-through decoration-red decoration-wavy brightness-75'>
+        <span className='truncate line-through decoration-red decoration-wavy brightness-75'>
           <DisplayOriginURL url={new URL(site.origin)} />
         </span>
       )}
@@ -34,7 +33,7 @@ export const KnownSite = ({
           className='h-auto bg-transparent'
           onClick={() => void discard(site)}
         >
-          <TrashIcon className='text-muted-foreground' size={16} />
+          <span className='i-lucide-trash-2 h-4 w-4 text-muted-foreground' />
         </Button>
       </div>
     </div>

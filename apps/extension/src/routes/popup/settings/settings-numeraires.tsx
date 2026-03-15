@@ -1,5 +1,4 @@
 import { SettingsScreen } from './settings-screen';
-import { NumerairesGradientIcon } from '../../../icons/numeraires-gradient';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { NumeraireForm } from '../../../shared/components/numeraires-form';
@@ -13,7 +12,7 @@ export const SettingsNumeraires = () => {
     navigate(PopupPath.INDEX);
   };
   return (
-    <SettingsScreen title='Price Denomination' IconComponent={NumerairesGradientIcon}>
+    <SettingsScreen title='price denomination'>
       <NumeraireForm onSuccess={onSuccess} chainId={chainId} />
     </SettingsScreen>
   );

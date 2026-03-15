@@ -1,4 +1,4 @@
-import { EyeOpenIcon, TrashIcon, ExternalLinkIcon, Link2Icon, CameraIcon } from '@radix-ui/react-icons';
+import { useLocation } from 'react-router-dom';
 import { useStore } from '../../../state';
 import { walletsSelector } from '../../../state/wallets';
 import { zignerConnectSelector } from '../../../state/zigner';
@@ -17,6 +17,8 @@ function isZignerWallet(custody: { encryptedSeedPhrase?: unknown; airgapSigner?:
 }
 
 export const SettingsZigner = () => {
+  const location = useLocation();
+  const autoScan = (location.state as { autoScan?: boolean } | null)?.autoScan;
   const { all, zcashWallets, addAirgapSignerWallet, addZcashWallet, removeWallet, removeZcashWallet } = useStore(walletsSelector);
   const {
     scanState,
@@ -82,7 +84,15 @@ export const SettingsZigner = () => {
     return () => { clearZignerState(); };
   }, [clearZignerState]);
 
-  const handleIconClick = () => {
+  // auto-start scanner when navigated from "add wallet" button
+  useEffect(() => {
+    if (autoScan && !scanning && scanState === 'idle') {
+      setScanning(true);
+    }
+  }, [autoScan]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** hidden paste mode — activated by tapping the title area 10 times */
+  const handleSecretTap = () => {
     clickCountRef.current += 1;
     if (clickTimeoutRef.current) clearTimeout(clickTimeoutRef.current);
     clickTimeoutRef.current = setTimeout(() => { clickCountRef.current = 0; }, 3000);
@@ -173,17 +183,10 @@ export const SettingsZigner = () => {
   const showInitialState = scanState === 'idle' && !showManualInput;
 
   return (
-    <SettingsScreen
-      title='zigner'
-      IconComponent={() => (
-        <div onClick={handleIconClick}>
-          <EyeOpenIcon className='size-5' />
-        </div>
-      )}
-    >
+    <SettingsScreen title='zigner'>
       <div className='flex flex-col gap-4'>
-        {/* info */}
-        <div className='rounded-lg border border-border bg-card p-3'>
+        {/* info — tap 10x for dev paste mode */}
+        <div className='rounded-lg border border-border/40 bg-card p-3' onClick={handleSecretTap}>
           <p className='text-xs text-muted-foreground'>
             zafu zigner keeps spending keys offline. transactions require QR code signing with your device.
           </p>
@@ -193,20 +196,20 @@ export const SettingsZigner = () => {
             rel='noopener noreferrer'
             className='flex items-center gap-1.5 text-xs text-primary hover:underline mt-2'
           >
-            <ExternalLinkIcon className='h-3 w-3' />
+            <span className='i-lucide-external-link h-3 w-3' />
             download zafu zigner
           </a>
         </div>
 
         {/* penumbra wallets */}
         {zignerWallets.length > 0 && (
-          <div className='border-t border-border pt-4'>
+          <div className='border-t border-border/40 pt-4'>
             <p className='text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2'>penumbra</p>
             <div className='flex flex-col gap-1'>
               {zignerWallets.map(({ wallet, index }) => (
-                <div key={wallet.id} className='flex items-center justify-between border border-border/40 bg-card p-3'>
+                <div key={wallet.id} className='flex items-center justify-between rounded-lg border border-border/40 bg-card p-3'>
                   <div className='flex items-center gap-2 min-w-0'>
-                    <EyeOpenIcon className='size-3 text-purple-500 flex-shrink-0' />
+                    <span className='i-lucide-eye size-3 text-purple-500 flex-shrink-0' />
                     <span className='text-sm truncate'>{wallet.label}</span>
                   </div>
                   {confirmDelete === index ? (
@@ -225,7 +228,7 @@ export const SettingsZigner = () => {
                       title={all.length <= 1 ? 'cannot remove the last wallet' : 'remove wallet'}
                       className='p-1 text-muted-foreground hover:text-red-400 transition-colors disabled:opacity-50'
                     >
-                      <TrashIcon className='size-4' />
+                      <span className='i-lucide-trash-2 size-4' />
                     </button>
                   )}
                 </div>
@@ -236,15 +239,15 @@ export const SettingsZigner = () => {
 
         {/* zcash wallets */}
         {zcashWallets.length > 0 && (
-          <div className='border-t border-border pt-4'>
+          <div className='border-t border-border/40 pt-4'>
             <p className='text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2'>zcash</p>
             <div className='flex flex-col gap-1'>
               {zcashWallets.map((wallet, index) => (
-                <div key={wallet.id} className='flex items-center justify-between border border-border/40 bg-card p-3'>
+                <div key={wallet.id} className='flex items-center justify-between rounded-lg border border-border/40 bg-card p-3'>
                   <div className='flex items-center gap-2 min-w-0'>
-                    <EyeOpenIcon className='size-3 text-yellow-500 flex-shrink-0' />
+                    <span className='i-lucide-eye size-3 text-yellow-400 flex-shrink-0' />
                     <span className='text-sm truncate'>{wallet.label}</span>
-                    <span className='text-[10px] px-1 bg-muted text-muted-foreground'>
+                    <span className='text-[10px] px-1 rounded-md bg-muted text-muted-foreground'>
                       {wallet.mainnet ? 'mainnet' : 'testnet'}
                     </span>
                   </div>
@@ -253,7 +256,7 @@ export const SettingsZigner = () => {
                     title='remove wallet'
                     className='p-1 text-muted-foreground hover:text-red-400 transition-colors'
                   >
-                    <TrashIcon className='size-4' />
+                    <span className='i-lucide-trash-2 size-4' />
                   </button>
                 </div>
               ))}
@@ -263,17 +266,17 @@ export const SettingsZigner = () => {
 
         {/* cosmos wallets */}
         {cosmosVaults.length > 0 && (
-          <div className='border-t border-border pt-4'>
+          <div className='border-t border-border/40 pt-4'>
             <p className='text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2'>cosmos</p>
             <div className='flex flex-col gap-1'>
               {cosmosVaults.map(vault => {
                 const addrs = vault.insensitive['cosmosAddresses'] as
                   { chainId: string; address: string; prefix: string }[];
                 return (
-                  <div key={vault.id} className='flex items-center justify-between border border-border/40 bg-card p-3'>
+                  <div key={vault.id} className='flex items-center justify-between rounded-lg border border-border/40 bg-card p-3'>
                     <div className='flex flex-col gap-1 min-w-0'>
                       <div className='flex items-center gap-2'>
-                        <EyeOpenIcon className='size-3 text-pink-500 flex-shrink-0' />
+                        <span className='i-lucide-eye size-3 text-pink-500 flex-shrink-0' />
                         <span className='text-sm truncate'>{vault.name}</span>
                       </div>
                       {addrs.map(a => (
@@ -293,7 +296,7 @@ export const SettingsZigner = () => {
                       </div>
                     ) : (
                       <button onClick={() => setConfirmDeleteVault(vault.id)} className='p-1 text-muted-foreground hover:text-red-400 transition-colors'>
-                        <TrashIcon className='size-4' />
+                        <span className='i-lucide-trash-2 size-4' />
                       </button>
                     )}
                   </div>
@@ -305,15 +308,15 @@ export const SettingsZigner = () => {
 
         {/* polkadot wallets */}
         {polkadotVaults.length > 0 && (
-          <div className='border-t border-border pt-4'>
+          <div className='border-t border-border/40 pt-4'>
             <p className='text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2'>polkadot</p>
             <div className='flex flex-col gap-1'>
               {polkadotVaults.map(vault => {
                 const ss58 = vault.insensitive['polkadotSs58'] as string;
                 return (
-                  <div key={vault.id} className='flex items-center justify-between border border-border/40 bg-card p-3'>
+                  <div key={vault.id} className='flex items-center justify-between rounded-lg border border-border/40 bg-card p-3'>
                     <div className='flex items-center gap-2 min-w-0'>
-                      <EyeOpenIcon className='size-3 text-pink-500 flex-shrink-0' />
+                      <span className='i-lucide-eye size-3 text-pink-500 flex-shrink-0' />
                       <span className='text-sm truncate'>{vault.name}</span>
                       <span className='text-[10px] font-mono text-muted-foreground'>
                         {ss58.slice(0, 8)}...{ss58.slice(-6)}
@@ -330,7 +333,7 @@ export const SettingsZigner = () => {
                       </div>
                     ) : (
                       <button onClick={() => setConfirmDeleteVault(vault.id)} className='p-1 text-muted-foreground hover:text-red-400 transition-colors'>
-                        <TrashIcon className='size-4' />
+                        <span className='i-lucide-trash-2 size-4' />
                       </button>
                     )}
                   </div>
@@ -342,10 +345,10 @@ export const SettingsZigner = () => {
 
         {/* polkadot vault settings — only for polkadot/kusama users */}
         {hasPolkadot && (
-          <div className='border-t border-border pt-4'>
+          <div className='border-t border-border/40 pt-4'>
             <p className='text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2'>polkadot vault</p>
             <div className='flex flex-col gap-2'>
-              <div className='flex items-center justify-between border border-border/40 bg-card p-3'>
+              <div className='flex items-center justify-between rounded-lg border border-border/40 bg-card p-3'>
                 <div className='flex flex-col'>
                   <span className='text-sm'>legacy mode</span>
                   <span className='text-[10px] text-muted-foreground'>
@@ -358,7 +361,7 @@ export const SettingsZigner = () => {
                 />
               </div>
               {vaultLegacyMode && (
-                <div className='rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-3'>
+                <div className='rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-3'>
                   <p className='text-[10px] text-yellow-400 mb-1'>
                     legacy mode requires up-to-date metadata on your device
                   </p>
@@ -368,7 +371,7 @@ export const SettingsZigner = () => {
                     rel='noopener noreferrer'
                     className='flex items-center gap-1 text-[10px] text-primary hover:underline'
                   >
-                    <Link2Icon className='size-3' />
+                    <span className='i-lucide-link size-3' />
                     update metadata at novasama.io
                   </a>
                 </div>
@@ -379,13 +382,13 @@ export const SettingsZigner = () => {
 
         {/* success */}
         {success && (
-          <div className='rounded-lg border border-green-500/30 bg-green-500/5 p-3 text-xs text-green-400'>
+          <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-3 text-xs text-green-400'>
             wallet added successfully
           </div>
         )}
 
         {/* add wallet */}
-        <div className='border-t border-border pt-4'>
+        <div className='border-t border-border/40 pt-4'>
           <p className='text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2'>add wallet</p>
 
           {showManualInput && (
@@ -417,10 +420,10 @@ export const SettingsZigner = () => {
 
           {showScannedState && (
             <div className='flex flex-col gap-3'>
-              <div className='rounded-lg border border-green-500/30 bg-green-500/5 p-3'>
+              <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-3'>
                 <div className='flex items-center gap-2'>
                   <p className='text-xs text-green-400'>qr code scanned</p>
-                  <span className='text-[10px] px-1 bg-muted text-muted-foreground'>{detectedNetwork}</span>
+                  <span className='text-[10px] px-1 rounded-md bg-muted text-muted-foreground'>{detectedNetwork}</span>
                 </div>
                 <p className='text-[10px] text-muted-foreground mt-1 font-mono'>
                   {parsedCosmosExport ? (
@@ -455,7 +458,7 @@ export const SettingsZigner = () => {
           {showInitialState && (
             <div className='flex flex-col gap-2'>
               <Button variant='secondary' className='w-full' onClick={() => setScanning(true)}>
-                <CameraIcon className='size-4 mr-2' />
+                <span className='i-lucide-camera size-4 mr-2' />
                 scan QR code
               </Button>
               {errorMessage && <p className='text-xs text-red-400 text-center'>{errorMessage}</p>}
@@ -472,7 +475,7 @@ export const SettingsZigner = () => {
       </div>
 
       {scanning && (
-        <div className='border-t border-border pt-4'>
+        <div className='border-t border-border/40 pt-4'>
           <QrScanner
             inline
             onScan={handleQrScan}
