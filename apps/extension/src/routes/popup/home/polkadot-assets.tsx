@@ -124,7 +124,7 @@ export const PolkadotAssets = ({ publicKey, relay = 'polkadot' }: PolkadotAssets
         </button>
       </div>
 
-      <div className='border border-border/40 bg-card'>
+      <div className='rounded-lg border border-border/40 bg-card'>
         {balances.length === 0 ? (
           <div className='flex flex-col items-center justify-center py-6 text-center'>
             <span className='text-sm text-muted-foreground'>no balances</span>

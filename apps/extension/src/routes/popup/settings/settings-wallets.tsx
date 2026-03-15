@@ -253,7 +253,7 @@ const VaultRow = ({ vault, onRemove, onRename, disabled }: {
 /* ── shared ui ── */
 
 const RemovalCard = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <div className='border border-red-500/20 bg-card p-4'>
+  <div className='rounded-lg border border-red-500/20 bg-card p-4'>
     <div className='text-sm font-medium text-red-400 mb-2'>{title}</div>
     {children}
   </div>

@@ -183,7 +183,7 @@ export const SettingsZigner = () => {
     >
       <div className='flex flex-col gap-4'>
         {/* info */}
-        <div className='border border-border bg-card p-3'>
+        <div className='rounded-lg border border-border bg-card p-3'>
           <p className='text-xs text-muted-foreground'>
             zafu zigner keeps spending keys offline. transactions require QR code signing with your device.
           </p>
@@ -358,7 +358,7 @@ export const SettingsZigner = () => {
                 />
               </div>
               {vaultLegacyMode && (
-                <div className='border border-yellow-500/30 bg-yellow-500/5 p-3'>
+                <div className='rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-3'>
                   <p className='text-[10px] text-yellow-400 mb-1'>
                     legacy mode requires up-to-date metadata on your device
                   </p>
@@ -379,7 +379,7 @@ export const SettingsZigner = () => {
 
         {/* success */}
         {success && (
-          <div className='border border-green-500/30 bg-green-500/5 p-3 text-xs text-green-400'>
+          <div className='rounded-lg border border-green-500/30 bg-green-500/5 p-3 text-xs text-green-400'>
             wallet added successfully
           </div>
         )}
@@ -417,7 +417,7 @@ export const SettingsZigner = () => {
 
           {showScannedState && (
             <div className='flex flex-col gap-3'>
-              <div className='border border-green-500/30 bg-green-500/5 p-3'>
+              <div className='rounded-lg border border-green-500/30 bg-green-500/5 p-3'>
                 <div className='flex items-center gap-2'>
                   <p className='text-xs text-green-400'>qr code scanned</p>
                   <span className='text-[10px] px-1 bg-muted text-muted-foreground'>{detectedNetwork}</span>

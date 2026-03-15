@@ -332,7 +332,7 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
 
             {claimStatus === 'confirm' && claimInfo && (
               <div className='flex flex-col gap-3'>
-                <div className='border border-border bg-card p-3'>
+                <div className='rounded-lg border border-border bg-card p-3'>
                   <div className='text-xs text-muted-foreground'>Amount to receive</div>
                   <div className='text-lg font-semibold tabular-nums'>{claimDisplayAmount} UM</div>
                 </div>
