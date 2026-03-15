@@ -463,7 +463,7 @@ export const StakePage = () => {
         <p className='text-xl font-semibold'>{stakingBalance || '0'} {STAKING_TOKEN}</p>
         <button
           onClick={() => setAction('delegate')}
-          className='mt-2 w-full rounded bg-zigner-gold py-2 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light'
+          className='mt-2 w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light'
         >
           delegate
         </button>

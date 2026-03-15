@@ -409,7 +409,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         return (
           <div className="flex flex-col gap-4 p-4">
             <div className="flex items-center gap-2">
-              <button onClick={handleBack} className="p-1 hover:bg-muted rounded">
+              <button onClick={handleBack} className="p-1 hover:bg-muted rounded-lg">
                 <ArrowLeftIcon className="w-5 h-5" />
               </button>
               <h2 className="text-xl font-bold">review transaction</h2>
@@ -497,7 +497,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         return (
           <div className="flex flex-col gap-4 p-4">
             <div className="flex items-center gap-2">
-              <button onClick={handleBack} className="p-1 hover:bg-muted rounded">
+              <button onClick={handleBack} className="p-1 hover:bg-muted rounded-lg">
                 <ArrowLeftIcon className="w-5 h-5" />
               </button>
 <h2 className="text-xl font-bold">sign with zafu zigner</h2>
