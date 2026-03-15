@@ -57,7 +57,7 @@ export const SettingsNetworkEndpoints = () => {
                     [network.id]: e.target.value,
                   }))}
                   placeholder={`Enter ${network.name} endpoint`}
-                  className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  className="flex-1 rounded-lg border border-border bg-input px-3 py-2 text-sm focus:border-zigner-gold focus:outline-none"
                 />
                 {editingEndpoints[network.id] !== undefined && (
                   <button

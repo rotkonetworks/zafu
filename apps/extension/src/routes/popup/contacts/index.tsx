@@ -285,10 +285,10 @@ function AddressRow({
       </div>
 
       <div className='flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity'>
-        <button onClick={onEdit} className='p-1 rounded hover:bg-muted'>
+        <button onClick={onEdit} className='p-1 rounded hover:bg-muted transition-colors'>
           <Pencil1Icon className='h-3 w-3 text-muted-foreground' />
         </button>
-        <button onClick={onDelete} className='p-1 rounded hover:bg-muted'>
+        <button onClick={onDelete} className='p-1 rounded hover:bg-muted transition-colors'>
           <TrashIcon className='h-3 w-3 text-red-500' />
         </button>
       </div>
@@ -368,10 +368,10 @@ function ContactCard({
               <StarIcon className='h-4 w-4 text-muted-foreground' />
             )}
           </button>
-          <button onClick={onEditContact} className='p-1.5 rounded hover:bg-muted'>
+          <button onClick={onEditContact} className='p-1.5 rounded hover:bg-muted transition-colors'>
             <Pencil1Icon className='h-4 w-4 text-muted-foreground' />
           </button>
-          <button onClick={onDeleteContact} className='p-1.5 rounded hover:bg-muted'>
+          <button onClick={onDeleteContact} className='p-1.5 rounded hover:bg-muted transition-colors'>
             <TrashIcon className='h-4 w-4 text-red-500' />
           </button>
         </div>

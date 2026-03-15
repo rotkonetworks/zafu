@@ -324,7 +324,7 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
             <div className='flex items-center justify-between mb-4'>
               <h2 className='text-lg font-semibold'>Claim Unbonding Tokens</h2>
               {(claimStatus === 'confirm' || claimStatus === 'success' || claimStatus === 'error') && (
-                <button onClick={closeClaim} className='text-muted-foreground hover:text-foreground'>
+                <button onClick={closeClaim} className='text-muted-foreground hover:text-foreground transition-colors'>
                   <Cross2Icon className='h-4 w-4' />
                 </button>
               )}

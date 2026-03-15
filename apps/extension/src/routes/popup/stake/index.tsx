@@ -332,7 +332,7 @@ export const StakePage = () => {
         {/* header */}
         <div className='flex items-center justify-between'>
           <h2 className='text-lg font-semibold'>{isDelegate ? 'delegate' : 'undelegate'}</h2>
-          <button onClick={closeForm} className='text-muted-foreground hover:text-foreground'>
+          <button onClick={closeForm} className='text-muted-foreground hover:text-foreground transition-colors'>
             <Cross2Icon className='h-5 w-5' />
           </button>
         </div>

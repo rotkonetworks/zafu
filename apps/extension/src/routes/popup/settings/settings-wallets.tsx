@@ -120,7 +120,7 @@ export const SettingsWallets = () => {
               <input type='password' value={password} autoFocus
                 onChange={e => { setPassword(e.target.value); setPasswordError(false); }}
                 placeholder='password'
-                className='w-full bg-background border border-border/40 px-3 py-2 text-sm focus:outline-none focus:border-primary/50' />
+                className='w-full bg-input border border-border px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-zigner-gold' />
               {passwordError && <span className='text-xs text-red-400'>wrong password</span>}
               <div className='flex gap-2 mt-1'>
                 <Btn onClick={reset}>cancel</Btn>
