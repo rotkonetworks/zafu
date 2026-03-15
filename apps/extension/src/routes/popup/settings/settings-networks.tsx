@@ -1,14 +1,16 @@
 /**
- * settings page for managing enabled networks
+ * settings page for managing enabled networks + per-network endpoints
  */
 
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeftIcon, CheckIcon, PlusIcon } from '@radix-ui/react-icons';
+import { useState } from 'react';
 import { useStore } from '../../../state';
-import { selectEnabledNetworks, type NetworkType } from '../../../state/keyring';
+import { selectActiveNetwork, selectEnabledNetworks, selectSetActiveNetwork, type NetworkType } from '../../../state/keyring';
 import { isIbcNetwork } from '../../../state/keyring/network-types';
-import { NETWORKS } from '../../../config/networks';
+import { networksSelector, type NetworkId } from '../../../state/networks';
+import { NETWORKS, LAUNCHED_NETWORKS } from '../../../config/networks';
 import { cn } from '@repo/ui/lib/utils';
+import { SettingsScreen } from './settings-screen';
+import { PopupPath } from '../paths';
 
 /** color map for network indicators */
 const NETWORK_COLORS: Record<string, string> = {
@@ -27,93 +29,151 @@ const NETWORK_COLORS: Record<string, string> = {
 const getColorHex = (color: string): string =>
   NETWORK_COLORS[color] ?? '#6B7280';
 
-/** networks that are fully implemented */
-const READY_NETWORKS: NetworkType[] = ['penumbra', 'zcash', 'osmosis', 'noble', 'nomic', 'celestia'];
-
 export const SettingsNetworks = () => {
-  const navigate = useNavigate();
+  const activeNetwork = useStore(selectActiveNetwork);
   const enabledNetworks = useStore(selectEnabledNetworks);
+  const setActiveNetwork = useStore(selectSetActiveNetwork);
   const toggleNetwork = useStore(state => state.keyRing.toggleNetwork);
   const privacySetSetting = useStore(state => state.privacy.setSetting);
   const transparentEnabled = useStore(state => state.privacy.settings.enableTransparentBalances);
+  const { networks: networkState, setNetworkEndpoint } = useStore(networksSelector);
+
+  const [expandedNetwork, setExpandedNetwork] = useState<NetworkType | null>(null);
+  const [editingEndpoint, setEditingEndpoint] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const handleToggle = async (network: NetworkType) => {
     const wasEnabled = enabledNetworks.includes(network);
     await toggleNetwork(network);
-    // auto-enable transparent balance fetching when enabling (not disabling) an IBC chain
     if (!wasEnabled && isIbcNetwork(network) && !transparentEnabled) {
       await privacySetSetting('enableTransparentBalances', true);
+    }
+    // if enabling, auto-activate it (user probably wants to use it)
+    if (!wasEnabled) {
+      void setActiveNetwork(network);
+    }
+  };
+
+  const handleExpandToggle = (networkId: NetworkType) => {
+    if (expandedNetwork === networkId) {
+      setExpandedNetwork(null);
+    } else {
+      setExpandedNetwork(networkId);
+      const state = networkState[networkId as NetworkId];
+      setEditingEndpoint(state?.endpoint ?? '');
+    }
+  };
+
+  const handleSaveEndpoint = async (networkId: NetworkType) => {
+    setSaving(true);
+    try {
+      await setNetworkEndpoint(networkId as NetworkId, editingEndpoint);
+      setExpandedNetwork(null);
+    } finally {
+      setSaving(false);
     }
   };
 
   return (
-    <div className='flex flex-col'>
-      <div className='flex items-center gap-3 border-b border-border/40 px-4 py-3'>
-        <button
-          onClick={() => navigate(-1)}
-          className='text-muted-foreground transition-colors hover:text-foreground'
-        >
-          <ArrowLeftIcon className='h-5 w-5' />
-        </button>
-        <h1 className='text-lg font-medium'>manage networks</h1>
-      </div>
+    <SettingsScreen title='networks' backPath={PopupPath.SETTINGS}>
+      <div className='flex flex-col gap-1'>
+        {LAUNCHED_NETWORKS.map(networkId => {
+          const network = NETWORKS[networkId];
+          const isEnabled = enabledNetworks.includes(networkId);
+          const isActive = activeNetwork === networkId;
+          const isExpanded = expandedNetwork === networkId;
+          const state = networkState[networkId as NetworkId];
 
-      <div className='flex flex-col gap-4 p-4'>
-        {/* ready networks */}
-        <div>
-          <div className='mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground'>
-            available
-          </div>
-          <div className='flex flex-col gap-1'>
-            {READY_NETWORKS.map(networkId => {
-              const network = NETWORKS[networkId];
-              const isEnabled = enabledNetworks.includes(networkId);
-
-              return (
+          return (
+            <div key={networkId} className={cn(
+              'rounded-lg border overflow-hidden transition-colors',
+              isActive ? 'border-primary/60' : 'border-border/40',
+            )}>
+              {/* network row */}
+              <div className='flex items-center p-3'>
+                {/* name — click to set active (if enabled) */}
                 <button
-                  key={networkId}
-                  onClick={() => void handleToggle(networkId)}
-                  className={cn(
-                    'flex items-center justify-between p-3 rounded-lg border border-border/40 transition-colors',
-                    isEnabled ? 'bg-primary/5 border-primary/30' : 'hover:bg-muted/30'
-                  )}
+                  onClick={() => {
+                    if (isEnabled) void setActiveNetwork(networkId);
+                    else void handleToggle(networkId);
+                  }}
+                  className='flex flex-1 items-center gap-3'
                 >
-                  <div className='flex items-center gap-3'>
-                    <div
-                      className='h-3 w-3 rounded-full'
-                      style={{ backgroundColor: getColorHex(network.color) }}
-                    />
-                    <span className='font-medium'>{network.name}</span>
-                    {network.transparent && (
-                      <span className='text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-500 font-medium leading-none'>
-                        public
-                      </span>
-                    )}
-                  </div>
                   <div
+                    className={cn('h-3 w-3 rounded-full', isActive && 'ring-2 ring-primary/40 ring-offset-1 ring-offset-background')}
+                    style={{ backgroundColor: getColorHex(network.color) }}
+                  />
+                  <span className={cn('font-medium text-sm', !isEnabled && 'text-muted-foreground')}>{network.name}</span>
+                  {isActive && (
+                    <span className='text-[10px] px-1.5 py-0.5 rounded-md bg-primary/15 text-primary font-medium leading-none'>
+                      active
+                    </span>
+                  )}
+                  {network.transparent && (
+                    <span className='text-[10px] px-1.5 py-0.5 rounded-md bg-red-500/15 text-red-500 font-medium leading-none'>
+                      public
+                    </span>
+                  )}
+                </button>
+
+                <div className='flex items-center gap-2'>
+                  {/* endpoint expand button — only for enabled networks */}
+                  {isEnabled && (
+                    <button
+                      onClick={() => handleExpandToggle(networkId)}
+                      className={cn(
+                        'p-1 transition-colors',
+                        isExpanded ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
+                      )}
+                      title='configure endpoint'
+                    >
+                      <span className='i-lucide-settings-2 h-3.5 w-3.5' />
+                    </button>
+                  )}
+
+                  {/* checkbox — toggles enabled/disabled */}
+                  <button
+                    onClick={() => void handleToggle(networkId)}
                     className={cn(
                       'h-5 w-5 rounded border-2 flex items-center justify-center transition-colors',
                       isEnabled ? 'border-primary bg-primary' : 'border-muted-foreground/50'
                     )}
                   >
-                    {isEnabled && <CheckIcon className='h-3 w-3 text-primary-foreground' />}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+                    {isEnabled && <span className='i-lucide-check h-3 w-3 text-primary-foreground' />}
+                  </button>
+                </div>
+              </div>
 
-        {/* add custom chain - placeholder */}
-        <button
-          disabled
-          className='flex items-center justify-center gap-2 p-3 rounded-lg border border-dashed border-border/40 text-muted-foreground opacity-50 cursor-not-allowed'
-        >
-          <PlusIcon className='h-4 w-4' />
-          <span className='text-sm'>add custom chain (coming soon)</span>
-        </button>
+              {/* endpoint config — expanded */}
+              {isExpanded && isEnabled && (
+                <div className='border-t border-border/40 p-3 bg-muted/10'>
+                  <div className='text-[10px] text-muted-foreground mb-1'>endpoint</div>
+                  <div className='flex gap-2'>
+                    <input
+                      type='text'
+                      value={editingEndpoint}
+                      onChange={e => setEditingEndpoint(e.target.value)}
+                      placeholder={state?.endpoint ?? 'https://...'}
+                      className='flex-1 bg-input border border-border/40 px-2 py-1.5 text-xs font-mono focus:border-primary/50 focus:outline-none'
+                    />
+                    <button
+                      onClick={() => void handleSaveEndpoint(networkId)}
+                      disabled={saving}
+                      className='px-3 py-1.5 text-xs bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50'
+                    >
+                      {saving ? '...' : 'save'}
+                    </button>
+                  </div>
+                  {state?.syncDescription && (
+                    <p className='text-[10px] text-muted-foreground mt-1.5'>{state.syncDescription}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
-    </div>
+    </SettingsScreen>
   );
 };
 

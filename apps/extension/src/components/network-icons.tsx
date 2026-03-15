@@ -16,11 +16,22 @@ const PenumbraIcon = () => (
   </svg>
 );
 
-/** zcash shield icon */
+/** zcash logo — stylized Z with horizontal bars */
 const ZcashIcon = () => (
   <svg viewBox='0 0 32 32' className={iconClass}>
     <circle cx='16' cy='16' r='14' fill='#F4B728' />
-    <text x='16' y='21' textAnchor='middle' fill='white' fontSize='16' fontWeight='bold' fontFamily='sans-serif'>Z</text>
+    <g fill='white'>
+      {/* top bar */}
+      <rect x='10' y='9' width='12' height='1.8' rx='0.5' />
+      {/* diagonal */}
+      <polygon points='21,10.8 11,20.2 11,22.2 21,12.8' />
+      {/* bottom bar */}
+      <rect x='10' y='21.2' width='12' height='1.8' rx='0.5' />
+      {/* vertical stem top */}
+      <rect x='15' y='6' width='2' height='4' rx='0.5' />
+      {/* vertical stem bottom */}
+      <rect x='15' y='22' width='2' height='4' rx='0.5' />
+    </g>
   </svg>
 );
 

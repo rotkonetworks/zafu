@@ -129,8 +129,10 @@ async function createZignerWalletEntries(
         address: '',
         accountIndex: data.accountIndex,
         mainnet: !data.viewingKey.startsWith('uviewtest'),
+        vaultId,
       };
       await local.set('zcashWallets', [zcashWallet, ...existingZcashWallets]);
+      await local.set('activeZcashIndex', 0);
     } catch (e) {
       console.warn('[keyring] failed to create zcash wallet entry for zigner:', e);
     }
@@ -612,6 +614,15 @@ export const createKeyRingSlice = (
         await local.set('activeWalletIndex', matchingWalletIndex);
       }
 
+      // sync zcash wallet activeZcashIndex to match the selected vault
+      const zcashWallets = (await local.get('zcashWallets')) ?? [];
+      const matchingZcashIndex = zcashWallets.findIndex(
+        (w: { vaultId?: string }) => w.vaultId === vaultId
+      );
+      if (matchingZcashIndex >= 0) {
+        await local.set('activeZcashIndex', matchingZcashIndex);
+      }
+
       set(state => {
         state.keyRing.keyInfos = state.keyRing.keyInfos.map(k => ({
           ...k,
@@ -621,6 +632,10 @@ export const createKeyRingSlice = (
         // also update wallets.activeIndex in state
         if (matchingWalletIndex >= 0) {
           state.wallets.activeIndex = matchingWalletIndex;
+        }
+        // also update wallets.activeZcashIndex in state
+        if (matchingZcashIndex >= 0) {
+          state.wallets.activeZcashIndex = matchingZcashIndex;
         }
       });
     },
@@ -741,8 +756,9 @@ export const createKeyRingSlice = (
     },
 
     toggleNetwork: async (network: NetworkType) => {
-      const { enabledNetworks } = get().keyRing;
-      const newNetworks = enabledNetworks.includes(network)
+      const { enabledNetworks, activeNetwork } = get().keyRing;
+      const disabling = enabledNetworks.includes(network);
+      const newNetworks = disabling
         ? enabledNetworks.filter(n => n !== network)
         : [...enabledNetworks, network];
 
@@ -750,6 +766,11 @@ export const createKeyRingSlice = (
       set(state => {
         state.keyRing.enabledNetworks = newNetworks;
       });
+
+      // if disabling the currently active network, switch to another enabled one
+      if (disabling && activeNetwork === network && newNetworks.length > 0) {
+        await get().keyRing.setActiveNetwork(newNetworks[0]!);
+      }
     },
 
     setActiveNetwork: async (network: NetworkType) => {

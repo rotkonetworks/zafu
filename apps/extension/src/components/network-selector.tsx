@@ -3,11 +3,10 @@
  * solidjs-style: atomic selectors, composable primitives
  */
 
-import { ChevronDownIcon, PlusIcon } from '@radix-ui/react-icons';
 import { cn } from '@repo/ui/lib/utils';
 import { useStore } from '../state';
 import { selectEnabledNetworks, type NetworkType } from '../state/keyring';
-import { NETWORKS } from '../config/networks';
+import { NETWORKS, LAUNCHED_NETWORKS } from '../config/networks';
 import { Dropdown } from './primitives/dropdown';
 import { NetworkIcon } from './network-icons';
 
@@ -18,8 +17,8 @@ export interface NetworkInfo {
   testnet?: boolean;
 }
 
-/** derive supported networks from config */
-export const SUPPORTED_NETWORKS: NetworkInfo[] = (Object.keys(NETWORKS) as NetworkType[]).map(id => ({
+/** derive supported networks from config — only launched networks */
+export const SUPPORTED_NETWORKS: NetworkInfo[] = LAUNCHED_NETWORKS.map(id => ({
   id,
   name: NETWORKS[id].name,
   color: NETWORKS[id].color.replace('bg-', ''), // strip tailwind prefix for inline style
@@ -55,7 +54,7 @@ export const NetworkSelector = ({
           onClick={toggle}
           className={cn(
             'flex items-center gap-2 rounded-lg border border-border/40 bg-background/50 px-2.5 py-1.5 text-sm',
-            'transition-colors duration-75 hover:bg-accent',
+            'transition-colors hover:bg-muted/50',
             className
           )}
         >
@@ -64,12 +63,12 @@ export const NetworkSelector = ({
           {currentNetwork.testnet && (
             <span className='text-[10px] text-muted-foreground'>testnet</span>
           )}
-          <ChevronDownIcon className={cn('h-4 w-4 text-muted-foreground transition-transform duration-75', open && 'rotate-180')} />
+          <span className={cn('i-lucide-chevron-down h-4 w-4 text-muted-foreground transition-transform', open && 'rotate-180')} />
         </button>
       )}
     >
       {({ close }) => (
-        <div className='absolute right-0 top-full z-50 mt-1 w-52 rounded-lg border border-border bg-background shadow-lg'>
+        <div className='absolute right-0 top-full z-50 mt-1 w-52 max-h-60 overflow-y-auto rounded-lg border border-border/40 bg-background shadow-lg'>
           <div className='p-1'>
             <div className='px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground'>
               active networks
@@ -82,8 +81,8 @@ export const NetworkSelector = ({
                   close();
                 }}
                 className={cn(
-                  'flex w-full items-center justify-between px-2 py-1.5 text-sm transition-colors duration-75',
-                  network.id === currentNetwork.id ? 'bg-accent' : 'hover:bg-accent/50'
+                  'flex w-full items-center justify-between px-2 py-1.5 text-sm transition-colors',
+                  network.id === currentNetwork.id ? 'bg-muted/50' : 'hover:bg-muted/50'
                 )}
               >
                 <div className='flex items-center gap-2'>
@@ -101,15 +100,15 @@ export const NetworkSelector = ({
           </div>
 
           {onAddNetwork && (
-            <div className='border-t border-border p-1'>
+            <div className='border-t border-border/40 p-1'>
               <button
                 onClick={() => {
                   close();
                   onAddNetwork();
                 }}
-                className='flex w-full items-center gap-2 px-2 py-1.5 text-sm text-muted-foreground transition-colors duration-75 hover:bg-accent hover:text-foreground'
+                className='flex w-full items-center gap-2 px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground'
               >
-                <PlusIcon className='h-4 w-4' />
+                <span className='i-lucide-plus h-4 w-4' />
                 <span>add network</span>
               </button>
             </div>
