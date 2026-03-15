@@ -59,7 +59,7 @@ export const SelectAccount = ({ getAddrByIndex, index, setIndex }: SelectAccount
           <div className='mt-2 flex items-center justify-between'>
             <div className='flex items-center gap-2'>
               <IncognitoIcon fill='#BDB8B8' />
-              <p className='mt-1 font-bold'>IBC Deposit Address</p>
+              <p className='mt-1 font-medium'>IBC Deposit Address</p>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger>

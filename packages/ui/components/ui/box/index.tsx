@@ -63,7 +63,7 @@ export const Box = ({
         <div className='flex items-center justify-between'>
           {label && (
             <motion.div layout layoutId={layoutId ? `${layoutId}.label` : undefined}>
-              <div className='grow font-bold'>{label}</div>
+              <div className='grow font-medium'>{label}</div>
             </motion.div>
           )}
           {headerContent && (

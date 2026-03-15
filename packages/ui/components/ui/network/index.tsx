@@ -22,7 +22,7 @@ export const Network = ({ name, href }: NetworkProps) => {
     >
       <div
         className={
-          'flex items-center gap-4 rounded-lg border bg-background px-5 py-[7px] font-bold text-muted-foreground md:px-[25px] xl:px-[18px]'
+          'flex items-center gap-4 rounded-lg border bg-background px-5 py-[7px] font-medium text-muted-foreground md:px-[25px] xl:px-[18px]'
         }
       >
         <p className='grow truncate whitespace-nowrap'>{name}</p>

@@ -109,7 +109,7 @@ const SyncingState = ({
         <div className='flex gap-2'>
           <span
             className={cn(
-              'transition-all duration-300',
+              'transition-opacity duration-300',
               confident ? 'opacity-100' : 'opacity-0',
             )}
           >
@@ -159,7 +159,7 @@ const FullySyncedState = ({
             width='16'
             color='#134e4a'
             wrapperClass={cn(
-              'transition-all duration-300',
+              'transition-opacity duration-300',
               showLoader ? 'opacity-100' : 'opacity-0',
             )}
           />

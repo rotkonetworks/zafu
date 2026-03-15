@@ -46,8 +46,8 @@ const ThemeToggle: React.FC<ThemeToggleProps> = ({ className }) => {
     <button
       onClick={toggleTheme}
       className={cn(
-        'inline-flex items-center justify-center h-8 px-3 text-xs font-bold uppercase',
-        'border-2 transition-[background-color,color] duration-75',
+        'inline-flex items-center justify-center h-8 px-3 text-xs font-medium uppercase',
+        'border-2 transition-[background-color,color]',
         isDark
           ? 'border-[#f4a31e] bg-[#12121a] text-[#f4a31e] hover:bg-[#f4a31e] hover:text-black'
           : 'border-[#000066] bg-white text-[#000066] hover:bg-[#000066] hover:text-white',

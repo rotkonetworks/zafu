@@ -135,7 +135,7 @@ DialogContent.displayName = DialogPrimitive.Content.displayName;
 const DialogHeader = ({ children }: { children?: React.ReactNode }) => (
   <div
     className={cn(
-      'flex items-center gap-4 px-4 text-xl leading-[30px] font-headline font-semibold h-[70px] border-b shrink-0 overflow-hidden w-full',
+      'flex items-center gap-4 px-4 text-xl leading-[30px] font-headline font-medium h-[70px] border-b border-border/40 shrink-0 overflow-hidden w-full',
     )}
   >
     <DialogPrimitive.Close
@@ -167,7 +167,7 @@ const DialogTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Title
     ref={ref}
-    className={cn('text-lg font-semibold leading-none tracking-tight', className)}
+    className={cn('text-lg font-medium leading-none tracking-tight', className)}
     {...props}
   />
 ));

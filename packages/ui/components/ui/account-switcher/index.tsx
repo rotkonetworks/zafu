@@ -74,7 +74,7 @@ export const AccountSwitcher = ({
           className='size-6 hover:cursor-pointer'
         />
       </Button>
-      <div className='select-none text-center font-headline text-xl font-semibold leading-[30px]'>
+      <div className='select-none text-center font-headline text-xl font-medium leading-[30px]'>
         <div className='flex flex-row flex-wrap items-end gap-[6px]'>
           {account === 0 ? (
             <span>Main Account</span>
@@ -90,7 +90,7 @@ export const AccountSwitcher = ({
                     aria-disabled={!!filter}
                     variant='transparent'
                     type='number'
-                    className='mb-[3px] h-6 py-[2px] font-headline text-xl font-semibold leading-[30px]'
+                    className='mb-[3px] h-6 py-[2px] font-headline text-xl font-medium leading-[30px]'
                     onChange={e => {
                       /**
                        * Don't allow manual account number entry when there's a

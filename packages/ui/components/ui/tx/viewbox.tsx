@@ -12,7 +12,7 @@ export interface ViewBoxProps {
 }
 
 const Label = ({ label }: { label: string }) => (
-  <span className='text-lg font-bold text-gray-300'>{label}</span>
+  <span className='text-lg font-medium text-gray-300'>{label}</span>
 );
 
 export const ViewBox = ({ label, visibleContent, isOpaque }: ViewBoxProps) => {
@@ -48,7 +48,7 @@ export interface ViewSectionProps {
 export const ViewSection = ({ heading, children }: ViewSectionProps) => {
   return (
     <div className='grid gap-2'>
-      <div className='text-xl font-bold'>{heading}</div>
+      <div className='text-xl font-medium'>{heading}</div>
       {children}
     </div>
   );

@@ -73,7 +73,7 @@ const UnbondingTooltipContent = ({
 
   return (
     <div className='flex flex-col gap-2 font-normal text-left'>
-      <div className='font-bold text-white'>Unbonding Token</div>
+      <div className='font-medium text-white'>Unbonding Token</div>
       <div>
         <span className='text-muted-foreground'>Start: </span>
         <span className='text-white font-mono'>{info.startAt.toLocaleString()}</span>

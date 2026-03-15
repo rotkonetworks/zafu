@@ -10,7 +10,7 @@ export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
 
 const Card = React.forwardRef<HTMLDivElement, CardProps>(
   ({ className, gradient: _gradient, light, children, layout }, ref) => {
-    const baseClasses = 'border border-border p-[30px] overflow-hidden';
+    const baseClasses = 'border border-border/40 p-[30px] overflow-hidden';
     return (
       <motion.div
         layout={layout}
@@ -39,7 +39,7 @@ const CardTitle = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HT
   ({ className, ...props }, ref) => (
     <h3
       ref={ref}
-      className={cn('text-2xl leading-9 font-bold font-headline', className)}
+      className={cn('text-2xl leading-9 font-medium font-headline', className)}
       {...props}
     />
   ),

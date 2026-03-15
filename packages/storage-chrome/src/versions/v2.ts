@@ -56,7 +56,10 @@ type LOCAL = {
     address: string;
     accountIndex: number;
     mainnet: boolean;
+    vaultId?: string;
   }[];
+  /** Active zcash wallet index */
+  activeZcashIndex?: number;
   /** Polkadot zigner watch-only accounts */
   polkadotZignerAccounts?: {
     id: string;
