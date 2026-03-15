@@ -109,7 +109,7 @@ export const PopupIndex = () => {
           <PenumbraAccountPicker account={penumbraAccount} onChange={setPenumbraAccount} />
         )}
         {/* address + actions row */}
-        <div className='flex items-center justify-between border border-border/40 bg-card p-4'>
+        <div className='flex items-center justify-between rounded-lg border border-border/40 bg-card p-4'>
           <div>
             {activeNetwork !== 'zcash' && (
               <>
@@ -500,7 +500,7 @@ const ZcashContent = ({
   return (
     <div className='flex-1 flex flex-col gap-3'>
       {/* combined balance */}
-      <div className='border border-border/40 bg-card p-4'>
+      <div className='rounded-lg border border-border/40 bg-card p-4'>
         <div className='text-3xl font-semibold tabular-nums text-foreground'>
           {workerSyncHeight > 0 || totalZat > 0n
             ? `${totalZec.toFixed(8)} ZEC`
@@ -517,7 +517,7 @@ const ZcashContent = ({
 
       {/* transparent pool detail — only shown when transparent > 0 */}
       {transparentZat > 0n && (
-        <div className='border border-red-500/30 bg-red-500/5 p-3'>
+        <div className='rounded-lg border border-red-500/30 bg-red-500/5 p-3'>
           <div className='flex items-center justify-between'>
             <div className='flex items-center gap-2'>
               <span className='text-xs text-red-500'>transparent</span>
@@ -617,7 +617,7 @@ const ZcashContent = ({
 
       {/* sync pipeline — hidden when fully synced */}
       {!allSynced && (
-        <div className='border border-border/40 bg-card p-3'>
+        <div className='rounded-lg border border-border/40 bg-card p-3'>
           {syncError && (
             <div className='text-xs text-red-400 mb-2'>{syncError.message}</div>
           )}
@@ -710,7 +710,7 @@ const CosmosContent = ({ chainId }: { chainId: CosmosChainId }) => {
       {isLoading ? (
         <AssetListSkeleton rows={2} />
       ) : assetsData?.assets.length === 0 ? (
-        <div className='border border-border bg-card p-4'>
+        <div className='rounded-lg border border-border bg-card p-4'>
           <div className='flex items-center justify-between'>
             <div className='flex items-center gap-2'>
               <div className='h-8 w-8 bg-muted flex items-center justify-center'>
@@ -729,7 +729,7 @@ const CosmosContent = ({ chainId }: { chainId: CosmosChainId }) => {
       ) : (
         <div className='flex flex-col gap-1'>
           {assetsData?.assets.map(asset => (
-            <div key={asset.denom} className='border border-border bg-card p-4'>
+            <div key={asset.denom} className='rounded-lg border border-border bg-card p-4'>
               <div className='flex items-center justify-between'>
                 <div className='flex items-center gap-2'>
                   <div className='h-8 w-8 bg-muted flex items-center justify-center'>
@@ -828,7 +828,7 @@ function TxRow({ tx }: { tx: ParsedTransaction }) {
   return (
     <div
       className={cn(
-        'border border-border/30 bg-card p-3 transition-colors',
+        'rounded-lg border border-border/30 bg-card p-3 transition-colors',
         hasMemo ? 'cursor-pointer hover:border-border' : '',
       )}
       onClick={hasMemo ? () => setExpanded(e => !e) : undefined}
