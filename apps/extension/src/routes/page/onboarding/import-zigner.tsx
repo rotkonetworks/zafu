@@ -16,7 +16,6 @@ import { keyRingSelector, type ZignerZafuImport } from '../../../state/keyring';
 import { usePageNav } from '../../../utils/navigate';
 import { useCallback, useRef, useState } from 'react';
 import { QrScanner } from '../../../shared/components/qr-scanner';
-import { CameraIcon, EyeOpenIcon } from '@radix-ui/react-icons';
 import { LineWave } from 'react-loader-spinner';
 import { PagePath } from '../paths';
 import { setOnboardingValuesInStorage } from './persist-parameters';
@@ -183,10 +182,10 @@ title="Scan Zafu Zigner QR"
       <BackIcon className='float-left mb-4' onClick={handleBack} />
       <Card className={cn('p-6', 'w-[600px]')} gradient>
         <CardHeader className='items-center'>
-          <div onClick={handleIconClick} className='cursor-default'>
-            <EyeOpenIcon className='size-8 mb-2 text-muted-foreground' />
+          <div onClick={handleIconClick} className='cursor-pointer'>
+            <span className='i-lucide-eye size-8 mb-2 text-muted-foreground' />
           </div>
-          <CardTitle className='font-semibold'>Connect Zafu Zigner</CardTitle>
+          <CardTitle className='font-medium'>Connect Zafu Zigner</CardTitle>
           <CardDescription className='text-center'>
             {scanState === 'idle' && !showManualInput && !importing && (
               <>
@@ -217,7 +216,7 @@ title="Scan Zafu Zigner QR"
                   className='mt-4'
                   onClick={() => setScanState('scanning')}
                 >
-                  <CameraIcon className='size-5 mr-2' />
+                  <span className='i-lucide-camera size-5 mr-2' />
                   Scan QR Code
                 </Button>
 
@@ -283,7 +282,7 @@ title="Scan Zafu Zigner QR"
                   className='text-center'
                 />
 
-                <div className='rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3 text-sm text-yellow-200 text-left'>
+                <div className='rounded-lg border border-yellow-500/40 bg-yellow-500/10 p-3 text-sm text-yellow-400 text-left'>
                   <p className='font-medium'>Airgap Signer</p>
                   <p className='mt-1 text-muted-foreground text-xs'>
                     View balances and create transactions. Signing requires your Zafu Zigner device.
@@ -344,7 +343,7 @@ title="Scan Zafu Zigner QR"
                   className='text-center'
                 />
 
-                <div className='rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3 text-sm text-yellow-200 text-left'>
+                <div className='rounded-lg border border-yellow-500/40 bg-yellow-500/10 p-3 text-sm text-yellow-400 text-left'>
                   <p className='font-medium'>Airgap Signer</p>
                   <p className='mt-1 text-muted-foreground text-xs'>
                     View balances and create transactions. Signing requires your Zafu Zigner device.
@@ -407,7 +406,7 @@ title="Scan Zafu Zigner QR"
                   className='text-center'
                 />
 
-                <div className='rounded-lg border border-pink-500/30 bg-pink-500/10 p-3 text-sm text-pink-200 text-left'>
+                <div className='rounded-lg border border-pink-500/40 bg-pink-500/10 p-3 text-sm text-pink-200 text-left'>
                   <p className='font-medium'>Watch-Only Account</p>
                   <p className='mt-1 text-muted-foreground text-xs'>
                     View balances and create unsigned transactions. Signing requires your Zafu Zigner device via QR codes.
@@ -467,7 +466,7 @@ title="Scan Zafu Zigner QR"
                   className='text-center'
                 />
 
-                <div className='rounded-lg border border-pink-500/30 bg-pink-500/10 p-3 text-sm text-pink-200 text-left'>
+                <div className='rounded-lg border border-pink-500/40 bg-pink-500/10 p-3 text-sm text-pink-200 text-left'>
                   <p className='font-medium'>Watch-Only Account</p>
                   <p className='mt-1 text-muted-foreground text-xs'>
                     View balances and create unsigned transactions. Signing requires your Zafu Zigner device via QR codes.

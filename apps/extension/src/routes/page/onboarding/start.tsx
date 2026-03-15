@@ -23,10 +23,10 @@ export const OnboardingStart = () => {
       </div>
       <Card className='w-[400px] ' gradient>
         <CardHeader className='items-center'>
-          <CardTitle>Your Keys, Your Privacy</CardTitle>
+          <CardTitle>your keys, your privacy</CardTitle>
           <CardDescription className='text-center'>
-            Securely transact across Penumbra, Zcash, and more privacy-focused networks.
-            Your keys never leave your device.
+            securely transact across privacy-focused networks.
+            your keys never leave your device.
           </CardDescription>
         </CardHeader>
         <CardContent className='mt-6 grid gap-4'>

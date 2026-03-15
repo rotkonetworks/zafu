@@ -3,8 +3,6 @@ import { PagePath } from './paths';
 import { SplashPage } from '@repo/ui/components/ui/splash-page';
 import { Button } from '@repo/ui/components/ui/button';
 import { localExtStorage } from '@repo/storage-chrome/local';
-import { useStore } from '../../state';
-import { getDefaultFrontend } from '../../state/default-frontend';
 
 // Because Zustand initializes default empty (prior to persisted storage synced),
 // We need to manually check storage for accounts in the loader.
@@ -20,22 +18,17 @@ export const pageIndexLoader = async () => {
 };
 
 export const PageIndex = () => {
-  const defaultFrontendUrl = useStore(getDefaultFrontend);
-
   return (
     <SplashPage
-      title='Successful login'
-      description='Use your account to transact, stake, swap or market make.'
+      title='wallet ready'
+      description='you can close this tab and use zafu from the browser toolbar.'
     >
       <Button
-        variant='gradient'
+        variant='secondary'
         className='w-full'
-        onClick={() => {
-          window.open(defaultFrontendUrl, '_blank');
-          window.close();
-        }}
+        onClick={() => window.close()}
       >
-        Visit web app
+        close
       </Button>
     </SplashPage>
   );

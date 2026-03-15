@@ -31,7 +31,7 @@ export const ImportSeedPhrase = () => {
       <BackIcon className='float-left mb-4' onClick={() => navigate(-1)} />
       <Card className={cn('p-6', phrase.length === 12 ? 'w-[600px]' : 'w-[816px]')} gradient>
         <CardHeader className='items-center'>
-          <CardTitle className='font-semibold'>Import Wallet with Recovery Phrase</CardTitle>
+          <CardTitle className='font-medium'>Import Wallet with Recovery Phrase</CardTitle>
           <CardDescription>
             You can paste your full phrase into the first box and the rest will fill automatically.
           </CardDescription>

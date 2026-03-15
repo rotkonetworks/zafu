@@ -8,7 +8,6 @@ import {
 } from '@repo/ui/components/ui/card';
 import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
 import { cn } from '@repo/ui/lib/utils';
-import { CameraIcon, CheckCircledIcon, Cross1Icon } from '@radix-ui/react-icons';
 import { useState, useEffect } from 'react';
 import {
   checkCameraPermission,
@@ -56,14 +55,14 @@ export const GrantCamera = () => {
               state === 'granted' ? 'bg-green-500/20' : 'bg-primary/20'
             )}>
               {state === 'granted' ? (
-                <CheckCircledIcon className='size-10 text-green-500' />
+                <span className='i-lucide-check-circle size-10 text-green-400' />
               ) : state === 'denied' ? (
-                <Cross1Icon className='size-10 text-red-400' />
+                <span className='i-lucide-x size-10 text-red-400' />
               ) : (
-                <CameraIcon className='size-10 text-primary' />
+                <span className='i-lucide-camera size-10 text-primary' />
               )}
             </div>
-            <CardTitle className='font-semibold text-xl'>
+            <CardTitle className='font-medium text-xl'>
               {state === 'granted' && 'Camera Access Granted'}
               {state === 'denied' && 'Camera Access Denied'}
               {state === 'checking' && 'Checking Permission...'}
@@ -112,7 +111,7 @@ export const GrantCamera = () => {
                   className='w-full'
                   onClick={handleGrantAccess}
                 >
-                  <CameraIcon className='size-5 mr-2' />
+                  <span className='i-lucide-camera size-5 mr-2' />
                   Grant Camera Access
                 </Button>
               )}

@@ -11,7 +11,7 @@ const GrantCamera = lazy(() => import('./grant-camera').then(m => ({ default: m.
 // suspense fallback
 const LazyFallback = () => (
   <div className="flex h-full items-center justify-center">
-    <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+    <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
   </div>
 );
 

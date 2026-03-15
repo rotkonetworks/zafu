@@ -83,7 +83,7 @@ export const SetPassword = () => {
                 'Next'
               )}
             </Button>
-            {error && <div className='text-red-600'>{error}</div>}
+            {error && <div className='text-red-400'>{error}</div>}
           </form>
         </CardContent>
       </Card>
