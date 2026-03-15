@@ -101,6 +101,12 @@ export default {
         brown: {
           DEFAULT: 'var(--brown)',
         },
+        /* network-aware accent (changes with data-network attribute) */
+        'network-accent': {
+          DEFAULT: 'var(--network-accent)',
+          light: 'var(--network-accent-light)',
+          foreground: 'var(--network-accent-foreground)',
+        },
         /* zigner brand colors */
         zigner: {
           gold: 'var(--zigner-gold)',

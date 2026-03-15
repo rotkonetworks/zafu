@@ -1,6 +1,7 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+@unocss;
 
 @layer base {
   :root {
@@ -42,7 +43,12 @@
     --destructive-foreground: 0 0% 100%;
 
     --ring: 42 91% 55%;
-    --radius: 0;
+    --radius: 0.375rem;
+
+    /* network-aware accent (overridden by [data-network]) */
+    --network-accent: var(--zigner-gold);
+    --network-accent-light: var(--zigner-gold-light);
+    --network-accent-foreground: var(--zigner-dark);
 
     /* brand colors */
     --zigner-gold: #f4b728;
@@ -78,6 +84,52 @@
     --light-brown: #0a0a0a;
     --light-grey: #ccc;
     --brown: rgba(0, 0, 0, 0.8);
+  }
+
+  /* network-specific theming */
+  [data-network="zcash"] {
+    --network-accent: var(--zigner-gold);
+    --network-accent-light: var(--zigner-gold-light);
+    --network-accent-foreground: #0a0a0a;
+  }
+  [data-network="penumbra"] {
+    --network-accent: var(--teal);
+    --network-accent-light: var(--sand);
+    --network-accent-foreground: #0a0a0a;
+    --primary: 174 30% 48%;
+    --ring: 174 30% 48%;
+  }
+  [data-network="polkadot"],
+  [data-network="kusama"] {
+    --network-accent: #6b7280;
+    --network-accent-light: #9ca3af;
+    --network-accent-foreground: #ffffff;
+  }
+  [data-network="osmosis"] {
+    --network-accent: #a78bfa;
+    --network-accent-light: #c4b5fd;
+    --network-accent-foreground: #0a0a0a;
+  }
+  [data-network="celestia"] {
+    --network-accent: #7c3aed;
+    --network-accent-light: #a78bfa;
+    --network-accent-foreground: #ffffff;
+  }
+  [data-network="noble"] {
+    --network-accent: #60a5fa;
+    --network-accent-light: #93c5fd;
+    --network-accent-foreground: #0a0a0a;
+  }
+  [data-network="nomic"],
+  [data-network="bitcoin"] {
+    --network-accent: #f97316;
+    --network-accent-light: #fb923c;
+    --network-accent-foreground: #0a0a0a;
+  }
+  [data-network="ethereum"] {
+    --network-accent: #3b82f6;
+    --network-accent-light: #60a5fa;
+    --network-accent-foreground: #ffffff;
   }
 
   /* ensure full height for side panel and popup */
@@ -146,14 +198,9 @@
     text-decoration: underline;
   }
 
-  /* form elements - sharp, no radius */
+  /* form elements */
   input, textarea, select {
-    @apply bg-input text-foreground placeholder:text-muted-foreground rounded-none;
-  }
-
-  /* buttons - no radius, pragmatic */
-  button {
-    @apply rounded-none;
+    @apply bg-input text-foreground placeholder:text-muted-foreground;
   }
 
   code, pre {
@@ -245,7 +292,7 @@
     @apply outline-none ring-1 ring-primary ring-offset-1 ring-offset-background;
   }
 
-  /* 90s volvo pragmatic - sharp edges everywhere */
+  /* override for explicitly sharp elements */
   .sharp {
     @apply rounded-none;
   }
