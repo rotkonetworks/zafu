@@ -621,7 +621,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
         </div>
       )}
       {route && (
-        <div className='rounded-lg border border-border/50 bg-muted/20 p-3'>
+        <div className='rounded-lg border border-border/40 bg-muted/20 p-3'>
           <div className='flex items-center justify-between text-xs'>
             <span className='text-muted-foreground'>receive</span>
             <span className='font-mono'>

@@ -312,7 +312,7 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
             ) : (
               <div className='rounded-lg border border-border/40 bg-muted/10'>
                 {assetsData?.assets.map(asset => (
-                  <div key={asset.denom} className='flex items-center justify-between px-3 py-2 text-xs border-b border-border/20 last:border-0'>
+                  <div key={asset.denom} className='flex items-center justify-between px-3 py-2 text-xs border-b border-border/30 last:border-0'>
                     <span className='text-muted-foreground truncate max-w-[60%]'>
                       {asset.symbol}
                     </span>

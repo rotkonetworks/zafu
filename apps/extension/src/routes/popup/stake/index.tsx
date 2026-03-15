@@ -458,7 +458,7 @@ export const StakePage = () => {
       </div>
 
       {/* staking balance */}
-      <div className='rounded-lg border border-border/50 bg-muted/20 p-4'>
+      <div className='rounded-lg border border-border/40 bg-muted/20 p-4'>
         <p className='text-xs text-muted-foreground'>available to stake</p>
         <p className='text-xl font-semibold'>{stakingBalance || '0'} {STAKING_TOKEN}</p>
         <button
@@ -496,7 +496,7 @@ export const StakePage = () => {
               return (
                 <div
                   key={i}
-                  className='flex items-center justify-between rounded-lg border border-border/50 bg-muted/10 p-3'
+                  className='flex items-center justify-between rounded-lg border border-border/40 bg-muted/10 p-3'
                 >
                   <div className='min-w-0 flex-1'>
                     <p className='text-sm font-medium truncate'>{displayName}</p>

@@ -317,7 +317,7 @@ function ContactCard({
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className='rounded-lg border border-border/50 bg-card overflow-hidden'>
+    <div className='rounded-lg border border-border/40 bg-card overflow-hidden'>
       {/* header - always visible */}
       <div
         className='flex items-center justify-between p-3 cursor-pointer hover:bg-muted/30'

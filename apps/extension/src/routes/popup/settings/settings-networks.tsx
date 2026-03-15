@@ -107,7 +107,7 @@ export const SettingsNetworks = () => {
         {/* add custom chain - placeholder */}
         <button
           disabled
-          className='flex items-center justify-center gap-2 p-3 border border-dashed border-border/60 text-muted-foreground opacity-50 cursor-not-allowed'
+          className='flex items-center justify-center gap-2 p-3 border border-dashed border-border/40 text-muted-foreground opacity-50 cursor-not-allowed'
         >
           <PlusIcon className='h-4 w-4' />
           <span className='text-sm'>add custom chain (coming soon)</span>

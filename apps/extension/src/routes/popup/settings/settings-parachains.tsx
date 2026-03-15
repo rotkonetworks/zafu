@@ -185,7 +185,7 @@ export const SettingsParachains = () => {
             />
             <button
               onClick={() => fileInputRef.current?.click()}
-              className='flex items-center justify-center gap-2 p-3 border border-dashed border-border/60 hover:border-primary/50 hover:bg-muted/30 transition-colors'
+              className='flex items-center justify-center gap-2 p-3 border border-dashed border-border/40 hover:border-primary/50 hover:bg-muted/30 transition-colors'
             >
               <UploadIcon className='h-4 w-4' />
               <span className='text-sm'>upload chainspec json</span>

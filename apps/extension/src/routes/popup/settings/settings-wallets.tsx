@@ -103,7 +103,7 @@ export const SettingsWallets = () => {
         {/* add */}
         <button
           onClick={() => chrome.runtime.openOptionsPage()}
-          className='w-full border border-dashed border-border/50 py-2.5 text-xs text-muted-foreground hover:text-foreground hover:border-border transition-colors duration-100'
+          className='w-full border border-dashed border-border/40 py-2.5 text-xs text-muted-foreground hover:text-foreground hover:border-border transition-colors duration-100'
         >
           + add wallet
         </button>
@@ -191,7 +191,7 @@ const VaultSection = ({ label, vaults, onRemove, onRename, disabled }: {
 }) => (
   <div>
     <div className='text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5'>{label}</div>
-    <div className='flex flex-col divide-y divide-border/20 border border-border/40 bg-card'>
+    <div className='flex flex-col divide-y divide-border/30 border border-border/40 bg-card'>
       {vaults.map(v => (
         <VaultRow key={v.id} vault={v}
           onRemove={() => onRemove(v)}

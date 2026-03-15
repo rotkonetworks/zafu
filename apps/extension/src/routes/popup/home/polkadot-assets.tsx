@@ -29,7 +29,7 @@ interface PolkadotAssetsProps {
 
 /** single chain balance row */
 const ChainRow = memo(({ balance }: { balance: ChainBalance }) => (
-  <div className='flex items-center justify-between py-2 px-3 border-b border-border/20 last:border-0'>
+  <div className='flex items-center justify-between py-2 px-3 border-b border-border/30 last:border-0'>
     <div className='flex items-center gap-2'>
       <div className='h-6 w-6 bg-primary/10 flex items-center justify-center text-xs font-bold'>
         {balance.symbol.slice(0, 2)}
