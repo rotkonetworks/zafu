@@ -31,8 +31,9 @@ const initParallelWasm = async (): Promise<WasmModule> => {
     // the helpers do `new Worker(new URL('./workerHelpers.js', import.meta.url), { type: 'module' })`
     // but import.meta.url in the offscreen context resolves wrong.
     // we intercept and rewrite the URL to the correct absolute extension path.
+    // note: chrome.runtime is NOT available in nested Workers — use self.location.origin instead.
     const OriginalWorker = globalThis.Worker;
-    const extOrigin = chrome.runtime.getURL('/');
+    const extOrigin = self.location.origin + '/';
     globalThis.Worker = class PatchedWorker extends OriginalWorker {
       constructor(url: string | URL, options?: WorkerOptions) {
         let urlStr = url instanceof URL ? url.href : String(url);
@@ -42,7 +43,7 @@ const initParallelWasm = async (): Promise<WasmModule> => {
         if (!urlStr.startsWith(extOrigin) && !urlStr.startsWith('blob:')) {
           // strip leading slash, make absolute
           const relative = urlStr.startsWith('/') ? urlStr.slice(1) : urlStr;
-          urlStr = chrome.runtime.getURL(relative);
+          urlStr = extOrigin + relative;
           console.log('[zcash-build-parallel] patching worker URL →', urlStr);
         }
         super(urlStr, options);
@@ -52,8 +53,8 @@ const initParallelWasm = async (): Promise<WasmModule> => {
     try {
       // @ts-expect-error dynamic import — parallel WASM build with rayon + shared memory
       const wasm = await import(/* webpackIgnore: true */ '/zafu-wasm-parallel/zafu_wasm.js');
-      const memory = new WebAssembly.Memory({ initial: 43, maximum: 16384, shared: true });
-      await wasm.default({ module_or_path: `${WASM_BASE}/zafu_wasm_bg.wasm`, memory });
+      // let the JS glue create shared memory with its own initial/max settings
+      await wasm.default(`${WASM_BASE}/zafu_wasm_bg.wasm`);
       wasm.init();
 
       const numThreads = navigator.hardwareConcurrency || 4;

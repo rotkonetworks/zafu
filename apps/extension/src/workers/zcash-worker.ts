@@ -559,26 +559,41 @@ interface ZcashBuildRequest {
   args: unknown[];
 }
 
+// pending prove requests waiting for parent (network-worker) to relay response
+const pendingProveRequests = new Map<string, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
+let proveRequestCounter = 0;
+
 const proveViaOffscreen = async (req: ZcashBuildRequest): Promise<unknown> => {
-  // ensure offscreen document exists (only service worker can create it).
-  // always check — penumbra's releaseOffscreen() can close it between calls.
-  const ensureResult = await chrome.runtime.sendMessage({ type: 'ZCASH_ENSURE_OFFSCREEN' });
-  if (!ensureResult?.ok) {
-    throw new Error(`failed to activate offscreen: ${ensureResult?.error ?? 'unknown'}`);
-  }
-  // send directly to offscreen handler
-  const response = await chrome.runtime.sendMessage({
-    type: 'ZCASH_BUILD',
+  // web workers don't have chrome.runtime — relay through parent (network-worker/popup)
+  // which has chrome APIs and can forward to service worker → offscreen document
+  const id = `prove-${++proveRequestCounter}`;
+  const { promise, resolve, reject } = Promise.withResolvers<unknown>();
+  pendingProveRequests.set(id, { resolve, reject });
+
+  self.postMessage({
+    type: 'prove-request',
+    id,
     request: req,
   });
-  if (response?.error) {
-    throw new Error(response.error.message ?? JSON.stringify(response.error));
-  }
-  if (response?.data === undefined) {
-    throw new Error('offscreen returned no data — document may have been closed');
-  }
-  return response.data;
+
+  return promise;
 };
+
+// handle prove responses from parent
+self.addEventListener('message', (e: MessageEvent) => {
+  const msg = e.data;
+  if (msg?.type === 'prove-response' && msg.id) {
+    const pending = pendingProveRequests.get(msg.id);
+    if (pending) {
+      pendingProveRequests.delete(msg.id);
+      if (msg.error) {
+        pending.reject(new Error(msg.error));
+      } else {
+        pending.resolve(msg.data);
+      }
+    }
+  }
+});
 
 // ── ZIP-317 fee computation ──
 
@@ -1739,6 +1754,11 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
           emitProgress('building & proving transaction (halo2, parallel)', `${selected.length} spends`);
           const proveStart = performance.now();
+          // keep the clock ticking during proving so the UI doesn't look frozen
+          const provingTicker = setInterval(() => {
+            const elapsed = ((performance.now() - proveStart) / 1000).toFixed(0);
+            emitProgress('proving (halo2)', `${elapsed}s elapsed`);
+          }, 2000);
 
           let txHex: string;
           try {
@@ -1753,6 +1773,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           } catch (e) {
             console.error('[zcash-worker] build_signed_spend_transaction failed:', e);
             throw e;
+          } finally {
+            clearInterval(provingTicker);
           }
 
           const proveDuration = ((performance.now() - proveStart) / 1000).toFixed(1);

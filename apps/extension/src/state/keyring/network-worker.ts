@@ -25,7 +25,7 @@ export interface NetworkWorkerMessage {
 }
 
 export interface NetworkWorkerResponse {
-  type: 'ready' | 'address' | 'sync-progress' | 'send-progress' | 'sync-started' | 'sync-stopped' | 'sync-reset' | 'balance' | 'tx-result' | 'send-tx-unsigned' | 'shield-result' | 'shield-unsigned-result' | 'wallets' | 'wallet-deleted' | 'notes' | 'memos' | 'transparent-history' | 'history' | 'memos-result' | 'sync-memos-progress' | 'mempool-update' | 'error';
+  type: 'ready' | 'address' | 'sync-progress' | 'send-progress' | 'sync-started' | 'sync-stopped' | 'sync-reset' | 'balance' | 'tx-result' | 'send-tx-unsigned' | 'shield-result' | 'shield-unsigned-result' | 'wallets' | 'wallet-deleted' | 'notes' | 'memos' | 'transparent-history' | 'history' | 'memos-result' | 'sync-memos-progress' | 'mempool-update' | 'prove-request' | 'error';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -92,6 +92,14 @@ const spawnNetworkWorkerInner = async (network: NetworkType): Promise<void> => {
     if (msg.type === 'ready') {
       state.ready = true;
       console.log(`[network-worker] ${network} worker ready`);
+      return;
+    }
+
+    // relay prove requests from zcash-worker to offscreen via service worker
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (msg.type === 'prove-request' && (msg as any).id && (msg as any).request) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      void relayProveRequest(worker, (msg as any).id, (msg as any).request);
       return;
     }
 
@@ -511,6 +519,32 @@ export const isNetworkSyncing = (network: NetworkType): boolean => {
 export const isNetworkWorkerRunning = (network: NetworkType): boolean => {
   return workers.has(network);
 };
+
+/**
+ * relay a prove request from zcash-worker (Web Worker, no chrome APIs)
+ * through to the service worker → offscreen document for parallel proving.
+ */
+async function relayProveRequest(worker: Worker, id: string, request: unknown): Promise<void> {
+  try {
+    // 1. ensure offscreen document exists
+    const ensureResult = await chrome.runtime.sendMessage({ type: 'ZCASH_ENSURE_OFFSCREEN' });
+    if (!ensureResult?.ok) {
+      worker.postMessage({ type: 'prove-response', id, error: `failed to activate offscreen: ${ensureResult?.error ?? 'unknown'}` });
+      return;
+    }
+    // 2. send build request to offscreen handler
+    const response = await chrome.runtime.sendMessage({ type: 'ZCASH_BUILD', request });
+    if (response?.error) {
+      worker.postMessage({ type: 'prove-response', id, error: response.error.message ?? JSON.stringify(response.error) });
+    } else if (response?.data === undefined) {
+      worker.postMessage({ type: 'prove-response', id, error: 'offscreen returned no data' });
+    } else {
+      worker.postMessage({ type: 'prove-response', id, data: response.data });
+    }
+  } catch (e) {
+    worker.postMessage({ type: 'prove-response', id, error: e instanceof Error ? e.message : String(e) });
+  }
+}
 
 // worker URLs per network
 const getWorkerUrl = (network: NetworkType): string | null => {

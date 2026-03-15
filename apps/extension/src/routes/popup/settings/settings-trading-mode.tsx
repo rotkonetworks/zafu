@@ -76,7 +76,7 @@ export const SettingsTradingMode = () => {
     >
       <div className='flex flex-col gap-4'>
         {/* Info Box */}
-        <div className='rounded-lg border border-border bg-card-radial p-4'>
+        <div className='border border-border bg-card p-3'>
           <p className='text-sm text-muted-foreground'>
             Enable auto-signing for swap transactions from whitelisted sites. Sends and withdrawals
             always require manual approval.
@@ -85,7 +85,7 @@ export const SettingsTradingMode = () => {
 
         {/* Session Status */}
         {sessionActive && (
-          <div className='rounded-lg border border-green-500/30 bg-green-500/10 p-3'>
+          <div className='border border-green-500/30 bg-green-500/5 p-3'>
             <div className='flex items-center justify-between'>
               <div className='flex flex-col'>
                 <span className='text-sm font-medium text-green-400'>Session Active</span>
@@ -150,7 +150,7 @@ export const SettingsTradingMode = () => {
               <p className='text-sm font-bold mb-3'>Allowed Sites</p>
 
               {settings.allowedOrigins.length === 0 ? (
-                <div className='rounded-lg border border-border bg-card-radial p-3'>
+                <div className='border border-border/40 bg-card p-3'>
                   <p className='text-xs text-muted-foreground'>
                     No sites selected. Add at least one site to enable auto-signing.
                   </p>
@@ -160,7 +160,7 @@ export const SettingsTradingMode = () => {
                   {settings.allowedOrigins.map((origin: string) => (
                     <div
                       key={origin}
-                      className='flex items-center justify-between rounded-lg border border-border bg-card-radial p-3'
+                      className='flex items-center justify-between border border-border/40 bg-card p-3'
                     >
                       <span className='text-sm truncate'>{new URL(origin).hostname}</span>
                       <button
