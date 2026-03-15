@@ -167,29 +167,15 @@ export async function initializeEnabledNetworks(): Promise<void> {
     const zcashWallets = await localExtStorage.get('zcashWallets');
     const zignerWallets = await localExtStorage.get('zignerWallets');
 
-    // Auto-enable networks based on existing wallets
-    const networksToEnable: NetworkId[] = [];
-
-    if (wallets && wallets.length > 0) {
-      networksToEnable.push('penumbra');
-    }
-    if (zcashWallets && zcashWallets.length > 0) {
-      networksToEnable.push('zcash');
-    }
-    if (zignerWallets && zignerWallets.length > 0) {
-      // Check which networks zigner wallets have
-      for (const zw of zignerWallets) {
-        if (zw.networks.penumbra && !networksToEnable.includes('penumbra')) {
-          networksToEnable.push('penumbra');
-        }
-        if (zw.networks.zcash && !networksToEnable.includes('zcash')) {
-          networksToEnable.push('zcash');
-        }
-        if (zw.networks.polkadot && !networksToEnable.includes('polkadot')) {
-          networksToEnable.push('polkadot');
-        }
-      }
-    }
+    // Auto-enable networks based on existing wallets — declarative derivation
+    const zignerNetworks = (zignerWallets ?? []).flatMap(zw =>
+      (['penumbra', 'zcash', 'polkadot'] as const).filter(n => zw.networks[n])
+    );
+    const networksToEnable: NetworkId[] = [
+      ...((wallets?.length ?? 0) > 0 ? ['penumbra' as const] : []),
+      ...((zcashWallets?.length ?? 0) > 0 ? ['zcash' as const] : []),
+      ...zignerNetworks,
+    ].filter((n, i, arr) => arr.indexOf(n) === i);
 
     // Load the auto-detected networks
     await Promise.all(networksToEnable.map(loadAdapter));

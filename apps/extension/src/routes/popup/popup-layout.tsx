@@ -6,33 +6,24 @@ import { BottomTabs, BOTTOM_TABS_HEIGHT } from '../../components/bottom-tabs';
 import { AppHeader } from '../../components/app-header';
 import { MenuDrawer } from '../../components/menu-drawer';
 import { PopupPath } from './paths';
-import {
-  HomeIcon,
-  StackIcon,
-  MixIcon,
-  EnvelopeClosedIcon,
-} from '@radix-ui/react-icons';
 import { useStore } from '../../state';
 import { selectActiveNetwork, type NetworkType } from '../../state/keyring';
 import { hasFeature } from '../../config/networks';
 
-/** derive tabs from network features - solidjs-style computed */
-const getTabsForNetwork = (network: NetworkType) => {
-  const tabs = [
-    { path: PopupPath.INDEX, icon: <HomeIcon className='h-5 w-5' />, label: 'Home' },
-  ];
-  if (hasFeature(network, 'inbox')) {
-    tabs.push({ path: PopupPath.INBOX, icon: <EnvelopeClosedIcon className='h-5 w-5' />, label: 'Inbox' });
-  }
-  if (hasFeature(network, 'stake')) {
-    tabs.push({ path: PopupPath.STAKE, icon: <StackIcon className='h-5 w-5' />, label: 'Stake' });
-  }
-  if (hasFeature(network, 'swap')) {
-    tabs.push({ path: PopupPath.SWAP, icon: <MixIcon className='h-5 w-5' />, label: 'Swap' });
-  }
-  // history is shown inline on the home page — no separate tab
-  return tabs;
-};
+type FeatureKey = 'stake' | 'swap' | 'vote' | 'inbox';
+
+/** all possible tabs — each gated by a network feature */
+const ALL_TABS: ReadonlyArray<{ path: PopupPath; icon: JSX.Element; label: string; feature?: FeatureKey }> = [
+  { path: PopupPath.INDEX,  icon: <span className='i-lucide-home h-5 w-5' />,              label: 'Home' },
+  { path: PopupPath.INBOX,  icon: <span className='i-lucide-mail h-5 w-5' />,              label: 'Inbox',  feature: 'inbox' },
+  { path: PopupPath.STAKE,  icon: <span className='i-lucide-layers h-5 w-5' />,            label: 'Stake',  feature: 'stake' },
+  { path: PopupPath.SWAP,   icon: <span className='i-lucide-arrow-left-right h-5 w-5' />,  label: 'Swap',   feature: 'swap' },
+  { path: PopupPath.VOTE,   icon: <span className='i-lucide-vote h-5 w-5' />,              label: 'Vote',   feature: 'vote' },
+];
+
+/** derive tabs from network features — pure filter, no mutation */
+const getTabsForNetwork = (network: NetworkType) =>
+  ALL_TABS.filter(tab => !tab.feature || hasFeature(network, tab.feature));
 
 /** routes where bottom tabs should NOT be shown */
 const hiddenTabRoutes = [
@@ -69,7 +60,7 @@ export const PopupLayout = () => {
   const showTabs = showChrome && !matchesRoute(location.pathname, hiddenTabRoutes);
 
   return (
-    <div className='relative flex h-full flex-col bg-background contain-layout overflow-hidden'>
+    <div data-network={activeNetwork} className='relative flex h-full flex-col bg-background contain-layout overflow-hidden'>
       {showChrome && <AppHeader onMenuClick={() => setMenuOpen(true)} />}
       <div
         className='min-h-0 flex-1 overflow-y-auto transform-gpu'

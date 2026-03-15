@@ -26,12 +26,8 @@ const TabButton = memo(({
   <button
     onClick={() => onNavigate(tab.path)}
     className={cn(
-      // GPU-accelerated transform instead of color changes
       'flex flex-1 flex-col items-center justify-center gap-0.5',
-      'transform-gpu transition-transform duration-75',
-      'active:scale-90', // instant feedback
-      // CSS containment - isolate repaints
-      'contain-layout contain-paint',
+      'transition-colors',
       isActive ? 'text-primary' : 'text-muted-foreground'
     )}
   >

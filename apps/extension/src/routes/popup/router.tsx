@@ -18,6 +18,7 @@ const OriginApproval = lazy(() =>
 // lazy load tab pages
 const StakePage = lazy(() => import('./stake').then(m => ({ default: m.StakePage })));
 const SwapPage = lazy(() => import('./swap').then(m => ({ default: m.SwapPage })));
+const VotePage = lazy(() => import('./vote').then(m => ({ default: m.VotePage })));
 const InboxPage = lazy(() => import('./inbox').then(m => ({ default: m.InboxPage })));
 const ContactsPage = lazy(() => import('./contacts').then(m => ({ default: m.ContactsPage })));
 const SendPage = lazy(() => import('./send').then(m => ({ default: m.SendPage })));
@@ -54,6 +55,14 @@ export const popupRoutes: RouteObject[] = [
         element: (
           <Suspense fallback={<LazyFallback />}>
             <SwapPage />
+          </Suspense>
+        ),
+      },
+      {
+        path: PopupPath.VOTE,
+        element: (
+          <Suspense fallback={<LazyFallback />}>
+            <VotePage />
           </Suspense>
         ),
       },
