@@ -1500,7 +1500,7 @@ export function SendPage() {
               />
             </div>
 
-            <button className='mt-4 w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark transition-all duration-100 hover:bg-zigner-gold-light active:scale-[0.99]'>
+            <button className='mt-4 w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors disabled:opacity-50'>
               continue
             </button>
 

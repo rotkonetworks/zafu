@@ -170,7 +170,7 @@ function MessageRow({
                   onMarkRead();
                   setShowMenu(false);
                 }}
-                className='flex items-center gap-2 w-full px-3 py-1.5 text-sm hover:bg-muted'
+                className='flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-muted transition-colors'
               >
                 <CheckIcon className='h-4 w-4' />
                 mark read
@@ -183,7 +183,7 @@ function MessageRow({
                   onAddToContacts();
                   setShowMenu(false);
                 }}
-                className='flex items-center gap-2 w-full px-3 py-1.5 text-sm hover:bg-muted'
+                className='flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-muted transition-colors'
               >
                 <PersonIcon className='h-4 w-4' />
                 add to contacts
@@ -195,7 +195,7 @@ function MessageRow({
                 onDelete();
                 setShowMenu(false);
               }}
-              className='flex items-center gap-2 w-full px-3 py-1.5 text-sm text-red-500 hover:bg-muted'
+              className='flex items-center gap-2 w-full px-3 py-2 text-sm text-red-400 hover:bg-muted transition-colors'
             >
               <TrashIcon className='h-4 w-4' />
               delete
@@ -311,7 +311,7 @@ function MessageDetail({
           </div>
           <button
             onClick={onReply}
-            className='w-full flex items-center justify-center gap-2 rounded-lg bg-zigner-gold py-2.5 text-sm font-medium text-zigner-dark'
+            className='w-full flex items-center justify-center gap-2 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors'
           >
             <PaperPlaneIcon className='h-4 w-4' />
             reply
@@ -516,7 +516,7 @@ function ComposeMessage({
             }
           }}
           disabled={txStatus === 'idle' && !canSend || txStatus === 'sending'}
-          className='w-full flex items-center justify-center gap-2 rounded-lg bg-zigner-gold py-2.5 text-sm font-medium text-zigner-dark disabled:opacity-50'
+          className='w-full flex items-center justify-center gap-2 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
         >
           {txStatus === 'sending' ? (
             <>

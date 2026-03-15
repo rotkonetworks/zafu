@@ -251,7 +251,7 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
           const rect = chainBtnRef.current!.getBoundingClientRect();
           return (
             <div
-              className='fixed z-[999] rounded-lg border border-border bg-popover shadow-lg'
+              className='fixed z-[999] rounded-lg border border-border bg-background shadow-lg'
               style={{ top: rect.bottom + 4, left: rect.left, width: rect.width }}
             >
               {ibcChains.map(chain => (
@@ -342,7 +342,7 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
                   const rect = assetBtnRef.current!.getBoundingClientRect();
                   return (
                     <div
-                      className='fixed z-[999] rounded-lg border border-border bg-popover shadow-lg'
+                      className='fixed z-[999] rounded-lg border border-border bg-background shadow-lg'
                       style={{ top: rect.bottom + 4, left: rect.left, width: rect.width }}
                     >
                       {assetsData.assets.map(asset => (
@@ -422,7 +422,7 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
             <button
               onClick={handleShield}
               disabled={!canSubmit}
-              className='w-full rounded-lg bg-zigner-gold px-4 py-3 text-sm font-medium text-zigner-dark transition-colors duration-100 hover:bg-zigner-gold/90 disabled:opacity-50'
+              className='w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
             >
               {txStatus === 'signing' ? 'shielding...' : 'Shield Assets'}
             </button>
@@ -646,7 +646,7 @@ function ReceiveTab({ address, loading, activeNetwork }: {
                 <InfoCircledIcon className='h-3.5 w-3.5' />
               </button>
               {showTooltip && (
-                <div className='absolute left-1/2 top-6 z-50 w-72 -translate-x-1/2 rounded-lg border border-border bg-popover p-3 text-xs text-popover-foreground shadow-lg'>
+                <div className='absolute left-1/2 top-6 z-50 w-72 -translate-x-1/2 rounded-lg border border-border bg-background p-3 text-xs text-popover-foreground shadow-lg'>
                   <p className='mb-1.5 font-medium'>Your main address is stable.</p>
                   <p className='mb-1.5 text-muted-foreground'>
                     Anyone you share it with can recognize future payments to the same address.
@@ -699,7 +699,7 @@ function ReceiveTab({ address, loading, activeNetwork }: {
                   <InfoCircledIcon className='h-3.5 w-3.5' />
                 </button>
                 {showTransparentTooltip && (
-                  <div className='absolute left-1/2 top-6 z-50 w-72 -translate-x-1/2 rounded-lg border border-border bg-popover p-3 text-xs text-popover-foreground shadow-lg'>
+                  <div className='absolute left-1/2 top-6 z-50 w-72 -translate-x-1/2 rounded-lg border border-border bg-background p-3 text-xs text-popover-foreground shadow-lg'>
                     <p className='mb-1.5 font-medium'>Transparent addresses are fully visible on-chain.</p>
                     <p className='mb-1.5 text-muted-foreground'>
                       Anyone can see your balance and transaction history.

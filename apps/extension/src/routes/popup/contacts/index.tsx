@@ -86,8 +86,8 @@ function ContactModal({
   };
 
   return (
-    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50'>
-      <div className='w-full max-w-sm mx-4 rounded-xl bg-background border border-border p-4'>
+    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60'>
+      <div className='w-full max-w-sm mx-4 rounded-lg bg-background border border-border p-5 shadow-xl'>
         <h2 className='text-lg font-semibold mb-4'>
           {editContact ? 'edit contact' : 'new contact'}
         </h2>
@@ -166,8 +166,8 @@ function AddressModal({
   };
 
   return (
-    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50'>
-      <div className='w-full max-w-sm mx-4 rounded-xl bg-background border border-border p-4'>
+    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60'>
+      <div className='w-full max-w-sm mx-4 rounded-lg bg-background border border-border p-5 shadow-xl'>
         <h2 className='text-lg font-semibold mb-4'>
           {editAddress ? 'edit address' : 'add address'}
         </h2>
