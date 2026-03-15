@@ -18,7 +18,7 @@ export function PenumbraAccountPicker({
       <button
         disabled={account <= 0}
         onClick={() => onChange(account - 1)}
-        className='p-1 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30'
+        className='p-1 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50'
       >
         <ChevronLeftIcon className='h-4 w-4' />
       </button>
@@ -28,7 +28,7 @@ export function PenumbraAccountPicker({
       <button
         disabled={account >= MAX_ACCOUNT}
         onClick={() => onChange(account + 1)}
-        className='p-1 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30'
+        className='p-1 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50'
       >
         <ChevronRightIcon className='h-4 w-4' />
       </button>

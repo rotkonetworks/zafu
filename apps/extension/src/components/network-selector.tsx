@@ -54,7 +54,7 @@ export const NetworkSelector = ({
         <button
           onClick={toggle}
           className={cn(
-            'flex items-center gap-2 border border-border/50 bg-background/50 px-2.5 py-1.5 text-sm',
+            'flex items-center gap-2 rounded-lg border border-border/40 bg-background/50 px-2.5 py-1.5 text-sm',
             'transition-colors duration-75 hover:bg-accent',
             className
           )}
@@ -69,7 +69,7 @@ export const NetworkSelector = ({
       )}
     >
       {({ close }) => (
-        <div className='absolute right-0 top-full z-50 mt-1 w-52 border border-border bg-popover shadow-lg'>
+        <div className='absolute right-0 top-full z-50 mt-1 w-52 rounded-lg border border-border bg-background shadow-lg'>
           <div className='p-1'>
             <div className='px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground'>
               active networks

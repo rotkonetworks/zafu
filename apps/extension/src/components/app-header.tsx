@@ -80,7 +80,7 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
         )}
       >
         {({ close }) => (
-          <div className='absolute left-0 top-full mt-1 z-50 min-w-[140px] rounded border border-border bg-popover p-1 shadow-lg'>
+          <div className='absolute left-0 top-full mt-1 z-50 min-w-[140px] rounded-lg border border-border bg-background p-1 shadow-lg'>
             {enabledNetworks.map(network => {
               const info = getNetwork(network);
               return (
@@ -118,7 +118,7 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
         )}
       >
         {({ close }) => (
-          <div className='absolute left-1/2 -translate-x-1/2 top-full mt-1 z-50 min-w-[180px] max-h-[300px] overflow-y-auto rounded border border-border bg-popover p-1 shadow-lg'>
+          <div className='absolute left-1/2 -translate-x-1/2 top-full mt-1 z-50 min-w-[180px] max-h-[300px] overflow-y-auto rounded-lg border border-border bg-background p-1 shadow-lg'>
             {keyInfos.length > 0 && (
               <>
                 <div className='px-2 py-1 text-xs text-muted-foreground font-medium'>

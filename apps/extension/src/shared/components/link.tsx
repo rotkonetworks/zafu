@@ -13,7 +13,7 @@ export const CustomLink = ({ icon, title, onClick, disabled }: LinkProps) => {
     <Button
       variant='ghost'
       disabled={disabled}
-      className='flex w-full items-center justify-start gap-2 p-[10px] text-left hover:bg-transparent hover:opacity-50'
+      className='flex w-full items-center justify-start gap-2 p-[10px] text-left hover:bg-transparent hover:opacity-50 transition-opacity'
       onClick={onClick}
     >
       <div className='h-[22px]'>{icon}</div>
