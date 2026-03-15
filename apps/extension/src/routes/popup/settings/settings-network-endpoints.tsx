@@ -63,7 +63,7 @@ export const SettingsNetworkEndpoints = () => {
                   <button
                     onClick={() => handleSave(network.id)}
                     disabled={saving === network.id}
-                    className="rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                    className="rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
                   >
                     {saving === network.id ? '...' : 'Save'}
                   </button>

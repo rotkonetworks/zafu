@@ -69,7 +69,7 @@ export const Login = () => {
           <p className='text-center text-muted-foreground'>
             Need help? Visit{' '}
             <a
-              className='cursor-pointer text-teal hover:underline'
+              className='cursor-pointer text-teal hover:underline transition-colors'
               target='_blank'
               href='https://rotko.net'
               rel='noreferrer'

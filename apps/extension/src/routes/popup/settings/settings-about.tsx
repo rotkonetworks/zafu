@@ -29,7 +29,7 @@ export const SettingsAbout = () => {
               href="https://rotko.net"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-xs text-primary hover:underline"
+              className="flex items-center gap-1.5 text-xs text-primary hover:underline transition-colors"
             >
               <ExternalLinkIcon className="h-3 w-3" />
               rotko.net
@@ -38,7 +38,7 @@ export const SettingsAbout = () => {
               href="https://github.com/rotkonetworks/zafu"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-xs text-primary hover:underline"
+              className="flex items-center gap-1.5 text-xs text-primary hover:underline transition-colors"
             >
               <ExternalLinkIcon className="h-3 w-3" />
               github
@@ -47,7 +47,7 @@ export const SettingsAbout = () => {
               href="https://zigner.rotko.net"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-xs text-primary hover:underline"
+              className="flex items-center gap-1.5 text-xs text-primary hover:underline transition-colors"
             >
               <ExternalLinkIcon className="h-3 w-3" />
               zigner cold wallet

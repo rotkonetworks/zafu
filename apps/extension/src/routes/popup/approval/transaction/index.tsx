@@ -210,13 +210,13 @@ export const TransactionApproval = () => {
         {selectedTransactionViewName === TransactionViewTab.SENDER && (
           <>
             {hasTransparentAddress(selectedTransactionView) && (
-              <div className='mb-4 rounded border content-center border-yellow-500 p-2 text-sm text-yellow-500'>
+              <div className='mb-4 rounded-lg border content-center border-yellow-500/40 p-2 text-sm text-yellow-500'>
                 <h2>⚠ Privacy Warning</h2>
                 <p>This transaction uses a transparent address which may reduce privacy.</p>
               </div>
             )}
             {!hasAltGasFee(selectedTransactionView) && (
-              <div className='mb-4 rounded border content-center border-yellow-500 p-2 text-sm text-yellow-500'>
+              <div className='mb-4 rounded-lg border content-center border-yellow-500/40 p-2 text-sm text-yellow-500'>
                 <h2>⚠ Privacy Warning</h2>
                 <p>
                   Transaction uses a non-native fee token. To reduce gas costs and protect your
@@ -260,7 +260,7 @@ export const TransactionApproval = () => {
               Sign with Zigner
             </Button>
             <Button
-              className='w-1/2 py-3.5 text-base hover:bg-destructive/90'
+              className='w-1/2 py-3.5 text-base hover:bg-destructive/90 transition-colors'
               size='lg'
               variant='destructiveSecondary'
               onClick={deny}

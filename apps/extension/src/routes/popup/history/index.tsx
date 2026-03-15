@@ -101,7 +101,7 @@ function TransactionRow({ tx }: { tx: ParsedTransaction }) {
   const isShield = tx.type === 'shield';
 
   return (
-    <div className='flex items-center gap-3 rounded-lg border border-border/30 bg-card p-3 hover:border-border transition-colors'>
+    <div className='flex items-center gap-3 rounded-lg border border-border/40 bg-card p-3 hover:border-border transition-colors'>
       <div className={cn(
         'flex h-10 w-10 items-center justify-center rounded-full',
         isShield ? 'bg-blue-500/10' : isIncoming ? 'bg-green-500/10' : 'bg-muted/50'

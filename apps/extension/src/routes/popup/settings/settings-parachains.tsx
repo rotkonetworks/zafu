@@ -185,7 +185,7 @@ export const SettingsParachains = () => {
             />
             <button
               onClick={() => fileInputRef.current?.click()}
-              className='flex items-center justify-center gap-2 p-3 border border-dashed border-border/40 hover:border-primary/50 hover:bg-muted/30 transition-colors'
+              className='flex items-center justify-center gap-2 p-3 rounded-lg border border-dashed border-border/40 hover:border-primary/50 hover:bg-muted/30 transition-colors'
             >
               <UploadIcon className='h-4 w-4' />
               <span className='text-sm'>upload chainspec json</span>
@@ -203,7 +203,7 @@ export const SettingsParachains = () => {
                 {customChains.map(chain => (
                   <div
                     key={chain.id}
-                    className='flex items-center justify-between p-3 border border-border/40 text-left'
+                    className='flex items-center justify-between p-3 rounded-lg border border-border/40 text-left'
                   >
                     <div className='flex flex-col'>
                       <span className='font-medium text-sm'>{chain.name}</span>
@@ -242,7 +242,7 @@ export const SettingsParachains = () => {
                   key={chain.id}
                   onClick={() => void handleToggle(chain.id)}
                   className={cn(
-                    'flex items-center justify-between p-3 border border-border/40 transition-colors text-left',
+                    'flex items-center justify-between p-3 rounded-lg border border-border/40 transition-colors text-left',
                     isEnabled ? 'bg-primary/5 border-primary/30' : 'hover:bg-muted/30'
                   )}
                 >

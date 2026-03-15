@@ -76,7 +76,7 @@ function SettingsRow({
   return (
     <button
       onClick={onClick}
-      className='flex w-full items-center gap-3 py-3 text-left transition-colors duration-75 hover:opacity-70'
+      className='flex w-full items-center gap-3 py-3 text-left transition-colors duration-75 hover:bg-muted/30'
     >
       {icon}
       <span className='flex-1 text-sm text-foreground'>{title}</span>
