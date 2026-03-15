@@ -555,12 +555,12 @@ export function ContactsPage() {
 
       {/* header */}
       <div className='flex items-center justify-between px-4 py-3 border-b border-border/40'>
-        <div className='flex items-center gap-2'>
+        <div className='flex items-center gap-3'>
           <button
             onClick={() => navigate(PopupPath.INDEX)}
-            className='p-1 rounded hover:bg-muted/50'
+            className='text-muted-foreground transition-colors hover:text-foreground'
           >
-            <ArrowLeftIcon className='h-4 w-4' />
+            <ArrowLeftIcon className='h-5 w-5' />
           </button>
           <h1 className='text-lg font-medium'>contacts</h1>
         </div>

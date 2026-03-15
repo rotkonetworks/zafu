@@ -249,7 +249,7 @@ const ZcashCrosschainSwap = () => {
       {step === 'input' && (
         <>
           {/* FROM card */}
-          <div className='border border-border bg-muted/20 p-3'>
+          <div className='rounded-lg border border-border bg-muted/20 p-3'>
             <div className='flex items-center justify-between mb-2'>
               <span className='text-xs text-muted-foreground'>you send</span>
               {isFromZec && balanceZec && (
@@ -302,7 +302,7 @@ const ZcashCrosschainSwap = () => {
           </div>
 
           {/* TO card */}
-          <div className='border border-border bg-muted/20 p-3'>
+          <div className='rounded-lg border border-border bg-muted/20 p-3'>
             <div className='flex items-center justify-between mb-2'>
               <span className='text-xs text-muted-foreground'>you receive</span>
             </div>
@@ -330,7 +330,7 @@ const ZcashCrosschainSwap = () => {
 
           {/* token picker dropdown */}
           {tokenPickerOpen && (
-            <div className='border border-border bg-background max-h-48 overflow-y-auto -mt-2'>
+            <div className='rounded-lg border border-border bg-background max-h-48 overflow-y-auto -mt-2'>
               {sortedTokens.map((t) => (
                 <button
                   key={t.assetId}
@@ -355,7 +355,7 @@ const ZcashCrosschainSwap = () => {
           )}
 
           {/* destination address */}
-          <div className='border border-border bg-muted/20 p-3'>
+          <div className='rounded-lg border border-border bg-muted/20 p-3'>
             <div className='flex items-center justify-between mb-1'>
               <span className='text-xs text-muted-foreground'>
                 {isFromZec
@@ -438,7 +438,7 @@ const ZcashCrosschainSwap = () => {
       {(step === 'deposit' || step === 'polling') && quote && (
         <div className='flex flex-col gap-3'>
           {/* quote summary */}
-          <div className='border border-border bg-muted/20 p-3'>
+          <div className='rounded-lg border border-border bg-muted/20 p-3'>
             <div className='flex justify-between text-sm'>
               <span className='text-muted-foreground'>send</span>
               <span className='font-medium'>
@@ -460,7 +460,7 @@ const ZcashCrosschainSwap = () => {
           </div>
 
           {/* deposit address */}
-          <div className='border border-primary/30 bg-primary/5 p-3'>
+          <div className='rounded-lg border border-primary/30 bg-primary/5 p-3'>
             <div className='text-xs text-muted-foreground mb-1'>
               send {isFromZec ? 'ZEC' : selectedToken?.symbol} to this address
             </div>
@@ -475,7 +475,7 @@ const ZcashCrosschainSwap = () => {
           </div>
 
           {/* status */}
-          <div className='border border-border bg-muted/20 p-3'>
+          <div className='rounded-lg border border-border bg-muted/20 p-3'>
             <div className='flex items-center gap-2'>
               {step === 'polling' ? (
                 <UpdateIcon className='h-4 w-4 animate-spin text-primary' />
@@ -503,7 +503,7 @@ const ZcashCrosschainSwap = () => {
 
       {step === 'done' && (
         <div className='flex flex-col gap-3'>
-          <div className='border border-green-500/30 bg-green-500/10 p-3'>
+          <div className='rounded-lg border border-green-500/30 bg-green-500/10 p-3'>
             <p className='text-sm text-green-400'>swap complete</p>
             {quote && (
               <p className='text-xs text-muted-foreground mt-1'>
@@ -524,7 +524,7 @@ const ZcashCrosschainSwap = () => {
 
       {step === 'error' && (
         <div className='flex flex-col gap-3'>
-          <div className='border border-red-500/30 bg-red-500/10 p-3'>
+          <div className='rounded-lg border border-red-500/30 bg-red-500/10 p-3'>
             <p className='text-sm text-red-400'>swap failed</p>
             <p className='text-xs text-muted-foreground mt-1'>{error}</p>
           </div>
