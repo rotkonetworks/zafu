@@ -199,7 +199,7 @@ export const TransactionApproval = () => {
 
       <div className='grow overflow-auto p-4'>
         {invalidPlan && (
-          <div className='mb-4 rounded border content-center border-red-500 p-2 text-sm text-red-500 text-center'>
+          <div className='mb-4 rounded-lg border content-center border-red-400/30 p-2 text-sm text-red-400 text-center'>
             <h2>⚠ Invalid Transaction</h2>
             <p>
               {invalidPlan instanceof ConnectError ? invalidPlan.rawMessage : String(invalidPlan)}

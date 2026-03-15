@@ -540,7 +540,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
           )}
         />
         {recipient && !recipientValid && (
-          <p className='mt-1 text-xs text-red-500'>invalid cosmos address</p>
+          <p className='mt-1 text-xs text-red-400'>invalid cosmos address</p>
         )}
         {detectedChain && !destChainId && (
           <p className='mt-1 text-xs text-muted-foreground'>
@@ -643,7 +643,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
         </div>
       )}
       {routeError && (
-        <p className='text-xs text-red-500'>{(routeError as Error).message}</p>
+        <p className='text-xs text-red-400'>{(routeError as Error).message}</p>
       )}
 
 {/* transaction status */}
@@ -1059,7 +1059,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
           )}
         />
         {sendState.recipient && !addressValid && (
-          <p className='mt-1 text-xs text-red-500'>invalid penumbra address</p>
+          <p className='mt-1 text-xs text-red-400'>invalid penumbra address</p>
         )}
         <RecipientPicker
           network='penumbra'
@@ -1152,7 +1152,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
       </button>
 
       {sendState.error && txStatus === 'idle' && (
-        <p className='text-center text-xs text-red-500'>{sendState.error}</p>
+        <p className='text-center text-xs text-red-400'>{sendState.error}</p>
       )}
 
       <p className='text-center text-xs text-muted-foreground'>
@@ -1274,7 +1274,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
           )}
         />
         {ibcState.destinationAddress && !addressValid && (
-          <p className='mt-1 text-xs text-red-500'>invalid address for {ibcState.chain?.displayName}</p>
+          <p className='mt-1 text-xs text-red-400'>invalid address for {ibcState.chain?.displayName}</p>
         )}
         <RecipientPicker
           network='cosmos'
@@ -1401,7 +1401,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
       </button>
 
       {ibcState.error && txStatus === 'idle' && (
-        <p className='text-center text-xs text-red-500'>{ibcState.error}</p>
+        <p className='text-center text-xs text-red-400'>{ibcState.error}</p>
       )}
 
       <p className='text-center text-xs text-muted-foreground'>

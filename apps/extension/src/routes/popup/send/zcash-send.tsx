@@ -311,7 +311,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       case 'form':
         return (
           <div className="flex flex-col gap-4 p-4">
-            <h2 className="text-xl font-bold">send zcash</h2>
+            <h2 className="text-lg font-medium">send zcash</h2>
 
             <div className="flex flex-col gap-3">
               <div>
@@ -412,7 +412,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               <button onClick={handleBack} className="p-1 hover:bg-muted rounded-lg">
                 <ArrowLeftIcon className="w-5 h-5" />
               </button>
-              <h2 className="text-xl font-bold">review transaction</h2>
+              <h2 className="text-lg font-medium">review transaction</h2>
             </div>
 
             <div className="bg-card border border-border rounded-lg p-4 flex flex-col gap-3">
@@ -461,7 +461,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center animate-pulse">
               <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
             </div>
-            <h2 className="text-xl font-bold">building transaction</h2>
+            <h2 className="text-lg font-medium">building transaction</h2>
 
             {sendSteps.length > 0 ? (
               <div className="w-full max-w-sm flex flex-col gap-1">
@@ -500,7 +500,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               <button onClick={handleBack} className="p-1 hover:bg-muted rounded-lg">
                 <ArrowLeftIcon className="w-5 h-5" />
               </button>
-<h2 className="text-xl font-bold">sign with zafu zigner</h2>
+<h2 className="text-lg font-medium">sign with zafu zigner</h2>
             </div>
 
             <div className="flex flex-col items-center gap-4 py-4">
@@ -552,7 +552,7 @@ description="point camera at zafu zigner's signature qr code"
             <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center animate-pulse">
               <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
             </div>
-            <h2 className="text-xl font-bold">broadcasting transaction</h2>
+            <h2 className="text-lg font-medium">broadcasting transaction</h2>
             <p className="text-sm text-muted-foreground text-center">
               sending your transaction to the zcash network...
             </p>
@@ -565,7 +565,7 @@ description="point camera at zafu zigner's signature qr code"
             <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center">
               <CheckIcon className="w-8 h-8 text-green-500" />
             </div>
-            <h2 className="text-xl font-bold">transaction sent!</h2>
+            <h2 className="text-lg font-medium">transaction sent!</h2>
             <p className="text-sm text-muted-foreground text-center">
               {amount} zec sent successfully
               {totalElapsedSec !== null && ` in ${totalElapsedSec}s`}
@@ -660,10 +660,10 @@ description="point camera at zafu zigner's signature qr code"
       case 'error':
         return (
           <div className="flex flex-col items-center gap-4 p-8">
-            <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center">
-              <Cross1Icon className="w-8 h-8 text-red-500" />
+            <div className="w-16 h-16 rounded-full bg-red-400/20 flex items-center justify-center">
+              <Cross1Icon className="w-8 h-8 text-red-400" />
             </div>
-            <h2 className="text-xl font-bold">transaction failed</h2>
+            <h2 className="text-lg font-medium">transaction failed</h2>
             <p className="text-sm text-red-400 text-center">
               {formError || signingError || 'an error occurred'}
             </p>

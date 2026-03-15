@@ -407,7 +407,7 @@ const ZcashCrosschainSwap = () => {
           </div>
 
           {error && (
-            <p className='text-xs text-red-500'>{error}</p>
+            <p className='text-xs text-red-400'>{error}</p>
           )}
 
           <button
@@ -905,7 +905,7 @@ const PenumbraSwap = () => {
       )}
 
       {simError && (
-        <p className='text-xs text-red-500'>
+        <p className='text-xs text-red-400'>
           {(simError as Error).message || 'failed to simulate swap'}
         </p>
       )}
