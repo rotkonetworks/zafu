@@ -55,16 +55,18 @@ export const SettingsClearCache = () => {
     ? Math.round((clearingState.completed / clearingState.total) * 100)
     : 0;
 
-  const handleClearZcash = async (vault: KeyInfo) => {
-    setClearingKey(`${vault.id}:zcash`);
+  const handleClearZcash = async (_vault: KeyInfo) => {
+    setClearingKey(`${_vault.id}:zcash`);
     try {
       // terminate worker so in-memory commitment tree is dropped
-      terminateNetworkWorker('zcash');
+      try { terminateNetworkWorker('zcash'); } catch {}
       // delete IndexedDB databases (zcash sync data + memo cache)
       try { indexedDB.deleteDatabase('zafu-zcash'); } catch {}
       try { indexedDB.deleteDatabase('zafu-memo-cache'); } catch {}
+      // small delay for IDB deletion to settle
+      await new Promise(r => setTimeout(r, 500));
       // respawn worker fresh — sync will restart from birthday
-      await spawnNetworkWorker('zcash');
+      try { await spawnNetworkWorker('zcash'); } catch {}
     } finally {
       setClearingKey(null);
     }
