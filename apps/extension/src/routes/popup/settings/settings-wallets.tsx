@@ -40,8 +40,6 @@ export const SettingsWallets = () => {
   const {
     all: penumbraWallets,
     zcashWallets,
-    addAirgapSignerWallet,
-    addZcashWallet,
   } = useStore(walletsSelector);
   const {
     scanState,
@@ -171,9 +169,24 @@ export const SettingsWallets = () => {
     try {
       setIsAdding(true);
       if (detectedNetwork === 'penumbra' && walletImport) {
-        await addAirgapSignerWallet(walletImport);
+        // route through vault system so wallet gets vaultId and shows in wallet list
+        const fvkBytes = walletImport.fullViewingKey.inner;
+        const zignerData: ZignerZafuImport = {
+          fullViewingKey: btoa(String.fromCharCode(...fvkBytes)),
+          accountIndex: walletImport.accountIndex,
+          deviceId: `penumbra-${Date.now()}`,
+        };
+        await addZignerUnencrypted(zignerData, walletLabel || walletImport.label || 'zigner penumbra');
       } else if (detectedNetwork === 'zcash' && zcashWalletImport) {
-        await addZcashWallet(zcashWalletImport);
+        // route through vault system so wallet gets vaultId and shows in wallet list
+        const viewingKey = zcashWalletImport.ufvk
+          || (zcashWalletImport.orchardFvk ? btoa(String.fromCharCode(...zcashWalletImport.orchardFvk)) : undefined);
+        const zignerData: ZignerZafuImport = {
+          viewingKey,
+          accountIndex: zcashWalletImport.accountIndex,
+          deviceId: `zcash-${Date.now()}`,
+        };
+        await addZignerUnencrypted(zignerData, walletLabel || zcashWalletImport.label || 'zigner zcash');
       } else if (detectedNetwork === 'cosmos' && parsedCosmosExport) {
         const zignerData: ZignerZafuImport = {
           cosmosAddresses: parsedCosmosExport.addresses,
