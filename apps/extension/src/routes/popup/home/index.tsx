@@ -937,6 +937,7 @@ const HistoryContent = ({ network }: { network: NetworkType }) => {
   const walletId = selectedKeyInfo?.id;
   const isMainnet = !zidecarUrl.includes('testnet');
   const { tAddresses } = useTransparentAddresses(isMainnet);
+  const { workerSyncHeight } = useZcashSyncStatus();
 
   // build txId→memo lookup from messages store (for zcash)
   const memoByTxId = useMemo(() => {
@@ -971,7 +972,8 @@ const HistoryContent = ({ network }: { network: NetworkType }) => {
   });
 
   const zcashQ = useQuery({
-    queryKey: ['homeHistory', 'zcash', walletId, tAddresses.length],
+    // bucket sync height to avoid refetching on every block — refresh every 10k blocks
+    queryKey: ['homeHistory', 'zcash', walletId, tAddresses.length, Math.floor(workerSyncHeight / 10000)],
     enabled: network === 'zcash' && !!walletId,
     staleTime: 0,
     queryFn: async () => {

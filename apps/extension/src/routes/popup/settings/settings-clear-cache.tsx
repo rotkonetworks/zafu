@@ -6,7 +6,7 @@ import {
 import { useStore } from '../../../state';
 import { selectKeyInfos } from '../../../state/keyring';
 import { selectZcashWallets, selectPenumbraWallets } from '../../../state/wallets';
-import { deleteWalletInWorker } from '../../../state/keyring/network-worker';
+import { terminateNetworkWorker, spawnNetworkWorker } from '../../../state/keyring/network-worker';
 import { useState, useEffect } from 'react';
 import { SettingsScreen } from './settings-screen';
 import type { KeyInfo } from '../../../state/keyring';
@@ -58,10 +58,13 @@ export const SettingsClearCache = () => {
   const handleClearZcash = async (vault: KeyInfo) => {
     setClearingKey(`${vault.id}:zcash`);
     try {
-      const vaultZcash = zcashWallets.filter(w => w.vaultId === vault.id);
-      for (const w of vaultZcash) {
-        try { await deleteWalletInWorker('zcash', w.id); } catch {}
-      }
+      // terminate worker so in-memory commitment tree is dropped
+      terminateNetworkWorker('zcash');
+      // delete IndexedDB databases (zcash sync data + memo cache)
+      try { indexedDB.deleteDatabase('zafu-zcash'); } catch {}
+      try { indexedDB.deleteDatabase('zafu-memo-cache'); } catch {}
+      // respawn worker fresh — sync will restart from birthday
+      await spawnNetworkWorker('zcash');
     } finally {
       setClearingKey(null);
     }
