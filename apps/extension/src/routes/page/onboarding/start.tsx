@@ -19,7 +19,7 @@ export const OnboardingStart = () => {
         <h1 className='bg-text-linear bg-clip-text font-headline text-4xl font-bold text-transparent'>
           Zafu
         </h1>
-        <p className='text-muted-foreground'>Privacy-first multi-chain wallet</p>
+        <p className='text-muted-foreground'>privacy-first wallet</p>
       </div>
       <Card className='w-[400px] ' gradient>
         <CardHeader className='items-center'>
@@ -33,23 +33,23 @@ export const OnboardingStart = () => {
           <Button
             variant='gradient'
             className='w-full'
+            onClick={() => navigate(PagePath.IMPORT_ZIGNER)}
+          >
+            Connect Zafu Zigner (airgap)
+          </Button>
+          <Button
+            variant='secondary'
+            className='w-full'
             onClick={() => navigate(PagePath.GENERATE_SEED_PHRASE)}
           >
             Create new wallet
           </Button>
           <Button
-            variant='secondary'
+            variant='outline'
             className='w-full'
             onClick={() => navigate(PagePath.IMPORT_SEED_PHRASE)}
           >
             Import existing wallet
-          </Button>
-          <Button
-            variant='outline'
-            className='w-full'
-            onClick={() => navigate(PagePath.IMPORT_ZIGNER)}
-          >
-Connect Zafu Zigner (watch-only)
           </Button>
         </CardContent>
       </Card>
