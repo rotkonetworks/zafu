@@ -150,6 +150,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   };
 
   const handleSign = async () => {
+    let frostAbort: AbortController | null = null;
     if (!selectedKeyInfo) {
       setFormError('no wallet selected');
       return;
@@ -230,7 +231,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         const peerSharesPerAction: string[][] = Array.from({ length: numActions }, () => []);
         let signingPhase: 'commitments' | 'shares' | 'done' = 'commitments';
 
-        const abortController = new AbortController();
+        const abortController = frostAbort = new AbortController();
         void relay.joinRoom(room.roomCode, participantId, (event) => {
           if (event.type === 'message') {
             const text = new TextDecoder().decode(event.message.payload);
@@ -352,6 +353,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         setStep('sign');
       }
     } catch (err) {
+      frostAbort?.abort();
       setFormError(err instanceof Error ? err.message : 'failed to build transaction');
       setStep('error');
     }

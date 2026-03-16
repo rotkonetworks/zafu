@@ -33,6 +33,7 @@ export const MultisigSign = () => {
   const handleSign = async () => {
     if (!roomCode.trim() || !ms) return;
 
+    const abortController = new AbortController();
     try {
       const relayUrl = (typeof ms.relayUrl === 'string' ? ms.relayUrl : '') || 'https://zidecar.rotko.net';
       setStep('waiting');
@@ -54,8 +55,6 @@ export const MultisigSign = () => {
       // coordinator sends pipe-delimited commitments (one per action)
       let peerCommitmentBundle: string[] | null = null;
       let phase: 'init' | 'commitments' | 'done' = 'init';
-
-      const abortController = new AbortController();
       void relay.joinRoom(roomCode.trim(), participantId, (event) => {
         if (event.type === 'message') {
           const text = new TextDecoder().decode(event.message.payload);
@@ -117,11 +116,12 @@ export const MultisigSign = () => {
         await relay.sendMessage(roomCode.trim(), participantId, new TextEncoder().encode(`S:${i}:${share}`));
       }
 
-      abortController.abort();
       setStep('complete');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setStep('error');
+    } finally {
+      abortController.abort();
     }
   };
 
