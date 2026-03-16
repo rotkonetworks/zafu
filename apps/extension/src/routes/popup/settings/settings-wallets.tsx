@@ -249,6 +249,9 @@ export const SettingsWallets = () => {
           <MultisigWalletList wallets={zcashWallets.filter(w => w.multisig)} />
         )}
 
+        {/* ── zigner sync ── */}
+        {zcashWallets.length > 0 && <ZignerSyncButton />}
+
         {/* ── removal flow ── */}
 
         {removingVault && removingType === 'mnemonic' && step === 'password' && (
@@ -522,6 +525,28 @@ const VaultRow = ({ vault, networks, onRemove, onRename, disabled }: {
           />
         </div>
       )}
+    </div>
+  );
+};
+
+/* ── zigner sync button ── */
+
+const ZignerSyncButton = () => {
+  const navigate = usePopupNav();
+
+  return (
+    <div className='mt-4'>
+      <button
+        onClick={() => navigate(PopupPath.NOTE_SYNC)}
+        className='flex w-full items-center gap-3 rounded-lg border border-border/40 bg-card px-4 py-3 text-left hover:bg-muted/50 transition-colors'
+      >
+        <span className='i-lucide-qr-code size-5 text-primary' />
+        <div className='flex-1 min-w-0'>
+          <p className='text-sm font-medium'>sync balance to zigner</p>
+          <p className='text-[10px] text-muted-foreground'>transfer spendable notes via animated QR</p>
+        </div>
+        <span className='i-lucide-chevron-right size-4 text-muted-foreground' />
+      </button>
     </div>
   );
 };

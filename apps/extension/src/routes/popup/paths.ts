@@ -27,6 +27,7 @@ export enum PopupPath {
   MULTISIG_CREATE = '/multisig/create',
   MULTISIG_JOIN = '/multisig/join',
   MULTISIG_SIGN = '/multisig/sign',
+  NOTE_SYNC = '/note-sync',
 
   // Settings sub-pages (multisig)
   SETTINGS_MULTISIG = '/settings/multisig',

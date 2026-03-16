@@ -30,6 +30,7 @@ const CosmosSign = lazy(() => import('./cosmos-sign').then(m => ({ default: m.Co
 const MultisigCreate = lazy(() => import('./multisig/create').then(m => ({ default: m.MultisigCreate })));
 const MultisigJoin = lazy(() => import('./multisig/join').then(m => ({ default: m.MultisigJoin })));
 const MultisigSign = lazy(() => import('./multisig/sign').then(m => ({ default: m.MultisigSign })));
+const NoteSyncPage = lazy(() => import('./note-sync').then(m => ({ default: m.NoteSyncPage })));
 
 // suspense fallback for lazy routes
 const LazyFallback = () => (
@@ -148,6 +149,14 @@ export const popupRoutes: RouteObject[] = [
         element: (
           <Suspense fallback={<LazyFallback />}>
             <MultisigSign />
+          </Suspense>
+        ),
+      },
+      {
+        path: PopupPath.NOTE_SYNC,
+        element: (
+          <Suspense fallback={<LazyFallback />}>
+            <NoteSyncPage />
           </Suspense>
         ),
       },

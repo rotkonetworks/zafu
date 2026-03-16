@@ -28,6 +28,7 @@ export const QR_TYPE = {
   FVK_EXPORT: 0x01,
   SIGN_REQUEST: 0x02,
   SIGNATURES: 0x03,
+  NOTE_SYNC: 0x04,
 } as const;
 
 // ============================================================================
@@ -562,6 +563,156 @@ function writeUint32LE(data: Uint8Array, offset: number, value: number): void {
 function writeUint16LE(data: Uint8Array, offset: number, value: number): void {
   data[offset] = value & 0xff;
   data[offset + 1] = (value >> 8) & 0xff;
+}
+
+// ============================================================================
+// Zcash Note Sync (Balance Update for Zigner)
+// ============================================================================
+
+/**
+ * A spendable note to sync to the air-gapped device
+ */
+export interface SyncNote {
+  /** block height where note was mined */
+  height: number;
+  /** note value in zatoshis (as string for u64 precision) */
+  value: string;
+  /** 32-byte nullifier hex */
+  nullifier: string;
+  /** 32-byte note commitment hex */
+  cmx: string;
+  /** note position in the commitment tree */
+  position: number;
+}
+
+/**
+ * Encode spendable notes as compact binary for QR transfer.
+ * Uses a simple binary format — NOT the substrate-compat prelude
+ * since this goes through BC-UR multipart encoding.
+ *
+ * Format:
+ * ```
+ * [version: 1 byte]             - 0x01
+ * [flags: 1 byte]               - bit 0: mainnet
+ * [sync_height: 4 bytes LE]     - chain height at time of sync
+ * [note_count: 2 bytes LE]
+ * [per note:
+ *   height: 4 bytes LE
+ *   value: 8 bytes LE
+ *   nullifier: 32 bytes
+ *   cmx: 32 bytes
+ *   position: 4 bytes LE
+ * ]                              - 80 bytes per note
+ * ```
+ */
+export function encodeNoteSyncPayload(
+  notes: SyncNote[],
+  syncHeight: number,
+  mainnet: boolean,
+): Uint8Array {
+  const headerLen = 1 + 1 + 4 + 2; // version + flags + syncHeight + noteCount
+  const noteLen = 4 + 8 + 32 + 32 + 4; // 80 bytes per note
+  const totalLen = headerLen + notes.length * noteLen;
+  const output = new Uint8Array(totalLen);
+  let offset = 0;
+
+  // version
+  output[offset++] = 0x01;
+
+  // flags
+  output[offset++] = mainnet ? 0x01 : 0x00;
+
+  // sync height
+  writeUint32LE(output, offset, syncHeight);
+  offset += 4;
+
+  // note count
+  writeUint16LE(output, offset, notes.length);
+  offset += 2;
+
+  for (const note of notes) {
+    // height
+    writeUint32LE(output, offset, note.height);
+    offset += 4;
+
+    // value as uint64 LE
+    const val = BigInt(note.value);
+    for (let i = 0; i < 8; i++) {
+      output[offset + i] = Number((val >> BigInt(i * 8)) & 0xffn);
+    }
+    offset += 8;
+
+    // nullifier (32 bytes from hex)
+    const nf = hexToBytes(note.nullifier);
+    output.set(nf.subarray(0, 32), offset);
+    offset += 32;
+
+    // cmx (32 bytes from hex)
+    const cm = hexToBytes(note.cmx);
+    output.set(cm.subarray(0, 32), offset);
+    offset += 32;
+
+    // position
+    writeUint32LE(output, offset, note.position);
+    offset += 4;
+  }
+
+  return output;
+}
+
+/**
+ * Decode note sync payload back to notes.
+ * Used by the scanning device (Zigner) to reconstruct balance.
+ */
+export function decodeNoteSyncPayload(data: Uint8Array): {
+  notes: SyncNote[];
+  syncHeight: number;
+  mainnet: boolean;
+} {
+  if (data.length < 8) {
+    throw new Error('note sync payload too short');
+  }
+
+  let offset = 0;
+
+  const version = data[offset++]!;
+  if (version !== 0x01) {
+    throw new Error(`unsupported note sync version: ${version}`);
+  }
+
+  const flags = data[offset++]!;
+  const mainnet = (flags & 0x01) !== 0;
+
+  const syncHeight = readUint32LE(data, offset);
+  offset += 4;
+
+  const noteCount = readUint16LE(data, offset);
+  offset += 2;
+
+  const notes: SyncNote[] = [];
+  for (let i = 0; i < noteCount; i++) {
+    const height = readUint32LE(data, offset);
+    offset += 4;
+
+    let val = 0n;
+    for (let j = 0; j < 8; j++) {
+      val |= BigInt(data[offset + j]!) << BigInt(j * 8);
+    }
+    offset += 8;
+
+    const nullifier = bytesToHex(data.subarray(offset, offset + 32));
+    offset += 32;
+
+    const cmx = bytesToHex(data.subarray(offset, offset + 32));
+    offset += 32;
+
+    const position = readUint32LE(data, offset);
+    offset += 4;
+
+    notes.push({ height, value: val.toString(), nullifier, cmx, position });
+  }
+
+  return { notes, syncHeight, mainnet };
 }
 
 // ============================================================================
