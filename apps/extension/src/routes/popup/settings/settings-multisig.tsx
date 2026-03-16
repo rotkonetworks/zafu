@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useStore } from '../../../state';
 import { selectZcashWallets, walletsSelector } from '../../../state/wallets';
+import { deleteWalletInWorker } from '../../../state/keyring/network-worker';
 import { SettingsScreen } from './settings-screen';
 import { PopupPath } from '../paths';
 import { usePopupNav } from '../../../utils/navigate';
@@ -42,6 +43,12 @@ export const SettingsMultisig = () => {
   };
 
   const handleDelete = async () => {
+    // clean up IndexedDB note data before removing wallet record
+    try {
+      await deleteWalletInWorker('zcash', wallet.id);
+    } catch {
+      // worker may not be running — continue with removal
+    }
     await removeZcashWallet(walletIndex);
     navigate(PopupPath.SETTINGS_WALLETS);
   };

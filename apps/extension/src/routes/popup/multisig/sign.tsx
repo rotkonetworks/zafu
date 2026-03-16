@@ -95,6 +95,11 @@ export const MultisigSign = () => {
       setProgress('round 1: waiting for coordinator...');
       await waitFor(() => peerCommitmentBundle !== null, 120000);
 
+      // validate coordinator sent enough commitments
+      if (peerCommitmentBundle!.length < numActions) {
+        throw new Error(`coordinator sent ${peerCommitmentBundle!.length} commitments but ${numActions} actions needed`);
+      }
+
       // round 2: sign each action with its dedicated nonces
       phase = 'done'; // stop collecting messages
       setProgress('round 2: signing...');

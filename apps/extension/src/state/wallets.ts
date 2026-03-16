@@ -196,13 +196,12 @@ export const createWalletsSlice =
 
         // encrypt secret key material (keyPackage + ephemeralSeed) with password
         const passwordKey = await session.get('passwordKey');
-        let encKeyPackage: BoxJson | string = params.keyPackage;
-        let encEphemeralSeed: BoxJson | string = params.ephemeralSeed;
-        if (passwordKey) {
-          const key = await Key.fromJson(passwordKey);
-          encKeyPackage = (await key.seal(params.keyPackage)).toJson();
-          encEphemeralSeed = (await key.seal(params.ephemeralSeed)).toJson();
+        if (!passwordKey) {
+          throw new Error('password required to store multisig keys — unlock wallet first');
         }
+        const key = await Key.fromJson(passwordKey);
+        const encKeyPackage = (await key.seal(params.keyPackage)).toJson();
+        const encEphemeralSeed = (await key.seal(params.ephemeralSeed)).toJson();
 
         const newWallet: ZcashWalletJson = {
           id: crypto.randomUUID(),
