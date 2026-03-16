@@ -12,7 +12,7 @@ import {
   selectEnabledNetworks,
   selectEffectiveKeyInfo,
   selectSetActiveNetwork,
-  selectKeyInfos,
+  selectKeyInfosForActiveNetwork,
   selectSelectKeyRing,
 } from '../state/keyring';
 import { selectActiveZcashWallet } from '../state/wallets';
@@ -30,11 +30,12 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
   const setActiveNetwork = useStore(selectSetActiveNetwork);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const activeZcashWallet = useStore(selectActiveZcashWallet);
-  const keyInfos = useStore(selectKeyInfos);
+  const keyInfos = useStore(selectKeyInfosForActiveNetwork);
   const selectKeyRing = useStore(selectSelectKeyRing);
 
   const networkInfo = getNetwork(activeNetwork);
-  const walletName = activeNetwork === 'zcash'
+  // mnemonic vaults derive zcash keys directly — no zcash wallet record
+  const walletName = activeNetwork === 'zcash' && selectedKeyInfo?.type !== 'mnemonic'
     ? activeZcashWallet?.label ?? selectedKeyInfo?.name ?? 'no wallet'
     : selectedKeyInfo?.name ?? 'no wallet';
 

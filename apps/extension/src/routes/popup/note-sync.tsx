@@ -9,6 +9,7 @@
 import { useState, useEffect } from 'react';
 import { useStore } from '../../state';
 import { selectActiveZcashWallet } from '../../state/wallets';
+import { selectEffectiveKeyInfo } from '../../state/keyring';
 import { getNotesInWorker } from '../../state/keyring/network-worker';
 import { encodeNoteSyncPayload, type SyncNote } from '@repo/wallet/zcash-zigner';
 import { AnimatedQrDisplay } from '../../shared/components/animated-qr-display';
@@ -19,14 +20,18 @@ type Step = 'loading' | 'display' | 'error';
 
 export const NoteSyncPage = () => {
   const activeWallet = useStore(selectActiveZcashWallet);
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const [step, setStep] = useState<Step>('loading');
   const [payload, setPayload] = useState<Uint8Array | null>(null);
   const [noteCount, setNoteCount] = useState(0);
   const [balance, setBalance] = useState('0');
   const [error, setError] = useState('');
 
+  // sync uses vaultId (selectedKeyInfo.id), not zcash wallet id
+  const walletId = selectedKeyInfo?.id;
+
   useEffect(() => {
-    if (!activeWallet) {
+    if (!activeWallet || !walletId) {
       setError('no active zcash wallet');
       setStep('error');
       return;
@@ -34,7 +39,7 @@ export const NoteSyncPage = () => {
 
     void (async () => {
       try {
-        const allNotes = await getNotesInWorker('zcash', activeWallet.id);
+        const allNotes = await getNotesInWorker('zcash', walletId);
 
         // filter to unspent notes only
         const spendable = allNotes.filter(n => !n.spent);

@@ -92,8 +92,8 @@ export const PopupIndex = () => {
     setTimeout(() => setCopied(false), 1500);
   }, [address]);
 
-  // derive wallet name - zcash can come from zigner import OR mnemonic derivation
-  const walletName = activeNetwork === 'zcash'
+  // mnemonic vaults derive zcash keys directly — no zcash wallet record
+  const walletName = activeNetwork === 'zcash' && selectedKeyInfo?.type !== 'mnemonic'
     ? activeZcashWallet?.label ?? selectedKeyInfo?.name ?? 'no wallet'
     : selectedKeyInfo?.name ?? 'no wallet';
 
