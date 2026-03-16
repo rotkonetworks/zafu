@@ -9,7 +9,7 @@
  * - transparent: rpc only (polkadot, ethereum) - no local state needed
  */
 
-export type KeyType = 'mnemonic' | 'zigner-zafu' | 'ledger';
+export type KeyType = 'mnemonic' | 'zigner-zafu' | 'frost-multisig' | 'ledger' | 'trezor' | 'keystone';
 
 // re-export from network-types for convenience
 import type { NetworkType as NetworkTypeImport } from './network-types';

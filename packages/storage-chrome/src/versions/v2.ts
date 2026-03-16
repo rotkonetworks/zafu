@@ -117,7 +117,7 @@ type LOCAL = {
   /** keyring vaults (keplr-style multi-account) */
   vaults?: {
     id: string;
-    type: 'mnemonic' | 'zigner-zafu' | 'ledger';
+    type: 'mnemonic' | 'zigner-zafu' | 'frost-multisig' | 'ledger' | 'trezor' | 'keystone';
     name: string;
     createdAt: number;
     encryptedData: string;

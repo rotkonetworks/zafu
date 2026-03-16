@@ -36,8 +36,8 @@ export interface MultisigWallet {
   createdAt: number;
   /** participant pubkeys (hex ed25519, for display) */
   participants: string[];
-  /** links to parent vault if associated with a keyring */
-  vaultId?: string;
+  /** links to parent vault */
+  vaultId: string;
 }
 
 /** zcash wallet entry compatible with existing ZcashWalletJson */
@@ -49,7 +49,7 @@ export interface MultisigZcashWallet {
   accountIndex: number;
   mainnet: boolean;
   ufvk?: string;
-  vaultId?: string;
+  vaultId: string;
   /** multisig-specific fields */
   multisig: {
     threshold: number;
