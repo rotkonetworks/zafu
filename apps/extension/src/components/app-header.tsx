@@ -1,6 +1,7 @@
 /**
  * persistent app header — minimal, no dropdowns
- * tap wallet name → wallet settings, tap network dot → network settings
+ * tap network dot → cycle network
+ * tap wallet name → cycle wallet identity
  */
 
 import { useNavigate } from 'react-router-dom';
@@ -11,6 +12,8 @@ import {
   selectEnabledNetworks,
   selectEffectiveKeyInfo,
   selectSetActiveNetwork,
+  selectKeyInfos,
+  selectSelectKeyRing,
 } from '../state/keyring';
 import { selectActiveZcashWallet } from '../state/wallets';
 import { getNetwork } from '../config/networks';
@@ -27,13 +30,15 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
   const setActiveNetwork = useStore(selectSetActiveNetwork);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const activeZcashWallet = useStore(selectActiveZcashWallet);
+  const keyInfos = useStore(selectKeyInfos);
+  const selectKeyRing = useStore(selectSelectKeyRing);
 
   const networkInfo = getNetwork(activeNetwork);
   const walletName = activeNetwork === 'zcash'
     ? activeZcashWallet?.label ?? selectedKeyInfo?.name ?? 'no wallet'
     : selectedKeyInfo?.name ?? 'no wallet';
 
-  /** tap cycles through enabled networks, long-press goes to settings */
+  /** tap cycles through enabled networks */
   const cycleNetwork = () => {
     if (enabledNetworks.length <= 1) {
       navigate(PopupPath.SETTINGS_NETWORKS);
@@ -44,9 +49,21 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
     void setActiveNetwork(next);
   };
 
+  /** tap cycles through wallet identities */
+  const cycleWallet = () => {
+    if (keyInfos.length <= 1) {
+      navigate(PopupPath.SETTINGS_WALLETS);
+      return;
+    }
+    const currentId = selectedKeyInfo?.id;
+    const idx = keyInfos.findIndex(k => k.id === currentId);
+    const next = keyInfos[(idx + 1) % keyInfos.length]!;
+    void selectKeyRing(next.id);
+  };
+
   return (
     <header className='sticky top-0 z-50 flex shrink-0 items-center justify-between px-3 py-2 border-b border-border/40 bg-background/80 backdrop-blur-sm'>
-      {/* network indicator — tap to cycle, holds network dots for all enabled */}
+      {/* network indicator — tap to cycle */}
       <button
         onClick={cycleNetwork}
         className='flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-muted/50 transition-colors'
@@ -67,12 +84,26 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
         <span className='text-sm font-medium'>{networkInfo.name}</span>
       </button>
 
-      {/* wallet name — tap to manage wallets */}
+      {/* wallet name — tap to cycle identity, shows dot per vault */}
       <button
-        onClick={() => navigate(PopupPath.SETTINGS_WALLETS)}
-        className='flex-1 mx-2 px-2 py-1 rounded-lg hover:bg-muted/50 transition-colors text-center'
+        onClick={cycleWallet}
+        className='flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-muted/50 transition-colors'
+        title={`${walletName} — tap to switch wallet`}
       >
-        <span className='text-sm font-medium truncate block max-w-[140px] mx-auto'>{walletName}</span>
+        {keyInfos.length > 1 && (
+          <div className='flex items-center gap-0.5'>
+            {keyInfos.map(k => (
+              <div
+                key={k.id}
+                className={cn(
+                  'rounded-full bg-foreground transition-all',
+                  k.id === selectedKeyInfo?.id ? 'h-1.5 w-1.5' : 'h-1 w-1 opacity-30',
+                )}
+              />
+            ))}
+          </div>
+        )}
+        <span className='text-sm font-medium truncate max-w-[120px]'>{walletName}</span>
       </button>
 
       {/* menu */}
