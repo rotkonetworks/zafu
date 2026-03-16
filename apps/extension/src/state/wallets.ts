@@ -1,5 +1,5 @@
 import { Key } from '@repo/encryption/key';
-import { Box } from '@repo/encryption/box';
+import { Box, type BoxJson } from '@repo/encryption/box';
 import { Wallet, type WalletJson } from '@repo/wallet';
 // Dynamic import to avoid bundling WASM into initial chunks
 // import { generateSpendKey, getFullViewingKey, getWalletId } from '@rotko/penumbra-wasm/keys';
@@ -23,12 +23,12 @@ export interface ZcashWalletJson {
   vaultId?: string;
   /** FROST multisig fields — present only for multisig wallets */
   multisig?: {
-    /** hex-encoded FROST key package (secret, per-participant) */
-    keyPackage: string;
-    /** hex-encoded FROST public key package (shared, identifies the group) */
+    /** FROST key package — encrypted BoxJson when password is set, raw hex string otherwise */
+    keyPackage: BoxJson | string;
+    /** hex-encoded FROST public key package (shared, non-sensitive) */
     publicKeyPackage: string;
-    /** hex-encoded ephemeral seed for nonce generation */
-    ephemeralSeed: string;
+    /** ephemeral seed — encrypted BoxJson when password is set, raw hex string otherwise */
+    ephemeralSeed: BoxJson | string;
     /** signing threshold */
     threshold: number;
     /** total signers */
@@ -73,6 +73,8 @@ export interface WalletsSlice {
   setActiveWallet: (index: number) => Promise<void>;
   /** Switch to a different Zcash wallet by index */
   setActiveZcashWallet: (index: number) => Promise<void>;
+  /** Decrypt multisig key material (requires password) */
+  getMultisigSecrets: (walletId: string) => Promise<{ keyPackage: string; ephemeralSeed: string } | null>;
   getSeedPhrase: () => Promise<string[]>;
 }
 
@@ -192,6 +194,16 @@ export const createWalletsSlice =
       addMultisigWallet: async (params) => {
         const existingZcashWallets = (await local.get('zcashWallets')) ?? [];
 
+        // encrypt secret key material (keyPackage + ephemeralSeed) with password
+        const passwordKey = await session.get('passwordKey');
+        let encKeyPackage: BoxJson | string = params.keyPackage;
+        let encEphemeralSeed: BoxJson | string = params.ephemeralSeed;
+        if (passwordKey) {
+          const key = await Key.fromJson(passwordKey);
+          encKeyPackage = (await key.seal(params.keyPackage)).toJson();
+          encEphemeralSeed = (await key.seal(params.ephemeralSeed)).toJson();
+        }
+
         const newWallet: ZcashWalletJson = {
           id: crypto.randomUUID(),
           label: params.label,
@@ -200,9 +212,9 @@ export const createWalletsSlice =
           accountIndex: 0,
           mainnet: true,
           multisig: {
-            keyPackage: params.keyPackage,
-            publicKeyPackage: params.publicKeyPackage,
-            ephemeralSeed: params.ephemeralSeed,
+            keyPackage: encKeyPackage,
+            publicKeyPackage: params.publicKeyPackage, // public — no encryption needed
+            ephemeralSeed: encEphemeralSeed,
             threshold: params.threshold,
             maxSigners: params.maxSigners,
             relayUrl: params.relayUrl,
@@ -267,6 +279,28 @@ export const createWalletsSlice =
         });
 
         await local.set('activeZcashIndex', index);
+      },
+
+      getMultisigSecrets: async (walletId: string) => {
+        const wallet = get().wallets.zcashWallets.find(w => w.id === walletId);
+        if (!wallet?.multisig) return null;
+
+        const { keyPackage: kp, ephemeralSeed: es } = wallet.multisig;
+
+        // if stored as plain strings (pre-encryption or no password), return directly
+        if (typeof kp === 'string' && typeof es === 'string') {
+          return { keyPackage: kp, ephemeralSeed: es };
+        }
+
+        // encrypted BoxJson — need password to decrypt
+        const passwordKey = await session.get('passwordKey');
+        if (!passwordKey) throw new Error('password required to access multisig keys');
+
+        const key = await Key.fromJson(passwordKey);
+        return {
+          keyPackage: await key.unseal(Box.fromJson(kp as BoxJson)) as string,
+          ephemeralSeed: await key.unseal(Box.fromJson(es as BoxJson)) as string,
+        };
       },
 
       removeWallet: async (index: number) => {

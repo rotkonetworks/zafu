@@ -33,8 +33,14 @@ export const MultisigSign = () => {
     if (!roomCode.trim() || !ms) return;
 
     try {
-      const relayUrl = ms.relayUrl || 'https://zidecar.rotko.net';
+      const relayUrl = (typeof ms.relayUrl === 'string' ? ms.relayUrl : '') || 'https://zidecar.rotko.net';
       setStep('waiting');
+      setProgress('decrypting keys...');
+
+      // decrypt secret key material
+      const secrets = await useStore.getState().wallets.getMultisigSecrets(activeWallet!.id);
+      if (!secrets) throw new Error('failed to decrypt multisig keys');
+
       setProgress('connecting to signing session...');
 
       const relay = new FrostRelayClient(relayUrl);
@@ -44,29 +50,26 @@ export const MultisigSign = () => {
       // state for receiving coordinator data
       let sighash = '';
       let alphas: string[] = [];
-      const peerCommitments: string[] = [];
-      let phase: 'init' | 'commitments' | 'shares' | 'done' = 'init';
+      // coordinator sends pipe-delimited commitments (one per action)
+      let peerCommitmentBundle: string[] | null = null;
+      let phase: 'init' | 'commitments' | 'done' = 'init';
 
       const abortController = new AbortController();
       void relay.joinRoom(roomCode.trim(), participantId, (event) => {
         if (event.type === 'message') {
           const text = new TextDecoder().decode(event.message.payload);
           if (phase === 'init') {
-            // parse SIGN:<sighash>:<alpha1>,<alpha2>,... prefix from coordinator
             const signMatch = text.match(/^SIGN:([0-9a-fA-F]+):(.+)$/);
             if (signMatch) {
               sighash = signMatch[1]!;
               alphas = signMatch[2]!.split(',');
               phase = 'commitments';
-            } else {
-              // this is a commitment (coordinator sent SIGN before we joined)
-              peerCommitments.push(text);
-              phase = 'commitments';
             }
-          } else if (phase === 'commitments') {
-            peerCommitments.push(text);
+            // if not SIGN prefix, ignore (don't misclassify as commitment)
+          } else if (phase === 'commitments' && !peerCommitmentBundle) {
+            // coordinator's commitment bundle: pipe-delimited, one per action
+            peerCommitmentBundle = text.split('|');
           }
-          // shares phase: we only produce shares, coordinator collects
         }
       }, abortController.signal);
 
@@ -75,34 +78,36 @@ export const MultisigSign = () => {
       await waitFor(() => sighash.length > 0, 120000);
 
       setStep('signing');
-      setProgress('round 1: generating commitments...');
+      const numActions = alphas.length;
+      setProgress(`round 1: generating ${numActions} commitment(s)...`);
 
-      // round 1: generate nonces + commitments
-      const round1 = await frostSignRound1InWorker(ms.ephemeralSeed, ms.keyPackage);
+      // generate fresh nonces per action — NEVER reuse nonces across different messages
+      const round1s: { nonces: string; commitments: string }[] = [];
+      for (let i = 0; i < numActions; i++) {
+        round1s.push(await frostSignRound1InWorker(secrets.ephemeralSeed, secrets.keyPackage));
+      }
 
-      // broadcast our commitments
-      await relay.sendMessage(roomCode.trim(), participantId, new TextEncoder().encode(round1.commitments));
+      // broadcast our commitments as pipe-delimited bundle
+      const ourCommitments = round1s.map(r => r.commitments).join('|');
+      await relay.sendMessage(roomCode.trim(), participantId, new TextEncoder().encode(ourCommitments));
 
-      // wait for coordinator's commitments (at least 1 peer = coordinator)
+      // wait for coordinator's commitment bundle
       setProgress('round 1: waiting for coordinator...');
-      await waitFor(() => peerCommitments.length >= 1, 120000);
+      await waitFor(() => peerCommitmentBundle !== null, 120000);
 
-      // all commitments = ours + peers
-      const allCommitments = [round1.commitments, ...peerCommitments];
-
-      // round 2: produce shares for each action (alpha)
-      phase = 'shares';
+      // round 2: sign each action with its dedicated nonces
+      phase = 'done'; // stop collecting messages
       setProgress('round 2: signing...');
 
-      for (let i = 0; i < alphas.length; i++) {
-        setProgress(`round 2: signing action ${i + 1}/${alphas.length}...`);
+      for (let i = 0; i < numActions; i++) {
+        setProgress(`round 2: signing action ${i + 1}/${numActions}...`);
+        const allCommitments = [round1s[i]!.commitments, peerCommitmentBundle![i]!];
         const share = await frostSpendSignInWorker(
-          ms.keyPackage, round1.nonces, sighash, alphas[i]!, allCommitments,
+          secrets.keyPackage, round1s[i]!.nonces, sighash, alphas[i]!, allCommitments,
         );
         await relay.sendMessage(roomCode.trim(), participantId, new TextEncoder().encode(share));
       }
 
-      phase = 'done';
       abortController.abort();
       setStep('complete');
     } catch (e) {

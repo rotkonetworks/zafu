@@ -186,6 +186,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       } else if (activeZcashWallet?.multisig) {
         // ── FROST multisig: build unsigned tx → relay signing rounds ──
         const ms = activeZcashWallet.multisig;
+        // decrypt secret key material (encrypted at rest with password)
+        const secrets = await useStore.getState().wallets.getMultisigSecrets(activeZcashWallet.id);
+        if (!secrets) throw new Error('failed to decrypt multisig keys — unlock wallet first');
         const result = await buildSendTxInWorker(
           'zcash', walletId, zidecarUrl, recipient.trim(), amountZat, memo, accountIndex, mainnet,
           undefined, ufvk,
@@ -206,60 +209,73 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         const room = await relay.createRoom(ms.threshold, ms.maxSigners, 300);
         setFrostRoomCode(room.roomCode);
 
-        // signing round 1: generate our nonces + commitments
+        // signing: generate fresh nonces per action to prevent nonce reuse
         setStep('frost-signing');
         setFrostProgress('round 1: generating commitments...');
-        const round1 = await frostSignRound1InWorker(ms.ephemeralSeed, ms.keyPackage);
 
-        // join room and broadcast our commitments
+        const numActions = result.alphas.length;
+
+        // generate one round1 (nonces + commitments) per action
+        const round1s: { nonces: string; commitments: string }[] = [];
+        for (let i = 0; i < numActions; i++) {
+          round1s.push(await frostSignRound1InWorker(secrets.ephemeralSeed, secrets.keyPackage));
+        }
+
+        // join room and set up message collection
         const participantId = new Uint8Array(32);
         crypto.getRandomValues(participantId);
-        const allCommitments: string[] = [round1.commitments];
-        const allShares: string[] = [];
+
+        // per-action commitment and share collection from peers
+        const peerCommitmentsPerAction: string[][] = Array.from({ length: numActions }, () => []);
+        const peerSharesPerAction: string[][] = Array.from({ length: numActions }, () => []);
+        let currentAction = 0;
         let signingPhase: 'commitments' | 'shares' | 'done' = 'commitments';
 
         const abortController = new AbortController();
         void relay.joinRoom(room.roomCode, participantId, (event) => {
           if (event.type === 'message') {
             const text = new TextDecoder().decode(event.message.payload);
-            // skip our own SIGN prefix if echoed back
-            if (text.startsWith('SIGN:')) return;
+            if (text.startsWith('SIGN:')) return; // skip echoed SIGN prefix
             if (signingPhase === 'commitments') {
-              allCommitments.push(text);
+              // peers send comma-joined commitments for all actions
+              const parts = text.split('|');
+              for (let i = 0; i < parts.length && i < numActions; i++) {
+                peerCommitmentsPerAction[i]!.push(parts[i]!);
+              }
             } else if (signingPhase === 'shares') {
-              allShares.push(text);
+              peerSharesPerAction[currentAction]!.push(text);
             }
           }
         }, abortController.signal);
 
-        // broadcast SIGN prefix with sighash + alphas so co-signers can participate
+        // broadcast SIGN prefix then our commitments (pipe-delimited, one per action)
         const signPrefix = `SIGN:${result.sighash}:${result.alphas.join(',')}`;
         await relay.sendMessage(room.roomCode, participantId, new TextEncoder().encode(signPrefix));
-        await relay.sendMessage(room.roomCode, participantId, new TextEncoder().encode(round1.commitments));
+        const ourCommitments = round1s.map(r => r.commitments).join('|');
+        await relay.sendMessage(room.roomCode, participantId, new TextEncoder().encode(ourCommitments));
 
-        // wait for threshold-1 peer commitments
+        // wait for threshold-1 peer commitment bundles
         setFrostProgress(`round 1: waiting for ${ms.threshold - 1} co-signer(s)...`);
-        await waitFor(() => allCommitments.length >= ms.threshold, 120000);
+        await waitFor(() => peerCommitmentsPerAction[0]!.length >= ms.threshold - 1, 120000);
 
-        // signing round 2: produce shares for each action
+        // round 2: sign each action with its own nonces
         signingPhase = 'shares';
         setFrostProgress('round 2: signing...');
 
         const orchardSigs: string[] = [];
-        for (let i = 0; i < result.alphas.length; i++) {
+        for (let i = 0; i < numActions; i++) {
+          currentAction = i;
+          const allCommitments = [round1s[i]!.commitments, ...peerCommitmentsPerAction[i]!];
+
           const share = await frostSpendSignInWorker(
-            ms.keyPackage, round1.nonces, result.sighash, result.alphas[i]!, allCommitments,
+            secrets.keyPackage, round1s[i]!.nonces, result.sighash, result.alphas[i]!, allCommitments,
           );
           await relay.sendMessage(room.roomCode, participantId, new TextEncoder().encode(share));
 
-          // wait for threshold-1 peer shares for this action
-          setFrostProgress(`round 2: collecting shares (${i + 1}/${result.alphas.length})...`);
-          await waitFor(() => allShares.length >= (ms.threshold - 1) * (i + 1), 120000);
+          setFrostProgress(`round 2: collecting shares (${i + 1}/${numActions})...`);
+          await waitFor(() => peerSharesPerAction[i]!.length >= ms.threshold - 1, 120000);
 
-          // aggregate
-          const actionShares = allShares.slice(i * (ms.threshold - 1), (i + 1) * (ms.threshold - 1));
-          const allSharesForAction = [share, ...actionShares];
-
+          const allSharesForAction = [share, ...peerSharesPerAction[i]!];
           const sig = await frostSpendAggregateInWorker(
             ms.publicKeyPackage, result.sighash, result.alphas[i]!, allCommitments, allSharesForAction,
           );
