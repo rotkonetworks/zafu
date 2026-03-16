@@ -14,6 +14,7 @@ export enum PopupPath {
   // Approvals
   TRANSACTION_APPROVAL = '/approval/tx',
   ORIGIN_APPROVAL = '/approval/origin',
+  SIGN_APPROVAL = '/approval/sign',
 
   // Send/Receive
   SEND = '/send',

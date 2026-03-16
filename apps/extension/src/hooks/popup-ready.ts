@@ -15,6 +15,7 @@ const handlePopup = async <T extends PopupType>(
   } = {
     [PopupType.TxApproval]: state.txApproval.acceptRequest,
     [PopupType.OriginApproval]: state.originApproval.acceptRequest,
+    [PopupType.SignRequest]: state.signApproval.acceptRequest,
   };
 
   // handle via slice

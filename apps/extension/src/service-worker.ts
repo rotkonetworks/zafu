@@ -10,6 +10,7 @@
 
 // listeners
 import { contentScriptConnectListener } from './message/listen/content-script-connect';
+import { signRequestListener } from './message/listen/sign-request';
 import { contentScriptDisconnectListener } from './message/listen/content-script-disconnect';
 import { contentScriptLoadListener } from './message/listen/content-script-load';
 import { internalRevokeListener } from './message/listen/internal-revoke';
@@ -222,6 +223,9 @@ chrome.runtime.onMessage.addListener(internalRevokeListener);
 chrome.runtime.onMessage.addListener((req, sender, respond) =>
   internalServiceListener(walletServices, req, sender, respond),
 );
+
+// listen for identity sign requests from approved origins
+chrome.runtime.onMessageExternal.addListener(signRequestListener);
 
 // listen for external messages
 chrome.runtime.onMessageExternal.addListener(externalEasterEggListener);

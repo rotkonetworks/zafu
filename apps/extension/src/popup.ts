@@ -8,6 +8,7 @@ const POPUP_READY_TIMEOUT = 60_000;
 const POPUP_PATHS = {
   [PopupType.TxApproval]: PopupPath.TRANSACTION_APPROVAL,
   [PopupType.OriginApproval]: PopupPath.ORIGIN_APPROVAL,
+  [PopupType.SignRequest]: PopupPath.SIGN_APPROVAL,
 } as const;
 const POPUP_BASE = chrome.runtime.getURL('/popup.html');
 

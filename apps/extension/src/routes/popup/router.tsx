@@ -14,6 +14,9 @@ const TransactionApproval = lazy(() =>
 const OriginApproval = lazy(() =>
   import('./approval/origin').then(m => ({ default: m.OriginApproval })),
 );
+const SignApproval = lazy(() =>
+  import('./approval/sign').then(m => ({ default: m.SignApproval })),
+);
 
 // lazy load tab pages
 const StakePage = lazy(() => import('./stake').then(m => ({ default: m.StakePage })));
@@ -141,6 +144,14 @@ export const popupRoutes: RouteObject[] = [
         element: (
           <Suspense fallback={<LazyFallback />}>
             <OriginApproval />
+          </Suspense>
+        ),
+      },
+      {
+        path: PopupPath.SIGN_APPROVAL,
+        element: (
+          <Suspense fallback={<LazyFallback />}>
+            <SignApproval />
           </Suspense>
         ),
       },

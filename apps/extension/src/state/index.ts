@@ -26,6 +26,7 @@ import { createPenumbraSendSlice, PenumbraSendSlice } from './penumbra-send';
 import { createContactsSlice, ContactsSlice } from './contacts';
 import { createMessagesSlice, MessagesSlice } from './messages';
 import { createRecentAddressesSlice, RecentAddressesSlice } from './recent-addresses';
+import { createSignApprovalSlice, SignApprovalSlice } from './sign-approval';
 
 export interface AllSlices {
   wallets: WalletsSlice;
@@ -50,6 +51,7 @@ export interface AllSlices {
   contacts: ContactsSlice;
   messages: MessagesSlice;
   recentAddresses: RecentAddressesSlice;
+  signApproval: SignApprovalSlice;
 }
 
 export type SliceCreator<SliceInterface> = StateCreator<
@@ -86,6 +88,7 @@ export const initializeStore = (
     contacts: createContactsSlice(local)(setState, getState, store),
     messages: createMessagesSlice(local)(setState, getState, store),
     recentAddresses: createRecentAddressesSlice(local)(setState, getState, store),
+    signApproval: createSignApprovalSlice()(setState, getState, store),
   }));
 };
 

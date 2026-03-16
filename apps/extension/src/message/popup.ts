@@ -6,6 +6,7 @@ import type { JsonValue } from '@bufbuild/protobuf';
 export enum PopupType {
   TxApproval = 'TxApproval',
   OriginApproval = 'OriginApproval',
+  SignRequest = 'SignRequest',
 }
 
 export type PopupError = Record<'error', JsonValue>;
@@ -58,6 +59,13 @@ interface PopupRequestMap {
     title?: string;
     lastRequest?: number;
   };
+  SignRequest: {
+    origin: string;
+    favIconUrl?: string;
+    title?: string;
+    challengeHex: string;
+    statement?: string;
+  };
 }
 
 interface PopupResponseMap {
@@ -67,4 +75,9 @@ interface PopupResponseMap {
     authorizationData?: JsonValue;
   };
   OriginApproval: OriginRecord;
+  SignRequest: {
+    choice: UserChoice;
+    signature?: string;
+    publicKey?: string;
+  };
 }
