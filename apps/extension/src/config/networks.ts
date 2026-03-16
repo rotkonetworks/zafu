@@ -24,19 +24,19 @@ export interface NetworkConfig {
 
 /** all network configs - the single source of truth */
 export const NETWORKS: Record<NetworkType, NetworkConfig> = {
-  penumbra: {
-    name: 'Penumbra',
-    color: 'bg-purple-500',
-    transparent: false,
-    launched: true,
-    features: { stake: true, swap: false, vote: true, inbox: true },
-  },
   zcash: {
     name: 'Zcash',
     color: 'bg-yellow-500',
     transparent: false,
     launched: true,
     features: { stake: false, swap: false, vote: false, inbox: true },
+  },
+  penumbra: {
+    name: 'Penumbra',
+    color: 'bg-purple-500',
+    transparent: false,
+    launched: true,
+    features: { stake: true, swap: false, vote: true, inbox: true },
   },
   polkadot: {
     name: 'Polkadot',

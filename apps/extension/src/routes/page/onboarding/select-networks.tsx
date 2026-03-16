@@ -27,7 +27,7 @@ interface NetworkOption {
 
 const NETWORK_DESCRIPTIONS: Record<string, { description: string; icon: string }> = {
   zcash: { description: 'private digital cash', icon: 'Z' },
-  penumbra: { description: 'private defi on cosmos', icon: 'P' },
+  penumbra: { description: 'private defi', icon: 'P' },
   kusama: { description: 'expect chaos', icon: 'K' },
   polkadot: { description: 'multi-chain ecosystem', icon: 'D' },
   osmosis: { description: 'cosmos dex hub', icon: 'O' },
