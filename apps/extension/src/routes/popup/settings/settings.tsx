@@ -45,11 +45,6 @@ const links: SettingsLink[] = [
     icon: 'i-lucide-trash-2',
     href: PopupPath.SETTINGS_CLEAR_CACHE,
   },
-  {
-    title: 'about',
-    icon: 'i-lucide-info',
-    href: PopupPath.SETTINGS_ABOUT,
-  },
 ];
 
 function SettingsRow({

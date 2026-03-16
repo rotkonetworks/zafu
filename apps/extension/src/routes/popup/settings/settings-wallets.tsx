@@ -6,7 +6,7 @@ import { walletsSelector } from '../../../state/wallets';
 import { zignerConnectSelector } from '../../../state/zigner';
 import { passwordSelector } from '../../../state/password';
 import { SettingsScreen } from './settings-screen';
-import { deleteWalletInWorker, terminateNetworkWorker } from '../../../state/keyring/network-worker';
+import { terminateNetworkWorker } from '../../../state/keyring/network-worker';
 import { QrScanner } from '../../../shared/components/qr-scanner';
 import { Input } from '@repo/ui/components/ui/input';
 import { cn } from '@repo/ui/lib/utils';
@@ -59,7 +59,7 @@ export const SettingsWallets = () => {
 
   // -- removal state --
   const [removingId, setRemovingId] = useState<string | null>(null);
-  const [removingType, setRemovingType] = useState<'mnemonic' | 'zigner-zafu'>('mnemonic');
+  const [removingType, setRemovingType] = useState<string>('mnemonic');
   const [step, setStep] = useState<RemovalStep>('idle');
   const [password, setPassword] = useState('');
   const [passwordError, setPasswordError] = useState(false);
@@ -104,7 +104,7 @@ export const SettingsWallets = () => {
   const startRemoval = (vault: KeyInfo) => {
     resetRemoval();
     setRemovingId(vault.id);
-    setRemovingType(vault.type as 'mnemonic' | 'zigner-zafu');
+    setRemovingType(vault.type);
     setStep(vault.type === 'mnemonic' ? 'password' : 'confirm');
   };
 
@@ -129,7 +129,6 @@ export const SettingsWallets = () => {
     try {
       const isLast = keyInfos.length <= 1;
       await deleteKeyRing(removingId);
-      try { await deleteWalletInWorker('zcash', removingId); } catch {}
       if (isLast) terminateNetworkWorker('zcash');
       resetRemoval();
       if (isLast) window.close();
@@ -226,6 +225,15 @@ export const SettingsWallets = () => {
   const showInitialState = scanState === 'idle' && !showManualInput;
 
   return (
+    <>
+    {scanning && (
+      <QrScanner
+        onScan={handleQrScan}
+        onError={(err) => { setError(err); setScanning(false); }}
+        onClose={() => setScanning(false)}
+        title='scan zigner QR'
+        description='point camera at your zigner FVK QR code' />
+    )}
     <SettingsScreen title='wallets'>
       <div className='flex flex-col gap-5'>
 
@@ -244,9 +252,19 @@ export const SettingsWallets = () => {
                 if (!networks.includes('zcash')) networks.push('zcash');
                 if (!networks.includes('penumbra')) networks.push('penumbra');
               }
+              // frost-multisig vaults support zcash
+              if (v.type === 'frost-multisig' && !networks.includes('zcash')) {
+                networks.push('zcash');
+              }
+
+              // multisig detail link
+              const multisigWallet = v.type === 'frost-multisig'
+                ? zcashWallets.find(w => w.vaultId === v.id && w.multisig)
+                : undefined;
 
               return (
                 <VaultRow key={v.id} vault={v} networks={networks}
+                  multisigWallet={multisigWallet}
                   onRemove={() => startRemoval(v)}
                   onRename={name => handleRename(v.id, name)}
                   disabled={step !== 'idle'} />
@@ -256,14 +274,6 @@ export const SettingsWallets = () => {
         ) : (
           <p className='py-12 text-center text-sm text-muted-foreground'>no wallets</p>
         )}
-
-        {/* ── multisig wallets ── */}
-        {zcashWallets.filter(w => w.multisig).length > 0 && (
-          <MultisigWalletList wallets={zcashWallets.filter(w => w.multisig)} />
-        )}
-
-        {/* ── zigner sync ── */}
-        {zcashWallets.some(w => w.vaultId) && <ZignerSyncButton />}
 
         {/* ── removal flow ── */}
 
@@ -314,6 +324,7 @@ export const SettingsWallets = () => {
             <p className='text-xs text-muted-foreground mb-3'>
               "{removingVault.name}" will be permanently removed.
               {removingType === 'zigner-zafu' && ' re-import from zigner anytime.'}
+              {removingType === 'frost-multisig' && ' you would need to run DKG again.'}
             </p>
             {error && <p className='text-xs text-red-400 mb-2'>{error}</p>}
             <div className='flex gap-2'>
@@ -431,31 +442,23 @@ export const SettingsWallets = () => {
           )}
         </div>
 
-        {/* inline scanner */}
-        {scanning && (
-          <div className='border-t border-border/40 pt-4'>
-            <QrScanner inline
-              onScan={handleQrScan}
-              onError={(err) => { setError(err); setScanning(false); }}
-              onClose={() => setScanning(false)}
-              title='scan zigner QR'
-              description='point camera at your zigner FVK QR code' />
-          </div>
-        )}
       </div>
     </SettingsScreen>
+    </>
   );
 };
 
 /* ── vault row with inline rename + network badges ── */
 
-const VaultRow = ({ vault, networks, onRemove, onRename, disabled }: {
+const VaultRow = ({ vault, networks, multisigWallet, onRemove, onRename, disabled }: {
   vault: KeyInfo;
   networks: string[];
+  multisigWallet?: import('../../../state/wallets').ZcashWalletJson;
   onRemove: () => void;
   onRename: (name: string) => void;
   disabled: boolean;
 }) => {
+  const navigate = usePopupNav();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(vault.name);
   const ref = useRef<HTMLInputElement>(null);
@@ -538,62 +541,36 @@ const VaultRow = ({ vault, networks, onRemove, onRename, disabled }: {
           />
         </div>
       )}
-    </div>
-  );
-};
 
-/* ── zigner sync button ── */
+      {vault.type === 'zigner-zafu' && hasZcash && (
+        <button
+          onClick={() => navigate(PopupPath.NOTE_SYNC)}
+          className='flex items-center gap-1.5 mt-2 text-[10px] text-muted-foreground hover:text-foreground'
+        >
+          <span className='i-lucide-qr-code size-3' />
+          sync balance to zigner
+        </button>
+      )}
 
-const ZignerSyncButton = () => {
-  const navigate = usePopupNav();
-
-  return (
-    <div className='mt-4'>
-      <button
-        onClick={() => navigate(PopupPath.NOTE_SYNC)}
-        className='flex w-full items-center gap-3 rounded-lg border border-border/40 bg-card px-4 py-3 text-left hover:bg-muted/50 transition-colors'
-      >
-        <span className='i-lucide-qr-code size-5 text-primary' />
-        <div className='flex-1 min-w-0'>
-          <p className='text-sm font-medium'>sync balance to zigner</p>
-          <p className='text-[10px] text-muted-foreground'>transfer spendable notes via animated QR</p>
+      {multisigWallet && (
+        <div className='flex items-center gap-2 mt-2'>
+          <span className='text-[10px] text-muted-foreground'>
+            {String(vault.insensitive['threshold'])}/{String(vault.insensitive['maxSigners'])}
+          </span>
+          <button
+            onClick={() => navigate(`${PopupPath.SETTINGS_MULTISIG}?id=${multisigWallet.id}` as PopupPath)}
+            className='text-[10px] text-muted-foreground hover:text-foreground'
+          >
+            edit
+          </button>
+          <button
+            onClick={() => navigate(PopupPath.MULTISIG_SIGN)}
+            className='text-[10px] text-primary'
+          >
+            co-sign
+          </button>
         </div>
-        <span className='i-lucide-chevron-right size-4 text-muted-foreground' />
-      </button>
-    </div>
-  );
-};
-
-/* ── multisig wallet list ── */
-
-const MultisigWalletList = ({ wallets }: { wallets: import('../../../state/wallets').ZcashWalletJson[] }) => {
-  const navigate = usePopupNav();
-
-  return (
-    <div className='mt-4'>
-      <p className='mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider'>multisig wallets</p>
-      <div className='flex flex-col divide-y divide-border/40 rounded-lg border border-border/40 bg-card'>
-        {wallets.map(w => (
-          <div key={w.id} className='group flex items-center gap-2 px-4 py-3'>
-            <button
-              onClick={() => navigate(`${PopupPath.SETTINGS_MULTISIG}?id=${w.id}` as PopupPath)}
-              className='flex-1 min-w-0 text-left'
-            >
-              <p className='text-sm font-medium truncate hover:text-primary transition-colors'>{w.label}</p>
-              <p className='text-xs text-muted-foreground font-mono truncate'>{w.address.slice(0, 16)}...{w.address.slice(-8)}</p>
-            </button>
-            <span className='shrink-0 rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary'>
-              {w.multisig!.threshold}/{w.multisig!.maxSigners}
-            </span>
-            <button
-              onClick={() => navigate(PopupPath.MULTISIG_SIGN)}
-              className='shrink-0 rounded-lg border border-primary/40 bg-primary/5 px-2.5 py-1 text-[10px] text-primary hover:bg-primary/10 transition-colors'
-            >
-              co-sign
-            </button>
-          </div>
-        ))}
-      </div>
+      )}
     </div>
   );
 };

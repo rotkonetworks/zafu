@@ -1,18 +1,15 @@
 import {
   getClearCacheStepLabel,
-  PENUMBRA_CLEAR_STEPS,
-  ZCASH_CLEAR_STEPS,
   type ClearCacheProgress,
-  type ClearCacheRequest,
   type ClearCacheStep,
 } from '../../../message/services';
-import { usePopupNav } from '../../../utils/navigate';
-import { PopupPath } from '../paths';
 import { useStore } from '../../../state';
-import { selectActiveNetwork } from '../../../state/keyring';
+import { selectKeyInfos } from '../../../state/keyring';
+import { selectZcashWallets, selectPenumbraWallets } from '../../../state/wallets';
+import { deleteWalletInWorker } from '../../../state/keyring/network-worker';
 import { useState, useEffect } from 'react';
 import { SettingsScreen } from './settings-screen';
-import { localExtStorage } from '@repo/storage-chrome/local';
+import type { KeyInfo } from '../../../state/keyring';
 
 interface ClearingState {
   inProgress: boolean;
@@ -21,81 +18,74 @@ interface ClearingState {
   total: number;
 }
 
-const useCacheClear = () => {
-  const navigate = usePopupNav();
-  const activeNetwork = useStore(selectActiveNetwork);
-  const isZcash = activeNetwork === 'zcash';
-  const clearNetwork = isZcash ? 'zcash' : 'penumbra';
-  const steps = isZcash ? ZCASH_CLEAR_STEPS : PENUMBRA_CLEAR_STEPS;
-
-  const [clearingState, setClearingState] = useState<ClearingState>({
-    inProgress: false,
-    step: 'stopping',
-    completed: 0,
-    total: steps.length,
-  });
-
-  useEffect(() => {
-    void localExtStorage.get('clearingCache').then(wasClearing => {
-      if (wasClearing) {
-        setClearingState({
-          inProgress: true,
-          step: 'clearing-database',
-          completed: 1,
-          total: steps.length,
-        });
-        const req: ClearCacheRequest = { type: 'ClearCache', network: clearNetwork };
-        void chrome.runtime.sendMessage(req);
-      }
-    });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    const handleMessage = (message: unknown) => {
-      if (
-        typeof message === 'object' &&
-        message !== null &&
-        'type' in message &&
-        (message as { type: string }).type === 'ClearCacheProgress'
-      ) {
-        const progress = message as ClearCacheProgress;
-        setClearingState({
-          inProgress: true,
-          step: progress.step,
-          completed: progress.completed,
-          total: progress.total,
-        });
-      }
-    };
-
-    chrome.runtime.onMessage.addListener(handleMessage);
-    return () => chrome.runtime.onMessage.removeListener(handleMessage);
-  }, []);
-
-  const handleCacheClear = () => {
-    setClearingState(prev => ({ ...prev, inProgress: true }));
-
-    void (async function () {
-      const req: ClearCacheRequest = { type: 'ClearCache', network: clearNetwork };
-      await chrome.runtime.sendMessage(req);
-      if (!isZcash) {
-        useStore.setState(state => {
-          state.network.fullSyncHeight = undefined;
-        });
-      }
-      navigate(PopupPath.INDEX);
-    })();
-  };
-
-  return { handleCacheClear, clearingState, clearNetwork };
+const TYPE_LABELS: Record<string, string> = {
+  mnemonic: 'seed vaults',
+  'zigner-zafu': 'zigner vaults',
+  'frost-multisig': 'multisig vaults',
 };
 
+const TYPE_ORDER = ['mnemonic', 'zigner-zafu', 'frost-multisig'] as const;
+
 export const SettingsClearCache = () => {
-  const { handleCacheClear, clearingState, clearNetwork } = useCacheClear();
+  const keyInfos = useStore(selectKeyInfos);
+  const zcashWallets = useStore(selectZcashWallets);
+  const penumbraWallets = useStore(selectPenumbraWallets);
+  const [clearingKey, setClearingKey] = useState<string | null>(null);
+
+  const [clearingState, setClearingState] = useState<ClearingState>({
+    inProgress: false, step: 'stopping', completed: 0, total: 0,
+  });
+
+  // listen for progress from service worker
+  useEffect(() => {
+    const handler = (message: unknown) => {
+      if (
+        typeof message === 'object' && message !== null &&
+        'type' in message && (message as { type: string }).type === 'ClearCacheProgress'
+      ) {
+        const p = message as ClearCacheProgress;
+        setClearingState({ inProgress: true, step: p.step, completed: p.completed, total: p.total });
+      }
+    };
+    chrome.runtime.onMessage.addListener(handler);
+    return () => chrome.runtime.onMessage.removeListener(handler);
+  }, []);
 
   const progressPercent = clearingState.total > 0
     ? Math.round((clearingState.completed / clearingState.total) * 100)
     : 0;
+
+  const handleClearZcash = async (vault: KeyInfo) => {
+    setClearingKey(`${vault.id}:zcash`);
+    try {
+      const vaultZcash = zcashWallets.filter(w => w.vaultId === vault.id);
+      for (const w of vaultZcash) {
+        try { await deleteWalletInWorker('zcash', w.id); } catch {}
+      }
+    } finally {
+      setClearingKey(null);
+    }
+  };
+
+  const handleClearPenumbra = async (vault: KeyInfo) => {
+    setClearingKey(`${vault.id}:penumbra`);
+    try {
+      // soft clear: stops block processor, clears IndexedDB, resets sync state
+      // does NOT reload the extension
+      await chrome.runtime.sendMessage({ type: 'ClearCache', network: 'penumbra', soft: true });
+      useStore.setState(state => { state.network.fullSyncHeight = undefined; });
+    } finally {
+      setClearingKey(null);
+    }
+  };
+
+  const grouped = TYPE_ORDER
+    .map(type => ({
+      type,
+      label: TYPE_LABELS[type] ?? type,
+      vaults: keyInfos.filter(k => k.type === type),
+    }))
+    .filter(g => g.vaults.length > 0);
 
   return (
     <SettingsScreen title='clear cache'>
@@ -117,24 +107,56 @@ export const SettingsClearCache = () => {
             </p>
           </div>
         ) : (
-          <div className='flex flex-col gap-3'>
-            <p className='text-sm text-muted-foreground'>
-              clears {clearNetwork} sync data and resynchronizes from network.
-            </p>
-            <p className='flex items-center gap-2 text-xs text-rust'>
-              <span className='i-lucide-triangle-alert size-4' />
-              your private keys won't be lost
-            </p>
-          </div>
-        )}
+          <>
+            <div className='flex flex-col gap-3'>
+              <p className='text-sm text-muted-foreground'>
+                clears sync data per network and resynchronizes from chain.
+              </p>
+              <p className='flex items-center gap-2 text-xs text-rust'>
+                <span className='i-lucide-triangle-alert size-4' />
+                your private keys won't be lost
+              </p>
+            </div>
 
-        <button
-          disabled={clearingState.inProgress}
-          onClick={handleCacheClear}
-          className='w-full rounded-lg border border-red-500/25 bg-red-500/15 py-2.5 text-sm text-red-400 transition-colors hover:bg-red-500/25 disabled:opacity-50'
-        >
-          {clearingState.inProgress ? 'clearing...' : `clear ${clearNetwork} cache`}
-        </button>
+            {grouped.map(g => (
+              <div key={g.type}>
+                <p className='mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider'>{g.label}</p>
+                <div className='flex flex-col divide-y divide-border/40 rounded-lg border border-border/40 bg-card'>
+                  {g.vaults.map(v => {
+                    const hasZcash = zcashWallets.some(w => w.vaultId === v.id) || v.type === 'mnemonic';
+                    const hasPenumbra = penumbraWallets.some(w => w.vaultId === v.id) || v.type === 'mnemonic';
+
+                    return (
+                      <div key={v.id} className='px-3 py-2.5'>
+                        <p className='text-sm truncate'>{v.name}</p>
+                        <div className='flex gap-2 mt-1.5'>
+                          {hasZcash && (
+                            <button
+                              disabled={!!clearingKey || clearingState.inProgress}
+                              onClick={() => void handleClearZcash(v)}
+                              className='rounded border border-red-500/25 bg-red-500/5 px-2 py-0.5 text-[10px] text-red-400 hover:bg-red-500/15 transition-colors disabled:opacity-50'
+                            >
+                              {clearingKey === `${v.id}:zcash` ? 'clearing...' : 'clear zcash'}
+                            </button>
+                          )}
+                          {hasPenumbra && (
+                            <button
+                              disabled={!!clearingKey || clearingState.inProgress}
+                              onClick={() => void handleClearPenumbra(v)}
+                              className='rounded border border-red-500/25 bg-red-500/5 px-2 py-0.5 text-[10px] text-red-400 hover:bg-red-500/15 transition-colors disabled:opacity-50'
+                            >
+                              {clearingKey === `${v.id}:penumbra` ? 'clearing...' : 'clear penumbra'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </>
+        )}
       </div>
     </SettingsScreen>
   );

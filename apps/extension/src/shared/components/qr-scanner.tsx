@@ -223,8 +223,8 @@ export const QrScanner = ({
 
   // fullscreen overlay mode (used by zcash-send etc.)
   return (
-    <div className='fixed inset-0 z-50 bg-black flex flex-col overflow-hidden'>
-      <div className='flex-none flex items-center justify-between p-4 bg-black/80'>
+    <div className='fixed inset-0 z-50 bg-black/95 backdrop-blur-sm flex flex-col overflow-hidden'>
+      <div className='flex-none flex items-center justify-between p-4 bg-black'>
         <div>
           <h2 className='text-lg font-medium text-white'>{title}</h2>
           {description && <p className='text-sm text-white/60'>{description}</p>}
@@ -242,7 +242,7 @@ export const QrScanner = ({
       </div>
 
       {isScanning && (
-        <div className='flex-none p-4 bg-black/80 text-center'>
+        <div className='flex-none p-4 bg-black text-center'>
           <p className='text-sm text-white/60'>position the QR code within the frame</p>
         </div>
       )}
