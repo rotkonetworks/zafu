@@ -40,8 +40,6 @@ export const SettingsWallets = () => {
     zcashWallets,
     addAirgapSignerWallet,
     addZcashWallet,
-    removeWallet,
-    removeZcashWallet,
   } = useStore(walletsSelector);
   const {
     scanState,
@@ -207,20 +205,6 @@ export const SettingsWallets = () => {
     manualInputRef.current = false;
   };
 
-  // -- build unified wallet list --
-  // group vaults by type
-  const seedVaults = keyInfos.filter(k => k.type === 'mnemonic');
-  const zignerVaults = keyInfos.filter(k => k.type === 'zigner-zafu');
-
-  // find orphaned legacy wallets (no vaultId linking to keyring)
-  const vaultIds = new Set(keyInfos.map(k => k.id));
-  const orphanedPenumbra = penumbraWallets.filter(
-    w => 'airgapSigner' in w.custody && (!w.vaultId || !vaultIds.has(w.vaultId))
-  );
-  const orphanedZcash = zcashWallets.filter(
-    w => !w.vaultId || !vaultIds.has(w.vaultId)
-  );
-
   const removingVault = keyInfos.find(v => v.id === removingId);
   const showManualInput = manualInputRef.current && scanState !== 'scanned';
   const showScannedState = scanState === 'scanned' && (walletImport || zcashWalletImport || parsedPolkadotExport || parsedCosmosExport);
@@ -230,61 +214,31 @@ export const SettingsWallets = () => {
     <SettingsScreen title='wallets'>
       <div className='flex flex-col gap-5'>
 
-        {/* ── vault sections ── */}
+        {/* ── wallet list ── */}
 
-        {zignerVaults.length > 0 && (
-          <VaultSection label='zigner' vaults={zignerVaults}
-            onRemove={startRemoval} onRename={handleRename}
-            disabled={step !== 'idle'}
-            penumbraWallets={penumbraWallets} zcashWallets={zcashWallets} />
-        )}
+        {keyInfos.length > 0 ? (
+          <div className='flex flex-col divide-y divide-border/40 rounded-lg border border-border/40 bg-card'>
+            {keyInfos.map(v => {
+              const networks: string[] = [];
+              if (penumbraWallets.some(w => w.vaultId === v.id)) networks.push('penumbra');
+              if (zcashWallets.some(w => w.vaultId === v.id)) networks.push('zcash');
+              if (v.insensitive['cosmosAddresses']) networks.push('cosmos');
+              if (v.insensitive['polkadotSs58']) networks.push('polkadot');
+              // seed wallets derive keys for all networks
+              if (v.type === 'mnemonic') {
+                if (!networks.includes('zcash')) networks.push('zcash');
+                if (!networks.includes('penumbra')) networks.push('penumbra');
+              }
 
-        {seedVaults.length > 0 && (
-          <VaultSection label='seed' vaults={seedVaults}
-            onRemove={startRemoval} onRename={handleRename}
-            disabled={step !== 'idle'}
-            penumbraWallets={penumbraWallets} zcashWallets={zcashWallets} />
-        )}
-
-        {/* orphaned legacy wallets (imported via old zigner flow without vault) */}
-        {(orphanedPenumbra.length > 0 || orphanedZcash.length > 0) && (
-          <div>
-            <div className='text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5'>watch-only</div>
-            <div className='flex flex-col gap-1 rounded-lg border border-border/40 bg-card divide-y divide-border/40'>
-              {orphanedPenumbra.map((w, i) => (
-                <div key={w.id} className='flex items-center justify-between px-3 py-2.5'>
-                  <div className='flex items-center gap-2 min-w-0'>
-                    <span className='i-lucide-eye size-3 text-purple-400 shrink-0' />
-                    <span className='text-sm truncate'>{w.label}</span>
-                    {networkBadge('penumbra')}
-                  </div>
-                  <button onClick={() => removeWallet(i)} disabled={penumbraWallets.length <= 1}
-                    className='p-1 text-muted-foreground/0 hover:text-red-400 transition-colors disabled:opacity-50'>
-                    <span className='i-lucide-trash-2 size-3.5' />
-                  </button>
-                </div>
-              ))}
-              {orphanedZcash.map((w, i) => (
-                <div key={w.id} className='flex items-center justify-between px-3 py-2.5'>
-                  <div className='flex items-center gap-2 min-w-0'>
-                    <span className='i-lucide-eye size-3 text-yellow-400 shrink-0' />
-                    <span className='text-sm truncate'>{w.label}</span>
-                    {networkBadge('zcash')}
-                    <span className='text-[10px] px-1 rounded-md bg-muted text-muted-foreground'>
-                      {w.mainnet ? 'mainnet' : 'testnet'}
-                    </span>
-                  </div>
-                  <button onClick={() => removeZcashWallet(i)}
-                    className='p-1 text-muted-foreground/0 hover:text-red-400 transition-colors'>
-                    <span className='i-lucide-trash-2 size-3.5' />
-                  </button>
-                </div>
-              ))}
-            </div>
+              return (
+                <VaultRow key={v.id} vault={v} networks={networks}
+                  onRemove={() => startRemoval(v)}
+                  onRename={name => handleRename(v.id, name)}
+                  disabled={step !== 'idle'} />
+              );
+            })}
           </div>
-        )}
-
-        {keyInfos.length === 0 && orphanedPenumbra.length === 0 && orphanedZcash.length === 0 && (
+        ) : (
           <p className='py-12 text-center text-sm text-muted-foreground'>no wallets</p>
         )}
 
@@ -470,42 +424,6 @@ export const SettingsWallets = () => {
   );
 };
 
-/* ── vault section with network indicators ── */
-
-const VaultSection = ({ label, vaults, onRemove, onRename, disabled, penumbraWallets, zcashWallets }: {
-  label: string;
-  vaults: KeyInfo[];
-  onRemove: (v: KeyInfo) => void;
-  onRename: (id: string, name: string) => void;
-  disabled: boolean;
-  penumbraWallets: { vaultId?: string }[];
-  zcashWallets: { vaultId?: string }[];
-}) => (
-  <div>
-    <div className='text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5'>{label}</div>
-    <div className='flex flex-col divide-y divide-border/40 rounded-lg border border-border/40 bg-card'>
-      {vaults.map(v => {
-        // detect which networks this vault covers
-        const networks: string[] = [];
-        if (penumbraWallets.some(w => w.vaultId === v.id)) networks.push('penumbra');
-        if (zcashWallets.some(w => w.vaultId === v.id)) networks.push('zcash');
-        const ins = v.insensitive;
-        if (ins['cosmosAddresses']) networks.push('cosmos');
-        if (ins['polkadotSs58']) networks.push('polkadot');
-        // seed vaults always have penumbra
-        if (v.type === 'mnemonic' && !networks.includes('penumbra')) networks.push('penumbra');
-
-        return (
-          <VaultRow key={v.id} vault={v} networks={networks}
-            onRemove={() => onRemove(v)}
-            onRename={name => onRename(v.id, name)}
-            disabled={disabled} />
-        );
-      })}
-    </div>
-  </div>
-);
-
 /* ── vault row with inline rename + network badges ── */
 
 const VaultRow = ({ vault, networks, onRemove, onRename, disabled }: {
@@ -518,6 +436,28 @@ const VaultRow = ({ vault, networks, onRemove, onRename, disabled }: {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(vault.name);
   const ref = useRef<HTMLInputElement>(null);
+  const hasZcash = networks.includes('zcash');
+
+  // zcash birthday height per wallet
+  const [birthday, setBirthday] = useState<string>('');
+  const birthdayKey = `zcashBirthday_${vault.id}`;
+
+  useEffect(() => {
+    if (!hasZcash) return;
+    chrome.storage.local.get(birthdayKey).then(r => {
+      const v = r[birthdayKey];
+      if (v !== undefined) setBirthday(String(v));
+    });
+  }, [hasZcash, birthdayKey]);
+
+  const saveBirthday = () => {
+    const num = parseInt(birthday, 10);
+    if (!isNaN(num) && num >= 0) {
+      void chrome.storage.local.set({ [birthdayKey]: num });
+    } else if (birthday === '') {
+      void chrome.storage.local.remove(birthdayKey);
+    }
+  };
 
   useEffect(() => { if (editing) ref.current?.select(); }, [editing]);
 
@@ -534,30 +474,47 @@ const VaultRow = ({ vault, networks, onRemove, onRename, disabled }: {
   };
 
   return (
-    <div className='group flex items-center gap-2 px-3 py-2.5'>
-      <div className='flex-1 min-w-0'>
-        <div className='flex items-center gap-1.5'>
-          {editing ? (
-            <input ref={ref} value={draft} onChange={e => setDraft(e.target.value)}
-              onBlur={commit} onKeyDown={onKey} autoFocus
-              className='w-full text-sm bg-transparent border-b border-primary/50 outline-none' />
-          ) : (
-            <button onClick={() => { setDraft(vault.name); setEditing(true); }}
-              className='text-sm text-left truncate hover:text-primary transition-colors'>
-              {vault.name}
-            </button>
+    <div className='group px-3 py-2.5'>
+      <div className='flex items-center gap-2'>
+        <div className='flex-1 min-w-0'>
+          <div className='flex items-center gap-1.5'>
+            {editing ? (
+              <input ref={ref} value={draft} onChange={e => setDraft(e.target.value)}
+                onBlur={commit} onKeyDown={onKey} autoFocus
+                className='w-full text-sm bg-transparent border-b border-primary/50 outline-none' />
+            ) : (
+              <button onClick={() => { setDraft(vault.name); setEditing(true); }}
+                className='text-sm text-left truncate hover:text-primary transition-colors'>
+                {vault.name}
+              </button>
+            )}
+          </div>
+          {networks.length > 0 && (
+            <div className='flex gap-1 mt-1'>
+              {networks.map(networkBadge)}
+            </div>
           )}
         </div>
-        {networks.length > 0 && (
-          <div className='flex gap-1 mt-1'>
-            {networks.map(networkBadge)}
-          </div>
-        )}
+        <button onClick={onRemove} disabled={disabled}
+          className='p-1 text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-red-400 transition-colors disabled:opacity-50'>
+          <span className='i-lucide-trash-2 size-3.5' />
+        </button>
       </div>
-      <button onClick={onRemove} disabled={disabled}
-        className='p-1 text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-red-400 transition-colors disabled:opacity-50'>
-        <span className='i-lucide-trash-2 size-3.5' />
-      </button>
+
+      {/* zcash start block */}
+      {hasZcash && (
+        <div className='flex items-center gap-2 mt-2'>
+          <span className='text-[10px] text-muted-foreground whitespace-nowrap'>sync from</span>
+          <input
+            type='number' min='0' step='1000' value={birthday}
+            onChange={e => setBirthday(e.target.value)}
+            onBlur={saveBirthday}
+            onKeyDown={e => e.key === 'Enter' && saveBirthday()}
+            placeholder='auto'
+            className='w-24 bg-input border border-border/40 px-2 py-1 text-[10px] font-mono rounded focus:outline-none focus:border-primary/50'
+          />
+        </div>
+      )}
     </div>
   );
 };
