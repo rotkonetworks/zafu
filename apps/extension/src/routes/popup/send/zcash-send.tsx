@@ -26,7 +26,6 @@ import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
 import { QrDisplay } from '../../../shared/components/qr-display';
 import { QrScanner } from '../../../shared/components/qr-scanner';
-import { ArrowLeftIcon, CheckIcon, Cross1Icon, PersonIcon } from '@radix-ui/react-icons';
 import { RecipientPicker } from '../../../components/recipient-picker';
 import {
   encodeZcashSignRequest,
@@ -311,11 +310,19 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       case 'form':
         return (
           <div className="flex flex-col gap-4 p-4">
-            <h2 className="text-lg font-medium">send zcash</h2>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={onClose}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <span className="i-lucide-arrow-left h-5 w-5" />
+              </button>
+              <h2 className="text-lg font-medium">send zcash</h2>
+            </div>
 
             <div className="flex flex-col gap-3">
               <div>
-                <label className="text-sm text-muted-foreground mb-1 block">
+                <label className="text-xs text-muted-foreground mb-1 block">
                   recipient address
                 </label>
                 <div className="flex gap-1">
@@ -333,7 +340,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     title="address book"
                     className="shrink-0"
                   >
-                    <PersonIcon className="h-4 w-4" />
+                    <span className="i-lucide-user h-4 w-4" />
                   </Button>
                 </div>
                 <RecipientPicker
@@ -345,12 +352,12 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-sm text-muted-foreground">
+                  <label className="text-xs text-muted-foreground">
                     amount (zec)
                   </label>
                   {balanceZec !== null && (
                     <span className="text-xs text-muted-foreground tabular-nums">
-                      balance: {balanceZec.toFixed(8)} ZEC
+                      balance: {balanceZec.toFixed(8).replace(/0+$/, '').replace(/\.$/, '')} ZEC
                     </span>
                   )}
                 </div>
@@ -366,11 +373,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                   />
                   <Button
                     variant="outline"
-                    size="sm"
                     type="button"
-                    onClick={() => setAmount(maxSendZec > 0 ? maxSendZec.toFixed(8) : '0')}
+                    onClick={() => setAmount(maxSendZec > 0 ? maxSendZec.toFixed(8).replace(/0+$/, '').replace(/\.$/, '') : '0')}
                     disabled={maxSendZec <= 0}
-                    className="shrink-0 text-xs"
+                    className="shrink-0 text-xs h-10 px-3"
                   >
                     max
                   </Button>
@@ -378,7 +384,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               </div>
 
               <div>
-                <label className="text-sm text-muted-foreground mb-1 block">
+                <label className="text-xs text-muted-foreground mb-1 block">
                   memo (optional)
                 </label>
                 <Input
@@ -409,13 +415,13 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         return (
           <div className="flex flex-col gap-4 p-4">
             <div className="flex items-center gap-2">
-              <button onClick={handleBack} className="p-1 hover:bg-muted rounded-lg transition-colors">
-                <ArrowLeftIcon className="w-5 h-5" />
+              <button onClick={handleBack} className="text-muted-foreground hover:text-foreground transition-colors">
+                <span className="i-lucide-arrow-left w-5 h-5" />
               </button>
               <h2 className="text-lg font-medium">review transaction</h2>
             </div>
 
-            <div className="bg-card border border-border rounded-lg p-4 flex flex-col gap-3">
+            <div className="bg-card border border-border/40 rounded-lg p-4 flex flex-col gap-3">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">network</span>
                 <span className="font-medium">
@@ -436,9 +442,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 <span className="text-muted-foreground">fee</span>
                 <span className="text-sm">{fee} zec</span>
               </div>
-              <div className="border-t border-border pt-2 flex justify-between">
+              <div className="border-t border-border/40 pt-2 flex justify-between">
                 <span className="text-muted-foreground">total</span>
-                <span className="font-bold">
+                <span className="font-medium">
                   {(Number(amount) + Number(fee)).toFixed(4)} zec
                 </span>
               </div>
@@ -497,8 +503,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         return (
           <div className="flex flex-col gap-4 p-4">
             <div className="flex items-center gap-2">
-              <button onClick={handleBack} className="p-1 hover:bg-muted rounded-lg transition-colors">
-                <ArrowLeftIcon className="w-5 h-5" />
+              <button onClick={handleBack} className="text-muted-foreground hover:text-foreground transition-colors">
+                <span className="i-lucide-arrow-left w-5 h-5" />
               </button>
 <h2 className="text-lg font-medium">sign with zafu zigner</h2>
             </div>
@@ -563,7 +569,7 @@ description="point camera at zafu zigner's signature qr code"
         return (
           <div className="flex flex-col items-center gap-4 p-8">
             <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center">
-              <CheckIcon className="w-8 h-8 text-green-500" />
+              <span className="i-lucide-check w-8 h-8 text-green-400" />
             </div>
             <h2 className="text-lg font-medium">transaction sent!</h2>
             <p className="text-sm text-muted-foreground text-center">
@@ -578,9 +584,9 @@ description="point camera at zafu zigner's signature qr code"
 
             {/* save contact prompt */}
             {showSavePrompt && recipient && !findByAddress(recipient) && !showContactModal && (
-              <div className="w-full rounded-lg border border-primary/30 bg-primary/10 p-3">
+              <div className="w-full rounded-lg border border-primary/40 bg-primary/10 p-3">
                 <div className="flex items-center gap-2 mb-2">
-                  <PersonIcon className="h-4 w-4 text-primary" />
+                  <span className="i-lucide-user h-4 w-4 text-primary" />
                   <p className="text-sm">save to contacts?</p>
                 </div>
                 <div className="flex gap-2">
@@ -609,7 +615,7 @@ description="point camera at zafu zigner's signature qr code"
 
             {/* contact name input */}
             {showContactModal && (
-              <div className="w-full rounded-lg border border-border bg-card p-3">
+              <div className="w-full rounded-lg border border-border/40 bg-card p-3">
                 <p className="text-sm font-medium mb-2">name this contact</p>
                 <Input
                   value={contactName}
@@ -660,8 +666,8 @@ description="point camera at zafu zigner's signature qr code"
       case 'error':
         return (
           <div className="flex flex-col items-center gap-4 p-8">
-            <div className="w-16 h-16 rounded-full bg-red-400/20 flex items-center justify-center">
-              <Cross1Icon className="w-8 h-8 text-red-400" />
+            <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center">
+              <span className="i-lucide-x w-8 h-8 text-red-400" />
             </div>
             <h2 className="text-lg font-medium">transaction failed</h2>
             <p className="text-sm text-red-400 text-center">

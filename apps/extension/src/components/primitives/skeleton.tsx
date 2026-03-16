@@ -11,12 +11,12 @@ interface SkeletonProps {
 
 /** basic skeleton block */
 export const Skeleton = ({ className }: SkeletonProps) => (
-  <div className={cn('animate-pulse bg-muted rounded', className)} />
+  <div className={cn('animate-pulse bg-muted rounded-md', className)} />
 );
 
 /** skeleton for balance display */
 export const BalanceSkeleton = () => (
-  <div className='flex items-center justify-between border border-border/40 bg-card p-4'>
+  <div className='flex items-center justify-between rounded-lg border border-border/40 bg-card p-4'>
     <div className='space-y-2'>
       <Skeleton className='h-3 w-12' />
       <Skeleton className='h-7 w-24' />

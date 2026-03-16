@@ -1,7 +1,6 @@
 import { useStore } from '../../../state';
 import { getDefaultFrontend } from '../../../state/default-frontend';
 import { Button } from '@repo/ui/components/ui/button';
-import { ExternalLink } from 'lucide-react';
 import { MouseEventHandler } from 'react';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
@@ -29,7 +28,7 @@ export const FrontendLink = () => {
   return (
     <a href={href} target='_blank' rel='noreferrer'>
       <Button className='flex w-full items-center gap-2' variant='gradient' onClick={onClick}>
-        Manage portfolio {href && <ExternalLink size={16} />}
+        Manage portfolio {href && <span className='i-lucide-external-link h-4 w-4' />}
       </Button>
     </a>
   );

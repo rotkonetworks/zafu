@@ -21,6 +21,7 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
     // Part 1: Get storage values and sync them to store
     const wallets = await localExtStorage.get('wallets');
     const zcashWallets = await localExtStorage.get('zcashWallets');
+    const activeZcashIndex = await localExtStorage.get('activeZcashIndex');
     const grpcEndpoint = await localExtStorage.get('grpcEndpoint');
     const knownSites = await localExtStorage.get('knownSites');
     const frontendUrl = await localExtStorage.get('frontendUrl');
@@ -32,6 +33,7 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
       produce((state: AllSlices) => {
         state.wallets.all = wallets;
         state.wallets.zcashWallets = zcashWallets ?? [];
+        state.wallets.activeZcashIndex = activeZcashIndex ?? 0;
         state.network.grpcEndpoint = grpcEndpoint;
         state.connectedSites.knownSites = knownSites as OriginRecord[];
         state.defaultFrontend.url = frontendUrl;
@@ -125,6 +127,15 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
         set(
           produce((state: AllSlices) => {
             state.wallets.zcashWallets = stored ?? [];
+          }),
+        );
+      }
+
+      if (changes.activeZcashIndex) {
+        const stored = changes.activeZcashIndex.newValue;
+        set(
+          produce((state: AllSlices) => {
+            state.wallets.activeZcashIndex = stored ?? 0;
           }),
         );
       }

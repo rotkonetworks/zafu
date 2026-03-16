@@ -4,15 +4,6 @@
  */
 
 import { useNavigate } from 'react-router-dom';
-import {
-  Cross1Icon,
-  PersonIcon,
-  GlobeIcon,
-  LockClosedIcon,
-  MobileIcon,
-  GearIcon,
-  ViewVerticalIcon,
-} from '@radix-ui/react-icons';
 import { useStore } from '../state';
 import { selectLock } from '../state/keyring';
 import { PopupPath } from '../routes/popup/paths';
@@ -29,7 +20,6 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
   const lock = useStore(selectLock);
   const inSidePanel = isSidePanel();
 
-  // don't render anything when closed
   if (!open) return null;
 
   const handleLock = () => {
@@ -55,7 +45,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
 
   const menuItems = [
     {
-      icon: <PersonIcon className='h-4 w-4' />,
+      icon: 'i-lucide-user',
       label: 'Contacts',
       onClick: () => {
         navigate(PopupPath.CONTACTS);
@@ -63,7 +53,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
       },
     },
     {
-      icon: <GlobeIcon className='h-4 w-4' />,
+      icon: 'i-lucide-globe',
       label: 'Manage Networks',
       onClick: () => {
         navigate(PopupPath.SETTINGS_NETWORKS);
@@ -71,7 +61,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
       },
     },
     {
-      icon: <MobileIcon className='h-4 w-4' />,
+      icon: 'i-lucide-smartphone',
       label: 'Zigner',
       onClick: () => {
         navigate(PopupPath.SETTINGS_ZIGNER);
@@ -79,25 +69,24 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
       },
     },
     {
-      icon: <GearIcon className='h-4 w-4' />,
+      icon: 'i-lucide-settings',
       label: 'Settings',
       onClick: () => {
         navigate(PopupPath.SETTINGS);
         onClose();
       },
     },
-    // offer popup window when in side panel
     ...(inSidePanel
       ? [
           {
-            icon: <ViewVerticalIcon className='h-4 w-4' />,
+            icon: 'i-lucide-panel-right',
             label: 'Open as Popup',
             onClick: handleOpenPopupWindow,
           },
         ]
       : []),
     {
-      icon: <LockClosedIcon className='h-4 w-4' />,
+      icon: 'i-lucide-lock',
       label: 'Lock Wallet',
       onClick: handleLock,
       className: 'text-destructive',
@@ -108,17 +97,17 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
     <>
       {/* backdrop */}
       <div
-        className='fixed inset-0 z-50 bg-black/60'
+        className='fixed inset-0 z-50 bg-black/60 backdrop-blur-sm'
         onClick={onClose}
       />
 
       {/* drawer */}
-      <div className='fixed right-0 top-0 bottom-0 z-50 w-64 bg-background border-l border-border shadow-xl'>
+      <div className='fixed right-0 top-0 bottom-0 z-50 w-64 bg-background border-l border-border/40 shadow-xl'>
         {/* header */}
-        <div className='flex items-center justify-between px-4 py-3 border-b border-border'>
+        <div className='flex items-center justify-between px-4 py-3 border-b border-border/40'>
           <span className='font-medium'>Menu</span>
-          <button onClick={onClose} className='p-1 rounded hover:bg-muted/50'>
-            <Cross1Icon className='h-4 w-4' />
+          <button onClick={onClose} className='p-1 rounded-lg hover:bg-muted/50 transition-colors'>
+            <span className='i-lucide-x h-4 w-4' />
           </button>
         </div>
 
@@ -129,11 +118,11 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
               key={i}
               onClick={item.onClick}
               className={cn(
-                'flex w-full items-center gap-3 px-3 py-2.5 rounded text-sm transition-colors hover:bg-muted/50',
+                'flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors hover:bg-muted/50',
                 item.className
               )}
             >
-              {item.icon}
+              <span className={cn(item.icon, 'h-4 w-4')} />
               <span>{item.label}</span>
             </button>
           ))}

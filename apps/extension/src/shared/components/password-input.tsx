@@ -1,4 +1,3 @@
-import { EyeClosedIcon, EyeOpenIcon } from '@radix-ui/react-icons';
 import { ReactElement, useState } from 'react';
 import { Input, InputProps } from '@repo/ui/components/ui/input';
 import { cn } from '@repo/ui/lib/utils';
@@ -25,12 +24,12 @@ export const PasswordInput = ({
   return (
     <div className='flex flex-col items-center justify-center gap-2'>
       <div className='flex items-center gap-2 self-start'>
-        <div className='text-base font-bold'>{label}</div>
+        <div className='text-sm font-medium'>{label}</div>
         {validationResult ? (
           <div
             className={cn(
               'italic',
-              validationResult.type === 'warn' ? 'text-yellow-300' : 'text-red-400',
+              validationResult.type === 'warn' ? 'text-yellow-400' : 'text-red-400',
             )}
           >
             {validationResult.issue}
@@ -40,9 +39,9 @@ export const PasswordInput = ({
       <div className='relative w-full'>
         <div className='absolute inset-y-0 right-4 flex cursor-pointer items-center'>
           {reveal ? (
-            <EyeOpenIcon onClick={() => setReveal(false)} />
+            <span className='i-lucide-eye' onClick={() => setReveal(false)} />
           ) : (
-            <EyeClosedIcon onClick={() => setReveal(true)} className='text-gray-500' />
+            <span className='i-lucide-eye-off text-muted-foreground' onClick={() => setReveal(true)} />
           )}
         </div>
         <Input

@@ -6,7 +6,6 @@ import { LinkGradientIcon } from '../../../icons/link-gradient';
 import { DisplayOriginURL } from '../../../shared/components/display-origin-url';
 import { cn } from '@repo/ui/lib/utils';
 import { UserChoice } from '@repo/storage-chrome/records';
-import { ExclamationTriangleIcon } from '@radix-ui/react-icons';
 
 export const OriginApproval = () => {
   const { requestOrigin, favIconUrl, title, lastRequest, setChoice, sendResponse } =
@@ -37,7 +36,7 @@ export const OriginApproval = () => {
   return (
     <FadeTransition>
       <div className='flex min-h-screen w-screen flex-col gap-6'>
-        <h1 className='flex h-[70px] items-center justify-center border-b border-border-secondary font-headline text-xl font-semibold leading-[30px]'>
+        <h1 className='flex h-[70px] items-center justify-center border-b border-border/40 font-headline text-xl font-medium leading-[30px]'>
           Connect
         </h1>
         <div className='mx-auto size-20'>
@@ -93,8 +92,8 @@ export const OriginApproval = () => {
             </div>
             <div className='mt-3 flex flex-col gap-3 text-muted-foreground'>
               <p>This host wants to connect to your wallet.</p>
-              <p className='text-rust-600'>
-                <ExclamationTriangleIcon className='mr-2 inline-block' /> Approval will allow this
+              <p className='text-rust'>
+                <span className='i-lucide-triangle-alert mr-2 inline-block h-4 w-4' /> Approval will allow this
                 host to see your balance and transaction history.
               </p>
             </div>

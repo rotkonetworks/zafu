@@ -122,7 +122,7 @@ export const TransactionApproval = () => {
   if (isAirgap && airgapStep === 'show-qr') {
     return (
       <div className='flex h-screen flex-col'>
-        <div className='border-b border-gray-700 p-4'>
+        <div className='border-b border-border/40 p-4'>
           <h1 className='bg-text-linear bg-clip-text pb-0 font-headline text-2xl font-bold text-transparent'>
             Sign with Zigner
           </h1>
@@ -138,7 +138,7 @@ export const TransactionApproval = () => {
           />
         </div>
 
-        <div className='border-t border-gray-700 p-4 flex gap-3'>
+        <div className='border-t border-border/40 p-4 flex gap-3'>
           <Button
             variant='gradient'
             className='flex-1 py-3.5 text-base'
@@ -149,7 +149,7 @@ export const TransactionApproval = () => {
           </Button>
           <Button
             variant='destructiveSecondary'
-            className='flex-1 py-3.5 text-base'
+            className='flex-1 py-3.5 text-base hover:bg-destructive/90 transition-colors'
             size='lg'
             onClick={deny}
           >
@@ -191,15 +191,15 @@ export const TransactionApproval = () => {
   // Review step (shared between normal and airgap)
   return (
     <div className='flex h-screen flex-col'>
-      <div className='border-b border-gray-700 p-4'>
-        <h1 className=' bg-text-linear bg-clip-text pb-0 font-headline text-2xl font-bold text-transparent'>
+      <div className='border-b border-border/40 p-4'>
+        <h1 className='bg-text-linear bg-clip-text pb-0 font-headline text-2xl font-bold text-transparent'>
           Confirm Transaction
         </h1>
       </div>
 
       <div className='grow overflow-auto p-4'>
         {invalidPlan && (
-          <div className='mb-4 rounded-lg border content-center border-red-400/30 p-2 text-sm text-red-400 text-center'>
+          <div className='mb-4 rounded-lg border content-center border-red-400/40 p-2 text-sm text-red-400 text-center'>
             <h2>⚠ Invalid Transaction</h2>
             <p>
               {invalidPlan instanceof ConnectError ? invalidPlan.rawMessage : String(invalidPlan)}
@@ -210,13 +210,13 @@ export const TransactionApproval = () => {
         {selectedTransactionViewName === TransactionViewTab.SENDER && (
           <>
             {hasTransparentAddress(selectedTransactionView) && (
-              <div className='mb-4 rounded-lg border content-center border-yellow-500/40 p-2 text-sm text-yellow-500'>
+              <div className='mb-4 rounded-lg border content-center border-yellow-400/40 p-3 text-sm text-yellow-400'>
                 <h2>⚠ Privacy Warning</h2>
                 <p>This transaction uses a transparent address which may reduce privacy.</p>
               </div>
             )}
             {!hasAltGasFee(selectedTransactionView) && (
-              <div className='mb-4 rounded-lg border content-center border-yellow-500/40 p-2 text-sm text-yellow-500'>
+              <div className='mb-4 rounded-lg border content-center border-yellow-400/40 p-3 text-sm text-yellow-400'>
                 <h2>⚠ Privacy Warning</h2>
                 <p>
                   Transaction uses a non-native fee token. To reduce gas costs and protect your
@@ -244,11 +244,10 @@ export const TransactionApproval = () => {
           </div>
         )}
       </div>
-      <div className='border-t border-gray-700 p-0'>
+      <div className='border-t border-border/40 p-0'>
         {isAirgap ? (
           <div
-            className='flex flex-row justify-between gap-4 rounded-md p-4 shadow-md'
-            style={{ backgroundColor: '#1A1A1A', paddingBottom: '28px', paddingTop: '28px' }}
+            className='flex flex-row justify-between gap-4 rounded-lg bg-card px-4 py-7 shadow-lg'
           >
             <Button
               variant='gradient'

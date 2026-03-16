@@ -14,13 +14,12 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 /**
  * button with instant feedback
- * - immediate scale on press (active:scale-95)
- * - fast transitions (75ms)
+ * - color transitions on hover
  * - loading state with spinner
  */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = 'primary', size = 'md', loading, disabled, children, ...props }, ref) => {
-    const baseStyles = 'inline-flex items-center justify-center font-medium transition-all duration-75 active:scale-95 disabled:opacity-50 disabled:pointer-events-none';
+    const baseStyles = 'inline-flex items-center justify-center font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none';
 
     const variants = {
       primary: 'bg-primary text-primary-foreground hover:bg-primary/90',

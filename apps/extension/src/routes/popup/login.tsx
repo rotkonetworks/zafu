@@ -48,7 +48,7 @@ export const Login = () => {
           <PasswordInput
             passwordValue={input}
             label={
-              <p className='font-headline text-2xl font-bold text-foreground'>
+              <p className='font-headline text-2xl font-medium text-foreground'>
                 Enter password
               </p>
             }

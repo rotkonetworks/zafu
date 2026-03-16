@@ -15,12 +15,7 @@ export const ApproveDeny = ({
 
   return (
     <div
-      className='flex flex-row justify-between gap-4 rounded-md p-4 shadow-md'
-      style={{
-        backgroundColor: '#1A1A1A',
-        paddingBottom: '28px',
-        paddingTop: '28px',
-      }}
+      className='flex flex-row justify-between gap-4 rounded-lg bg-card px-4 py-7 shadow-lg'
     >
       <Button
         variant='gradient'
@@ -32,7 +27,7 @@ export const ApproveDeny = ({
         Approve
       </Button>
       <Button
-        className='w-1/2 py-3.5 text-base hover:bg-destructive/90'
+        className='w-1/2 py-3.5 text-base hover:bg-destructive/90 transition-colors'
         size='lg'
         variant='destructiveSecondary'
         onClick={deny}

@@ -9,7 +9,6 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeftIcon, CopyIcon, CheckIcon, InfoCircledIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ReloadIcon } from '@radix-ui/react-icons';
 import { PopupPath } from '../paths';
 import { useStore } from '../../../state';
 import { selectActiveNetwork, selectEffectiveKeyInfo, selectPenumbraAccount, keyRingSelector } from '../../../state/keyring';
@@ -40,9 +39,9 @@ function CopyButton({ text, className }: { text: string; className?: string }) {
   return (
     <button
       onClick={copy}
-      className={className ?? 'shrink-0 text-muted-foreground transition-colors duration-75 hover:text-foreground'}
+      className={className ?? 'shrink-0 text-muted-foreground transition-colors hover:text-foreground'}
     >
-      {copied ? <CheckIcon className='h-4 w-4' /> : <CopyIcon className='h-4 w-4' />}
+      {copied ? <span className='i-lucide-check h-4 w-4' /> : <span className='i-lucide-copy h-4 w-4' />}
     </button>
   );
 }
@@ -120,6 +119,7 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
   const [showAssetDropdown, setShowAssetDropdown] = useState(false);
   const [amount, setAmount] = useState('');
   const [depositAddress, setDepositAddress] = useState('');
+  const [depositCopied, setDepositCopied] = useState(false);
   const [txStatus, setTxStatus] = useState<'idle' | 'signing' | 'success' | 'error'>('idle');
   const [txHash, setTxHash] = useState('');
   const [txError, setTxError] = useState('');
@@ -233,7 +233,7 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
   return (
     <div className='w-full border-t border-border/40 pt-4'>
       {PasswordModal}
-      <div className='mb-3 text-sm font-medium'>Shield Assets via IBC</div>
+      <div className='mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground'>Shield Assets via IBC</div>
 
       {/* source chain selector */}
       <div className='mb-3'>
@@ -242,16 +242,16 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
           ref={chainBtnRef}
           onClick={() => setShowChainDropdown(prev => !prev)}
           disabled={chainsLoading}
-          className='flex w-full items-center justify-between rounded-lg border border-border bg-input px-3 py-2.5 text-sm text-foreground transition-colors duration-100 hover:border-zigner-gold disabled:opacity-50'
+          className='flex w-full items-center justify-between rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground transition-colors duration-100 hover:border-zigner-gold disabled:opacity-50'
         >
           <span>{selectedIbcChain?.displayName ?? (chainsLoading ? 'loading...' : 'select source chain')}</span>
-          <ChevronDownIcon className='h-4 w-4 text-muted-foreground' />
+          <span className='i-lucide-chevron-down h-4 w-4 text-muted-foreground' />
         </button>
         {showChainDropdown && chainBtnRef.current && (() => {
           const rect = chainBtnRef.current!.getBoundingClientRect();
           return (
             <div
-              className='fixed z-50 rounded-lg border border-border bg-background shadow-lg'
+              className='fixed z-50 rounded-lg border border-border/40 bg-background shadow-lg'
               style={{ top: rect.bottom + 4, left: rect.left, width: rect.width }}
             >
               {ibcChains.map(chain => (
@@ -312,7 +312,7 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
             ) : (
               <div className='rounded-lg border border-border/40 bg-muted/10'>
                 {assetsData?.assets.map(asset => (
-                  <div key={asset.denom} className='flex items-center justify-between px-3 py-2 text-xs border-b border-border/30 last:border-0'>
+                  <div key={asset.denom} className='flex items-center justify-between px-3 py-2 text-xs border-b border-border/40 last:border-0'>
                     <span className='text-muted-foreground truncate max-w-[60%]'>
                       {asset.symbol}
                     </span>
@@ -333,16 +333,16 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
                   ref={assetBtnRef}
                   onClick={() => setShowAssetDropdown(prev => !prev)}
                   disabled={!assetsData?.assets.length}
-                  className='flex w-full items-center justify-between rounded-lg border border-border bg-input px-3 py-2 text-xs disabled:opacity-50'
+                  className='flex w-full items-center justify-between rounded-lg border border-border/40 bg-input px-3 py-2.5 text-xs disabled:opacity-50'
                 >
                   <span>{selectedAsset?.symbol ?? 'select asset'}</span>
-                  <ChevronDownIcon className='h-3 w-3 text-muted-foreground' />
+                  <span className='i-lucide-chevron-down h-3 w-3 text-muted-foreground' />
                 </button>
                 {showAssetDropdown && assetsData?.assets && assetBtnRef.current && (() => {
                   const rect = assetBtnRef.current!.getBoundingClientRect();
                   return (
                     <div
-                      className='fixed z-50 rounded-lg border border-border bg-background shadow-lg'
+                      className='fixed z-50 rounded-lg border border-border/40 bg-background shadow-lg'
                       style={{ top: rect.bottom + 4, left: rect.left, width: rect.width }}
                     >
                       {assetsData.assets.map(asset => (
@@ -370,7 +370,7 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
                 onChange={e => setAmount(e.target.value)}
                 placeholder='amount'
                 disabled={txStatus !== 'idle'}
-                className='flex-1 rounded-lg border border-border bg-input px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:border-zigner-gold focus:outline-none disabled:opacity-50'
+                className='flex-1 rounded-lg border border-border/40 bg-input px-3 py-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-zigner-gold focus:outline-none disabled:opacity-50'
               />
             </div>
           </div>
@@ -387,10 +387,14 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
               This ephemeral address is unlinkable to your main address — source chain observers cannot correlate your deposits.{' '}
               {depositAddress && (
                 <button
-                  onClick={() => navigator.clipboard.writeText(depositAddress)}
+                  onClick={() => {
+                    void navigator.clipboard.writeText(depositAddress);
+                    setDepositCopied(true);
+                    setTimeout(() => setDepositCopied(false), 1500);
+                  }}
                   className='text-foreground underline'
                 >
-                  Copy address
+                  {depositCopied ? 'copied!' : 'Copy address'}
                 </button>
               )}
             </p>
@@ -398,7 +402,7 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
 
           {/* transaction status */}
           {txStatus === 'success' && (
-            <div className='mb-3 rounded-lg border border-green-500/30 bg-green-500/10 p-3'>
+            <div className='mb-3 rounded-lg border border-green-500/40 bg-green-500/10 p-3'>
               <p className='text-sm text-green-400'>shielding transfer sent!</p>
               <p className='text-xs text-muted-foreground mt-1 font-mono break-all'>{txHash}</p>
               <button onClick={handleReset} className='mt-2 text-xs text-green-400 underline'>
@@ -408,7 +412,7 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
           )}
 
           {txStatus === 'error' && (
-            <div className='mb-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3'>
+            <div className='mb-3 rounded-lg border border-red-500/40 bg-red-500/10 p-3'>
               <p className='text-sm text-red-400'>transaction failed</p>
               <p className='text-xs text-muted-foreground mt-1'>{txError}</p>
               <button onClick={handleReset} className='mt-2 text-xs text-red-400 underline'>
@@ -616,7 +620,7 @@ function ReceiveTab({ address, loading, activeNetwork }: {
 
   return (
     <div className='flex flex-col items-center gap-4'>
-      <div className='rounded-xl border border-border bg-white p-2'>
+      <div className='rounded-lg border border-border/40 bg-white p-2'>
         {isLoading ? (
           <div className='flex h-48 w-48 items-center justify-center'>
             <span className='text-xs text-muted-foreground'>loading...</span>
@@ -630,7 +634,7 @@ function ReceiveTab({ address, loading, activeNetwork }: {
         )}
       </div>
 
-      <span className='rounded-full bg-muted px-3 py-1 text-xs font-medium capitalize'>
+      <span className='rounded-md bg-muted px-3 py-1 text-xs font-medium capitalize'>
         {activeNetwork}
       </span>
 
@@ -641,12 +645,12 @@ function ReceiveTab({ address, loading, activeNetwork }: {
             <div className='relative'>
               <button
                 onClick={() => setShowTooltip(prev => !prev)}
-                className='text-muted-foreground transition-colors duration-75 hover:text-foreground'
+                className='text-muted-foreground transition-colors hover:text-foreground'
               >
-                <InfoCircledIcon className='h-3.5 w-3.5' />
+                <span className='i-lucide-info h-3.5 w-3.5' />
               </button>
               {showTooltip && (
-                <div className='absolute left-1/2 top-6 z-50 w-72 -translate-x-1/2 rounded-lg border border-border bg-background p-3 text-xs text-popover-foreground shadow-lg'>
+                <div className='absolute left-1/2 top-6 z-50 w-72 -translate-x-1/2 rounded-lg border border-border/40 bg-background p-3 text-xs text-popover-foreground shadow-lg'>
                   <p className='mb-1.5 font-medium'>Your main address is stable.</p>
                   <p className='mb-1.5 text-muted-foreground'>
                     Anyone you share it with can recognize future payments to the same address.
@@ -679,9 +683,9 @@ function ReceiveTab({ address, loading, activeNetwork }: {
         <button
           onClick={() => void handleRotateShielded()}
           disabled={loading}
-          className='flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-foreground hover:text-foreground disabled:opacity-50'
+          className='flex items-center gap-1.5 rounded-lg border border-border/40 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-foreground hover:text-foreground disabled:opacity-50'
         >
-          <ReloadIcon className='h-3 w-3' />
+          <span className='i-lucide-refresh-cw h-3 w-3' />
           new address
         </button>
       )}
@@ -694,12 +698,12 @@ function ReceiveTab({ address, loading, activeNetwork }: {
               <div className='relative'>
                 <button
                   onClick={() => setShowTransparentTooltip(prev => !prev)}
-                  className='text-muted-foreground transition-colors duration-75 hover:text-foreground'
+                  className='text-muted-foreground transition-colors hover:text-foreground'
                 >
-                  <InfoCircledIcon className='h-3.5 w-3.5' />
+                  <span className='i-lucide-info h-3.5 w-3.5' />
                 </button>
                 {showTransparentTooltip && (
-                  <div className='absolute left-1/2 top-6 z-50 w-72 -translate-x-1/2 rounded-lg border border-border bg-background p-3 text-xs text-popover-foreground shadow-lg'>
+                  <div className='absolute left-1/2 top-6 z-50 w-72 -translate-x-1/2 rounded-lg border border-border/40 bg-background p-3 text-xs text-popover-foreground shadow-lg'>
                     <p className='mb-1.5 font-medium'>Transparent addresses are fully visible on-chain.</p>
                     <p className='mb-1.5 text-muted-foreground'>
                       Anyone can see your balance and transaction history.
@@ -739,7 +743,7 @@ function ReceiveTab({ address, loading, activeNetwork }: {
                 onClick={() => setTransparentIndex(i => i - 1)}
                 className='p-1 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50'
               >
-                <ChevronLeftIcon className='h-4 w-4' />
+                <span className='i-lucide-chevron-left h-4 w-4' />
               </button>
               <span className='min-w-[110px] text-center text-xs font-medium text-muted-foreground'>
                 Address #{transparentIndex}
@@ -759,7 +763,7 @@ function ReceiveTab({ address, loading, activeNetwork }: {
                 }}
                 className='p-1 text-muted-foreground transition-colors hover:text-foreground'
               >
-                <ChevronRightIcon className='h-4 w-4' />
+                <span className='i-lucide-chevron-right h-4 w-4' />
               </button>
             </div>
           )}
@@ -771,7 +775,7 @@ function ReceiveTab({ address, loading, activeNetwork }: {
           {ephemeral && isPenumbra
             ? 'ephemeral address'
             : transparent && isZcash
-              ? <span className='flex items-center gap-1.5'>transparent address #{transparentIndex} <span className='text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-500 font-medium leading-none'>public</span></span>
+              ? <span className='flex items-center gap-1.5'>transparent address #{transparentIndex} <span className='text-[10px] px-1.5 py-0.5 rounded-md bg-red-500/15 text-red-500 font-medium leading-none'>public</span></span>
               : 'address'}
         </div>
         <div className={`flex items-center gap-2 rounded-lg border p-3 ${
@@ -789,9 +793,9 @@ function ReceiveTab({ address, loading, activeNetwork }: {
           {displayAddress && (
             <button
               onClick={copyAddress}
-              className='shrink-0 text-muted-foreground transition-colors duration-75 hover:text-foreground'
+              className='shrink-0 text-muted-foreground transition-colors hover:text-foreground'
             >
-              {copied ? <CheckIcon className='h-4 w-4' /> : <CopyIcon className='h-4 w-4' />}
+              {copied ? <span className='i-lucide-check h-4 w-4' /> : <span className='i-lucide-copy h-4 w-4' />}
             </button>
           )}
         </div>
@@ -827,9 +831,9 @@ export function ReceivePage() {
       <div className='flex shrink-0 items-center gap-3 border-b border-border/40 px-4 py-3'>
         <button
           onClick={() => navigate(PopupPath.INDEX)}
-          className='text-muted-foreground transition-colors duration-75 hover:text-foreground'
+          className='text-muted-foreground transition-colors hover:text-foreground'
         >
-          <ArrowLeftIcon className='h-5 w-5' />
+          <span className='i-lucide-arrow-left h-5 w-5' />
         </button>
         <h1 className='text-lg font-medium text-foreground'>receive</h1>
       </div>

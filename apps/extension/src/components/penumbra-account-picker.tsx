@@ -1,4 +1,3 @@
-import { ChevronLeftIcon, ChevronRightIcon } from '@radix-ui/react-icons';
 
 const MAX_ACCOUNT = 2 ** 24;
 
@@ -20,7 +19,7 @@ export function PenumbraAccountPicker({
         onClick={() => onChange(account - 1)}
         className='p-1 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50'
       >
-        <ChevronLeftIcon className='h-4 w-4' />
+        <span className='i-lucide-chevron-left h-4 w-4' />
       </button>
       <span className='min-w-[110px] text-center text-xs font-medium text-muted-foreground'>
         {accountLabel(account)}
@@ -30,7 +29,7 @@ export function PenumbraAccountPicker({
         onClick={() => onChange(account + 1)}
         className='p-1 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50'
       >
-        <ChevronRightIcon className='h-4 w-4' />
+        <span className='i-lucide-chevron-right h-4 w-4' />
       </button>
     </div>
   );

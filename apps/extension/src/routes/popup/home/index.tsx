@@ -1,6 +1,5 @@
 import { lazy, Suspense, useState, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowUpIcon, ArrowDownIcon, CopyIcon, CheckIcon, ReloadIcon, ClockIcon, WidthIcon, ChevronDownIcon, MixIcon } from '@radix-ui/react-icons';
 
 import { useStore } from '../../../state';
 import { selectActiveNetwork, selectEffectiveKeyInfo, selectPenumbraAccount, selectSetPenumbraAccount, keyRingSelector, type NetworkType } from '../../../state/keyring';
@@ -90,7 +89,7 @@ export const PopupIndex = () => {
     if (!address) return;
     setCopied(true);
     void navigator.clipboard.writeText(address);
-    setTimeout(() => setCopied(false), 1200);
+    setTimeout(() => setCopied(false), 1500);
   }, [address]);
 
   // derive wallet name - zcash can come from zigner import OR mnemonic derivation
@@ -106,11 +105,10 @@ export const PopupIndex = () => {
   return (
     <div className='flex min-h-full flex-col'>
       <div className='flex flex-col gap-3 p-4'>
-        {activeNetwork === 'penumbra' && (
-          <PenumbraAccountPicker account={penumbraAccount} onChange={setPenumbraAccount} />
-        )}
         {/* address + actions row */}
-        <div className='flex items-center justify-between rounded-lg border border-border/40 bg-card p-4'>
+        <div className='rounded-lg border border-border/40 bg-card p-4'>
+{/* account picker moved into PenumbraContent below sync bar */}
+          <div className='flex items-center justify-between'>
           <div>
             <div className='flex items-center gap-1'>
               <button
@@ -119,7 +117,7 @@ export const PopupIndex = () => {
                 className='flex items-center gap-1 text-xs text-muted-foreground transition-colors duration-100 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed'
               >
                 <span className='font-mono'>{displayAddress}</span>
-                {address && (copied ? <CheckIcon className='h-3 w-3' /> : <CopyIcon className='h-3 w-3' />)}
+                {address && (copied ? <span className='i-lucide-check h-3 w-3' /> : <span className='i-lucide-copy h-3 w-3' />)}
               </button>
               {address && activeNetwork === 'zcash' && (
                 <button
@@ -132,7 +130,7 @@ export const PopupIndex = () => {
                   className='p-0.5 text-muted-foreground transition-colors hover:text-foreground'
                   title='rotate address'
                 >
-                  <ReloadIcon className='h-3 w-3' />
+                  <span className='i-lucide-refresh-cw h-3 w-3' />
                 </button>
               )}
             </div>
@@ -141,30 +139,31 @@ export const PopupIndex = () => {
           <div className='flex gap-2'>
             <button
               onClick={() => navigate(PopupPath.RECEIVE)}
-              className='flex h-10 w-10 items-center justify-center bg-muted transition-all duration-100 hover:bg-muted/80 active:scale-95'
+              className='flex h-10 w-10 items-center justify-center bg-muted transition-colors hover:bg-muted/80'
               title='receive'
             >
-              <ArrowDownIcon className='h-5 w-5' />
+              <span className='i-lucide-arrow-down h-5 w-5' />
             </button>
             <button
               onClick={() => navigate(PopupPath.SWAP)}
-              className='flex h-10 w-10 items-center justify-center bg-muted transition-all duration-100 hover:bg-muted/80 active:scale-95'
+              className='flex h-10 w-10 items-center justify-center bg-muted transition-colors hover:bg-muted/80'
               title='swap'
             >
-              <MixIcon className='h-5 w-5' />
+              <span className='i-lucide-arrow-left-right h-5 w-5' />
             </button>
             <button
               onClick={() => navigate(PopupPath.SEND)}
               className={cn(
-                'flex h-10 w-10 items-center justify-center transition-all duration-100 active:scale-95',
+                'flex h-10 w-10 items-center justify-center transition-colors',
                 activeNetwork === 'penumbra'
                   ? 'bg-penumbra-purple text-white hover:bg-penumbra-purple-dark'
                   : 'bg-primary text-primary-foreground hover:bg-primary/90',
               )}
               title='send'
             >
-              <ArrowUpIcon className='h-5 w-5' />
+              <span className='i-lucide-arrow-up h-5 w-5' />
             </button>
+          </div>
           </div>
         </div>
 
@@ -173,6 +172,7 @@ export const PopupIndex = () => {
           <NetworkContent
             network={activeNetwork}
             penumbraAccount={penumbraAccount}
+            setPenumbraAccount={setPenumbraAccount}
             zcashWallet={activeZcashWallet}
             polkadotPublicKey={polkadotPublicKey}
             hasMnemonic={selectedKeyInfo?.type === 'mnemonic'}
@@ -192,19 +192,21 @@ export const PopupIndex = () => {
 const NetworkContent = ({
   network,
   penumbraAccount,
+  setPenumbraAccount,
   zcashWallet,
   polkadotPublicKey,
   hasMnemonic,
 }: {
   network: NetworkType;
   penumbraAccount: number;
+  setPenumbraAccount: (n: number) => void;
   zcashWallet?: { label: string; mainnet: boolean; orchardFvk?: string; ufvk?: string; id?: string };
   polkadotPublicKey?: string;
   hasMnemonic?: boolean;
 }) => {
   switch (network) {
     case 'penumbra':
-      return <PenumbraContent account={penumbraAccount} />;
+      return <PenumbraContent account={penumbraAccount} onAccountChange={setPenumbraAccount} />;
 
     case 'zcash':
       return <ZcashContent hasMnemonic={hasMnemonic} watchOnly={zcashWallet} />;
@@ -226,8 +228,8 @@ const NetworkContent = ({
   }
 };
 
-/** penumbra-specific content — balance card + sync bar + assets */
-const PenumbraContent = ({ account }: { account: number }) => {
+/** penumbra-specific content — balance card + sync bar + account picker + assets */
+const PenumbraContent = ({ account, onAccountChange }: { account: number; onAccountChange: (n: number) => void }) => {
   const { latestBlockHeight, fullSyncHeight, error } = useSyncProgress();
 
   const isSyncing = (latestBlockHeight ?? 0) - (fullSyncHeight ?? 0) > 10;
@@ -246,7 +248,7 @@ const PenumbraContent = ({ account }: { account: number }) => {
       {/* balance card */}
       <div className='rounded-lg border border-penumbra-purple/20 bg-card p-4'>
         <div className='text-xs text-muted-foreground'>balance</div>
-        <div className='text-3xl font-semibold tabular-nums text-foreground'>
+        <div className='text-3xl font-medium tabular-nums text-foreground'>
           {fullSyncHeight ? '—' : '—'} UM
         </div>
         <div className='mt-1 text-xs text-muted-foreground'>{syncLabel}</div>
@@ -263,7 +265,10 @@ const PenumbraContent = ({ account }: { account: number }) => {
         />
       )}
 
-      <div className='mb-2 text-xs font-medium text-muted-foreground'>assets</div>
+      {/* account picker — between sync bar and assets */}
+      <PenumbraAccountPicker account={account} onChange={onAccountChange} />
+
+      <div className='mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground'>assets</div>
       <Suspense fallback={<AssetListSkeleton rows={4} />}>
         <AssetsTable account={account} />
       </Suspense>
@@ -499,7 +504,7 @@ const ZcashContent = ({
 
   if (!hasWallet) {
     return (
-      <div className='flex flex-col items-center justify-center py-8 text-center'>
+      <div className='flex flex-col items-center justify-center py-12 text-center'>
         <div className='text-sm text-muted-foreground'>no zcash wallet</div>
         <div className='text-xs text-muted-foreground mt-1'>
           create a wallet or import a viewing key from zigner
@@ -526,6 +531,13 @@ const ZcashContent = ({
 
   const allSynced = scanPct >= 100 && ligeritoPct >= 100;
 
+  // overall sync percentage (0-100) with 1 decimal — zashi style
+  const overallPct = scanPct > 0
+    ? Math.min(100, (scanProgress / scanRange) * 100)
+    : ligeritoPct > 0
+      ? Math.min(100, ligeritoPct)
+      : nomtPct;
+
   // combined balance
   const totalZat = orchardZat + transparentZat;
   const totalZec = Number(totalZat) / 1e8;
@@ -536,36 +548,36 @@ const ZcashContent = ({
       {/* combined balance */}
       <div className='rounded-lg border border-primary/20 bg-card p-4'>
         <div className='text-xs text-muted-foreground'>balance</div>
-        <div className='text-3xl font-semibold tabular-nums text-foreground'>
+        <div className='text-3xl font-medium tabular-nums text-foreground'>
           {workerSyncHeight > 0 || totalZat > 0n
-            ? `${totalZec.toFixed(8)} ZEC`
+            ? `${fmtZec(totalZec)} ZEC`
             : '— ZEC'}
         </div>
         <div className='mt-1 text-xs text-muted-foreground'>
           {chainHeight <= 0
             ? 'connecting...'
-            : scanPct >= 100
+            : allSynced
               ? `block ${workerSyncHeight.toLocaleString()}`
-              : `syncing · block ${workerSyncHeight.toLocaleString()}`}
+              : `syncing · ${overallPct.toFixed(1)}%`}
         </div>
       </div>
 
       {/* transparent pool detail — only shown when transparent > 0 */}
       {transparentZat > 0n && (
-        <div className='rounded-lg border border-red-500/30 bg-red-500/5 p-3'>
+        <div className='rounded-lg border border-red-500/40 bg-red-500/5 p-3'>
           <div className='flex items-center justify-between'>
             <div className='flex items-center gap-2'>
-              <span className='text-xs text-red-500'>transparent</span>
-              <span className='text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-500 font-medium leading-none'>public</span>
+              <span className='text-xs text-red-400'>transparent</span>
+              <span className='text-[10px] px-1.5 py-0.5 rounded-md bg-red-500/15 text-red-500 font-medium leading-none'>public</span>
               <span className='text-xs font-medium tabular-nums'>
-                {utxoLoading ? '...' : `${tZec.toFixed(8)} ZEC`}
+                {utxoLoading ? '...' : `${fmtZec(tZec)} ZEC`}
               </span>
             </div>
             {hasMnemonic ? (
               <button
                 onClick={() => void handleShield()}
                 disabled={shielding || !!shieldTxid}
-                className='text-xs font-medium text-red-500 hover:text-red-400 transition-colors disabled:opacity-50'
+                className='text-xs font-medium text-red-400 hover:text-red-300 transition-colors disabled:opacity-50'
               >
                 {shielding ? 'shielding...' : shieldTxid ? 'pending...' : 'shield'}
               </button>
@@ -573,7 +585,7 @@ const ZcashContent = ({
               <button
                 onClick={() => void handleZignerShield()}
                 disabled={zignerShieldStep !== 'idle' && zignerShieldStep !== 'error' && zignerShieldStep !== 'complete'}
-                className='text-xs font-medium text-red-500 hover:text-red-400 transition-colors disabled:opacity-50'
+                className='text-xs font-medium text-red-400 hover:text-red-300 transition-colors disabled:opacity-50'
               >
                 {zignerShieldStep === 'building' ? 'building...' :
                  zignerShieldStep === 'broadcasting' ? 'broadcasting...' :
@@ -582,7 +594,7 @@ const ZcashContent = ({
             )}
           </div>
           {shieldTxid && (
-            <div className='text-[10px] text-green-500 mt-1.5 font-mono'>
+            <div className='text-[10px] text-green-400 mt-1.5 font-mono'>
               shielded: {shieldTxid.slice(0, 16)}... (wait for confirmation)
             </div>
           )}
@@ -632,7 +644,7 @@ const ZcashContent = ({
           )}
 
           {zignerShieldStep === 'complete' && zignerShieldTxid && (
-            <div className='text-[10px] text-green-500 mt-1.5 font-mono'>
+            <div className='text-[10px] text-green-400 mt-1.5 font-mono'>
               shielded: {zignerShieldTxid.slice(0, 16)}... (wait for confirmation)
             </div>
           )}
@@ -653,21 +665,25 @@ const ZcashContent = ({
       {/* sync pipeline — hidden when fully synced */}
       {!allSynced && (
         <SyncProgressBar
-          percent={Math.max(scanPct > 0 ? scanPct : ligeritoPct > 0 ? ligeritoPct : nomtPct, 2)}
+          percent={Math.max(overallPct, 2)}
           label={chainHeight <= 0
             ? 'connecting...'
             : scanPct > 0
-              ? `scanning ${scanProgress.toLocaleString()} / ${scanRange.toLocaleString()}`
+              ? `scanning · ${overallPct.toFixed(1)}%`
               : gigaproofStatus >= 2
-                ? blocksUntilReady > 0 ? `ligerito ${blocksUntilReady} blocks to tip` : 'ligerito verified'
+                ? `ligerito · ${blocksUntilReady <= 0 ? 'verified' : `${blocksUntilReady} blocks`}`
                 : gigaproofStatus === 1
                   ? 'ligerito proving...'
                   : nomtPct >= 100
-                    ? 'nomt verified, waiting for ligerito'
+                    ? 'nomt verified'
                     : 'verifying nomt...'}
           error={syncError?.message}
-          barColor={scanPct > 0 ? 'bg-green-500' : ligeritoPct > 0 ? 'bg-primary' : 'bg-muted-foreground/30'}
-          barDoneColor='bg-green-500'
+          barColor={scanPct > 0 ? 'bg-primary' : ligeritoPct > 0 ? 'bg-primary' : 'bg-muted-foreground/30'}
+          barDoneColor='bg-primary'
+          currentHeight={workerSyncHeight}
+          targetHeight={chainHeight}
+          startBlock={walletBirthday}
+          onRescan={(h) => window.dispatchEvent(new CustomEvent('zcash-rescan', { detail: h }))}
         />
       )}
 
@@ -686,7 +702,7 @@ const PolkadotContent = ({
 }) => {
   if (!publicKey) {
     return (
-      <div className='flex flex-col items-center justify-center py-8 text-center'>
+      <div className='flex flex-col items-center justify-center py-12 text-center'>
         <div className='text-sm text-muted-foreground'>no {relay} wallet</div>
         <div className='text-xs text-muted-foreground mt-1'>
           import a polkadot account to get started
@@ -712,7 +728,7 @@ const CosmosContent = ({ chainId }: { chainId: CosmosChainId }) => {
 
   if (error) {
     return (
-      <div className='flex flex-col items-center justify-center py-8 text-center'>
+      <div className='flex flex-col items-center justify-center py-12 text-center'>
         <div className='text-sm text-muted-foreground'>failed to load balances</div>
         <div className='text-xs text-muted-foreground mt-1'>{error instanceof Error ? error.message : 'unknown error'}</div>
       </div>
@@ -721,7 +737,7 @@ const CosmosContent = ({ chainId }: { chainId: CosmosChainId }) => {
 
   if (!assetsData && !isLoading) {
     return (
-      <div className='flex flex-col items-center justify-center py-8 text-center'>
+      <div className='flex flex-col items-center justify-center py-12 text-center'>
         <div className='text-sm text-muted-foreground'>enable transparent balance fetching in privacy settings to view {config.name} balances</div>
       </div>
     );
@@ -729,11 +745,11 @@ const CosmosContent = ({ chainId }: { chainId: CosmosChainId }) => {
 
   return (
     <div className='flex-1'>
-      <div className='mb-2 text-xs font-medium text-muted-foreground'>assets</div>
+      <div className='mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground'>assets</div>
       {isLoading ? (
         <AssetListSkeleton rows={2} />
       ) : assetsData?.assets.length === 0 ? (
-        <div className='rounded-lg border border-border bg-card p-4'>
+        <div className='rounded-lg border border-border/40 bg-card p-4'>
           <div className='flex items-center justify-between'>
             <div className='flex items-center gap-2'>
               <div className='h-8 w-8 bg-muted flex items-center justify-center'>
@@ -752,7 +768,7 @@ const CosmosContent = ({ chainId }: { chainId: CosmosChainId }) => {
       ) : (
         <div className='flex flex-col gap-1'>
           {assetsData?.assets.map(asset => (
-            <div key={asset.denom} className='rounded-lg border border-border bg-card p-4'>
+            <div key={asset.denom} className='rounded-lg border border-border/40 bg-card p-4'>
               <div className='flex items-center justify-between'>
                 <div className='flex items-center gap-2'>
                   <div className='h-8 w-8 bg-muted flex items-center justify-center'>
@@ -822,6 +838,17 @@ function parsePenumbraTx(txInfo: TransactionInfo): ParsedTransaction {
   return { id, height, timestamp: null, type, description, memo };
 }
 
+/** format ZEC with meaningful digits only — no trailing zeros, min 2 decimals */
+function fmtZec(val: number): string {
+  if (val === 0) return '0';
+  const s = val.toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
+  // ensure at least 2 decimal places for readability
+  const dot = s.indexOf('.');
+  if (dot === -1) return s + '.00';
+  const decimals = s.length - dot - 1;
+  return decimals < 2 ? s + '0'.repeat(2 - decimals) : s;
+}
+
 function zatToZec(zat: bigint | string): string {
   const v = typeof zat === 'string' ? BigInt(zat) : zat;
   const w = v / 100_000_000n;
@@ -851,8 +878,8 @@ function TxRow({ tx }: { tx: ParsedTransaction }) {
   return (
     <div
       className={cn(
-        'rounded-lg border border-border/30 bg-card p-3 transition-colors',
-        hasMemo ? 'cursor-pointer hover:border-border' : '',
+        'rounded-lg border border-border/40 bg-card p-3 transition-colors',
+        hasMemo ? 'cursor-pointer hover:border-border/40' : '',
       )}
       onClick={hasMemo ? () => setExpanded(e => !e) : undefined}
     >
@@ -861,9 +888,9 @@ function TxRow({ tx }: { tx: ParsedTransaction }) {
           'flex h-8 w-8 items-center justify-center rounded-full',
           isSh ? 'bg-blue-500/10' : isIn ? 'bg-green-500/10' : 'bg-muted/50',
         )}>
-          {isSh ? <WidthIcon className='h-4 w-4 text-blue-500' />
-            : isIn ? <ArrowDownIcon className='h-4 w-4 text-green-500' />
-            : <ArrowUpIcon className='h-4 w-4 text-muted-foreground' />}
+          {isSh ? <span className='i-lucide-move-horizontal h-4 w-4 text-blue-500' />
+            : isIn ? <span className='i-lucide-arrow-down h-4 w-4 text-green-400' />
+            : <span className='i-lucide-arrow-up h-4 w-4 text-muted-foreground' />}
         </div>
         <div className='flex-1 min-w-0'>
           <div className='flex items-center justify-between gap-2'>
@@ -871,14 +898,14 @@ function TxRow({ tx }: { tx: ParsedTransaction }) {
             <div className='flex items-center gap-1'>
               {tx.amount && (
                 <span className={cn('text-xs font-mono',
-                  isSh ? 'text-blue-500' : isIn ? 'text-green-500' : 'text-muted-foreground',
+                  isSh ? 'text-blue-500' : isIn ? 'text-green-400' : 'text-muted-foreground',
                 )}>
                   {isIn ? '+' : ''}{tx.amount} {tx.asset ?? ''}
                 </span>
               )}
               {hasMemo && (
-                <ChevronDownIcon className={cn(
-                  'h-3 w-3 text-muted-foreground transition-transform',
+                <span className={cn(
+                  'i-lucide-chevron-down h-3 w-3 text-muted-foreground transition-transform',
                   expanded && 'rotate-180',
                 )} />
               )}
@@ -908,20 +935,6 @@ const HistoryContent = ({ network }: { network: NetworkType }) => {
   const walletId = selectedKeyInfo?.id;
   const isMainnet = !zidecarUrl.includes('testnet');
   const { tAddresses } = useTransparentAddresses(isMainnet);
-  const { workerSyncHeight } = useZcashSyncStatus();
-
-  // editable start block for zcash rescan
-  const [editingStart, setEditingStart] = useState(false);
-  const [startBlockInput, setStartBlockInput] = useState('');
-  const [walletBirthday, setWalletBirthday] = useState(0);
-
-  useEffect(() => {
-    if (network !== 'zcash' || !walletId) return;
-    const key = `zcashBirthday_${walletId}`;
-    chrome.storage.local.get(key, r => {
-      if (typeof r[key] === 'number') setWalletBirthday(r[key] as number);
-    });
-  }, [network, walletId]);
 
   // build txId→memo lookup from messages store (for zcash)
   const memoByTxId = useMemo(() => {
@@ -980,8 +993,8 @@ const HistoryContent = ({ network }: { network: NetworkType }) => {
 
   if (q.isLoading && txs.length === 0) {
     return (
-      <div className='flex flex-col items-center justify-center gap-2 py-8'>
-        <ReloadIcon className='h-5 w-5 animate-spin text-muted-foreground' />
+      <div className='flex flex-col items-center justify-center gap-3 py-12'>
+        <span className='i-lucide-refresh-cw h-5 w-5 animate-spin text-muted-foreground' />
         <span className='text-xs text-muted-foreground'>loading...</span>
       </div>
     );
@@ -989,7 +1002,7 @@ const HistoryContent = ({ network }: { network: NetworkType }) => {
 
   if (q.error) {
     return (
-      <div className='flex flex-col items-center justify-center gap-2 py-8'>
+      <div className='flex flex-col items-center justify-center gap-3 py-12'>
         <span className='text-xs text-red-400'>failed to load</span>
         <button onClick={() => void q.refetch()} className='text-xs text-primary hover:underline'>retry</button>
       </div>
@@ -998,8 +1011,8 @@ const HistoryContent = ({ network }: { network: NetworkType }) => {
 
   if (txs.length === 0) {
     return (
-      <div className='flex flex-col items-center justify-center gap-2 py-4'>
-        <ClockIcon className='h-5 w-5 text-muted-foreground' />
+      <div className='flex flex-col items-center justify-center gap-3 py-12'>
+        <span className='i-lucide-clock h-5 w-5 text-muted-foreground' />
         <span className='text-xs text-muted-foreground'>no transactions yet</span>
       </div>
     );
@@ -1009,61 +1022,8 @@ const HistoryContent = ({ network }: { network: NetworkType }) => {
 
   return (
     <div className='flex flex-col gap-1'>
-      <div className='mb-1 flex items-center justify-between'>
-        <span className='text-xs font-medium text-muted-foreground'>recent activity</span>
-        {network === 'zcash' && (
-          <div className='flex items-center gap-1.5'>
-            {editingStart ? (
-              <div className='flex items-center gap-1'>
-                <input
-                  type='number'
-                  min={0}
-                  value={startBlockInput}
-                  onChange={e => setStartBlockInput(e.target.value)}
-                  placeholder={String(walletBirthday)}
-                  className='w-20 bg-muted px-1.5 py-0.5 text-[10px] font-mono text-foreground placeholder:text-muted-foreground/50 outline-none'
-                  autoFocus
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && startBlockInput) {
-                      window.dispatchEvent(new CustomEvent('zcash-rescan', { detail: parseInt(startBlockInput, 10) }));
-                      setEditingStart(false);
-                      setStartBlockInput('');
-                    } else if (e.key === 'Escape') {
-                      setEditingStart(false);
-                      setStartBlockInput('');
-                    }
-                  }}
-                />
-                <button
-                  onClick={() => {
-                    if (startBlockInput) {
-                      window.dispatchEvent(new CustomEvent('zcash-rescan', { detail: parseInt(startBlockInput, 10) }));
-                    }
-                    setEditingStart(false);
-                    setStartBlockInput('');
-                  }}
-                  className='text-[10px] text-primary hover:underline'
-                >
-                  go
-                </button>
-                <button
-                  onClick={() => { setEditingStart(false); setStartBlockInput(''); }}
-                  className='text-[10px] text-muted-foreground hover:text-foreground'
-                >
-                  &times;
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => { setEditingStart(true); setStartBlockInput(String(walletBirthday)); }}
-                className='text-[10px] font-mono text-muted-foreground hover:text-foreground transition-colors'
-                title='click to change start block'
-              >
-                {walletBirthday > 0 ? walletBirthday.toLocaleString() : '0'}..{workerSyncHeight > 0 ? workerSyncHeight.toLocaleString() : '?'}
-              </button>
-            )}
-          </div>
-        )}
+      <div className='mb-1'>
+        <span className='text-xs font-medium uppercase tracking-wider text-muted-foreground'>recent activity</span>
       </div>
       {recent.map(tx => <TxRow key={tx.id} tx={tx} />)}
       {txs.length > 20 && (
@@ -1077,7 +1037,7 @@ const HistoryContent = ({ network }: { network: NetworkType }) => {
 
 /** placeholder for networks not yet implemented */
 const NetworkPlaceholder = ({ network }: { network: NetworkType }) => (
-  <div className='flex flex-col items-center justify-center py-8 text-center'>
+  <div className='flex flex-col items-center justify-center py-12 text-center'>
     <div className='text-sm text-muted-foreground'>{network} support coming soon</div>
   </div>
 );

@@ -1,6 +1,5 @@
 import { ReactNode } from 'react';
 import { cn } from '@repo/ui/lib/utils';
-import { ArrowUpIcon, ArrowDownIcon, UpdateIcon, EyeOpenIcon, EyeClosedIcon } from '@radix-ui/react-icons';
 import { Button } from '@repo/ui/components/ui/button';
 
 interface ActionButton {
@@ -31,17 +30,17 @@ export const BalanceCard = ({
 }: BalanceCardProps) => {
   const defaultActions: ActionButton[] = [
     {
-      icon: <ArrowDownIcon className='h-4 w-4' />,
+      icon: <span className='i-lucide-arrow-down h-4 w-4' />,
       label: 'Receive',
       onClick: () => {},
     },
     {
-      icon: <ArrowUpIcon className='h-4 w-4' />,
+      icon: <span className='i-lucide-arrow-up h-4 w-4' />,
       label: 'Send',
       onClick: () => {},
     },
     {
-      icon: <UpdateIcon className='h-4 w-4' />,
+      icon: <span className='i-lucide-refresh-cw h-4 w-4' />,
       label: 'Swap',
       onClick: () => {},
     },
@@ -52,7 +51,7 @@ export const BalanceCard = ({
   return (
     <div
       className={cn(
-        'relative overflow-hidden rounded-2xl border border-border/50 bg-gradient-to-br from-card to-card/80 p-5',
+        'relative overflow-hidden rounded-lg border border-border/40 bg-gradient-to-br from-card to-card/80 p-5',
         className
       )}
     >
@@ -66,18 +65,18 @@ export const BalanceCard = ({
               className='rounded-full p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground'
             >
               {isPrivacyMode ? (
-                <EyeClosedIcon className='h-4 w-4' />
+                <span className='i-lucide-eye-off h-4 w-4' />
               ) : (
-                <EyeOpenIcon className='h-4 w-4' />
+                <span className='i-lucide-eye h-4 w-4' />
               )}
             </button>
           )}
         </div>
         <div className='mt-1'>
           {isLoading ? (
-            <div className='h-9 w-32 animate-pulse rounded bg-muted' />
+            <div className='h-9 w-32 animate-pulse rounded-md bg-muted' />
           ) : (
-            <span className='text-3xl font-bold tracking-tight'>
+            <span className='text-3xl font-medium tracking-tight'>
               {isPrivacyMode ? '••••••' : totalBalance}
             </span>
           )}

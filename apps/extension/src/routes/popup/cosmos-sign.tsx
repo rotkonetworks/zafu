@@ -168,7 +168,7 @@ export const CosmosSign = () => {
   if (step === 'show-qr' && signData) {
     return (
       <div className='flex h-screen flex-col bg-background'>
-        <div className='border-b border-gray-700 p-4'>
+        <div className='border-b border-border/40 p-4'>
           <h1 className='bg-text-linear bg-clip-text pb-0 font-headline text-2xl font-bold text-transparent'>
             Sign with Zigner
           </h1>
@@ -177,8 +177,8 @@ export const CosmosSign = () => {
         <div className='grow overflow-auto p-4 flex flex-col gap-4'>
           {/* Transaction summary */}
           {txSummary && (
-            <div className='rounded-lg border border-border bg-card/50 p-3'>
-              <p className='text-xs font-medium text-muted-foreground mb-2'>transaction summary</p>
+            <div className='rounded-lg border border-border/40 bg-card/50 p-3'>
+              <p className='text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2'>transaction summary</p>
               <SummaryRow label='chain' value={txSummary.chainName} />
               {txSummary.msgs.map((msg: { type: string; to?: string; amount?: string; channel?: string }, i: number) => (
                 <div key={i}>
@@ -206,7 +206,7 @@ export const CosmosSign = () => {
           </div>
         </div>
 
-        <div className='border-t border-gray-700 p-4 flex gap-3'>
+        <div className='border-t border-border/40 p-4 flex gap-3'>
           <Button
             variant='gradient'
             className='flex-1 py-3.5 text-base'
@@ -217,7 +217,7 @@ export const CosmosSign = () => {
           </Button>
           <Button
             variant='destructiveSecondary'
-            className='flex-1 py-3.5 text-base'
+            className='flex-1 py-3.5 text-base hover:bg-destructive/90 transition-colors'
             size='lg'
             onClick={handleClose}
           >
@@ -246,7 +246,7 @@ export const CosmosSign = () => {
   if (step === 'broadcasting') {
     return (
       <div className='flex h-screen flex-col items-center justify-center bg-background gap-4'>
-        <div className='animate-spin rounded-full h-8 w-8 border-2 border-zigner-gold border-t-transparent' />
+        <div className='animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent' />
         <p className='text-sm text-muted-foreground'>broadcasting transaction...</p>
       </div>
     );
@@ -256,8 +256,10 @@ export const CosmosSign = () => {
   if (step === 'success') {
     return (
       <div className='flex h-screen flex-col items-center justify-center bg-background gap-4 p-6'>
-        <div className='text-4xl'>✓</div>
-        <p className='text-lg font-medium text-green-400'>Transaction Sent!</p>
+        <div className='w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center'>
+          <span className='i-lucide-check w-8 h-8 text-green-400' />
+        </div>
+        <h2 className='text-lg font-medium'>Transaction Sent!</h2>
         {txHash && (
           <p className='text-xs text-muted-foreground font-mono break-all text-center'>
             {txHash}

@@ -1,4 +1,3 @@
-import { BadgeAlert, BadgeCheck } from 'lucide-react';
 import type { AddressOwnershipInfo } from './types';
 
 export const Result = ({
@@ -13,7 +12,7 @@ export const Result = ({
   if (!addressOwnershipInfo.isValidAddress) {
     return (
       <div className='flex items-center gap-2'>
-        <BadgeAlert className='text-red' />
+        <span className='i-lucide-badge-alert text-red' />
         Invalid address
       </div>
     );
@@ -22,7 +21,7 @@ export const Result = ({
   if (addressOwnershipInfo.belongsToWallet) {
     return (
       <div className='flex items-center gap-2'>
-        <BadgeCheck className='text-green' />
+        <span className='i-lucide-badge-check text-green' />
 
         <div className='flex flex-col'>
           Belongs to this wallet
@@ -44,7 +43,7 @@ export const Result = ({
 
   return (
     <div className='flex items-center gap-2'>
-      <BadgeAlert className='text-red' />
+      <span className='i-lucide-badge-alert text-red' />
       Does not belong to this wallet
     </div>
   );

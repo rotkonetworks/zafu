@@ -95,7 +95,7 @@ export const DefaultFrontendForm = ({ isOnboarding }: { isOnboarding?: boolean }
 
       <LoadingList isLoading={isLoading} />
 
-      <div className='sticky bottom-0 left-0 right-0 w-full backdrop-blur-md bg-background/70 border-t z-10 mt-4 pb-[15px]'>
+      <div className='sticky bottom-0 left-0 right-0 w-full backdrop-blur-md bg-background/70 border-t border-border/40 z-10 mt-4 pb-[15px]'>
         <Button
           key='save-button'
           variant='gradient'

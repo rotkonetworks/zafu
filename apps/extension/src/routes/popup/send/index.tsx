@@ -6,7 +6,6 @@
 
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeftIcon, ChevronDownIcon, UpdateIcon, PersonIcon, Cross2Icon } from '@radix-ui/react-icons';
 import { PopupPath } from '../paths';
 import { useQuery } from '@tanstack/react-query';
 import { ZcashSend } from './zcash-send';
@@ -51,18 +50,18 @@ function ChainSelector({
     <div className='relative'>
       <button
         onClick={() => setOpen(!open)}
-        className='flex w-full items-center justify-between rounded-lg border border-border bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50'
+        className='flex w-full items-center justify-between rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50'
       >
         {selected ? (
           <span>{selected.displayName}</span>
         ) : (
           <span className='text-muted-foreground'>select chain</span>
         )}
-        <ChevronDownIcon className={cn('h-4 w-4 transition-transform', open && 'rotate-180')} />
+        <span className={cn('i-lucide-chevron-down h-4 w-4 transition-transform', open && 'rotate-180')} />
       </button>
 
       {open && (
-        <div className='absolute top-full left-0 right-0 z-10 mt-1 rounded-lg border border-border bg-background shadow-lg overflow-hidden'>
+        <div className='absolute top-full left-0 right-0 z-50 mt-1 rounded-lg border border-border/40 bg-background shadow-lg overflow-hidden'>
           {chains.map(chain => (
             <button
               key={chain.chainId}
@@ -102,12 +101,12 @@ function AssetSelector({
   const [open, setOpen] = useState(false);
 
   if (loading) {
-    return <div className='h-10 rounded-lg bg-muted/30 animate-pulse' />;
+    return <div className='h-10 rounded-lg bg-muted animate-pulse' />;
   }
 
   if (assets.length === 0) {
     return (
-      <div className='rounded-lg border border-border bg-input px-3 py-2.5 text-sm text-muted-foreground'>
+      <div className='rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-muted-foreground'>
         no assets
       </div>
     );
@@ -117,7 +116,7 @@ function AssetSelector({
     <div className='relative'>
       <button
         onClick={() => setOpen(!open)}
-        className='flex w-full items-center justify-between rounded-lg border border-border bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50'
+        className='flex w-full items-center justify-between rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50'
       >
         {selected ? (
           <div className='flex items-center gap-2'>
@@ -127,11 +126,11 @@ function AssetSelector({
         ) : (
           <span className='text-muted-foreground'>select asset</span>
         )}
-        <ChevronDownIcon className={cn('h-4 w-4 transition-transform', open && 'rotate-180')} />
+        <span className={cn('i-lucide-chevron-down h-4 w-4 transition-transform', open && 'rotate-180')} />
       </button>
 
       {open && (
-        <div className='absolute top-full left-0 right-0 z-10 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border bg-background shadow-lg'>
+        <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border/40 bg-background shadow-lg'>
           {assets.map(asset => (
             <button
               key={asset.denom}
@@ -182,16 +181,16 @@ function CosmosChainSelector({
     <div className='relative'>
       <button
         onClick={() => setOpen(!open)}
-        className='flex w-full items-center justify-between rounded-lg border border-border bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50'
+        className='flex w-full items-center justify-between rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50'
       >
         <span className={!manuallySelected && !selected ? 'text-muted-foreground' : ''}>
           {displayName}
         </span>
-        <ChevronDownIcon className={cn('h-4 w-4 transition-transform', open && 'rotate-180')} />
+        <span className={cn('i-lucide-chevron-down h-4 w-4 transition-transform', open && 'rotate-180')} />
       </button>
 
       {open && (
-        <div className='absolute top-full left-0 right-0 z-10 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border bg-background shadow-lg'>
+        <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border/40 bg-background shadow-lg'>
           {/* auto-detect option */}
           <button
             onClick={() => {
@@ -245,7 +244,7 @@ function SaveContactPrompt({
     <div className='rounded-lg border border-zigner-gold/30 bg-zigner-gold/10 p-3'>
       <div className='flex items-start justify-between gap-2'>
         <div className='flex items-center gap-2'>
-          <PersonIcon className='h-4 w-4 text-zigner-gold' />
+          <span className='i-lucide-user h-4 w-4 text-zigner-gold' />
           <div>
             <p className='text-sm text-foreground'>save to contacts?</p>
             <p className='text-xs text-muted-foreground'>
@@ -257,19 +256,19 @@ function SaveContactPrompt({
           onClick={onDismiss}
           className='text-muted-foreground hover:text-foreground transition-colors'
         >
-          <Cross2Icon className='h-4 w-4' />
+          <span className='i-lucide-x h-4 w-4' />
         </button>
       </div>
       <div className='mt-2 flex gap-2'>
         <button
           onClick={onSave}
-          className='flex-1 rounded bg-zigner-gold px-3 py-1.5 text-xs font-medium text-zigner-dark transition-colors hover:bg-zigner-gold-light'
+          className='flex-1 rounded-md bg-zigner-gold px-3 py-1.5 text-xs font-medium text-zigner-dark transition-colors hover:bg-zigner-gold-light'
         >
           save contact
         </button>
         <button
           onClick={onDismiss}
-          className='flex-1 rounded bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground'
+          className='flex-1 rounded-md bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground'
         >
           not now
         </button>
@@ -508,7 +507,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
           <select
             value={accountIndex}
             onChange={e => setAccountIndex(parseInt(e.target.value, 10))}
-            className='flex-1 rounded-lg border border-border bg-input px-3 py-2.5 text-sm text-foreground transition-colors focus:border-zigner-gold focus:outline-none'
+            className='flex-1 rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground transition-colors focus:border-zigner-gold focus:outline-none'
           >
             {[0, 1, 2, 3, 4].map(idx => (
               <option key={idx} value={idx}>
@@ -536,7 +535,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
             'w-full rounded-lg border bg-input px-3 py-2.5 text-sm text-foreground',
             'placeholder:text-muted-foreground transition-colors duration-100',
             'focus:border-zigner-gold focus:outline-none',
-            recipient && !recipientValid ? 'border-red-500' : 'border-border'
+            recipient && !recipientValid ? 'border-red-400' : 'border-border/40'
           )}
         />
         {recipient && !recipientValid && (
@@ -558,7 +557,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
       <div>
         <label className='mb-1 block text-xs text-muted-foreground'>destination chain</label>
         {chainsLoading ? (
-          <div className='h-10 rounded-lg bg-muted/30 animate-pulse' />
+          <div className='h-10 rounded-lg bg-muted animate-pulse' />
         ) : (
           <CosmosChainSelector
             chains={skipChains}
@@ -599,13 +598,13 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
             value={amount}
             onChange={e => setAmount(e.target.value)}
             placeholder='0.00'
-            className='w-full rounded-lg border border-border bg-input px-3 py-2.5 pr-14 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-100 focus:border-zigner-gold focus:outline-none'
+            className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 pr-14 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-100 focus:border-zigner-gold focus:outline-none'
           />
           {selectedAsset && Number(selectedAsset.amount) > 0 && (
             <button
               type='button'
               onClick={handleSetMax}
-              className='absolute right-2 top-1/2 -translate-y-1/2 rounded bg-muted/50 px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground'
+              className='absolute right-2 top-1/2 -translate-y-1/2 rounded-md bg-muted/50 px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground'
             >
               max
             </button>
@@ -616,7 +615,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
       {/* route info */}
       {routeLoading && (
         <div className='flex items-center gap-2 text-xs text-muted-foreground'>
-          <UpdateIcon className='h-3 w-3 animate-spin' />
+          <span className='i-lucide-refresh-cw h-3 w-3 animate-spin' />
           finding route...
         </div>
       )}
@@ -648,7 +647,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
 
 {/* transaction status */}
       {txStatus === 'success' && txHash && (
-        <div className='rounded-lg border border-green-500/30 bg-green-500/10 p-3'>
+        <div className='rounded-lg border border-green-500/40 bg-green-500/10 p-3'>
           <p className='text-sm text-green-400'>transaction sent!</p>
           <p className='text-xs text-muted-foreground mt-1 font-mono break-all'>
             {txHash}
@@ -674,14 +673,14 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
 
       {/* contact name modal */}
       {showContactModal && (
-        <div className='rounded-lg border border-border bg-background p-3'>
+        <div className='rounded-lg border border-border/40 bg-background p-3'>
           <p className='text-sm font-medium mb-2'>name this contact</p>
           <input
             type='text'
             value={contactName}
             onChange={e => setContactName(e.target.value)}
             placeholder='enter name...'
-            className='w-full rounded-lg border border-border bg-input px-3 py-2 text-sm mb-2 focus:border-zigner-gold focus:outline-none'
+            className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm mb-2 focus:border-zigner-gold focus:outline-none'
             autoFocus
           />
           <div className='flex gap-2'>
@@ -695,7 +694,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
                 }
               }}
               disabled={!contactName.trim()}
-              className='flex-1 rounded bg-zigner-gold px-3 py-1.5 text-xs font-medium text-zigner-dark disabled:opacity-50'
+              className='flex-1 rounded-md bg-zigner-gold px-3 py-1.5 text-xs font-medium text-zigner-dark transition-colors disabled:opacity-50'
             >
               save
             </button>
@@ -704,7 +703,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
                 setShowContactModal(false);
                 setContactName('');
               }}
-              className='flex-1 rounded bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground'
+              className='flex-1 rounded-md bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground transition-colors'
             >
               cancel
             </button>
@@ -751,7 +750,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
                 {showRawJson ? 'hide' : 'view'} raw transaction json
               </button>
               {showRawJson && (
-                <pre className='mt-2 max-h-48 overflow-auto rounded bg-background p-2 text-[10px] font-mono text-muted-foreground leading-relaxed'>
+                <pre className='mt-2 max-h-48 overflow-auto rounded-md bg-background p-2 text-[10px] font-mono text-muted-foreground leading-relaxed'>
                   {JSON.stringify(txPreview, null, 2)}
                 </pre>
               )}
@@ -762,15 +761,15 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
             <button
               onClick={() => void handleConfirm()}
               className={cn(
-                'flex-1 rounded-lg bg-zigner-gold py-2.5 text-sm font-medium text-zigner-dark',
-                'transition-all duration-100 hover:bg-zigner-gold-light active:scale-[0.99]'
+                'flex-1 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark',
+                'transition-colors hover:bg-zigner-gold-light'
               )}
             >
               confirm & sign
             </button>
             <button
               onClick={() => setTxStatus('idle')}
-              className='flex-1 rounded-lg border border-border py-2.5 text-sm text-muted-foreground hover:text-foreground transition-colors'
+              className='flex-1 rounded-lg border border-border/40 py-3 text-sm text-muted-foreground hover:text-foreground transition-colors'
             >
               back
             </button>
@@ -779,7 +778,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
       )}
 
       {txStatus === 'error' && txError && (
-        <div className='rounded-lg border border-red-500/30 bg-red-500/10 p-3'>
+        <div className='rounded-lg border border-red-500/40 bg-red-500/10 p-3'>
           <p className='text-sm text-red-400'>transaction failed</p>
           <p className='text-xs text-muted-foreground mt-1'>{txError}</p>
         </div>
@@ -809,7 +808,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
         }
         className={cn(
           'mt-2 w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark',
-          'transition-all duration-100 hover:bg-zigner-gold-light active:scale-[0.99]',
+          'transition-colors hover:bg-zigner-gold-light',
           'disabled:opacity-50 disabled:cursor-not-allowed',
           txStatus === 'confirm' && 'hidden'
         )}
@@ -991,7 +990,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
           <button
             onClick={() => setAssetOpen(!assetOpen)}
             disabled={txStatus !== 'idle' || balancesLoading}
-            className='flex w-full items-center justify-between rounded-lg border border-border bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50 disabled:opacity-50'
+            className='flex w-full items-center justify-between rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50 disabled:opacity-50'
           >
             {balancesLoading ? (
               <span className='text-muted-foreground'>loading...</span>
@@ -1000,11 +999,11 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
             ) : (
               <span className='text-muted-foreground'>select asset</span>
             )}
-            <ChevronDownIcon className={cn('h-4 w-4 transition-transform', assetOpen && 'rotate-180')} />
+            <span className={cn('i-lucide-chevron-down h-4 w-4 transition-transform', assetOpen && 'rotate-180')} />
           </button>
 
           {assetOpen && (
-            <div className='absolute top-full left-0 right-0 z-10 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border bg-background shadow-lg'>
+            <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border/40 bg-background shadow-lg'>
               {balances.map((balance, i) => {
                 if (!balance.balanceView) return null;
                 const symbol = getDisplayDenomFromView(balance.balanceView) || 'Unknown';
@@ -1055,7 +1054,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
             'w-full rounded-lg border bg-input px-3 py-2.5 text-sm text-foreground',
             'placeholder:text-muted-foreground transition-colors duration-100',
             'focus:border-zigner-gold focus:outline-none disabled:opacity-50',
-            sendState.recipient && !addressValid ? 'border-red-500' : 'border-border'
+            sendState.recipient && !addressValid ? 'border-red-400' : 'border-border/40'
           )}
         />
         {sendState.recipient && !addressValid && (
@@ -1086,7 +1085,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
           onChange={e => sendState.setAmount(e.target.value)}
           placeholder='0.00'
           disabled={txStatus !== 'idle'}
-          className='w-full rounded-lg border border-border bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-100 focus:border-zigner-gold focus:outline-none disabled:opacity-50'
+          className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-100 focus:border-zigner-gold focus:outline-none disabled:opacity-50'
         />
       </div>
 
@@ -1099,13 +1098,13 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
           onChange={e => sendState.setMemo(e.target.value)}
           placeholder='optional message'
           disabled={txStatus !== 'idle'}
-          className='w-full rounded-lg border border-border bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-100 focus:border-zigner-gold focus:outline-none disabled:opacity-50'
+          className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-100 focus:border-zigner-gold focus:outline-none disabled:opacity-50'
         />
       </div>
 
       {/* transaction status */}
       {txStatus === 'success' && txHash && (
-        <div className='rounded-lg border border-green-500/30 bg-green-500/10 p-3'>
+        <div className='rounded-lg border border-green-500/40 bg-green-500/10 p-3'>
           <p className='text-sm text-green-400'>transaction sent!</p>
           <p className='text-xs text-muted-foreground mt-1 font-mono break-all'>
             {txHash}
@@ -1114,7 +1113,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
       )}
 
       {txStatus === 'error' && txError && (
-        <div className='rounded-lg border border-red-500/30 bg-red-500/10 p-3'>
+        <div className='rounded-lg border border-red-500/40 bg-red-500/10 p-3'>
           <p className='text-sm text-red-400'>transaction failed</p>
           <p className='text-xs text-muted-foreground mt-1'>{txError}</p>
         </div>
@@ -1139,7 +1138,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
         }
         className={cn(
           'mt-2 w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark',
-          'transition-all duration-100 hover:bg-zigner-gold-light active:scale-[0.99]',
+          'transition-colors hover:bg-zigner-gold-light',
           'disabled:opacity-50 disabled:cursor-not-allowed'
         )}
       >
@@ -1245,7 +1244,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
       <div>
         <label className='mb-1 block text-xs text-muted-foreground'>destination chain</label>
         {chainsLoading ? (
-          <div className='h-10 rounded-lg bg-muted/30 animate-pulse' />
+          <div className='h-10 rounded-lg bg-muted animate-pulse' />
         ) : (
           <ChainSelector
             chains={chains}
@@ -1270,7 +1269,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
             'w-full rounded-lg border bg-input px-3 py-2.5 text-sm text-foreground',
             'placeholder:text-muted-foreground transition-colors duration-100',
             'focus:border-zigner-gold focus:outline-none disabled:opacity-50',
-            ibcState.destinationAddress && !addressValid ? 'border-red-500' : 'border-border'
+            ibcState.destinationAddress && !addressValid ? 'border-red-400' : 'border-border/40'
           )}
         />
         {ibcState.destinationAddress && !addressValid && (
@@ -1292,13 +1291,13 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
           onChange={e => ibcState.setAmount(e.target.value)}
           placeholder='0.00'
           disabled={txStatus !== 'idle'}
-          className='w-full rounded-lg border border-border bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-100 focus:border-zigner-gold focus:outline-none disabled:opacity-50'
+          className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-100 focus:border-zigner-gold focus:outline-none disabled:opacity-50'
         />
       </div>
 
       {/* transaction status */}
       {txStatus === 'success' && txHash && (
-        <div className='rounded-lg border border-green-500/30 bg-green-500/10 p-3'>
+        <div className='rounded-lg border border-green-500/40 bg-green-500/10 p-3'>
           <p className='text-sm text-green-400'>transaction sent!</p>
           <p className='text-xs text-muted-foreground mt-1 font-mono break-all'>
             {txHash}
@@ -1324,14 +1323,14 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
 
       {/* contact name modal */}
       {showContactModal && sentToAddress && (
-        <div className='rounded-lg border border-border bg-background p-3'>
+        <div className='rounded-lg border border-border/40 bg-background p-3'>
           <p className='text-sm font-medium mb-2'>name this contact</p>
           <input
             type='text'
             value={contactName}
             onChange={e => setContactName(e.target.value)}
             placeholder='enter name...'
-            className='w-full rounded-lg border border-border bg-input px-3 py-2 text-sm mb-2 focus:border-zigner-gold focus:outline-none'
+            className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm mb-2 focus:border-zigner-gold focus:outline-none'
             autoFocus
           />
           <div className='flex gap-2'>
@@ -1345,7 +1344,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
                 }
               }}
               disabled={!contactName.trim()}
-              className='flex-1 rounded bg-zigner-gold px-3 py-1.5 text-xs font-medium text-zigner-dark disabled:opacity-50'
+              className='flex-1 rounded-md bg-zigner-gold px-3 py-1.5 text-xs font-medium text-zigner-dark transition-colors disabled:opacity-50'
             >
               save
             </button>
@@ -1354,7 +1353,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
                 setShowContactModal(false);
                 setContactName('');
               }}
-              className='flex-1 rounded bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground'
+              className='flex-1 rounded-md bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground transition-colors'
             >
               cancel
             </button>
@@ -1363,7 +1362,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
       )}
 
       {txStatus === 'error' && txError && (
-        <div className='rounded-lg border border-red-500/30 bg-red-500/10 p-3'>
+        <div className='rounded-lg border border-red-500/40 bg-red-500/10 p-3'>
           <p className='text-sm text-red-400'>transaction failed</p>
           <p className='text-xs text-muted-foreground mt-1'>{txError}</p>
         </div>
@@ -1388,7 +1387,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
         }
         className={cn(
           'mt-2 w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark',
-          'transition-all duration-100 hover:bg-zigner-gold-light active:scale-[0.99]',
+          'transition-colors hover:bg-zigner-gold-light',
           'disabled:opacity-50 disabled:cursor-not-allowed'
         )}
       >
@@ -1466,9 +1465,9 @@ export function SendPage() {
         {!inDedicatedWindow && (
           <button
             onClick={goBack}
-            className='text-muted-foreground transition-colors duration-75 hover:text-foreground'
+            className='text-muted-foreground transition-colors hover:text-foreground'
           >
-            <ArrowLeftIcon className='h-5 w-5' />
+            <span className='i-lucide-arrow-left h-5 w-5' />
           </button>
         )}
         <h1 className='text-lg font-medium text-foreground'>{getTitle()}</h1>
@@ -1487,7 +1486,7 @@ export function SendPage() {
               <input
                 type='text'
                 placeholder='enter address'
-                className='w-full rounded-lg border border-border bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-100 focus:border-zigner-gold focus:outline-none'
+                className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-100 focus:border-zigner-gold focus:outline-none'
               />
             </div>
 
@@ -1496,7 +1495,7 @@ export function SendPage() {
               <input
                 type='text'
                 placeholder='0.00'
-                className='w-full rounded-lg border border-border bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-100 focus:border-zigner-gold focus:outline-none'
+                className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-100 focus:border-zigner-gold focus:outline-none'
               />
             </div>
 

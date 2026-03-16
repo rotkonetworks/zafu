@@ -3,23 +3,6 @@
  */
 
 import { useState, useMemo, useCallback, useRef } from 'react';
-import {
-  PersonIcon,
-  PlusIcon,
-  MagnifyingGlassIcon,
-  StarIcon,
-  StarFilledIcon,
-  Pencil1Icon,
-  TrashIcon,
-  CopyIcon,
-  CheckIcon,
-  DownloadIcon,
-  UploadIcon,
-  DotsHorizontalIcon,
-  ChevronDownIcon,
-  ChevronRightIcon,
-  ArrowLeftIcon,
-} from '@radix-ui/react-icons';
 import { useNavigate } from 'react-router-dom';
 import { PopupPath } from '../paths';
 import { useStore } from '../../../state';
@@ -86,9 +69,9 @@ function ContactModal({
   };
 
   return (
-    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60'>
-      <div className='w-full max-w-sm mx-4 rounded-lg bg-background border border-border p-5 shadow-xl'>
-        <h2 className='text-lg font-semibold mb-4'>
+    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm'>
+      <div className='w-full max-w-sm mx-4 rounded-lg bg-background border border-border/40 p-5 shadow-xl'>
+        <h2 className='text-lg font-medium mb-4'>
           {editContact ? 'edit contact' : 'new contact'}
         </h2>
 
@@ -101,7 +84,7 @@ function ContactModal({
               onChange={(e) => setName(e.target.value)}
               placeholder='alice'
               autoFocus
-              className='w-full rounded-lg border border-border bg-input px-3 py-2 text-sm focus:border-zigner-gold focus:outline-none'
+              className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
             />
           </div>
 
@@ -112,7 +95,7 @@ function ContactModal({
               onChange={(e) => setNotes(e.target.value)}
               placeholder='notes about this contact...'
               rows={2}
-              className='w-full rounded-lg border border-border bg-input px-3 py-2 text-sm focus:border-zigner-gold focus:outline-none resize-none'
+              className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none resize-none'
             />
           </div>
         </div>
@@ -120,14 +103,14 @@ function ContactModal({
         <div className='flex gap-2 mt-4'>
           <button
             onClick={onClose}
-            className='flex-1 rounded-lg border border-border py-2 text-sm hover:bg-muted/50'
+            className='flex-1 rounded-lg border border-border/40 py-3 text-sm hover:bg-muted/50 transition-colors'
           >
             cancel
           </button>
           <button
             onClick={handleSave}
             disabled={!canSave}
-            className='flex-1 rounded-lg bg-zigner-gold py-2 text-sm font-medium text-zigner-dark disabled:opacity-50'
+            className='flex-1 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
           >
             save
           </button>
@@ -166,9 +149,9 @@ function AddressModal({
   };
 
   return (
-    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60'>
-      <div className='w-full max-w-sm mx-4 rounded-lg bg-background border border-border p-5 shadow-xl'>
-        <h2 className='text-lg font-semibold mb-4'>
+    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm'>
+      <div className='w-full max-w-sm mx-4 rounded-lg bg-background border border-border/40 p-5 shadow-xl'>
+        <h2 className='text-lg font-medium mb-4'>
           {editAddress ? 'edit address' : 'add address'}
         </h2>
 
@@ -178,7 +161,7 @@ function AddressModal({
             <select
               value={network}
               onChange={(e) => setNetwork(e.target.value as ContactNetwork)}
-              className='w-full rounded-lg border border-border bg-input px-3 py-2 text-sm focus:border-zigner-gold focus:outline-none'
+              className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
             >
               {Object.entries(NETWORK_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>
@@ -196,7 +179,7 @@ function AddressModal({
                 value={chainId}
                 onChange={(e) => setChainId(e.target.value)}
                 placeholder='osmosis, noble, etc'
-                className='w-full rounded-lg border border-border bg-input px-3 py-2 text-sm focus:border-zigner-gold focus:outline-none'
+                className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
               />
             </div>
           )}
@@ -208,7 +191,7 @@ function AddressModal({
               value={address}
               onChange={(e) => setAddress(e.target.value)}
               placeholder='paste address...'
-              className='w-full rounded-lg border border-border bg-input px-3 py-2 text-xs font-mono focus:border-zigner-gold focus:outline-none'
+              className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-xs font-mono focus:border-zigner-gold focus:outline-none'
             />
           </div>
 
@@ -219,7 +202,7 @@ function AddressModal({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder='notes for this address...'
-              className='w-full rounded-lg border border-border bg-input px-3 py-2 text-sm focus:border-zigner-gold focus:outline-none'
+              className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
             />
           </div>
         </div>
@@ -227,14 +210,14 @@ function AddressModal({
         <div className='flex gap-2 mt-4'>
           <button
             onClick={onClose}
-            className='flex-1 rounded-lg border border-border py-2 text-sm hover:bg-muted/50'
+            className='flex-1 rounded-lg border border-border/40 py-3 text-sm hover:bg-muted/50 transition-colors'
           >
             cancel
           </button>
           <button
             onClick={handleSave}
             disabled={!canSave}
-            className='flex-1 rounded-lg bg-zigner-gold py-2 text-sm font-medium text-zigner-dark disabled:opacity-50'
+            className='flex-1 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
           >
             save
           </button>
@@ -259,13 +242,13 @@ function AddressRow({
   const copyAddress = useCallback(() => {
     void navigator.clipboard.writeText(address.address);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setTimeout(() => setCopied(false), 1500);
   }, [address.address]);
 
   return (
-    <div className='group flex items-center justify-between py-2 px-3 rounded-lg hover:bg-muted/30'>
+    <div className='group flex items-center justify-between py-2 px-3 rounded-lg hover:bg-muted/50 transition-colors'>
       <div className='flex items-center gap-2 min-w-0 flex-1'>
-        <span className={cn('shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium', NETWORK_COLORS[address.network])}>
+        <span className={cn('shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium', NETWORK_COLORS[address.network])}>
           {NETWORK_LABELS[address.network]}
           {address.chainId && ` / ${address.chainId}`}
         </span>
@@ -277,19 +260,19 @@ function AddressRow({
           className='shrink-0 p-1 text-muted-foreground hover:text-foreground'
         >
           {copied ? (
-            <CheckIcon className='h-3 w-3 text-green-500' />
+            <span className='i-lucide-check h-3 w-3 text-green-400' />
           ) : (
-            <CopyIcon className='h-3 w-3' />
+            <span className='i-lucide-copy h-3 w-3' />
           )}
         </button>
       </div>
 
       <div className='flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity'>
-        <button onClick={onEdit} className='p-1 rounded hover:bg-muted transition-colors'>
-          <Pencil1Icon className='h-3 w-3 text-muted-foreground' />
+        <button onClick={onEdit} className='p-1 rounded-lg hover:bg-muted/50 transition-colors'>
+          <span className='i-lucide-pencil h-3 w-3 text-muted-foreground' />
         </button>
-        <button onClick={onDelete} className='p-1 rounded hover:bg-muted transition-colors'>
-          <TrashIcon className='h-3 w-3 text-red-500' />
+        <button onClick={onDelete} className='p-1 rounded-lg hover:bg-muted/50 transition-colors'>
+          <span className='i-lucide-trash-2 h-3 w-3 text-red-400' />
         </button>
       </div>
     </div>
@@ -320,7 +303,7 @@ function ContactCard({
     <div className='rounded-lg border border-border/40 bg-card overflow-hidden'>
       {/* header - always visible */}
       <div
-        className='flex items-center justify-between p-3 cursor-pointer hover:bg-muted/30'
+        className='flex items-center justify-between p-3 cursor-pointer hover:bg-muted/50 transition-colors'
         onClick={() => setExpanded(!expanded)}
       >
         <div className='flex items-center gap-3'>
@@ -332,14 +315,14 @@ function ContactCard({
             className='p-0.5'
           >
             {expanded ? (
-              <ChevronDownIcon className='h-4 w-4 text-muted-foreground' />
+              <span className='i-lucide-chevron-down h-4 w-4 text-muted-foreground' />
             ) : (
-              <ChevronRightIcon className='h-4 w-4 text-muted-foreground' />
+              <span className='i-lucide-chevron-right h-4 w-4 text-muted-foreground' />
             )}
           </button>
 
           <div className='flex h-8 w-8 items-center justify-center rounded-full bg-primary/10'>
-            <PersonIcon className='h-4 w-4 text-primary' />
+            <span className='i-lucide-user h-4 w-4 text-primary' />
           </div>
 
           <div>
@@ -360,26 +343,26 @@ function ContactCard({
         <div className='flex items-center gap-1' onClick={(e) => e.stopPropagation()}>
           <button
             onClick={onToggleFavorite}
-            className='p-1.5 rounded hover:bg-muted'
+            className='p-1.5 rounded-lg hover:bg-muted/50 transition-colors'
           >
             {contact.favorite ? (
-              <StarFilledIcon className='h-4 w-4 text-yellow-500' />
+              <span className='i-lucide-star h-4 w-4 text-yellow-400' />
             ) : (
-              <StarIcon className='h-4 w-4 text-muted-foreground' />
+              <span className='i-lucide-star h-4 w-4 text-muted-foreground' />
             )}
           </button>
-          <button onClick={onEditContact} className='p-1.5 rounded hover:bg-muted transition-colors'>
-            <Pencil1Icon className='h-4 w-4 text-muted-foreground' />
+          <button onClick={onEditContact} className='p-1.5 rounded-lg hover:bg-muted/50 transition-colors'>
+            <span className='i-lucide-pencil h-4 w-4 text-muted-foreground' />
           </button>
-          <button onClick={onDeleteContact} className='p-1.5 rounded hover:bg-muted transition-colors'>
-            <TrashIcon className='h-4 w-4 text-red-500' />
+          <button onClick={onDeleteContact} className='p-1.5 rounded-lg hover:bg-muted/50 transition-colors'>
+            <span className='i-lucide-trash-2 h-4 w-4 text-red-400' />
           </button>
         </div>
       </div>
 
       {/* expanded addresses */}
       {expanded && (
-        <div className='border-t border-border/30 bg-muted/10'>
+        <div className='border-t border-border/40 bg-muted/10'>
           {contact.addresses.length === 0 ? (
             <div className='p-4 text-center'>
               <p className='text-xs text-muted-foreground'>no addresses yet</p>
@@ -398,12 +381,12 @@ function ContactCard({
           )}
 
           {/* add address button */}
-          <div className='p-2 border-t border-border/30'>
+          <div className='p-2 border-t border-border/40'>
             <button
               onClick={onAddAddress}
-              className='flex w-full items-center justify-center gap-1 rounded-lg border border-dashed border-border py-2 text-xs text-muted-foreground hover:border-zigner-gold hover:text-zigner-gold transition-colors'
+              className='flex w-full items-center justify-center gap-1 rounded-lg border border-dashed border-border/40 py-2 text-xs text-muted-foreground hover:border-zigner-gold hover:text-zigner-gold transition-colors'
             >
-              <PlusIcon className='h-3 w-3' />
+              <span className='i-lucide-plus h-3 w-3' />
               add address
             </button>
           </div>
@@ -560,7 +543,7 @@ export function ContactsPage() {
             onClick={() => navigate(PopupPath.INDEX)}
             className='text-muted-foreground transition-colors hover:text-foreground'
           >
-            <ArrowLeftIcon className='h-5 w-5' />
+            <span className='i-lucide-arrow-left h-5 w-5' />
           </button>
           <h1 className='text-lg font-medium'>contacts</h1>
         </div>
@@ -569,26 +552,26 @@ export function ContactsPage() {
           <div className='relative'>
             <button
               onClick={() => setShowMenu(!showMenu)}
-              className='rounded-lg p-1.5 hover:bg-muted transition-colors'
+              className='rounded-lg p-1.5 hover:bg-muted/50 transition-colors'
             >
-              <DotsHorizontalIcon className='h-5 w-5' />
+              <span className='i-lucide-more-horizontal h-5 w-5' />
             </button>
             {showMenu && (
               <>
-                <div className='fixed inset-0 z-40' onClick={() => setShowMenu(false)} />
-                <div className='absolute right-0 top-full mt-1 z-50 w-40 rounded-lg border border-border bg-background shadow-lg'>
+                <div className='fixed inset-0 z-50' onClick={() => setShowMenu(false)} />
+                <div className='absolute right-0 top-full mt-1 z-50 w-40 rounded-lg border border-border/40 bg-background shadow-lg'>
                   <button
                     onClick={handleExport}
-                    className='flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors'
+                    className='flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50 transition-colors'
                   >
-                    <DownloadIcon className='h-4 w-4' />
+                    <span className='i-lucide-download h-4 w-4' />
                     export
                   </button>
                   <button
                     onClick={() => fileInputRef.current?.click()}
-                    className='flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors'
+                    className='flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50 transition-colors'
                   >
-                    <UploadIcon className='h-4 w-4' />
+                    <span className='i-lucide-upload h-4 w-4' />
                     import
                   </button>
                 </div>
@@ -601,9 +584,9 @@ export function ContactsPage() {
               setEditingContact(undefined);
               setShowContactModal(true);
             }}
-            className='flex items-center gap-1 rounded-lg bg-zigner-gold px-3 py-1.5 text-sm font-medium text-zigner-dark'
+            className='flex items-center gap-1 rounded-lg bg-zigner-gold px-3 py-1.5 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors'
           >
-            <PlusIcon className='h-4 w-4' />
+            <span className='i-lucide-plus h-4 w-4' />
             add
           </button>
         </div>
@@ -615,8 +598,8 @@ export function ContactsPage() {
           className={cn(
             'mx-4 mt-2 rounded-lg px-3 py-2 text-sm',
             importStatus.type === 'success'
-              ? 'bg-green-500/10 text-green-500 border border-green-500/30'
-              : 'bg-red-500/10 text-red-500 border border-red-500/30'
+              ? 'bg-green-500/10 text-green-400 border border-green-500/40'
+              : 'bg-red-500/10 text-red-400 border border-red-500/40'
           )}
         >
           {importStatus.message}
@@ -626,23 +609,23 @@ export function ContactsPage() {
       {/* search and filter */}
       <div className='px-4 py-3 space-y-2'>
         <div className='relative'>
-          <MagnifyingGlassIcon className='absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground' />
+          <span className='i-lucide-search absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground' />
           <input
             type='text'
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder='search contacts...'
-            className='w-full rounded-lg border border-border bg-input pl-9 pr-3 py-2 text-sm focus:border-zigner-gold focus:outline-none'
+            className='w-full rounded-lg border border-border/40 bg-input pl-9 pr-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
           />
         </div>
         <div className='flex gap-2'>
           <button
             onClick={() => setFilter('all')}
             className={cn(
-              'rounded-full px-3 py-1 text-xs transition-colors',
+              'rounded-md px-3 py-1 text-xs transition-colors',
               filter === 'all'
                 ? 'bg-zigner-gold text-zigner-dark'
-                : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                : 'bg-muted/50 text-muted-foreground hover:bg-muted/80'
             )}
           >
             all
@@ -650,10 +633,10 @@ export function ContactsPage() {
           <button
             onClick={() => setFilter('favorites')}
             className={cn(
-              'rounded-full px-3 py-1 text-xs transition-colors',
+              'rounded-md px-3 py-1 text-xs transition-colors',
               filter === 'favorites'
                 ? 'bg-zigner-gold text-zigner-dark'
-                : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                : 'bg-muted/50 text-muted-foreground hover:bg-muted/80'
             )}
           >
             favorites
@@ -666,7 +649,7 @@ export function ContactsPage() {
         {filteredContacts.length === 0 ? (
           <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
             <div className='rounded-full bg-primary/10 p-4'>
-              <PersonIcon className='h-8 w-8 text-primary' />
+              <span className='i-lucide-user h-8 w-8 text-primary' />
             </div>
             <div>
               <p className='text-sm font-medium'>no contacts</p>

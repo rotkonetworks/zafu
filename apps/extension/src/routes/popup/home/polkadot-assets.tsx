@@ -5,7 +5,6 @@
  */
 
 import { useState, useEffect, useCallback, memo } from 'react';
-import { ReloadIcon } from '@radix-ui/react-icons';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import {
   getBalances,
@@ -29,7 +28,7 @@ interface PolkadotAssetsProps {
 
 /** single chain balance row */
 const ChainRow = memo(({ balance }: { balance: ChainBalance }) => (
-  <div className='flex items-center justify-between py-2 px-3 border-b border-border/30 last:border-0'>
+  <div className='flex items-center justify-between py-2 px-3 border-b border-border/40 last:border-0'>
     <div className='flex items-center gap-2'>
       <div className='h-6 w-6 bg-primary/10 flex items-center justify-center text-xs font-bold'>
         {balance.symbol.slice(0, 2)}
@@ -99,8 +98,8 @@ export const PolkadotAssets = ({ publicKey, relay = 'polkadot' }: PolkadotAssets
 
   if (loading) {
     return (
-      <div className='flex items-center justify-center py-8'>
-        <ReloadIcon className='h-5 w-5 animate-spin text-muted-foreground' />
+      <div className='flex items-center justify-center py-12'>
+        <span className='i-lucide-refresh-cw h-5 w-5 animate-spin text-muted-foreground' />
       </div>
     );
   }
@@ -108,7 +107,7 @@ export const PolkadotAssets = ({ publicKey, relay = 'polkadot' }: PolkadotAssets
   return (
     <div className='flex flex-col'>
       <div className='flex items-center justify-between mb-2'>
-        <span className='text-xs font-medium text-muted-foreground'>
+        <span className='text-xs font-medium uppercase tracking-wider text-muted-foreground'>
           {relay} ecosystem
         </span>
         <button
@@ -117,7 +116,7 @@ export const PolkadotAssets = ({ publicKey, relay = 'polkadot' }: PolkadotAssets
           className='text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50'
         >
           {refreshing ? (
-            <ReloadIcon className='h-3 w-3 animate-spin' />
+            <span className='i-lucide-refresh-cw h-3 w-3 animate-spin' />
           ) : (
             'refresh'
           )}
@@ -126,7 +125,7 @@ export const PolkadotAssets = ({ publicKey, relay = 'polkadot' }: PolkadotAssets
 
       <div className='rounded-lg border border-border/40 bg-card'>
         {balances.length === 0 ? (
-          <div className='flex flex-col items-center justify-center py-6 text-center'>
+          <div className='flex flex-col items-center justify-center py-12 text-center'>
             <span className='text-sm text-muted-foreground'>no balances</span>
             <span className='text-xs text-muted-foreground/70 mt-1'>
               enable parachains in settings

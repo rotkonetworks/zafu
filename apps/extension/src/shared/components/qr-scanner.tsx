@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { BrowserQRCodeReader } from '@zxing/browser';
-import { CameraIcon, Cross1Icon } from '@radix-ui/react-icons';
 import { Button } from '@repo/ui/components/ui/button';
 
 interface QrScannerProps {
@@ -149,7 +148,7 @@ export const QrScanner = ({
       {!isScanning && !error && (
         <div className='absolute inset-0 flex items-center justify-center bg-black'>
           <div className='flex flex-col items-center gap-2 text-white'>
-            <CameraIcon className='size-8 animate-pulse' />
+            <span className='i-lucide-camera size-8 animate-pulse' />
             <span className='text-sm'>starting camera...</span>
           </div>
         </div>
@@ -159,7 +158,7 @@ export const QrScanner = ({
         <div className='absolute inset-0 flex items-center justify-center bg-black p-4'>
           <div className='flex flex-col items-center gap-3 text-center'>
             <div className='p-3 rounded-full bg-red-500/20'>
-              <CameraIcon className='size-6 text-red-400' />
+              <span className='i-lucide-camera size-6 text-red-400' />
             </div>
             <p className='text-xs text-red-400'>{error}</p>
             <div className='flex gap-2'>
@@ -182,10 +181,10 @@ export const QrScanner = ({
             onClick={handleClose}
             className='p-0.5 text-muted-foreground hover:text-foreground transition-colors'
           >
-            <Cross1Icon className='h-3.5 w-3.5' />
+            <span className='i-lucide-x h-3.5 w-3.5' />
           </button>
         </div>
-        <div className='relative aspect-square w-full overflow-hidden rounded-lg border border-yellow-500/30 bg-black'>
+        <div className='relative aspect-square w-full overflow-hidden rounded-lg border border-yellow-500/40 bg-black'>
           {cameraView}
         </div>
         {description && (
@@ -207,14 +206,14 @@ export const QrScanner = ({
     <div className='fixed inset-0 z-50 bg-black flex flex-col overflow-hidden'>
       <div className='flex-none flex items-center justify-between p-4 bg-black/80'>
         <div>
-          <h2 className='text-lg font-bold text-white'>{title}</h2>
-          {description && <p className='text-sm text-gray-400'>{description}</p>}
+          <h2 className='text-lg font-medium text-white'>{title}</h2>
+          {description && <p className='text-sm text-white/60'>{description}</p>}
         </div>
         <button
           onClick={handleClose}
           className='p-2 rounded-full hover:bg-white/10 transition-colors'
         >
-          <Cross1Icon className='size-6 text-white' />
+          <span className='i-lucide-x size-6 text-white' />
         </button>
       </div>
 
@@ -224,7 +223,7 @@ export const QrScanner = ({
 
       {isScanning && (
         <div className='flex-none p-4 bg-black/80 text-center'>
-          <p className='text-sm text-gray-400'>position the QR code within the frame</p>
+          <p className='text-sm text-white/60'>position the QR code within the frame</p>
         </div>
       )}
 

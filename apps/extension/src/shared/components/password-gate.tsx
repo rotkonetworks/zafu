@@ -6,7 +6,6 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { EyeClosedIcon, EyeOpenIcon, LockClosedIcon } from '@radix-ui/react-icons';
 import { useStore } from '../../state';
 import { passwordSelector } from '../../state/password';
 
@@ -82,11 +81,11 @@ export const PasswordGateModal = ({
   if (!open) return null;
 
   return (
-    <div className='fixed inset-0 z-[1000] flex items-center justify-center bg-black/60 backdrop-blur-sm'>
-      <div className='mx-4 w-full max-w-sm rounded-lg border border-border bg-background p-5 shadow-2xl'>
+    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm'>
+      <div className='mx-4 w-full max-w-sm rounded-lg border border-border/40 bg-background p-5 shadow-xl'>
         <div className='mb-4 flex items-center gap-2'>
-          <LockClosedIcon className='h-4 w-4 text-primary' />
-          <h3 className='text-sm font-medium'>Confirm Transaction</h3>
+          <span className='i-lucide-lock h-4 w-4 text-primary' />
+          <h3 className='text-lg font-medium'>Confirm Transaction</h3>
         </div>
 
         {walletType === 'zigner' ? (
@@ -96,16 +95,16 @@ export const PasswordGateModal = ({
             </p>
             <div className='flex gap-2'>
               <button
-                onClick={onConfirm}
-                className='flex-1 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90'
-              >
-                Continue
-              </button>
-              <button
                 onClick={onCancel}
-                className='flex-1 rounded-lg border border-border px-4 py-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted/50'
+                className='flex-1 rounded-lg border border-border/40 px-4 py-3 text-sm text-muted-foreground transition-colors hover:bg-muted/50'
               >
                 Cancel
+              </button>
+              <button
+                onClick={onConfirm}
+                className='flex-1 rounded-lg bg-primary px-4 py-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90'
+              >
+                Continue
               </button>
             </div>
           </>
@@ -127,7 +126,7 @@ export const PasswordGateModal = ({
                 onKeyDown={handleKeyDown}
                 placeholder='password'
                 disabled={checking}
-                className='w-full rounded-lg border border-border bg-input px-3 py-2.5 pr-10 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none disabled:opacity-50'
+                className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 pr-10 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none disabled:opacity-50'
               />
               <button
                 type='button'
@@ -135,9 +134,9 @@ export const PasswordGateModal = ({
                 className='absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground'
               >
                 {reveal ? (
-                  <EyeOpenIcon className='h-3.5 w-3.5' />
+                  <span className='i-lucide-eye h-3.5 w-3.5' />
                 ) : (
-                  <EyeClosedIcon className='h-3.5 w-3.5' />
+                  <span className='i-lucide-eye-off h-3.5 w-3.5' />
                 )}
               </button>
             </div>
@@ -148,18 +147,18 @@ export const PasswordGateModal = ({
 
             <div className='flex gap-2'>
               <button
-                onClick={() => void handleSubmit()}
-                disabled={checking || !password.trim()}
-                className='flex-1 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50'
-              >
-                {checking ? 'verifying...' : 'Confirm'}
-              </button>
-              <button
                 onClick={onCancel}
                 disabled={checking}
-                className='flex-1 rounded-lg border border-border px-4 py-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-50'
+                className='flex-1 rounded-lg border border-border/40 px-4 py-3 text-sm text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-50'
               >
                 Cancel
+              </button>
+              <button
+                onClick={() => void handleSubmit()}
+                disabled={checking || !password.trim()}
+                className='flex-1 rounded-lg bg-primary px-4 py-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50'
+              >
+                {checking ? 'verifying...' : 'Confirm'}
               </button>
             </div>
           </>

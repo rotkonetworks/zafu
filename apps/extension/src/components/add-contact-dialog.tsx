@@ -4,7 +4,6 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Cross2Icon, PersonIcon, PlusIcon } from '@radix-ui/react-icons';
 import { useStore } from '../state';
 import { contactsSelector, type ContactNetwork, type Contact } from '../state/contacts';
 import { cn } from '@repo/ui/lib/utils';
@@ -67,41 +66,34 @@ export function AddContactDialog({
   const canSubmit = mode === 'new' || selectedContact !== null;
 
   return (
-    <>
-      {/* backdrop */}
-      <div
-        className='fixed inset-0 z-50 bg-black/50'
-        onClick={onClose}
-      />
-
-      {/* dialog */}
-      <div className='fixed left-1/2 top-1/2 z-50 w-[90%] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-lg border border-border bg-background shadow-xl'>
+    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm' onClick={onClose}>
+      <div className='w-full max-w-sm mx-4 rounded-lg border border-border/40 bg-background shadow-xl' onClick={e => e.stopPropagation()}>
         {/* header */}
-        <div className='flex items-center justify-between border-b border-border px-4 py-3'>
-          <h2 className='font-medium'>add to contacts</h2>
+        <div className='flex items-center justify-between border-b border-border/40 px-4 py-3'>
+          <h2 className='text-lg font-medium'>add to contacts</h2>
           <button
             onClick={onClose}
-            className='rounded p-1 hover:bg-muted/50'
+            className='rounded-lg p-1 hover:bg-muted/50 transition-colors'
           >
-            <Cross2Icon className='h-4 w-4' />
+            <span className='i-lucide-x h-4 w-4' />
           </button>
         </div>
 
         {/* content */}
         <div className='p-4 space-y-4'>
           {/* address preview */}
-          <div className='rounded-lg border border-border bg-muted/30 p-3'>
+          <div className='rounded-lg border border-border/40 bg-muted/30 p-3'>
             <div className='text-xs text-muted-foreground mb-1'>address</div>
             <div className='text-sm font-mono break-all'>{address}</div>
             <div className='mt-1'>
-              <span className='rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground'>
+              <span className='rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground'>
                 {network}
               </span>
             </div>
           </div>
 
           {/* mode tabs */}
-          <div className='flex rounded-lg border border-border overflow-hidden'>
+          <div className='flex rounded-lg border border-border/40 overflow-hidden'>
             <button
               onClick={() => setMode('new')}
               className={cn(
@@ -111,7 +103,7 @@ export function AddContactDialog({
                   : 'bg-muted/30 hover:bg-muted/50'
               )}
             >
-              <PlusIcon className='h-4 w-4 inline mr-1' />
+              <span className='i-lucide-plus h-4 w-4 inline mr-1' />
               new contact
             </button>
             <button
@@ -125,7 +117,7 @@ export function AddContactDialog({
                 existingContacts.length === 0 && 'opacity-50 cursor-not-allowed'
               )}
             >
-              <PersonIcon className='h-4 w-4 inline mr-1' />
+              <span className='i-lucide-user h-4 w-4 inline mr-1' />
               existing
             </button>
           </div>
@@ -141,7 +133,7 @@ export function AddContactDialog({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder={defaultName}
-                className='w-full rounded-lg border border-border bg-input px-3 py-2 text-sm focus:border-zigner-gold focus:outline-none'
+                className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
                 autoFocus
               />
               <p className='text-xs text-muted-foreground mt-1'>
@@ -154,7 +146,7 @@ export function AddContactDialog({
               <label className='block text-xs text-muted-foreground mb-1'>
                 select contact
               </label>
-              <div className='max-h-40 overflow-y-auto rounded-lg border border-border'>
+              <div className='max-h-40 overflow-y-auto rounded-lg border border-border/40'>
                 {existingContacts.map((contact) => (
                   <button
                     key={contact.id}
@@ -164,7 +156,7 @@ export function AddContactDialog({
                       selectedContact?.id === contact.id && 'bg-primary/10'
                     )}
                   >
-                    <PersonIcon className='h-4 w-4 text-muted-foreground' />
+                    <span className='i-lucide-user h-4 w-4 text-muted-foreground' />
                     <span className='truncate'>{contact.name}</span>
                     <span className='ml-auto text-xs text-muted-foreground'>
                       {contact.addresses.length} addr
@@ -177,22 +169,22 @@ export function AddContactDialog({
         </div>
 
         {/* footer */}
-        <div className='flex gap-2 border-t border-border px-4 py-3'>
+        <div className='flex gap-2 border-t border-border/40 px-4 py-3'>
           <button
             onClick={onClose}
-            className='flex-1 rounded-lg border border-border py-2 text-sm font-medium hover:bg-muted/50'
+            className='flex-1 rounded-lg border border-border/40 py-3 text-sm font-medium hover:bg-muted/50 transition-colors'
           >
             cancel
           </button>
           <button
             onClick={() => void handleSubmit()}
             disabled={!canSubmit || isSubmitting}
-            className='flex-1 rounded-lg bg-zigner-gold py-2 text-sm font-medium text-zigner-dark disabled:opacity-50'
+            className='flex-1 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
           >
             {isSubmitting ? 'adding...' : 'add contact'}
           </button>
         </div>
       </div>
-    </>
+    </div>
   );
 }

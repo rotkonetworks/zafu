@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { ClockIcon, ReloadIcon, ArrowUpIcon, ArrowDownIcon, WidthIcon } from '@radix-ui/react-icons';
 import { useQuery } from '@tanstack/react-query';
 import { viewClient, sctClient } from '../../../clients';
 import { useStore } from '../../../state';
@@ -101,17 +100,17 @@ function TransactionRow({ tx }: { tx: ParsedTransaction }) {
   const isShield = tx.type === 'shield';
 
   return (
-    <div className='flex items-center gap-3 rounded-lg border border-border/40 bg-card p-3 hover:border-border transition-colors'>
+    <div className='flex items-center gap-3 rounded-lg border border-border/40 bg-card p-3 hover:border-muted-foreground/30 transition-colors'>
       <div className={cn(
         'flex h-10 w-10 items-center justify-center rounded-full',
         isShield ? 'bg-blue-500/10' : isIncoming ? 'bg-green-500/10' : 'bg-muted/50'
       )}>
         {isShield ? (
-          <WidthIcon className='h-5 w-5 text-blue-500' />
+          <span className='i-lucide-move-horizontal h-5 w-5 text-blue-500' />
         ) : isIncoming ? (
-          <ArrowDownIcon className='h-5 w-5 text-green-500' />
+          <span className='i-lucide-arrow-down h-5 w-5 text-green-400' />
         ) : (
-          <ArrowUpIcon className='h-5 w-5 text-muted-foreground' />
+          <span className='i-lucide-arrow-up h-5 w-5 text-muted-foreground' />
         )}
       </div>
 
@@ -120,7 +119,7 @@ function TransactionRow({ tx }: { tx: ParsedTransaction }) {
           <span className='text-sm font-medium'>{tx.description}</span>
           {tx.amount && (
             <span className={cn('text-sm font-mono',
-              isShield ? 'text-blue-500' : isIncoming ? 'text-green-500' : 'text-muted-foreground'
+              isShield ? 'text-blue-500' : isIncoming ? 'text-green-400' : 'text-muted-foreground'
             )}>
               {isIncoming ? '+' : ''}{tx.amount} {tx.asset ?? ''}
             </span>
@@ -231,10 +230,10 @@ export const HistoryPage = () => {
         <button
           onClick={() => void refetch()}
           disabled={isLoading}
-          className='rounded-lg p-1.5 hover:bg-muted transition-colors disabled:opacity-50'
+          className='rounded-lg p-1.5 hover:bg-muted/50 transition-colors disabled:opacity-50'
           title='refresh'
         >
-          <ReloadIcon className={cn('h-4 w-4', isLoading && 'animate-spin')} />
+          <span className={cn('i-lucide-refresh-cw h-4 w-4', isLoading && 'animate-spin')} />
         </button>
       </div>
 
@@ -242,7 +241,7 @@ export const HistoryPage = () => {
       <div className='flex-1 overflow-y-auto p-4'>
         {isLoading && transactions.length === 0 ? (
           <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
-            <ReloadIcon className='h-6 w-6 animate-spin text-muted-foreground' />
+            <span className='i-lucide-refresh-cw h-6 w-6 animate-spin text-muted-foreground' />
             <p className='text-sm text-muted-foreground'>Loading transactions...</p>
           </div>
         ) : error ? (
@@ -258,7 +257,7 @@ export const HistoryPage = () => {
         ) : transactions.length === 0 ? (
           <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
             <div className='rounded-full bg-primary/10 p-4'>
-              <ClockIcon className='h-8 w-8 text-primary' />
+              <span className='i-lucide-clock h-8 w-8 text-primary' />
             </div>
             <div>
               <p className='text-sm font-medium'>No transactions yet</p>

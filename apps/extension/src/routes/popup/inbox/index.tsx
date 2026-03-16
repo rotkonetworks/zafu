@@ -6,17 +6,6 @@
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  EnvelopeClosedIcon,
-  EnvelopeOpenIcon,
-  PaperPlaneIcon,
-  MagnifyingGlassIcon,
-  DotsVerticalIcon,
-  CheckIcon,
-  TrashIcon,
-  ReloadIcon,
-  PersonIcon,
-} from '@radix-ui/react-icons';
 import { useStore } from '../../../state';
 import { messagesSelector, type Message } from '../../../state/messages';
 import { contactsSelector } from '../../../state/contacts';
@@ -97,8 +86,8 @@ function MessageRow({
       className={cn(
         'group relative flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors',
         message.read
-          ? 'border-border/30 bg-card hover:border-border'
-          : 'border-primary/30 bg-primary/5 hover:bg-primary/10'
+          ? 'border-border/40 bg-card hover:border-border/40'
+          : 'border-primary/40 bg-primary/5 hover:bg-primary/10'
       )}
       onClick={onClick}
     >
@@ -110,16 +99,16 @@ function MessageRow({
       {/* icon */}
       <div className='flex h-10 w-10 items-center justify-center rounded-full bg-muted/50'>
         {message.read ? (
-          <EnvelopeOpenIcon className='h-5 w-5 text-muted-foreground' />
+          <span className='i-lucide-mail-open h-5 w-5 text-muted-foreground' />
         ) : (
-          <EnvelopeClosedIcon className='h-5 w-5 text-primary' />
+          <span className='i-lucide-mail h-5 w-5 text-primary' />
         )}
       </div>
 
       {/* content */}
       <div className='flex-1 min-w-0'>
         <div className='flex items-center justify-between gap-2'>
-          <span className={cn('text-sm truncate', !message.read && 'font-semibold')}>
+          <span className={cn('text-sm truncate', !message.read && 'font-medium')}>
             {contactName ?? truncatedAddress}
           </span>
           <span className='text-xs text-muted-foreground whitespace-nowrap'>
@@ -135,15 +124,15 @@ function MessageRow({
         </p>
 
         {message.amount && (
-          <div className='mt-1 inline-flex items-center gap-1 rounded bg-green-500/10 px-1.5 py-0.5'>
-            <span className='text-xs text-green-500'>
+          <div className='mt-1 inline-flex items-center gap-1 rounded-md bg-green-500/10 px-1.5 py-0.5'>
+            <span className='text-xs text-green-400'>
               {message.direction === 'received' ? '+' : '-'}{message.amount} {message.asset ?? ''}
             </span>
           </div>
         )}
 
         <div className='flex items-center gap-2 mt-1'>
-          <span className='rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground'>
+          <span className='rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground'>
             {message.network}
           </span>
         </div>
@@ -156,13 +145,13 @@ function MessageRow({
             e.stopPropagation();
             setShowMenu(!showMenu);
           }}
-          className='p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-muted'
+          className='p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-muted/50 transition-colors'
         >
-          <DotsVerticalIcon className='h-4 w-4 text-muted-foreground' />
+          <span className='i-lucide-more-vertical h-4 w-4 text-muted-foreground' />
         </button>
 
         {showMenu && (
-          <div className='absolute right-0 top-full mt-1 z-10 rounded-lg border border-border bg-background shadow-lg py-1 min-w-[140px]'>
+          <div className='absolute right-0 top-full mt-1 z-50 rounded-lg border border-border/40 bg-background shadow-lg py-1 min-w-[140px]'>
             {!message.read && (
               <button
                 onClick={(e) => {
@@ -170,9 +159,9 @@ function MessageRow({
                   onMarkRead();
                   setShowMenu(false);
                 }}
-                className='flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-muted transition-colors'
+                className='flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-muted/50 transition-colors'
               >
-                <CheckIcon className='h-4 w-4' />
+                <span className='i-lucide-check h-4 w-4' />
                 mark read
               </button>
             )}
@@ -183,9 +172,9 @@ function MessageRow({
                   onAddToContacts();
                   setShowMenu(false);
                 }}
-                className='flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-muted transition-colors'
+                className='flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-muted/50 transition-colors'
               >
-                <PersonIcon className='h-4 w-4' />
+                <span className='i-lucide-user h-4 w-4' />
                 add to contacts
               </button>
             )}
@@ -195,9 +184,9 @@ function MessageRow({
                 onDelete();
                 setShowMenu(false);
               }}
-              className='flex items-center gap-2 w-full px-3 py-2 text-sm text-red-400 hover:bg-muted transition-colors'
+              className='flex items-center gap-2 w-full px-3 py-2 text-sm text-red-400 hover:bg-muted/50 transition-colors'
             >
-              <TrashIcon className='h-4 w-4' />
+              <span className='i-lucide-trash-2 h-4 w-4' />
               delete
             </button>
           </div>
@@ -234,11 +223,11 @@ function MessageDetail({
       <div className='flex items-center gap-3 px-4 py-3 border-b border-border/40'>
         <button
           onClick={onClose}
-          className='text-muted-foreground hover:text-foreground'
+          className='text-muted-foreground hover:text-foreground transition-colors'
         >
-          &larr;
+          <span className='i-lucide-arrow-left h-5 w-5' />
         </button>
-        <h2 className='font-medium'>message</h2>
+        <h2 className='text-lg font-medium'>message</h2>
       </div>
 
       {/* message content */}
@@ -261,10 +250,10 @@ function MessageDetail({
                 {canAddToContacts && (
                   <button
                     onClick={onAddToContacts}
-                    className='flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors'
+                    className='flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors'
                     title='add to contacts'
                   >
-                    <PersonIcon className='h-3 w-3' />
+                    <span className='i-lucide-user h-3 w-3' />
                     add
                   </button>
                 )}
@@ -274,7 +263,7 @@ function MessageDetail({
               </span>
             </div>
             <div className='flex items-center gap-2'>
-              <span className='rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground'>
+              <span className='rounded-md bg-muted px-1.5 py-0.5 text-xs text-muted-foreground'>
                 {message.network}
               </span>
               <span className='text-xs text-muted-foreground font-mono'>
@@ -285,10 +274,10 @@ function MessageDetail({
 
           {/* amount if payment */}
           {message.amount && (
-            <div className='rounded-lg border border-green-500/30 bg-green-500/10 p-3'>
+            <div className='rounded-lg border border-green-500/40 bg-green-500/10 p-3'>
               <p className='text-sm text-green-400'>
                 {message.direction === 'received' ? 'received' : 'sent'}{' '}
-                <span className='font-semibold'>
+                <span className='font-medium'>
                   {message.amount} {message.asset ?? ''}
                 </span>
               </p>
@@ -296,7 +285,7 @@ function MessageDetail({
           )}
 
           {/* message body */}
-          <div className='rounded-lg border border-border bg-card p-4'>
+          <div className='rounded-lg border border-border/40 bg-card p-4'>
             <p className='text-sm whitespace-pre-wrap'>{message.content}</p>
           </div>
         </div>
@@ -306,14 +295,14 @@ function MessageDetail({
       {message.direction === 'received' && message.senderAddress && (
         <div className='p-4 border-t border-border/40'>
           <div className='mb-2 flex items-center gap-1.5 text-xs text-muted-foreground'>
-            <PaperPlaneIcon className='h-3 w-3' />
+            <span className='i-lucide-send h-3.5 w-3.5' />
             <span>return address available — you can reply</span>
           </div>
           <button
             onClick={onReply}
             className='w-full flex items-center justify-center gap-2 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors'
           >
-            <PaperPlaneIcon className='h-4 w-4' />
+            <span className='i-lucide-send h-4 w-4' />
             reply
           </button>
         </div>
@@ -430,11 +419,11 @@ function ComposeMessage({
       <div className='flex items-center gap-3 px-4 py-3 border-b border-border/40'>
         <button
           onClick={onClose}
-          className='text-muted-foreground hover:text-foreground'
+          className='text-muted-foreground hover:text-foreground transition-colors'
         >
-          &larr;
+          <span className='i-lucide-arrow-left h-5 w-5' />
         </button>
-        <h2 className='font-medium'>compose</h2>
+        <h2 className='text-lg font-medium'>compose</h2>
       </div>
 
       {/* form */}
@@ -447,7 +436,7 @@ function ComposeMessage({
             onChange={(e) => setRecipient(e.target.value)}
             placeholder={network === 'zcash' ? 'z-address or unified address' : 'penumbra1...'}
             disabled={!!replyTo || txStatus !== 'idle'}
-            className='w-full rounded-lg border border-border bg-input px-3 py-2 text-xs font-mono focus:border-zigner-gold focus:outline-none disabled:opacity-50'
+            className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-xs font-mono focus:border-zigner-gold focus:outline-none disabled:opacity-50'
           />
         </div>
 
@@ -461,7 +450,7 @@ function ComposeMessage({
             onChange={(e) => setAmount(e.target.value)}
             placeholder='0.00 (optional)'
             disabled={txStatus !== 'idle'}
-            className='w-full rounded-lg border border-border bg-input px-3 py-2 text-sm focus:border-zigner-gold focus:outline-none disabled:opacity-50'
+            className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none disabled:opacity-50'
           />
           <p className='text-xs text-muted-foreground mt-1'>
             send a payment with your message
@@ -477,7 +466,7 @@ function ComposeMessage({
             rows={6}
             maxLength={network === 'zcash' && ownAddress ? 512 - ownAddress.length - 7 : 512}
             disabled={txStatus !== 'idle'}
-            className='w-full rounded-lg border border-border bg-input px-3 py-2 text-sm focus:border-zigner-gold focus:outline-none resize-none disabled:opacity-50'
+            className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none resize-none disabled:opacity-50'
           />
           <p className='text-xs text-muted-foreground mt-1'>
             {message.length}/{network === 'zcash' && ownAddress ? 512 - ownAddress.length - 7 : 512} characters
@@ -489,7 +478,7 @@ function ComposeMessage({
 
         {/* transaction status */}
         {txStatus === 'success' && txHash && (
-          <div className='rounded-lg border border-green-500/30 bg-green-500/10 p-3'>
+          <div className='rounded-lg border border-green-500/40 bg-green-500/10 p-3'>
             <p className='text-sm text-green-400'>message sent!</p>
             <p className='text-xs text-muted-foreground mt-1 font-mono break-all'>
               {txHash}
@@ -498,7 +487,7 @@ function ComposeMessage({
         )}
 
         {txStatus === 'error' && txError && (
-          <div className='rounded-lg border border-red-500/30 bg-red-500/10 p-3'>
+          <div className='rounded-lg border border-red-500/40 bg-red-500/10 p-3'>
             <p className='text-sm text-red-400'>failed to send</p>
             <p className='text-xs text-muted-foreground mt-1'>{txError}</p>
           </div>
@@ -520,19 +509,19 @@ function ComposeMessage({
         >
           {txStatus === 'sending' ? (
             <>
-              <ReloadIcon className='h-4 w-4 animate-spin' />
+              <span className='i-lucide-refresh-cw h-4 w-4 animate-spin' />
               sending...
             </>
           ) : txStatus === 'success' ? (
             <>
-              <CheckIcon className='h-4 w-4' />
+              <span className='i-lucide-check h-4 w-4' />
               done
             </>
           ) : txStatus === 'error' ? (
             'close'
           ) : (
             <>
-              <PaperPlaneIcon className='h-4 w-4' />
+              <span className='i-lucide-send h-4 w-4' />
               send message
             </>
           )}
@@ -702,7 +691,7 @@ export function InboxPage() {
           <h1 className='text-lg font-medium'>inbox</h1>
           {isSyncing && (
             <span className='flex items-center gap-1 text-xs text-muted-foreground'>
-              <ReloadIcon className='h-3 w-3 animate-spin' />
+              <span className='i-lucide-refresh-cw h-3 w-3 animate-spin' />
               syncing{currentSyncProgress ? ` (${currentSyncProgress.current})` : '...'}
             </span>
           )}
@@ -717,16 +706,16 @@ export function InboxPage() {
               }
             }}
             disabled={isSyncing}
-            className='rounded-lg p-1.5 hover:bg-muted transition-colors disabled:opacity-50'
+            className='rounded-lg p-1.5 hover:bg-muted/50 transition-colors disabled:opacity-50'
             title='sync messages'
           >
-            <ReloadIcon className={cn('h-4 w-4', isSyncing && 'animate-spin')} />
+            <span className={cn('i-lucide-refresh-cw h-4 w-4', isSyncing && 'animate-spin')} />
           </button>
           <button
             onClick={() => setShowCompose(true)}
-            className='flex items-center gap-1 rounded-lg bg-zigner-gold px-3 py-1.5 text-sm font-medium text-zigner-dark'
+            className='flex items-center gap-1 rounded-lg bg-zigner-gold px-3 py-1.5 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors'
           >
-            <PaperPlaneIcon className='h-4 w-4' />
+            <span className='i-lucide-send h-4 w-4' />
             compose
           </button>
         </div>
@@ -766,13 +755,13 @@ export function InboxPage() {
       {/* search */}
       <div className='px-4 py-3'>
         <div className='relative'>
-          <MagnifyingGlassIcon className='absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground' />
+          <span className='i-lucide-search absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground' />
           <input
             type='text'
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder='search messages...'
-            className='w-full rounded-lg border border-border bg-input pl-9 pr-3 py-2 text-sm focus:border-zigner-gold focus:outline-none'
+            className='w-full rounded-lg border border-border/40 bg-input pl-9 pr-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
           />
         </div>
       </div>
@@ -784,7 +773,7 @@ export function InboxPage() {
             onClick={() => void messages.markAllRead()}
             className='flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground'
           >
-            <CheckIcon className='h-3 w-3' />
+            <span className='i-lucide-check h-3 w-3' />
             mark all read
           </button>
         </div>
@@ -795,7 +784,7 @@ export function InboxPage() {
         {displayedMessages.length === 0 ? (
           <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
             <div className='rounded-full bg-primary/10 p-4'>
-              <EnvelopeClosedIcon className='h-8 w-8 text-primary' />
+              <span className='i-lucide-mail h-8 w-8 text-primary' />
             </div>
             <div>
               <p className='text-sm font-medium'>

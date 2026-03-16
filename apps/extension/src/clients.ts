@@ -1,4 +1,4 @@
-import { ViewService, StakeService, SimulationService, DexService, SctService } from '@penumbra-zone/protobuf';
+import { ViewService, StakeService, SimulationService, DexService, SctService, GovernanceService } from '@penumbra-zone/protobuf';
 import { createClient } from '@connectrpc/connect';
 import { createChannelTransport } from '@penumbra-zone/transport-dom/create';
 import { CRSessionClient } from '@penumbra-zone/transport-chrome/session-client';
@@ -26,3 +26,4 @@ export const stakeClient = createClient(StakeService, extensionPageTransport);
 export const simulationClient = createClient(SimulationService, extensionPageTransport);
 export const dexClient = createClient(DexService, extensionPageTransport);
 export const sctClient = createClient(SctService, extensionPageTransport);
+export const governanceClient = createClient(GovernanceService, extensionPageTransport);

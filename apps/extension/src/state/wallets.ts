@@ -19,6 +19,8 @@ export interface ZcashWalletJson {
   accountIndex: number;
   mainnet: boolean;
   ufvk?: string;
+  /** vault ID this wallet belongs to (for zigner wallet linking) */
+  vaultId?: string;
 }
 
 export interface WalletsSlice {
@@ -192,6 +194,8 @@ export const createWalletsSlice =
         set(state => {
           state.wallets.activeZcashIndex = index;
         });
+
+        await local.set('activeZcashIndex', index);
       },
 
       removeWallet: async (index: number) => {

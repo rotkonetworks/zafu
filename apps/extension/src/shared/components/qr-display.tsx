@@ -6,7 +6,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@repo/ui/components/ui/button';
-import { CopyIcon, CheckIcon } from '@radix-ui/react-icons';
 
 // dynamic import for qrcode since types may not be available
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -80,7 +79,7 @@ export function QrDisplay({
     try {
       await navigator.clipboard.writeText(data);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => setCopied(false), 1500);
     } catch {
       // ignore copy errors
     }
@@ -97,7 +96,7 @@ export function QrDisplay({
   return (
     <div className="flex flex-col items-center gap-3">
       {title && (
-        <h3 className="text-lg font-semibold text-foreground">{title}</h3>
+        <h3 className="text-lg font-medium text-foreground">{title}</h3>
       )}
 
       <div className="bg-white p-3 rounded-lg">
@@ -119,12 +118,12 @@ export function QrDisplay({
         >
           {copied ? (
             <>
-              <CheckIcon className="w-4 h-4 text-green-500" />
+              <span className="i-lucide-check w-4 h-4 text-green-400" />
               copied
             </>
           ) : (
             <>
-              <CopyIcon className="w-4 h-4" />
+              <span className="i-lucide-copy w-4 h-4" />
               copy hex
             </>
           )}

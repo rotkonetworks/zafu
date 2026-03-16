@@ -21,7 +21,6 @@ import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view
 import { useSyncProgress } from '../../../hooks/full-sync-height';
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
 import { bech32mIdentityKey, identityKeyFromBech32m } from '@penumbra-zone/bech32m/penumbravalid';
-import { Cross2Icon } from '@radix-ui/react-icons';
 import { isSidePanel, isDedicatedWindow } from '../../../utils/popup-detection';
 import { openInSidePanel } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
@@ -264,15 +263,15 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
 
   if (isLoading) {
     return (
-      <div className='flex items-center justify-center py-8 text-xs text-muted-foreground'>
-        Loading...
+      <div className='flex items-center justify-center py-12 text-sm text-muted-foreground'>
+        loading...
       </div>
     );
   }
 
   if (error || !balances.length) {
     return (
-      <div className='flex flex-col items-center justify-center gap-1 py-8 text-center'>
+      <div className='flex flex-col items-center justify-center py-12 text-center'>
         <span className='text-sm text-muted-foreground'>No assets yet</span>
         <span className='text-xs text-muted-foreground/70'>
           Receive funds to get started
@@ -319,22 +318,22 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
 
       {/* claim confirmation modal */}
       {claimBalance && claimStatus !== 'idle' && (
-        <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60'>
-          <div className='mx-4 w-full max-w-sm rounded-lg border border-border bg-background p-5 shadow-xl'>
+        <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm'>
+          <div className='mx-4 w-full max-w-sm rounded-lg border border-border/40 bg-background p-5 shadow-xl'>
             <div className='flex items-center justify-between mb-4'>
-              <h2 className='text-lg font-semibold'>Claim Unbonding Tokens</h2>
+              <h2 className='text-lg font-medium'>Claim Unbonding Tokens</h2>
               {(claimStatus === 'confirm' || claimStatus === 'success' || claimStatus === 'error') && (
                 <button onClick={closeClaim} className='text-muted-foreground hover:text-foreground transition-colors'>
-                  <Cross2Icon className='h-4 w-4' />
+                  <span className='i-lucide-x h-4 w-4' />
                 </button>
               )}
             </div>
 
             {claimStatus === 'confirm' && claimInfo && (
               <div className='flex flex-col gap-3'>
-                <div className='rounded-lg border border-border bg-card p-3'>
+                <div className='rounded-lg border border-border/40 bg-card p-3'>
                   <div className='text-xs text-muted-foreground'>Amount to receive</div>
-                  <div className='text-lg font-semibold tabular-nums'>{claimDisplayAmount} UM</div>
+                  <div className='text-lg font-medium tabular-nums'>{claimDisplayAmount} UM</div>
                 </div>
 
                 <div className='text-sm'>
@@ -355,13 +354,13 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
                 <div className='flex gap-2 mt-2'>
                   <button
                     onClick={closeClaim}
-                    className='flex-1 rounded-lg border border-border py-2 text-sm hover:bg-muted transition-colors'
+                    className='flex-1 rounded-lg border border-border/40 py-3 text-sm hover:bg-muted/50 transition-colors'
                   >
                     Cancel
                   </button>
                   <button
                     onClick={() => void handleClaim()}
-                    className='flex-1 rounded-lg bg-zigner-gold py-2 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors'
+                    className='flex-1 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors'
                   >
                     Confirm Claim
                   </button>
@@ -370,8 +369,8 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
             )}
 
             {(claimStatus === 'planning' || claimStatus === 'signing' || claimStatus === 'broadcasting') && (
-              <div className='flex flex-col items-center gap-3 py-6'>
-                <div className='h-6 w-6 animate-spin rounded-full border-2 border-teal border-t-transparent' />
+              <div className='flex flex-col items-center gap-3 py-12'>
+                <div className='h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent' />
                 <p className='text-sm text-muted-foreground'>
                   {claimStatus === 'planning' && 'building transaction plan...'}
                   {claimStatus === 'signing' && 'signing transaction...'}
@@ -390,7 +389,7 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
                 )}
                 <button
                   onClick={closeClaim}
-                  className='mt-2 w-full rounded-lg border border-border py-2 text-sm hover:bg-muted transition-colors'
+                  className='mt-2 w-full rounded-lg border border-border/40 py-2 text-sm hover:bg-muted/50 transition-colors'
                 >
                   Close
                 </button>
@@ -403,13 +402,13 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
                 <div className='flex gap-2 mt-2'>
                   <button
                     onClick={closeClaim}
-                    className='flex-1 rounded-lg border border-border py-2 text-sm hover:bg-muted transition-colors'
+                    className='flex-1 rounded-lg border border-border/40 py-3 text-sm hover:bg-muted/50 transition-colors'
                   >
                     Close
                   </button>
                   <button
                     onClick={() => { setClaimStatus('confirm'); setClaimError(undefined); }}
-                    className='flex-1 rounded-lg bg-zigner-gold py-2 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors'
+                    className='flex-1 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors'
                   >
                     Retry
                   </button>
