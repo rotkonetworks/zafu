@@ -53,6 +53,23 @@ interface ZcashSendProps {
 
 type SendStep = 'form' | 'review' | 'building' | 'sign' | 'scan' | 'broadcast' | 'complete' | 'error' | 'frost-room' | 'frost-signing';
 
+/** live elapsed timer — ticks every second so the build screen never looks frozen */
+function LiveTimer({ startMs }: { startMs: number }) {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!startMs) return;
+    const tick = () => setElapsed(Math.round((Date.now() - startMs) / 1000));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [startMs]);
+  return (
+    <div className="font-mono text-2xl tabular-nums text-primary">
+      {elapsed}s
+    </div>
+  );
+}
+
 export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSendProps) {
   const {
     txHash,
@@ -605,10 +622,13 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       case 'building':
         return (
           <div className="flex flex-col items-center gap-4 p-6">
-            <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center animate-pulse">
+            <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center">
               <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
             </div>
             <h2 className="text-lg font-medium">building transaction</h2>
+
+            {/* live elapsed timer — ticks every second so the UI never looks frozen */}
+            <LiveTimer startMs={buildStartRef.current} />
 
             {sendSteps.length > 0 ? (
               <div className="w-full max-w-sm flex flex-col gap-1">
@@ -621,7 +641,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                       <span className="font-mono w-12 text-right shrink-0">
                         {(s.elapsedMs / 1000).toFixed(1)}s
                       </span>
-                      <span className={isLast ? 'animate-pulse' : ''}>
+                      <span className={isLast ? '' : ''}>
                         {s.step}
                         {s.detail && <span className="text-muted-foreground ml-1">({s.detail})</span>}
                         {!isLast && Number(stepDuration) >= 0.5 && (

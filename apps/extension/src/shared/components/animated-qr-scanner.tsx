@@ -1,16 +1,15 @@
 /**
- * animated QR scanner — reassembles BC-UR fountain-coded parts from camera
+ * animated QR scanner — reassembles multipart QR frames from camera
  *
- * scans multiple QR frames continuously, feeding each to URDecoder
+ * scans multiple QR frames continuously, collecting numbered parts
  * until the full payload is reconstructed. shows progress %.
+ *
+ * frame format: "P<frameIndex>/<totalFrames>/<urType>/<base64chunk>"
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { BrowserQRCodeReader } from '@zxing/browser';
-import URlib from '@ngraveio/bc-ur';
 import { Button } from '@repo/ui/components/ui/button';
-
-const { URDecoder } = URlib;
 
 interface AnimatedQrScannerProps {
   /** called when all parts have been received and reassembled */
@@ -35,8 +34,12 @@ export const AnimatedQrScanner = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const controlsRef = useRef<{ stop: () => void } | null>(null);
   const mountedRef = useRef(true);
-  const decoderRef = useRef<InstanceType<typeof URDecoder>>(new URDecoder());
   const completedRef = useRef(false);
+
+  // collected frames: index -> base64 chunk
+  const framesRef = useRef<Map<number, string>>(new Map());
+  const totalRef = useRef(0);
+  const urTypeRef = useRef('');
 
   const onCompleteRef = useRef(onComplete);
   const onErrorRef = useRef(onError);
@@ -75,27 +78,47 @@ export const AnimatedQrScanner = ({
           if (!result || completedRef.current) return;
 
           const text = result.getText();
-          // only process UR parts
-          if (!text.toLowerCase().startsWith('ur:')) return;
+          // parse frame: P<idx>/<total>/<type>/<data>
+          const match = text.match(/^P(\d+)\/(\d+)\/([^/]+)\/(.+)$/);
+          if (!match) return;
 
-          const decoder = decoderRef.current;
-          const accepted = decoder.receivePart(text);
-          if (!accepted) return;
+          const idx = Number(match[1]);
+          const total = Number(match[2]);
+          const type = match[3]!;
+          const chunk = match[4]!;
 
-          setPartsReceived(prev => prev + 1);
-          setProgress(Math.round(decoder.estimatedPercentComplete() * 100));
+          if (totalRef.current === 0) {
+            totalRef.current = total;
+            urTypeRef.current = type;
+          }
 
-          if (decoder.isComplete()) {
+          if (!framesRef.current.has(idx)) {
+            framesRef.current.set(idx, chunk);
+            setPartsReceived(framesRef.current.size);
+            setProgress(Math.round((framesRef.current.size / total) * 100));
+          }
+
+          // check if complete
+          if (framesRef.current.size >= total) {
             completedRef.current = true;
             stopScanning();
 
-            if (decoder.isSuccess()) {
-              const ur = decoder.resultUR();
-              onCompleteRef.current(new Uint8Array(ur.cbor), ur.type);
-            } else {
-              const errMsg = decoder.resultError() || 'failed to decode';
-              setError(errMsg);
-              onErrorRef.current?.(errMsg);
+            try {
+              // reassemble in order
+              let b64 = '';
+              for (let i = 1; i <= total; i++) {
+                b64 += framesRef.current.get(i) || '';
+              }
+              const binary = atob(b64);
+              const bytes = new Uint8Array(binary.length);
+              for (let i = 0; i < binary.length; i++) {
+                bytes[i] = binary.charCodeAt(i);
+              }
+              onCompleteRef.current(bytes, urTypeRef.current);
+            } catch (e) {
+              const msg = e instanceof Error ? e.message : 'failed to decode';
+              setError(msg);
+              onErrorRef.current?.(msg);
             }
           }
         },
