@@ -34,7 +34,6 @@ const links: SettingsLink[] = [
     title: 'connected sites',
     icon: 'i-lucide-link',
     href: PopupPath.SETTINGS_CONNECTED_SITES,
-    networks: ['penumbra'],
   },
   {
     title: 'privacy',
