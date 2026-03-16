@@ -409,23 +409,30 @@ export function ContactsPage() {
   const [importStatus, setImportStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // export contacts as JSON file download
-  const handleExport = useCallback(() => {
-    const data = contacts.exportContacts();
-    const json = JSON.stringify(data, null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `zafu-contacts-${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  // export contacts as encrypted JSON file download
+  const handleExport = useCallback(async () => {
+    const password = window.prompt('enter password to encrypt export');
+    if (!password) return;
+    try {
+      const data = await contacts.exportContacts(password);
+      const json = JSON.stringify(data, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `zafu-contacts-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setImportStatus({ type: 'error', message: err instanceof Error ? err.message : 'export failed' });
+      setTimeout(() => setImportStatus(null), 3000);
+    }
     setShowMenu(false);
   }, [contacts]);
 
-  // import contacts from JSON file
+  // import contacts from encrypted JSON file
   const handleImportFile = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
@@ -434,7 +441,9 @@ export function ContactsPage() {
       try {
         const text = await file.text();
         const data = JSON.parse(text) as ContactsExport;
-        const count = await contacts.importContacts(data, 'merge');
+        const password = window.prompt('enter password to decrypt contacts');
+        if (!password) return;
+        const count = await contacts.importContacts(data, password, 'merge');
         setImportStatus({ type: 'success', message: `imported ${count} contacts` });
         setTimeout(() => setImportStatus(null), 3000);
       } catch (err) {
@@ -561,7 +570,7 @@ export function ContactsPage() {
                 <div className='fixed inset-0 z-50' onClick={() => setShowMenu(false)} />
                 <div className='absolute right-0 top-full mt-1 z-50 w-40 rounded-lg border border-border/40 bg-background shadow-lg'>
                   <button
-                    onClick={handleExport}
+                    onClick={() => void handleExport()}
                     className='flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50 transition-colors'
                   >
                     <span className='i-lucide-download h-4 w-4' />

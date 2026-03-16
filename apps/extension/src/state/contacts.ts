@@ -8,6 +8,11 @@
 import type { AllSlices, SliceCreator } from '.';
 import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
+import type { SessionStorageState } from '@repo/storage-chrome/session';
+import { Key } from '@repo/encryption/key';
+import { Box, type BoxJson } from '@repo/encryption/box';
+import type { KeyPrintJson } from '@repo/encryption/key-print';
+import { writeEncrypted } from './encrypted-storage';
 
 export type ContactNetwork = 'penumbra' | 'zcash' | 'cosmos' | 'polkadot' | 'kusama' | 'ethereum' | 'bitcoin' | 'solana' | 'near' | 'base' | 'arbitrum' | 'avalanche' | 'polygon';
 
@@ -36,21 +41,14 @@ export interface Contact {
   addresses: ContactAddress[];
 }
 
-/** portable export format for sharing contacts */
+/** portable export format — encrypted with a password-derived key */
 export interface ContactsExport {
-  version: 2;
+  version: 3;
   exportedAt: number;
-  contacts: Array<{
-    name: string;
-    notes?: string;
-    favorite?: boolean;
-    addresses: Array<{
-      network: ContactNetwork;
-      address: string;
-      chainId?: string;
-      notes?: string;
-    }>;
-  }>;
+  /** encrypted contacts JSON */
+  data: BoxJson;
+  /** key derivation parameters (salt) for recreating the encryption key */
+  keyPrint: KeyPrintJson;
 }
 
 export interface ContactsSlice {
@@ -95,11 +93,11 @@ export interface ContactsSlice {
   /** search contacts by name or address */
   search: (query: string) => Contact[];
 
-  /** export all contacts to portable JSON format */
-  exportContacts: () => ContactsExport;
+  /** export all contacts to encrypted portable format */
+  exportContacts: (password: string) => Promise<ContactsExport>;
 
-  /** import contacts from portable JSON (returns count of imported) */
-  importContacts: (data: ContactsExport, mode: 'merge' | 'replace') => Promise<number>;
+  /** import contacts from encrypted portable format (returns count of imported) */
+  importContacts: (data: ContactsExport, password: string, mode: 'merge' | 'replace') => Promise<number>;
 
   /** clear all contacts */
   clearAll: () => Promise<void>;
@@ -108,8 +106,11 @@ export interface ContactsSlice {
 const generateId = () => crypto.randomUUID();
 
 export const createContactsSlice =
-  (local: ExtensionStorage<LocalStorageState>): SliceCreator<ContactsSlice> =>
-  (set, get) => ({
+  (local: ExtensionStorage<LocalStorageState>, session: ExtensionStorage<SessionStorageState>): SliceCreator<ContactsSlice> =>
+  (set, get) => {
+  const persist = () => writeEncrypted(local, session, 'contacts' as keyof LocalStorageState, get().contacts.contacts);
+
+  return {
     contacts: [],
 
     addContact: async (data) => {
@@ -125,7 +126,7 @@ export const createContactsSlice =
         state.contacts.contacts.push(contact);
       });
 
-      await local.set('contacts' as keyof LocalStorageState, get().contacts.contacts as never);
+      await persist();
       return contact;
     },
 
@@ -138,7 +139,7 @@ export const createContactsSlice =
         }
       });
 
-      await local.set('contacts' as keyof LocalStorageState, get().contacts.contacts as never);
+      await persist();
     },
 
     removeContact: async (id) => {
@@ -146,7 +147,7 @@ export const createContactsSlice =
         state.contacts.contacts = state.contacts.contacts.filter((c) => c.id !== id);
       });
 
-      await local.set('contacts' as keyof LocalStorageState, get().contacts.contacts as never);
+      await persist();
     },
 
     toggleFavorite: async (id) => {
@@ -157,7 +158,7 @@ export const createContactsSlice =
         }
       });
 
-      await local.set('contacts' as keyof LocalStorageState, get().contacts.contacts as never);
+      await persist();
     },
 
     addAddress: async (contactId, addressData) => {
@@ -176,7 +177,7 @@ export const createContactsSlice =
         }
       });
 
-      await local.set('contacts' as keyof LocalStorageState, get().contacts.contacts as never);
+      await persist();
       return addr;
     },
 
@@ -194,7 +195,7 @@ export const createContactsSlice =
         }
       });
 
-      await local.set('contacts' as keyof LocalStorageState, get().contacts.contacts as never);
+      await persist();
     },
 
     removeAddress: async (contactId, addressId) => {
@@ -205,7 +206,7 @@ export const createContactsSlice =
         }
       });
 
-      await local.set('contacts' as keyof LocalStorageState, get().contacts.contacts as never);
+      await persist();
     },
 
     markAddressUsed: async (contactId, addressId) => {
@@ -219,7 +220,7 @@ export const createContactsSlice =
         }
       });
 
-      await local.set('contacts' as keyof LocalStorageState, get().contacts.contacts as never);
+      await persist();
     },
 
     findByAddress: (address) => {
@@ -278,43 +279,61 @@ export const createContactsSlice =
       );
     },
 
-    exportContacts: () => {
-      const contacts = get().contacts.contacts;
-      return {
-        version: 2,
-        exportedAt: Date.now(),
-        contacts: contacts.map((c) => ({
-          name: c.name,
-          notes: c.notes,
-          favorite: c.favorite,
-          addresses: c.addresses.map((a) => ({
-            network: a.network,
-            address: a.address,
-            chainId: a.chainId,
-            notes: a.notes,
-          })),
+    exportContacts: async (password: string) => {
+      const allContacts = get().contacts.contacts;
+      const plaintext = JSON.stringify(allContacts.map(c => ({
+        name: c.name,
+        notes: c.notes,
+        favorite: c.favorite,
+        addresses: c.addresses.map(a => ({
+          network: a.network,
+          address: a.address,
+          chainId: a.chainId,
+          notes: a.notes,
         })),
+      })));
+
+      const { key, keyPrint } = await Key.create(password);
+      const box = await key.seal(plaintext);
+
+      return {
+        version: 3 as const,
+        exportedAt: Date.now(),
+        data: box.toJson(),
+        keyPrint: keyPrint.toJson(),
       };
     },
 
-    importContacts: async (data, mode) => {
-      if (data.version !== 2) {
-        throw new Error('unsupported contacts export version');
+    importContacts: async (data, password, mode) => {
+      if (data.version !== 3) {
+        throw new Error('unsupported export version — expected v3 (encrypted)');
       }
 
+      const { KeyPrint: KP } = await import('@repo/encryption/key-print');
+      const key = await Key.recreate(password, KP.fromJson(data.keyPrint));
+      if (!key) throw new Error('wrong password');
+
+      const plaintext = await key.unseal(Box.fromJson(data.data));
+      if (!plaintext) throw new Error('failed to decrypt contacts');
+
+      const imported = JSON.parse(plaintext) as Array<{
+        name: string; notes?: string; favorite?: boolean;
+        addresses: Array<{ network: ContactNetwork; address: string; chainId?: string; notes?: string }>;
+      }>;
+
       const existingNames = new Set(
-        get().contacts.contacts.map((c) => c.name.toLowerCase())
+        get().contacts.contacts.map(c => c.name.toLowerCase()),
       );
 
-      const newContacts: Contact[] = data.contacts
-        .filter((c) => mode === 'replace' || !existingNames.has(c.name.toLowerCase()))
-        .map((c) => ({
+      const newContacts: Contact[] = imported
+        .filter(c => mode === 'replace' || !existingNames.has(c.name.toLowerCase()))
+        .map(c => ({
           id: generateId(),
           name: c.name,
           notes: c.notes,
           favorite: c.favorite,
           createdAt: Date.now(),
-          addresses: c.addresses.map((a) => ({
+          addresses: c.addresses.map(a => ({
             id: generateId(),
             network: a.network,
             address: a.address,
@@ -323,7 +342,7 @@ export const createContactsSlice =
           })),
         }));
 
-      set((state) => {
+      set(state => {
         if (mode === 'replace') {
           state.contacts.contacts = newContacts;
         } else {
@@ -331,7 +350,7 @@ export const createContactsSlice =
         }
       });
 
-      await local.set('contacts' as keyof LocalStorageState, get().contacts.contacts as never);
+      await persist();
       return newContacts.length;
     },
 
@@ -339,9 +358,10 @@ export const createContactsSlice =
       set((state) => {
         state.contacts.contacts = [];
       });
-      await local.set('contacts' as keyof LocalStorageState, [] as never);
+      await persist();
     },
-  });
+  };
+  };
 
 // selectors
 export const contactsSelector = (state: AllSlices) => state.contacts;
