@@ -315,7 +315,7 @@ const ZcashContent = ({
   // sync lifecycle managed by useZcashAutoSync in PopupLayout
   // this component only reads sync status and balance
 
-  // fetch orchard balance from worker on each sync-progress event
+  // fetch orchard balance from worker — re-fetch on sync progress and height changes
   useEffect(() => {
     if (!selectedKeyInfo) return;
     const walletId = selectedKeyInfo.id;
@@ -323,7 +323,7 @@ const ZcashContent = ({
     const fetchBalance = () => {
       getBalanceInWorker('zcash', walletId)
         .then(bal => setOrchardZat(BigInt(bal)))
-        .catch(() => {}); // worker not ready yet, ignore
+        .catch(() => {});
     };
 
     const handler = (e: Event) => {
@@ -333,14 +333,9 @@ const ZcashContent = ({
     };
 
     window.addEventListener('network-sync-progress', handler);
-    // fetch on mount in case sync already ran, plus retry after worker init delay
     fetchBalance();
-    const retryTimer = setTimeout(fetchBalance, 2000);
-    return () => {
-      window.removeEventListener('network-sync-progress', handler);
-      clearTimeout(retryTimer);
-    };
-  }, [selectedKeyInfo?.id]);
+    return () => window.removeEventListener('network-sync-progress', handler);
+  }, [selectedKeyInfo?.id, workerSyncHeight]);
 
   // derive transparent addresses for UTXO lookup (shared hook with caching)
   const { tAddresses } = useTransparentAddresses(isMainnet);
