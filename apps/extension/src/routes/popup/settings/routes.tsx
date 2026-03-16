@@ -28,6 +28,9 @@ const SettingsWallets = lazy(() =>
 const SettingsAbout = lazy(() =>
   import('./settings-about').then(m => ({ default: m.SettingsAbout })),
 );
+const SettingsMultisig = lazy(() =>
+  import('./settings-multisig').then(m => ({ default: m.SettingsMultisig })),
+);
 
 const LazyFallback = () => (
   <div className="flex h-full items-center justify-center p-4">
@@ -81,5 +84,9 @@ export const settingsRoutes = [
   {
     path: PopupPath.SETTINGS_ABOUT,
     element: withSuspense(SettingsAbout),
+  },
+  {
+    path: PopupPath.SETTINGS_MULTISIG,
+    element: withSuspense(SettingsMultisig),
   },
 ];

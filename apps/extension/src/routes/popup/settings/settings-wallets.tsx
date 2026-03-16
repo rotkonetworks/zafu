@@ -10,6 +10,8 @@ import { deleteWalletInWorker, terminateNetworkWorker } from '../../../state/key
 import { QrScanner } from '../../../shared/components/qr-scanner';
 import { Input } from '@repo/ui/components/ui/input';
 import { cn } from '@repo/ui/lib/utils';
+import { usePopupNav } from '../../../utils/navigate';
+import { PopupPath } from '../paths';
 
 type RemovalStep = 'idle' | 'password' | 'backup' | 'confirm';
 
@@ -244,22 +246,7 @@ export const SettingsWallets = () => {
 
         {/* ── multisig wallets ── */}
         {zcashWallets.filter(w => w.multisig).length > 0 && (
-          <div className='mt-4'>
-            <p className='mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider'>multisig wallets</p>
-            <div className='flex flex-col divide-y divide-border/40 rounded-lg border border-border/40 bg-card'>
-              {zcashWallets.filter(w => w.multisig).map(w => (
-                <div key={w.id} className='flex items-center justify-between px-4 py-3'>
-                  <div className='flex-1 min-w-0'>
-                    <p className='text-sm font-medium truncate'>{w.label}</p>
-                    <p className='text-xs text-muted-foreground font-mono truncate'>{w.address.slice(0, 16)}...{w.address.slice(-8)}</p>
-                  </div>
-                  <span className='ml-2 shrink-0 rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary'>
-                    {w.multisig!.threshold}/{w.multisig!.maxSigners}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
+          <MultisigWalletList wallets={zcashWallets.filter(w => w.multisig)} />
         )}
 
         {/* ── removal flow ── */}
@@ -535,6 +522,40 @@ const VaultRow = ({ vault, networks, onRemove, onRename, disabled }: {
           />
         </div>
       )}
+    </div>
+  );
+};
+
+/* ── multisig wallet list ── */
+
+const MultisigWalletList = ({ wallets }: { wallets: import('../../../state/wallets').ZcashWalletJson[] }) => {
+  const navigate = usePopupNav();
+
+  return (
+    <div className='mt-4'>
+      <p className='mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider'>multisig wallets</p>
+      <div className='flex flex-col divide-y divide-border/40 rounded-lg border border-border/40 bg-card'>
+        {wallets.map(w => (
+          <div key={w.id} className='group flex items-center gap-2 px-4 py-3'>
+            <button
+              onClick={() => navigate(`${PopupPath.SETTINGS_MULTISIG}?id=${w.id}` as PopupPath)}
+              className='flex-1 min-w-0 text-left'
+            >
+              <p className='text-sm font-medium truncate hover:text-primary transition-colors'>{w.label}</p>
+              <p className='text-xs text-muted-foreground font-mono truncate'>{w.address.slice(0, 16)}...{w.address.slice(-8)}</p>
+            </button>
+            <span className='shrink-0 rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary'>
+              {w.multisig!.threshold}/{w.multisig!.maxSigners}
+            </span>
+            <button
+              onClick={() => navigate(PopupPath.MULTISIG_SIGN)}
+              className='shrink-0 rounded-lg border border-primary/40 bg-primary/5 px-2.5 py-1 text-[10px] text-primary hover:bg-primary/10 transition-colors'
+            >
+              co-sign
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };

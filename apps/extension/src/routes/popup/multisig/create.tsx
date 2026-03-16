@@ -16,8 +16,16 @@ import {
   frostDeriveAddressInWorker,
 } from '../../../state/keyring/network-worker';
 import { FrostRelayClient } from '../../../state/keyring/frost-relay-client';
+import { SettingsScreen } from '../settings/settings-screen';
+import { PopupPath } from '../paths';
 
 type Step = 'config' | 'waiting' | 'dkg-round1' | 'dkg-round2' | 'dkg-round3' | 'complete' | 'error';
+
+const DKG_STEPS = [
+  { key: 'dkg-round1', label: 'commitments' },
+  { key: 'dkg-round2', label: 'key shares' },
+  { key: 'dkg-round3', label: 'finalize' },
+] as const;
 
 export const MultisigCreate = () => {
   const [threshold, setThreshold] = useState(2);
@@ -33,21 +41,16 @@ export const MultisigCreate = () => {
 
   const handleCreate = async () => {
     try {
-      // use the zidecar URL as relay URL (frost relay runs on same server)
       const url = relayUrl || 'https://zidecar.rotko.net';
       const code = await startDkg(url, threshold, maxSigners);
       setRoomCode(code);
       setStep('waiting');
 
-      // start listening for participants
       const relay = new FrostRelayClient(url);
 
-      // DKG round 1: generate our commitment
       setStep('dkg-round1');
       const round1 = await frostDkgPart1InWorker(maxSigners, threshold);
 
-      // join the room with a placeholder participant ID
-      // (the actual ed25519 pubkey is inside the signed broadcast)
       const participantId = new Uint8Array(32);
       crypto.getRandomValues(participantId);
 
@@ -55,10 +58,10 @@ export const MultisigCreate = () => {
       const peerRound2: string[] = [];
       let dkgPhase: 'round1' | 'round2' | 'done' = 'round1';
 
-      // send our round1 broadcast
-      await relay.sendMessage(code, participantId, new TextEncoder().encode(round1.broadcast));
+      // send our round1 broadcast with DKG params prefix so joiners learn threshold/maxSigners
+      const prefixedBroadcast = `DKG:${threshold}:${maxSigners}:${round1.broadcast}`;
+      await relay.sendMessage(code, participantId, new TextEncoder().encode(prefixedBroadcast));
 
-      // listen for peer messages
       const abortController = new AbortController();
       void relay.joinRoom(code, participantId, (event) => {
         if (event.type === 'message') {
@@ -71,23 +74,18 @@ export const MultisigCreate = () => {
         }
       }, abortController.signal);
 
-      // wait for enough round1 broadcasts
       await waitFor(() => peerBroadcasts.length >= maxSigners - 1, 120000);
 
-      // DKG round 2
       dkgPhase = 'round2';
       setStep('dkg-round2');
       const round2 = await frostDkgPart2InWorker(round1.secret, peerBroadcasts);
 
-      // send round2 peer packages
       for (const pkg of round2.peer_packages) {
         await relay.sendMessage(code, participantId, new TextEncoder().encode(pkg));
       }
 
-      // wait for enough round2 packages
       await waitFor(() => peerRound2.length >= maxSigners - 1, 120000);
 
-      // DKG round 3
       setStep('dkg-round3');
       const round3 = await frostDkgPart3InWorker(
         round2.secret,
@@ -95,7 +93,6 @@ export const MultisigCreate = () => {
         peerRound2,
       );
 
-      // derive address
       const addr = await frostDeriveAddressInWorker(round3.public_key_package, 0);
       setAddress(addr);
 
@@ -107,6 +104,7 @@ export const MultisigCreate = () => {
         ephemeralSeed: round3.ephemeral_seed,
         threshold,
         maxSigners,
+        relayUrl: url,
       });
 
       setStep('complete');
@@ -117,38 +115,38 @@ export const MultisigCreate = () => {
     }
   };
 
-  return (
-    <div className='flex flex-col gap-4 p-4'>
-      <h2 className='font-headline text-lg'>Create Multisig Wallet</h2>
+  const currentRound = step.startsWith('dkg-round') ? Number(step.replace('dkg-round', '')) : 0;
 
+  return (
+    <SettingsScreen title='create multisig' backPath={PopupPath.SETTINGS_WALLETS}>
       {step === 'config' && (
-        <div className='flex flex-col gap-3'>
-          <label className='text-sm text-muted-foreground'>
-            Relay URL
+        <div className='flex flex-col gap-4'>
+          <label className='text-xs text-muted-foreground'>
+            relay url
             <input
-              className='mt-1 w-full rounded bg-muted p-2 text-sm'
+              className='mt-1 w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 font-mono text-xs focus:border-primary/50 focus:outline-none'
               value={relayUrl}
               onChange={e => setRelayUrl(e.target.value)}
               placeholder='https://zidecar.rotko.net'
             />
           </label>
           <div className='flex gap-3'>
-            <label className='flex-1 text-sm text-muted-foreground'>
-              Threshold (t)
+            <label className='flex-1 text-xs text-muted-foreground'>
+              threshold (t)
               <input
                 type='number'
-                className='mt-1 w-full rounded bg-muted p-2 text-sm'
+                className='mt-1 w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm focus:border-primary/50 focus:outline-none'
                 value={threshold}
                 onChange={e => setThreshold(Number(e.target.value))}
                 min={2}
                 max={maxSigners}
               />
             </label>
-            <label className='flex-1 text-sm text-muted-foreground'>
-              Signers (n)
+            <label className='flex-1 text-xs text-muted-foreground'>
+              signers (n)
               <input
                 type='number'
-                className='mt-1 w-full rounded bg-muted p-2 text-sm'
+                className='mt-1 w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm focus:border-primary/50 focus:outline-none'
                 value={maxSigners}
                 onChange={e => setMaxSigners(Number(e.target.value))}
                 min={threshold}
@@ -157,71 +155,101 @@ export const MultisigCreate = () => {
             </label>
           </div>
           <p className='text-xs text-muted-foreground'>
-            {threshold}-of-{maxSigners}: requires {threshold} participants to approve each transaction
+            {threshold}-of-{maxSigners}: requires {threshold} signatures to approve each transaction
           </p>
           <button
-            className='rounded bg-primary p-2 text-primary-foreground'
-            onClick={handleCreate}
+            className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-primary hover:bg-primary/10 transition-colors'
+            onClick={() => void handleCreate()}
           >
-            Create Room
+            create room
           </button>
         </div>
       )}
 
       {step === 'waiting' && (
-        <div className='flex flex-col items-center gap-3'>
-          <p className='text-sm text-muted-foreground'>Share this room code with other participants:</p>
-          <div className='rounded bg-muted px-6 py-3 font-mono text-xl'>{roomCode}</div>
-          <p className='text-xs text-muted-foreground'>Waiting for {maxSigners - 1} other participant(s) to join...</p>
-          <div className='h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent' />
+        <div className='flex flex-col items-center gap-4'>
+          <p className='text-xs text-muted-foreground'>share this room code with other participants</p>
+          <div className='flex items-center gap-2 rounded-lg border border-border/40 bg-card px-6 py-4'>
+            <span className='font-mono text-2xl tracking-wider'>{roomCode}</span>
+            <button
+              onClick={() => void navigator.clipboard.writeText(roomCode)}
+              className='p-1 text-muted-foreground hover:text-foreground transition-colors'
+            >
+              <span className='i-lucide-copy size-4' />
+            </button>
+          </div>
+          <div className='flex items-center gap-2 text-xs text-muted-foreground'>
+            <span className='i-lucide-loader-2 size-3.5 animate-spin' />
+            waiting for {maxSigners - 1} participant(s)...
+          </div>
         </div>
       )}
 
-      {(step === 'dkg-round1' || step === 'dkg-round2' || step === 'dkg-round3') && (
-        <div className='flex flex-col items-center gap-3'>
-          <p className='text-sm'>
-            {step === 'dkg-round1' && 'DKG Round 1: Exchanging commitments...'}
-            {step === 'dkg-round2' && 'DKG Round 2: Exchanging key shares...'}
-            {step === 'dkg-round3' && 'DKG Round 3: Finalizing key generation...'}
-          </p>
-          <div className='flex gap-1'>
-            {[1, 2, 3].map(r => (
-              <div
-                key={r}
-                className={`h-2 w-8 rounded-full ${
-                  r <= Number(step.replace('dkg-round', ''))
-                    ? 'bg-primary'
-                    : 'bg-muted'
-                }`}
-              />
+      {currentRound > 0 && (
+        <div className='flex flex-col items-center gap-4'>
+          <div className='flex items-center gap-2 text-xs text-muted-foreground'>
+            <span className='i-lucide-loader-2 size-3.5 animate-spin' />
+            key generation in progress
+          </div>
+          <div className='flex gap-2'>
+            {DKG_STEPS.map((s, i) => (
+              <div key={s.key} className='flex items-center gap-1.5'>
+                <div className={`flex size-5 items-center justify-center rounded-full text-[10px] font-medium ${
+                  i + 1 <= currentRound
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground'
+                }`}>
+                  {i + 1}
+                </div>
+                <span className={`text-xs ${i + 1 <= currentRound ? 'text-foreground' : 'text-muted-foreground'}`}>
+                  {s.label}
+                </span>
+              </div>
             ))}
           </div>
-          <div className='h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent' />
+          {roomCode && (
+            <div className='flex items-center gap-2 rounded-lg border border-border/40 bg-card px-4 py-2'>
+              <span className='font-mono text-sm tracking-wider'>{roomCode}</span>
+              <button
+                onClick={() => void navigator.clipboard.writeText(roomCode)}
+                className='p-1 text-muted-foreground hover:text-foreground transition-colors'
+              >
+                <span className='i-lucide-copy size-3.5' />
+              </button>
+            </div>
+          )}
         </div>
       )}
 
       {step === 'complete' && (
         <div className='flex flex-col gap-3'>
-          <div className='rounded bg-green-900/30 p-3 text-sm text-green-400'>
-            Multisig wallet created successfully!
+          <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-3 text-xs text-green-400'>
+            multisig wallet created
           </div>
-          <div className='rounded bg-muted p-3'>
-            <p className='text-xs text-muted-foreground'>Address</p>
+          <div className='rounded-lg border border-border/40 bg-card p-3'>
+            <p className='text-[10px] text-muted-foreground'>address</p>
             <p className='mt-1 break-all font-mono text-xs'>{address}</p>
           </div>
           <p className='text-xs text-muted-foreground'>
-            {threshold}-of-{maxSigners} threshold. All participants can view incoming transactions.
-            {threshold} participants must approve outgoing transactions.
+            {threshold}-of-{maxSigners} threshold. {threshold} participants must approve outgoing transactions.
           </p>
         </div>
       )}
 
       {step === 'error' && (
-        <div className='rounded bg-red-900/30 p-3 text-sm text-red-400'>
-          {error}
+        <div className='flex flex-col gap-3'>
+          <div className='rounded-lg border border-red-500/40 bg-red-500/5 p-3 text-xs text-red-400'>
+            {error}
+          </div>
+          <button
+            onClick={() => setStep('config')}
+            className='rounded-lg border border-border/40 py-2 text-xs hover:bg-muted/50 transition-colors'
+          >
+            try again
+          </button>
         </div>
       )}
-    </div>
+    </SettingsScreen>
   );
 };
 

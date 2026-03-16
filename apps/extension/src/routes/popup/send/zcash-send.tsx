@@ -201,7 +201,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
         // create relay room for signing session
         setStep('frost-room');
-        const relayUrl = zidecarUrl;
+        const relayUrl = ms.relayUrl || zidecarUrl;
         const relay = new FrostRelayClient(relayUrl);
         const room = await relay.createRoom(ms.threshold, ms.maxSigners, 300);
         setFrostRoomCode(room.roomCode);
@@ -222,6 +222,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         void relay.joinRoom(room.roomCode, participantId, (event) => {
           if (event.type === 'message') {
             const text = new TextDecoder().decode(event.message.payload);
+            // skip our own SIGN prefix if echoed back
+            if (text.startsWith('SIGN:')) return;
             if (signingPhase === 'commitments') {
               allCommitments.push(text);
             } else if (signingPhase === 'shares') {
@@ -230,6 +232,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           }
         }, abortController.signal);
 
+        // broadcast SIGN prefix with sighash + alphas so co-signers can participate
+        const signPrefix = `SIGN:${result.sighash}:${result.alphas.join(',')}`;
+        await relay.sendMessage(room.roomCode, participantId, new TextEncoder().encode(signPrefix));
         await relay.sendMessage(room.roomCode, participantId, new TextEncoder().encode(round1.commitments));
 
         // wait for threshold-1 peer commitments

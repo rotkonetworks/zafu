@@ -29,6 +29,7 @@ const ReceivePage = lazy(() => import('./receive').then(m => ({ default: m.Recei
 const CosmosSign = lazy(() => import('./cosmos-sign').then(m => ({ default: m.CosmosSign })));
 const MultisigCreate = lazy(() => import('./multisig/create').then(m => ({ default: m.MultisigCreate })));
 const MultisigJoin = lazy(() => import('./multisig/join').then(m => ({ default: m.MultisigJoin })));
+const MultisigSign = lazy(() => import('./multisig/sign').then(m => ({ default: m.MultisigSign })));
 
 // suspense fallback for lazy routes
 const LazyFallback = () => (
@@ -139,6 +140,14 @@ export const popupRoutes: RouteObject[] = [
         element: (
           <Suspense fallback={<LazyFallback />}>
             <MultisigJoin />
+          </Suspense>
+        ),
+      },
+      {
+        path: PopupPath.MULTISIG_SIGN,
+        element: (
+          <Suspense fallback={<LazyFallback />}>
+            <MultisigSign />
           </Suspense>
         ),
       },

@@ -33,6 +33,8 @@ export interface ZcashWalletJson {
     threshold: number;
     /** total signers */
     maxSigners: number;
+    /** relay server URL used for signing sessions */
+    relayUrl: string;
   };
 }
 
@@ -59,7 +61,10 @@ export interface WalletsSlice {
     ephemeralSeed: string;
     threshold: number;
     maxSigners: number;
+    relayUrl: string;
   }) => Promise<void>;
+  /** Update a multisig wallet's mutable fields (label, relayUrl) */
+  updateMultisigWallet: (id: string, updates: { label?: string; relayUrl?: string }) => Promise<void>;
   /** Remove a wallet by index. Cannot remove the last remaining wallet. */
   removeWallet: (index: number) => Promise<void>;
   /** Remove a Zcash wallet by index */
@@ -200,6 +205,7 @@ export const createWalletsSlice =
             ephemeralSeed: params.ephemeralSeed,
             threshold: params.threshold,
             maxSigners: params.maxSigners,
+            relayUrl: params.relayUrl,
           },
         };
 
@@ -208,6 +214,22 @@ export const createWalletsSlice =
         });
 
         await local.set('zcashWallets', [newWallet, ...existingZcashWallets]);
+      },
+
+      updateMultisigWallet: async (id, updates) => {
+        const { zcashWallets } = get().wallets;
+        const idx = zcashWallets.findIndex(w => w.id === id);
+        if (idx === -1 || !zcashWallets[idx]!.multisig) {
+          throw new Error('multisig wallet not found');
+        }
+
+        set(state => {
+          const w = state.wallets.zcashWallets[idx]!;
+          if (updates.label !== undefined) w.label = updates.label;
+          if (updates.relayUrl !== undefined && w.multisig) w.multisig.relayUrl = updates.relayUrl;
+        });
+
+        await local.set('zcashWallets', get().wallets.zcashWallets);
       },
 
       removeZcashWallet: async (index: number) => {
