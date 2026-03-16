@@ -61,7 +61,7 @@ export const internalServiceListener = (
         await indexedDb.clear();
         completed++;
 
-        // Step 4: Clear sync state
+        // Step 4: Clear sync state (penumbra + zcash)
         broadcastProgress('clearing-sync-state', completed, total);
         await Promise.all([
           localExtStorage.remove('fullSyncHeight'),
@@ -73,6 +73,9 @@ export const internalServiceListener = (
           // sync acceleration affordances provided by that flag.
           localExtStorage.remove('compactFrontierBlockHeight'),
         ]);
+        // clear zcash sync databases
+        try { indexedDB.deleteDatabase('zafu-zcash'); } catch {}
+        try { indexedDB.deleteDatabase('zafu-memo-cache'); } catch {}
         completed++;
 
         // Clear the in-progress flag before reload

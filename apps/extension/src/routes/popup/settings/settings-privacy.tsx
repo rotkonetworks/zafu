@@ -1,7 +1,42 @@
 import { useStore } from '../../../state';
-import { privacySelector } from '../../../state/privacy';
+import { privacySelector, type PrivacySettings } from '../../../state/privacy';
+import { selectActiveNetwork } from '../../../state/keyring';
 import { SettingsScreen } from './settings-screen';
 import { Switch } from '@repo/ui/components/ui/switch';
+import { isIbcNetwork, type NetworkType } from '../../../state/keyring/network-types';
+
+interface PrivacyRow {
+  key: keyof PrivacySettings;
+  label: string;
+  note: string;
+  /** filter function — return true if this row is visible for the given network */
+  visible?: (network: NetworkType) => boolean;
+}
+
+const PRIVACY_ROWS: readonly PrivacyRow[] = [
+  {
+    key: 'enableTransparentBalances',
+    label: 'cosmos balance queries',
+    note: 'leaks addresses to rpc nodes',
+    visible: n => isIbcNetwork(n) || n === 'penumbra',
+  },
+  {
+    key: 'enableTransactionHistory',
+    label: 'transaction history',
+    note: 'stored locally',
+  },
+  {
+    key: 'enableBackgroundSync',
+    label: 'cosmos background sync',
+    note: 'periodic rpc queries. shielded networks sync automatically.',
+    visible: n => isIbcNetwork(n) || n === 'penumbra',
+  },
+  {
+    key: 'enablePriceFetching',
+    label: 'price fetching',
+    note: 'price apis do not learn your addresses',
+  },
+];
 
 function Row({
   label,
@@ -27,34 +62,29 @@ function Row({
 
 export function SettingsPrivacy() {
   const { settings, setSetting } = useStore(privacySelector);
+  const activeNetwork = useStore(selectActiveNetwork);
+
+  const visibleRows = PRIVACY_ROWS.filter(
+    row => !row.visible || row.visible(activeNetwork),
+  );
 
   return (
     <SettingsScreen title='privacy'>
       <div className='flex flex-col divide-y divide-border/40'>
-        <Row
-          label='cosmos balance queries'
-          note='leaks addresses to rpc nodes'
-          checked={settings.enableTransparentBalances}
-          onChange={v => setSetting('enableTransparentBalances', v)}
-        />
-        <Row
-          label='transaction history'
-          note='stored locally'
-          checked={settings.enableTransactionHistory}
-          onChange={v => setSetting('enableTransactionHistory', v)}
-        />
-        <Row
-          label='cosmos background sync'
-          note='periodic rpc queries. shielded networks sync automatically.'
-          checked={settings.enableBackgroundSync}
-          onChange={v => setSetting('enableBackgroundSync', v)}
-        />
-        <Row
-          label='price fetching'
-          note='price apis do not learn your addresses'
-          checked={settings.enablePriceFetching}
-          onChange={v => setSetting('enablePriceFetching', v)}
-        />
+        {visibleRows.map(row => (
+          <Row
+            key={row.key}
+            label={row.label}
+            note={row.note}
+            checked={settings[row.key]}
+            onChange={v => setSetting(row.key, v)}
+          />
+        ))}
+        {visibleRows.length === 0 && (
+          <p className='py-8 text-center text-sm text-muted-foreground'>
+            no privacy settings for this network
+          </p>
+        )}
       </div>
     </SettingsScreen>
   );
