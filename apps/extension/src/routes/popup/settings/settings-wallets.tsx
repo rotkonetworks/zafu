@@ -249,7 +249,7 @@ export const SettingsWallets = () => {
         {/* orphaned legacy wallets (imported via old zigner flow without vault) */}
         {(orphanedPenumbra.length > 0 || orphanedZcash.length > 0) && (
           <div>
-            <div className='text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5'>legacy watch-only</div>
+            <div className='text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5'>watch-only</div>
             <div className='flex flex-col gap-1 rounded-lg border border-border/40 bg-card divide-y divide-border/40'>
               {orphanedPenumbra.map((w, i) => (
                 <div key={w.id} className='flex items-center justify-between px-3 py-2.5'>
