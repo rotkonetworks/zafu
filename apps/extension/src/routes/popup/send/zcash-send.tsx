@@ -228,7 +228,6 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         // per-action commitment and share collection from peers
         const peerCommitmentsPerAction: string[][] = Array.from({ length: numActions }, () => []);
         const peerSharesPerAction: string[][] = Array.from({ length: numActions }, () => []);
-        let currentAction = 0;
         let signingPhase: 'commitments' | 'shares' | 'done' = 'commitments';
 
         const abortController = new AbortController();
@@ -237,19 +236,28 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             const text = new TextDecoder().decode(event.message.payload);
             if (text.startsWith('SIGN:')) return; // skip echoed SIGN prefix
             if (signingPhase === 'commitments') {
-              // peers send comma-joined commitments for all actions
+              // peers send pipe-delimited commitments for all actions
               const parts = text.split('|');
               for (let i = 0; i < parts.length && i < numActions; i++) {
                 peerCommitmentsPerAction[i]!.push(parts[i]!);
               }
             } else if (signingPhase === 'shares') {
-              peerSharesPerAction[currentAction]!.push(text);
+              // shares are tagged: S:<actionIndex>:<shareData>
+              const shareMatch = text.match(/^S:(\d+):(.+)$/);
+              if (shareMatch) {
+                const actionIdx = Number(shareMatch[1]);
+                if (actionIdx >= 0 && actionIdx < numActions) {
+                  peerSharesPerAction[actionIdx]!.push(shareMatch[2]!);
+                }
+              }
             }
           }
         }, abortController.signal);
 
-        // broadcast SIGN prefix then our commitments (pipe-delimited, one per action)
-        const signPrefix = `SIGN:${result.sighash}:${result.alphas.join(',')}`;
+        // broadcast SIGN prefix with tx summary so co-signers can verify
+        const amountZec = (Number(amountZat) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
+        const summary = `${amountZec} ZEC to ${recipient.trim().slice(0, 16)}...`;
+        const signPrefix = `SIGN:${result.sighash}:${result.alphas.join(',')}:${summary}`;
         await relay.sendMessage(room.roomCode, participantId, new TextEncoder().encode(signPrefix));
         const ourCommitments = round1s.map(r => r.commitments).join('|');
         await relay.sendMessage(room.roomCode, participantId, new TextEncoder().encode(ourCommitments));
@@ -264,13 +272,13 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
         const orchardSigs: string[] = [];
         for (let i = 0; i < numActions; i++) {
-          currentAction = i;
           const allCommitments = [round1s[i]!.commitments, ...peerCommitmentsPerAction[i]!];
 
           const share = await frostSpendSignInWorker(
             secrets.keyPackage, round1s[i]!.nonces, result.sighash, result.alphas[i]!, allCommitments,
           );
-          await relay.sendMessage(room.roomCode, participantId, new TextEncoder().encode(share));
+          // tag share with action index so peers can bucket correctly
+          await relay.sendMessage(room.roomCode, participantId, new TextEncoder().encode(`S:${i}:${share}`));
 
           setFrostProgress(`round 2: collecting shares (${i + 1}/${numActions})...`);
           await waitFor(() => peerSharesPerAction[i]!.length >= ms.threshold - 1, 120000);

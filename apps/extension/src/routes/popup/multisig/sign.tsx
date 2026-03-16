@@ -25,6 +25,7 @@ export const MultisigSign = () => {
   const [step, setStep] = useState<Step>('input');
   const [error, setError] = useState('');
   const [progress, setProgress] = useState('');
+  const [txSummary, setTxSummary] = useState('');
 
   const activeWallet = useStore(selectActiveZcashWallet);
   const ms = activeWallet?.multisig;
@@ -59,10 +60,12 @@ export const MultisigSign = () => {
         if (event.type === 'message') {
           const text = new TextDecoder().decode(event.message.payload);
           if (phase === 'init') {
-            const signMatch = text.match(/^SIGN:([0-9a-fA-F]+):(.+)$/);
+            // format: SIGN:<sighash>:<alpha1,alpha2,...>:<summary>
+            const signMatch = text.match(/^SIGN:([0-9a-fA-F]+):([^:]+):(.*)$/);
             if (signMatch) {
               sighash = signMatch[1]!;
               alphas = signMatch[2]!.split(',');
+              setTxSummary(signMatch[3] || '');
               phase = 'commitments';
             }
             // if not SIGN prefix, ignore (don't misclassify as commitment)
@@ -110,7 +113,8 @@ export const MultisigSign = () => {
         const share = await frostSpendSignInWorker(
           secrets.keyPackage, round1s[i]!.nonces, sighash, alphas[i]!, allCommitments,
         );
-        await relay.sendMessage(roomCode.trim(), participantId, new TextEncoder().encode(share));
+        // tag share with action index so coordinator can bucket correctly
+        await relay.sendMessage(roomCode.trim(), participantId, new TextEncoder().encode(`S:${i}:${share}`));
       }
 
       abortController.abort();
@@ -168,6 +172,12 @@ export const MultisigSign = () => {
 
       {(step === 'waiting' || step === 'signing') && (
         <div className='flex flex-col items-center gap-4'>
+          {txSummary && (
+            <div className='w-full rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-3'>
+              <p className='text-[10px] text-yellow-400'>signing transaction</p>
+              <p className='mt-0.5 text-sm font-medium text-yellow-300'>{txSummary}</p>
+            </div>
+          )}
           <div className='flex items-center gap-2 text-xs text-muted-foreground'>
             <span className='i-lucide-loader-2 size-3.5 animate-spin' />
             {progress}
