@@ -17,7 +17,7 @@
 import type { NetworkType } from './types';
 
 export interface NetworkWorkerMessage {
-  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos';
+  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos' | 'frost-dkg-part1' | 'frost-dkg-part2' | 'frost-dkg-part3' | 'frost-sign-round1' | 'frost-spend-sign' | 'frost-spend-aggregate' | 'frost-derive-address';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -25,7 +25,7 @@ export interface NetworkWorkerMessage {
 }
 
 export interface NetworkWorkerResponse {
-  type: 'ready' | 'address' | 'sync-progress' | 'send-progress' | 'sync-started' | 'sync-stopped' | 'sync-reset' | 'balance' | 'tx-result' | 'send-tx-unsigned' | 'shield-result' | 'shield-unsigned-result' | 'wallets' | 'wallet-deleted' | 'notes' | 'memos' | 'transparent-history' | 'history' | 'memos-result' | 'sync-memos-progress' | 'mempool-update' | 'prove-request' | 'error';
+  type: 'ready' | 'address' | 'sync-progress' | 'send-progress' | 'sync-started' | 'sync-stopped' | 'sync-reset' | 'balance' | 'tx-result' | 'send-tx-unsigned' | 'shield-result' | 'shield-unsigned-result' | 'wallets' | 'wallet-deleted' | 'notes' | 'memos' | 'transparent-history' | 'history' | 'memos-result' | 'sync-memos-progress' | 'mempool-update' | 'prove-request' | 'frost-result' | 'error';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -545,6 +545,82 @@ async function relayProveRequest(worker: Worker, id: string, request: unknown): 
     worker.postMessage({ type: 'prove-response', id, error: e instanceof Error ? e.message : String(e) });
   }
 }
+
+// ── FROST multisig worker helpers ──
+
+/** DKG round 1: generate ephemeral identity + signed commitment */
+export const frostDkgPart1InWorker = async (
+  maxSigners: number,
+  minSigners: number,
+): Promise<{ secret: string; broadcast: string }> => {
+  return callWorker('zcash', 'frost-dkg-part1', { maxSigners, minSigners });
+};
+
+/** DKG round 2: process signed round1 broadcasts */
+export const frostDkgPart2InWorker = async (
+  secretHex: string,
+  peerBroadcasts: string[],
+): Promise<{ secret: string; peer_packages: string[] }> => {
+  return callWorker('zcash', 'frost-dkg-part2', { secretHex, peerBroadcasts: JSON.stringify(peerBroadcasts) });
+};
+
+/** DKG round 3: finalize — returns key package + public key package */
+export const frostDkgPart3InWorker = async (
+  secretHex: string,
+  round1Broadcasts: string[],
+  round2Packages: string[],
+): Promise<{ key_package: string; public_key_package: string; ephemeral_seed: string }> => {
+  return callWorker('zcash', 'frost-dkg-part3', {
+    secretHex,
+    round1Broadcasts: JSON.stringify(round1Broadcasts),
+    round2Packages: JSON.stringify(round2Packages),
+  });
+};
+
+/** signing round 1: generate nonces + signed commitments */
+export const frostSignRound1InWorker = async (
+  ephemeralSeedHex: string,
+  keyPackageHex: string,
+): Promise<{ nonces: string; commitments: string }> => {
+  return callWorker('zcash', 'frost-sign-round1', { ephemeralSeedHex, keyPackageHex });
+};
+
+/** spend-authorize round 2: produce FROST share for each action */
+export const frostSpendSignInWorker = async (
+  keyPackageHex: string,
+  noncesHex: string,
+  sighashHex: string,
+  alphaHex: string,
+  commitments: string[],
+): Promise<string> => {
+  return callWorker('zcash', 'frost-spend-sign', {
+    keyPackageHex, noncesHex, sighashHex, alphaHex,
+    commitments: JSON.stringify(commitments),
+  });
+};
+
+/** coordinator: aggregate shares into SpendAuth signature */
+export const frostSpendAggregateInWorker = async (
+  publicKeyPackageHex: string,
+  sighashHex: string,
+  alphaHex: string,
+  commitments: string[],
+  shares: string[],
+): Promise<string> => {
+  return callWorker('zcash', 'frost-spend-aggregate', {
+    publicKeyPackageHex, sighashHex, alphaHex,
+    commitments: JSON.stringify(commitments),
+    shares: JSON.stringify(shares),
+  });
+};
+
+/** derive multisig Orchard address from FROST group key */
+export const frostDeriveAddressInWorker = async (
+  publicKeyPackageHex: string,
+  diversifierIndex: number,
+): Promise<string> => {
+  return callWorker('zcash', 'frost-derive-address', { publicKeyPackageHex, diversifierIndex });
+};
 
 // worker URLs per network
 const getWorkerUrl = (network: NetworkType): string | null => {

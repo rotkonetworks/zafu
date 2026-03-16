@@ -35,6 +35,8 @@ const hiddenTabRoutes = [
   PopupPath.SEND,
   PopupPath.RECEIVE,
   PopupPath.CONTACTS,
+  PopupPath.MULTISIG_CREATE,
+  PopupPath.MULTISIG_JOIN,
 ];
 
 /** routes where header should NOT be shown (auth/approval flows only) */

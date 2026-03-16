@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'vitest';
-import { create, StoreApi, UseBoundStore } from 'zustand';
-import { AllSlices, initializeStore } from '.';
+import { create } from 'zustand';
+import { AllSlices, initializeStore, TestStore } from '.';
 import { OriginRecord } from '@repo/storage-chrome/records';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
@@ -17,7 +17,7 @@ const mockSite: OriginRecord = {
 };
 
 describe('Connected Sites Slice', () => {
-  let useStore: UseBoundStore<StoreApi<AllSlices>>;
+  let useStore: TestStore;
 
   beforeEach(() => {
     localMock.clear();

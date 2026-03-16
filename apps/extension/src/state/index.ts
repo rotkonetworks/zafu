@@ -25,6 +25,7 @@ import { createContactsSlice, ContactsSlice } from './contacts';
 import { createMessagesSlice, MessagesSlice } from './messages';
 import { createRecentAddressesSlice, RecentAddressesSlice } from './recent-addresses';
 import { createSignApprovalSlice, SignApprovalSlice } from './sign-approval';
+import { createFrostSessionSlice, FrostSessionSlice } from './frost-session';
 
 export interface AllSlices {
   wallets: WalletsSlice;
@@ -48,6 +49,7 @@ export interface AllSlices {
   messages: MessagesSlice;
   recentAddresses: RecentAddressesSlice;
   signApproval: SignApprovalSlice;
+  frostSession: FrostSessionSlice;
 }
 
 export type SliceCreator<SliceInterface> = StateCreator<
@@ -83,6 +85,7 @@ export const initializeStore = (
     messages: createMessagesSlice(local)(setState, getState, store),
     recentAddresses: createRecentAddressesSlice(local)(setState, getState, store),
     signApproval: createSignApprovalSlice()(setState, getState, store),
+    frostSession: createFrostSessionSlice()(setState, getState, store),
   }));
 };
 
@@ -90,3 +93,6 @@ export const initializeStore = (
 export const useStore = create<AllSlices>()(
   customPersist(initializeStore(sessionExtStorage, localExtStorage)),
 );
+
+/** store type for use in test mocks — includes immer middleware signature */
+export type TestStore = typeof useStore;

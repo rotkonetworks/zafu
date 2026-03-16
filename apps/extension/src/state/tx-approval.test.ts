@@ -14,8 +14,8 @@ import { UserChoice } from '@repo/storage-chrome/records';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { beforeEach, describe, expect, MockedFunction, test, vi } from 'vitest';
-import { create, StoreApi, UseBoundStore } from 'zustand';
-import { AllSlices, initializeStore } from '.';
+import { create } from 'zustand';
+import { AllSlices, initializeStore, TestStore } from '.';
 import { PopupRequest, PopupType } from '../message/popup';
 
 const localMock = (chrome.storage.local as unknown as { mock: Map<string, unknown> }).mock;
@@ -89,7 +89,7 @@ const spend = new ActionPlan({
 const plan = new TransactionPlan({ actions: [spend] });
 
 describe('Transaction Approval Slice', () => {
-  let useStore: UseBoundStore<StoreApi<AllSlices>>;
+  let useStore: TestStore;
 
   const authorizeRequest = new AuthorizeRequest({ plan });
 

@@ -27,6 +27,8 @@ const ContactsPage = lazy(() => import('./contacts').then(m => ({ default: m.Con
 const SendPage = lazy(() => import('./send').then(m => ({ default: m.SendPage })));
 const ReceivePage = lazy(() => import('./receive').then(m => ({ default: m.ReceivePage })));
 const CosmosSign = lazy(() => import('./cosmos-sign').then(m => ({ default: m.CosmosSign })));
+const MultisigCreate = lazy(() => import('./multisig/create').then(m => ({ default: m.MultisigCreate })));
+const MultisigJoin = lazy(() => import('./multisig/join').then(m => ({ default: m.MultisigJoin })));
 
 // suspense fallback for lazy routes
 const LazyFallback = () => (
@@ -119,6 +121,24 @@ export const popupRoutes: RouteObject[] = [
         element: (
           <Suspense fallback={<LazyFallback />}>
             <CosmosSign />
+          </Suspense>
+        ),
+      },
+
+      // Multisig
+      {
+        path: PopupPath.MULTISIG_CREATE,
+        element: (
+          <Suspense fallback={<LazyFallback />}>
+            <MultisigCreate />
+          </Suspense>
+        ),
+      },
+      {
+        path: PopupPath.MULTISIG_JOIN,
+        element: (
+          <Suspense fallback={<LazyFallback />}>
+            <MultisigJoin />
           </Suspense>
         ),
       },

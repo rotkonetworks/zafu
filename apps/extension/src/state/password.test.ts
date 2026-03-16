@@ -3,8 +3,8 @@ import { KeyPrint } from '@repo/encryption/key-print';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { beforeEach, describe, expect, test } from 'vitest';
-import { create, StoreApi, UseBoundStore } from 'zustand';
-import { AllSlices, initializeStore } from '.';
+import { create } from 'zustand';
+import { AllSlices, initializeStore, TestStore } from '.';
 
 const localMock = (chrome.storage.local as unknown as { mock: Map<string, unknown> }).mock;
 const sessionMock = (chrome.storage.session as unknown as { mock: Map<string, unknown> }).mock;
@@ -15,7 +15,7 @@ describe('Password Slice', () => {
     'advance twist canal impact field normal depend pink sick horn world broccoli',
   ];
 
-  let useStore: UseBoundStore<StoreApi<AllSlices>>;
+  let useStore: TestStore;
 
   beforeEach(() => {
     localMock.clear();

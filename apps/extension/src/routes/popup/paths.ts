@@ -23,6 +23,10 @@ export enum PopupPath {
   // Cosmos airgap signing (dedicated window)
   COSMOS_SIGN = '/cosmos-sign',
 
+  // Multisig
+  MULTISIG_CREATE = '/multisig/create',
+  MULTISIG_JOIN = '/multisig/join',
+
   // Settings sub-pages
   SETTINGS_DEFAULT_FRONTEND = '/settings/default-frontend',
   SETTINGS_CONNECTED_SITES = '/settings/connected-sites',

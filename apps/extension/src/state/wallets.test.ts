@@ -1,5 +1,5 @@
-import { create, StoreApi, UseBoundStore } from 'zustand';
-import { AllSlices, initializeStore } from '.';
+import { create } from 'zustand';
+import { AllSlices, initializeStore, TestStore } from '.';
 import { beforeEach, describe, expect, test } from 'vitest';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
@@ -38,7 +38,7 @@ const localMock = (chrome.storage.local as unknown as { mock: Map<string, unknow
 const sessionMock = (chrome.storage.session as unknown as { mock: Map<string, unknown> }).mock;
 
 describe('Accounts Slice', () => {
-  let useStore: UseBoundStore<StoreApi<AllSlices>>;
+  let useStore: TestStore;
 
   beforeEach(() => {
     localMock.clear();
