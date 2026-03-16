@@ -689,6 +689,11 @@ export function decodeNoteSyncPayload(data: Uint8Array): {
   const noteCount = readUint16LE(data, offset);
   offset += 2;
 
+  const noteLen = 4 + 8 + 32 + 32 + 4; // 80 bytes per note
+  if (offset + noteCount * noteLen > data.length) {
+    throw new Error(`note sync payload truncated: need ${noteCount * noteLen} bytes for ${noteCount} notes, have ${data.length - offset}`);
+  }
+
   const notes: SyncNote[] = [];
   for (let i = 0; i < noteCount; i++) {
     const height = readUint32LE(data, offset);
