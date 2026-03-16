@@ -39,7 +39,16 @@ const prerenderComplete = new Promise<void>(resolve =>
 );
 
 // In dev mode, use runtime ID (Chrome assigns dynamic ID for unpacked extensions)
-const extensionOrigin = globalThis.__DEV__ ? `chrome-extension://${chrome.runtime.id}` : ZIGNER_ORIGIN;
+// Guard: chrome.runtime.id can be undefined if service worker hasn't started
+const extensionOrigin = globalThis.__DEV__
+  ? (chrome.runtime?.id ? `chrome-extension://${chrome.runtime.id}` : '')
+  : ZIGNER_ORIGIN;
+
+// bail if we can't determine our origin (avoids "Cannot redefine property: chrome-extension://undefined")
+if (!extensionOrigin || extensionOrigin.endsWith('undefined')) {
+  // eslint-disable-next-line no-console
+  console.debug('[zafu] skipping penumbra provider injection: extension origin unavailable');
+} else {
 
 class ZignerInjection {
   private static singleton?: ZignerInjection = new ZignerInjection();
@@ -180,3 +189,5 @@ Object.defineProperty(
     enumerable: true,
   },
 );
+
+} // end extensionOrigin guard
