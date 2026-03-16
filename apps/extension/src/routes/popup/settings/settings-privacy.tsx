@@ -35,6 +35,7 @@ const PRIVACY_ROWS: readonly PrivacyRow[] = [
     key: 'enablePriceFetching',
     label: 'price fetching',
     note: 'price apis do not learn your addresses',
+    visible: n => n === 'penumbra' || isIbcNetwork(n),
   },
 ];
 
