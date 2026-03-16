@@ -2,7 +2,7 @@ import { PopupLoaderData } from '../routes/popup/home';
 import { useLoaderData } from 'react-router-dom';
 import { useLatestBlockHeight } from './latest-block-height';
 import { useStore } from '../state';
-import { networkSelector } from '../state/network';
+const selectFullSyncHeight = (state: { network: { fullSyncHeight?: number } }) => state.network.fullSyncHeight;
 
 const tryGetMax = (a?: number, b?: number): number | undefined => {
   // Height can be 0n which is falsy, so should compare to undefined state
@@ -20,7 +20,7 @@ const tryGetMax = (a?: number, b?: number): number | undefined => {
 // To prevent the screen flicker, we use a loader to read it from chrome.storage.local.
 const useFullSyncHeight = (): number | undefined => {
   const { fullSyncHeight: localHeight } = useLoaderData() as PopupLoaderData;
-  const { fullSyncHeight: memoryHeight } = useStore(networkSelector);
+  const memoryHeight = useStore(selectFullSyncHeight);
 
   return tryGetMax(localHeight, memoryHeight);
 };

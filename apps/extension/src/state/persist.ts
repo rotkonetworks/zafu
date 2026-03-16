@@ -22,24 +22,30 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
     const wallets = await localExtStorage.get('wallets');
     const zcashWallets = await localExtStorage.get('zcashWallets');
     const activeZcashIndex = await localExtStorage.get('activeZcashIndex');
+    const activeWalletIndex = await localExtStorage.get('activeWalletIndex');
     const grpcEndpoint = await localExtStorage.get('grpcEndpoint');
     const knownSites = await localExtStorage.get('knownSites');
     const frontendUrl = await localExtStorage.get('frontendUrl');
     const numeraires = await localExtStorage.get('numeraires');
     const zignerCameraEnabled = await localExtStorage.get('zignerCameraEnabled');
     const contacts = await localExtStorage.get('contacts');
+    const privacySettings = await localExtStorage.get('privacySettings' as keyof import('@repo/storage-chrome/local').LocalStorageState);
 
     set(
       produce((state: AllSlices) => {
         state.wallets.all = wallets;
         state.wallets.zcashWallets = zcashWallets ?? [];
         state.wallets.activeZcashIndex = activeZcashIndex ?? 0;
+        state.wallets.activeIndex = activeWalletIndex ?? 0;
         state.network.grpcEndpoint = grpcEndpoint;
         state.connectedSites.knownSites = knownSites as OriginRecord[];
         state.defaultFrontend.url = frontendUrl;
         state.numeraires.selectedNumeraires = numeraires;
         state.zigner.cameraEnabled = zignerCameraEnabled ?? false;
         state.contacts.contacts = contacts ?? [];
+        if (privacySettings) {
+          state.privacy.settings = privacySettings as AllSlices['privacy']['settings'];
+        }
       }),
     );
 
@@ -147,6 +153,36 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
             state.contacts.contacts = stored ?? [];
           }),
         );
+      }
+
+      if (changes.activeWalletIndex) {
+        const stored = changes.activeWalletIndex.newValue;
+        set(
+          produce((state: AllSlices) => {
+            state.wallets.activeIndex = stored ?? 0;
+          }),
+        );
+      }
+
+      if (changes.enabledNetworks) {
+        const stored = changes.enabledNetworks.newValue;
+        set(
+          produce((state: AllSlices) => {
+            state.keyRing.enabledNetworks = (stored ?? []) as AllSlices['keyRing']['enabledNetworks'];
+          }),
+        );
+      }
+
+      const privacyChange = (changes as Record<string, { newValue?: unknown }>)['privacySettings'];
+      if (privacyChange) {
+        const stored = privacyChange.newValue;
+        if (stored) {
+          set(
+            produce((state: AllSlices) => {
+              state.privacy.settings = stored as AllSlices['privacy']['settings'];
+            }),
+          );
+        }
       }
 
       // re-init keyring if vaults or selected vault changes

@@ -8,7 +8,7 @@
 
 import { useState, useEffect } from 'react';
 import { useStore } from '../state';
-import { selectActiveNetwork, selectEffectiveKeyInfo, selectPenumbraAccount, keyRingSelector } from '../state/keyring';
+import { selectActiveNetwork, selectEffectiveKeyInfo, selectPenumbraAccount, selectGetMnemonic } from '../state/keyring';
 import { getActiveWalletJson, selectActiveZcashWallet } from '../state/wallets';
 import { NETWORK_CONFIGS, type IbcNetwork, isIbcNetwork } from '../state/keyring/network-types';
 import type { CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
@@ -119,7 +119,7 @@ export function useActiveAddress() {
   const activeNetwork = useStore(selectActiveNetwork);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const penumbraAccount = useStore(selectPenumbraAccount);
-  const keyRing = useStore(keyRingSelector);
+  const getMnemonic = useStore(selectGetMnemonic);
   const penumbraWallet = useStore(getActiveWalletJson);
   const zcashWallet = useStore(selectActiveZcashWallet);
 
@@ -157,7 +157,7 @@ export function useActiveAddress() {
         // mnemonic vault - derive addresses from seed for all networks
         if (selectedKeyInfo?.type === 'mnemonic') {
           try {
-            const mnemonic = await keyRing.getMnemonic(selectedKeyInfo.id);
+            const mnemonic = await getMnemonic(selectedKeyInfo.id);
 
             // penumbra - derive from seed
             if (activeNetwork === 'penumbra') {
@@ -317,7 +317,7 @@ export function useActiveAddress() {
 
     void deriveAddress();
     return () => { cancelled = true; };
-  }, [activeNetwork, selectedKeyInfo?.id, selectedKeyInfo?.type, penumbraAccount, penumbraWallet?.fullViewingKey, zcashWallet?.address, zcashWallet?.orchardFvk, zcashWallet?.ufvk, keyRing, shieldedIndex]);
+  }, [activeNetwork, selectedKeyInfo?.id, selectedKeyInfo?.type, penumbraAccount, penumbraWallet?.fullViewingKey, zcashWallet?.address, zcashWallet?.orchardFvk, zcashWallet?.ufvk, getMnemonic, shieldedIndex]);
 
   return { address, loading };
 }

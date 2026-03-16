@@ -845,6 +845,11 @@ export const selectUnlock = (state: AllSlices) => state.keyRing.unlock;
 export const selectSelectKeyRing = (state: AllSlices) => state.keyRing.selectKeyRing;
 export const selectPenumbraAccount = (state: AllSlices) => state.keyRing.penumbraAccount;
 export const selectSetPenumbraAccount = (state: AllSlices) => state.keyRing.setPenumbraAccount;
+export const selectGetMnemonic = (state: AllSlices) => state.keyRing.getMnemonic;
+export const selectDeriveKey = (state: AllSlices) => state.keyRing.deriveKey;
+export const selectToggleNetwork = (state: AllSlices) => state.keyRing.toggleNetwork;
+export const selectDeleteKeyRing = (state: AllSlices) => state.keyRing.deleteKeyRing;
+export const selectRenameKeyRing = (state: AllSlices) => state.keyRing.renameKeyRing;
 
 /** Helper to check if a keyInfo supports a given network */
 const keyInfoSupportsNetwork = (k: KeyInfo, network: NetworkType): boolean => {

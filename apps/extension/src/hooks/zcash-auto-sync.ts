@@ -10,7 +10,7 @@
 import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useStore } from '../state';
-import { selectActiveNetwork, selectEffectiveKeyInfo, keyRingSelector } from '../state/keyring';
+import { selectActiveNetwork, selectEffectiveKeyInfo, selectGetMnemonic } from '../state/keyring';
 import { selectActiveZcashWallet } from '../state/wallets';
 import {
   spawnNetworkWorker,
@@ -39,7 +39,7 @@ export function useZcashAutoSync() {
   const location = useLocation();
   const activeNetwork = useStore(selectActiveNetwork);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
-  const keyRing = useStore(keyRingSelector);
+  const getMnemonic = useStore(selectGetMnemonic);
   const activeZcashWallet = useStore(selectActiveZcashWallet);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
 
@@ -67,7 +67,7 @@ export function useZcashAutoSync() {
         try {
           await spawnNetworkWorker('zcash');
           if (cancelled) return;
-          const mnemonic = await keyRing.getMnemonic(walletId);
+          const mnemonic = await getMnemonic(walletId);
           if (cancelled) return;
           const startHeight = await resolveBirthday(walletId, zidecarUrl);
           if (cancelled) return;
@@ -89,7 +89,7 @@ export function useZcashAutoSync() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [activeNetwork, onLoginPage, hasMnemonic, walletId, keyRing, zidecarUrl]);
+  }, [activeNetwork, onLoginPage, hasMnemonic, walletId, getMnemonic, zidecarUrl]);
 
   // watch-only wallet sync
   useEffect(() => {
