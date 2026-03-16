@@ -462,6 +462,22 @@ function ReceiveTab({ address, loading, activeNetwork }: {
   const zcashUfvk = zcashWallet?.ufvk ?? (zcashWallet?.orchardFvk?.startsWith('uview') ? zcashWallet.orchardFvk : undefined);
   const canTransparent = isMnemonic || !!zcashUfvk;
 
+  // zcash shielded diversifier index (synced with chrome.storage)
+  const [shieldedIndex, setShieldedIndex] = useState(0);
+  useEffect(() => {
+    if (!isZcash) return;
+    chrome.storage.local.get('zcashShieldedIndex').then(r => {
+      setShieldedIndex(r['zcashShieldedIndex'] ?? 0);
+    });
+    const listener = (changes: Record<string, chrome.storage.StorageChange>) => {
+      if (changes['zcashShieldedIndex']?.newValue !== undefined) {
+        setShieldedIndex(changes['zcashShieldedIndex'].newValue);
+      }
+    };
+    chrome.storage.local.onChanged.addListener(listener);
+    return () => chrome.storage.local.onChanged.removeListener(listener);
+  }, [isZcash]);
+
   // zcash transparent address state
   const [transparent, setTransparent] = useState(false);
   const [transparentIndex, setTransparentIndex] = useState(0);
@@ -679,15 +695,28 @@ function ReceiveTab({ address, loading, activeNetwork }: {
         </div>
       )}
 
-      {isZcash && canTransparent && !transparent && (
-        <button
-          onClick={() => void handleRotateShielded()}
-          disabled={loading}
-          className='flex items-center gap-1.5 rounded-lg border border-border/40 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-foreground hover:text-foreground disabled:opacity-50'
-        >
-          <span className='i-lucide-refresh-cw h-3 w-3' />
-          new address
-        </button>
+      {isZcash && !transparent && (
+        <div className='flex w-full items-center justify-center gap-1'>
+          <button
+            disabled={shieldedIndex <= 0}
+            onClick={() => {
+              const prev = Math.max(0, shieldedIndex - 1);
+              void chrome.storage.local.set({ zcashShieldedIndex: prev });
+            }}
+            className='p-1 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50'
+          >
+            <span className='i-lucide-chevron-left h-4 w-4' />
+          </button>
+          <span className='min-w-[110px] text-center text-xs font-medium text-muted-foreground'>
+            Address #{shieldedIndex}
+          </span>
+          <button
+            onClick={() => void handleRotateShielded()}
+            className='p-1 text-muted-foreground transition-colors hover:text-foreground'
+          >
+            <span className='i-lucide-chevron-right h-4 w-4' />
+          </button>
+        </div>
       )}
 
       {isZcash && canTransparent && (
@@ -776,7 +805,9 @@ function ReceiveTab({ address, loading, activeNetwork }: {
             ? 'ephemeral address'
             : transparent && isZcash
               ? <span className='flex items-center gap-1.5'>transparent address #{transparentIndex} <span className='text-[10px] px-1.5 py-0.5 rounded-md bg-red-500/15 text-red-500 font-medium leading-none'>public</span></span>
-              : 'address'}
+              : isZcash
+                ? `shielded address #${shieldedIndex}`
+                : 'address'}
         </div>
         <div className={`flex items-center gap-2 rounded-lg border p-3 ${
           ephemeral && isPenumbra
