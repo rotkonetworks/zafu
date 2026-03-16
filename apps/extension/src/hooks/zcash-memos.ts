@@ -15,6 +15,7 @@ import {
   decryptMemosInWorker,
   type FoundNoteWithMemo,
 } from '../state/keyring/network-worker';
+import { isStructuredMemo } from '@repo/wallet/networks/zcash/memo-codec';
 
 const DEFAULT_ZIDECAR_URL = 'https://zcash.rotko.net';
 
@@ -105,6 +106,39 @@ export function useZcashMemos(walletId: string, zidecarUrl: string = DEFAULT_ZID
           read: memo.direction === 'sent',
           amount: memo.amount,
         });
+      }
+
+      // also feed raw memo bytes into the structured inbox for binary-encoded messages
+      // (FROST coordination, fragmented text, address shares, etc.)
+      // the existing messages store handles plain-text memos; the inbox handles structured ones
+      if (results.length > 0) {
+        const inbox = useStore.getState().inbox;
+        const structuredNotes = results
+          .filter(m => m.memoBytes)
+          .map(m => {
+            // decode hex to Uint8Array
+            const hex = m.memoBytes!;
+            const bytes = new Uint8Array(hex.length / 2);
+            for (let i = 0; i < bytes.length; i++) {
+              bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
+            }
+            return bytes;
+          })
+          .filter(bytes => isStructuredMemo(bytes))
+          .map((bytes, i) => {
+            const m = results.filter(r => r.memoBytes)[i]!;
+            return {
+              txid: m.txId,
+              height: m.blockHeight,
+              memo: bytes,
+              diversifierIndex: m.diversifierIndex ?? 0,
+              isChange: m.direction === 'sent',
+              timestamp: m.timestamp,
+            };
+          });
+        if (structuredNotes.length > 0) {
+          inbox.ingestMemos(structuredNotes);
+        }
       }
 
       setSyncProgress(null);

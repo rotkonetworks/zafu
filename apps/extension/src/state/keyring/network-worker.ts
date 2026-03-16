@@ -378,6 +378,10 @@ export interface MemoSyncEntry {
   content: string;
   direction: string;
   amount: string;
+  /** hex-encoded raw 512-byte memo (for structured/binary memos) */
+  memoBytes?: string;
+  /** diversifier index of the receiving address */
+  diversifierIndex?: number;
 }
 
 /**

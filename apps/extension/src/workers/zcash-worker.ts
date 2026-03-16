@@ -32,6 +32,8 @@ interface FoundNoteWithMemo {
   memo: string;
   memo_is_text: boolean;
   is_outgoing: boolean;
+  /** hex-encoded raw 512-byte memo */
+  memo_bytes: string;
 }
 
 /** Common scanning interface shared by WalletKeys and WatchOnlyWallet */
@@ -1568,7 +1570,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         }
 
         // process buckets sequentially to avoid race conditions on processedTxids
-        const results: Array<{ txId: string; blockHeight: number; timestamp: number; content: string; direction: string; amount: string }> = [];
+        const results: Array<{ txId: string; blockHeight: number; timestamp: number; content: string; direction: string; amount: string; memoBytes?: string; diversifierIndex?: number }> = [];
         const totalBuckets = allFetchBuckets.length;
 
         for (let i = 0; i < allFetchBuckets.length; i += FETCH_CONCURRENCY) {
@@ -1615,7 +1617,11 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 const foundMemos = memoKeys.decrypt_transaction_memos(txBuf);
 
                 for (const memo of foundMemos) {
-                  if (!memo.memo_is_text || !memo.memo.trim()) continue;
+                  // structured binary memos (0xF6 prefix) are handled separately
+                  // check if this is a structured binary memo (0xF6 prefix per ZIP-302)
+                  const memoRawHex = memo.memo_bytes || '';
+                  const isStructured = memoRawHex.length === 1024 && memoRawHex.startsWith('f6');
+                  if (!isStructured && (!memo.memo_is_text || !memo.memo.trim())) continue;
 
                   if (memo.is_outgoing) {
                     const heightTxIds = spentTxIds.get(height);
@@ -1629,6 +1635,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                             content: memo.memo,
                             direction: 'sent',
                             amount: (memo.value / 100_000_000).toFixed(8),
+                            memoBytes: isStructured ? memoRawHex : undefined,
                           });
                           processedTxids.add(spentTxId);
                         }
@@ -1647,6 +1654,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                       content: memo.memo,
                       direction: 'received',
                       amount: (memo.value / 100_000_000).toFixed(8),
+                      memoBytes: isStructured ? memoRawHex : undefined,
                     });
                     processedTxids.add(matchingNote.txid);
                   }
