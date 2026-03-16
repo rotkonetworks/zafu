@@ -20,8 +20,12 @@ import {
   buildSendTxInWorker,
   completeSendTxInWorker,
   getBalanceInWorker,
+  frostSignRound1InWorker,
+  frostSpendSignInWorker,
+  frostSpendAggregateInWorker,
   type SendTxUnsignedResult,
 } from '../../../state/keyring/network-worker';
+import { FrostRelayClient } from '../../../state/keyring/frost-relay-client';
 import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
 import { QrDisplay } from '../../../shared/components/qr-display';
@@ -47,7 +51,7 @@ interface ZcashSendProps {
   };
 }
 
-type SendStep = 'form' | 'review' | 'building' | 'sign' | 'scan' | 'broadcast' | 'complete' | 'error';
+type SendStep = 'form' | 'review' | 'building' | 'sign' | 'scan' | 'broadcast' | 'complete' | 'error' | 'frost-room' | 'frost-signing';
 
 export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSendProps) {
   const {
@@ -80,6 +84,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const [sendSteps, setSendSteps] = useState<Array<{ step: string; detail?: string; elapsedMs: number }>>([]);
   const [totalElapsedSec, setTotalElapsedSec] = useState<number | null>(null);
   const buildStartRef = useRef<number>(0);
+
+  // FROST multisig state
+  const [frostRoomCode, setFrostRoomCode] = useState('');
+  const [frostProgress, setFrostProgress] = useState('');
 
   // store access for wallet id and server url
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
@@ -174,6 +182,104 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           if (shouldSuggestSave(recipient)) {
             setShowSavePrompt(true);
           }
+        }
+      } else if (activeZcashWallet?.multisig) {
+        // ── FROST multisig: build unsigned tx → relay signing rounds ──
+        const ms = activeZcashWallet.multisig;
+        const result = await buildSendTxInWorker(
+          'zcash', walletId, zidecarUrl, recipient.trim(), amountZat, memo, accountIndex, mainnet,
+          undefined, ufvk,
+        );
+
+        if (!('sighash' in result)) {
+          throw new Error('unexpected result from unsigned tx build');
+        }
+
+        unsignedTxRef.current = result;
+        const feeZec = (Number(result.fee) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
+        setFee(feeZec);
+
+        // create relay room for signing session
+        setStep('frost-room');
+        const relayUrl = zidecarUrl;
+        const relay = new FrostRelayClient(relayUrl);
+        const room = await relay.createRoom(ms.threshold, ms.maxSigners, 300);
+        setFrostRoomCode(room.roomCode);
+
+        // signing round 1: generate our nonces + commitments
+        setStep('frost-signing');
+        setFrostProgress('round 1: generating commitments...');
+        const round1 = await frostSignRound1InWorker(ms.ephemeralSeed, ms.keyPackage);
+
+        // join room and broadcast our commitments
+        const participantId = new Uint8Array(32);
+        crypto.getRandomValues(participantId);
+        const allCommitments: string[] = [round1.commitments];
+        const allShares: string[] = [];
+        let signingPhase: 'commitments' | 'shares' | 'done' = 'commitments';
+
+        const abortController = new AbortController();
+        void relay.joinRoom(room.roomCode, participantId, (event) => {
+          if (event.type === 'message') {
+            const text = new TextDecoder().decode(event.message.payload);
+            if (signingPhase === 'commitments') {
+              allCommitments.push(text);
+            } else if (signingPhase === 'shares') {
+              allShares.push(text);
+            }
+          }
+        }, abortController.signal);
+
+        await relay.sendMessage(room.roomCode, participantId, new TextEncoder().encode(round1.commitments));
+
+        // wait for threshold-1 peer commitments
+        setFrostProgress(`round 1: waiting for ${ms.threshold - 1} co-signer(s)...`);
+        await waitFor(() => allCommitments.length >= ms.threshold, 120000);
+
+        // signing round 2: produce shares for each action
+        signingPhase = 'shares';
+        setFrostProgress('round 2: signing...');
+
+        const orchardSigs: string[] = [];
+        for (let i = 0; i < result.alphas.length; i++) {
+          const share = await frostSpendSignInWorker(
+            ms.keyPackage, round1.nonces, result.sighash, result.alphas[i]!, allCommitments,
+          );
+          await relay.sendMessage(room.roomCode, participantId, new TextEncoder().encode(share));
+
+          // wait for threshold-1 peer shares for this action
+          setFrostProgress(`round 2: collecting shares (${i + 1}/${result.alphas.length})...`);
+          await waitFor(() => allShares.length >= (ms.threshold - 1) * (i + 1), 120000);
+
+          // aggregate
+          const actionShares = allShares.slice(i * (ms.threshold - 1), (i + 1) * (ms.threshold - 1));
+          const allSharesForAction = [share, ...actionShares];
+
+          const sig = await frostSpendAggregateInWorker(
+            ms.publicKeyPackage, result.sighash, result.alphas[i]!, allCommitments, allSharesForAction,
+          );
+          orchardSigs.push(sig);
+        }
+
+        signingPhase = 'done';
+        abortController.abort();
+
+        // complete transaction with aggregated signatures
+        setStep('broadcast');
+        setFrostProgress('broadcasting...');
+        const finalResult = await completeSendTxInWorker(
+          'zcash', walletId, zidecarUrl,
+          result.unsignedTx,
+          { orchardSigs, transparentSigs: [] },
+          result.spendIndices,
+        );
+
+        complete(finalResult.txid);
+        setTotalElapsedSec(Math.round((Date.now() - buildStartRef.current) / 1000));
+        setStep('complete');
+        void recordUsage(recipient, 'zcash');
+        if (shouldSuggestSave(recipient)) {
+          setShowSavePrompt(true);
         }
       } else {
         // zigner wallet: build unsigned tx → QR signing flow
@@ -290,6 +396,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         break;
       case 'scan':
         setStep('sign');
+        break;
+      case 'frost-room':
+      case 'frost-signing':
+        setStep('review');
         break;
       case 'error':
         setStep('review');
@@ -663,6 +773,39 @@ description="point camera at zafu zigner's signature qr code"
           </div>
         );
 
+      case 'frost-room':
+      case 'frost-signing':
+        return (
+          <div className="flex flex-col items-center gap-6 p-8">
+            <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center">
+              <span className="i-lucide-users w-8 h-8 text-primary" />
+            </div>
+            <h2 className="text-lg font-medium">multisig signing</h2>
+
+            {frostRoomCode && (
+              <div className="flex flex-col items-center gap-2">
+                <p className="text-xs text-muted-foreground">share this code with co-signers:</p>
+                <div className="rounded bg-muted px-4 py-2 font-mono text-lg">{frostRoomCode}</div>
+              </div>
+            )}
+
+            <div className="flex flex-col items-center gap-2">
+              <p className="text-sm">{frostProgress}</p>
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            </div>
+
+            <div className="w-full rounded bg-muted/30 p-3 text-xs text-muted-foreground">
+              <p>{activeZcashWallet?.multisig?.threshold}-of-{activeZcashWallet?.multisig?.maxSigners} threshold</p>
+              <p className="mt-1">send {amount} ZEC to {recipient.slice(0, 16)}...{recipient.slice(-8)}</p>
+              <p className="mt-1">fee: {fee} ZEC</p>
+            </div>
+
+            <Button variant="secondary" onClick={handleClose} className="w-full mt-2">
+              cancel
+            </Button>
+          </div>
+        );
+
       case 'error':
         return (
           <div className="flex flex-col items-center gap-4 p-8">
@@ -695,3 +838,15 @@ description="point camera at zafu zigner's signature qr code"
     </div>
   );
 }
+
+/** poll until condition is true, with timeout */
+const waitFor = (condition: () => boolean, timeoutMs: number): Promise<void> =>
+  new Promise((resolve, reject) => {
+    const start = Date.now();
+    const check = () => {
+      if (condition()) return resolve();
+      if (Date.now() - start > timeoutMs) return reject(new Error('timeout waiting for co-signers'));
+      setTimeout(check, 500);
+    };
+    check();
+  });
