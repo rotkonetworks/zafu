@@ -37,7 +37,7 @@ export const MultisigCreate = () => {
   const [relayUrl, setRelayUrl] = useState('');
 
   const startDkg = useStore(s => s.frostSession.startDkg);
-  const addMultisigWallet = useStore(s => s.wallets.addMultisigWallet);
+  const newFrostMultisigKey = useStore(s => s.keyRing.newFrostMultisigKey);
 
   const handleCreate = async () => {
     const abortController = new AbortController();
@@ -96,7 +96,7 @@ export const MultisigCreate = () => {
       const addr = await frostDeriveAddressInWorker(round3.public_key_package, 0);
       setAddress(addr);
 
-      await addMultisigWallet({
+      await newFrostMultisigKey({
         label: `${threshold}-of-${maxSigners} multisig`,
         address: addr,
         keyPackage: round3.key_package,

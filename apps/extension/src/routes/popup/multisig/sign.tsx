@@ -39,8 +39,8 @@ export const MultisigSign = () => {
       setStep('waiting');
       setProgress('decrypting keys...');
 
-      // decrypt secret key material
-      const secrets = await useStore.getState().wallets.getMultisigSecrets(activeWallet!.id);
+      // decrypt secret key material from vault
+      const secrets = await useStore.getState().keyRing.getMultisigSecrets(activeWallet!.vaultId);
       if (!secrets) throw new Error('failed to decrypt multisig keys');
 
       setProgress('connecting to signing session...');

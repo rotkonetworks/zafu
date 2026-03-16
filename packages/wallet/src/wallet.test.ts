@@ -77,6 +77,7 @@ describe.each(Object.keys(custodyBoxes) as (keyof typeof custodyBoxes)[])(
         label: label,
         fullViewingKey: fvk.toJsonString(),
         custody: custodyJson,
+        vaultId: 'test-vault-1',
       };
 
       test('round-trip', () => {

@@ -32,18 +32,20 @@ export interface WalletJson<T extends CustodyTypeName = CustodyTypeName> {
   fullViewingKey: string;
   custody: CustodyNamedValue<BoxJson, T>;
   /** Links this wallet to a keyring vault */
-  vaultId?: string;
+  vaultId: string;
 }
 
 export class Wallet<T extends CustodyTypeName = CustodyTypeName> {
   public readonly custodyType: T;
   private readonly custodyBox: Box;
+  public readonly vaultId: string;
 
   constructor(
     public readonly label: string,
     public readonly id: WalletId,
     public readonly fullViewingKey: FullViewingKey,
     custodyData: CustodyNamedValue<Box, T>,
+    vaultId = '',
   ) {
     if (!label || typeof label !== 'string') {
       throw new TypeError(`Wallet "${label}" label is not valid`, { cause: label });
@@ -61,6 +63,7 @@ export class Wallet<T extends CustodyTypeName = CustodyTypeName> {
 
     this.custodyType = getCustodyTypeName(custodyData);
     this.custodyBox = custodyData[this.custodyType];
+    this.vaultId = vaultId;
 
     if (!(this.custodyBox instanceof Box)) {
       throw new TypeError(`Wallet "${label}" custody box is not valid`, { cause: this.custodyBox });
@@ -114,6 +117,7 @@ export class Wallet<T extends CustodyTypeName = CustodyTypeName> {
       WalletId.fromJsonString(json.id),
       FullViewingKey.fromJsonString(json.fullViewingKey),
       custodyData,
+      json.vaultId,
     );
   }
 
@@ -123,6 +127,7 @@ export class Wallet<T extends CustodyTypeName = CustodyTypeName> {
       id: this.id.toJsonString(),
       fullViewingKey: this.fullViewingKey.toJsonString(),
       custody: { [this.custodyType]: this.custodyBox.toJson() } as CustodyNamedValue<BoxJson, T>,
+      vaultId: this.vaultId,
     };
   }
 }

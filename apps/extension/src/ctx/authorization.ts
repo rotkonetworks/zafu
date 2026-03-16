@@ -90,7 +90,8 @@ const openWallet = async () => {
 
   const wallet = localExtStorage.get('wallets').then(async wallets => {
     const activeIdx = (await localExtStorage.get('activeWalletIndex')) ?? 0;
-    return Wallet.fromJson(wallets[activeIdx]!);
+    const w = wallets[activeIdx]!;
+    return Wallet.fromJson({ ...w, vaultId: w.vaultId ?? '' } as typeof w & { vaultId: string });
   });
 
   return (await wallet).custody(await passKey);

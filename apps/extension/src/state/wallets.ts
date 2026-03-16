@@ -7,8 +7,6 @@ import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
 import type { SessionStorageState } from '@repo/storage-chrome/session';
 import { AllSlices, SliceCreator } from '.';
-import type { ZignerWalletImport } from '@repo/wallet/zigner-signer';
-import type { ZcashWalletImport } from '@repo/wallet/zcash-zigner';
 
 /** Zcash wallet stored in extension */
 export interface ZcashWalletJson {
@@ -19,8 +17,8 @@ export interface ZcashWalletJson {
   accountIndex: number;
   mainnet: boolean;
   ufvk?: string;
-  /** vault ID this wallet belongs to (for zigner wallet linking) */
-  vaultId?: string;
+  /** vault ID this wallet belongs to */
+  vaultId: string;
   /** FROST multisig fields — present only for multisig wallets */
   multisig?: {
     /** FROST key package — encrypted BoxJson when password is set, raw hex string otherwise */
@@ -48,21 +46,6 @@ export interface WalletsSlice {
   /** Index of the currently active Zcash wallet */
   activeZcashIndex: number;
   addWallet: (toAdd: { label: string; seedPhrase: string[] }) => Promise<void>;
-  /** Add a watch-only wallet from airgap signer (e.g., Zigner) FVK export */
-  addAirgapSignerWallet: (walletImport: ZignerWalletImport) => Promise<void>;
-  /** Add a Zcash watch-only wallet from Zigner FVK export */
-  addZcashWallet: (walletImport: ZcashWalletImport) => Promise<void>;
-  /** Add a FROST multisig wallet after DKG completion */
-  addMultisigWallet: (params: {
-    label: string;
-    address: string;
-    keyPackage: string;
-    publicKeyPackage: string;
-    ephemeralSeed: string;
-    threshold: number;
-    maxSigners: number;
-    relayUrl: string;
-  }) => Promise<void>;
   /** Update a multisig wallet's mutable fields (label, relayUrl) */
   updateMultisigWallet: (id: string, updates: { label?: string; relayUrl?: string }) => Promise<void>;
   /** Remove a wallet by index. Cannot remove the last remaining wallet. */
@@ -73,8 +56,6 @@ export interface WalletsSlice {
   setActiveWallet: (index: number) => Promise<void>;
   /** Switch to a different Zcash wallet by index */
   setActiveZcashWallet: (index: number) => Promise<void>;
-  /** Decrypt multisig key material (requires password) */
-  getMultisigSecrets: (walletId: string) => Promise<{ keyPackage: string; ephemeralSeed: string } | null>;
   getSeedPhrase: () => Promise<string[]>;
 }
 
@@ -116,115 +97,6 @@ export const createWalletsSlice =
 
         const wallets = await local.get('wallets');
         await local.set('wallets', [newWallet.toJson(), ...wallets]);
-      },
-
-      addAirgapSignerWallet: async (walletImport) => {
-        // airgap signer metadata - encrypted with password key for consistency
-        // the password is required to access custody() for any wallet type
-        const metadata = JSON.stringify({
-          accountIndex: walletImport.accountIndex,
-          importedAt: Date.now(),
-          signerType: 'zigner',
-        });
-
-        const passwordKey = await session.get('passwordKey');
-        if (passwordKey === undefined) {
-          throw new Error('password key not in storage');
-        }
-
-        const key = await Key.fromJson(passwordKey);
-        const metadataBox = await key.seal(metadata);
-
-        const newWallet = new Wallet(
-          walletImport.label,
-          walletImport.walletId,
-          walletImport.fullViewingKey,
-          {
-            airgapSigner: metadataBox,
-          },
-        );
-
-        set(state => {
-          state.wallets.all.unshift(newWallet.toJson());
-        });
-
-        const wallets = await local.get('wallets');
-        await local.set('wallets', [newWallet.toJson(), ...wallets]);
-      },
-
-      addZcashWallet: async (walletImport: ZcashWalletImport) => {
-        const existingZcashWallets = (await local.get('zcashWallets')) ?? [];
-
-        // generate unique ID with collision check (defense in depth)
-        let id: string;
-        let attempts = 0;
-        do {
-          id = crypto.randomUUID();
-          attempts++;
-          if (attempts > 10) {
-            throw new Error('failed to generate unique wallet id');
-          }
-        } while (existingZcashWallets.some((w: ZcashWalletJson) => w.id === id));
-
-        // convert FVK bytes to base64 for storage (more efficient than hex)
-        const orchardFvkBase64 = walletImport.orchardFvk
-          ? btoa(String.fromCharCode(...walletImport.orchardFvk))
-          : '';
-
-        // use address from QR if available
-        const address = walletImport.address ?? '';
-
-        const newZcashWallet: ZcashWalletJson = {
-          id,
-          label: walletImport.label,
-          orchardFvk: orchardFvkBase64,
-          address,
-          accountIndex: walletImport.accountIndex,
-          mainnet: walletImport.mainnet,
-          ufvk: walletImport.ufvk,
-        };
-
-        set(state => {
-          state.wallets.zcashWallets.unshift(newZcashWallet);
-        });
-
-        await local.set('zcashWallets', [newZcashWallet, ...existingZcashWallets]);
-      },
-
-      addMultisigWallet: async (params) => {
-        const existingZcashWallets = (await local.get('zcashWallets')) ?? [];
-
-        // encrypt secret key material (keyPackage + ephemeralSeed) with password
-        const passwordKey = await session.get('passwordKey');
-        if (!passwordKey) {
-          throw new Error('password required to store multisig keys — unlock wallet first');
-        }
-        const key = await Key.fromJson(passwordKey);
-        const encKeyPackage = (await key.seal(params.keyPackage)).toJson();
-        const encEphemeralSeed = (await key.seal(params.ephemeralSeed)).toJson();
-
-        const newWallet: ZcashWalletJson = {
-          id: crypto.randomUUID(),
-          label: params.label,
-          orchardFvk: '', // multisig wallets derive FVK from the public key package
-          address: params.address,
-          accountIndex: 0,
-          mainnet: true,
-          multisig: {
-            keyPackage: encKeyPackage,
-            publicKeyPackage: params.publicKeyPackage, // public — no encryption needed
-            ephemeralSeed: encEphemeralSeed,
-            threshold: params.threshold,
-            maxSigners: params.maxSigners,
-            relayUrl: params.relayUrl,
-          },
-        };
-
-        set(state => {
-          state.wallets.zcashWallets.unshift(newWallet);
-        });
-
-        await local.set('zcashWallets', [newWallet, ...existingZcashWallets]);
       },
 
       updateMultisigWallet: async (id, updates) => {
@@ -278,28 +150,6 @@ export const createWalletsSlice =
         });
 
         await local.set('activeZcashIndex', index);
-      },
-
-      getMultisigSecrets: async (walletId: string) => {
-        const wallet = get().wallets.zcashWallets.find(w => w.id === walletId);
-        if (!wallet?.multisig) return null;
-
-        const { keyPackage: kp, ephemeralSeed: es } = wallet.multisig;
-
-        // if stored as plain strings (pre-encryption or no password), return directly
-        if (typeof kp === 'string' && typeof es === 'string') {
-          return { keyPackage: kp, ephemeralSeed: es };
-        }
-
-        // encrypted BoxJson — need password to decrypt
-        const passwordKey = await session.get('passwordKey');
-        if (!passwordKey) throw new Error('password required to access multisig keys');
-
-        const key = await Key.fromJson(passwordKey);
-        return {
-          keyPackage: await key.unseal(Box.fromJson(kp as BoxJson)) as string,
-          ephemeralSeed: await key.unseal(Box.fromJson(es as BoxJson)) as string,
-        };
       },
 
       removeWallet: async (index: number) => {

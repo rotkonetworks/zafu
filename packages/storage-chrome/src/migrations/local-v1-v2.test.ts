@@ -234,7 +234,7 @@ describe('local-v1-v2 migration', () => {
       expect(decryptedSeedPhrase).toBe(testSeedPhrase);
 
       // works with new wallet tools
-      const newWalletFromJson = RepoWallet.fromJson(wallets[0]!);
+      const newWalletFromJson = RepoWallet.fromJson({ ...wallets[0]!, vaultId: wallets[0]!.vaultId ?? '' });
       expect(newWalletFromJson.custodyType).toBe('encryptedSeedPhrase');
       expect(() => newWalletFromJson.custody(recreatedKey!)).not.toThrow();
     });
@@ -263,7 +263,7 @@ describe('local-v1-v2 migration', () => {
       expect(decryptedSeedPhrase).toBe(testSeedPhrase);
 
       // works with new wallet tools
-      const newWalletFromJson = RepoWallet.fromJson(wallets[0]!);
+      const newWalletFromJson = RepoWallet.fromJson({ ...wallets[0]!, vaultId: wallets[0]!.vaultId ?? '' });
       expect(newWalletFromJson.custodyType).toBe('encryptedSeedPhrase');
       expect(() => newWalletFromJson.custody(recreatedKey!)).not.toThrow();
     });
@@ -321,7 +321,7 @@ describe('local-v1-v2 migration', () => {
       expect(decryptedSeedPhrase).toBe(testSeedPhrase);
 
       // works with new wallet tools
-      const newWalletFromJson = RepoWallet.fromJson(wallets[0]!);
+      const newWalletFromJson = RepoWallet.fromJson({ ...wallets[0]!, vaultId: wallets[0]!.vaultId ?? '' });
       expect(newWalletFromJson.custodyType).toBe('encryptedSeedPhrase');
       expect(() => newWalletFromJson.custody(recreatedKey!)).not.toThrow();
     });
@@ -363,7 +363,7 @@ describe('local-v1-v2 migration', () => {
       expect(decryptedSeedPhrase).toBe(testSeedPhrase);
 
       // works with new wallet tools
-      const newWalletFromJson = RepoWallet.fromJson(wallets[0]!);
+      const newWalletFromJson = RepoWallet.fromJson({ ...wallets[0]!, vaultId: wallets[0]!.vaultId ?? '' });
       expect(newWalletFromJson.custodyType).toBe('encryptedSeedPhrase');
       expect(() => newWalletFromJson.custody(recreatedKey!)).not.toThrow();
     });
@@ -405,7 +405,7 @@ describe('local-v1-v2 migration', () => {
       expect(decryptedSeedPhrase).toBe(testSeedPhrase);
 
       // works with new wallet tools
-      const newWalletFromJson = RepoWallet.fromJson(wallets[0]!);
+      const newWalletFromJson = RepoWallet.fromJson({ ...wallets[0]!, vaultId: wallets[0]!.vaultId ?? '' });
       expect(newWalletFromJson.custodyType).toBe('encryptedSeedPhrase');
       expect(() => newWalletFromJson.custody(recreatedKey!)).not.toThrow();
     });

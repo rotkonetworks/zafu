@@ -25,13 +25,17 @@ export const onboardGrpcEndpoint = async (): Promise<string> => {
   });
 };
 
+/** coerce storage wallet (vaultId optional) to runtime WalletJson (vaultId required) */
+const coerceWallet = (w: { vaultId?: string } & Record<string, unknown>): WalletJson =>
+  ({ ...w, vaultId: w.vaultId ?? '' }) as unknown as WalletJson;
+
 export const onboardWallet = async (): Promise<WalletJson> => {
   const wallets = await localExtStorage.get('wallets');
   const activeIndex = (await localExtStorage.get('activeWalletIndex')) ?? 0;
   const activeWallet = wallets[activeIndex] ?? wallets[0];
 
   if (activeWallet) {
-    return activeWallet;
+    return coerceWallet(activeWallet);
   }
 
   return new Promise(resolve => {
@@ -39,7 +43,7 @@ export const onboardWallet = async (): Promise<WalletJson> => {
       const wallets = changes.wallets?.newValue;
       const initialWallet = wallets?.[0];
       if (initialWallet) {
-        resolve(initialWallet);
+        resolve(coerceWallet(initialWallet));
         localExtStorage.removeListener(storageListener);
       }
     };
@@ -55,5 +59,6 @@ export const onboardWallet = async (): Promise<WalletJson> => {
 export const getWalletFromStorage = async (): Promise<WalletJson | undefined> => {
   const wallets = await localExtStorage.get('wallets');
   const activeIndex = (await localExtStorage.get('activeWalletIndex')) ?? 0;
-  return wallets[activeIndex] ?? wallets[0];
+  const w = wallets[activeIndex] ?? wallets[0];
+  return w ? coerceWallet(w) : undefined;
 };

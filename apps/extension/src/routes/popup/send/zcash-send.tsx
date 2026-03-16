@@ -204,8 +204,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       } else if (activeZcashWallet?.multisig) {
         // ── FROST multisig: build unsigned tx → relay signing rounds ──
         const ms = activeZcashWallet.multisig;
-        // decrypt secret key material (encrypted at rest with password)
-        const secrets = await useStore.getState().wallets.getMultisigSecrets(activeZcashWallet.id);
+        // decrypt secret key material from vault
+        const secrets = await useStore.getState().keyRing.getMultisigSecrets(activeZcashWallet.vaultId);
         if (!secrets) throw new Error('failed to decrypt multisig keys — unlock wallet first');
         const result = await buildSendTxInWorker(
           'zcash', walletId, zidecarUrl, recipient.trim(), amountZat, memo, accountIndex, mainnet,

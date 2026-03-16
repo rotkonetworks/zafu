@@ -4,7 +4,11 @@ import { produce } from 'immer';
 
 import { AppParameters } from '@penumbra-zone/protobuf/penumbra/core/app/v1/app_pb';
 import { localExtStorage } from '@repo/storage-chrome/local';
+import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { OriginRecord } from '@repo/storage-chrome/records';
+import { readEncrypted } from './encrypted-storage';
+import type { Contact } from './contacts';
+import type { RecentAddress } from './recent-addresses';
 
 export type Middleware = <
   T,
@@ -28,13 +32,12 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
     const frontendUrl = await localExtStorage.get('frontendUrl');
     const numeraires = await localExtStorage.get('numeraires');
     const zignerCameraEnabled = await localExtStorage.get('zignerCameraEnabled');
-    const contacts = await localExtStorage.get('contacts');
     const privacySettings = await localExtStorage.get('privacySettings' as keyof import('@repo/storage-chrome/local').LocalStorageState);
 
     set(
       produce((state: AllSlices) => {
-        state.wallets.all = wallets;
-        state.wallets.zcashWallets = zcashWallets ?? [];
+        state.wallets.all = wallets.map(w => ({ ...w, vaultId: w.vaultId ?? '' })) as typeof state.wallets.all;
+        state.wallets.zcashWallets = (zcashWallets ?? []).map(w => ({ ...w, vaultId: w.vaultId ?? '' })) as typeof state.wallets.zcashWallets;
         state.wallets.activeZcashIndex = activeZcashIndex ?? 0;
         state.wallets.activeIndex = activeWalletIndex ?? 0;
         state.network.grpcEndpoint = grpcEndpoint;
@@ -42,15 +45,40 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
         state.defaultFrontend.url = frontendUrl;
         state.numeraires.selectedNumeraires = numeraires;
         state.zigner.cameraEnabled = zignerCameraEnabled ?? false;
-        state.contacts.contacts = contacts ?? [];
         if (privacySettings) {
           state.privacy.settings = privacySettings as AllSlices['privacy']['settings'];
         }
       }),
     );
 
+    // hydrate encrypted user data — standalone service, called on any unlock event
+    const hydrateEncryptedData = async () => {
+      const [contacts, recentAddresses] = await Promise.all([
+        readEncrypted<Contact[]>(localExtStorage, sessionExtStorage, 'contacts' as keyof import('@repo/storage-chrome/local').LocalStorageState),
+        readEncrypted<RecentAddress[]>(localExtStorage, sessionExtStorage, 'recentAddresses' as keyof import('@repo/storage-chrome/local').LocalStorageState),
+      ]);
+      set(produce((state: AllSlices) => {
+        if (contacts) state.contacts.contacts = contacts;
+        if (recentAddresses) state.recentAddresses.recentAddresses = recentAddresses;
+      }));
+    };
+
     // Initialize keyring from storage (loads vaults, selected key, networks)
     await get().keyRing.init();
+
+    // hydrate now (works if already unlocked or auto-unlocked)
+    await hydrateEncryptedData();
+
+    // subscribe to status changes — re-hydrate when keyring transitions to 'unlocked'
+    // dataflow: react to state change, not imperative wrapping of unlock()
+    let prevStatus = get().keyRing.status;
+    store.subscribe((state: AllSlices) => {
+      const status = state.keyRing.status;
+      if (status === 'unlocked' && prevStatus !== 'unlocked') {
+        void hydrateEncryptedData();
+      }
+      prevStatus = status;
+    });
 
     // Part 2: when chrome.storage changes sync select fields to store
     localExtStorage.addListener(changes => {
@@ -58,7 +86,7 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
         const wallets = changes.wallets.newValue;
         set(
           produce((state: AllSlices) => {
-            state.wallets.all = wallets ?? [];
+            state.wallets.all = (wallets ?? []).map(w => ({ ...w, vaultId: w.vaultId ?? '' })) as typeof state.wallets.all;
           }),
         );
       }
@@ -132,7 +160,7 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
         const stored = changes.zcashWallets.newValue;
         set(
           produce((state: AllSlices) => {
-            state.wallets.zcashWallets = stored ?? [];
+            state.wallets.zcashWallets = (stored ?? []).map(w => ({ ...w, vaultId: w.vaultId ?? '' })) as typeof state.wallets.zcashWallets;
           }),
         );
       }
@@ -147,12 +175,13 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
       }
 
       if (changes.contacts) {
-        const stored = changes.contacts.newValue;
-        set(
-          produce((state: AllSlices) => {
-            state.contacts.contacts = stored ?? [];
-          }),
-        );
+        // contacts may be encrypted — re-read through decryption layer
+        void readEncrypted<Contact[]>(localExtStorage, sessionExtStorage, 'contacts' as keyof import('@repo/storage-chrome/local').LocalStorageState)
+          .then(decrypted => {
+            if (decrypted) {
+              set(produce((state: AllSlices) => { state.contacts.contacts = decrypted; }));
+            }
+          });
       }
 
       if (changes.activeWalletIndex) {

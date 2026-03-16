@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useStore } from '../../../state';
 import { selectZcashWallets, walletsSelector } from '../../../state/wallets';
-import { deleteWalletInWorker } from '../../../state/keyring/network-worker';
+import { keyRingSelector } from '../../../state/keyring';
 import { SettingsScreen } from './settings-screen';
 import { PopupPath } from '../paths';
 import { usePopupNav } from '../../../utils/navigate';
@@ -13,10 +13,10 @@ export const SettingsMultisig = () => {
   const navigate = usePopupNav();
 
   const zcashWallets = useStore(selectZcashWallets);
-  const { updateMultisigWallet, removeZcashWallet } = useStore(walletsSelector);
+  const { updateMultisigWallet } = useStore(walletsSelector);
+  const { deleteKeyRing } = useStore(keyRingSelector);
 
   const wallet = zcashWallets.find(w => w.id === walletId);
-  const walletIndex = zcashWallets.findIndex(w => w.id === walletId);
 
   const [label, setLabel] = useState(wallet?.label ?? '');
   const [relayUrl, setRelayUrl] = useState(wallet?.multisig?.relayUrl ?? '');
@@ -43,13 +43,8 @@ export const SettingsMultisig = () => {
   };
 
   const handleDelete = async () => {
-    // clean up IndexedDB note data before removing wallet record
-    try {
-      await deleteWalletInWorker('zcash', wallet.id);
-    } catch {
-      // worker may not be running — continue with removal
-    }
-    await removeZcashWallet(walletIndex);
+    if (!wallet.vaultId) return;
+    await deleteKeyRing(wallet.vaultId);
     navigate(PopupPath.SETTINGS_WALLETS);
   };
 
