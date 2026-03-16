@@ -56,6 +56,15 @@ export function useZcashAutoSync() {
     if (activeNetwork !== 'zcash') return;
     if (onLoginPage) return; // keyring not yet unlocked
     if (!hasMnemonic || !walletId) return;
+
+    // stop previous wallet's sync if switching to a different wallet
+    const prevWallet = syncingWalletRef.current;
+    if (prevWallet && prevWallet !== walletId && isWalletSyncing('zcash', prevWallet)) {
+      console.log('[zcash-sync] stopping sync for previous wallet', prevWallet);
+      void stopSyncInWorker('zcash', prevWallet).catch(() => {});
+      syncingWalletRef.current = null;
+    }
+
     if (isWalletSyncing('zcash', walletId)) {
       syncingWalletRef.current = walletId;
       return;
@@ -75,7 +84,6 @@ export function useZcashAutoSync() {
           console.log('[zcash-sync] starting mnemonic sync for', walletId);
           await startSyncInWorker('zcash', walletId, mnemonic, zidecarUrl, startHeight);
         } catch (err) {
-          // keyring locked is expected before login — don't spam console
           if (err instanceof Error && err.message.includes('keyring locked')) {
             console.log('[zcash-sync] waiting for unlock');
           } else {
@@ -99,6 +107,15 @@ export function useZcashAutoSync() {
     if (!watchOnly) return;
     const ufvkStr = watchOnly.ufvk ?? (watchOnly.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
     if (!ufvkStr || !walletId) return;
+
+    // stop previous wallet's sync if switching
+    const prevWallet = syncingWalletRef.current;
+    if (prevWallet && prevWallet !== walletId && isWalletSyncing('zcash', prevWallet)) {
+      console.log('[zcash-sync] stopping sync for previous wallet', prevWallet);
+      void stopSyncInWorker('zcash', prevWallet).catch(() => {});
+      syncingWalletRef.current = null;
+    }
+
     if (isWalletSyncing('zcash', walletId)) {
       syncingWalletRef.current = walletId;
       return;

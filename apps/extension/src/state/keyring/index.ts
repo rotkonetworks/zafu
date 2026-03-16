@@ -615,13 +615,12 @@ export const createKeyRingSlice = (
       }
 
       // sync zcash wallet activeZcashIndex to match the selected vault
+      // -1 means no zcash wallet for this vault (mnemonic wallets derive from seed)
       const zcashWallets = (await local.get('zcashWallets')) ?? [];
       const matchingZcashIndex = zcashWallets.findIndex(
         (w: { vaultId?: string }) => w.vaultId === vaultId
       );
-      if (matchingZcashIndex >= 0) {
-        await local.set('activeZcashIndex', matchingZcashIndex);
-      }
+      await local.set('activeZcashIndex', Math.max(0, matchingZcashIndex));
 
       set(state => {
         state.keyRing.keyInfos = state.keyRing.keyInfos.map(k => ({
@@ -629,14 +628,10 @@ export const createKeyRingSlice = (
           isSelected: k.id === vaultId,
         }));
         state.keyRing.selectedKeyInfo = state.keyRing.keyInfos.find(k => k.isSelected);
-        // also update wallets.activeIndex in state
         if (matchingWalletIndex >= 0) {
           state.wallets.activeIndex = matchingWalletIndex;
         }
-        // also update wallets.activeZcashIndex in state
-        if (matchingZcashIndex >= 0) {
-          state.wallets.activeZcashIndex = matchingZcashIndex;
-        }
+        state.wallets.activeZcashIndex = Math.max(0, matchingZcashIndex);
       });
     },
 
@@ -665,10 +660,20 @@ export const createKeyRingSlice = (
       const updatedWallets = wallets.filter((w: { vaultId?: string }) => w.vaultId !== vaultId);
       if (updatedWallets.length !== wallets.length) {
         await local.set('wallets', updatedWallets);
-
         const activeWalletIndex = await local.get('activeWalletIndex') ?? 0;
         if (activeWalletIndex >= updatedWallets.length) {
           await local.set('activeWalletIndex', Math.max(0, updatedWallets.length - 1));
+        }
+      }
+
+      // remove associated zcash wallet (linked via vaultId)
+      const zcashWallets = (await local.get('zcashWallets')) ?? [];
+      const updatedZcash = zcashWallets.filter((w: { vaultId?: string }) => w.vaultId !== vaultId);
+      if (updatedZcash.length !== zcashWallets.length) {
+        await local.set('zcashWallets', updatedZcash);
+        const activeZcashIndex = await local.get('activeZcashIndex') ?? 0;
+        if (activeZcashIndex >= updatedZcash.length) {
+          await local.set('activeZcashIndex', Math.max(0, updatedZcash.length - 1));
         }
       }
 
@@ -701,6 +706,8 @@ export const createKeyRingSlice = (
         await local.set('selectedVaultId', undefined);
         await local.set('wallets', []);
         await local.set('activeWalletIndex', 0);
+        await local.set('zcashWallets', []);
+        await local.set('activeZcashIndex', 0);
 
         set(state => {
           state.keyRing.keyInfos = [];
@@ -708,6 +715,8 @@ export const createKeyRingSlice = (
           state.keyRing.status = 'empty';
           state.wallets.all = [];
           state.wallets.activeIndex = 0;
+          state.wallets.zcashWallets = [];
+          state.wallets.activeZcashIndex = 0;
         });
         return;
       }
