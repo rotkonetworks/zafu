@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { BrowserQRCodeReader } from '@zxing/browser';
+import { DecodeHintType } from '@zxing/library';
 import { Button } from '@repo/ui/components/ui/button';
 
 interface QrScannerProps {
@@ -67,7 +68,13 @@ export const QrScanner = ({
 
     try {
       setError(null);
-      const reader = new BrowserQRCodeReader();
+      // TRY_HARDER improves detection of damaged/blurry QR codes at the cost of CPU
+      const hints = new Map<DecodeHintType, unknown>();
+      hints.set(DecodeHintType.TRY_HARDER, true);
+
+      const reader = new BrowserQRCodeReader(hints, {
+        delayBetweenScanAttempts: 100, // scan ~10x/sec instead of default ~2x/sec
+      });
       const devices = await BrowserQRCodeReader.listVideoInputDevices();
       const camera = devices.find((d: MediaDeviceInfo) =>
         /back|rear|environment/i.test(d.label),
@@ -75,8 +82,21 @@ export const QrScanner = ({
 
       if (!camera) throw new Error('No camera found');
 
+      // request higher resolution + continuous autofocus for sharper QR capture
+      const videoConstraints: MediaTrackConstraints = {
+        deviceId: camera.deviceId,
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+      };
+      // focusMode is supported on mobile Chrome but not in the TS type defs
+      Object.assign(videoConstraints, { focusMode: { ideal: 'continuous' } });
+
+      const stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints });
+      videoRef.current.srcObject = stream;
+      await videoRef.current.play();
+
       const controls = await reader.decodeFromVideoDevice(
-        camera.deviceId,
+        undefined, // use the stream already attached to the video element
         videoRef.current,
         (result) => {
           if (result && !scannedRef.current) {
