@@ -8,7 +8,7 @@
 import { localExtStorage } from '@repo/storage-chrome/local';
 import type { NetworkAdapter } from '@repo/wallet/networks';
 
-export type NetworkId = 'penumbra' | 'zcash' | 'osmosis' | 'noble' | 'nomic' | 'celestia' | 'polkadot' | 'kusama' | 'ethereum' | 'bitcoin';
+export type NetworkId = 'zcash' | 'penumbra' | 'osmosis' | 'noble' | 'nomic' | 'celestia' | 'polkadot' | 'kusama' | 'ethereum' | 'bitcoin';
 
 /** Currently loaded network adapters */
 const loadedAdapters = new Map<NetworkId, NetworkAdapter>();
@@ -169,11 +169,11 @@ export async function initializeEnabledNetworks(): Promise<void> {
 
     // Auto-enable networks based on existing wallets — declarative derivation
     const zignerNetworks = (zignerWallets ?? []).flatMap(zw =>
-      (['penumbra', 'zcash', 'polkadot'] as const).filter(n => zw.networks[n])
+      (['zcash', 'penumbra', 'polkadot'] as const).filter(n => zw.networks[n])
     );
     const networksToEnable: NetworkId[] = [
-      ...((wallets?.length ?? 0) > 0 ? ['penumbra' as const] : []),
       ...((zcashWallets?.length ?? 0) > 0 ? ['zcash' as const] : []),
+      ...((wallets?.length ?? 0) > 0 ? ['penumbra' as const] : []),
       ...zignerNetworks,
     ].filter((n, i, arr) => arr.indexOf(n) === i);
 
