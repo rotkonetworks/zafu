@@ -21,10 +21,9 @@ import {
   buildUnsignedShieldInWorker,
   completeShieldInWorker,
   spawnNetworkWorker,
+  terminateNetworkWorker,
   startSyncInWorker,
   startWatchOnlySyncInWorker,
-  stopSyncInWorker,
-  resetSyncInWorker,
   getBalanceInWorker,
   type ShieldUnsignedResult,
 } from '../../../state/keyring/network-worker';
@@ -444,7 +443,7 @@ const ZcashContent = ({
     }
   }, [shieldUnsignedData, selectedKeyInfo, watchOnly, zidecarUrl]);
 
-  // rescan via custom event from HistoryContent
+  // rescan via custom event — terminate worker, clear IDB, restart fresh
   useEffect(() => {
     const handler = async (e: Event) => {
       const height = (e as CustomEvent<number>).detail;
@@ -455,12 +454,22 @@ const ZcashContent = ({
         const walletId = selectedKeyInfo.id;
         const birthdayKey = `zcashBirthday_${walletId}`;
 
-        await stopSyncInWorker('zcash', walletId);
-        await resetSyncInWorker('zcash', walletId);
+        // terminate worker so in-memory commitment tree is dropped
+        try { terminateNetworkWorker('zcash'); } catch {}
+        // delete IndexedDB to clear stale commitment tree
+        try { indexedDB.deleteDatabase('zafu-zcash'); } catch {}
+        try { indexedDB.deleteDatabase('zafu-memo-cache'); } catch {}
+        // update birthday and clear persisted sync height
         await chrome.storage.local.set({ [birthdayKey]: height });
         await chrome.storage.local.remove('zcashSyncHeight');
         setWalletBirthday(height);
+        setOrchardZat(0n);
 
+        // small delay for IDB deletion to settle
+        await new Promise(r => setTimeout(r, 500));
+
+        // respawn worker and start fresh sync
+        await spawnNetworkWorker('zcash');
         if (hasMnemonic && selectedKeyInfo.type === 'mnemonic') {
           const mnemonic = await keyRing.getMnemonic(walletId);
           await startSyncInWorker('zcash', walletId, mnemonic, zidecarUrl, height);
