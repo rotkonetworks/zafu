@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react';
+import { Navigate } from 'react-router-dom';
 import { PopupPath } from '../paths';
 
 // lazy load all settings screens
@@ -14,9 +15,6 @@ const SettingsPassphrase = lazy(() =>
 );
 const SettingsDefaultFrontend = lazy(() =>
   import('./settings-default-frontend').then(m => ({ default: m.SettingsDefaultFrontend })),
-);
-const SettingsZigner = lazy(() =>
-  import('./settings-zigner').then(m => ({ default: m.SettingsZigner })),
 );
 const SettingsNetworks = lazy(() =>
   import('./settings-networks').then(m => ({ default: m.SettingsNetworks })),
@@ -66,7 +64,7 @@ export const settingsRoutes = [
   },
   {
     path: PopupPath.SETTINGS_ZIGNER,
-    element: withSuspense(SettingsZigner),
+    element: <Navigate to={PopupPath.SETTINGS_WALLETS} replace />,
   },
   {
     path: PopupPath.SETTINGS_NETWORKS,

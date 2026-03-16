@@ -61,10 +61,10 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
       },
     },
     {
-      icon: 'i-lucide-smartphone',
-      label: 'Zigner',
+      icon: 'i-lucide-wallet',
+      label: 'Wallets',
       onClick: () => {
-        navigate(PopupPath.SETTINGS_ZIGNER);
+        navigate(PopupPath.SETTINGS_WALLETS);
         onClose();
       },
     },
