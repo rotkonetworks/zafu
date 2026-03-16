@@ -250,7 +250,7 @@ export const SettingsWallets = () => {
         )}
 
         {/* ── zigner sync ── */}
-        {zcashWallets.length > 0 && <ZignerSyncButton />}
+        {zcashWallets.some(w => w.vaultId) && <ZignerSyncButton />}
 
         {/* ── removal flow ── */}
 
