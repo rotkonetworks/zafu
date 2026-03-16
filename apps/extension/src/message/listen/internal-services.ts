@@ -87,7 +87,7 @@ export const internalServiceListener = (
 
   // network-scoped clear cache request
   if (isClearCacheRequest(req)) {
-    const { network } = req as ClearCacheRequest;
+    const { network, soft } = req as ClearCacheRequest & { soft?: boolean };
     void (async () => {
       if (network === 'penumbra') {
         await clearPenumbraCache(walletServices);
@@ -96,7 +96,7 @@ export const internalServiceListener = (
       }
     })()
       .then(() => respond())
-      .finally(() => chrome.runtime.reload());
+      .finally(() => { if (!soft) chrome.runtime.reload(); });
     return true;
   }
 

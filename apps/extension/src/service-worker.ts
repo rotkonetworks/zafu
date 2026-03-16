@@ -105,11 +105,29 @@ void loadCustomChainspecs();
 
 let walletServices: Promise<Services>;
 let currentWalletIndex: number | undefined;
+let currentSyncAbort: AbortController | undefined;
 
 // Reinitialize services when active wallet changes
 const reinitializeServices = async () => {
-  walletServices = startWalletServices();
-  // Ensure services start syncing
+  // tear down old services: stop block processor + cancel fullSyncHeight subscription
+  if (currentSyncAbort) {
+    currentSyncAbort.abort();
+  }
+  try {
+    const oldServices = await walletServices;
+    const oldWs = await oldServices.getWalletServices();
+    oldWs.blockProcessor.stop('wallet switch');
+    console.log('[sync] stopped old block processor');
+  } catch {
+    // old services may not have initialized — that's fine
+  }
+
+  // clear stale fullSyncHeight so UI doesn't show old wallet's height
+  await localExtStorage.set('fullSyncHeight', 0);
+
+  // start fresh services for the new wallet
+  currentSyncAbort = new AbortController();
+  walletServices = startWalletServices(currentSyncAbort.signal);
   const services = await walletServices;
   const ws = await services.getWalletServices();
   void ws.blockProcessor.sync();
@@ -158,7 +176,8 @@ localExtStorage.addListener(changes => {
 const initHandler = async () => {
   // Track initial wallet index
   currentWalletIndex = (await localExtStorage.get('activeWalletIndex')) ?? 0;
-  walletServices = startWalletServices();
+  currentSyncAbort = new AbortController();
+  walletServices = startWalletServices(currentSyncAbort.signal);
   const rpcImpls = await getRpcImpls();
 
   let custodyClient: Client<typeof CustodyService> | undefined;

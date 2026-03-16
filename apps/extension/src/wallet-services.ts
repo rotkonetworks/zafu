@@ -47,7 +47,7 @@ const getPenumbraEndpoint = async (): Promise<string> => {
   return DEFAULT_PENUMBRA_ENDPOINT;
 };
 
-export const startWalletServices = async () => {
+export const startWalletServices = async (signal?: AbortSignal) => {
   // privacy gate: check if penumbra is enabled before making network connections
   const enabled = await isPenumbraEnabled();
   console.log('[sync] isPenumbraEnabled:', enabled);
@@ -100,7 +100,7 @@ export const startWalletServices = async () => {
   const walletServices = await services.getWalletServices();
   console.log('[sync] wallet services ready, starting block sync subscription...');
 
-  void syncLastBlockToStorage(walletServices);
+  void syncLastBlockToStorage(walletServices, signal);
 
   return services;
 };
@@ -133,10 +133,13 @@ const getChainId = async (baseUrl: string) => {
 
 /**
  * Sync the last block known by indexedDb with `chrome.storage.local`
-
- * Later used in Zustand store
+ *
+ * Later used in Zustand store. Returns an abort function to stop the subscription.
  */
-const syncLastBlockToStorage = async ({ indexedDb }: Pick<WalletServices, 'indexedDb'>) => {
+const syncLastBlockToStorage = async (
+  { indexedDb }: Pick<WalletServices, 'indexedDb'>,
+  signal?: AbortSignal,
+) => {
   const dbHeight = await indexedDb.getFullSyncHeight();
   console.log('[sync] initial dbHeight from indexedDb:', dbHeight);
 
@@ -148,6 +151,7 @@ const syncLastBlockToStorage = async ({ indexedDb }: Pick<WalletServices, 'index
   console.log('[sync] subscribing to FULL_SYNC_HEIGHT updates...');
   const sub = indexedDb.subscribe('FULL_SYNC_HEIGHT');
   for await (const { value } of sub) {
+    if (signal?.aborted) break;
     if (value !== SENTINEL_U64_MAX) {
       await localExtStorage.set('fullSyncHeight', Number(value));
       console.log('[sync] fullSyncHeight updated:', Number(value));
