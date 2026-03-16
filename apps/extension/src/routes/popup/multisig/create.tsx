@@ -40,6 +40,7 @@ export const MultisigCreate = () => {
   const addMultisigWallet = useStore(s => s.wallets.addMultisigWallet);
 
   const handleCreate = async () => {
+    const abortController = new AbortController();
     try {
       const url = relayUrl || 'https://zidecar.rotko.net';
       const code = await startDkg(url, threshold, maxSigners);
@@ -62,7 +63,6 @@ export const MultisigCreate = () => {
       const prefixedBroadcast = `DKG:${threshold}:${maxSigners}:${round1.broadcast}`;
       await relay.sendMessage(code, participantId, new TextEncoder().encode(prefixedBroadcast));
 
-      const abortController = new AbortController();
       void relay.joinRoom(code, participantId, (event) => {
         if (event.type === 'message') {
           const text = new TextDecoder().decode(event.message.payload);
@@ -108,10 +108,11 @@ export const MultisigCreate = () => {
       });
 
       setStep('complete');
-      abortController.abort();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setStep('error');
+    } finally {
+      abortController.abort();
     }
   };
 

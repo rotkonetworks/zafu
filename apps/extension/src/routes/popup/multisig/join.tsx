@@ -33,6 +33,7 @@ export const MultisigJoin = () => {
   const handleJoin = async () => {
     if (!roomCode.trim()) return;
 
+    const abortController = new AbortController();
     try {
       const url = relayUrl || 'https://zidecar.rotko.net';
       setStep('joining');
@@ -51,7 +52,6 @@ export const MultisigJoin = () => {
       setStep('dkg');
       setProgress('waiting for coordinator...');
 
-      const abortController = new AbortController();
       void relay.joinRoom(roomCode.trim(), participantId, (event) => {
         if (event.type === 'message') {
           const text = new TextDecoder().decode(event.message.payload);
@@ -121,10 +121,11 @@ export const MultisigJoin = () => {
       });
 
       setStep('complete');
-      abortController.abort();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setStep('error');
+    } finally {
+      abortController.abort();
     }
   };
 
