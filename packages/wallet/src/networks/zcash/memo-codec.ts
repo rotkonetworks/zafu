@@ -16,11 +16,38 @@
 // ── constants ──
 
 export const MEMO_SIZE = 512;
-const ARBITRARY_DATA = 0xf6; // ZIP-302
 
-/** max payload bytes per memo */
-export const PAYLOAD_SINGLE = MEMO_SIZE - 3; // 509
-export const PAYLOAD_FRAGMENT = MEMO_SIZE - 19; // 493
+/**
+ * ZIP-302 memo type tags:
+ *   0x00-0xF4 = UTF-8 text (strip trailing nulls)
+ *   0xF5      = legacy arbitrary data (deprecated)
+ *   0xF6 + all zeros = no memo
+ *   0xF6 + non-zero  = RESERVED ("from the future")
+ *   0xF7-0xFE = reserved
+ *   0xFF      = arbitrary data (511 unconstrained bytes)
+ *
+ * We use 0xFF — the correct tag for custom structured binary data.
+ */
+const ARBITRARY_DATA = 0xff; // ZIP-302 §"Memo field format"
+
+/**
+ * Magic byte after 0xFF to identify zafu structured memos.
+ * Distinguishes us from other wallets' arbitrary data.
+ * 'Z' = 0x5A — easy to spot in hex dumps.
+ */
+const ZAFU_MAGIC = 0x5a;
+
+/**
+ * Layout (4-byte header for single, 20 for fragmented):
+ *   byte 0: 0xFF (ZIP-302 arbitrary data)
+ *   byte 1: 0x5A (zafu magic)
+ *   byte 2: type (MemoType enum)
+ *   byte 3: sequence (0x00=standalone, high nibble=part, low=total)
+ *   bytes 4-19: messageId (only if fragmented)
+ *   rest: payload
+ */
+export const PAYLOAD_SINGLE = MEMO_SIZE - 4; // 508
+export const PAYLOAD_FRAGMENT = MEMO_SIZE - 20; // 492
 
 // ── message types ──
 
@@ -72,9 +99,10 @@ export function encodeMemo(type: MemoType, payload: Uint8Array): Uint8Array {
   }
   const memo = new Uint8Array(MEMO_SIZE);
   memo[0] = ARBITRARY_DATA;
-  memo[1] = type;
-  memo[2] = 0x00; // standalone
-  memo.set(payload, 3);
+  memo[1] = ZAFU_MAGIC;
+  memo[2] = type;
+  memo[3] = 0x00; // standalone
+  memo.set(payload, 4);
   return memo;
 }
 
@@ -112,10 +140,11 @@ export function encodeFragmented(type: MemoType, payload: Uint8Array): Uint8Arra
 
     const memo = new Uint8Array(MEMO_SIZE);
     memo[0] = ARBITRARY_DATA;
-    memo[1] = type;
-    memo[2] = ((i + 1) << 4) | totalParts; // high nibble = part (1-indexed), low = total
-    memo.set(messageId, 3);
-    memo.set(chunk, 19);
+    memo[1] = ZAFU_MAGIC;
+    memo[2] = type;
+    memo[3] = ((i + 1) << 4) | totalParts; // high nibble = part (1-indexed), low = total
+    memo.set(messageId, 4);
+    memo.set(chunk, 20);
     memos.push(memo);
   }
 
@@ -131,35 +160,36 @@ export function encodeFragmented(type: MemoType, payload: Uint8Array): Uint8Arra
 export function decodeMemo(memo: Uint8Array): ParsedMemo | null {
   if (memo.length !== MEMO_SIZE) return null;
   if (memo[0] !== ARBITRARY_DATA) return null;
+  if (memo[1] !== ZAFU_MAGIC) return null;
 
-  const type = memo[1]! as MemoType;
-  const seq = memo[2]!;
+  const type = memo[2]! as MemoType;
+  const seq = memo[3]!;
 
   if (seq === 0x00) {
-    // standalone message
-    // find end of payload (strip trailing zeros for text)
+    // standalone message — use deterministic ID from first 16 payload bytes
+    // (so decoding the same memo twice produces the same ID)
     let end = MEMO_SIZE;
     if (type === MemoType.Text) {
-      while (end > 3 && memo[end - 1] === 0) end--;
+      while (end > 4 && memo[end - 1] === 0) end--;
     }
     return {
       type,
-      messageId: crypto.getRandomValues(new Uint8Array(16)), // synthetic ID for standalone
+      messageId: memo.slice(4, 20), // deterministic, not random
       part: 1,
       total: 1,
-      payload: memo.slice(3, end),
+      payload: memo.slice(4, end),
     };
   }
 
   // fragmented
   const part = (seq >> 4) & 0x0f;
   const total = seq & 0x0f;
-  const messageId = memo.slice(3, 19);
+  const messageId = memo.slice(4, 20);
 
   let end = MEMO_SIZE;
   if (type === MemoType.Text && part === total) {
     // last text fragment: strip trailing zeros
-    while (end > 19 && memo[end - 1] === 0) end--;
+    while (end > 20 && memo[end - 1] === 0) end--;
   }
 
   return {
@@ -167,7 +197,7 @@ export function decodeMemo(memo: Uint8Array): ParsedMemo | null {
     messageId,
     part,
     total,
-    payload: memo.slice(19, end),
+    payload: memo.slice(20, end),
   };
 }
 
@@ -182,7 +212,11 @@ export function reassemble(fragments: ParsedMemo[]): Uint8Array | null {
   if (fragments.length === 0) return null;
 
   const total = fragments[0]!.total;
+  const expectedType = fragments[0]!.type;
   if (fragments.length < total) return null;
+
+  // all fragments must have the same type
+  if (!fragments.every(f => f.type === expectedType)) return null;
 
   // sort by part number
   const sorted = [...fragments].sort((a, b) => a.part - b.part);
@@ -258,9 +292,9 @@ export function bytesToHex(bytes: Uint8Array): string {
   return s;
 }
 
-/** check if a 512-byte memo is one of our structured types */
+/** check if a 512-byte memo is a zafu structured memo (0xFF 0x5A ...) */
 export function isStructuredMemo(memo: Uint8Array): boolean {
-  return memo.length === MEMO_SIZE && memo[0] === ARBITRARY_DATA && memo[1]! >= 0x01;
+  return memo.length === MEMO_SIZE && memo[0] === ARBITRARY_DATA && memo[1] === ZAFU_MAGIC;
 }
 
 /** human-readable type name */

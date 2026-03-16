@@ -1618,9 +1618,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
                 for (const memo of foundMemos) {
                   // structured binary memos (0xF6 prefix) are handled separately
-                  // check if this is a structured binary memo (0xF6 prefix per ZIP-302)
+                  // check if this is a zafu structured binary memo (0xFF 0x5A magic)
                   const memoRawHex = memo.memo_bytes || '';
-                  const isStructured = memoRawHex.length === 1024 && memoRawHex.startsWith('f6');
+                  const isStructured = memoRawHex.length === 1024 && memoRawHex.startsWith('ff5a');
                   if (!isStructured && (!memo.memo_is_text || !memo.memo.trim())) continue;
 
                   if (memo.is_outgoing) {
