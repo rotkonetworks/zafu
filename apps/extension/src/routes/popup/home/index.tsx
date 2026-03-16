@@ -22,6 +22,7 @@ import {
   completeShieldInWorker,
   spawnNetworkWorker,
   terminateNetworkWorker,
+  markWalletSyncing,
   startSyncInWorker,
   startWatchOnlySyncInWorker,
   getBalanceInWorker,
@@ -443,11 +444,11 @@ const ZcashContent = ({
     }
   }, [shieldUnsignedData, selectedKeyInfo, watchOnly, zidecarUrl]);
 
-  // rescan via custom event — terminate worker, clear IDB, restart fresh
+  // rescan via custom event — terminate worker, clear IDB, let auto-sync restart
   useEffect(() => {
     const handler = async (e: Event) => {
       const height = (e as CustomEvent<number>).detail;
-      if (!selectedKeyInfo || (!hasMnemonic && !watchOnly)) return;
+      if (!selectedKeyInfo) return;
       if (isNaN(height) || height < 0) return;
 
       try {
@@ -465,16 +466,17 @@ const ZcashContent = ({
         setWalletBirthday(height);
         setOrchardZat(0n);
 
-        // small delay for IDB deletion to settle
+        // respawn worker and start sync — mark syncing immediately to prevent
+        // auto-sync hook from racing with a duplicate sync
         await new Promise(r => setTimeout(r, 500));
-
-        // respawn worker and start fresh sync
         await spawnNetworkWorker('zcash');
+        markWalletSyncing('zcash', walletId);
+
         if (hasMnemonic && selectedKeyInfo.type === 'mnemonic') {
           const mnemonic = await keyRing.getMnemonic(walletId);
           await startSyncInWorker('zcash', walletId, mnemonic, zidecarUrl, height);
-        } else {
-          const ufvkStr = watchOnly?.ufvk ?? (watchOnly?.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
+        } else if (watchOnly) {
+          const ufvkStr = watchOnly.ufvk ?? (watchOnly.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
           if (ufvkStr) {
             await startWatchOnlySyncInWorker('zcash', walletId, ufvkStr, zidecarUrl, height);
           }

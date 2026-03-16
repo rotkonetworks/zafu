@@ -510,6 +510,14 @@ export const isWalletSyncing = (network: NetworkType, walletId: string): boolean
 };
 
 /**
+ * pre-mark a wallet as syncing (prevents race with auto-sync hook)
+ */
+export const markWalletSyncing = (network: NetworkType, walletId: string): void => {
+  const state = workers.get(network);
+  if (state) state.syncingWallets.add(walletId);
+};
+
+/**
  * check if any wallet is syncing on a network
  */
 export const isNetworkSyncing = (network: NetworkType): boolean => {
