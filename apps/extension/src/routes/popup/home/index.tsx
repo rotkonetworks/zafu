@@ -97,6 +97,8 @@ export const PopupIndex = () => {
     ? activeZcashWallet?.label ?? selectedKeyInfo?.name ?? 'no wallet'
     : selectedKeyInfo?.name ?? 'no wallet';
 
+  const isMultisig = !!activeZcashWallet?.multisig;
+
   // truncate address for display
   const displayAddress = address
     ? `${address.slice(0, 12)}...${address.slice(-8)}`
@@ -116,6 +118,11 @@ export const PopupIndex = () => {
                 disabled={!address}
                 className='flex items-center gap-1 text-xs text-muted-foreground transition-colors duration-100 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed'
               >
+                {isMultisig && (
+                  <span className='rounded bg-primary/15 px-1.5 py-0.5 text-[9px] font-semibold text-primary leading-none'>
+                    {activeZcashWallet!.multisig!.threshold}/{activeZcashWallet!.multisig!.maxSigners}
+                  </span>
+                )}
                 <span className='font-mono'>{displayAddress}</span>
                 {address && (copied ? <span className='i-lucide-check h-3 w-3' /> : <span className='i-lucide-copy h-3 w-3' />)}
               </button>

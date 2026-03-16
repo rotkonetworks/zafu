@@ -21,6 +21,19 @@ export interface ZcashWalletJson {
   ufvk?: string;
   /** vault ID this wallet belongs to (for zigner wallet linking) */
   vaultId?: string;
+  /** FROST multisig fields — present only for multisig wallets */
+  multisig?: {
+    /** hex-encoded FROST key package (secret, per-participant) */
+    keyPackage: string;
+    /** hex-encoded FROST public key package (shared, identifies the group) */
+    publicKeyPackage: string;
+    /** hex-encoded ephemeral seed for nonce generation */
+    ephemeralSeed: string;
+    /** signing threshold */
+    threshold: number;
+    /** total signers */
+    maxSigners: number;
+  };
 }
 
 export interface WalletsSlice {
@@ -37,6 +50,16 @@ export interface WalletsSlice {
   addAirgapSignerWallet: (walletImport: ZignerWalletImport) => Promise<void>;
   /** Add a Zcash watch-only wallet from Zigner FVK export */
   addZcashWallet: (walletImport: ZcashWalletImport) => Promise<void>;
+  /** Add a FROST multisig wallet after DKG completion */
+  addMultisigWallet: (params: {
+    label: string;
+    address: string;
+    keyPackage: string;
+    publicKeyPackage: string;
+    ephemeralSeed: string;
+    threshold: number;
+    maxSigners: number;
+  }) => Promise<void>;
   /** Remove a wallet by index. Cannot remove the last remaining wallet. */
   removeWallet: (index: number) => Promise<void>;
   /** Remove a Zcash wallet by index */
@@ -159,6 +182,32 @@ export const createWalletsSlice =
         });
 
         await local.set('zcashWallets', [newZcashWallet, ...existingZcashWallets]);
+      },
+
+      addMultisigWallet: async (params) => {
+        const existingZcashWallets = (await local.get('zcashWallets')) ?? [];
+
+        const newWallet: ZcashWalletJson = {
+          id: crypto.randomUUID(),
+          label: params.label,
+          orchardFvk: '', // multisig wallets derive FVK from the public key package
+          address: params.address,
+          accountIndex: 0,
+          mainnet: true,
+          multisig: {
+            keyPackage: params.keyPackage,
+            publicKeyPackage: params.publicKeyPackage,
+            ephemeralSeed: params.ephemeralSeed,
+            threshold: params.threshold,
+            maxSigners: params.maxSigners,
+          },
+        };
+
+        set(state => {
+          state.wallets.zcashWallets.unshift(newWallet);
+        });
+
+        await local.set('zcashWallets', [newWallet, ...existingZcashWallets]);
       },
 
       removeZcashWallet: async (index: number) => {

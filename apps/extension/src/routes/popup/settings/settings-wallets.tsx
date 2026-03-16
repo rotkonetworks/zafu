@@ -242,6 +242,26 @@ export const SettingsWallets = () => {
           <p className='py-12 text-center text-sm text-muted-foreground'>no wallets</p>
         )}
 
+        {/* ── multisig wallets ── */}
+        {zcashWallets.filter(w => w.multisig).length > 0 && (
+          <div className='mt-4'>
+            <p className='mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider'>multisig wallets</p>
+            <div className='flex flex-col divide-y divide-border/40 rounded-lg border border-border/40 bg-card'>
+              {zcashWallets.filter(w => w.multisig).map(w => (
+                <div key={w.id} className='flex items-center justify-between px-4 py-3'>
+                  <div className='flex-1 min-w-0'>
+                    <p className='text-sm font-medium truncate'>{w.label}</p>
+                    <p className='text-xs text-muted-foreground font-mono truncate'>{w.address.slice(0, 16)}...{w.address.slice(-8)}</p>
+                  </div>
+                  <span className='ml-2 shrink-0 rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary'>
+                    {w.multisig!.threshold}/{w.multisig!.maxSigners}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* ── removal flow ── */}
 
         {removingVault && removingType === 'mnemonic' && step === 'password' && (

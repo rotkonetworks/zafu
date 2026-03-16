@@ -7,6 +7,7 @@
  */
 
 import { useState } from 'react';
+import { useStore } from '../../../state';
 import {
   frostDkgPart1InWorker,
   frostDkgPart2InWorker,
@@ -24,6 +25,7 @@ export const MultisigJoin = () => {
   const [address, setAddress] = useState('');
   const [progress, setProgress] = useState('');
   const [relayUrl, setRelayUrl] = useState('');
+  const addMultisigWallet = useStore(s => s.wallets.addMultisigWallet);
 
   const handleJoin = async () => {
     if (!roomCode.trim()) return;
@@ -103,7 +105,15 @@ export const MultisigJoin = () => {
       const addr = await frostDeriveAddressInWorker(round3.public_key_package, 0);
       setAddress(addr);
 
-      // TODO: store as multisig wallet in IDB
+      await addMultisigWallet({
+        label: `${threshold}-of-${maxSigners} multisig`,
+        address: addr,
+        keyPackage: round3.key_package,
+        publicKeyPackage: round3.public_key_package,
+        ephemeralSeed: round3.ephemeral_seed,
+        threshold,
+        maxSigners,
+      });
 
       setStep('complete');
       abortController.abort();

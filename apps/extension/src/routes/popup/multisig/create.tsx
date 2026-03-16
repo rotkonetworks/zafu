@@ -9,7 +9,6 @@
 
 import { useState } from 'react';
 import { useStore } from '../../../state';
-import { frostSessionSelector } from '../../../state/frost-session';
 import {
   frostDkgPart1InWorker,
   frostDkgPart2InWorker,
@@ -29,7 +28,8 @@ export const MultisigCreate = () => {
   const [address, setAddress] = useState('');
   const [relayUrl, setRelayUrl] = useState('');
 
-  const { startDkg } = useStore(frostSessionSelector);
+  const startDkg = useStore(s => s.frostSession.startDkg);
+  const addMultisigWallet = useStore(s => s.wallets.addMultisigWallet);
 
   const handleCreate = async () => {
     try {
@@ -99,7 +99,15 @@ export const MultisigCreate = () => {
       const addr = await frostDeriveAddressInWorker(round3.public_key_package, 0);
       setAddress(addr);
 
-      // TODO: store as multisig wallet in IDB
+      await addMultisigWallet({
+        label: `${threshold}-of-${maxSigners} multisig`,
+        address: addr,
+        keyPackage: round3.key_package,
+        publicKeyPackage: round3.public_key_package,
+        ephemeralSeed: round3.ephemeral_seed,
+        threshold,
+        maxSigners,
+      });
 
       setStep('complete');
       abortController.abort();
