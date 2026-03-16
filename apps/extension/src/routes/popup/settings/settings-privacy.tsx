@@ -8,7 +8,8 @@ import { isIbcNetwork, type NetworkType } from '../../../state/keyring/network-t
 interface PrivacyRow {
   key: keyof PrivacySettings;
   label: string;
-  note: string;
+  onLabel: string;
+  offLabel: string;
   /** filter function — return true if this row is visible for the given network */
   visible?: (network: NetworkType) => boolean;
 }
@@ -16,37 +17,41 @@ interface PrivacyRow {
 const PRIVACY_ROWS: readonly PrivacyRow[] = [
   {
     key: 'enableTransparentBalances',
-    label: 'cosmos balance queries',
-    note: 'leaks addresses to rpc nodes',
+    label: 'cosmos balances',
+    onLabel: 'querying rpc nodes for balances',
+    offLabel: 'balances hidden — no rpc queries',
     visible: n => isIbcNetwork(n) || n === 'penumbra',
   },
   {
     key: 'enableTransactionHistory',
     label: 'transaction history',
-    note: 'stored locally',
+    onLabel: 'saving history locally',
+    offLabel: 'history disabled',
   },
   {
     key: 'enableBackgroundSync',
-    label: 'cosmos background sync',
-    note: 'periodic rpc queries. shielded networks sync automatically.',
+    label: 'background sync',
+    onLabel: 'syncing periodically in background',
+    offLabel: 'sync only when extension is open',
     visible: n => isIbcNetwork(n) || n === 'penumbra',
   },
   {
     key: 'enablePriceFetching',
-    label: 'price fetching',
-    note: 'price apis do not learn your addresses',
+    label: 'price display',
+    onLabel: 'fetching prices — apis cannot see your addresses',
+    offLabel: 'prices hidden',
     visible: n => n === 'penumbra' || isIbcNetwork(n),
   },
 ];
 
 function Row({
   label,
-  note,
+  stateLabel,
   checked,
   onChange,
 }: {
   label: string;
-  note: string;
+  stateLabel: string;
   checked: boolean;
   onChange: (v: boolean) => void;
 }) {
@@ -54,7 +59,9 @@ function Row({
     <div className='flex items-start justify-between gap-4 py-3'>
       <div className='flex-1'>
         <p className='text-sm font-medium'>{label}</p>
-        <p className='text-xs text-muted-foreground mt-0.5'>{note}</p>
+        <p className={`text-xs mt-0.5 ${checked ? 'text-green-500' : 'text-muted-foreground'}`}>
+          {stateLabel}
+        </p>
       </div>
       <Switch checked={checked} onCheckedChange={onChange} />
     </div>
@@ -76,7 +83,7 @@ export function SettingsPrivacy() {
           <Row
             key={row.key}
             label={row.label}
-            note={row.note}
+            stateLabel={settings[row.key] ? row.onLabel : row.offLabel}
             checked={settings[row.key]}
             onChange={v => setSetting(row.key, v)}
           />
