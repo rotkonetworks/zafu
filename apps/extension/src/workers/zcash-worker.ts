@@ -17,7 +17,7 @@ import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
 const workerSelf = globalThis as any as DedicatedWorkerGlobalScope;
 
 interface WorkerMessage {
-  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos';
+  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos' | 'frost-dkg-part1' | 'frost-dkg-part2' | 'frost-dkg-part3' | 'frost-sign-round1' | 'frost-spend-sign' | 'frost-spend-aggregate' | 'frost-derive-address';
   id: string;
   network: 'zcash';
   walletId?: string;
@@ -96,6 +96,19 @@ interface WasmModule {
   build_merkle_paths(tree_state_hex: string, compact_blocks_json: string, note_positions_json: string, anchor_height: number): unknown;
   frontier_tree_size(tree_state_hex: string): bigint;
   tree_root_hex(tree_state_hex: string): string;
+
+  // FROST multisig
+  frost_dealer_keygen(min_signers: number, max_signers: number): string;
+  frost_dkg_part1(max_signers: number, min_signers: number): string;
+  frost_dkg_part2(secret_hex: string, peer_broadcasts_json: string): string;
+  frost_dkg_part3(secret_hex: string, round1_broadcasts_json: string, round2_packages_json: string): string;
+  frost_sign_round1(ephemeral_seed_hex: string, key_package_hex: string): string;
+  frost_generate_randomizer(ephemeral_seed_hex: string, message_hex: string, commitments_json: string): string;
+  frost_sign_round2(ephemeral_seed_hex: string, key_package_hex: string, nonces_hex: string, message_hex: string, commitments_json: string, randomizer_hex: string): string;
+  frost_aggregate_shares(public_key_package_hex: string, message_hex: string, commitments_json: string, shares_json: string, randomizer_hex: string): string;
+  frost_derive_address_raw(public_key_package_hex: string, diversifier_index: number): string;
+  frost_spend_sign_round2(key_package_hex: string, nonces_hex: string, sighash_hex: string, alpha_hex: string, commitments_json: string): string;
+  frost_spend_aggregate(public_key_package_hex: string, sighash_hex: string, alpha_hex: string, commitments_json: string, shares_json: string): string;
 }
 
 let wasmModule: WasmModule | null = null;
@@ -2096,6 +2109,70 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           type: 'tx-result', id, network: 'zcash', walletId,
           payload: { txid: shieldCompleteTxid },
         });
+        return;
+      }
+
+      // ── FROST multisig ──
+
+      case 'frost-dkg-part1': {
+        await initWasm();
+        const { maxSigners, minSigners } = payload as { maxSigners: number; minSigners: number };
+        const result = JSON.parse(wasmModule!.frost_dkg_part1(maxSigners, minSigners));
+        workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: result });
+        return;
+      }
+
+      case 'frost-dkg-part2': {
+        await initWasm();
+        const { secretHex, peerBroadcasts } = payload as { secretHex: string; peerBroadcasts: string };
+        const result = JSON.parse(wasmModule!.frost_dkg_part2(secretHex, peerBroadcasts));
+        workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: result });
+        return;
+      }
+
+      case 'frost-dkg-part3': {
+        await initWasm();
+        const { secretHex, round1Broadcasts, round2Packages } = payload as {
+          secretHex: string; round1Broadcasts: string; round2Packages: string;
+        };
+        const result = JSON.parse(wasmModule!.frost_dkg_part3(secretHex, round1Broadcasts, round2Packages));
+        workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: result });
+        return;
+      }
+
+      case 'frost-sign-round1': {
+        await initWasm();
+        const { ephemeralSeedHex, keyPackageHex } = payload as { ephemeralSeedHex: string; keyPackageHex: string };
+        const result = JSON.parse(wasmModule!.frost_sign_round1(ephemeralSeedHex, keyPackageHex));
+        workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: result });
+        return;
+      }
+
+      case 'frost-spend-sign': {
+        await initWasm();
+        const { keyPackageHex, noncesHex, sighashHex, alphaHex, commitments } = payload as {
+          keyPackageHex: string; noncesHex: string; sighashHex: string; alphaHex: string; commitments: string;
+        };
+        const result = wasmModule!.frost_spend_sign_round2(keyPackageHex, noncesHex, sighashHex, alphaHex, commitments);
+        workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: result });
+        return;
+      }
+
+      case 'frost-spend-aggregate': {
+        await initWasm();
+        const { publicKeyPackageHex, sighashHex, alphaHex, commitments, shares } = payload as {
+          publicKeyPackageHex: string; sighashHex: string; alphaHex: string; commitments: string; shares: string;
+        };
+        const result = wasmModule!.frost_spend_aggregate(publicKeyPackageHex, sighashHex, alphaHex, commitments, shares);
+        workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: result });
+        return;
+      }
+
+      case 'frost-derive-address': {
+        await initWasm();
+        const { publicKeyPackageHex, diversifierIndex } = payload as { publicKeyPackageHex: string; diversifierIndex: number };
+        const rawHex = wasmModule!.frost_derive_address_raw(publicKeyPackageHex, diversifierIndex);
+        workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: rawHex });
         return;
       }
 
