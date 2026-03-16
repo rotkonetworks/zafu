@@ -1,13 +1,15 @@
 import {
-  ServicesMessage,
   getClearCacheStepLabel,
-  CLEAR_CACHE_STEPS,
+  PENUMBRA_CLEAR_STEPS,
+  ZCASH_CLEAR_STEPS,
   type ClearCacheProgress,
+  type ClearCacheRequest,
   type ClearCacheStep,
 } from '../../../message/services';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { useStore } from '../../../state';
+import { selectActiveNetwork } from '../../../state/keyring';
 import { useState, useEffect } from 'react';
 import { SettingsScreen } from './settings-screen';
 import { localExtStorage } from '@repo/storage-chrome/local';
@@ -21,11 +23,16 @@ interface ClearingState {
 
 const useCacheClear = () => {
   const navigate = usePopupNav();
+  const activeNetwork = useStore(selectActiveNetwork);
+  const isZcash = activeNetwork === 'zcash';
+  const clearNetwork = isZcash ? 'zcash' : 'penumbra';
+  const steps = isZcash ? ZCASH_CLEAR_STEPS : PENUMBRA_CLEAR_STEPS;
+
   const [clearingState, setClearingState] = useState<ClearingState>({
     inProgress: false,
     step: 'stopping',
     completed: 0,
-    total: CLEAR_CACHE_STEPS.length,
+    total: steps.length,
   });
 
   useEffect(() => {
@@ -34,13 +41,14 @@ const useCacheClear = () => {
         setClearingState({
           inProgress: true,
           step: 'clearing-database',
-          completed: 2,
-          total: CLEAR_CACHE_STEPS.length,
+          completed: 1,
+          total: steps.length,
         });
-        void chrome.runtime.sendMessage(ServicesMessage.ClearCache);
+        const req: ClearCacheRequest = { type: 'ClearCache', network: clearNetwork };
+        void chrome.runtime.sendMessage(req);
       }
     });
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const handleMessage = (message: unknown) => {
@@ -68,19 +76,22 @@ const useCacheClear = () => {
     setClearingState(prev => ({ ...prev, inProgress: true }));
 
     void (async function () {
-      await chrome.runtime.sendMessage(ServicesMessage.ClearCache);
-      useStore.setState(state => {
-        state.network.fullSyncHeight = undefined;
-      });
+      const req: ClearCacheRequest = { type: 'ClearCache', network: clearNetwork };
+      await chrome.runtime.sendMessage(req);
+      if (!isZcash) {
+        useStore.setState(state => {
+          state.network.fullSyncHeight = undefined;
+        });
+      }
       navigate(PopupPath.INDEX);
     })();
   };
 
-  return { handleCacheClear, clearingState };
+  return { handleCacheClear, clearingState, clearNetwork };
 };
 
 export const SettingsClearCache = () => {
-  const { handleCacheClear, clearingState } = useCacheClear();
+  const { handleCacheClear, clearingState, clearNetwork } = useCacheClear();
 
   const progressPercent = clearingState.total > 0
     ? Math.round((clearingState.completed / clearingState.total) * 100)
@@ -108,7 +119,7 @@ export const SettingsClearCache = () => {
         ) : (
           <div className='flex flex-col gap-3'>
             <p className='text-sm text-muted-foreground'>
-              all local data will be deleted and resynchronized.
+              clears {clearNetwork} sync data and resynchronizes from network.
             </p>
             <p className='flex items-center gap-2 text-xs text-rust'>
               <span className='i-lucide-triangle-alert size-4' />
@@ -122,7 +133,7 @@ export const SettingsClearCache = () => {
           onClick={handleCacheClear}
           className='w-full rounded-lg border border-red-500/25 bg-red-500/15 py-2.5 text-sm text-red-400 transition-colors hover:bg-red-500/25 disabled:opacity-50'
         >
-          {clearingState.inProgress ? 'clearing...' : 'clear cache'}
+          {clearingState.inProgress ? 'clearing...' : `clear ${clearNetwork} cache`}
         </button>
       </div>
     </SettingsScreen>
