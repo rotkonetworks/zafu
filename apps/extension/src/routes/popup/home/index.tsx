@@ -180,7 +180,7 @@ export const PopupIndex = () => {
             network={activeNetwork}
             penumbraAccount={penumbraAccount}
             setPenumbraAccount={setPenumbraAccount}
-            zcashWallet={activeZcashWallet}
+            zcashWallet={selectedKeyInfo?.type === 'mnemonic' ? undefined : activeZcashWallet}
             polkadotPublicKey={polkadotPublicKey}
             hasMnemonic={selectedKeyInfo?.type === 'mnemonic'}
           />
