@@ -5,6 +5,9 @@
 
 import type { NetworkType } from '../state/keyring';
 
+/** orchard pool activation height — no zcash wallet should scan before this */
+export const ZCASH_ORCHARD_ACTIVATION = 1_687_104;
+
 export interface NetworkConfig {
   name: string;
   color: string;

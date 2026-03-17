@@ -12,6 +12,7 @@ import { Input } from '@repo/ui/components/ui/input';
 import { cn } from '@repo/ui/lib/utils';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
+import { ZCASH_ORCHARD_ACTIVATION } from '../../../config/networks';
 
 type RemovalStep = 'idle' | 'password' | 'backup' | 'confirm';
 
@@ -478,8 +479,12 @@ const VaultRow = ({ vault, networks, multisigWallet, onRemove, onRename, disable
 
   const saveBirthday = () => {
     const num = parseInt(birthday, 10);
-    if (!isNaN(num) && num >= 0) {
+    if (!isNaN(num) && num >= ZCASH_ORCHARD_ACTIVATION) {
       void chrome.storage.local.set({ [birthdayKey]: num });
+    } else if (!isNaN(num) && num > 0 && num < ZCASH_ORCHARD_ACTIVATION) {
+      // clamp to orchard activation — no point scanning earlier
+      setBirthday(String(ZCASH_ORCHARD_ACTIVATION));
+      void chrome.storage.local.set({ [birthdayKey]: ZCASH_ORCHARD_ACTIVATION });
     } else if (birthday === '') {
       void chrome.storage.local.remove(birthdayKey);
     }
@@ -532,7 +537,7 @@ const VaultRow = ({ vault, networks, multisigWallet, onRemove, onRename, disable
         <div className='flex items-center gap-2 mt-2'>
           <span className='text-[10px] text-muted-foreground whitespace-nowrap'>sync from</span>
           <input
-            type='number' min='0' step='1000' value={birthday}
+            type='number' min={ZCASH_ORCHARD_ACTIVATION} step='1000' value={birthday}
             onChange={e => setBirthday(e.target.value)}
             onBlur={saveBirthday}
             onKeyDown={e => e.key === 'Enter' && saveBirthday()}

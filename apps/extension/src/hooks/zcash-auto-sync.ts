@@ -19,20 +19,28 @@ import {
   stopSyncInWorker,
   isWalletSyncing,
 } from '../state/keyring/network-worker';
+import { ZCASH_ORCHARD_ACTIVATION } from '../config/networks';
 
-/** resolve wallet birthday height from storage or chain tip */
-async function resolveBirthday(walletId: string, zidecarUrl: string): Promise<number | undefined> {
+/** resolve wallet birthday height from storage or chain tip.
+ *  never returns below orchard activation — no point scanning pre-orchard blocks. */
+async function resolveBirthday(walletId: string, zidecarUrl: string): Promise<number> {
   const birthdayKey = `zcashBirthday_${walletId}`;
   const stored = await chrome.storage.local.get([birthdayKey, 'zcashSyncHeight']);
-  if (stored['zcashSyncHeight'] && stored['zcashSyncHeight'] !== 0) return undefined;
-  if (stored[birthdayKey]) return stored[birthdayKey] as number;
+  if (stored['zcashSyncHeight'] && stored['zcashSyncHeight'] !== 0) {
+    return Math.max(ZCASH_ORCHARD_ACTIVATION, stored['zcashSyncHeight'] as number);
+  }
+  if (stored[birthdayKey]) {
+    return Math.max(ZCASH_ORCHARD_ACTIVATION, stored[birthdayKey] as number);
+  }
   try {
     const { ZidecarClient } = await import('../state/keyring/zidecar-client');
     const tip = await new ZidecarClient(zidecarUrl).getTip();
-    const height = Math.floor(Math.max(0, tip.height - 100) / 10000) * 10000;
+    const height = Math.floor(Math.max(ZCASH_ORCHARD_ACTIVATION, tip.height - 100) / 10000) * 10000;
     await chrome.storage.local.set({ [birthdayKey]: height });
     return height;
-  } catch { return undefined; }
+  } catch {
+    return ZCASH_ORCHARD_ACTIVATION;
+  }
 }
 
 export function useZcashAutoSync() {
