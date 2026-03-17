@@ -1083,9 +1083,9 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
   console.log(`[zcash-worker] sync stopped wallet=${walletId}`);
 };
 
-const getBalance = (walletId: string): bigint => {
-  const state = walletStates.get(walletId);
-  if (!state) return 0n;
+const getBalance = async (walletId: string): Promise<bigint> => {
+  // always load from IDB — in-memory state may be stale after rescan
+  const state = await loadState(walletId);
   let balance = 0n;
   for (const note of state.notes) {
     if (!state.spentNullifiers.has(note.nullifier)) {
@@ -1160,7 +1160,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
       case 'get-balance': {
         if (!walletId) throw new Error('walletId required');
-        const balance = getBalance(walletId);
+        const balance = await getBalance(walletId);
         workerSelf.postMessage({ type: 'balance', id, network: 'zcash', walletId, payload: balance.toString() });
         return;
       }
