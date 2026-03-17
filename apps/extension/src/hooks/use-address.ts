@@ -169,10 +169,20 @@ export function useActiveAddress() {
 
             // zcash - derive orchard address via worker (avoids main-thread wasm)
             if (activeNetwork === 'zcash') {
-              await spawnNetworkWorker('zcash');
-              const rawAddr = await deriveAddressInWorker('zcash', mnemonic, shieldedIndex);
-              const addr = fixOrchardAddress(rawAddr, true);
-              if (!cancelled) setAddress(addr);
+              // retry worker spawn — rescan may have terminated it
+              for (let attempt = 0; attempt < 3 && !cancelled; attempt++) {
+                try {
+                  await spawnNetworkWorker('zcash');
+                  const rawAddr = await deriveAddressInWorker('zcash', mnemonic, shieldedIndex);
+                  const addr = fixOrchardAddress(rawAddr, true);
+                  if (!cancelled) setAddress(addr);
+                  if (!cancelled) setLoading(false);
+                  return;
+                } catch {
+                  if (attempt < 2) await new Promise(r => setTimeout(r, 1000));
+                }
+              }
+              // all retries failed — don't fall through to zigner wallet
               if (!cancelled) setLoading(false);
               return;
             }
