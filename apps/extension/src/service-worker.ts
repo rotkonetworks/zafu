@@ -15,7 +15,7 @@ import { contentScriptDisconnectListener } from './message/listen/content-script
 import { contentScriptLoadListener } from './message/listen/content-script-load';
 import { internalRevokeListener } from './message/listen/internal-revoke';
 import { internalServiceListener } from './message/listen/internal-services';
-import { externalEasterEggListener } from './message/listen/external-easteregg';
+import { externalMessageListener } from './message/listen/external-easteregg';
 
 // all rpc implementations, local and proxy
 import { getRpcImpls } from './rpc';
@@ -247,7 +247,7 @@ chrome.runtime.onMessage.addListener((req, sender, respond) =>
 chrome.runtime.onMessageExternal.addListener(signRequestListener);
 
 // listen for external messages
-chrome.runtime.onMessageExternal.addListener(externalEasterEggListener);
+chrome.runtime.onMessageExternal.addListener(externalMessageListener);
 
 // https://developer.chrome.com/docs/extensions/reference/api/alarms
 void chrome.alarms.create('blockSync', {

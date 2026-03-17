@@ -1426,12 +1426,15 @@ export function SendPage() {
   // dedicated window should close on completion, side panel navigates normally
   const [inDedicatedWindow] = useState(() => isDedicatedWindow());
 
-  // get prefill from location state (from inbox compose)
+  // get prefill from location state (inbox compose), URL params (external message), or hash params
   const locationState = location.state as SendLocationState | undefined;
-  const prefill = locationState ? {
+  const searchParams = new URLSearchParams(location.search);
+  const prefill = locationState?.prefillRecipient ? {
     recipient: locationState.prefillRecipient,
     amount: locationState.prefillAmount,
     memo: locationState.prefillMemo,
+  } : searchParams.get('to') ? {
+    recipient: searchParams.get('to') ?? undefined,
   } : undefined;
 
   const goBack = () => inDedicatedWindow ? window.close() : navigate(PopupPath.INDEX);
