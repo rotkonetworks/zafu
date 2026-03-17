@@ -534,16 +534,19 @@ const VaultRow = ({ vault, networks, multisigWallet, onRemove, onRename, disable
 
       {/* zcash start block */}
       {hasZcash && (
-        <div className='flex items-center gap-2 mt-2'>
-          <span className='text-[10px] text-muted-foreground whitespace-nowrap'>sync from</span>
-          <input
-            type='number' min={ZCASH_ORCHARD_ACTIVATION} step='1000' value={birthday}
-            onChange={e => setBirthday(e.target.value)}
-            onBlur={saveBirthday}
-            onKeyDown={e => e.key === 'Enter' && saveBirthday()}
-            placeholder='auto'
-            className='w-24 bg-input border border-border/40 px-2 py-1 text-[10px] font-mono rounded focus:outline-none focus:border-primary/50'
-          />
+        <div className='mt-2'>
+          <div className='flex items-center gap-2'>
+            <span className='text-[10px] text-muted-foreground whitespace-nowrap'>sync from</span>
+            <input
+              type='number' min={ZCASH_ORCHARD_ACTIVATION} step='1000' value={birthday}
+              onChange={e => setBirthday(e.target.value)}
+              onBlur={saveBirthday}
+              onKeyDown={e => e.key === 'Enter' && saveBirthday()}
+              placeholder='auto'
+              className='w-24 bg-input border border-border/40 px-2 py-1 text-[10px] font-mono rounded focus:outline-none focus:border-primary/50'
+            />
+          </div>
+          <p className='text-[9px] text-muted-foreground/60 mt-0.5'>orchard only — sapling/sprout not supported</p>
         </div>
       )}
 
