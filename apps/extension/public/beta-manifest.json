@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "zafu wallet BETA",
+  "name": "zafu BETA",
   "short_name": "zafu",
   "version": "0.2.0",
   "description": "privacy wallet for zcash and penumbra. air-gapped cold signing, FROST multisig, client-side proving in under 15s. ed25519 identity signing and encryption for applications. fully verified lightclient.",
