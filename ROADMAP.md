@@ -32,6 +32,18 @@ seed wallets derive zcash keys on-the-fly in the worker. a stored UFVK per seed 
 
 > **open question:** do we want this? a stored UFVK is readable without the password. if the service worker is compromised or a site abuses externally_connectable, it could enumerate balances and transaction history silently. current mnemonic path requires unlock to derive anything.
 
+## stealth mode — opt-in provider injection
+
+currently `injected-penumbra-global.js` runs on every page via content_scripts. this announces "a penumbra wallet is installed" to every site — a fingerprinting signal. the actual FVK/data is gated behind connected sites approval, but the presence alone is metadata.
+
+- add privacy setting: "announce wallet to websites" (default: **off**)
+- when off: no content script injection. sites can't detect the wallet.
+- when on: current behavior. sites can call `connect()` → approval popup.
+- dApps that need wallet detection show "install Zafu" link instead of auto-detecting.
+- per-site override: user can enable injection for specific origins only.
+
+this is a differentiator vs MetaMask/Keplr/Prax which all inject unconditionally.
+
 ## proving performance — SIMD field arithmetic + precomputed MSM
 
 current: ~12-15s halo2 proving with multithreaded rayon + WASM SIMD128. the bottleneck is multi-scalar multiplication (MSM) on pasta curves.
