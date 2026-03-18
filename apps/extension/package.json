@@ -55,10 +55,13 @@
     "react-dom": "^18.3.1",
     "react-loader-spinner": "^6.1.6",
     "react-router-dom": "^6.30.3",
+    "solid-js": "^1.9.11",
     "usehooks-ts": "^3.1.1",
     "zustand": "^4.5.7"
   },
   "devDependencies": {
+    "@babel/core": "^7.29.0",
+    "@babel/preset-typescript": "^7.28.5",
     "@types/chrome": "0.0.270",
     "@types/firefox-webext-browser": "^120.0.5",
     "@types/lodash": "^4.17.23",
@@ -67,6 +70,8 @@
     "@types/react-dom": "^18.3.7",
     "@types/webpack": "^5.28.5",
     "autoprefixer": "^10.4.23",
+    "babel-loader": "^10.1.1",
+    "babel-preset-solid": "^1.9.10",
     "bip39": "^3.1.0",
     "buffer": "^6.0.3",
     "copy-webpack-plugin": "^12.0.2",
