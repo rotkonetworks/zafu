@@ -10,6 +10,7 @@ import { localExtStorage } from '@repo/storage-chrome/local';
 import { UserChoice } from '@repo/storage-chrome/records';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { Wallet, getCustodyTypeName } from '@repo/wallet';
+import { getWalletFromStorage } from '@repo/storage-chrome/onboard';
 import { PopupType } from '../message/popup';
 import { throwIfNeedsLogin } from '../needs-login';
 import { popup } from '../popup';
@@ -88,10 +89,9 @@ const openWallet = async () => {
     .get('passwordKey')
     .then(passKeyJson => Key.fromJson(passKeyJson!));
 
-  const wallet = localExtStorage.get('wallets').then(async wallets => {
-    const activeIdx = (await localExtStorage.get('activeWalletIndex')) ?? 0;
-    const w = wallets[activeIdx]!;
-    return Wallet.fromJson({ ...w, vaultId: w.vaultId ?? '' } as typeof w & { vaultId: string });
+  const wallet = getWalletFromStorage().then(w => {
+    if (!w) throw new Error('no wallet available');
+    return Wallet.fromJson(w);
   });
 
   return (await wallet).custody(await passKey);

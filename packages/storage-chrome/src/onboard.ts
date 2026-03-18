@@ -1,6 +1,9 @@
 import type { WalletJson } from '@repo/wallet';
 import type { ChromeStorageListener } from './listener';
 import { localExtStorage, type LocalStorageState } from './local';
+import { sessionExtStorage } from './session';
+import { Key } from '@repo/encryption/key';
+import { Box, type BoxJson } from '@repo/encryption/box';
 
 /**
  * When a user first onboards with the extension, they won't have chosen a gRPC
@@ -25,17 +28,32 @@ export const onboardGrpcEndpoint = async (): Promise<string> => {
   });
 };
 
-/** coerce storage wallet (vaultId optional) to runtime WalletJson (vaultId required) */
-const coerceWallet = (w: { vaultId?: string } & Record<string, unknown>): WalletJson =>
-  ({ ...w, vaultId: w.vaultId ?? '' }) as unknown as WalletJson;
+/** decrypt wallets if encrypted, fallback to plaintext for migration */
+const decryptWallets = async (raw: unknown): Promise<WalletJson[]> => {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw; // plaintext (legacy)
+  // encrypted wrapper: { encrypted: BoxJson }
+  if (typeof raw === 'object' && 'encrypted' in (raw as Record<string, unknown>)) {
+    try {
+      const keyJson = await sessionExtStorage.get('passwordKey');
+      if (!keyJson) return []; // locked
+      const key = await Key.fromJson(keyJson);
+      const plaintext = await key.unseal(Box.fromJson((raw as { encrypted: BoxJson }).encrypted));
+      if (!plaintext) return [];
+      return JSON.parse(plaintext) as WalletJson[];
+    } catch { return []; }
+  }
+  return [];
+};
 
 export const onboardWallet = async (): Promise<WalletJson> => {
-  const wallets = await localExtStorage.get('wallets');
+  const rawWallets = await localExtStorage.get('wallets');
+  const wallets = await decryptWallets(rawWallets);
   const activeIndex = (await localExtStorage.get('activeWalletIndex')) ?? 0;
   const activeWallet = wallets[activeIndex] ?? wallets[0];
 
   if (activeWallet) {
-    return coerceWallet(activeWallet);
+    return activeWallet;
   }
 
   return new Promise(resolve => {
@@ -43,7 +61,7 @@ export const onboardWallet = async (): Promise<WalletJson> => {
       const wallets = changes.wallets?.newValue;
       const initialWallet = wallets?.[0];
       if (initialWallet) {
-        resolve(coerceWallet(initialWallet));
+        resolve({ ...initialWallet, vaultId: initialWallet.vaultId ?? '' } as WalletJson);
         localExtStorage.removeListener(storageListener);
       }
     };
@@ -57,8 +75,9 @@ export const onboardWallet = async (): Promise<WalletJson> => {
  * Use this for multi-network wallets where penumbra wallet may not exist yet.
  */
 export const getWalletFromStorage = async (): Promise<WalletJson | undefined> => {
-  const wallets = await localExtStorage.get('wallets');
+  const rawWallets = await localExtStorage.get('wallets');
+  const wallets = await decryptWallets(rawWallets);
   const activeIndex = (await localExtStorage.get('activeWalletIndex')) ?? 0;
   const w = wallets[activeIndex] ?? wallets[0];
-  return w ? coerceWallet(w) : undefined;
+  return w ?? undefined;
 };

@@ -8,6 +8,7 @@ import { createNetworkSlice, NetworkSlice } from './network';
 import { localExtStorage, type LocalStorageState } from '@repo/storage-chrome/local';
 import { sessionExtStorage, type SessionStorageState } from '@repo/storage-chrome/session';
 import type { ExtensionStorage } from '@repo/storage-chrome/base';
+import { createEncryptedLocal } from './encrypted-storage';
 import { createTxApprovalSlice, TxApprovalSlice } from './tx-approval';
 import { createOriginApprovalSlice, OriginApprovalSlice } from './origin-approval';
 import { ConnectedSitesSlice, createConnectedSitesSlice } from './connected-sites';
@@ -63,8 +64,12 @@ export type SliceCreator<SliceInterface> = StateCreator<
 
 export const initializeStore = (
   session: ExtensionStorage<SessionStorageState>,
-  local: ExtensionStorage<LocalStorageState>,
+  rawLocal: ExtensionStorage<LocalStorageState>,
 ) => {
+  // wrap local storage with encryption for sensitive keys
+  // wallets, zcashWallets, contacts, messages, knownSites auto-encrypted
+  const local = createEncryptedLocal(rawLocal, session);
+
   return immer((setState, getState: () => AllSlices, store) => ({
     wallets: createWalletsSlice(session, local)(setState, getState, store),
     password: createPasswordSlice(session, local)(setState, getState, store),

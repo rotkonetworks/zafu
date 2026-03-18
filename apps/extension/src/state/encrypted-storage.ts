@@ -67,3 +67,46 @@ export async function writeEncrypted(
   const box = await key.seal(plaintext);
   await local.set(storageKey, { encrypted: box.toJson() } as never);
 }
+
+/** keys that must be encrypted at rest */
+const ENCRYPTED_KEYS = new Set<string>([
+  'wallets',
+  'zcashWallets',
+  'contacts',
+  'recentAddresses',
+  'dismissedContactSuggestions',
+  'knownSites',
+  'messages',
+]);
+
+/** should this storage key be encrypted? */
+export const isEncryptedKey = (key: string): boolean => ENCRYPTED_KEYS.has(key);
+
+/**
+ * encrypted local storage proxy — wraps ExtensionStorage to auto-encrypt/decrypt
+ * specific keys. all other keys pass through unchanged.
+ */
+export function createEncryptedLocal(
+  local: ExtensionStorage<LocalStorageState>,
+  session: ExtensionStorage<SessionStorageState>,
+): ExtensionStorage<LocalStorageState> {
+  return {
+    get: async <K extends keyof LocalStorageState>(key: K) => {
+      if (isEncryptedKey(key as string)) {
+        const result = await readEncrypted<LocalStorageState[K]>(local, session, key);
+        return result as LocalStorageState[K];
+      }
+      return local.get(key);
+    },
+    set: async <K extends keyof LocalStorageState>(key: K, value: LocalStorageState[K]) => {
+      if (isEncryptedKey(key as string)) {
+        await writeEncrypted(local, session, key, value);
+        return;
+      }
+      await local.set(key, value);
+    },
+    remove: (key) => local.remove(key),
+    addListener: (listener) => local.addListener(listener),
+    removeListener: (listener) => local.removeListener(listener),
+  } as ExtensionStorage<LocalStorageState>;
+}

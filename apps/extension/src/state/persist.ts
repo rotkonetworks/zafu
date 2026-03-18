@@ -7,6 +7,8 @@ import { localExtStorage } from '@repo/storage-chrome/local';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { OriginRecord } from '@repo/storage-chrome/records';
 import { readEncrypted } from './encrypted-storage';
+import type { WalletJson } from '@repo/wallet';
+import type { ZcashWalletJson } from './wallets';
 import type { Contact } from './contacts';
 import type { RecentAddress } from './recent-addresses';
 
@@ -22,13 +24,10 @@ type Persist = (f: StateCreator<AllSlices>) => StateCreator<AllSlices>;
 
 export const customPersistImpl: Persist = f => (set, get, store) => {
   void (async function () {
-    // Part 1: Get storage values and sync them to store
-    const wallets = await localExtStorage.get('wallets');
-    const zcashWallets = await localExtStorage.get('zcashWallets');
+    // Part 1: load non-encrypted values (indices, settings, endpoints)
     const activeZcashIndex = await localExtStorage.get('activeZcashIndex');
     const activeWalletIndex = await localExtStorage.get('activeWalletIndex');
     const grpcEndpoint = await localExtStorage.get('grpcEndpoint');
-    const knownSites = await localExtStorage.get('knownSites');
     const frontendUrl = await localExtStorage.get('frontendUrl');
     const numeraires = await localExtStorage.get('numeraires');
     const zignerCameraEnabled = await localExtStorage.get('zignerCameraEnabled');
@@ -36,12 +35,9 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
 
     set(
       produce((state: AllSlices) => {
-        state.wallets.all = wallets.map(w => ({ ...w, vaultId: w.vaultId ?? '' })) as typeof state.wallets.all;
-        state.wallets.zcashWallets = (zcashWallets ?? []).map(w => ({ ...w, vaultId: w.vaultId ?? '' })) as typeof state.wallets.zcashWallets;
         state.wallets.activeZcashIndex = activeZcashIndex ?? 0;
         state.wallets.activeIndex = activeWalletIndex ?? 0;
         state.network.grpcEndpoint = grpcEndpoint;
-        state.connectedSites.knownSites = knownSites as OriginRecord[];
         state.defaultFrontend.url = frontendUrl;
         state.numeraires.selectedNumeraires = numeraires;
         state.zigner.cameraEnabled = zignerCameraEnabled ?? false;
@@ -51,15 +47,25 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
       }),
     );
 
-    // hydrate encrypted user data — standalone service, called on any unlock event
+    type LK = keyof import('@repo/storage-chrome/local').LocalStorageState;
+
+    // hydrate ALL encrypted data — wallets, contacts, messages, connected sites
     const hydrateEncryptedData = async () => {
-      const [contacts, recentAddresses] = await Promise.all([
-        readEncrypted<Contact[]>(localExtStorage, sessionExtStorage, 'contacts' as keyof import('@repo/storage-chrome/local').LocalStorageState),
-        readEncrypted<RecentAddress[]>(localExtStorage, sessionExtStorage, 'recentAddresses' as keyof import('@repo/storage-chrome/local').LocalStorageState),
+      const [wallets, zcashWallets, contacts, recentAddresses, knownSites, messages] = await Promise.all([
+        readEncrypted<WalletJson[]>(localExtStorage, sessionExtStorage, 'wallets' as LK),
+        readEncrypted<ZcashWalletJson[]>(localExtStorage, sessionExtStorage, 'zcashWallets' as LK),
+        readEncrypted<Contact[]>(localExtStorage, sessionExtStorage, 'contacts' as LK),
+        readEncrypted<RecentAddress[]>(localExtStorage, sessionExtStorage, 'recentAddresses' as LK),
+        readEncrypted<OriginRecord[]>(localExtStorage, sessionExtStorage, 'knownSites' as LK),
+        readEncrypted<unknown[]>(localExtStorage, sessionExtStorage, 'messages' as LK),
       ]);
       set(produce((state: AllSlices) => {
+        if (wallets) state.wallets.all = wallets.map(w => ({ ...w, vaultId: w.vaultId ?? '' })) as typeof state.wallets.all;
+        if (zcashWallets) state.wallets.zcashWallets = zcashWallets.map(w => ({ ...w, vaultId: w.vaultId ?? '' })) as typeof state.wallets.zcashWallets;
         if (contacts) state.contacts.contacts = contacts;
         if (recentAddresses) state.recentAddresses.recentAddresses = recentAddresses;
+        if (knownSites) state.connectedSites.knownSites = knownSites;
+        if (messages) state.messages.messages = messages as typeof state.messages.messages;
       }));
     };
 
@@ -82,13 +88,9 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
 
     // Part 2: when chrome.storage changes sync select fields to store
     localExtStorage.addListener(changes => {
-      if (changes.wallets) {
-        const wallets = changes.wallets.newValue;
-        set(
-          produce((state: AllSlices) => {
-            state.wallets.all = (wallets ?? []).map(w => ({ ...w, vaultId: w.vaultId ?? '' })) as typeof state.wallets.all;
-          }),
-        );
+      // encrypted keys: re-read through decryption layer on any change
+      if (changes.wallets || changes.zcashWallets || changes.contacts || changes.knownSites || changes.messages) {
+        void hydrateEncryptedData();
       }
 
       if (changes.fullSyncHeight) {
@@ -105,15 +107,6 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
         set(
           produce((state: AllSlices) => {
             state.network.grpcEndpoint = stored ?? state.network.grpcEndpoint;
-          }),
-        );
-      }
-
-      if (changes.knownSites) {
-        const stored = changes.knownSites.newValue as OriginRecord[] | undefined;
-        set(
-          produce((state: AllSlices) => {
-            state.connectedSites.knownSites = stored ?? state.connectedSites.knownSites;
           }),
         );
       }
@@ -156,15 +149,6 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
         );
       }
 
-      if (changes.zcashWallets) {
-        const stored = changes.zcashWallets.newValue;
-        set(
-          produce((state: AllSlices) => {
-            state.wallets.zcashWallets = (stored ?? []).map(w => ({ ...w, vaultId: w.vaultId ?? '' })) as typeof state.wallets.zcashWallets;
-          }),
-        );
-      }
-
       if (changes.activeZcashIndex) {
         const stored = changes.activeZcashIndex.newValue;
         set(
@@ -172,16 +156,6 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
             state.wallets.activeZcashIndex = stored ?? 0;
           }),
         );
-      }
-
-      if (changes.contacts) {
-        // contacts may be encrypted — re-read through decryption layer
-        void readEncrypted<Contact[]>(localExtStorage, sessionExtStorage, 'contacts' as keyof import('@repo/storage-chrome/local').LocalStorageState)
-          .then(decrypted => {
-            if (decrypted) {
-              set(produce((state: AllSlices) => { state.contacts.contacts = decrypted; }));
-            }
-          });
       }
 
       if (changes.activeWalletIndex) {
