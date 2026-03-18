@@ -32,6 +32,39 @@ seed wallets derive zcash keys on-the-fly in the worker. a stored UFVK per seed 
 
 > **open question:** do we want this? a stored UFVK is readable without the password. if the service worker is compromised or a site abuses externally_connectable, it could enumerate balances and transaction history silently. current mnemonic path requires unlock to derive anything.
 
+## v0.3.0 — ed25519 identity system
+
+the wallet IS your identity. ed25519 keypairs derived from seed (or standalone) serve as the authentication and encryption layer for applications.
+
+### identity panel
+- create/manage multiple ed25519 identities per vault
+- per-site identity selection — each origin gets a different pubkey by default
+- sign arbitrary messages (prove ownership to apps)
+- encrypt/decrypt messages to other identities (x25519 DH from ed25519)
+- export pubkeys for apps to verify
+
+### identity cards via memo (ZID protocol)
+shareable contact cards sent inside zcash shielded memos:
+```
+ZID:1:<ed25519_pubkey>:<zcash_unified_address>:<name>
+```
+- fits in 512-byte zcash memo field
+- wallet auto-detects `ZID:` prefix, offers to save as contact
+- private exchange — the card itself is inside the shielded memo
+- recipient gets: name, receiving address, pubkey for encrypted replies
+
+### identity-aware inbox
+- filter inbox by identity (which pubkey received the memo)
+- compose replies from the identity that received the message
+- encrypt memo body with recipient's ed25519 pubkey (x25519 ECDH + xchacha20poly1305)
+- cross-chain: same identity works on zcash memos and penumbra memos
+
+### site authentication
+- sites request identity via `externally_connectable` message
+- user picks which identity to present (default: unique per origin)
+- site verifies via ed25519 signature challenge
+- replaces OAuth/passwords for privacy-aware applications
+
 ## stealth mode — opt-in provider injection
 
 currently `injected-penumbra-global.js` runs on every page via content_scripts. this announces "a penumbra wallet is installed" to every site — a fingerprinting signal. the actual FVK/data is gated behind connected sites approval, but the presence alone is metadata.
