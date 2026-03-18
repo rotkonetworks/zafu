@@ -329,6 +329,7 @@ const ZcashContent = ({
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (detail?.network !== 'zcash') return;
+      if (detail.walletId && detail.walletId !== walletId) return;
       fetchBalance();
     };
 

@@ -9,6 +9,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ZidecarClient, type SyncStatus, type ChainTip } from '../state/keyring/zidecar-client';
 import { useStore } from '../state';
+import { selectEffectiveKeyInfo } from '../state/keyring';
 
 const DEFAULT_ZIDECAR_URL = 'https://zcash.rotko.net';
 const POLL_INTERVAL = 10_000;
@@ -28,14 +29,24 @@ export interface ZcashSyncState {
 
 export function useZcashSyncStatus(): ZcashSyncState {
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || DEFAULT_ZIDECAR_URL;
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  const activeWalletId = selectedKeyInfo?.id;
   const [workerSyncHeight, setWorkerSyncHeight] = useState(0);
   const [workerChainHeight, setWorkerChainHeight] = useState(0);
 
-  // listen for worker sync-progress events
+  // reset on wallet switch
+  useEffect(() => {
+    setWorkerSyncHeight(0);
+    setWorkerChainHeight(0);
+  }, [activeWalletId]);
+
+  // listen for worker sync-progress events — filter by active wallet
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (detail?.network !== 'zcash') return;
+      // only accept events for the currently active wallet
+      if (activeWalletId && detail.walletId && detail.walletId !== activeWalletId) return;
       if (typeof detail.currentHeight === 'number') {
         setWorkerSyncHeight(detail.currentHeight);
       }
@@ -46,7 +57,7 @@ export function useZcashSyncStatus(): ZcashSyncState {
 
     window.addEventListener('network-sync-progress', handler);
     return () => window.removeEventListener('network-sync-progress', handler);
-  }, []);
+  }, [activeWalletId]);
 
   // also try to read persisted sync height on mount
   useEffect(() => {
