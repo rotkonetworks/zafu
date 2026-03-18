@@ -241,7 +241,7 @@ function boot() {
           break;
         case 'poker': {
           const room = args[0] || 'new';
-          const pokerUrl = `https://zk.bot/poker?room=${room}`;
+          const pokerUrl = `https://poker.zk.bot/${room}`;
           addMsg('zitadel', `opening poker table${args[0] ? ' ' + args[0] : ''}...`, true);
           window.open(pokerUrl, '_blank');
         }
