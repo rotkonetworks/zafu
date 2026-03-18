@@ -69,9 +69,11 @@ export async function writeEncrypted(
 }
 
 /** keys that must be encrypted at rest */
+/** keys encrypted at rest — only keys read exclusively via zustand store.
+ *  wallets/zcashWallets excluded: read by service worker, context getters,
+ *  onboard.ts outside the store. their FVKs are protected by the vault's
+ *  encryptedData (requires password to derive spending keys). */
 const ENCRYPTED_KEYS = new Set<string>([
-  'wallets',
-  'zcashWallets',
   'contacts',
   'recentAddresses',
   'dismissedContactSuggestions',
