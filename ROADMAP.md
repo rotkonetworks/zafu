@@ -27,6 +27,11 @@ vault types `ledger`, `trezor`, `keystone` are defined in `KeyType` but not impl
 ## per-wallet penumbra sync
 `fullSyncHeight` is currently a global key overwritten by whichever wallet is syncing. should be per-wallet (`fullSyncHeight_${walletId}`) so switching wallets shows correct sync state without waiting for resync.
 
+## zcash unified full viewing key (UFVK) for seed wallets
+seed wallets derive zcash keys on-the-fly in the worker. a stored UFVK per seed vault would enable watch-only balance display without unlocking, and consistent wallet record linking.
+
+> **open question:** do we want this? a stored UFVK is readable without the password. if the service worker is compromised or a site abuses externally_connectable, it could enumerate balances and transaction history silently. current mnemonic path requires unlock to derive anything.
+
 ## proving performance — SIMD field arithmetic + precomputed MSM
 
 current: ~12-15s halo2 proving with multithreaded rayon + WASM SIMD128. the bottleneck is multi-scalar multiplication (MSM) on pasta curves.
