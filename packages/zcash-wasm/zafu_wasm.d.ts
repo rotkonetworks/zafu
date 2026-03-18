@@ -237,6 +237,66 @@ export function derive_transparent_privkey(seed_phrase: string, account: number,
 export function frontier_tree_size(tree_state_hex: string): bigint;
 
 /**
+ * coordinator: aggregate signed shares into final signature
+ */
+export function frost_aggregate_shares(public_key_package_hex: string, message_hex: string, commitments_json: string, shares_json: string, randomizer_hex: string): string;
+
+/**
+ * trusted dealer: generate key packages for all participants
+ */
+export function frost_dealer_keygen(min_signers: number, max_signers: number): string;
+
+/**
+ * derive the multisig wallet's Orchard address (raw 43-byte address, hex-encoded)
+ */
+export function frost_derive_address_raw(public_key_package_hex: string, diversifier_index: number): string;
+
+/**
+ * DKG round 1: generate ephemeral identity + signed commitment
+ */
+export function frost_dkg_part1(max_signers: number, min_signers: number): string;
+
+/**
+ * DKG round 2: process signed round1 broadcasts, produce per-peer packages
+ */
+export function frost_dkg_part2(secret_hex: string, peer_broadcasts_json: string): string;
+
+/**
+ * DKG round 3: finalize — returns key package + public key package
+ */
+export function frost_dkg_part3(secret_hex: string, round1_broadcasts_json: string, round2_packages_json: string): string;
+
+/**
+ * coordinator: generate signed randomizer
+ */
+export function frost_generate_randomizer(ephemeral_seed_hex: string, message_hex: string, commitments_json: string): string;
+
+/**
+ * signing round 1: generate nonces + signed commitments
+ */
+export function frost_sign_round1(ephemeral_seed_hex: string, key_package_hex: string): string;
+
+/**
+ * signing round 2: produce signed signature share
+ */
+export function frost_sign_round2(ephemeral_seed_hex: string, key_package_hex: string, nonces_hex: string, message_hex: string, commitments_json: string, randomizer_hex: string): string;
+
+/**
+ * coordinator: aggregate shares into Orchard SpendAuth signature (64 bytes hex)
+ */
+export function frost_spend_aggregate(public_key_package_hex: string, sighash_hex: string, alpha_hex: string, commitments_json: string, shares_json: string): string;
+
+/**
+ * sighash-bound round 2: produce FROST share for one Orchard action
+ */
+export function frost_spend_sign_round2(key_package_hex: string, nonces_hex: string, sighash_hex: string, alpha_hex: string, commitments_json: string): string;
+
+/**
+ * authenticated variant: wraps share in SignedMessage for relay transport
+ */
+export function frost_spend_sign_round2_signed(ephemeral_seed_hex: string, key_package_hex: string, nonces_hex: string, sighash_hex: string, alpha_hex: string, commitments_json: string): string;
+
+/**
  * Generate a new 24-word seed phrase
  */
 export function generate_seed_phrase(): string;
@@ -352,6 +412,18 @@ export interface InitOutput {
     readonly watchonlywallet_scan_actions_parallel: (a: number, b: number, c: number) => [number, number, number];
     readonly init: () => void;
     readonly num_threads: () => number;
+    readonly frost_aggregate_shares: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number, number];
+    readonly frost_dealer_keygen: (a: number, b: number) => [number, number, number, number];
+    readonly frost_derive_address_raw: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly frost_dkg_part1: (a: number, b: number) => [number, number, number, number];
+    readonly frost_dkg_part2: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+    readonly frost_dkg_part3: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly frost_generate_randomizer: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly frost_sign_round1: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+    readonly frost_sign_round2: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number, number];
+    readonly frost_spend_aggregate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number, number];
+    readonly frost_spend_sign_round2: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number, number];
+    readonly frost_spend_sign_round2_signed: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number, number];
     readonly rustsecp256k1_v0_10_0_default_error_callback_fn: (a: number, b: number) => void;
     readonly rustsecp256k1_v0_10_0_default_illegal_callback_fn: (a: number, b: number) => void;
     readonly rustsecp256k1_v0_10_0_context_destroy: (a: number) => void;
