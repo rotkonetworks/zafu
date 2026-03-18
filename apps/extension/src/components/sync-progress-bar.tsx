@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { cn } from '@repo/ui/lib/utils';
+import { ZCASH_ORCHARD_ACTIVATION } from '../config/networks';
 
 interface SyncProgressBarProps {
   percent: number;
@@ -37,7 +38,7 @@ export const SyncProgressBar = ({
 
   const submitRescan = () => {
     const h = parseInt(input, 10);
-    if (!isNaN(h) && h >= 0 && onRescan) {
+    if (!isNaN(h) && h >= ZCASH_ORCHARD_ACTIVATION && onRescan) {
       onRescan(h);
     }
     setEditing(false);
@@ -75,7 +76,7 @@ export const SyncProgressBar = ({
               <span className='flex items-center gap-1'>
                 <input
                   type='number'
-                  min={0}
+                  min={ZCASH_ORCHARD_ACTIVATION}
                   value={input}
                   onChange={e => setInput(e.target.value)}
                   placeholder={String(startBlock)}
