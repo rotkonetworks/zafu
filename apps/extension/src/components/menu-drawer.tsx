@@ -150,7 +150,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
             <a href='https://github.com/rotkonetworks/zafu' target='_blank' rel='noopener noreferrer' className='hover:text-foreground'>github</a>
             <a href='https://zigner.rotko.net' target='_blank' rel='noopener noreferrer' className='hover:text-foreground'>zigner</a>
           </div>
-          <p className='text-[9px] text-muted-foreground/50 mt-1'>MIT license — rotko networks</p>
+          <p className='text-[9px] text-muted-foreground/50 mt-1'>GPL-3.0 — rotko networks</p>
         </div>
       </div>
     </>
