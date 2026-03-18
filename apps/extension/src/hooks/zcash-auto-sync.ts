@@ -25,13 +25,12 @@ import { ZCASH_ORCHARD_ACTIVATION } from '../config/networks';
  *  never returns below orchard activation — no point scanning pre-orchard blocks. */
 async function resolveBirthday(walletId: string, zidecarUrl: string): Promise<number> {
   const birthdayKey = `zcashBirthday_${walletId}`;
-  const stored = await chrome.storage.local.get([birthdayKey, 'zcashSyncHeight']);
-  if (stored['zcashSyncHeight'] && stored['zcashSyncHeight'] !== 0) {
-    return Math.max(ZCASH_ORCHARD_ACTIVATION, stored['zcashSyncHeight'] as number);
-  }
-  if (stored[birthdayKey]) {
+  const stored = await chrome.storage.local.get(birthdayKey);
+  // per-wallet birthday takes priority (user-set or auto-detected)
+  if (stored[birthdayKey] && typeof stored[birthdayKey] === 'number') {
     return Math.max(ZCASH_ORCHARD_ACTIVATION, stored[birthdayKey] as number);
   }
+  // no birthday set — default to near chain tip (new wallet = recent)
   try {
     const { ZidecarClient } = await import('../state/keyring/zidecar-client');
     const tip = await new ZidecarClient(zidecarUrl).getTip();
