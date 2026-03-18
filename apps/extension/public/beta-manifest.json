@@ -1,9 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "zafu BETA",
-  "version": "0.1.0",
-  "description": "beta testing - multi-chain privacy wallet",
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2C3cc89NGTgKUPm4zu77Ah2ObjlQU+D4HCwZkMyRRPaVa0N6AmFfwMdkzf5Vas3Zlvw/55QVlsr773LvstWdysdr647hNPl21mUyLREyW5wsHShh8ZdgJdilVbpF406TtOobvbAOQIRsF5ypLsFhz7xP7uroNs9nDTv2KtVjQXFHjjUZV0dgJDuVWf166UCDdLXCO/Pq9avfOBYtSqhPvzy6oXDZ/MnxKHcqsSYC9ILUWsiH0jKVmhfrjnisFcgz5eIzHCfkdQyKfTCBGHPjDMKvSuzoZmh8IYsiuyuRupKcjb1J2qqS4+hTrkvG57bIe02y//w5C2dsKF/c3K56xQIDAQAB",
+  "name": "Zafu Wallet Beta",
+  "short_name": "Zafu Beta",
+  "version": "0.2.0",
+  "description": "BETA — Privacy wallet for Zcash shielded transactions and Penumbra DeFi. Air-gapped cold signing, FROST multisig, watch-only mode. Client-side proving.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzpxFq+skBCPK5rCIenZfZ9ijPDyar61d3S4DzyxHBXdviLYtVvrK1byXXnCpUwyaYrR9N9QjNCCPT1lEOS5HBUViCI/K1tsJvlWrm0r8+wipNtwb/tVoo+AVUuhyaR4pkm2ckQnYWN10PNhf24Gw8QkjSNNk/oVUbn4gqRcQ4V1WN/E3RiINjaBz0TnDK/8bxqo0z3k5Z7W1YGzA/tB9ZSSTw3QQLUwXlrJbbkqcnNhE91Q9d3dO1ZSao9Qcheg2WFR39nGI7nYnmFEhUDpo8+C56/zUzWAoh08b4lX0IonQy3KOACUkbM10C8VvPuxnKM8IR1d/RWelj1Cul4oqZwIDAQAB",
   "minimum_chrome_version": "119",
   "action": {
     "default_popup": "popup.html"
