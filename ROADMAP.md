@@ -29,3 +29,11 @@ vault types `ledger`, `trezor`, `keystone` are defined in `KeyType` but not impl
 
 ## zcash unified full viewing key (UFVK) for seed wallets
 seed wallets derive zcash keys on-the-fly in the worker. a stored UFVK per seed vault would enable watch-only balance display without unlocking, and consistent wallet record linking.
+
+## proving performance — SIMD field arithmetic + precomputed MSM
+
+current: ~12-15s halo2 proving with multithreaded rayon + WASM SIMD128. the bottleneck is multi-scalar multiplication (MSM) on pasta curves.
+
+- **SIMD-optimized pasta field arithmetic** — fork `pasta_curves` crate, add WASM SIMD128 intrinsics for 255-bit field multiplication. pasta fields use 4x64-bit limbs; SIMD128 gives 2x64-bit lanes → ~1.5-2x speedup on field ops. requires `core::arch::wasm32` SIMD intrinsics (i64x2_mul, i64x2_add, etc).
+- **precomputed MSM tables** — the halo2 prover uses the same generator points (circuit-specific) every time. precompute windowed multiplication tables and store in WASM memory (~8MB per circuit). skip table setup on each proof → ~20-30% speedup on MSM phase.
+- combined: potential ~2-3x total proving speedup (target: <5s per transaction)
