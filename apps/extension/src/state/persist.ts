@@ -24,7 +24,9 @@ type Persist = (f: StateCreator<AllSlices>) => StateCreator<AllSlices>;
 
 export const customPersistImpl: Persist = f => (set, get, store) => {
   void (async function () {
-    // Part 1: load non-encrypted values (indices, settings, endpoints)
+    // Part 1: load non-encrypted values + wallets (wallets are plaintext, needed before keyRing.init)
+    const wallets = await localExtStorage.get('wallets');
+    const zcashWallets = await localExtStorage.get('zcashWallets');
     const activeZcashIndex = await localExtStorage.get('activeZcashIndex');
     const activeWalletIndex = await localExtStorage.get('activeWalletIndex');
     const grpcEndpoint = await localExtStorage.get('grpcEndpoint');
@@ -35,6 +37,8 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
 
     set(
       produce((state: AllSlices) => {
+        state.wallets.all = wallets.map(w => ({ ...w, vaultId: w.vaultId ?? '' })) as typeof state.wallets.all;
+        state.wallets.zcashWallets = (zcashWallets ?? []).map(w => ({ ...w, vaultId: w.vaultId ?? '' })) as typeof state.wallets.zcashWallets;
         state.wallets.activeZcashIndex = activeZcashIndex ?? 0;
         state.wallets.activeIndex = activeWalletIndex ?? 0;
         state.network.grpcEndpoint = grpcEndpoint;
@@ -88,8 +92,21 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
 
     // Part 2: when chrome.storage changes sync select fields to store
     localExtStorage.addListener(changes => {
-      // encrypted keys: re-read through decryption layer on any change
-      if (changes.wallets || changes.zcashWallets || changes.contacts || changes.knownSites || changes.messages) {
+      // wallets: plaintext, sync directly
+      if (changes.wallets) {
+        const w = changes.wallets.newValue;
+        set(produce((state: AllSlices) => {
+          state.wallets.all = (w ?? []).map(w => ({ ...w, vaultId: w.vaultId ?? '' })) as typeof state.wallets.all;
+        }));
+      }
+      if (changes.zcashWallets) {
+        const w = changes.zcashWallets.newValue;
+        set(produce((state: AllSlices) => {
+          state.wallets.zcashWallets = (w ?? []).map(w => ({ ...w, vaultId: w.vaultId ?? '' })) as typeof state.wallets.zcashWallets;
+        }));
+      }
+      // encrypted keys: re-read through decryption layer
+      if (changes.contacts || changes.knownSites || changes.messages) {
         void hydrateEncryptedData();
       }
 
