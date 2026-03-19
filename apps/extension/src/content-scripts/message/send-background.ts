@@ -1,11 +1,11 @@
 import { PenumbraRequestFailure } from '@penumbra-zone/client/error';
-import type { ZignerConnection } from './zigner-connection';
+import type { ZafuConnection } from './zafu-connection';
 
 export const sendBackground = async (
-  request: ZignerConnection,
+  request: ZafuConnection,
 ): Promise<null | PenumbraRequestFailure> => {
   try {
-    const response = await chrome.runtime.sendMessage<ZignerConnection, unknown>(request);
+    const response = await chrome.runtime.sendMessage<ZafuConnection, unknown>(request);
 
     switch (response) {
       case undefined:
@@ -37,7 +37,7 @@ export function listenBackground<R = never>(
     respond: (response: R) => void,
   ): boolean => {
     // In dev mode, use runtime ID (Chrome assigns dynamic ID for unpacked extensions)
-    if (sender.id !== (globalThis.__DEV__ ? chrome.runtime.id : ZIGNER)) {
+    if (sender.id !== (globalThis.__DEV__ ? chrome.runtime.id : ZAFU)) {
       return false;
     }
 

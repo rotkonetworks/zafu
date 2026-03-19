@@ -1,14 +1,14 @@
 import { PenumbraRequestFailure } from '@penumbra-zone/client/error';
 import { CRSessionClient } from '@penumbra-zone/transport-chrome/session-client';
-import { isZignerConnection } from './message/zigner-connection';
-import { isZignerControl, ZignerControl } from './message/zigner-control';
-import { ZignerMessageEvent, unwrapZignerMessageEvent } from './message/zigner-message-event';
+import { isZafuConnection } from './message/zafu-connection';
+import { isZafuControl, ZafuControl } from './message/zafu-control';
+import { ZafuMessageEvent, unwrapZafuMessageEvent } from './message/zafu-message-event';
 import { listenBackground, sendBackground } from './message/send-background';
 import { listenWindow, sendWindow } from './message/send-window';
 
-const zignerDocumentListener = (ev: ZignerMessageEvent): void => {
-  const request = unwrapZignerMessageEvent(ev);
-  if (isZignerConnection(request)) {
+const zafuDocumentListener = (ev: ZafuMessageEvent): void => {
+  const request = unwrapZafuMessageEvent(ev);
+  if (isZafuConnection(request)) {
     ev.stopImmediatePropagation();
     void sendBackground(request).then(response => {
       if (response != null) {
@@ -18,23 +18,23 @@ const zignerDocumentListener = (ev: ZignerMessageEvent): void => {
   }
 };
 
-const zignerExtensionListener = (message: unknown, responder: (response: null) => void): boolean => {
-  if (!isZignerControl(message)) {
+const zafuExtensionListener = (message: unknown, responder: (response: null) => void): boolean => {
+  if (!isZafuControl(message)) {
     return false;
   }
 
-  // In dev mode, use runtime ID (Chrome assigns dynamic ID for unpacked extensions)
-  const extensionId = globalThis.__DEV__ ? chrome.runtime.id : ZIGNER;
+  // ZAFU is replaced at build time with the extension ID string
+  const extensionId = ZAFU;
   switch (message) {
-    case ZignerControl.Init:
+    case ZafuControl.Init:
       sendWindow<MessagePort>(CRSessionClient.init(extensionId));
       break;
-    case ZignerControl.End:
+    case ZafuControl.End:
       CRSessionClient.end(extensionId);
-      sendWindow<ZignerControl>(ZignerControl.End);
+      sendWindow<ZafuControl>(ZafuControl.End);
       break;
-    case ZignerControl.Preconnect:
-      sendWindow<ZignerControl>(ZignerControl.Preconnect);
+    case ZafuControl.Preconnect:
+      sendWindow<ZafuControl>(ZafuControl.Preconnect);
       break;
   }
   responder(null);
@@ -42,5 +42,5 @@ const zignerExtensionListener = (message: unknown, responder: (response: null) =
   return true;
 };
 
-listenWindow(undefined, zignerDocumentListener);
-listenBackground<null>(undefined, zignerExtensionListener);
+listenWindow(undefined, zafuDocumentListener);
+listenBackground<null>(undefined, zafuExtensionListener);

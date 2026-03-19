@@ -1,9 +1,9 @@
-import { isZignerMessageEvent, type ZignerMessageEvent } from './zigner-message-event';
+import { isZafuMessageEvent, type ZafuMessageEvent } from './zafu-message-event';
 
 /** @note not private. could be observed by anything in this window. */
 export const sendWindow = <P = never>(contents: NoInfer<P>) =>
   window.postMessage(
-    { [ZIGNER]: contents } satisfies Record<typeof ZIGNER, P>,
+    { [ZAFU]: contents } satisfies Record<typeof ZAFU, P>,
     '/', // restrict to the same origin
     contents instanceof MessagePort ? [contents] : [],
   );
@@ -11,13 +11,13 @@ export const sendWindow = <P = never>(contents: NoInfer<P>) =>
 /** @note not private. could be activated by anything in this window. */
 export const listenWindow = (
   signal: AbortSignal | undefined,
-  listener: (pev: ZignerMessageEvent) => void,
+  listener: (pev: ZafuMessageEvent) => void,
 ) =>
   window.addEventListener(
     'message',
     ev => {
       if (
-        isZignerMessageEvent(ev) && // only handle zigner messages
+        isZafuMessageEvent(ev) && // only handle zafu messages
         ev.origin === window.origin && // from this origin
         ev.source === window // from this window
       ) {

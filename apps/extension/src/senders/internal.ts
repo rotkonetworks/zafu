@@ -1,7 +1,7 @@
 // In dev mode, use runtime ID (Chrome assigns dynamic ID for unpacked extensions)
-// In prod, use the hardcoded ZIGNER constant
-const getExtensionId = () => (globalThis.__DEV__ ? chrome.runtime.id : ZIGNER);
-const getExtensionOrigin = () => (globalThis.__DEV__ ? `chrome-extension://${chrome.runtime.id}` : ZIGNER_ORIGIN);
+// In prod, use the hardcoded ZAFU constant
+const getExtensionId = () => (globalThis.__DEV__ ? chrome.runtime.id : ZAFU);
+const getExtensionOrigin = () => (globalThis.__DEV__ ? `chrome-extension://${chrome.runtime.id}` : ZAFU_ORIGIN);
 
 export type ValidInternalSender = chrome.runtime.MessageSender & {
   id: string;

@@ -24,9 +24,9 @@ import { createPenumbraStateEvent } from '@penumbra-zone/client/event';
 import type { PenumbraProvider } from '@penumbra-zone/client/provider';
 import { PenumbraState } from '@penumbra-zone/client/state';
 import { PenumbraSymbol } from '@penumbra-zone/client/symbol';
-import { ZignerConnection } from './message/zigner-connection';
-import { ZignerControl } from './message/zigner-control';
-import { ZignerMessageEvent, unwrapZignerMessageEvent } from './message/zigner-message-event';
+import { ZafuConnection } from './message/zafu-connection';
+import { ZafuControl } from './message/zafu-control';
+import { ZafuMessageEvent, unwrapZafuMessageEvent } from './message/zafu-message-event';
 import { listenWindow, sendWindow } from './message/send-window';
 
 const isPenumbraRequestFailure = (data: unknown): data is PenumbraRequestFailure =>
@@ -42,7 +42,7 @@ const prerenderComplete = new Promise<void>(resolve =>
 // Guard: chrome.runtime.id can be undefined if service worker hasn't started
 const extensionOrigin = globalThis.__DEV__
   ? (chrome.runtime?.id ? `chrome-extension://${chrome.runtime.id}` : '')
-  : ZIGNER_ORIGIN;
+  : ZAFU_ORIGIN;
 
 // bail if we can't determine our origin (avoids "Cannot redefine property: chrome-extension://undefined")
 if (!extensionOrigin || extensionOrigin.endsWith('undefined')) {
@@ -50,11 +50,11 @@ if (!extensionOrigin || extensionOrigin.endsWith('undefined')) {
   console.debug('[zafu] skipping penumbra provider injection: extension origin unavailable');
 } else {
 
-class ZignerInjection {
-  private static singleton?: ZignerInjection = new ZignerInjection();
+class ZafuInjection {
+  private static singleton?: ZafuInjection = new ZafuInjection();
 
   public static get penumbra() {
-    return new ZignerInjection().injection;
+    return new ZafuInjection().injection;
   }
 
   private presentState: PenumbraState = PenumbraState.Disconnected;
@@ -72,27 +72,27 @@ class ZignerInjection {
   });
 
   private constructor() {
-    if (ZignerInjection.singleton) {
-      return ZignerInjection.singleton;
+    if (ZafuInjection.singleton) {
+      return ZafuInjection.singleton;
     }
 
     // ambient end listener
-    const ambientEndListener = (ev: ZignerMessageEvent): void => {
-      const content = unwrapZignerMessageEvent(ev);
-      if (content === ZignerControl.End) {
+    const ambientEndListener = (ev: ZafuMessageEvent): void => {
+      const content = unwrapZafuMessageEvent(ev);
+      if (content === ZafuControl.End) {
         this.setState(PenumbraState.Disconnected);
       }
     };
     listenWindow(undefined, ambientEndListener);
 
     const listenAc = new AbortController();
-    const preconnectListener = (ev: ZignerMessageEvent): void => {
-      const content = unwrapZignerMessageEvent(ev);
-      if (content !== ZignerConnection.Load) {
+    const preconnectListener = (ev: ZafuMessageEvent): void => {
+      const content = unwrapZafuMessageEvent(ev);
+      if (content !== ZafuConnection.Load) {
         // anything other than our own announcement will remove the listener
         listenAc.abort();
 
-        if (content === ZignerControl.Preconnect) {
+        if (content === ZafuControl.Preconnect) {
           ev.stopImmediatePropagation();
           this.setState(PenumbraState.Connected);
         } else if (globalThis.__DEV__) {
@@ -103,7 +103,7 @@ class ZignerInjection {
     listenWindow(listenAc.signal, preconnectListener);
 
     // announce load (does not need to wait for prerendering)
-    sendWindow<ZignerConnection>(ZignerConnection.Load);
+    sendWindow<ZafuConnection>(ZafuConnection.Load);
   }
 
   private setState(state: PenumbraState) {
@@ -118,13 +118,13 @@ class ZignerInjection {
       this.setState(PenumbraState.Pending);
     }
     const attempt = this.listenPortMessage();
-    void prerenderComplete.then(() => sendWindow<ZignerConnection>(ZignerConnection.Connect));
+    void prerenderComplete.then(() => sendWindow<ZafuConnection>(ZafuConnection.Connect));
     return attempt;
   }
 
   private postDisconnectRequest() {
     const attempt = this.listenEndMessage();
-    void prerenderComplete.then(() => sendWindow<ZignerConnection>(ZignerConnection.Disconnect));
+    void prerenderComplete.then(() => sendWindow<ZafuConnection>(ZafuConnection.Disconnect));
     return attempt;
   }
 
@@ -132,8 +132,8 @@ class ZignerInjection {
     const connection = Promise.withResolvers<MessagePort>();
 
     const listenAc = new AbortController();
-    const portListener = (ev: ZignerMessageEvent): void => {
-      const content = unwrapZignerMessageEvent(ev);
+    const portListener = (ev: ZafuMessageEvent): void => {
+      const content = unwrapZafuMessageEvent(ev);
       if (content instanceof MessagePort) {
         ev.stopImmediatePropagation();
         connection.resolve(content);
@@ -156,9 +156,9 @@ class ZignerInjection {
     const disconnection = Promise.withResolvers<void>();
 
     const listenAc = new AbortController();
-    const endListener = (ev: ZignerMessageEvent): void => {
-      const content = unwrapZignerMessageEvent(ev);
-      if (content === ZignerControl.End) {
+    const endListener = (ev: ZafuMessageEvent): void => {
+      const content = unwrapZafuMessageEvent(ev);
+      if (content === ZafuControl.End) {
         ev.stopImmediatePropagation();
         disconnection.resolve();
       } else if (isPenumbraRequestFailure(content)) {
@@ -177,14 +177,14 @@ class ZignerInjection {
   }
 }
 
-// inject zigner
+// inject zafu
 Object.defineProperty(
   window[PenumbraSymbol] ??
     // create the global if not present
     Object.defineProperty(window, PenumbraSymbol, { value: {}, writable: false })[PenumbraSymbol],
   extensionOrigin,
   {
-    value: ZignerInjection.penumbra,
+    value: ZafuInjection.penumbra,
     writable: false,
     enumerable: true,
   },

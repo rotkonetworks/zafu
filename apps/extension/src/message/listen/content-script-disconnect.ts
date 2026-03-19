@@ -1,6 +1,6 @@
 import { PenumbraRequestFailure } from '@penumbra-zone/client/error';
 import { CRSessionManager } from '@penumbra-zone/transport-chrome/session-manager';
-import { ZignerConnection } from '../../content-scripts/message/zigner-connection';
+import { ZafuConnection } from '../../content-scripts/message/zafu-connection';
 import { alreadyApprovedSender } from '../../senders/approve';
 import { isValidExternalSender, ValidExternalSender } from '../../senders/external';
 import { revokeOrigin } from '../../senders/revoke';
@@ -12,7 +12,7 @@ export const contentScriptDisconnectListener = (
   // responds with null or an enumerated failure
   respond: (r: null | PenumbraRequestFailure) => void,
 ): boolean => {
-  if (req !== ZignerConnection.Disconnect) {
+  if (req !== ZafuConnection.Disconnect) {
     return false;
   }
 

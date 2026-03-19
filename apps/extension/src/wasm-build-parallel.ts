@@ -24,7 +24,7 @@ import actionKeys from '@penumbra-zone/keys';
 const keyFileNames: Partial<Record<string, URL>> = Object.fromEntries(
   Object.entries(actionKeys).map(([action, keyFile]) => [
     action,
-    new URL('keys/' + keyFile, globalThis.__DEV__ ? self.location.origin : ZIGNER_ORIGIN),
+    new URL('keys/' + keyFile, globalThis.__DEV__ ? self.location.origin : ZAFU_ORIGIN),
   ]),
 );
 

@@ -1,5 +1,5 @@
-import { ZignerConnection } from '../../content-scripts/message/zigner-connection';
-import { ZignerControl } from '../../content-scripts/message/zigner-control';
+import { ZafuConnection } from '../../content-scripts/message/zafu-connection';
+import { ZafuControl } from '../../content-scripts/message/zafu-control';
 import { alreadyApprovedSender } from '../../senders/approve';
 import {
   isPrerenderingExternalSender,
@@ -16,7 +16,7 @@ export const contentScriptLoadListener = (
   // responds with null
   respond: (r: null) => void,
 ): boolean => {
-  if (req !== ZignerConnection.Load) {
+  if (req !== ZafuConnection.Load) {
     return false;
   }
 
@@ -32,7 +32,7 @@ const handle = (sender: ValidExternalSender | PrerenderingExternalSender) =>
   alreadyApprovedSender(sender).then(hasApproval => {
     if (hasApproval) {
       // preconnect only the specific document
-      void sendTab(sender, ZignerControl.Preconnect);
+      void sendTab(sender, ZafuControl.Preconnect);
     }
 
     // handler is done

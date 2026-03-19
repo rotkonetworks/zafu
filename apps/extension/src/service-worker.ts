@@ -222,13 +222,13 @@ const handler = await backOff(() => initHandler(), {
   numOfAttempts: Infinity,
   maxDelay: 20_000, // 20 seconds
   retry: (e, attemptNumber) => {
-    console.log("zigner couldn't start wallet services", attemptNumber, e);
+    console.log("zafu couldn't start wallet services", attemptNumber, e);
     return true;
   },
 });
 
 // In dev mode, use runtime ID (Chrome assigns dynamic ID for unpacked extensions)
-CRSessionManager.init(globalThis.__DEV__ ? chrome.runtime.id : ZIGNER, handler, validateSessionPort);
+CRSessionManager.init(globalThis.__DEV__ ? chrome.runtime.id : ZAFU, handler, validateSessionPort);
 
 // listen for content script activity
 chrome.runtime.onMessage.addListener(contentScriptConnectListener);

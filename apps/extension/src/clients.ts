@@ -10,7 +10,7 @@ let sessionPort: MessagePort | undefined;
 const getOrCreatePort = (): Promise<MessagePort> => {
   if (!sessionPort) {
     // In dev mode, use runtime ID (Chrome assigns dynamic ID for unpacked extensions)
-    const extensionId = globalThis.__DEV__ ? chrome.runtime.id : ZIGNER;
+    const extensionId = globalThis.__DEV__ ? chrome.runtime.id : ZAFU;
     sessionPort = CRSessionClient.init(extensionId);
   }
   return Promise.resolve(sessionPort);
