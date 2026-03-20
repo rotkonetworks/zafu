@@ -100,14 +100,14 @@ async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
     case 'build_signed_spend':
       result = wasm['build_signed_spend_transaction'](
         a[0], a[1], a[2], BigInt(a[3] as string), BigInt(a[4] as string),
-        a[5], a[6], a[7], a[8],
+        a[5], a[6], a[7], a[8], a[9] ?? null,
       );
       break;
 
     case 'build_unsigned':
       result = wasm['build_unsigned_transaction'](
         a[0], a[1], a[2], BigInt(a[3] as string), BigInt(a[4] as string),
-        a[5], a[6], a[7], a[8],
+        a[5], a[6], a[7], a[8], a[9] ?? null,
       );
       break;
 

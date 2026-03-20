@@ -89,7 +89,7 @@ interface WasmModule {
     new (fvkBytes: Uint8Array, accountIndex: number, mainnet: boolean): WatchOnlyWallet;
   };
   build_shielding_transaction(utxos_json: string, privkey_hex: string, recipient: string, amount: bigint, fee: bigint, anchor_height: number, mainnet: boolean): string;
-  build_unsigned_transaction(ufvk_str: string, notes_json: unknown, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: unknown, account_index: number, mainnet: boolean): unknown;
+  build_unsigned_transaction(ufvk_str: string, notes_json: unknown, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: unknown, account_index: number, mainnet: boolean, memo_hex?: string | null): unknown;
   build_signed_spend_transaction(seed_phrase: string, notes_json: unknown, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: unknown, account_index: number, mainnet: boolean): string;
   complete_transaction(unsigned_tx_hex: string, signatures: unknown, spend_indices: unknown): string;
   build_unsigned_shielding_transaction(utxos_json: string, recipient: string, amount: bigint, fee: bigint, anchor_height: number, mainnet: boolean): string;
@@ -1789,6 +1789,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 sendPayload.mnemonic, notesJson, sendPayload.recipient,
                 amountZat.toString(), fee.toString(), anchorHex,
                 merklePathsForWasm, sendPayload.accountIndex, sendPayload.mainnet,
+                sendPayload.memo || null,
               ],
             }) as string;
           } catch (e) {
@@ -1859,6 +1860,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             sendPayload.ufvk, notesForWasm, sendPayload.recipient,
             amountZat.toString(), fee.toString(), anchorHex,
             pathsForWasm, sendPayload.accountIndex, sendPayload.mainnet,
+            sendPayload.memo || null,
           ],
         });
 
