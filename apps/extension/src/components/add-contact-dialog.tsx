@@ -62,7 +62,7 @@ export function AddContactDialog({
     }
   };
 
-  const existingContacts = contacts.contacts;
+  const existingContacts = contacts.contacts ?? [];
   const canSubmit = mode === 'new' || selectedContact !== null;
 
   return (
