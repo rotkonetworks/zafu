@@ -97,8 +97,13 @@ function MessageRow({
       )}
 
       {/* icon */}
-      <div className='flex h-10 w-10 items-center justify-center rounded-full bg-muted/50'>
-        {message.read ? (
+      <div className={cn(
+        'flex h-10 w-10 items-center justify-center rounded-full',
+        message.asset === 'contact-card' ? 'bg-primary/10' : 'bg-muted/50',
+      )}>
+        {message.asset === 'contact-card' ? (
+          <span className='i-lucide-contact h-5 w-5 text-primary' />
+        ) : message.read ? (
           <span className='i-lucide-mail-open h-5 w-5 text-muted-foreground' />
         ) : (
           <span className='i-lucide-mail h-5 w-5 text-primary' />
@@ -285,9 +290,17 @@ function MessageDetail({
           )}
 
           {/* message body */}
-          <div className='rounded-lg border border-border/40 bg-card p-4'>
-            <p className='text-sm whitespace-pre-wrap'>{message.content}</p>
-          </div>
+          {message.asset === 'contact-card' ? (
+            <ContactCardView
+              message={message}
+              onAddToContacts={onAddToContacts}
+              isInContacts={isInContacts}
+            />
+          ) : (
+            <div className='rounded-lg border border-border/40 bg-card p-4'>
+              <p className='text-sm whitespace-pre-wrap'>{message.content}</p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -305,6 +318,56 @@ function MessageDetail({
             <span className='i-lucide-send h-4 w-4' />
             reply
           </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ContactCardView({
+  message,
+  onAddToContacts,
+  isInContacts,
+}: {
+  message: Message;
+  onAddToContacts?: () => void;
+  isInContacts: boolean;
+}) {
+  // parse name and address from the content (format: "📇 name\naddress")
+  const lines = message.content.split('\n');
+  const name = lines[0]?.replace(/^📇\s*/, '') ?? '';
+  const address = lines.slice(1).join('\n').trim();
+
+  return (
+    <div className='rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3'>
+      <div className='flex items-center gap-2'>
+        <span className='i-lucide-contact h-5 w-5 text-primary' />
+        <span className='text-sm font-medium'>contact card</span>
+      </div>
+
+      <div className='space-y-2'>
+        <div>
+          <span className='text-xs text-muted-foreground'>name</span>
+          <p className='text-sm font-medium'>{name}</p>
+        </div>
+        <div>
+          <span className='text-xs text-muted-foreground'>address</span>
+          <p className='text-xs font-mono break-all text-muted-foreground'>{address}</p>
+        </div>
+      </div>
+
+      {!isInContacts && onAddToContacts ? (
+        <button
+          onClick={onAddToContacts}
+          className='w-full flex items-center justify-center gap-2 rounded-lg bg-zigner-gold py-2.5 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors'
+        >
+          <span className='i-lucide-user-plus h-4 w-4' />
+          save to contacts
+        </button>
+      ) : (
+        <div className='flex items-center gap-1.5 text-xs text-green-400'>
+          <span className='i-lucide-check h-3.5 w-3.5' />
+          already in contacts
         </div>
       )}
     </div>

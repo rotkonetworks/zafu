@@ -28,7 +28,9 @@ import {
   decodeText,
   memoTypeName,
   isStructuredMemo,
+  decodeContactCard,
   type ParsedMemo,
+  type ContactCard,
   MemoType,
   bytesToHex,
 } from '@repo/wallet/networks/zcash/memo-codec';
@@ -55,6 +57,8 @@ export interface InboxMessage {
   complete: boolean;
   /** direction */
   direction: 'incoming' | 'outgoing';
+  /** decoded contact card (only for MemoType.ContactCard) */
+  contactCard?: ContactCard;
 }
 
 /** a conversation = all messages to/from one diversified address */
@@ -119,7 +123,13 @@ export const createInboxSlice = (): SliceCreator<InboxSlice> => (set, get) => ({
         // standalone message
         const body = parsed.type === MemoType.Text
           ? decodeText(parsed.payload)
-          : bytesToHex(parsed.payload);
+          : parsed.type === MemoType.ContactCard
+            ? '' // body unused for contact cards, data lives in contactCard field
+            : bytesToHex(parsed.payload);
+
+        const contactCard = parsed.type === MemoType.ContactCard
+          ? decodeContactCard(parsed.payload) ?? undefined
+          : undefined;
 
         newMessages.push({
           diversifierIndex: raw.diversifierIndex,
@@ -133,6 +143,7 @@ export const createInboxSlice = (): SliceCreator<InboxSlice> => (set, get) => ({
             timestamp: raw.timestamp,
             complete: true,
             direction: raw.isChange ? 'outgoing' : 'incoming',
+            contactCard,
           },
         });
       } else {

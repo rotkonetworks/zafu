@@ -15,7 +15,12 @@ import {
   decryptMemosInWorker,
   type FoundNoteWithMemo,
 } from '../state/keyring/network-worker';
-import { isStructuredMemo } from '@repo/wallet/networks/zcash/memo-codec';
+import {
+  isStructuredMemo,
+  decodeMemo,
+  decodeContactCard,
+  MemoType,
+} from '@repo/wallet/networks/zcash/memo-codec';
 
 const DEFAULT_ZIDECAR_URL = 'https://zcash.rotko.net';
 
@@ -138,6 +143,33 @@ export function useZcashMemos(walletId: string, zidecarUrl: string = DEFAULT_ZID
           });
         if (structuredNotes.length > 0) {
           inbox.ingestMemos(structuredNotes);
+        }
+
+        // surface contact cards as messages so they appear in the inbox UI
+        for (const note of structuredNotes) {
+          const parsed = decodeMemo(note.memo);
+          if (!parsed || parsed.type !== MemoType.ContactCard) continue;
+
+          const card = decodeContactCard(parsed.payload);
+          if (!card) continue;
+
+          const m = results.find(r => r.txId === note.txid);
+          if (!m) continue;
+
+          // store as a message with a recognizable prefix for the UI to detect
+          await messages.addMessage({
+            network: 'zcash',
+            txId: m.txId,
+            blockHeight: m.blockHeight,
+            timestamp: m.timestamp,
+            content: `📇 ${card.name || 'anonymous'}\n${card.address}`,
+            senderAddress: card.address,
+            recipientAddress: '',
+            direction: m.direction as 'sent' | 'received',
+            read: m.direction === 'sent',
+            amount: m.amount,
+            asset: 'contact-card', // tag for UI detection
+          });
         }
       }
 
