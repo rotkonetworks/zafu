@@ -1700,6 +1700,20 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           mnemonic?: string; ufvk?: string;
         };
 
+        // encode memo to hex for WASM:
+        // - if already hex (starts with ff5a = zafu structured memo), pass through
+        // - if plain text, encode as UTF-8 bytes → hex
+        // - if empty, null (WASM uses all-zero memo)
+        let memoHex: string | null = null;
+        if (sendPayload.memo) {
+          if (/^[0-9a-f]+$/i.test(sendPayload.memo) && sendPayload.memo.startsWith('ff5a')) {
+            memoHex = sendPayload.memo;
+          } else {
+            const bytes = new TextEncoder().encode(sendPayload.memo);
+            memoHex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+          }
+        }
+
         const sendStart = performance.now();
         const emitProgress = (step: string, detail?: string) => {
           const elapsed = ((performance.now() - sendStart) / 1000).toFixed(1);
@@ -1789,7 +1803,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 sendPayload.mnemonic, notesJson, sendPayload.recipient,
                 amountZat.toString(), fee.toString(), anchorHex,
                 merklePathsForWasm, sendPayload.accountIndex, sendPayload.mainnet,
-                sendPayload.memo || null,
+                memoHex,
               ],
             }) as string;
           } catch (e) {

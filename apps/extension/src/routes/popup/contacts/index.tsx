@@ -13,6 +13,7 @@ import {
   type ContactNetwork,
   type ContactsExport,
 } from '../../../state/contacts';
+import { encodeContactCard, bytesToHex } from '@repo/wallet/networks/zcash/memo-codec';
 import { cn } from '@repo/ui/lib/utils';
 
 const NETWORK_LABELS: Record<ContactNetwork, string> = {
@@ -288,6 +289,7 @@ function ContactCard({
   onAddAddress,
   onEditAddress,
   onDeleteAddress,
+  onShareCard,
 }: {
   contact: Contact;
   onEditContact: () => void;
@@ -296,6 +298,7 @@ function ContactCard({
   onAddAddress: () => void;
   onEditAddress: (address: ContactAddress) => void;
   onDeleteAddress: (addressId: string) => void;
+  onShareCard?: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -380,15 +383,24 @@ function ContactCard({
             </div>
           )}
 
-          {/* add address button */}
-          <div className='p-2 border-t border-border/40'>
+          {/* actions */}
+          <div className='p-2 border-t border-border/40 flex gap-2'>
             <button
               onClick={onAddAddress}
-              className='flex w-full items-center justify-center gap-1 rounded-lg border border-dashed border-border/40 py-2 text-xs text-muted-foreground hover:border-zigner-gold hover:text-zigner-gold transition-colors'
+              className='flex flex-1 items-center justify-center gap-1 rounded-lg border border-dashed border-border/40 py-2 text-xs text-muted-foreground hover:border-zigner-gold hover:text-zigner-gold transition-colors'
             >
               <span className='i-lucide-plus h-3 w-3' />
               add address
             </button>
+            {onShareCard && (
+              <button
+                onClick={onShareCard}
+                className='flex flex-1 items-center justify-center gap-1 rounded-lg border border-dashed border-border/40 py-2 text-xs text-muted-foreground hover:border-primary hover:text-primary transition-colors'
+              >
+                <span className='i-lucide-send h-3 w-3' />
+                share via zcash
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -679,6 +691,21 @@ export function ContactsPage() {
                 onAddAddress={() => handleAddAddress(contact.id)}
                 onEditAddress={(addr) => handleEditAddress(contact.id, addr)}
                 onDeleteAddress={(addrId) => void handleDeleteAddress(contact.id, addrId)}
+                onShareCard={(() => {
+                  const zcashAddr = contact.addresses.find(a => a.network === 'zcash');
+                  if (!zcashAddr) return undefined;
+                  return () => {
+                    const memoBytes = encodeContactCard({
+                      name: contact.name,
+                      address: zcashAddr.address,
+                      flags: 0,
+                    });
+                    const hex = bytesToHex(memoBytes);
+                    navigate(PopupPath.SEND, {
+                      state: { prefillMemo: hex, network: 'zcash' },
+                    });
+                  };
+                })()}
               />
             ))}
           </div>
