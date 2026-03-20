@@ -57,9 +57,11 @@ export const onboardWallet = async (): Promise<WalletJson> => {
   }
 
   return new Promise(resolve => {
-    const storageListener: ChromeStorageListener<LocalStorageState> = changes => {
-      const wallets = changes.wallets?.newValue;
-      const initialWallet = wallets?.[0];
+    const storageListener: ChromeStorageListener<LocalStorageState> = async changes => {
+      if (!changes.wallets?.newValue) return;
+      // wallets may be encrypted — decrypt before reading
+      const wallets = await decryptWallets(changes.wallets.newValue);
+      const initialWallet = wallets[0];
       if (initialWallet) {
         resolve({ ...initialWallet, vaultId: initialWallet.vaultId ?? '' } as WalletJson);
         localExtStorage.removeListener(storageListener);
