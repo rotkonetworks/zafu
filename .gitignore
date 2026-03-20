@@ -71,3 +71,4 @@ scripts/private
 # nix
 /result
 *.zip
+.claude/
