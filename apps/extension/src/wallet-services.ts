@@ -16,10 +16,10 @@ import { SENTINEL_U64_MAX } from './utils/sentinel';
  */
 export const isPenumbraEnabled = async (): Promise<boolean> => {
   const enabledNetworks = await localExtStorage.get('enabledNetworks');
-  // if no networks configured yet, check if we have wallets (backwards compat)
+  // if no networks configured yet, check vaults (wallets are encrypted at rest)
   if (!enabledNetworks) {
-    const wallets = await localExtStorage.get('wallets');
-    return wallets && wallets.length > 0;
+    const vaults = await localExtStorage.get('vaults');
+    return !!vaults && vaults.length > 0;
   }
   return enabledNetworks.includes('penumbra');
 };

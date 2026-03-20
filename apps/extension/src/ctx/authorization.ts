@@ -6,7 +6,6 @@ import {
 import { AuthorizeRequest } from '@penumbra-zone/protobuf/penumbra/custody/v1/custody_pb';
 import { Jsonified } from '@rotko/penumbra-types/jsonified';
 import { Key } from '@repo/encryption/key';
-import { localExtStorage } from '@repo/storage-chrome/local';
 import { UserChoice } from '@repo/storage-chrome/records';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { Wallet, getCustodyTypeName } from '@repo/wallet';
@@ -16,10 +15,9 @@ import { throwIfNeedsLogin } from '../needs-login';
 import { popup } from '../popup';
 
 export const getAuthorization = async (plan: TransactionPlan): Promise<AuthorizationData> => {
-  // Check if active wallet is airgap (Zigner)
-  const wallets = await localExtStorage.get('wallets');
-  const activeIdx = (await localExtStorage.get('activeWalletIndex')) ?? 0;
-  const activeWallet = wallets[activeIdx];
+  // Check if active wallet is airgap (Zigner) — use getWalletFromStorage
+  // which handles decryption (wallets are encrypted at rest)
+  const activeWallet = await getWalletFromStorage();
 
   if (activeWallet) {
     const custodyType = getCustodyTypeName(activeWallet.custody);

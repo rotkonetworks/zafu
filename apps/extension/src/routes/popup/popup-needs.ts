@@ -13,12 +13,10 @@ export const needsLogin = async (): Promise<Response | null> => {
 };
 
 export const needsOnboard = async () => {
-  // check keyring vaults (new system) or legacy wallets
+  // use vaults (unencrypted metadata) — wallets are encrypted at rest
   const vaults = await localExtStorage.get('vaults');
-  const wallets = await localExtStorage.get('wallets');
-  const hasWallet = (vaults && vaults.length > 0) || (wallets && wallets.length > 0);
 
-  if (hasWallet) {
+  if (vaults && vaults.length > 0) {
     return null;
   }
 

@@ -6,7 +6,7 @@ import { AppParameters } from '@penumbra-zone/protobuf/penumbra/core/app/v1/app_
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { OriginRecord } from '@repo/storage-chrome/records';
-import { readEncrypted } from './encrypted-storage';
+import { readEncrypted, writeEncrypted, isEncryptedWrapper } from './encrypted-storage';
 import type { WalletJson } from '@repo/wallet';
 import type { ZcashWalletJson } from './wallets';
 import type { Contact } from './contacts';
@@ -24,9 +24,9 @@ type Persist = (f: StateCreator<AllSlices>) => StateCreator<AllSlices>;
 
 export const customPersistImpl: Persist = f => (set, get, store) => {
   void (async function () {
-    // Part 1: load non-encrypted values + wallets (wallets are plaintext, needed before keyRing.init)
-    const wallets = await localExtStorage.get('wallets');
-    const zcashWallets = await localExtStorage.get('zcashWallets');
+    // Part 1: load non-encrypted values only.
+    // wallets/zcashWallets are encrypted at rest (contain viewing keys) —
+    // they're loaded later via hydrateEncryptedData() after unlock.
     const activeZcashIndex = await localExtStorage.get('activeZcashIndex');
     const activeWalletIndex = await localExtStorage.get('activeWalletIndex');
     const grpcEndpoint = await localExtStorage.get('grpcEndpoint');
@@ -37,8 +37,6 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
 
     set(
       produce((state: AllSlices) => {
-        state.wallets.all = wallets.map(w => ({ ...w, vaultId: w.vaultId ?? '' })) as typeof state.wallets.all;
-        state.wallets.zcashWallets = (zcashWallets ?? []).map(w => ({ ...w, vaultId: w.vaultId ?? '' })) as typeof state.wallets.zcashWallets;
         state.wallets.activeZcashIndex = activeZcashIndex ?? 0;
         state.wallets.activeIndex = activeWalletIndex ?? 0;
         state.network.grpcEndpoint = grpcEndpoint;
@@ -71,6 +69,16 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
         if (knownSites) state.connectedSites.knownSites = knownSites;
         if (messages) state.messages.messages = messages as typeof state.messages.messages;
       }));
+
+      // migration: if wallets were stored plaintext (pre-encryption), re-encrypt now
+      const rawWallets = await localExtStorage.get('wallets');
+      if (rawWallets && !isEncryptedWrapper(rawWallets) && wallets) {
+        await writeEncrypted(localExtStorage as never, sessionExtStorage as never, 'wallets' as LK, wallets);
+      }
+      const rawZcash = await localExtStorage.get('zcashWallets');
+      if (rawZcash && !isEncryptedWrapper(rawZcash) && zcashWallets) {
+        await writeEncrypted(localExtStorage as never, sessionExtStorage as never, 'zcashWallets' as LK, zcashWallets);
+      }
     };
 
     // Initialize keyring from storage (loads vaults, selected key, networks)
@@ -92,21 +100,8 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
 
     // Part 2: when chrome.storage changes sync select fields to store
     localExtStorage.addListener(changes => {
-      // wallets: plaintext, sync directly
-      if (changes.wallets) {
-        const w = changes.wallets.newValue;
-        set(produce((state: AllSlices) => {
-          state.wallets.all = (w ?? []).map(w => ({ ...w, vaultId: w.vaultId ?? '' })) as typeof state.wallets.all;
-        }));
-      }
-      if (changes.zcashWallets) {
-        const w = changes.zcashWallets.newValue;
-        set(produce((state: AllSlices) => {
-          state.wallets.zcashWallets = (w ?? []).map(w => ({ ...w, vaultId: w.vaultId ?? '' })) as typeof state.wallets.zcashWallets;
-        }));
-      }
-      // encrypted keys: re-read through decryption layer
-      if (changes.contacts || changes.knownSites || changes.messages) {
+      // all sensitive data goes through encrypted hydration
+      if (changes.wallets || changes.zcashWallets || changes.contacts || changes.knownSites || changes.messages) {
         void hydrateEncryptedData();
       }
 

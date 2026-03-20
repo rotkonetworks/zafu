@@ -147,12 +147,12 @@ localExtStorage.addListener(changes => {
     }
   }
 
-  // Reinitialize when wallets are created (first wallet triggers sync)
-  if (changes.wallets !== undefined) {
-    const oldWallets = changes.wallets.oldValue ?? [];
-    const newWallets = changes.wallets.newValue ?? [];
-    if (oldWallets.length === 0 && newWallets.length > 0) {
-      console.log('[sync] first wallet created, initializing services...');
+  // Reinitialize when first vault is created (wallets are encrypted, use vaults as signal)
+  if (changes.vaults !== undefined) {
+    const oldVaults = (changes.vaults.oldValue ?? []) as unknown[];
+    const newVaults = (changes.vaults.newValue ?? []) as unknown[];
+    if (oldVaults.length === 0 && newVaults.length > 0) {
+      console.log('[sync] first vault created, initializing services...');
       void reinitializeServices();
     }
   }

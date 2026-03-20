@@ -162,20 +162,20 @@ export async function initializeEnabledNetworks(): Promise<void> {
   const enabledNetworks = await localExtStorage.get('enabledNetworks');
 
   if (!enabledNetworks || enabledNetworks.length === 0) {
-    // If no networks explicitly enabled, check for existing wallets
-    const wallets = await localExtStorage.get('wallets');
-    const zcashWallets = await localExtStorage.get('zcashWallets');
-    const zignerWallets = await localExtStorage.get('zignerWallets');
+    // Use vaults (unencrypted metadata) to detect networks —
+    // wallets/zcashWallets are encrypted, can't read without session key.
+    // Vault insensitive.supportedNetworks tells us which networks exist.
+    const vaults = (await localExtStorage.get('vaults')) ?? [];
 
-    // Auto-enable networks based on existing wallets — declarative derivation
-    const zignerNetworks = (zignerWallets ?? []).flatMap(zw =>
-      (['zcash', 'penumbra', 'polkadot'] as const).filter(n => zw.networks[n])
-    );
-    const networksToEnable: NetworkId[] = [
-      ...((zcashWallets?.length ?? 0) > 0 ? ['zcash' as const] : []),
-      ...((wallets?.length ?? 0) > 0 ? ['penumbra' as const] : []),
-      ...zignerNetworks,
-    ].filter((n, i, arr) => arr.indexOf(n) === i);
+    const networksToEnable: NetworkId[] = vaults
+      .flatMap(v => {
+        const nets = (v as { insensitive?: { supportedNetworks?: string[] } }).insensitive?.supportedNetworks ?? [];
+        // mnemonic vaults support both penumbra and zcash by default
+        const vaultType = (v as { type?: string }).type;
+        if (vaultType === 'mnemonic') return ['penumbra', 'zcash', ...nets] as NetworkId[];
+        return nets as NetworkId[];
+      })
+      .filter((n, i, arr) => arr.indexOf(n) === i);
 
     // Load the auto-detected networks
     await Promise.all(networksToEnable.map(loadAdapter));

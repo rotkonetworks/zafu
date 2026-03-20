@@ -6,9 +6,11 @@ import { localExtStorage } from '@repo/storage-chrome/local';
 // We need to manually check storage for accounts in the loader.
 // Will redirect to onboarding if necessary.
 export const pageIndexLoader = async () => {
-  const wallets = await localExtStorage.get('wallets');
+  // use vaults (unencrypted metadata) to check if user has wallets —
+  // wallets array is now encrypted at rest, can't read without session key
+  const vaults = await localExtStorage.get('vaults');
 
-  if (!wallets.length) {
+  if (!vaults || !vaults.length) {
     return redirect(PagePath.WELCOME);
   }
 

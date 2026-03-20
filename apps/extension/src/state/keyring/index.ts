@@ -123,30 +123,26 @@ export const createKeyRingSlice = (
       const selectedId = await local.get('selectedVaultId');
       const enabledNetworks = (await local.get('enabledNetworks')) ?? [];
       const activeNetwork = (await local.get('activeNetwork')) ?? (enabledNetworks[0] ?? '');
-      const wallets = await local.get('wallets');
-      const zcashWallets = ((await local.get('zcashWallets')) ?? []) as ZcashWalletJson[];
+      // wallets are encrypted — read via encrypted path if session key available
+      const initSessionKey = await session.get('passwordKey');
 
-      // migration
+      // migration: check zcashWallets for orphaned multisigs (needs decryption)
       let vaults = rawVaults;
-      if (hasOrphanedMultisigs(zcashWallets)) {
-        const sessionKey = await session.get('passwordKey');
-        const migrated = await migrateOrphanedMultisigs(rawVaults, zcashWallets, sessionKey, local);
-        vaults = migrated.vaults;
+      if (initSessionKey) {
+        const { readEncrypted } = await import('./../../state/encrypted-storage');
+        type LK = keyof import('@repo/storage-chrome/local').LocalStorageState;
+        const zcashWallets = (await readEncrypted<ZcashWalletJson[]>(local as never, session as never, 'zcashWallets' as LK)) ?? [];
+        if (hasOrphanedMultisigs(zcashWallets)) {
+          const migrated = await migrateOrphanedMultisigs(rawVaults, zcashWallets, initSessionKey, local);
+          vaults = migrated.vaults;
+        }
       }
 
       // auto-unlock for airgap-only setups
       const hasOnlyAirgap = vaults.length > 0 && vaults.every(v => v.insensitive?.['airgapOnly'] === true);
 
-      // sync penumbra wallet index
-      let syncedWalletIndex = 0;
-      if (selectedId && wallets.length > 0) {
-        const idx = findWalletIndex(wallets as { vaultId?: string }[], selectedId as string);
-        if (idx >= 0) {
-          syncedWalletIndex = idx;
-          const storedIndex = await local.get('activeWalletIndex');
-          if (storedIndex !== idx) await local.set('activeWalletIndex', idx);
-        }
-      }
+      // sync penumbra wallet index — only if unlocked (wallets are encrypted)
+      let syncedWalletIndex = await local.get('activeWalletIndex') ?? 0;
 
       if (!keyPrint) {
         set(state => {

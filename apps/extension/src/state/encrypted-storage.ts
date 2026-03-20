@@ -16,7 +16,7 @@ interface EncryptedWrapper {
   encrypted: BoxJson;
 }
 
-const isEncryptedWrapper = (v: unknown): v is EncryptedWrapper =>
+export const isEncryptedWrapper = (v: unknown): v is EncryptedWrapper =>
   typeof v === 'object' && v !== null && 'encrypted' in v &&
   typeof (v as EncryptedWrapper).encrypted === 'object';
 
@@ -68,12 +68,12 @@ export async function writeEncrypted(
   await local.set(storageKey, { encrypted: box.toJson() } as never);
 }
 
-/** keys that must be encrypted at rest */
-/** keys encrypted at rest — only keys read exclusively via zustand store.
- *  wallets/zcashWallets excluded: read by service worker, context getters,
- *  onboard.ts outside the store. their FVKs are protected by the vault's
- *  encryptedData (requires password to derive spending keys). */
+/** keys encrypted at rest — decrypted on-demand via session key.
+ *  wallets/zcashWallets contain viewing keys (FVK) that reveal full
+ *  transaction history. no viewing key data in plaintext storage — ever. */
 const ENCRYPTED_KEYS = new Set<string>([
+  'wallets',
+  'zcashWallets',
   'contacts',
   'recentAddresses',
   'dismissedContactSuggestions',
