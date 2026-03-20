@@ -60,6 +60,8 @@ export const enum MemoType {
   PaymentRequest = 0x03,
   /** read receipt / ack */
   Ack = 0x04,
+  /** zafu contact card — name + address + optional flags */
+  ContactCard = 0x05,
 
   // FROST DKG (0x10-0x1f)
   DkgRound1 = 0x10,
@@ -292,6 +294,146 @@ export function bytesToHex(bytes: Uint8Array): string {
   return s;
 }
 
+// ── contact card ──
+
+/**
+ * Zafu Contact Card (MemoType 0x05)
+ *
+ * A contact card lets one zafu user share their name and receiving address
+ * with another, privately, inside a zcash shielded memo. The recipient's
+ * wallet detects the card and offers to save the sender as a contact.
+ *
+ * Design decisions:
+ *
+ *   Why binary, not text-delimited?
+ *     Names can contain any UTF-8 character including colons, newlines, etc.
+ *     Length-prefixed binary fields are unambiguous to parse — no escaping,
+ *     no delimiter collision. Also more compact in the 508-byte budget.
+ *
+ *   Why not CBOR/protobuf?
+ *     508 bytes is too tight for schema overhead. A hand-rolled 5-byte
+ *     header is trivial to implement and audit. CBOR would buy us nothing
+ *     here — there are only two variable-length fields.
+ *
+ *   Why no encryption on top of the memo?
+ *     Zcash shielded memos are already encrypted to the recipient's
+ *     incoming viewing key. Adding another layer would be redundant.
+ *     The card is only readable by sender and recipient.
+ *
+ *   Why no checksum?
+ *     The zcash note commitment scheme already provides authenticated
+ *     encryption. Bit-flips are not possible without invalidating the
+ *     note. A checksum would waste bytes for zero benefit.
+ *
+ *   Why u8 for name_len but u16be for addr_len?
+ *     Names over 255 bytes (~125 CJK chars) are unreasonable for a
+ *     contact name. Zcash unified addresses can reach ~350+ bytes with
+ *     multiple receiver types (orchard + sapling + transparent), so u8
+ *     (max 255) would be too small. u16be handles up to 65535.
+ *
+ *   Why version + "ignore trailing bytes"?
+ *     Version byte lets us make breaking changes if needed. The trailing
+ *     bytes rule (parsers MUST ignore bytes after the last defined field)
+ *     lets us append optional fields in v1 without bumping the version.
+ *     This is the same extensibility pattern used in DNS, TLS, and QUIC.
+ *
+ *   Why a flags byte?
+ *     Cheap signal bits for wallet-to-wallet capability negotiation.
+ *     A FROST participant can set bit 0 so the recipient knows signing
+ *     requires threshold coordination. Future bits are reserved and MUST
+ *     be zero on send, MUST be ignored on receive.
+ *
+ * Wire format (payload, max 508 bytes):
+ *
+ *   0      1       2          2+NL     3+NL        3+NL+AL
+ *   ┌──────┬───────┬──────────┬────────┬───────────┬─────────┐
+ *   │ ver  │ flags │ name_len │  name  │ addr_len  │ address │
+ *   │ u8   │ u8    │ u8       │ UTF-8  │ u16be     │ UTF-8   │
+ *   └──────┴───────┴──────────┴────────┴───────────┴─────────┘
+ *
+ *   ver:       0x01. MUST reject unknown versions.
+ *   flags:     bitfield (bit 0 = FROST, bits 1-7 reserved).
+ *   name_len:  u8, length of name in bytes. MAY be 0 (anonymous card).
+ *   name:      UTF-8 display name. no null terminator.
+ *   addr_len:  big-endian u16, length of address in bytes.
+ *   address:   zcash unified address (bech32m string). REQUIRED.
+ *   trailing:  MUST be ignored by parsers.
+ *
+ * Size budget:
+ *   overhead: 5 bytes (ver + flags + name_len + addr_len)
+ *   typical UA (~300 bytes): leaves ~203 bytes for name
+ *   large UA (~400 bytes): leaves ~103 bytes for name (~50 CJK chars)
+ */
+
+export const CONTACT_CARD_VERSION = 0x01;
+
+export const enum ContactCardFlag {
+  /** sender participates in FROST multisig */
+  Frost = 1 << 0,
+}
+
+export interface ContactCard {
+  version: number;
+  flags: number;
+  name: string;
+  address: string;
+}
+
+export function encodeContactCard(card: Omit<ContactCard, 'version'>): Uint8Array {
+  const nameBytes = new TextEncoder().encode(card.name);
+  const addrBytes = new TextEncoder().encode(card.address);
+
+  if (nameBytes.length > 255) {
+    throw new Error(`name too long: ${nameBytes.length} bytes (max 255)`);
+  }
+  if (addrBytes.length > 65535) {
+    throw new Error(`address too long: ${addrBytes.length} bytes`);
+  }
+
+  const total = 1 + 1 + 1 + nameBytes.length + 2 + addrBytes.length;
+  if (total > PAYLOAD_SINGLE) {
+    throw new Error(`contact card ${total} bytes exceeds memo capacity ${PAYLOAD_SINGLE}`);
+  }
+
+  const payload = new Uint8Array(total);
+  let offset = 0;
+
+  payload[offset++] = CONTACT_CARD_VERSION;
+  payload[offset++] = card.flags & 0xff;
+  payload[offset++] = nameBytes.length;
+  payload.set(nameBytes, offset); offset += nameBytes.length;
+  payload[offset++] = (addrBytes.length >> 8) & 0xff; // u16be high
+  payload[offset++] = addrBytes.length & 0xff;        // u16be low
+  payload.set(addrBytes, offset);
+
+  return encodeMemo(MemoType.ContactCard, payload);
+}
+
+export function decodeContactCard(payload: Uint8Array): ContactCard | null {
+  if (payload.length < 5) return null; // minimum: ver + flags + name_len(0) + addr_len(0)
+
+  let offset = 0;
+
+  const version = payload[offset++]!;
+  if (version !== CONTACT_CARD_VERSION) return null; // unknown version
+
+  const flags = payload[offset++]!;
+
+  const nameLen = payload[offset++]!;
+  if (offset + nameLen + 2 > payload.length) return null;
+  const name = new TextDecoder().decode(payload.slice(offset, offset + nameLen));
+  offset += nameLen;
+
+  const addrLen = (payload[offset]! << 8) | payload[offset + 1]!;
+  offset += 2;
+  if (offset + addrLen > payload.length) return null;
+  const address = new TextDecoder().decode(payload.slice(offset, offset + addrLen));
+
+  if (!address) return null; // address is required
+
+  return { version, flags, name, address };
+}
+
 /** check if a 512-byte memo is a zafu structured memo (0xFF 0x5A ...) */
 export function isStructuredMemo(memo: Uint8Array): boolean {
   return memo.length === MEMO_SIZE && memo[0] === ARBITRARY_DATA && memo[1] === ZAFU_MAGIC;
@@ -304,6 +446,7 @@ export function memoTypeName(type: MemoType): string {
     case MemoType.Address: return 'address';
     case MemoType.PaymentRequest: return 'payment request';
     case MemoType.Ack: return 'read receipt';
+    case MemoType.ContactCard: return 'contact card';
     case MemoType.DkgRound1: return 'DKG round 1';
     case MemoType.DkgRound2: return 'DKG round 2';
     case MemoType.DkgRound3: return 'DKG round 3';
