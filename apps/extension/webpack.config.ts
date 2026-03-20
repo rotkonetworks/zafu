@@ -20,10 +20,10 @@ import WatchExternalFilesPlugin from 'webpack-watch-external-files-plugin';
 
 export default ({
   WEBPACK_WATCH = false,
-  ZIGNER_ID,
+  ZAFU_ID,
 }: {
   ['WEBPACK_WATCH']?: boolean;
-  ZIGNER_ID: string;
+  ZAFU_ID: string;
 }): webpack.Configuration[] => {
   const gitCommit = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
   const gitDate = execSync('git log -1 --format=%cd --date=short', { encoding: 'utf-8' }).trim();
@@ -59,13 +59,13 @@ export default ({
 
   /*
    * The DefinePlugin replaces specified tokens with specified values.
-   * - These should be declared in `zigner.d.ts` for TypeScript awareness.
+   * - These should be declared in `zafu.d.ts` for TypeScript awareness.
    * - `process.env.NODE_ENV` and other env vars are implicitly defined.
    * - Replacement is literal, so the values must be stringified.
    */
   const DefinePlugin = new webpack.DefinePlugin({
-    ZIGNER: JSON.stringify(ZIGNER_ID),
-    ZIGNER_ORIGIN: JSON.stringify(`chrome-extension://${ZIGNER_ID}`),
+    ZAFU: JSON.stringify(ZAFU_ID),
+    ZAFU_ORIGIN: JSON.stringify(`chrome-extension://${ZAFU_ID}`),
     'globalThis.__DEV__': JSON.stringify(process.env['NODE_ENV'] !== 'production'),
     'globalThis.__ASSERT_ROOT__': JSON.stringify(false),
     BUILD_COMMIT: JSON.stringify(gitCommit),

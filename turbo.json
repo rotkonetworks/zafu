@@ -20,7 +20,7 @@
     },
     "build": {
       "dependsOn": ["^build"],
-      "env": ["ZIGNER"],
+      "env": ["ZAFU"],
       "outputs": ["dist/**"]
     },
     "clean": {
