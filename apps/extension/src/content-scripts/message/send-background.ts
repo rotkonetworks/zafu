@@ -37,7 +37,7 @@ export function listenBackground<R = never>(
     respond: (response: R) => void,
   ): boolean => {
     // In dev mode, use runtime ID (Chrome assigns dynamic ID for unpacked extensions)
-    if (sender.id !== (globalThis.__DEV__ ? chrome.runtime.id : ZAFU)) {
+    if (sender.id !== ZAFU) {
       return false;
     }
 

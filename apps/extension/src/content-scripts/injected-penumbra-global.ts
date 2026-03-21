@@ -38,11 +38,10 @@ const prerenderComplete = new Promise<void>(resolve =>
     : resolve(),
 );
 
-// In dev mode, use runtime ID (Chrome assigns dynamic ID for unpacked extensions)
-// Guard: chrome.runtime.id can be undefined if service worker hasn't started
-const extensionOrigin = globalThis.__DEV__
-  ? (chrome.runtime?.id ? `chrome-extension://${chrome.runtime.id}` : '')
-  : ZAFU_ORIGIN;
+// ZAFU_ORIGIN is replaced at build time by DefinePlugin with the correct
+// chrome-extension:// URL. Always use it — chrome.runtime is unavailable
+// in MAIN world content scripts, and __DEV__ is unreliable across build modes.
+const extensionOrigin = ZAFU_ORIGIN;
 
 // bail if we can't determine our origin (avoids "Cannot redefine property: chrome-extension://undefined")
 if (!extensionOrigin || extensionOrigin.endsWith('undefined')) {

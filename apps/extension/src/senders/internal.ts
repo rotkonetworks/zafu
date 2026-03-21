@@ -1,7 +1,5 @@
-// In dev mode, use runtime ID (Chrome assigns dynamic ID for unpacked extensions)
-// In prod, use the hardcoded ZAFU constant
-const getExtensionId = () => (globalThis.__DEV__ ? chrome.runtime.id : ZAFU);
-const getExtensionOrigin = () => (globalThis.__DEV__ ? `chrome-extension://${chrome.runtime.id}` : ZAFU_ORIGIN);
+const getExtensionId = () => ZAFU;
+const getExtensionOrigin = () => ZAFU_ORIGIN;
 
 export type ValidInternalSender = chrome.runtime.MessageSender & {
   id: string;
