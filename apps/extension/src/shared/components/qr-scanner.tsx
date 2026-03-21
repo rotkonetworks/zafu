@@ -75,6 +75,13 @@ export const QrScanner = ({
       const reader = new BrowserQRCodeReader(hints, {
         delayBetweenScanAttempts: 100, // scan ~10x/sec instead of default ~2x/sec
       });
+
+      // request camera permission FIRST — Chrome MV3 extension pages may
+      // auto-dismiss the permission prompt if enumerateDevices() runs before
+      // getUserMedia(). Getting a stream first ensures the prompt is shown.
+      const initialStream = await navigator.mediaDevices.getUserMedia({ video: true });
+      initialStream.getTracks().forEach(t => t.stop()); // release, we just needed the permission
+
       const devices = await BrowserQRCodeReader.listVideoInputDevices();
       const camera = devices.find((d: MediaDeviceInfo) =>
         /back|rear|environment/i.test(d.label),
