@@ -5,6 +5,7 @@ import { createClient } from '@connectrpc/connect';
 import { FullViewingKey, WalletId } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { getWalletFromStorage } from '@repo/storage-chrome/onboard';
+import type { WalletJson } from '@repo/wallet';
 import { Services } from '@repo/context';
 import { WalletServices } from '@rotko/penumbra-types/services';
 import { AssetId } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
@@ -61,14 +62,28 @@ export const startWalletServices = async (signal?: AbortSignal) => {
 
   console.log('[sync] starting wallet services...');
 
-  // Non-blocking wallet check (unlike onboardWallet which waits forever)
-  const wallet = await getWalletFromStorage();
+  // Try to load wallet — may be encrypted and locked.
+  // If locked, wait for unlock (session key appears in storage).
+  let wallet = await getWalletFromStorage();
   if (!wallet) {
-    console.log('[sync] no penumbra wallet found in storage, sync will start when wallet is created');
-    // Return stub - sync will be triggered when wallet is created via keyring
-    return {
-      getWalletServices: () => Promise.reject(new Error('no penumbra wallet configured')),
-    } as Services;
+    console.log('[sync] wallet locked or missing, waiting for unlock...');
+    wallet = await new Promise<WalletJson>(resolve => {
+      // listen for session key (unlock) or wallet creation
+      const check = async () => {
+        const w = await getWalletFromStorage();
+        if (w) {
+          localExtStorage.removeListener(listener);
+          resolve(w);
+        }
+      };
+      const listener = (changes: Record<string, unknown>) => {
+        // wallet writes (encrypted blob) or vault creation
+        if ('wallets' in changes || 'vaults' in changes) void check();
+      };
+      localExtStorage.addListener(listener as never);
+      // also check when session key appears (user unlocked)
+      chrome.storage.session.onChanged.addListener(() => void check());
+    });
   }
   console.log('[sync] wallet loaded:', wallet.id.slice(0, 20) + '...');
 
