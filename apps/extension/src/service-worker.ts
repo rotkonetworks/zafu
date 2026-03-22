@@ -182,8 +182,9 @@ const initHandler = async () => {
 
   let custodyClient: Client<typeof CustodyService> | undefined;
   let stakeClient: Client<typeof StakeService> | undefined;
+  let handler: ReturnType<typeof connectChannelAdapter>;
 
-  return connectChannelAdapter({
+  handler = connectChannelAdapter({
     jsonOptions,
 
     /** @see https://connectrpc.com/docs/node/implementing-services */
@@ -214,6 +215,8 @@ const initHandler = async () => {
       return Promise.resolve({ ...req, contextValues });
     },
   });
+
+  return handler;
 };
 
 // register message listeners IMMEDIATELY — before wallet services init.
@@ -225,11 +228,21 @@ chrome.runtime.onMessage.addListener(contentScriptDisconnectListener);
 chrome.runtime.onMessage.addListener(contentScriptLoadListener);
 chrome.runtime.onMessage.addListener(internalRevokeListener);
 
-// initialize wallet services — may wait for unlock since wallets are
-// encrypted at rest. the handler resolves once services are ready.
-// CRSessionManager and message listeners must be registered before
-// this await, otherwise dapps can't trigger the approval popup.
-const handler = await backOff(() => initHandler(), {
+// CRSessionManager must be initialized NOW — before wallet services are
+// ready — so content scripts can establish session ports right after the
+// approval popup. The deferred handler queues RPC requests until the
+// real handler resolves.
+type HandlerFn = (request: never, signal?: AbortSignal, timeoutMs?: number) => Promise<never>;
+let resolveHandler: (h: HandlerFn) => void;
+const handlerReady = new Promise<HandlerFn>(r => { resolveHandler = r; });
+
+const deferredHandler: HandlerFn = (request, signal, timeoutMs) =>
+  handlerReady.then(h => h(request, signal, timeoutMs));
+
+CRSessionManager.init(ZAFU, deferredHandler as never, validateSessionPort);
+
+// start services in background — resolves handlerReady when done
+void backOff(() => initHandler(), {
   delayFirstAttempt: false,
   startingDelay: 5_000,
   numOfAttempts: Infinity,
@@ -238,9 +251,7 @@ const handler = await backOff(() => initHandler(), {
     console.log("zafu couldn't start wallet services", attemptNumber, e);
     return true;
   },
-});
-
-CRSessionManager.init(ZAFU, handler, validateSessionPort);
+}).then(handler => resolveHandler!(handler as unknown as HandlerFn));
 
 // listen for internal service controls
 chrome.runtime.onMessage.addListener((req, sender, respond) =>
