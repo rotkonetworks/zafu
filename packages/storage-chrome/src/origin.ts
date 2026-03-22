@@ -1,11 +1,19 @@
 import { localExtStorage } from './local';
 import { OriginRecord } from './records/known-site';
 
+/** safely get knownSites as an array — handles stale encrypted blobs from migration */
+const getKnownSitesArray = async (): Promise<OriginRecord[]> => {
+  const raw = await localExtStorage.get('knownSites');
+  // guard against encrypted wrapper left from previous build
+  if (!Array.isArray(raw)) return [];
+  return raw as OriginRecord[];
+};
+
 export const getOriginRecord = async (getOrigin?: string): Promise<OriginRecord | undefined> => {
   if (!getOrigin) {
     return undefined;
   }
-  const knownSites = await localExtStorage.get('knownSites');
+  const knownSites = await getKnownSitesArray();
 
   const [match, ...extra] = knownSites.filter(r => r.origin === getOrigin);
   if (extra.length !== 0) {
@@ -16,7 +24,7 @@ export const getOriginRecord = async (getOrigin?: string): Promise<OriginRecord 
 };
 
 export const upsertOriginRecord = async (proposal: OriginRecord): Promise<void> => {
-  const knownSites = await localExtStorage.get('knownSites');
+  const knownSites = await getKnownSitesArray();
 
   const newKnownSites = [...knownSites.filter(r => r.origin !== proposal.origin), proposal];
 
@@ -24,7 +32,7 @@ export const upsertOriginRecord = async (proposal: OriginRecord): Promise<void> 
 };
 
 export const removeOriginRecord = async (removeOrigin: string): Promise<void> => {
-  const knownSites = await localExtStorage.get('knownSites');
+  const knownSites = await getKnownSitesArray();
 
   const newKnownSites = knownSites.filter(r => r.origin !== removeOrigin);
 
