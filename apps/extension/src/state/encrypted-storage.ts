@@ -71,13 +71,15 @@ export async function writeEncrypted(
 /** keys encrypted at rest — decrypted on-demand via session key.
  *  wallets/zcashWallets contain viewing keys (FVK) that reveal full
  *  transaction history. no viewing key data in plaintext storage — ever. */
+/** knownSites is NOT encrypted — origin approval records ({ origin, choice, date })
+ *  contain no private data and are read by the origin storage package which
+ *  doesn't have access to the session key. */
 const ENCRYPTED_KEYS = new Set<string>([
   'wallets',
   'zcashWallets',
   'contacts',
   'recentAddresses',
   'dismissedContactSuggestions',
-  'knownSites',
   'messages',
 ]);
 
