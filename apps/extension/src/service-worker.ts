@@ -216,11 +216,24 @@ const initHandler = async () => {
   });
 };
 
+// register message listeners IMMEDIATELY — before wallet services init.
+// wallet services now wait for unlock (wallets encrypted at rest), but
+// content scripts and dapps need the connect/disconnect/load listeners
+// to be ready as soon as the service worker starts.
+chrome.runtime.onMessage.addListener(contentScriptConnectListener);
+chrome.runtime.onMessage.addListener(contentScriptDisconnectListener);
+chrome.runtime.onMessage.addListener(contentScriptLoadListener);
+chrome.runtime.onMessage.addListener(internalRevokeListener);
+
+// initialize wallet services — may wait for unlock since wallets are
+// encrypted at rest. the handler resolves once services are ready.
+// CRSessionManager and message listeners must be registered before
+// this await, otherwise dapps can't trigger the approval popup.
 const handler = await backOff(() => initHandler(), {
   delayFirstAttempt: false,
-  startingDelay: 5_000, // 5 seconds
+  startingDelay: 5_000,
   numOfAttempts: Infinity,
-  maxDelay: 20_000, // 20 seconds
+  maxDelay: 20_000,
   retry: (e, attemptNumber) => {
     console.log("zafu couldn't start wallet services", attemptNumber, e);
     return true;
@@ -228,14 +241,6 @@ const handler = await backOff(() => initHandler(), {
 });
 
 CRSessionManager.init(ZAFU, handler, validateSessionPort);
-
-// listen for content script activity
-chrome.runtime.onMessage.addListener(contentScriptConnectListener);
-chrome.runtime.onMessage.addListener(contentScriptDisconnectListener);
-chrome.runtime.onMessage.addListener(contentScriptLoadListener);
-
-// listen for internal revoke controls
-chrome.runtime.onMessage.addListener(internalRevokeListener);
 
 // listen for internal service controls
 chrome.runtime.onMessage.addListener((req, sender, respond) =>
