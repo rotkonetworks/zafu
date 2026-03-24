@@ -1,0 +1,14 @@
+{
+  "name": "@zafu/zid",
+  "version": "0.1.0",
+  "license": "(MIT OR Apache-2.0)",
+  "type": "module",
+  "description": "zafu identity SDK — connect wallet, sign actions, e2ee channels",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint \"**/*.ts*\"",
+    "test": "vitest run"
+  }
+}
