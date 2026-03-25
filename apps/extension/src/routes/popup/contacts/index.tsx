@@ -14,6 +14,7 @@ import {
   type ContactsExport,
 } from '../../../state/contacts';
 import { encodeContactCard, bytesToHex } from '@repo/wallet/networks/zcash/memo-codec';
+import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { cn } from '@repo/ui/lib/utils';
 
 const NETWORK_LABELS: Record<ContactNetwork, string> = {
@@ -411,6 +412,7 @@ function ContactCard({
 export function ContactsPage() {
   const navigate = useNavigate();
   const contacts = useStore(contactsSelector);
+  const keyInfo = useStore(selectEffectiveKeyInfo);
   const [search, setSearch] = useState('');
   const [showContactModal, setShowContactModal] = useState(false);
   const [showAddressModal, setShowAddressModal] = useState(false);
@@ -695,12 +697,15 @@ export function ContactsPage() {
                   const zcashAddr = contact.addresses.find(a => a.network === 'zcash');
                   if (!zcashAddr) return undefined;
                   return () => {
-                    const memoBytes = encodeContactCard({
+                    const senderZid = keyInfo?.insensitive?.['zid'] as string | undefined;
+                    const memos = encodeContactCard({
                       name: contact.name,
                       address: zcashAddr.address,
                       flags: 0,
+                      zid: senderZid,
                     });
-                    const hex = bytesToHex(memoBytes);
+                    // for now, contact cards fit in a single memo
+                    const hex = bytesToHex(memos[0]!);
                     navigate(PopupPath.SEND, {
                       state: { prefillMemo: hex, network: 'zcash' },
                     });

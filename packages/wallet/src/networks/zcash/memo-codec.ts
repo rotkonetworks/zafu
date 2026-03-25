@@ -60,8 +60,12 @@ export const enum MemoType {
   PaymentRequest = 0x03,
   /** read receipt / ack */
   Ack = 0x04,
-  /** zafu contact card — name + address + optional flags */
+  /** zafu contact card — name + address + TLV extensions */
   ContactCard = 0x05,
+  /** zid-authenticated encrypted payload (sender-auth + forward secrecy) */
+  EncryptedMessage = 0x06,
+  /** generic structured data — content-type + correlation + payload */
+  Data = 0x07,
 
   // FROST DKG (0x10-0x1f)
   DkgRound1 = 0x10,
@@ -357,7 +361,15 @@ export function bytesToHex(bytes: Uint8Array): string {
  *   name:      UTF-8 display name. no null terminator.
  *   addr_len:  big-endian u16, length of address in bytes.
  *   address:   zcash unified address (bech32m string). REQUIRED.
- *   trailing:  MUST be ignored by parsers.
+ *   extensions: TLV (tag-length-value) entries until payload end.
+ *              each: tag(u8) | len(u16be) | value(len bytes)
+ *              parsers MUST skip unknown tags by reading len and advancing.
+ *
+ *              tag 0x01: ed25519 zid pubkey (len=32). DH messaging capable.
+ *
+ *              tag 0x02: post-quantum public key (algorithm-specific, future).
+ *                        PQ keys (897+ bytes) exceed a single memo but the
+ *                        card is fragmented across multiple notes when needed.
  *
  * Size budget:
  *   overhead: 5 bytes (ver + flags + name_len + addr_len)
@@ -367,9 +379,19 @@ export function bytesToHex(bytes: Uint8Array): string {
 
 export const CONTACT_CARD_VERSION = 0x01;
 
+/**
+ * Contact card flags byte.
+ *
+ * Capabilities are signaled by DATA PRESENCE, not flag bits:
+ *   - zid present (tag 0x01)  → sender supports ed25519 DH messaging
+ *   - pq key present (tag 0x02, future) → sender supports post-quantum
+ *
+ * The flags byte is reserved for behavioral signals that can't be
+ * inferred from the data fields. All bits MUST be 0 on send,
+ * MUST be ignored on receive, until assigned.
+ */
 export const enum ContactCardFlag {
-  /** sender participates in FROST multisig */
-  Frost = 1 << 0,
+  // all bits reserved — set to 0
 }
 
 export interface ContactCard {
@@ -377,9 +399,16 @@ export interface ContactCard {
   flags: number;
   name: string;
   address: string;
+  /** sender's per-contact zid pubkey (32 bytes hex). optional in v1 — appended after address. */
+  zid?: string;
 }
 
-export function encodeContactCard(card: Omit<ContactCard, 'version'>): Uint8Array {
+/**
+ * encode a contact card. returns one or more 512-byte memos.
+ * automatically fragments when the card exceeds a single memo
+ * (e.g. long addresses or future PQ key extensions).
+ */
+export function encodeContactCard(card: Omit<ContactCard, 'version'>): Uint8Array[] {
   const nameBytes = new TextEncoder().encode(card.name);
   const addrBytes = new TextEncoder().encode(card.address);
 
@@ -390,10 +419,22 @@ export function encodeContactCard(card: Omit<ContactCard, 'version'>): Uint8Arra
     throw new Error(`address too long: ${addrBytes.length} bytes`);
   }
 
-  const total = 1 + 1 + 1 + nameBytes.length + 2 + addrBytes.length;
-  if (total > PAYLOAD_SINGLE) {
-    throw new Error(`contact card ${total} bytes exceeds memo capacity ${PAYLOAD_SINGLE}`);
+  // build extensions
+  const extensions: Uint8Array[] = [];
+  if (card.zid) {
+    const zidBytes = hexToBytes(card.zid);
+    if (zidBytes.length === 32) {
+      const ext = new Uint8Array(3 + 32);
+      ext[0] = 0x01; // tag: ed25519 zid
+      ext[1] = 0x00; // len high
+      ext[2] = 0x20; // len low (32)
+      ext.set(zidBytes, 3);
+      extensions.push(ext);
+    }
   }
+
+  const extTotal = extensions.reduce((s, e) => s + e.length, 0);
+  const total = 1 + 1 + 1 + nameBytes.length + 2 + addrBytes.length + extTotal;
 
   const payload = new Uint8Array(total);
   let offset = 0;
@@ -402,11 +443,19 @@ export function encodeContactCard(card: Omit<ContactCard, 'version'>): Uint8Arra
   payload[offset++] = card.flags & 0xff;
   payload[offset++] = nameBytes.length;
   payload.set(nameBytes, offset); offset += nameBytes.length;
-  payload[offset++] = (addrBytes.length >> 8) & 0xff; // u16be high
-  payload[offset++] = addrBytes.length & 0xff;        // u16be low
-  payload.set(addrBytes, offset);
+  payload[offset++] = (addrBytes.length >> 8) & 0xff;
+  payload[offset++] = addrBytes.length & 0xff;
+  payload.set(addrBytes, offset); offset += addrBytes.length;
+  for (const ext of extensions) {
+    payload.set(ext, offset);
+    offset += ext.length;
+  }
 
-  return encodeMemo(MemoType.ContactCard, payload);
+  // single memo or fragmented
+  if (total <= PAYLOAD_SINGLE) {
+    return [encodeMemo(MemoType.ContactCard, payload)];
+  }
+  return encodeFragmented(MemoType.ContactCard, payload);
 }
 
 export function decodeContactCard(payload: Uint8Array): ContactCard | null {
@@ -428,10 +477,133 @@ export function decodeContactCard(payload: Uint8Array): ContactCard | null {
   offset += 2;
   if (offset + addrLen > payload.length) return null;
   const address = new TextDecoder().decode(payload.slice(offset, offset + addrLen));
+  offset += addrLen;
 
   if (!address) return null; // address is required
 
-  return { version, flags, name, address };
+  // parse TLV extensions
+  let zid: string | undefined;
+  while (offset + 3 <= payload.length) {
+    const tag = payload[offset]!;
+    const len = (payload[offset + 1]! << 8) | payload[offset + 2]!;
+    offset += 3;
+    if (offset + len > payload.length) break; // truncated — stop
+    if (tag === 0x01 && len === 32) {
+      zid = bytesToHex(payload.slice(offset, offset + 32));
+    }
+    // unknown tags: skip by advancing offset
+    offset += len;
+  }
+
+  return { version, flags, name, address, zid };
+}
+
+// ── generic data (agentic / machine-to-machine) ──
+
+/**
+ * Data memo content types.
+ *
+ * The Data message (0x07) carries machine-readable payloads with a
+ * content type, optional correlation ID (for request/response), and
+ * optional reply-to address.
+ *
+ * Wire format (payload after zafu header):
+ *   byte 0:      content type (DataContentType enum)
+ *   byte 1:      flags (bit 0 = has correlation ID, bit 1 = has reply-to)
+ *   bytes 2-17:  correlation ID (16 bytes, present if flags bit 0)
+ *   next 2+N:    reply-to address (u16be len + UTF-8, present if flags bit 1)
+ *   rest:        application data
+ */
+export const enum DataContentType {
+  /** raw bytes — receiver interprets based on context */
+  Raw = 0x00,
+  /** JSON (UTF-8 encoded) */
+  Json = 0x01,
+  /** CBOR (RFC 8949) */
+  Cbor = 0x02,
+  /** protobuf (caller defines schema out-of-band) */
+  Protobuf = 0x03,
+}
+
+export const enum DataFlag {
+  /** payload includes a 16-byte correlation ID for request/response linking */
+  HasCorrelation = 1 << 0,
+  /** payload includes a reply-to address */
+  HasReplyTo = 1 << 1,
+}
+
+export interface DataMemo {
+  contentType: DataContentType;
+  correlationId?: Uint8Array;  // 16 bytes
+  replyTo?: string;            // zcash address
+  data: Uint8Array;            // application payload
+}
+
+export function encodeDataMemo(msg: DataMemo): Uint8Array[] {
+  let flags = 0;
+  if (msg.correlationId) flags |= DataFlag.HasCorrelation;
+  if (msg.replyTo) flags |= DataFlag.HasReplyTo;
+
+  const replyToBytes = msg.replyTo ? new TextEncoder().encode(msg.replyTo) : null;
+  const headerSize = 2
+    + (msg.correlationId ? 16 : 0)
+    + (replyToBytes ? 2 + replyToBytes.length : 0);
+  const total = headerSize + msg.data.length;
+
+  const payload = new Uint8Array(total);
+  let offset = 0;
+
+  payload[offset++] = msg.contentType;
+  payload[offset++] = flags;
+
+  if (msg.correlationId) {
+    payload.set(msg.correlationId.slice(0, 16), offset);
+    offset += 16;
+  }
+  if (replyToBytes) {
+    payload[offset++] = (replyToBytes.length >> 8) & 0xff;
+    payload[offset++] = replyToBytes.length & 0xff;
+    payload.set(replyToBytes, offset);
+    offset += replyToBytes.length;
+  }
+  payload.set(msg.data, offset);
+
+  if (total <= PAYLOAD_SINGLE) {
+    return [encodeMemo(MemoType.Data, payload)];
+  }
+  return encodeFragmented(MemoType.Data, payload);
+}
+
+export function decodeDataMemo(payload: Uint8Array): DataMemo | null {
+  if (payload.length < 2) return null;
+
+  let offset = 0;
+  const contentType = payload[offset++]! as DataContentType;
+  const flags = payload[offset++]!;
+
+  let correlationId: Uint8Array | undefined;
+  if (flags & DataFlag.HasCorrelation) {
+    if (offset + 16 > payload.length) return null;
+    correlationId = payload.slice(offset, offset + 16);
+    offset += 16;
+  }
+
+  let replyTo: string | undefined;
+  if (flags & DataFlag.HasReplyTo) {
+    if (offset + 2 > payload.length) return null;
+    const len = (payload[offset]! << 8) | payload[offset + 1]!;
+    offset += 2;
+    if (offset + len > payload.length) return null;
+    replyTo = new TextDecoder().decode(payload.slice(offset, offset + len));
+    offset += len;
+  }
+
+  return {
+    contentType,
+    correlationId,
+    replyTo,
+    data: payload.slice(offset),
+  };
 }
 
 /** check if a 512-byte memo is a zafu structured memo (0xFF 0x5A ...) */
@@ -447,6 +619,8 @@ export function memoTypeName(type: MemoType): string {
     case MemoType.PaymentRequest: return 'payment request';
     case MemoType.Ack: return 'read receipt';
     case MemoType.ContactCard: return 'contact card';
+    case MemoType.EncryptedMessage: return 'encrypted message';
+    case MemoType.Data: return 'data';
     case MemoType.DkgRound1: return 'DKG round 1';
     case MemoType.DkgRound2: return 'DKG round 2';
     case MemoType.DkgRound3: return 'DKG round 3';

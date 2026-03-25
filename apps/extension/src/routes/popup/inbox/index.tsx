@@ -329,14 +329,15 @@ function ContactCardView({
   onAddToContacts,
   isInContacts,
 }: {
-  message: Message;
+  message: Message & { contactCard?: import('../../../state/inbox').InboxMessage['contactCard'] };
   onAddToContacts?: () => void;
   isInContacts: boolean;
 }) {
-  // parse name and address from the content (format: "📇 name\naddress")
-  const lines = message.content.split('\n');
-  const name = lines[0]?.replace(/^📇\s*/, '') ?? '';
-  const address = lines.slice(1).join('\n').trim();
+  const card = message.contactCard;
+  // fallback: parse from content string if contactCard field missing (older messages)
+  const name = card?.name ?? message.content.split('\n')[0]?.replace(/^📇\s*/, '') ?? '';
+  const address = card?.address ?? message.content.split('\n').slice(1).join('\n').trim();
+  const zid = card?.zid;
 
   return (
     <div className='rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3'>
@@ -354,12 +355,18 @@ function ContactCardView({
           <span className='text-xs text-muted-foreground'>address</span>
           <p className='text-xs font-mono break-all text-muted-foreground'>{address}</p>
         </div>
+        {zid && (
+          <div>
+            <span className='text-xs text-muted-foreground'>sender zid</span>
+            <p className='text-xs font-mono text-muted-foreground'>zid{zid.slice(0, 16)}</p>
+          </div>
+        )}
       </div>
 
       {!isInContacts && onAddToContacts ? (
         <button
           onClick={onAddToContacts}
-          className='w-full flex items-center justify-center gap-2 rounded-lg bg-zigner-gold py-2.5 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors'
+          className='w-full flex items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/10 py-2.5 text-sm text-primary hover:bg-primary/20 transition-colors'
         >
           <span className='i-lucide-user-plus h-4 w-4' />
           save to contacts

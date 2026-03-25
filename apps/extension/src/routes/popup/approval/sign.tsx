@@ -4,7 +4,7 @@ import { signApprovalSelector } from '../../../state/sign-approval';
 import { ApproveDeny } from './approve-deny';
 import { DisplayOriginURL } from '../../../shared/components/display-origin-url';
 import { UserChoice } from '@repo/storage-chrome/records';
-import { signWithIdentity } from '../../../state/identity';
+import { signZid } from '../../../state/identity';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { hexToBytes } from '@noble/hashes/utils';
 
@@ -20,7 +20,8 @@ export const SignApproval = () => {
     try {
       const mnemonic = await getMnemonic(keyInfo.id);
       const challenge = hexToBytes(challengeHex);
-      const result = signWithIdentity(mnemonic, 0, challenge);
+      // TODO: load per-site preference from storage and pass to signZid
+      const result = signZid(mnemonic, origin!, challenge);
       setChoice(UserChoice.Approved);
       sendResponse(result);
     } catch (e) {

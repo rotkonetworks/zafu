@@ -8,6 +8,9 @@ export enum PopupPath {
   CONTACTS = '/contacts',
   SETTINGS = '/settings',
 
+  // Identity
+  IDENTITY = '/identity',
+
   // Auth
   LOGIN = '/login',
 

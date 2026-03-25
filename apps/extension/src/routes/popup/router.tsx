@@ -31,6 +31,7 @@ const MultisigCreate = lazy(() => import('./multisig/create').then(m => ({ defau
 const MultisigJoin = lazy(() => import('./multisig/join').then(m => ({ default: m.MultisigJoin })));
 const MultisigSign = lazy(() => import('./multisig/sign').then(m => ({ default: m.MultisigSign })));
 const NoteSyncPage = lazy(() => import('./note-sync').then(m => ({ default: m.NoteSyncPage })));
+const IdentityPage = lazy(() => import('./identity').then(m => ({ default: m.IdentityPage })));
 
 // suspense fallback for lazy routes
 const LazyFallback = () => (
@@ -97,6 +98,16 @@ export const popupRoutes: RouteObject[] = [
           </Suspense>
         ),
         children: settingsRoutes,
+      },
+
+      // Identity
+      {
+        path: PopupPath.IDENTITY,
+        element: (
+          <Suspense fallback={<LazyFallback />}>
+            <IdentityPage />
+          </Suspense>
+        ),
       },
 
       // Send/Receive

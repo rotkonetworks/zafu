@@ -1,17 +1,23 @@
 /**
  * slide-out menu drawer
- * includes navigation, about info, and donation address
+ * includes navigation, about info, and donation
  */
 
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../state';
-import { selectLock, selectActiveNetwork } from '../state/keyring';
+import { selectLock, selectActiveNetwork, selectEffectiveKeyInfo } from '../state/keyring';
 import { PopupPath } from '../routes/popup/paths';
 import { cn } from '@repo/ui/lib/utils';
 import { isSidePanel } from '../utils/popup-detection';
 
-const DONATION_ADDRESS = 'u153khs43zxz6hcnlwnut77knyqmursnutmungxjxd7khruunhj77ea6tmpzxct9wzlgen66jxwc93ea053j22afkktu7hrs9rmsz003h3';
+/** donation addresses per network */
+const DONATE: Record<string, { address: string; name: string }> = {
+  zcash: {
+    address: 'u153khs43zxz6hcnlwnut77knyqmursnutmungxjxd7khruunhj77ea6tmpzxct9wzlgen66jxwc93ea053j22afkktu7hrs9rmsz003h3',
+    name: 'zafu / rotko networks',
+  },
+};
 
 interface MenuDrawerProps {
   open: boolean;
@@ -22,8 +28,12 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
   const navigate = useNavigate();
   const lock = useStore(selectLock);
   const activeNetwork = useStore(selectActiveNetwork);
+  const keyInfo = useStore(selectEffectiveKeyInfo);
   const inSidePanel = isSidePanel();
-  const [copied, setCopied] = useState(false);
+  const [zidCopied, setZidCopied] = useState(false);
+
+  const zidPubkey = keyInfo?.insensitive?.['zid'] as string | undefined;
+  const zidAddress = zidPubkey ? 'zid' + zidPubkey.slice(0, 16) : undefined;
 
   const handleLock = () => {
     lock();
@@ -46,50 +56,52 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
     }
   };
 
+  const donation = activeNetwork ? DONATE[activeNetwork] : undefined;
+
   const handleDonate = useCallback(() => {
-    if (activeNetwork === 'zcash') {
-      onClose();
-      navigate(PopupPath.SEND, { state: { prefillRecipient: DONATION_ADDRESS } });
-    } else {
-      void navigator.clipboard.writeText(DONATION_ADDRESS);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    }
-  }, [activeNetwork, navigate, onClose]);
+    if (!donation) return;
+    onClose();
+    navigate(PopupPath.SEND, { state: { prefillRecipient: donation.address } });
+  }, [donation, navigate, onClose]);
 
   if (!open) return null;
 
   const menuItems = [
     {
+      icon: 'i-lucide-fingerprint',
+      label: 'identity',
+      onClick: () => { navigate(PopupPath.IDENTITY); onClose(); },
+    },
+    {
       icon: 'i-lucide-user',
-      label: 'Contacts',
+      label: 'contacts',
       onClick: () => { navigate(PopupPath.CONTACTS); onClose(); },
     },
     {
       icon: 'i-lucide-globe',
-      label: 'Manage Networks',
+      label: 'networks',
       onClick: () => { navigate(PopupPath.SETTINGS_NETWORKS); onClose(); },
     },
     {
       icon: 'i-lucide-wallet',
-      label: 'Wallets',
+      label: 'wallets',
       onClick: () => { navigate(PopupPath.SETTINGS_WALLETS); onClose(); },
     },
     {
       icon: 'i-lucide-settings',
-      label: 'Settings',
+      label: 'settings',
       onClick: () => { navigate(PopupPath.SETTINGS); onClose(); },
     },
     ...(inSidePanel
       ? [{
           icon: 'i-lucide-panel-right',
-          label: 'Open as Popup',
+          label: 'open as popup',
           onClick: handleOpenPopupWindow,
         }]
       : []),
     {
       icon: 'i-lucide-lock',
-      label: 'Lock Wallet',
+      label: 'lock',
       onClick: handleLock,
       className: 'text-destructive',
     },
@@ -113,6 +125,24 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
           </button>
         </div>
 
+        {/* zid */}
+        {zidAddress && (
+          <button
+            onClick={() => {
+              void navigator.clipboard.writeText(zidPubkey!);
+              setZidCopied(true);
+              setTimeout(() => setZidCopied(false), 1500);
+            }}
+            className='mx-4 mt-3 flex items-center gap-2 rounded-lg border border-border/40 px-3 py-2 text-left hover:bg-muted/50 transition-colors'
+          >
+            <span className='i-lucide-fingerprint h-3.5 w-3.5 text-muted-foreground' />
+            <span className='text-xs font-mono text-muted-foreground truncate'>{zidAddress}</span>
+            <span className='text-[10px] text-muted-foreground/60 ml-auto'>
+              {zidCopied ? 'copied' : 'zid'}
+            </span>
+          </button>
+        )}
+
         {/* menu items */}
         <nav className='p-2'>
           {menuItems.map((item, i) => (
@@ -130,27 +160,24 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
           ))}
         </nav>
 
-        {/* about + donate — pushed to bottom */}
+        {/* footer  - donate + about */}
         <div className='mt-auto border-t border-border/40 px-4 py-3'>
-          {/* donate */}
-          <button
-            onClick={handleDonate}
-            className='w-full rounded-lg border border-border/40 bg-card px-3 py-2 mb-3 text-left hover:bg-muted/50 transition-colors'
-          >
-            <p className='text-[10px] text-muted-foreground'>donate zcash</p>
-            <p className='text-[9px] font-mono text-muted-foreground/70 truncate mt-0.5'>{DONATION_ADDRESS}</p>
-            <p className='text-[10px] text-primary mt-1'>
-              {activeNetwork === 'zcash' ? 'tap to send' : copied ? 'copied!' : 'tap to copy'}
-            </p>
-          </button>
+          {donation && (
+            <button
+              onClick={handleDonate}
+              className='flex w-full items-center gap-2 px-3 py-2 mb-3 rounded-lg border border-border/40 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors'
+            >
+              <span className='i-lucide-heart h-3.5 w-3.5' />
+              <span>donate {activeNetwork}</span>
+            </button>
+          )}
 
-          {/* about links */}
           <div className='flex items-center gap-3 text-[10px] text-muted-foreground'>
             <a href='https://rotko.net' target='_blank' rel='noopener noreferrer' className='hover:text-foreground'>rotko.net</a>
             <a href='https://github.com/rotkonetworks/zafu' target='_blank' rel='noopener noreferrer' className='hover:text-foreground'>github</a>
             <a href='https://zigner.rotko.net' target='_blank' rel='noopener noreferrer' className='hover:text-foreground'>zigner</a>
           </div>
-          <p className='text-[9px] text-muted-foreground/50 mt-1'>GPL-3.0 — rotko networks</p>
+          <p className='text-[9px] text-muted-foreground/50 mt-1'>GPL-3.0</p>
         </div>
       </div>
     </>
