@@ -1,0 +1,2839 @@
+<!DOCTYPE HTML>
+<html lang="en" class="coal sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>zafu</title>
+        <meta name="robots" content="noindex">
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="privacy wallet for zcash and penumbra">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="favicon-8114d1fc.png">
+        <link rel="stylesheet" href="css/variables-8adf115d.css">
+        <link rel="stylesheet" href="css/general-2459343d.css">
+        <link rel="stylesheet" href="css/chrome-ae938929.css">
+        <link rel="stylesheet" href="css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "coal";
+            const default_dark_theme = "coal";
+            window.path_to_searchindex_js = "searchindex-9f0443aa.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc-4cbd2bf8.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('coal')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">zafu</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/rotkonetworks/zafu" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="zafu"><a class="header" href="#zafu">zafu</a></h1>
+<p>zafu is a privacy wallet for zcash and penumbra. it runs as a chrome
+extension with client-side proving, encrypted storage, and air-gapped
+signing support.</p>
+<h2 id="design-principles"><a class="header" href="#design-principles">design principles</a></h2>
+<p><strong>privacy by default.</strong> viewing keys are encrypted at rest. no network
+connections are made until you opt in per network. no telemetry, no
+analytics, no tracking.</p>
+<p><strong>your keys, your device.</strong> spending keys never leave your device. the
+extension proves transactions locally using WASM (halo2 for zcash,
+groth16/plonk for penumbra). with zigner, spending keys stay on a
+separate air-gapped device.</p>
+<p><strong>minimal trust.</strong> the extension connects to light client endpoints for
+chain data (compact blocks). it does not trust the server with any
+private data. the view server runs locally in the service worker.</p>
+<p><strong>cross-network identity.</strong> zafu derives a persistent ed25519 identity
+(zid) from your seed phrase. this identity works across all networks
+and can be used for authentication, message signing, and encrypted
+communication.</p>
+<h2 id="features"><a class="header" href="#features">features</a></h2>
+<ul>
+<li>zcash shielded transactions (orchard)</li>
+<li>penumbra shielded transactions</li>
+<li>FROST threshold multisig for zcash</li>
+<li>zigner air-gapped signing via QR codes</li>
+<li>zid cross-network identity</li>
+<li>contact cards via shielded memos</li>
+<li>encrypted wallet storage (AES-256-GCM)</li>
+<li>side panel and popup modes</li>
+</ul>
+<h2 id="networks"><a class="header" href="#networks">networks</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>network</th><th>send</th><th>receive</th><th>sync</th><th>swap</th><th>stake</th></tr>
+</thead>
+<tbody>
+<tr><td>penumbra</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td></tr>
+<tr><td>zcash</td><td>yes</td><td>yes</td><td>yes</td><td>-</td><td>-</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="source"><a class="header" href="#source">source</a></h2>
+<p>zafu is free software released under the GPL-3.0 license.</p>
+<ul>
+<li>source: <a href="https://github.com/rotkonetworks/zafu">github.com/rotkonetworks/zafu</a></li>
+<li>zigner: <a href="https://zigner.rotko.net">zigner.rotko.net</a></li>
+<li>by: <a href="https://rotko.net">rotko networks</a></li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="getting-started"><a class="header" href="#getting-started">getting started</a></h1>
+<p>zafu is a multi-chain privacy wallet for zcash and penumbra, distributed as a
+chrome extension (manifest v3). it supports three onboarding paths: creating a
+new wallet, importing an existing seed phrase, or connecting a zigner airgap
+device.</p>
+<h2 id="building-from-source"><a class="header" href="#building-from-source">building from source</a></h2>
+<p>zafu is a pnpm monorepo. the extension lives in <code>apps/extension/</code>.</p>
+<p>prerequisites:</p>
+<ul>
+<li>node.js (with <code>--max-old-space-size=8192</code> - set automatically by build scripts)</li>
+<li>pnpm 9.4+</li>
+<li>rust toolchain (for zcash wasm compilation in <code>packages/zcash-wasm/</code>)</li>
+</ul>
+<pre><code class="language-sh">git clone https://github.com/nicely-gg/zafu
+cd zafu
+pnpm install
+pnpm build
+</code></pre>
+<p><code>pnpm build</code> runs turbo across the monorepo. it produces two extension builds:</p>
+<ul>
+<li><code>apps/extension/dist/</code> - production build (<code>bundle:prod</code>)</li>
+<li><code>apps/extension/beta-dist/</code> - beta/testnet build (<code>bundle:beta</code>)</li>
+</ul>
+<p>for development with hot reload against testnet:</p>
+<pre><code class="language-sh">cd apps/extension
+pnpm dev
+</code></pre>
+<p>this runs webpack in watch mode with <code>NODE_ENV=testnet</code> and inline source maps.</p>
+<p>to load the unpacked extension in chromium, navigate to <code>chrome://extensions</code>,
+enable developer mode, and load the <code>dist/</code> or <code>beta-dist/</code> directory.</p>
+<p>other commands:</p>
+<ul>
+<li><code>pnpm lint</code> - eslint</li>
+<li><code>pnpm lint:strict</code> - typecheck + eslint with zero warnings</li>
+<li><code>pnpm test</code> - vitest</li>
+<li><code>pnpm clean</code> - remove <code>dist/</code>, <code>beta-dist/</code>, <code>bin/</code></li>
+</ul>
+<h2 id="onboarding"><a class="header" href="#onboarding">onboarding</a></h2>
+<p>on first launch, zafu opens a full-page onboarding tab. there are three paths.</p>
+<h3 id="create-new-wallet"><a class="header" href="#create-new-wallet">create new wallet</a></h3>
+<p>generates a new 24-word BIP-39 seed phrase. 24 words are used for better
+entropy and zcash compatibility. the phrase is generated client-side and
+never leaves the device.</p>
+<p>after generation, the flow proceeds to network selection and then password
+creation.</p>
+<h3 id="import-seed-phrase"><a class="header" href="#import-seed-phrase">import seed phrase</a></h3>
+<p>enter an existing 12 or 24-word BIP-39 recovery phrase. you can paste the
+full phrase into the first input box and the remaining fields fill
+automatically. the phrase is validated before the import button becomes
+active.</p>
+<p>after validation, the flow proceeds to network selection and then password
+creation.</p>
+<h3 id="connect-zigner-airgap"><a class="header" href="#connect-zigner-airgap">connect zigner (airgap)</a></h3>
+<p>zigner is zafu’s companion airgap signing device. it keeps spending keys
+offline and communicates with zafu via QR codes.</p>
+<p>the zigner import flow:</p>
+<ol>
+<li>open the zigner app on your phone and export the viewing key as a QR code</li>
+<li>scan the QR code with your computer’s camera</li>
+<li>zafu detects the network type automatically (penumbra, zcash, cosmos, or polkadot)</li>
+<li>set an optional wallet label</li>
+<li>choose to set a password or skip it</li>
+</ol>
+<p>zigner wallets are watch-only. you can view balances and construct unsigned
+transactions, but signing requires the zigner device. the extension stores
+only the full viewing key (penumbra), unified full viewing key (zcash), or
+public address (cosmos/polkadot).</p>
+<p>zigner supports four network types:</p>
+<ul>
+<li>penumbra - imports the full viewing key and account index</li>
+<li>zcash - imports the orchard full viewing key or unified full viewing key</li>
+<li>cosmos - imports watch-only addresses for cosmos chains</li>
+<li>polkadot - imports the SS58 address and genesis hash</li>
+</ul>
+<h2 id="network-selection"><a class="header" href="#network-selection">network selection</a></h2>
+<p>after creating or importing a wallet (seed phrase path), you select which
+networks to enable. only launched networks appear in the list. transparent
+networks are labeled “public” to indicate their ledger is fully visible.</p>
+<p>you must select at least one network. the first selected network becomes the
+active network. network selection can be changed later in settings.</p>
+<h2 id="password"><a class="header" href="#password">password</a></h2>
+<p>the password encrypts your wallet data in local storage. it is required to
+unlock the extension after it locks.</p>
+<p>when connecting via zigner, you can skip password creation. this means the
+extension does not require login but is less secure - anyone with access to
+your browser can open the wallet.</p>
+<p>password requirements: the password and confirmation must match. there is no
+minimum length enforced by the UI, but longer passwords are recommended.</p>
+<h2 id="fresh-wallet-optimization"><a class="header" href="#fresh-wallet-optimization">fresh wallet optimization</a></h2>
+<p>when creating a new wallet (not importing), zafu records the current block
+height at the time of creation. this allows the sync process to skip all
+historical blocks before your wallet existed, since there cannot be any
+transactions for a newly generated key before that height.</p>
+<p>for penumbra, it also fetches the compact frontier snapshot from the RPC node
+to bootstrap the state commitment tree without downloading the full chain
+history.</p>
+<h2 id="after-onboarding"><a class="header" href="#after-onboarding">after onboarding</a></h2>
+<p>once onboarding completes, close the setup tab. the wallet is accessible from
+the zafu icon in the browser toolbar.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="networks-1"><a class="header" href="#networks-1">networks</a></h1>
+<p>zafu organizes networks into three categories based on their privacy
+properties: privacy networks, IBC/cosmos chains, and transparent networks.</p>
+<p>only zcash and penumbra are currently launched and available for selection
+during onboarding. the remaining networks are defined in the codebase but
+not yet enabled in the UI.</p>
+<h2 id="privacy-networks"><a class="header" href="#privacy-networks">privacy networks</a></h2>
+<p>these networks use client-side trial decryption. the wallet downloads all
+compact blocks and decrypts them locally with the viewing key. the RPC node
+never learns which addresses or notes belong to the user.</p>
+<h3 id="zcash"><a class="header" href="#zcash">zcash</a></h3>
+<ul>
+<li>symbol: ZEC</li>
+<li>decimals: 8</li>
+<li>pool: orchard (shielded)</li>
+<li>sync model: zidecar trustless sync - header chain proven via Ligerito
+polynomial commitments, nullifier set verified by NOMT merkle proofs.
+compact blocks are trial-decrypted locally.</li>
+<li>default endpoint: <code>https://zcash.rotko.net</code></li>
+<li>orchard activation height: 1,687,104 - scanning never starts before this</li>
+<li>key derivation: ZIP-32 shielded derivation</li>
+<li>features: encrypted inbox (shielded memos)</li>
+<li>staking: no</li>
+<li>swaps: no</li>
+</ul>
+<p>zcash sync downloads compact blocks from the orchard activation height (or
+the wallet birthday height for imported wallets). each action in a compact
+block is trial-decrypted against the incoming viewing key at approximately
+3 microseconds per action. this is privacy-preserving - the RPC node sees
+only that someone is downloading blocks, not which notes are relevant.</p>
+<p>zafu uses a dedicated web worker (<code>zcash-worker.ts</code>) for zcash sync and
+proving. the zcash WASM module is compiled from rust with wasm-bindgen and
+rayon support for parallel proving.</p>
+<p>FROST threshold multisig is supported for zcash. coordination happens via
+shielded memos with no coordinator server.</p>
+<h3 id="penumbra"><a class="header" href="#penumbra">penumbra</a></h3>
+<ul>
+<li>symbol: UM</li>
+<li>decimals: 6</li>
+<li>denomination: upenumbra</li>
+<li>sync model: compact blocks verified by state commitment tree,
+trial-decrypted locally - keys never leave the device</li>
+<li>default endpoint: <code>https://penumbra.rotko.net</code></li>
+<li>chain ID: penumbra-1</li>
+<li>bech32 prefix: penumbra</li>
+<li>key derivation: penumbra-specific derivation</li>
+<li>features: staking, governance voting, encrypted inbox</li>
+<li>swaps: no (in zafu - the penumbra DEX is accessed via frontend dapps)</li>
+</ul>
+<p>penumbra is a shielded DEX chain. all assets on penumbra are shielded by
+default. zafu syncs by downloading all compact blocks and trial-decrypting
+locally with the full viewing key. the RPC node never learns which notes
+belong to the user.</p>
+<p>penumbra supports staking (delegation to validators) and on-chain governance
+voting directly from the wallet. asset swaps are performed through connected
+frontend dapps like the penumbra DEX rather than built into zafu itself.</p>
+<p>for fresh wallets, zafu fetches the compact frontier snapshot to bootstrap
+the state commitment tree without downloading full chain history.</p>
+<h2 id="ibccosmos-chains"><a class="header" href="#ibccosmos-chains">IBC/cosmos chains</a></h2>
+<p>cosmos-sdk chains used primarily for IBC transfers into and out of penumbra.
+these are transparent - queries send specific bech32 addresses to centralized
+RPC nodes, which can observe address activity and correlate it with IP
+addresses.</p>
+<p>all cosmos chains use BIP44 secp256k1 key derivation with path
+<code>m/44'/118'/0'/0/0</code> and chain-specific bech32 prefixes.</p>
+<p>these networks are not yet launched in the UI.</p>
+<h3 id="osmosis"><a class="header" href="#osmosis">osmosis</a></h3>
+<ul>
+<li>symbol: OSMO</li>
+<li>decimals: 6</li>
+<li>denomination: uosmo</li>
+<li>chain ID: osmosis-1</li>
+<li>bech32 prefix: osmo</li>
+<li>default RPC: <code>https://rpc.osmosis.zone</code></li>
+<li>default LCD: <code>https://lcd.osmosis.zone</code></li>
+<li>features: staking, swaps</li>
+<li>role: DEX and IBC routing hub</li>
+</ul>
+<h3 id="noble"><a class="header" href="#noble">noble</a></h3>
+<ul>
+<li>symbol: USDC</li>
+<li>decimals: 6</li>
+<li>denomination: uusdc (native USDC issuance)</li>
+<li>chain ID: noble-1</li>
+<li>bech32 prefix: noble</li>
+<li>default RPC: <code>https://noble-rpc.polkachu.com</code></li>
+<li>default LCD: <code>https://noble-api.polkachu.com</code></li>
+<li>features: none (transfer only)</li>
+<li>role: native USDC issuance chain</li>
+</ul>
+<h3 id="nomic"><a class="header" href="#nomic">nomic</a></h3>
+<ul>
+<li>symbol: nBTC</li>
+<li>decimals: 8 (satoshis)</li>
+<li>denomination: usat</li>
+<li>chain ID: nomic-stakenet-3</li>
+<li>bech32 prefix: nomic</li>
+<li>default RPC: <code>https://rpc.nomic.io</code></li>
+<li>default REST: <code>https://app.nomic.io:8443</code> (relayer endpoint for deposits)</li>
+<li>features: none (transfer only)</li>
+<li>role: bitcoin bridge - deposit BTC, receive nBTC, transfer to penumbra
+via IBC for shielded bitcoin</li>
+</ul>
+<p>the intended flow: BTC -&gt; nomic (nBTC) -&gt; penumbra (shielded nBTC).</p>
+<h3 id="celestia"><a class="header" href="#celestia">celestia</a></h3>
+<ul>
+<li>symbol: TIA</li>
+<li>decimals: 6</li>
+<li>denomination: utia</li>
+<li>chain ID: celestia</li>
+<li>bech32 prefix: celestia</li>
+<li>default RPC: <code>https://celestia-rpc.polkachu.com</code></li>
+<li>default LCD: <code>https://celestia-api.polkachu.com</code></li>
+<li>features: staking</li>
+<li>role: data availability layer</li>
+</ul>
+<h2 id="transparent-networks"><a class="header" href="#transparent-networks">transparent networks</a></h2>
+<p>fully public ledgers. all balances and transactions are visible on-chain.
+these networks are not yet launched in the UI.</p>
+<h3 id="polkadot"><a class="header" href="#polkadot">polkadot</a></h3>
+<ul>
+<li>symbol: DOT</li>
+<li>decimals: 10</li>
+<li>SS58 prefix: 0</li>
+<li>default endpoint: <code>wss://rpc.polkadot.io</code></li>
+<li>key derivation: sr25519 (default), ed25519, ledger_ed25519, ecdsa</li>
+<li>features: staking</li>
+<li>sync model: smoldot embedded light client - connects to the p2p network
+directly, verifies headers cryptographically. queries are distributed
+across peers rather than sent to a single RPC node.</li>
+</ul>
+<p>polkadot supports multiple encryption types per network. sr25519 is the
+default for hot wallets. ledger_ed25519 uses SLIP-10/BIP32-Ed25519
+derivation matching the Ledger hardware wallet app, so users can add their
+Ledger wallet to zigner and use it with zafu.</p>
+<p>substrate parachains are supported under the polkadot umbrella with the same
+key derivation but different SS58 prefixes and RPC endpoints. defined
+parachains: hydration, acala, moonbeam, astar.</p>
+<h3 id="kusama"><a class="header" href="#kusama">kusama</a></h3>
+<ul>
+<li>symbol: KSM</li>
+<li>decimals: 12</li>
+<li>SS58 prefix: 2</li>
+<li>default endpoint: <code>wss://kusama-rpc.polkadot.io</code></li>
+<li>key derivation: sr25519 (default), ed25519, ledger_ed25519, ecdsa</li>
+<li>features: staking</li>
+<li>sync model: same as polkadot (smoldot light client)</li>
+</ul>
+<p>kusama parachains: karura, moonriver.</p>
+<h3 id="ethereum"><a class="header" href="#ethereum">ethereum</a></h3>
+<ul>
+<li>symbol: ETH</li>
+<li>decimals: 18</li>
+<li>chain ID: 1</li>
+<li>default endpoint: <code>https://eth.llamarpc.com</code></li>
+<li>key derivation: secp256k1, path <code>m/44'/60'/0'/0/0</code></li>
+<li>features: swaps</li>
+</ul>
+<h3 id="bitcoin"><a class="header" href="#bitcoin">bitcoin</a></h3>
+<ul>
+<li>symbol: BTC</li>
+<li>decimals: 8</li>
+<li>default endpoint: <code>https://mempool.space</code></li>
+<li>key derivation: BIP-84 native segwit, path <code>m/84'/0'/0'/0/0</code></li>
+<li>features: none</li>
+</ul>
+<h2 id="custom-endpoints"><a class="header" href="#custom-endpoints">custom endpoints</a></h2>
+<p>all network endpoints can be changed in the settings. custom endpoints are
+persisted in local storage independently of the default configuration.</p>
+<h2 id="network-selection-in-settings"><a class="header" href="#network-selection-in-settings">network selection in settings</a></h2>
+<p>networks can be enabled or disabled after onboarding through the settings
+page. disabling a network that still has associated wallets is not permitted.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="privacy"><a class="header" href="#privacy">privacy</a></h1>
+<p>zafu operates in minimal-footprint mode by default. all privacy-relevant
+toggles default to off for transparent networks. shielded networks (penumbra,
+zcash) are always safe to sync because they use trial decryption - the RPC
+node never learns which addresses or notes belong to the user.</p>
+<h2 id="privacy-tiers"><a class="header" href="#privacy-tiers">privacy tiers</a></h2>
+<p>zafu classifies networks into three privacy tiers that determine how queries
+are handled:</p>
+<h3 id="tier-1-shielded-penumbra-zcash"><a class="header" href="#tier-1-shielded-penumbra-zcash">tier 1: shielded (penumbra, zcash)</a></h3>
+<p>trial decryption. the client downloads all compact blocks and decrypts them
+locally with the viewing key. the RPC node sees only that someone is
+downloading blocks. it cannot determine which notes, addresses, or
+transactions belong to the user.</p>
+<p>syncing and balance queries for shielded networks are always permitted
+regardless of privacy settings. no toggle controls them because they do not
+leak metadata.</p>
+<h3 id="tier-2-light-client-polkadot"><a class="header" href="#tier-2-light-client-polkadot">tier 2: light client (polkadot)</a></h3>
+<p>smoldot embedded light client. connects to the p2p network directly and
+verifies block headers cryptographically. queries are distributed across
+multiple peers rather than sent to a single centralized RPC node. this makes
+correlation harder than a single RPC endpoint but does not provide the same
+guarantees as trial decryption.</p>
+<p>balance queries for light client networks are always permitted regardless of
+privacy settings.</p>
+<h3 id="tier-3-transparent-cosmos-chains"><a class="header" href="#tier-3-transparent-cosmos-chains">tier 3: transparent (cosmos chains)</a></h3>
+<p>queries specific bech32 addresses against centralized RPC nodes. the RPC
+operator can observe which addresses are being watched and correlate this
+with the user’s IP address and query timing.</p>
+<p>balance queries, background sync, and transaction history for transparent
+networks are controlled by the privacy toggles described below.</p>
+<h2 id="privacy-toggles"><a class="header" href="#privacy-toggles">privacy toggles</a></h2>
+<p>all toggles default to off (false). settings are persisted in local storage.</p>
+<h3 id="cosmos-balances-enabletransparentbalances"><a class="header" href="#cosmos-balances-enabletransparentbalances">cosmos balances (<code>enableTransparentBalances</code>)</a></h3>
+<ul>
+<li>default: off</li>
+<li>when off: no balance queries are sent for cosmos/IBC networks. balances
+are not displayed.</li>
+<li>when on: queries RPC nodes for account balances on cosmos chains. the RPC
+node learns which bech32 addresses you control.</li>
+<li>scope: cosmos/IBC chains only (osmosis, noble, nomic, celestia). does not
+affect penumbra or zcash, which are always safe.</li>
+<li>visible when: active network is an IBC chain or penumbra</li>
+</ul>
+<h3 id="transaction-history-enabletransactionhistory"><a class="header" href="#transaction-history-enabletransactionhistory">transaction history (<code>enableTransactionHistory</code>)</a></h3>
+<ul>
+<li>default: off</li>
+<li>when off: no transaction history is fetched or stored</li>
+<li>when on: queries and stores transaction history locally</li>
+<li>scope: all networks</li>
+<li>visible when: always (for all networks)</li>
+</ul>
+<h3 id="background-sync-enablebackgroundsync"><a class="header" href="#background-sync-enablebackgroundsync">background sync (<code>enableBackgroundSync</code>)</a></h3>
+<ul>
+<li>default: off</li>
+<li>when off: transparent network state is only synced when the extension
+popup is open</li>
+<li>when on: periodically syncs state with transparent networks in the
+background via the service worker</li>
+<li>scope: cosmos/IBC chains and transparent networks. penumbra and zcash
+background sync is always permitted because it uses trial decryption.</li>
+<li>visible when: active network is an IBC chain or penumbra</li>
+</ul>
+<h3 id="price-display-enablepricefetching"><a class="header" href="#price-display-enablepricefetching">price display (<code>enablePriceFetching</code>)</a></h3>
+<ul>
+<li>default: off</li>
+<li>when off: no fiat price data is fetched. amounts are shown in native
+denominations only.</li>
+<li>when on: fetches prices from external APIs. these APIs do not receive
+your addresses or any wallet data - they only know that someone requested
+a price for a given asset. this is relatively low risk compared to the
+other toggles.</li>
+<li>scope: all networks</li>
+<li>visible when: active network is penumbra or an IBC chain</li>
+</ul>
+<h2 id="what-data-leaves-the-device"><a class="header" href="#what-data-leaves-the-device">what data leaves the device</a></h2>
+<h3 id="with-all-toggles-off-default"><a class="header" href="#with-all-toggles-off-default">with all toggles off (default)</a></h3>
+<ul>
+<li>penumbra: compact block requests to the configured gRPC endpoint.
+the endpoint sees your IP address and that you are syncing. it cannot
+determine your addresses or balances.</li>
+<li>zcash: compact block requests to the configured zidecar endpoint.
+same privacy properties as penumbra - trial decryption means the
+endpoint cannot determine your addresses.</li>
+<li>transparent networks: nothing. no queries are sent.</li>
+</ul>
+<h3 id="with-toggles-on"><a class="header" href="#with-toggles-on">with toggles on</a></h3>
+<ul>
+<li><code>enableTransparentBalances</code>: balance queries containing your bech32
+addresses are sent to cosmos RPC nodes</li>
+<li><code>enableTransactionHistory</code>: transaction history queries are sent to
+relevant network endpoints</li>
+<li><code>enableBackgroundSync</code>: the above queries happen periodically in the
+background, not just when the popup is open</li>
+<li><code>enablePriceFetching</code>: price requests for asset symbols are sent to
+external price APIs. no address data is included.</li>
+</ul>
+<h3 id="always-sent"><a class="header" href="#always-sent">always sent</a></h3>
+<ul>
+<li>DNS lookups for configured endpoints</li>
+<li>TLS handshakes with configured endpoints</li>
+<li>penumbra chain registry queries during onboarding (to discover RPC
+endpoints and numeraire denominations)</li>
+</ul>
+<h2 id="leaky-feature-detection"><a class="header" href="#leaky-feature-detection">leaky feature detection</a></h2>
+<p>the wallet tracks whether any metadata-leaking features are enabled. the
+<code>hasLeakyFeatures()</code> function returns true if any of the following are on:</p>
+<ul>
+<li><code>enableTransparentBalances</code></li>
+<li><code>enableTransactionHistory</code></li>
+<li><code>enableBackgroundSync</code></li>
+</ul>
+<p>note: <code>enablePriceFetching</code> is not included in the leaky features check
+because price APIs do not receive address data.</p>
+<h2 id="resetting-to-defaults"><a class="header" href="#resetting-to-defaults">resetting to defaults</a></h2>
+<p>the privacy settings page provides a way to reset all toggles to their
+default values (all off). this immediately stops all transparent network
+queries.</p>
+<h2 id="numeraire-pricing"><a class="header" href="#numeraire-pricing">numeraire pricing</a></h2>
+<p>penumbra uses a separate privacy-preserving approach for asset pricing.
+instead of querying third-party price APIs, zafu indexes asset prices
+locally by a user-selected denomination (the numeraire). this is configured
+during onboarding. prices are derived from on-chain DEX data that is
+already downloaded as part of the normal sync process.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="zid---zafu-identity"><a class="header" href="#zid---zafu-identity">zid - zafu identity</a></h1>
+<h2 id="what-is-a-zid"><a class="header" href="#what-is-a-zid">what is a zid</a></h2>
+<p>a zid is a cross-network ed25519 identity derived from your wallet
+seed phrase. it is not tied to any specific blockchain - it is the
+cryptographic identity of the person behind the wallet.</p>
+<p>a zid can:</p>
+<ul>
+<li>authenticate you to websites and apps</li>
+<li>sign arbitrary messages</li>
+<li>identify you in contact cards</li>
+<li>enable encrypted messaging between wallets</li>
+<li>detect if someone forwarded your contact information</li>
+</ul>
+<h2 id="derivation"><a class="header" href="#derivation">derivation</a></h2>
+<p>all zid keys are derived deterministically from the wallet mnemonic
+using HMAC-SHA512 with a versioned domain separator.</p>
+<pre><code>root = HMAC-SHA512("zid-v1", mnemonic)
+</code></pre>
+<p>from the root, multiple keypairs are derived:</p>
+<pre><code>global:      HMAC-SHA512(root, 0x00000000)
+per-site:    HMAC-SHA512(root, "site:" + origin)
+per-contact: HMAC-SHA512(root, "contact:" + contact_id)
+</code></pre>
+<p>the first 32 bytes of each derived value become the ed25519 private
+key. the public key is derived from it. all intermediate values are
+zeroized after use.</p>
+<h2 id="address-format"><a class="header" href="#address-format">address format</a></h2>
+<p>for display, a zid is shown as:</p>
+<pre><code>zid + first 16 hex characters of the public key
+</code></pre>
+<p>example: <code>zid8a3f72b1e9c04d5a</code></p>
+<p>the full 32-byte public key is available for copy/export.</p>
+<h2 id="per-contact-identity"><a class="header" href="#per-contact-identity">per-contact identity</a></h2>
+<p>when you share a contact card with someone, zafu derives a unique
+zid for that relationship:</p>
+<pre><code>zid_for_alice = HMAC-SHA512(root, "contact:" + alice_zid_pubkey)
+</code></pre>
+<p>if alice forwards your card to bob, bob will present the zid you
+created for alice. you can detect the forwarding because you know
+which zid was given to which contact.</p>
+<p>this is like giving each person a different phone number. if spam
+arrives on the number you only gave to your dentist, you know who
+shared it.</p>
+<h2 id="per-site-identity"><a class="header" href="#per-site-identity">per-site identity</a></h2>
+<p>by default, each website gets a unique zid derived from its origin:</p>
+<pre><code>zid_for_example = HMAC-SHA512(root, "site:https://example.com")
+</code></pre>
+<p>websites cannot correlate your activity across sites because they
+each see a different public key.</p>
+<p>you can opt to share your global zid (index 0) with a site if you
+want to be recognizable across services.</p>
+<h2 id="sign-in-flow"><a class="header" href="#sign-in-flow">sign-in flow</a></h2>
+<ol>
+<li>a website sends a sign request: <code>{ type: "zafu_sign", challengeHex, statement? }</code></li>
+<li>zafu shows an approval popup with the origin and challenge</li>
+<li>you approve or deny</li>
+<li>if approved, zafu signs the challenge with your zid and returns the signature</li>
+<li>the website verifies the signature against your public key</li>
+</ol>
+<p>no transaction is created. no funds are at risk. the signature only
+proves you control the zid private key.</p>
+<h2 id="recovery"><a class="header" href="#recovery">recovery</a></h2>
+<p>because the zid is derived from your seed phrase, it is automatically
+recovered when you restore your wallet. no separate backup is needed.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="contact-cards"><a class="header" href="#contact-cards">contact cards</a></h1>
+<h2 id="overview"><a class="header" href="#overview">overview</a></h2>
+<p>a contact card is a structured zcash memo that shares your name and
+address with another zafu user. the recipient’s wallet detects the
+card and offers to save you as a contact.</p>
+<p>contact cards are sent inside zcash shielded notes. only the sender
+and recipient can read them.</p>
+<h2 id="whats-in-a-card"><a class="header" href="#whats-in-a-card">what’s in a card</a></h2>
+<ul>
+<li><strong>name</strong> - your display name (UTF-8, up to 255 bytes)</li>
+<li><strong>address</strong> - your zcash unified address</li>
+<li><strong>zid</strong> - your per-contact identity (optional, 32-byte ed25519 pubkey)</li>
+</ul>
+<p>the zid in the card is unique to the recipient (see <a href="#per-contact-identity">per-contact identity</a>).</p>
+<h2 id="wire-format"><a class="header" href="#wire-format">wire format</a></h2>
+<p>contact cards use MemoType 0x05 in the zafu memo protocol. the payload
+is binary with TLV (tag-length-value) extensions after the core fields.</p>
+<p>see the <a href="#zafu-memo-protocol">memo protocol specification</a> for the full
+wire format.</p>
+<h2 id="sending-a-card"><a class="header" href="#sending-a-card">sending a card</a></h2>
+<ol>
+<li>go to contacts</li>
+<li>select a contact with a zcash address</li>
+<li>tap “share via zcash”</li>
+<li>the card is encoded as a memo and attached to the send flow</li>
+</ol>
+<p>the card is sent as a standard zcash transaction with a dust amount.
+the memo carries the encoded contact card.</p>
+<h2 id="receiving-a-card"><a class="header" href="#receiving-a-card">receiving a card</a></h2>
+<p>when zafu detects a contact card during zcash sync, it appears in
+your inbox. you can:</p>
+<ul>
+<li>view the sender’s name and address</li>
+<li>see their zid (if included)</li>
+<li>save them to your contacts with one tap</li>
+</ul>
+<h2 id="privacy-properties"><a class="header" href="#privacy-properties">privacy properties</a></h2>
+<ul>
+<li>the card is encrypted inside the zcash shielded note</li>
+<li>only the recipient can read it</li>
+<li>the sender’s zid is unique per recipient (leak detection)</li>
+<li>no metadata leaks to the network</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="threat-model"><a class="header" href="#threat-model">threat model</a></h1>
+<h2 id="what-zafu-protects"><a class="header" href="#what-zafu-protects">what zafu protects</a></h2>
+<p>zafu is designed to protect against:</p>
+<ol>
+<li>
+<p><strong>network observers</strong> - all transactions use shielded pools (zcash orchard, penumbra). amounts, sender, recipient, and memo contents are hidden from anyone observing the network.</p>
+</li>
+<li>
+<p><strong>RPC server operators</strong> - the extension connects to light client endpoints for compact blocks (public chain data). the server never sees your viewing keys, balances, or transaction history. the view server runs locally.</p>
+</li>
+<li>
+<p><strong>device theft (locked state)</strong> - wallet data is encrypted at rest with AES-256-GCM. viewing keys, zcash wallet data, contacts, and messages are stored as encrypted blobs in chrome.storage.local. the encryption key is derived from your password via PBKDF2-SHA512 (210,000 iterations) and exists only in chrome.storage.session while unlocked.</p>
+</li>
+<li>
+<p><strong>website tracking</strong> - per-site zid identities prevent cross-site correlation. websites only see the zid derived for their specific origin.</p>
+</li>
+<li>
+<p><strong>contact forwarding</strong> - per-contact zid identities let you detect when someone shares your contact information with a third party.</p>
+</li>
+</ol>
+<h2 id="what-zafu-does-not-protect-against"><a class="header" href="#what-zafu-does-not-protect-against">what zafu does not protect against</a></h2>
+<ol>
+<li>
+<p><strong>compromised device</strong> - if your device is compromised (malware, root access), an attacker can read memory, intercept keystrokes, and extract keys. zafu cannot protect against a compromised operating system.</p>
+</li>
+<li>
+<p><strong>compromised browser</strong> - chrome extensions run inside the browser’s process. a compromised browser can read extension memory. use a hardened browser configuration.</p>
+</li>
+<li>
+<p><strong>viewing key compromise (unlocked state)</strong> - while the wallet is unlocked, viewing keys are in memory. a memory dump could extract them. zid-encrypted messages provide an additional layer (the attacker would need both the viewing key and the zid private key).</p>
+</li>
+<li>
+<p><strong>mnemonic compromise</strong> - if your seed phrase is compromised, all derived keys (spending, viewing, zid) are compromised. use zigner for air-gapped key storage.</p>
+</li>
+<li>
+<p><strong>side-channel attacks</strong> - WASM proving runs in the browser. timing side channels may leak information about transaction values or key material. this is an inherent limitation of browser-based cryptography.</p>
+</li>
+</ol>
+<h2 id="trust-boundaries"><a class="header" href="#trust-boundaries">trust boundaries</a></h2>
+<pre><code>trusted:
+  your device (assuming not compromised)
+  the extension code (open source, auditable)
+  the WASM proving libraries
+
+partially trusted:
+  chrome browser (sandboxing, extension isolation)
+  light client RPC endpoint (sees your IP, knows you use zafu)
+
+untrusted:
+  websites / dapps (sandboxed by extension transport)
+  network observers (shielded by zcash/penumbra)
+  relay operators (if used - see encrypted blobs only)
+</code></pre>
+<h2 id="encryption-at-rest"><a class="header" href="#encryption-at-rest">encryption at rest</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>data</th><th>storage</th><th>encrypted</th></tr>
+</thead>
+<tbody>
+<tr><td>penumbra wallets (FVK)</td><td>chrome.storage.local</td><td>yes (AES-256-GCM)</td></tr>
+<tr><td>zcash wallets (UFVK)</td><td>chrome.storage.local</td><td>yes</td></tr>
+<tr><td>contacts</td><td>chrome.storage.local</td><td>yes</td></tr>
+<tr><td>messages</td><td>chrome.storage.local</td><td>yes</td></tr>
+<tr><td>recent addresses</td><td>chrome.storage.local</td><td>yes</td></tr>
+<tr><td>connected sites</td><td>chrome.storage.local</td><td>no (no private data)</td></tr>
+<tr><td>password key</td><td>chrome.storage.session</td><td>session only</td></tr>
+<tr><td>vaults (encrypted mnemonic)</td><td>chrome.storage.local</td><td>yes (separate key)</td></tr>
+</tbody>
+</table>
+</div>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="encryption-at-rest-1"><a class="header" href="#encryption-at-rest-1">encryption at rest</a></h1>
+<p>zafu encrypts sensitive wallet data in chrome.storage.local using AES-256-GCM
+with a key derived from the user’s password via PBKDF2.</p>
+<h2 id="what-is-encrypted"><a class="header" href="#what-is-encrypted">what is encrypted</a></h2>
+<p>the following storage keys are encrypted at rest:</p>
+<ul>
+<li><code>penumbraWallets</code> - penumbra full viewing keys and custody data</li>
+<li><code>zcashWallets</code> - zcash orchard full viewing keys and addresses</li>
+<li><code>contacts</code> - user contact entries</li>
+<li><code>recentAddresses</code> - recently used addresses</li>
+<li><code>dismissedContactSuggestions</code> - dismissed contact suggestion records</li>
+<li><code>messages</code> - zcash memo messages</li>
+</ul>
+<p>viewing keys (FVK) reveal full transaction history. no viewing key data is
+stored in plaintext - ever.</p>
+<p>the following are not encrypted:</p>
+<ul>
+<li><code>knownSites</code> - origin approval records (origin, choice, date). these contain
+no private data and are read by the origin storage package which does not have
+access to the session key.</li>
+<li><code>grpcEndpoint</code>, <code>frontendUrl</code>, <code>numeraires</code>, <code>activeWalletIndex</code>,
+<code>activeZcashIndex</code> - non-sensitive configuration values.</li>
+</ul>
+<h2 id="key-derivation"><a class="header" href="#key-derivation">key derivation</a></h2>
+<p>password-based key derivation uses PBKDF2 with the following parameters:</p>
+<ul>
+<li><strong>algorithm</strong>: PBKDF2</li>
+<li><strong>hash</strong>: SHA-512</li>
+<li><strong>iterations</strong>: 210,000</li>
+<li><strong>salt</strong>: 128-bit random (16 bytes), generated once at wallet creation</li>
+<li><strong>output</strong>: AES-GCM key, 256-bit</li>
+</ul>
+<p>the salt is stored in a <code>KeyPrint</code> alongside a verification hash. the
+verification hash is computed by exporting the derived CryptoKey to raw bytes
+and hashing with SHA-256. this hash is used during unlock to verify the password
+without attempting a trial decryption.</p>
+<p>password verification uses constant-time comparison to prevent timing attacks.
+all bytes are compared regardless of mismatch position.</p>
+<h2 id="aes-256-gcm-encryption"><a class="header" href="#aes-256-gcm-encryption">AES-256-GCM encryption</a></h2>
+<p>each encryption operation:</p>
+<ol>
+<li>generates a fresh 12-byte (96-bit) random nonce via <code>crypto.getRandomValues</code></li>
+<li>encrypts the plaintext with AES-256-GCM using the derived key and nonce</li>
+<li>returns a <code>Box</code> containing the nonce and ciphertext</li>
+</ol>
+<p>the <code>Box</code> class holds <code>(nonce: Uint8Array, cipherText: Uint8Array)</code>. decryption
+requires the same nonce and key.</p>
+<p>all cryptographic operations use the Web Crypto API (<code>crypto.subtle</code>). no
+third-party cryptography libraries are involved.</p>
+<h2 id="storage-format"><a class="header" href="#storage-format">storage format</a></h2>
+<p>encrypted values are stored as a JSON wrapper:</p>
+<pre><code class="language-json">{
+  "encrypted": {
+    "nonce": "&lt;base64&gt;",
+    "cipherText": "&lt;base64&gt;"
+  }
+}
+</code></pre>
+<p>the <code>isEncryptedWrapper</code> function checks for the <code>{ encrypted: BoxJson }</code> shape
+to distinguish encrypted data from legacy plaintext. if storage contains data
+that does not match this wrapper, it is treated as stale and ignored.</p>
+<h2 id="session-key-lifecycle"><a class="header" href="#session-key-lifecycle">session key lifecycle</a></h2>
+<p>the derived AES-256-GCM CryptoKey is stored in <code>chrome.storage.session</code> under
+the <code>passwordKey</code> key as an exported JWK. session storage is scoped to the
+extension and cleared when the browser closes.</p>
+<ul>
+<li><strong>locked state</strong>: no <code>passwordKey</code> in session storage. reads return null.
+writes are silently skipped with a console warning.</li>
+<li><strong>unlocked state</strong>: <code>passwordKey</code> is present in session storage. reads decrypt
+on demand. writes encrypt before persisting to local storage.</li>
+</ul>
+<p>the <code>Key</code> class wraps a <code>CryptoKey</code> and provides:</p>
+<ul>
+<li><code>Key.create(password)</code> - derives a new key from a password. generates a fresh
+salt. returns both the key and a <code>KeyPrint</code> for later verification.</li>
+<li><code>Key.recreate(password, keyPrint)</code> - re-derives the key from an existing salt
+and verifies against the stored hash. returns null on mismatch.</li>
+<li><code>Key.fromJson(keyJson)</code> - imports a key from its JWK representation (used to
+restore from session storage).</li>
+<li><code>seal(message)</code> - encrypts a string to a <code>Box</code>.</li>
+<li><code>unseal(box)</code> - decrypts a <code>Box</code> to a string, or returns null on failure.</li>
+</ul>
+<p>decryption errors are caught and return null. only unexpected errors (not
+<code>TypeError</code> or <code>OperationError</code>) are logged, to avoid leaking information.</p>
+<h2 id="encrypted-storage-proxy"><a class="header" href="#encrypted-storage-proxy">encrypted storage proxy</a></h2>
+<p><code>createEncryptedLocal</code> wraps the chrome local storage interface with a
+transparent proxy. for keys in the <code>ENCRYPTED_KEYS</code> set, reads decrypt and
+writes encrypt automatically. all other keys pass through unchanged.</p>
+<p>on unlock, the persist layer re-hydrates encrypted data by calling
+<code>readEncrypted</code> for each encrypted key. a zustand subscription watches for
+keyring status transitions to <code>unlocked</code> and triggers re-hydration.</p>
+<h2 id="key-print"><a class="header" href="#key-print">key print</a></h2>
+<p>the <code>KeyPrint</code> stores:</p>
+<ul>
+<li><code>hash</code> - SHA-256 of the raw exported key bytes (not the password)</li>
+<li><code>salt</code> - the PBKDF2 salt used during derivation</li>
+</ul>
+<p>both are serialized as base64 strings. the key print is stored persistently and
+used during unlock to verify the password before attempting decryption. the
+actual derived key is never stored persistently - only in session storage while
+unlocked.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="zigner"><a class="header" href="#zigner">zigner</a></h1>
+<p>zigner is an air-gapped cold wallet companion for zafu. spending keys stay on
+the phone. the browser extension holds only viewing keys and cannot authorize
+transactions on its own.</p>
+<h2 id="overview-1"><a class="header" href="#overview-1">overview</a></h2>
+<p>zafu supports two wallet types:</p>
+<ul>
+<li><strong>mnemonic</strong> - the extension holds the seed phrase (encrypted at rest) and can
+derive spending keys locally. this is a hot wallet.</li>
+<li><strong>zigner-zafu</strong> - the extension holds only viewing keys imported via QR code
+from a zigner device. transaction signing requires round-trip QR code
+communication with the phone. this is a cold wallet.</li>
+</ul>
+<p>the zigner model is the same for all supported networks: penumbra, zcash,
+polkadot, and cosmos.</p>
+<h2 id="what-stays-on-the-phone"><a class="header" href="#what-stays-on-the-phone">what stays on the phone</a></h2>
+<p>the zigner device (phone) holds:</p>
+<ul>
+<li>the seed phrase / mnemonic</li>
+<li>spending keys derived from the seed</li>
+<li>authorization to sign transactions</li>
+</ul>
+<p>the zigner device never connects to the internet during signing. the air gap
+is maintained by using QR codes as the only communication channel.</p>
+<h2 id="what-the-extension-holds"><a class="header" href="#what-the-extension-holds">what the extension holds</a></h2>
+<p>for a zigner-zafu vault, the extension stores:</p>
+<ul>
+<li><strong>penumbra</strong>: the full viewing key (FVK), account index, device identifier</li>
+<li><strong>zcash</strong>: the orchard full viewing key or unified full viewing key (UFVK),
+account index, device identifier</li>
+<li><strong>polkadot</strong>: the SS58 address and genesis hash (watch-only)</li>
+<li><strong>cosmos</strong>: chain addresses and optionally a compressed secp256k1 public key
+(watch-only)</li>
+</ul>
+<p>viewing keys allow the extension to:</p>
+<ul>
+<li>derive receiving addresses</li>
+<li>decrypt and scan incoming transactions</li>
+<li>display balances and transaction history</li>
+<li>build unsigned transactions</li>
+</ul>
+<p>viewing keys do not allow:</p>
+<ul>
+<li>signing transactions</li>
+<li>moving funds</li>
+<li>authorizing spends</li>
+</ul>
+<h2 id="import-flow"><a class="header" href="#import-flow">import flow</a></h2>
+<p>importing a zigner wallet into the extension:</p>
+<ol>
+<li>on the zigner device, export the viewing key as a QR code</li>
+<li>in the extension, open settings &gt; wallets &gt; scan zigner QR</li>
+<li>the extension camera scans the QR code</li>
+<li>the extension parses the QR data and extracts the viewing key</li>
+<li>the user optionally sets a label</li>
+<li>the extension stores the viewing key in an encrypted vault entry</li>
+</ol>
+<p>the extension accepts multiple QR formats:</p>
+<ul>
+<li><strong>UR format</strong> (preferred) - <code>ur:penumbra-accounts/...</code> or
+<code>ur:zcash-accounts/...</code>. uses the uniform resources encoding standard.</li>
+<li><strong>legacy binary format</strong> - hex-encoded binary with a <code>0x53</code> prefix byte,
+chain byte (<code>0x03</code> for penumbra, <code>0x04</code> for zcash), and operation byte
+(<code>0x01</code> for FVK export).</li>
+<li><strong>substrate format</strong> - <code>substrate:&lt;address&gt;:&lt;genesis_hash&gt;</code> for
+polkadot/kusama watch-only addresses.</li>
+<li><strong>cosmos JSON format</strong> - JSON with <code>type: "cosmos-accounts"</code>, containing
+chain addresses and a public key.</li>
+</ul>
+<h2 id="signing-flow"><a class="header" href="#signing-flow">signing flow</a></h2>
+<p>sending a transaction with a zigner wallet:</p>
+<ol>
+<li>the extension builds an unsigned transaction</li>
+<li>the extension encodes the sign request as a QR code and displays it</li>
+<li>the user scans the QR code with the zigner device</li>
+<li>the zigner device displays the transaction details for review</li>
+<li>the user approves on the zigner device</li>
+<li>the zigner device signs and displays a QR code containing the signature</li>
+<li>the user scans the signature QR code with the extension</li>
+<li>the extension attaches the signature to the transaction and broadcasts it</li>
+</ol>
+<p>the signing state machine tracks these steps:</p>
+<p><code>idle</code> - <code>building</code> - <code>show_qr</code> - <code>scanning</code> - <code>broadcasting</code> - <code>complete</code></p>
+<p>if any step fails, the state transitions to <code>error</code> and can be reset.</p>
+<h2 id="balance-sync"><a class="header" href="#balance-sync">balance sync</a></h2>
+<p>for zcash zigner wallets, the extension can sync balance data back to the
+zigner device via QR code. this lets the phone display current balances without
+connecting to the network.</p>
+<h2 id="security-model"><a class="header" href="#security-model">security model</a></h2>
+<p>the air gap provides the following properties:</p>
+<ul>
+<li><strong>compromise of the extension</strong> (browser exploit, malicious site, compromised
+machine) does not expose spending keys. an attacker gains viewing access
+(transaction history, balances) but cannot move funds.</li>
+<li><strong>compromise of the phone</strong> while offline does not expose funds to network
+attackers. the phone must be physically accessed.</li>
+<li><strong>the QR code channel</strong> is unidirectional per step and contains only the
+minimum data needed (sign request or signature). no persistent connection is
+established.</li>
+<li><strong>transaction review</strong> happens on the zigner device, which shows the
+destination and amount before signing. a compromised extension cannot silently
+redirect funds without the user seeing the wrong address on the phone screen.</li>
+</ul>
+<h2 id="vault-type"><a class="header" href="#vault-type">vault type</a></h2>
+<p>zigner wallets are stored as vault entries with <code>type: 'zigner-zafu'</code>. the
+<code>ZignerZafuImport</code> type contains optional fields for each network’s key
+material. a single zigner import can contain keys for multiple networks.</p>
+<p>insensitive metadata (device ID, account index, network addresses) is stored
+in the vault’s <code>insensitive</code> record. the viewing key data is encrypted at rest
+alongside all other wallet data.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="frost-threshold-signing"><a class="header" href="#frost-threshold-signing">frost threshold signing</a></h1>
+<p>zafu supports t-of-n multisig wallets for zcash using FROST (Flexible
+Round-Optimized Schnorr Threshold signatures). a group of n participants
+generates a shared key where any t participants can cooperatively sign a
+transaction, but fewer than t cannot.</p>
+<h2 id="overview-2"><a class="header" href="#overview-2">overview</a></h2>
+<p>a FROST multisig wallet in zafu consists of:</p>
+<ul>
+<li>a <strong>threshold</strong> (t) - the minimum number of signers required</li>
+<li>a <strong>max signers</strong> (n) - the total number of participants</li>
+<li>a <strong>key package</strong> per participant (secret - encrypted at rest)</li>
+<li>a <strong>public key package</strong> (shared among all participants, non-sensitive)</li>
+<li>an <strong>orchard full viewing key</strong> derived from the FROST group key</li>
+<li>a <strong>receiving address</strong> derived from the public key package</li>
+</ul>
+<p>the public key package and FVK are shared openly. they allow all participants
+to derive the wallet’s receiving address and decrypt incoming memos. the
+private key package is unique to each participant and must be kept secret.</p>
+<h2 id="distributed-key-generation-dkg"><a class="header" href="#distributed-key-generation-dkg">distributed key generation (DKG)</a></h2>
+<p>before a multisig wallet can be used, all n participants must run a distributed
+key generation ceremony. DKG produces each participant’s key package without
+any single party ever holding the full private key.</p>
+<h3 id="coordination"><a class="header" href="#coordination">coordination</a></h3>
+<p>DKG is coordinated via a relay server (zidecar). one participant creates a room
+and shares the room code with the others. all participants connect to the same
+room.</p>
+<p>the relay server is used only for message transport. it sees encrypted DKG
+messages but does not learn any key material. rooms are ephemeral and
+auto-expire after a TTL (default 600 seconds for DKG).</p>
+<h3 id="dkg-rounds"><a class="header" href="#dkg-rounds">DKG rounds</a></h3>
+<p>the protocol runs in 3 rounds:</p>
+<p><strong>round 1 - commitments</strong></p>
+<p>each participant generates a commitment (broadcast) and a secret (kept
+locally). the coordinator’s broadcast is prefixed with <code>DKG:&lt;threshold&gt;:&lt;maxSigners&gt;:</code>
+so joining participants learn the group parameters.</p>
+<p>all participants send their commitments through the relay and wait until
+<code>n - 1</code> peer commitments are collected.</p>
+<p>WASM function: <code>frostDkgPart1InWorker(maxSigners, threshold)</code></p>
+<p><strong>round 2 - key shares</strong></p>
+<p>each participant takes their round 1 secret and all peer commitments, then
+computes peer-specific key share packages. these packages are broadcast through
+the relay. each participant waits for <code>n - 1</code> peer packages.</p>
+<p>WASM function: <code>frostDkgPart2InWorker(round1Secret, peerBroadcasts)</code></p>
+<p><strong>round 3 - finalize</strong></p>
+<p>each participant takes their round 2 secret, all round 1 broadcasts, and all
+round 2 packages, then finalizes the key generation. the output is:</p>
+<ul>
+<li><code>key_package</code> - the participant’s secret share (encrypted at rest)</li>
+<li><code>public_key_package</code> - the group’s public key (shared)</li>
+<li><code>ephemeral_seed</code> - seed for generating signing nonces</li>
+</ul>
+<p>WASM function: <code>frostDkgPart3InWorker(round2Secret, peerBroadcasts, peerRound2)</code></p>
+<p>after round 3, the wallet address is derived from the public key package via
+<code>frostDeriveAddressInWorker(publicKeyPackage, diversifierIndex)</code>.</p>
+<h3 id="storage-after-dkg"><a class="header" href="#storage-after-dkg">storage after DKG</a></h3>
+<p>the resulting multisig wallet is stored as a vault entry with
+<code>type: 'frost-multisig'</code>. the vault’s insensitive metadata includes the
+threshold and max signers count.</p>
+<p>the <code>MultisigWallet</code> record stores:</p>
+<ul>
+<li><code>keyPackageHex</code> - hex-encoded FROST key package (secret, encrypted at rest)</li>
+<li><code>publicKeyPackageHex</code> - hex-encoded public key package (shared)</li>
+<li><code>ephemeralSeedHex</code> - seed for signing nonces</li>
+<li><code>orchardFvkHex</code> - 96-byte orchard FVK from the group key</li>
+<li><code>address</code> - the unified receiving address</li>
+<li><code>participants</code> - hex-encoded ed25519 public keys of all participants</li>
+</ul>
+<h2 id="signing-coordination"><a class="header" href="#signing-coordination">signing coordination</a></h2>
+<p>spending from a multisig wallet requires t participants to cooperatively sign.
+signing is coordinated through the same relay server.</p>
+<h3 id="signing-protocol"><a class="header" href="#signing-protocol">signing protocol</a></h3>
+<p><strong>round 1 - commitments</strong></p>
+<p>the coordinator creates a relay room and broadcasts the transaction data with a
+<code>SIGN:&lt;sighash&gt;:&lt;alpha1,alpha2,...&gt;:&lt;summary&gt;</code> prefix. the sighash is the
+transaction’s binding signature hash. the alphas are per-action randomizers from
+the unsigned transaction.</p>
+<p>each participant (including the coordinator) generates fresh nonces for each
+action and broadcasts their commitments as a pipe-delimited bundle. nonces are
+never reused across different messages.</p>
+<p>WASM function: <code>frostSignRound1InWorker(ephemeralSeed, keyPackage)</code></p>
+<p><strong>round 2 - signature shares</strong></p>
+<p>once each participant has collected commitments from all t signers, they compute
+a signature share for each action using their key package, nonces, the sighash,
+the action’s alpha, and all commitments.</p>
+<p>shares are sent as <code>S:&lt;actionIndex&gt;:&lt;shareHex&gt;</code> messages so the coordinator can
+bucket them by action.</p>
+<p>WASM function: <code>frostSpendSignInWorker(keyPackage, nonces, sighash, alpha, allCommitments)</code></p>
+<p><strong>aggregation</strong></p>
+<p>the coordinator collects t signature shares per action and aggregates them into
+the final authorization signatures. the signed transaction is then broadcast to
+the zcash network.</p>
+<h2 id="relay-server"><a class="header" href="#relay-server">relay server</a></h2>
+<p>the frost relay client (<code>FrostRelayClient</code>) communicates with zidecar via
+gRPC-Web over HTTPS. the protocol uses raw protobuf encoding.</p>
+<p>relay operations:</p>
+<ul>
+<li><code>CreateRoom(threshold, maxSigners, ttlSeconds)</code> - returns a human-readable
+room code (e.g., “acid-blue-cave”)</li>
+<li><code>JoinRoom(roomCode, participantId)</code> - server-streamed; receives join events,
+relayed messages, and room close events</li>
+<li><code>SendMessage(roomCode, senderId, payload)</code> - broadcasts a message to all
+room participants</li>
+</ul>
+<p>participant IDs are 32-byte random values generated per session. they are not
+linked to persistent identities.</p>
+<p>signing rooms use a shorter TTL (default 300 seconds) than DKG rooms.</p>
+<h2 id="trust-model"><a class="header" href="#trust-model">trust model</a></h2>
+<ul>
+<li><strong>no trusted dealer</strong>: DKG generates key shares without any party holding the
+full key. there is no key ceremony where a complete private key exists.</li>
+<li><strong>relay sees messages but not keys</strong>: the relay server transports DKG and
+signing messages. the cryptographic content is opaque to the relay. a
+compromised relay can deny service or replay messages, but cannot forge
+signatures or learn key material.</li>
+<li><strong>threshold security</strong>: fewer than t participants cannot produce a valid
+signature. compromising t - 1 participants reveals no useful information
+about the group’s private key.</li>
+<li><strong>ephemeral rooms</strong>: relay rooms expire after their TTL. no persistent state
+is kept on the relay server.</li>
+<li><strong>FROST key packages are encrypted at rest</strong>: each participant’s secret key
+package is stored in the extension’s encrypted storage, protected by the
+same AES-256-GCM scheme described in the <a href="#encryption-at-rest-1">encryption</a>
+documentation.</li>
+<li><strong>re-running DKG</strong>: if a participant loses their key package, the group must
+run DKG again. there is no key recovery mechanism for individual shares.</li>
+</ul>
+<h2 id="limitations"><a class="header" href="#limitations">limitations</a></h2>
+<ul>
+<li>only zcash orchard is supported for FROST multisig. sapling and sprout are
+not supported.</li>
+<li>all t signers must be online simultaneously during signing coordination.
+there is no asynchronous signing protocol.</li>
+<li>the FROST cryptography runs in a WASM worker. the WASM module is compiled
+from the zcash crate’s FROST implementation.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="zafu-memo-protocol"><a class="header" href="#zafu-memo-protocol">Zafu Memo Protocol</a></h1>
+<h2 id="status"><a class="header" href="#status">Status</a></h2>
+<p>Version: 1.0-draft
+Date: 2026-03-23
+Authors: rotko networks</p>
+<h2 id="abstract"><a class="header" href="#abstract">Abstract</a></h2>
+<p>This document specifies the binary wire format for structured messages
+carried inside Zcash shielded memo fields (ZIP-302). The protocol
+enables wallet-to-wallet communication including text messaging,
+contact card exchange, FROST multisig coordination, and authenticated
+encrypted messaging using ed25519-derived identities (zid).</p>
+<h2 id="1-conventions"><a class="header" href="#1-conventions">1. Conventions</a></h2>
+<p>The key words “MUST”, “MUST NOT”, “REQUIRED”, “SHALL”, “SHOULD”,
+“SHOULD NOT”, “RECOMMENDED”, “MAY”, and “OPTIONAL” in this document
+are to be interpreted as described in RFC 2119.</p>
+<p>All integers are unsigned and big-endian unless stated otherwise.
+All lengths are in bytes.</p>
+<h2 id="2-transport-layer"><a class="header" href="#2-transport-layer">2. Transport Layer</a></h2>
+<h3 id="21-zcash-memo-field"><a class="header" href="#21-zcash-memo-field">2.1. Zcash Memo Field</a></h3>
+<p>The Zcash memo field is a 512-byte field attached to each shielded
+note (ZIP-302). The first byte determines the interpretation:</p>
+<pre><code>0x00-0xF4  UTF-8 text (strip trailing zero bytes)
+0xF5       Legacy arbitrary data (deprecated)
+0xF6       No memo / reserved
+0xF7-0xFE  Reserved
+0xFF       Arbitrary data (511 unconstrained bytes)
+</code></pre>
+<p>This protocol uses 0xFF (arbitrary data) exclusively.</p>
+<h3 id="22-zafu-header"><a class="header" href="#22-zafu-header">2.2. Zafu Header</a></h3>
+<p>Bytes 0-2 of every zafu structured memo:</p>
+<pre><code> 0                   1                   2
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|     0xFF      |     0x5A      |     Type      |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+0xFF   ZIP-302 arbitrary data tag
+0x5A   Zafu magic byte ('Z', identifies zafu protocol)
+Type   Message type (Section 3)
+</code></pre>
+<p>Receivers MUST reject memos where byte 0 is not 0xFF or byte 1
+is not 0x5A.</p>
+<h2 id="3-message-types"><a class="header" href="#3-message-types">3. Message Types</a></h2>
+<pre><code>Value   Name             Description
+-----   ----             -----------
+0x01    Text             UTF-8 text message
+0x02    Address          Unified address (bech32m string)
+0x03    PaymentRequest   Amount + optional address + label
+0x04    Ack              Read receipt / acknowledgment
+0x05    ContactCard      Name + address + TLV extensions
+0x06    EncryptedMessage zid-authenticated encrypted payload
+0x07    Data             Generic structured data (agentic)
+0x10    DkgRound1        FROST DKG round 1
+0x11    DkgRound2        FROST DKG round 2
+0x12    DkgRound3        FROST DKG round 3
+0x20    SignRequest      FROST signing request
+0x21    SignCommitment   FROST signing commitment
+0x22    SignShare        FROST signature share
+0x23    SignResult       FROST aggregated signature
+</code></pre>
+<p>Values 0x00 and 0xF0-0xFF are reserved. Receivers MUST ignore
+messages with unknown type values.</p>
+<h2 id="4-standalone-messages"><a class="header" href="#4-standalone-messages">4. Standalone Messages</a></h2>
+<p>Messages that fit in a single memo use a 4-byte header:</p>
+<pre><code> 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|     0xFF      |     0x5A      |     Type      |     0x00      |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                                                               |
+|                     Payload (508 bytes max)                   |
+|                                                               |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+</code></pre>
+<p>Byte 3 is 0x00, indicating a standalone (non-fragmented) message.
+Maximum payload: 512 - 4 = 508 bytes.</p>
+<h2 id="5-fragmented-messages"><a class="header" href="#5-fragmented-messages">5. Fragmented Messages</a></h2>
+<p>Messages exceeding 508 bytes are split across multiple memos.
+Each fragment uses a 20-byte header:</p>
+<pre><code> 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|     0xFF      |     0x5A      |     Type      |  Part | Total |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                                                               |
+|                     Message ID (16 bytes)                     |
+|                                                               |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                                                               |
+|                     Payload (492 bytes max)                   |
+|                                                               |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+</code></pre>
+<p>Byte 3 encodes the sequence: high nibble = part number (1-indexed),
+low nibble = total fragment count. A standalone message has byte 3
+equal to 0x00 (part=0, total=0).</p>
+<pre><code>Part:  1-15 (4 bits, 1-indexed)
+Total: 1-15 (4 bits)
+</code></pre>
+<p>Maximum fragments: 15
+Maximum payload per fragment: 512 - 20 = 492 bytes
+Maximum total payload: 15 * 492 = 7,380 bytes</p>
+<h3 id="51-message-id"><a class="header" href="#51-message-id">5.1. Message ID</a></h3>
+<p>The Message ID is a 16-byte random value generated by the sender.
+All fragments of one logical message share the same Message ID.</p>
+<p>Receivers MUST group fragments by Message ID and Type. Receivers
+MUST reject reassembly if fragment types differ within a group.</p>
+<h3 id="52-reassembly"><a class="header" href="#52-reassembly">5.2. Reassembly</a></h3>
+<p>Fragments are sorted by Part number. Payloads are concatenated
+in order. The result is the complete application-layer payload,
+identical in format to a standalone payload.</p>
+<p>Receivers MUST NOT deliver incomplete messages to the application
+layer. Receivers SHOULD buffer fragments for a reasonable time
+(RECOMMENDED: until the next 100 blocks) before discarding
+incomplete groups.</p>
+<h3 id="53-transport"><a class="header" href="#53-transport">5.3. Transport</a></h3>
+<p>Each fragment is carried in a separate Zcash shielded output note
+within the same transaction. This ensures atomic delivery  - either
+all fragments confirm or none. Each fragment output carries a dust
+amount (minimum 1 zatoshi).</p>
+<h2 id="6-contact-card-type-0x05"><a class="header" href="#6-contact-card-type-0x05">6. Contact Card (Type 0x05)</a></h2>
+<h3 id="61-purpose"><a class="header" href="#61-purpose">6.1. Purpose</a></h3>
+<p>A contact card allows one wallet to share identity and address
+information with another, privately, inside a shielded memo. The
+recipient’s wallet detects the card and offers to save the sender
+as a contact.</p>
+<h3 id="62-payload-format"><a class="header" href="#62-payload-format">6.2. Payload Format</a></h3>
+<pre><code> 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|    Version    |     Flags     |   Name Len    |               |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+               +
+|                        Name (UTF-8)                           |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|        Address Length          |                              |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+                               +
+|                       Address (UTF-8)                         |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                    TLV Extensions (optional)                  |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+</code></pre>
+<p>Fields:</p>
+<pre><code>Version (u8):
+    0x01. Receivers MUST reject unknown versions.
+
+Flags (u8):
+    Reserved. Senders MUST set to 0x00.
+    Receivers MUST ignore all flag bits.
+    Capabilities are signaled by extension presence (Section 6.3),
+    not flag bits.
+
+Name Length (u8):
+    Length of Name field in bytes. MAY be 0 (anonymous card).
+    Maximum: 255.
+
+Name (variable):
+    UTF-8 encoded display name. No null terminator.
+
+Address Length (u16be):
+    Length of Address field in bytes. MUST be &gt; 0.
+
+Address (variable):
+    Zcash unified address (bech32m string). REQUIRED.
+</code></pre>
+<h3 id="63-tlv-extensions"><a class="header" href="#63-tlv-extensions">6.3. TLV Extensions</a></h3>
+<p>After the Address field, zero or more TLV extensions MAY follow:</p>
+<pre><code>+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|      Tag      |         Length (u16be)         |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                  Value (Length bytes)          |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+</code></pre>
+<p>Parsers MUST read extensions until the payload ends. Parsers MUST
+skip unknown tags by reading Length and advancing the offset.
+Parsers MUST stop if a TLV header would exceed the remaining
+payload (truncated extension).</p>
+<p>Defined tags:</p>
+<pre><code>Tag    Length   Description
+---    ------   -----------
+0x01   32       ed25519 zid public key (Section 7)
+0x02   var      Post-quantum public key (reserved, format TBD)
+</code></pre>
+<p>The presence of tag 0x01 indicates the sender supports
+zid-authenticated messaging (Section 8). The specific key in the
+value is the sender’s per-contact zid, unique to this relationship
+(Section 7.2).</p>
+<h3 id="64-size-budget"><a class="header" href="#64-size-budget">6.4. Size Budget</a></h3>
+<pre><code>Fixed overhead:       5 bytes (ver + flags + name_len + addr_len)
+Typical UA:           ~300 bytes
+Typical name:         ~20 bytes
+zid extension:        35 bytes (3 TLV header + 32 pubkey)
+Total:                ~360 bytes (fits single memo)
+
+With PQ extension:    ~1,260 bytes (requires fragmentation)
+</code></pre>
+<h3 id="65-design-rationale"><a class="header" href="#65-design-rationale">6.5. Design Rationale</a></h3>
+<pre><code>Q: Why binary, not text-delimited?
+A: Names can contain any UTF-8 character including delimiters.
+   Length-prefixed binary is unambiguous. More compact in the
+   508-byte budget.
+
+Q: Why not CBOR or protobuf?
+A: 508 bytes is too tight for schema overhead. A 5-byte header
+   is trivial to implement and audit.
+
+Q: Why no encryption on top?
+A: Zcash shielded memos are already encrypted to the recipient's
+   incoming viewing key. Redundant encryption wastes bytes.
+   When sender authentication is needed, use EncryptedMessage
+   (Section 8).
+
+Q: Why no checksum?
+A: The Zcash note commitment scheme provides authenticated
+   encryption. Bit-flips invalidate the note.
+
+Q: Why TLV for extensions instead of flag bits?
+A: Flag bits signal boolean capabilities. Extensions carry data
+   (public keys, certificates). TLV is self-describing  -
+   unknown tags can be skipped without protocol knowledge.
+   Same pattern as IPv6 extension headers, DNS, TLS.
+</code></pre>
+<h2 id="7-zafu-identity-zid"><a class="header" href="#7-zafu-identity-zid">7. Zafu Identity (zid)</a></h2>
+<h3 id="71-derivation"><a class="header" href="#71-derivation">7.1. Derivation</a></h3>
+<p>A zid is a cross-network ed25519 identity derived deterministically
+from the wallet’s mnemonic seed phrase. All derivations use
+HMAC-SHA512.</p>
+<pre><code>root = HMAC-SHA512("zid-v1", encode_utf8(mnemonic))
+
+Global zid (index 0):
+    seed = HMAC-SHA512(root, 0x00000000)
+    private_key = seed[0:32]
+    public_key = ed25519_public_key(private_key)
+
+Per-site zid:
+    seed = HMAC-SHA512(root, encode_utf8("site:" + origin))
+    (same derivation as above)
+
+Per-site rotated zid:
+    seed = HMAC-SHA512(root, encode_utf8("site:" + origin + ":" + N))
+    N is the rotation counter (decimal string)
+
+Per-contact zid:
+    seed = HMAC-SHA512(root, encode_utf8("contact:" + contact_id))
+    contact_id is the counterparty's zid public key (hex) or
+    any stable unique identifier for the contact.
+</code></pre>
+<p>All intermediate values (root, seed, private_key) MUST be zeroized
+after use.</p>
+<h3 id="72-per-contact-identity-and-leak-detection"><a class="header" href="#72-per-contact-identity-and-leak-detection">7.2. Per-Contact Identity and Leak Detection</a></h3>
+<p>When sharing a contact card, the sender includes a per-contact zid
+derived for the recipient (Section 7.1, per-contact derivation).
+Each relationship receives a unique public key.</p>
+<p>If a contact card is forwarded to a third party, the third party
+presents the per-contact zid that was bound to the original
+recipient. The sender can detect this by maintaining a mapping:</p>
+<pre><code>{ zid_public_key -&gt; recipient_name }
+</code></pre>
+<p>When a previously-unseen party presents a known per-contact zid,
+the sender knows which contact forwarded the card.</p>
+<h3 id="73-address-format"><a class="header" href="#73-address-format">7.3. Address Format</a></h3>
+<p>For display, a zid is formatted as:</p>
+<pre><code>"zid" + hex(public_key)[0:16]
+</code></pre>
+<p>Example: zid8a3f72b1e9c04d5a</p>
+<p>The full 32-byte public key is available via copy/export.</p>
+<h2 id="8-data-messages-type-0x07"><a class="header" href="#8-data-messages-type-0x07">8. Data Messages (Type 0x07)</a></h2>
+<h3 id="81-purpose"><a class="header" href="#81-purpose">8.1. Purpose</a></h3>
+<p>The Data message carries generic structured payloads for
+machine-to-machine communication. This enables agentic transactions
+where AI agents or automated services exchange structured data
+(JSON, CBOR, protobuf) over Zcash shielded memos with built-in
+request/response correlation and reply addressing.</p>
+<h3 id="82-payload-format"><a class="header" href="#82-payload-format">8.2. Payload Format</a></h3>
+<pre><code> 0                   1
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+| Content Type  |     Flags     |   ...
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+</code></pre>
+<p>Fields:</p>
+<pre><code>Content Type (u8):
+    0x00  Raw bytes (interpret by context)
+    0x01  JSON (UTF-8)
+    0x02  CBOR (RFC 8949)
+    0x03  Protobuf (schema out-of-band)
+
+Flags (u8):
+    bit 0: Correlation ID present (16 bytes follow)
+    bit 1: Reply-To address present (u16be len + UTF-8 follows)
+
+Correlation ID (16 bytes, optional):
+    Links a response to a prior request. The requester generates
+    a random 16-byte ID; the responder echoes it. Present only
+    if flags bit 0 is set.
+
+Reply-To (variable, optional):
+    u16be length prefix + UTF-8 Zcash address. Tells the
+    recipient where to send a response. Present only if flags
+    bit 1 is set.
+
+Application Data (remaining bytes):
+    The actual payload, interpreted per Content Type.
+</code></pre>
+<h3 id="83-requestresponse-pattern"><a class="header" href="#83-requestresponse-pattern">8.3. Request/Response Pattern</a></h3>
+<pre><code>Agent A -&gt; Agent B:
+    Data { contentType: JSON, correlationId: X, replyTo: addr_A,
+           data: {"method": "translate", "text": "..."} }
+
+Agent B -&gt; Agent A (to addr_A):
+    Data { contentType: JSON, correlationId: X,
+           data: {"result": "..."} }
+
+Agent A matches the response by correlationId X.
+</code></pre>
+<h3 id="84-atomicity-with-payment"><a class="header" href="#84-atomicity-with-payment">8.4. Atomicity with Payment</a></h3>
+<p>A Data memo can be attached to a payment note. This enables
+pay-for-service in a single atomic transaction:</p>
+<pre><code>Transaction outputs:
+    Note 1: (agent_B, 0.01 ZEC, Data{method: "translate", ...})
+    Note 2: (self, change, empty)
+
+Agent B receives both the payment and the request atomically.
+</code></pre>
+<h3 id="85-combining-with-encryption"><a class="header" href="#85-combining-with-encryption">8.5. Combining with Encryption</a></h3>
+<p>Data messages can be wrapped inside EncryptedMessage (Type 0x06)
+for sender authentication and viewing-key resistance. The inner
+plaintext of an EncryptedMessage has byte 0 = inner MemoType,
+which can be 0x07 (Data).</p>
+<h2 id="9-encrypted-messages-type-0x06----future"><a class="header" href="#9-encrypted-messages-type-0x06----future">9. Encrypted Messages (Type 0x06)  - Future</a></h2>
+<h3 id="81-motivation"><a class="header" href="#81-motivation">8.1. Motivation</a></h3>
+<p>Zcash shielded memos provide confidentiality but not sender
+authentication. A compromised viewing key reveals all memo
+history. zid-encrypted messages add:</p>
+<pre><code>- Sender authentication (DH with sender's zid)
+- Viewing key resistance (double encryption)
+- Partial forward secrecy (sender-side only; see Section 10.3)
+</code></pre>
+<h3 id="82-construction"><a class="header" href="#82-construction">8.2. Construction</a></h3>
+<pre><code>sender_zid: ed25519 keypair (from seed)
+recipient_zid: ed25519 public key (from contact card)
+
+// Convert to x25519 for Diffie-Hellman
+x_s = ed25519_to_x25519_private(sender_zid)
+X_r = ed25519_to_x25519_public(recipient_zid)
+
+// Ephemeral keypair for forward secrecy
+e = random_x25519_scalar()
+E = x25519_basepoint(e)
+
+// Two shared secrets
+ss1 = x25519(e, X_r)         // forward-secret
+ss2 = x25519(x_s, X_r)       // sender-authenticated
+
+// Key derivation
+key = HKDF-SHA256("zid-msg-v1", ss1 || ss2, 32)
+
+// Encryption
+nonce = random(12)
+ciphertext = AES-256-GCM(key, nonce, plaintext)
+</code></pre>
+<h3 id="83-wire-format"><a class="header" href="#83-wire-format">8.3. Wire Format</a></h3>
+<pre><code>Bytes 0-3:    Zafu header (0xFF 0x5A 0x06 0x00)
+Bytes 4-35:   Sender zid public key (ed25519, 32 bytes)
+Bytes 36-67:  Ephemeral public key (x25519, 32 bytes)
+Bytes 68-79:  Nonce (12 bytes)
+Bytes 80-N:   Ciphertext + GCM tag (16 bytes)
+
+Overhead: 80 + 16 = 96 bytes
+Plaintext capacity: 508 - 96 = 416 bytes (single memo)
+With fragmentation: up to 7,284 bytes
+</code></pre>
+<p>The inner plaintext is a typed payload:</p>
+<pre><code>Byte 0:    Inner MemoType
+Bytes 1-N: Inner payload
+</code></pre>
+<p>Any message type can be encrypted, including ContactCard and Text.</p>
+<h3 id="84-negotiation"><a class="header" href="#84-negotiation">8.4. Negotiation</a></h3>
+<p>Encrypted messaging is available when both parties have exchanged
+contact cards containing tag 0x01 (zid public key). No explicit
+capability negotiation is needed  - the presence of the key IS the
+capability signal.</p>
+<p>When sending to a contact with a known zid, wallets SHOULD default
+to EncryptedMessage. Wallets MAY fall back to plaintext for
+contacts without a zid.</p>
+<h2 id="10-security-considerations"><a class="header" href="#10-security-considerations">10. Security Considerations</a></h2>
+<h3 id="91-memo-privacy"><a class="header" href="#91-memo-privacy">9.1. Memo Privacy</a></h3>
+<p>Zcash shielded memos are encrypted to the recipient’s incoming
+viewing key. An attacker without the viewing key learns nothing.
+An attacker WITH the viewing key can read plaintext memos but
+NOT zid-encrypted memos (Section 8).</p>
+<h3 id="92-sender-anonymity"><a class="header" href="#92-sender-anonymity">9.2. Sender Anonymity</a></h3>
+<p>Plain memos do not identify the sender. zid-encrypted memos
+reveal the sender’s zid public key to the recipient (intentional
+for authentication). The sender’s zid is NOT visible to network
+observers (it’s inside the encrypted note).</p>
+<h3 id="103-forward-secrecy----limitations"><a class="header" href="#103-forward-secrecy----limitations">10.3. Forward Secrecy  - Limitations</a></h3>
+<p>EncryptedMessage uses an ephemeral x25519 key per message. This
+provides forward secrecy against SENDER key compromise only:
+if the sender’s zid is compromised after sending, the ephemeral
+private key has been zeroized and past messages remain secure.</p>
+<p>However, compromise of the RECIPIENT’s long-term zid reveals all
+past messages to that recipient. The ephemeral public key E is
+stored in the memo; an attacker with the recipient’s private key
+can compute both DH shared secrets (ss1 = x25519(priv_r, E),
+ss2 = x25519(priv_r, pub_s)) and derive the message key.</p>
+<p>This is a fundamental limitation of unidirectional channels.
+Full forward secrecy requires both parties to contribute ephemeral
+keys (as in Signal’s Double Ratchet), which requires a
+bidirectional exchange before each message.</p>
+<p>Future work: once both parties have exchanged at least one message
+each (establishing a bidirectional channel), a ratcheting protocol
+can be layered on top to achieve full forward secrecy for
+subsequent messages.</p>
+<h3 id="94-fragment-integrity"><a class="header" href="#94-fragment-integrity">9.4. Fragment Integrity</a></h3>
+<p>Each fragment is carried in a separate Zcash shielded note.
+The note commitment scheme provides authenticated encryption per
+fragment. Tampering with any fragment invalidates its note.</p>
+<h3 id="95-per-contact-zid-correlation"><a class="header" href="#95-per-contact-zid-correlation">9.5. Per-Contact Zid Correlation</a></h3>
+<p>Per-contact zids prevent cross-contact linkability. However, if
+an attacker obtains two contact cards from the same sender (e.g.,
+the card sent to Alice and the card sent to Bob), the attacker
+cannot determine they come from the same wallet  - the per-contact
+zids are cryptographically independent (derived via HMAC with
+different inputs).</p>
+<h2 id="11-references"><a class="header" href="#11-references">11. References</a></h2>
+<pre><code>[ZIP-302]   Zcash Memo Field Format
+[RFC 2119]  Key words for use in RFCs
+[RFC 7748]  Elliptic Curves for Security (x25519)
+[RFC 8032]  Edwards-Curve Digital Signature Algorithm (ed25519)
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="message-types"><a class="header" href="#message-types">message types</a></h1>
+<p>the zafu memo protocol defines 14 message types carried inside zcash
+shielded memo fields (ZIP-302). each memo is exactly 512 bytes. byte 0
+is 0xFF (arbitrary data), byte 1 is 0x5A (zafu magic), byte 2 is the
+message type.</p>
+<p>all integers are unsigned and big-endian unless stated otherwise.</p>
+<h2 id="framing"><a class="header" href="#framing">framing</a></h2>
+<p>standalone messages use a 4-byte header, leaving 508 bytes for payload:</p>
+<pre><code>byte 0: 0xFF (ZIP-302 arbitrary data)
+byte 1: 0x5A (zafu magic)
+byte 2: message type
+byte 3: 0x00 (standalone)
+bytes 4-511: payload (508 bytes max)
+</code></pre>
+<p>fragmented messages use a 20-byte header, leaving 492 bytes per
+fragment:</p>
+<pre><code>byte 0: 0xFF
+byte 1: 0x5A
+byte 2: message type
+byte 3: high nibble = part (1-indexed), low nibble = total
+bytes 4-19: message ID (16 bytes, random, shared across fragments)
+bytes 20-511: payload (492 bytes max)
+</code></pre>
+<p>maximum fragments: 15. maximum total payload: 15 * 492 = 7,380 bytes.
+all fragments of one logical message share the same message ID and type.
+reassembly sorts by part number and concatenates payloads.</p>
+<p>any message type can be fragmented. fragmentation is automatic when the
+payload exceeds 508 bytes.</p>
+<h2 id="type-table"><a class="header" href="#type-table">type table</a></h2>
+<pre><code>value   name              description
+-----   ----              -----------
+0x01    Text              UTF-8 text message
+0x02    Address           unified address share
+0x03    PaymentRequest    amount + optional address + label
+0x04    Ack               read receipt / acknowledgment
+0x05    ContactCard       name + address + TLV extensions
+0x06    EncryptedMessage  zid-authenticated encrypted payload
+0x07    Data              generic structured data
+0x10    DkgRound1         FROST DKG round 1
+0x11    DkgRound2         FROST DKG round 2
+0x12    DkgRound3         FROST DKG round 3
+0x20    SignRequest       FROST signing request
+0x21    SignCommitment    FROST signing commitment
+0x22    SignShare         FROST signature share
+0x23    SignResult        FROST aggregated signature
+</code></pre>
+<p>values 0x00 and 0xF0-0xFF are reserved. receivers must ignore messages
+with unknown type values.</p>
+<h2 id="0x01---text"><a class="header" href="#0x01---text">0x01 - text</a></h2>
+<p>UTF-8 text message. the payload is raw UTF-8 bytes with no length
+prefix. trailing zero bytes are stripped on decode.</p>
+<pre><code>payload: UTF-8 text (no null terminator)
+max single: 508 bytes (~508 ASCII chars, ~170 CJK chars)
+fragmentation: automatic if text exceeds 508 bytes
+max fragmented: 7,380 bytes
+</code></pre>
+<p>for standalone messages, the message ID used internally is the first 16
+bytes of the payload (deterministic). for fragmented messages, a random
+16-byte message ID is generated.</p>
+<h2 id="0x02---address"><a class="header" href="#0x02---address">0x02 - address</a></h2>
+<p>a zcash unified address encoded as a UTF-8 bech32m string. no length
+prefix - the entire payload is the address string.</p>
+<pre><code>payload: UTF-8 bech32m address
+max: 508 bytes (sufficient for all current UA configurations)
+fragmentation: not expected in practice
+</code></pre>
+<h2 id="0x03---paymentrequest"><a class="header" href="#0x03---paymentrequest">0x03 - paymentrequest</a></h2>
+<p>a payment request carrying an amount and optional metadata. the payload
+structure is:</p>
+<pre><code>byte 0-7:   amount in zatoshis (u64be)
+byte 8:     flags (bit 0 = address present, bit 1 = label present)
+if address: u16be length + UTF-8 address
+if label:   u16be length + UTF-8 label
+</code></pre>
+<p>the amount field is always 8 bytes. when no specific address is
+provided, the sender expects payment to the address that received this
+memo (the diversified address of the conversation).</p>
+<pre><code>max single: 508 bytes
+fragmentation: supported but unlikely needed
+</code></pre>
+<h2 id="0x04---ack"><a class="header" href="#0x04---ack">0x04 - ack</a></h2>
+<p>read receipt acknowledging a previously received message. the payload
+contains the message ID of the message being acknowledged.</p>
+<pre><code>payload: 16 bytes (message ID of the acknowledged message)
+size: always fits in a single memo (16 bytes &lt;&lt; 508)
+fragmentation: never needed
+</code></pre>
+<p>the ack confirms the recipient’s wallet has received and processed a
+message. it does not imply the user has read it.</p>
+<h2 id="0x05---contactcard"><a class="header" href="#0x05---contactcard">0x05 - contactcard</a></h2>
+<p>a contact card for sharing identity and address information. see the
+<a href="#zafu-memo-protocol">memo protocol spec</a> section 6 for the full wire format.</p>
+<h3 id="payload-format"><a class="header" href="#payload-format">payload format</a></h3>
+<pre><code>offset  size    field
+0       1       version (0x01)
+1       1       flags (reserved, must be 0x00)
+2       1       name_len (u8)
+3       var     name (UTF-8, name_len bytes)
+3+NL    2       addr_len (u16be)
+5+NL    var     address (UTF-8, addr_len bytes)
+5+NL+AL var     TLV extensions (until payload end)
+</code></pre>
+<h3 id="fields"><a class="header" href="#fields">fields</a></h3>
+<ul>
+<li><strong>version</strong>: 0x01. receivers must reject unknown versions.</li>
+<li><strong>flags</strong>: reserved. senders must set to 0x00. receivers must ignore.</li>
+<li><strong>name_len</strong>: u8. may be 0 (anonymous card). max 255.</li>
+<li><strong>name</strong>: UTF-8 display name. no null terminator.</li>
+<li><strong>addr_len</strong>: u16be. must be &gt; 0.</li>
+<li><strong>address</strong>: zcash unified address (bech32m). required.</li>
+</ul>
+<h3 id="tlv-extensions"><a class="header" href="#tlv-extensions">TLV extensions</a></h3>
+<p>after the address, zero or more TLV entries may follow:</p>
+<pre><code>tag (u8) | length (u16be) | value (length bytes)
+</code></pre>
+<p>parsers must skip unknown tags by reading the length and advancing.</p>
+<pre><code>tag    length   description
+---    ------   -----------
+0x01   32       ed25519 zid public key (signals DH messaging capability)
+0x02   var      post-quantum public key (reserved, format TBD)
+</code></pre>
+<p>the presence of tag 0x01 indicates the sender supports zid-authenticated
+encrypted messaging (type 0x06). the key in the value is the sender’s
+per-contact zid, unique to this relationship. see
+<a href="#encrypted-messaging">encrypted messaging</a> for details.</p>
+<h3 id="size-budget"><a class="header" href="#size-budget">size budget</a></h3>
+<pre><code>fixed overhead:       5 bytes (ver + flags + name_len + addr_len)
+typical UA:           ~300 bytes
+zid extension:        35 bytes (3 header + 32 pubkey)
+typical total:        ~360 bytes (fits single memo)
+with PQ extension:    ~1,260 bytes (requires fragmentation)
+</code></pre>
+<p>name length is capped at u8 (255 bytes). address length is u16be (up to
+65,535 bytes) because zcash unified addresses with multiple receiver
+types (orchard + sapling + transparent) can exceed 255 bytes.</p>
+<h2 id="0x06---encryptedmessage"><a class="header" href="#0x06---encryptedmessage">0x06 - encryptedmessage</a></h2>
+<p>zid-authenticated encrypted payload providing sender authentication and
+viewing-key resistance on top of zcash’s shielded encryption. see
+<a href="#encrypted-messaging">encrypted messaging</a> for the full
+specification.</p>
+<h3 id="wire-format-payload-after-zafu-header"><a class="header" href="#wire-format-payload-after-zafu-header">wire format (payload after zafu header)</a></h3>
+<pre><code>offset  size    field
+0       32      sender zid public key (ed25519)
+32      32      ephemeral public key (x25519)
+64      12      nonce
+76      var     ciphertext + GCM tag (16 bytes)
+
+overhead: 76 + 16 = 92 bytes
+plaintext capacity (single memo): 508 - 92 = 416 bytes
+plaintext capacity (fragmented): up to 7,288 bytes
+</code></pre>
+<p>the inner plaintext is a typed payload:</p>
+<pre><code>byte 0:    inner MemoType
+bytes 1-N: inner payload
+</code></pre>
+<p>any message type can be encrypted, including Text, ContactCard, and
+Data.</p>
+<h2 id="0x07---data"><a class="header" href="#0x07---data">0x07 - data</a></h2>
+<p>generic structured data for machine-to-machine communication. supports
+content type tagging, request/response correlation, and reply-to
+addressing.</p>
+<h3 id="payload-format-1"><a class="header" href="#payload-format-1">payload format</a></h3>
+<pre><code>offset  size    field
+0       1       content type (DataContentType)
+1       1       flags
+2       var     conditional fields (per flags)
+var     var     application data
+</code></pre>
+<h3 id="content-types"><a class="header" href="#content-types">content types</a></h3>
+<pre><code>value   name       description
+-----   ----       -----------
+0x00    Raw        raw bytes, interpret by context
+0x01    Json       JSON (UTF-8 encoded)
+0x02    Cbor       CBOR (RFC 8949)
+0x03    Protobuf   protobuf (schema defined out-of-band)
+</code></pre>
+<h3 id="flags"><a class="header" href="#flags">flags</a></h3>
+<pre><code>bit 0: correlation ID present (16 bytes follow immediately after flags)
+bit 1: reply-to address present (u16be length + UTF-8 address follows)
+</code></pre>
+<h3 id="conditional-fields"><a class="header" href="#conditional-fields">conditional fields</a></h3>
+<p>when flags bit 0 is set, 16 bytes of correlation ID follow the flags
+byte. the requester generates a random correlation ID; the responder
+echoes it to link the response.</p>
+<p>when flags bit 1 is set, a reply-to address follows (after the
+correlation ID if present). the format is u16be length prefix + UTF-8
+zcash address. this tells the recipient where to send a response.</p>
+<h3 id="layout-examples"><a class="header" href="#layout-examples">layout examples</a></h3>
+<p>minimal data message (no correlation, no reply-to):</p>
+<pre><code>[content_type: 1 byte] [flags: 0x00] [application data]
+</code></pre>
+<p>data message with correlation ID:</p>
+<pre><code>[content_type] [flags: 0x01] [correlation_id: 16 bytes] [data]
+</code></pre>
+<p>data message with both correlation and reply-to:</p>
+<pre><code>[content_type] [flags: 0x03] [correlation_id: 16 bytes]
+[reply_to_len: u16be] [reply_to: UTF-8] [data]
+</code></pre>
+<h3 id="fragmentation"><a class="header" href="#fragmentation">fragmentation</a></h3>
+<p>data messages fragment automatically when the total payload (content
+type + flags + conditional fields + application data) exceeds 508 bytes.
+max total payload with fragmentation: 7,380 bytes.</p>
+<h2 id="frost-types-0x10-0x12---dkg"><a class="header" href="#frost-types-0x10-0x12---dkg">FROST types (0x10-0x12) - DKG</a></h2>
+<p>FROST distributed key generation is carried over three rounds, each in
+its own memo type. payloads are raw binary blobs (hex-decoded FROST
+protocol messages).</p>
+<h3 id="0x10---dkground1"><a class="header" href="#0x10---dkground1">0x10 - DkgRound1</a></h3>
+<p>round 1 broadcast: each participant publishes their commitments.
+payload is the serialized round 1 package.</p>
+<pre><code>payload: FROST round 1 package (binary)
+fragmentation: automatic if package exceeds 508 bytes
+</code></pre>
+<h3 id="0x11---dkground2"><a class="header" href="#0x11---dkground2">0x11 - DkgRound2</a></h3>
+<p>round 2: each participant sends their secret shares to specific
+recipients. payload is the serialized round 2 package.</p>
+<pre><code>payload: FROST round 2 package (binary)
+fragmentation: automatic if package exceeds 508 bytes
+</code></pre>
+<h3 id="0x12---dkground3"><a class="header" href="#0x12---dkground3">0x12 - DkgRound3</a></h3>
+<p>round 3: verification and finalization. payload is the serialized
+round 3 package.</p>
+<pre><code>payload: FROST round 3 package (binary)
+fragmentation: automatic if package exceeds 508 bytes
+</code></pre>
+<p>all DKG round messages are sent as shielded memos to specific
+participants. the zcash diversified address identifies the DKG session
+endpoint.</p>
+<h2 id="frost-types-0x20-0x23---signing"><a class="header" href="#frost-types-0x20-0x23---signing">FROST types (0x20-0x23) - signing</a></h2>
+<p>FROST threshold signing uses four message types for the signing
+ceremony.</p>
+<h3 id="0x20---signrequest"><a class="header" href="#0x20---signrequest">0x20 - SignRequest</a></h3>
+<p>a signing request containing the sighash and alpha values. the
+coordinator sends this to each signer.</p>
+<pre><code>payload layout:
+    bytes 0-31:   sighash (32 bytes)
+    bytes 32-N:   alpha values (N * 32 bytes, one per input)
+
+total size: 32 + (num_inputs * 32) bytes
+fragmentation: automatic for transactions with many inputs
+</code></pre>
+<h3 id="0x21---signcommitment"><a class="header" href="#0x21---signcommitment">0x21 - SignCommitment</a></h3>
+<p>a signer’s nonce commitment for the signing round. each signer responds
+to a SignRequest with their commitment.</p>
+<pre><code>payload: serialized FROST signing commitment (binary)
+fragmentation: automatic if needed
+</code></pre>
+<h3 id="0x22---signshare"><a class="header" href="#0x22---signshare">0x22 - SignShare</a></h3>
+<p>a signer’s partial signature share. sent after the coordinator
+broadcasts all commitments.</p>
+<pre><code>payload: serialized FROST signature share (binary)
+fragmentation: automatic if needed
+</code></pre>
+<h3 id="0x23---signresult"><a class="header" href="#0x23---signresult">0x23 - SignResult</a></h3>
+<p>the aggregated signature, broadcast by the coordinator after collecting
+sufficient shares.</p>
+<pre><code>payload: serialized FROST aggregate signature (binary)
+fragmentation: automatic if needed
+</code></pre>
+<h2 id="references"><a class="header" href="#references">references</a></h2>
+<ul>
+<li><a href="#zafu-memo-protocol">memo protocol</a> - full protocol specification</li>
+<li><a href="#encrypted-messaging">encrypted messaging</a> - type 0x06 details</li>
+<li><a href="https://zips.z.cash/zip-0302">ZIP-302</a> - zcash memo field format</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="encrypted-messaging"><a class="header" href="#encrypted-messaging">encrypted messaging</a></h1>
+<p>zafu encrypted messages (type 0x06) provide sender authentication and
+viewing-key resistance on top of zcash’s shielded memo encryption. this
+document covers the cryptographic construction, wire format, capability
+negotiation, and forward secrecy properties.</p>
+<h2 id="motivation"><a class="header" href="#motivation">motivation</a></h2>
+<p>zcash shielded memos are encrypted to the recipient’s incoming viewing
+key. this provides confidentiality against network observers but has two
+limitations:</p>
+<ol>
+<li>
+<p>no sender authentication. the recipient cannot verify who sent a
+memo. any party knowing the recipient’s address can send memos that
+appear identical.</p>
+</li>
+<li>
+<p>viewing key exposure reveals all history. if the recipient shares or
+leaks their viewing key (for compliance, auditing, or compromise),
+all past memo content is exposed.</p>
+</li>
+</ol>
+<p>encrypted messages address both by adding a second encryption layer
+using zid-derived keys.</p>
+<h2 id="zid-derivation"><a class="header" href="#zid-derivation">zid derivation</a></h2>
+<p>a zid is a cross-network ed25519 identity derived deterministically from
+the wallet mnemonic. all derivations use HMAC-SHA512.</p>
+<pre><code>root = HMAC-SHA512("zid-v1", encode_utf8(mnemonic))
+</code></pre>
+<p>four derivation paths exist:</p>
+<pre><code>global (index 0):
+    seed = HMAC-SHA512(root, 0x00000000)
+    private_key = seed[0:32]
+    public_key = ed25519_public_key(private_key)
+
+per-site:
+    seed = HMAC-SHA512(root, encode_utf8("site:" + origin))
+
+per-site rotated:
+    seed = HMAC-SHA512(root, encode_utf8("site:" + origin + ":" + N))
+    N is the rotation counter (decimal string)
+
+per-contact:
+    seed = HMAC-SHA512(root, encode_utf8("contact:" + contact_id))
+    contact_id is the counterparty's zid public key (hex) or any
+    stable unique identifier
+</code></pre>
+<p>all intermediate values (root, seed, private_key) must be zeroized
+after use. the implementation in <code>identity.ts</code> calls <code>.fill(0)</code> on
+every intermediate buffer.</p>
+<h3 id="per-contact-zid-for-leak-detection"><a class="header" href="#per-contact-zid-for-leak-detection">per-contact zid for leak detection</a></h3>
+<p>when sharing a contact card, the sender derives a per-contact zid bound
+to the recipient. each relationship receives a unique public key. if a
+contact card is forwarded to a third party, the third party presents the
+per-contact zid that was bound to the original recipient. the sender can
+detect this by maintaining a mapping of per-contact zid public keys to
+recipient names.</p>
+<h3 id="display-format"><a class="header" href="#display-format">display format</a></h3>
+<p>for display, a zid is formatted as <code>"zid" + hex(public_key)[0:16]</code>.
+example: <code>zid8a3f72b1e9c04d5a</code>. the full 32-byte public key is
+available via copy/export.</p>
+<h2 id="ed25519-to-x25519-conversion"><a class="header" href="#ed25519-to-x25519-conversion">ed25519 to x25519 conversion</a></h2>
+<p>ed25519 keys are signing keys. diffie-hellman requires x25519 keys. the
+conversion follows RFC 7748 and the birational map between
+twisted-edwards and montgomery curves:</p>
+<pre><code>ed25519 private key -&gt; x25519 private key:
+    clamp the SHA-512 hash of the ed25519 seed (standard x25519
+    scalar clamping: clear bits 0, 1, 2, 255; set bit 254)
+
+ed25519 public key -&gt; x25519 public key:
+    convert the edwards point (x, y) to montgomery u-coordinate:
+    u = (1 + y) / (1 - y) mod p
+</code></pre>
+<p>this is a standard conversion implemented in libsodium
+(<code>crypto_sign_ed25519_pk_to_curve25519</code>) and in the <code>@noble/curves</code>
+library used by zafu.</p>
+<p>the conversion is deterministic - a given ed25519 keypair always
+produces the same x25519 keypair. no additional key material is stored.</p>
+<h2 id="cryptographic-construction"><a class="header" href="#cryptographic-construction">cryptographic construction</a></h2>
+<p>the encryption uses two diffie-hellman shared secrets combined via HKDF
+to produce the message key.</p>
+<h3 id="inputs"><a class="header" href="#inputs">inputs</a></h3>
+<pre><code>sender_zid:    ed25519 keypair (from per-contact derivation)
+recipient_zid: ed25519 public key (from received contact card)
+</code></pre>
+<h3 id="key-agreement"><a class="header" href="#key-agreement">key agreement</a></h3>
+<pre><code>// convert ed25519 keys to x25519
+x_s = ed25519_to_x25519_private(sender_zid.private_key)
+X_r = ed25519_to_x25519_public(recipient_zid.public_key)
+
+// generate ephemeral x25519 keypair
+e = random_x25519_scalar()
+E = x25519_basepoint(e)
+
+// two shared secrets
+ss1 = x25519(e, X_r)         // ephemeral-static (forward-secret)
+ss2 = x25519(x_s, X_r)       // static-static (sender-authenticated)
+
+// key derivation
+key = HKDF-SHA256(salt="zid-msg-v1", ikm=ss1 || ss2, length=32)
+</code></pre>
+<h3 id="encryption"><a class="header" href="#encryption">encryption</a></h3>
+<pre><code>nonce = random(12)
+ciphertext = AES-256-GCM(key, nonce, plaintext)
+</code></pre>
+<p>the GCM tag (16 bytes) is appended to the ciphertext.</p>
+<h3 id="why-two-shared-secrets"><a class="header" href="#why-two-shared-secrets">why two shared secrets</a></h3>
+<p>ss1 alone would provide forward secrecy but no sender authentication -
+anyone can generate an ephemeral key. ss2 alone would provide sender
+authentication but no forward secrecy - compromise of either long-term
+key reveals all messages.</p>
+<p>combining both means the recipient can verify the sender (only the
+holder of x_s can produce ss2) while maintaining sender-side forward
+secrecy (the ephemeral key e is discarded after use).</p>
+<h2 id="wire-format-1"><a class="header" href="#wire-format-1">wire format</a></h2>
+<p>the encrypted message payload (after the 4-byte zafu header) is:</p>
+<pre><code>offset  size    field
+0       32      sender zid public key (ed25519, uncompressed)
+32      32      ephemeral public key (x25519)
+64      12      nonce (random)
+76      var     ciphertext
+N-16    16      GCM authentication tag
+</code></pre>
+<p>total overhead: 76 bytes header + 16 bytes tag = 92 bytes.</p>
+<h3 id="capacity"><a class="header" href="#capacity">capacity</a></h3>
+<pre><code>single memo:     508 - 92 = 416 bytes plaintext
+fragmented:      up to (15 * 492) - 92 = 7,288 bytes plaintext
+</code></pre>
+<p>fragmentation uses the standard zafu fragmentation mechanism - the
+entire encrypted payload (sender key + ephemeral key + nonce +
+ciphertext + tag) is split across fragments. reassembly produces the
+complete encrypted blob before decryption.</p>
+<h3 id="inner-plaintext-format"><a class="header" href="#inner-plaintext-format">inner plaintext format</a></h3>
+<pre><code>byte 0:    inner MemoType
+bytes 1-N: inner payload
+</code></pre>
+<p>any message type can be wrapped. common inner types:</p>
+<pre><code>0x01  Text         - authenticated text message
+0x05  ContactCard  - encrypted contact exchange
+0x07  Data         - authenticated machine-to-machine payload
+</code></pre>
+<h2 id="decryption"><a class="header" href="#decryption">decryption</a></h2>
+<p>the recipient:</p>
+<ol>
+<li>reads the sender’s ed25519 zid public key (bytes 0-31)</li>
+<li>looks up the sender in their contact list</li>
+<li>converts keys to x25519:
+<ul>
+<li>their own ed25519 private key to x25519 private</li>
+<li>the sender’s ed25519 public key to x25519 public</li>
+</ul>
+</li>
+<li>computes shared secrets:
+<ul>
+<li>ss1 = x25519(recipient_private, ephemeral_public)</li>
+<li>ss2 = x25519(recipient_private, sender_x25519_public)</li>
+</ul>
+</li>
+<li>derives the key: HKDF-SHA256(“zid-msg-v1”, ss1 || ss2, 32)</li>
+<li>decrypts with AES-256-GCM using the nonce at bytes 64-75</li>
+<li>verifies the GCM tag</li>
+<li>parses the inner MemoType and payload</li>
+</ol>
+<p>note that ss1 and ss2 from the recipient’s perspective produce the same
+values as the sender’s computation due to the commutativity of
+diffie-hellman: x25519(e, X_r) = x25519(r, E) and
+x25519(x_s, X_r) = x25519(x_r, X_s).</p>
+<h2 id="capability-negotiation"><a class="header" href="#capability-negotiation">capability negotiation</a></h2>
+<p>encrypted messaging requires no explicit handshake or capability
+negotiation. the mechanism is implicit:</p>
+<ol>
+<li>
+<p>alice sends bob a contact card (type 0x05) containing TLV tag 0x01
+with her per-contact ed25519 zid public key (32 bytes).</p>
+</li>
+<li>
+<p>bob’s wallet parses the TLV extensions. the presence of tag 0x01
+signals that alice supports zid-authenticated messaging.</p>
+</li>
+<li>
+<p>bob can now send encrypted messages (type 0x06) to alice using her
+zid public key for the DH computation.</p>
+</li>
+<li>
+<p>if bob’s contact card also included tag 0x01, alice can send
+encrypted messages to bob.</p>
+</li>
+</ol>
+<p>the presence of the zid public key in the contact card IS the capability
+signal. no flag bits, version bumps, or protocol negotiation are
+involved.</p>
+<p>wallets should default to encrypted messages when both parties have
+exchanged zid-bearing contact cards. wallets may fall back to plaintext
+for contacts without a zid.</p>
+<h3 id="upgrading-to-encrypted-messaging"><a class="header" href="#upgrading-to-encrypted-messaging">upgrading to encrypted messaging</a></h3>
+<p>if an existing contact sends a new contact card with tag 0x01 (where the
+previous card had no zid), the wallet upgrades the contact and begins
+using encrypted messages for subsequent communication. no user
+interaction is needed beyond the initial contact card exchange.</p>
+<h2 id="forward-secrecy-properties"><a class="header" href="#forward-secrecy-properties">forward secrecy properties</a></h2>
+<h3 id="sender-side-forward-secrecy"><a class="header" href="#sender-side-forward-secrecy">sender-side forward secrecy</a></h3>
+<p>the ephemeral x25519 key (e) is generated per message and discarded
+immediately after computing ss1. if the sender’s long-term zid private
+key is compromised after sending, the attacker cannot recover e and
+therefore cannot compute ss1. past messages remain secure.</p>
+<h3 id="recipient-side-limitation"><a class="header" href="#recipient-side-limitation">recipient-side limitation</a></h3>
+<p>compromise of the recipient’s long-term zid private key reveals all past
+messages to that recipient. the attacker can:</p>
+<ol>
+<li>recover the ephemeral public key E from the memo (bytes 32-63)</li>
+<li>compute ss1 = x25519(recipient_private, E)</li>
+<li>recover the sender’s zid public key from the memo (bytes 0-31)</li>
+<li>convert it to x25519 and compute ss2 = x25519(recipient_private,
+sender_x25519_public)</li>
+<li>derive the message key and decrypt</li>
+</ol>
+<p>this is a fundamental limitation of unidirectional channels. the
+recipient contributes no ephemeral key material, so all messages to a
+given recipient share the same long-term decryption capability.</p>
+<h3 id="comparison-to-bidirectional-protocols"><a class="header" href="#comparison-to-bidirectional-protocols">comparison to bidirectional protocols</a></h3>
+<p>full forward secrecy (as in Signal’s double ratchet) requires both
+parties to contribute fresh ephemeral keys before each message. this
+requires a bidirectional exchange, which is not available in zcash memos
+without a round trip.</p>
+<p>the zafu protocol is designed for asynchronous, unidirectional messaging
+where the recipient may be offline. the trade-off is intentional:
+sender-side forward secrecy with no round-trip overhead, at the cost of
+no recipient-side forward secrecy.</p>
+<h3 id="future-work"><a class="header" href="#future-work">future work</a></h3>
+<p>once both parties have exchanged at least one message each (establishing
+a bidirectional channel), a ratcheting protocol can be layered on top to
+achieve full forward secrecy for subsequent messages. this would require
+each message to include the sender’s next ephemeral public key, enabling
+a DH ratchet.</p>
+<h2 id="security-considerations"><a class="header" href="#security-considerations">security considerations</a></h2>
+<h3 id="viewing-key-compartmentalization"><a class="header" href="#viewing-key-compartmentalization">viewing key compartmentalization</a></h3>
+<p>zcash viewing keys reveal memo contents. zid-encrypted messages add a
+second layer - an attacker with the viewing key sees the encrypted blob
+(sender zid + ephemeral key + ciphertext) but cannot decrypt without the
+recipient’s zid private key.</p>
+<p>this is useful when sharing viewing keys for compliance or auditing while
+keeping message content private.</p>
+<h3 id="sender-identity-exposure"><a class="header" href="#sender-identity-exposure">sender identity exposure</a></h3>
+<p>the sender’s zid public key is included in plaintext (within the
+zcash-encrypted note). the recipient learns the sender’s identity. this
+is intentional - authentication requires identification.</p>
+<p>network observers cannot see the sender’s zid because it is inside the
+zcash shielded note.</p>
+<h3 id="replay-protection"><a class="header" href="#replay-protection">replay protection</a></h3>
+<p>each message uses a random 12-byte nonce for AES-256-GCM. the
+probability of nonce collision is negligible (2^-48 after 2^24
+messages). additionally, each zcash note has a unique nullifier that
+prevents double-spending, which provides transaction-level replay
+protection.</p>
+<h3 id="cross-contact-unlinkability"><a class="header" href="#cross-contact-unlinkability">cross-contact unlinkability</a></h3>
+<p>per-contact zid derivation ensures that the sender’s zid public key
+differs for each contact. an attacker who obtains contact cards from two
+different relationships cannot determine they originate from the same
+wallet. the per-contact zids are cryptographically independent
+(HMAC-SHA512 with different inputs).</p>
+<h2 id="references-1"><a class="header" href="#references-1">references</a></h2>
+<ul>
+<li><a href="#message-types">message types</a> - all memo type definitions</li>
+<li><a href="#zafu-memo-protocol">memo protocol</a> - full protocol specification</li>
+<li><a href="https://www.rfc-editor.org/rfc/rfc7748">RFC 7748</a> - x25519</li>
+<li><a href="https://www.rfc-editor.org/rfc/rfc8032">RFC 8032</a> - ed25519</li>
+<li><a href="https://www.rfc-editor.org/rfc/rfc5869">RFC 5869</a> - HKDF</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="chrome-extension-architecture"><a class="header" href="#chrome-extension-architecture">chrome extension architecture</a></h1>
+<p>zafu is a chrome mv3 extension. the background runs as a service worker, content
+scripts bridge dapps to the extension, and the ui renders in a popup, side panel,
+or full-page tab.</p>
+<h2 id="manifest"><a class="header" href="#manifest">manifest</a></h2>
+<p><code>apps/extension/public/manifest.json</code> declares:</p>
+<ul>
+<li><code>manifest_version: 3</code></li>
+<li>minimum chrome 119</li>
+<li>permissions: <code>storage</code>, <code>unlimitedStorage</code>, <code>offscreen</code>, <code>alarms</code>, <code>sidePanel</code>,
+<code>contextMenus</code></li>
+<li><code>host_permissions: &lt;all_urls&gt;</code> - needed for grpc-web requests to arbitrary
+endpoints and content script injection</li>
+<li><code>externally_connectable</code> matches <code>https://*/*</code> plus localhost variants, allowing
+dapps to send messages directly via <code>chrome.runtime.sendMessage</code></li>
+<li>csp allows <code>wasm-unsafe-eval</code> for penumbra and zcash wasm modules</li>
+</ul>
+<p>two content scripts are declared, both injected at <code>document_start</code> on all https
+pages and localhost:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>script</th><th>world</th><th>purpose</th></tr>
+</thead>
+<tbody>
+<tr><td><code>injected-session.js</code></td><td>ISOLATED</td><td>relay messages between page and sw</td></tr>
+<tr><td><code>injected-penumbra-global.js</code></td><td>MAIN</td><td>inject <code>PenumbraSymbol</code> provider</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="service-worker-lifecycle"><a class="header" href="#service-worker-lifecycle">service worker lifecycle</a></h2>
+<p>the service worker entry is <code>apps/extension/src/service-worker.ts</code>. it initializes
+in a specific order designed to handle the fact that wallet data is encrypted at
+rest and may not be available immediately.</p>
+<h3 id="phase-1---immediate-listener-registration"><a class="header" href="#phase-1---immediate-listener-registration">phase 1 - immediate listener registration</a></h3>
+<p>message listeners are registered synchronously, before any async work:</p>
+<pre><code>chrome.runtime.onMessage.addListener(contentScriptConnectListener)
+chrome.runtime.onMessage.addListener(contentScriptDisconnectListener)
+chrome.runtime.onMessage.addListener(contentScriptLoadListener)
+chrome.runtime.onMessage.addListener(internalRevokeListener)
+</code></pre>
+<p>this is required because chrome mv3 service workers can start and stop at any
+time. if listeners were registered inside an async init function, messages arriving
+before init completes would be dropped.</p>
+<h3 id="phase-2---deferred-handler-and-crsessionmanager"><a class="header" href="#phase-2---deferred-handler-and-crsessionmanager">phase 2 - deferred handler and CRSessionManager</a></h3>
+<p>a deferred handler pattern queues rpc requests until wallet services are ready:</p>
+<pre><code class="language-typescript">let resolveHandler: (h: HandlerFn) =&gt; void;
+const handlerReady = new Promise&lt;HandlerFn&gt;(r =&gt; { resolveHandler = r; });
+
+const deferredHandler: HandlerFn = (request, signal, timeoutMs) =&gt;
+  handlerReady.then(h =&gt; h(request, signal, timeoutMs));
+
+CRSessionManager.init(ZAFU, deferredHandler, validateSessionPort);
+</code></pre>
+<p><code>CRSessionManager</code> (from <code>@penumbra-zone/transport-chrome</code>) manages
+<code>chrome.runtime.Port</code> sessions between content scripts and the service worker.
+it is initialized immediately with the deferred handler so that content scripts
+can establish session ports right after the user approves a connection in the popup.
+rpc requests sent over these ports will block on <code>handlerReady</code> until the real
+handler resolves.</p>
+<p><code>validateSessionPort</code> checks whether a port’s sender is either a valid internal
+sender (extension pages) or an approved external sender (dapp origin previously
+approved by the user).</p>
+<h3 id="phase-3---wallet-services-initialization"><a class="header" href="#phase-3---wallet-services-initialization">phase 3 - wallet services initialization</a></h3>
+<p><code>initHandler()</code> starts wallet services with exponential backoff:</p>
+<pre><code class="language-typescript">void backOff(() =&gt; initHandler(), {
+  startingDelay: 5_000,
+  numOfAttempts: Infinity,
+  maxDelay: 20_000,
+}).then(handler =&gt; resolveHandler(handler));
+</code></pre>
+<p><code>initHandler()</code> does the following:</p>
+<ol>
+<li>tracks the initial <code>activeWalletIndex</code> from storage</li>
+<li>calls <code>startWalletServices()</code> which waits for the wallet to be unlocked
+(encrypted wallets require the session key to decrypt)</li>
+<li>gets all rpc implementations via <code>getRpcImpls()</code></li>
+<li>creates a <code>connectChannelAdapter</code> with connect-rpc routing and context values</li>
+<li>returns the handler, which resolves <code>handlerReady</code> and unblocks queued rpc
+requests</li>
+</ol>
+<p>the connect-rpc adapter routes protobuf service calls to their implementations.
+context values are injected per-request:</p>
+<ul>
+<li><code>fvkCtx</code> - full viewing key getter</li>
+<li><code>servicesCtx</code> - wallet services (indexeddb, block processor, querier)</li>
+<li><code>walletIdCtx</code> - wallet id getter</li>
+<li><code>custodyClientCtx</code> / <code>stakeClientCtx</code> - internal rpc clients</li>
+<li><code>authorizeCtx</code> - only injected for custody service paths</li>
+</ul>
+<h3 id="phase-4---storage-change-listeners"><a class="header" href="#phase-4---storage-change-listeners">phase 4 - storage change listeners</a></h3>
+<p>the service worker listens for <code>chrome.storage.local</code> changes to react to:</p>
+<ul>
+<li><strong>wallet switching</strong> - when <code>activeWalletIndex</code> changes, <code>reinitializeServices()</code>
+tears down the old block processor, resets the wallet cache, clears
+<code>fullSyncHeight</code>, and starts fresh services for the new wallet</li>
+<li><strong>first vault creation</strong> - when <code>vaults</code> goes from empty to non-empty, services
+are initialized for the first time</li>
+<li><strong>penumbra network enabled</strong> - when penumbra appears in <code>enabledNetworks</code>,
+services are initialized</li>
+<li><strong>custom chainspecs</strong> - polkadot custom chainspecs are reloaded</li>
+</ul>
+<h3 id="background-sync"><a class="header" href="#background-sync">background sync</a></h3>
+<p>a chrome alarm fires every 30 minutes to trigger background block sync. this is
+gated by a user privacy setting (<code>enableBackgroundSync</code>). when disabled, no
+network requests are made in the background.</p>
+<h3 id="offscreen-document"><a class="header" href="#offscreen-document">offscreen document</a></h3>
+<p>zcash halo 2 proving requires parallel wasm threads (rayon). chrome mv3 does not
+allow web workers inside service workers, so proving runs in an offscreen document.
+the service worker listens for <code>ZCASH_ENSURE_OFFSCREEN</code> messages and calls
+<code>chrome.offscreen.createDocument()</code> as needed.</p>
+<h2 id="content-scripts"><a class="header" href="#content-scripts">content scripts</a></h2>
+<h3 id="isolated-world---injected-sessionts"><a class="header" href="#isolated-world---injected-sessionts">ISOLATED world - injected-session.ts</a></h3>
+<p>runs in the isolated content script world. has access to <code>chrome.runtime</code> apis
+but not the page’s js context.</p>
+<p>responsibilities:</p>
+<ul>
+<li>listens for <code>ZafuMessageEvent</code> from the page (MAIN world). when it receives a
+<code>ZafuConnection</code> message (connect/disconnect/load), it forwards it to the
+service worker via <code>chrome.runtime.sendMessage</code> and relays the response back
+to the page</li>
+<li>listens for <code>ZafuControl</code> messages from the service worker. on <code>Init</code>, it calls
+<code>CRSessionClient.init(extensionId)</code> which creates a <code>chrome.runtime.Port</code> and
+sends the <code>MessagePort</code> end to the page. on <code>End</code>, it tears down the session
+and notifies the page</li>
+</ul>
+<p>this script bridges the two worlds: the page cannot talk to <code>chrome.runtime</code>
+directly, and the service worker cannot post messages to the page directly.</p>
+<h3 id="main-world---injected-penumbra-globalts"><a class="header" href="#main-world---injected-penumbra-globalts">MAIN world - injected-penumbra-global.ts</a></h3>
+<p>runs in the page’s js context. has no access to chrome extension apis.</p>
+<p>creates the <code>window[Symbol.for('penumbra')]</code> global that dapps use to discover
+and connect to penumbra wallet providers. the global is a record keyed by
+extension origin (<code>chrome-extension://&lt;id&gt;</code>), with each value being a frozen
+<code>PenumbraProvider</code> object:</p>
+<pre><code class="language-typescript">{
+  connect: () =&gt; Promise&lt;MessagePort&gt;,
+  disconnect: () =&gt; Promise&lt;void&gt;,
+  isConnected: () =&gt; boolean,
+  state: () =&gt; PenumbraState,
+  manifest: string,       // URL to extension manifest.json
+  addEventListener: ...,
+  removeEventListener: ...,
+}
+</code></pre>
+<p>the <code>ZafuInjection</code> class manages connection state transitions:</p>
+<ul>
+<li><code>Disconnected</code> - initial state</li>
+<li><code>Pending</code> - connect request sent, waiting for approval</li>
+<li><code>Connected</code> - session port received from ISOLATED world</li>
+</ul>
+<p>on construction, the script sends a <code>ZafuConnection.Load</code> event to announce its
+presence. if the service worker recognizes the origin as previously approved, it
+sends back <code>ZafuControl.Preconnect</code> and the state transitions directly to
+<code>Connected</code>.</p>
+<p>the global is frozen and defined as non-writable to discourage tampering, though
+as noted in the source comments, any script running on the page can potentially
+interfere.</p>
+<h2 id="dapp-connection-flow"><a class="header" href="#dapp-connection-flow">dapp connection flow</a></h2>
+<ol>
+<li>dapp calls <code>window[PenumbraSymbol][extensionOrigin].connect()</code></li>
+<li>MAIN world script sends <code>ZafuConnection.Connect</code> via <code>window.postMessage</code></li>
+<li>ISOLATED world script receives it and forwards to service worker via
+<code>chrome.runtime.sendMessage</code></li>
+<li>service worker’s <code>contentScriptConnectListener</code> checks if the origin is
+approved. if not, it opens the approval popup</li>
+<li>on approval, service worker sends <code>ZafuControl.Init</code> back to the ISOLATED
+world script</li>
+<li>ISOLATED world script calls <code>CRSessionClient.init()</code> which opens a
+<code>chrome.runtime.Port</code> to <code>CRSessionManager</code> in the service worker</li>
+<li>the <code>MessagePort</code> end is posted to the MAIN world via <code>window.postMessage</code></li>
+<li>dapp receives the <code>MessagePort</code> and uses it for protobuf-over-postmessage rpc</li>
+</ol>
+<h2 id="external-messages"><a class="header" href="#external-messages">external messages</a></h2>
+<p>the extension also handles <code>chrome.runtime.onMessageExternal</code> for:</p>
+<ul>
+<li><strong>sign requests</strong> - approved origins can request ed25519 identity signatures</li>
+<li><strong>easter egg messages</strong> - external message handler for misc interactions</li>
+</ul>
+<h2 id="side-panel-and-context-menu"><a class="header" href="#side-panel-and-context-menu">side panel and context menu</a></h2>
+<p>clicking the extension icon opens the side panel by default
+(<code>openPanelOnActionClick: true</code>). a context menu entry allows opening the popup
+in a standalone window.</p>
+<p>on first install, the options page (onboarding) opens automatically.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="state-management"><a class="header" href="#state-management">state management</a></h1>
+<p>zafu uses zustand with immer for immutable state updates. the store is split into
+slices, each managing a specific domain. sensitive data (wallets, contacts,
+messages) is encrypted at rest in <code>chrome.storage.local</code> and decrypted on-demand
+using a session key derived from the user’s password.</p>
+<h2 id="store-structure"><a class="header" href="#store-structure">store structure</a></h2>
+<p>the store is defined in <code>apps/extension/src/state/index.ts</code>. it combines all
+slices into a single <code>AllSlices</code> interface:</p>
+<pre><code class="language-typescript">export const useStore = create&lt;AllSlices&gt;()(
+  customPersist(initializeStore(sessionExtStorage, localExtStorage)),
+);
+</code></pre>
+<p>the middleware stack is: <code>customPersist</code> -&gt; <code>immer</code> -&gt; slice creators.</p>
+<h3 id="slices"><a class="header" href="#slices">slices</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>slice</th><th>purpose</th></tr>
+</thead>
+<tbody>
+<tr><td><code>wallets</code></td><td>penumbra and zcash wallet records, active indices</td></tr>
+<tr><td><code>password</code></td><td>password validation during onboarding</td></tr>
+<tr><td><code>seedPhrase</code></td><td>seed phrase generation and validation flow</td></tr>
+<tr><td><code>network</code></td><td>grpc endpoint, chain id, sync height</td></tr>
+<tr><td><code>numeraires</code></td><td>selected numeraire assets for value display</td></tr>
+<tr><td><code>txApproval</code></td><td>pending transaction approval state</td></tr>
+<tr><td><code>originApproval</code></td><td>pending dapp origin approval state</td></tr>
+<tr><td><code>connectedSites</code></td><td>known sites and their approval status</td></tr>
+<tr><td><code>defaultFrontend</code></td><td>default frontend url for dapp links</td></tr>
+<tr><td><code>zigner</code></td><td>zigner air-gap device settings</td></tr>
+<tr><td><code>tradingMode</code></td><td>trading mode toggle</td></tr>
+<tr><td><code>zignerSigning</code></td><td>active zigner signing session state</td></tr>
+<tr><td><code>privacy</code></td><td>user privacy settings (background sync, etc.)</td></tr>
+<tr><td><code>networks</code></td><td>network endpoint configuration</td></tr>
+<tr><td><code>keyRing</code></td><td>vault management, lock/unlock, key derivation</td></tr>
+<tr><td><code>ibcWithdraw</code></td><td>ibc withdrawal flow state</td></tr>
+<tr><td><code>penumbraSend</code></td><td>penumbra send flow state</td></tr>
+<tr><td><code>contacts</code></td><td>encrypted contact book</td></tr>
+<tr><td><code>messages</code></td><td>encrypted message history</td></tr>
+<tr><td><code>recentAddresses</code></td><td>recently used addresses (encrypted)</td></tr>
+<tr><td><code>signApproval</code></td><td>pending sign request approval</td></tr>
+<tr><td><code>frostSession</code></td><td>frost multisig dkg/signing session state</td></tr>
+<tr><td><code>inbox</code></td><td>encrypted inbox for memo-capable chains</td></tr>
+</tbody>
+</table>
+</div>
+<p>each slice creator receives the storage backends it needs. slices that persist
+data get <code>local</code> (chrome.storage.local) and/or <code>session</code> (chrome.storage.session).
+ephemeral slices (like <code>seedPhrase</code>, <code>txApproval</code>) receive no storage and reset
+when the popup closes.</p>
+<h3 id="slice-creator-pattern"><a class="header" href="#slice-creator-pattern">slice creator pattern</a></h3>
+<p>every slice follows the same signature:</p>
+<pre><code class="language-typescript">export const createExampleSlice = (
+  local: ExtensionStorage&lt;LocalStorageState&gt;,
+): SliceCreator&lt;ExampleSlice&gt; =&gt; (set, get) =&gt; ({
+  // state
+  someValue: defaultValue,
+  // actions
+  setSomeValue: async (v) =&gt; {
+    await local.set('someKey', v);
+    set(state =&gt; { state.example.someValue = v; });
+  },
+});
+</code></pre>
+<p><code>SliceCreator&lt;T&gt;</code> is typed as <code>StateCreator&lt;AllSlices, [['zustand/immer', never]], [], T&gt;</code>,
+which gives every slice access to the full store via <code>get()</code> and immer-powered
+mutations via <code>set()</code>.</p>
+<h2 id="encrypted-storage"><a class="header" href="#encrypted-storage">encrypted storage</a></h2>
+<p><code>apps/extension/src/state/encrypted-storage.ts</code> provides transparent encryption
+for sensitive storage keys.</p>
+<h3 id="encrypted-keys"><a class="header" href="#encrypted-keys">encrypted keys</a></h3>
+<p>the following storage keys are encrypted at rest:</p>
+<ul>
+<li><code>penumbraWallets</code> - penumbra wallet records containing full viewing keys</li>
+<li><code>zcashWallets</code> - zcash wallet records containing orchard full viewing keys</li>
+<li><code>contacts</code> - user contact book</li>
+<li><code>recentAddresses</code> - recently used addresses</li>
+<li><code>dismissedContactSuggestions</code> - dismissed suggestions</li>
+<li><code>messages</code> - message history</li>
+</ul>
+<p><code>knownSites</code> (origin approval records) is explicitly not encrypted because it
+contains no private data (just origin, choice, date) and needs to be readable by
+the origin storage package which lacks access to the session key.</p>
+<h3 id="encryption-mechanism"><a class="header" href="#encryption-mechanism">encryption mechanism</a></h3>
+<p>data is stored as <code>{ encrypted: BoxJson }</code> where <code>BoxJson</code> is an
+<code>@repo/encryption/box</code> sealed box. the encryption key is derived from the user’s
+password via <code>@repo/encryption/key</code>.</p>
+<p>the key lifecycle:</p>
+<ol>
+<li>on password creation, <code>Key.create(password)</code> generates a key and a <code>KeyPrint</code>
+(password verification hash). the key is serialized to json and stored in
+<code>chrome.storage.session</code> (memory-only, cleared when browser closes). the
+keyprint is stored in <code>chrome.storage.local</code> (persistent).</li>
+<li>on unlock, <code>Key.recreate(password, keyPrint)</code> re-derives the key from the
+password and verifies it against the keyprint. if correct, the key json is
+stored in session storage.</li>
+<li>on lock, the session key is removed. encrypted data becomes unreadable until
+the next unlock.</li>
+</ol>
+<h3 id="encrypted-local-proxy"><a class="header" href="#encrypted-local-proxy">encrypted local proxy</a></h3>
+<p><code>createEncryptedLocal()</code> wraps the local storage backend with a proxy that
+automatically encrypts/decrypts values for keys in the <code>ENCRYPTED_KEYS</code> set.
+callers use normal <code>get()</code>/<code>set()</code> and encryption is transparent:</p>
+<pre><code class="language-typescript">const local = createEncryptedLocal(rawLocal, session);
+// local.set('penumbraWallets', wallets) -&gt; encrypts and stores
+// local.get('penumbraWallets') -&gt; decrypts and returns
+// local.set('grpcEndpoint', url) -&gt; stores plaintext (not in ENCRYPTED_KEYS)
+</code></pre>
+<p>this proxy is passed to slice creators that handle sensitive data.</p>
+<h3 id="reading-encrypted-values"><a class="header" href="#reading-encrypted-values">reading encrypted values</a></h3>
+<p><code>readEncrypted&lt;T&gt;()</code> reads a value from local storage, checks if it is an
+<code>EncryptedWrapper</code>, retrieves the session key, decrypts, and parses the json
+result. returns <code>null</code> if the value is missing, not encrypted, or the wallet is
+locked.</p>
+<h2 id="custompersist-middleware"><a class="header" href="#custompersist-middleware">customPersist middleware</a></h2>
+<p><code>apps/extension/src/state/persist.ts</code> implements a custom persistence middleware
+that replaces zustand’s built-in <code>persist</code>. it handles the two-phase hydration
+required by encrypted storage.</p>
+<h3 id="phase-1---plaintext-hydration"><a class="header" href="#phase-1---plaintext-hydration">phase 1 - plaintext hydration</a></h3>
+<p>on startup, non-encrypted values are loaded immediately from
+<code>chrome.storage.local</code>:</p>
+<ul>
+<li><code>activeZcashIndex</code></li>
+<li><code>activeWalletIndex</code></li>
+<li><code>grpcEndpoint</code></li>
+<li><code>frontendUrl</code></li>
+<li><code>numeraires</code></li>
+<li><code>zignerCameraEnabled</code></li>
+<li><code>privacySettings</code></li>
+</ul>
+<p>these are set into the store via <code>produce()</code> (immer).</p>
+<h3 id="phase-2---encrypted-hydration"><a class="header" href="#phase-2---encrypted-hydration">phase 2 - encrypted hydration</a></h3>
+<p><code>hydrateEncryptedData()</code> loads encrypted values that require the session key:</p>
+<ul>
+<li><code>penumbraWallets</code> (via <code>readEncrypted</code>)</li>
+<li><code>zcashWallets</code> (via <code>readEncrypted</code>)</li>
+<li><code>contacts</code> (via <code>readEncrypted</code>)</li>
+<li><code>recentAddresses</code> (via <code>readEncrypted</code>)</li>
+<li><code>messages</code> (via <code>readEncrypted</code>)</li>
+<li><code>knownSites</code> (plaintext, loaded directly)</li>
+</ul>
+<p>this function runs:</p>
+<ol>
+<li>immediately on startup (succeeds if already unlocked or auto-unlocked)</li>
+<li>when keyring status transitions to <code>unlocked</code> (via store subscription)</li>
+</ol>
+<p>the subscription watches for <code>status === 'unlocked' &amp;&amp; prevStatus !== 'unlocked'</code>
+to re-hydrate after the user enters their password.</p>
+<h3 id="storage-change-listener"><a class="header" href="#storage-change-listener">storage change listener</a></h3>
+<p>the middleware subscribes to <code>localExtStorage.addListener()</code> to sync storage
+changes back into the zustand store. this handles changes from other extension
+contexts (service worker, other tabs). monitored keys include:</p>
+<ul>
+<li>encrypted data keys - triggers <code>hydrateEncryptedData()</code></li>
+<li><code>knownSites</code> - hydrated directly from change event</li>
+<li><code>fullSyncHeight</code>, <code>grpcEndpoint</code>, <code>frontendUrl</code>, <code>numeraires</code>, <code>params</code>,
+<code>zignerCameraEnabled</code>, <code>activeZcashIndex</code>, <code>activeWalletIndex</code>,
+<code>enabledNetworks</code>, <code>privacySettings</code> - each synced individually</li>
+<li><code>vaults</code> or <code>selectedVaultId</code> - triggers <code>keyRing.init()</code> to rebuild vault list</li>
+</ul>
+<h2 id="keyring-vault-system"><a class="header" href="#keyring-vault-system">keyring vault system</a></h2>
+<p>the keyring (<code>apps/extension/src/state/keyring/index.ts</code>) manages vaults - encrypted
+containers that hold seed phrases, zigner device data, or frost multisig key
+packages.</p>
+<h3 id="keyring-status"><a class="header" href="#keyring-status">keyring status</a></h3>
+<p>the keyring state machine has four states:</p>
+<ul>
+<li><code>not-loaded</code> - initial state before <code>init()</code> runs</li>
+<li><code>empty</code> - no password has been set (no <code>passwordKeyPrint</code> in storage)</li>
+<li><code>locked</code> - password exists but session key is not available</li>
+<li><code>unlocked</code> - session key is available, vaults can be decrypted</li>
+</ul>
+<h3 id="vault-types"><a class="header" href="#vault-types">vault types</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>type</th><th>contents</th></tr>
+</thead>
+<tbody>
+<tr><td><code>mnemonic</code></td><td>bip39 seed phrase, can derive for all networks</td></tr>
+<tr><td><code>zigner-zafu</code></td><td>viewing keys from zigner air-gap device</td></tr>
+<tr><td><code>frost-multisig</code></td><td>frost dkg key package + ephemeral seed</td></tr>
+<tr><td><code>ledger</code></td><td>hardware wallet reference (planned)</td></tr>
+<tr><td><code>trezor</code></td><td>hardware wallet reference (planned)</td></tr>
+<tr><td><code>keystone</code></td><td>hardware wallet reference (planned)</td></tr>
+</tbody>
+</table>
+</div>
+<p>each vault is stored as an <code>EncryptedVault</code>:</p>
+<pre><code class="language-typescript">interface EncryptedVault {
+  id: string;
+  type: KeyType;
+  name: string;
+  createdAt: number;
+  encryptedData: string;  // sealed box containing mnemonic or metadata
+  salt: string;
+  insensitive: Record&lt;string, unknown&gt;;  // unencrypted metadata
+}
+</code></pre>
+<p>the <code>insensitive</code> field stores data that can be read without decryption - things
+like zid public keys, device ids, account indices, and supported networks. this
+allows the ui to display vault names and types without requiring unlock.</p>
+<h3 id="vault-operations"><a class="header" href="#vault-operations">vault operations</a></h3>
+<p>the keyring code is split into three layers following a “your server as a
+function” pattern:</p>
+<ul>
+<li><strong>vault-ops.ts</strong> - pure domain functions. no i/o, no crypto, no storage. takes
+data, returns data. every function is independently testable.</li>
+<li><strong>crypto-ops.ts</strong> - async crypto helpers. each function does one thing. no
+storage writes, no state updates.</li>
+<li><strong>wallet-entries.ts</strong> - storage effects. creates penumbra/zcash wallet records
+linked to vaults, handles cleanup on deletion.</li>
+</ul>
+<h3 id="key-operations"><a class="header" href="#key-operations">key operations</a></h3>
+<ul>
+<li><code>newMnemonicKey(mnemonic, name)</code> - encrypts the mnemonic, builds a vault, stores
+it, creates a linked penumbra wallet entry, and stores the zid public key in
+unencrypted metadata</li>
+<li><code>newZignerZafuKey(data, name)</code> - encrypts zigner viewing key data, builds a
+vault, creates linked wallet entries for each supported network</li>
+<li><code>newFrostMultisigKey(params)</code> - encrypts the frost key package and ephemeral
+seed, builds a vault, creates a linked zcash wallet entry</li>
+<li><code>selectKeyRing(vaultId)</code> - sets the selected vault, syncs the active penumbra
+and zcash wallet indices to match</li>
+<li><code>deleteKeyRing(vaultId)</code> - removes the vault, removes linked wallet entries,
+cleans up zcash indexeddb data. if it was the last vault, nukes all wallet data</li>
+<li><code>getMnemonic(vaultId)</code> - decrypts and returns the mnemonic for a mnemonic vault</li>
+<li><code>lock()</code> / <code>unlock(password)</code> - manages the session key</li>
+</ul>
+<h3 id="init-flow"><a class="header" href="#init-flow">init flow</a></h3>
+<p><code>keyRing.init()</code> loads vault data from storage and determines the initial status:</p>
+<ol>
+<li>reads <code>passwordKeyPrint</code> and <code>vaults</code> from local storage</li>
+<li>reads <code>selectedVaultId</code> and <code>enabledNetworks</code></li>
+<li>if no keyprint exists, status is <code>empty</code></li>
+<li>if a session key exists, status is <code>unlocked</code></li>
+<li>if all vaults are airgap-only (zigner watch-only), auto-unlocks with an empty
+password (no secrets to protect - only viewing keys)</li>
+<li>otherwise, status is <code>locked</code></li>
+</ol>
+<p>the init also runs a migration check for orphaned frost multisig zcash wallets
+that may lack a parent vault record.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="multi-network-architecture"><a class="header" href="#multi-network-architecture">multi-network architecture</a></h1>
+<p>zafu supports multiple blockchain networks from a single wallet. networks are
+categorized by their privacy and consensus properties, and each category has
+different sync and key derivation requirements.</p>
+<h2 id="network-categories"><a class="header" href="#network-categories">network categories</a></h2>
+<p>defined in <code>apps/extension/src/state/keyring/network-types.ts</code>:</p>
+<h3 id="privacy-networks-1"><a class="header" href="#privacy-networks-1">privacy networks</a></h3>
+<p>require local block scanning with dedicated wasm workers. the chain data is
+encrypted and must be trial-decrypted against the user’s viewing keys.</p>
+<ul>
+<li><strong>zcash</strong> - orchard shielded pool. uses ZIP-32 key derivation, coin type 133.
+wasm module: <code>@rotko/zcash-wasm</code> (zafu-wasm with rayon parallel proving).</li>
+<li><strong>penumbra</strong> - shielded dex. uses penumbra-specific derivation, coin type 6532.
+wasm module: <code>@rotko/penumbra-wasm</code>.</li>
+</ul>
+<h3 id="ibccosmos-chains-1"><a class="header" href="#ibccosmos-chains-1">ibc/cosmos chains</a></h3>
+<p>transparent chains using BIP44 secp256k1 with bech32 address encoding. primarily
+used for deposits into and withdrawals from penumbra via ibc.</p>
+<ul>
+<li><strong>osmosis</strong> - bech32 prefix <code>osmo</code>, denom <code>uosmo</code></li>
+<li><strong>noble</strong> - bech32 prefix <code>noble</code>, denom <code>uusdc</code></li>
+<li><strong>nomic</strong> - bech32 prefix <code>nomic</code>, denom <code>usat</code> (nBTC)</li>
+<li><strong>celestia</strong> - bech32 prefix <code>celestia</code>, denom <code>utia</code></li>
+</ul>
+<p>all ibc chains use the same coin type 118 and derivation path <code>m/44'/118'/0'/0/0</code>,
+differing only in bech32 prefix.</p>
+<h3 id="transparent-networks-1"><a class="header" href="#transparent-networks-1">transparent networks</a></h3>
+<p>fully public ledgers with no client-side scanning requirement.</p>
+<ul>
+<li><strong>polkadot</strong> - ss58 prefix 0, supports sr25519/ed25519/ecdsa encryption types.
+includes parachains (hydration, acala, moonbeam, astar) as sub-chain configs
+under the polkadot umbrella.</li>
+<li><strong>kusama</strong> - ss58 prefix 2, same encryption type support as polkadot. includes
+parachains (karura, moonriver).</li>
+<li><strong>ethereum</strong> - secp256k1, chain id 1, BIP44 coin type 60.</li>
+<li><strong>bitcoin</strong> - BIP-84 native segwit (<code>bc1...</code>), coin type 0.</li>
+</ul>
+<p>substrate networks (polkadot, kusama) support multiple encryption types per
+network. the default is sr25519, but users can choose ed25519 (including
+ledger-compatible SLIP-10/BIP32-Ed25519 derivation) or ecdsa (for evm-compatible
+parachains like moonbeam).</p>
+<h2 id="network-configuration"><a class="header" href="#network-configuration">network configuration</a></h2>
+<p><code>apps/extension/src/config/networks.ts</code> is the single source of truth for ui
+display and feature flags:</p>
+<pre><code class="language-typescript">interface NetworkConfig {
+  name: string;
+  color: string;
+  transparent: boolean;
+  launched: boolean;
+  features: { stake, swap, vote, inbox };
+}
+</code></pre>
+<p>the <code>launched</code> flag controls which networks appear in the ui. currently launched:
+zcash and penumbra. other networks are defined but gated behind <code>launched: false</code>.</p>
+<p><code>NETWORK_CONFIGS</code> in <code>network-types.ts</code> holds the technical config (symbol,
+decimals, derivation paths, ss58 prefixes, bech32 prefixes, chain ids).</p>
+<h2 id="vault-system---one-seed-multiple-networks"><a class="header" href="#vault-system---one-seed-multiple-networks">vault system - one seed, multiple networks</a></h2>
+<p>the keyring vault system (described in detail in <a href="#state-management">state.md</a>) maps one
+vault to multiple network keys. a single bip39 mnemonic stored in a vault can
+derive keys for every supported network using standard derivation paths:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>network</th><th>coin type</th><th>path</th></tr>
+</thead>
+<tbody>
+<tr><td>penumbra</td><td>6532</td><td><code>m/44'/6532'/0'</code></td></tr>
+<tr><td>zcash</td><td>133</td><td><code>m/44'/133'/0'/0/0</code></td></tr>
+<tr><td>osmosis</td><td>118</td><td><code>m/44'/118'/0'/0/0</code></td></tr>
+<tr><td>noble</td><td>118</td><td><code>m/44'/118'/0'/0/0</code></td></tr>
+<tr><td>nomic</td><td>118</td><td><code>m/44'/118'/0'/0/0</code></td></tr>
+<tr><td>celestia</td><td>118</td><td><code>m/44'/118'/0'/0/0</code></td></tr>
+<tr><td>polkadot</td><td>354</td><td><code>m/44'/354'/0'/0'/0'</code></td></tr>
+<tr><td>kusama</td><td>434</td><td><code>m/44'/434'/0'/0'/0'</code></td></tr>
+<tr><td>ethereum</td><td>60</td><td><code>m/44'/60'/0'/0/0</code></td></tr>
+<tr><td>bitcoin</td><td>0</td><td><code>m/84'/0'/0'/0/0</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>zigner-zafu vaults import viewing keys (not mnemonics) from an air-gapped
+signing device. these vaults declare which networks they support based on the
+keys present in the import data (<code>fullViewingKey</code> for penumbra, <code>viewingKey</code> for
+zcash, <code>polkadotSs58</code> for substrate, <code>cosmosAddresses</code> for ibc chains).</p>
+<p>frost-multisig vaults store a frost dkg key package and ephemeral seed. these
+currently support zcash only.</p>
+<h2 id="network-activation"><a class="header" href="#network-activation">network activation</a></h2>
+<p>a network is only active (apis injected, features loaded, sync running) when two
+conditions are met:</p>
+<ol>
+<li>the user has at least one derived key for that network</li>
+<li>the network is in the <code>enabledNetworks</code> list</li>
+</ol>
+<p>this is formalized in the <code>NetworkActivation</code> type:</p>
+<pre><code class="language-typescript">interface NetworkActivation {
+  network: NetworkType;
+  hasKeys: boolean;
+  isEnabled: boolean;
+  shouldInjectProvider: boolean;  // hasKeys AND isEnabled
+  shouldLoadFeatures: boolean;    // isEnabled
+}
+</code></pre>
+<p>this prevents leaking wallet presence to dapps for unused networks. if a user has
+not enabled zcash, no zcash provider is injected and no zcash wasm is loaded.</p>
+<h2 id="network-workers"><a class="header" href="#network-workers">network workers</a></h2>
+<p><code>apps/extension/src/state/keyring/network-worker.ts</code> manages dedicated web workers
+for each privacy network. each worker runs in its own thread with:</p>
+<ul>
+<li>separate memory space (no cross-contamination between networks)</li>
+<li>its own wasm instance</li>
+<li>its own sync loop</li>
+<li>its own indexeddb store</li>
+</ul>
+<h3 id="worker-lifecycle"><a class="header" href="#worker-lifecycle">worker lifecycle</a></h3>
+<p><code>spawnNetworkWorker(network)</code> creates a <code>new Worker(url, { type: 'module' })</code> for
+the requested network. concurrent spawn calls are deduplicated - multiple callers
+share the same spawn promise.</p>
+<p>currently supported worker urls:</p>
+<ul>
+<li>zcash: <code>/workers/zcash-worker.js</code></li>
+<li>penumbra: <code>/workers/penumbra-worker.js</code></li>
+</ul>
+<p>the worker posts a <code>ready</code> message once its wasm is initialized. the spawn
+function polls for this and times out after 30 seconds.</p>
+<p><code>terminateNetworkWorker(network)</code> calls <code>worker.terminate()</code> and removes the
+worker state, fully freeing the wasm memory.</p>
+<h3 id="message-protocol"><a class="header" href="#message-protocol">message protocol</a></h3>
+<p>communication uses a typed request/response protocol over <code>postMessage</code>:</p>
+<pre><code>NetworkWorkerMessage (to worker):
+  type: init | derive-address | sync | stop-sync | reset-sync |
+        get-balance | send-tx | shield | get-notes | decrypt-memos |
+        get-history | sync-memos | frost-dkg-part1/2/3 | frost-sign-round1 |
+        frost-spend-sign | frost-spend-aggregate | frost-derive-address | ...
+  id: string (for correlating responses)
+  network: NetworkType
+  walletId?: string
+  payload?: unknown
+
+NetworkWorkerResponse (from worker):
+  type: ready | address | sync-progress | balance | tx-result | error | ...
+  id: string
+  network: NetworkType
+  payload?: unknown
+  error?: string
+</code></pre>
+<p><code>callWorker&lt;T&gt;()</code> sends a message and returns a promise that resolves when the
+worker posts a response with the matching <code>id</code>. progress messages
+(<code>sync-progress</code>, <code>send-progress</code>, <code>mempool-update</code>) are emitted as
+<code>CustomEvent</code>s on <code>window</code> rather than resolving promises.</p>
+<h3 id="zcash-worker-capabilities"><a class="header" href="#zcash-worker-capabilities">zcash worker capabilities</a></h3>
+<p>the zcash worker handles:</p>
+<ul>
+<li>address derivation from mnemonic or ufvk</li>
+<li>block scanning and trial decryption (orchard pool)</li>
+<li>balance computation</li>
+<li>transaction building (fully signed or unsigned for cold signing)</li>
+<li>transaction completion (applying signatures from zigner and broadcasting)</li>
+<li>shielding transparent funds to orchard</li>
+<li>memo decryption</li>
+<li>frost dkg (3-round distributed key generation)</li>
+<li>frost signing (nonce generation, spend authorization, share aggregation)</li>
+<li>frost address derivation from group key</li>
+</ul>
+<h3 id="offscreen-proving-relay"><a class="header" href="#offscreen-proving-relay">offscreen proving relay</a></h3>
+<p>the zcash worker runs inside a web worker which cannot call chrome extension apis.
+halo 2 proving requires parallel wasm (rayon thread pool) which needs an offscreen
+document. the relay path is:</p>
+<ol>
+<li>zcash worker posts <code>prove-request</code> to the network worker manager</li>
+<li>manager calls <code>chrome.runtime.sendMessage({ type: 'ZCASH_ENSURE_OFFSCREEN' })</code>
+to the service worker</li>
+<li>service worker creates the offscreen document if needed</li>
+<li>manager sends <code>chrome.runtime.sendMessage({ type: 'ZCASH_BUILD', request })</code></li>
+<li>offscreen document runs the parallel proving and returns the result</li>
+<li>manager posts <code>prove-response</code> back to the zcash worker</li>
+</ol>
+<h2 id="network-feature-loading"><a class="header" href="#network-feature-loading">network feature loading</a></h2>
+<p><code>apps/extension/src/state/keyring/network-loader.ts</code> lazily loads wasm and
+features only for enabled networks.</p>
+<p>privacy networks require wasm initialization:</p>
+<ul>
+<li>penumbra: imports <code>@rotko/penumbra-wasm/init</code> and calls
+<code>initWasmWithParallel(numThreads)</code> using <code>navigator.hardwareConcurrency</code></li>
+<li>zcash: imports and calls <code>initZcashWasm()</code></li>
+</ul>
+<p>transparent networks need no wasm - they are marked as loaded immediately.</p>
+<p><code>syncNetworkLoading()</code> is called when the user enables/disables networks or
+adds/removes keys. it loads features for newly enabled networks and unloads
+features for disabled ones.</p>
+<h2 id="penumbra-services"><a class="header" href="#penumbra-services">penumbra services</a></h2>
+<p>penumbra uses a different architecture from the network worker system. rather than
+a dedicated web worker, penumbra services run inside the service worker itself
+using the <code>Services</code> class from <code>@repo/context</code>.</p>
+<p><code>startWalletServices()</code> in <code>apps/extension/src/wallet-services.ts</code>:</p>
+<ol>
+<li>checks if penumbra is enabled (privacy gate - no network connections unless
+user has opted in)</li>
+<li>waits for the wallet to be decrypted (listens for session key or wallet
+creation)</li>
+<li>fetches the grpc endpoint from storage (supports per-network endpoints, legacy
+single endpoint, or default <code>https://penumbra.rotko.net</code>)</li>
+<li>queries <code>chainId</code> from the endpoint’s <code>AppService</code></li>
+<li>creates a <code>Services</code> instance with wallet id, full viewing key, numeraires,
+and sync height hints</li>
+<li>starts a subscription that syncs <code>fullSyncHeight</code> from indexeddb to
+<code>chrome.storage.local</code> (used by the ui to show sync progress)</li>
+</ol>
+<p>the block processor runs via <code>ws.blockProcessor.sync()</code> and is stopped/restarted
+on wallet switches.</p>
+<h2 id="wallet-switching"><a class="header" href="#wallet-switching">wallet switching</a></h2>
+<p>when the user selects a different vault via <code>selectKeyRing(vaultId)</code>:</p>
+<ol>
+<li>the keyring updates <code>selectedVaultId</code> in storage</li>
+<li>it syncs <code>activeWalletIndex</code> (penumbra) and <code>activeZcashIndex</code> (zcash) to
+point to the wallet entries linked to the selected vault</li>
+<li>the service worker’s storage change listener detects the <code>activeWalletIndex</code>
+change and calls <code>reinitializeServices()</code></li>
+<li><code>reinitializeServices()</code> stops the old block processor, resets the wallet
+cache, clears <code>fullSyncHeight</code>, and starts fresh wallet services for the new
+wallet</li>
+</ol>
+<p>when switching the active network via <code>setActiveNetwork(network)</code>:</p>
+<ol>
+<li>the keyring checks if the currently selected vault supports the new network</li>
+<li>if not, it searches for a compatible vault (one whose type supports the
+target network) and auto-selects it</li>
+<li>for penumbra, it also syncs <code>activeWalletIndex</code></li>
+</ol>
+<p>this ensures the ui always shows a vault that is capable of operating on the
+active network.</p>
+<h2 id="substrate-chain-support"><a class="header" href="#substrate-chain-support">substrate chain support</a></h2>
+<p>polkadot and kusama act as umbrella networks for their parachains.
+<code>SUBSTRATE_CHAINS</code> in <code>network-types.ts</code> defines known chains with their
+ss58 prefixes, para ids, and rpc endpoints.</p>
+<p>the service worker also supports custom chainspecs loaded from storage. on
+startup and when <code>customChainspecs</code> changes in storage, <code>loadCustomChainspecs()</code>
+registers/unregisters chains with the polkadot light client via
+<code>registerCustomChainspec()</code> / <code>unregisterCustomChainspec()</code>.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="changelog"><a class="header" href="#changelog">CHANGELOG</a></h1>
+<p><em>this page is under construction.</em></p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr-ef4e11c1.min.js"></script>
+        <script src="mark-09e88c2c.min.js"></script>
+        <script src="searcher-c2a407aa.js"></script>
+
+        <script src="clipboard-1626706a.min.js"></script>
+        <script src="highlight-abc7f01d.js"></script>
+        <script src="book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+
+        <script>
+        window.addEventListener('load', function() {
+            window.setTimeout(window.print, 100);
+        });
+        </script>
+
+
+    </div>
+    </body>
+</html>

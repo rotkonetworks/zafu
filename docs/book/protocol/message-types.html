@@ -1,0 +1,501 @@
+<!DOCTYPE HTML>
+<html lang="en" class="coal sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>message types - zafu</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="privacy wallet for zcash and penumbra">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "coal";
+            const default_dark_theme = "coal";
+            window.path_to_searchindex_js = "../searchindex-9f0443aa.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-4cbd2bf8.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('coal')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">zafu</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/rotkonetworks/zafu" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="message-types"><a class="header" href="#message-types">message types</a></h1>
+<p>the zafu memo protocol defines 14 message types carried inside zcash
+shielded memo fields (ZIP-302). each memo is exactly 512 bytes. byte 0
+is 0xFF (arbitrary data), byte 1 is 0x5A (zafu magic), byte 2 is the
+message type.</p>
+<p>all integers are unsigned and big-endian unless stated otherwise.</p>
+<h2 id="framing"><a class="header" href="#framing">framing</a></h2>
+<p>standalone messages use a 4-byte header, leaving 508 bytes for payload:</p>
+<pre><code>byte 0: 0xFF (ZIP-302 arbitrary data)
+byte 1: 0x5A (zafu magic)
+byte 2: message type
+byte 3: 0x00 (standalone)
+bytes 4-511: payload (508 bytes max)
+</code></pre>
+<p>fragmented messages use a 20-byte header, leaving 492 bytes per
+fragment:</p>
+<pre><code>byte 0: 0xFF
+byte 1: 0x5A
+byte 2: message type
+byte 3: high nibble = part (1-indexed), low nibble = total
+bytes 4-19: message ID (16 bytes, random, shared across fragments)
+bytes 20-511: payload (492 bytes max)
+</code></pre>
+<p>maximum fragments: 15. maximum total payload: 15 * 492 = 7,380 bytes.
+all fragments of one logical message share the same message ID and type.
+reassembly sorts by part number and concatenates payloads.</p>
+<p>any message type can be fragmented. fragmentation is automatic when the
+payload exceeds 508 bytes.</p>
+<h2 id="type-table"><a class="header" href="#type-table">type table</a></h2>
+<pre><code>value   name              description
+-----   ----              -----------
+0x01    Text              UTF-8 text message
+0x02    Address           unified address share
+0x03    PaymentRequest    amount + optional address + label
+0x04    Ack               read receipt / acknowledgment
+0x05    ContactCard       name + address + TLV extensions
+0x06    EncryptedMessage  zid-authenticated encrypted payload
+0x07    Data              generic structured data
+0x10    DkgRound1         FROST DKG round 1
+0x11    DkgRound2         FROST DKG round 2
+0x12    DkgRound3         FROST DKG round 3
+0x20    SignRequest       FROST signing request
+0x21    SignCommitment    FROST signing commitment
+0x22    SignShare         FROST signature share
+0x23    SignResult        FROST aggregated signature
+</code></pre>
+<p>values 0x00 and 0xF0-0xFF are reserved. receivers must ignore messages
+with unknown type values.</p>
+<h2 id="0x01---text"><a class="header" href="#0x01---text">0x01 - text</a></h2>
+<p>UTF-8 text message. the payload is raw UTF-8 bytes with no length
+prefix. trailing zero bytes are stripped on decode.</p>
+<pre><code>payload: UTF-8 text (no null terminator)
+max single: 508 bytes (~508 ASCII chars, ~170 CJK chars)
+fragmentation: automatic if text exceeds 508 bytes
+max fragmented: 7,380 bytes
+</code></pre>
+<p>for standalone messages, the message ID used internally is the first 16
+bytes of the payload (deterministic). for fragmented messages, a random
+16-byte message ID is generated.</p>
+<h2 id="0x02---address"><a class="header" href="#0x02---address">0x02 - address</a></h2>
+<p>a zcash unified address encoded as a UTF-8 bech32m string. no length
+prefix - the entire payload is the address string.</p>
+<pre><code>payload: UTF-8 bech32m address
+max: 508 bytes (sufficient for all current UA configurations)
+fragmentation: not expected in practice
+</code></pre>
+<h2 id="0x03---paymentrequest"><a class="header" href="#0x03---paymentrequest">0x03 - paymentrequest</a></h2>
+<p>a payment request carrying an amount and optional metadata. the payload
+structure is:</p>
+<pre><code>byte 0-7:   amount in zatoshis (u64be)
+byte 8:     flags (bit 0 = address present, bit 1 = label present)
+if address: u16be length + UTF-8 address
+if label:   u16be length + UTF-8 label
+</code></pre>
+<p>the amount field is always 8 bytes. when no specific address is
+provided, the sender expects payment to the address that received this
+memo (the diversified address of the conversation).</p>
+<pre><code>max single: 508 bytes
+fragmentation: supported but unlikely needed
+</code></pre>
+<h2 id="0x04---ack"><a class="header" href="#0x04---ack">0x04 - ack</a></h2>
+<p>read receipt acknowledging a previously received message. the payload
+contains the message ID of the message being acknowledged.</p>
+<pre><code>payload: 16 bytes (message ID of the acknowledged message)
+size: always fits in a single memo (16 bytes &lt;&lt; 508)
+fragmentation: never needed
+</code></pre>
+<p>the ack confirms the recipient’s wallet has received and processed a
+message. it does not imply the user has read it.</p>
+<h2 id="0x05---contactcard"><a class="header" href="#0x05---contactcard">0x05 - contactcard</a></h2>
+<p>a contact card for sharing identity and address information. see the
+<a href="memo.html">memo protocol spec</a> section 6 for the full wire format.</p>
+<h3 id="payload-format"><a class="header" href="#payload-format">payload format</a></h3>
+<pre><code>offset  size    field
+0       1       version (0x01)
+1       1       flags (reserved, must be 0x00)
+2       1       name_len (u8)
+3       var     name (UTF-8, name_len bytes)
+3+NL    2       addr_len (u16be)
+5+NL    var     address (UTF-8, addr_len bytes)
+5+NL+AL var     TLV extensions (until payload end)
+</code></pre>
+<h3 id="fields"><a class="header" href="#fields">fields</a></h3>
+<ul>
+<li><strong>version</strong>: 0x01. receivers must reject unknown versions.</li>
+<li><strong>flags</strong>: reserved. senders must set to 0x00. receivers must ignore.</li>
+<li><strong>name_len</strong>: u8. may be 0 (anonymous card). max 255.</li>
+<li><strong>name</strong>: UTF-8 display name. no null terminator.</li>
+<li><strong>addr_len</strong>: u16be. must be &gt; 0.</li>
+<li><strong>address</strong>: zcash unified address (bech32m). required.</li>
+</ul>
+<h3 id="tlv-extensions"><a class="header" href="#tlv-extensions">TLV extensions</a></h3>
+<p>after the address, zero or more TLV entries may follow:</p>
+<pre><code>tag (u8) | length (u16be) | value (length bytes)
+</code></pre>
+<p>parsers must skip unknown tags by reading the length and advancing.</p>
+<pre><code>tag    length   description
+---    ------   -----------
+0x01   32       ed25519 zid public key (signals DH messaging capability)
+0x02   var      post-quantum public key (reserved, format TBD)
+</code></pre>
+<p>the presence of tag 0x01 indicates the sender supports zid-authenticated
+encrypted messaging (type 0x06). the key in the value is the sender’s
+per-contact zid, unique to this relationship. see
+<a href="encrypted-messaging.html">encrypted messaging</a> for details.</p>
+<h3 id="size-budget"><a class="header" href="#size-budget">size budget</a></h3>
+<pre><code>fixed overhead:       5 bytes (ver + flags + name_len + addr_len)
+typical UA:           ~300 bytes
+zid extension:        35 bytes (3 header + 32 pubkey)
+typical total:        ~360 bytes (fits single memo)
+with PQ extension:    ~1,260 bytes (requires fragmentation)
+</code></pre>
+<p>name length is capped at u8 (255 bytes). address length is u16be (up to
+65,535 bytes) because zcash unified addresses with multiple receiver
+types (orchard + sapling + transparent) can exceed 255 bytes.</p>
+<h2 id="0x06---encryptedmessage"><a class="header" href="#0x06---encryptedmessage">0x06 - encryptedmessage</a></h2>
+<p>zid-authenticated encrypted payload providing sender authentication and
+viewing-key resistance on top of zcash’s shielded encryption. see
+<a href="encrypted-messaging.html">encrypted messaging</a> for the full
+specification.</p>
+<h3 id="wire-format-payload-after-zafu-header"><a class="header" href="#wire-format-payload-after-zafu-header">wire format (payload after zafu header)</a></h3>
+<pre><code>offset  size    field
+0       32      sender zid public key (ed25519)
+32      32      ephemeral public key (x25519)
+64      12      nonce
+76      var     ciphertext + GCM tag (16 bytes)
+
+overhead: 76 + 16 = 92 bytes
+plaintext capacity (single memo): 508 - 92 = 416 bytes
+plaintext capacity (fragmented): up to 7,288 bytes
+</code></pre>
+<p>the inner plaintext is a typed payload:</p>
+<pre><code>byte 0:    inner MemoType
+bytes 1-N: inner payload
+</code></pre>
+<p>any message type can be encrypted, including Text, ContactCard, and
+Data.</p>
+<h2 id="0x07---data"><a class="header" href="#0x07---data">0x07 - data</a></h2>
+<p>generic structured data for machine-to-machine communication. supports
+content type tagging, request/response correlation, and reply-to
+addressing.</p>
+<h3 id="payload-format-1"><a class="header" href="#payload-format-1">payload format</a></h3>
+<pre><code>offset  size    field
+0       1       content type (DataContentType)
+1       1       flags
+2       var     conditional fields (per flags)
+var     var     application data
+</code></pre>
+<h3 id="content-types"><a class="header" href="#content-types">content types</a></h3>
+<pre><code>value   name       description
+-----   ----       -----------
+0x00    Raw        raw bytes, interpret by context
+0x01    Json       JSON (UTF-8 encoded)
+0x02    Cbor       CBOR (RFC 8949)
+0x03    Protobuf   protobuf (schema defined out-of-band)
+</code></pre>
+<h3 id="flags"><a class="header" href="#flags">flags</a></h3>
+<pre><code>bit 0: correlation ID present (16 bytes follow immediately after flags)
+bit 1: reply-to address present (u16be length + UTF-8 address follows)
+</code></pre>
+<h3 id="conditional-fields"><a class="header" href="#conditional-fields">conditional fields</a></h3>
+<p>when flags bit 0 is set, 16 bytes of correlation ID follow the flags
+byte. the requester generates a random correlation ID; the responder
+echoes it to link the response.</p>
+<p>when flags bit 1 is set, a reply-to address follows (after the
+correlation ID if present). the format is u16be length prefix + UTF-8
+zcash address. this tells the recipient where to send a response.</p>
+<h3 id="layout-examples"><a class="header" href="#layout-examples">layout examples</a></h3>
+<p>minimal data message (no correlation, no reply-to):</p>
+<pre><code>[content_type: 1 byte] [flags: 0x00] [application data]
+</code></pre>
+<p>data message with correlation ID:</p>
+<pre><code>[content_type] [flags: 0x01] [correlation_id: 16 bytes] [data]
+</code></pre>
+<p>data message with both correlation and reply-to:</p>
+<pre><code>[content_type] [flags: 0x03] [correlation_id: 16 bytes]
+[reply_to_len: u16be] [reply_to: UTF-8] [data]
+</code></pre>
+<h3 id="fragmentation"><a class="header" href="#fragmentation">fragmentation</a></h3>
+<p>data messages fragment automatically when the total payload (content
+type + flags + conditional fields + application data) exceeds 508 bytes.
+max total payload with fragmentation: 7,380 bytes.</p>
+<h2 id="frost-types-0x10-0x12---dkg"><a class="header" href="#frost-types-0x10-0x12---dkg">FROST types (0x10-0x12) - DKG</a></h2>
+<p>FROST distributed key generation is carried over three rounds, each in
+its own memo type. payloads are raw binary blobs (hex-decoded FROST
+protocol messages).</p>
+<h3 id="0x10---dkground1"><a class="header" href="#0x10---dkground1">0x10 - DkgRound1</a></h3>
+<p>round 1 broadcast: each participant publishes their commitments.
+payload is the serialized round 1 package.</p>
+<pre><code>payload: FROST round 1 package (binary)
+fragmentation: automatic if package exceeds 508 bytes
+</code></pre>
+<h3 id="0x11---dkground2"><a class="header" href="#0x11---dkground2">0x11 - DkgRound2</a></h3>
+<p>round 2: each participant sends their secret shares to specific
+recipients. payload is the serialized round 2 package.</p>
+<pre><code>payload: FROST round 2 package (binary)
+fragmentation: automatic if package exceeds 508 bytes
+</code></pre>
+<h3 id="0x12---dkground3"><a class="header" href="#0x12---dkground3">0x12 - DkgRound3</a></h3>
+<p>round 3: verification and finalization. payload is the serialized
+round 3 package.</p>
+<pre><code>payload: FROST round 3 package (binary)
+fragmentation: automatic if package exceeds 508 bytes
+</code></pre>
+<p>all DKG round messages are sent as shielded memos to specific
+participants. the zcash diversified address identifies the DKG session
+endpoint.</p>
+<h2 id="frost-types-0x20-0x23---signing"><a class="header" href="#frost-types-0x20-0x23---signing">FROST types (0x20-0x23) - signing</a></h2>
+<p>FROST threshold signing uses four message types for the signing
+ceremony.</p>
+<h3 id="0x20---signrequest"><a class="header" href="#0x20---signrequest">0x20 - SignRequest</a></h3>
+<p>a signing request containing the sighash and alpha values. the
+coordinator sends this to each signer.</p>
+<pre><code>payload layout:
+    bytes 0-31:   sighash (32 bytes)
+    bytes 32-N:   alpha values (N * 32 bytes, one per input)
+
+total size: 32 + (num_inputs * 32) bytes
+fragmentation: automatic for transactions with many inputs
+</code></pre>
+<h3 id="0x21---signcommitment"><a class="header" href="#0x21---signcommitment">0x21 - SignCommitment</a></h3>
+<p>a signer’s nonce commitment for the signing round. each signer responds
+to a SignRequest with their commitment.</p>
+<pre><code>payload: serialized FROST signing commitment (binary)
+fragmentation: automatic if needed
+</code></pre>
+<h3 id="0x22---signshare"><a class="header" href="#0x22---signshare">0x22 - SignShare</a></h3>
+<p>a signer’s partial signature share. sent after the coordinator
+broadcasts all commitments.</p>
+<pre><code>payload: serialized FROST signature share (binary)
+fragmentation: automatic if needed
+</code></pre>
+<h3 id="0x23---signresult"><a class="header" href="#0x23---signresult">0x23 - SignResult</a></h3>
+<p>the aggregated signature, broadcast by the coordinator after collecting
+sufficient shares.</p>
+<pre><code>payload: serialized FROST aggregate signature (binary)
+fragmentation: automatic if needed
+</code></pre>
+<h2 id="references"><a class="header" href="#references">references</a></h2>
+<ul>
+<li><a href="memo.html">memo protocol</a> - full protocol specification</li>
+<li><a href="encrypted-messaging.html">encrypted messaging</a> - type 0x06 details</li>
+<li><a href="https://zips.z.cash/zip-0302">ZIP-302</a> - zcash memo field format</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../protocol/memo.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../protocol/encrypted-messaging.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../protocol/memo.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../protocol/encrypted-messaging.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

@@ -1,0 +1,14 @@
+[book]
+title = "zafu"
+description = "privacy wallet for zcash and penumbra"
+authors = ["rotko networks"]
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book"
+
+[output.html]
+default-theme = "coal"
+preferred-dark-theme = "coal"
+git-repository-url = "https://github.com/rotkonetworks/zafu"
