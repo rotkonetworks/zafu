@@ -38,6 +38,8 @@ import { QrScanner } from '../../../shared/components/qr-scanner';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { useQuery } from '@tanstack/react-query';
 import { viewClient, sctClient } from '../../../clients';
+import { getDisplayDenomFromView } from '@penumbra-zone/getters/value-view';
+import { fromValueView } from '@rotko/penumbra-types/amount';
 import { getHistoryInWorker } from '../../../state/keyring/network-worker';
 import { cn } from '@repo/ui/lib/utils';
 import { messagesSelector } from '../../../state/messages';
@@ -235,7 +237,7 @@ const NetworkContent = ({
   }
 };
 
-/** penumbra-specific content — balance card + sync bar + account picker + assets */
+/** penumbra-specific content - balance card + sync bar + account picker + assets */
 const PenumbraContent = ({ account, onAccountChange }: { account: number; onAccountChange: (n: number) => void }) => {
   const { latestBlockHeight, fullSyncHeight, error } = useSyncProgress();
 
@@ -247,22 +249,49 @@ const PenumbraContent = ({ account, onAccountChange }: { account: number; onAcco
   const syncLabel = !latestBlockHeight
     ? 'connecting...'
     : isSyncing
-      ? `syncing · block ${(fullSyncHeight ?? 0).toLocaleString()} / ${latestBlockHeight.toLocaleString()}`
+      ? `syncing ${syncPct}%`
       : `block ${(fullSyncHeight ?? latestBlockHeight).toLocaleString()}`;
+
+  // query UM balance for the balance card
+  const { data: umBalance } = useQuery({
+    queryKey: ['um-balance', account, fullSyncHeight],
+    staleTime: 5_000,
+    queryFn: async () => {
+      try {
+        const balances = await Array.fromAsync(
+          viewClient.balances({ accountFilter: { account } }),
+        );
+        let total = 0;
+        for (const b of balances) {
+          if (!b.balanceView) continue;
+          const denom = getDisplayDenomFromView(b.balanceView);
+          if (denom === 'penumbra' || denom === 'UM') {
+            total += Number(fromValueView(b.balanceView));
+          }
+        }
+        return total;
+      } catch {
+        return null;
+      }
+    },
+  });
+
+  const balanceDisplay = umBalance != null && umBalance > 0
+    ? `${umBalance.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} UM`
+    : isSyncing ? 'syncing...' : '0 UM';
 
   return (
     <div className='flex-1 flex flex-col gap-3'>
       {/* balance card */}
-      <div className='rounded-lg border border-penumbra-purple/20 bg-card p-4'>
-        <div className='text-xs text-muted-foreground'>balance</div>
+      <div className='rounded-lg border border-border/40 bg-card p-4'>
         <div className='text-3xl font-medium tabular-nums text-foreground'>
-          {fullSyncHeight ? '—' : '—'} UM
+          {balanceDisplay}
         </div>
         <div className='mt-1 text-xs text-muted-foreground'>{syncLabel}</div>
       </div>
 
-      {/* sync bar — hidden when synced */}
-      {isSyncing && (
+      {/* sync bar — visible while syncing or connecting */}
+      {(isSyncing || !latestBlockHeight) && (
         <SyncProgressBar
           percent={syncPct}
           label={syncLabel}

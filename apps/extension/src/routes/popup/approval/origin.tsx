@@ -91,10 +91,11 @@ export const OriginApproval = () => {
               </div>
             </div>
             <div className='mt-3 flex flex-col gap-3 text-muted-foreground'>
-              <p>This host wants to connect to your wallet.</p>
-              <p className='text-rust'>
-                <span className='i-lucide-triangle-alert mr-2 inline-block h-4 w-4' /> Approval will allow this
-                host to see your balance and transaction history.
+              <p>this site wants to connect to your wallet.</p>
+              <p className='text-xs'>
+                the site can query your balances and request transactions.
+                your viewing keys stay local - they never leave the extension.
+                you will be asked to approve each transaction separately.
               </p>
             </div>
           </div>

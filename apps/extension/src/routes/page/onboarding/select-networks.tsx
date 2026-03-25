@@ -16,7 +16,7 @@ import { PagePath } from '../paths';
 import { useStore } from '../../../state';
 import { NetworkType } from '../../../state/keyring';
 import { getSeedPhraseOrigin } from './password/utils';
-import { NETWORKS, isLaunched } from '../../../config/networks';
+import { NETWORKS, isLaunched, ZCASH_ORCHARD_ACTIVATION } from '../../../config/networks';
 
 interface NetworkOption {
   id: NetworkType;
@@ -53,6 +53,7 @@ export const SelectNetworks = () => {
   const location = useLocation();
   const { enabledNetworks, toggleNetwork, setActiveNetwork } = useStore(state => state.keyRing);
   const [selected, setSelected] = useState<Set<NetworkType>>(new Set(enabledNetworks));
+  const [zcashBirthday, setZcashBirthday] = useState('');
 
   // get origin from incoming state, default to NEWLY_GENERATED
   const origin = getSeedPhraseOrigin(location);
@@ -83,7 +84,15 @@ export const SelectNetworks = () => {
       await setActiveNetwork(firstSelected.id);
     }
 
-    // pass origin state to password page
+    // store zcash birthday - rounded to nearest 10k for privacy
+    if (selected.has('zcash') && zcashBirthday) {
+      const num = parseInt(zcashBirthday, 10);
+      if (!isNaN(num) && num >= ZCASH_ORCHARD_ACTIVATION) {
+        const rounded = Math.floor(num / 10_000) * 10_000;
+        sessionStorage.setItem('pendingZcashBirthday', String(Math.max(rounded, ZCASH_ORCHARD_ACTIVATION)));
+      }
+    }
+
     navigate(PagePath.SET_PASSWORD, { state: { origin } });
   };
 
@@ -155,13 +164,36 @@ export const SelectNetworks = () => {
             })}
           </div>
 
+          {/* zcash sync start height - only shown when zcash is selected */}
+          {selected.has('zcash') && (
+            <div className='mt-4 rounded-lg border border-border/40 p-3'>
+              <div className='flex items-center gap-2 mb-2'>
+                <span className='text-xs font-medium'>zcash sync start block</span>
+              </div>
+              <input
+                type='number'
+                min={ZCASH_ORCHARD_ACTIVATION}
+                step='10000'
+                value={zcashBirthday}
+                onChange={e => setZcashBirthday(e.target.value)}
+                placeholder='leave blank for new wallets'
+                className='w-full bg-input border border-border/40 px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-primary'
+              />
+              <p className='mt-1.5 text-[10px] text-muted-foreground'>
+                for existing wallets, enter an approximate block height from
+                before your first transaction. rounded to nearest 10,000 for privacy.
+                leave blank for new wallets.
+              </p>
+            </div>
+          )}
+
           <Button
             variant='gradient'
             className='w-full mt-6'
             disabled={availableCount === 0}
             onClick={() => void handleContinue()}
           >
-            Continue with {availableCount} network{availableCount !== 1 ? 's' : ''}
+            continue with {availableCount} network{availableCount !== 1 ? 's' : ''}
           </Button>
         </CardContent>
       </Card>

@@ -65,13 +65,10 @@ export const SettingsPassphrase = () => {
           </form>
         ) : (
           <div className='flex flex-col gap-3'>
-            <div className='grid grid-cols-3 gap-1.5 rounded-lg bg-background border border-border/40 p-3'>
-              {phrase.map((word, i) => (
-                <div className='flex text-xs' key={i}>
-                  <span className='w-5 text-right text-muted-foreground mr-1'>{i + 1}.</span>
-                  <span>{word}</span>
-                </div>
-              ))}
+            <div
+              className='select-all cursor-text rounded-lg bg-background border border-border/40 p-3 text-xs leading-relaxed break-words'
+            >
+              {phrase.join(' ')}
             </div>
             <CopyToClipboard
               text={phrase.join(' ')}

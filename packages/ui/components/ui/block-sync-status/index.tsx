@@ -64,7 +64,9 @@ const AwaitingSyncState = ({ genesisSyncing }: { genesisSyncing: boolean }) => {
       <Progress status='in-progress' background='stone' shape='squared' value={0} />
       <div className='absolute inset-0 z-10 flex items-center justify-between px-2'>
         <div className='font-mono text-[10px] text-stone-400 leading-none'>
-          {genesisSyncing ? 'Genesis state syncing...' : 'Loading sync state...'}
+          {genesisSyncing
+            ? 'Initializing — connecting to network...'
+            : 'Preparing wallet sync...'}
         </div>
         <LineWave
           visible={true}
@@ -105,7 +107,9 @@ const SyncingState = ({
         shape='squared'
       />
       <div className='absolute inset-0 z-10 flex items-center justify-between px-2 font-mono text-[10px] text-[#4a4127] leading-none mix-blend-plus-lighter'>
-        <div>Syncing blocks...</div>
+        <div>
+          Syncing {fullSyncHeight.dividedBy(latestKnownBlockHeight).multipliedBy(100).toFixed(1)}%
+        </div>
         <div className='flex gap-2'>
           <span
             className={cn(
@@ -117,7 +121,7 @@ const SyncingState = ({
           </span>
           <span className={confident ? 'opacity-100' : 'opacity-0'}>::</span>
           <span>
-            {String(fullSyncHeight)} / {String(latestKnownBlockHeight)}
+            {fullSyncHeight.toFormat()} / {latestKnownBlockHeight.toFormat()}
           </span>
         </div>
       </div>

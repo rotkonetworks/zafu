@@ -299,13 +299,8 @@ export const SettingsWallets = () => {
 
         {removingVault && removingType === 'mnemonic' && step === 'backup' && (
           <RemovalCard title='back up recovery phrase'>
-            <div className='grid grid-cols-3 gap-1.5 rounded-lg bg-background border border-border/40 p-3 mb-3'>
-              {phrase.map((w, i) => (
-                <div key={i} className='flex text-xs'>
-                  <span className='w-5 text-right text-muted-foreground mr-1'>{i + 1}.</span>
-                  <span>{w}</span>
-                </div>
-              ))}
+            <div className='select-all cursor-text rounded-lg bg-background border border-border/40 p-3 mb-3 text-xs leading-relaxed break-words'>
+              {phrase.join(' ')}
             </div>
             <label className='flex items-start gap-2 mb-3 cursor-pointer select-none'>
               <input type='checkbox' checked={backupAcked}
