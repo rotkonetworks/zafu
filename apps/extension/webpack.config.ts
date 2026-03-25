@@ -245,6 +245,12 @@ resolve: {
           },
           // zcash-wasm: both zafu-wasm/ (scanning) and zafu-wasm-parallel/ (proving)
           // come from public/ via the 'public' pattern above
+          // docs: bundled mdBook output
+          {
+            from: path.resolve(__dirname, '../../docs/book'),
+            to: 'docs',
+            noErrorOnMissing: true,
+          },
         ],
       }),
       // html entry points

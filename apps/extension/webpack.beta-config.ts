@@ -16,7 +16,7 @@ const BetaManifestReplacerPlugin = new CopyPlugin({
   ],
 });
 
-const ZAFU_ID = 'ppgbkpjgpggkibdojjocgndbbhiempjf';
+const ZAFU_ID = 'hlnodmbpndgjbhophnfbnfpgcbogiohh';
 
 /**
  * This config defines the zafu Chrome ID, changes the output directory,

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "zafu wallet BETA",
   "short_name": "zafu BETA",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "privacy wallet for zcash and penumbra. air-gapped cold signing, FROST multisig, client-side proving in under 15s. ed25519 identity signing and encryption for applications. fully verified lightclient.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzpxFq+skBCPK5rCIenZfZ9ijPDyar61d3S4DzyxHBXdviLYtVvrK1byXXnCpUwyaYrR9N9QjNCCPT1lEOS5HBUViCI/K1tsJvlWrm0r8+wipNtwb/tVoo+AVUuhyaR4pkm2ckQnYWN10PNhf24Gw8QkjSNNk/oVUbn4gqRcQ4V1WN/E3RiINjaBz0TnDK/8bxqo0z3k5Z7W1YGzA/tB9ZSSTw3QQLUwXlrJbbkqcnNhE91Q9d3dO1ZSao9Qcheg2WFR39nGI7nYnmFEhUDpo8+C56/zUzWAoh08b4lX0IonQy3KOACUkbM10C8VvPuxnKM8IR1d/RWelj1Cul4oqZwIDAQAB",
   "minimum_chrome_version": "119",
@@ -20,13 +20,13 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://*/*", "http://localhost/*"],
+      "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*", "http://[::1]/*"],
       "js": ["injected-session.js"],
       "run_at": "document_start",
       "world": "ISOLATED"
     },
     {
-      "matches": ["https://*/*", "http://localhost/*"],
+      "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*", "http://[::1]/*"],
       "js": ["injected-penumbra-global.js"],
       "run_at": "document_start",
       "world": "MAIN"
@@ -48,7 +48,7 @@
   "permissions": ["storage", "unlimitedStorage", "offscreen", "alarms", "sidePanel", "contextMenus"],
   "host_permissions": ["<all_urls>"],
   "externally_connectable": {
-    "matches": ["<all_urls>"]
+    "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*", "http://[::1]/*"]
   },
   "content_security_policy": {
     "extension_pages": "object-src 'self'; script-src 'self' 'wasm-unsafe-eval'"

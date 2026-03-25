@@ -3,7 +3,7 @@ import config from './webpack.config.js';
 
 const __dirname = new URL('.', import.meta.url).pathname;
 
-const ZAFU_ID = 'oojfeopgoeapfgcfhmlpfgabcbhkglck';
+const ZAFU_ID = 'bfdfeleokgpdladfmipfmffgpjfjibbe';
 
 /**
  * This config defines the zafu Chrome ID and the output directory
