@@ -32,6 +32,9 @@ export enum PopupPath {
   MULTISIG_SIGN = '/multisig/sign',
   NOTE_SYNC = '/note-sync',
 
+  // zid contact picker (opened by external apps)
+  CONTACT_PICKER = '/pick-contacts',
+
   // Settings sub-pages (multisig)
   SETTINGS_MULTISIG = '/settings/multisig',
 

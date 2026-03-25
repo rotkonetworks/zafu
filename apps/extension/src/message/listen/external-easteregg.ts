@@ -2,13 +2,20 @@
  * external message listener — handles messages from websites via externally_connectable
  *
  * supports:
- * - { type: 'ping' } → responds with { zafu: true, version } for detection
- * - { type: 'send', address, network? } → opens popup with send page prefilled
+ * - { type: 'ping' } → responds with { zafu: true, version }
+ * - { type: 'send', address } → opens send popup
+ * - { type: 'zafu_sign', challengeHex, ... } → sign request (handled elsewhere)
+ * - { type: 'zafu_pick_contacts', purpose, max } → opens contact picker popup
+ * - { type: 'zafu_pick_contacts_result', requestId, contacts } → internal: picker result
+ * - { type: 'zafu_send_invite', handle, payload } → route invite via e2ee
  */
+
+// pending pick requests: requestId → sendResponse callback
+const pendingPicks = new Map<string, (r: unknown) => void>();
 
 export const externalMessageListener = (
   req: unknown,
-  _sender: chrome.runtime.MessageSender,
+  sender: chrome.runtime.MessageSender,
   sendResponse: (r: unknown) => void,
 ) => {
   if (typeof req !== 'object' || req === null || !('type' in req)) {
@@ -16,7 +23,7 @@ export const externalMessageListener = (
     return true;
   }
 
-  const msg = req as { type: string; address?: string; network?: string };
+  const msg = req as Record<string, unknown>;
 
   switch (msg.type) {
     case 'ping':
@@ -28,15 +35,52 @@ export const externalMessageListener = (
         sendResponse({ error: 'address required' });
         return true;
       }
-      // open the extension popup with the send page and prefilled address
       const url = chrome.runtime.getURL(`popup.html#/send?to=${encodeURIComponent(msg.address)}`);
-      void chrome.windows.create({
-        url,
-        type: 'popup',
-        width: 400,
-        height: 628,
-      });
+      void chrome.windows.create({ url, type: 'popup', width: 400, height: 628 });
       sendResponse({ ok: true });
+      return true;
+    }
+
+    case 'zafu_pick_contacts': {
+      // use sender.origin (verified by Chrome) not self-reported appOrigin
+      const appOrigin = sender.origin || sender.url || String(msg.appOrigin || 'unknown');
+      const purpose = String(msg.purpose || 'pick contacts');
+      const max = Number(msg.max) || 1;
+      const requestId = crypto.randomUUID();
+
+      // store the callback — picker popup will send result via internal message
+      pendingPicks.set(requestId, sendResponse);
+
+      // open picker popup with params
+      const params = new URLSearchParams({
+        app: appOrigin,
+        purpose,
+        max: String(max),
+        requestId,
+      });
+      const url = chrome.runtime.getURL(`popup.html#/pick-contacts?${params.toString()}`);
+      void chrome.windows.create({ url, type: 'popup', width: 400, height: 520 });
+
+      // return true = async response (sendResponse called later from picker)
+      return true;
+    }
+
+    case 'zafu_pick_contacts_result': {
+      // internal message from picker popup → resolve pending external request
+      const requestId = String(msg.requestId || '');
+      const callback = pendingPicks.get(requestId);
+      if (callback) {
+        callback({ success: true, contacts: msg.contacts || [] });
+        pendingPicks.delete(requestId);
+      }
+      sendResponse({ ok: true });
+      return true;
+    }
+
+    case 'zafu_send_invite': {
+      // TODO: resolve handle → pubkey, open e2ee channel, deliver payload
+      // for now, acknowledge the request
+      sendResponse({ sent: false, error: 'invite delivery not yet implemented in extension' });
       return true;
     }
 

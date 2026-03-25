@@ -32,6 +32,7 @@ const MultisigJoin = lazy(() => import('./multisig/join').then(m => ({ default: 
 const MultisigSign = lazy(() => import('./multisig/sign').then(m => ({ default: m.MultisigSign })));
 const NoteSyncPage = lazy(() => import('./note-sync').then(m => ({ default: m.NoteSyncPage })));
 const IdentityPage = lazy(() => import('./identity').then(m => ({ default: m.IdentityPage })));
+const ContactPicker = lazy(() => import('./pick-contacts').then(m => ({ default: m.ContactPicker })));
 
 // suspense fallback for lazy routes
 const LazyFallback = () => (
@@ -168,6 +169,16 @@ export const popupRoutes: RouteObject[] = [
         element: (
           <Suspense fallback={<LazyFallback />}>
             <NoteSyncPage />
+          </Suspense>
+        ),
+      },
+
+      // zid contact picker (external app requests)
+      {
+        path: PopupPath.CONTACT_PICKER,
+        element: (
+          <Suspense fallback={<LazyFallback />}>
+            <ContactPicker />
           </Suspense>
         ),
       },
