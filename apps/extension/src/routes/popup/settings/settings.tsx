@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { useStore } from '../../../state';
 import { passwordSelector } from '../../../state/password';
 import { selectActiveNetwork } from '../../../state/keyring';
@@ -5,6 +6,7 @@ import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { SettingsScreen } from './settings-screen';
 import { cn } from '@repo/ui/lib/utils';
+import { localExtStorage } from '@repo/storage-chrome/local';
 
 interface SettingsLink {
   title: string;
@@ -31,7 +33,7 @@ const links: SettingsLink[] = [
     href: PopupPath.SETTINGS_NETWORKS,
   },
   {
-    title: 'connected sites',
+    title: 'connections',
     icon: 'i-lucide-link',
     href: PopupPath.SETTINGS_CONNECTED_SITES,
   },
@@ -68,14 +70,36 @@ function SettingsRow({
   );
 }
 
+const AUTO_LOCK_OPTIONS = [
+  { label: 'disabled', value: 0 },
+  { label: '5 min', value: 5 },
+  { label: '15 min', value: 15 },
+  { label: '30 min', value: 30 },
+  { label: '1 hour', value: 60 },
+];
+
 export const Settings = () => {
   const navigate = usePopupNav();
   const { clearSessionPassword } = useStore(passwordSelector);
   const activeNetwork = useStore(selectActiveNetwork);
+  const [autoLock, setAutoLock] = useState(15);
+
+  useEffect(() => {
+    void localExtStorage.get('autoLockMinutes').then(v => setAutoLock(v ?? 15));
+  }, []);
+
+  const cycleAutoLock = () => {
+    const idx = AUTO_LOCK_OPTIONS.findIndex(o => o.value === autoLock);
+    const next = AUTO_LOCK_OPTIONS[(idx + 1) % AUTO_LOCK_OPTIONS.length]!;
+    setAutoLock(next.value);
+    void localExtStorage.set('autoLockMinutes', next.value);
+  };
 
   const visibleLinks = links.filter(
     l => !l.networks || l.networks.includes(activeNetwork),
   );
+
+  const autoLockLabel = AUTO_LOCK_OPTIONS.find(o => o.value === autoLock)?.label ?? '15 min';
 
   return (
     <SettingsScreen title='settings' backPath={PopupPath.INDEX}>
@@ -89,6 +113,14 @@ export const Settings = () => {
               onClick={() => navigate(l.href)}
             />
           ))}
+          <button
+            onClick={cycleAutoLock}
+            className='flex w-full items-center gap-3 py-3 text-left transition-colors hover:bg-muted/50'
+          >
+            <span className={cn('i-lucide-timer', 'size-5 text-muted-foreground')} />
+            <span className='flex-1 text-sm text-foreground'>auto-lock</span>
+            <span className='text-xs text-muted-foreground'>{autoLockLabel}</span>
+          </button>
         </div>
 
         <div className='mt-4 border-t border-border/40 pt-4'>

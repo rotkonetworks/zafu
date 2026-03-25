@@ -274,13 +274,52 @@ chrome.runtime.onMessageExternal.addListener(signRequestListener);
 // listen for external messages
 chrome.runtime.onMessageExternal.addListener(externalMessageListener);
 
+// ── idle auto-lock ──
+// track last activity timestamp. only UI and dapp interactions reset it.
+// background service messages (sync, alarms) must NOT reset the timer.
+let lastActivityMs = Date.now();
+const touchActivity = () => { lastActivityMs = Date.now(); };
+
+// reset on external messages (dapp interactions - always user-initiated)
+chrome.runtime.onMessageExternal.addListener(() => { touchActivity(); });
+
+// reset on internal messages that originate from UI (popup/sidepanel/page),
+// not from the service worker itself. check sender for a tab (UI has tabs,
+// service worker does not).
+chrome.runtime.onMessage.addListener((_msg, sender) => {
+  if (sender.tab || sender.url?.includes('popup.html') || sender.url?.includes('sidepanel.html')) {
+    touchActivity();
+  }
+});
+
 // https://developer.chrome.com/docs/extensions/reference/api/alarms
 void chrome.alarms.create('blockSync', {
   periodInMinutes: 30,
   delayInMinutes: 0,
 });
 
+void chrome.alarms.create('idleCheck', {
+  periodInMinutes: 1,
+  delayInMinutes: 1,
+});
+
 chrome.alarms.onAlarm.addListener(async alarm => {
+  if (alarm.name === 'idleCheck') {
+    const minutes = (await localExtStorage.get('autoLockMinutes')) ?? 15;
+    if (minutes <= 0) return; // disabled
+    const idleMs = Date.now() - lastActivityMs;
+    if (idleMs >= minutes * 60_000) {
+      // check if actually unlocked before locking
+      const key = await chrome.storage.session.get('passwordKey');
+      if (key?.['passwordKey']) {
+        console.log(`[idle] auto-locking after ${minutes}m of inactivity`);
+        await chrome.storage.session.remove('passwordKey');
+        chrome.runtime.reload();
+      }
+    }
+    return;
+  }
+
   if (alarm.name === 'blockSync') {
     // privacy check: only run background sync if user has enabled it
     const privacySettings = await localExtStorage.get('privacySettings');
