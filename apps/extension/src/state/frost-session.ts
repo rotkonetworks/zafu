@@ -136,9 +136,9 @@ export const createFrostSessionSlice = (): SliceCreator<FrostSessionSlice> => (s
     });
   },
 
-  startSigning: async (relayUrl, sighashHex, alphasHex, _keyPackageHex, _ephemeralSeedHex) => {
+  startSigning: async (relayUrl, sighashHex, alphasHex, _keyPackageHex, _ephemeralSeedHex, threshold = 2, maxSigners = 3) => {
     const relay = new FrostRelayClient(relayUrl);
-    const room = await relay.createRoom(2, 3, 300); // TODO: use wallet threshold/max
+    const room = await relay.createRoom(threshold, maxSigners, 300);
 
     set(state => {
       state.frostSession.relay = relay;

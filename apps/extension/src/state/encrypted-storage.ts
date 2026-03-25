@@ -1,5 +1,5 @@
 /**
- * encrypted storage — wraps chrome.storage.local values with password encryption
+ * encrypted storage  - wraps chrome.storage.local values with password encryption
  *
  * stores data as { encrypted: BoxJson } in place of the plaintext value.
  * requires session key (password) to read or write.
@@ -35,17 +35,13 @@ export async function readEncrypted<T>(
   const raw = await local.get(storageKey);
   if (!raw) return null;
 
-  // check if already encrypted
-  if (isEncryptedWrapper(raw)) {
-    const key = await getKey(session);
-    if (!key) return null; // locked — can't decrypt
-    const plaintext = await key.unseal(Box.fromJson(raw.encrypted));
-    if (!plaintext) return null;
-    return JSON.parse(plaintext) as T;
-  }
+  if (!isEncryptedWrapper(raw)) return null; // not encrypted  - ignore stale data
 
-  // plaintext (legacy) — return as-is for migration
-  return raw as T;
+  const key = await getKey(session);
+  if (!key) return null; // locked  - can't decrypt
+  const plaintext = await key.unseal(Box.fromJson(raw.encrypted));
+  if (!plaintext) return null;
+  return JSON.parse(plaintext) as T;
 }
 
 /** write an encrypted value to local storage. */
@@ -57,9 +53,9 @@ export async function writeEncrypted(
 ): Promise<void> {
   const key = await getKey(session);
   if (!key) {
-    // no session key (locked or no password set) — store plaintext
-    // this handles the airgap-only setup case
-    await local.set(storageKey, data as never);
+    // locked  - skip write silently. callers must ensure they only write
+    // when unlocked, or accept that the write will be deferred.
+    console.warn(`[encrypted-storage] skipping write of '${storageKey}'  - wallet is locked`);
     return;
   }
 
@@ -68,14 +64,14 @@ export async function writeEncrypted(
   await local.set(storageKey, { encrypted: box.toJson() } as never);
 }
 
-/** keys encrypted at rest — decrypted on-demand via session key.
+/** keys encrypted at rest  - decrypted on-demand via session key.
  *  wallets/zcashWallets contain viewing keys (FVK) that reveal full
- *  transaction history. no viewing key data in plaintext storage — ever. */
-/** knownSites is NOT encrypted — origin approval records ({ origin, choice, date })
+ *  transaction history. no viewing key data in plaintext storage  - ever. */
+/** knownSites is NOT encrypted  - origin approval records ({ origin, choice, date })
  *  contain no private data and are read by the origin storage package which
  *  doesn't have access to the session key. */
 const ENCRYPTED_KEYS = new Set<string>([
-  'wallets',
+  'penumbraWallets',
   'zcashWallets',
   'contacts',
   'recentAddresses',
@@ -87,7 +83,7 @@ const ENCRYPTED_KEYS = new Set<string>([
 export const isEncryptedKey = (key: string): boolean => ENCRYPTED_KEYS.has(key);
 
 /**
- * encrypted local storage proxy — wraps ExtensionStorage to auto-encrypt/decrypt
+ * encrypted local storage proxy  - wraps ExtensionStorage to auto-encrypt/decrypt
  * specific keys. all other keys pass through unchanged.
  */
 export function createEncryptedLocal(

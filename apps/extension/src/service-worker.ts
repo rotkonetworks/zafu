@@ -32,6 +32,7 @@ import { fvkCtx } from '@rotko/penumbra-services/ctx/full-viewing-key';
 import { servicesCtx } from '@rotko/penumbra-services/ctx/prax';
 import { getFullViewingKey } from './ctx/full-viewing-key';
 import { getWalletId } from './ctx/wallet-id';
+import { setCachedWallet, resetWalletCache } from './ctx/wallet-cache';
 
 // custody context
 import { authorizeCtx } from '@repo/custody-chrome/ctx';
@@ -103,6 +104,7 @@ async function loadCustomChainspecs(): Promise<void> {
 // load custom chainspecs on startup
 void loadCustomChainspecs();
 
+let walletServicesResult: Promise<{ services: Services; wallet: import('@repo/wallet').WalletJson }>;
 let walletServices: Promise<Services>;
 let currentWalletIndex: number | undefined;
 let currentSyncAbort: AbortController | undefined;
@@ -122,13 +124,18 @@ const reinitializeServices = async () => {
     // old services may not have initialized — that's fine
   }
 
+  // new RPC requests will block on getWalletReady() until the new wallet is cached
+  resetWalletCache();
+
   // clear stale fullSyncHeight so UI doesn't show old wallet's height
   await localExtStorage.set('fullSyncHeight', 0);
 
   // start fresh services for the new wallet
   currentSyncAbort = new AbortController();
-  walletServices = startWalletServices(currentSyncAbort.signal);
-  const services = await walletServices;
+  walletServicesResult = startWalletServices(currentSyncAbort.signal);
+  walletServices = walletServicesResult.then(r => r.services);
+  const { services, wallet } = await walletServicesResult;
+  setCachedWallet(wallet);
   const ws = await services.getWalletServices();
   void ws.blockProcessor.sync();
 };
@@ -177,7 +184,10 @@ const initHandler = async () => {
   // Track initial wallet index
   currentWalletIndex = (await localExtStorage.get('activeWalletIndex')) ?? 0;
   currentSyncAbort = new AbortController();
-  walletServices = startWalletServices(currentSyncAbort.signal);
+  walletServicesResult = startWalletServices(currentSyncAbort.signal);
+  walletServices = walletServicesResult.then(r => r.services);
+  // cache decrypted wallet as soon as it's available — unblocks RPC context getters
+  void walletServicesResult.then(({ wallet }) => setCachedWallet(wallet));
   const rpcImpls = await getRpcImpls();
 
   let custodyClient: Client<typeof CustodyService> | undefined;
@@ -331,13 +341,18 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => 
   // side panel not supported in this browser version
 });
 
-// context menu to open in popup window (for users who prefer it)
-chrome.runtime.onInstalled.addListener(() => {
+// on install: open onboarding page + create context menu
+chrome.runtime.onInstalled.addListener(({ reason }) => {
   chrome.contextMenus.create({
     id: 'open-popup-window',
     title: 'Open Zafu in Popup Window',
     contexts: ['action'],
   });
+
+  // open onboarding on first install
+  if (reason === 'install') {
+    chrome.runtime.openOptionsPage();
+  }
 });
 
 chrome.contextMenus.onClicked.addListener((_info, _tab) => {

@@ -72,16 +72,12 @@ export const SettingsClearCache = () => {
     }
   };
 
-  const handleClearPenumbra = async (vault: KeyInfo) => {
-    setClearingKey(`${vault.id}:penumbra`);
-    try {
-      // soft clear: stops block processor, clears IndexedDB, resets sync state
-      // does NOT reload the extension
-      await chrome.runtime.sendMessage({ type: 'ClearCache', network: 'penumbra', soft: true });
-      useStore.setState(state => { state.network.fullSyncHeight = undefined; });
-    } finally {
-      setClearingKey(null);
-    }
+  const handleClearPenumbra = (_vault: KeyInfo) => {
+    setClearingState({ inProgress: true, step: 'stopping', completed: 0, total: 4 });
+    // fire-and-forget: service worker will reload the extension when done
+    chrome.runtime.sendMessage({ type: 'ClearCache', network: 'penumbra' }).catch(() => {
+      // expected — extension reloads before response arrives
+    });
   };
 
   const grouped = TYPE_ORDER

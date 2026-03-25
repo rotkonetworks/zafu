@@ -8,7 +8,7 @@ export default {
   version: v => expectVersion(v, 1, 2),
   transform: old => ({
     // required values should definitely have correct formats
-    wallets: old.wallets ?? [],
+    penumbraWallets: old.wallets ?? [],
     knownSites: old.knownSites ?? [],
     numeraires: old.numeraires ?? [],
 

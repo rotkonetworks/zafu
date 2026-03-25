@@ -2,7 +2,7 @@ import { ExtensionStorage, ExtensionStorageDefaults } from './base';
 import { VERSION as LocalStorageVersion, LOCAL as LocalStorageState } from './versions/v2';
 
 const localDefaults: ExtensionStorageDefaults<LocalStorageState> = {
-  wallets: [],
+  penumbraWallets: [],
   knownSites: [],
   numeraires: [],
 };

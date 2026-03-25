@@ -95,8 +95,8 @@ export const createWalletsSlice =
           state.wallets.all.unshift(newWallet.toJson());
         });
 
-        const wallets = await local.get('wallets');
-        await local.set('wallets', [newWallet.toJson(), ...wallets]);
+        const wallets = await local.get('penumbraWallets');
+        await local.set('penumbraWallets', [newWallet.toJson(), ...wallets]);
       },
 
       updateMultisigWallet: async (id, updates) => {
@@ -183,7 +183,7 @@ export const createWalletsSlice =
 
         // Persist to storage
         await Promise.all([
-          local.set('wallets', newWallets),
+          local.set('penumbraWallets', newWallets),
           local.set('activeWalletIndex', newActiveIndex),
         ]);
       },

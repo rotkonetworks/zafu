@@ -11,7 +11,7 @@ type LOCAL = {
   knownSites: { choice: 'Approved' | 'Denied' | 'Ignored'; date: number; origin: string }[];
   /** Stringified AssetId */
   numeraires: string[];
-  wallets: {
+  penumbraWallets: {
     custody:
       | { encryptedSeedPhrase: BoxJson }
       | { airgapSigner: BoxJson };

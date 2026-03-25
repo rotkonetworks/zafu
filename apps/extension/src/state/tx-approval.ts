@@ -60,7 +60,7 @@ export const createTxApprovalSlice =
         throw new Error('Another request is still pending');
       }
 
-      const fvk = await local.get('wallets').then(async wallets => {
+      const fvk = await local.get('penumbraWallets').then(async wallets => {
         const activeIdx = (await local.get('activeWalletIndex')) ?? 0;
         const wallet = wallets[activeIdx];
         if (!wallet) {

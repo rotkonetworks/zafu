@@ -85,11 +85,23 @@ export const useFinalizeOnboarding = () => {
       }
 
       await setOnboardingValuesInStorage(origin);
+
+      // apply zcash birthday from onboarding (stored in sessionStorage)
+      const pendingBirthday = sessionStorage.getItem('pendingZcashBirthday');
+      if (pendingBirthday) {
+        const vaults = await localExtStorage.get('vaults') as { id: string }[] | null;
+        const vaultId = vaults?.[0]?.id;
+        if (vaultId) {
+          await chrome.storage.local.set({ [`zcashBirthday_${vaultId}`]: parseInt(pendingBirthday, 10) });
+        }
+        sessionStorage.removeItem('pendingZcashBirthday');
+      }
+
       navigate(PagePath.ONBOARDING_SUCCESS);
     } catch (e) {
       setError(String(e));
       // roll back on failure
-      await localExtStorage.remove('wallets');
+      await localExtStorage.remove('penumbraWallets');
       await localExtStorage.remove('vaults');
     } finally {
       setLoading(false);

@@ -48,7 +48,7 @@ const getPenumbraEndpoint = async (): Promise<string> => {
   return DEFAULT_PENUMBRA_ENDPOINT;
 };
 
-export const startWalletServices = async (signal?: AbortSignal) => {
+export const startWalletServices = async (signal?: AbortSignal): Promise<{ services: Services; wallet: WalletJson }> => {
   // privacy gate: check if penumbra is enabled before making network connections
   const enabled = await isPenumbraEnabled();
   console.log('[sync] isPenumbraEnabled:', enabled);
@@ -56,8 +56,11 @@ export const startWalletServices = async (signal?: AbortSignal) => {
     console.log('[sync] penumbra not enabled, skipping wallet services initialization');
     // return a stub services object that throws on access
     return {
-      getWalletServices: () => Promise.reject(new Error('penumbra network not enabled')),
-    } as Services;
+      services: {
+        getWalletServices: () => Promise.reject(new Error('penumbra network not enabled')),
+      } as Services,
+      wallet: undefined as unknown as WalletJson,
+    };
   }
 
   console.log('[sync] starting wallet services...');
@@ -69,20 +72,22 @@ export const startWalletServices = async (signal?: AbortSignal) => {
     console.log('[sync] wallet locked or missing, waiting for unlock...');
     wallet = await new Promise<WalletJson>(resolve => {
       // listen for session key (unlock) or wallet creation
+      const sessionListener = () => void check();
       const check = async () => {
         const w = await getWalletFromStorage();
         if (w) {
           localExtStorage.removeListener(listener);
+          chrome.storage.session.onChanged.removeListener(sessionListener);
           resolve(w);
         }
       };
       const listener = (changes: Record<string, unknown>) => {
         // wallet writes (encrypted blob) or vault creation
-        if ('wallets' in changes || 'vaults' in changes) void check();
+        if ('penumbraWallets' in changes || 'vaults' in changes) void check();
       };
       localExtStorage.addListener(listener as never);
       // also check when session key appears (user unlocked)
-      chrome.storage.session.onChanged.addListener(() => void check());
+      chrome.storage.session.onChanged.addListener(sessionListener);
     });
   }
   console.log('[sync] wallet loaded:', wallet.id.slice(0, 20) + '...');
@@ -117,7 +122,7 @@ export const startWalletServices = async (signal?: AbortSignal) => {
 
   void syncLastBlockToStorage(walletServices, signal);
 
-  return services;
+  return { services, wallet };
 };
 
 /**

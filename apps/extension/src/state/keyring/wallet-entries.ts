@@ -36,8 +36,8 @@ export async function createPenumbraWalletForMnemonic(
     vaultId,
   };
 
-  const wallets = await local.get('wallets');
-  await local.set('wallets', [praxWallet, ...wallets]);
+  const wallets = (await local.get('penumbraWallets')) ?? [];
+  await local.set('penumbraWallets', [praxWallet, ...wallets]);
   await local.set('activeWalletIndex', 0);
 }
 
@@ -77,8 +77,8 @@ export async function createZignerWalletEntries(
         vaultId,
       };
 
-      const existingWallets = await local.get('wallets');
-      await local.set('wallets', [praxWallet, ...existingWallets]);
+      const existingWallets = (await local.get('penumbraWallets')) ?? [];
+      await local.set('penumbraWallets', [praxWallet, ...existingWallets]);
       await local.set('activeWalletIndex', 0);
     } catch (e) {
       console.warn('[keyring] failed to create penumbra wallet entry for zigner:', e);
@@ -125,10 +125,10 @@ export async function removeLinkedWallets(
   local: ExtensionStorage<LocalStorageState>,
 ): Promise<{ removedZcashIds: string[] }> {
   // penumbra wallets
-  const wallets = (await local.get('wallets')) ?? [];
+  const wallets = (await local.get('penumbraWallets')) ?? [];
   const updatedWallets = wallets.filter((w: { vaultId?: string }) => w.vaultId !== vaultId);
   if (updatedWallets.length !== wallets.length) {
-    await local.set('wallets', updatedWallets);
+    await local.set('penumbraWallets', updatedWallets);
     const activeWalletIndex = await local.get('activeWalletIndex') ?? 0;
     if (activeWalletIndex >= updatedWallets.length) {
       await local.set('activeWalletIndex', Math.max(0, updatedWallets.length - 1));
@@ -173,7 +173,7 @@ export async function nukeAllWalletData(
   session: ExtensionStorage<SessionStorageState>,
   local: ExtensionStorage<LocalStorageState>,
 ): Promise<void> {
-  await session.set('passwordKey', undefined);
+  await session.remove('passwordKey');
 
   const allLocalKeys = await chrome.storage.local.get(null);
   const keysToRemove = Object.keys(allLocalKeys).filter(k =>
@@ -194,7 +194,7 @@ export async function nukeAllWalletData(
   try { indexedDB.deleteDatabase('zafu-memo-cache'); } catch {}
 
   await local.set('selectedVaultId', undefined);
-  await local.set('wallets', []);
+  await local.set('penumbraWallets', []);
   await local.set('activeWalletIndex', 0);
   await local.set('zcashWallets', []);
   await local.set('activeZcashIndex', 0);

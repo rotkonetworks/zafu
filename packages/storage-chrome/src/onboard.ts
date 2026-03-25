@@ -28,26 +28,28 @@ export const onboardGrpcEndpoint = async (): Promise<string> => {
   });
 };
 
-/** decrypt wallets if encrypted, fallback to plaintext for migration */
+/** decrypt wallets from encrypted storage */
 const decryptWallets = async (raw: unknown): Promise<WalletJson[]> => {
   if (!raw) return [];
-  if (Array.isArray(raw)) return raw; // plaintext (legacy)
-  // encrypted wrapper: { encrypted: BoxJson }
-  if (typeof raw === 'object' && 'encrypted' in (raw as Record<string, unknown>)) {
-    try {
-      const keyJson = await sessionExtStorage.get('passwordKey');
-      if (!keyJson) return []; // locked
-      const key = await Key.fromJson(keyJson);
-      const plaintext = await key.unseal(Box.fromJson((raw as { encrypted: BoxJson }).encrypted));
-      if (!plaintext) return [];
-      return JSON.parse(plaintext) as WalletJson[];
-    } catch { return []; }
+  if (typeof raw !== 'object' || !('encrypted' in (raw as Record<string, unknown>))) return [];
+  const keyJson = await sessionExtStorage.get('passwordKey');
+  if (!keyJson) return []; // locked — no session key
+  try {
+    const key = await Key.fromJson(keyJson);
+    const plaintext = await key.unseal(Box.fromJson((raw as { encrypted: BoxJson }).encrypted));
+    if (!plaintext) {
+      console.error('[storage] decryptWallets: unseal returned null — blob may be corrupt');
+      return [];
+    }
+    return JSON.parse(plaintext) as WalletJson[];
+  } catch (e) {
+    console.error('[storage] decryptWallets failed:', e);
+    return [];
   }
-  return [];
 };
 
 export const onboardWallet = async (): Promise<WalletJson> => {
-  const rawWallets = await localExtStorage.get('wallets');
+  const rawWallets = await localExtStorage.get('penumbraWallets');
   const wallets = await decryptWallets(rawWallets);
   const activeIndex = (await localExtStorage.get('activeWalletIndex')) ?? 0;
   const activeWallet = wallets[activeIndex] ?? wallets[0];
@@ -58,9 +60,9 @@ export const onboardWallet = async (): Promise<WalletJson> => {
 
   return new Promise(resolve => {
     const storageListener: ChromeStorageListener<LocalStorageState> = async changes => {
-      if (!changes.wallets?.newValue) return;
+      if (!changes.penumbraWallets?.newValue) return;
       // wallets may be encrypted — decrypt before reading
-      const wallets = await decryptWallets(changes.wallets.newValue);
+      const wallets = await decryptWallets(changes.penumbraWallets.newValue);
       const initialWallet = wallets[0];
       if (initialWallet) {
         resolve({ ...initialWallet, vaultId: initialWallet.vaultId ?? '' } as WalletJson);
@@ -77,7 +79,7 @@ export const onboardWallet = async (): Promise<WalletJson> => {
  * Use this for multi-network wallets where penumbra wallet may not exist yet.
  */
 export const getWalletFromStorage = async (): Promise<WalletJson | undefined> => {
-  const rawWallets = await localExtStorage.get('wallets');
+  const rawWallets = await localExtStorage.get('penumbraWallets');
   const wallets = await decryptWallets(rawWallets);
   const activeIndex = (await localExtStorage.get('activeWalletIndex')) ?? 0;
   const w = wallets[activeIndex] ?? wallets[0];

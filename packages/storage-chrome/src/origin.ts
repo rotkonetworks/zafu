@@ -1,10 +1,8 @@
 import { localExtStorage } from './local';
 import { OriginRecord } from './records/known-site';
 
-/** safely get knownSites as an array — handles stale encrypted blobs from migration */
 const getKnownSitesArray = async (): Promise<OriginRecord[]> => {
   const raw = await localExtStorage.get('knownSites');
-  // guard against encrypted wrapper left from previous build
   if (!Array.isArray(raw)) return [];
   return raw as OriginRecord[];
 };

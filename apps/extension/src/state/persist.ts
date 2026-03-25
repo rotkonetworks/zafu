@@ -6,7 +6,7 @@ import { AppParameters } from '@penumbra-zone/protobuf/penumbra/core/app/v1/app_
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { OriginRecord } from '@repo/storage-chrome/records';
-import { readEncrypted, writeEncrypted, isEncryptedWrapper } from './encrypted-storage';
+import { readEncrypted } from './encrypted-storage';
 import type { WalletJson } from '@repo/wallet';
 import type { ZcashWalletJson } from './wallets';
 import type { Contact } from './contacts';
@@ -51,16 +51,17 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
 
     type LK = keyof import('@repo/storage-chrome/local').LocalStorageState;
 
-    // hydrate ALL encrypted data — wallets, contacts, messages, connected sites
+    // hydrate encrypted data + plaintext knownSites
     const hydrateEncryptedData = async () => {
-      const [wallets, zcashWallets, contacts, recentAddresses, knownSites, messages] = await Promise.all([
-        readEncrypted<WalletJson[]>(localExtStorage, sessionExtStorage, 'wallets' as LK),
+      const [wallets, zcashWallets, contacts, recentAddresses, messages, rawKnownSites] = await Promise.all([
+        readEncrypted<WalletJson[]>(localExtStorage, sessionExtStorage, 'penumbraWallets' as LK),
         readEncrypted<ZcashWalletJson[]>(localExtStorage, sessionExtStorage, 'zcashWallets' as LK),
         readEncrypted<Contact[]>(localExtStorage, sessionExtStorage, 'contacts' as LK),
         readEncrypted<RecentAddress[]>(localExtStorage, sessionExtStorage, 'recentAddresses' as LK),
-        readEncrypted<OriginRecord[]>(localExtStorage, sessionExtStorage, 'knownSites' as LK),
         readEncrypted<unknown[]>(localExtStorage, sessionExtStorage, 'messages' as LK),
+        localExtStorage.get('knownSites'), // plaintext - not encrypted
       ]);
+      const knownSites = Array.isArray(rawKnownSites) ? rawKnownSites as OriginRecord[] : null;
       set(produce((state: AllSlices) => {
         if (wallets) state.wallets.all = wallets.map(w => ({ ...w, vaultId: w.vaultId ?? '' })) as typeof state.wallets.all;
         if (zcashWallets) state.wallets.zcashWallets = zcashWallets.map(w => ({ ...w, vaultId: w.vaultId ?? '' })) as typeof state.wallets.zcashWallets;
@@ -70,15 +71,6 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
         if (messages) state.messages.messages = messages as typeof state.messages.messages;
       }));
 
-      // migration: if wallets were stored plaintext (pre-encryption), re-encrypt now
-      const rawWallets = await localExtStorage.get('wallets');
-      if (rawWallets && !isEncryptedWrapper(rawWallets) && wallets) {
-        await writeEncrypted(localExtStorage as never, sessionExtStorage as never, 'wallets' as LK, wallets);
-      }
-      const rawZcash = await localExtStorage.get('zcashWallets');
-      if (rawZcash && !isEncryptedWrapper(rawZcash) && zcashWallets) {
-        await writeEncrypted(localExtStorage as never, sessionExtStorage as never, 'zcashWallets' as LK, zcashWallets);
-      }
     };
 
     // Initialize keyring from storage (loads vaults, selected key, networks)
@@ -100,9 +92,18 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
 
     // Part 2: when chrome.storage changes sync select fields to store
     localExtStorage.addListener(changes => {
-      // all sensitive data goes through encrypted hydration
-      if (changes.wallets || changes.zcashWallets || changes.contacts || changes.knownSites || changes.messages) {
+      // encrypted data re-hydration
+      if (changes.penumbraWallets || changes.zcashWallets || changes.contacts || changes.messages) {
         void hydrateEncryptedData();
+      }
+      // knownSites is plaintext - hydrate directly
+      if (changes.knownSites) {
+        const raw = changes.knownSites.newValue;
+        if (Array.isArray(raw)) {
+          set(produce((state: AllSlices) => {
+            state.connectedSites.knownSites = raw as OriginRecord[];
+          }));
+        }
       }
 
       if (changes.fullSyncHeight) {

@@ -240,6 +240,10 @@ export const createKeyRingSlice = (
       const vaultId = generateVaultId();
       const encryptedData = await encrypt(ctx, mnemonic);
       const vault = buildMnemonicVault(vaultId, name, encryptedData);
+      // store zid pubkey in unencrypted metadata — readable without password
+      const { deriveZid } = await import('../identity');
+      const zid = deriveZid(mnemonic);
+      vault.insensitive['zid'] = zid.publicKey;
 
       const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
       const newVaults = [vault, ...vaults];
@@ -321,7 +325,7 @@ export const createKeyRingSlice = (
       }
       // check penumbra wallets for matching FVK
       if (data.fullViewingKey) {
-        const existingPenumbra = (await local.get('wallets')) ?? [];
+        const existingPenumbra = (await local.get('penumbraWallets')) ?? [];
         const fvkB64 = data.fullViewingKey;
         // penumbra wallets store FVK as JSON string — compare via base64 of inner bytes
         for (const w of existingPenumbra) {
@@ -440,7 +444,7 @@ export const createKeyRingSlice = (
       await local.set('selectedVaultId', vaultId);
 
       // sync penumbra wallet index
-      const wallets = await local.get('wallets');
+      const wallets = (await local.get('penumbraWallets')) ?? [];
       const walletIdx = findWalletIndex(wallets as { vaultId?: string }[], vaultId);
       if (walletIdx >= 0) await local.set('activeWalletIndex', walletIdx);
 
@@ -504,7 +508,7 @@ export const createKeyRingSlice = (
       if (selectedId !== currentSelectedId) await local.set('selectedVaultId', selectedId);
 
       const keyInfos = vaultsToKeyInfos(updatedVaults, selectedId);
-      const updatedWallets = (await local.get('wallets')) ?? [];
+      const updatedWallets = (await local.get('penumbraWallets')) ?? [];
       set(state => {
         state.keyRing.keyInfos = keyInfos;
         state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
@@ -593,7 +597,7 @@ export const createKeyRingSlice = (
           await local.set('selectedVaultId', compatible.id);
 
           if (network === 'penumbra') {
-            const wallets = await local.get('wallets');
+            const wallets = (await local.get('penumbraWallets')) ?? [];
             const idx = findWalletIndex(wallets as { vaultId?: string }[], compatible.id);
             if (idx >= 0) await local.set('activeWalletIndex', idx);
           }
