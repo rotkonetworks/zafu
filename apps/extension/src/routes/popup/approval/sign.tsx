@@ -1,12 +1,14 @@
+import { useState, useEffect } from 'react';
 import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
 import { useStore } from '../../../state';
 import { signApprovalSelector } from '../../../state/sign-approval';
 import { ApproveDeny } from './approve-deny';
 import { DisplayOriginURL } from '../../../shared/components/display-origin-url';
 import { UserChoice } from '@repo/storage-chrome/records';
-import { signZid } from '../../../state/identity';
+import { signZid, resolveZid, type ZidSitePreference } from '../../../state/identity';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { hexToBytes } from '@noble/hashes/utils';
+import { localExtStorage } from '@repo/storage-chrome/local';
 
 export const SignApproval = () => {
   const { origin, challengeHex, statement, setChoice, sendResponse } =
@@ -14,14 +16,57 @@ export const SignApproval = () => {
   const keyInfo = useStore(selectEffectiveKeyInfo);
   const getMnemonic = useStore(s => s.keyRing.getMnemonic);
 
+  // preview: try share log first (no mnemonic), fall back to derivation
+  const [previewAddress, setPreviewAddress] = useState<string | null>(null);
+  const [signingMode, setSigningMode] = useState<string>('site #0');
+
+  useEffect(() => {
+    if (!origin) return;
+    void (async () => {
+      const prefs = await localExtStorage.get('zidPreferences');
+      const pref: ZidSitePreference | undefined = prefs?.[origin];
+      const isSite = !pref || pref.mode === 'site';
+      setSigningMode(isSite ? `site #${pref?.rotation ?? 0}` : 'global');
+
+      // check share log first - avoids touching mnemonic
+      const log = await localExtStorage.get('zidShareLog');
+      const entries = (log ?? []).filter(r => r.sharedWith === origin);
+      const latest = entries[entries.length - 1];
+      if (latest) {
+        setPreviewAddress('zid' + latest.publicKey.slice(0, 16));
+        return;
+      }
+
+      // first time with this site - derive to show preview
+      if (!keyInfo) return;
+      const mnemonic = await getMnemonic(keyInfo.id);
+      const zid = resolveZid(mnemonic, origin, pref);
+      setPreviewAddress(zid.address);
+    })();
+  }, [keyInfo, origin]);
+
   const approve = async () => {
     if (!keyInfo || !challengeHex) return;
 
     try {
       const mnemonic = await getMnemonic(keyInfo.id);
       const challenge = hexToBytes(challengeHex);
-      // TODO: load per-site preference from storage and pass to signZid
-      const result = signZid(mnemonic, origin!, challenge);
+      const prefs = await localExtStorage.get('zidPreferences');
+      const pref: ZidSitePreference | undefined = prefs?.[origin!];
+      const result = signZid(mnemonic, origin!, challenge, pref);
+
+      // log the zid we signed with so the connections page can display it
+      const log = (await localExtStorage.get('zidShareLog')) ?? [];
+      const alreadyLogged = log.some(r => r.publicKey === result.publicKey && r.sharedWith === origin);
+      if (!alreadyLogged) {
+        log.push({
+          publicKey: result.publicKey,
+          sharedWith: origin!,
+          sharedAt: Date.now(),
+        });
+        void localExtStorage.set('zidShareLog', log);
+      }
+
       setChoice(UserChoice.Approved);
       sendResponse(result);
     } catch (e) {
@@ -71,6 +116,12 @@ export const SignApproval = () => {
                   : challengeHex}
               </p>
             </div>
+            {previewAddress && (
+              <div className='rounded-lg border border-border/40 p-3'>
+                <p className='text-[10px] text-muted-foreground/60 mb-1'>signing as ({signingMode})</p>
+                <p className='font-mono text-xs break-all'>{previewAddress}</p>
+              </div>
+            )}
             <p className='text-sm text-muted-foreground'>
               This site is requesting a signature from your wallet identity.
               This will not authorize any transactions.

@@ -183,6 +183,30 @@ type LOCAL = {
     addedAt: number;
   }[];
 
+  /** per-origin zid identity preferences (default: site-specific) */
+  zidPreferences?: Record<string, {
+    mode: 'global' | 'site';
+    rotation: number;
+  }>;
+
+  /** log of zid pubkeys shared during site authentication */
+  zidShareLog?: {
+    publicKey: string;
+    sharedWith: string;
+    sharedAt: number;
+  }[];
+
+  /** per-contact diversified zcash addresses - traces payment referrals */
+  diversifiedAddresses?: {
+    diversifierIndex: number;
+    sharedWith: string;
+    address: string;
+    sharedAt: number;
+  }[];
+
+  /** auto-lock timeout in minutes (0 = disabled, default 15) */
+  autoLockMinutes?: number;
+
   /** polkadot vault settings */
   polkadotVaultSettings?: {
     /** use legacy qr format for older parity signer / polkadot vault */

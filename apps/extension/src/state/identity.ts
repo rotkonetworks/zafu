@@ -2,17 +2,27 @@
  * zid  - seed-derived ed25519 signing identity
  *
  * a zid is a cross-network identity: not penumbra, not zcash  - it's the
- * person behind the wallet. one seed → one identity root → derived keypairs.
+ * person behind the wallet. one seed -> one identity root -> derived keypairs.
  *
  * derivation hierarchy:
- *   root     = HMAC-SHA512("zid-v1", mnemonic)
- *   global   = HMAC-SHA512(root, 0x00000000)              ← public identity
- *   per-site = HMAC-SHA512(root, "site:" + origin)         ← unlinkable per origin
- *   rotated  = HMAC-SHA512(root, "site:" + origin + ":N")  ← rotation N for origin
- *   key      = ed25519.fromSeed(seed[0:32])
+ *   root        = HMAC-SHA512("zid-v1", mnemonic)
+ *   global      = HMAC-SHA512(root, 0x00000000)              <- opt-in only
+ *   per-site    = HMAC-SHA512(root, "site:" + origin)         <- default, unlinkable
+ *   rotated     = HMAC-SHA512(root, "site:" + origin + ":N")  <- rotation N for origin
+ *   per-contact = HMAC-SHA512(root, "contact:" + contactId)   <- DH keypair for e2ee
+ *   key         = ed25519.fromSeed(seed[0:32])
  *
- * all deterministic from seed. no extra key storage  - just store the
- * per-origin preference (which mode + rotation counter).
+ * default is per-site. global identity is opt-in because sharing the same
+ * zid across origins lets sites collude to link your activity.
+ *
+ * per-contact zids provide DH keypairs for authenticated encrypted messaging.
+ * they are NOT for referral tracking - that's handled by diversified zcash
+ * addresses at the transport layer.
+ *
+ * separation of concerns:
+ *   diversified address  -> payment routing + referral tracking
+ *   per-site zid         -> website authentication
+ *   per-contact zid      -> sender auth + e2ee (X25519 DH)
  */
 
 import { ed25519 } from '@noble/curves/ed25519';
@@ -74,7 +84,7 @@ const keypairFromSeed = (seed: Uint8Array): { privateKey: Uint8Array; publicKey:
 const deriveSeedForContact = (root: Uint8Array, contactId: string): Uint8Array =>
   deriveSeedFromTag(root, enc.encode('contact:' + contactId));
 
-// ── public API ──
+// -- public API --
 
 /**
  * derive the global zid (index 0). this is the user's "public" identity.
@@ -99,11 +109,19 @@ export const deriveZidForSite = (mnemonic: string, origin: string, rotation = 0)
 };
 
 /**
- * derive a per-contact zid. when you share your contact card with someone,
- * use this instead of your global zid. if they forward your card, the
- * recipient will present this zid  - you'll know who shared it.
+ * derive a per-contact zid for authenticated encrypted communication.
  *
- * contactId: their zid pubkey, or any stable unique identifier for the contact.
+ * each contact gets a unique ed25519 keypair. the public key is shared in
+ * the contact card (TLV tag 0x01). the recipient can use it for:
+ *   - verifying message authenticity (signature)
+ *   - X25519 DH key exchange for e2ee
+ *
+ * referral tracking ("via alice") is handled by diversified zcash addresses,
+ * not by per-contact zids.
+ *
+ * contactId must be STABLE for the lifetime of the relationship. use the
+ * contact's internal database ID (not their zid pubkey, which may rotate).
+ * changing contactId changes the derived keypair, breaking e2ee continuity.
  */
 export const deriveZidForContact = (mnemonic: string, contactId: string): Zid => {
   const root = deriveRoot(mnemonic);
@@ -115,10 +133,12 @@ export const deriveZidForContact = (mnemonic: string, contactId: string): Zid =>
 
 /**
  * resolve which zid to use for a given origin based on preference.
+ * default is site-specific (not global) to prevent cross-origin linking.
  */
 export const resolveZid = (mnemonic: string, origin: string, pref?: ZidSitePreference): Zid => {
-  if (!pref || pref.mode === 'global') return deriveZid(mnemonic);
-  return deriveZidForSite(mnemonic, origin, pref.rotation);
+  if (pref?.mode === 'global') return deriveZid(mnemonic);
+  // default to site-specific identity
+  return deriveZidForSite(mnemonic, origin, pref?.rotation ?? 0);
 };
 
 /**
@@ -131,9 +151,9 @@ export const signZid = (
   pref?: ZidSitePreference,
 ): { signature: string; publicKey: string } => {
   const root = deriveRoot(mnemonic);
-  const seed = (!pref || pref.mode === 'global')
+  const seed = (pref?.mode === 'global')
     ? deriveSeedByIndex(root, 0)
-    : deriveSeedForSite(root, origin, pref.rotation);
+    : deriveSeedForSite(root, origin, pref?.rotation ?? 0);
   const { privateKey, publicKey } = keypairFromSeed(seed);
   const signature = ed25519.sign(challenge, privateKey);
 
@@ -145,6 +165,28 @@ export const signZid = (
     publicKey: bytesToHex(publicKey),
   };
 };
+
+// -- zid share log (site authentication tracking) --
+
+/** a record of a zid we shared with a site during authentication */
+export interface ZidShareRecord {
+  /** the zid pubkey we signed with (hex) */
+  publicKey: string;
+  /** the origin we authenticated to */
+  sharedWith: string;
+  /** when we signed */
+  sharedAt: number;
+}
+
+/**
+ * look up which site we used a zid pubkey with.
+ * used by the connections page to show which zid each site knows.
+ */
+export const lookupSharedZid = (
+  log: ZidShareRecord[],
+  origin: string,
+): ZidShareRecord | undefined =>
+  log.filter(r => r.sharedWith === origin).pop();
 
 /** verify a zid signature */
 export const verifyZid = (

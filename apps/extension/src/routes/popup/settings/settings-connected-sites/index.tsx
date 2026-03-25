@@ -36,7 +36,7 @@ export const SettingsConnectedSites = () => {
   };
 
   return (
-    <SettingsScreen title='connected sites'>
+    <SettingsScreen title='connections'>
       <div className='relative mt-5 flex w-full items-center justify-center'>
         <div className='absolute inset-y-0 left-3 flex items-center'>
           <span className='i-lucide-search size-5 text-muted-foreground' />
