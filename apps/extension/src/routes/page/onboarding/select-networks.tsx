@@ -48,12 +48,39 @@ const NETWORK_OPTIONS: NetworkOption[] = (Object.keys(NETWORKS) as NetworkType[]
 
 // only show launched networks — no "coming soon" clutter
 
+/**
+ * zcash block height <-> date estimation
+ *
+ * zcash targets 75 seconds per block. we anchor to a known block/date
+ * and extrapolate. this is approximate - good enough for sync start.
+ */
+// anchor at orchard activation - the earliest block we allow
+const ZCASH_ANCHOR_BLOCK = ZCASH_ORCHARD_ACTIVATION; // 1,687,104
+const ZCASH_ANCHOR_DATE = new Date('2022-05-31T00:00:00Z');
+const ZCASH_BLOCK_TIME_S = 75;
+
+const dateToBlock = (date: Date): number => {
+  const diffMs = date.getTime() - ZCASH_ANCHOR_DATE.getTime();
+  const diffBlocks = Math.floor(diffMs / (ZCASH_BLOCK_TIME_S * 1000));
+  return Math.max(ZCASH_ORCHARD_ACTIVATION, ZCASH_ANCHOR_BLOCK + diffBlocks);
+};
+
+const blockToDate = (block: number): Date => {
+  const diffBlocks = block - ZCASH_ANCHOR_BLOCK;
+  const diffMs = diffBlocks * ZCASH_BLOCK_TIME_S * 1000;
+  return new Date(ZCASH_ANCHOR_DATE.getTime() + diffMs);
+};
+
+const formatDateInput = (date: Date): string => date.toISOString().split('T')[0]!;
+
 export const SelectNetworks = () => {
   const navigate = usePageNav();
   const location = useLocation();
   const { enabledNetworks, toggleNetwork, setActiveNetwork } = useStore(state => state.keyRing);
   const [selected, setSelected] = useState<Set<NetworkType>>(new Set(enabledNetworks));
   const [zcashBirthday, setZcashBirthday] = useState('');
+  const [zcashDate, setZcashDate] = useState('');
+  const [inputMode, setInputMode] = useState<'date' | 'block'>('date');
 
   // get origin from incoming state, default to NEWLY_GENERATED
   const origin = getSeedPhraseOrigin(location);
@@ -84,11 +111,13 @@ export const SelectNetworks = () => {
       await setActiveNetwork(firstSelected.id);
     }
 
-    // store zcash birthday - rounded to nearest 10k for privacy
+    // store zcash birthday - round down to nearest 10k, then subtract
+    // one more 10k to guarantee we start before the actual date
+    // (the date-to-block estimate can drift a few thousand blocks ahead)
     if (selected.has('zcash') && zcashBirthday) {
       const num = parseInt(zcashBirthday, 10);
       if (!isNaN(num) && num >= ZCASH_ORCHARD_ACTIVATION) {
-        const rounded = Math.floor(num / 10_000) * 10_000;
+        const rounded = Math.floor(num / 10_000) * 10_000 - 10_000;
         sessionStorage.setItem('pendingZcashBirthday', String(Math.max(rounded, ZCASH_ORCHARD_ACTIVATION)));
       }
     }
@@ -164,25 +193,63 @@ export const SelectNetworks = () => {
             })}
           </div>
 
-          {/* zcash sync start height - only shown when zcash is selected */}
+          {/* zcash sync start - only shown when zcash is selected */}
           {selected.has('zcash') && (
             <div className='mt-4 rounded-lg border border-border/40 p-3'>
-              <div className='flex items-center gap-2 mb-2'>
-                <span className='text-xs font-medium'>zcash sync start block</span>
+              <div className='flex items-center justify-between mb-2'>
+                <span className='text-xs font-medium'>wallet birthday</span>
+                <button
+                  type='button'
+                  onClick={() => setInputMode(inputMode === 'date' ? 'block' : 'date')}
+                  className='text-[10px] text-muted-foreground hover:text-foreground transition-colors'
+                >
+                  {inputMode === 'date' ? 'enter block instead' : 'enter date instead'}
+                </button>
               </div>
-              <input
-                type='number'
-                min={ZCASH_ORCHARD_ACTIVATION}
-                step='10000'
-                value={zcashBirthday}
-                onChange={e => setZcashBirthday(e.target.value)}
-                placeholder='leave blank for new wallets'
-                className='w-full bg-input border border-border/40 px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-primary'
-              />
-              <p className='mt-1.5 text-[10px] text-muted-foreground'>
-                for existing wallets, enter an approximate block height from
-                before your first transaction. rounded to nearest 10,000 for privacy.
-                leave blank for new wallets.
+
+              {inputMode === 'date' ? (
+                <input
+                  type='date'
+                  min={formatDateInput(blockToDate(ZCASH_ORCHARD_ACTIVATION))}
+                  max={formatDateInput(new Date())}
+                  value={zcashDate}
+                  onChange={e => {
+                    setZcashDate(e.target.value);
+                    if (e.target.value) {
+                      setZcashBirthday(String(dateToBlock(new Date(e.target.value + 'T00:00:00Z'))));
+                    } else {
+                      setZcashBirthday('');
+                    }
+                  }}
+                  className='w-full bg-input border border-border/40 px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-primary'
+                />
+              ) : (
+                <input
+                  type='number'
+                  min={ZCASH_ORCHARD_ACTIVATION}
+                  step='10000'
+                  value={zcashBirthday}
+                  onChange={e => {
+                    setZcashBirthday(e.target.value);
+                    const num = parseInt(e.target.value, 10);
+                    if (!isNaN(num) && num >= ZCASH_ORCHARD_ACTIVATION) {
+                      setZcashDate(formatDateInput(blockToDate(num)));
+                    }
+                  }}
+                  placeholder='leave blank for new wallets'
+                  className='w-full bg-input border border-border/40 px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-primary'
+                />
+              )}
+
+              {zcashBirthday && (
+                <p className='mt-1.5 text-[10px] text-muted-foreground'>
+                  ~block {Number(zcashBirthday).toLocaleString()}
+                  {zcashDate && ` (~${zcashDate})`}
+                </p>
+              )}
+              <p className='mt-1 text-[10px] text-muted-foreground'>
+                for existing wallets, pick the approximate date you created the wallet.
+                leave blank for new wallets. rounded for privacy.
               </p>
             </div>
           )}
