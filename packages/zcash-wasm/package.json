@@ -18,5 +18,5 @@
   "sideEffects": [
     "./snippets/*"
   ],
-  "types": "zcash_wasm.d.ts"
+  "types": "zafu_wasm.d.ts"
 }

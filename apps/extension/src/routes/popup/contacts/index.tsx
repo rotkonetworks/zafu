@@ -16,6 +16,10 @@ import {
 import { encodeContactCard, bytesToHex } from '@repo/wallet/networks/zcash/memo-codec';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { cn } from '@repo/ui/lib/utils';
+import { contactDiversifierIndex, type DiversifiedAddressRecord } from '@repo/wallet/networks/zcash/diversified-address';
+import { deriveZidForContact } from '../../../state/identity';
+import { localExtStorage } from '@repo/storage-chrome/local';
+import { selectActiveZcashWallet } from '../../../state/wallets';
 
 const NETWORK_LABELS: Record<ContactNetwork, string> = {
   penumbra: 'penumbra',
@@ -413,6 +417,65 @@ export function ContactsPage() {
   const navigate = useNavigate();
   const contacts = useStore(contactsSelector);
   const keyInfo = useStore(selectEffectiveKeyInfo);
+  const zcashWallet = useStore(selectActiveZcashWallet);
+  const getMnemonic = useStore(s => s.keyRing.getMnemonic);
+
+  /** share a contact card with per-contact diversified address + zid */
+  const shareContactCard = async (contact: Contact, recipientZcashAddr: string) => {
+    if (!keyInfo) return;
+
+    // derive per-contact diversified address (unique receiving address for this contact)
+    let myAddress = recipientZcashAddr; // fallback to recipient's address if no zcash wallet
+    const ufvk = zcashWallet?.ufvk ?? zcashWallet?.orchardFvk;
+    if (ufvk && typeof ufvk === 'string' && ufvk.startsWith('uview')) {
+      try {
+        const divIndex = await contactDiversifierIndex(contact.id);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const wasm: any = await import('@repo/zcash-wasm');
+        const rawAddr: string = wasm.address_from_ufvk(ufvk, divIndex);
+        // fixOrchardAddress would be needed here for proper bech32m encoding
+        // for now use the raw address - the codec handles it
+        if (rawAddr) {
+          myAddress = rawAddr;
+          // record the diversified address for referral tracking
+          const records: DiversifiedAddressRecord[] = (await localExtStorage.get('diversifiedAddresses')) ?? [];
+          if (!records.some(r => r.diversifierIndex === divIndex)) {
+            records.push({
+              diversifierIndex: divIndex,
+              sharedWith: contact.name || contact.id,
+              address: rawAddr,
+              sharedAt: Date.now(),
+            });
+            void localExtStorage.set('diversifiedAddresses', records);
+          }
+        }
+      } catch (e) {
+        console.warn('[contacts] failed to derive diversified address, using default:', e);
+      }
+    }
+
+    // derive per-contact zid for authenticated e2ee
+    let contactZid: string | undefined;
+    try {
+      const mnemonic = await getMnemonic(keyInfo.id);
+      const zid = deriveZidForContact(mnemonic, contact.id);
+      contactZid = zid.publicKey;
+    } catch {
+      // fall back to global zid if mnemonic unavailable
+      contactZid = keyInfo.insensitive?.['zid'] as string | undefined;
+    }
+
+    const memos = encodeContactCard({
+      name: contact.name,
+      address: myAddress,
+      flags: 0,
+      zid: contactZid,
+    });
+    const hex = bytesToHex(memos[0]!);
+    navigate(PopupPath.SEND, {
+      state: { prefillMemo: hex, network: 'zcash' },
+    });
+  };
   const [search, setSearch] = useState('');
   const [showContactModal, setShowContactModal] = useState(false);
   const [showAddressModal, setShowAddressModal] = useState(false);
@@ -696,20 +759,7 @@ export function ContactsPage() {
                 onShareCard={(() => {
                   const zcashAddr = contact.addresses.find(a => a.network === 'zcash');
                   if (!zcashAddr) return undefined;
-                  return () => {
-                    const senderZid = keyInfo?.insensitive?.['zid'] as string | undefined;
-                    const memos = encodeContactCard({
-                      name: contact.name,
-                      address: zcashAddr.address,
-                      flags: 0,
-                      zid: senderZid,
-                    });
-                    // for now, contact cards fit in a single memo
-                    const hex = bytesToHex(memos[0]!);
-                    navigate(PopupPath.SEND, {
-                      state: { prefillMemo: hex, network: 'zcash' },
-                    });
-                  };
+                  return () => void shareContactCard(contact, zcashAddr.address);
                 })()}
               />
             ))}

@@ -23,6 +23,8 @@ import { viewClient } from '../../../clients';
 import { cn } from '@repo/ui/lib/utils';
 import { PopupPath } from '../paths';
 import { AddContactDialog } from '../../../components/add-contact-dialog';
+import { localExtStorage } from '@repo/storage-chrome/local';
+import { traceAddressReferral, type DiversifiedAddressRecord } from '@repo/wallet/networks/zcash/diversified-address';
 
 type TabType = 'inbox' | 'sent';
 
@@ -208,6 +210,7 @@ function MessageDetail({
   onReply,
   onAddToContacts,
   isInContacts,
+  referral,
 }: {
   message: Message;
   contactName?: string;
@@ -215,6 +218,7 @@ function MessageDetail({
   onReply: () => void;
   onAddToContacts?: () => void;
   isInContacts: boolean;
+  referral?: DiversifiedAddressRecord;
 }) {
   const displayAddress = message.direction === 'received'
     ? message.senderAddress ?? 'shielded sender'
@@ -295,6 +299,7 @@ function MessageDetail({
               message={message}
               onAddToContacts={onAddToContacts}
               isInContacts={isInContacts}
+              referral={referral}
             />
           ) : (
             <div className='rounded-lg border border-border/40 bg-card p-4'>
@@ -328,10 +333,12 @@ function ContactCardView({
   message,
   onAddToContacts,
   isInContacts,
+  referral,
 }: {
   message: Message & { contactCard?: import('../../../state/inbox').InboxMessage['contactCard'] };
   onAddToContacts?: () => void;
   isInContacts: boolean;
+  referral?: DiversifiedAddressRecord;
 }) {
   const card = message.contactCard;
   // fallback: parse from content string if contactCard field missing (older messages)
@@ -346,6 +353,17 @@ function ContactCardView({
         <span className='text-sm font-medium'>contact card</span>
       </div>
 
+      {/* referral attribution - "via alice" */}
+      {referral && (
+        <div className='flex items-center gap-1.5 text-xs text-blue-400'>
+          <span className='i-lucide-share-2 h-3.5 w-3.5' />
+          via {referral.sharedWith}
+          <span className='text-muted-foreground/40'>
+            - shared {new Date(referral.sharedAt).toLocaleDateString()}
+          </span>
+        </div>
+      )}
+
       <div className='space-y-2'>
         <div>
           <span className='text-xs text-muted-foreground'>name</span>
@@ -357,7 +375,7 @@ function ContactCardView({
         </div>
         {zid && (
           <div>
-            <span className='text-xs text-muted-foreground'>sender zid</span>
+            <span className='text-xs text-muted-foreground'>zid</span>
             <p className='text-xs font-mono text-muted-foreground'>zid{zid.slice(0, 16)}</p>
           </div>
         )}
@@ -716,6 +734,25 @@ export function InboxPage() {
       : selectedMessage.recipientAddress
     : undefined;
 
+  // look up referral from diversified address records
+  const [addressRecords, setAddressRecords] = useState<DiversifiedAddressRecord[]>([]);
+  useEffect(() => {
+    void localExtStorage.get('diversifiedAddresses').then(r => setAddressRecords(r ?? []));
+  }, []);
+
+  // find referral for selected message by checking the inbox conversation's diversifier
+  const selectedReferral = useMemo(() => {
+    if (!selectedMessage || addressRecords.length === 0) return undefined;
+    // look up the conversation this message belongs to (via inbox state)
+    const inbox = useStore.getState().inbox;
+    for (const conv of inbox.conversations.values()) {
+      if (conv.messages.some(m => m.txids.includes(selectedMessage.txId))) {
+        return traceAddressReferral(addressRecords, conv.diversifierIndex);
+      }
+    }
+    return undefined;
+  }, [selectedMessage, addressRecords]);
+
   // show message detail
   if (selectedMessage) {
     return (
@@ -727,6 +764,7 @@ export function InboxPage() {
           onReply={handleReply}
           onAddToContacts={selectedAddress ? () => handleAddToContacts(selectedAddress, selectedMessage.network) : undefined}
           isInContacts={isAddressInContacts(selectedAddress)}
+          referral={selectedReferral}
         />
         {addContactData && (
           <AddContactDialog
