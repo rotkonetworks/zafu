@@ -35,7 +35,7 @@ export const MultisigJoin = () => {
 
     const abortController = new AbortController();
     try {
-      const url = relayUrl || 'https://zidecar.rotko.net';
+      const url = relayUrl || 'https://zcash.rotko.net';
       setStep('joining');
 
       const relay = new FrostRelayClient(url);
@@ -139,7 +139,7 @@ export const MultisigJoin = () => {
               className='mt-1 w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 font-mono text-xs focus:border-primary/50 focus:outline-none'
               value={relayUrl}
               onChange={e => setRelayUrl(e.target.value)}
-              placeholder='https://zidecar.rotko.net'
+              placeholder='https://zcash.rotko.net'
             />
           </label>
           <label className='text-xs text-muted-foreground'>

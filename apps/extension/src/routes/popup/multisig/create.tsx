@@ -42,7 +42,7 @@ export const MultisigCreate = () => {
   const handleCreate = async () => {
     const abortController = new AbortController();
     try {
-      const url = relayUrl || 'https://zidecar.rotko.net';
+      const url = relayUrl || 'https://zcash.rotko.net';
       const code = await startDkg(url, threshold, maxSigners);
       setRoomCode(code);
       setStep('waiting');
@@ -128,7 +128,7 @@ export const MultisigCreate = () => {
               className='mt-1 w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 font-mono text-xs focus:border-primary/50 focus:outline-none'
               value={relayUrl}
               onChange={e => setRelayUrl(e.target.value)}
-              placeholder='https://zidecar.rotko.net'
+              placeholder='https://zcash.rotko.net'
             />
           </label>
           <div className='flex gap-3'>

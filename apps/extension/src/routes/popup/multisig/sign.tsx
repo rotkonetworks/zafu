@@ -35,7 +35,7 @@ export const MultisigSign = () => {
 
     const abortController = new AbortController();
     try {
-      const relayUrl = (typeof ms.relayUrl === 'string' ? ms.relayUrl : '') || 'https://zidecar.rotko.net';
+      const relayUrl = (typeof ms.relayUrl === 'string' ? ms.relayUrl : '') || 'https://zcash.rotko.net';
       setStep('waiting');
       setProgress('decrypting keys...');
 
