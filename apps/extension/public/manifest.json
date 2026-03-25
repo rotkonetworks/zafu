@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "zafu wallet",
   "short_name": "zafu",
-  "version": "0.3.0",
+  "version": "21.0.0",
   "description": "privacy wallet for zcash and penumbra. air-gapped cold signing, FROST multisig, client-side proving in under 15s. ed25519 identity signing and encryption for applications. fully verified lightclient.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqh6vHXkwEKpgW8bpgfPLpIfMKX7pLH7Jmefpr/8YfvsPN79tJtvujMtxo/gy2y3Sg7QcnT+hK5iycsgdSYzj/yvnL8W1eDQ1N0jFsI/o++S6iG/CLWHkbICA2fEwhKe9rA2C9O7FWBSlfIuBD6lrXEuhnTEuykmgH67mIyAQnx88pe0Sn0ZQLmpPw58bmf07iRNfZzTZ+Oy1B98Eu5GUNbiExtxM/HM96eIxzxsP0imXi8VF9o2XDNnUmQWoWouVKEkBZ4wY3ZJ3HR2S9Psrkx4JFoNsvGTQLYVrzHAbosRiQcySn8a0vYxDTnQRenztxyN8BZC0VkTx9o5Ex5lHyQIDAQAB",
   "minimum_chrome_version": "119",
