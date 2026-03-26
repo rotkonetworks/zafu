@@ -51,7 +51,10 @@ waitForMsgType(self, 'wasm_bindgen_worker_init').then(async ({ init, receiver })
   // OTOH, even though it can't be inlined, it should be still reasonably
   // cheap since the requested file is already in cache (it was loaded by
   // the main thread).
-  const pkg = await import('../../..');
+  // Chrome extensions can't import directories — resolve to the actual JS entry.
+  // '../../..' from snippets/wasm-bindgen-rayon-xxx/src/ → zafu-wasm-parallel/
+  const base = new URL('../../..', import.meta.url).href;
+  const pkg = await import(base.endsWith('/') ? base + 'zafu_wasm.js' : base);
   await pkg.default(init);
   postMessage({ type: 'wasm_bindgen_worker_ready' });
   pkg.wbg_rayon_start_worker(receiver);
