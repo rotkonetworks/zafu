@@ -1,13 +1,13 @@
 /**
- * co-sign multisig transaction — join a signing session initiated by the coordinator
+ * co-sign multisig transaction - join a signing session initiated by the coordinator
  *
  * 1. enter room code from coordinator
  * 2. receive SIGN:<sighash>:<alphas> prefix from coordinator
  * 3. run FROST round 1 (commitments) + round 2 (shares)
- * 4. coordinator aggregates — we're done
+ * 4. coordinator aggregates - we're done
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useStore } from '../../../state';
 import { selectActiveZcashWallet } from '../../../state/wallets';
 import {
@@ -20,6 +20,30 @@ import { PopupPath } from '../paths';
 
 type Step = 'input' | 'waiting' | 'signing' | 'complete' | 'error';
 
+const ROUND_TIMEOUT_MS = 120_000;
+
+function useCountdown(active: boolean, totalMs: number) {
+  const [remaining, setRemaining] = useState(Math.ceil(totalMs / 1000));
+  const startRef = useRef(Date.now());
+
+  useEffect(() => {
+    if (!active) {
+      setRemaining(Math.ceil(totalMs / 1000));
+      startRef.current = Date.now();
+      return;
+    }
+    startRef.current = Date.now();
+    const iv = setInterval(() => {
+      const elapsed = Date.now() - startRef.current;
+      const left = Math.max(0, Math.ceil((totalMs - elapsed) / 1000));
+      setRemaining(left);
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [active, totalMs]);
+
+  return remaining;
+}
+
 export const MultisigSign = () => {
   const [roomCode, setRoomCode] = useState('');
   const [step, setStep] = useState<Step>('input');
@@ -30,6 +54,9 @@ export const MultisigSign = () => {
   const activeWallet = useStore(selectActiveZcashWallet);
   const ms = activeWallet?.multisig;
 
+  const isActive = step === 'waiting' || step === 'signing';
+  const countdown = useCountdown(isActive, ROUND_TIMEOUT_MS);
+
   const handleSign = async () => {
     if (!roomCode.trim() || !ms) return;
 
@@ -39,7 +66,6 @@ export const MultisigSign = () => {
       setStep('waiting');
       setProgress('decrypting keys...');
 
-      // decrypt secret key material from vault
       const secrets = await useStore.getState().keyRing.getMultisigSecrets(activeWallet!.vaultId);
       if (!secrets) throw new Error('failed to decrypt multisig keys');
 
@@ -49,17 +75,14 @@ export const MultisigSign = () => {
       const participantId = new Uint8Array(32);
       crypto.getRandomValues(participantId);
 
-      // state for receiving coordinator data
       let sighash = '';
       let alphas: string[] = [];
-      // coordinator sends pipe-delimited commitments (one per action)
       let peerCommitmentBundle: string[] | null = null;
       let phase: 'init' | 'commitments' | 'done' = 'init';
       void relay.joinRoom(roomCode.trim(), participantId, (event) => {
         if (event.type === 'message') {
           const text = new TextDecoder().decode(event.message.payload);
           if (phase === 'init') {
-            // format: SIGN:<sighash>:<alpha1,alpha2,...>:<summary>
             const signMatch = text.match(/^SIGN:([0-9a-fA-F]+):([^:]+):(.*)$/);
             if (signMatch) {
               sighash = signMatch[1]!;
@@ -67,43 +90,35 @@ export const MultisigSign = () => {
               setTxSummary(signMatch[3] || '');
               phase = 'commitments';
             }
-            // if not SIGN prefix, ignore (don't misclassify as commitment)
           } else if (phase === 'commitments' && !peerCommitmentBundle) {
-            // coordinator's commitment bundle: pipe-delimited, one per action
             peerCommitmentBundle = text.split('|');
           }
         }
       }, abortController.signal);
 
-      // wait for SIGN prefix
       setProgress('waiting for transaction data...');
-      await waitFor(() => sighash.length > 0, 120000);
+      await waitFor(() => sighash.length > 0, ROUND_TIMEOUT_MS);
 
       setStep('signing');
       const numActions = alphas.length;
       setProgress(`round 1: generating ${numActions} commitment(s)...`);
 
-      // generate fresh nonces per action — NEVER reuse nonces across different messages
       const round1s: { nonces: string; commitments: string }[] = [];
       for (let i = 0; i < numActions; i++) {
         round1s.push(await frostSignRound1InWorker(secrets.ephemeralSeed, secrets.keyPackage));
       }
 
-      // broadcast our commitments as pipe-delimited bundle
       const ourCommitments = round1s.map(r => r.commitments).join('|');
       await relay.sendMessage(roomCode.trim(), participantId, new TextEncoder().encode(ourCommitments));
 
-      // wait for coordinator's commitment bundle
       setProgress('round 1: waiting for coordinator...');
-      await waitFor(() => peerCommitmentBundle !== null, 120000);
+      await waitFor(() => peerCommitmentBundle !== null, ROUND_TIMEOUT_MS);
 
-      // validate coordinator sent enough commitments
       if (peerCommitmentBundle!.length < numActions) {
         throw new Error(`coordinator sent ${peerCommitmentBundle!.length} commitments but ${numActions} actions needed`);
       }
 
-      // round 2: sign each action with its dedicated nonces
-      phase = 'done'; // stop collecting messages
+      phase = 'done';
       setProgress('round 2: signing...');
 
       for (let i = 0; i < numActions; i++) {
@@ -112,7 +127,6 @@ export const MultisigSign = () => {
         const share = await frostSpendSignInWorker(
           secrets.keyPackage, round1s[i]!.nonces, sighash, alphas[i]!, allCommitments,
         );
-        // tag share with action index so coordinator can bucket correctly
         await relay.sendMessage(roomCode.trim(), participantId, new TextEncoder().encode(`S:${i}:${share}`));
       }
 
@@ -129,7 +143,7 @@ export const MultisigSign = () => {
     return (
       <SettingsScreen title='co-sign' backPath={PopupPath.SETTINGS_WALLETS}>
         <div className='rounded-lg border border-red-500/40 bg-red-500/5 p-3 text-xs text-red-400'>
-          no active multisig wallet — select a multisig wallet first
+          no active multisig wallet - select a multisig wallet first
         </div>
       </SettingsScreen>
     );
@@ -139,9 +153,9 @@ export const MultisigSign = () => {
     <SettingsScreen title='co-sign' backPath={PopupPath.SETTINGS_WALLETS}>
       <div className='mb-4 rounded-lg border border-border/40 bg-card p-3'>
         <p className='text-[10px] text-muted-foreground'>signing as</p>
-        <p className='mt-0.5 text-sm font-medium truncate'>{activeWallet.label}</p>
+        <p className='mt-0.5 text-sm font-medium truncate'>{activeWallet!.label}</p>
         <p className='text-[10px] font-mono text-muted-foreground truncate'>
-          {activeWallet.address.slice(0, 16)}...{activeWallet.address.slice(-8)}
+          {activeWallet!.address.slice(0, 16)}...{activeWallet!.address.slice(-8)}
         </p>
         <span className='mt-1 inline-block rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary'>
           {ms.threshold}/{ms.maxSigners}
@@ -181,13 +195,14 @@ export const MultisigSign = () => {
           <div className='flex items-center gap-2 text-xs text-muted-foreground'>
             <span className='i-lucide-loader-2 size-3.5 animate-spin' />
             {progress}
+            <span className='tabular-nums text-muted-foreground/60'>{countdown}s</span>
           </div>
         </div>
       )}
 
       {step === 'complete' && (
         <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-3 text-xs text-green-400'>
-          signing shares sent — coordinator will broadcast the transaction
+          signing shares sent - coordinator will broadcast the transaction
         </div>
       )}
 

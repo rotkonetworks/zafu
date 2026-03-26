@@ -1,13 +1,13 @@
 /**
- * create multisig wallet — DKG flow
+ * create multisig wallet - DKG flow
  *
  * 1. choose threshold (t) and max signers (n)
- * 2. create room → show room code for others to join
+ * 2. create room - show room code + QR for others to join
  * 3. run 3 DKG rounds via relay (automatic once all participants join)
  * 4. store key package + public key package as multisig wallet
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useStore } from '../../../state';
 import {
   frostDkgPart1InWorker,
@@ -18,6 +18,7 @@ import {
 import { FrostRelayClient } from '../../../state/keyring/frost-relay-client';
 import { SettingsScreen } from '../settings/settings-screen';
 import { PopupPath } from '../paths';
+import { QrDisplay } from '../../../shared/components/qr-display';
 
 type Step = 'config' | 'waiting' | 'dkg-round1' | 'dkg-round2' | 'dkg-round3' | 'complete' | 'error';
 
@@ -27,6 +28,31 @@ const DKG_STEPS = [
   { key: 'dkg-round3', label: 'finalize' },
 ] as const;
 
+const ROUND_TIMEOUT_MS = 120_000;
+
+/** countdown hook - returns seconds remaining */
+function useCountdown(active: boolean, totalMs: number) {
+  const [remaining, setRemaining] = useState(Math.ceil(totalMs / 1000));
+  const startRef = useRef(Date.now());
+
+  useEffect(() => {
+    if (!active) {
+      setRemaining(Math.ceil(totalMs / 1000));
+      startRef.current = Date.now();
+      return;
+    }
+    startRef.current = Date.now();
+    const iv = setInterval(() => {
+      const elapsed = Date.now() - startRef.current;
+      const left = Math.max(0, Math.ceil((totalMs - elapsed) / 1000));
+      setRemaining(left);
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [active, totalMs]);
+
+  return remaining;
+}
+
 export const MultisigCreate = () => {
   const [threshold, setThreshold] = useState(2);
   const [maxSigners, setMaxSigners] = useState(3);
@@ -35,9 +61,13 @@ export const MultisigCreate = () => {
   const [error, setError] = useState('');
   const [address, setAddress] = useState('');
   const [relayUrl, setRelayUrl] = useState('');
+  const [participantCount, setParticipantCount] = useState(1); // self = 1
 
   const startDkg = useStore(s => s.frostSession.startDkg);
   const newFrostMultisigKey = useStore(s => s.keyRing.newFrostMultisigKey);
+
+  const isWaiting = step === 'waiting' || step.startsWith('dkg-round');
+  const countdown = useCountdown(isWaiting, ROUND_TIMEOUT_MS);
 
   const handleCreate = async () => {
     const abortController = new AbortController();
@@ -46,6 +76,7 @@ export const MultisigCreate = () => {
       const code = await startDkg(url, threshold, maxSigners);
       setRoomCode(code);
       setStep('waiting');
+      setParticipantCount(1);
 
       const relay = new FrostRelayClient(url);
 
@@ -64,17 +95,22 @@ export const MultisigCreate = () => {
       await relay.sendMessage(code, participantId, new TextEncoder().encode(prefixedBroadcast));
 
       void relay.joinRoom(code, participantId, (event) => {
-        if (event.type === 'message') {
+        if (event.type === 'joined') {
+          setParticipantCount(event.participant.participantCount);
+        } else if (event.type === 'message') {
           const text = new TextDecoder().decode(event.message.payload);
           if (dkgPhase === 'round1') {
             peerBroadcasts.push(text);
           } else if (dkgPhase === 'round2') {
             peerRound2.push(text);
           }
+        } else if (event.type === 'closed') {
+          setError(`room closed: ${event.reason}`);
+          setStep('error');
         }
       }, abortController.signal);
 
-      await waitFor(() => peerBroadcasts.length >= maxSigners - 1, 120000);
+      await waitFor(() => peerBroadcasts.length >= maxSigners - 1, ROUND_TIMEOUT_MS);
 
       dkgPhase = 'round2';
       setStep('dkg-round2');
@@ -84,7 +120,7 @@ export const MultisigCreate = () => {
         await relay.sendMessage(code, participantId, new TextEncoder().encode(pkg));
       }
 
-      await waitFor(() => peerRound2.length >= maxSigners - 1, 120000);
+      await waitFor(() => peerRound2.length >= maxSigners - 1, ROUND_TIMEOUT_MS);
 
       setStep('dkg-round3');
       const round3 = await frostDkgPart3InWorker(
@@ -170,6 +206,8 @@ export const MultisigCreate = () => {
       {step === 'waiting' && (
         <div className='flex flex-col items-center gap-4'>
           <p className='text-xs text-muted-foreground'>share this room code with other participants</p>
+
+          {/* room code + copy */}
           <div className='flex items-center gap-2 rounded-lg border border-border/40 bg-card px-6 py-4'>
             <span className='font-mono text-2xl tracking-wider'>{roomCode}</span>
             <button
@@ -179,9 +217,26 @@ export const MultisigCreate = () => {
               <span className='i-lucide-copy size-4' />
             </button>
           </div>
+
+          {/* QR code for room code */}
+          <div className='rounded-lg border border-border/40 bg-card p-3'>
+            <QrDisplay data={Array.from(new TextEncoder().encode(roomCode)).map(b => b.toString(16).padStart(2, '0')).join('')} size={160} />
+          </div>
+
+          {/* participant counter */}
+          <div className='flex items-center gap-2 rounded-md bg-muted/50 px-3 py-1.5'>
+            <span className='i-lucide-users size-3.5 text-muted-foreground' />
+            <span className='text-xs'>
+              <span className='font-medium text-foreground'>{participantCount}</span>
+              <span className='text-muted-foreground'> / {maxSigners} joined</span>
+            </span>
+          </div>
+
+          {/* countdown + spinner */}
           <div className='flex items-center gap-2 text-xs text-muted-foreground'>
             <span className='i-lucide-loader-2 size-3.5 animate-spin' />
-            waiting for {maxSigners - 1} participant(s)...
+            waiting for {maxSigners - participantCount} participant(s)...
+            <span className='tabular-nums text-muted-foreground/60'>{countdown}s</span>
           </div>
         </div>
       )}
@@ -191,7 +246,10 @@ export const MultisigCreate = () => {
           <div className='flex items-center gap-2 text-xs text-muted-foreground'>
             <span className='i-lucide-loader-2 size-3.5 animate-spin' />
             key generation in progress
+            <span className='tabular-nums text-muted-foreground/60'>{countdown}s</span>
           </div>
+
+          {/* round progress */}
           <div className='flex gap-2'>
             {DKG_STEPS.map((s, i) => (
               <div key={s.key} className='flex items-center gap-1.5'>
@@ -208,6 +266,16 @@ export const MultisigCreate = () => {
               </div>
             ))}
           </div>
+
+          {/* participant counter */}
+          <div className='flex items-center gap-2 rounded-md bg-muted/50 px-3 py-1.5'>
+            <span className='i-lucide-users size-3.5 text-muted-foreground' />
+            <span className='text-xs'>
+              <span className='font-medium text-foreground'>{participantCount}</span>
+              <span className='text-muted-foreground'> / {maxSigners} participants</span>
+            </span>
+          </div>
+
           {roomCode && (
             <div className='flex items-center gap-2 rounded-lg border border-border/40 bg-card px-4 py-2'>
               <span className='font-mono text-sm tracking-wider'>{roomCode}</span>
@@ -243,7 +311,7 @@ export const MultisigCreate = () => {
             {error}
           </div>
           <button
-            onClick={() => setStep('config')}
+            onClick={() => { setStep('config'); setError(''); }}
             className='rounded-lg border border-border/40 py-2 text-xs hover:bg-muted/50 transition-colors'
           >
             try again

@@ -33,6 +33,7 @@ import { isDedicatedWindow } from '../../../utils/popup-detection';
 import { openInDedicatedWindow } from '../../../utils/navigate';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { RecipientPicker } from '../../../components/recipient-picker';
+import { QrScanner } from '../../../shared/components/qr-scanner';
 
 /** IBC chain selector dropdown */
 function ChainSelector({
@@ -880,6 +881,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
   const [txHash, setTxHash] = useState<string | undefined>();
   const [txError, setTxError] = useState<string | undefined>();
   const [assetOpen, setAssetOpen] = useState(false);
+  const [showQrScanner, setShowQrScanner] = useState(false);
 
   const penumbraTx = usePenumbraTransaction();
 
@@ -1044,19 +1046,42 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
         <label className='mb-1 block text-xs text-muted-foreground'>
           recipient (penumbra1...)
         </label>
-        <input
-          type='text'
-          value={sendState.recipient}
-          onChange={e => sendState.setRecipient(e.target.value)}
-          placeholder='penumbra1...'
-          disabled={txStatus !== 'idle'}
-          className={cn(
-            'w-full rounded-lg border bg-input px-3 py-2.5 text-sm text-foreground',
-            'placeholder:text-muted-foreground transition-colors duration-100',
-            'focus:border-zigner-gold focus:outline-none disabled:opacity-50',
-            sendState.recipient && !addressValid ? 'border-red-400' : 'border-border/40'
-          )}
-        />
+        <div className='flex gap-1'>
+          <input
+            type='text'
+            value={sendState.recipient}
+            onChange={e => sendState.setRecipient(e.target.value)}
+            placeholder='penumbra1...'
+            disabled={txStatus !== 'idle'}
+            className={cn(
+              'flex-1 rounded-lg border bg-input px-3 py-2.5 text-sm text-foreground',
+              'placeholder:text-muted-foreground transition-colors duration-100',
+              'focus:border-zigner-gold focus:outline-none disabled:opacity-50',
+              sendState.recipient && !addressValid ? 'border-red-400' : 'border-border/40'
+            )}
+          />
+          <button
+            type='button'
+            onClick={() => setShowQrScanner(true)}
+            disabled={txStatus !== 'idle'}
+            className='shrink-0 flex h-[42px] w-[42px] items-center justify-center rounded-lg border border-border/40 bg-input text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50'
+            title='scan QR code'
+          >
+            <span className='i-lucide-scan h-4 w-4' />
+          </button>
+        </div>
+        {showQrScanner && (
+          <QrScanner
+            onScan={(data) => {
+              sendState.setRecipient(data);
+              setShowQrScanner(false);
+            }}
+            onClose={() => setShowQrScanner(false)}
+            title="scan address"
+            description="scan a penumbra address QR code"
+            inline
+          />
+        )}
         {sendState.recipient && !addressValid && (
           <p className='mt-1 text-xs text-red-400'>invalid penumbra address</p>
         )}
