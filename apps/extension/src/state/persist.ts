@@ -66,7 +66,7 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
         if (wallets) state.wallets.all = wallets.map(w => ({ ...w, vaultId: w.vaultId ?? '' })) as typeof state.wallets.all;
         if (zcashWallets) state.wallets.zcashWallets = zcashWallets.map(w => ({ ...w, vaultId: w.vaultId ?? '' })) as typeof state.wallets.zcashWallets;
         if (contacts) state.contacts.contacts = contacts;
-        if (recentAddresses) state.recentAddresses.recentAddresses = recentAddresses;
+        if (Array.isArray(recentAddresses)) state.recentAddresses.recentAddresses = recentAddresses;
         if (knownSites) state.connectedSites.knownSites = knownSites;
         if (messages) state.messages.messages = messages as typeof state.messages.messages;
       }));

@@ -71,7 +71,7 @@ export const initZcashWasm = async (): Promise<void> => {
     // webpack copies this to dist/zafu-wasm/
     // @ts-expect-error - dynamic import from extension root
     const wasm = await import(/* webpackIgnore: true */ '/zafu-wasm/zafu_wasm.js');
-    const memory = new WebAssembly.Memory({ initial: 43, maximum: 16384, shared: true });
+    const memory = new WebAssembly.Memory({ initial: 49, maximum: 32768, shared: true });
     await wasm.default({ module_or_path: '/zafu-wasm/zafu_wasm_bg.wasm', memory });
 
     // init panic hook

@@ -1874,7 +1874,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             sendPayload.ufvk, notesForWasm, sendPayload.recipient,
             amountZat.toString(), fee.toString(), anchorHex,
             pathsForWasm, sendPayload.accountIndex, sendPayload.mainnet,
-            sendPayload.memo || null,
+            memoHex,
           ],
         });
 

@@ -88,7 +88,9 @@ export const createRecentAddressesSlice =
     },
 
     getRecent: (network, limit = 5) => {
-      return [...get().recentAddresses.recentAddresses]
+      const arr = get().recentAddresses.recentAddresses;
+      if (!Array.isArray(arr)) return [];
+      return [...arr]
         .filter((r) => r.network === network)
         .sort((a, b) => b.lastUsedAt - a.lastUsedAt)
         .slice(0, limit);
