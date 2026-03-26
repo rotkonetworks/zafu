@@ -22,7 +22,7 @@ async function computeHandle(pubkey: string, appOrigin: string): Promise<string>
 /** get the "best" pubkey for a contact (first address, or contact id) */
 function contactPubkey(contact: Contact): string {
   // use first address as the pubkey identifier
-  if (contact.addresses.length > 0) return contact.addresses[0].address;
+  if (contact.addresses.length > 0) return contact.addresses[0]!.address;
   return contact.id;
 }
 
@@ -149,7 +149,7 @@ export function ContactPicker() {
                   <div className="text-sm font-medium truncate">{contact.name}</div>
                   {contact.addresses.length > 0 && (
                     <div className="text-xs text-muted-foreground truncate">
-                      {contact.addresses[0].network} · {contact.addresses[0].address.slice(0, 12)}...
+                      {contact.addresses[0]!.network} - {contact.addresses[0]!.address.slice(0, 12)}...
                     </div>
                   )}
                 </div>

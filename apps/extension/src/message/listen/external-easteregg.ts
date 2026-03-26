@@ -24,28 +24,29 @@ export const externalMessageListener = (
   }
 
   const msg = req as Record<string, unknown>;
+  const type = msg['type'] as string;
 
-  switch (msg.type) {
+  switch (type) {
     case 'ping':
       sendResponse({ zafu: true, version: chrome.runtime.getManifest().version });
       return true;
 
     case 'send': {
-      if (!msg.address || typeof msg.address !== 'string') {
+      const address = msg['address'];
+      if (!address || typeof address !== 'string') {
         sendResponse({ error: 'address required' });
         return true;
       }
-      const url = chrome.runtime.getURL(`popup.html#/send?to=${encodeURIComponent(msg.address)}`);
+      const url = chrome.runtime.getURL(`popup.html#/send?to=${encodeURIComponent(address)}`);
       void chrome.windows.create({ url, type: 'popup', width: 400, height: 628 });
       sendResponse({ ok: true });
       return true;
     }
 
     case 'zafu_pick_contacts': {
-      // use sender.origin (verified by Chrome) not self-reported appOrigin
-      const appOrigin = sender.origin || sender.url || String(msg.appOrigin || 'unknown');
-      const purpose = String(msg.purpose || 'pick contacts');
-      const max = Number(msg.max) || 1;
+      const appOrigin = sender.origin || sender.url || String(msg['appOrigin'] || 'unknown');
+      const purpose = String(msg['purpose'] || 'pick contacts');
+      const max = Number(msg['max']) || 1;
       const requestId = crypto.randomUUID();
 
       // store the callback — picker popup will send result via internal message
@@ -66,11 +67,10 @@ export const externalMessageListener = (
     }
 
     case 'zafu_pick_contacts_result': {
-      // internal message from picker popup → resolve pending external request
-      const requestId = String(msg.requestId || '');
+      const requestId = String(msg['requestId'] || '');
       const callback = pendingPicks.get(requestId);
       if (callback) {
-        callback({ success: true, contacts: msg.contacts || [] });
+        callback({ success: true, contacts: msg['contacts'] || [] });
         pendingPicks.delete(requestId);
       }
       sendResponse({ ok: true });

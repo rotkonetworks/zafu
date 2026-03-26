@@ -54,7 +54,7 @@ const initParallelWasm = async (): Promise<WasmModule> => {
       // @ts-expect-error dynamic import — parallel WASM build with rayon + shared memory
       const wasm = await import(/* webpackIgnore: true */ '/zafu-wasm-parallel/zafu_wasm.js');
       // let the JS glue create shared memory with its own initial/max settings
-      await wasm.default(`${WASM_BASE}/zafu_wasm_bg.wasm`);
+      await wasm.default({ module_or_path: `${WASM_BASE}/zafu_wasm_bg.wasm` });
       wasm.init();
 
       const numThreads = navigator.hardwareConcurrency || 4;
