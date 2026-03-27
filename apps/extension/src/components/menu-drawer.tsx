@@ -87,6 +87,13 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
       label: 'wallets',
       onClick: () => { navigate(PopupPath.SETTINGS_WALLETS); onClose(); },
     },
+    ...(activeNetwork === 'zcash'
+      ? [{
+          icon: 'i-lucide-users',
+          label: 'multisig',
+          onClick: () => { navigate(PopupPath.MULTISIG_CREATE); onClose(); },
+        }]
+      : []),
     {
       icon: 'i-lucide-settings',
       label: 'settings',

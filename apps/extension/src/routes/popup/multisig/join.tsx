@@ -130,7 +130,7 @@ export const MultisigJoin = () => {
   };
 
   return (
-    <SettingsScreen title='join multisig' backPath={PopupPath.SETTINGS_WALLETS}>
+    <SettingsScreen title='join multisig' backPath={PopupPath.MULTISIG_CREATE}>
       {step === 'input' && (
         <div className='flex flex-col gap-4'>
           <label className='text-xs text-muted-foreground'>

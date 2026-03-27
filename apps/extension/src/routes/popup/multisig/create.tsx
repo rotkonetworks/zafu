@@ -8,6 +8,7 @@
  */
 
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../../state';
 import {
   frostDkgPart1InWorker,
@@ -36,6 +37,7 @@ export const MultisigCreate = () => {
   const [address, setAddress] = useState('');
   const [relayUrl, setRelayUrl] = useState('');
 
+  const navigate = useNavigate();
   const startDkg = useStore(s => s.frostSession.startDkg);
   const newFrostMultisigKey = useStore(s => s.keyRing.newFrostMultisigKey);
 
@@ -119,9 +121,12 @@ export const MultisigCreate = () => {
   const currentRound = step.startsWith('dkg-round') ? Number(step.replace('dkg-round', '')) : 0;
 
   return (
-    <SettingsScreen title='create multisig' backPath={PopupPath.SETTINGS_WALLETS}>
+    <SettingsScreen title='multisig' backPath={PopupPath.INDEX}>
       {step === 'config' && (
         <div className='flex flex-col gap-4'>
+          <p className='text-xs text-muted-foreground'>
+            create a new FROST threshold wallet or join an existing one. all participants must be online during setup.
+          </p>
           <label className='text-xs text-muted-foreground'>
             relay url
             <input
@@ -162,7 +167,18 @@ export const MultisigCreate = () => {
             className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-primary hover:bg-primary/10 transition-colors'
             onClick={() => void handleCreate()}
           >
-            create room
+            create new wallet
+          </button>
+          <div className='relative flex items-center gap-3 my-1'>
+            <div className='flex-1 border-t border-border/40' />
+            <span className='text-[10px] text-muted-foreground'>or</span>
+            <div className='flex-1 border-t border-border/40' />
+          </div>
+          <button
+            className='w-full rounded-lg border border-border/40 bg-muted/30 py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors'
+            onClick={() => navigate(PopupPath.MULTISIG_JOIN)}
+          >
+            join existing wallet
           </button>
         </div>
       )}
