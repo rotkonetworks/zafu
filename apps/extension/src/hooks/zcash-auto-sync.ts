@@ -58,6 +58,15 @@ export function useZcashAutoSync() {
   // track which walletId we started sync for, to avoid double-start
   const syncingWalletRef = useRef<string | null>(null);
 
+  // eagerly pre-spawn zcash worker when on zcash network
+  // decouples WASM loading from wallet data hydration so the worker
+  // is ready by the time mnemonic or watch-only sync needs it
+  useEffect(() => {
+    if (activeNetwork !== 'zcash') return;
+    if (onLoginPage) return;
+    void spawnNetworkWorker('zcash').catch(() => {});
+  }, [activeNetwork, onLoginPage]);
+
   // mnemonic wallet sync
   useEffect(() => {
     if (activeNetwork !== 'zcash') return;
@@ -129,27 +138,26 @@ export function useZcashAutoSync() {
     }
 
     let cancelled = false;
-    const timer = setTimeout(() => {
-      (async () => {
-        try {
-          await spawnNetworkWorker('zcash');
-          if (cancelled) return;
-          const startHeight = await resolveBirthday(walletId, zidecarUrl);
-          if (cancelled) return;
-          syncingWalletRef.current = walletId;
-          console.log('[zcash-sync] starting watch-only sync for', walletId);
-          await startWatchOnlySyncInWorker('zcash', walletId, ufvkStr, zidecarUrl, startHeight);
-        } catch (err) {
-          console.error('[zcash-sync] watch-only auto-sync failed:', err);
-        }
-      })();
-    }, 500);
+    // no timer delay — worker is already pre-spawned by the eager effect above,
+    // and this effect only fires once zcashWallets has hydrated, so start immediately
+    (async () => {
+      try {
+        await spawnNetworkWorker('zcash');
+        if (cancelled) return;
+        const startHeight = await resolveBirthday(walletId, zidecarUrl);
+        if (cancelled) return;
+        syncingWalletRef.current = walletId;
+        console.log('[zcash-sync] starting watch-only sync for', walletId);
+        await startWatchOnlySyncInWorker('zcash', walletId, ufvkStr, zidecarUrl, startHeight);
+      } catch (err) {
+        console.error('[zcash-sync] watch-only auto-sync failed:', err);
+      }
+    })();
 
     return () => {
       cancelled = true;
-      clearTimeout(timer);
     };
-  }, [activeNetwork, onLoginPage, hasMnemonic, watchOnly?.ufvk, watchOnly?.orchardFvk, walletId, zidecarUrl]);
+  }, [activeNetwork, onLoginPage, hasMnemonic, watchOnly?.id, watchOnly?.ufvk, watchOnly?.orchardFvk, walletId, zidecarUrl]);
 
   // stop sync when switching away from zcash network
   useEffect(() => {

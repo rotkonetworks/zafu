@@ -70,7 +70,6 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
         if (knownSites) state.connectedSites.knownSites = knownSites;
         if (messages) state.messages.messages = messages as typeof state.messages.messages;
       }));
-
     };
 
     // Initialize keyring from storage (loads vaults, selected key, networks)
