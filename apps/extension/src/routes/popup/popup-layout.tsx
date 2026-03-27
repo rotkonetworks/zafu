@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { usePopupReady } from '../../hooks/popup-ready';
 import { useZcashAutoSync } from '../../hooks/zcash-auto-sync';
+import { usePenumbraSwapClaim } from '../../hooks/penumbra-swap-claim';
 import { BottomTabs, BOTTOM_TABS_HEIGHT } from '../../components/bottom-tabs';
 import { AppHeader } from '../../components/app-header';
 import { MenuDrawer } from '../../components/menu-drawer';
 import { PopupPath } from './paths';
 import { useStore } from '../../state';
-import { selectActiveNetwork, type NetworkType } from '../../state/keyring';
+import { selectActiveNetwork, selectPenumbraAccount, type NetworkType } from '../../state/keyring';
 import { hasFeature } from '../../config/networks';
 
 type FeatureKey = 'stake' | 'swap' | 'vote' | 'inbox';
@@ -57,6 +58,9 @@ export const PopupLayout = () => {
   useZcashAutoSync();
   const location = useLocation();
   const activeNetwork = useStore(selectActiveNetwork);
+  const penumbraAccount = useStore(selectPenumbraAccount);
+  const onLoginPage = location.pathname === '/login';
+  usePenumbraSwapClaim(activeNetwork, onLoginPage, penumbraAccount);
   const [menuOpen, setMenuOpen] = useState(false);
 
   const tabs = getTabsForNetwork(activeNetwork);

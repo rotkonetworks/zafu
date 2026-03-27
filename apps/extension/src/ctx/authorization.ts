@@ -16,6 +16,10 @@ import { PopupType } from '../message/popup';
 import { throwIfNeedsLogin } from '../needs-login';
 import { popup } from '../popup';
 
+/** swap claims don't require user approval — auto-authorize them */
+const isSwapClaimOnly = (plan: TransactionPlan): boolean =>
+  plan.actions.length > 0 && plan.actions.every(a => a.action.case === 'swapClaim');
+
 export const getAuthorization = async (plan: TransactionPlan): Promise<AuthorizationData> => {
   // Check if active wallet is airgap (Zigner) — use getWalletFromStorage
   // which handles decryption (wallets are encrypted at rest)
@@ -26,6 +30,16 @@ export const getAuthorization = async (plan: TransactionPlan): Promise<Authoriza
     if (custodyType === 'airgapSigner') {
       return getAirgapAuthorization(plan, activeWallet);
     }
+  }
+
+  // Swap claims don't require user interaction — sign without popup
+  if (isSwapClaimOnly(plan)) {
+    return openWallet()
+      .then(custody => custody.authorizePlan(plan))
+      .catch(error => {
+        console.error(error);
+        throw new ConnectError('Authorization failed', Code.Internal);
+      });
   }
 
   // Normal flow: sign in parallel with user approval
