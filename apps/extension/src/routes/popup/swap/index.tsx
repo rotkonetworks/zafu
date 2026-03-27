@@ -11,7 +11,7 @@ import { useQuery } from '@tanstack/react-query';
 import { viewClient, simulationClient } from '../../../clients';
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
 import { useStore } from '../../../state';
-import { selectActiveNetwork, selectPenumbraAccount } from '../../../state/keyring';
+import { selectActiveNetwork, selectPenumbraAccount, selectEffectiveKeyInfo } from '../../../state/keyring';
 import { contactsSelector, type ContactNetwork } from '../../../state/contacts';
 import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
@@ -29,9 +29,9 @@ import {
   requestQuote,
   checkSwapStatus,
   filterSwappableTokens,
+  findZecAssetId,
   blockchainToContactNetwork,
   toBaseUnits,
-  ZEC_ASSET_ID,
   type NearToken,
   type SwapQuoteResponse,
   type SwapStatus,
@@ -83,6 +83,7 @@ type ZcashSwapStep = 'input' | 'quoting' | 'deposit' | 'polling' | 'done' | 'err
 const ZcashCrosschainSwap = () => {
   const navigate = useNavigate();
   const { address: zcashAddress } = useActiveAddress();
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const { contacts } = useStore(contactsSelector);
   const [step, setStep] = useState<ZcashSwapStep>('input');
   const [direction, setDirection] = useState<'from_zec' | 'into_zec'>('from_zec');
@@ -100,19 +101,23 @@ const ZcashCrosschainSwap = () => {
   const isFromZec = direction === 'from_zec';
 
   // fetch ZEC balance
+  const walletId = selectedKeyInfo?.id;
   useEffect(() => {
-    getBalanceInWorker('zcash', 'default').then(b => {
+    if (!walletId) return;
+    getBalanceInWorker('zcash', walletId).then(b => {
       const zec = (Number(b) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
       setBalanceZec(zec);
     }).catch(() => {});
-  }, []);
+  }, [walletId]);
 
-  // fetch supported tokens
+  // fetch supported tokens + resolve ZEC asset ID dynamically
+  const [zecAssetId, setZecAssetId] = useState<string | undefined>();
   const { data: tokens = [], isLoading: tokensLoading } = useQuery({
     queryKey: ['near-tokens'],
     staleTime: 300_000,
     queryFn: async () => {
       const all = await getSupportedTokens();
+      setZecAssetId(findZecAssetId(all));
       return filterSwappableTokens(all);
     },
   });
@@ -155,7 +160,7 @@ const ZcashCrosschainSwap = () => {
   }, [step]);
 
   const handleRequestQuote = useCallback(async () => {
-    if (!selectedToken || !amountIn || parseFloat(amountIn) <= 0 || !zcashAddress) return;
+    if (!selectedToken || !amountIn || parseFloat(amountIn) <= 0 || !zcashAddress || !zecAssetId) return;
 
     if (!destinationAddress) {
       setError(isFromZec
@@ -168,8 +173,8 @@ const ZcashCrosschainSwap = () => {
     setError(undefined);
 
     try {
-      const originAsset = isFromZec ? ZEC_ASSET_ID : selectedToken.assetId;
-      const destAsset = isFromZec ? selectedToken.assetId : ZEC_ASSET_ID;
+      const originAsset = isFromZec ? zecAssetId : selectedToken.assetId;
+      const destAsset = isFromZec ? selectedToken.assetId : zecAssetId;
       const originDecimals = isFromZec ? 8 : selectedToken.decimals;
       const amount = toBaseUnits(amountIn, originDecimals);
 
@@ -191,7 +196,7 @@ const ZcashCrosschainSwap = () => {
       setError(err instanceof Error ? err.message : 'failed to get quote');
       setStep('error');
     }
-  }, [selectedToken, amountIn, direction, zcashAddress, destinationAddress, isFromZec]);
+  }, [selectedToken, amountIn, direction, zcashAddress, destinationAddress, isFromZec, zecAssetId]);
 
   // poll swap status when in deposit/polling step
   useEffect(() => {
@@ -717,6 +722,10 @@ const PenumbraSwap = () => {
       const multiplier = 10 ** selectedIn.exponent;
       const baseAmount = BigInt(Math.floor(parseFloat(amountIn) * multiplier));
 
+      const { address: claimAddress } = await viewClient.addressByIndex({
+        addressIndex: { account: penumbraAccount },
+      });
+
       const planRequest = new TransactionPlannerRequest({
         swaps: [{
           targetAsset: { inner: selectedOut.assetId },
@@ -724,7 +733,7 @@ const PenumbraSwap = () => {
             amount: new Amount({ lo: baseAmount, hi: 0n }),
             assetId: { inner: selectedIn.assetId },
           }),
-          claimAddress: undefined,
+          claimAddress,
         }],
         source: { account: penumbraAccount },
       });
