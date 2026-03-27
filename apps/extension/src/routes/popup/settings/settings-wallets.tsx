@@ -12,7 +12,7 @@ import { Input } from '@repo/ui/components/ui/input';
 import { cn } from '@repo/ui/lib/utils';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
-import { ZCASH_ORCHARD_ACTIVATION } from '../../../config/networks';
+import { ZCASH_ORCHARD_ACTIVATION, isLaunched } from '../../../config/networks';
 
 type RemovalStep = 'idle' | 'password' | 'backup' | 'confirm';
 
@@ -187,7 +187,7 @@ export const SettingsWallets = () => {
           deviceId: `zcash-${Date.now()}`,
         };
         await addZignerUnencrypted(zignerData, walletLabel || zcashWalletImport.label || 'zigner zcash');
-      } else if (detectedNetwork === 'cosmos' && parsedCosmosExport) {
+      } else if (detectedNetwork === 'cosmos' && parsedCosmosExport && isLaunched('osmosis')) {
         const zignerData: ZignerZafuImport = {
           cosmosAddresses: parsedCosmosExport.addresses,
           publicKey: parsedCosmosExport.publicKey || undefined,
@@ -195,7 +195,7 @@ export const SettingsWallets = () => {
           deviceId: `cosmos-${Date.now()}`,
         };
         await addZignerUnencrypted(zignerData, walletLabel || 'zigner cosmos');
-      } else if (detectedNetwork === 'polkadot' && parsedPolkadotExport) {
+      } else if (detectedNetwork === 'polkadot' && parsedPolkadotExport && isLaunched('polkadot')) {
         const zignerData: ZignerZafuImport = {
           polkadotSs58: parsedPolkadotExport.address,
           polkadotGenesisHash: parsedPolkadotExport.genesisHash,
@@ -246,8 +246,8 @@ export const SettingsWallets = () => {
               const networks: string[] = [];
               if (penumbraWallets.some(w => w.vaultId === v.id)) networks.push('penumbra');
               if (zcashWallets.some(w => w.vaultId === v.id)) networks.push('zcash');
-              if (v.insensitive['cosmosAddresses']) networks.push('cosmos');
-              if (v.insensitive['polkadotSs58']) networks.push('polkadot');
+              if (v.insensitive['cosmosAddresses'] && isLaunched('osmosis')) networks.push('cosmos');
+              if (v.insensitive['polkadotSs58'] && isLaunched('polkadot')) networks.push('polkadot');
               // seed wallets derive keys for all networks
               if (v.type === 'mnemonic') {
                 if (!networks.includes('zcash')) networks.push('zcash');
