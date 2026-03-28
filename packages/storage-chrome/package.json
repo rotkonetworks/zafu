@@ -32,6 +32,6 @@
     "@rotko/penumbra-types": "37.0.0",
     "@rotko/penumbra-wasm": "55.0.1",
     "@types/chrome": "0.0.270",
-    "@types/lodash": "^4.17.23"
+    "@types/lodash": "^4.17.24"
   }
 }

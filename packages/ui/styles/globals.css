@@ -1,6 +1,5 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@import "../../tailwind-config/index.css";
 @unocss;
 
 @layer base {
@@ -171,11 +170,12 @@
   }
 
   * {
-    @apply border-border;
+    border-color: hsl(var(--border));
   }
 
   body {
-    @apply bg-background text-foreground;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
     font-family: 'Iosevka Term', 'Courier New', Courier, monospace;
     font-size: 13px;
     line-height: 1.5;
@@ -187,7 +187,7 @@
   }
 
   p {
-    @apply text-foreground;
+    color: hsl(var(--foreground));
   }
 
   a {
@@ -200,7 +200,11 @@
 
   /* form elements */
   input, textarea, select {
-    @apply bg-input text-foreground placeholder:text-muted-foreground;
+    background-color: hsl(var(--input));
+    color: hsl(var(--foreground));
+  }
+  input::placeholder, textarea::placeholder, select::placeholder {
+    color: hsl(var(--muted-foreground));
   }
 
   code, pre {
@@ -246,54 +250,49 @@
   }
 }
 
-@layer utilities {
-  /* text contrast helpers */
-  .text-high-contrast {
-    @apply text-foreground;
-  }
-  .text-medium-contrast {
-    @apply text-muted-foreground;
-  }
-  .text-low-contrast {
-    @apply text-muted-foreground/60;
-  }
+/* custom utilities */
+@utility text-high-contrast {
+  color: hsl(var(--foreground));
+}
+@utility text-medium-contrast {
+  color: hsl(var(--muted-foreground));
+}
+@utility text-low-contrast {
+  color: hsl(var(--muted-foreground) / 0.6);
+}
 
-  /* brand utilities */
-  .text-zigner-gold {
-    color: var(--zigner-gold);
-  }
-  .bg-zigner-gold {
-    background-color: var(--zigner-gold);
-  }
-  .border-zigner-gold {
-    border-color: var(--zigner-gold);
-  }
-  .text-zafu-blue {
-    color: var(--zafu-blue);
-  }
-  .bg-zafu-blue {
-    background-color: var(--zafu-blue);
-  }
-  .border-zafu-blue {
-    border-color: var(--zafu-blue);
-  }
+@utility text-zigner-gold {
+  color: var(--zigner-gold);
+}
+@utility bg-zigner-gold {
+  background-color: var(--zigner-gold);
+}
+@utility border-zigner-gold {
+  border-color: var(--zigner-gold);
+}
+@utility text-zafu-blue {
+  color: var(--zafu-blue);
+}
+@utility bg-zafu-blue {
+  background-color: var(--zafu-blue);
+}
+@utility border-zafu-blue {
+  border-color: var(--zafu-blue);
+}
 
-  /* gradient backgrounds */
-  .bg-card-gradient {
-    background: linear-gradient(
-      135deg,
-      hsl(var(--card)) 0%,
-      hsl(var(--card) / 0.9) 100%
-    );
-  }
+@utility bg-card-gradient {
+  background: linear-gradient(
+    135deg,
+    hsl(var(--card)) 0%,
+    hsl(var(--card) / 0.9) 100%
+  );
+}
 
-  /* focus ring - pragmatic */
-  .focus-ring {
-    @apply outline-none ring-1 ring-primary ring-offset-1 ring-offset-background;
-  }
+@utility focus-ring {
+  outline: none;
+  box-shadow: 0 0 0 1px hsl(var(--primary)), 0 0 0 2px hsl(var(--background));
+}
 
-  /* override for explicitly sharp elements */
-  .sharp {
-    @apply rounded-none;
-  }
+@utility sharp {
+  border-radius: 0;
 }

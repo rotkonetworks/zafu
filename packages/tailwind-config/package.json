@@ -4,11 +4,7 @@
   "private": true,
   "license": "(MIT OR Apache-2.0)",
   "main": "index.ts",
-  "dependencies": {
-    "tailwindcss": "^3.4.19",
-    "tailwindcss-animate": "^1.0.7"
-  },
   "devDependencies": {
-    "@types/node": "^22.19.7"
+    "@types/node": "^25.5.0"
   }
 }
