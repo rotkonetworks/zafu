@@ -64,6 +64,7 @@ export const createRecentAddressesSlice =
       const normalized = address.toLowerCase();
 
       set((state) => {
+        if (!Array.isArray(state.recentAddresses.recentAddresses)) state.recentAddresses.recentAddresses = [];
         const existing = state.recentAddresses.recentAddresses.find(
           (r) => r.address.toLowerCase() === normalized
         );
@@ -98,6 +99,7 @@ export const createRecentAddressesSlice =
 
     getFrequent: (network) => {
       let addresses = get().recentAddresses.recentAddresses;
+      if (!Array.isArray(addresses)) return [];
       if (network) {
         addresses = addresses.filter((r) => r.network === network);
       }
@@ -108,7 +110,8 @@ export const createRecentAddressesSlice =
 
     getSuggestionsForContacts: () => {
       const { recentAddresses, dismissedSuggestions } = get().recentAddresses;
-      const contacts = get().contacts.contacts;
+      if (!Array.isArray(recentAddresses)) return [];
+      const contacts = Array.isArray(get().contacts.contacts) ? get().contacts.contacts : [];
 
       // get addresses used multiple times that aren't saved as contacts
       return recentAddresses
@@ -129,7 +132,8 @@ export const createRecentAddressesSlice =
     shouldSuggestSave: (address) => {
       const normalized = address.toLowerCase();
       const { recentAddresses, dismissedSuggestions } = get().recentAddresses;
-      const contacts = get().contacts.contacts;
+      if (!Array.isArray(recentAddresses)) return false;
+      const contacts = Array.isArray(get().contacts.contacts) ? get().contacts.contacts : [];
 
       // already a contact?
       if (contacts.some((c) => c.addresses.some((a) => a.address.toLowerCase() === normalized))) {
