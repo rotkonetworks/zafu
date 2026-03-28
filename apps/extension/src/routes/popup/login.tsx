@@ -67,14 +67,14 @@ export const Login = () => {
         </form>
         <div className='flex flex-col gap-1'>
           <p className='text-center text-muted-foreground'>
-            Need help? Visit{' '}
+            Need help?{' '}
             <a
               className='cursor-pointer text-teal hover:underline transition-colors'
+              href={chrome.runtime.getURL('zitadel.html?room=support')}
               target='_blank'
-              href='https://rotko.net'
               rel='noreferrer'
             >
-              rotko.net
+              Chat with us
             </a>
           </p>
           <p className='text-center text-xs text-muted-foreground/50'>

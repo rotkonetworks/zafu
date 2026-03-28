@@ -42,6 +42,10 @@ function boot() {
   font.href = 'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&display=swap';
   document.head.appendChild(font);
 
+  // init params (must be before state refs)
+  const params = new URLSearchParams(location.search);
+  const initialRoom = params.get('room') || 'zitadel';
+
   // state
   let nick = '...';
   let loggedIn = false;
@@ -49,12 +53,23 @@ function boot() {
   let currentRoom: string | null = null;
   let ws: WebSocket | null = null;
   let connected = false;
-  const messages: Msg[] = [];
+  const messagesPerRoom = new Map<string, Msg[]>();
+  const joinedRooms = new Set<string>();
+  const DEFAULT_CHANNELS = ['zitadel', 'support', 'dev'];
   const history: string[] = [];
   let histIdx = -1;
 
-  // DOM
-  root.style.cssText = `background:${C.bg};color:${C.text};font-family:'IBM Plex Mono',monospace;font-size:14px;height:100vh;display:flex;flex-direction:column;`;
+  function roomMessages(): Msg[] {
+    const key = currentRoom || initialRoom;
+    let arr = messagesPerRoom.get(key);
+    if (!arr) { arr = []; messagesPerRoom.set(key, arr); }
+    return arr;
+  }
+
+  // DOM - sidebar + main layout
+  root.style.cssText = `background:${C.bg};color:${C.text};font-family:'IBM Plex Mono',monospace;font-size:14px;height:100vh;display:flex;`;
+  const sidebar = mkEl('div', `width:160px;min-width:160px;background:${C.panel};border-right:1px solid ${C.border};display:flex;flex-direction:column;overflow-y:auto;`);
+  const main = mkEl('div', `flex:1;display:flex;flex-direction:column;min-width:0;`);
   const topbar = mkEl('div', `background:${C.panel};border-bottom:1px solid ${C.border};padding:6px 12px;display:flex;align-items:center;gap:8px;`);
   const msgArea = mkEl('div', `flex:1;overflow-y:auto;padding:8px 12px;`);
   const statusEl = mkEl('div', `background:${C.panel};border-top:1px solid ${C.border};padding:4px 12px;font-size:11px;color:${C.muted};display:flex;gap:16px;`);
@@ -64,21 +79,63 @@ function boot() {
   inp.placeholder = 'type a message... (/ for commands)';
   inp.style.cssText = `flex:1;background:transparent;border:none;outline:none;color:${C.bright};font-family:inherit;font-size:inherit;caret-color:${C.gold};`;
   bar.appendChild(inp);
-  root.append(topbar, msgArea, statusEl, bar);
+  main.append(topbar, msgArea, statusEl, bar);
+  root.append(sidebar, main);
 
   function mkEl(tag: string, css: string) { const e = document.createElement(tag); e.style.cssText = css; return e; }
 
-  function addMsg(n: string, text: string, system = false) {
-    messages.push({ nick: n, text, time: now(), system, color: system ? undefined : nickColor(n) });
+  function addMsg(n: string, text: string, system = false, room?: string) {
+    const key = room || currentRoom || initialRoom;
+    let arr = messagesPerRoom.get(key);
+    if (!arr) { arr = []; messagesPerRoom.set(key, arr); }
+    arr.push({ nick: n, text, time: now(), system, color: system ? undefined : nickColor(n) });
     render();
   }
 
+  function switchRoom(room: string) {
+    if (room === currentRoom) return;
+    if (currentRoom) wsSend({ t: 'part' });
+    wsSend({ t: 'join', room, nick });
+  }
+
+  function renderSidebar() {
+    const room = currentRoom || initialRoom;
+    const allRooms = [...new Set([...DEFAULT_CHANNELS, ...joinedRooms])];
+    sidebar.innerHTML = `
+      <div style="padding:10px 12px;border-bottom:1px solid ${C.border};">
+        <b style="color:${C.bright};font-size:13px;">channels</b>
+      </div>
+      ${allRooms.map(r => {
+        const active = r === room;
+        const bg = active ? C.border : 'transparent';
+        const col = active ? C.bright : C.muted;
+        return `<div class="ch" data-room="${esc(r)}" style="padding:5px 12px;cursor:pointer;background:${bg};color:${col};font-size:13px;transition:background 0.1s;">#${esc(r)}</div>`;
+      }).join('')}
+      <div style="padding:8px 12px;margin-top:auto;border-top:1px solid ${C.border};">
+        <div style="color:${C.muted};font-size:11px;">${esc(nick)}</div>
+        <div style="color:${C.muted};font-size:10px;">${loggedIn ? 'zafu' : 'anon'}</div>
+      </div>
+    `;
+    sidebar.querySelectorAll('.ch').forEach(el => {
+      el.addEventListener('click', () => {
+        const r = (el as HTMLElement).dataset['room'];
+        if (r) switchRoom(r);
+      });
+      el.addEventListener('mouseenter', () => { (el as HTMLElement).style.background = C.border; });
+      el.addEventListener('mouseleave', () => {
+        const r = (el as HTMLElement).dataset['room'];
+        if (r !== (currentRoom || initialRoom)) (el as HTMLElement).style.background = 'transparent';
+      });
+    });
+  }
+
   function render() {
-    const room = currentRoom || 'zitadel';
+    const room = currentRoom || initialRoom;
+    const msgs = roomMessages();
     const relayStatus = connected ? `<span style="color:${C.green}">ok</span>` : `<span style="color:${C.red}">--</span>`;
     topbar.innerHTML = `<b style="color:${C.bright}">#${esc(room)}</b><span style="color:${C.border}">|</span><span style="color:${C.muted}">shielded lobby | /help</span><span style="margin-left:auto;color:${C.muted}">relay: ${relayStatus}</span>`;
 
-    msgArea.innerHTML = messages.map(m => {
+    msgArea.innerHTML = msgs.map(m => {
       if (m.system) return `<div style="line-height:1.4"><span style="color:${C.muted}">${m.time}</span><span style="color:${C.gold}"> -!- </span><span style="color:${C.muted}">${esc(m.text)}</span></div>`;
       const col = m.color || C.gold;
       return `<div style="line-height:1.4"><span style="color:${C.muted}">${m.time}</span><span style="color:${C.border}"> &lt;</span><b style="color:${col}">${esc(m.nick)}</b><span style="color:${C.border}">&gt; </span>${esc(m.text)}</div>`;
@@ -91,6 +148,7 @@ function boot() {
     bar.innerHTML = `<span style="color:${C.border}">[</span><b style="color:${C.gold}">${esc(nick)}</b><span style="color:${C.border}">]</span>`;
     bar.appendChild(inp);
     inp.focus();
+    renderSidebar();
   }
 
   // WebSocket
@@ -106,8 +164,8 @@ function boot() {
     ws.onopen = () => {
       connected = true;
       addMsg('zitadel', 'connected to relay', true);
-      // auto-join lobby (create if doesn't exist)
-      wsSend({ t: 'join', room: 'zitadel', nick });
+      // auto-join initial room (create if doesn't exist)
+      wsSend({ t: 'join', room: initialRoom, nick });
     };
 
     let joinRetried = false;
@@ -118,12 +176,12 @@ function boot() {
         switch (msg.t) {
           case 'msg':
             if (msg.nick !== nick) {
-              messages.push({ nick: msg.nick, text: msg.text, time: now(), color: nickColor(msg.nick) });
-              render();
+              addMsg(msg.nick, msg.text, false, msg.room || currentRoom || undefined);
             }
             break;
           case 'joined':
             currentRoom = msg.room;
+            joinedRooms.add(msg.room);
             joinRetried = false;
             addMsg('zitadel', `joined #${msg.room} (${msg.count} users)`, true);
             break;
@@ -142,8 +200,8 @@ function boot() {
             // if lobby doesn't exist, create it (persistent, TTL=0)
             if (msg.msg === 'room not found or expired' && !joinRetried) {
               joinRetried = true;
-              addMsg('zitadel', 'lobby not found, creating...', true);
-              wsSend({ t: 'create', nick, room: 'zitadel' });
+              addMsg('zitadel', 'room not found, creating...', true);
+              wsSend({ t: 'create', nick, room: initialRoom });
             } else {
               addMsg('zitadel', `error: ${msg.msg}`, true);
             }
@@ -230,14 +288,17 @@ function boot() {
           if (args[0]) { const old = nick; nick = args[0]; addMsg('zitadel', `${old} is now known as ${nick}`, true); render(); }
           break;
         case 'j': case 'join':
-          if (args[0]) { wsSend({ t: 'join', room: args[0], nick }); }
+          if (args[0]) { switchRoom(args[0]); }
           else addMsg('zitadel', 'usage: /j <room>', true);
           break;
         case 'part':
-          wsSend({ t: 'part' });
-          currentRoom = null;
-          addMsg('zitadel', 'left channel', true);
-          render();
+          if (currentRoom) {
+            wsSend({ t: 'part' });
+            joinedRooms.delete(currentRoom);
+            addMsg('zitadel', `left #${currentRoom}`, true);
+            currentRoom = null;
+            render();
+          }
           break;
         case 'poker': {
           const room = args[0] || 'new';
@@ -261,7 +322,7 @@ function boot() {
           else addMsg('zitadel', 'already connected', true);
           break;
         case 'clear':
-          messages.length = 0; render();
+          roomMessages().length = 0; render();
           break;
         default:
           addMsg('zitadel', `unknown: /${cmd}`, true);
@@ -289,7 +350,7 @@ function boot() {
     else addMsg('zitadel', 'ephemeral session. connect zafu for persistent identity.', true);
     addMsg('zitadel', 'welcome to zitadel. type /help for commands.', true);
     render();
-    // auto-connect to relay
+    // auto-connect to relay and join initial room
     connectRelay();
   });
 }

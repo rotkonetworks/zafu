@@ -122,7 +122,31 @@ export const QrScanner = ({
       const msg = err instanceof Error ? err.message : 'Failed to start camera';
 
       if (/Permission|NotAllowed/.test(msg)) {
-        setError('Camera permission denied. Enable camera access in browser settings.');
+        // side panels and popups can't show permission prompts.
+        // open a dedicated window to request camera access, then retry.
+        try {
+          const grantUrl = chrome.runtime.getURL('page.html#/grant-camera');
+          const tab = await chrome.tabs.create({ url: grantUrl, active: true });
+          // wait for the tab to close (user granted or denied)
+          await new Promise<void>(resolve => {
+            const listener = (tabId: number) => {
+              if (tabId === tab.id) {
+                chrome.tabs.onRemoved.removeListener(listener);
+                resolve();
+              }
+            };
+            chrome.tabs.onRemoved.addListener(listener);
+          });
+          // retry - if permission was granted this will work
+          startingRef.current = false;
+          void startScanning();
+          return;
+        } catch {
+          // fallback if tabs API not available
+        }
+        setError('permission');
+      } else if (/NotReadable|AbortError|Could not start/i.test(msg)) {
+        setError('Camera is in use by another app. Close it and retry.');
       } else if (/NotFound|no camera/i.test(msg)) {
         setError('No camera found on this device.');
       } else {
@@ -187,11 +211,23 @@ export const QrScanner = ({
             <div className='p-3 rounded-full bg-red-500/20'>
               <span className='i-lucide-camera size-6 text-red-400' />
             </div>
-            <p className='text-xs text-red-400'>{error}</p>
-            <div className='flex gap-2'>
-              <Button variant='secondary' size='sm' onClick={handleClose}>cancel</Button>
-              <Button size='sm' onClick={startScanning}>retry</Button>
-            </div>
+            {error === 'permission' ? (
+              <>
+                <p className='text-xs text-red-400'>camera access is required to scan QR codes</p>
+                <div className='flex gap-2'>
+                  <Button variant='secondary' size='sm' onClick={handleClose}>cancel</Button>
+                  <Button size='sm' onClick={() => { setError(null); void startScanning(); }}>grant access</Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className='text-xs text-red-400'>{error}</p>
+                <div className='flex gap-2'>
+                  <Button variant='secondary' size='sm' onClick={handleClose}>cancel</Button>
+                  <Button size='sm' onClick={() => { setError(null); void startScanning(); }}>retry</Button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
