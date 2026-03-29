@@ -264,7 +264,7 @@ export const externalMessageListener = (
           // lazy import to avoid loading webauthn.ts in every page load
           const { createCredential } = await import('../../state/webauthn');
           const { useStore } = await import('../../state');
-          const keyInfo = useStore.getState().keyRing.keyInfo;
+          const keyInfo = useStore.getState().keyRing.selectedKeyInfo;
           if (!keyInfo) { sendResponse({ success: false }); return; }
           const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
           const result = createCredential(mnemonic, rpId);
@@ -300,7 +300,7 @@ export const externalMessageListener = (
           const { signAssertion, buildCredentialId } = await import('../../state/webauthn');
           const { useStore } = await import('../../state');
           const { bytesToHex, hexToBytes: h2b } = await import('@noble/hashes/utils');
-          const keyInfo = useStore.getState().keyRing.keyInfo;
+          const keyInfo = useStore.getState().keyRing.selectedKeyInfo;
           if (!keyInfo) { sendResponse({ success: false }); return; }
           const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
 
