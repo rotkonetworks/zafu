@@ -1,6 +1,5 @@
 @import "tailwindcss";
 @import "../../tailwind-config/index.css";
-@unocss;
 
 @layer base {
   :root {

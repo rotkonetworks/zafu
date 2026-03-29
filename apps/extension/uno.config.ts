@@ -3,10 +3,10 @@ import presetIcons from '@unocss/preset-icons';
 
 export default defineConfig({
   content: {
-    pipeline: {
-      include: [/\.tsx?$/],
-      exclude: [/node_modules/, /\.wasm$/, /\.woff2?$/],
-    },
+    filesystem: [
+      'src/**/*.{ts,tsx}',
+      '../../packages/ui/**/*.{ts,tsx}',
+    ],
   },
   presets: [
     presetIcons({

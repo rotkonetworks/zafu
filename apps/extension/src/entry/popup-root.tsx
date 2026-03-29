@@ -6,6 +6,7 @@ import { popupRouter } from '../routes/popup/router';
 import { isSidePanel } from '../utils/popup-detection';
 
 import '@repo/ui/styles/globals.css';
+import '@repo/ui/styles/icons.css';
 
 const MainPopup = () => {
   const [queryClient] = useState(() => new QueryClient());

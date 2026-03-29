@@ -16,6 +16,7 @@ import { type WebExtRunner, cmd as WebExtCmd } from 'web-ext';
 import { execSync } from 'node:child_process';
 import webpack from 'webpack';
 import WatchExternalFilesPlugin from 'webpack-watch-external-files-plugin';
+import unocssPostcss from '@unocss/postcss';
 // UnoCSS icons are loaded via @unocss/postcss in the PostCSS pipeline
 
 export default ({
@@ -200,7 +201,7 @@ export default ({
               options: {
                 postcssOptions: {
                   ident: 'postcss',
-                  plugins: ['@tailwindcss/postcss', '@unocss/postcss'],
+                  plugins: [unocssPostcss(), '@tailwindcss/postcss'],
                 },
               },
             },
