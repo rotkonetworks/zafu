@@ -164,7 +164,25 @@ export const HistoryPage = () => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const penumbraAccount = useStore(selectPenumbraAccount);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
+  const historyEnabled = useStore(s => s.privacy.settings.enableTransactionHistory);
   const [transactions, setTransactions] = useState<ParsedTransaction[]>([]);
+
+  if (!historyEnabled) {
+    return (
+      <div className='flex flex-col h-full'>
+        <div className='flex items-center px-4 py-3 border-b border-border/40'>
+          <h1 className='text-lg font-medium'>History</h1>
+        </div>
+        <div className='flex-1 flex flex-col items-center justify-center gap-3 p-8 text-center'>
+          <span className='i-lucide-eye-off h-8 w-8 text-muted-foreground/30' />
+          <p className='text-sm text-muted-foreground'>transaction history is disabled</p>
+          <p className='text-xs text-muted-foreground/50'>
+            enable in settings &rarr; privacy to see past transactions
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const walletId = selectedKeyInfo?.id;
   const isMainnet = !zidecarUrl.includes('testnet');

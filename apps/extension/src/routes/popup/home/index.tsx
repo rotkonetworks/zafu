@@ -1095,6 +1095,7 @@ function TxRow({ tx }: { tx: ParsedTransaction }) {
 const HistoryContent = ({ network, penumbraAccount }: { network: NetworkType; penumbraAccount: number }) => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
+  const historyEnabled = useStore(s => s.privacy.settings.enableTransactionHistory);
   const messages = useStore(messagesSelector);
   const walletId = selectedKeyInfo?.id;
   const isMainnet = !zidecarUrl.includes('testnet');
@@ -1109,6 +1110,19 @@ const HistoryContent = ({ network, penumbraAccount }: { network: NetworkType; pe
     }
     return map;
   }, [messages, network]);
+
+  if (!historyEnabled) {
+    return (
+      <div className='px-4 py-6 text-center'>
+        <p className='text-xs text-muted-foreground/50'>
+          transaction history is off
+        </p>
+        <p className='text-[10px] text-muted-foreground/30 mt-1'>
+          enable in settings &rarr; privacy
+        </p>
+      </div>
+    );
+  }
 
   const penumbraQ = useQuery({
     queryKey: ['homeHistory', 'penumbra'],
