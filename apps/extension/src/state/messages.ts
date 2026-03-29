@@ -82,7 +82,7 @@ export const createMessagesSlice =
   (local: ExtensionStorage<LocalStorageState>): SliceCreator<MessagesSlice> =>
   (set, get) => {
   const safeMessages = (): Message[] => {
-    const m = safeMessages();
+    const m = get().messages.messages;
     return Array.isArray(m) ? m : [];
   };
   return {
