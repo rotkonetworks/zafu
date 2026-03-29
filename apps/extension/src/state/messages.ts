@@ -80,13 +80,18 @@ const generateId = () => crypto.randomUUID();
 
 export const createMessagesSlice =
   (local: ExtensionStorage<LocalStorageState>): SliceCreator<MessagesSlice> =>
-  (set, get) => ({
+  (set, get) => {
+  const safeMessages = (): Message[] => {
+    const m = safeMessages();
+    return Array.isArray(m) ? m : [];
+  };
+  return {
     messages: [],
 
     addMessage: async (messageData) => {
       // skip if we already have this tx
       if (get().messages.hasMessage(messageData.txId)) {
-        const existing = get().messages.messages.find((m) => m.txId === messageData.txId);
+        const existing = safeMessages().find((m) => m.txId === messageData.txId);
         return existing!;
       }
 
@@ -96,15 +101,16 @@ export const createMessagesSlice =
       };
 
       set((state) => {
+        if (!Array.isArray(state.messages.messages)) state.messages.messages = [];
         state.messages.messages.push(message);
       });
 
-      await local.set('messages' as keyof LocalStorageState, get().messages.messages as never);
+      await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
       return message;
     },
 
     addMessages: async (messagesData) => {
-      const existingTxIds = new Set(get().messages.messages.map((m) => m.txId));
+      const existingTxIds = new Set(safeMessages().map((m) => m.txId));
       const newMessages = messagesData
         .filter((m) => !existingTxIds.has(m.txId))
         .map((m) => ({ ...m, id: generateId() }));
@@ -112,60 +118,61 @@ export const createMessagesSlice =
       if (newMessages.length === 0) return;
 
       set((state) => {
+        if (!Array.isArray(state.messages.messages)) state.messages.messages = [];
         state.messages.messages.push(...newMessages);
       });
 
-      await local.set('messages' as keyof LocalStorageState, get().messages.messages as never);
+      await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
     },
 
     markRead: async (id) => {
       set((state) => {
-        const msg = state.messages.messages.find((m) => m.id === id);
+        const msg = (Array.isArray(state.messages.messages) ? state.messages.messages : []).find((m) => m.id === id);
         if (msg) {
           msg.read = true;
         }
       });
 
-      await local.set('messages' as keyof LocalStorageState, get().messages.messages as never);
+      await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
     },
 
     markAllRead: async () => {
       set((state) => {
-        state.messages.messages.forEach((m) => {
+        (Array.isArray(state.messages.messages) ? state.messages.messages : []).forEach((m) => {
           m.read = true;
         });
       });
 
-      await local.set('messages' as keyof LocalStorageState, get().messages.messages as never);
+      await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
     },
 
     deleteMessage: async (id) => {
       set((state) => {
-        state.messages.messages = state.messages.messages.filter((m) => m.id !== id);
+        state.messages.messages = (Array.isArray(state.messages.messages) ? state.messages.messages : []).filter((m) => m.id !== id);
       });
 
-      await local.set('messages' as keyof LocalStorageState, get().messages.messages as never);
+      await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
     },
 
     getInbox: () => {
-      return [...get().messages.messages]
+      return [...safeMessages()]
         .filter((m) => m.direction === 'received')
         .sort((a, b) => b.timestamp - a.timestamp);
     },
 
     getSent: () => {
-      return [...get().messages.messages]
+      return [...safeMessages()]
         .filter((m) => m.direction === 'sent')
         .sort((a, b) => b.timestamp - a.timestamp);
     },
 
     getUnreadCount: () => {
-      return get().messages.messages.filter((m) => !m.read && m.direction === 'received').length;
+      return safeMessages().filter((m) => !m.read && m.direction === 'received').length;
     },
 
     getConversation: (address) => {
       const normalized = address.toLowerCase();
-      return [...get().messages.messages]
+      return [...safeMessages()]
         .filter(
           (m) =>
             m.senderAddress?.toLowerCase() === normalized ||
@@ -175,14 +182,14 @@ export const createMessagesSlice =
     },
 
     getByNetwork: (network) => {
-      return [...get().messages.messages]
+      return [...safeMessages()]
         .filter((m) => m.network === network)
         .sort((a, b) => b.timestamp - a.timestamp);
     },
 
     search: (query) => {
       const q = query.toLowerCase();
-      return get().messages.messages.filter(
+      return safeMessages().filter(
         (m) =>
           m.content.toLowerCase().includes(q) ||
           m.senderAddress?.toLowerCase().includes(q)
@@ -190,9 +197,10 @@ export const createMessagesSlice =
     },
 
     hasMessage: (txId) => {
-      return get().messages.messages.some((m) => m.txId === txId);
+      return safeMessages().some((m) => m.txId === txId);
     },
-  });
+  };
+  };
 
 // selectors
 export const messagesSelector = (state: AllSlices) => state.messages;

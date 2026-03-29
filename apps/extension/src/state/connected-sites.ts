@@ -23,7 +23,8 @@ export const createConnectedSitesSlice =
     },
 
     discardKnownSite: async (siteToDiscard: { origin: string }) => {
-      const { knownSites } = get().connectedSites;
+      const raw = get().connectedSites.knownSites;
+      const knownSites = Array.isArray(raw) ? raw : [];
       const knownSitesWithoutDiscardedSite = knownSites.filter(
         known => known.origin !== siteToDiscard.origin,
       );
@@ -38,5 +39,6 @@ export const allSitesFilteredOutSelector = (state: AllSlices) => {
     return false;
   }
 
-  return !state.connectedSites.knownSites.some(site => site.origin.includes(filter));
+  const sites = Array.isArray(state.connectedSites.knownSites) ? state.connectedSites.knownSites : [];
+  return !sites.some(site => site.origin.includes(filter));
 };

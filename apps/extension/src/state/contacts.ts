@@ -108,7 +108,12 @@ const generateId = () => crypto.randomUUID();
 export const createContactsSlice =
   (local: ExtensionStorage<LocalStorageState>, session: ExtensionStorage<SessionStorageState>): SliceCreator<ContactsSlice> =>
   (set, get) => {
-  const persist = () => writeEncrypted(local, session, 'contacts' as keyof LocalStorageState, get().contacts.contacts);
+  /** safely get contacts array - guards against non-iterable state from stale/corrupt storage */
+  const safeContacts = (): Contact[] => {
+    const c = get().contacts.contacts;
+    return Array.isArray(c) ? c : [];
+  };
+  const persist = () => writeEncrypted(local, session, 'contacts' as keyof LocalStorageState, safeContacts());
 
   return {
     contacts: [],
@@ -123,6 +128,7 @@ export const createContactsSlice =
       };
 
       set((state) => {
+        if (!Array.isArray(state.contacts.contacts)) state.contacts.contacts = [];
         state.contacts.contacts.push(contact);
       });
 
@@ -132,7 +138,7 @@ export const createContactsSlice =
 
     updateContact: async (id, updates) => {
       set((state) => {
-        const contact = state.contacts.contacts.find((c) => c.id === id);
+        const contact = (Array.isArray(state.contacts.contacts) ? state.contacts.contacts : []).find((c) => c.id === id);
         if (contact) {
           if (updates.name !== undefined) contact.name = updates.name.trim();
           if (updates.notes !== undefined) contact.notes = updates.notes.trim() || undefined;
@@ -144,7 +150,7 @@ export const createContactsSlice =
 
     removeContact: async (id) => {
       set((state) => {
-        state.contacts.contacts = state.contacts.contacts.filter((c) => c.id !== id);
+        state.contacts.contacts = (Array.isArray(state.contacts.contacts) ? state.contacts.contacts : []).filter((c) => c.id !== id);
       });
 
       await persist();
@@ -152,7 +158,7 @@ export const createContactsSlice =
 
     toggleFavorite: async (id) => {
       set((state) => {
-        const contact = state.contacts.contacts.find((c) => c.id === id);
+        const contact = (Array.isArray(state.contacts.contacts) ? state.contacts.contacts : []).find((c) => c.id === id);
         if (contact) {
           contact.favorite = !contact.favorite;
         }
@@ -171,7 +177,7 @@ export const createContactsSlice =
       };
 
       set((state) => {
-        const contact = state.contacts.contacts.find((c) => c.id === contactId);
+        const contact = (Array.isArray(state.contacts.contacts) ? state.contacts.contacts : []).find((c) => c.id === contactId);
         if (contact) {
           contact.addresses.push(addr);
         }
@@ -183,7 +189,7 @@ export const createContactsSlice =
 
     updateAddress: async (contactId, addressId, updates) => {
       set((state) => {
-        const contact = state.contacts.contacts.find((c) => c.id === contactId);
+        const contact = (Array.isArray(state.contacts.contacts) ? state.contacts.contacts : []).find((c) => c.id === contactId);
         if (contact) {
           const addr = contact.addresses.find((a) => a.id === addressId);
           if (addr) {
@@ -200,7 +206,7 @@ export const createContactsSlice =
 
     removeAddress: async (contactId, addressId) => {
       set((state) => {
-        const contact = state.contacts.contacts.find((c) => c.id === contactId);
+        const contact = (Array.isArray(state.contacts.contacts) ? state.contacts.contacts : []).find((c) => c.id === contactId);
         if (contact) {
           contact.addresses = contact.addresses.filter((a) => a.id !== addressId);
         }
@@ -211,7 +217,7 @@ export const createContactsSlice =
 
     markAddressUsed: async (contactId, addressId) => {
       set((state) => {
-        const contact = state.contacts.contacts.find((c) => c.id === contactId);
+        const contact = (Array.isArray(state.contacts.contacts) ? state.contacts.contacts : []).find((c) => c.id === contactId);
         if (contact) {
           const addr = contact.addresses.find((a) => a.id === addressId);
           if (addr) {
@@ -225,7 +231,7 @@ export const createContactsSlice =
 
     findByAddress: (address) => {
       const normalized = address.toLowerCase();
-      for (const contact of get().contacts.contacts) {
+      for (const contact of safeContacts()) {
         const addr = contact.addresses.find((a) => a.address.toLowerCase() === normalized);
         if (addr) {
           return { contact, address: addr };
@@ -236,7 +242,7 @@ export const createContactsSlice =
 
     getAddressesByNetwork: (network) => {
       const results: Array<{ contact: Contact; address: ContactAddress }> = [];
-      for (const contact of get().contacts.contacts) {
+      for (const contact of safeContacts()) {
         for (const addr of contact.addresses) {
           if (addr.network === network) {
             results.push({ contact, address: addr });
@@ -247,12 +253,12 @@ export const createContactsSlice =
     },
 
     getFavorites: () => {
-      return get().contacts.contacts.filter((c) => c.favorite);
+      return safeContacts().filter((c) => c.favorite);
     },
 
     getRecentAddresses: (limit = 5) => {
       const results: Array<{ contact: Contact; address: ContactAddress; lastUsed: number }> = [];
-      for (const contact of get().contacts.contacts) {
+      for (const contact of safeContacts()) {
         for (const addr of contact.addresses) {
           if (addr.lastUsedAt) {
             results.push({ contact, address: addr, lastUsed: addr.lastUsedAt });
@@ -267,7 +273,7 @@ export const createContactsSlice =
 
     search: (query) => {
       const q = query.toLowerCase();
-      return get().contacts.contacts.filter(
+      return safeContacts().filter(
         (c) =>
           c.name.toLowerCase().includes(q) ||
           c.notes?.toLowerCase().includes(q) ||
@@ -280,7 +286,7 @@ export const createContactsSlice =
     },
 
     exportContacts: async (password: string) => {
-      const allContacts = get().contacts.contacts;
+      const allContacts = safeContacts();
       const plaintext = JSON.stringify(allContacts.map(c => ({
         name: c.name,
         notes: c.notes,
@@ -322,7 +328,7 @@ export const createContactsSlice =
       }>;
 
       const existingNames = new Set(
-        get().contacts.contacts.map(c => c.name.toLowerCase()),
+        safeContacts().map(c => c.name.toLowerCase()),
       );
 
       const newContacts: Contact[] = imported
@@ -346,6 +352,7 @@ export const createContactsSlice =
         if (mode === 'replace') {
           state.contacts.contacts = newContacts;
         } else {
+          if (!Array.isArray(state.contacts.contacts)) state.contacts.contacts = [];
           state.contacts.contacts.push(...newContacts);
         }
       });
@@ -365,5 +372,5 @@ export const createContactsSlice =
 
 // selectors
 export const contactsSelector = (state: AllSlices) => state.contacts;
-export const allContactsSelector = (state: AllSlices) => state.contacts.contacts;
+export const allContactsSelector = (state: AllSlices) => Array.isArray(state.contacts.contacts) ? state.contacts.contacts : [];
 export const favoriteContactsSelector = (state: AllSlices) => state.contacts.getFavorites();
