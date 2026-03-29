@@ -8,6 +8,9 @@
  * - { type: 'zafu_pick_contacts', purpose, max } → opens contact picker popup
  * - { type: 'zafu_pick_contacts_result', requestId, contacts } → internal: picker result
  * - { type: 'zafu_send_invite', handle, payload } → route invite via e2ee
+ * - { type: 'zafu_frost_create' } → create FROST DKG, returns approval popup
+ * - { type: 'zafu_frost_join', roomCode } → join existing FROST DKG
+ * - { type: 'zafu_frost_sign', roomCode, sighashHex, ... } → FROST signing session
  */
 
 // pending pick requests: requestId → sendResponse callback
@@ -79,8 +82,96 @@ export const externalMessageListener = (
 
     case 'zafu_send_invite': {
       // TODO: resolve handle → pubkey, open e2ee channel, deliver payload
-      // for now, acknowledge the request
       sendResponse({ sent: false, error: 'invite delivery not yet implemented in extension' });
+      return true;
+    }
+
+    case 'zafu_frost_create': {
+      // open FROST DKG approval popup - user confirms creating a multisig
+      const threshold = Number(msg['threshold']) || 2;
+      const maxSigners = Number(msg['maxSigners']) || 3;
+      const relayUrl = String(msg['relayUrl'] || 'https://zcash.rotko.net');
+      const appOrigin = sender.origin || sender.url || 'unknown';
+      const requestId = crypto.randomUUID();
+
+      pendingPicks.set(requestId, sendResponse);
+
+      const params = new URLSearchParams({
+        app: appOrigin,
+        action: 'frost-create',
+        threshold: String(threshold),
+        maxSigners: String(maxSigners),
+        relayUrl,
+        requestId,
+      });
+      const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
+      void chrome.windows.create({ url, type: 'popup', width: 400, height: 520 });
+      return true;
+    }
+
+    case 'zafu_frost_join': {
+      const roomCode = String(msg['roomCode'] || '');
+      if (!roomCode) {
+        sendResponse({ error: 'roomCode required' });
+        return true;
+      }
+      const threshold = Number(msg['threshold']) || 2;
+      const maxSigners = Number(msg['maxSigners']) || 3;
+      const relayUrl = String(msg['relayUrl'] || 'https://zcash.rotko.net');
+      const appOrigin = sender.origin || sender.url || 'unknown';
+      const requestId = crypto.randomUUID();
+
+      pendingPicks.set(requestId, sendResponse);
+
+      const params = new URLSearchParams({
+        app: appOrigin,
+        action: 'frost-join',
+        roomCode,
+        threshold: String(threshold),
+        maxSigners: String(maxSigners),
+        relayUrl,
+        requestId,
+      });
+      const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
+      void chrome.windows.create({ url, type: 'popup', width: 400, height: 520 });
+      return true;
+    }
+
+    case 'zafu_frost_sign': {
+      const roomCode = String(msg['roomCode'] || '');
+      const sighashHex = String(msg['sighashHex'] || '');
+      if (!roomCode || !sighashHex) {
+        sendResponse({ error: 'roomCode and sighashHex required' });
+        return true;
+      }
+      const relayUrl = String(msg['relayUrl'] || 'https://zcash.rotko.net');
+      const appOrigin = sender.origin || sender.url || 'unknown';
+      const requestId = crypto.randomUUID();
+
+      pendingPicks.set(requestId, sendResponse);
+
+      const params = new URLSearchParams({
+        app: appOrigin,
+        action: 'frost-sign',
+        roomCode,
+        sighashHex,
+        relayUrl,
+        requestId,
+      });
+      const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
+      void chrome.windows.create({ url, type: 'popup', width: 400, height: 520 });
+      return true;
+    }
+
+    case 'zafu_frost_result': {
+      // internal: frost approval popup sends result back
+      const requestId = String(msg['requestId'] || '');
+      const callback = pendingPicks.get(requestId);
+      if (callback) {
+        callback(msg['result'] || { error: 'no result' });
+        pendingPicks.delete(requestId);
+      }
+      sendResponse({ ok: true });
       return true;
     }
 
