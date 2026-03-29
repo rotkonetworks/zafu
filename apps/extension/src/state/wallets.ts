@@ -244,6 +244,10 @@ export const selectActiveZcashWallet = (state: AllSlices) => {
   const { zcashWallets, activeZcashIndex } = state.wallets;
   return zcashWallets[activeZcashIndex];
 };
+export const selectMultisigWallets = (state: AllSlices) => {
+  const wallets = Array.isArray(state.wallets.zcashWallets) ? state.wallets.zcashWallets : [];
+  return wallets.filter(w => w.multisig);
+};
 export const selectPenumbraWallets = (state: AllSlices) => Array.isArray(state.wallets.all) ? state.wallets.all : [];
 export const selectActivePenumbraIndex = (state: AllSlices) => state.wallets.activeIndex;
 

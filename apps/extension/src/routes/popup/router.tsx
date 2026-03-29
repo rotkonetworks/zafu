@@ -27,7 +27,7 @@ const ContactsPage = lazy(() => import('./contacts').then(m => ({ default: m.Con
 const SendPage = lazy(() => import('./send').then(m => ({ default: m.SendPage })));
 const ReceivePage = lazy(() => import('./receive').then(m => ({ default: m.ReceivePage })));
 const CosmosSign = lazy(() => import('./cosmos-sign').then(m => ({ default: m.CosmosSign })));
-const MultisigSessions = lazy(() => import('./multisig/sessions').then(m => ({ default: m.MultisigSessions })));
+const MultisigSessions = lazy(() => import('./multisig/sessions').then(m => ({ default: m.MultisigPage })));
 const MultisigCreate = lazy(() => import('./multisig/create').then(m => ({ default: m.MultisigCreate })));
 const MultisigJoin = lazy(() => import('./multisig/join').then(m => ({ default: m.MultisigJoin })));
 const MultisigSign = lazy(() => import('./multisig/sign').then(m => ({ default: m.MultisigSign })));

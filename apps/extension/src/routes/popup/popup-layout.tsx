@@ -8,19 +8,26 @@ import { MenuDrawer } from '../../components/menu-drawer';
 import { PopupPath } from './paths';
 import { useStore } from '../../state';
 import { selectActiveNetwork, type NetworkType } from '../../state/keyring';
+import { selectMultisigWallets } from '../../state/wallets';
 import { hasFeature } from '../../config/networks';
 
 type FeatureKey = 'stake' | 'swap' | 'vote' | 'inbox';
 
 /** all possible tabs — each gated by a network feature */
 const ALL_TABS: ReadonlyArray<{ path: PopupPath; icon: JSX.Element; label: string; feature?: FeatureKey }> = [
-  { path: PopupPath.INDEX,    icon: <span className='i-lucide-home h-5 w-5' />,              label: 'Home' },
-  { path: PopupPath.MULTISIG, icon: <span className='i-lucide-shield h-5 w-5' />,            label: 'Multisig' },
-  { path: PopupPath.INBOX,    icon: <span className='i-lucide-mail h-5 w-5' />,              label: 'Inbox',  feature: 'inbox' },
-  { path: PopupPath.STAKE,    icon: <span className='i-lucide-layers h-5 w-5' />,            label: 'Stake',  feature: 'stake' },
-  { path: PopupPath.SWAP,     icon: <span className='i-lucide-arrow-left-right h-5 w-5' />,  label: 'Swap',   feature: 'swap' },
-  { path: PopupPath.VOTE,     icon: <span className='i-lucide-vote h-5 w-5' />,              label: 'Vote',   feature: 'vote' },
+  { path: PopupPath.INDEX,  icon: <span className='i-lucide-home h-5 w-5' />,              label: 'Home' },
+  { path: PopupPath.INBOX,  icon: <span className='i-lucide-mail h-5 w-5' />,              label: 'Inbox',  feature: 'inbox' },
+  { path: PopupPath.STAKE,  icon: <span className='i-lucide-layers h-5 w-5' />,            label: 'Stake',  feature: 'stake' },
+  { path: PopupPath.SWAP,   icon: <span className='i-lucide-arrow-left-right h-5 w-5' />,  label: 'Swap',   feature: 'swap' },
+  { path: PopupPath.VOTE,   icon: <span className='i-lucide-vote h-5 w-5' />,              label: 'Vote',   feature: 'vote' },
 ];
+
+/** multisig tab — injected only when user has FROST wallets */
+const MULTISIG_TAB = {
+  path: PopupPath.MULTISIG,
+  icon: <span className='i-lucide-shield h-5 w-5' />,
+  label: 'Multisig',
+} as const;
 
 /** derive tabs from network features — pure filter, no mutation */
 const getTabsForNetwork = (network: NetworkType) =>
@@ -58,9 +65,13 @@ export const PopupLayout = () => {
   useZcashAutoSync();
   const location = useLocation();
   const activeNetwork = useStore(selectActiveNetwork);
+  const multisigWallets = useStore(selectMultisigWallets);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const tabs = getTabsForNetwork(activeNetwork);
+  const networkTabs = getTabsForNetwork(activeNetwork);
+  const tabs = multisigWallets.length > 0
+    ? [...networkTabs, MULTISIG_TAB]
+    : networkTabs;
   const showChrome = !matchesRoute(location.pathname, hiddenHeaderRoutes);
   const showTabs = showChrome && !matchesRoute(location.pathname, hiddenTabRoutes);
 
