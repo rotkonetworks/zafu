@@ -288,7 +288,7 @@ export const PopupIndex = () => {
 
         {/* recent history */}
         <Suspense fallback={<AssetListSkeleton rows={3} />}>
-          <HistoryContent network={activeNetwork} />
+          <HistoryContent network={activeNetwork} penumbraAccount={penumbraAccount} />
         </Suspense>
       </div>
     </div>
@@ -943,6 +943,19 @@ interface ParsedTransaction {
   amount?: string;
   asset?: string;
   memo?: string;
+  /** penumbra account indices associated with this transaction (from visible actions) */
+  accountIndices?: Set<number>;
+}
+
+/** extract account index from a visible note's decoded address view */
+function noteAccountIndex(note: unknown): number | undefined {
+  const n = note as { address?: { addressView?: { case?: string; value?: { index?: { account?: number } } } } } | undefined;
+  if (!n?.address?.addressView) return undefined;
+  const av = n.address.addressView;
+  if (av.case === 'decoded' && av.value?.index != null) {
+    return av.value.index.account;
+  }
+  return undefined;
 }
 
 function parsePenumbraTx(txInfo: TransactionInfo): ParsedTransaction {
@@ -954,12 +967,22 @@ function parsePenumbraTx(txInfo: TransactionInfo): ParsedTransaction {
   let description = 'Transaction';
   let hasVisibleSpend = false;
   let hasOutput = false;
+  const accountIndices = new Set<number>();
 
   for (const action of txInfo.view?.bodyView?.actionViews ?? []) {
     const c = action.actionView.case;
-    if (c === 'spend' && action.actionView.value.spendView?.case === 'visible') hasVisibleSpend = true;
-    else if (c === 'output') hasOutput = true;
-    else if (c === 'swap') { type = 'swap'; description = 'Swap'; }
+    if (c === 'spend' && action.actionView.value.spendView?.case === 'visible') {
+      hasVisibleSpend = true;
+      const idx = noteAccountIndex(action.actionView.value.spendView.value?.note);
+      if (idx != null) accountIndices.add(idx);
+    } else if (c === 'output') {
+      hasOutput = true;
+      const ov = action.actionView.value.outputView;
+      if (ov?.case === 'visible') {
+        const idx = noteAccountIndex(ov.value?.note);
+        if (idx != null) accountIndices.add(idx);
+      }
+    } else if (c === 'swap') { type = 'swap'; description = 'Swap'; }
     else if (c === 'delegate') { type = 'delegate'; description = 'Delegate'; }
     else if (c === 'undelegate') { type = 'undelegate'; description = 'Undelegate'; }
   }
@@ -976,7 +999,7 @@ function parsePenumbraTx(txInfo: TransactionInfo): ParsedTransaction {
     if (text) memo = text;
   }
 
-  return { id, height, timestamp: null, type, description, memo };
+  return { id, height, timestamp: null, type, description, memo, accountIndices };
 }
 
 /** format ZEC with meaningful digits only — no trailing zeros, min 2 decimals */
@@ -1069,7 +1092,7 @@ function TxRow({ tx }: { tx: ParsedTransaction }) {
   );
 }
 
-const HistoryContent = ({ network }: { network: NetworkType }) => {
+const HistoryContent = ({ network, penumbraAccount }: { network: NetworkType; penumbraAccount: number }) => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const messages = useStore(messagesSelector);
@@ -1132,7 +1155,14 @@ const HistoryContent = ({ network }: { network: NetworkType }) => {
   });
 
   const q = network === 'penumbra' ? penumbraQ : zcashQ;
-  const txs = q.data ?? [];
+  // for penumbra, filter by the selected account index - a tx belongs to an
+  // account if any of its visible spend or output notes reference that index
+  const allTxs = (q.data ?? []) as ParsedTransaction[];
+  const txs = network === 'penumbra'
+    ? allTxs.filter(tx =>
+        !tx.accountIndices || tx.accountIndices.size === 0 || tx.accountIndices.has(penumbraAccount),
+      )
+    : allTxs;
 
   if (q.isLoading && txs.length === 0) {
     return (
