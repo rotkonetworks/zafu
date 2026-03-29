@@ -145,7 +145,7 @@ export const IdentityPage = () => {
         <section>
           <button onClick={() => copy(zidPubkey, 'zid')} className='w-full text-left'>
             <div className='font-mono text-sm'>{zidAddress}</div>
-            <div className='font-mono text-[9px] text-muted-foreground/30 mt-1 break-all leading-relaxed'>{zidPubkey}</div>
+            <div className='font-mono text-[9px] text-muted-foreground/60 mt-1 break-all leading-relaxed'>{zidPubkey}</div>
             <div className='text-[10px] text-muted-foreground/40 mt-2'>
               {copied === 'zid' ? 'copied' : 'tap to copy'}
             </div>
@@ -167,7 +167,7 @@ export const IdentityPage = () => {
           </div>
         </section>
 
-        <hr className='border-border/20' />
+        <hr className='border-border/40' />
 
         {/* ── tabs ── */}
         <div className='flex gap-4 text-xs font-mono'>
@@ -226,12 +226,12 @@ export const IdentityPage = () => {
                 <button
                   key={`${record.sharedWith}-${record.sharedAt}-${i}`}
                   onClick={() => copy(record.publicKey, `log-${i}`)}
-                  className='flex items-baseline justify-between gap-2 py-1.5 text-left border-b border-border/10 last:border-0'
+                  className='flex items-baseline justify-between gap-2 py-1.5 text-left border-b border-border/30 last:border-0'
                 >
                   <span className='text-[10px] font-mono truncate'>
                     {displayOrigin(record.sharedWith)}
                   </span>
-                  <span className='text-[9px] text-muted-foreground/30 shrink-0 font-mono'>
+                  <span className='text-[9px] text-muted-foreground/60 shrink-0 font-mono'>
                     {copied === `log-${i}` ? 'copied' : shortDate(record.sharedAt)}
                   </span>
                 </button>
@@ -240,7 +240,7 @@ export const IdentityPage = () => {
           </section>
         )}
 
-        <hr className='border-border/20' />
+        <hr className='border-border/40' />
 
         {/* ── contacts link ── */}
         <button
@@ -252,7 +252,7 @@ export const IdentityPage = () => {
         </button>
 
         {keyInfo && (
-          <div className='text-[9px] text-muted-foreground/20 font-mono'>{keyInfo.name}</div>
+          <div className='text-[9px] text-muted-foreground/50 font-mono'>{keyInfo.name}</div>
         )}
       </div>
     </SettingsScreen>
@@ -315,7 +315,7 @@ const SiteRow = ({
   };
 
   return (
-    <div className={`border-b border-border/10 last:border-0 ${!site.connected ? 'opacity-40' : ''}`}>
+    <div className={`border-b border-border/30 last:border-0 ${!site.connected ? 'opacity-40' : ''}`}>
       {/* header */}
       <button onClick={onToggleExpand} className='w-full flex items-baseline justify-between py-2 text-left'>
         <div className='flex items-baseline gap-2 min-w-0'>
@@ -327,7 +327,7 @@ const SiteRow = ({
               onBlur={() => void saveLabel(site.origin, labelInput)}
               onClick={e => e.stopPropagation()}
               onKeyDown={e => { if (e.key === 'Enter') void saveLabel(site.origin, labelInput); if (e.key === 'Escape') setEditingLabel(null); }}
-              className='text-xs font-mono bg-transparent border-b border-muted-foreground/20 outline-none'
+              className='text-xs font-mono bg-transparent border-b border-muted-foreground/40 outline-none'
               placeholder='label...'
             />
           ) : (
@@ -335,9 +335,9 @@ const SiteRow = ({
               {siteLabels[site.origin] || displayOrigin(site.origin)}
             </span>
           )}
-          {!isSiteMode && <span className='text-[8px] text-muted-foreground/30 font-mono'>cross</span>}
+          {!isSiteMode && <span className='text-[8px] text-muted-foreground/60 font-mono'>cross</span>}
         </div>
-        <span className='text-[9px] text-muted-foreground/30 font-mono shrink-0'>
+        <span className='text-[9px] text-muted-foreground/60 font-mono shrink-0'>
           {site.perms ? `${site.perms.granted.length} caps` : ''}
           {isSiteMode && rotation > 0 ? ` #${rotation}` : ''}
         </span>
@@ -399,7 +399,7 @@ const SiteRow = ({
           )}
 
           {/* revoke */}
-          <button onClick={() => void handleRevoke()} className='text-muted-foreground/30 hover:text-muted-foreground text-left'>
+          <button onClick={() => void handleRevoke()} className='text-muted-foreground/60 hover:text-muted-foreground text-left'>
             revoke
           </button>
 
