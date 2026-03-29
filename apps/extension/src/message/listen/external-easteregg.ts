@@ -5,6 +5,7 @@
  * - { type: 'ping' } → responds with { zafu: true, version }
  * - { type: 'send', address } → opens send popup
  * - { type: 'zafu_sign', challengeHex, ... } → sign request (handled elsewhere)
+ * - { type: 'zafu_request_capability', capability } → request a specific capability
  * - { type: 'zafu_pick_contacts', purpose, max } → opens contact picker popup
  * - { type: 'zafu_pick_contacts_result', requestId, contacts } → internal: picker result
  * - { type: 'zafu_send_invite', handle, payload } → route invite via e2ee
@@ -12,6 +13,9 @@
  * - { type: 'zafu_frost_join', roomCode } → join existing FROST DKG
  * - { type: 'zafu_frost_sign', roomCode, sighashHex, ... } → FROST signing session
  */
+
+import { getOriginPermissions, grantCapability, denyCapability } from '@repo/storage-chrome/origin';
+import { hasCapability, isDenied, type Capability, CAPABILITY_META } from '@repo/storage-chrome/capabilities';
 
 // pending pick requests: requestId → sendResponse callback
 const pendingPicks = new Map<string, (r: unknown) => void>();
@@ -169,6 +173,75 @@ export const externalMessageListener = (
       const callback = pendingPicks.get(requestId);
       if (callback) {
         callback(msg['result'] || { error: 'no result' });
+        pendingPicks.delete(requestId);
+      }
+      sendResponse({ ok: true });
+      return true;
+    }
+
+    case 'zafu_request_capability': {
+      const capability = msg['capability'] as string;
+      if (!capability || !(capability in CAPABILITY_META)) {
+        sendResponse({ error: 'invalid capability' });
+        return true;
+      }
+      const cap = capability as Capability;
+      const origin = sender.origin || sender.url;
+      if (!origin) {
+        sendResponse({ error: 'unknown origin' });
+        return true;
+      }
+
+      void (async () => {
+        const perms = await getOriginPermissions(origin);
+
+        // already granted
+        if (hasCapability(perms, cap)) {
+          sendResponse({ granted: true, capability: cap });
+          return;
+        }
+
+        // previously denied
+        if (isDenied(perms, cap)) {
+          sendResponse({ granted: false, denied: true, capability: cap });
+          return;
+        }
+
+        // open approval popup for this capability
+        const requestId = crypto.randomUUID();
+        const resultPromise = new Promise<unknown>(resolve => {
+          pendingPicks.set(requestId, resolve);
+        });
+
+        const params = new URLSearchParams({
+          app: origin,
+          capability: cap,
+          requestId,
+          favIconUrl: sender.tab?.favIconUrl || '',
+          title: sender.tab?.title || '',
+        });
+        const url = chrome.runtime.getURL(`popup.html#/approval/capability?${params.toString()}`);
+        void chrome.windows.create({ url, type: 'popup', width: 400, height: 520 });
+
+        const result = await resultPromise as { approved?: boolean };
+        if (result?.approved) {
+          await grantCapability(origin, cap);
+          sendResponse({ granted: true, capability: cap });
+        } else {
+          await denyCapability(origin, cap);
+          sendResponse({ granted: false, denied: true, capability: cap });
+        }
+      })();
+
+      return true;
+    }
+
+    case 'zafu_capability_result': {
+      // internal: capability approval popup sends result back
+      const requestId = String(msg['requestId'] || '');
+      const callback = pendingPicks.get(requestId);
+      if (callback) {
+        callback(msg['result'] || { approved: false });
         pendingPicks.delete(requestId);
       }
       sendResponse({ ok: true });

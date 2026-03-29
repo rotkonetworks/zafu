@@ -1,4 +1,5 @@
 import { UserChoice } from '@repo/storage-chrome/records';
+import { Capability } from '@repo/storage-chrome/capabilities';
 import { AllSlices, SliceCreator } from '.';
 import { PopupRequest, PopupResponse, PopupType } from '../message/popup';
 
@@ -11,6 +12,8 @@ export interface OriginApprovalSlice {
   requestOrigin?: string;
   choice?: UserChoice;
   lastRequest?: Date;
+  /** Capabilities being requested in this approval */
+  requestedCapabilities: Capability[];
 
   acceptRequest: (
     req: PopupRequest<PopupType.OriginApproval>[PopupType.OriginApproval],
@@ -22,6 +25,8 @@ export interface OriginApprovalSlice {
 }
 
 export const createOriginApprovalSlice = (): SliceCreator<OriginApprovalSlice> => (set, get) => ({
+  requestedCapabilities: ['connect'],
+
   setChoice: (choice: UserChoice) => {
     set(state => {
       state.originApproval.choice = choice;
@@ -43,11 +48,18 @@ export const createOriginApprovalSlice = (): SliceCreator<OriginApprovalSlice> =
       state.originApproval.responder = responder;
     });
 
+    // extract requested capabilities from the request if present
+    const capabilities: Capability[] =
+      'capabilities' in req && Array.isArray((req as Record<string, unknown>)['capabilities'])
+        ? ((req as Record<string, unknown>)['capabilities'] as Capability[])
+        : ['connect'];
+
     set(state => {
       state.originApproval.favIconUrl = favIconUrl;
       state.originApproval.title = title && !title.startsWith(requestOrigin) ? title : undefined;
       state.originApproval.requestOrigin = requestOrigin;
       state.originApproval.lastRequest = lastRequest ? new Date(lastRequest) : undefined;
+      state.originApproval.requestedCapabilities = capabilities;
     });
 
     return responder.promise;
@@ -80,6 +92,7 @@ export const createOriginApprovalSlice = (): SliceCreator<OriginApprovalSlice> =
         state.originApproval.requestOrigin = undefined;
         state.originApproval.favIconUrl = undefined;
         state.originApproval.title = undefined;
+        state.originApproval.requestedCapabilities = ['connect'];
       });
     }
   },

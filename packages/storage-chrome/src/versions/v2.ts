@@ -198,6 +198,9 @@ type LOCAL = {
     identity: string;
   }[];
 
+  /** user-defined labels for sites (displayed instead of origin) */
+  zidSiteLabels?: Record<string, string>;
+
   /** per-contact diversified zcash addresses - traces payment referrals */
   diversifiedAddresses?: {
     diversifierIndex: number;

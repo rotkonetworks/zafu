@@ -5,7 +5,7 @@ import { produce } from 'immer';
 import { AppParameters } from '@penumbra-zone/protobuf/penumbra/core/app/v1/app_pb';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
-import { OriginRecord } from '@repo/storage-chrome/records';
+import { OriginRecord, UserChoice } from '@repo/storage-chrome/records';
 import { readEncrypted } from './encrypted-storage';
 import type { WalletJson } from '@repo/wallet';
 import type { ZcashWalletJson } from './wallets';
@@ -61,7 +61,21 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
         readEncrypted<unknown[]>(localExtStorage, sessionExtStorage, 'messages' as LK),
         localExtStorage.get('knownSites'), // plaintext - not encrypted
       ]);
-      const knownSites = Array.isArray(rawKnownSites) ? rawKnownSites as OriginRecord[] : null;
+      const knownSites = Array.isArray(rawKnownSites)
+        ? (rawKnownSites as Record<string, unknown>[]).map(r => {
+            // handle new OriginPermissions shape
+            if ('granted' in r && Array.isArray(r['granted'])) {
+              const granted = r['granted'] as string[];
+              const denied = r['denied'] as string[];
+              let choice: UserChoice;
+              if (granted.includes('connect')) choice = UserChoice.Approved;
+              else if (denied.includes('connect')) choice = UserChoice.Denied;
+              else choice = UserChoice.Ignored;
+              return { origin: r['origin'] as string, choice, date: r['grantedAt'] as number } as OriginRecord;
+            }
+            return r as unknown as OriginRecord;
+          })
+        : null;
       set(produce((state: AllSlices) => {
         if (Array.isArray(wallets)) state.wallets.all = wallets.map(w => ({ ...w, vaultId: w.vaultId ?? '' })) as typeof state.wallets.all;
         if (Array.isArray(zcashWallets)) state.wallets.zcashWallets = zcashWallets.map(w => ({ ...w, vaultId: w.vaultId ?? '' })) as typeof state.wallets.zcashWallets;
@@ -96,12 +110,24 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
       if (changes.penumbraWallets || changes.zcashWallets || changes.contacts || changes.messages) {
         void hydrateEncryptedData();
       }
-      // knownSites is plaintext - hydrate directly
+      // knownSites is plaintext - hydrate directly (convert OriginPermissions if needed)
       if (changes.knownSites) {
         const raw = changes.knownSites.newValue;
         if (Array.isArray(raw)) {
+          const sites = (raw as Record<string, unknown>[]).map(r => {
+            if ('granted' in r && Array.isArray(r['granted'])) {
+              const granted = r['granted'] as string[];
+              const denied = r['denied'] as string[];
+              let choice: UserChoice;
+              if (granted.includes('connect')) choice = UserChoice.Approved;
+              else if (denied.includes('connect')) choice = UserChoice.Denied;
+              else choice = UserChoice.Ignored;
+              return { origin: r['origin'] as string, choice, date: r['grantedAt'] as number } as OriginRecord;
+            }
+            return r as unknown as OriginRecord;
+          });
           set(produce((state: AllSlices) => {
-            state.connectedSites.knownSites = raw as OriginRecord[];
+            state.connectedSites.knownSites = sites;
           }));
         }
       }

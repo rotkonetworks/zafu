@@ -6,6 +6,9 @@ import { localExtStorage } from '@repo/storage-chrome/local';
 import { useStore } from '../../../../state';
 import { selectPenumbraWallets, selectActivePenumbraIndex, selectZcashWallets, selectActiveZcashIndex } from '../../../../state/wallets';
 import type { ZidSitePreference } from '../../../../state/identity';
+import { getOriginPermissions } from '@repo/storage-chrome/origin';
+import { CAPABILITY_META, type Capability, type OriginPermissions } from '@repo/storage-chrome/capabilities';
+import { cn } from '@repo/ui/lib/utils';
 
 const useZidPref = (origin: string) => {
   const [pref, setPref] = useState<ZidSitePreference | undefined>();
@@ -61,19 +64,70 @@ const useSharedZid = (origin: string) => {
   return { address, pubkey };
 };
 
+const useOriginPermissions = (origin: string) => {
+  const [perms, setPerms] = useState<OriginPermissions | undefined>();
+
+  useEffect(() => {
+    void getOriginPermissions(origin).then(setPerms);
+  }, [origin]);
+
+  return perms;
+};
+
+const ALL_CAPABILITIES: Capability[] = [
+  'connect', 'sign_identity', 'send_tx', 'export_fvk',
+  'view_contacts', 'view_history', 'frost', 'auto_sign',
+];
+
+const CapabilityToggle = ({
+  cap,
+  granted,
+  onToggle,
+}: {
+  cap: Capability;
+  granted: boolean;
+  onToggle: (cap: Capability, enabled: boolean) => void;
+}) => {
+  const meta = CAPABILITY_META[cap];
+  return (
+    <label className='flex items-center justify-between gap-2 py-1'>
+      <div className='flex items-center gap-1.5'>
+        <span className={cn(
+          'text-[10px]',
+          meta.risk === 'low' && 'text-muted-foreground',
+          meta.risk === 'medium' && 'text-yellow-400',
+          meta.risk === 'high' && 'text-orange-400',
+          meta.risk === 'critical' && 'text-red-400',
+        )}>
+          {meta.label}
+        </span>
+      </div>
+      <input
+        type='checkbox'
+        checked={granted}
+        onChange={e => onToggle(cap, e.target.checked)}
+        className='h-3 w-3 accent-primary'
+      />
+    </label>
+  );
+};
+
 export const KnownSite = ({
   site,
   discard,
 }: {
   site: OriginRecord;
-  discard: (d: OriginRecord) => Promise<void>;
+  discard: (d: { origin: string }) => Promise<void>;
 }) => {
   const { pref, update } = useZidPref(site.origin);
   const isApproved = site.choice === UserChoice.Approved;
   const { address: zidAddress, pubkey: zidPubkey } = useSharedZid(site.origin);
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [capsExpanded, setCapsExpanded] = useState(false);
   const [confirming, setConfirming] = useState<'global' | 'rotate' | null>(null);
+  const perms = useOriginPermissions(site.origin);
+  const toggleCapability = useStore(state => state.connectedSites.toggleCapability);
 
   // network addresses - show all enabled, not just active network
   const penumbraWallets = useStore(selectPenumbraWallets);
@@ -118,6 +172,10 @@ export const KnownSite = ({
     setConfirming(null);
   };
 
+  const handleCapToggle = (cap: Capability, enabled: boolean) => {
+    void toggleCapability(site.origin, cap, enabled);
+  };
+
   return (
     <div key={site.origin} role='listitem' className='flex flex-col gap-1'>
       <div className='flex items-center justify-between'>
@@ -151,6 +209,27 @@ export const KnownSite = ({
       {/* connection details for approved sites */}
       {isApproved && (
         <div className='flex flex-col gap-1.5 pl-1 pb-2'>
+          {/* per-capability toggles */}
+          <button
+            onClick={() => setCapsExpanded(!capsExpanded)}
+            className='flex items-center gap-1 text-[10px] text-muted-foreground/50 hover:text-muted-foreground transition-colors'
+          >
+            <span className={`i-lucide-chevron-${capsExpanded ? 'down' : 'right'} h-2.5 w-2.5`} />
+            capabilities ({perms?.granted.length ?? 0} granted)
+          </button>
+          {capsExpanded && (
+            <div className='flex flex-col gap-0.5 pl-4 border-l border-border/20'>
+              {ALL_CAPABILITIES.map(cap => (
+                <CapabilityToggle
+                  key={cap}
+                  cap={cap}
+                  granted={perms?.granted.includes(cap) ?? false}
+                  onToggle={handleCapToggle}
+                />
+              ))}
+            </div>
+          )}
+
           {/* zid from share log - no mnemonic access needed */}
           {zidAddress ? (
             <button
