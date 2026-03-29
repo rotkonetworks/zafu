@@ -28,6 +28,12 @@
       "js": ["injected-penumbra-global.js"],
       "run_at": "document_start",
       "world": "MAIN"
+    },
+    {
+      "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*", "http://[::1]/*"],
+      "js": ["passkey-intercept.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
     }
   ],
   "options_ui": {

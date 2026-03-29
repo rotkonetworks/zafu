@@ -122,11 +122,22 @@ navigator.credentials.get = async function (
   const challenge = bufToHex(pk.challenge);
   const prfSalts = extractPrfSalts(pk.extensions);
 
+  // build clientDataJSON first — the service worker needs its hash to sign
+  const clientDataJSON = new TextEncoder().encode(JSON.stringify({
+    type: 'webauthn.get',
+    challenge: btoa(String.fromCharCode(...new Uint8Array(hexToBuf(challenge))))
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
+    origin: window.location.origin,
+    crossOrigin: false,
+  }));
+  // SHA-256 hash of clientDataJSON — this is what gets signed
+  const clientDataHash = bufToHex(new Uint8Array(await crypto.subtle.digest('SHA-256', clientDataJSON)));
+
   try {
     const response = await chrome.runtime.sendMessage({
       type: 'zafu_passkey_get',
       rpId,
-      challenge,
+      clientDataHash,
       origin: window.location.origin,
       prfSalts,
       allowCredentials: pk.allowCredentials?.map(c => ({
@@ -142,13 +153,6 @@ navigator.credentials.get = async function (
     const credentialId = hexToBuf(response.credentialId);
     const authenticatorData = hexToBuf(response.authenticatorData);
     const signature = hexToBuf(response.signature);
-    const clientDataJSON = new TextEncoder().encode(JSON.stringify({
-      type: 'webauthn.get',
-      challenge: btoa(String.fromCharCode(...new Uint8Array(hexToBuf(challenge))))
-        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
-      origin: window.location.origin,
-      crossOrigin: false,
-    }));
 
     return {
       id: btoa(String.fromCharCode(...new Uint8Array(credentialId)))

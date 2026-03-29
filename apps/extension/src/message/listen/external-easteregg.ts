@@ -284,8 +284,9 @@ export const externalMessageListener = (
     }
 
     case 'zafu_passkey_get': {
-      const { rpId, prfSalts, origin: getOrigin } = msg as {
+      const { rpId, clientDataHash: clientDataHashHex, prfSalts, origin: getOrigin } = msg as {
         rpId: string;
+        clientDataHash: string;
         prfSalts?: { first: string; second?: string };
         origin: string;
       };
@@ -298,21 +299,13 @@ export const externalMessageListener = (
           }
           const { signAssertion, buildCredentialId } = await import('../../state/webauthn');
           const { useStore } = await import('../../state');
-          const { sha256 } = await import('@noble/hashes/sha256');
-          const { bytesToHex } = await import('@noble/hashes/utils');
+          const { bytesToHex, hexToBytes: h2b } = await import('@noble/hashes/utils');
           const keyInfo = useStore.getState().keyRing.keyInfo;
           if (!keyInfo) { sendResponse({ success: false }); return; }
           const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
 
-          // clientDataHash will be computed by the content script's clientDataJSON
-          // for now, use the challenge as a placeholder — the content script
-          // constructs the real clientDataJSON
-          const clientDataJSON = new TextEncoder().encode(JSON.stringify({
-            type: 'webauthn.get',
-            challenge: '', // filled by content script
-            origin: getOrigin,
-          }));
-          const clientDataHash = sha256(clientDataJSON);
+          // clientDataHash comes from the content script (SHA-256 of its clientDataJSON)
+          const clientDataHash = h2b(clientDataHashHex);
 
           const result = signAssertion(mnemonic, rpId, clientDataHash, prfSalts);
           sendResponse({

@@ -168,6 +168,7 @@ export default ({
     entry: {
       'injected-session': path.join(injectDir, 'injected-session.ts'),
       'injected-penumbra-global': path.join(injectDir, 'injected-penumbra-global.ts'),
+      'passkey-intercept': path.join(injectDir, 'passkey-intercept.ts'),
       'offscreen-handler': path.join(entryDir, 'offscreen-handler.ts'),
       'page-root': path.join(entryDir, 'page-root.tsx'),
       'popup-root': path.join(entryDir, 'popup-root.tsx'),
@@ -183,7 +184,7 @@ export default ({
       splitChunks: {
         chunks: chunk => {
           // workers must be self-contained (no chunk splitting)
-          const filesNotToChunk = ['injected-session', 'injected-penumbra-global', 'workers/zcash-worker'];
+          const filesNotToChunk = ['injected-session', 'injected-penumbra-global', 'passkey-intercept', 'workers/zcash-worker'];
           return chunk.name ? !filesNotToChunk.includes(chunk.name) : false;
         },
       },
