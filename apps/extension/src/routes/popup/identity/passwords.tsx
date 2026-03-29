@@ -16,6 +16,7 @@ export const PasswordsPage = () => {
   const [origin, setOrigin] = useState('');
   const [username, setUsername] = useState('');
   const [length, setLength] = useState(32);
+  const [index, setIndex] = useState(0);
   const [password, setPassword] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -25,7 +26,7 @@ export const PasswordsPage = () => {
     setGenerating(true);
     try {
       const mnemonic = await getMnemonic(keyInfo.id);
-      const result = derivePassword(mnemonic, DEFAULT_IDENTITY, origin.trim(), username.trim(), length);
+      const result = derivePassword(mnemonic, DEFAULT_IDENTITY, origin.trim(), username.trim(), length, index);
       setPassword(result);
     } catch (e) {
       setPassword(null);
@@ -73,6 +74,22 @@ export const PasswordsPage = () => {
               className='flex-1'
             />
             <span className='text-[10px] text-muted-foreground font-mono w-6 text-right'>{length}</span>
+          </div>
+          <div className='flex items-center gap-2'>
+            <span className='text-[10px] text-muted-foreground/60 font-mono'>rotation</span>
+            <button
+              onClick={() => { setIndex(Math.max(0, index - 1)); setPassword(null); }}
+              disabled={index === 0}
+              className='text-xs font-mono text-muted-foreground hover:text-foreground disabled:opacity-30 px-1'
+            >-</button>
+            <span className='text-[10px] text-muted-foreground font-mono w-6 text-center'>#{index}</span>
+            <button
+              onClick={() => { setIndex(index + 1); setPassword(null); }}
+              className='text-xs font-mono text-muted-foreground hover:text-foreground px-1'
+            >+</button>
+            {index > 0 && (
+              <span className='text-[9px] text-muted-foreground/40 font-mono'>password was rotated {index} time{index !== 1 ? 's' : ''}</span>
+            )}
           </div>
         </div>
 

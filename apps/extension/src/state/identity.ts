@@ -367,9 +367,12 @@ export const derivePassword = (
   origin: string,
   username: string,
   length = 32,
+  /** rotation index — increment when site requires password change */
+  index = 0,
 ): string =>
   withIdentity(mnemonic, identity, (id) => {
-    const tag = enc.encode('password:' + origin + '\0' + username);
+    const suffix = index > 0 ? '\0' + index : '';
+    const tag = enc.encode('password:' + origin + '\0' + username + suffix);
     const seed = deriveSeed(id, tag);
     const bytes = seed.slice(0, 32);
     seed.fill(0);
