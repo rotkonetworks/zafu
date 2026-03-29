@@ -90,12 +90,11 @@ export const MultisigCreate = () => {
       const peerRound2: string[] = [];
       let dkgPhase: 'round1' | 'round2' | 'done' = 'round1';
 
-      // send our round1 broadcast with DKG params prefix so joiners learn threshold/maxSigners
-      const prefixedBroadcast = `DKG:${threshold}:${maxSigners}:${round1.broadcast}`;
-      await relay.sendMessage(code, participantId, new TextEncoder().encode(prefixedBroadcast));
-
+      // join room first (server requires participant membership to send)
+      let joined = false;
       void relay.joinRoom(code, participantId, (event) => {
         if (event.type === 'joined') {
+          joined = true;
           setParticipantCount(event.participant.participantCount);
         } else if (event.type === 'message') {
           const text = new TextDecoder().decode(event.message.payload);
@@ -109,6 +108,13 @@ export const MultisigCreate = () => {
           setStep('error');
         }
       }, abortController.signal);
+
+      // wait until we're joined before sending
+      await waitFor(() => joined, 10_000);
+
+      // send our round1 broadcast with DKG params prefix
+      const prefixedBroadcast = `DKG:${threshold}:${maxSigners}:${round1.broadcast}`;
+      await relay.sendMessage(code, participantId, new TextEncoder().encode(prefixedBroadcast));
 
       await waitFor(() => peerBroadcasts.length >= maxSigners - 1, ROUND_TIMEOUT_MS);
 
