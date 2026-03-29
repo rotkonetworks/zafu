@@ -46,8 +46,9 @@ export const FrostApprove = () => {
   const [params] = useSearchParams();
   const action = params.get('action') || '';
   const app = params.get('app') || 'unknown';
-  const threshold = Number(params.get('threshold')) || 2;
-  const maxSigners = Number(params.get('maxSigners')) || 3;
+  const MAX_FROST_SIGNERS = 15;
+  const threshold = Math.min(Number(params.get('threshold')) || 2, MAX_FROST_SIGNERS);
+  const maxSigners = Math.min(Number(params.get('maxSigners')) || 3, MAX_FROST_SIGNERS);
   const relayUrl = params.get('relayUrl') || 'https://zcash.rotko.net';
   const roomCode = params.get('roomCode') || '';
   const sighashHex = params.get('sighashHex') || '';
@@ -217,7 +218,7 @@ export const FrostApprove = () => {
     });
 
     abort.abort();
-    const res = { success: true, address: addr, roomCode, publicKeyPackage: round3.public_key_package };
+    const res = { success: true, address: addr, roomCode };
     setResult(res);
     setPhase('complete');
     sendResult(requestId, res);
@@ -239,16 +240,11 @@ export const FrostApprove = () => {
     // parse alphas from coordinator message or use sighash as single alpha
     const alphas = [sighashHex];
 
-    setStatus('generating commitments...');
-    const round1 = await frostSignRound1InWorker(secrets.ephemeralSeed, secrets.keyPackage);
-
-    // send our commitments
-    await relay.sendMessage(roomCode, pid, new TextEncoder().encode(`C:${round1.commitments}`));
-
     const peerCommitments: string[] = [];
     const peerShares: string[] = [];
     let sigPhase: 'commitments' | 'shares' = 'commitments';
 
+    // join room BEFORE sending to avoid race condition
     void relay.joinRoom(roomCode, pid, (event) => {
       if (event.type === 'message') {
         const text = new TextDecoder().decode(event.message.payload);
@@ -260,8 +256,16 @@ export const FrostApprove = () => {
       }
     }, abort.signal);
 
+    setStatus('generating commitments...');
+    const round1 = await frostSignRound1InWorker(secrets.ephemeralSeed, secrets.keyPackage);
+
+    // send commitments after joining
+    await relay.sendMessage(roomCode, pid, new TextEncoder().encode(`C:${round1.commitments}`));
+
+    // use wallet's stored threshold, not attacker-controlled URL param
+    const walletThreshold = (multisigVault.insensitive?.['threshold'] as number) || threshold;
     setStatus('waiting for other signers...');
-    await waitFor(() => peerCommitments.length >= threshold - 1, 120_000);
+    await waitFor(() => peerCommitments.length >= walletThreshold - 1, 120_000);
 
     sigPhase = 'shares';
     setStatus('signing...');

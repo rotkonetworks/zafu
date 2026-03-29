@@ -8,7 +8,6 @@ import { MenuDrawer } from '../../components/menu-drawer';
 import { PopupPath } from './paths';
 import { useStore } from '../../state';
 import { selectActiveNetwork, type NetworkType } from '../../state/keyring';
-import { selectMultisigWallets } from '../../state/wallets';
 import { hasFeature } from '../../config/networks';
 
 type FeatureKey = 'stake' | 'swap' | 'vote' | 'inbox';
@@ -65,13 +64,10 @@ export const PopupLayout = () => {
   useZcashAutoSync();
   const location = useLocation();
   const activeNetwork = useStore(selectActiveNetwork);
-  const multisigWallets = useStore(selectMultisigWallets);
   const [menuOpen, setMenuOpen] = useState(false);
 
   const networkTabs = getTabsForNetwork(activeNetwork);
-  const tabs = multisigWallets.length > 0
-    ? [...networkTabs, MULTISIG_TAB]
-    : networkTabs;
+  const tabs = activeNetwork === 'zcash' ? [...networkTabs, MULTISIG_TAB] : networkTabs;
   const showChrome = !matchesRoute(location.pathname, hiddenHeaderRoutes);
   const showTabs = showChrome && !matchesRoute(location.pathname, hiddenTabRoutes);
 
