@@ -17,6 +17,9 @@ import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { allContactsSelector } from '../../../state/contacts';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import type { ZidSitePreference, ZidShareRecord } from '../../../state/identity';
+import { getOriginPermissions, grantCapability, denyCapability, revokeOrigin as revokeOriginPerms } from '@repo/storage-chrome/origin';
+import { CAPABILITY_META, type Capability, type OriginPermissions } from '@repo/storage-chrome/capabilities';
+import { cn } from '@repo/ui/lib/utils';
 import { SettingsScreen } from '../settings/settings-screen';
 import { PopupPath } from '../paths';
 
@@ -28,6 +31,7 @@ interface SiteIdentity {
   lastShared?: ZidShareRecord;
   label?: string;
   connected: boolean;
+  perms?: OriginPermissions;
 }
 
 type ActiveTab = 'sites' | 'log';
@@ -67,6 +71,8 @@ export const IdentityPage = () => {
   const [expandedSite, setExpandedSite] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<{ origin: string; action: 'cross-site' | 'rotate' } | null>(null);
   const [showQr, setShowQr] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const reloadSites = useCallback(() => setReloadKey(k => k + 1), []);
 
   const zidPubkey = keyInfo?.insensitive?.['zid'] as string | undefined;
   const zidAddress = zidPubkey ? 'zid' + zidPubkey.slice(0, 16) : undefined;
@@ -104,7 +110,8 @@ export const IdentityPage = () => {
         const lastShared = shares[shares.length - 1];
         const connected = approvedOrigins.has(origin);
 
-        siteList.push({ origin, pref, shares, lastShared, label: labels?.[origin], connected });
+        const perms = await getOriginPermissions(origin);
+        siteList.push({ origin, pref, shares, lastShared, label: labels?.[origin], connected, perms });
       }
 
       // sort: connected first, then by last shared date
@@ -117,7 +124,7 @@ export const IdentityPage = () => {
 
       setSites(siteList);
     })();
-  }, []);
+  }, [reloadKey]);
 
   const copy = useCallback((text: string, which: string) => {
     void navigator.clipboard.writeText(text);
@@ -316,6 +323,7 @@ export const IdentityPage = () => {
                   onConfirm={(action) => setConfirming({ origin: site.origin, action })}
                   onCancelConfirm={() => setConfirming(null)}
                   onUpdatePref={updatePref}
+                  onSitesChanged={reloadSites}
                   copied={copied}
                   onCopy={copy}
                 />
@@ -456,11 +464,32 @@ const SiteCard = ({
   onConfirm: (action: 'cross-site' | 'rotate') => void;
   onCancelConfirm: () => void;
   onUpdatePref: (origin: string, pref: ZidSitePreference | undefined) => Promise<void>;
+  onSitesChanged: () => void;
   copied: string | null;
   onCopy: (text: string, which: string) => void;
 }) => {
   const isSiteMode = site.pref.mode === 'site';
   const rotation = site.pref.rotation;
+  const [capsExpanded, setCapsExpanded] = useState(false);
+
+  const ALL_CAPS: Capability[] = [
+    'connect', 'sign_identity', 'send_tx', 'export_fvk',
+    'view_contacts', 'view_history', 'frost', 'auto_sign',
+  ];
+
+  const handleCapToggle = async (cap: Capability, enabled: boolean) => {
+    if (enabled) {
+      await grantCapability(site.origin, cap);
+    } else {
+      await denyCapability(site.origin, cap);
+    }
+    onSitesChanged();
+  };
+
+  const handleRevoke = async () => {
+    await revokeOriginPerms(site.origin);
+    onSitesChanged();
+  };
 
   return (
     <div className={`rounded-lg border overflow-hidden ${
@@ -596,6 +625,55 @@ const SiteCard = ({
               <span>{siteLabels[site.origin] ? 'edit label' : 'add label'}</span>
             </button>
           </div>
+
+          {/* capabilities */}
+          {site.perms && (
+            <div className='flex flex-col gap-1'>
+              <button
+                onClick={() => setCapsExpanded(!capsExpanded)}
+                className='flex items-center gap-1 text-[9px] text-muted-foreground/50 hover:text-muted-foreground transition-colors'
+              >
+                <span className={`${capsExpanded ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'} h-2.5 w-2.5`} />
+                permissions ({site.perms.granted.length} granted)
+              </button>
+              {capsExpanded && (
+                <div className='flex flex-col gap-0.5 pl-3 border-l border-border/20'>
+                  {ALL_CAPS.map(cap => {
+                    const meta = CAPABILITY_META[cap];
+                    const granted = site.perms!.granted.includes(cap);
+                    return (
+                      <label key={cap} className='flex items-center justify-between gap-2 py-0.5'>
+                        <span className={cn(
+                          'text-[9px]',
+                          meta.risk === 'low' && 'text-muted-foreground',
+                          meta.risk === 'medium' && 'text-yellow-400',
+                          meta.risk === 'high' && 'text-orange-400',
+                          meta.risk === 'critical' && 'text-red-400',
+                        )}>
+                          {meta.label}
+                        </span>
+                        <input
+                          type='checkbox'
+                          checked={granted}
+                          onChange={e => void handleCapToggle(cap, e.target.checked)}
+                          className='h-3 w-3 accent-primary'
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* revoke */}
+          <button
+            onClick={() => void handleRevoke()}
+            className='flex items-center gap-1.5 text-[10px] text-red-400/70 hover:text-red-400 transition-colors mt-1'
+          >
+            <span className='i-lucide-trash-2 h-3 w-3' />
+            <span>revoke all permissions</span>
+          </button>
 
           {/* confirmation: switch to cross-site */}
           {confirming === 'cross-site' && (
