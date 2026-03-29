@@ -540,7 +540,7 @@ export function ContactsPage() {
   );
 
   const filteredContacts = useMemo(() => {
-    let result = contacts.contacts ?? [];
+    let result = Array.isArray(contacts.contacts) ? contacts.contacts : [];
 
     if (filter === 'favorites') {
       result = result.filter((c) => c.favorite);

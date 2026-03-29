@@ -63,12 +63,12 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
       ]);
       const knownSites = Array.isArray(rawKnownSites) ? rawKnownSites as OriginRecord[] : null;
       set(produce((state: AllSlices) => {
-        if (wallets) state.wallets.all = wallets.map(w => ({ ...w, vaultId: w.vaultId ?? '' })) as typeof state.wallets.all;
-        if (zcashWallets) state.wallets.zcashWallets = zcashWallets.map(w => ({ ...w, vaultId: w.vaultId ?? '' })) as typeof state.wallets.zcashWallets;
-        if (contacts) state.contacts.contacts = contacts;
+        if (Array.isArray(wallets)) state.wallets.all = wallets.map(w => ({ ...w, vaultId: w.vaultId ?? '' })) as typeof state.wallets.all;
+        if (Array.isArray(zcashWallets)) state.wallets.zcashWallets = zcashWallets.map(w => ({ ...w, vaultId: w.vaultId ?? '' })) as typeof state.wallets.zcashWallets;
+        if (Array.isArray(contacts)) state.contacts.contacts = contacts;
         if (Array.isArray(recentAddresses)) state.recentAddresses.recentAddresses = recentAddresses;
-        if (knownSites) state.connectedSites.knownSites = knownSites;
-        if (messages) state.messages.messages = messages as typeof state.messages.messages;
+        if (Array.isArray(knownSites)) state.connectedSites.knownSites = knownSites;
+        if (Array.isArray(messages)) state.messages.messages = messages as typeof state.messages.messages;
       }));
 
     };
