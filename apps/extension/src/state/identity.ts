@@ -283,6 +283,32 @@ export const verifyP256 = (
   }
 };
 
+// -- PRF (WebAuthn pseudo-random function) --
+
+/**
+ * derive a PRF output for a site — the WebAuthn hmac-secret / prf extension.
+ *
+ * sites like Confer.to use PRF to derive encryption keys from passkeys.
+ * our implementation: HMAC(identity, "prf:" + origin + "\0" + salt_hex)
+ *
+ * the output is deterministic: same seed + same site + same salt = same key.
+ * this is exactly what the PRF extension spec requires.
+ */
+export const derivePrf = (
+  mnemonic: string,
+  identity: string,
+  origin: string,
+  saltHex: string,
+  rotation = 0,
+): Uint8Array =>
+  withIdentity(mnemonic, identity, (id) => {
+    const siteSeed = deriveSeedForSite(id, origin, rotation);
+    const prfTag = enc.encode('prf:' + saltHex);
+    const result = hmac(sha256, siteSeed.slice(0, 32), prfTag);
+    siteSeed.fill(0);
+    return result;
+  });
+
 // -- deterministic passwords --
 
 /** base85 alphabet (RFC 1924 — URL-safe, no quotes) */
