@@ -27,6 +27,7 @@ export enum PopupPath {
   COSMOS_SIGN = '/cosmos-sign',
 
   // Multisig
+  MULTISIG = '/multisig',
   MULTISIG_CREATE = '/multisig/create',
   MULTISIG_JOIN = '/multisig/join',
   MULTISIG_SIGN = '/multisig/sign',

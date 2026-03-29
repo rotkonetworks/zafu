@@ -14,11 +14,12 @@ type FeatureKey = 'stake' | 'swap' | 'vote' | 'inbox';
 
 /** all possible tabs — each gated by a network feature */
 const ALL_TABS: ReadonlyArray<{ path: PopupPath; icon: JSX.Element; label: string; feature?: FeatureKey }> = [
-  { path: PopupPath.INDEX,  icon: <span className='i-lucide-home h-5 w-5' />,              label: 'Home' },
-  { path: PopupPath.INBOX,  icon: <span className='i-lucide-mail h-5 w-5' />,              label: 'Inbox',  feature: 'inbox' },
-  { path: PopupPath.STAKE,  icon: <span className='i-lucide-layers h-5 w-5' />,            label: 'Stake',  feature: 'stake' },
-  { path: PopupPath.SWAP,   icon: <span className='i-lucide-arrow-left-right h-5 w-5' />,  label: 'Swap',   feature: 'swap' },
-  { path: PopupPath.VOTE,   icon: <span className='i-lucide-vote h-5 w-5' />,              label: 'Vote',   feature: 'vote' },
+  { path: PopupPath.INDEX,    icon: <span className='i-lucide-home h-5 w-5' />,              label: 'Home' },
+  { path: PopupPath.MULTISIG, icon: <span className='i-lucide-shield h-5 w-5' />,            label: 'Multisig' },
+  { path: PopupPath.INBOX,    icon: <span className='i-lucide-mail h-5 w-5' />,              label: 'Inbox',  feature: 'inbox' },
+  { path: PopupPath.STAKE,    icon: <span className='i-lucide-layers h-5 w-5' />,            label: 'Stake',  feature: 'stake' },
+  { path: PopupPath.SWAP,     icon: <span className='i-lucide-arrow-left-right h-5 w-5' />,  label: 'Swap',   feature: 'swap' },
+  { path: PopupPath.VOTE,     icon: <span className='i-lucide-vote h-5 w-5' />,              label: 'Vote',   feature: 'vote' },
 ];
 
 /** derive tabs from network features — pure filter, no mutation */
