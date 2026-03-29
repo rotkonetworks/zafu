@@ -42,6 +42,8 @@
  */
 
 import { ed25519 } from '@noble/curves/ed25519';
+import { p256 } from '@noble/curves/p256';
+import { sha256 } from '@noble/hashes/sha256';
 import { sha512 } from '@noble/hashes/sha512';
 import { hmac } from '@noble/hashes/hmac';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
@@ -110,6 +112,16 @@ const keypairFromSeed = (seed: Uint8Array): { privateKey: Uint8Array; publicKey:
   const privateKey = seed.slice(0, 32);
   const publicKey = ed25519.getPublicKey(privateKey);
   seed.fill(0);
+  return { privateKey, publicKey };
+};
+
+/** extract P-256 keypair from seed (for WebAuthn/passkey compat). zeroizes the seed. */
+const p256KeypairFromSeed = (seed: Uint8Array): { privateKey: Uint8Array; publicKey: Uint8Array } => {
+  // domain-separate from ed25519: HMAC to get a valid P-256 scalar
+  const derived = hmac(sha256, enc.encode('zid-p256'), seed.slice(0, 32));
+  seed.fill(0);
+  const privateKey = derived.slice(0, 32);
+  const publicKey = p256.getPublicKey(privateKey, false); // uncompressed (0x04 || x || y)
   return { privateKey, publicKey };
 };
 
@@ -209,6 +221,66 @@ export const signZid = (
     signature: bytesToHex(signature),
     publicKey: bytesToHex(publicKey),
   };
+};
+
+// -- P-256 / WebAuthn / passkey --
+
+/**
+ * derive a site-specific P-256 public key (for WebAuthn/passkey registration).
+ * same origin scoping as ed25519 ZID — same rotation, same identity.
+ * returns uncompressed public key (65 bytes: 0x04 || x || y).
+ */
+export const deriveP256ForSite = (mnemonic: string, identity: string, origin: string, rotation = 0): { publicKey: string } =>
+  withIdentity(mnemonic, identity, (id) => {
+    const { publicKey } = p256KeypairFromSeed(deriveSeedForSite(id, origin, rotation));
+    return { publicKey: bytesToHex(publicKey) };
+  });
+
+/**
+ * sign a WebAuthn challenge with the P-256 key for an origin.
+ * produces an ECDSA signature (DER-encoded) compatible with ES256.
+ * used for sites that only support WebAuthn/passkeys.
+ */
+export const signP256 = (
+  mnemonic: string,
+  origin: string,
+  challenge: Uint8Array,
+  pref?: ZidSitePreference,
+): { signature: string; publicKey: string } => {
+  const identityName = pref?.identity ?? DEFAULT_IDENTITY;
+  const root = deriveRoot(mnemonic);
+  const identity = deriveIdentity(root, identityName);
+  root.fill(0);
+
+  const seed = (pref?.mode === 'cross-site')
+    ? deriveSeedCrossSite(identity)
+    : deriveSeedForSite(identity, origin, pref?.rotation ?? 0);
+  identity.fill(0);
+
+  const { privateKey, publicKey } = p256KeypairFromSeed(seed);
+  const signature = p256.sign(challenge, privateKey);
+
+  privateKey.fill(0);
+
+  return {
+    signature: bytesToHex(signature.toDERRawBytes()),
+    publicKey: bytesToHex(publicKey),
+  };
+};
+
+/**
+ * verify a P-256 signature.
+ */
+export const verifyP256 = (
+  publicKeyHex: string,
+  signatureHex: string,
+  challenge: Uint8Array,
+): boolean => {
+  try {
+    return p256.verify(hexToBytes(signatureHex), challenge, hexToBytes(publicKeyHex));
+  } catch {
+    return false;
+  }
 };
 
 // -- backwards compatibility --

@@ -5,13 +5,13 @@ import { signApprovalSelector } from '../../../state/sign-approval';
 import { ApproveDeny } from './approve-deny';
 import { DisplayOriginURL } from '../../../shared/components/display-origin-url';
 import { UserChoice } from '@repo/storage-chrome/records';
-import { signZid, resolveZid, type ZidSitePreference } from '../../../state/identity';
+import { signZid, signP256, resolveZid, type ZidSitePreference } from '../../../state/identity';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { hexToBytes } from '@noble/hashes/utils';
 import { localExtStorage } from '@repo/storage-chrome/local';
 
 export const SignApproval = () => {
-  const { origin, challengeHex, statement, setChoice, sendResponse } =
+  const { origin, challengeHex, statement, algorithm, setChoice, sendResponse } =
     useStore(signApprovalSelector);
   const keyInfo = useStore(selectEffectiveKeyInfo);
   const getMnemonic = useStore(s => s.keyRing.getMnemonic);
@@ -63,7 +63,9 @@ export const SignApproval = () => {
         rotation: raw2.rotation ?? 0,
         identity: raw2.identity ?? 'default',
       } : undefined;
-      const result = signZid(mnemonic, origin!, challenge, pref);
+      const result = algorithm === 'es256'
+        ? signP256(mnemonic, origin!, challenge, pref)
+        : signZid(mnemonic, origin!, challenge, pref);
 
       // log the zid we signed with so the connections page can display it
       const log = (await localExtStorage.get('zidShareLog')) ?? [];
