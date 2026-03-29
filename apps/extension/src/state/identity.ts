@@ -283,6 +283,46 @@ export const verifyP256 = (
   }
 };
 
+// -- passkey (non-rotating, long-lived WebAuthn credential) --
+
+/**
+ * derive a passkey seed for a relying party. NOT affected by ZID rotation.
+ * passkeys are long-lived credentials — rotating would lock the user out.
+ * re-registration is an explicit action (delete + create new passkey).
+ */
+const deriveSeedForPasskey = (identity: Uint8Array, rpId: string): Uint8Array =>
+  deriveSeed(identity, enc.encode('passkey:' + rpId));
+
+/**
+ * derive a P-256 keypair for a passkey (non-rotating).
+ */
+export const derivePasskeyForSite = (mnemonic: string, identity: string, rpId: string): { publicKey: string } =>
+  withIdentity(mnemonic, identity, (id) => {
+    const { publicKey } = p256KeypairFromSeed(deriveSeedForPasskey(id, rpId));
+    return { publicKey: bytesToHex(publicKey) };
+  });
+
+/**
+ * sign with the passkey P-256 key (non-rotating).
+ * message is NOT pre-hashed — p256.sign handles SHA-256 internally.
+ */
+export const signPasskey = (
+  mnemonic: string,
+  rpId: string,
+  message: Uint8Array,
+  identity = DEFAULT_IDENTITY,
+): { signature: Uint8Array; publicKey: string } =>
+  withIdentity(mnemonic, identity, (id) => {
+    const seed = deriveSeedForPasskey(id, rpId);
+    const { privateKey, publicKey } = p256KeypairFromSeed(seed);
+    const sig = p256.sign(message, privateKey, { lowS: true });
+    privateKey.fill(0);
+    return {
+      signature: sig.toDERRawBytes(),
+      publicKey: bytesToHex(publicKey),
+    };
+  });
+
 // -- PRF (WebAuthn pseudo-random function) --
 
 /**
@@ -297,15 +337,15 @@ export const verifyP256 = (
 export const derivePrf = (
   mnemonic: string,
   identity: string,
-  origin: string,
+  rpId: string,
   saltHex: string,
-  rotation = 0,
 ): Uint8Array =>
   withIdentity(mnemonic, identity, (id) => {
-    const siteSeed = deriveSeedForSite(id, origin, rotation);
+    // PRF is bound to the passkey (non-rotating), not the ZID rotation
+    const passkeySeed = deriveSeedForPasskey(id, rpId);
     const prfTag = enc.encode('prf:' + saltHex);
-    const result = hmac(sha256, siteSeed.slice(0, 32), prfTag);
-    siteSeed.fill(0);
+    const result = hmac(sha256, passkeySeed.slice(0, 32), prfTag);
+    passkeySeed.fill(0);
     return result;
   });
 

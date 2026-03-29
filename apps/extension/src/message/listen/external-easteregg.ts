@@ -51,7 +51,7 @@ export const externalMessageListener = (
     }
 
     case 'zafu_pick_contacts': {
-      const appOrigin = sender.origin || sender.url || String(msg['appOrigin'] || 'unknown');
+      const appOrigin = sender.origin || sender.url || 'unknown';
       const purpose = String(msg['purpose'] || 'pick contacts');
       const max = Number(msg['max']) || 1;
       const requestId = crypto.randomUUID();
@@ -245,6 +245,90 @@ export const externalMessageListener = (
         pendingPicks.delete(requestId);
       }
       sendResponse({ ok: true });
+      return true;
+    }
+
+    // ── passkey / WebAuthn ──
+
+    case 'zafu_passkey_create': {
+      const { rpId, origin: reqOrigin } = msg as { rpId: string; origin: string };
+      // TODO: show approval popup before creating credential
+      // for now, auto-approve if origin has 'connect' capability
+      void (async () => {
+        try {
+          const perms = await getOriginPermissions(reqOrigin);
+          if (!hasCapability(perms, 'connect')) {
+            sendResponse({ success: false, error: 'not connected' });
+            return;
+          }
+          // lazy import to avoid loading webauthn.ts in every page load
+          const { createCredential } = await import('../../state/webauthn');
+          const { useStore } = await import('../../state');
+          const keyInfo = useStore.getState().keyRing.keyInfo;
+          if (!keyInfo) { sendResponse({ success: false }); return; }
+          const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
+          const result = createCredential(mnemonic, rpId);
+          const { bytesToHex } = await import('@noble/hashes/utils');
+          sendResponse({
+            success: true,
+            credentialId: bytesToHex(result.credentialId),
+            authenticatorData: bytesToHex(result.authenticatorData),
+            publicKey: bytesToHex(result.publicKey),
+            prfEnabled: true,
+          });
+        } catch (e) {
+          sendResponse({ success: false, error: String(e) });
+        }
+      })();
+      return true;
+    }
+
+    case 'zafu_passkey_get': {
+      const { rpId, prfSalts, origin: getOrigin } = msg as {
+        rpId: string;
+        prfSalts?: { first: string; second?: string };
+        origin: string;
+      };
+      void (async () => {
+        try {
+          const perms = await getOriginPermissions(getOrigin);
+          if (!hasCapability(perms, 'connect')) {
+            sendResponse({ success: false, error: 'not connected' });
+            return;
+          }
+          const { signAssertion, buildCredentialId } = await import('../../state/webauthn');
+          const { useStore } = await import('../../state');
+          const { sha256 } = await import('@noble/hashes/sha256');
+          const { bytesToHex } = await import('@noble/hashes/utils');
+          const keyInfo = useStore.getState().keyRing.keyInfo;
+          if (!keyInfo) { sendResponse({ success: false }); return; }
+          const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
+
+          // clientDataHash will be computed by the content script's clientDataJSON
+          // for now, use the challenge as a placeholder — the content script
+          // constructs the real clientDataJSON
+          const clientDataJSON = new TextEncoder().encode(JSON.stringify({
+            type: 'webauthn.get',
+            challenge: '', // filled by content script
+            origin: getOrigin,
+          }));
+          const clientDataHash = sha256(clientDataJSON);
+
+          const result = signAssertion(mnemonic, rpId, clientDataHash, prfSalts);
+          sendResponse({
+            success: true,
+            credentialId: bytesToHex(buildCredentialId(rpId)),
+            authenticatorData: bytesToHex(result.authenticatorData),
+            signature: bytesToHex(result.signature),
+            prfResults: result.prfResults ? {
+              first: bytesToHex(result.prfResults.first),
+              second: result.prfResults.second ? bytesToHex(result.prfResults.second) : undefined,
+            } : undefined,
+          });
+        } catch (e) {
+          sendResponse({ success: false, error: String(e) });
+        }
+      })();
       return true;
     }
 
