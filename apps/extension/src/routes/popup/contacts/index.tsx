@@ -136,7 +136,7 @@ function AddressModal({
   onSave: (data: Omit<ContactAddress, 'id'>) => void;
   editAddress?: ContactAddress;
 }) {
-  const [network, setNetwork] = useState<ContactNetwork>(editAddress?.network ?? 'penumbra');
+  const [network, setNetwork] = useState<ContactNetwork>(editAddress?.network ?? 'zcash');
   const [address, setAddress] = useState(editAddress?.address ?? '');
   const [chainId, setChainId] = useState(editAddress?.chainId ?? '');
   const [notes, setNotes] = useState(editAddress?.notes ?? '');
