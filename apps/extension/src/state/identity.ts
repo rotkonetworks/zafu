@@ -1,23 +1,39 @@
 /**
  * zid  - seed-derived ed25519 signing identity
  *
- * a zid is a cross-network identity: not penumbra, not zcash  - it's the
- * person behind the wallet. one seed -> one identity root -> derived keypairs.
+ * a zid is a cross-network identity: not penumbra, not zcash — it's the
+ * person behind the wallet. one seed -> named identities -> derived keypairs.
  *
  * derivation hierarchy:
- *   root        = HMAC-SHA512("zid-v1", mnemonic)
- *   global      = HMAC-SHA512(root, 0x00000000)              <- opt-in only
- *   per-site    = HMAC-SHA512(root, "site:" + origin)         <- default, unlinkable
- *   rotated     = HMAC-SHA512(root, "site:" + origin + ":N")  <- rotation N for origin
- *   per-contact = HMAC-SHA512(root, "contact:" + contactId)   <- DH keypair for e2ee
- *   key         = ed25519.fromSeed(seed[0:32])
+ *   root              = HMAC-SHA512("zid-v1", mnemonic)
+ *   identity["poker"] = HMAC-SHA512(root, "identity:poker")     <- named persona
+ *   per-site          = HMAC-SHA512(identity, "site:" + origin)  <- default, unlinkable
+ *   rotated           = HMAC-SHA512(identity, "site:" + origin + ":" + N)
+ *   per-contact       = HMAC-SHA512(identity, "contact:" + contactId)
+ *   cross-site        = HMAC-SHA512(identity, "cross-site")     <- opt-in, dangerous
+ *   key               = ed25519.fromSeed(seed[0:32])
  *
- * default is per-site. global identity is opt-in because sharing the same
- * zid across origins lets sites collude to link your activity.
+ * identities are named, not numbered. "poker" and "personal" derive
+ * different subtrees. the name is a derivation path component, not a
+ * secret — the mnemonic provides all entropy.
  *
- * per-contact zids provide DH keypairs for authenticated encrypted messaging.
- * they are NOT for referral tracking - that's handled by diversified zcash
- * addresses at the transport layer.
+ * identities are unlinkable — no one can tell identity["poker"] and
+ * identity["personal"] came from the same seed.
+ *
+ * contacts are scoped to the identity — poker identity's contacts are
+ * completely separate from personal identity's contacts.
+ *
+ * cross-site key: links your activity across origins WITHIN one identity.
+ * opt-in only, requires explicit confirmation. never displayed by default.
+ * it does NOT link across identities — "poker" cross-site key cannot be
+ * correlated with "personal" cross-site key.
+ *
+ * limitations:
+ *   - no forward secrecy. compromised seed decrypts all past e2ee messages.
+ *     for poker game channels, consider ephemeral DH with ratcheting (future).
+ *   - no revocation. compromised identity has no signal mechanism. a revocation
+ *     certificate protocol (sign "revoked, trust new key" with old key) is
+ *     planned but requires a distribution channel (future).
  *
  * separation of concerns:
  *   diversified address  -> payment routing + referral tracking
@@ -38,41 +54,58 @@ export interface Zid {
   address: string;    // display: "zid" + first 16 hex chars of pubkey
 }
 
+/** a named identity persona */
+export interface ZidIdentity {
+  /** derivation name ("personal", "poker", "anon") — stable, part of key path */
+  name: string;
+  /** user-facing label (can be renamed without changing keys) */
+  label: string;
+}
+
 /** per-origin identity preference */
 export interface ZidSitePreference {
-  /** 'global' = share your public zid. 'site' = origin-specific. */
-  mode: 'global' | 'site';
-  /** rotation counter for site mode (0 = first identity for this origin) */
+  /** 'cross-site' = same key across origins (dangerous). 'site' = origin-specific (default). */
+  mode: 'cross-site' | 'site';
+  /** rotation counter for site mode (0 = first key for this origin) */
   rotation: number;
+  /** which identity name to use for this origin */
+  identity: string;
 }
 
 /** format a public key as a zid address */
 const formatZid = (pubkeyHex: string): string => 'zid' + pubkeyHex.slice(0, 16);
 
+// -- derivation primitives --
+
 /** derive the identity root from the mnemonic. caller must zeroize. */
 const deriveRoot = (mnemonic: string): Uint8Array =>
   hmac(sha512, ZID_DOMAIN, enc.encode(mnemonic));
 
-/** derive seed from root + arbitrary tag bytes. caller must zeroize. */
-const deriveSeedFromTag = (root: Uint8Array, tag: Uint8Array): Uint8Array =>
-  hmac(sha512, root, tag);
+/** derive a named identity subtree root. caller must zeroize. */
+const deriveIdentity = (root: Uint8Array, name: string): Uint8Array =>
+  hmac(sha512, root, enc.encode('identity:' + name));
 
-/** derive seed at numeric index (for global zid). */
-const deriveSeedByIndex = (root: Uint8Array, index: number): Uint8Array => {
-  const idx = new Uint8Array(4);
-  new DataView(idx.buffer).setUint32(0, index, false);
-  return deriveSeedFromTag(root, idx);
-};
+/** derive seed from identity + tag. caller must zeroize. */
+const deriveSeed = (identity: Uint8Array, tag: Uint8Array): Uint8Array =>
+  hmac(sha512, identity, tag);
 
-/** derive seed for a specific origin + rotation. */
-const deriveSeedForSite = (root: Uint8Array, origin: string, rotation: number): Uint8Array => {
+/** derive per-site seed. */
+const deriveSeedForSite = (identity: Uint8Array, origin: string, rotation: number): Uint8Array => {
   const tag = rotation === 0
     ? enc.encode('site:' + origin)
     : enc.encode('site:' + origin + ':' + rotation);
-  return deriveSeedFromTag(root, tag);
+  return deriveSeed(identity, tag);
 };
 
-/** extract ed25519 keypair from a seed. zeroizes the seed. */
+/** derive cross-site seed. opt-in only. */
+const deriveSeedCrossSite = (identity: Uint8Array): Uint8Array =>
+  deriveSeed(identity, enc.encode('cross-site'));
+
+/** derive per-contact seed. */
+const deriveSeedForContact = (identity: Uint8Array, contactId: string): Uint8Array =>
+  deriveSeed(identity, enc.encode('contact:' + contactId));
+
+/** extract ed25519 keypair from seed. zeroizes the seed. */
 const keypairFromSeed = (seed: Uint8Array): { privateKey: Uint8Array; publicKey: Uint8Array } => {
   const privateKey = seed.slice(0, 32);
   const publicKey = ed25519.getPublicKey(privateKey);
@@ -80,65 +113,72 @@ const keypairFromSeed = (seed: Uint8Array): { privateKey: Uint8Array; publicKey:
   return { privateKey, publicKey };
 };
 
-/** derive seed for a specific contact (by their zid pubkey or contact id). */
-const deriveSeedForContact = (root: Uint8Array, contactId: string): Uint8Array =>
-  deriveSeedFromTag(root, enc.encode('contact:' + contactId));
+/** helper: derive named identity, run fn, zeroize. */
+const withIdentity = <T>(mnemonic: string, identityName: string, fn: (identity: Uint8Array) => T): T => {
+  const root = deriveRoot(mnemonic);
+  const identity = deriveIdentity(root, identityName);
+  root.fill(0);
+  const result = fn(identity);
+  identity.fill(0);
+  return result;
+};
 
 // -- public API --
 
-/**
- * derive the global zid (index 0). this is the user's "public" identity.
- */
-export const deriveZid = (mnemonic: string, index = 0): Zid => {
-  const root = deriveRoot(mnemonic);
-  const { publicKey } = keypairFromSeed(deriveSeedByIndex(root, index));
-  root.fill(0);
-  const hex = bytesToHex(publicKey);
-  return { publicKey: hex, address: formatZid(hex) };
-};
+/** default identity name for new wallets */
+export const DEFAULT_IDENTITY = 'default';
 
 /**
- * derive a site-specific zid for an origin.
+ * derive a site-specific zid for an origin under a named identity.
+ * this is the DEFAULT mode — each site sees a unique key.
  */
-export const deriveZidForSite = (mnemonic: string, origin: string, rotation = 0): Zid => {
-  const root = deriveRoot(mnemonic);
-  const { publicKey } = keypairFromSeed(deriveSeedForSite(root, origin, rotation));
-  root.fill(0);
-  const hex = bytesToHex(publicKey);
-  return { publicKey: hex, address: formatZid(hex) };
-};
+export const deriveZidForSite = (mnemonic: string, identity: string, origin: string, rotation = 0): Zid =>
+  withIdentity(mnemonic, identity, (id) => {
+    const { publicKey } = keypairFromSeed(deriveSeedForSite(id, origin, rotation));
+    const hex = bytesToHex(publicKey);
+    return { publicKey: hex, address: formatZid(hex) };
+  });
 
 /**
- * derive a per-contact zid for authenticated encrypted communication.
+ * derive the cross-site zid for an identity. OPT-IN ONLY.
  *
- * each contact gets a unique ed25519 keypair. the public key is shared in
- * the contact card (TLV tag 0x01). the recipient can use it for:
- *   - verifying message authenticity (signature)
- *   - X25519 DH key exchange for e2ee
+ * this key is the same across all origins for this identity.
+ * sharing it lets sites collude to link your sessions.
+ * it does NOT link across different identities.
  *
- * referral tracking ("via alice") is handled by diversified zcash addresses,
- * not by per-contact zids.
- *
- * contactId must be STABLE for the lifetime of the relationship. use the
- * contact's internal database ID (not their zid pubkey, which may rotate).
- * changing contactId changes the derived keypair, breaking e2ee continuity.
+ * never display by default. buried in settings > identity > advanced.
  */
-export const deriveZidForContact = (mnemonic: string, contactId: string): Zid => {
-  const root = deriveRoot(mnemonic);
-  const { publicKey } = keypairFromSeed(deriveSeedForContact(root, contactId));
-  root.fill(0);
-  const hex = bytesToHex(publicKey);
-  return { publicKey: hex, address: formatZid(hex) };
-};
+export const deriveZidCrossSite = (mnemonic: string, identity: string): Zid =>
+  withIdentity(mnemonic, identity, (id) => {
+    const { publicKey } = keypairFromSeed(deriveSeedCrossSite(id));
+    const hex = bytesToHex(publicKey);
+    return { publicKey: hex, address: formatZid(hex) };
+  });
+
+/**
+ * derive a per-contact zid under a named identity.
+ *
+ * contacts are scoped to the identity — "poker" contacts are separate
+ * from "personal" contacts. the same contactId under different identities
+ * produces different keypairs.
+ *
+ * contactId must be STABLE for the lifetime of the relationship.
+ */
+export const deriveZidForContact = (mnemonic: string, identity: string, contactId: string): Zid =>
+  withIdentity(mnemonic, identity, (id) => {
+    const { publicKey } = keypairFromSeed(deriveSeedForContact(id, contactId));
+    const hex = bytesToHex(publicKey);
+    return { publicKey: hex, address: formatZid(hex) };
+  });
 
 /**
  * resolve which zid to use for a given origin based on preference.
- * default is site-specific (not global) to prevent cross-origin linking.
+ * default: site-specific for the "default" identity.
  */
 export const resolveZid = (mnemonic: string, origin: string, pref?: ZidSitePreference): Zid => {
-  if (pref?.mode === 'global') return deriveZid(mnemonic);
-  // default to site-specific identity
-  return deriveZidForSite(mnemonic, origin, pref?.rotation ?? 0);
+  const identity = pref?.identity ?? DEFAULT_IDENTITY;
+  if (pref?.mode === 'cross-site') return deriveZidCrossSite(mnemonic, identity);
+  return deriveZidForSite(mnemonic, identity, origin, pref?.rotation ?? 0);
 };
 
 /**
@@ -150,15 +190,20 @@ export const signZid = (
   challenge: Uint8Array,
   pref?: ZidSitePreference,
 ): { signature: string; publicKey: string } => {
+  const identityName = pref?.identity ?? DEFAULT_IDENTITY;
   const root = deriveRoot(mnemonic);
-  const seed = (pref?.mode === 'global')
-    ? deriveSeedByIndex(root, 0)
-    : deriveSeedForSite(root, origin, pref?.rotation ?? 0);
+  const identity = deriveIdentity(root, identityName);
+  root.fill(0);
+
+  const seed = (pref?.mode === 'cross-site')
+    ? deriveSeedCrossSite(identity)
+    : deriveSeedForSite(identity, origin, pref?.rotation ?? 0);
+  identity.fill(0);
+
   const { privateKey, publicKey } = keypairFromSeed(seed);
   const signature = ed25519.sign(challenge, privateKey);
 
   privateKey.fill(0);
-  root.fill(0);
 
   return {
     signature: bytesToHex(signature),
@@ -166,9 +211,18 @@ export const signZid = (
   };
 };
 
-// -- zid share log (site authentication tracking) --
+// -- backwards compatibility --
 
-/** a record of a zid we shared with a site during authentication */
+/**
+ * derive the display zid (default identity, cross-site key).
+ * @deprecated use deriveZidForSite with explicit identity name.
+ */
+export const deriveZid = (mnemonic: string): Zid =>
+  deriveZidCrossSite(mnemonic, DEFAULT_IDENTITY);
+
+// -- share log --
+
+/** a record of a zid shared with a site during authentication */
 export interface ZidShareRecord {
   /** the zid pubkey we signed with (hex) */
   publicKey: string;
@@ -176,12 +230,11 @@ export interface ZidShareRecord {
   sharedWith: string;
   /** when we signed */
   sharedAt: number;
+  /** which identity name was used */
+  identity: string;
 }
 
-/**
- * look up which site we used a zid pubkey with.
- * used by the connections page to show which zid each site knows.
- */
+/** look up the most recent zid shared with a site */
 export const lookupSharedZid = (
   log: ZidShareRecord[],
   origin: string,

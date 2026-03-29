@@ -34,22 +34,59 @@ zid handles identity and encryption - not payment routing.
 all zid keys are derived deterministically from the wallet mnemonic
 using HMAC-SHA512 with a versioned domain separator.
 
+### named identities
+
+a single seed phrase produces multiple independent identities, each
+identified by a stable name. the name is a derivation path component,
+not a secret — the mnemonic provides all entropy.
+
 ```
 root = HMAC-SHA512("zid-v1", mnemonic)
+
+identity["default"]  = HMAC-SHA512(root, "identity:default")
+identity["poker"]    = HMAC-SHA512(root, "identity:poker")
+identity["personal"] = HMAC-SHA512(root, "identity:personal")
 ```
 
-from the root, multiple keypairs are derived:
+identities are unlinkable — no one can determine that two identities
+derive from the same seed. users create identities by choosing a name:
+
+- "default" — created automatically for new wallets
+- "poker" — gaming pseudonym
+- "personal" — friends and family
+- "work" — professional contacts
+
+the name is stable. changing it changes the derived keys, which breaks
+all connections to sites and contacts under that identity. the user-facing
+label (displayed in the UI) can change freely without affecting keys.
+
+### per-identity subtree
+
+each identity has its own complete derivation subtree:
 
 ```
-global:      HMAC-SHA512(root, 0x00000000)         opt-in only
-per-site:    HMAC-SHA512(root, "site:" + origin)    default
-rotated:     HMAC-SHA512(root, "site:" + origin + ":" + N)
-per-contact: HMAC-SHA512(root, "contact:" + contact_id)
+identity["poker"]:
+  per-site:    HMAC-SHA512(identity, "site:" + origin)       default
+  rotated:     HMAC-SHA512(identity, "site:" + origin + ":" + counter)
+  per-contact: HMAC-SHA512(identity, "contact:" + contact_id)
+  cross-site:  HMAC-SHA512(identity, "cross-site")           opt-in only
 ```
 
 the first 32 bytes of each derived value become the ed25519 private
 key. the public key is derived from it. all intermediate values are
 zeroized after use.
+
+**per-site** keys are the default. **cross-site** keys are opt-in only
+and require explicit confirmation with a warning about cross-origin
+linking. the cross-site key is never displayed on the identity card.
+
+### contacts are scoped to identity
+
+per-contact zids are derived under the identity subtree, not the root.
+your "poker" identity's contacts are completely separate from your
+"personal" identity's contacts. sharing a contact card from "poker"
+produces a different zid than sharing from "personal", even for the
+same contact.
 
 ## address format
 
@@ -65,19 +102,39 @@ the full 32-byte public key is available for copy/export.
 
 ## per-site identity (default)
 
-every website gets a unique zid derived from its origin:
+every website gets a unique zid derived from the active identity
+and the site's origin:
 
 ```
-zid_for_example = HMAC-SHA512(root, "site:https://example.com")
+zid_for_example = HMAC-SHA512(identity["poker"], "site:https://example.com")
 ```
 
 this is the default mode. websites cannot correlate your activity
 across sites because they each see a different public key.
 
-you can opt to share your global zid (index 0) with a site if you
-want to be recognizable across services. switching to global mode
-requires explicit confirmation because it enables cross-origin
-linking.
+### cross-site key (opt-in, dangerous)
+
+each identity has a cross-site key that is the same across all origins.
+sharing it enables cross-origin linking within that identity.
+
+```
+cross_site = HMAC-SHA512(identity["poker"], "cross-site")
+```
+
+this does NOT link across identities — the "poker" cross-site key
+cannot be correlated with the "personal" cross-site key.
+
+**this is never shared by default.** switching to cross-site mode for
+any origin requires:
+
+1. explicit toggle in identity settings
+2. warning dialog: "this links your activity across all sites using
+   your [poker] identity. anyone who learns this key can correlate
+   your sessions."
+3. separate confirmation
+
+the cross-site key is NOT shown on the identity card. it lives in
+settings > identity > advanced.
 
 ### rotation
 
@@ -90,10 +147,10 @@ future signatures.
 ## per-contact identity
 
 when you share a contact card, zafu derives a unique zid for that
-relationship:
+relationship under the active identity:
 
 ```
-zid_for_alice = HMAC-SHA512(root, "contact:" + alice_contact_id)
+zid_for_alice = HMAC-SHA512(identity["poker"], "contact:" + alice_contact_id)
 ```
 
 this zid is included in the contact card as a TLV extension
@@ -114,23 +171,52 @@ by diversified zcash addresses at the transport layer.
 
 **no forward secrecy.** per-contact zid keys are deterministic from
 the seed phrase. if the seed is compromised, all past encrypted
-messages can be decrypted. a ratchet protocol (like Signal's Double
-Ratchet) would fix this but adds significant complexity. for v0.3.0,
-the zcash note-level encryption (to the recipient's IVK) provides
-the primary confidentiality layer. the zid layer adds sender
-authentication on top.
+messages can be decrypted. for poker game channels where session
+confidentiality matters, consider ephemeral DH with ratcheting
+on top of zid authentication (future work). for v0.3.0, the zcash
+note-level encryption provides the primary confidentiality layer.
+
+**no revocation.** a compromised identity cannot signal its
+compromise to contacts. rotation creates a new per-site key but
+the old key remains valid. a revocation certificate protocol
+(sign "revoked, trust new key" with old key) requires a
+distribution channel and is planned for a future release.
 
 **contactId must be stable.** the per-contact zid is derived from
 the contact's internal ID (not their zid pubkey, which may rotate).
 changing the ID changes the keypair, breaking e2ee continuity for
 that relationship.
 
+## identity manager
+
+the identity screen shows:
+
+- list of identities with labels ("Personal", "Poker", "Anon")
+- create new identity (choose a stable name — cannot change later)
+- rename label (display only, does not affect keys)
+- delete identity
+- active identity indicator
+- per-identity: list of connected sites + per-contact zids
+- **never** shows the cross-site key on the main screen
+
+switching identities changes which zid apps see on next connection.
+existing connections keep whatever identity was used.
+
+### identity selection in apps
+
+when an app requests connection via `zid.connect()`:
+
+1. if only one identity exists, use it automatically
+2. if multiple exist, show identity picker popup
+3. the user picks which identity to present to this app
+4. the choice is remembered per origin
+
 ## sign-in flow
 
 1. a website sends a sign request: `{ type: "zafu_sign", challengeHex, statement? }`
-2. zafu shows an approval popup with the origin, challenge, and which zid will sign
+2. zafu shows an approval popup with the origin, active identity label, and which per-site zid will sign
 3. you approve or deny
-4. if approved, zafu signs the challenge with your per-site zid
+4. if approved, zafu signs the challenge with the per-site zid for the active identity
 5. the signature and pubkey are returned to the website
 6. the pubkey is recorded in the encrypted share log
 
@@ -141,12 +227,11 @@ proves you control the zid private key.
 
 each approved site appears in the connections page showing:
 
-- the zid address they know you by (from the share log)
+- which identity was used (label + per-site zid)
 - your network addresses (penumbra, zcash) if applicable
-- identity mode (site-specific or global)
 - rotation counter and rotate button
 
-switching to global mode shows a warning about cross-origin linking.
+switching to cross-site mode shows a strong warning.
 rotating shows a notice that the site keeps old identities.
 
 ## storage
@@ -156,18 +241,21 @@ wallet keys. they are not readable without the wallet password.
 
 | data | encrypted | purpose |
 |------|-----------|---------|
-| zidPreferences | yes | per-origin mode + rotation counter |
+| zidIdentities | yes | identity names + labels |
+| zidPreferences | yes | per-origin identity choice + mode + rotation counter |
 | zidShareLog | yes | site authentication records |
 | diversifiedAddresses | yes | per-contact zcash address mapping |
-| vault.insensitive.zid | no | global zid pubkey for menu display |
 
-the global zid pubkey in vault metadata is not sensitive - it is
-your public identity. preferences, share logs, and address records
-are sensitive because they reveal your social graph.
+all identity information is encrypted. no zid pubkeys are stored
+in plaintext vault metadata.
 
 ## recovery
 
-because the zid is derived from your seed phrase, it is automatically
-recovered when you restore your wallet. the share log, preferences,
-and diversified address records are not recoverable from the seed -
-they exist only in encrypted local storage.
+because all identities are derived from the seed phrase, they are
+automatically recovered when you restore your wallet — provided you
+remember the identity names. identity labels, share logs, preferences,
+and diversified address records exist only in encrypted local storage
+and are not recoverable from the seed alone.
+
+after recovery, you get the same keypairs (for known identity names)
+but must re-establish connections to sites and re-share contact cards.
