@@ -28,11 +28,16 @@ export interface License {
   signature: string;
 }
 
-/** pro subscription cost in zatoshis (0.01 ZEC) */
-export const PRO_COST_ZAT = 1_000_000;
+/** base rate: 1,000,000 zat (0.01 ZEC) = 30 days */
+export const PRO_RATE_ZAT_PER_30_DAYS = 1_000_000;
+
+/** calculate days of pro time for a given payment amount */
+export function daysForPayment(amountZat: number): number {
+  return Math.floor((amountZat / PRO_RATE_ZAT_PER_30_DAYS) * 30);
+}
 
 /** rotko's receiving address for license payments */
-export const ROTKO_LICENSE_ADDRESS = ''; // TODO: set before release
+export const ROTKO_LICENSE_ADDRESS = 'u153khs43zxz6hcnlwnut77knyqmursnutmungxjxd7khruunhj77ea6tmpzxct9wzlgen66jxwc93ea053j22afkktu7hrs9rmsz003h3';
 
 /** features gated behind pro */
 export const PRO_FEATURES = [

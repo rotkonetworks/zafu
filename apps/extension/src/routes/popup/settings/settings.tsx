@@ -18,6 +18,11 @@ interface SettingsLink {
 
 const links: SettingsLink[] = [
   {
+    title: 'pro subscription',
+    icon: 'i-lucide-zap',
+    href: PopupPath.SUBSCRIBE,
+  },
+  {
     title: 'recovery passphrase',
     icon: 'i-lucide-file-text',
     href: PopupPath.SETTINGS_RECOVERY_PASSPHRASE,

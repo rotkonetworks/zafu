@@ -48,6 +48,9 @@ export enum PopupPath {
   // Settings sub-pages (multisig)
   SETTINGS_MULTISIG = '/settings/multisig',
 
+  // Subscribe
+  SUBSCRIBE = '/settings/subscribe',
+
   // Settings sub-pages
   SETTINGS_DEFAULT_FRONTEND = '/settings/default-frontend',
   SETTINGS_CONNECTED_SITES = '/settings/connected-sites',
