@@ -5,6 +5,7 @@ import { useStore } from '../../../state';
 import { passwordSelector } from '../../../state/password';
 import { walletsSelector } from '../../../state/wallets';
 import { SettingsScreen } from './settings-screen';
+import { PopupPath } from '../paths';
 
 export const SettingsPassphrase = () => {
   const { isPassword } = useStore(passwordSelector);
@@ -13,22 +14,28 @@ export const SettingsPassphrase = () => {
   const [password, setPassword] = useState('');
   const [enteredIncorrect, setEnteredIncorrect] = useState(false);
   const [phrase, setPhrase] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const submit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setError(null);
 
     void (async function () {
-      if (await isPassword(password)) {
-        setPassword('');
-        setPhrase(await getSeedPhrase());
-      } else {
-        setEnteredIncorrect(true);
+      try {
+        if (await isPassword(password)) {
+          setPassword('');
+          setPhrase(await getSeedPhrase());
+        } else {
+          setEnteredIncorrect(true);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'failed to retrieve passphrase');
       }
     })();
   };
 
   return (
-    <SettingsScreen title='recovery passphrase'>
+    <SettingsScreen title='recovery passphrase' backPath={PopupPath.SETTINGS}>
       <div className='flex flex-col gap-4'>
         <p className='text-sm text-muted-foreground'>
           if you change browser or switch to another computer, you will need this recovery
@@ -56,6 +63,9 @@ export const SettingsPassphrase = () => {
                 },
               ]}
             />
+            {error && (
+              <p className='text-xs text-rust'>{error}</p>
+            )}
             <button
               type='submit'
               className='w-full rounded-lg bg-primary py-2.5 text-sm text-primary-foreground transition-colors hover:bg-primary/90'

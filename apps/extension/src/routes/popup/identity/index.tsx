@@ -365,20 +365,27 @@ const SiteRow = ({
 
           {/* identity mode */}
           <div className='flex flex-col gap-1'>
-            <div className='flex items-center gap-2'>
-              <span className='text-muted-foreground/60'>mode:</span>
-              <span className={isSiteMode ? 'text-foreground' : 'text-muted-foreground/40'}>
-                unique key
-              </span>
+            <div className='flex items-center gap-0'>
               <button
-                onClick={() => isSiteMode ? onConfirm('cross-site') : void onUpdatePref(site.origin, undefined)}
-                className='text-muted-foreground/40 hover:text-muted-foreground px-1'
+                onClick={() => !isSiteMode ? void onUpdatePref(site.origin, undefined) : undefined}
+                className={`px-2 py-0.5 rounded-l border text-[10px] transition-colors ${
+                  isSiteMode
+                    ? 'bg-green-500/15 border-green-500/30 text-green-400'
+                    : 'border-border/40 text-muted-foreground/40 hover:text-muted-foreground'
+                }`}
               >
-                /
+                unique key
               </button>
-              <span className={!isSiteMode ? 'text-foreground' : 'text-muted-foreground/40'}>
+              <button
+                onClick={() => isSiteMode ? onConfirm('cross-site') : undefined}
+                className={`px-2 py-0.5 rounded-r border border-l-0 text-[10px] transition-colors ${
+                  !isSiteMode
+                    ? 'bg-yellow-500/15 border-yellow-500/30 text-yellow-400'
+                    : 'border-border/40 text-muted-foreground/40 hover:text-muted-foreground'
+                }`}
+              >
                 shared key
-              </span>
+              </button>
             </div>
             {!isSiteMode && (
               <span className='text-muted-foreground/60'>sites with shared key can link your sessions</span>
@@ -388,9 +395,33 @@ const SiteRow = ({
           {/* actions */}
           <div className='flex items-center gap-3 text-muted-foreground/50'>
             {isSiteMode && (
-              <button onClick={() => onConfirm('rotate')} className='hover:text-muted-foreground'>
-                rotate key
-              </button>
+              <div className='flex items-center gap-1.5'>
+                <span className='text-muted-foreground/60'>rotation:</span>
+                <button
+                  onClick={() => rotation > 0 ? void onUpdatePref(site.origin, { ...site.pref, rotation: rotation - 1 }) : undefined}
+                  disabled={rotation === 0}
+                  className='hover:text-muted-foreground disabled:opacity-20'
+                >
+                  <span className='i-lucide-minus size-3' />
+                </button>
+                <input
+                  type='number'
+                  min={0}
+                  max={rotation + 1}
+                  value={rotation}
+                  onChange={e => {
+                    const v = Math.max(0, Math.min(rotation + 1, parseInt(e.target.value, 10) || 0));
+                    void onUpdatePref(site.origin, { ...site.pref, rotation: v });
+                  }}
+                  className='w-8 bg-transparent border border-border/40 rounded text-center text-[10px] font-mono py-0.5 outline-none'
+                />
+                <button
+                  onClick={() => onConfirm('rotate')}
+                  className='hover:text-muted-foreground'
+                >
+                  <span className='i-lucide-plus size-3' />
+                </button>
+              </div>
             )}
             <button
               onClick={() => { setEditingLabel(site.origin); setLabelInput(siteLabels[site.origin] ?? ''); }}

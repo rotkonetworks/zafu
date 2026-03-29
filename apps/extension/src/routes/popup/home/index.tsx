@@ -1111,15 +1111,26 @@ const HistoryContent = ({ network, penumbraAccount }: { network: NetworkType; pe
     return map;
   }, [messages, network]);
 
+  const setSetting = useStore(s => s.privacy.setSetting);
+
   if (!historyEnabled) {
     return (
       <div className='px-4 py-6 text-center'>
         <p className='text-xs text-muted-foreground/50'>
           transaction history is off
         </p>
-        <p className='text-[10px] text-muted-foreground/30 mt-1'>
-          enable in settings &rarr; privacy
-        </p>
+        <button
+          onClick={() => void setSetting('enableTransactionHistory', true)}
+          className='mt-3 text-xs text-primary/70 hover:text-primary transition-colors'
+        >
+          enable transaction history
+        </button>
+        <a
+          href={`#${PopupPath.SETTINGS_PRIVACY}`}
+          className='text-[10px] text-muted-foreground/30 hover:text-primary mt-2 inline-block'
+        >
+          privacy settings
+        </a>
       </div>
     );
   }
