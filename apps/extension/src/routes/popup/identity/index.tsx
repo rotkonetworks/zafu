@@ -353,17 +353,33 @@ const SiteRow = ({
             </button>
           )}
 
-          {/* identity controls */}
+          {/* identity mode */}
+          <div className='flex flex-col gap-1'>
+            <div className='flex items-center gap-2'>
+              <span className='text-muted-foreground/60'>mode:</span>
+              <span className={isSiteMode ? 'text-foreground' : 'text-muted-foreground/40'}>
+                unique key
+              </span>
+              <button
+                onClick={() => isSiteMode ? onConfirm('cross-site') : void onUpdatePref(site.origin, undefined)}
+                className='text-muted-foreground/40 hover:text-muted-foreground px-1'
+              >
+                /
+              </button>
+              <span className={!isSiteMode ? 'text-foreground' : 'text-muted-foreground/40'}>
+                shared key
+              </span>
+            </div>
+            {!isSiteMode && (
+              <span className='text-muted-foreground/60'>sites with shared key can link your sessions</span>
+            )}
+          </div>
+
+          {/* actions */}
           <div className='flex items-center gap-3 text-muted-foreground/50'>
-            <button
-              onClick={() => isSiteMode ? onConfirm('cross-site') : void onUpdatePref(site.origin, undefined)}
-              className='hover:text-muted-foreground'
-            >
-              {isSiteMode ? 'site-specific' : 'cross-site'}
-            </button>
             {isSiteMode && (
               <button onClick={() => onConfirm('rotate')} className='hover:text-muted-foreground'>
-                rotate
+                rotate key
               </button>
             )}
             <button
