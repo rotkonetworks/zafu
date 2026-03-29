@@ -18,24 +18,9 @@ interface SettingsLink {
 
 const links: SettingsLink[] = [
   {
-    title: 'wallets',
-    icon: 'i-lucide-user',
-    href: PopupPath.SETTINGS_WALLETS,
-  },
-  {
     title: 'recovery passphrase',
     icon: 'i-lucide-file-text',
     href: PopupPath.SETTINGS_RECOVERY_PASSPHRASE,
-  },
-  {
-    title: 'networks & endpoints',
-    icon: 'i-lucide-globe',
-    href: PopupPath.SETTINGS_NETWORKS,
-  },
-  {
-    title: 'connections',
-    icon: 'i-lucide-link',
-    href: PopupPath.SETTINGS_CONNECTED_SITES,
   },
   {
     title: 'privacy',

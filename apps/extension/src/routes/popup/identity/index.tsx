@@ -9,7 +9,8 @@ import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { allContactsSelector } from '../../../state/contacts';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import type { ZidSitePreference, ZidShareRecord } from '../../../state/identity';
-import { getOriginPermissions, grantCapability, denyCapability, revokeOrigin as revokeOriginPerms } from '@repo/storage-chrome/origin';
+import { getOriginPermissions, grantCapability, denyCapability } from '@repo/storage-chrome/origin';
+import { revokeOrigin as revokeOriginFull } from '../../../senders/revoke';
 import { CAPABILITY_META, type Capability, type OriginPermissions } from '@repo/storage-chrome/capabilities';
 import { SettingsScreen } from '../settings/settings-screen';
 import { PopupPath } from '../paths';
@@ -309,8 +310,8 @@ const SiteRow = ({
     onSitesChanged();
   };
 
-  const handleRevoke = async () => {
-    await revokeOriginPerms(site.origin);
+  const handleRevoke = () => {
+    revokeOriginFull(site.origin); // kills sessions + deletes permissions
     onSitesChanged();
   };
 
