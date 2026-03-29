@@ -361,6 +361,17 @@ const B85 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&
  * derivation: HMAC-SHA512(identity, "password:" + origin + "\0" + username)
  * output: first 32 bytes → base85 → 40-char string, truncated to len.
  */
+/** normalize origin for password derivation — strip protocol, www/common subdomains, trailing slash */
+export const normalizeOrigin = (raw: string): string => {
+  let s = raw.trim().toLowerCase();
+  s = s.replace(/^https?:\/\//, '');
+  s = s.replace(/\/.*$/, '');
+  s = s.replace(/:\d+$/, '');
+  // strip common subdomains that share the same account
+  s = s.replace(/^(www|api|app|login|auth|sso|accounts|mail|my|portal|secure|id)\./i, '');
+  return s;
+};
+
 export const derivePassword = (
   mnemonic: string,
   identity: string,
@@ -371,8 +382,9 @@ export const derivePassword = (
   index = 0,
 ): string =>
   withIdentity(mnemonic, identity, (id) => {
+    const normalized = normalizeOrigin(origin);
     const suffix = index > 0 ? '\0' + index : '';
-    const tag = enc.encode('password:' + origin + '\0' + username + suffix);
+    const tag = enc.encode('password:' + normalized + '\0' + username + suffix);
     const seed = deriveSeed(id, tag);
     const bytes = seed.slice(0, 32);
     seed.fill(0);

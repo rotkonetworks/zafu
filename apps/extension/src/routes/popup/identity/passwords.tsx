@@ -6,7 +6,7 @@
 import { useState, useCallback } from 'react';
 import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
-import { derivePassword, DEFAULT_IDENTITY } from '../../../state/identity';
+import { derivePassword, normalizeOrigin, DEFAULT_IDENTITY } from '../../../state/identity';
 import { SettingsScreen } from '../settings/settings-screen';
 import { PopupPath } from '../paths';
 
@@ -56,6 +56,9 @@ export const PasswordsPage = () => {
             placeholder='site (e.g. github.com)'
             className='w-full rounded border border-border/40 bg-transparent px-3 py-2 text-xs font-mono outline-none focus:border-muted-foreground/60'
           />
+          {origin.trim() && normalizeOrigin(origin) !== origin.trim().toLowerCase() && (
+            <span className='text-[9px] text-muted-foreground/50 font-mono'>→ {normalizeOrigin(origin)}</span>
+          )}
           <input
             type='text'
             value={username}
