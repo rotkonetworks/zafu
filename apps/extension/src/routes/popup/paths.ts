@@ -35,6 +35,9 @@ export enum PopupPath {
   // zid contact picker (opened by external apps)
   CONTACT_PICKER = '/pick-contacts',
 
+  // FROST approval (opened by external apps via zafu_frost_*)
+  FROST_APPROVE = '/frost-approve',
+
   // Settings sub-pages (multisig)
   SETTINGS_MULTISIG = '/settings/multisig',
 

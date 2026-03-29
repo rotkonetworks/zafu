@@ -33,6 +33,7 @@ const MultisigSign = lazy(() => import('./multisig/sign').then(m => ({ default: 
 const NoteSyncPage = lazy(() => import('./note-sync').then(m => ({ default: m.NoteSyncPage })));
 const IdentityPage = lazy(() => import('./identity').then(m => ({ default: m.IdentityPage })));
 const ContactPicker = lazy(() => import('./pick-contacts').then(m => ({ default: m.ContactPicker })));
+const FrostApprove = lazy(() => import('./frost-approve').then(m => ({ default: m.FrostApprove })));
 
 // suspense fallback for lazy routes
 const LazyFallback = () => (
@@ -179,6 +180,14 @@ export const popupRoutes: RouteObject[] = [
         element: (
           <Suspense fallback={<LazyFallback />}>
             <ContactPicker />
+          </Suspense>
+        ),
+      },
+      {
+        path: PopupPath.FROST_APPROVE,
+        element: (
+          <Suspense fallback={<LazyFallback />}>
+            <FrostApprove />
           </Suspense>
         ),
       },
