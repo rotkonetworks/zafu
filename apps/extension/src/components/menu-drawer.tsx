@@ -69,13 +69,8 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
   const menuItems = [
     {
       icon: 'i-lucide-fingerprint',
-      label: 'identity',
+      label: 'identity & contacts',
       onClick: () => { navigate(PopupPath.IDENTITY); onClose(); },
-    },
-    {
-      icon: 'i-lucide-user',
-      label: 'contacts',
-      onClick: () => { navigate(PopupPath.CONTACTS); onClose(); },
     },
     {
       icon: 'i-lucide-globe',
