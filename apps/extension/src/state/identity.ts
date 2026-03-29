@@ -283,6 +283,47 @@ export const verifyP256 = (
   }
 };
 
+// -- deterministic passwords --
+
+/** base85 alphabet (RFC 1924 — URL-safe, no quotes) */
+const B85 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~';
+
+/**
+ * derive a deterministic password for a site + username.
+ * same seed → same password, always. nothing stored.
+ *
+ * derivation: HMAC-SHA512(identity, "password:" + origin + "\0" + username)
+ * output: first 32 bytes → base85 → 40-char string, truncated to len.
+ */
+export const derivePassword = (
+  mnemonic: string,
+  identity: string,
+  origin: string,
+  username: string,
+  length = 32,
+): string =>
+  withIdentity(mnemonic, identity, (id) => {
+    const tag = enc.encode('password:' + origin + '\0' + username);
+    const seed = deriveSeed(id, tag);
+    const bytes = seed.slice(0, 32);
+    seed.fill(0);
+
+    // base85 encode for high entropy density + printable chars
+    let result = '';
+    for (let i = 0; i < bytes.length && result.length < length; i += 4) {
+      let val = 0;
+      for (let j = 0; j < 4 && i + j < bytes.length; j++) {
+        val = (val << 8) | bytes[i + j]!;
+      }
+      for (let j = 0; j < 5 && result.length < length; j++) {
+        result += B85[val % 85]!;
+        val = Math.floor(val / 85);
+      }
+    }
+    bytes.fill(0);
+    return result.slice(0, length);
+  });
+
 // -- backwards compatibility --
 
 /**

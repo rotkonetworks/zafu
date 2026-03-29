@@ -243,14 +243,23 @@ export const IdentityPage = () => {
 
         <hr className='border-border/40' />
 
-        {/* ── contacts link ── */}
-        <button
-          onClick={() => navigate(PopupPath.CONTACTS)}
-          className='flex items-baseline justify-between text-xs font-mono text-muted-foreground/50 hover:text-muted-foreground'
-        >
-          <span>contacts</span>
-          <span>{contactCount} &rarr;</span>
-        </button>
+        {/* ── links ── */}
+        <div className='flex flex-col gap-2'>
+          <button
+            onClick={() => navigate(PopupPath.CONTACTS)}
+            className='flex items-baseline justify-between text-xs font-mono text-muted-foreground/50 hover:text-muted-foreground'
+          >
+            <span>contacts</span>
+            <span>{contactCount} &rarr;</span>
+          </button>
+          <button
+            onClick={() => navigate(PopupPath.PASSWORDS)}
+            className='flex items-baseline justify-between text-xs font-mono text-muted-foreground/50 hover:text-muted-foreground'
+          >
+            <span>passwords</span>
+            <span>&rarr;</span>
+          </button>
+        </div>
 
         {keyInfo && (
           <div className='text-[9px] text-muted-foreground/50 font-mono'>{keyInfo.name}</div>

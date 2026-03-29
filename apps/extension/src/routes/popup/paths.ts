@@ -39,6 +39,9 @@ export enum PopupPath {
   // FROST approval (opened by external apps via zafu_frost_*)
   FROST_APPROVE = '/frost-approve',
 
+  // Passwords (deterministic password generator)
+  PASSWORDS = '/identity/passwords',
+
   // Capability approval (opened by external apps via zafu_request_capability)
   CAPABILITY_APPROVAL = '/approval/capability',
 
