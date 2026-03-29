@@ -1,0 +1,11 @@
+--- /tmp/ts-node-patch/original/dist-raw/node-internal-modules-esm-resolve.js	2026-03-28 06:13:07.163825612 +0700
++++ node_modules/.pnpm/ts-node@10.9.2_@types+node@25.1.0_typescript@5.9.3/node_modules/ts-node/dist-raw/node-internal-modules-esm-resolve.js	2026-03-28 06:13:14.539564113 +0700
+@@ -143,7 +143,7 @@
+ const statSupportsThrowIfNoEntry = versionGteLt(process.versions.node, '15.3.0') ||
+   versionGteLt(process.versions.node, '14.17.0', '15.0.0');
+ const tryStatSync = statSupportsThrowIfNoEntry ? tryStatSyncWithoutErrors : tryStatSyncWithErrors;
+-const statsIfNotFound = new Stats();
++const statsIfNotFound = { isFile() { return false; }, isDirectory() { return false; } };
+ function tryStatSyncWithoutErrors(path) {
+   const stats = statSync(path, { throwIfNoEntry: false });
+   if(stats != null) return stats;
