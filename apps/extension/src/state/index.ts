@@ -28,6 +28,7 @@ import { createRecentAddressesSlice, RecentAddressesSlice } from './recent-addre
 import { createSignApprovalSlice, SignApprovalSlice } from './sign-approval';
 import { createFrostSessionSlice, FrostSessionSlice } from './frost-session';
 import { createInboxSlice, InboxSlice } from './inbox';
+import { createLicenseSlice, LicenseSlice } from './license';
 
 export interface AllSlices {
   wallets: WalletsSlice;
@@ -53,6 +54,7 @@ export interface AllSlices {
   signApproval: SignApprovalSlice;
   frostSession: FrostSessionSlice;
   inbox: InboxSlice;
+  license: LicenseSlice;
 }
 
 export type SliceCreator<SliceInterface> = StateCreator<
@@ -94,6 +96,7 @@ export const initializeStore = (
     signApproval: createSignApprovalSlice()(setState, getState, store),
     frostSession: createFrostSessionSlice()(setState, getState, store),
     inbox: createInboxSlice()(setState, getState, store),
+    license: createLicenseSlice()(setState, getState, store),
   }));
 };
 

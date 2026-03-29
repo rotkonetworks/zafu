@@ -6,14 +6,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
-import { isPro, selectDaysRemaining, licenseSelector } from '../../../state/license';
-import { ROTKO_LICENSE_ADDRESS, PRO_RATE_ZAT_PER_30_DAYS, PRO_FEATURES, buildPaymentMemo, daysForPayment } from '@repo/wallet/license';
+import { isPro, selectDaysRemaining, selectPending, licenseSelector } from '../../../state/license';
+import { ROTKO_LICENSE_ADDRESS, PRO_RATE_ZAT_PER_30_DAYS, PRO_FEATURES, buildPaymentMemo } from '@repo/wallet/license';
 import { SettingsScreen } from './settings-screen';
 
 export const SubscribePage = () => {
   const keyInfo = useStore(selectEffectiveKeyInfo);
   const pro = useStore(isPro);
   const days = useStore(selectDaysRemaining);
+  const pending = useStore(selectPending);
   const { loadLicense } = useStore(licenseSelector);
   const [copied, setCopied] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
@@ -34,10 +35,7 @@ export const SubscribePage = () => {
     if (!zidPubkey) return;
     setChecking(true);
     try {
-      // call zidecar GetLicense
-      const endpoint = useStore.getState().networks?.networks?.zcash?.endpoint || 'https://zcash.rotko.net';
-      // TODO: proper gRPC call — for now use REST-style fetch
-      // the gRPC-web call would go through the zcash worker
+      // TODO: proper gRPC call via zcash worker - for now just reload from storage
       await loadLicense();
     } catch { /* */ }
     setChecking(false);
@@ -70,14 +68,31 @@ export const SubscribePage = () => {
           <ul className='flex flex-col gap-0.5 pl-2'>
             {PRO_FEATURES.map(f => (
               <li key={f} className='flex items-center gap-1.5'>
-                <span className={pro ? 'text-green-400' : 'text-muted-foreground/30'}>
-                  {pro ? '✓' : '·'}
+                <span className={pro ? 'i-lucide-check size-3 text-green-400' : 'size-3 text-muted-foreground/30'}>
+                  {pro ? '' : '\u00b7'}
                 </span>
                 {f.replace(/_/g, ' ')}
               </li>
             ))}
           </ul>
         </div>
+
+        {/* pending payment */}
+        {pending && pending.pendingZat > 0 && (
+          <div className='rounded border border-yellow-500/30 p-3'>
+            <div className='flex items-center gap-2'>
+              <span className='h-2 w-2 rounded-full bg-yellow-400 animate-pulse' />
+              <span className='text-xs font-mono'>
+                payment detected — {(pending.pendingZat / 1e8).toFixed(4)} ZEC
+              </span>
+            </div>
+            <div className='text-[9px] font-mono text-muted-foreground/60 mt-1'>
+              {pending.requiredConfs === 0
+                ? 'crediting...'
+                : `${pending.pendingConfs}/${pending.requiredConfs} confirmations`}
+            </div>
+          </div>
+        )}
 
         {!pro && (
           <>

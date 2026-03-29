@@ -212,6 +212,9 @@ type LOCAL = {
   /** auto-lock timeout in minutes (0 = disabled, default 15) */
   autoLockMinutes?: number;
 
+  /** serialized pro license JSON */
+  proLicense?: string;
+
   /** polkadot vault settings */
   polkadotVaultSettings?: {
     /** use legacy qr format for older parity signer / polkadot vault */

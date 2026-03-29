@@ -53,15 +53,16 @@ export async function verifyAttestation(
   const digest = await attestationDigest(pubkeyBytes, anchor, height, mainnet);
 
   // import rotko's ed25519 public key
+  // slice() to get a fresh ArrayBuffer (avoids SharedArrayBuffer compat issues)
   const key = await crypto.subtle.importKey(
     'raw',
-    pubkeyBytes,
+    pubkeyBytes.slice().buffer,
     { name: 'Ed25519' },
     false,
     ['verify'],
   );
 
-  return crypto.subtle.verify('Ed25519', key, signature, digest);
+  return crypto.subtle.verify('Ed25519', key, signature.slice().buffer, digest.slice().buffer);
 }
 
 function hexToBytes(hex: string): Uint8Array {

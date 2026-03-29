@@ -10,7 +10,7 @@
  */
 
 import { ed25519 } from '@noble/curves/ed25519';
-import { hexToBytes, bytesToHex } from '@noble/hashes/utils';
+import { hexToBytes } from '@noble/hashes/utils';
 import { ROTKO_ZCASH_VERIFIER } from './rotko-verifier';
 
 /** license plans */
@@ -92,7 +92,7 @@ export function isLicenseValid(license: License | null | undefined): boolean {
 /**
  * check if a specific pro feature is available.
  */
-export function hasProFeature(license: License | null | undefined, feature: ProFeature): boolean {
+export function hasProFeature(license: License | null | undefined, _feature: ProFeature): boolean {
   if (!isLicenseValid(license)) return false;
   return license!.plan === 'pro';
 }

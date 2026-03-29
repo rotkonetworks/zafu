@@ -32,7 +32,8 @@
     "./networks/polkadot/parachain-registry": "./src/networks/polkadot/parachain-registry.ts",
     "./networks/ethereum/derive": "./src/networks/ethereum/derive.ts",
     "./networks/bitcoin/derive": "./src/networks/bitcoin/derive.ts",
-    "./networks/zcash/diversified-address": "./src/networks/zcash/diversified-address.ts"
+    "./networks/zcash/diversified-address": "./src/networks/zcash/diversified-address.ts",
+    "./license": "./src/license.ts"
   },
   "dependencies": {
     "@cosmjs/amino": "^0.32.4",
