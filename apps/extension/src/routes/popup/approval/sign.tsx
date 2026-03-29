@@ -24,9 +24,14 @@ export const SignApproval = () => {
     if (!origin) return;
     void (async () => {
       const prefs = await localExtStorage.get('zidPreferences');
-      const pref: ZidSitePreference | undefined = prefs?.[origin];
+      const raw = prefs?.[origin] as Partial<ZidSitePreference> | undefined;
+      const pref: ZidSitePreference | undefined = raw ? {
+        mode: raw.mode === 'cross-site' ? 'cross-site' : 'site',
+        rotation: raw.rotation ?? 0,
+        identity: raw.identity ?? 'default',
+      } : undefined;
       const isSite = !pref || pref.mode === 'site';
-      setSigningMode(isSite ? `site #${pref?.rotation ?? 0}` : 'global');
+      setSigningMode(isSite ? `site #${pref?.rotation ?? 0}` : 'cross-site');
 
       // check share log first - avoids touching mnemonic
       const log = await localExtStorage.get('zidShareLog');
@@ -52,7 +57,12 @@ export const SignApproval = () => {
       const mnemonic = await getMnemonic(keyInfo.id);
       const challenge = hexToBytes(challengeHex);
       const prefs = await localExtStorage.get('zidPreferences');
-      const pref: ZidSitePreference | undefined = prefs?.[origin!];
+      const raw2 = prefs?.[origin!] as Partial<ZidSitePreference> | undefined;
+      const pref: ZidSitePreference | undefined = raw2 ? {
+        mode: raw2.mode === 'cross-site' ? 'cross-site' : 'site',
+        rotation: raw2.rotation ?? 0,
+        identity: raw2.identity ?? 'default',
+      } : undefined;
       const result = signZid(mnemonic, origin!, challenge, pref);
 
       // log the zid we signed with so the connections page can display it
@@ -63,6 +73,7 @@ export const SignApproval = () => {
           publicKey: result.publicKey,
           sharedWith: origin!,
           sharedAt: Date.now(),
+          identity: pref?.identity ?? 'default',
         });
         void localExtStorage.set('zidShareLog', log);
       }

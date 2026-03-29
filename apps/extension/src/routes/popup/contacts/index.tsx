@@ -458,7 +458,7 @@ export function ContactsPage() {
     let contactZid: string | undefined;
     try {
       const mnemonic = await getMnemonic(keyInfo.id);
-      const zid = deriveZidForContact(mnemonic, contact.id);
+      const zid = deriveZidForContact(mnemonic, 'default', contact.id);
       contactZid = zid.publicKey;
     } catch {
       // fall back to global zid if mnemonic unavailable

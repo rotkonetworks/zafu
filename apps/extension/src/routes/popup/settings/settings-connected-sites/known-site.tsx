@@ -12,7 +12,14 @@ const useZidPref = (origin: string) => {
 
   useEffect(() => {
     void localExtStorage.get('zidPreferences').then(prefs => {
-      setPref(prefs?.[origin]);
+      const raw = prefs?.[origin] as Partial<ZidSitePreference> | undefined;
+      if (raw) {
+        setPref({
+          mode: raw.mode === 'cross-site' ? 'cross-site' : 'site',
+          rotation: raw.rotation ?? 0,
+          identity: raw.identity ?? 'default',
+        });
+      }
     });
   }, [origin]);
 
@@ -98,7 +105,7 @@ export const KnownSite = ({
   };
 
   const confirmGlobal = () => {
-    void update({ mode: 'global', rotation: 0 });
+    void update({ mode: 'cross-site', rotation: 0, identity: pref?.identity ?? 'default' });
     setConfirming(null);
   };
 
@@ -107,7 +114,7 @@ export const KnownSite = ({
   };
 
   const confirmRotate = () => {
-    void update({ mode: 'site', rotation: rotation + 1 });
+    void update({ mode: 'site', rotation: rotation + 1, identity: pref?.identity ?? 'default' });
     setConfirming(null);
   };
 

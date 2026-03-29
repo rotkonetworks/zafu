@@ -185,8 +185,9 @@ type LOCAL = {
 
   /** per-origin zid identity preferences (default: site-specific) */
   zidPreferences?: Record<string, {
-    mode: 'global' | 'site';
+    mode: 'cross-site' | 'site';
     rotation: number;
+    identity: string;
   }>;
 
   /** log of zid pubkeys shared during site authentication */
@@ -194,6 +195,7 @@ type LOCAL = {
     publicKey: string;
     sharedWith: string;
     sharedAt: number;
+    identity: string;
   }[];
 
   /** per-contact diversified zcash addresses - traces payment referrals */
