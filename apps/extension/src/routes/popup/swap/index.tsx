@@ -159,67 +159,105 @@ const ZcashCrosschainSwap = () => {
     setDestinationAddress('');
   }, [step]);
 
-  const handleRequestQuote = useCallback(async () => {
-    if (!selectedToken || !amountIn || parseFloat(amountIn) <= 0 || !zcashAddress || !zecAssetId) return;
+const handleRequestQuote = useCallback(async () => {
+  if (!selectedToken) {
+    setError('select a token to receive');
+    return;
+  }
 
-    if (!destinationAddress) {
-      setError(isFromZec
+  if (!amountIn || parseFloat(amountIn) <= 0) {
+    setError('enter an amount greater than 0');
+    return;
+  }
+
+  if (!zcashAddress) {
+    setError('zcash address not loaded yet');
+    return;
+  }
+
+  if (!zecAssetId) {
+    setError('ZEC asset metadata still loading');
+    return;
+  }
+
+  if (!destinationAddress) {
+    setError(
+      isFromZec
         ? `enter ${selectedToken.blockchain} recipient address`
-        : `enter your ${selectedToken.blockchain} address for sending + refund`);
-      return;
-    }
+        : `enter your ${selectedToken.blockchain} address for sending + refund`,
+    );
+    return;
+  }
 
-    setStep('quoting');
-    setError(undefined);
+  setStep('quoting');
+  setError(undefined);
 
+  try {
+    const originAsset = isFromZec ? zecAssetId : selectedToken.assetId;
+    const destAsset = isFromZec ? selectedToken.assetId : zecAssetId;
+    const originDecimals = isFromZec ? 8 : selectedToken.decimals;
+    const amount = toBaseUnits(amountIn, originDecimals);
+
+    const recipient = isFromZec ? destinationAddress : zcashAddress;
+    const refundTo = isFromZec ? zcashAddress : destinationAddress;
+
+    const resp = await requestQuote({
+      swapType: 'EXACT_INPUT',
+      amount,
+      originAsset,
+      destinationAsset: destAsset,
+      recipient,
+      refundTo,
+    });
+
+    setQuote(resp);
+    setStep('deposit');
+  } catch (err) {
+    setError(err instanceof Error ? err.message : 'failed to get quote');
+    setStep('error');
+  }
+}, [selectedToken, amountIn, zcashAddress, zecAssetId, destinationAddress, isFromZec]);
+// poll swap status when in deposit/polling step
+useEffect(() => {
+  if ((step !== 'deposit' && step !== 'polling') || !quote) return;
+
+  const interval = setInterval(async () => {
     try {
-      const originAsset = isFromZec ? zecAssetId : selectedToken.assetId;
-      const destAsset = isFromZec ? selectedToken.assetId : zecAssetId;
-      const originDecimals = isFromZec ? 8 : selectedToken.decimals;
-      const amount = toBaseUnits(amountIn, originDecimals);
+      const status = await checkSwapStatus(quote.quote.depositAddress);
 
-      const recipient = isFromZec ? destinationAddress : zcashAddress;
-      const refundTo = isFromZec ? zcashAddress : destinationAddress;
+      console.log('[swap-status]', status.status);
+      setSwapStatus(status.status);
 
-      const resp = await requestQuote({
-        swapType: 'EXACT_INPUT',
-        amount,
-        originAsset,
-        destinationAsset: destAsset,
-        recipient,
-        refundTo,
-      });
-
-      setQuote(resp);
-      setStep('deposit');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'failed to get quote');
-      setStep('error');
-    }
-  }, [selectedToken, amountIn, direction, zcashAddress, destinationAddress, isFromZec, zecAssetId]);
-
-  // poll swap status when in deposit/polling step
-  useEffect(() => {
-    if ((step !== 'deposit' && step !== 'polling') || !quote) return;
-
-    const interval = setInterval(async () => {
-      try {
-        const status = await checkSwapStatus(quote.quote.depositAddress);
-        setSwapStatus(status.status);
-        if (status.status === 'SUCCESS') {
+      switch (status.status) {
+        case 'SUCCESS':
           setStep('done');
-        } else if (status.status === 'FAILED' || status.status === 'REFUNDED') {
+          break;
+
+        case 'FAILED':
+        case 'REFUNDED':
           setError(`swap ${status.status.toLowerCase()}`);
           setStep('error');
-        } else if (status.status && status.status !== 'INCOMPLETE_DEPOSIT') {
+          break;
+
+        case 'PROCESSING':
           setStep('polling');
-        }
-      } catch { /* continue polling */ }
-    }, 5000);
+          break;
 
-    return () => clearInterval(interval);
-  }, [step, quote]);
+        case 'KNOWN_DEPOSIT_TX':
+        case 'PENDING_DEPOSIT':
+        case 'INCOMPLETE_DEPOSIT':
+        case null:
+        default:
+          // stay on current screen and keep polling
+          break;
+      }
+    } catch (err) {
+      console.error('[swap-status] poll failed', err);
+    }
+  }, 5000);
 
+  return () => clearInterval(interval);
+}, [step, quote]);
   const handleCopyDeposit = useCallback(() => {
     if (!quote) return;
     void navigator.clipboard.writeText(quote.quote.depositAddress);
@@ -488,8 +526,8 @@ const ZcashCrosschainSwap = () => {
               )}
               <span className='text-sm'>
                 {swapStatus === 'PROCESSING' && 'processing swap...'}
-                {swapStatus === 'PENDING_DEPOSIT' && 'deposit detected, confirming...'}
-                {swapStatus === 'KNOWN_DEPOSIT_TX' && 'deposit found...'}
+                {swapStatus === 'PENDING_DEPOSIT' && 'waiting for deposit...'}
+                {swapStatus === 'KNOWN_DEPOSIT_TX' && 'deposit detected, confirming...'}
                 {swapStatus === 'INCOMPLETE_DEPOSIT' && 'waiting for full deposit...'}
                 {!swapStatus && 'waiting for deposit...'}
               </span>
