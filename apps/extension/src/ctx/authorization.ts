@@ -21,6 +21,10 @@ const isSwapClaimOnly = (plan: TransactionPlan): boolean =>
   plan.actions.length > 0 && plan.actions.every(a => a.action.case === 'swapClaim');
 
 export const getAuthorization = async (plan: TransactionPlan): Promise<AuthorizationData> => {
+  // Swap claims don't require user interaction — sign without popup
+  if (isSwapClaimOnly(plan)) {
+    return new AuthorizationData();
+  }
   // Check if active wallet is airgap (Zigner) — use getWalletFromStorage
   // which handles decryption (wallets are encrypted at rest)
   const activeWallet = await getWalletFromStorage();
@@ -30,16 +34,6 @@ export const getAuthorization = async (plan: TransactionPlan): Promise<Authoriza
     if (custodyType === 'airgapSigner') {
       return getAirgapAuthorization(plan, activeWallet);
     }
-  }
-
-  // Swap claims don't require user interaction — sign without popup
-  if (isSwapClaimOnly(plan)) {
-    return openWallet()
-      .then(custody => custody.authorizePlan(plan))
-      .catch(error => {
-        console.error(error);
-        throw new ConnectError('Authorization failed', Code.Internal);
-      });
   }
 
   // Normal flow: sign in parallel with user approval
@@ -76,7 +70,9 @@ const getAirgapAuthorization = async (
   // Compute the real 64-byte effect hash using penumbra WASM
   const fvk = FullViewingKey.fromJsonString(activeWallet.fullViewingKey);
   const effectHashBytes = await computeEffectHash(fvk, plan);
-  const effectHashHex = Array.from(effectHashBytes, (b: number) => b.toString(16).padStart(2, '0')).join('');
+  const effectHashHex = Array.from(effectHashBytes, (b: number) =>
+    b.toString(16).padStart(2, '0'),
+  ).join('');
 
   const response = await popup(PopupType.TxApproval, {
     authorizeRequest: new AuthorizeRequest({ plan }).toJson() as Jsonified<AuthorizeRequest>,
