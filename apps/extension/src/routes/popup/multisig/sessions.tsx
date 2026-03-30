@@ -56,37 +56,47 @@ const WalletRow = ({
   balance,
   isActive,
   onSelect,
+  onEdit,
 }: {
   wallet: ZcashWalletJson & { originalIndex: number };
   balance: bigint;
   isActive: boolean;
   onSelect: () => void;
+  onEdit: () => void;
 }) => (
-  <button
-    onClick={onSelect}
+  <div
     className={cn(
-      'flex items-center justify-between w-full rounded-lg px-3 py-3 text-left transition-colors',
+      'flex items-center w-full rounded-lg px-3 py-3 transition-colors',
       isActive ? 'bg-primary/10 ring-1 ring-primary/20' : 'hover:bg-muted/50',
     )}
   >
-    <div className='flex flex-col gap-1 min-w-0'>
-      <div className='flex items-center gap-2'>
-        <span className='rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary leading-none shrink-0'>
-          {wallet.multisig!.threshold}-of-{wallet.multisig!.maxSigners}
+    <button onClick={onSelect} className='flex flex-1 items-center justify-between min-w-0 text-left'>
+      <div className='flex flex-col gap-1 min-w-0'>
+        <div className='flex items-center gap-2'>
+          <span className='rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary leading-none shrink-0'>
+            {wallet.multisig!.threshold}-of-{wallet.multisig!.maxSigners}
+          </span>
+          <span className='text-sm font-medium truncate'>{wallet.label}</span>
+          {isActive && (
+            <span className='i-lucide-check h-3 w-3 text-primary shrink-0' />
+          )}
+        </div>
+        <span className='text-[11px] text-muted-foreground font-mono'>
+          {truncateAddr(wallet.address)}
         </span>
-        <span className='text-sm font-medium truncate'>{wallet.label}</span>
-        {isActive && (
-          <span className='i-lucide-check h-3 w-3 text-primary shrink-0' />
-        )}
       </div>
-      <span className='text-[11px] text-muted-foreground font-mono'>
-        {truncateAddr(wallet.address)}
+      <span className='text-sm font-mono text-muted-foreground shrink-0 ml-2'>
+        {formatZec(balance)} ZEC
       </span>
-    </div>
-    <span className='text-sm font-mono text-muted-foreground shrink-0 ml-2'>
-      {formatZec(balance)} ZEC
-    </span>
-  </button>
+    </button>
+    <button
+      onClick={onEdit}
+      className='ml-2 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors shrink-0'
+      title='wallet settings'
+    >
+      <span className='i-lucide-settings h-3.5 w-3.5' />
+    </button>
+  </div>
 );
 
 export const MultisigPage = () => {
@@ -144,6 +154,7 @@ export const MultisigPage = () => {
               balance={balances[w.id] ?? 0n}
               isActive={w.originalIndex === activeIdx}
               onSelect={() => void setActiveZcashWallet(w.originalIndex)}
+              onEdit={() => navigate(`${PopupPath.SETTINGS_MULTISIG}?id=${w.id}`)}
             />
           ))}
         </div>

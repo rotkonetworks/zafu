@@ -7,6 +7,30 @@
  *
  * Designed to be compatible with the upcoming onboarding restructure
  * (see prax-wallet/prax PR #402) while working standalone until that lands.
+ *
+ * ========================================================================
+ * DESIGN: ZID-aware QR processing
+ * ========================================================================
+ *
+ * processQrData currently handles: FVK exports (penumbra, zcash),
+ * substrate addresses, cosmos accounts, UR formats, and zigner backups.
+ *
+ * New UR types to add for ZID:
+ *   - ur:zid-response - scanned after zigner signs a ZID challenge.
+ *     this should NOT be processed here (wallet import context).
+ *     it belongs in a new zid-verify slice or the signing flow.
+ *   - ur:zid-identity - NOT scanned by zafu. this is zafu -> zigner only.
+ *
+ * The DetectedNetwork type may need a 'zid' variant, OR zid verification
+ * should bypass the wallet-import pipeline entirely since it is not
+ * importing a wallet - it is verifying identity.
+ *
+ * Recommended approach: add a top-level check in processQrData for
+ * ur:zid-response that delegates to a different handler (e.g., a callback
+ * or a separate state slice) rather than trying to fit it into the
+ * wallet-import state machine. This keeps the import flow clean and
+ * avoids confusing users who scan a zid-response in the wrong context.
+ * ========================================================================
  */
 
 import type { AllSlices, SliceCreator } from '.';

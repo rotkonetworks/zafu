@@ -161,7 +161,7 @@ export const MultisigCreate = () => {
   const currentRound = step.startsWith('dkg-round') ? Number(step.replace('dkg-round', '')) : 0;
 
   return (
-    <SettingsScreen title='create multisig' backPath={PopupPath.SETTINGS_WALLETS}>
+    <SettingsScreen title='create multisig' backPath={PopupPath.MULTISIG}>
       {step === 'config' && (
         <div className='flex flex-col gap-4'>
           <label className='text-xs text-muted-foreground'>

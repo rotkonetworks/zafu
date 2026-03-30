@@ -591,3 +591,72 @@ export function parseZignerBackupUr(urString: string): ZignerBackupExport {
     accounts: mappedAccounts,
   };
 }
+
+// ============================================================================
+// DESIGN: ZID Identity QR Protocol for Zigner
+// ============================================================================
+//
+// Three new UR types for ZID operations between zafu and zigner.
+// These follow the same UR encoding as existing types (bytewords + CRC32).
+//
+// --- ur:zid-challenge (zafu -> zigner) ---
+//
+// Zafu generates a random 32-byte challenge and encodes the derivation
+// parameters so zigner knows which key to sign with.
+//
+// CBOR structure:
+//   map(4-5) {
+//     1: bytes(32)   // challenge - random nonce, never reused
+//     2: text        // identity name ("default", "poker", etc)
+//     3: uint        // purpose: 0=backup-verify, 1=frost-identity, 2=contact-auth
+//     4: text        // context label for zigner UI ("verify backup", "join multisig", etc)
+//     5: text        // (optional) additional params - origin + rotation for site-scoped ops
+//   }
+//
+// Security: challenge must be generated with crypto.getRandomValues().
+// Zigner should reject challenges shorter than 32 bytes.
+// Zigner displays the context label so user can reject unexpected requests.
+//
+// --- ur:zid-response (zigner -> zafu) ---
+//
+// Zigner derives the requested key, signs the challenge, displays QR.
+//
+// CBOR structure:
+//   map(3) {
+//     1: bytes(64)   // ed25519 signature over the challenge
+//     2: bytes(32)   // ed25519 public key (so zafu can verify without knowing which key)
+//     3: uint        // purpose echo (zafu verifies this matches what it asked for)
+//   }
+//
+// Zafu verifies:
+//   1. signature is valid for the pubkey and the original challenge
+//   2. pubkey matches the expected ZID for the given identity + purpose
+//   3. purpose matches what was requested (prevents cross-purpose replay)
+//
+// --- ur:zid-identity (zafu -> zigner, one-time config) ---
+//
+// During seed backup (settings-passphrase.tsx QR flow), zafu also sends
+// the active identity configuration so zigner knows which identity names
+// exist.
+//
+// CBOR structure:
+//   map(2) {
+//     1: text        // identity derivation name (stable, part of key path)
+//     2: text        // user-facing label (display only, can change)
+//   }
+//
+// This is a configuration QR, not a signing operation. Zigner stores the
+// identity name alongside the seed. Multiple identities can be sent as
+// separate QR scans.
+//
+// Design rationale:
+//   - zigner is air-gapped, so it CANNOT fetch identity config from a server
+//   - identity names must be explicitly communicated via QR
+//   - the name is not secret (the mnemonic provides all entropy)
+//   - if zigner has the mnemonic but no identity name, it should default
+//     to "default" (matching DEFAULT_IDENTITY in identity.ts)
+//
+// Future: ur:zid-challenge could be extended for P-256/WebAuthn if zigner
+// ever gains NFC capability, but that breaks the air-gap model and is not
+// planned.
+// ============================================================================

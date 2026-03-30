@@ -39,6 +39,91 @@
  *   diversified address  -> payment routing + referral tracking
  *   per-site zid         -> website authentication
  *   per-contact zid      -> sender auth + e2ee (X25519 DH)
+ *
+ * ==========================================================================
+ * DESIGN: ZID on Zigner (air-gapped cold wallet)
+ * ==========================================================================
+ *
+ * zigner already holds the mnemonic (imported via QR from zafu, or generated
+ * natively). since ZID derivation is fully deterministic from the mnemonic,
+ * zigner can derive the SAME ZID keys independently - no secret transfer
+ * needed.
+ *
+ * what zigner needs ZID for:
+ *   1. FROST participation identity - zigner must prove it holds the same
+ *      seed when co-signing. the cross-site ZID (or a FROST-specific
+ *      derivation) acts as the persistent participant identity.
+ *   2. backup verification - when zafu shows "verify backup" flow, zigner
+ *      can sign a challenge with its ZID to prove seed possession without
+ *      revealing the seed itself.
+ *   3. zigner-to-zigner contact auth - if two zigner devices communicate
+ *      (e.g., multisig setup via QR relay), per-contact ZID authenticates
+ *      each party.
+ *
+ * what zigner does NOT need ZID for:
+ *   - per-site identity (zigner never talks to websites)
+ *   - password derivation (zigner has no browser)
+ *   - WebAuthn/passkeys (zigner has no USB/NFC)
+ *   - ring VRF key (zigner does not interact with zidecar)
+ *
+ * derivation on zigner:
+ *   zigner derives: root = HMAC-SHA512("zid-v1", mnemonic)
+ *   zigner derives: identity = HMAC-SHA512(root, "identity:" + name)
+ *   the identity name must be communicated from zafu to zigner (see below).
+ *   zigner does NOT need site preferences, rotation indices, or share logs.
+ *
+ * rotation sync:
+ *   zigner does NOT track rotation. rotation is a zafu-side concept for
+ *   web origins. when zafu needs zigner to sign with a rotated key (rare -
+ *   only if a site somehow needs zigner to authenticate), zafu includes the
+ *   full derivation parameters in the QR sign request:
+ *     { tag: "site", origin: "...", rotation: N }
+ *   zigner blindly derives and signs. it does not persist rotation state.
+ *
+ * QR protocol additions needed:
+ *   1. ur:zid-challenge - zafu shows challenge QR for zigner to sign
+ *      CBOR: { challenge: bytes(32), identity: text, tag: text, params: text }
+ *      zigner signs with the derived ed25519 key, displays ur:zid-response
+ *   2. ur:zid-response - zigner displays signed challenge
+ *      CBOR: { signature: bytes(64), publicKey: bytes(32) }
+ *      zafu scans and verifies signature + pubkey matches expected ZID
+ *   3. ur:zid-identity - zafu tells zigner which identity name to use
+ *      sent during initial seed backup flow or as a separate config QR.
+ *      CBOR: { name: text, label: text }
+ *      zigner stores the identity name alongside the seed.
+ *
+ * privacy analysis - zigner screen:
+ *   zigner displays the ZID pubkey on its screen during verification.
+ *   this is acceptable because:
+ *   - the user is physically holding the device, screen is private
+ *   - the pubkey is only shown momentarily during the flow
+ *   - zigner should display truncated form ("zid" + first 16 hex chars)
+ *     same as zafu, to avoid unnecessary full-key exposure
+ *   - zigner MUST NOT display the cross-site key unprompted. it should
+ *     only show the identity-level key (equivalent to deriveZidCrossSite
+ *     for that identity name) since zigner has no "site" concept
+ *   - shoulder-surfing risk: the 16-char truncated address is not enough
+ *     to reconstruct the full key. acceptable for verification UX.
+ *
+ * threat model:
+ *   - compromised zafu (hot wallet): attacker gets mnemonic, derives all
+ *     ZIDs. this is already the threat model - ZID adds no new risk.
+ *   - compromised zigner QR channel (camera/screen observed): attacker
+ *     sees pubkeys and signatures but NOT private keys. signatures are
+ *     challenge-response, so replay is useless. no new risk.
+ *   - evil QR injection (attacker shows fake challenge QR to zigner):
+ *     zigner signs arbitrary challenges. but the signature is only valid
+ *     for ed25519 verify - it cannot leak the private key. the attacker
+ *     gets proof-of-identity for one challenge. mitigation: zigner should
+ *     display the challenge context (e.g., "backup verify" vs "FROST sign")
+ *     so the user can reject unexpected requests.
+ *
+ * implementation plan:
+ *   phase 1: add ZID derivation to zigner app (same HMAC-SHA512 chain)
+ *   phase 2: add ur:zid-challenge / ur:zid-response to ur-parser.ts
+ *   phase 3: backup verification flow (zafu shows challenge, zigner signs)
+ *   phase 4: FROST participant identity (zigner uses ZID in DKG)
+ * ==========================================================================
  */
 
 import { ed25519 } from '@noble/curves/ed25519';
@@ -107,9 +192,9 @@ const deriveSeedCrossSite = (identity: Uint8Array): Uint8Array =>
 const deriveSeedForContact = (identity: Uint8Array, contactId: string): Uint8Array =>
   deriveSeed(identity, enc.encode('contact:' + contactId));
 
-/** derive stable zpro license seed (never rotates). */
-const deriveSeedForLicense = (identity: Uint8Array): Uint8Array =>
-  deriveSeed(identity, enc.encode('zpro-license-v1'));
+/** derive ring VRF seed for anonymous pro membership (never rotates). */
+const deriveSeedForRingVrf = (identity: Uint8Array): Uint8Array =>
+  deriveSeed(identity, enc.encode('ring-vrf-v1'));
 
 /** extract ed25519 keypair from seed. zeroizes the seed. */
 const keypairFromSeed = (seed: Uint8Array): { privateKey: Uint8Array; publicKey: Uint8Array } => {
@@ -172,17 +257,22 @@ export const deriveZidCrossSite = (mnemonic: string, identity: string): Zid =>
   });
 
 /**
- * derive the stable zpro license key for an identity.
+ * derive the ring VRF seed for anonymous pro membership.
  *
- * this key NEVER rotates - it's the permanent license identity.
- * used for: payment memo, license lookup, ring VRF derivation.
+ * this seed NEVER rotates - it's the permanent ring identity.
+ * the Bandersnatch pubkey derived from this seed goes in the payment memo.
+ * the same seed feeds ring_vrf_prove() for anonymous sync proofs.
+ *
+ * one key serves both roles (payment identity + ring member), eliminating
+ * the zpro-to-ring mapping that would let the license server correlate
+ * payment identity with ring membership.
+ *
  * independent of ZID rotation so subscriptions survive key rotation.
  */
-export const deriveZproKey = (mnemonic: string, identity = DEFAULT_IDENTITY): { publicKey: string; seed: Uint8Array } =>
+export const deriveRingVrfSeed = (mnemonic: string, identity = DEFAULT_IDENTITY): Uint8Array =>
   withIdentity(mnemonic, identity, (id) => {
-    const seed = deriveSeedForLicense(id);
-    const { publicKey } = keypairFromSeed(seed.slice());
-    return { publicKey: bytesToHex(publicKey), seed: seed.slice(0, 32) };
+    const seed = deriveSeedForRingVrf(id);
+    return seed.slice(0, 32);
   });
 
 /**

@@ -1,13 +1,13 @@
 /**
  * license state - tracks pro subscription status.
  *
- * license is fetched from zidecar, verified against rotko's key,
- * stored in localStorage. checked on feature access.
+ * license is fetched from license-server (via zidecar proxy or direct),
+ * verified against rotko's key, stored in localStorage.
  *
- * rate-limit tier: license signature is attached to all gRPC requests
- * via x-zafu-license header. zidecar verifies and applies tiers:
- *   free  = throttled sync (entry level, always works)
- *   pro   = full speed, priority
+ * sync priority uses ring VRF proofs (anonymous, unlinkable).
+ * license check uses the Bandersnatch pubkey (same key as ring member).
+ *   free  = normal sync (always works)
+ *   pro   = priority queue under load
  */
 
 import type { AllSlices, SliceCreator } from '.';

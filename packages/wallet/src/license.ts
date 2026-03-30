@@ -1,12 +1,16 @@
 /**
- * license — ZEC-paid pro subscription verified via ZID + rotko signature.
+ * license — ZEC-paid pro subscription verified via ring VRF + rotko signature.
  *
  * flow:
- * 1. user sends 0.01 ZEC to rotko's address with memo "zid<pubkey>"
- * 2. zidecar detects payment, signs license: { zid, expires, plan }
- * 3. zafu fetches/stores license, checks expiry for feature gating
+ * 1. user sends 0.01 ZEC to rotko's address with memo "zid<bandersnatch_pubkey>"
+ * 2. license-server detects payment, signs license, adds key to ring
+ * 3. zafu fetches license, verifies locally, uses ring VRF for anonymous sync
  *
- * no accounts, no emails, no KYC. blockchain = payment ledger, ZID = account.
+ * the Bandersnatch pubkey in the memo IS the ring identity. no separate
+ * registration step. one key, one role. license-server can't correlate
+ * payment identity with ring membership because they're the same thing.
+ *
+ * no accounts, no emails, no KYC. blockchain = payment ledger.
  */
 
 import { ed25519 } from '@noble/curves/ed25519';

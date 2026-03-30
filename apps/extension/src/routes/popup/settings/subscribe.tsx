@@ -8,7 +8,7 @@ import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo, selectGetMnemonic } from '../../../state/keyring';
 import { isPro, selectDaysRemaining, selectPending, licenseSelector } from '../../../state/license';
 import { ROTKO_LICENSE_ADDRESS, PRO_RATE_ZAT_PER_30_DAYS, PRO_FEATURES, buildPaymentMemo } from '@repo/wallet/license';
-import { deriveZproKey } from '../../../state/identity';
+import { deriveRingVrfSeed } from '../../../state/identity';
 import { SettingsScreen } from './settings-screen';
 
 export const SubscribePage = () => {
@@ -22,21 +22,26 @@ export const SubscribePage = () => {
   const [copied, setCopied] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState<string | null>(null);
-  const [zproKey, setZproKey] = useState<string | null>(null);
+  const [ringPubkey, setRingPubkey] = useState<string | null>(null);
 
-  // derive stable zpro license key (never rotates, survives ZID rotation)
+  // derive Bandersnatch ring VRF pubkey (the payment + ring identity)
   useEffect(() => {
     if (!keyInfo?.id) return;
     void (async () => {
       try {
         const mnemonic = await getMnemonic(keyInfo.id);
-        const { publicKey } = deriveZproKey(mnemonic);
-        setZproKey(publicKey);
-      } catch { /* not a mnemonic vault */ }
+        const seed = deriveRingVrfSeed(mnemonic);
+        // derive Bandersnatch pubkey via WASM
+        // @ts-expect-error dynamic WASM import resolved at runtime
+        const wasm = await import(/* webpackIgnore: true */ '/ring-vrf-wasm/ring_vrf_wasm.js');
+        await wasm.default({ module_or_path: '/ring-vrf-wasm/ring_vrf_wasm_bg.wasm' });
+        const pubkey = wasm.derive_ring_pubkey(seed) as string;
+        setRingPubkey(pubkey);
+      } catch { /* WASM not available or not a mnemonic vault */ }
     })();
   }, [keyInfo?.id, getMnemonic]);
 
-  const memo = zproKey ? buildPaymentMemo(zproKey) : '';
+  const memo = ringPubkey ? buildPaymentMemo(ringPubkey) : '';
   const rateZec = (PRO_RATE_ZAT_PER_30_DAYS / 1e8).toFixed(2);
 
   useEffect(() => { void loadLicense(); }, [loadLicense]);
@@ -48,11 +53,11 @@ export const SubscribePage = () => {
   };
 
   const checkLicense = useCallback(async () => {
-    if (!zproKey) return;
+    if (!ringPubkey) return;
     setChecking(true);
     setCheckResult(null);
     try {
-      const license = await fetchLicense(zidecarUrl, zproKey);
+      const license = await fetchLicense(zidecarUrl, ringPubkey);
       if (license) {
         setCheckResult('license activated');
       } else {
@@ -64,7 +69,7 @@ export const SubscribePage = () => {
     }
     setChecking(false);
     setTimeout(() => setCheckResult(null), 4000);
-  }, [zproKey, zidecarUrl, fetchLicense, loadLicense]);
+  }, [ringPubkey, zidecarUrl, fetchLicense, loadLicense]);
 
   return (
     <SettingsScreen title='subscribe'>

@@ -4,10 +4,25 @@
  * Enables importing watch-only wallets and signing transactions via QR codes
  * with a Zigner (air-gapped phone) cold wallet.
  *
- * QR Code Types:
- * - 0x01: FVK Export (Zigner → zigner-web) - Import viewing key
- * - 0x10: Transaction (zigner-web → Zigner) - Send tx to sign
- * - 0x10: Authorization (Zigner → zigner-web) - Receive signatures
+ * QR Code Types (legacy binary, 0x53 prelude):
+ * - 0x01: FVK Export (Zigner -> zafu) - Import viewing key
+ * - 0x10: Transaction (zafu -> Zigner) - Send tx to sign
+ * - 0x10: Authorization (Zigner -> zafu) - Receive signatures
+ *
+ * QR Code Types (UR format, preferred):
+ * - ur:penumbra-accounts - FVK export
+ * - ur:zcash-accounts    - FVK export
+ * - ur:zigner-backup     - seed backup metadata
+ * - ur:zid-challenge     - (planned) zafu -> zigner: identity challenge
+ * - ur:zid-response      - (planned) zigner -> zafu: signed identity proof
+ * - ur:zid-identity      - (planned) zafu -> zigner: identity config
+ *
+ * See identity.ts and ur-parser.ts for the ZID-on-zigner design.
+ *
+ * Key insight: zigner already has the mnemonic, so ZID derivation happens
+ * locally on zigner using the same HMAC-SHA512 chain. No private key
+ * material crosses the air gap for ZID - only challenges, signatures,
+ * and public keys.
  */
 
 import {

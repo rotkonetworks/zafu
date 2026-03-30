@@ -141,7 +141,7 @@ export const MultisigSign = () => {
 
   if (!ms) {
     return (
-      <SettingsScreen title='co-sign' backPath={PopupPath.SETTINGS_WALLETS}>
+      <SettingsScreen title='co-sign' backPath={PopupPath.MULTISIG}>
         <div className='rounded-lg border border-red-500/40 bg-red-500/5 p-3 text-xs text-red-400'>
           no active multisig wallet - select a multisig wallet first
         </div>
@@ -150,7 +150,7 @@ export const MultisigSign = () => {
   }
 
   return (
-    <SettingsScreen title='co-sign' backPath={PopupPath.SETTINGS_WALLETS}>
+    <SettingsScreen title='co-sign' backPath={PopupPath.MULTISIG}>
       <div className='mb-4 rounded-lg border border-border/40 bg-card p-3'>
         <p className='text-[10px] text-muted-foreground'>signing as</p>
         <p className='mt-0.5 text-sm font-medium truncate'>{activeWallet!.label}</p>

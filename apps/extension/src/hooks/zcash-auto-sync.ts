@@ -21,7 +21,7 @@ import {
 } from '../state/keyring/network-worker';
 import { ZCASH_ORCHARD_ACTIVATION } from '../config/networks';
 import { isPro } from '../state/license';
-import { deriveZproKey } from '../state/identity';
+import { deriveRingVrfSeed } from '../state/identity';
 import { ZidecarClient } from '../state/keyring/zidecar-client';
 
 /** resolve wallet birthday height from storage or chain tip.
@@ -93,7 +93,7 @@ export function useZcashAutoSync() {
           // generate ring VRF session proof for pro priority sync
           if (isPro(useStore.getState())) {
             try {
-              const { seed } = deriveZproKey(mnemonic);
+              const seed = deriveRingVrfSeed(mnemonic);
               await useStore.getState().ringVrf.refreshRing(zidecarUrl, seed);
               await useStore.getState().ringVrf.newSessionProof();
               // inject proof headers into all ZidecarClient requests

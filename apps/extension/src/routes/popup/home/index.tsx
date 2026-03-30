@@ -982,8 +982,30 @@ function parsePenumbraTx(txInfo: TransactionInfo): ParsedTransaction {
         const idx = noteAccountIndex(ov.value?.note);
         if (idx != null) accountIndices.add(idx);
       }
-    } else if (c === 'swap') { type = 'swap'; description = 'Swap'; }
-    else if (c === 'delegate') { type = 'delegate'; description = 'Delegate'; }
+    } else if (c === 'swap') {
+      type = 'swap'; description = 'Swap';
+      // extract account from swap output notes (populated after claim)
+      const sv = action.actionView.value.swapView;
+      if (sv?.case === 'visible') {
+        const v = sv.value as { output1?: unknown; output2?: unknown };
+        for (const out of [v.output1, v.output2]) {
+          const idx = noteAccountIndex(out);
+          if (idx != null) accountIndices.add(idx);
+        }
+      }
+    } else if (c === 'swapClaim') {
+      type = 'swap'; description = 'Swap Claim';
+      // swap claims are separate txs with no spend/output actions - extract
+      // account from the claim's output notes
+      const scv = action.actionView.value.swapClaimView;
+      if (scv?.case === 'visible') {
+        const v = scv.value as { output1?: unknown; output2?: unknown };
+        for (const out of [v.output1, v.output2]) {
+          const idx = noteAccountIndex(out);
+          if (idx != null) accountIndices.add(idx);
+        }
+      }
+    } else if (c === 'delegate') { type = 'delegate'; description = 'Delegate'; }
     else if (c === 'undelegate') { type = 'undelegate'; description = 'Undelegate'; }
   }
   if (type === 'unknown') {
