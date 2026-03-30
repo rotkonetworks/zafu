@@ -11,7 +11,7 @@ import { useQuery } from '@tanstack/react-query';
 import { viewClient, simulationClient } from '../../../clients';
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
 import { useStore } from '../../../state';
-import { selectActiveNetwork, selectPenumbraAccount, selectEffectiveKeyInfo } from '../../../state/keyring';
+import { selectActiveNetwork, selectPenumbraAccount, selectEffectiveKeyInfo, selectGetMnemonic } from '../../../state/keyring';
 import { contactsSelector, type ContactNetwork } from '../../../state/contacts';
 import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
@@ -22,7 +22,7 @@ import { fromValueView } from '@rotko/penumbra-types/amount';
 import { assetPatterns } from '@rotko/penumbra-types/assets';
 import { cn } from '@repo/ui/lib/utils';
 import { useActiveAddress } from '../../../hooks/use-address';
-import { getBalanceInWorker } from '../../../state/keyring/network-worker';
+import { getBalanceInWorker, buildSendTxInWorker } from '../../../state/keyring/network-worker';
 import { RecipientPicker } from '../../../components/recipient-picker';
 import {
   getSupportedTokens,
@@ -37,6 +37,7 @@ import {
   type SwapStatus,
 } from '../../../state/near-swap';
 import type { BalancesResponse, AssetsResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
+import { usePasswordGate } from '../../../hooks/password-gate';
 
 /** input asset with balance */
 interface InputAsset {
@@ -78,7 +79,7 @@ export const SwapPage = () => {
 
 // ── Zcash Crosschain Swap (NEAR 1Click) ──
 
-type ZcashSwapStep = 'input' | 'quoting' | 'deposit' | 'polling' | 'done' | 'error';
+type ZcashSwapStep = 'input' | 'quoting' | 'review' | 'sending' | 'deposit' | 'polling' | 'done' | 'error';
 
 const ZcashCrosschainSwap = () => {
   const navigate = useNavigate();
@@ -97,6 +98,9 @@ const ZcashCrosschainSwap = () => {
   const [error, setError] = useState<string | undefined>();
   const [copied, setCopied] = useState(false);
   const [balanceZec, setBalanceZec] = useState<string | undefined>();
+  const getMnemonic = useStore(selectGetMnemonic);
+  const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
+  const { requestAuth, PasswordModal } = usePasswordGate();
 
   const isFromZec = direction === 'from_zec';
 
@@ -211,12 +215,60 @@ const handleRequestQuote = useCallback(async () => {
     });
 
     setQuote(resp);
-    setStep('deposit');
+    setStep('review');
   } catch (err) {
     setError(err instanceof Error ? err.message : 'failed to get quote');
     setStep('error');
   }
 }, [selectedToken, amountIn, zcashAddress, zecAssetId, destinationAddress, isFromZec]);
+
+const handleConfirmSwap = useCallback(async () => {
+  if (!quote || !selectedKeyInfo) return;
+
+  setError(undefined);
+
+  try {
+    if (isFromZec && selectedKeyInfo.type === 'mnemonic') {
+      const ok = await requestAuth();
+      if (!ok) {
+        setStep('review');
+        return;
+      }
+
+      setStep('sending');
+
+      const walletId = selectedKeyInfo.id;
+      const amountZat = toBaseUnits(amountIn, 8);
+      const mnemonic = await getMnemonic(walletId);
+
+      const result = await buildSendTxInWorker(
+        'zcash',
+        walletId,
+        zidecarUrl,
+        quote.quote.depositAddress,
+        amountZat,
+        '',
+        0,
+        true,
+        mnemonic,
+      );
+
+      if (!('txid' in result)) {
+        throw new Error('failed to broadcast deposit transaction');
+      }
+
+      setStep('polling');
+      return;
+    }
+
+    setStep('deposit');
+  } catch (err) {
+    console.error('[swap] send failed', err);
+    setError(err instanceof Error ? err.message : 'failed to send deposit');
+    setStep('error');
+  }
+}, [quote, selectedKeyInfo, amountIn, getMnemonic, zidecarUrl, isFromZec, requestAuth]);
+
 // poll swap status when in deposit/polling step
 useEffect(() => {
   if ((step !== 'deposit' && step !== 'polling') || !quote) return;
@@ -277,6 +329,7 @@ useEffect(() => {
 
   return (
     <div className='flex flex-col gap-3 p-4'>
+      {PasswordModal}
       {/* header with back arrow */}
       <div className='flex items-center gap-3 -mx-4 -mt-4 border-b border-border/40 px-4 py-3'>
         <button
@@ -474,6 +527,65 @@ useEffect(() => {
         <div className='flex flex-col items-center gap-3 py-12'>
           <span className='i-lucide-refresh-cw h-6 w-6 animate-spin text-muted-foreground' />
           <p className='text-sm text-muted-foreground'>fetching quote...</p>
+        </div>
+      )}
+
+      {step === 'review' && quote && (
+          <div className='flex flex-col gap-3'>
+            <div className='rounded-lg border border-zigner-gold/30 bg-card/50 p-3'>
+              <p className='mb-2 text-xs font-medium text-zigner-gold'>
+                confirm swap
+              </p>
+
+              <div className='flex flex-col gap-1.5 text-xs'>
+                <div className='flex justify-between'>
+                  <span className='text-muted-foreground'>you send</span>
+                  <span>{amountIn} ZEC</span>
+                </div>
+
+                <div className='flex justify-between'>
+                  <span className='text-muted-foreground'>you receive</span>
+                  <span>
+                    {quote.quote.amountOutFormatted} {isFromZec ? selectedToken?.symbol : 'ZEC'}
+                  </span>
+                </div>
+
+                <div className='flex justify-between gap-2'>
+                  <span className='shrink-0 text-muted-foreground'>recipient</span>
+                  <span className='break-all text-right font-mono'>{destinationAddress}</span>
+                </div>
+
+                <div className='flex justify-between gap-2'>
+                  <span className='shrink-0 text-muted-foreground'>deposit address</span>
+                  <span className='break-all text-right font-mono'>{quote.quote.depositAddress}</span>
+                </div>
+              </div>
+
+              <div className='mt-3 flex gap-2'>
+                <button
+                  onClick={() => void handleConfirmSwap()}
+                  className='flex-1 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark transition-colors hover:bg-zigner-gold-light'
+                >
+                  confirm & send
+                </button>
+
+                <button
+                  onClick={() => setStep('input')}
+                  className='flex-1 rounded-lg border border-border/40 py-3 text-sm text-muted-foreground transition-colors hover:text-foreground'
+                >
+                  back
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+      {step === 'sending' && (
+        <div className='flex flex-col items-center gap-3 py-12'>
+          <span className='i-lucide-refresh-cw h-6 w-6 animate-spin text-muted-foreground' />
+          <p className='text-sm text-muted-foreground'>
+            building and broadcasting deposit transaction...
+          </p>
         </div>
       )}
 
@@ -1004,3 +1116,4 @@ const PenumbraSwap = () => {
     </div>
   );
 };
+
