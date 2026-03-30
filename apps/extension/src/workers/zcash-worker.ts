@@ -17,7 +17,7 @@ import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
 const workerSelf = globalThis as any as DedicatedWorkerGlobalScope;
 
 interface WorkerMessage {
-  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'note-sync-encode' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos' | 'frost-dkg-part1' | 'frost-dkg-part2' | 'frost-dkg-part3' | 'frost-sign-round1' | 'frost-spend-sign' | 'frost-spend-aggregate' | 'frost-derive-address';
+  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-multi' | 'send-tx-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'note-sync-encode' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos' | 'frost-dkg-part1' | 'frost-dkg-part2' | 'frost-dkg-part3' | 'frost-sign-round1' | 'frost-spend-sign' | 'frost-spend-aggregate' | 'frost-derive-address';
   id: string;
   network: 'zcash';
   walletId?: string;
@@ -2052,6 +2052,191 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         workerSelf.postMessage({
           type: 'tx-result', id, network: 'zcash', walletId,
           payload: { txid },
+        });
+        return;
+      }
+
+      // ── multi-output send (sequential single-output txs) ──
+      // Used by poker escrow: builds one tx per output, broadcasting each in sequence.
+      // Each output gets its own note selection, witness build, prove, and broadcast cycle.
+      // If any tx fails mid-way, previously broadcast txs are NOT rolled back.
+      case 'send-tx-multi': {
+        if (!walletId) throw new Error('walletId required');
+        await initWasm();
+        if (!wasmModule) throw new Error('wasm not initialized');
+
+        const multiPayload = payload as {
+          serverUrl: string;
+          outputs: Array<{ address: string; amount: string; memo?: string }>;
+          accountIndex: number;
+          mainnet: boolean;
+          mnemonic: string;
+        };
+
+        if (!multiPayload.outputs || multiPayload.outputs.length === 0) {
+          throw new Error('outputs array required');
+        }
+        if (!multiPayload.mnemonic) {
+          throw new Error('mnemonic required for multi-output send');
+        }
+
+        // validate all outputs up front before building any tx
+        for (let i = 0; i < multiPayload.outputs.length; i++) {
+          const out = multiPayload.outputs[i]!;
+          if (!out.address || typeof out.address !== 'string') {
+            throw new Error(`output ${i}: address required`);
+          }
+          const amt = BigInt(out.amount);
+          if (amt <= 0n) {
+            throw new Error(`output ${i}: amount must be positive`);
+          }
+          // validate address prefix
+          const addr = out.address.trim();
+          const validPrefix = addr.startsWith('u1') || addr.startsWith('utest1')
+            || addr.startsWith('zs') || addr.startsWith('t1') || addr.startsWith('tm');
+          if (!validPrefix) {
+            throw new Error(`output ${i}: invalid zcash address prefix`);
+          }
+        }
+
+        const multiStart = performance.now();
+        const emitMultiProgress = (step: string, detail?: string) => {
+          const elapsed = ((performance.now() - multiStart) / 1000).toFixed(1);
+          console.log(`[zcash-worker] multi-send [${elapsed}s] ${step}${detail ? ': ' + detail : ''}`);
+          workerSelf.postMessage({
+            type: 'send-progress', id: '', network: 'zcash', walletId,
+            payload: { step, detail, elapsedMs: Math.round(performance.now() - multiStart) },
+          });
+        };
+
+        const txids: string[] = [];
+        const fees: string[] = [];
+
+        for (let outputIdx = 0; outputIdx < multiPayload.outputs.length; outputIdx++) {
+          const out = multiPayload.outputs[outputIdx]!;
+          const recipient = out.address.trim();
+          const amountZat = BigInt(out.amount);
+
+          emitMultiProgress(
+            `building output ${outputIdx + 1}/${multiPayload.outputs.length}`,
+            `${recipient.slice(0, 12)}... ${amountZat} zat`,
+          );
+
+          // encode memo
+          let memoHex: string | null = null;
+          if (out.memo) {
+            if (/^[0-9a-f]+$/i.test(out.memo) && out.memo.startsWith('ff5a')) {
+              memoHex = out.memo;
+            } else {
+              const bytes = new TextEncoder().encode(out.memo);
+              memoHex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+            }
+          }
+
+          // reload state each iteration (previous tx spent notes)
+          const multiState = await loadState(walletId);
+
+          // determine recipient type for fee calc
+          const isTransparent = recipient.startsWith('t1') || recipient.startsWith('tm');
+          const nZOutputs = isTransparent ? 0 : 1;
+          const nTOutputs = isTransparent ? 1 : 0;
+
+          // estimate fee and select notes
+          const estFee = computeFee(1, nZOutputs, nTOutputs, true);
+          const selected = selectNotes(multiState.notes, multiState.spentNullifiers, amountZat + estFee);
+
+          // compute exact fee
+          const totalIn = selected.reduce((sum, n) => sum + BigInt(n.value), 0n);
+          const hasChange = totalIn > amountZat + computeFee(selected.length, nZOutputs, nTOutputs, true);
+          const fee = computeFee(selected.length, nZOutputs, nTOutputs, hasChange);
+          if (totalIn < amountZat + fee) {
+            throw new Error(`output ${outputIdx}: insufficient funds: have ${totalIn} zat, need ${amountZat + fee} zat`);
+          }
+
+          emitMultiProgress(`output ${outputIdx + 1}: notes selected`, `${selected.length} notes, fee=${fee}`);
+
+          // build merkle witnesses
+          const { ZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
+          const multiClient = new ZidecarClient(multiPayload.serverUrl);
+          const multiTip = await multiClient.getTip();
+
+          emitMultiProgress(`output ${outputIdx + 1}: building witnesses`);
+          const { anchorHex: multiAnchor, paths: multiPaths } = await buildWitnesses(
+            multiClient, walletId, selected, multiTip.height,
+          );
+
+          // build note data for WASM
+          const notesJson = selected.map(n => ({
+            value: Number(n.value),
+            nullifier: n.nullifier,
+            cmx: n.cmx,
+            position: n.position,
+            rseed_hex: n.rseed ?? '',
+            rho_hex: n.rho ?? '',
+            recipient_hex: n.recipient ?? '',
+          }));
+          const pathsResult = multiPaths as Array<{ position: number; path: Array<{ hash: string }> }>;
+          const merklePathsForWasm = pathsResult.map(p => ({
+            path: p.path.map(e => e.hash),
+            position: p.position,
+          }));
+
+          emitMultiProgress(`output ${outputIdx + 1}: proving (halo2)`, `${selected.length} spends`);
+          const proveStart = performance.now();
+          const provingTicker = setInterval(() => {
+            const elapsed = ((performance.now() - proveStart) / 1000).toFixed(0);
+            emitMultiProgress(`output ${outputIdx + 1}: proving`, `${elapsed}s elapsed`);
+          }, 2000);
+
+          let txHex: string;
+          try {
+            txHex = await proveViaOffscreen({
+              fn: 'build_signed_spend',
+              args: [
+                multiPayload.mnemonic, notesJson, recipient,
+                amountZat.toString(), fee.toString(), multiAnchor,
+                merklePathsForWasm, multiPayload.accountIndex, multiPayload.mainnet,
+                memoHex,
+              ],
+            }) as string;
+          } finally {
+            clearInterval(provingTicker);
+          }
+
+          // broadcast
+          emitMultiProgress(`output ${outputIdx + 1}: broadcasting`);
+          const txData = hexDecode(txHex);
+          const broadcastClient = new ZidecarClient(multiPayload.serverUrl);
+          const broadcastResult = await broadcastClient.sendTransaction(txData);
+          if (broadcastResult.errorCode !== 0) {
+            throw new Error(`output ${outputIdx}: broadcast failed (${broadcastResult.errorCode}): ${broadcastResult.errorMessage}`);
+          }
+
+          const outputTxid = new TextDecoder().decode(broadcastResult.txid);
+          txids.push(outputTxid);
+          fees.push(fee.toString());
+
+          // mark spent nullifiers so next iteration picks different notes
+          for (const note of selected) {
+            multiState.spentNullifiers.add(note.nullifier);
+          }
+          // persist spent nullifiers to IDB so next iteration picks different notes
+          const db = await getDb();
+          const spentTx = db.transaction('spent', 'readwrite');
+          for (const note of selected) {
+            spentTx.objectStore('spent').put({ walletId, nullifier: note.nullifier });
+          }
+          await txComplete(spentTx);
+
+          emitMultiProgress(`output ${outputIdx + 1}: complete`, `txid=${outputTxid}`);
+        }
+
+        const totalDuration = ((performance.now() - multiStart) / 1000).toFixed(1);
+        emitMultiProgress('all outputs complete', `${txids.length} txs, total=${totalDuration}s`);
+
+        workerSelf.postMessage({
+          type: 'tx-multi-result', id, network: 'zcash', walletId,
+          payload: { txids, fees },
         });
         return;
       }

@@ -39,6 +39,9 @@ const IdentityPage = lazy(() => import('./identity').then(m => ({ default: m.Ide
 const PasswordsPage = lazy(() => import('./identity/passwords').then(m => ({ default: m.PasswordsPage })));
 const ContactPicker = lazy(() => import('./pick-contacts').then(m => ({ default: m.ContactPicker })));
 const FrostApprove = lazy(() => import('./frost-approve').then(m => ({ default: m.FrostApprove })));
+const ZcashSendApproval = lazy(() =>
+  import('./approval/zcash-send').then(m => ({ default: m.ZcashSendApproval })),
+);
 
 // suspense fallback for lazy routes
 const LazyFallback = () => (
@@ -250,6 +253,14 @@ export const popupRoutes: RouteObject[] = [
         element: (
           <Suspense fallback={<LazyFallback />}>
             <CapabilityApproval />
+          </Suspense>
+        ),
+      },
+      {
+        path: '/approval/zcash-send',
+        element: (
+          <Suspense fallback={<LazyFallback />}>
+            <ZcashSendApproval />
           </Suspense>
         ),
       },

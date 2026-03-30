@@ -2,7 +2,6 @@ import { useStore } from '../../../state';
 import { privacySelector, type PrivacySettings } from '../../../state/privacy';
 import { selectActiveNetwork } from '../../../state/keyring';
 import { SettingsScreen } from './settings-screen';
-import { Switch } from '@repo/ui/components/ui/switch';
 import { isIbcNetwork, type NetworkType } from '../../../state/keyring/network-types';
 
 interface PrivacyRow {
@@ -63,7 +62,15 @@ function Row({
           {stateLabel}
         </p>
       </div>
-      <Switch checked={checked} onCheckedChange={onChange} />
+      <button
+        onClick={() => onChange(!checked)}
+        className='shrink-0 transition-colors'
+      >
+        {checked
+          ? <span className='i-lucide-toggle-right size-7 text-green-400' />
+          : <span className='i-lucide-toggle-left size-7 text-muted-foreground/40' />
+        }
+      </button>
     </div>
   );
 }

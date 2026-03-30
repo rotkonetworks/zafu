@@ -62,7 +62,7 @@ export const MultisigSign = () => {
 
     const abortController = new AbortController();
     try {
-      const relayUrl = (typeof ms.relayUrl === 'string' ? ms.relayUrl : '') || 'https://zcash.rotko.net';
+      const relayUrl = (typeof ms.relayUrl === 'string' ? ms.relayUrl : '') || 'https://poker.zk.bot';
       setStep('waiting');
       setProgress('decrypting keys...');
 

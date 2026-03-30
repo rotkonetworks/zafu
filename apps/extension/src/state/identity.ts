@@ -107,6 +107,10 @@ const deriveSeedCrossSite = (identity: Uint8Array): Uint8Array =>
 const deriveSeedForContact = (identity: Uint8Array, contactId: string): Uint8Array =>
   deriveSeed(identity, enc.encode('contact:' + contactId));
 
+/** derive stable zpro license seed (never rotates). */
+const deriveSeedForLicense = (identity: Uint8Array): Uint8Array =>
+  deriveSeed(identity, enc.encode('zpro-license-v1'));
+
 /** extract ed25519 keypair from seed. zeroizes the seed. */
 const keypairFromSeed = (seed: Uint8Array): { privateKey: Uint8Array; publicKey: Uint8Array } => {
   const privateKey = seed.slice(0, 32);
@@ -165,6 +169,20 @@ export const deriveZidCrossSite = (mnemonic: string, identity: string): Zid =>
     const { publicKey } = keypairFromSeed(deriveSeedCrossSite(id));
     const hex = bytesToHex(publicKey);
     return { publicKey: hex, address: formatZid(hex) };
+  });
+
+/**
+ * derive the stable zpro license key for an identity.
+ *
+ * this key NEVER rotates - it's the permanent license identity.
+ * used for: payment memo, license lookup, ring VRF derivation.
+ * independent of ZID rotation so subscriptions survive key rotation.
+ */
+export const deriveZproKey = (mnemonic: string, identity = DEFAULT_IDENTITY): { publicKey: string; seed: Uint8Array } =>
+  withIdentity(mnemonic, identity, (id) => {
+    const seed = deriveSeedForLicense(id);
+    const { publicKey } = keypairFromSeed(seed.slice());
+    return { publicKey: bytesToHex(publicKey), seed: seed.slice(0, 32) };
   });
 
 /**

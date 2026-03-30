@@ -5,22 +5,38 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useStore } from '../../../state';
-import { selectEffectiveKeyInfo } from '../../../state/keyring';
+import { selectEffectiveKeyInfo, selectGetMnemonic } from '../../../state/keyring';
 import { isPro, selectDaysRemaining, selectPending, licenseSelector } from '../../../state/license';
 import { ROTKO_LICENSE_ADDRESS, PRO_RATE_ZAT_PER_30_DAYS, PRO_FEATURES, buildPaymentMemo } from '@repo/wallet/license';
+import { deriveZproKey } from '../../../state/identity';
 import { SettingsScreen } from './settings-screen';
 
 export const SubscribePage = () => {
   const keyInfo = useStore(selectEffectiveKeyInfo);
+  const getMnemonic = useStore(selectGetMnemonic);
   const pro = useStore(isPro);
   const days = useStore(selectDaysRemaining);
   const pending = useStore(selectPending);
-  const { loadLicense } = useStore(licenseSelector);
+  const { loadLicense, fetchLicense } = useStore(licenseSelector);
+  const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const [copied, setCopied] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
+  const [checkResult, setCheckResult] = useState<string | null>(null);
+  const [zproKey, setZproKey] = useState<string | null>(null);
 
-  const zidPubkey = keyInfo?.insensitive?.['zid'] as string | undefined;
-  const memo = zidPubkey ? buildPaymentMemo(zidPubkey) : '';
+  // derive stable zpro license key (never rotates, survives ZID rotation)
+  useEffect(() => {
+    if (!keyInfo?.id) return;
+    void (async () => {
+      try {
+        const mnemonic = await getMnemonic(keyInfo.id);
+        const { publicKey } = deriveZproKey(mnemonic);
+        setZproKey(publicKey);
+      } catch { /* not a mnemonic vault */ }
+    })();
+  }, [keyInfo?.id, getMnemonic]);
+
+  const memo = zproKey ? buildPaymentMemo(zproKey) : '';
   const rateZec = (PRO_RATE_ZAT_PER_30_DAYS / 1e8).toFixed(2);
 
   useEffect(() => { void loadLicense(); }, [loadLicense]);
@@ -32,14 +48,23 @@ export const SubscribePage = () => {
   };
 
   const checkLicense = useCallback(async () => {
-    if (!zidPubkey) return;
+    if (!zproKey) return;
     setChecking(true);
+    setCheckResult(null);
     try {
-      // TODO: proper gRPC call via zcash worker - for now just reload from storage
-      await loadLicense();
-    } catch { /* */ }
+      const license = await fetchLicense(zidecarUrl, zproKey);
+      if (license) {
+        setCheckResult('license activated');
+      } else {
+        await loadLicense();
+        setCheckResult('no payment found yet');
+      }
+    } catch {
+      setCheckResult('could not reach server');
+    }
     setChecking(false);
-  }, [zidPubkey, loadLicense]);
+    setTimeout(() => setCheckResult(null), 4000);
+  }, [zproKey, zidecarUrl, fetchLicense, loadLicense]);
 
   return (
     <SettingsScreen title='subscribe'>
@@ -144,7 +169,7 @@ export const SubscribePage = () => {
               disabled={checking}
               className='rounded border border-border/40 py-2 text-xs font-mono text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors'
             >
-              {checking ? 'checking...' : 'check payment status'}
+              {checking ? 'checking...' : checkResult ?? 'check payment status'}
             </button>
           </>
         )}

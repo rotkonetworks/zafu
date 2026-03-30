@@ -17,7 +17,7 @@
 import type { NetworkType } from './types';
 
 export interface NetworkWorkerMessage {
-  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'note-sync-encode' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos' | 'frost-dkg-part1' | 'frost-dkg-part2' | 'frost-dkg-part3' | 'frost-sign-round1' | 'frost-spend-sign' | 'frost-spend-aggregate' | 'frost-derive-address';
+  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-multi' | 'send-tx-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'note-sync-encode' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos' | 'frost-dkg-part1' | 'frost-dkg-part2' | 'frost-dkg-part3' | 'frost-sign-round1' | 'frost-spend-sign' | 'frost-spend-aggregate' | 'frost-derive-address';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -25,7 +25,7 @@ export interface NetworkWorkerMessage {
 }
 
 export interface NetworkWorkerResponse {
-  type: 'ready' | 'address' | 'sync-progress' | 'send-progress' | 'sync-started' | 'sync-stopped' | 'sync-reset' | 'balance' | 'tx-result' | 'send-tx-unsigned' | 'shield-result' | 'shield-unsigned-result' | 'wallets' | 'wallet-deleted' | 'notes' | 'note-sync-encoded' | 'memos' | 'transparent-history' | 'history' | 'memos-result' | 'sync-memos-progress' | 'mempool-update' | 'prove-request' | 'frost-result' | 'error';
+  type: 'ready' | 'address' | 'sync-progress' | 'send-progress' | 'sync-started' | 'sync-stopped' | 'sync-reset' | 'balance' | 'tx-result' | 'tx-multi-result' | 'send-tx-unsigned' | 'shield-result' | 'shield-unsigned-result' | 'wallets' | 'wallet-deleted' | 'notes' | 'note-sync-encoded' | 'memos' | 'transparent-history' | 'history' | 'memos-result' | 'sync-memos-progress' | 'mempool-update' | 'prove-request' | 'frost-result' | 'error';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -465,6 +465,29 @@ export const buildSendTxInWorker = async (
   ufvk?: string,
 ): Promise<SendTxUnsignedResult | { txid: string; fee: string }> => {
   return callWorker(network, 'send-tx', { serverUrl, recipient, amount, memo, accountIndex, mainnet, mnemonic, ufvk }, walletId);
+};
+
+/** result of building multi-output transactions */
+export interface MultiSendResult {
+  txids: string[];
+  fees: string[];
+}
+
+/**
+ * build and broadcast multiple single-output transactions in sequence.
+ * Used by poker escrow for atomic-ish rake + deposit.
+ * Each output becomes a separate on-chain transaction.
+ */
+export const buildMultiSendTxInWorker = async (
+  network: NetworkType,
+  walletId: string,
+  serverUrl: string,
+  outputs: Array<{ address: string; amount: string; memo?: string }>,
+  accountIndex: number,
+  mainnet: boolean,
+  mnemonic: string,
+): Promise<MultiSendResult> => {
+  return callWorker(network, 'send-tx-multi', { serverUrl, outputs, accountIndex, mainnet, mnemonic }, walletId);
 };
 
 /**

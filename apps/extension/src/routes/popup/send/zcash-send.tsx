@@ -223,7 +223,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
         // create relay room for signing session
         setStep('frost-room');
-        const relayUrl = ms.relayUrl || zidecarUrl;
+        const relayUrl = ms.relayUrl || 'https://poker.zk.bot';
         const relay = new FrostRelayClient(relayUrl);
         const room = await relay.createRoom(ms.threshold, ms.maxSigners, 300);
         setFrostRoomCode(room.roomCode);

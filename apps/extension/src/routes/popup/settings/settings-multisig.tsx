@@ -78,7 +78,7 @@ export const SettingsMultisig = () => {
             className='mt-1 w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 font-mono text-xs focus:border-primary/50 focus:outline-none'
             value={relayUrl}
             onChange={e => setRelayUrl(e.target.value)}
-            placeholder='https://zcash.rotko.net'
+            placeholder='https://poker.zk.bot'
           />
         </label>
 

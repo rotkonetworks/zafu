@@ -94,7 +94,7 @@ export const externalMessageListener = (
       // open FROST DKG approval popup - user confirms creating a multisig
       const threshold = Number(msg['threshold']) || 2;
       const maxSigners = Number(msg['maxSigners']) || 3;
-      const relayUrl = String(msg['relayUrl'] || 'https://zcash.rotko.net');
+      const relayUrl = String(msg['relayUrl'] || 'https://poker.zk.bot');
       const appOrigin = sender.origin || sender.url || 'unknown';
       const requestId = crypto.randomUUID();
 
@@ -121,7 +121,7 @@ export const externalMessageListener = (
       }
       const threshold = Number(msg['threshold']) || 2;
       const maxSigners = Number(msg['maxSigners']) || 3;
-      const relayUrl = String(msg['relayUrl'] || 'https://zcash.rotko.net');
+      const relayUrl = String(msg['relayUrl'] || 'https://poker.zk.bot');
       const appOrigin = sender.origin || sender.url || 'unknown';
       const requestId = crypto.randomUUID();
 
@@ -148,7 +148,7 @@ export const externalMessageListener = (
         sendResponse({ error: 'roomCode and sighashHex required' });
         return true;
       }
-      const relayUrl = String(msg['relayUrl'] || 'https://zcash.rotko.net');
+      const relayUrl = String(msg['relayUrl'] || 'https://poker.zk.bot');
       const appOrigin = sender.origin || sender.url || 'unknown';
       const requestId = crypto.randomUUID();
 
@@ -247,6 +247,59 @@ export const externalMessageListener = (
       sendResponse({ ok: true });
       return true;
     }
+
+    // ── Zcash transaction (multi-output, for poker escrow) ──
+
+    case 'zafu_zcash_send': {
+      // Multi-output Zcash Orchard transaction
+      // Used by poker.zk.bot for: rake + escrow deposit in one tx
+      //
+      // msg.outputs: [{address: string, amount: number, memo?: string}]
+      // msg.fee?: number (default 10000 = 0.0001 ZEC)
+      //
+      // Opens approval popup showing all outputs for user confirmation
+      const outputs = msg['outputs'] as Array<{address: string; amount: number; memo?: string}>;
+      if (!outputs || !Array.isArray(outputs) || outputs.length === 0) {
+        sendResponse({ success: false, error: 'outputs array required' });
+        return true;
+      }
+
+      const totalAmount = outputs.reduce((sum, o) => sum + (o.amount || 0), 0);
+      const fee = Number(msg['fee']) || 10_000;
+      const appOrigin = sender.origin || sender.url || 'unknown';
+      const requestId = crypto.randomUUID();
+
+      pendingPicks.set(requestId, sendResponse);
+
+      const params = new URLSearchParams({
+        app: appOrigin,
+        requestId,
+        total: String(totalAmount),
+        fee: String(fee),
+        numOutputs: String(outputs.length),
+        outputsJson: JSON.stringify(outputs),
+        favIconUrl: sender.tab?.favIconUrl || '',
+      });
+      const url = chrome.runtime.getURL(`popup.html#/approval/zcash-send?${params.toString()}`);
+      void chrome.windows.create({ url, type: 'popup', width: 400, height: 628 });
+      return true;
+    }
+
+    case 'zafu_zcash_send_result': {
+      // Internal: Zcash send approval popup returns result
+      const requestId = String(msg['requestId'] || '');
+      const callback = pendingPicks.get(requestId);
+      if (callback) {
+        callback(msg['result'] || { success: false, error: 'no result' });
+        pendingPicks.delete(requestId);
+      }
+      sendResponse({ ok: true });
+      return true;
+    }
+
+    // note: zafu_zcash_build_and_send was removed - the approval popup now builds
+    // and broadcasts transactions directly via the zcash worker (buildMultiSendTxInWorker).
+    // The popup sends the result back through zafu_zcash_send_result.
 
     // ── passkey / WebAuthn ──
 

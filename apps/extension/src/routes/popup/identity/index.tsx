@@ -407,10 +407,9 @@ const SiteRow = ({
                 <input
                   type='number'
                   min={0}
-                  max={rotation + 1}
                   value={rotation}
                   onChange={e => {
-                    const v = Math.max(0, Math.min(rotation + 1, parseInt(e.target.value, 10) || 0));
+                    const v = Math.max(0, parseInt(e.target.value, 10) || 0);
                     void onUpdatePref(site.origin, { ...site.pref, rotation: v });
                   }}
                   className='w-8 bg-transparent border border-border/40 rounded text-center text-[10px] font-mono py-0.5 outline-none'

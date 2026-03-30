@@ -29,6 +29,7 @@ import { createSignApprovalSlice, SignApprovalSlice } from './sign-approval';
 import { createFrostSessionSlice, FrostSessionSlice } from './frost-session';
 import { createInboxSlice, InboxSlice } from './inbox';
 import { createLicenseSlice, LicenseSlice } from './license';
+import { createRingVrfSlice, RingVrfSlice } from './ring-vrf';
 
 export interface AllSlices {
   wallets: WalletsSlice;
@@ -55,6 +56,7 @@ export interface AllSlices {
   frostSession: FrostSessionSlice;
   inbox: InboxSlice;
   license: LicenseSlice;
+  ringVrf: RingVrfSlice;
 }
 
 export type SliceCreator<SliceInterface> = StateCreator<
@@ -97,6 +99,7 @@ export const initializeStore = (
     frostSession: createFrostSessionSlice()(setState, getState, store),
     inbox: createInboxSlice()(setState, getState, store),
     license: createLicenseSlice()(setState, getState, store),
+    ringVrf: createRingVrfSlice()(setState, getState, store),
   }));
 };
 

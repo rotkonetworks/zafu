@@ -20,6 +20,9 @@ import {
   isWalletSyncing,
 } from '../state/keyring/network-worker';
 import { ZCASH_ORCHARD_ACTIVATION } from '../config/networks';
+import { isPro } from '../state/license';
+import { deriveZproKey } from '../state/identity';
+import { ZidecarClient } from '../state/keyring/zidecar-client';
 
 /** resolve wallet birthday height from storage or chain tip.
  *  never returns below orchard activation — no point scanning pre-orchard blocks. */
@@ -87,6 +90,17 @@ export function useZcashAutoSync() {
           if (cancelled) return;
           const startHeight = await resolveBirthday(walletId, zidecarUrl);
           if (cancelled) return;
+          // generate ring VRF session proof for pro priority sync
+          if (isPro(useStore.getState())) {
+            try {
+              const { seed } = deriveZproKey(mnemonic);
+              await useStore.getState().ringVrf.refreshRing(zidecarUrl, seed);
+              await useStore.getState().ringVrf.newSessionProof();
+              // inject proof headers into all ZidecarClient requests
+              ZidecarClient.extraHeaders = () => useStore.getState().ringVrf.getProofHeaders();
+            } catch { /* ring VRF is optional - free tier still works */ }
+          }
+
           syncingWalletRef.current = walletId;
           console.log('[zcash-sync] starting mnemonic sync for', walletId);
           await startSyncInWorker('zcash', walletId, mnemonic, zidecarUrl, startHeight);

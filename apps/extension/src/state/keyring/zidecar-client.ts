@@ -60,17 +60,55 @@ export interface NullifierProofData {
   valueHash: Uint8Array;
 }
 
+export interface ProRing {
+  ringKeys: string[];      // hex-encoded 32-byte Bandersnatch pubkeys
+  commitment: Uint8Array;  // 144-byte ring commitment
+  epoch: string;           // YYYY-MM-DD
+  context: string;         // VRF context string (includes server nonce)
+  ringSize: number;
+}
+
+export interface LicenseInfo {
+  zid: string;
+  plan: string;
+  expires: number;
+  signature: string;
+  totalPaidZat: number;
+}
+
 export class ZidecarClient {
   private serverUrl: string;
 
+  /** optional callback that returns extra headers (ring VRF proof, etc.) */
+  static extraHeaders: (() => Record<string, string>) | null = null;
+
   constructor(serverUrl: string) {
     this.serverUrl = serverUrl.replace(/\/$/, '');
+  }
+
+  /** check license status for a ZID (scans on-chain payments) */
+  async checkLicense(zid: string, ringPubkey?: Uint8Array): Promise<LicenseInfo> {
+    // LicenseRequest: field 1 = zid_pubkey (string), field 9 = ring_pubkey (bytes)
+    const zidBytes = new TextEncoder().encode(zid);
+    const parts: number[] = [0x0a, ...this.lengthDelimited(zidBytes)];
+    if (ringPubkey && ringPubkey.length === 32) {
+      // field 9, wire type 2 (length-delimited): tag = (9 << 3) | 2 = 0x4a
+      parts.push(0x4a, ...this.lengthDelimited(ringPubkey));
+    }
+    const resp = await this.grpcCall('GetLicense', new Uint8Array(parts));
+    return this.parseLicenseResponse(resp);
   }
 
   /** get current chain tip */
   async getTip(): Promise<ChainTip> {
     const resp = await this.grpcCall('GetTip', new Uint8Array(0));
     return this.parseTip(resp);
+  }
+
+  /** get current pro ring for anonymous membership proofs */
+  async getProRing(): Promise<ProRing> {
+    const resp = await this.grpcCall('GetProRing', new Uint8Array(0));
+    return this.parseProRing(resp);
   }
 
   /** get sync status (chain height, epoch info, gigaproof status) */
@@ -226,15 +264,14 @@ export class ZidecarClient {
     body[4] = msg.length & 0xff;
     body.set(msg, 5);
 
-    const resp = await fetch(path, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/grpc-web+proto',
-        'Accept': 'application/grpc-web+proto',
-        'x-grpc-web': '1',
-      },
-      body,
-    });
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/grpc-web+proto',
+      'Accept': 'application/grpc-web+proto',
+      'x-grpc-web': '1',
+      ...(ZidecarClient.extraHeaders?.() ?? {}),
+    };
+
+    const resp = await fetch(path, { method: 'POST', headers, body });
 
     if (!resp.ok) throw new Error(`gRPC ${method}: HTTP ${resp.status}`);
 
@@ -284,15 +321,14 @@ export class ZidecarClient {
     body[4] = msg.length & 0xff;
     body.set(msg, 5);
 
-    const resp = await fetch(path, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/grpc-web+proto',
-        'Accept': 'application/grpc-web+proto',
-        'x-grpc-web': '1',
-      },
-      body,
-    });
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/grpc-web+proto',
+      'Accept': 'application/grpc-web+proto',
+      'x-grpc-web': '1',
+      ...(ZidecarClient.extraHeaders?.() ?? {}),
+    };
+
+    const resp = await fetch(path, { method: 'POST', headers, body });
 
     if (!resp.ok) throw new Error(`gRPC HTTP ${resp.status}`);
     return new Uint8Array(await resp.arrayBuffer());
@@ -990,5 +1026,94 @@ export class ZidecarClient {
     }
 
     return txids;
+  }
+
+  private parseProRing(buf: Uint8Array): ProRing {
+    const ringKeys: string[] = [];
+    let commitment = new Uint8Array(0);
+    let epoch = '';
+    let context = '';
+    let ringSize = 0;
+    let pos = 0;
+
+    while (pos < buf.length) {
+      const tag = buf[pos++]!;
+      const field = tag >> 3;
+      const wire = tag & 0x7;
+
+      if (wire === 0) {
+        let v = 0, s = 0;
+        while (pos < buf.length) {
+          const b = buf[pos++]!;
+          v |= (b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7;
+        }
+        if (field === 5) ringSize = v;
+      } else if (wire === 2) {
+        let len = 0, s = 0;
+        while (pos < buf.length) {
+          const b = buf[pos++]!;
+          len |= (b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7;
+        }
+        const data = buf.subarray(pos, pos + len);
+        if (field === 1) {
+          // repeated bytes ring_keys - each is a 32-byte pubkey
+          ringKeys.push(Array.from(data, b => b.toString(16).padStart(2, '0')).join(''));
+        } else if (field === 2) {
+          commitment = buf.slice(pos, pos + len);
+        } else if (field === 3) {
+          epoch = new TextDecoder().decode(data);
+        } else if (field === 4) {
+          context = new TextDecoder().decode(data);
+        }
+        pos += len;
+      } else break;
+    }
+
+    return { ringKeys, commitment, epoch, context, ringSize };
+  }
+
+  private parseLicenseResponse(buf: Uint8Array): LicenseInfo {
+    let zid = '';
+    let plan = 'free';
+    let expires = 0;
+    let signature = '';
+    let totalPaidZat = 0;
+    let pos = 0;
+
+    while (pos < buf.length) {
+      const tag = buf[pos++]!;
+      const field = tag >> 3;
+      const wire = tag & 0x7;
+
+      if (wire === 0) {
+        let v = 0, s = 0;
+        while (pos < buf.length) {
+          const b = buf[pos++]!;
+          v |= (b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7;
+        }
+        if (field === 3) expires = v;
+        if (field === 5) totalPaidZat = v;
+      } else if (wire === 2) {
+        let len = 0, s = 0;
+        while (pos < buf.length) {
+          const b = buf[pos++]!;
+          len |= (b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7;
+        }
+        if (field === 1) zid = new TextDecoder().decode(buf.subarray(pos, pos + len));
+        else if (field === 2) plan = new TextDecoder().decode(buf.subarray(pos, pos + len));
+        else if (field === 4) signature = Array.from(buf.subarray(pos, pos + len), b => b.toString(16).padStart(2, '0')).join('');
+        pos += len;
+      } else break;
+    }
+
+    return { zid, plan, expires, signature, totalPaidZat };
   }
 }

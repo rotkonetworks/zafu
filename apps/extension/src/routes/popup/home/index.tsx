@@ -1113,31 +1113,10 @@ const HistoryContent = ({ network, penumbraAccount }: { network: NetworkType; pe
 
   const setSetting = useStore(s => s.privacy.setSetting);
 
-  if (!historyEnabled) {
-    return (
-      <div className='px-4 py-6 text-center'>
-        <p className='text-xs text-muted-foreground/50'>
-          transaction history is off
-        </p>
-        <button
-          onClick={() => void setSetting('enableTransactionHistory', true)}
-          className='mt-3 text-xs text-primary/70 hover:text-primary transition-colors'
-        >
-          enable transaction history
-        </button>
-        <a
-          href={`#${PopupPath.SETTINGS_PRIVACY}`}
-          className='text-[10px] text-muted-foreground/30 hover:text-primary mt-2 inline-block'
-        >
-          privacy settings
-        </a>
-      </div>
-    );
-  }
-
+  // hooks must always be called in the same order - queries use `enabled` flag instead
   const penumbraQ = useQuery({
     queryKey: ['homeHistory', 'penumbra'],
-    enabled: network === 'penumbra',
+    enabled: network === 'penumbra' && historyEnabled,
     staleTime: 30_000,
     queryFn: async () => {
       const txs: ParsedTransaction[] = [];
@@ -1161,7 +1140,7 @@ const HistoryContent = ({ network, penumbraAccount }: { network: NetworkType; pe
   const zcashQ = useQuery({
     // bucket sync height to avoid refetching on every block — refresh every 10k blocks
     queryKey: ['homeHistory', 'zcash', walletId, tAddresses.length, Math.floor(workerSyncHeight / 10000)],
-    enabled: network === 'zcash' && !!walletId,
+    enabled: network === 'zcash' && !!walletId && historyEnabled,
     staleTime: 0,
     queryFn: async () => {
       if (!walletId) return [];
@@ -1178,6 +1157,28 @@ const HistoryContent = ({ network, penumbraAccount }: { network: NetworkType; pe
       }));
     },
   });
+
+  if (!historyEnabled) {
+    return (
+      <div className='px-4 py-6 text-center'>
+        <p className='text-xs text-muted-foreground/50'>
+          transaction history is off
+        </p>
+        <button
+          onClick={() => void setSetting('enableTransactionHistory', true)}
+          className='mt-3 text-xs text-primary/70 hover:text-primary transition-colors'
+        >
+          enable transaction history
+        </button>
+        <a
+          href={`#${PopupPath.SETTINGS_PRIVACY}`}
+          className='text-[10px] text-muted-foreground/30 hover:text-primary mt-2 inline-block'
+        >
+          privacy settings
+        </a>
+      </div>
+    );
+  }
 
   const q = network === 'penumbra' ? penumbraQ : zcashQ;
   // for penumbra, filter by the selected account index - a tx belongs to an
