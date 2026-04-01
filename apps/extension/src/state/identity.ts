@@ -196,6 +196,10 @@ const deriveSeedForContact = (identity: Uint8Array, contactId: string): Uint8Arr
 const deriveSeedForRingVrf = (identity: Uint8Array): Uint8Array =>
   deriveSeed(identity, enc.encode('ring-vrf-v1'));
 
+/** derive hot wallet entropy from identity (for zigner-derived hot wallets). */
+const deriveSeedForHotWallet = (identity: Uint8Array): Uint8Array =>
+  deriveSeed(identity, enc.encode('hot-wallet-v1'));
+
 /** extract ed25519 keypair from seed. zeroizes the seed. */
 const keypairFromSeed = (seed: Uint8Array): { privateKey: Uint8Array; publicKey: Uint8Array } => {
   const privateKey = seed.slice(0, 32);
@@ -274,6 +278,33 @@ export const deriveRingVrfSeed = (mnemonic: string, identity = DEFAULT_IDENTITY)
     const seed = deriveSeedForRingVrf(id);
     return seed.slice(0, 32);
   });
+
+/**
+ * derive a 12-word BIP39 hot wallet mnemonic from a master mnemonic.
+ *
+ * this lets zigner (cold wallet) users deterministically create a hot wallet
+ * for ZID identity, pro subscription, and day-to-day spending.
+ *
+ * the derived mnemonic is:
+ *   - deterministic: same master seed always produces same hot wallet
+ *   - recoverable: if zigner has the master seed, hot wallet can be re-derived
+ *   - independent: compromise of hot wallet does not expose cold storage keys
+ *
+ * derivation: HMAC-SHA512(identity, "hot-wallet-v1") -> 16 bytes -> BIP39 12 words
+ */
+export const deriveHotWalletMnemonic = async (mnemonic: string, identity = DEFAULT_IDENTITY): Promise<string> => {
+  const entropy = withIdentity(mnemonic, identity, (id) => {
+    const seed = deriveSeedForHotWallet(id);
+    // 16 bytes = 128 bits = 12-word mnemonic
+    const ent = seed.slice(0, 16);
+    seed.fill(0);
+    return ent;
+  });
+  const { entropyToMnemonic } = await import('bip39');
+  const words = entropyToMnemonic(Buffer.from(entropy));
+  entropy.fill(0);
+  return words;
+};
 
 /**
  * derive a per-contact zid under a named identity.

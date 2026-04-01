@@ -45,13 +45,17 @@ export const ROTKO_LICENSE_ADDRESS = 'u153khs43zxz6hcnlwnut77knyqmursnutmungxjxd
 
 /** features gated behind pro */
 export const PRO_FEATURES = [
-  'passwords',
-  'passkeys',
   'frost_multisig',
-  'multiple_identities',
   'zigner_cold_signing',
+  'multiple_identities',
   'encrypted_backup',
   'extended_relay_ttl',
+] as const;
+
+/** features available to all users */
+export const FREE_FEATURES = [
+  'passwords',
+  'passkeys',
   'inbox_send',
 ] as const;
 

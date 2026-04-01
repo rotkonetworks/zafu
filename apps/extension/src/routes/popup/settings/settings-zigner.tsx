@@ -2,6 +2,7 @@ import { EyeOpenIcon, TrashIcon, ExternalLinkIcon, Link2Icon } from '@radix-ui/r
 import { useStore } from '../../../state';
 import { zignerConnectSelector } from '../../../state/zigner';
 import { keyRingSelector, type ZignerZafuImport } from '../../../state/keyring';
+import { isPro } from '../../../state/license';
 import { SettingsScreen } from './settings-screen';
 import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
@@ -9,7 +10,9 @@ import { Switch } from '@repo/ui/components/ui/switch';
 import { useState, useRef, useEffect } from 'react';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { PagePath } from '../../page/paths';
+import { PopupPath } from '../paths';
 import { openPageInTab } from '../../../utils/popup-detection';
+import { useNavigate } from 'react-router-dom';
 
 /** network color for zigner vault badges */
 const networkColors: Record<string, string> = {
@@ -30,6 +33,8 @@ const networkColors: Record<string, string> = {
  * The QrScanner component handles permission prompts and error states.
  */
 export const SettingsZigner = () => {
+  const pro = useStore(isPro);
+  const navigate = useNavigate();
   const {
     scanState,
     walletLabel,
@@ -178,8 +183,25 @@ Zafu Zigner is a cold wallet that keeps your spending keys offline. Zafu stores 
           </p>
         </div>
 
+        {/* Pro gate */}
+        {!pro && (
+          <div className='rounded-lg border border-border/40 bg-card-radial p-4 flex flex-col items-center gap-3'>
+            <div className='i-lucide-lock size-8 text-muted-foreground/40' />
+            <p className='text-xs text-muted-foreground text-center'>
+              zigner cold wallet signing is a pro feature
+            </p>
+            <Button
+              variant='secondary'
+              size='sm'
+              onClick={() => navigate(PopupPath.SUBSCRIBE)}
+            >
+              subscribe
+            </Button>
+          </div>
+        )}
+
         {/* Zigner Wallets — unified list from keyring */}
-        {zignerVaults.length > 0 && (
+        {pro && zignerVaults.length > 0 && (
           <div className='border-t border-border pt-4'>
             <p className='text-sm font-bold mb-3'>wallets</p>
             <div className='flex flex-col gap-2'>
@@ -256,7 +278,7 @@ Zafu Zigner is a cold wallet that keeps your spending keys offline. Zafu stores 
         )}
 
         {/* Polkadot Vault Settings */}
-        <div className='border-t border-border pt-4'>
+        {pro && <div className='border-t border-border pt-4'>
           <p className='text-sm font-bold mb-3'>polkadot vault</p>
           <div className='flex flex-col gap-3'>
             <div className='flex items-center justify-between border border-border bg-card-radial p-3'>
@@ -289,17 +311,17 @@ Zafu Zigner is a cold wallet that keeps your spending keys offline. Zafu stores 
               </div>
             )}
           </div>
-        </div>
+        </div>}
 
         {/* Success message */}
-        {success && (
+        {pro && success && (
           <div className='rounded-lg border border-green-500/30 bg-green-500/10 p-3 text-sm text-green-400'>
 wallet added successfully!
           </div>
         )}
 
 {/* Add Wallet section */}
-        <div className='border-t border-border pt-4'>
+        {pro && <div className='border-t border-border pt-4'>
           <p className='text-sm font-bold mb-3'>add wallet</p>
 
           {/* Manual input (hidden by default, developer mode) */}
@@ -423,7 +445,7 @@ wallet added successfully!
               </Button>
             </div>
           )}
-        </div>
+        </div>}
       </div>
     </SettingsScreen>
   );

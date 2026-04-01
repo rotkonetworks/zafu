@@ -593,6 +593,59 @@ export function parseZignerBackupUr(urString: string): ZignerBackupExport {
 }
 
 // ============================================================================
+// Hot Wallet Mnemonic UR Parsing
+// ============================================================================
+
+export interface HotWalletUrExport {
+  /** 12-word BIP39 mnemonic derived from zigner's master seed */
+  mnemonic: string;
+  /** identity name used for derivation (usually "default") */
+  identity: string;
+}
+
+/**
+ * Parse ur:zafu-hot-wallet UR string
+ *
+ * CBOR structure:
+ *   map(2) {
+ *     1: text  // 12-word mnemonic
+ *     2: text  // identity name
+ *   }
+ *
+ * This is exported by zigner devices to create a deterministic hot wallet
+ * that can be used for ZID, pro subscription, and daily spending.
+ * The mnemonic is derived from the master seed via HKDF("hot-wallet-v1").
+ */
+export function parseHotWalletUr(urString: string): HotWalletUrExport {
+  const type = getUrType(urString);
+  if (type !== 'zafu-hot-wallet') {
+    throw new Error(`expected ur:zafu-hot-wallet, got ur:${type}`);
+  }
+
+  const cbor = decodeUr(urString);
+  const reader = new CborReader(cbor);
+
+  const mapLen = reader.readMapHeader();
+  let mnemonic: string | null = null;
+  let identity = 'default';
+
+  for (let i = 0; i < mapLen; i++) {
+    const key = reader.readUint();
+    if (key === 1) {
+      mnemonic = reader.readTextString();
+    } else if (key === 2) {
+      identity = reader.readTextString();
+    }
+  }
+
+  if (!mnemonic) {
+    throw new Error('zafu-hot-wallet: missing mnemonic');
+  }
+
+  return { mnemonic, identity };
+}
+
+// ============================================================================
 // DESIGN: ZID Identity QR Protocol for Zigner
 // ============================================================================
 //

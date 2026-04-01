@@ -8,6 +8,7 @@ import { MenuDrawer } from '../../components/menu-drawer';
 import { PopupPath } from './paths';
 import { useStore } from '../../state';
 import { selectActiveNetwork, type NetworkType } from '../../state/keyring';
+import { isPro } from '../../state/license';
 import { hasFeature } from '../../config/networks';
 
 type FeatureKey = 'stake' | 'swap' | 'vote' | 'inbox';
@@ -65,10 +66,11 @@ export const PopupLayout = () => {
   useZcashAutoSync();
   const location = useLocation();
   const activeNetwork = useStore(selectActiveNetwork);
+  const pro = useStore(isPro);
   const [menuOpen, setMenuOpen] = useState(false);
 
   const networkTabs = getTabsForNetwork(activeNetwork);
-  const tabs = activeNetwork === 'zcash' ? [...networkTabs, MULTISIG_TAB] : networkTabs;
+  const tabs = activeNetwork === 'zcash' && pro ? [...networkTabs, MULTISIG_TAB] : networkTabs;
   const showChrome = !matchesRoute(location.pathname, hiddenHeaderRoutes);
   const showTabs = showChrome && !matchesRoute(location.pathname, hiddenTabRoutes);
 
