@@ -378,8 +378,14 @@ export const externalMessageListener = (
       return true;
     }
 
-    default:
+    default: {
+      // don't respond to encryption API types - handled by external-encryption.ts
+      const encryptionTypes = ['zafu_encrypt', 'zafu_decrypt', 'zafu_zid_pubkey', 'zafu_encryption_approval_result'];
+      if (typeof type === 'string' && encryptionTypes.includes(type)) {
+        return false;
+      }
       sendResponse({ error: 'unknown message type' });
       return true;
+    }
   }
 };

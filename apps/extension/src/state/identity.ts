@@ -574,6 +574,23 @@ export const lookupSharedZid = (
 ): ZidShareRecord | undefined =>
   log.filter(r => r.sharedWith === origin).pop();
 
+/**
+ * derive the full ed25519 keypair for a site-specific zid.
+ * caller MUST zeroize the returned privateKey when done.
+ *
+ * used by the encryption API to derive x25519 keys for sealed boxes.
+ */
+export const deriveZidKeypairForSite = (
+  mnemonic: string,
+  identity: string,
+  origin: string,
+  rotation = 0,
+): { privateKey: Uint8Array; publicKey: Uint8Array } =>
+  withIdentity(mnemonic, identity, (id) => {
+    const seed = deriveSeedForSite(id, origin, rotation);
+    return keypairFromSeed(seed);
+  });
+
 /** verify a zid signature */
 export const verifyZid = (
   publicKeyHex: string,

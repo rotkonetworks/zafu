@@ -6,7 +6,8 @@ export type Capability =
   | 'view_contacts'  // read contact list
   | 'view_history'   // read transaction history
   | 'frost'          // create/join/sign multisig sessions
-  | 'auto_sign';     // skip per-tx confirmation (time-limited)
+  | 'auto_sign'      // skip per-tx confirmation (time-limited)
+  | 'encrypt';       // sealed box encrypt/decrypt with ZID keys
 
 export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
 
@@ -54,6 +55,11 @@ export const CAPABILITY_META: Record<Capability, {
     label: 'Auto-sign transactions',
     description: 'Sign transactions without individual approval popups',
     risk: 'critical',
+  },
+  encrypt: {
+    label: 'Encryption',
+    description: 'Encrypt and decrypt messages using your ZID identity key',
+    risk: 'medium',
   },
 };
 

@@ -16,6 +16,7 @@ import { contentScriptLoadListener } from './message/listen/content-script-load'
 import { internalRevokeListener } from './message/listen/internal-revoke';
 import { internalServiceListener } from './message/listen/internal-services';
 import { externalMessageListener } from './message/listen/external-easteregg';
+import { encryptionMessageListener } from './message/listen/external-encryption';
 
 // all rpc implementations, local and proxy
 import { getRpcImpls } from './rpc';
@@ -273,6 +274,9 @@ chrome.runtime.onMessageExternal.addListener(signRequestListener);
 
 // listen for external messages
 chrome.runtime.onMessageExternal.addListener(externalMessageListener);
+
+// listen for external encryption API (sealed box encrypt/decrypt, ZID pubkey)
+chrome.runtime.onMessageExternal.addListener(encryptionMessageListener);
 
 // ── idle auto-lock ──
 // track last activity timestamp. only UI and dapp interactions reset it.
