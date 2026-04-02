@@ -70,6 +70,14 @@ export const DEFAULT_ZAPPS: Zapp[] = [
     category: 'games',
   },
   {
+    id: 'sonotxt',
+    name: 'sonotxt',
+    description: 'private text-to-speech',
+    icon: 'i-lucide-audio-lines',
+    url: 'https://sonotxt.com',
+    category: 'tools',
+  },
+  {
     id: 'zigner',
     name: 'zigner',
     description: 'airgap signing app',
