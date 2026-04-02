@@ -21,7 +21,7 @@
  * the Noise payloads.
  */
 
-import { chacha20poly1305 } from '@noble/ciphers/chacha'
+import { chacha20poly1305 } from '@noble/ciphers/chacha.js'
 import { x25519, edwardsToMontgomeryPub, edwardsToMontgomeryPriv } from '@noble/curves/ed25519'
 import { sha256 } from '@noble/hashes/sha256'
 import { extract, expand } from '@noble/hashes/hkdf'

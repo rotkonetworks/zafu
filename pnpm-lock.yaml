@@ -764,16 +764,15 @@ importers:
 
   packages/zid:
     dependencies:
+      '@noble/ciphers':
+        specifier: ^2.1.1
+        version: 2.1.1
       '@noble/curves':
         specifier: ^1.9.7
         version: 1.9.7
       '@noble/hashes':
         specifier: ^1.8.0
         version: 1.8.0
-    devDependencies:
-      '@noble/ciphers':
-        specifier: ^2.1.1
-        version: 2.1.1
 
 packages:
 

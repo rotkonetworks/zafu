@@ -110,7 +110,16 @@ export const SubscribePage = () => {
   }, [checkLicense]);
 
   const handlePay = useCallback(async () => {
-    if (!keyInfo?.id || !memo || !activeZcashWallet) return;
+    if (!keyInfo?.id || !memo) {
+      setError('wallet not ready');
+      setPayState('error');
+      return;
+    }
+    if (!activeZcashWallet) {
+      setError('no zcash wallet - switch to zcash network first');
+      setPayState('error');
+      return;
+    }
     setPayState('building');
     setError(null);
     try {
@@ -133,10 +142,15 @@ export const SubscribePage = () => {
         setPayState('error');
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(
+        msg.includes('insufficient') || msg.includes('balance') || msg.includes('not enough')
+          ? 'insufficient balance - you need at least ' + amountZec + ' ZEC'
+          : msg
+      );
       setPayState('error');
     }
-  }, [keyInfo?.id, memo, activeZcashWallet, getMnemonic, zidecarUrl, amountZat, startPolling]);
+  }, [keyInfo?.id, memo, activeZcashWallet, getMnemonic, zidecarUrl, amountZat, amountZec, startPolling]);
 
   const isZigner = keyInfo?.type === 'zigner-zafu';
 
