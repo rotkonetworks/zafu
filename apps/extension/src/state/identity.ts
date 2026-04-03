@@ -131,9 +131,29 @@ import { p256 } from '@noble/curves/p256';
 import { sha256 } from '@noble/hashes/sha256';
 import { sha512 } from '@noble/hashes/sha512';
 import { hmac } from '@noble/hashes/hmac';
+import { hkdf } from '@noble/hashes/hkdf';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
+import { mnemonicToSeedSync } from 'bip39';
 
-const ZID_DOMAIN = 'zid-v1';
+/**
+ * ZID domain separator - v2 uses two-stage KDF.
+ *
+ * v1 derived directly from the mnemonic string:
+ *   root = HMAC-SHA512("zid-v1", mnemonic)
+ *
+ * v2 derives from the BIP39 seed through HKDF, providing:
+ *   1. cryptographic separation from spending keys (HKDF is one-way)
+ *   2. legal separation - zid_seed can be handed over without exposing wallet
+ *   3. key management - zid has different lifetime/rotation than spending keys
+ *
+ * derivation:
+ *   spending_seed = BIP39(mnemonic, "")        // 64 bytes, same as wallet uses
+ *   zid_seed = HKDF-SHA256(spending_seed, "zafu-zid-v2", "identity-root", 64)
+ *   identity[name] = HMAC-SHA512(zid_seed, "identity:" + name)
+ *   ...all further ZID keys derive from identity, not from spending_seed
+ */
+const ZID_SALT = 'zafu-zid-v2';
+const ZID_INFO = 'identity-root';
 const enc = new TextEncoder();
 
 export interface Zid {
@@ -164,9 +184,22 @@ const formatZid = (pubkeyHex: string): string => 'zid' + pubkeyHex.slice(0, 16);
 
 // -- derivation primitives --
 
-/** derive the identity root from the mnemonic. caller must zeroize. */
-const deriveRoot = (mnemonic: string): Uint8Array =>
-  hmac(sha512, ZID_DOMAIN, enc.encode(mnemonic));
+/**
+ * derive the ZID root from the mnemonic via two-stage KDF.
+ *
+ * stage 1: BIP39 seed (same 64 bytes the wallet uses for spending keys)
+ * stage 2: HKDF-SHA256 to produce a separate ZID seed
+ *
+ * this ensures ZID keys are cryptographically independent from spending keys.
+ * knowing zid_seed reveals nothing about spending_seed (HKDF is one-way).
+ * caller must zeroize the returned bytes.
+ */
+const deriveRoot = (mnemonic: string): Uint8Array => {
+  const spendingSeed = mnemonicToSeedSync(mnemonic);
+  const zidSeed = hkdf(sha256, spendingSeed, ZID_SALT, ZID_INFO, 64);
+  spendingSeed.fill(0);
+  return zidSeed;
+};
 
 /** derive a named identity subtree root. caller must zeroize. */
 const deriveIdentity = (root: Uint8Array, name: string): Uint8Array =>
