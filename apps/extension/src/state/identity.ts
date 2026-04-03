@@ -133,7 +133,6 @@ import { sha512 } from '@noble/hashes/sha512';
 import { hmac } from '@noble/hashes/hmac';
 import { hkdf } from '@noble/hashes/hkdf';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
-import { mnemonicToSeedSync } from 'bip39';
 
 /**
  * ZID domain separator - v2 uses two-stage KDF.
@@ -147,10 +146,15 @@ import { mnemonicToSeedSync } from 'bip39';
  *   3. key management - zid has different lifetime/rotation than spending keys
  *
  * derivation:
- *   spending_seed = BIP39(mnemonic, "")        // 64 bytes, same as wallet uses
- *   zid_seed = HKDF-SHA256(spending_seed, "zafu-zid-v2", "identity-root", 64)
+ *   mnemonic_hash = SHA-256(mnemonic_string)   // hash the words directly
+ *   zid_seed = HKDF-SHA256(mnemonic_hash, "zafu-zid-v2", "identity-root", 64)
  *   identity[name] = HMAC-SHA512(zid_seed, "identity:" + name)
- *   ...all further ZID keys derive from identity, not from spending_seed
+ *
+ * NOTE: we derive from SHA-256(mnemonic), NOT from BIP39Seed(mnemonic).
+ * BIP39Seed is what spending keys use. by hashing the mnemonic string
+ * directly, ZID shares zero intermediate material with spending keys.
+ * this is the strongest possible separation per Jeff Burdges' guidance:
+ * "do not mix encryption and signing keys"
  */
 const ZID_SALT = 'zafu-zid-v2';
 const ZID_INFO = 'identity-root';
@@ -185,19 +189,20 @@ const formatZid = (pubkeyHex: string): string => 'zid' + pubkeyHex.slice(0, 16);
 // -- derivation primitives --
 
 /**
- * derive the ZID root from the mnemonic via two-stage KDF.
+ * derive the ZID root from the mnemonic words via HKDF.
  *
- * stage 1: BIP39 seed (same 64 bytes the wallet uses for spending keys)
- * stage 2: HKDF-SHA256 to produce a separate ZID seed
+ * input: SHA-256(mnemonic_string) - NOT the BIP39 seed.
+ * BIP39 seed = PBKDF2(mnemonic, "mnemonic" + passphrase) is what spending
+ * keys derive from. we deliberately avoid it so ZID shares zero intermediate
+ * material with spending keys.
  *
- * this ensures ZID keys are cryptographically independent from spending keys.
- * knowing zid_seed reveals nothing about spending_seed (HKDF is one-way).
+ * same mnemonic, completely separate derivation path.
  * caller must zeroize the returned bytes.
  */
 const deriveRoot = (mnemonic: string): Uint8Array => {
-  const spendingSeed = mnemonicToSeedSync(mnemonic);
-  const zidSeed = hkdf(sha256, spendingSeed, ZID_SALT, ZID_INFO, 64);
-  spendingSeed.fill(0);
+  const mnemonicHash = sha256(enc.encode(mnemonic));
+  const zidSeed = hkdf(sha256, mnemonicHash, ZID_SALT, ZID_INFO, 64);
+  mnemonicHash.fill(0);
   return zidSeed;
 };
 
