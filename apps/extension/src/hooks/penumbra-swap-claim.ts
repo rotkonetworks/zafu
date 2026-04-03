@@ -62,10 +62,8 @@ export function usePenumbraSwapClaim(activeNetwork: string, onLoginPage: boolean
   useEffect(() => {
     if (activeNetwork !== 'penumbra') return;
     if (onLoginPage) return;
-    if (claimingRef.current) return;
 
-    // delay to let sync settle after popup opens
-    const timer = setTimeout(() => {
+    const tryClaimOnce = () => {
       if (claimingRef.current) return;
       claimingRef.current = true;
 
@@ -73,8 +71,13 @@ export function usePenumbraSwapClaim(activeNetwork: string, onLoginPage: boolean
         .then(n => { if (n > 0) console.log(`[swap-claim] claimed ${n} swap(s)`); })
         .catch(err => console.error('[swap-claim] auto-claim error:', err))
         .finally(() => { claimingRef.current = false; });
-    }, 5000);
+    };
 
-    return () => clearTimeout(timer);
+    // initial check after sync settles
+    const timer = setTimeout(tryClaimOnce, 5000);
+    // re-check every 30s for swaps made during this session
+    const interval = setInterval(tryClaimOnce, 30_000);
+
+    return () => { clearTimeout(timer); clearInterval(interval); };
   }, [activeNetwork, onLoginPage, penumbraAccount]);
 }

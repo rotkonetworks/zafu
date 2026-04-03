@@ -875,25 +875,6 @@ const ZcashCrosschainSwap = () => {
             )}
           </div>
 
-          {/* deposit address */}
-          <div className='rounded-lg border border-primary/40 bg-primary/5 p-3'>
-            <div className='text-xs text-muted-foreground mb-1'>
-              send {isFromZec ? 'ZEC' : selectedToken?.symbol} to this address
-            </div>
-            <div className='flex items-start gap-2'>
-              <p className='flex-1 text-xs font-mono text-foreground break-all'>
-                {quote.quote.depositAddress}
-              </p>
-              <button onClick={handleCopyDeposit} className='shrink-0 p-1 hover:text-primary'>
-                {copied ? (
-                  <span className='i-lucide-check h-4 w-4' />
-                ) : (
-                  <span className='i-lucide-copy h-4 w-4' />
-                )}
-              </button>
-            </div>
-          </div>
-
           {/* status */}
           <div className='rounded-lg border border-border/40 bg-muted/20 p-3'>
             <div className='flex items-center gap-2'>
