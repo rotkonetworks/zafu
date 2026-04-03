@@ -507,6 +507,29 @@ const getTreeFrontier = async (walletId: string): Promise<string | null> => {
   return r?.value ?? null;
 };
 
+/** periodic frontier snapshots for privacy-safe witness building.
+ *  stored as array of {height, frontier} in IDB, one per SNAPSHOT_INTERVAL blocks. */
+const FRONTIER_SNAPSHOT_INTERVAL = 50_000;
+
+interface FrontierSnapshot { height: number; frontier: string }
+
+const getFrontierSnapshots = async (walletId: string): Promise<FrontierSnapshot[]> => {
+  const r = await idbGet<{ value: FrontierSnapshot[] }>('meta', [walletId, 'frontierSnapshots']);
+  return r?.value ?? [];
+};
+
+const saveFrontierSnapshot = async (walletId: string, height: number, frontier: string): Promise<void> => {
+  const existing = await getFrontierSnapshots(walletId);
+  // avoid duplicates, keep sorted
+  if (existing.some(s => s.height === height)) return;
+  existing.push({ height, frontier });
+  existing.sort((a, b) => a.height - b.height);
+  const db = await getDb();
+  const tx = db.transaction('meta', 'readwrite');
+  tx.objectStore('meta').put({ walletId, key: 'frontierSnapshots', value: existing });
+  await txComplete(tx);
+};
+
 /** batch-save notes + spent + sync height + tree size in one transaction */
 const saveBatch = async (
   walletId: string,
@@ -685,45 +708,56 @@ const buildWitnesses = async (
   const positions = notes.map(n => n.position);
   console.log(`[zcash-worker] witness build: positions=${JSON.stringify(positions)}, anchor=${anchorHeight}`);
 
-  // try cached frontier first (fast path: only replay gap blocks)
+  // find a tree state from BEFORE the earliest note was committed.
+  // build_merkle_paths needs each note's CMX to appear in the replayed blocks,
+  // so the starting frontier must have a tree size <= the earliest note position.
   let frontierHex: string | null = null;
   let frontierHeight = 0;
 
+  const earliestNoteHeight = Math.min(...notes.map(n => n.height));
+  const earliestPosition = Math.min(...positions);
+
+  // 1. try cached frontier at sync height (fast path: works when all selected notes are very recent)
   const cachedFrontier = await getTreeFrontier(walletId);
   const cachedFrontierHeight = (await idbGet<{ value: number }>('meta', [walletId, 'orchardTreeFrontierHeight']))?.value ?? 0;
 
-  if (cachedFrontier && cachedFrontierHeight > 0 && cachedFrontierHeight <= anchorHeight) {
+  if (cachedFrontier && cachedFrontierHeight > 0 && cachedFrontierHeight < earliestNoteHeight) {
     const cachedSize = Number(wasmModule.frontier_tree_size(cachedFrontier));
-    const earliestPosition = Math.min(...positions);
-
-    // the cached frontier must contain all note positions
-    if (cachedSize > earliestPosition) {
+    if (cachedSize <= earliestPosition) {
       frontierHex = cachedFrontier;
       frontierHeight = cachedFrontierHeight;
       console.log(`[zcash-worker] using cached frontier: height=${frontierHeight}, size=${cachedSize}, gap=${anchorHeight - frontierHeight} blocks`);
-    } else {
-      console.log(`[zcash-worker] cached frontier too small (size=${cachedSize}, need>=${earliestPosition}), falling back to search`);
     }
   }
 
-  // no cached frontier: fetch tree state at sync height (single RPC, no position leak)
+  // 2. try periodic snapshots (privacy-safe: no RPC needed, all stored locally)
   if (!frontierHex) {
-    const syncHeight = (await idbGet<{ value: number }>('meta', [walletId, 'syncHeight']))?.value ?? 0;
-    if (syncHeight > 0 && syncHeight <= anchorHeight) {
-      console.log(`[zcash-worker] no cached frontier, fetching at sync height ${syncHeight}`);
-      const ts = await client.getTreeState(syncHeight);
-      frontierHex = ts.orchardTree;
-      frontierHeight = syncHeight;
-
-      // cache it for next time
-      const db = await getDb();
-      const metaTx = db.transaction('meta', 'readwrite');
-      metaTx.objectStore('meta').put({ walletId, key: 'orchardTreeFrontier', value: frontierHex });
-      metaTx.objectStore('meta').put({ walletId, key: 'orchardTreeFrontierHeight', value: frontierHeight });
-      await txComplete(metaTx);
-    } else {
-      throw new Error('wallet must be synced before spending - no tree frontier available');
+    const snapshots = await getFrontierSnapshots(walletId);
+    // find latest snapshot that's before the earliest note
+    for (let i = snapshots.length - 1; i >= 0; i--) {
+      const snap = snapshots[i]!;
+      if (snap.height >= earliestNoteHeight) continue;
+      const snapSize = Number(wasmModule.frontier_tree_size(snap.frontier));
+      if (snapSize <= earliestPosition) {
+        frontierHex = snap.frontier;
+        frontierHeight = snap.height;
+        console.log(`[zcash-worker] using snapshot: height=${frontierHeight}, size=${snapSize}, gap=${anchorHeight - frontierHeight} blocks`);
+        break;
+      }
     }
+  }
+
+  // 3. last resort: fetch from server at a rounded height (minimal privacy leak)
+  if (!frontierHex) {
+    // round down to nearest 50k to avoid revealing exact note height
+    const roundedHeight = Math.max(1, Math.floor((earliestNoteHeight - 1) / FRONTIER_SNAPSHOT_INTERVAL) * FRONTIER_SNAPSHOT_INTERVAL);
+    console.log(`[zcash-worker] no local snapshot, fetching at rounded height ${roundedHeight}`);
+    const ts = await client.getTreeState(roundedHeight);
+    frontierHex = ts.orchardTree;
+    frontierHeight = roundedHeight;
+
+    // cache this snapshot for next time
+    await saveFrontierSnapshot(walletId, roundedHeight, frontierHex);
   }
 
   const checkpointTreeSize = Number(wasmModule.frontier_tree_size(frontierHex));
@@ -1094,6 +1128,14 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
       // single batched db write for entire batch
       currentHeight = endHeight;
       await saveBatch(walletId, newNotes, newSpent, currentHeight, orchardTreeSize, spentUpdatedNotes.length > 0 ? spentUpdatedNotes : undefined);
+
+      // periodic frontier snapshot for privacy-safe witness building
+      if (currentHeight % FRONTIER_SNAPSHOT_INTERVAL < batchSize) {
+        try {
+          const snapshotTs = await client.getTreeState(currentHeight);
+          await saveFrontierSnapshot(walletId, currentHeight, snapshotTs.orchardTree);
+        } catch { /* best-effort */ }
+      }
 
       // persist actions commitment
       if (zyncModule) {

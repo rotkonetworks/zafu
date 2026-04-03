@@ -145,8 +145,8 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
   });
 
   const { data: rawBalances, isLoading, error } = useQuery({
-    queryKey: ['balances', account],
-    staleTime: Infinity,
+    queryKey: ['balances', account, latestBlockHeight],
+    staleTime: 30_000,
     queryFn: async () => {
       try {
         return await Array.fromAsync(viewClient.balances({ accountFilter: { account } }));
