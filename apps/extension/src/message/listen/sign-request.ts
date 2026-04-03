@@ -12,7 +12,8 @@
  * sign requests from unapproved origins are silently denied.
  */
 
-import { getOriginRecord } from '@repo/storage-chrome/origin';
+import { getOriginPermissions } from '@repo/storage-chrome/origin';
+import { hasCapability } from '@repo/storage-chrome/capabilities';
 import { UserChoice } from '@repo/storage-chrome/records';
 import { PopupType } from '../../message/popup';
 import { popup } from '../../popup';
@@ -60,9 +61,9 @@ const handleSignRequest = async (
   req: SignRequestMessage,
   sender: { origin: string; tab: chrome.tabs.Tab },
 ): Promise<SignResponse> => {
-  // only sign for already-approved origins
-  const record = await getOriginRecord(sender.origin);
-  if (record?.choice !== UserChoice.Approved) {
+  // only sign for origins with sign_identity capability (or at least connect)
+  const perms = await getOriginPermissions(sender.origin);
+  if (!hasCapability(perms, 'sign_identity') && !hasCapability(perms, 'connect')) {
     return { success: false, error: 'origin not approved — call connect() first' };
   }
 

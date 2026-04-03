@@ -27,6 +27,7 @@ export enum PopupPath {
   COSMOS_SIGN = '/cosmos-sign',
 
   // Multisig
+  MULTISIG = '/multisig',
   MULTISIG_CREATE = '/multisig/create',
   MULTISIG_JOIN = '/multisig/join',
   MULTISIG_SIGN = '/multisig/sign',
@@ -35,8 +36,20 @@ export enum PopupPath {
   // zid contact picker (opened by external apps)
   CONTACT_PICKER = '/pick-contacts',
 
+  // FROST approval (opened by external apps via zafu_frost_*)
+  FROST_APPROVE = '/frost-approve',
+
+  // Passwords (deterministic password generator)
+  PASSWORDS = '/identity/passwords',
+
+  // Capability approval (opened by external apps via zafu_request_capability)
+  CAPABILITY_APPROVAL = '/approval/capability',
+
   // Settings sub-pages (multisig)
   SETTINGS_MULTISIG = '/settings/multisig',
+
+  // Subscribe
+  SUBSCRIBE = '/settings/subscribe',
 
   // Settings sub-pages
   SETTINGS_DEFAULT_FRONTEND = '/settings/default-frontend',

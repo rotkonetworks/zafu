@@ -65,6 +65,7 @@ interface PopupRequestMap {
     title?: string;
     challengeHex: string;
     statement?: string;
+    algorithm?: 'ed25519' | 'es256';
   };
 }
 

@@ -9,6 +9,7 @@ import { MenuDrawer } from '../../components/menu-drawer';
 import { PopupPath } from './paths';
 import { useStore } from '../../state';
 import { selectActiveNetwork, selectPenumbraAccount, type NetworkType } from '../../state/keyring';
+import { isPro } from '../../state/license';
 import { hasFeature } from '../../config/networks';
 
 type FeatureKey = 'stake' | 'swap' | 'vote' | 'inbox';
@@ -21,6 +22,13 @@ const ALL_TABS: ReadonlyArray<{ path: PopupPath; icon: JSX.Element; label: strin
   { path: PopupPath.SWAP,   icon: <span className='i-lucide-arrow-left-right h-5 w-5' />,  label: 'Swap',   feature: 'swap' },
   { path: PopupPath.VOTE,   icon: <span className='i-lucide-vote h-5 w-5' />,              label: 'Vote',   feature: 'vote' },
 ];
+
+/** multisig tab — injected only when user has FROST wallets */
+const MULTISIG_TAB = {
+  path: PopupPath.MULTISIG,
+  icon: <span className='i-lucide-shield h-5 w-5' />,
+  label: 'Multisig',
+} as const;
 
 /** derive tabs from network features — pure filter, no mutation */
 const getTabsForNetwork = (network: NetworkType) =>
@@ -38,6 +46,7 @@ const hiddenTabRoutes = [
   PopupPath.CONTACTS,
   PopupPath.MULTISIG_CREATE,
   PopupPath.MULTISIG_JOIN,
+  PopupPath.MULTISIG_SIGN,
 ];
 
 /** routes where header should NOT be shown (auth/approval flows only) */
@@ -59,11 +68,13 @@ export const PopupLayout = () => {
   const location = useLocation();
   const activeNetwork = useStore(selectActiveNetwork);
   const penumbraAccount = useStore(selectPenumbraAccount);
+  const pro = useStore(isPro);
   const onLoginPage = location.pathname === '/login';
   usePenumbraSwapClaim(activeNetwork, onLoginPage, penumbraAccount);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const tabs = getTabsForNetwork(activeNetwork);
+  const networkTabs = getTabsForNetwork(activeNetwork);
+  const tabs = activeNetwork === 'zcash' && pro ? [...networkTabs, MULTISIG_TAB] : networkTabs;
   const showChrome = !matchesRoute(location.pathname, hiddenHeaderRoutes);
   const showTabs = showChrome && !matchesRoute(location.pathname, hiddenTabRoutes);
 

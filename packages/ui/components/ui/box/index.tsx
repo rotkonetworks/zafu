@@ -2,7 +2,6 @@ import { cva, VariantProps } from 'class-variance-authority';
 import { motion } from 'framer-motion';
 import { PropsWithChildren, ReactNode } from 'react';
 import { cn } from '../../../lib/utils';
-import { RESOLVED_TAILWIND_CONFIG } from '@repo/tailwind-config/resolved-tailwind-config';
 
 const variants = cva('rounded-lg border bg-background', {
   variants: {
@@ -57,7 +56,7 @@ export const Box = ({
        *
        * @see https://www.framer.com/motion/layout-animations/##scale-correction
        */
-      style={{ borderRadius: RESOLVED_TAILWIND_CONFIG.theme.borderRadius.lg }}
+      style={{ borderRadius: 'var(--radius)' }}
     >
       {(label ?? headerContent) && (
         <div className='flex items-center justify-between'>

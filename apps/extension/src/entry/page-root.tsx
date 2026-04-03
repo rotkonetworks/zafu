@@ -5,6 +5,7 @@ import { StrictMode, useState, useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import '@repo/ui/styles/globals.css';
+import '@repo/ui/styles/icons.css';
 
 const MainPage = () => {
   const [queryClient] = useState(() => new QueryClient());

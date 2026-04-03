@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* Zafu minimalistic theme */
+/* Zafu terminal theme - CSS-first config (Tailwind v4) */
 @theme {
   --font-body: "Iosevka Term", "Courier New", Courier, monospace;
   --font-headline: "Iosevka Term", "Courier New", Courier, monospace;
@@ -13,43 +13,97 @@
   --radius-2xl: 0;
   --radius-full: 0;
 
-  /* Light mode accent */
-  --color-accent-light: #000066;
-  --color-accent-light-50: #e6e6f2;
-  --color-accent-light-100: #ccccdf;
-  --color-accent-light-200: #9999bf;
-  --color-accent-light-300: #66669f;
-  --color-accent-light-400: #333380;
-  --color-accent-light-500: #000066;
-  --color-accent-light-600: #000052;
-  --color-accent-light-700: #00003d;
-  --color-accent-light-800: #000029;
-  --color-accent-light-900: #000014;
+  /* semantic color tokens (hsl CSS vars defined in globals.css) */
+  --color-border: hsl(var(--border));
+  --color-border-secondary: var(--border-secondary);
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
 
-  /* Dark mode accent */
-  --color-accent-dark: #f4a31e;
-  --color-accent-dark-50: #fef6e6;
-  --color-accent-dark-100: #fdeacc;
-  --color-accent-dark-200: #fbd699;
-  --color-accent-dark-300: #f8c166;
-  --color-accent-dark-400: #f6ad33;
-  --color-accent-dark-500: #f4a31e;
-  --color-accent-dark-600: #c4830e;
-  --color-accent-dark-700: #936200;
-  --color-accent-dark-800: #624100;
-  --color-accent-dark-900: #312100;
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
 
+  /* brand */
+  --color-charcoal: var(--charcoal);
+  --color-charcoal-secondary: var(--charcoal-secondary);
+  --color-teal: var(--teal);
+  --color-teal-420: var(--teal-420);
+  --color-teal-700: var(--teal-700);
+  --color-sand: var(--sand);
+  --color-sand-420: var(--sand-420);
+  --color-sand-700: var(--sand-700);
+  --color-rust: var(--rust);
+  --color-rust-420: var(--rust-420);
+  --color-rust-600: var(--rust-600);
+  --color-black: var(--black);
+  --color-green: var(--green);
+  --color-red: var(--red);
+  --color-light-brown: var(--light-brown);
+  --color-light-grey: var(--light-grey);
+  --color-brown: var(--brown);
+
+  /* network accent */
+  --color-network-accent: var(--network-accent);
+  --color-network-accent-light: var(--network-accent-light);
+  --color-network-accent-foreground: var(--network-accent-foreground);
+
+  /* zigner */
+  --color-zigner-gold: var(--zigner-gold);
+  --color-zigner-gold-light: var(--zigner-gold-light);
+  --color-zigner-gold-dark: var(--zigner-gold-dark);
+  --color-zigner-dark: var(--zigner-dark);
+  --color-zigner-darker: var(--zigner-darker);
+
+  /* penumbra */
+  --color-penumbra-purple: var(--penumbra-purple);
+  --color-penumbra-purple-light: var(--penumbra-purple-light);
+  --color-penumbra-purple-dark: var(--penumbra-purple-dark);
+  --color-penumbra-teal: var(--penumbra-teal);
+  --color-penumbra-teal-dark: var(--penumbra-teal-dark);
+
+  /* semantic */
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+  --color-info: var(--info);
+
+  /* animations */
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+  --animate-gradient-x: gradient-x 1s ease-out;
+
+  @keyframes accordion-down {
+    from { height: 0; }
+    to { height: var(--radix-accordion-content-height); }
+  }
+  @keyframes accordion-up {
+    from { height: var(--radix-accordion-content-height); }
+    to { height: 0; }
+  }
+  @keyframes gradient-x {
+    0%, 100% { background-size: 200% 200%; background-position: left center; }
+    50% { background-size: 200% 200%; background-position: right center; }
+  }
 }
 
-/* Custom utilities */
+/* custom utilities */
 @utility grid-std-spacing {
   gap: 1.5rem;
-  @media (min-width: 768px) {
-    gap: 1rem;
-  }
-  @media (min-width: 1280px) {
-    gap: 1.25rem;
-  }
+  @media (min-width: 768px) { gap: 1rem; }
+  @media (min-width: 1280px) { gap: 1.25rem; }
 }
 
 @utility background-size-200 {
@@ -61,3 +115,12 @@
   mask-composite: xor;
   mask-composite: exclude;
 }
+
+@utility contain-none { contain: none; }
+@utility contain-strict { contain: strict; }
+@utility contain-content { contain: content; }
+@utility contain-size { contain: size; }
+@utility contain-layout { contain: layout; }
+@utility contain-style { contain: style; }
+@utility contain-paint { contain: paint; }
+@utility transform-gpu { transform: translateZ(0); }

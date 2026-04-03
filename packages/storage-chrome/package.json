@@ -17,7 +17,8 @@
     "./onboard": "./src/onboard.ts",
     "./origin": "./src/origin.ts",
     "./session": "./src/session.ts",
-    "./records": "./src/records/index.ts"
+    "./records": "./src/records/index.ts",
+    "./capabilities": "./src/capabilities.ts"
   },
   "dependencies": {
     "@penumbra-zone/bech32m": "18.0.0",
@@ -32,6 +33,6 @@
     "@rotko/penumbra-types": "37.0.0",
     "@rotko/penumbra-wasm": "55.0.1",
     "@types/chrome": "0.0.270",
-    "@types/lodash": "^4.17.23"
+    "@types/lodash": "^4.17.24"
   }
 }

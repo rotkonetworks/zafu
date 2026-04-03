@@ -7,6 +7,30 @@
  *
  * Designed to be compatible with the upcoming onboarding restructure
  * (see prax-wallet/prax PR #402) while working standalone until that lands.
+ *
+ * ========================================================================
+ * DESIGN: ZID-aware QR processing
+ * ========================================================================
+ *
+ * processQrData currently handles: FVK exports (penumbra, zcash),
+ * substrate addresses, cosmos accounts, UR formats, and zigner backups.
+ *
+ * New UR types to add for ZID:
+ *   - ur:zid-response - scanned after zigner signs a ZID challenge.
+ *     this should NOT be processed here (wallet import context).
+ *     it belongs in a new zid-verify slice or the signing flow.
+ *   - ur:zid-identity - NOT scanned by zafu. this is zafu -> zigner only.
+ *
+ * The DetectedNetwork type may need a 'zid' variant, OR zid verification
+ * should bypass the wallet-import pipeline entirely since it is not
+ * importing a wallet - it is verifying identity.
+ *
+ * Recommended approach: add a top-level check in processQrData for
+ * ur:zid-response that delegates to a different handler (e.g., a callback
+ * or a separate state slice) rather than trying to fit it into the
+ * wallet-import state machine. This keeps the import flow clean and
+ * avoids confusing users who scan a zid-response in the wrong context.
+ * ========================================================================
  */
 
 import type { AllSlices, SliceCreator } from '.';
@@ -32,6 +56,7 @@ import {
   getUrType,
   parsePenumbraUr,
   parseZcashUr,
+  parseHotWalletUr,
 } from '@repo/wallet/ur-parser';
 
 // ============================================================================
@@ -44,7 +69,7 @@ import {
 export type ZignerScanState = 'idle' | 'scanning' | 'scanned' | 'importing' | 'complete' | 'error';
 
 /** Detected network type from QR code */
-export type DetectedNetwork = 'penumbra' | 'zcash' | 'polkadot' | 'cosmos' | 'backup' | 'unknown';
+export type DetectedNetwork = 'penumbra' | 'zcash' | 'polkadot' | 'cosmos' | 'backup' | 'hot-wallet' | 'unknown';
 
 /** Polkadot address import data from Zigner QR */
 export interface PolkadotImportData {
@@ -93,6 +118,8 @@ export interface ZignerSlice {
   parsedPolkadotExport?: PolkadotImportData;
   /** Parsed Cosmos accounts data from QR code */
   parsedCosmosExport?: CosmosImportData;
+  /** Derived hot wallet mnemonic from zigner export */
+  hotWalletMnemonic?: string;
   /** User-provided label for the wallet */
   walletLabel: string;
   /** Error message if something went wrong */
@@ -139,6 +166,7 @@ export const createZignerSlice =
     parsedZcashExport: undefined,
     parsedPolkadotExport: undefined,
     parsedCosmosExport: undefined,
+    hotWalletMnemonic: undefined,
     errorMessage: undefined,
 
     processQrData: (qrData: string) => {
@@ -337,10 +365,35 @@ export const createZignerSlice =
           return;
         }
 
+        if (urType === 'zafu-hot-wallet') {
+          try {
+            const hotWallet = parseHotWalletUr(trimmed);
+            set(state => {
+              state.zigner.qrData = trimmed;
+              state.zigner.detectedNetwork = 'hot-wallet';
+              state.zigner.hotWalletMnemonic = hotWallet.mnemonic;
+              state.zigner.parsedPenumbraExport = undefined;
+              state.zigner.parsedZcashExport = undefined;
+              state.zigner.parsedPolkadotExport = undefined;
+              state.zigner.parsedCosmosExport = undefined;
+              state.zigner.walletLabel = 'zigner hot wallet';
+              state.zigner.scanState = 'scanned';
+              state.zigner.errorMessage = undefined;
+            });
+          } catch (cause) {
+            const message = cause instanceof Error ? cause.message : String(cause);
+            set(state => {
+              state.zigner.scanState = 'error';
+              state.zigner.errorMessage = `failed to parse hot wallet ur: ${message}`;
+            });
+          }
+          return;
+        }
+
         // Unknown UR type
         set(state => {
           state.zigner.scanState = 'error';
-          state.zigner.errorMessage = `unsupported ur type: ${urType}. expected penumbra-accounts or zcash-accounts`;
+          state.zigner.errorMessage = `unsupported ur type: ${urType}. expected penumbra-accounts, zcash-accounts, or zafu-hot-wallet`;
         });
         return;
       }
@@ -454,6 +507,7 @@ export const createZignerSlice =
         state.zigner.parsedZcashExport = undefined;
         state.zigner.parsedPolkadotExport = undefined;
         state.zigner.parsedCosmosExport = undefined;
+        state.zigner.hotWalletMnemonic = undefined;
         state.zigner.walletLabel = '';
         state.zigner.errorMessage = undefined;
       });
@@ -497,6 +551,7 @@ export const zignerConnectSelector = (state: AllSlices) => {
     parsedZcashExport: slice.parsedZcashExport,
     parsedPolkadotExport: slice.parsedPolkadotExport,
     parsedCosmosExport: slice.parsedCosmosExport,
+    hotWalletMnemonic: slice.hotWalletMnemonic,
     walletLabel: slice.walletLabel,
     errorMessage: slice.errorMessage,
     walletImport,

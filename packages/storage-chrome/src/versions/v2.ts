@@ -185,8 +185,9 @@ type LOCAL = {
 
   /** per-origin zid identity preferences (default: site-specific) */
   zidPreferences?: Record<string, {
-    mode: 'global' | 'site';
+    mode: 'cross-site' | 'site';
     rotation: number;
+    identity: string;
   }>;
 
   /** log of zid pubkeys shared during site authentication */
@@ -194,7 +195,11 @@ type LOCAL = {
     publicKey: string;
     sharedWith: string;
     sharedAt: number;
+    identity: string;
   }[];
+
+  /** user-defined labels for sites (displayed instead of origin) */
+  zidSiteLabels?: Record<string, string>;
 
   /** per-contact diversified zcash addresses - traces payment referrals */
   diversifiedAddresses?: {
@@ -206,6 +211,9 @@ type LOCAL = {
 
   /** auto-lock timeout in minutes (0 = disabled, default 15) */
   autoLockMinutes?: number;
+
+  /** serialized pro license JSON */
+  proLicense?: string;
 
   /** polkadot vault settings */
   polkadotVaultSettings?: {

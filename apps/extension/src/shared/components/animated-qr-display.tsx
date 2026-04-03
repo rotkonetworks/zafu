@@ -17,13 +17,15 @@ const QRCode = require('qrcode');
 const DEFAULT_CHUNK_SIZE = 400;
 
 interface AnimatedQrDisplayProps {
-  /** raw bytes to encode */
-  data: Uint8Array;
-  /** UR type string (e.g. 'zcash-notes') — included in frame prefix */
-  urType: string;
+  /** raw bytes to encode (used with legacy P-frame format) */
+  data?: Uint8Array;
+  /** pre-built UR string frames (e.g. from WASM ur_encode_frames) */
+  urFrames?: string[];
+  /** UR type string (e.g. 'zcash-notes') — used with data prop */
+  urType?: string;
   /** size of QR code in pixels */
   size?: number;
-  /** max base64 chars per frame */
+  /** max base64 chars per frame (legacy mode) */
   chunkSize?: number;
   /** ms between frames */
   frameInterval?: number;
@@ -31,9 +33,11 @@ interface AnimatedQrDisplayProps {
   title?: string;
   /** description below QR */
   description?: string;
+  /** total bytes for display (when using urFrames, data.length isn't available) */
+  totalBytes?: number;
 }
 
-/** split payload into numbered frames: P<idx>/<total>/<type>/<base64> */
+/** split payload into numbered frames: P<idx>/<total>/<type>/<base64> (legacy) */
 function buildFrames(data: Uint8Array, urType: string, chunkSize: number): string[] {
   const b64 = btoa(String.fromCharCode(...data));
   const totalChunks = Math.ceil(b64.length / chunkSize) || 1;
@@ -47,12 +51,14 @@ function buildFrames(data: Uint8Array, urType: string, chunkSize: number): strin
 
 export function AnimatedQrDisplay({
   data,
+  urFrames,
   urType,
   size = 256,
   chunkSize = DEFAULT_CHUNK_SIZE,
   frameInterval = 300,
   title,
   description,
+  totalBytes,
 }: AnimatedQrDisplayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -61,13 +67,17 @@ export function AnimatedQrDisplay({
   const [error, setError] = useState<string | null>(null);
 
   const frames = useMemo(() => {
+    // prefer pre-built UR frames if provided
+    if (urFrames && urFrames.length > 0) return urFrames;
+    // fall back to legacy P-frame format
+    if (!data || !urType) return [];
     try {
       return buildFrames(data, urType, chunkSize);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'failed to encode payload');
       return [];
     }
-  }, [data, urType, chunkSize]);
+  }, [data, urFrames, urType, chunkSize]);
 
   const renderFrame = useCallback(() => {
     const canvas = canvasRef.current;
@@ -142,7 +152,7 @@ export function AnimatedQrDisplay({
       )}
 
       <p className='text-[10px] text-muted-foreground'>
-        {data.length.toLocaleString()} bytes · {frames.length} frame{frames.length !== 1 ? 's' : ''}
+        {(totalBytes ?? data?.length ?? 0).toLocaleString()} bytes · {frames.length} frame{frames.length !== 1 ? 's' : ''}
       </p>
     </div>
   );

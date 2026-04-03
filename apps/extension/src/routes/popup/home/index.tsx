@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../../state';
 import { selectActiveNetwork, selectEffectiveKeyInfo, selectPenumbraAccount, selectSetPenumbraAccount, keyRingSelector, type NetworkType } from '../../../state/keyring';
 import { PenumbraAccountPicker } from '../../../components/penumbra-account-picker';
-import { selectActiveZcashWallet } from '../../../state/wallets';
+import { selectActiveZcashWallet, selectZcashWallets, selectActiveZcashIndex, walletsSelector } from '../../../state/wallets';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { needsLogin, needsOnboard } from '../popup-needs';
 import { PopupPath } from '../paths';
@@ -50,6 +50,101 @@ import type { TransactionInfo } from '@penumbra-zone/protobuf/penumbra/view/v1/v
 /** lazy load network-specific content - only load when needed */
 const AssetsTable = lazy(() => import('./assets-table').then(m => ({ default: m.AssetsTable })));
 const PolkadotAssets = lazy(() => import('./polkadot-assets').then(m => ({ default: m.PolkadotAssets })));
+
+/** shows all multisig wallets with balances at a glance */
+const MultisigOverview = () => {
+  const zcashWallets = useStore(selectZcashWallets);
+  const activeIdx = useStore(selectActiveZcashIndex);
+  const { setActiveZcashWallet } = useStore(walletsSelector);
+  const [expanded, setExpanded] = useState(false);
+  const [balances, setBalances] = useState<Record<string, bigint>>({});
+
+  const multisigWallets = useMemo(
+    () => zcashWallets.filter(w => w.multisig).map(w => ({ ...w, originalIndex: zcashWallets.indexOf(w) })),
+    [zcashWallets],
+  );
+
+  // fetch balances for all multisig wallets
+  useEffect(() => {
+    for (const w of multisigWallets) {
+      getBalanceInWorker('zcash', w.id)
+        .then(bal => setBalances(prev => ({ ...prev, [w.id]: BigInt(bal) })))
+        .catch(() => {});
+    }
+  }, [multisigWallets]);
+
+  if (multisigWallets.length === 0) return null;
+
+  const totalZat = Object.values(balances).reduce((sum, b) => sum + b, 0n);
+  const formatZec = (zat: bigint) => {
+    const whole = zat / 100_000_000n;
+    const frac = zat % 100_000_000n;
+    const fracStr = frac.toString().padStart(8, '0').replace(/0+$/, '') || '0';
+    return `${whole}.${fracStr}`;
+  };
+
+  return (
+    <div className='rounded-lg border border-border/40 bg-card'>
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className='flex items-center justify-between w-full px-4 py-3 text-left'
+      >
+        <div className='flex items-center gap-2'>
+          <span className='i-lucide-key-round h-4 w-4 text-yellow-400' />
+          <span className='text-sm font-medium'>
+            multisig wallets
+          </span>
+          <span className='rounded-full bg-yellow-500/15 px-1.5 py-0.5 text-[10px] text-yellow-400'>
+            {multisigWallets.length}
+          </span>
+        </div>
+        <div className='flex items-center gap-2'>
+          <span className='text-sm font-mono text-muted-foreground'>
+            {formatZec(totalZat)} ZEC
+          </span>
+          <span className={cn(
+            'h-4 w-4 text-muted-foreground transition-transform',
+            expanded ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down',
+          )} />
+        </div>
+      </button>
+
+      {expanded && (
+        <div className='border-t border-border/20 px-4 py-2 space-y-1'>
+          {multisigWallets.map(w => {
+            const bal = balances[w.id] ?? 0n;
+            const isActive = w.originalIndex === activeIdx;
+            return (
+              <button
+                key={w.id}
+                onClick={() => {
+                  void setActiveZcashWallet(w.originalIndex);
+                }}
+                className={cn(
+                  'flex items-center justify-between w-full rounded-md px-3 py-2 text-left transition-colors',
+                  isActive ? 'bg-primary/10' : 'hover:bg-muted/50',
+                )}
+              >
+                <div className='flex items-center gap-2 min-w-0'>
+                  <span className='rounded bg-primary/15 px-1.5 py-0.5 text-[9px] font-semibold text-primary leading-none shrink-0'>
+                    {w.multisig!.threshold}/{w.multisig!.maxSigners}
+                  </span>
+                  <span className='text-sm truncate'>{w.label}</span>
+                  {isActive && (
+                    <span className='i-lucide-check h-3 w-3 text-primary shrink-0' />
+                  )}
+                </div>
+                <span className='text-sm font-mono text-muted-foreground shrink-0'>
+                  {formatZec(bal)}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export interface PopupLoaderData {
   fullSyncHeight?: number;
@@ -176,6 +271,9 @@ export const PopupIndex = () => {
           </div>
         </div>
 
+        {/* multisig portfolio overview (zcash only, when multisigs exist) */}
+        {activeNetwork === 'zcash' && <MultisigOverview />}
+
         {/* network-specific content - lazy loaded with skeleton */}
         <Suspense fallback={<AssetListSkeleton rows={4} />}>
           <NetworkContent
@@ -190,7 +288,7 @@ export const PopupIndex = () => {
 
         {/* recent history */}
         <Suspense fallback={<AssetListSkeleton rows={3} />}>
-          <HistoryContent network={activeNetwork} />
+          <HistoryContent network={activeNetwork} penumbraAccount={penumbraAccount} />
         </Suspense>
       </div>
     </div>
@@ -845,6 +943,19 @@ interface ParsedTransaction {
   amount?: string;
   asset?: string;
   memo?: string;
+  /** penumbra account indices associated with this transaction (from visible actions) */
+  accountIndices?: Set<number>;
+}
+
+/** extract account index from a visible note's decoded address view */
+function noteAccountIndex(note: unknown): number | undefined {
+  const n = note as { address?: { addressView?: { case?: string; value?: { index?: { account?: number } } } } } | undefined;
+  if (!n?.address?.addressView) return undefined;
+  const av = n.address.addressView;
+  if (av.case === 'decoded' && av.value?.index != null) {
+    return av.value.index.account;
+  }
+  return undefined;
 }
 
 function parsePenumbraTx(txInfo: TransactionInfo): ParsedTransaction {
@@ -856,13 +967,45 @@ function parsePenumbraTx(txInfo: TransactionInfo): ParsedTransaction {
   let description = 'Transaction';
   let hasVisibleSpend = false;
   let hasOutput = false;
+  const accountIndices = new Set<number>();
 
   for (const action of txInfo.view?.bodyView?.actionViews ?? []) {
     const c = action.actionView.case;
-    if (c === 'spend' && action.actionView.value.spendView?.case === 'visible') hasVisibleSpend = true;
-    else if (c === 'output') hasOutput = true;
-    else if (c === 'swap') { type = 'swap'; description = 'Swap'; }
-    else if (c === 'delegate') { type = 'delegate'; description = 'Delegate'; }
+    if (c === 'spend' && action.actionView.value.spendView?.case === 'visible') {
+      hasVisibleSpend = true;
+      const idx = noteAccountIndex(action.actionView.value.spendView.value?.note);
+      if (idx != null) accountIndices.add(idx);
+    } else if (c === 'output') {
+      hasOutput = true;
+      const ov = action.actionView.value.outputView;
+      if (ov?.case === 'visible') {
+        const idx = noteAccountIndex(ov.value?.note);
+        if (idx != null) accountIndices.add(idx);
+      }
+    } else if (c === 'swap') {
+      type = 'swap'; description = 'Swap';
+      // extract account from swap output notes (populated after claim)
+      const sv = action.actionView.value.swapView;
+      if (sv?.case === 'visible') {
+        const v = sv.value as { output1?: unknown; output2?: unknown };
+        for (const out of [v.output1, v.output2]) {
+          const idx = noteAccountIndex(out);
+          if (idx != null) accountIndices.add(idx);
+        }
+      }
+    } else if (c === 'swapClaim') {
+      type = 'swap'; description = 'Swap Claim';
+      // swap claims are separate txs with no spend/output actions - extract
+      // account from the claim's output notes
+      const scv = action.actionView.value.swapClaimView;
+      if (scv?.case === 'visible') {
+        const v = scv.value as { output1?: unknown; output2?: unknown };
+        for (const out of [v.output1, v.output2]) {
+          const idx = noteAccountIndex(out);
+          if (idx != null) accountIndices.add(idx);
+        }
+      }
+    } else if (c === 'delegate') { type = 'delegate'; description = 'Delegate'; }
     else if (c === 'undelegate') { type = 'undelegate'; description = 'Undelegate'; }
   }
   if (type === 'unknown') {
@@ -878,7 +1021,7 @@ function parsePenumbraTx(txInfo: TransactionInfo): ParsedTransaction {
     if (text) memo = text;
   }
 
-  return { id, height, timestamp: null, type, description, memo };
+  return { id, height, timestamp: null, type, description, memo, accountIndices };
 }
 
 /** format ZEC with meaningful digits only — no trailing zeros, min 2 decimals */
@@ -971,9 +1114,10 @@ function TxRow({ tx }: { tx: ParsedTransaction }) {
   );
 }
 
-const HistoryContent = ({ network }: { network: NetworkType }) => {
+const HistoryContent = ({ network, penumbraAccount }: { network: NetworkType; penumbraAccount: number }) => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
+  const historyEnabled = useStore(s => s.privacy.settings.enableTransactionHistory);
   const messages = useStore(messagesSelector);
   const walletId = selectedKeyInfo?.id;
   const isMainnet = !zidecarUrl.includes('testnet');
@@ -989,9 +1133,12 @@ const HistoryContent = ({ network }: { network: NetworkType }) => {
     return map;
   }, [messages, network]);
 
+  const setSetting = useStore(s => s.privacy.setSetting);
+
+  // hooks must always be called in the same order - queries use `enabled` flag instead
   const penumbraQ = useQuery({
     queryKey: ['homeHistory', 'penumbra'],
-    enabled: network === 'penumbra',
+    enabled: network === 'penumbra' && historyEnabled,
     staleTime: 30_000,
     queryFn: async () => {
       const txs: ParsedTransaction[] = [];
@@ -1015,7 +1162,7 @@ const HistoryContent = ({ network }: { network: NetworkType }) => {
   const zcashQ = useQuery({
     // bucket sync height to avoid refetching on every block — refresh every 10k blocks
     queryKey: ['homeHistory', 'zcash', walletId, tAddresses.length, Math.floor(workerSyncHeight / 10000)],
-    enabled: network === 'zcash' && !!walletId,
+    enabled: network === 'zcash' && !!walletId && historyEnabled,
     staleTime: 0,
     queryFn: async () => {
       if (!walletId) return [];
@@ -1033,8 +1180,37 @@ const HistoryContent = ({ network }: { network: NetworkType }) => {
     },
   });
 
+  if (!historyEnabled) {
+    return (
+      <div className='px-4 py-6 text-center'>
+        <p className='text-xs text-muted-foreground/50'>
+          transaction history is off
+        </p>
+        <button
+          onClick={() => void setSetting('enableTransactionHistory', true)}
+          className='mt-3 text-xs text-primary/70 hover:text-primary transition-colors'
+        >
+          enable transaction history
+        </button>
+        <a
+          href={`#${PopupPath.SETTINGS_PRIVACY}`}
+          className='text-[10px] text-muted-foreground/30 hover:text-primary mt-2 inline-block'
+        >
+          privacy settings
+        </a>
+      </div>
+    );
+  }
+
   const q = network === 'penumbra' ? penumbraQ : zcashQ;
-  const txs = q.data ?? [];
+  // for penumbra, filter by the selected account index - a tx belongs to an
+  // account if any of its visible spend or output notes reference that index
+  const allTxs = (q.data ?? []) as ParsedTransaction[];
+  const txs = network === 'penumbra'
+    ? allTxs.filter(tx =>
+        !tx.accountIndices || tx.accountIndices.size === 0 || tx.accountIndices.has(penumbraAccount),
+      )
+    : allTxs;
 
   if (q.isLoading && txs.length === 0) {
     return (

@@ -481,11 +481,12 @@ export function build_shielding_transaction(utxos_json, privkey_hex, recipient, 
  * @param {any} merkle_paths_json
  * @param {number} account_index
  * @param {boolean} mainnet
+ * @param {string | null} [memo_hex]
  * @returns {string}
  */
-export function build_signed_spend_transaction(seed_phrase, notes_json, recipient, amount, fee, anchor_hex, merkle_paths_json, account_index, mainnet) {
-    let deferred5_0;
-    let deferred5_1;
+export function build_signed_spend_transaction(seed_phrase, notes_json, recipient, amount, fee, anchor_hex, merkle_paths_json, account_index, mainnet, memo_hex) {
+    let deferred6_0;
+    let deferred6_1;
     try {
         const ptr0 = passStringToWasm0(seed_phrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
@@ -493,18 +494,20 @@ export function build_signed_spend_transaction(seed_phrase, notes_json, recipien
         const len1 = WASM_VECTOR_LEN;
         const ptr2 = passStringToWasm0(anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len2 = WASM_VECTOR_LEN;
-        const ret = wasm.build_signed_spend_transaction(ptr0, len0, notes_json, ptr1, len1, amount, fee, ptr2, len2, merkle_paths_json, account_index, mainnet);
-        var ptr4 = ret[0];
-        var len4 = ret[1];
+        var ptr3 = isLikeNone(memo_hex) ? 0 : passStringToWasm0(memo_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len3 = WASM_VECTOR_LEN;
+        const ret = wasm.build_signed_spend_transaction(ptr0, len0, notes_json, ptr1, len1, amount, fee, ptr2, len2, merkle_paths_json, account_index, mainnet, ptr3, len3);
+        var ptr5 = ret[0];
+        var len5 = ret[1];
         if (ret[3]) {
-            ptr4 = 0; len4 = 0;
+            ptr5 = 0; len5 = 0;
             throw takeFromExternrefTable0(ret[2]);
         }
-        deferred5_0 = ptr4;
-        deferred5_1 = len4;
-        return getStringFromWasm0(ptr4, len4);
+        deferred6_0 = ptr5;
+        deferred6_1 = len5;
+        return getStringFromWasm0(ptr5, len5);
     } finally {
-        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
+        wasm.__wbindgen_free(deferred6_0, deferred6_1, 1);
     }
 }
 
@@ -566,16 +569,19 @@ export function build_unsigned_shielding_transaction(utxos_json, recipient, amou
  * @param {any} merkle_paths_json
  * @param {number} _account_index
  * @param {boolean} mainnet
+ * @param {string | null} [memo_hex]
  * @returns {any}
  */
-export function build_unsigned_transaction(ufvk_str, notes_json, recipient, amount, fee, anchor_hex, merkle_paths_json, _account_index, mainnet) {
+export function build_unsigned_transaction(ufvk_str, notes_json, recipient, amount, fee, anchor_hex, merkle_paths_json, _account_index, mainnet, memo_hex) {
     const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
     const ptr1 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len1 = WASM_VECTOR_LEN;
     const ptr2 = passStringToWasm0(anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len2 = WASM_VECTOR_LEN;
-    const ret = wasm.build_unsigned_transaction(ptr0, len0, notes_json, ptr1, len1, amount, fee, ptr2, len2, merkle_paths_json, _account_index, mainnet);
+    var ptr3 = isLikeNone(memo_hex) ? 0 : passStringToWasm0(memo_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len3 = WASM_VECTOR_LEN;
+    const ret = wasm.build_unsigned_transaction(ptr0, len0, notes_json, ptr1, len1, amount, fee, ptr2, len2, merkle_paths_json, _account_index, mainnet, ptr3, len3);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
@@ -720,6 +726,45 @@ export function derive_transparent_privkey(seed_phrase, account, index) {
 }
 
 /**
+ * Encode notes + merkle paths into CBOR bytes for ur:zcash-notes.
+ *
+ * This produces the exact format zigner expects: CBOR map with anchor,
+ * height, mainnet flag, notes array with merkle paths, and optional
+ * attestation signature.
+ *
+ * # Arguments
+ * * `notes_json` - JSON array of `[{value, nullifier, cmx, position, block_height}]`
+ * * `merkle_result_json` - JSON from build_merkle_paths: `{anchor_hex, paths: [{position, path: [{hash}]}]}`
+ * * `anchor_height` - block height of the anchor
+ * * `mainnet` - true for mainnet, false for testnet
+ * * `attestation_hex` - optional hex-encoded 64-byte FROST attestation signature
+ *
+ * # Returns
+ * `Uint8Array` of CBOR bytes ready for UR fountain encoding
+ * @param {string} notes_json
+ * @param {string} merkle_result_json
+ * @param {number} anchor_height
+ * @param {boolean} mainnet
+ * @param {string | null} [attestation_hex]
+ * @returns {Uint8Array}
+ */
+export function encode_notes_bundle(notes_json, merkle_result_json, anchor_height, mainnet, attestation_hex) {
+    const ptr0 = passStringToWasm0(notes_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(merkle_result_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    var ptr2 = isLikeNone(attestation_hex) ? 0 : passStringToWasm0(attestation_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len2 = WASM_VECTOR_LEN;
+    const ret = wasm.encode_notes_bundle(ptr0, len0, ptr1, len1, anchor_height, mainnet, ptr2, len2);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v4 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v4;
+}
+
+/**
  * Compute the tree size from a hex-encoded frontier.
  * @param {string} tree_state_hex
  * @returns {bigint}
@@ -770,6 +815,61 @@ export function frost_aggregate_shares(public_key_package_hex, message_hex, comm
     } finally {
         wasm.__wbindgen_free(deferred7_0, deferred7_1, 1);
     }
+}
+
+/**
+ * Compute the attestation digest for an anchor.
+ * Returns hex-encoded 32-byte SHA-256 digest.
+ * @param {string} public_key_package_hex
+ * @param {string} anchor_hex
+ * @param {number} anchor_height
+ * @param {boolean} mainnet
+ * @returns {string}
+ */
+export function frost_attestation_digest(public_key_package_hex, anchor_hex, anchor_height, mainnet) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(public_key_package_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_attestation_digest(ptr0, len0, ptr1, len1, anchor_height, mainnet);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
+ * Verify an attestation (96 bytes: sig || randomizer).
+ * @param {string} attestation_hex
+ * @param {string} public_key_package_hex
+ * @param {string} anchor_hex
+ * @param {number} anchor_height
+ * @param {boolean} mainnet
+ * @returns {boolean}
+ */
+export function frost_attestation_verify(attestation_hex, public_key_package_hex, anchor_hex, anchor_height, mainnet) {
+    const ptr0 = passStringToWasm0(attestation_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(public_key_package_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ret = wasm.frost_attestation_verify(ptr0, len0, ptr1, len1, ptr2, len2, anchor_height, mainnet);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return ret[0] !== 0;
 }
 
 /**
@@ -1305,6 +1405,39 @@ export function tree_root_hex(tree_state_hex) {
 }
 
 /**
+ * Encode CBOR bytes as UR-encoded animated QR string frames.
+ * Returns JSON array of UR strings suitable for QR display.
+ * ur_type: e.g. "zcash-notes", "zigner-contacts", "zigner-backup"
+ * fragment_size: max bytes per QR frame (200-500 typical, 0 = single QR)
+ * @param {Uint8Array} cbor_data
+ * @param {string} ur_type
+ * @param {number} fragment_size
+ * @returns {string}
+ */
+export function ur_encode_frames(cbor_data, ur_type, fragment_size) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passArray8ToWasm0(cbor_data, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(ur_type, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.ur_encode_frames(ptr0, len0, ptr1, len1, fragment_size);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
  * Validate a seed phrase
  * @param {string} seed_phrase
  * @returns {boolean}
@@ -1376,6 +1509,39 @@ if (Symbol.dispose) wbg_rayon_PoolBuilder.prototype[Symbol.dispose] = wbg_rayon_
  */
 export function wbg_rayon_start_worker(receiver) {
     wasm.wbg_rayon_start_worker(receiver);
+}
+
+/**
+ * Encode CBOR bytes as zoda transport QR frames (verified erasure coding).
+ * Returns JSON array of `zt:type/hex` strings.
+ * k = minimum frames to reconstruct, n = total frames.
+ * @param {Uint8Array} cbor_data
+ * @param {string} zt_type
+ * @param {number} k
+ * @param {number} n
+ * @returns {string}
+ */
+export function zt_encode_frames(cbor_data, zt_type, k, n) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passArray8ToWasm0(cbor_data, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(zt_type, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.zt_encode_frames(ptr0, len0, ptr1, len1, k, n);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
 }
 
 function __wbg_get_imports() {

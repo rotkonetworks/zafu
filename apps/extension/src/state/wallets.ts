@@ -92,11 +92,12 @@ export const createWalletsSlice =
         });
 
         set(state => {
+          if (!Array.isArray(state.wallets.all)) state.wallets.all = [];
           state.wallets.all.unshift(newWallet.toJson());
         });
 
-        const wallets = await local.get('penumbraWallets');
-        await local.set('penumbraWallets', [newWallet.toJson(), ...wallets]);
+        const wallets = (await local.get('penumbraWallets')) ?? [];
+        await local.set('penumbraWallets', [newWallet.toJson(), ...(Array.isArray(wallets) ? wallets : [])]);
       },
 
       updateMultisigWallet: async (id, updates) => {
@@ -237,13 +238,17 @@ export const walletsSelector = (state: AllSlices) => state.wallets;
 /**
  * fine-grained atomic selectors - solidjs style
  */
-export const selectZcashWallets = (state: AllSlices) => state.wallets.zcashWallets;
+export const selectZcashWallets = (state: AllSlices) => Array.isArray(state.wallets.zcashWallets) ? state.wallets.zcashWallets : [];
 export const selectActiveZcashIndex = (state: AllSlices) => state.wallets.activeZcashIndex;
 export const selectActiveZcashWallet = (state: AllSlices) => {
   const { zcashWallets, activeZcashIndex } = state.wallets;
   return zcashWallets[activeZcashIndex];
 };
-export const selectPenumbraWallets = (state: AllSlices) => state.wallets.all;
+export const selectMultisigWallets = (state: AllSlices) => {
+  const wallets = Array.isArray(state.wallets.zcashWallets) ? state.wallets.zcashWallets : [];
+  return wallets.filter(w => w.multisig);
+};
+export const selectPenumbraWallets = (state: AllSlices) => Array.isArray(state.wallets.all) ? state.wallets.all : [];
 export const selectActivePenumbraIndex = (state: AllSlices) => state.wallets.activeIndex;
 
 export const getActiveWallet = (state: AllSlices) => {

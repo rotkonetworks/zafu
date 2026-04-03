@@ -97,6 +97,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const [showContactModal, setShowContactModal] = useState(false);
   const [fee, setFee] = useState('0.0001');
   const [showContacts, setShowContacts] = useState(false);
+  const [showQrScanner, setShowQrScanner] = useState(false);
   const unsignedTxRef = useRef<SendTxUnsignedResult | null>(null);
   const [sendSteps, setSendSteps] = useState<Array<{ step: string; detail?: string; elapsedMs: number }>>([]);
   const [totalElapsedSec, setTotalElapsedSec] = useState<number | null>(null);
@@ -222,7 +223,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
         // create relay room for signing session
         setStep('frost-room');
-        const relayUrl = ms.relayUrl || zidecarUrl;
+        const relayUrl = ms.relayUrl || 'https://poker.zk.bot';
         const relay = new FrostRelayClient(relayUrl);
         const room = await relay.createRoom(ms.threshold, ms.maxSigners, 300);
         setFrostRoomCode(room.roomCode);
@@ -500,7 +501,31 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                   >
                     <span className="i-lucide-user h-4 w-4" />
                   </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    type="button"
+                    onClick={() => setShowQrScanner(true)}
+                    title="scan QR code"
+                    className="shrink-0"
+                  >
+                    <span className="i-lucide-scan h-4 w-4" />
+                  </Button>
                 </div>
+                {showQrScanner && (
+                  <QrScanner
+                    onScan={(data) => {
+                      // strip zcash: URI prefix if present
+                      const addr = data.startsWith('zcash:') ? data.slice(6).split('?')[0]! : data;
+                      setRecipient(addr);
+                      setShowQrScanner(false);
+                    }}
+                    onClose={() => setShowQrScanner(false)}
+                    title="scan address"
+                    description="scan a zcash address QR code"
+                    inline
+                  />
+                )}
                 <RecipientPicker
                   network='zcash'
                   onSelect={(addr) => { setRecipient(addr); setShowContacts(false); }}

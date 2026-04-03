@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { viewClient, sctClient } from '../../../clients';
 import { useStore } from '../../../state';
-import { selectActiveNetwork, selectEffectiveKeyInfo } from '../../../state/keyring';
+import { selectActiveNetwork, selectEffectiveKeyInfo, selectPenumbraAccount } from '../../../state/keyring';
 import { getHistoryInWorker } from '../../../state/keyring/network-worker';
 import { useTransparentAddresses } from '../../../hooks/use-transparent-addresses';
 import { cn } from '@repo/ui/lib/utils';
@@ -16,6 +16,19 @@ interface ParsedTransaction {
   description: string;
   amount?: string;
   asset?: string;
+  /** penumbra account indices associated with this transaction (from visible actions) */
+  accountIndices?: Set<number>;
+}
+
+/** extract account index from a visible note's decoded address view */
+function noteAccountIndex(note: unknown): number | undefined {
+  const n = note as { address?: { addressView?: { case?: string; value?: { index?: { account?: number } } } } } | undefined;
+  if (!n?.address?.addressView) return undefined;
+  const av = n.address.addressView;
+  if (av.case === 'decoded' && av.value?.index != null) {
+    return av.value.index.account;
+  }
+  return undefined;
 }
 
 function parseTransaction(txInfo: TransactionInfo): ParsedTransaction {
@@ -31,6 +44,7 @@ function parseTransaction(txInfo: TransactionInfo): ParsedTransaction {
   let description = 'Transaction';
   let hasVisibleSpend = false;
   let hasOutput = false;
+  const accountIndices = new Set<number>();
 
   for (const action of txInfo.view?.bodyView?.actionViews ?? []) {
     const actionCase = action.actionView.case;
@@ -38,9 +52,16 @@ function parseTransaction(txInfo: TransactionInfo): ParsedTransaction {
     if (actionCase === 'spend') {
       if (action.actionView.value.spendView?.case === 'visible') {
         hasVisibleSpend = true;
+        const idx = noteAccountIndex(action.actionView.value.spendView.value?.note);
+        if (idx != null) accountIndices.add(idx);
       }
     } else if (actionCase === 'output') {
       hasOutput = true;
+      const ov = action.actionView.value.outputView;
+      if (ov?.case === 'visible') {
+        const idx = noteAccountIndex(ov.value?.note);
+        if (idx != null) accountIndices.add(idx);
+      }
     } else if (actionCase === 'swap') {
       type = 'swap';
       description = 'Swap';
@@ -63,7 +84,7 @@ function parseTransaction(txInfo: TransactionInfo): ParsedTransaction {
     }
   }
 
-  return { id, height, timestamp: null, type, description };
+  return { id, height, timestamp: null, type, description, accountIndices };
 }
 
 function zatoshiToZec(zatoshis: bigint | string): string {
@@ -141,8 +162,27 @@ function TransactionRow({ tx }: { tx: ParsedTransaction }) {
 export const HistoryPage = () => {
   const activeNetwork = useStore(selectActiveNetwork);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  const penumbraAccount = useStore(selectPenumbraAccount);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
+  const historyEnabled = useStore(s => s.privacy.settings.enableTransactionHistory);
   const [transactions, setTransactions] = useState<ParsedTransaction[]>([]);
+
+  if (!historyEnabled) {
+    return (
+      <div className='flex flex-col h-full'>
+        <div className='flex items-center px-4 py-3 border-b border-border/40'>
+          <h1 className='text-lg font-medium'>History</h1>
+        </div>
+        <div className='flex-1 flex flex-col items-center justify-center gap-3 p-8 text-center'>
+          <span className='i-lucide-eye-off h-8 w-8 text-muted-foreground/30' />
+          <p className='text-sm text-muted-foreground'>transaction history is disabled</p>
+          <p className='text-xs text-muted-foreground/50'>
+            enable in settings &rarr; privacy to see past transactions
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const walletId = selectedKeyInfo?.id;
   const isMainnet = !zidecarUrl.includes('testnet');
@@ -214,6 +254,15 @@ export const HistoryPage = () => {
     },
   });
 
+  // for penumbra, filter by the selected account index - a tx belongs to an
+  // account if any of its visible spend or output notes reference that index
+  const filteredTransactions = useMemo(() => {
+    if (activeNetwork !== 'penumbra') return transactions;
+    return transactions.filter(tx =>
+      !tx.accountIndices || tx.accountIndices.size === 0 || tx.accountIndices.has(penumbraAccount),
+    );
+  }, [transactions, activeNetwork, penumbraAccount]);
+
   const isLoading = activeNetwork === 'penumbra' ? penumbraQuery.isLoading : zcashQuery.isLoading;
   const error = activeNetwork === 'penumbra' ? penumbraQuery.error : zcashQuery.error;
   const refetch = activeNetwork === 'penumbra' ? penumbraQuery.refetch : zcashQuery.refetch;
@@ -239,7 +288,7 @@ export const HistoryPage = () => {
 
       {/* content */}
       <div className='flex-1 overflow-y-auto p-4'>
-        {isLoading && transactions.length === 0 ? (
+        {isLoading && filteredTransactions.length === 0 ? (
           <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
             <span className='i-lucide-refresh-cw h-6 w-6 animate-spin text-muted-foreground' />
             <p className='text-sm text-muted-foreground'>Loading transactions...</p>
@@ -254,7 +303,7 @@ export const HistoryPage = () => {
               Try again
             </button>
           </div>
-        ) : transactions.length === 0 ? (
+        ) : filteredTransactions.length === 0 ? (
           <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
             <div className='rounded-full bg-primary/10 p-4'>
               <span className='i-lucide-clock h-8 w-8 text-primary' />
@@ -268,7 +317,7 @@ export const HistoryPage = () => {
           </div>
         ) : (
           <div className='space-y-2'>
-            {transactions.map(tx => (
+            {filteredTransactions.map(tx => (
               <TransactionRow key={tx.id} tx={tx} />
             ))}
           </div>

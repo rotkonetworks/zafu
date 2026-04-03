@@ -9,15 +9,16 @@ export interface Zapp {
   builtin?: boolean;    // cannot be removed
 }
 
-export type ZappCategory = 'finance' | 'social' | 'tools' | 'games';
+export type ZappCategory = 'finance' | 'social' | 'tools' | 'games' | 'learn';
 
-const CATEGORY_ORDER: ZappCategory[] = ['finance', 'social', 'games', 'tools'];
+const CATEGORY_ORDER: ZappCategory[] = ['finance', 'social', 'games', 'tools', 'learn'];
 
 export const CATEGORY_LABELS: Record<ZappCategory, string> = {
   finance: 'finance',
   social: 'social',
   games: 'games',
   tools: 'tools',
+  learn: 'learn',
 };
 
 export const categoryOrder = (a: ZappCategory, b: ZappCategory) =>
@@ -69,6 +70,14 @@ export const DEFAULT_ZAPPS: Zapp[] = [
     category: 'games',
   },
   {
+    id: 'sonotxt',
+    name: 'sonotxt',
+    description: 'private text-to-speech',
+    icon: 'i-lucide-audio-lines',
+    url: 'https://sonotxt.com',
+    category: 'tools',
+  },
+  {
     id: 'zigner',
     name: 'zigner',
     description: 'airgap signing app',
@@ -83,6 +92,99 @@ export const DEFAULT_ZAPPS: Zapp[] = [
     icon: 'i-lucide-code',
     url: 'https://github.com/rotkonetworks/zafu',
     category: 'tools',
+  },
+  // learn - zcash
+  {
+    id: 'learn-zcash-docs',
+    name: 'zcash docs',
+    description: 'protocol documentation',
+    icon: 'i-lucide-book-open',
+    url: 'https://zcash.readthedocs.io',
+    category: 'learn',
+    builtin: true,
+  },
+  {
+    id: 'learn-ecc',
+    name: 'electric coin co',
+    description: 'zcash core team',
+    icon: 'i-lucide-zap',
+    url: 'https://electriccoin.co',
+    category: 'learn',
+    builtin: true,
+  },
+  {
+    id: 'learn-zcash-forum',
+    name: 'zcash community',
+    description: 'community forum',
+    icon: 'i-lucide-users',
+    url: 'https://forum.zcashcommunity.com',
+    category: 'learn',
+    builtin: true,
+  },
+  {
+    id: 'learn-zfnd',
+    name: 'zcash foundation',
+    description: 'grants and governance',
+    icon: 'i-lucide-landmark',
+    url: 'https://zfnd.org',
+    category: 'learn',
+    builtin: true,
+  },
+  // learn - penumbra
+  {
+    id: 'learn-antumbra',
+    name: 'antumbra',
+    description: 'penumbra resources hub',
+    icon: 'i-lucide-globe',
+    url: 'https://antumbra.net',
+    category: 'learn',
+    builtin: true,
+  },
+  {
+    id: 'learn-penumbra-protocol',
+    name: 'penumbra protocol',
+    description: 'protocol specs',
+    icon: 'i-lucide-file-text',
+    url: 'https://protocol.penumbra.zone',
+    category: 'learn',
+    builtin: true,
+  },
+  {
+    id: 'learn-penumbra-tokenomics',
+    name: 'penumbra tokenomics',
+    description: 'token economics',
+    icon: 'i-lucide-coins',
+    url: 'https://tokenomics.penumbra.zone',
+    category: 'learn',
+    builtin: true,
+  },
+  {
+    id: 'learn-penumbra-guide',
+    name: 'penumbra guide',
+    description: 'getting started',
+    icon: 'i-lucide-graduation-cap',
+    url: 'https://guide.penumbra.zone',
+    category: 'learn',
+    builtin: true,
+  },
+  {
+    id: 'learn-penumbra-blog',
+    name: 'penumbra blog',
+    description: 'news and updates',
+    icon: 'i-lucide-rss',
+    url: 'https://penumbra.zone/blog',
+    category: 'learn',
+    builtin: true,
+  },
+  // learn - general privacy
+  {
+    id: 'learn-zafu-docs',
+    name: 'zafu docs',
+    description: 'wallet guides and specs',
+    icon: 'i-lucide-shield',
+    url: '__docs__',
+    category: 'learn',
+    builtin: true,
   },
 ];
 

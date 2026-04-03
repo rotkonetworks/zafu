@@ -1,18 +1,21 @@
 import { ExtensionStorage } from '@repo/storage-chrome/base';
 import { LocalStorageState } from '@repo/storage-chrome/local';
 import { OriginRecord } from '@repo/storage-chrome/records';
+import { Capability } from '@repo/storage-chrome/capabilities';
+import { grantCapability, denyCapability, revokeOrigin } from '@repo/storage-chrome/origin';
 import { AllSlices, SliceCreator } from '.';
 
 export interface ConnectedSitesSlice {
   filter?: string;
   setFilter: (search?: string) => void;
   knownSites: OriginRecord[];
-  discardKnownSite: (originRecord: OriginRecord) => Promise<void>;
+  discardKnownSite: (originRecord: { origin: string }) => Promise<void>;
+  toggleCapability: (origin: string, capability: Capability, enabled: boolean) => Promise<void>;
 }
 
 export const createConnectedSitesSlice =
-  (local: ExtensionStorage<LocalStorageState>): SliceCreator<ConnectedSitesSlice> =>
-  (set, get) => ({
+  (_local: ExtensionStorage<LocalStorageState>): SliceCreator<ConnectedSitesSlice> =>
+  (set, _get) => ({
     knownSites: [],
 
     filter: undefined,
@@ -23,12 +26,16 @@ export const createConnectedSitesSlice =
     },
 
     discardKnownSite: async (siteToDiscard: { origin: string }) => {
-      const { knownSites } = get().connectedSites;
-      const knownSitesWithoutDiscardedSite = knownSites.filter(
-        known => known.origin !== siteToDiscard.origin,
-      );
-      await local.set('knownSites', knownSitesWithoutDiscardedSite);
+      await revokeOrigin(siteToDiscard.origin);
       void chrome.runtime.sendMessage({ revoke: siteToDiscard.origin });
+    },
+
+    toggleCapability: async (origin: string, capability: Capability, enabled: boolean) => {
+      if (enabled) {
+        await grantCapability(origin, capability);
+      } else {
+        await denyCapability(origin, capability);
+      }
     },
   });
 
@@ -38,5 +45,6 @@ export const allSitesFilteredOutSelector = (state: AllSlices) => {
     return false;
   }
 
-  return !state.connectedSites.knownSites.some(site => site.origin.includes(filter));
+  const sites = Array.isArray(state.connectedSites.knownSites) ? state.connectedSites.knownSites : [];
+  return !sites.some(site => site.origin.includes(filter));
 };

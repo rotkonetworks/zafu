@@ -10,5 +10,10 @@
   "scripts": {
     "lint": "eslint \"**/*.ts*\"",
     "test": "vitest run"
+  },
+  "dependencies": {
+    "@noble/ciphers": "^2.1.1",
+    "@noble/curves": "^1.9.7",
+    "@noble/hashes": "^1.8.0"
   }
 }

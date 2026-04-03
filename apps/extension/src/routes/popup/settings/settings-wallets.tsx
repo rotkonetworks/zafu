@@ -224,6 +224,7 @@ export const SettingsWallets = () => {
   const showManualInput = manualInputRef.current && scanState !== 'scanned';
   const showScannedState = scanState === 'scanned' && (walletImport || zcashWalletImport || parsedPolkadotExport || parsedCosmosExport);
   const showInitialState = scanState === 'idle' && !showManualInput;
+  const hasSeedVault = keyInfos.some(v => v.type === 'mnemonic');
 
   return (
     <>
@@ -421,10 +422,12 @@ export const SettingsWallets = () => {
                 <span className='i-lucide-scan-line size-4' />
                 scan zigner QR
               </button>
-              <button onClick={() => chrome.runtime.openOptionsPage()}
-                className='w-full rounded-lg border border-dashed border-border/40 py-2.5 text-xs text-muted-foreground hover:text-foreground hover:border-border/60 transition-colors'>
-                + import seed phrase
-              </button>
+              {!hasSeedVault && (
+                <button onClick={() => chrome.runtime.openOptionsPage()}
+                  className='w-full rounded-lg border border-dashed border-border/40 py-2.5 text-xs text-muted-foreground hover:text-foreground hover:border-border/60 transition-colors'>
+                  + import seed phrase
+                </button>
+              )}
               {errorMessage && <p className='text-xs text-red-400 text-center'>{errorMessage}</p>}
             </div>
           )}

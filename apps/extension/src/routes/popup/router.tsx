@@ -17,6 +17,9 @@ const OriginApproval = lazy(() =>
 const SignApproval = lazy(() =>
   import('./approval/sign').then(m => ({ default: m.SignApproval })),
 );
+const CapabilityApproval = lazy(() =>
+  import('./approval/capability').then(m => ({ default: m.CapabilityApproval })),
+);
 
 // lazy load tab pages
 const StakePage = lazy(() => import('./stake').then(m => ({ default: m.StakePage })));
@@ -27,12 +30,18 @@ const ContactsPage = lazy(() => import('./contacts').then(m => ({ default: m.Con
 const SendPage = lazy(() => import('./send').then(m => ({ default: m.SendPage })));
 const ReceivePage = lazy(() => import('./receive').then(m => ({ default: m.ReceivePage })));
 const CosmosSign = lazy(() => import('./cosmos-sign').then(m => ({ default: m.CosmosSign })));
+const MultisigSessions = lazy(() => import('./multisig/sessions').then(m => ({ default: m.MultisigPage })));
 const MultisigCreate = lazy(() => import('./multisig/create').then(m => ({ default: m.MultisigCreate })));
 const MultisigJoin = lazy(() => import('./multisig/join').then(m => ({ default: m.MultisigJoin })));
 const MultisigSign = lazy(() => import('./multisig/sign').then(m => ({ default: m.MultisigSign })));
 const NoteSyncPage = lazy(() => import('./note-sync').then(m => ({ default: m.NoteSyncPage })));
 const IdentityPage = lazy(() => import('./identity').then(m => ({ default: m.IdentityPage })));
+const PasswordsPage = lazy(() => import('./identity/passwords').then(m => ({ default: m.PasswordsPage })));
 const ContactPicker = lazy(() => import('./pick-contacts').then(m => ({ default: m.ContactPicker })));
+const FrostApprove = lazy(() => import('./frost-approve').then(m => ({ default: m.FrostApprove })));
+const ZcashSendApproval = lazy(() =>
+  import('./approval/zcash-send').then(m => ({ default: m.ZcashSendApproval })),
+);
 
 // suspense fallback for lazy routes
 const LazyFallback = () => (
@@ -110,6 +119,14 @@ export const popupRoutes: RouteObject[] = [
           </Suspense>
         ),
       },
+      {
+        path: PopupPath.PASSWORDS,
+        element: (
+          <Suspense fallback={<LazyFallback />}>
+            <PasswordsPage />
+          </Suspense>
+        ),
+      },
 
       // Send/Receive
       {
@@ -140,6 +157,14 @@ export const popupRoutes: RouteObject[] = [
       },
 
       // Multisig
+      {
+        path: PopupPath.MULTISIG,
+        element: (
+          <Suspense fallback={<LazyFallback />}>
+            <MultisigSessions />
+          </Suspense>
+        ),
+      },
       {
         path: PopupPath.MULTISIG_CREATE,
         element: (
@@ -182,6 +207,14 @@ export const popupRoutes: RouteObject[] = [
           </Suspense>
         ),
       },
+      {
+        path: PopupPath.FROST_APPROVE,
+        element: (
+          <Suspense fallback={<LazyFallback />}>
+            <FrostApprove />
+          </Suspense>
+        ),
+      },
 
       // Auth
       {
@@ -212,6 +245,22 @@ export const popupRoutes: RouteObject[] = [
         element: (
           <Suspense fallback={<LazyFallback />}>
             <SignApproval />
+          </Suspense>
+        ),
+      },
+      {
+        path: PopupPath.CAPABILITY_APPROVAL,
+        element: (
+          <Suspense fallback={<LazyFallback />}>
+            <CapabilityApproval />
+          </Suspense>
+        ),
+      },
+      {
+        path: '/approval/zcash-send',
+        element: (
+          <Suspense fallback={<LazyFallback />}>
+            <ZcashSendApproval />
           </Suspense>
         ),
       },

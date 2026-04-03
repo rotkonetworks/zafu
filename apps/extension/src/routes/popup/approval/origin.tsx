@@ -6,9 +6,63 @@ import { LinkGradientIcon } from '../../../icons/link-gradient';
 import { DisplayOriginURL } from '../../../shared/components/display-origin-url';
 import { cn } from '@repo/ui/lib/utils';
 import { UserChoice } from '@repo/storage-chrome/records';
+import { CAPABILITY_META, type Capability, type RiskLevel } from '@repo/storage-chrome/capabilities';
+
+const riskStyles: Record<RiskLevel, { border: string; bg: string; text: string; banner?: string }> = {
+  low: {
+    border: 'border-border/40',
+    bg: '',
+    text: 'text-muted-foreground',
+  },
+  medium: {
+    border: 'border-yellow-500/30',
+    bg: 'bg-yellow-500/5',
+    text: 'text-yellow-400',
+  },
+  high: {
+    border: 'border-orange-500/40',
+    bg: 'bg-orange-500/5',
+    text: 'text-orange-400',
+    banner: 'This grants significant access to your wallet.',
+  },
+  critical: {
+    border: 'border-red-500/50',
+    bg: 'bg-red-500/10',
+    text: 'text-red-400',
+    banner: 'DANGER: This capability can sign transactions without your approval.',
+  },
+};
+
+const CapabilityItem = ({ cap }: { cap: Capability }) => {
+  const meta = CAPABILITY_META[cap];
+  const style = riskStyles[meta.risk];
+
+  return (
+    <div className={cn('rounded-lg border p-3', style.border, style.bg)}>
+      {style.banner && (
+        <div className={cn('mb-2 text-xs font-medium', style.text)}>
+          {style.banner}
+        </div>
+      )}
+      <div className='flex items-center gap-2'>
+        <span className={cn('text-sm font-medium', style.text)}>{meta.label}</span>
+        <span className={cn(
+          'rounded px-1.5 py-0.5 text-[10px] uppercase',
+          meta.risk === 'low' && 'bg-muted text-muted-foreground',
+          meta.risk === 'medium' && 'bg-yellow-500/10 text-yellow-400',
+          meta.risk === 'high' && 'bg-orange-500/10 text-orange-400',
+          meta.risk === 'critical' && 'bg-red-500/10 text-red-400',
+        )}>
+          {meta.risk}
+        </span>
+      </div>
+      <p className='mt-1 text-xs text-muted-foreground'>{meta.description}</p>
+    </div>
+  );
+};
 
 export const OriginApproval = () => {
-  const { requestOrigin, favIconUrl, title, lastRequest, setChoice, sendResponse } =
+  const { requestOrigin, favIconUrl, title, lastRequest, requestedCapabilities, setChoice, sendResponse } =
     useStore(originApprovalSelector);
 
   const approve = () => {
@@ -32,6 +86,13 @@ export const OriginApproval = () => {
   if (!requestOrigin) {
     return null;
   }
+
+  // determine highest risk level for banner
+  const maxRisk = requestedCapabilities.reduce<RiskLevel>((max, cap) => {
+    const levels: RiskLevel[] = ['low', 'medium', 'high', 'critical'];
+    const capRisk = CAPABILITY_META[cap].risk;
+    return levels.indexOf(capRisk) > levels.indexOf(max) ? capRisk : max;
+  }, 'low');
 
   return (
     <FadeTransition>
@@ -90,14 +151,33 @@ export const OriginApproval = () => {
                 </div>
               </div>
             </div>
-            <div className='mt-3 flex flex-col gap-3 text-muted-foreground'>
-              <p>this site wants to connect to your wallet.</p>
-              <p className='text-xs'>
-                the site can query your balances and request transactions.
-                your viewing keys stay local - they never leave the extension.
-                you will be asked to approve each transaction separately.
+
+            {/* capability list with risk styling */}
+            <div className='mt-3 flex flex-col gap-2'>
+              <p className='text-sm text-muted-foreground'>
+                this site is requesting the following permissions:
               </p>
+              {requestedCapabilities.map(cap => (
+                <CapabilityItem key={cap} cap={cap} />
+              ))}
             </div>
+
+            {/* extra warning for high/critical */}
+            {(maxRisk === 'high' || maxRisk === 'critical') && (
+              <div className={cn(
+                'mt-2 rounded-lg border p-3 text-xs',
+                maxRisk === 'critical'
+                  ? 'border-red-500/50 bg-red-500/10 text-red-400'
+                  : 'border-orange-500/40 bg-orange-500/5 text-orange-400',
+              )}>
+                review these permissions carefully before approving.
+                {maxRisk === 'critical' && ' this includes dangerous capabilities.'}
+              </div>
+            )}
+
+            <p className='mt-1 text-xs text-muted-foreground'>
+              your viewing keys stay local - they never leave the extension.
+            </p>
           </div>
         </div>
         <div className='flex grow flex-col justify-end'>

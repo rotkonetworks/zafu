@@ -16,6 +16,7 @@ import { type WebExtRunner, cmd as WebExtCmd } from 'web-ext';
 import { execSync } from 'node:child_process';
 import webpack from 'webpack';
 import WatchExternalFilesPlugin from 'webpack-watch-external-files-plugin';
+import unocssPostcss from '@unocss/postcss';
 // UnoCSS icons are loaded via @unocss/postcss in the PostCSS pipeline
 
 export default ({
@@ -28,10 +29,10 @@ export default ({
   const gitCommit = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
   const gitDate = execSync('git log -1 --format=%cd --date=short', { encoding: 'utf-8' }).trim();
 
-  const keysPackage = path.dirname(url.fileURLToPath(import.meta.resolve('@penumbra-zone/keys')));
+  const keysPackage = path.dirname(require.resolve('@penumbra-zone/keys'));
   // Resolve wasm package via a known export, then go up to package root
   const wasmPackage = path.dirname(
-    path.dirname(url.fileURLToPath(import.meta.resolve('@rotko/penumbra-wasm/build'))),
+    path.dirname(require.resolve('@rotko/penumbra-wasm/build')),
   );
 
   const localPackages = [
@@ -129,7 +130,7 @@ export default ({
   const sharedModuleRules: webpack.RuleSetRule[] = [
     {
       test: /\.tsx?$/,
-      use: 'ts-loader',
+      use: { loader: 'ts-loader', options: { transpileOnly: true } },
       exclude: /node_modules/,
     },
     {
@@ -167,6 +168,7 @@ export default ({
     entry: {
       'injected-session': path.join(injectDir, 'injected-session.ts'),
       'injected-penumbra-global': path.join(injectDir, 'injected-penumbra-global.ts'),
+      'passkey-intercept': path.join(injectDir, 'passkey-intercept.ts'),
       'offscreen-handler': path.join(entryDir, 'offscreen-handler.ts'),
       'page-root': path.join(entryDir, 'page-root.tsx'),
       'popup-root': path.join(entryDir, 'popup-root.tsx'),
@@ -182,7 +184,7 @@ export default ({
       splitChunks: {
         chunks: chunk => {
           // workers must be self-contained (no chunk splitting)
-          const filesNotToChunk = ['injected-session', 'injected-penumbra-global', 'workers/zcash-worker'];
+          const filesNotToChunk = ['injected-session', 'injected-penumbra-global', 'passkey-intercept', 'workers/zcash-worker'];
           return chunk.name ? !filesNotToChunk.includes(chunk.name) : false;
         },
       },
@@ -200,7 +202,7 @@ export default ({
               options: {
                 postcssOptions: {
                   ident: 'postcss',
-                  plugins: ['tailwindcss', '@unocss/postcss', 'autoprefixer'],
+                  plugins: [unocssPostcss(), '@tailwindcss/postcss'],
                 },
               },
             },

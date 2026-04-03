@@ -31,6 +31,9 @@ const SettingsAbout = lazy(() =>
 const SettingsMultisig = lazy(() =>
   import('./settings-multisig').then(m => ({ default: m.SettingsMultisig })),
 );
+const SubscribePage = lazy(() =>
+  import('./subscribe').then(m => ({ default: m.SubscribePage })),
+);
 
 const LazyFallback = () => (
   <div className="flex h-full items-center justify-center p-4">
@@ -48,6 +51,10 @@ export const settingsRoutes = [
   {
     path: PopupPath.SETTINGS,
     element: withSuspense(SettingsMain),
+  },
+  {
+    path: PopupPath.SUBSCRIBE,
+    element: withSuspense(SubscribePage),
   },
   {
     path: PopupPath.SETTINGS_DEFAULT_FRONTEND,

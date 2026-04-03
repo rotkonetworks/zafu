@@ -17,7 +17,7 @@ import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
 const workerSelf = globalThis as any as DedicatedWorkerGlobalScope;
 
 interface WorkerMessage {
-  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos' | 'frost-dkg-part1' | 'frost-dkg-part2' | 'frost-dkg-part3' | 'frost-sign-round1' | 'frost-spend-sign' | 'frost-spend-aggregate' | 'frost-derive-address';
+  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-multi' | 'send-tx-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'note-sync-encode' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos' | 'frost-dkg-part1' | 'frost-dkg-part2' | 'frost-dkg-part3' | 'frost-sign-round1' | 'frost-spend-sign' | 'frost-spend-aggregate' | 'frost-derive-address';
   id: string;
   network: 'zcash';
   walletId?: string;
@@ -111,6 +111,15 @@ interface WasmModule {
   frost_derive_address_raw(public_key_package_hex: string, diversifier_index: number): string;
   frost_spend_sign_round2(key_package_hex: string, nonces_hex: string, sighash_hex: string, alpha_hex: string, commitments_json: string): string;
   frost_spend_aggregate(public_key_package_hex: string, sighash_hex: string, alpha_hex: string, commitments_json: string, shares_json: string): string;
+
+  // note sync encoding (CBOR + UR/ZT)
+  encode_notes_bundle(notes_json: string, merkle_result_json: string, anchor_height: number, mainnet: boolean, attestation_hex?: string | null): Uint8Array;
+  ur_encode_frames(cbor_data: Uint8Array, ur_type: string, fragment_size: number): string;
+  zt_encode_frames(cbor_data: Uint8Array, zt_type: string, k: number, n: number): string;
+
+  // attestation
+  frost_attestation_digest(public_key_package_hex: string, anchor_hex: string, anchor_height: number, mainnet: boolean): string;
+  frost_attestation_verify(attestation_hex: string, public_key_package_hex: string, anchor_hex: string, anchor_height: number, mainnet: boolean): boolean;
 }
 
 let wasmModule: WasmModule | null = null;
@@ -492,6 +501,12 @@ const verifySyncProofs = async (
   console.log(`[zcash-worker] all proofs verified in ${elapsed}s`);
 };
 
+/** get cached orchard tree frontier from IDB */
+const getTreeFrontier = async (walletId: string): Promise<string | null> => {
+  const r = await idbGet<{ value: string }>('meta', [walletId, 'orchardTreeFrontier']);
+  return r?.value ?? null;
+};
+
 /** batch-save notes + spent + sync height + tree size in one transaction */
 const saveBatch = async (
   walletId: string,
@@ -500,6 +515,7 @@ const saveBatch = async (
   syncHeight: number,
   orchardTreeSize?: number,
   updatedNotes?: DecryptedNote[],
+  orchardTreeFrontier?: string,
 ): Promise<void> => {
   const db = await getDb();
   const tx = db.transaction(['notes', 'spent', 'meta'], 'readwrite');
@@ -515,6 +531,9 @@ const saveBatch = async (
   metaStore.put({ walletId, key: 'syncHeight', value: syncHeight });
   if (orchardTreeSize !== undefined) {
     metaStore.put({ walletId, key: 'orchardTreeSize', value: orchardTreeSize });
+  }
+  if (orchardTreeFrontier) {
+    metaStore.put({ walletId, key: 'orchardTreeFrontier', value: orchardTreeFrontier });
   }
   await txComplete(tx);
 };
@@ -642,90 +661,101 @@ const selectNotes = (notes: DecryptedNote[], spentNullifiers: Set<string>, targe
 
 const WITNESS_BATCH_SIZE = 1000;
 
-/** binary search for checkpoint height whose tree size is just before target_position */
-const findCheckpointHeight = async (
-  client: { getTreeState(h: number): Promise<{ height: number; orchardTree: string }> },
-  targetPosition: number,
-  activation: number,
-  tip: number,
-): Promise<{ height: number; size: number }> => {
-  if (!wasmModule) throw new Error('wasm not initialized');
-  let lo = activation;
-  let hi = tip;
-  let bestHeight = activation;
-  let bestSize = 0;
 
-  while (lo + 100 < hi) {
-    const mid = lo + Math.floor((hi - lo) / 2);
-    const ts = await client.getTreeState(mid);
-    const size = Number(wasmModule!.frontier_tree_size(ts.orchardTree));
-    if (size <= targetPosition) {
-      bestHeight = ts.height;
-      bestSize = size;
-      lo = mid + 1;
-    } else {
-      hi = mid;
-    }
-  }
-
-  return { height: bestHeight, size: bestSize };
-};
-
-/** build merkle witnesses by replaying blocks from checkpoint to anchor */
+/**
+ * Build merkle witnesses for spending notes.
+ *
+ * Strategy: use the cached tree frontier from sync (stored in IDB at the last
+ * synced height). We only need to replay the gap between the cached frontier
+ * height and the anchor height - typically <100 blocks instead of 100k+.
+ *
+ * Fallback: if no cached frontier, binary search for a checkpoint (slow path).
+ */
 const buildWitnesses = async (
   client: {
     getTreeState(h: number): Promise<{ height: number; orchardTree: string }>;
     getCompactBlocks(start: number, end: number): Promise<Array<{ height: number; actions: Array<{ cmx: Uint8Array }> }>>;
   },
+  walletId: string,
   notes: DecryptedNote[],
   anchorHeight: number,
-  mainnet: boolean,
 ): Promise<{ anchorHex: string; paths: unknown[] }> => {
   if (!wasmModule) throw new Error('wasm not initialized');
 
-  const activation = mainnet ? 1_687_104 : 1_842_420;
-  const earliestPosition = Math.min(...notes.map(n => n.position));
+  const positions = notes.map(n => n.position);
+  console.log(`[zcash-worker] witness build: positions=${JSON.stringify(positions)}, anchor=${anchorHeight}`);
 
-  console.log(`[zcash-worker] earliest note position: ${earliestPosition}, all positions: ${JSON.stringify(notes.map(n => n.position))}`);
+  // try cached frontier first (fast path: only replay gap blocks)
+  let frontierHex: string | null = null;
+  let frontierHeight = 0;
 
-  // find checkpoint
-  const checkpoint = await findCheckpointHeight(client, earliestPosition, activation, anchorHeight);
-  console.log(`[zcash-worker] checkpoint: height=${checkpoint.height} size=${checkpoint.size}`);
+  const cachedFrontier = await getTreeFrontier(walletId);
+  const cachedFrontierHeight = (await idbGet<{ value: number }>('meta', [walletId, 'orchardTreeFrontierHeight']))?.value ?? 0;
 
-  // get tree state at checkpoint
-  const ts = await client.getTreeState(checkpoint.height);
-  const checkpointTreeSize = Number(wasmModule!.frontier_tree_size(ts.orchardTree));
-  console.log(`[zcash-worker] checkpoint tree: height=${checkpoint.height}, frontier_size=${checkpointTreeSize}, orchardTree=${ts.orchardTree.substring(0, 40)}...`);
+  if (cachedFrontier && cachedFrontierHeight > 0 && cachedFrontierHeight <= anchorHeight) {
+    const cachedSize = Number(wasmModule.frontier_tree_size(cachedFrontier));
+    const earliestPosition = Math.min(...positions);
 
-  // replay blocks from checkpoint+1 to anchorHeight
-  const replayStart = checkpoint.height + 1;
-  const compactBlocks: Array<{ height: number; actions: Array<{ cmx_hex: string }> }> = [];
-
-  let totalActions = 0;
-  let current = replayStart;
-  while (current <= anchorHeight) {
-    const end = Math.min(current + WITNESS_BATCH_SIZE - 1, anchorHeight);
-    const blocks = await client.getCompactBlocks(current, end);
-    for (const block of blocks) {
-      totalActions += block.actions.length;
-      compactBlocks.push({
-        height: block.height,
-        actions: block.actions.map(a => ({ cmx_hex: hexEncode(a.cmx) })),
-      });
+    // the cached frontier must contain all note positions
+    if (cachedSize > earliestPosition) {
+      frontierHex = cachedFrontier;
+      frontierHeight = cachedFrontierHeight;
+      console.log(`[zcash-worker] using cached frontier: height=${frontierHeight}, size=${cachedSize}, gap=${anchorHeight - frontierHeight} blocks`);
+    } else {
+      console.log(`[zcash-worker] cached frontier too small (size=${cachedSize}, need>=${earliestPosition}), falling back to search`);
     }
-    current = end + 1;
   }
 
-  console.log(`[zcash-worker] replayed ${compactBlocks.length} blocks, ${totalActions} actions (heights ${replayStart}..${anchorHeight})`);
-  console.log(`[zcash-worker] expected tree size at anchor: ${checkpointTreeSize + totalActions}`);
+  // no cached frontier: fetch tree state at sync height (single RPC, no position leak)
+  if (!frontierHex) {
+    const syncHeight = (await idbGet<{ value: number }>('meta', [walletId, 'syncHeight']))?.value ?? 0;
+    if (syncHeight > 0 && syncHeight <= anchorHeight) {
+      console.log(`[zcash-worker] no cached frontier, fetching at sync height ${syncHeight}`);
+      const ts = await client.getTreeState(syncHeight);
+      frontierHex = ts.orchardTree;
+      frontierHeight = syncHeight;
+
+      // cache it for next time
+      const db = await getDb();
+      const metaTx = db.transaction('meta', 'readwrite');
+      metaTx.objectStore('meta').put({ walletId, key: 'orchardTreeFrontier', value: frontierHex });
+      metaTx.objectStore('meta').put({ walletId, key: 'orchardTreeFrontierHeight', value: frontierHeight });
+      await txComplete(metaTx);
+    } else {
+      throw new Error('wallet must be synced before spending - no tree frontier available');
+    }
+  }
+
+  const checkpointTreeSize = Number(wasmModule.frontier_tree_size(frontierHex));
+
+  // replay blocks from frontier+1 to anchorHeight
+  const replayStart = frontierHeight + 1;
+  const compactBlocks: Array<{ height: number; actions: Array<{ cmx_hex: string }> }> = [];
+  let totalActions = 0;
+
+  if (replayStart <= anchorHeight) {
+    let current = replayStart;
+    while (current <= anchorHeight) {
+      const end = Math.min(current + WITNESS_BATCH_SIZE - 1, anchorHeight);
+      const blocks = await client.getCompactBlocks(current, end);
+      for (const block of blocks) {
+        totalActions += block.actions.length;
+        compactBlocks.push({
+          height: block.height,
+          actions: block.actions.map(a => ({ cmx_hex: hexEncode(a.cmx) })),
+        });
+      }
+      current = end + 1;
+    }
+  }
+
+  console.log(`[zcash-worker] replayed ${compactBlocks.length} blocks, ${totalActions} actions (${replayStart}..${anchorHeight})`);
 
   // call witness WASM
-  const positions = notes.map(n => n.position);
-  console.log(`[zcash-worker] building merkle paths: positions=${JSON.stringify(positions)}, anchorHeight=${anchorHeight}`);
   let resultRaw: unknown;
   try {
-    resultRaw = wasmModule!.build_merkle_paths(
-      ts.orchardTree,
+    resultRaw = wasmModule.build_merkle_paths(
+      frontierHex,
       JSON.stringify(compactBlocks),
       JSON.stringify(positions),
       anchorHeight,
@@ -735,18 +765,16 @@ const buildWitnesses = async (
     throw e;
   }
 
-  // WASM returns JsValue::from_str(json) — comes through as a string
   const result = JSON.parse(resultRaw as string) as { anchor_hex: string; paths: unknown[] };
   console.log(`[zcash-worker] merkle paths built, anchor=${result.anchor_hex}`);
 
-  // verify anchor matches network state
+  // verify anchor matches network
   const anchorTs = await client.getTreeState(anchorHeight);
-  const anchorTreeSize = Number(wasmModule!.frontier_tree_size(anchorTs.orchardTree));
-  const networkRoot = wasmModule!.tree_root_hex(anchorTs.orchardTree);
-  console.log(`[zcash-worker] anchor verify: height=${anchorHeight}, networkSize=${anchorTreeSize}, networkRoot=${networkRoot}, ourRoot=${result.anchor_hex}`);
+  const networkRoot = wasmModule.tree_root_hex(anchorTs.orchardTree);
   if (result.anchor_hex !== networkRoot) {
-    console.error(`[zcash-worker] tree root mismatch: ours=${result.anchor_hex}, network=${networkRoot}, replayedActions=${totalActions}, expectedSize=${checkpointTreeSize + totalActions}, networkSize=${anchorTreeSize}`);
-    throw new Error(`tree root mismatch at height ${anchorHeight} (ours=${result.anchor_hex}, network=${networkRoot})`);
+    const networkSize = Number(wasmModule.frontier_tree_size(anchorTs.orchardTree));
+    console.error(`[zcash-worker] root mismatch: ours=${result.anchor_hex}, network=${networkRoot}, replayed=${totalActions}, expected=${checkpointTreeSize + totalActions}, networkSize=${networkSize}`);
+    throw new Error(`tree root mismatch at height ${anchorHeight}`);
   }
 
   return { anchorHex: result.anchor_hex, paths: result.paths };
@@ -840,7 +868,20 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
       const chainHeight = tip.height;
 
       if (currentHeight >= chainHeight) {
-        // caught up: verify proofs if we have pending notes and zync-core
+        // caught up: cache the tree frontier at sync height for fast witness building
+        try {
+          const syncTs = await client.getTreeState(currentHeight);
+          const db = await getDb();
+          const metaTx = db.transaction('meta', 'readwrite');
+          metaTx.objectStore('meta').put({ walletId, key: 'orchardTreeFrontier', value: syncTs.orchardTree });
+          metaTx.objectStore('meta').put({ walletId, key: 'orchardTreeFrontierHeight', value: currentHeight });
+          await txComplete(metaTx);
+          console.log(`[zcash-worker] cached tree frontier at height ${currentHeight}`);
+        } catch (e) {
+          console.warn('[zcash-worker] failed to cache tree frontier:', e);
+        }
+
+        // verify proofs if we have pending notes and zync-core
         if (zyncModule && pendingCmxs.length > 0) {
           try {
             await verifySyncProofs(client, tip.height, true, pendingCmxs, pendingPositions, state, actionsCommitment);
@@ -927,43 +968,74 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
         continue;
       }
 
-      // small batches, 50 blocks max to keep memory bounded
-      const batchSize = 50;
+      // 200 blocks per batch - balances memory vs RPC overhead
+      const batchSize = 200;
       const endHeight = Math.min(currentHeight + batchSize, chainHeight);
 
+      // prefetch: start fetching this batch while previous iteration's IDB write completes
       console.log(`[zcash-worker] blocks ${currentHeight + 1}..${endHeight}`);
       const blocks = await client.getCompactBlocks(currentHeight + 1, endHeight);
 
-      // build cmx->txid, cmx->height, and nullifier->txid lookups from raw block data
+      // single-pass: count actions, build lookups, pack binary buffer, and compute
+      // actions commitment all in one iteration over blocks
       const cmxToTxid = new Map<string, string>();
       const cmxToHeight = new Map<string, number>();
       const nfToTxid = new Map<string, string>();
       const nfToHeight = new Map<string, number>();
       const actionNullifiers = new Set<string>();
       let actionCount = 0;
-
-      // pack actions into binary format for scan_actions_parallel
-      // layout: [u32le count][per action: 32B nullifier | 32B cmx | 32B epk | 52B ct]
-      const ACTION_SIZE = 32 + 32 + 32 + 52;
       for (const block of blocks) actionCount += block.actions.length;
 
+      const ACTION_SIZE = 32 + 32 + 32 + 52;
       const newNotes: DecryptedNote[] = [];
       const newSpent: string[] = [];
       let spentUpdatedNotes: DecryptedNote[] = [];
 
       if (actionCount > 0 && state.keys) {
-        // build binary buffer, single allocation, no JS object overhead
+        // single allocation for scan buffer
         const buf = new Uint8Array(4 + actionCount * ACTION_SIZE);
         const view = new DataView(buf.buffer);
         view.setUint32(0, actionCount, true);
         let off = 4;
+
+        // actions commitment buffer: reuse across blocks (max action count per block)
+        let commitBuf: Uint8Array | null = null;
+        let commitView: DataView | null = null;
+
         for (const block of blocks) {
+          // compute actions commitment inline (single pass, no second iteration)
+          if (zyncModule) {
+            if (block.actions.length > 0) {
+              const needed = 4 + block.actions.length * 96;
+              if (!commitBuf || commitBuf.length < needed) {
+                commitBuf = new Uint8Array(needed);
+                commitView = new DataView(commitBuf.buffer);
+              }
+              commitView!.setUint32(0, block.actions.length, true);
+              let aoff = 4;
+              for (const a of block.actions) {
+                commitBuf.set(a.cmx, aoff); aoff += 32;
+                commitBuf.set(a.nullifier, aoff); aoff += 32;
+                commitBuf.set(a.ephemeralKey, aoff); aoff += 32;
+              }
+              const actionsRoot = zyncModule['compute_actions_root'](commitBuf.subarray(0, needed)) as string;
+              actionsCommitment = zyncModule['update_actions_commitment'](
+                actionsCommitment, actionsRoot, block.height,
+              ) as string;
+            } else {
+              actionsCommitment = zyncModule['update_actions_commitment'](
+                actionsCommitment, '0'.repeat(64), block.height,
+              ) as string;
+            }
+          }
+
           for (const a of block.actions) {
+            // pack binary for WASM scan
             if (a.nullifier.length === 32) buf.set(a.nullifier, off); off += 32;
             if (a.cmx.length === 32) buf.set(a.cmx, off); off += 32;
             if (a.ephemeralKey.length === 32) buf.set(a.ephemeralKey, off); off += 32;
             if (a.ciphertext.length >= 52) buf.set(a.ciphertext.subarray(0, 52), off); off += 52;
-            // build cmx->txid/height + nullifier->txid maps, collect action nullifiers (one pass)
+            // build lookups (single pass with binary packing)
             const cmxHex = hexEncode(a.cmx);
             const nfHex = hexEncode(a.nullifier);
             const txidHex = hexEncode(a.txid);
@@ -972,34 +1044,6 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
             nfToTxid.set(nfHex, txidHex);
             nfToHeight.set(nfHex, block.height);
             actionNullifiers.add(nfHex);
-          }
-        }
-
-        // compute running actions commitment (integrity chain)
-        if (zyncModule) {
-          for (const block of blocks) {
-            if (block.actions.length > 0) {
-              // pack actions for compute_actions_root: [count_u32_le][cmx(32)|nf(32)|epk(32)] * count
-              const abuf = new Uint8Array(4 + block.actions.length * 96);
-              const aview = new DataView(abuf.buffer);
-              aview.setUint32(0, block.actions.length, true);
-              let aoff = 4;
-              for (const a of block.actions) {
-                abuf.set(a.cmx, aoff); aoff += 32;
-                abuf.set(a.nullifier, aoff); aoff += 32;
-                abuf.set(a.ephemeralKey, aoff); aoff += 32;
-              }
-              const actionsRoot = zyncModule['compute_actions_root'](abuf) as string;
-              actionsCommitment = zyncModule['update_actions_commitment'](
-                actionsCommitment, actionsRoot, block.height,
-              ) as string;
-            } else {
-              // empty block: all-zeros root
-              const zeroRoot = '0'.repeat(64);
-              actionsCommitment = zyncModule['update_actions_commitment'](
-                actionsCommitment, zeroRoot, block.height,
-              ) as string;
-            }
           }
         }
 
@@ -1062,8 +1106,6 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
       });
 
       consecutiveErrors = 0;
-      // yield between batches
-      await new Promise(r => setTimeout(r, 10));
 
     } catch (err) {
       consecutiveErrors++;
@@ -1192,6 +1234,83 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           spent: noteState.spentNullifiers.has(n.nullifier),
         }));
         workerSelf.postMessage({ type: 'notes', id, network: 'zcash', walletId, payload: notesWithSpent });
+        return;
+      }
+
+      case 'note-sync-encode': {
+        // Build CBOR notes bundle with merkle paths, encode as UR frames
+        if (!walletId) throw new Error('walletId required');
+        if (!wasmModule) throw new Error('wasm not initialized');
+        const { mainnet: isMainnet, serverUrl: syncServerUrl } = payload as { mainnet: boolean; serverUrl: string };
+        const syncState = await loadState(walletId);
+        const unspent = syncState.notes.filter(n => !syncState.spentNullifiers.has(n.nullifier));
+        if (unspent.length === 0) {
+          workerSelf.postMessage({ type: 'note-sync-encoded', id, network: 'zcash', walletId, payload: { frames: [], noteCount: 0, balance: '0', cborBytes: 0 } });
+          return;
+        }
+
+        const anchorHeight = Math.max(...unspent.map(n => n.height));
+
+        // build merkle witnesses
+        const client = {
+          getTreeState: async (h: number) => {
+            const resp = await fetch(`${syncServerUrl}/tree-state/${h}`);
+            if (!resp.ok) throw new Error(`tree-state ${h}: ${resp.status}`);
+            return resp.json() as Promise<{ height: number; orchardTree: string }>;
+          },
+          getCompactBlocks: async (start: number, end: number) => {
+            const resp = await fetch(`${syncServerUrl}/compact-blocks/${start}/${end}`);
+            if (!resp.ok) throw new Error(`compact-blocks ${start}-${end}: ${resp.status}`);
+            return resp.json() as Promise<Array<{ height: number; actions: Array<{ cmx: Uint8Array }> }>>;
+          },
+        };
+        const witnessResult = await buildWitnesses(client, walletId, unspent, anchorHeight);
+
+        // prepare notes JSON for WASM encoder
+        const notesJson = JSON.stringify(unspent.map(n => ({
+          value: Number(n.value),
+          nullifier: n.nullifier,
+          cmx: n.cmx,
+          position: n.position,
+          block_height: n.height,
+        })));
+
+        // buildWitnesses returns { anchorHex, paths } but WASM expects { anchor_hex, paths }
+        const merkleJson = JSON.stringify({
+          anchor_hex: witnessResult.anchorHex,
+          paths: witnessResult.paths,
+        });
+
+        // encode to CBOR via WASM
+        const cborBytes = wasmModule.encode_notes_bundle(
+          notesJson,
+          merkleJson,
+          anchorHeight,
+          isMainnet,
+          null, // no attestation (TODO: FROST attestation)
+        );
+
+        // encode to QR frames via WASM
+        // use zoda transport (verified erasure coding) — 12-of-16 for redundancy
+        const framesJson = wasmModule.zt_encode_frames(cborBytes, 'zcash-notes', 12, 16);
+        const urFrames = JSON.parse(framesJson) as string[];
+
+        // compute balance
+        let balance = 0n;
+        for (const n of unspent) balance += BigInt(n.value);
+
+        workerSelf.postMessage({
+          type: 'note-sync-encoded',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: {
+            frames: urFrames,
+            noteCount: unspent.length,
+            balance: balance.toString(),
+            cborBytes: cborBytes.length,
+          },
+        });
         return;
       }
 
@@ -1762,7 +1881,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const witnessStart = performance.now();
 
         const { anchorHex, paths } = await buildWitnesses(
-          sendClient, selected, sendTip.height, sendPayload.mainnet,
+          sendClient, walletId, selected, sendTip.height,
         );
 
         const witnessDuration = ((performance.now() - witnessStart) / 1000).toFixed(1);
@@ -1933,6 +2052,191 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         workerSelf.postMessage({
           type: 'tx-result', id, network: 'zcash', walletId,
           payload: { txid },
+        });
+        return;
+      }
+
+      // ── multi-output send (sequential single-output txs) ──
+      // Used by poker escrow: builds one tx per output, broadcasting each in sequence.
+      // Each output gets its own note selection, witness build, prove, and broadcast cycle.
+      // If any tx fails mid-way, previously broadcast txs are NOT rolled back.
+      case 'send-tx-multi': {
+        if (!walletId) throw new Error('walletId required');
+        await initWasm();
+        if (!wasmModule) throw new Error('wasm not initialized');
+
+        const multiPayload = payload as {
+          serverUrl: string;
+          outputs: Array<{ address: string; amount: string; memo?: string }>;
+          accountIndex: number;
+          mainnet: boolean;
+          mnemonic: string;
+        };
+
+        if (!multiPayload.outputs || multiPayload.outputs.length === 0) {
+          throw new Error('outputs array required');
+        }
+        if (!multiPayload.mnemonic) {
+          throw new Error('mnemonic required for multi-output send');
+        }
+
+        // validate all outputs up front before building any tx
+        for (let i = 0; i < multiPayload.outputs.length; i++) {
+          const out = multiPayload.outputs[i]!;
+          if (!out.address || typeof out.address !== 'string') {
+            throw new Error(`output ${i}: address required`);
+          }
+          const amt = BigInt(out.amount);
+          if (amt <= 0n) {
+            throw new Error(`output ${i}: amount must be positive`);
+          }
+          // validate address prefix
+          const addr = out.address.trim();
+          const validPrefix = addr.startsWith('u1') || addr.startsWith('utest1')
+            || addr.startsWith('zs') || addr.startsWith('t1') || addr.startsWith('tm');
+          if (!validPrefix) {
+            throw new Error(`output ${i}: invalid zcash address prefix`);
+          }
+        }
+
+        const multiStart = performance.now();
+        const emitMultiProgress = (step: string, detail?: string) => {
+          const elapsed = ((performance.now() - multiStart) / 1000).toFixed(1);
+          console.log(`[zcash-worker] multi-send [${elapsed}s] ${step}${detail ? ': ' + detail : ''}`);
+          workerSelf.postMessage({
+            type: 'send-progress', id: '', network: 'zcash', walletId,
+            payload: { step, detail, elapsedMs: Math.round(performance.now() - multiStart) },
+          });
+        };
+
+        const txids: string[] = [];
+        const fees: string[] = [];
+
+        for (let outputIdx = 0; outputIdx < multiPayload.outputs.length; outputIdx++) {
+          const out = multiPayload.outputs[outputIdx]!;
+          const recipient = out.address.trim();
+          const amountZat = BigInt(out.amount);
+
+          emitMultiProgress(
+            `building output ${outputIdx + 1}/${multiPayload.outputs.length}`,
+            `${recipient.slice(0, 12)}... ${amountZat} zat`,
+          );
+
+          // encode memo
+          let memoHex: string | null = null;
+          if (out.memo) {
+            if (/^[0-9a-f]+$/i.test(out.memo) && out.memo.startsWith('ff5a')) {
+              memoHex = out.memo;
+            } else {
+              const bytes = new TextEncoder().encode(out.memo);
+              memoHex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+            }
+          }
+
+          // reload state each iteration (previous tx spent notes)
+          const multiState = await loadState(walletId);
+
+          // determine recipient type for fee calc
+          const isTransparent = recipient.startsWith('t1') || recipient.startsWith('tm');
+          const nZOutputs = isTransparent ? 0 : 1;
+          const nTOutputs = isTransparent ? 1 : 0;
+
+          // estimate fee and select notes
+          const estFee = computeFee(1, nZOutputs, nTOutputs, true);
+          const selected = selectNotes(multiState.notes, multiState.spentNullifiers, amountZat + estFee);
+
+          // compute exact fee
+          const totalIn = selected.reduce((sum, n) => sum + BigInt(n.value), 0n);
+          const hasChange = totalIn > amountZat + computeFee(selected.length, nZOutputs, nTOutputs, true);
+          const fee = computeFee(selected.length, nZOutputs, nTOutputs, hasChange);
+          if (totalIn < amountZat + fee) {
+            throw new Error(`output ${outputIdx}: insufficient funds: have ${totalIn} zat, need ${amountZat + fee} zat`);
+          }
+
+          emitMultiProgress(`output ${outputIdx + 1}: notes selected`, `${selected.length} notes, fee=${fee}`);
+
+          // build merkle witnesses
+          const { ZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
+          const multiClient = new ZidecarClient(multiPayload.serverUrl);
+          const multiTip = await multiClient.getTip();
+
+          emitMultiProgress(`output ${outputIdx + 1}: building witnesses`);
+          const { anchorHex: multiAnchor, paths: multiPaths } = await buildWitnesses(
+            multiClient, walletId, selected, multiTip.height,
+          );
+
+          // build note data for WASM
+          const notesJson = selected.map(n => ({
+            value: Number(n.value),
+            nullifier: n.nullifier,
+            cmx: n.cmx,
+            position: n.position,
+            rseed_hex: n.rseed ?? '',
+            rho_hex: n.rho ?? '',
+            recipient_hex: n.recipient ?? '',
+          }));
+          const pathsResult = multiPaths as Array<{ position: number; path: Array<{ hash: string }> }>;
+          const merklePathsForWasm = pathsResult.map(p => ({
+            path: p.path.map(e => e.hash),
+            position: p.position,
+          }));
+
+          emitMultiProgress(`output ${outputIdx + 1}: proving (halo2)`, `${selected.length} spends`);
+          const proveStart = performance.now();
+          const provingTicker = setInterval(() => {
+            const elapsed = ((performance.now() - proveStart) / 1000).toFixed(0);
+            emitMultiProgress(`output ${outputIdx + 1}: proving`, `${elapsed}s elapsed`);
+          }, 2000);
+
+          let txHex: string;
+          try {
+            txHex = await proveViaOffscreen({
+              fn: 'build_signed_spend',
+              args: [
+                multiPayload.mnemonic, notesJson, recipient,
+                amountZat.toString(), fee.toString(), multiAnchor,
+                merklePathsForWasm, multiPayload.accountIndex, multiPayload.mainnet,
+                memoHex,
+              ],
+            }) as string;
+          } finally {
+            clearInterval(provingTicker);
+          }
+
+          // broadcast
+          emitMultiProgress(`output ${outputIdx + 1}: broadcasting`);
+          const txData = hexDecode(txHex);
+          const broadcastClient = new ZidecarClient(multiPayload.serverUrl);
+          const broadcastResult = await broadcastClient.sendTransaction(txData);
+          if (broadcastResult.errorCode !== 0) {
+            throw new Error(`output ${outputIdx}: broadcast failed (${broadcastResult.errorCode}): ${broadcastResult.errorMessage}`);
+          }
+
+          const outputTxid = new TextDecoder().decode(broadcastResult.txid);
+          txids.push(outputTxid);
+          fees.push(fee.toString());
+
+          // mark spent nullifiers so next iteration picks different notes
+          for (const note of selected) {
+            multiState.spentNullifiers.add(note.nullifier);
+          }
+          // persist spent nullifiers to IDB so next iteration picks different notes
+          const db = await getDb();
+          const spentTx = db.transaction('spent', 'readwrite');
+          for (const note of selected) {
+            spentTx.objectStore('spent').put({ walletId, nullifier: note.nullifier });
+          }
+          await txComplete(spentTx);
+
+          emitMultiProgress(`output ${outputIdx + 1}: complete`, `txid=${outputTxid}`);
+        }
+
+        const totalDuration = ((performance.now() - multiStart) / 1000).toFixed(1);
+        emitMultiProgress('all outputs complete', `${txids.length} txs, total=${totalDuration}s`);
+
+        workerSelf.postMessage({
+          type: 'tx-multi-result', id, network: 'zcash', walletId,
+          payload: { txids, fees },
         });
         return;
       }
