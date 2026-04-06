@@ -9,7 +9,6 @@ import type { AllSlices, SliceCreator } from '.';
 import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
 import type { SessionStorageState } from '@repo/storage-chrome/session';
-import { writeEncrypted } from './encrypted-storage';
 
 export type AddressNetwork = 'penumbra' | 'zcash' | 'cosmos' | 'polkadot' | 'kusama' | 'ethereum' | 'bitcoin' | 'solana' | 'near' | 'base' | 'arbitrum' | 'avalanche' | 'polygon';
 
@@ -85,7 +84,7 @@ export const createRecentAddressesSlice =
         }
       });
 
-      await writeEncrypted(local, session, 'recentAddresses' as keyof LocalStorageState, get().recentAddresses.recentAddresses);
+      await local.set('recentAddresses' as keyof LocalStorageState, get().recentAddresses.recentAddresses as never);
     },
 
     getRecent: (network, limit = 5) => {
@@ -126,7 +125,7 @@ export const createRecentAddressesSlice =
         state.recentAddresses.dismissedSuggestions.add(address.toLowerCase());
       });
 
-      await writeEncrypted(local, session, 'dismissedContactSuggestions' as keyof LocalStorageState, [...get().recentAddresses.dismissedSuggestions]);
+      await local.set('dismissedContactSuggestions' as keyof LocalStorageState, [...get().recentAddresses.dismissedSuggestions] as never);
     },
 
     shouldSuggestSave: (address) => {

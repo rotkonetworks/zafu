@@ -26,6 +26,30 @@ async function getKey(session: ExtensionStorage<SessionStorageState>): Promise<K
   return Key.fromJson(keyJson);
 }
 
+/**
+ * hydration gate — prevents writeEncrypted from overwriting storage
+ * before readEncrypted has loaded the existing data. without this,
+ * a persist() call during startup can wipe contacts/wallets with [].
+ */
+const hydratedKeys = new Set<string>();
+let hydratePromise: Promise<void> | null = null;
+let hydrateResolve: (() => void) | null = null;
+
+/** mark that encrypted data has been hydrated (called by persist.ts after hydrateEncryptedData) */
+export function markHydrated(): void {
+  hydratedKeys.add('*');
+  if (hydrateResolve) { hydrateResolve(); hydrateResolve = null; hydratePromise = null; }
+}
+
+/** wait until hydration is complete before allowing writes */
+function waitForHydration(): Promise<void> {
+  if (hydratedKeys.has('*')) return Promise.resolve();
+  if (!hydratePromise) {
+    hydratePromise = new Promise(r => { hydrateResolve = r; });
+  }
+  return hydratePromise;
+}
+
 /** read an encrypted value from local storage. returns plaintext data or null. */
 export async function readEncrypted<T>(
   local: ExtensionStorage<LocalStorageState>,
@@ -51,10 +75,12 @@ export async function writeEncrypted(
   storageKey: keyof LocalStorageState,
   data: unknown,
 ): Promise<void> {
+  // wait for hydration to complete before writing — prevents overwriting
+  // existing encrypted data with empty/partial in-memory state during startup
+  await waitForHydration();
+
   const key = await getKey(session);
   if (!key) {
-    // locked  - skip write silently. callers must ensure they only write
-    // when unlocked, or accept that the write will be deferred.
     console.warn(`[encrypted-storage] skipping write of '${storageKey}'  - wallet is locked`);
     return;
   }
