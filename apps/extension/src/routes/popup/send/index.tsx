@@ -508,7 +508,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
           <select
             value={accountIndex}
             onChange={e => setAccountIndex(parseInt(e.target.value, 10))}
-            className='flex-1 rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground transition-colors focus:border-zigner-gold focus:outline-none'
+            className='flex-1 rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground transition-colors focus:border-penumbra-purple focus:outline-none'
           >
             {[0, 1, 2, 3, 4].map(idx => (
               <option key={idx} value={idx}>
@@ -535,7 +535,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
           className={cn(
             'w-full rounded-lg border bg-input px-3 py-2.5 text-sm text-foreground',
             'placeholder:text-muted-foreground transition-colors duration-100',
-            'focus:border-zigner-gold focus:outline-none',
+            'focus:border-penumbra-purple focus:outline-none',
             recipient && !recipientValid ? 'border-red-400' : 'border-border/40'
           )}
         />
@@ -599,7 +599,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
             value={amount}
             onChange={e => setAmount(e.target.value)}
             placeholder='0.00'
-            className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 pr-14 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-100 focus:border-zigner-gold focus:outline-none'
+            className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 pr-14 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
           />
           {selectedAsset && Number(selectedAsset.amount) > 0 && (
             <button
@@ -681,7 +681,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
             value={contactName}
             onChange={e => setContactName(e.target.value)}
             placeholder='enter name...'
-            className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm mb-2 focus:border-zigner-gold focus:outline-none'
+            className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm mb-2 focus:border-penumbra-purple focus:outline-none'
             autoFocus
           />
           <div className='flex gap-2'>
@@ -1056,7 +1056,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
             className={cn(
               'flex-1 rounded-lg border bg-input px-3 py-2.5 text-sm text-foreground',
               'placeholder:text-muted-foreground transition-colors duration-100',
-              'focus:border-zigner-gold focus:outline-none disabled:opacity-50',
+              'focus:border-penumbra-purple focus:outline-none disabled:opacity-50',
               sendState.recipient && !addressValid ? 'border-red-400' : 'border-border/40'
             )}
           />
@@ -1110,7 +1110,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
           onChange={e => sendState.setAmount(e.target.value)}
           placeholder='0.00'
           disabled={txStatus !== 'idle'}
-          className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-100 focus:border-zigner-gold focus:outline-none disabled:opacity-50'
+          className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-100 focus:border-penumbra-purple focus:outline-none disabled:opacity-50'
         />
       </div>
 
@@ -1123,7 +1123,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
           onChange={e => sendState.setMemo(e.target.value)}
           placeholder='optional message'
           disabled={txStatus !== 'idle'}
-          className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-100 focus:border-zigner-gold focus:outline-none disabled:opacity-50'
+          className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-100 focus:border-penumbra-purple focus:outline-none disabled:opacity-50'
         />
       </div>
 
@@ -1293,7 +1293,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
           className={cn(
             'w-full rounded-lg border bg-input px-3 py-2.5 text-sm text-foreground',
             'placeholder:text-muted-foreground transition-colors duration-100',
-            'focus:border-zigner-gold focus:outline-none disabled:opacity-50',
+            'focus:border-penumbra-purple focus:outline-none disabled:opacity-50',
             ibcState.destinationAddress && !addressValid ? 'border-red-400' : 'border-border/40'
           )}
         />
@@ -1316,7 +1316,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
           onChange={e => ibcState.setAmount(e.target.value)}
           placeholder='0.00'
           disabled={txStatus !== 'idle'}
-          className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-100 focus:border-zigner-gold focus:outline-none disabled:opacity-50'
+          className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-100 focus:border-penumbra-purple focus:outline-none disabled:opacity-50'
         />
       </div>
 
@@ -1355,7 +1355,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
             value={contactName}
             onChange={e => setContactName(e.target.value)}
             placeholder='enter name...'
-            className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm mb-2 focus:border-zigner-gold focus:outline-none'
+            className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm mb-2 focus:border-penumbra-purple focus:outline-none'
             autoFocus
           />
           <div className='flex gap-2'>
@@ -1514,7 +1514,7 @@ export function SendPage() {
               <input
                 type='text'
                 placeholder='enter address'
-                className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-100 focus:border-zigner-gold focus:outline-none'
+                className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
               />
             </div>
 
@@ -1523,7 +1523,7 @@ export function SendPage() {
               <input
                 type='text'
                 placeholder='0.00'
-                className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-100 focus:border-zigner-gold focus:outline-none'
+                className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
               />
             </div>
 
