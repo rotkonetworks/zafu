@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useCallback, useEffect, useMemo } from 'react';
+import { lazy, Suspense, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { useStore } from '../../../state';
@@ -36,7 +36,7 @@ import {
 import { QrDisplay } from '../../../shared/components/qr-display';
 import { QrScanner } from '../../../shared/components/qr-scanner';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { viewClient, sctClient } from '../../../clients';
 import { getDisplayDenomFromView } from '@penumbra-zone/getters/value-view';
 import { fromValueView } from '@rotko/penumbra-types/amount';
@@ -352,7 +352,7 @@ const PenumbraContent = ({ account, onAccountChange }: { account: number; onAcco
 
   // query UM balance for the balance card
   const { data: umBalance } = useQuery({
-    queryKey: ['um-balance', account, fullSyncHeight],
+    queryKey: ['um-balance', account],
     staleTime: 5_000,
     queryFn: async () => {
       try {
@@ -373,6 +373,16 @@ const PenumbraContent = ({ account, onAccountChange }: { account: number; onAcco
       }
     },
   });
+
+  // refetch UM balance when sync height advances (no flicker)
+  const queryClient = useQueryClient();
+  const prevHeight = useRef(fullSyncHeight);
+  useEffect(() => {
+    if (fullSyncHeight && fullSyncHeight !== prevHeight.current) {
+      prevHeight.current = fullSyncHeight;
+      void queryClient.invalidateQueries({ queryKey: ['um-balance', account] });
+    }
+  }, [fullSyncHeight, account, queryClient]);
 
   const balanceDisplay = umBalance != null && umBalance > 0
     ? `${umBalance.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} UM`
@@ -1123,6 +1133,8 @@ const HistoryContent = ({ network, penumbraAccount }: { network: NetworkType; pe
   const isMainnet = !zidecarUrl.includes('testnet');
   const { tAddresses } = useTransparentAddresses(isMainnet);
   const { workerSyncHeight } = useZcashSyncStatus();
+  const { latestBlockHeight } = useSyncProgress();
+  const queryClient = useQueryClient();
 
   // build txId→memo lookup from messages store (for zcash)
   const memoByTxId = useMemo(() => {
@@ -1137,9 +1149,9 @@ const HistoryContent = ({ network, penumbraAccount }: { network: NetworkType; pe
 
   // hooks must always be called in the same order - queries use `enabled` flag instead
   const penumbraQ = useQuery({
-    queryKey: ['homeHistory', 'penumbra'],
+    queryKey: ['homeHistory', 'penumbra', penumbraAccount],
     enabled: network === 'penumbra' && historyEnabled,
-    staleTime: 30_000,
+    staleTime: 10_000,
     queryFn: async () => {
       const txs: ParsedTransaction[] = [];
       for await (const r of viewClient.transactionInfo({})) {
@@ -1160,10 +1172,9 @@ const HistoryContent = ({ network, penumbraAccount }: { network: NetworkType; pe
   });
 
   const zcashQ = useQuery({
-    // bucket sync height to avoid refetching on every block — refresh every 10k blocks
-    queryKey: ['homeHistory', 'zcash', walletId, tAddresses.length, Math.floor(workerSyncHeight / 10000)],
+    queryKey: ['homeHistory', 'zcash', walletId, tAddresses.length],
     enabled: network === 'zcash' && !!walletId && historyEnabled,
-    staleTime: 0,
+    staleTime: 10_000,
     queryFn: async () => {
       if (!walletId) return [];
       const entries = await getHistoryInWorker('zcash', walletId, zidecarUrl, tAddresses);
@@ -1179,6 +1190,20 @@ const HistoryContent = ({ network, penumbraAccount }: { network: NetworkType; pe
       }));
     },
   });
+
+  // refetch history when block heights advance (live update, no flicker)
+  const prevPenumbraHeight = useRef(latestBlockHeight);
+  const prevZcashHeight = useRef(workerSyncHeight);
+  useEffect(() => {
+    if (network === 'penumbra' && latestBlockHeight && latestBlockHeight !== prevPenumbraHeight.current) {
+      prevPenumbraHeight.current = latestBlockHeight;
+      void queryClient.invalidateQueries({ queryKey: ['homeHistory', 'penumbra'] });
+    }
+    if (network === 'zcash' && workerSyncHeight && workerSyncHeight !== prevZcashHeight.current) {
+      prevZcashHeight.current = workerSyncHeight;
+      void queryClient.invalidateQueries({ queryKey: ['homeHistory', 'zcash'] });
+    }
+  }, [network, latestBlockHeight, workerSyncHeight, queryClient]);
 
   if (!historyEnabled) {
     return (
