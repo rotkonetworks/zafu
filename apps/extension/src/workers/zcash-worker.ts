@@ -433,16 +433,33 @@ const verifySyncProofs = async (
 
   // 2. verify commitment proofs for found notes
   if (pendingCmxs.length > 0) {
-    const { proofs, treeRoot } = await client.getCommitmentProofs(pendingCmxs, pendingPositions, tip);
-    const treeRootHex = hexEncode(treeRoot);
+    // the server may advance between header proof and commitment proof calls.
+    // retry with a fresh header proof if roots don't match (race condition).
+    let currentProven = proven;
+    let commitmentProofs: Array<{ cmx: Uint8Array; treeRoot: Uint8Array; pathProofRaw: string; valueHash: Uint8Array }> | undefined;
+    const MAX_RETRIES = 3;
 
-    // bind server root to proven root
-    if (treeRootHex !== proven.tree_root) {
-      throw new Error(`commitment tree root mismatch: server=${treeRootHex.slice(0, 16)} proven=${proven.tree_root.slice(0, 16)}`);
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      const { proofs: p, treeRoot } = await client.getCommitmentProofs(pendingCmxs, pendingPositions, tip);
+      const treeRootHex = hexEncode(treeRoot);
+
+      if (treeRootHex === currentProven.tree_root) {
+        commitmentProofs = p;
+        break;
+      }
+
+      if (attempt < MAX_RETRIES - 1) {
+        console.warn(`[zcash-worker] commitment root mismatch (attempt ${attempt + 1}), re-verifying header proof`);
+        currentProven = await verifyHeaderProof(client, tip, mainnet);
+        // update proven for downstream nullifier checks
+        Object.assign(proven, currentProven);
+      } else {
+        throw new Error(`commitment tree root mismatch after ${MAX_RETRIES} attempts: server=${treeRootHex.slice(0, 16)} proven=${currentProven.tree_root.slice(0, 16)}`);
+      }
     }
 
     // verify each proof
-    for (const proof of proofs) {
+    for (const proof of commitmentProofs!) {
       const valid = zyncModule['verify_commitment_proof'](
         hexEncode(proof.cmx),
         hexEncode(proof.treeRoot),
@@ -453,7 +470,7 @@ const verifySyncProofs = async (
         throw new Error(`commitment proof invalid for cmx ${hexEncode(proof.cmx).slice(0, 16)}`);
       }
     }
-    console.log(`[zcash-worker] ${proofs.length} commitment proofs verified`);
+    console.log(`[zcash-worker] ${commitmentProofs!.length} commitment proofs verified`);
   }
 
   // 3. verify nullifier proofs for unspent notes
