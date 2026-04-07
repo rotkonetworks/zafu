@@ -45,6 +45,7 @@ import { cn } from '@repo/ui/lib/utils';
 import { messagesSelector } from '../../../state/messages';
 import { SyncProgressBar } from '../../../components/sync-progress-bar';
 import { useSyncProgress } from '../../../hooks/full-sync-height';
+import { usePasswordGate } from '../../../hooks/password-gate';
 import type { TransactionInfo } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 
 /** lazy load network-specific content - only load when needed */
@@ -435,6 +436,7 @@ const ZcashContent = ({
 
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const keyRing = useStore(keyRingSelector);
+  const { requestAuth, PasswordModal } = usePasswordGate();
 
   // orchard balance from worker (zatoshi string)
   const [orchardZat, setOrchardZat] = useState(0n);
@@ -631,6 +633,9 @@ const ZcashContent = ({
     if (!hasMnemonic || !selectedKeyInfo || selectedKeyInfo.type !== 'mnemonic') return;
     if (shielding || transparentZat <= 0n) return;
 
+    const authorized = await requestAuth();
+    if (!authorized) return;
+
     setShielding(true);
     setShieldTxid(null);
     setShieldError(null);
@@ -696,6 +701,7 @@ const ZcashContent = ({
 
   return (
     <div className='flex-1 flex flex-col gap-3'>
+      {PasswordModal}
       {/* combined balance */}
       <div className='rounded-lg border border-primary/20 bg-card p-4'>
         <div className='text-xs text-muted-foreground'>balance</div>

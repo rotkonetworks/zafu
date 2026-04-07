@@ -32,6 +32,7 @@ import { QrDisplay } from '../../../shared/components/qr-display';
 import { QrScanner } from '../../../shared/components/qr-scanner';
 import { RecipientPicker } from '../../../components/recipient-picker';
 import { SaveContactModal } from '../../../components/save-contact-modal';
+import { usePasswordGate } from '../../../hooks/password-gate';
 import {
   encodeZcashSignRequest,
   isZcashSignatureQR,
@@ -110,6 +111,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   // store access for wallet id and server url
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const getMnemonic = useStore(selectGetMnemonic);
+  const { requestAuth, PasswordModal } = usePasswordGate();
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const activeZcashWallet = useStore(selectActiveZcashWallet);
   const ufvk = activeZcashWallet?.ufvk ?? (activeZcashWallet?.orchardFvk?.startsWith('uview') ? activeZcashWallet.orchardFvk : undefined);
@@ -184,7 +186,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       const amountZat = Math.round(Number(amount) * 1e8).toString();
 
       if (selectedKeyInfo.type === 'mnemonic') {
-        // mnemonic wallet: build signed tx + broadcast directly (no QR flow)
+        // mnemonic wallet: verify password, then build signed tx + broadcast
+        const authorized = await requestAuth();
+        if (!authorized) { setStep('review'); return; }
         const mnemonic = await getMnemonic(walletId);
         const result = await buildSendTxInWorker(
           'zcash', walletId, zidecarUrl, recipient.trim(), amountZat, memo,
@@ -860,6 +864,7 @@ description="point camera at zafu zigner's signature qr code"
 
   return (
     <div className="h-full bg-background">
+      {PasswordModal}
       {renderContent()}
     </div>
   );
