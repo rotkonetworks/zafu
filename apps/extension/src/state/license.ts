@@ -1,11 +1,10 @@
 /**
  * license state - tracks pro subscription status.
  *
- * license is fetched from license-server (via zidecar proxy or direct),
- * verified against rotko's key, stored in localStorage.
+ * license is fetched DIRECTLY from rotko's license-server over HTTPS.
+ * never through zidecar - keeps license identity separate from sync identity.
  *
  * sync priority uses ring VRF proofs (anonymous, unlinkable).
- * license check uses the Bandersnatch pubkey (same key as ring member).
  *   free  = normal sync (always works)
  *   pro   = priority queue under load
  */
@@ -13,7 +12,10 @@
 import type { AllSlices, SliceCreator } from '.';
 import { isLicenseValid, hasProFeature, daysRemaining, parseLicense, type License, type Plan, type ProFeature } from '@repo/wallet/license';
 import { localExtStorage } from '@repo/storage-chrome/local';
-import { ZidecarClient } from './keyring/zidecar-client';
+import { bytesToHex } from '@noble/hashes/utils';
+
+/** direct license-server endpoint - never goes through zidecar */
+const LICENSE_SERVER = 'https://zpro.rotko.net';
 
 export interface PendingPayment {
   /** amount in zatoshi seen but not yet credited */
@@ -33,8 +35,8 @@ export interface LicenseSlice {
   loadLicense: () => Promise<void>;
   /** store a new license */
   setLicense: (license: License) => Promise<void>;
-  /** fetch license from zidecar by ZID pubkey, optionally registering ring pubkey */
-  fetchLicense: (zidecarUrl: string, zid: string, ringPubkey?: Uint8Array) => Promise<License | null>;
+  /** fetch license directly from license-server by ZID pubkey */
+  fetchLicense: (zid: string, ringPubkey?: Uint8Array) => Promise<License | null>;
   /** update pending payment info from server */
   setPending: (pending: PendingPayment | null) => void;
   /** clear license */
@@ -63,11 +65,31 @@ export const createLicenseSlice = (): SliceCreator<LicenseSlice> => (set, get) =
     set(state => { state.license.license = license; });
   },
 
-  fetchLicense: async (zidecarUrl: string, zid: string, ringPubkey?: Uint8Array) => {
+  fetchLicense: async (zid: string, ringPubkey?: Uint8Array) => {
     set(state => { state.license.loading = true; });
     try {
-      const client = new ZidecarClient(zidecarUrl);
-      const info = await client.checkLicense(zid, ringPubkey);
+      // build URL with optional ring pubkey query param
+      const url = new URL(`/license/${zid}`, LICENSE_SERVER);
+      if (ringPubkey) {
+        url.searchParams.set('ring_pubkey', bytesToHex(ringPubkey));
+      }
+
+      const resp = await fetch(url.toString(), {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+      });
+
+      if (!resp.ok) {
+        set(state => { state.license.loading = false; });
+        return null;
+      }
+
+      const info = await resp.json() as {
+        zid: string;
+        plan: string;
+        expires: number;
+        signature: string;
+      };
 
       if (!info.signature || info.plan === 'free') {
         set(state => { state.license.loading = false; });

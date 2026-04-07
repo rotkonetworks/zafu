@@ -73,12 +73,12 @@ export const SubscribePage = () => {
   const checkLicense = useCallback(async () => {
     if (!zidPubkey) return false;
     try {
-      const license = await fetchLicense(zidecarUrl, zidPubkey, ringPubkeyBytes ?? undefined);
+      const license = await fetchLicense(zidPubkey, ringPubkeyBytes ?? undefined);
       return !!license;
     } catch {
       return false;
     }
-  }, [zidPubkey, ringPubkeyBytes, zidecarUrl, fetchLicense]);
+  }, [zidPubkey, ringPubkeyBytes, fetchLicense]);
 
   const manualCheck = useCallback(async () => {
     setChecking(true);
