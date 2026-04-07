@@ -31,6 +31,7 @@ import { Input } from '@repo/ui/components/ui/input';
 import { QrDisplay } from '../../../shared/components/qr-display';
 import { QrScanner } from '../../../shared/components/qr-scanner';
 import { RecipientPicker } from '../../../components/recipient-picker';
+import { SaveContactModal } from '../../../components/save-contact-modal';
 import {
   encodeZcashSignRequest,
   isZcashSignatureQR,
@@ -84,7 +85,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
   // recent addresses and contacts
   const { recordUsage, shouldSuggestSave, dismissSuggestion } = useStore(recentAddressesSelector);
-  const { addContact, addAddress, findByAddress } = useStore(contactsSelector);
+  const { findByAddress } = useStore(contactsSelector);
 
   const [step, setStep] = useState<SendStep>('form');
   const [recipient, setRecipient] = useState(prefill?.recipient ?? '');
@@ -93,7 +94,6 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const [formError, setFormError] = useState<string | null>(null);
   const [signRequestQr, setSignRequestQr] = useState<string | null>(null);
   const [showSavePrompt, setShowSavePrompt] = useState(false);
-  const [contactName, setContactName] = useState('');
   const [showContactModal, setShowContactModal] = useState(false);
   const [fee, setFee] = useState('0.0001');
   const [showContacts, setShowContacts] = useState(false);
@@ -765,71 +765,32 @@ description="point camera at zafu zigner's signature qr code"
                   <p className="text-sm">save to contacts?</p>
                 </div>
                 <div className="flex gap-2">
-                  <Button
-                    variant="gradient"
-                    size="sm"
+                  <button
                     onClick={() => setShowContactModal(true)}
-                    className="flex-1"
+                    className="flex-1 rounded-lg bg-primary py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
                   >
                     save
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
+                  </button>
+                  <button
                     onClick={() => {
                       void dismissSuggestion(recipient);
                       setShowSavePrompt(false);
                     }}
-                    className="flex-1"
+                    className="flex-1 rounded-lg border border-border/40 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
                   >
                     skip
-                  </Button>
+                  </button>
                 </div>
               </div>
             )}
 
-            {/* contact name input */}
             {showContactModal && (
-              <div className="w-full rounded-lg border border-border/40 bg-card p-3">
-                <p className="text-sm font-medium mb-2">name this contact</p>
-                <Input
-                  value={contactName}
-                  onChange={e => setContactName(e.target.value)}
-                  placeholder="enter name..."
-                  className="mb-2"
-                  autoFocus
-                />
-                <div className="flex gap-2">
-                  <Button
-                    variant="gradient"
-                    size="sm"
-                    onClick={async () => {
-                      if (contactName.trim()) {
-                        const newContact = await addContact({ name: contactName.trim() });
-                        await addAddress(newContact.id, { network: 'zcash', address: recipient });
-                        setShowContactModal(false);
-                        setShowSavePrompt(false);
-                        setContactName('');
-                      }
-                    }}
-                    disabled={!contactName.trim()}
-                    className="flex-1"
-                  >
-                    save
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      setShowContactModal(false);
-                      setContactName('');
-                    }}
-                    className="flex-1"
-                  >
-                    cancel
-                  </Button>
-                </div>
-              </div>
+              <SaveContactModal
+                address={recipient}
+                network='zcash'
+                onDone={() => { setShowContactModal(false); setShowSavePrompt(false); }}
+                onCancel={() => setShowContactModal(false)}
+              />
             )}
 
             <Button variant="gradient" onClick={handleClose} className="w-full mt-4">
