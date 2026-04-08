@@ -238,6 +238,40 @@ const deriveSeedForRingVrf = (identity: Uint8Array): Uint8Array =>
 const deriveSeedForHotWallet = (identity: Uint8Array): Uint8Array =>
   deriveSeed(identity, enc.encode('hot-wallet-v1'));
 
+// ========================================================================
+// POST-QUANTUM RECOVERY: reserved derivation paths
+// ========================================================================
+//
+// The entire derivation tree above (deriveRoot -> deriveIdentity -> deriveSeed)
+// is hash-based (HKDF-SHA256 + HMAC-SHA512) and quantum-safe. Only the final
+// step (ed25519 keypair) is vulnerable to Shor's algorithm.
+//
+// When post-quantum signatures are needed, derive PQ keys from the SAME seed
+// using reserved domain tags. This allows recovery from an existing mnemonic
+// without any protocol-breaking changes.
+//
+// Reserved derivation tags (DO NOT USE until PQ migration):
+//   'zid-falcon-v1'      - FALCON-512 site-scoped identity (replaces ed25519)
+//   'zid-falcon-cross-v1'- FALCON-512 cross-site identity
+//   'ring-vrf-pq-v1'     - post-quantum ring VRF (when available)
+//
+// Migration flow:
+//   1. same mnemonic, same deriveRoot(), same deriveIdentity()
+//   2. deriveSeed(identity, 'zid-falcon-v1') -> 48 bytes -> FALCON-512 keypair
+//   3. dual-sign period: ed25519 + FALCON-512 via falconed (rotkonetworks/falconed)
+//   4. verifiers accept either signature during transition
+//   5. drop ed25519 when ecosystem is ready
+//
+// FALCON-512 chosen over Dilithium for QR-friendliness:
+//   FALCON-512:  897B pubkey,  666B signature (fits in single QR)
+//   Dilithium2: 1312B pubkey, 2420B signature (needs animated QR)
+//
+// The falconed crate (hybrid ed25519+FALCON-512) is ready at rotkonetworks/falconed.
+// It compiles to WASM for zafu and native for zigner. Substrate compat included.
+//
+// Trigger for activation: first credible demonstration of 1000+ logical qubits.
+// ========================================================================
+
 /** extract ed25519 keypair from seed. zeroizes the seed. */
 const keypairFromSeed = (seed: Uint8Array): { privateKey: Uint8Array; publicKey: Uint8Array } => {
   const privateKey = seed.slice(0, 32);
