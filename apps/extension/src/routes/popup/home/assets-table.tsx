@@ -1,4 +1,4 @@
-import { useMemo, memo, useState, useCallback, useEffect } from 'react';
+import { useMemo, memo, useState, useCallback, useEffect, useRef } from 'react';
 import {
   Table,
   TableBody,
@@ -146,7 +146,7 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
 
   const { data: rawBalances, isLoading, error } = useQuery({
     queryKey: ['balances', account],
-    staleTime: Infinity,
+    staleTime: 5_000,
     queryFn: async () => {
       try {
         return await Array.fromAsync(viewClient.balances({ accountFilter: { account } }));
@@ -155,6 +155,15 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
       }
     },
   });
+
+  // refetch balances when sync height advances (live update, no flicker)
+  const prevHeightRef = useRef(latestBlockHeight);
+  useEffect(() => {
+    if (latestBlockHeight && latestBlockHeight !== prevHeightRef.current) {
+      prevHeightRef.current = latestBlockHeight;
+      void queryClient.invalidateQueries({ queryKey: ['balances', account] });
+    }
+  }, [latestBlockHeight, account, queryClient]);
 
   // memoize expensive filter + sort operations
   const balances = useMemo(() => {

@@ -12,7 +12,6 @@ import type { SessionStorageState } from '@repo/storage-chrome/session';
 import { Key } from '@repo/encryption/key';
 import { Box, type BoxJson } from '@repo/encryption/box';
 import type { KeyPrintJson } from '@repo/encryption/key-print';
-import { writeEncrypted } from './encrypted-storage';
 
 export type ContactNetwork = 'penumbra' | 'zcash' | 'cosmos' | 'polkadot' | 'kusama' | 'ethereum' | 'bitcoin' | 'solana' | 'near' | 'base' | 'arbitrum' | 'avalanche' | 'polygon';
 
@@ -113,7 +112,9 @@ export const createContactsSlice =
     const c = get().contacts.contacts;
     return Array.isArray(c) ? c : [];
   };
-  const persist = () => writeEncrypted(local, session, 'contacts' as keyof LocalStorageState, safeContacts());
+  // use local.set (encrypted proxy) — NOT writeEncrypted directly,
+  // since local is already the encrypted proxy and writeEncrypted would double-encrypt
+  const persist = () => local.set('contacts' as keyof LocalStorageState, safeContacts() as never);
 
   return {
     contacts: [],

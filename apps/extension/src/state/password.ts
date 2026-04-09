@@ -19,7 +19,7 @@ export const createPasswordSlice =
     session: ExtensionStorage<SessionStorageState>,
     local: ExtensionStorage<LocalStorageState>,
   ): SliceCreator<PasswordSlice> =>
-  () => {
+  (set) => {
     return {
       setPassword: async password => {
         const { key, keyPrint } = await Key.create(password);
@@ -42,6 +42,9 @@ export const createPasswordSlice =
         const keyJson = await key.toJson();
 
         await session.set('passwordKey', keyJson);
+
+        // mark keyring as unlocked so persist subscription re-hydrates encrypted data
+        set(state => { state.keyRing.status = 'unlocked'; });
       },
       clearSessionPassword: () => {
         void session.remove('passwordKey');

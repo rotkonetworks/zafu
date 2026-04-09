@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { usePopupReady } from '../../hooks/popup-ready';
 import { useZcashAutoSync } from '../../hooks/zcash-auto-sync';
+import { usePenumbraSwapClaim } from '../../hooks/penumbra-swap-claim';
 import { BottomTabs, BOTTOM_TABS_HEIGHT } from '../../components/bottom-tabs';
 import { AppHeader } from '../../components/app-header';
 import { MenuDrawer } from '../../components/menu-drawer';
 import { PopupPath } from './paths';
 import { useStore } from '../../state';
-import { selectActiveNetwork, type NetworkType } from '../../state/keyring';
+import { selectActiveNetwork, selectPenumbraAccount, type NetworkType } from '../../state/keyring';
 import { isPro } from '../../state/license';
 import { hasFeature } from '../../config/networks';
 
@@ -66,7 +67,10 @@ export const PopupLayout = () => {
   useZcashAutoSync();
   const location = useLocation();
   const activeNetwork = useStore(selectActiveNetwork);
+  const penumbraAccount = useStore(selectPenumbraAccount);
   const pro = useStore(isPro);
+  const onLoginPage = location.pathname === '/login';
+  usePenumbraSwapClaim(activeNetwork, onLoginPage, penumbraAccount);
   const [menuOpen, setMenuOpen] = useState(false);
 
   const networkTabs = getTabsForNetwork(activeNetwork);

@@ -170,12 +170,15 @@ export async function submitDepositTx(txHash: string, depositAddress: string): P
 
 // ── helpers ──
 
-/** ZEC asset ID on the NEAR 1Click platform. */
-export const ZEC_ASSET_ID = 'zcash:mainnet:native';
+/** Find the best ZEC asset ID from the token list (prefers 'zec' blockchain). */
+export function findZecAssetId(tokens: NearToken[]): string | undefined {
+  const zecTokens = tokens.filter(t => t.symbol === 'ZEC');
+  return (zecTokens.find(t => t.blockchain === 'zec') ?? zecTokens[0])?.assetId;
+}
 
-/** Filter tokens to only those swappable with ZEC. */
+/** Filter tokens to only those swappable with ZEC (exclude ZEC variants). */
 export function filterSwappableTokens(tokens: NearToken[]): NearToken[] {
-  return tokens.filter(t => t.assetId !== ZEC_ASSET_ID);
+  return tokens.filter(t => t.symbol !== 'ZEC');
 }
 
 /** Format amount from base units to display (e.g. zatoshis → ZEC). */

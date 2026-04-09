@@ -31,6 +31,8 @@ import { Input } from '@repo/ui/components/ui/input';
 import { QrDisplay } from '../../../shared/components/qr-display';
 import { QrScanner } from '../../../shared/components/qr-scanner';
 import { RecipientPicker } from '../../../components/recipient-picker';
+import { SaveContactModal } from '../../../components/save-contact-modal';
+import { usePasswordGate } from '../../../hooks/password-gate';
 import {
   encodeZcashSignRequest,
   isZcashSignatureQR,
@@ -84,7 +86,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
   // recent addresses and contacts
   const { recordUsage, shouldSuggestSave, dismissSuggestion } = useStore(recentAddressesSelector);
-  const { addContact, addAddress, findByAddress } = useStore(contactsSelector);
+  const { findByAddress } = useStore(contactsSelector);
 
   const [step, setStep] = useState<SendStep>('form');
   const [recipient, setRecipient] = useState(prefill?.recipient ?? '');
@@ -93,7 +95,6 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const [formError, setFormError] = useState<string | null>(null);
   const [signRequestQr, setSignRequestQr] = useState<string | null>(null);
   const [showSavePrompt, setShowSavePrompt] = useState(false);
-  const [contactName, setContactName] = useState('');
   const [showContactModal, setShowContactModal] = useState(false);
   const [fee, setFee] = useState('0.0001');
   const [showContacts, setShowContacts] = useState(false);
@@ -110,6 +111,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   // store access for wallet id and server url
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const getMnemonic = useStore(selectGetMnemonic);
+  const { requestAuth, PasswordModal } = usePasswordGate();
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const activeZcashWallet = useStore(selectActiveZcashWallet);
   const ufvk = activeZcashWallet?.ufvk ?? (activeZcashWallet?.orchardFvk?.startsWith('uview') ? activeZcashWallet.orchardFvk : undefined);
@@ -184,7 +186,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       const amountZat = Math.round(Number(amount) * 1e8).toString();
 
       if (selectedKeyInfo.type === 'mnemonic') {
-        // mnemonic wallet: build signed tx + broadcast directly (no QR flow)
+        // mnemonic wallet: verify password, then build signed tx + broadcast
+        const authorized = await requestAuth();
+        if (!authorized) { setStep('review'); return; }
         const mnemonic = await getMnemonic(walletId);
         const result = await buildSendTxInWorker(
           'zcash', walletId, zidecarUrl, recipient.trim(), amountZat, memo,
@@ -481,41 +485,29 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
             <div className="flex flex-col gap-3">
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">
+                <label className="mb-1 block text-xs text-muted-foreground">
                   recipient address
                 </label>
                 <div className="flex gap-1">
-                  <Input
+                  <input
+                    type="text"
                     placeholder="u1... / zs... / t1..."
                     value={recipient}
                     onChange={(e) => setRecipient(e.target.value)}
-                    className="font-mono text-sm flex-1"
+                    className="flex-1 rounded-lg border border-border/40 bg-input px-3 py-2.5 font-mono text-sm text-foreground placeholder:text-muted-foreground transition-colors focus:border-zigner-gold focus:outline-none"
                   />
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    type="button"
-                    onClick={() => setShowContacts(s => !s)}
-                    title="address book"
-                    className="shrink-0"
-                  >
-                    <span className="i-lucide-user h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="icon"
+                  <button
                     type="button"
                     onClick={() => setShowQrScanner(true)}
+                    className="shrink-0 flex h-[42px] w-[42px] items-center justify-center rounded-lg border border-border/40 bg-input text-muted-foreground hover:text-foreground transition-colors"
                     title="scan QR code"
-                    className="shrink-0"
                   >
                     <span className="i-lucide-scan h-4 w-4" />
-                  </Button>
+                  </button>
                 </div>
                 {showQrScanner && (
                   <QrScanner
                     onScan={(data) => {
-                      // strip zcash: URI prefix if present
                       const addr = data.startsWith('zcash:') ? data.slice(6).split('?')[0]! : data;
                       setRecipient(addr);
                       setShowQrScanner(false);
@@ -529,7 +521,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 <RecipientPicker
                   network='zcash'
                   onSelect={(addr) => { setRecipient(addr); setShowContacts(false); }}
-                  show={showContacts || !recipient}
+                  show={!recipient}
                 />
               </div>
 
@@ -545,36 +537,37 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                   )}
                 </div>
                 <div className="flex gap-1">
-                  <Input
+                  <input
                     type="number"
                     placeholder="0.0"
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
                     step="0.0001"
                     min="0"
-                    className="flex-1"
+                    className="flex-1 rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors focus:border-zigner-gold focus:outline-none"
                   />
-                  <Button
-                    variant="outline"
+                  <button
                     type="button"
                     onClick={() => setAmount(maxSendZec > 0 ? maxSendZec.toFixed(8).replace(/0+$/, '').replace(/\.$/, '') : '0')}
                     disabled={maxSendZec <= 0}
-                    className="shrink-0 text-xs h-10 px-3"
+                    className="shrink-0 h-[42px] rounded-lg border border-border/40 bg-input px-3 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
                   >
                     max
-                  </Button>
+                  </button>
                 </div>
               </div>
 
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">
+                <label className="mb-1 block text-xs text-muted-foreground">
                   memo (optional)
                 </label>
-                <Input
+                <input
+                  type="text"
                   placeholder="private message"
                   value={memo}
                   onChange={(e) => setMemo(e.target.value)}
                   maxLength={512}
+                  className="w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors focus:border-zigner-gold focus:outline-none"
                 />
               </div>
 
@@ -584,12 +577,12 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             </div>
 
             <div className="flex gap-2 mt-4">
-              <Button variant="secondary" onClick={handleClose} className="flex-1">
+              <button onClick={handleClose} className="flex-1 rounded-lg border border-border/40 bg-input py-2.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
                 cancel
-              </Button>
-              <Button variant="gradient" onClick={handleReview} className="flex-1">
+              </button>
+              <button onClick={handleReview} className="flex-1 rounded-lg bg-primary py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
                 continue
-              </Button>
+              </button>
             </div>
           </div>
         );
@@ -776,71 +769,32 @@ description="point camera at zafu zigner's signature qr code"
                   <p className="text-sm">save to contacts?</p>
                 </div>
                 <div className="flex gap-2">
-                  <Button
-                    variant="gradient"
-                    size="sm"
+                  <button
                     onClick={() => setShowContactModal(true)}
-                    className="flex-1"
+                    className="flex-1 rounded-lg bg-primary py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
                   >
                     save
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
+                  </button>
+                  <button
                     onClick={() => {
                       void dismissSuggestion(recipient);
                       setShowSavePrompt(false);
                     }}
-                    className="flex-1"
+                    className="flex-1 rounded-lg border border-border/40 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
                   >
                     skip
-                  </Button>
+                  </button>
                 </div>
               </div>
             )}
 
-            {/* contact name input */}
             {showContactModal && (
-              <div className="w-full rounded-lg border border-border/40 bg-card p-3">
-                <p className="text-sm font-medium mb-2">name this contact</p>
-                <Input
-                  value={contactName}
-                  onChange={e => setContactName(e.target.value)}
-                  placeholder="enter name..."
-                  className="mb-2"
-                  autoFocus
-                />
-                <div className="flex gap-2">
-                  <Button
-                    variant="gradient"
-                    size="sm"
-                    onClick={async () => {
-                      if (contactName.trim()) {
-                        const newContact = await addContact({ name: contactName.trim() });
-                        await addAddress(newContact.id, { network: 'zcash', address: recipient });
-                        setShowContactModal(false);
-                        setShowSavePrompt(false);
-                        setContactName('');
-                      }
-                    }}
-                    disabled={!contactName.trim()}
-                    className="flex-1"
-                  >
-                    save
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      setShowContactModal(false);
-                      setContactName('');
-                    }}
-                    className="flex-1"
-                  >
-                    cancel
-                  </Button>
-                </div>
-              </div>
+              <SaveContactModal
+                address={recipient}
+                network='zcash'
+                onDone={() => { setShowContactModal(false); setShowSavePrompt(false); }}
+                onCancel={() => setShowContactModal(false)}
+              />
             )}
 
             <Button variant="gradient" onClick={handleClose} className="w-full mt-4">
@@ -910,6 +864,7 @@ description="point camera at zafu zigner's signature qr code"
 
   return (
     <div className="h-full bg-background">
+      {PasswordModal}
       {renderContent()}
     </div>
   );

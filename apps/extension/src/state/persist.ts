@@ -6,7 +6,7 @@ import { AppParameters } from '@penumbra-zone/protobuf/penumbra/core/app/v1/app_
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { OriginRecord, UserChoice } from '@repo/storage-chrome/records';
-import { readEncrypted } from './encrypted-storage';
+import { readEncrypted, markHydrated } from './encrypted-storage';
 import type { WalletJson } from '@repo/wallet';
 import type { ZcashWalletJson } from './wallets';
 import type { Contact } from './contacts';
@@ -76,6 +76,7 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
             return r as unknown as OriginRecord;
           })
         : null;
+      const decryptedAny = !!(wallets || zcashWallets || contacts || recentAddresses || messages);
       set(produce((state: AllSlices) => {
         if (Array.isArray(wallets)) state.wallets.all = wallets.map(w => ({ ...w, vaultId: w.vaultId ?? '' })) as typeof state.wallets.all;
         if (Array.isArray(zcashWallets)) state.wallets.zcashWallets = zcashWallets.map(w => ({ ...w, vaultId: w.vaultId ?? '' })) as typeof state.wallets.zcashWallets;
@@ -84,11 +85,18 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
         if (Array.isArray(knownSites)) state.connectedSites.knownSites = knownSites;
         if (Array.isArray(messages)) state.messages.messages = messages as typeof state.messages.messages;
       }));
-
+      // only unblock writes if we actually decrypted data — if locked (all null),
+      // keep blocking so persist() can't wipe storage with empty arrays
+      if (decryptedAny) markHydrated();
     };
 
     // Initialize keyring from storage (loads vaults, selected key, networks)
     await get().keyRing.init();
+
+    // fresh install (no password set) — nothing to protect, unblock writes immediately
+    if (get().keyRing.status === 'empty') {
+      markHydrated();
+    }
 
     // hydrate now (works if already unlocked or auto-unlocked)
     await hydrateEncryptedData();

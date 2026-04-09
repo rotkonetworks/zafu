@@ -9,7 +9,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../../state';
-import { selectEffectiveKeyInfo } from '../../../state/keyring';
+import { selectEffectiveKeyInfo, selectKeyInfos } from '../../../state/keyring';
 import { allContactsSelector } from '../../../state/contacts';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import type { ZidSitePreference, ZidShareRecord } from '../../../state/identity';
@@ -88,6 +88,7 @@ const ZidFingerprint = ({ pubkeyHex, size = 40 }: { pubkeyHex: string; size?: nu
 export const IdentityPage = () => {
   const navigate = useNavigate();
   const keyInfo = useStore(selectEffectiveKeyInfo);
+  const allKeyInfos = useStore(selectKeyInfos);
   const contacts = useStore(allContactsSelector);
   const pro = useStore(isPro);
   const plan = useStore(selectPlan);
@@ -106,7 +107,8 @@ export const IdentityPage = () => {
   const [reloadKey, setReloadKey] = useState(0);
   const reloadSites = useCallback(() => setReloadKey(k => k + 1), []);
 
-  const zidPubkey = keyInfo?.insensitive?.['zid'] as string | undefined;
+  // try active keyinfo first, then any keyinfo with a zid (mnemonic wallets)
+  const zidPubkey = (keyInfo?.insensitive?.['zid'] ?? allKeyInfos.find(k => k.insensitive?.['zid'])?.insensitive?.['zid']) as string | undefined;
   const zidAddress = zidPubkey ? 'zid' + zidPubkey.slice(0, 16) : undefined;
 
   useEffect(() => {
@@ -179,12 +181,39 @@ export const IdentityPage = () => {
   const contactCount = contacts?.length ?? 0;
 
   if (!zidPubkey) {
+    const hasAnyWallet = allKeyInfos.length > 0;
     return (
       <SettingsScreen title='identity' backPath={PopupPath.INDEX}>
-        <div className='flex min-h-60 flex-col items-center justify-center'>
-          <span className='i-lucide-fingerprint size-8 text-muted-foreground/30 mb-3' />
-          <p className='text-sm text-muted-foreground'>no zid available</p>
-          <p className='mt-2 text-xs text-muted-foreground/50'>create a wallet to get started.</p>
+        <div className='flex flex-col gap-4'>
+          <div className='flex min-h-40 flex-col items-center justify-center'>
+            <span className='i-lucide-fingerprint size-8 text-muted-foreground/30 mb-3' />
+            {hasAnyWallet ? (
+              <>
+                <p className='text-sm text-muted-foreground'>zid requires a mnemonic wallet</p>
+                <p className='mt-2 text-xs text-muted-foreground/50'>zigner (watch-only) wallets cannot derive a zid identity.</p>
+              </>
+            ) : (
+              <>
+                <p className='text-sm text-muted-foreground'>no zid available</p>
+                <p className='mt-2 text-xs text-muted-foreground/50'>create a wallet to get started.</p>
+              </>
+            )}
+          </div>
+
+          <hr className='border-border/40' />
+
+          <div className='flex flex-col gap-2'>
+            <button
+              onClick={() => navigate(PopupPath.CONTACTS)}
+              className='flex items-center justify-between text-xs font-mono text-muted-foreground/50 hover:text-muted-foreground'
+            >
+              <span className='flex items-center gap-1.5'>
+                <span className='i-lucide-users size-3.5' />
+                contacts
+              </span>
+              <span className='text-muted-foreground/30'>{contactCount}</span>
+            </button>
+          </div>
         </div>
       </SettingsScreen>
     );
