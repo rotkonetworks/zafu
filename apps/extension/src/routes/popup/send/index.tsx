@@ -1187,9 +1187,27 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
 }
 
 /** Penumbra IBC send form */
+/** filter balances to assets withdrawable through a given IBC channel */
+const filterWithdrawableAssets = (
+  balances: Array<{ balanceView?: { valueView?: { value?: { metadata?: { base?: string } } } } }>,
+  channelId: string | undefined,
+) => {
+  if (!channelId) return balances;
+  const prefix = `transfer/${channelId}/`;
+  return balances.filter(b => {
+    const base = (b as any)?.balanceView?.valueView?.value?.metadata?.base
+      ?? getMetadataFromBalancesResponse.optional(b as any)?.base;
+    if (!base) return false;
+    // show assets that came through this channel (can unwind back)
+    // plus native UM (can always send cross-chain)
+    return base.startsWith(prefix) || base === 'upenumbra';
+  });
+};
+
 function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
   const { data: chains = [], isLoading: chainsLoading } = useIbcChains();
   const ibcState = useStore(selectIbcWithdraw);
+  const penumbraAccount = useStore(selectPenumbraAccount);
   const [txStatus, setTxStatus] = useState<'idle' | 'planning' | 'signing' | 'broadcasting' | 'success' | 'error'>('idle');
   const [txHash, setTxHash] = useState<string | undefined>();
   const [txError, setTxError] = useState<string | undefined>();
@@ -1198,16 +1216,53 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
   const [showContactModal, setShowContactModal] = useState(false);
   const [sentToAddress, setSentToAddress] = useState<string | undefined>();
   const [sentToChainId, setSentToChainId] = useState<string | undefined>();
+  const [assetOpen, setAssetOpen] = useState(false);
 
   const penumbraTx = usePenumbraTransaction();
 
-  // default denom to upenumbra if not set
+  // fetch balances for asset selection
+  const { data: allBalances = [] } = useQuery({
+    queryKey: ['balances', penumbraAccount],
+    staleTime: 30_000,
+    queryFn: async () => {
+      try {
+        const raw = await Array.fromAsync(viewClient.balances({ accountFilter: { account: penumbraAccount } }));
+        return raw.filter(b => {
+          const meta = getMetadataFromBalancesResponse.optional(b);
+          if (!meta?.base || typeof meta.base !== 'string') return false;
+          return !(
+            assetPatterns.auctionNft.matches(meta.base) ||
+            assetPatterns.lpNft.matches(meta.base) ||
+            assetPatterns.proposalNft.matches(meta.base) ||
+            assetPatterns.votingReceipt.matches(meta.base)
+          );
+        });
+      } catch {
+        return [];
+      }
+    },
+  });
+
+  // filter to withdrawable assets for selected chain
+  const withdrawableAssets = useMemo(
+    () => filterWithdrawableAssets(allBalances, ibcState.chain?.channelId),
+    [allBalances, ibcState.chain?.channelId]
+  );
+
+  const [selectedAsset, setSelectedAsset] = useState<typeof allBalances[0] | undefined>();
+
+  // auto-select first withdrawable asset when chain changes
   useEffect(() => {
-    if (!ibcState.denom) {
-      ibcState.setDenom('upenumbra');
+    if (withdrawableAssets.length > 0) {
+      const meta = getMetadataFromBalancesResponse.optional(withdrawableAssets[0]!);
+      setSelectedAsset(withdrawableAssets[0]);
+      if (meta?.base) ibcState.setDenom(meta.base);
+    } else {
+      setSelectedAsset(undefined);
+      ibcState.setDenom('');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ibcState.denom]);
+  }, [ibcState.chain?.channelId, withdrawableAssets.length]);
 
   // recent addresses and contacts
   const { recordUsage, shouldSuggestSave, dismissSuggestion } = useStore(recentAddressesSelector);
@@ -1250,7 +1305,12 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
       ibcState.reset();
     } catch (err) {
       setTxStatus('error');
-      setTxError(err instanceof Error ? err.message : 'transaction failed');
+      const msg = err instanceof Error ? err.message : 'transaction failed';
+      setTxError(
+        msg.includes('expired')
+          ? `${ibcState.chain?.displayName ?? 'IBC'} channel unavailable - client expired`
+          : msg
+      );
     }
   }, [canSubmit, ibcState, penumbraTx, recordUsage, shouldSuggestSave]);
 
@@ -1306,6 +1366,55 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
           show={!ibcState.destinationAddress}
         />
       </div>
+
+      {/* asset selector */}
+      {ibcState.chain && (
+        <div>
+          <label className='mb-1 block text-xs text-muted-foreground'>asset</label>
+          {withdrawableAssets.length === 0 ? (
+            <p className='text-xs text-muted-foreground/60 py-2'>
+              no withdrawable assets for {ibcState.chain.displayName}
+            </p>
+          ) : (
+            <div className='relative'>
+              <button
+                onClick={() => setAssetOpen(!assetOpen)}
+                disabled={txStatus !== 'idle'}
+                className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground text-left disabled:opacity-50'
+              >
+                {selectedAsset
+                  ? (getMetadataFromBalancesResponse.optional(selectedAsset)?.symbol
+                    ?? getMetadataFromBalancesResponse.optional(selectedAsset)?.display
+                    ?? ibcState.denom)
+                  : 'select asset'}
+              </button>
+              {assetOpen && (
+                <div className='absolute z-10 mt-1 w-full rounded-lg border border-border/40 bg-background shadow-lg max-h-48 overflow-y-auto'>
+                  {withdrawableAssets.map((b, i) => {
+                    const meta = getMetadataFromBalancesResponse.optional(b);
+                    const display = meta?.symbol ?? meta?.display ?? meta?.base ?? 'unknown';
+                    const amount = getDisplayDenomFromView(b.balanceView!);
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => {
+                          setSelectedAsset(b);
+                          if (meta?.base) ibcState.setDenom(meta.base);
+                          setAssetOpen(false);
+                        }}
+                        className='w-full px-3 py-2 text-left text-sm hover:bg-muted/30 flex justify-between items-center'
+                      >
+                        <span>{display}</span>
+                        <span className='text-xs text-muted-foreground'>{amount}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* amount */}
       <div>
