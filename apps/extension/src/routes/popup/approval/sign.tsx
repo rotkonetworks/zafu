@@ -81,19 +81,7 @@ export const SignApproval = () => {
         ? signP256(mnemonic, origin, challenge, pref)
         : signZid(mnemonic, origin, challenge, pref);
 
-      // log the shared zid
-      const log = (await localExtStorage.get('zidShareLog')) ?? [];
-      const alreadyLogged = log.some(r => r.publicKey === result.publicKey && r.sharedWith === origin);
-      if (!alreadyLogged) {
-        log.push({
-          publicKey: result.publicKey,
-          sharedWith: origin,
-          sharedAt: Date.now(),
-          identity: pref?.identity ?? 'default',
-        });
-        void localExtStorage.set('zidShareLog', log);
-      }
-
+      // share log is written by the service worker (sign-request.ts) after popup closes
       setChoice(UserChoice.Approved);
       sendResponse(result);
     } catch (e) {
@@ -122,28 +110,14 @@ export const SignApproval = () => {
         throw new Error('invalid response format');
       }
 
-      // log the shared zid
-      void (async () => {
-        const log = (await localExtStorage.get('zidShareLog')) ?? [];
-        const alreadyLogged = log.some(r => r.publicKey === resp.publicKey && r.sharedWith === origin);
-        if (!alreadyLogged) {
-          log.push({
-            publicKey: resp.publicKey,
-            sharedWith: origin!,
-            sharedAt: Date.now(),
-            identity: pref?.identity ?? 'default',
-          });
-          void localExtStorage.set('zidShareLog', log);
-        }
-      })();
-
+      // share log is written by the service worker (sign-request.ts) after popup closes
       setChoice(UserChoice.Approved);
       sendResponse({ signature: resp.signature, publicKey: resp.publicKey });
       window.close();
     } catch {
       // invalid QR, keep scanning
     }
-  }, [origin, pref, setChoice, sendResponse]);
+  }, [setChoice, sendResponse]);
 
   const approve = () => {
     if (isAirgap) {

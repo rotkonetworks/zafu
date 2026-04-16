@@ -20,6 +20,7 @@ import { popup } from '../../popup';
 import { isValidExternalSender } from '../../senders/external';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import type { EncryptedVault } from '../../state/keyring/types';
+import type { ZidShareRecord } from '../../state/identity';
 
 interface SignRequestMessage {
   type: 'zafu_sign';
@@ -90,16 +91,33 @@ const handleSignRequest = async (
       return { success: false, error: 'user denied' };
     }
 
+    const { signature, publicKey } = popupResponse;
+
     // auto-grant sign_identity capability so the site appears in the identity page
     const perms = await getOriginPermissions(sender.origin);
     if (!hasCapability(perms, 'sign_identity')) {
       await grantCapability(sender.origin, 'sign_identity');
     }
 
+    // log the shared zid (done in service worker so it persists even if popup closes)
+    if (publicKey) {
+      const log = ((await localExtStorage.get('zidShareLog')) ?? []) as ZidShareRecord[];
+      const alreadyLogged = log.some(r => r.publicKey === publicKey && r.sharedWith === sender.origin);
+      if (!alreadyLogged) {
+        log.push({
+          publicKey,
+          sharedWith: sender.origin,
+          sharedAt: Date.now(),
+          identity: 'default',
+        });
+        await localExtStorage.set('zidShareLog', log);
+      }
+    }
+
     return {
       success: true,
-      signature: popupResponse.signature,
-      publicKey: popupResponse.publicKey,
+      signature,
+      publicKey,
     };
   } catch (e) {
     console.error('sign request failed:', e);
