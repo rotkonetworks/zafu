@@ -66,6 +66,8 @@ interface PopupRequestMap {
     challengeHex: string;
     statement?: string;
     algorithm?: 'ed25519' | 'es256';
+    isAirgap?: boolean;
+    zidPubkey?: string;
   };
 }
 

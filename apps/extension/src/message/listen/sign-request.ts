@@ -18,6 +18,8 @@ import { UserChoice } from '@repo/storage-chrome/records';
 import { PopupType } from '../../message/popup';
 import { popup } from '../../popup';
 import { isValidExternalSender } from '../../senders/external';
+import { localExtStorage } from '@repo/storage-chrome/local';
+import type { EncryptedVault } from '../../state/keyring/types';
 
 interface SignRequestMessage {
   type: 'zafu_sign';
@@ -73,12 +75,21 @@ const handleSignRequest = async (
   }
 
   try {
+    // detect wallet type for mnemonic vs zigner signing flow
+    const vaults = ((await localExtStorage.get('vaults')) ?? []) as EncryptedVault[];
+    const selectedId = await localExtStorage.get('selectedVaultId');
+    const selectedVault = vaults.find(v => v.id === selectedId);
+    const isAirgap = selectedVault?.type === 'zigner-zafu';
+    const zidPubkey = isAirgap ? (selectedVault?.insensitive?.['zid'] as string | undefined) : undefined;
+
     const popupResponse = await popup(PopupType.SignRequest, {
       origin: sender.origin,
       favIconUrl: sender.tab?.favIconUrl,
       title: sender.tab?.title,
       challengeHex: req.challengeHex,
       statement: req.statement,
+      isAirgap,
+      zidPubkey,
     });
 
     if (!popupResponse || popupResponse.choice !== UserChoice.Approved) {
