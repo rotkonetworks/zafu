@@ -167,6 +167,8 @@ export interface ZignerZafuImport {
   accountIndex: number;
   /** device identifier */
   deviceId: string;
+  /** ZID cross-site ed25519 public key (hex), exported from zigner */
+  zidPublicKey?: string;
 }
 
 /**

@@ -85,6 +85,7 @@ export const buildZignerVault = (
     ...(data.cosmosAddresses?.length ? { cosmosAddresses: data.cosmosAddresses } : {}),
     ...(data.publicKey ? { cosmosPublicKey: data.publicKey } : {}),
     ...(opts.airgapOnly ? { airgapOnly: true } : {}),
+    ...(data.zidPublicKey ? { zid: data.zidPublicKey } : {}),
   },
 });
 
