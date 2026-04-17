@@ -6,7 +6,7 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../state';
-import { selectLock, selectActiveNetwork, selectEffectiveKeyInfo } from '../state/keyring';
+import { selectLock, selectActiveNetwork, selectEffectiveKeyInfo, selectKeyInfos } from '../state/keyring';
 import { PopupPath } from '../routes/popup/paths';
 import { cn } from '@repo/ui/lib/utils';
 import { isSidePanel } from '../utils/popup-detection';
@@ -29,10 +29,12 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
   const lock = useStore(selectLock);
   const activeNetwork = useStore(selectActiveNetwork);
   const keyInfo = useStore(selectEffectiveKeyInfo);
+  const allKeyInfos = useStore(selectKeyInfos);
   const inSidePanel = isSidePanel();
   const [zidCopied, setZidCopied] = useState(false);
 
-  const zidPubkey = keyInfo?.insensitive?.['zid'] as string | undefined;
+  // fall back to any keyInfo's ZID if active one doesn't have it
+  const zidPubkey = (keyInfo?.insensitive?.['zid'] ?? allKeyInfos.find(k => k.insensitive?.['zid'])?.insensitive?.['zid']) as string | undefined;
   const zidAddress = zidPubkey ? 'zid' + zidPubkey.slice(0, 16) : undefined;
 
   const handleLock = () => {
