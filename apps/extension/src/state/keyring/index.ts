@@ -174,6 +174,19 @@ export const createKeyRingSlice = (
         state.keyRing.enabledNetworks = enabledNetworks as NetworkType[];
         state.wallets.activeIndex = syncedWalletIndex;
       });
+
+      // check pro license after auto-unlock
+      if (sessionKey) {
+        void (async () => {
+          try {
+            const selected = keyInfos.find(k => k.isSelected);
+            const zidPubkey = selected?.insensitive?.['zid'] as string | undefined;
+            if (zidPubkey) {
+              await get().license.fetchLicense(zidPubkey);
+            }
+          } catch { /* server unreachable — no-op */ }
+        })();
+      }
     },
 
     // ── password / unlock / lock ──
@@ -220,6 +233,16 @@ export const createKeyRingSlice = (
 
       await session.set('passwordKey', result.keyJson);
       set(state => { state.keyRing.status = 'unlocked'; });
+
+      // check pro license status after unlock
+      void (async () => {
+        try {
+          const keyInfo = get().keyRing.selectedKeyInfo;
+          const zidPubkey = keyInfo?.insensitive?.['zid'] as string | undefined;
+          if (zidPubkey) await get().license.fetchLicense(zidPubkey);
+        } catch { /* server unreachable — treat as free */ }
+      })();
+
       return true;
     },
 

@@ -19,7 +19,7 @@ export const createPasswordSlice =
     session: ExtensionStorage<SessionStorageState>,
     local: ExtensionStorage<LocalStorageState>,
   ): SliceCreator<PasswordSlice> =>
-  (set) => {
+  (set, get) => {
     return {
       setPassword: async password => {
         const { key, keyPrint } = await Key.create(password);
@@ -45,6 +45,15 @@ export const createPasswordSlice =
 
         // mark keyring as unlocked so persist subscription re-hydrates encrypted data
         set(state => { state.keyRing.status = 'unlocked'; });
+
+        // refresh pro license from server on unlock
+        void (async () => {
+          try {
+            const keyInfo = get().keyRing.selectedKeyInfo;
+            const zidPubkey = keyInfo?.insensitive?.['zid'] as string | undefined;
+            if (zidPubkey) await get().license.fetchLicense(zidPubkey);
+          } catch { /* server unreachable — treat as free */ }
+        })();
       },
       clearSessionPassword: () => {
         void session.remove('passwordKey');

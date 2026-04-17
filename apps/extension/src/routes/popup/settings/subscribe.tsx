@@ -22,7 +22,7 @@ export const SubscribePage = () => {
   const pro = useStore(isPro);
   const days = useStore(selectDaysRemaining);
   const pending = useStore(selectPending);
-  const { loadLicense, fetchLicense } = useStore(licenseSelector);
+  const { fetchLicense } = useStore(licenseSelector);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
 
   const [months, setMonths] = useState(1);
@@ -58,8 +58,6 @@ export const SubscribePage = () => {
   const amountZat = PRO_RATE_ZAT_PER_30_DAYS * months;
   const amountZec = (amountZat / 1e8).toFixed(2);
   const daysAdded = 30 * months;
-
-  useEffect(() => { void loadLicense(); }, [loadLicense]);
 
   // cleanup poll on unmount
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);

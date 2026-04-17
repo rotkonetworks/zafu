@@ -4,14 +4,19 @@
  * license is fetched DIRECTLY from rotko's license-server over HTTPS.
  * never through zidecar - keeps license identity separate from sync identity.
  *
+ * server is always the source of truth:
+ *   - after wallet unlock, fetch license from server
+ *   - server reachable + pro → show pro
+ *   - server reachable + free → show free
+ *   - server unreachable → show free (offline = no pro)
+ *
  * sync priority uses ring VRF proofs (anonymous, unlinkable).
  *   free  = normal sync (always works)
  *   pro   = priority queue under load
  */
 
 import type { AllSlices, SliceCreator } from '.';
-import { isLicenseValid, hasProFeature, daysRemaining, parseLicense, type License, type Plan, type ProFeature } from '@repo/wallet/license';
-import { localExtStorage } from '@repo/storage-chrome/local';
+import { isLicenseValid, hasProFeature, daysRemaining, type License, type Plan, type ProFeature } from '@repo/wallet/license';
 import { bytesToHex } from '@noble/hashes/utils';
 
 /** direct license-server endpoint - never goes through zidecar */
@@ -31,44 +36,22 @@ export interface LicenseSlice {
   loading: boolean;
   pending: PendingPayment | null;
 
-  /** load license from storage on startup */
-  loadLicense: () => Promise<void>;
-  /** store a new license */
-  setLicense: (license: License) => Promise<void>;
   /** fetch license directly from license-server by ZID pubkey */
   fetchLicense: (zid: string, ringPubkey?: Uint8Array) => Promise<License | null>;
   /** update pending payment info from server */
   setPending: (pending: PendingPayment | null) => void;
   /** clear license */
-  clearLicense: () => Promise<void>;
+  clearLicense: () => void;
 }
 
-export const createLicenseSlice = (): SliceCreator<LicenseSlice> => (set, get) => ({
+export const createLicenseSlice = (): SliceCreator<LicenseSlice> => (set) => ({
   license: null,
   loading: false,
   pending: null,
 
-  loadLicense: async () => {
-    set(state => { state.license.loading = true; });
-    const raw = await localExtStorage.get('proLicense') as string | undefined;
-    const license = raw ? parseLicense(raw) : null;
-
-    set(state => {
-      state.license.license = license;
-      state.license.loading = false;
-    });
-  },
-
-  setLicense: async (license: License) => {
-    await localExtStorage.set('proLicense', JSON.stringify(license));
-
-    set(state => { state.license.license = license; });
-  },
-
   fetchLicense: async (zid: string, ringPubkey?: Uint8Array) => {
     set(state => { state.license.loading = true; });
     try {
-      // build URL with optional ring pubkey query param
       const url = new URL(`/license/${zid}`, LICENSE_SERVER);
       if (ringPubkey) {
         url.searchParams.set('ring_pubkey', bytesToHex(ringPubkey));
@@ -80,7 +63,7 @@ export const createLicenseSlice = (): SliceCreator<LicenseSlice> => (set, get) =
       });
 
       if (!resp.ok) {
-        set(state => { state.license.loading = false; });
+        set(state => { state.license.license = null; state.license.loading = false; });
         return null;
       }
 
@@ -92,7 +75,7 @@ export const createLicenseSlice = (): SliceCreator<LicenseSlice> => (set, get) =
       };
 
       if (!info.signature || info.plan === 'free') {
-        set(state => { state.license.loading = false; });
+        set(state => { state.license.license = null; state.license.loading = false; });
         return null;
       }
 
@@ -103,18 +86,17 @@ export const createLicenseSlice = (): SliceCreator<LicenseSlice> => (set, get) =
         signature: info.signature,
       };
 
-      // verify locally before storing
       if (isLicenseValid(license)) {
-        await get().license.setLicense(license);
-        set(state => { state.license.loading = false; });
+        set(state => { state.license.license = license; state.license.loading = false; });
         return license;
       }
 
-      set(state => { state.license.loading = false; });
+      set(state => { state.license.license = null; state.license.loading = false; });
       return null;
     } catch (e) {
-      console.warn('[license] fetch failed:', e);
-      set(state => { state.license.loading = false; });
+      // server unreachable = offline, treat as free
+      console.warn('[license] fetch failed (offline):', e);
+      set(state => { state.license.license = null; state.license.loading = false; });
       return null;
     }
   },
@@ -123,9 +105,7 @@ export const createLicenseSlice = (): SliceCreator<LicenseSlice> => (set, get) =
     set(state => { state.license.pending = pending; });
   },
 
-  clearLicense: async () => {
-    await localExtStorage.set('proLicense', undefined);
-
+  clearLicense: () => {
     set(state => { state.license.license = null; state.license.pending = null; });
   },
 });
