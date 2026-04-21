@@ -174,7 +174,8 @@ export const SettingsWallets = () => {
         const zignerData: ZignerZafuImport = {
           fullViewingKey: btoa(String.fromCharCode(...fvkBytes)),
           accountIndex: walletImport.accountIndex,
-          deviceId: `penumbra-${Date.now()}`,
+          deviceId: walletImport.zidPublicKey ?? `penumbra-${Date.now()}`,
+          zidPublicKey: walletImport.zidPublicKey,
         };
         await addZignerUnencrypted(zignerData, walletLabel || walletImport.label || 'zigner penumbra');
       } else if (detectedNetwork === 'zcash' && zcashWalletImport) {
@@ -184,7 +185,8 @@ export const SettingsWallets = () => {
         const zignerData: ZignerZafuImport = {
           viewingKey,
           accountIndex: zcashWalletImport.accountIndex,
-          deviceId: `zcash-${Date.now()}`,
+          deviceId: zcashWalletImport.zidPublicKey ?? `zcash-${Date.now()}`,
+          zidPublicKey: zcashWalletImport.zidPublicKey,
         };
         await addZignerUnencrypted(zignerData, walletLabel || zcashWalletImport.label || 'zigner zcash');
       } else if (detectedNetwork === 'cosmos' && parsedCosmosExport && isLaunched('osmosis')) {

@@ -53,6 +53,8 @@ export interface ZcashFvkExportData {
   address: string | null;
   /** Unified Full Viewing Key (uview1... or uviewtest1...) - from UR format */
   ufvk?: string;
+  /** ZID pubkey (hex) - canonical device identity, if present (bit 4 flag) */
+  zidPublicKey?: string;
 }
 
 /**
@@ -71,6 +73,8 @@ export interface ZcashWalletImport {
   address: string | null;
   /** Unified Full Viewing Key (uview1... or uviewtest1...) - from UR format */
   ufvk?: string;
+  /** ZID pubkey (hex) - canonical device identity for zigner dedup */
+  zidPublicKey?: string;
 }
 
 // ============================================================================
@@ -174,7 +178,16 @@ export function parseZcashFvkQR(hex: string): ZcashFvkExportData {
     offset += 2;
     if (offset + addrLen <= data.length) {
       address = new TextDecoder().decode(data.subarray(offset, offset + addrLen));
+      offset += addrLen;
     }
+  }
+
+  // Parse ZID pubkey if present (bit 4 = 0x10). 32 bytes hex.
+  const hasZid = (flags & 0x10) !== 0;
+  let zidPublicKey: string | undefined;
+  if (hasZid && offset + 32 <= data.length) {
+    zidPublicKey = Array.from(data.subarray(offset, offset + 32))
+      .map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
   return {
@@ -184,6 +197,7 @@ export function parseZcashFvkQR(hex: string): ZcashFvkExportData {
     transparentXpub,
     mainnet,
     address,
+    zidPublicKey,
   };
 }
 
@@ -205,6 +219,7 @@ export function createZcashWalletImport(
     mainnet: exportData.mainnet,
     address: exportData.address,
     ufvk: exportData.ufvk,
+    zidPublicKey: exportData.zidPublicKey,
   };
 }
 

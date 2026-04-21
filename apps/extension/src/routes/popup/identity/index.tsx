@@ -13,14 +13,12 @@ import { selectEffectiveKeyInfo, selectKeyInfos } from '../../../state/keyring';
 import { allContactsSelector } from '../../../state/contacts';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import type { ZidSitePreference, ZidShareRecord } from '../../../state/identity';
-import type { EncryptedVault } from '../../../state/keyring/types';
 import { getOriginPermissions, grantCapability, denyCapability } from '@repo/storage-chrome/origin';
 import { revokeOrigin as revokeOriginFull } from '../../../senders/revoke';
 import { CAPABILITY_META, type Capability, type OriginPermissions } from '@repo/storage-chrome/capabilities';
 import { isPro, selectDaysRemaining, selectPlan } from '../../../state/license';
 import { SettingsScreen } from '../settings/settings-screen';
 import { PopupPath } from '../paths';
-import { QrScanner } from '../../../shared/components/qr-scanner';
 
 interface SiteIdentity {
   origin: string;
@@ -182,89 +180,31 @@ export const IdentityPage = () => {
   const crossSiteCount = useMemo(() => sites.filter(s => s.pref.mode === 'cross-site').length, [sites]);
   const contactCount = contacts?.length ?? 0;
 
-  const isZignerWallet = keyInfo?.type === 'zigner-zafu';
-  const [scanning, setScanning] = useState(false);
-  const [scanStatus, setScanStatus] = useState<'idle' | 'success' | 'error'>('idle');
-  const [scanError, setScanError] = useState('');
-
-  const handleZidScan = useCallback(async (raw: string) => {
-    // accept "zid:<64hex>" or raw 64-char hex (from QR scanner's resultToHex)
-    const prefixed = raw.match(/^zid:([0-9a-fA-F]{64})$/);
-    const plain = raw.match(/^[0-9a-fA-F]{64}$/);
-    const pubkey = prefixed?.[1] ?? plain?.[0];
-
-    if (!pubkey) {
-      setScanError('invalid ZID QR — expected "zid:<64hex>"');
-      setScanStatus('error');
-      setScanning(false);
-      return;
-    }
-
-    try {
-      // write pubkey to vault.insensitive['zid']
-      const vaults = ((await localExtStorage.get('vaults')) ?? []) as EncryptedVault[];
-      const updated = vaults.map(v =>
-        v.id === keyInfo?.id ? { ...v, insensitive: { ...v.insensitive, zid: pubkey } } : v,
-      );
-      await localExtStorage.set('vaults', updated);
-
-      // re-init keyring to pick up the change
-      useStore.getState().keyRing.init();
-
-      setScanStatus('success');
-    } catch {
-      setScanError('failed to save ZID');
-      setScanStatus('error');
-    }
-    setScanning(false);
-  }, [keyInfo?.id]);
-
   if (!zidPubkey) {
     const hasAnyWallet = allKeyInfos.length > 0;
+    const hasAnyZignerWallet = allKeyInfos.some(k => k.type === 'zigner-zafu');
     return (
       <SettingsScreen title='identity' backPath={PopupPath.INDEX}>
         <div className='flex flex-col gap-4'>
-          {scanning ? (
-            <QrScanner
-              inline
-              title='scan ZID from zigner'
-              description='open key details on zigner, tap "show zid identity QR"'
-              onScan={handleZidScan}
-              onClose={() => setScanning(false)}
-            />
-          ) : (
-            <div className='flex min-h-40 flex-col items-center justify-center'>
-              <span className='i-lucide-fingerprint size-8 text-muted-foreground mb-3' />
-              {scanStatus === 'success' ? (
-                <p className='text-sm text-green-400'>zid imported — reloading...</p>
-              ) : isZignerWallet ? (
-                <>
-                  <p className='text-sm text-muted-foreground'>import zid from zigner</p>
-                  <p className='mt-2 text-xs text-muted-foreground/80'>scan the zid QR from your zigner device.</p>
-                  {scanStatus === 'error' && (
-                    <p className='mt-2 text-xs text-red-400'>{scanError}</p>
-                  )}
-                  <button
-                    onClick={() => { setScanStatus('idle'); setScanning(true); }}
-                    className='mt-4 flex items-center gap-1.5 text-xs font-mono text-foreground border border-border/60 rounded px-3 py-1.5 hover:bg-muted/50'
-                  >
-                    <span className='i-lucide-scan-line size-3.5' />
-                    scan zid QR
-                  </button>
-                </>
-              ) : hasAnyWallet ? (
-                <>
-                  <p className='text-sm text-muted-foreground'>zid requires a mnemonic wallet</p>
-                  <p className='mt-2 text-xs text-muted-foreground/80'>create a mnemonic wallet or import zid from zigner.</p>
-                </>
-              ) : (
-                <>
-                  <p className='text-sm text-muted-foreground'>no zid available</p>
-                  <p className='mt-2 text-xs text-muted-foreground/80'>create a wallet to get started.</p>
-                </>
-              )}
-            </div>
-          )}
+          <div className='flex min-h-40 flex-col items-center justify-center'>
+            <span className='i-lucide-fingerprint size-8 text-muted-foreground mb-3' />
+            {hasAnyWallet ? (
+              <>
+                <p className='text-sm text-muted-foreground'>zid not available</p>
+                <p className='mt-2 text-xs text-muted-foreground/80 text-center px-6'>
+                  create a mnemonic wallet
+                  {hasAnyZignerWallet
+                    ? ', or re-import your zigner wallet with the latest zigner build — the fvk QR now embeds your zid automatically.'
+                    : ' to get a zid. zigner-imported wallets also provision a zid when imported from a current zigner build.'}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className='text-sm text-muted-foreground'>no zid available</p>
+                <p className='mt-2 text-xs text-muted-foreground/80'>create a wallet to get started.</p>
+              </>
+            )}
+          </div>
 
           <hr className='border-border/40' />
 

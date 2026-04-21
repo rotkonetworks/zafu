@@ -36,20 +36,25 @@ export const useFinalizeOnboarding = () => {
           // penumbra zigner import - convert protobuf to base64 strings
           const fvkInner = walletImport.fullViewingKey.inner;
           const walletIdInner = walletImport.walletId.inner;
+          const legacyDeviceId = walletIdInner
+            ? btoa(String.fromCharCode(...walletIdInner))
+            : `penumbra-${Date.now()}`;
           const zignerData: ZignerZafuImport = {
             fullViewingKey: fvkInner ? btoa(String.fromCharCode(...fvkInner)) : undefined,
             accountIndex: walletImport.accountIndex,
-            deviceId: walletIdInner ? btoa(String.fromCharCode(...walletIdInner)) : `penumbra-${Date.now()}`,
+            deviceId: walletImport.zidPublicKey ?? legacyDeviceId,
+            zidPublicKey: walletImport.zidPublicKey,
           };
           await newZignerZafuKey(zignerData, walletLabel || 'zigner penumbra');
         } else if (zcashWalletImport) {
-          // zcash zigner import
+          // zcash zigner import — use ZID as canonical deviceId for dedup
           const zignerData: ZignerZafuImport = {
             viewingKey: zcashWalletImport.orchardFvk
               ? btoa(String.fromCharCode(...zcashWalletImport.orchardFvk))
               : zcashWalletImport.ufvk ?? undefined,
             accountIndex: zcashWalletImport.accountIndex,
-            deviceId: `zcash-${Date.now()}`,
+            deviceId: zcashWalletImport.zidPublicKey ?? `zcash-${Date.now()}`,
+            zidPublicKey: zcashWalletImport.zidPublicKey,
           };
           await newZignerZafuKey(zignerData, walletLabel || 'zigner zcash');
         } else if (parsedCosmosExport) {
