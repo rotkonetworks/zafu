@@ -589,6 +589,32 @@ export function build_unsigned_transaction(ufvk_str, notes_json, recipient, amou
 }
 
 /**
+ * One-shot witness + path builder used for initial backfill: replays blocks
+ * the same way `build_merkle_paths` does but also returns serialized
+ * witnesses and the resulting frontier so the caller can cache them.
+ *
+ * Returns JSON
+ * `{anchor_hex, end_frontier_hex, entries: [{position, witness_hex, path: [{hash}]}]}`.
+ * @param {string} tree_state_hex
+ * @param {string} compact_blocks_json
+ * @param {string} note_positions_json
+ * @returns {any}
+ */
+export function build_witnesses_and_paths(tree_state_hex, compact_blocks_json, note_positions_json) {
+    const ptr0 = passStringToWasm0(tree_state_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(compact_blocks_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(note_positions_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ret = wasm.build_witnesses_and_paths(ptr0, len0, ptr1, len1, ptr2, len2);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
  * Complete an unsigned shielding transaction by patching in transparent signatures.
  *
  * Takes the unsigned tx hex (with empty scriptSigs) and an array of `{sig_hex, pubkey_hex}`
@@ -1509,6 +1535,55 @@ if (Symbol.dispose) wbg_rayon_PoolBuilder.prototype[Symbol.dispose] = wbg_rayon_
  */
 export function wbg_rayon_start_worker(receiver) {
     wasm.wbg_rayon_start_worker(receiver);
+}
+
+/**
+ * Extract a merkle path from a stored per-note witness. Returns JSON
+ * `{position, root_hex, path: [{hash}]}`. The caller must cross-check
+ * `root_hex` against the anchor they intend to sign over.
+ * @param {string} witness_hex
+ * @returns {any}
+ */
+export function witness_extract_path(witness_hex) {
+    const ptr0 = passStringToWasm0(witness_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.witness_extract_path(ptr0, len0);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Advance tracked witnesses over a range of compact blocks, optionally
+ * seeding new ones. Returns JSON
+ * `{end_frontier_hex, anchor_hex, witnesses: [{id, position, witness_hex}], seeded_ids: [...], end_position}`.
+ *
+ * # Arguments
+ * * `start_frontier_hex` - tree state BEFORE the first block
+ * * `compact_blocks_json` - `[{height, actions: [{cmx_hex}]}]` in order
+ * * `existing_witnesses_json` - `[{id, witness_hex}]` - witnesses to advance
+ * * `new_notes_json` - `[{id, position}]` - witnesses to seed within this range
+ * @param {string} start_frontier_hex
+ * @param {string} compact_blocks_json
+ * @param {string} existing_witnesses_json
+ * @param {string} new_notes_json
+ * @returns {any}
+ */
+export function witness_sync_update(start_frontier_hex, compact_blocks_json, existing_witnesses_json, new_notes_json) {
+    const ptr0 = passStringToWasm0(start_frontier_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(compact_blocks_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(existing_witnesses_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ptr3 = passStringToWasm0(new_notes_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len3 = WASM_VECTOR_LEN;
+    const ret = wasm.witness_sync_update(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
 }
 
 /**

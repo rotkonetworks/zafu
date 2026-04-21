@@ -191,6 +191,16 @@ export function build_unsigned_shielding_transaction(utxos_json: string, recipie
 export function build_unsigned_transaction(ufvk_str: string, notes_json: any, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: any, _account_index: number, mainnet: boolean, memo_hex?: string | null): any;
 
 /**
+ * One-shot witness + path builder used for initial backfill: replays blocks
+ * the same way `build_merkle_paths` does but also returns serialized
+ * witnesses and the resulting frontier so the caller can cache them.
+ *
+ * Returns JSON
+ * `{anchor_hex, end_frontier_hex, entries: [{position, witness_hex, path: [{hash}]}]}`.
+ */
+export function build_witnesses_and_paths(tree_state_hex: string, compact_blocks_json: string, note_positions_json: string): any;
+
+/**
  * Complete an unsigned shielding transaction by patching in transparent signatures.
  *
  * Takes the unsigned tx hex (with empty scriptSigs) and an array of `{sig_hex, pubkey_hex}`
@@ -404,6 +414,26 @@ export class wbg_rayon_PoolBuilder {
 export function wbg_rayon_start_worker(receiver: number): void;
 
 /**
+ * Extract a merkle path from a stored per-note witness. Returns JSON
+ * `{position, root_hex, path: [{hash}]}`. The caller must cross-check
+ * `root_hex` against the anchor they intend to sign over.
+ */
+export function witness_extract_path(witness_hex: string): any;
+
+/**
+ * Advance tracked witnesses over a range of compact blocks, optionally
+ * seeding new ones. Returns JSON
+ * `{end_frontier_hex, anchor_hex, witnesses: [{id, position, witness_hex}], seeded_ids: [...], end_position}`.
+ *
+ * # Arguments
+ * * `start_frontier_hex` - tree state BEFORE the first block
+ * * `compact_blocks_json` - `[{height, actions: [{cmx_hex}]}]` in order
+ * * `existing_witnesses_json` - `[{id, witness_hex}]` - witnesses to advance
+ * * `new_notes_json` - `[{id, position}]` - witnesses to seed within this range
+ */
+export function witness_sync_update(start_frontier_hex: string, compact_blocks_json: string, existing_witnesses_json: string, new_notes_json: string): any;
+
+/**
  * Encode CBOR bytes as zoda transport QR frames (verified erasure coding).
  * Returns JSON array of `zt:type/hex` strings.
  * k = minimum frames to reconstruct, n = total frames.
@@ -422,6 +452,7 @@ export interface InitOutput {
     readonly build_signed_spend_transaction: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number) => [number, number, number, number];
     readonly build_unsigned_shielding_transaction: (a: number, b: number, c: number, d: number, e: bigint, f: bigint, g: number, h: number) => [number, number, number, number];
     readonly build_unsigned_transaction: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number) => [number, number, number];
+    readonly build_witnesses_and_paths: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
     readonly complete_shielding_transaction: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly complete_transaction: (a: number, b: number, c: any, d: any) => [number, number, number, number];
     readonly create_sign_request: (a: number, b: number, c: number, d: any, e: number, f: number) => [number, number, number, number];
@@ -457,6 +488,8 @@ export interface InitOutput {
     readonly watchonlywallet_get_address_at: (a: number, b: number) => [number, number];
     readonly watchonlywallet_is_mainnet: (a: number) => number;
     readonly watchonlywallet_scan_actions_parallel: (a: number, b: number, c: number) => [number, number, number];
+    readonly witness_extract_path: (a: number, b: number) => [number, number, number];
+    readonly witness_sync_update: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number];
     readonly zt_encode_frames: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly init: () => void;
     readonly num_threads: () => number;

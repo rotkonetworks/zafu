@@ -9,6 +9,7 @@ export const build_shielding_transaction: (a: number, b: number, c: number, d: n
 export const build_signed_spend_transaction: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number) => [number, number, number, number];
 export const build_unsigned_shielding_transaction: (a: number, b: number, c: number, d: number, e: bigint, f: bigint, g: number, h: number) => [number, number, number, number];
 export const build_unsigned_transaction: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number) => [number, number, number];
+export const build_witnesses_and_paths: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
 export const complete_shielding_transaction: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const complete_transaction: (a: number, b: number, c: any, d: any) => [number, number, number, number];
 export const create_sign_request: (a: number, b: number, c: number, d: any, e: number, f: number) => [number, number, number, number];
@@ -44,6 +45,8 @@ export const watchonlywallet_get_address: (a: number) => [number, number];
 export const watchonlywallet_get_address_at: (a: number, b: number) => [number, number];
 export const watchonlywallet_is_mainnet: (a: number) => number;
 export const watchonlywallet_scan_actions_parallel: (a: number, b: number, c: number) => [number, number, number];
+export const witness_extract_path: (a: number, b: number) => [number, number, number];
+export const witness_sync_update: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number];
 export const zt_encode_frames: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
 export const init: () => void;
 export const num_threads: () => number;

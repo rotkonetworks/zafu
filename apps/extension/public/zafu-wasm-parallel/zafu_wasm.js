@@ -589,6 +589,32 @@ export function build_unsigned_transaction(ufvk_str, notes_json, recipient, amou
 }
 
 /**
+ * One-shot witness + path builder used for initial backfill: replays blocks
+ * the same way `build_merkle_paths` does but also returns serialized
+ * witnesses and the resulting frontier so the caller can cache them.
+ *
+ * Returns JSON
+ * `{anchor_hex, end_frontier_hex, entries: [{position, witness_hex, path: [{hash}]}]}`.
+ * @param {string} tree_state_hex
+ * @param {string} compact_blocks_json
+ * @param {string} note_positions_json
+ * @returns {any}
+ */
+export function build_witnesses_and_paths(tree_state_hex, compact_blocks_json, note_positions_json) {
+    const ptr0 = passStringToWasm0(tree_state_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(compact_blocks_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(note_positions_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ret = wasm.build_witnesses_and_paths(ptr0, len0, ptr1, len1, ptr2, len2);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
  * Complete an unsigned shielding transaction by patching in transparent signatures.
  *
  * Takes the unsigned tx hex (with empty scriptSigs) and an array of `{sig_hex, pubkey_hex}`
@@ -726,6 +752,45 @@ export function derive_transparent_privkey(seed_phrase, account, index) {
 }
 
 /**
+ * Encode notes + merkle paths into CBOR bytes for ur:zcash-notes.
+ *
+ * This produces the exact format zigner expects: CBOR map with anchor,
+ * height, mainnet flag, notes array with merkle paths, and optional
+ * attestation signature.
+ *
+ * # Arguments
+ * * `notes_json` - JSON array of `[{value, nullifier, cmx, position, block_height}]`
+ * * `merkle_result_json` - JSON from build_merkle_paths: `{anchor_hex, paths: [{position, path: [{hash}]}]}`
+ * * `anchor_height` - block height of the anchor
+ * * `mainnet` - true for mainnet, false for testnet
+ * * `attestation_hex` - optional hex-encoded 64-byte FROST attestation signature
+ *
+ * # Returns
+ * `Uint8Array` of CBOR bytes ready for UR fountain encoding
+ * @param {string} notes_json
+ * @param {string} merkle_result_json
+ * @param {number} anchor_height
+ * @param {boolean} mainnet
+ * @param {string | null} [attestation_hex]
+ * @returns {Uint8Array}
+ */
+export function encode_notes_bundle(notes_json, merkle_result_json, anchor_height, mainnet, attestation_hex) {
+    const ptr0 = passStringToWasm0(notes_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(merkle_result_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    var ptr2 = isLikeNone(attestation_hex) ? 0 : passStringToWasm0(attestation_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len2 = WASM_VECTOR_LEN;
+    const ret = wasm.encode_notes_bundle(ptr0, len0, ptr1, len1, anchor_height, mainnet, ptr2, len2);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v4 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v4;
+}
+
+/**
  * Compute the tree size from a hex-encoded frontier.
  * @param {string} tree_state_hex
  * @returns {bigint}
@@ -776,6 +841,61 @@ export function frost_aggregate_shares(public_key_package_hex, message_hex, comm
     } finally {
         wasm.__wbindgen_free(deferred7_0, deferred7_1, 1);
     }
+}
+
+/**
+ * Compute the attestation digest for an anchor.
+ * Returns hex-encoded 32-byte SHA-256 digest.
+ * @param {string} public_key_package_hex
+ * @param {string} anchor_hex
+ * @param {number} anchor_height
+ * @param {boolean} mainnet
+ * @returns {string}
+ */
+export function frost_attestation_digest(public_key_package_hex, anchor_hex, anchor_height, mainnet) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(public_key_package_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_attestation_digest(ptr0, len0, ptr1, len1, anchor_height, mainnet);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
+ * Verify an attestation (96 bytes: sig || randomizer).
+ * @param {string} attestation_hex
+ * @param {string} public_key_package_hex
+ * @param {string} anchor_hex
+ * @param {number} anchor_height
+ * @param {boolean} mainnet
+ * @returns {boolean}
+ */
+export function frost_attestation_verify(attestation_hex, public_key_package_hex, anchor_hex, anchor_height, mainnet) {
+    const ptr0 = passStringToWasm0(attestation_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(public_key_package_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ret = wasm.frost_attestation_verify(ptr0, len0, ptr1, len1, ptr2, len2, anchor_height, mainnet);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return ret[0] !== 0;
 }
 
 /**
@@ -1311,6 +1431,39 @@ export function tree_root_hex(tree_state_hex) {
 }
 
 /**
+ * Encode CBOR bytes as UR-encoded animated QR string frames.
+ * Returns JSON array of UR strings suitable for QR display.
+ * ur_type: e.g. "zcash-notes", "zigner-contacts", "zigner-backup"
+ * fragment_size: max bytes per QR frame (200-500 typical, 0 = single QR)
+ * @param {Uint8Array} cbor_data
+ * @param {string} ur_type
+ * @param {number} fragment_size
+ * @returns {string}
+ */
+export function ur_encode_frames(cbor_data, ur_type, fragment_size) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passArray8ToWasm0(cbor_data, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(ur_type, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.ur_encode_frames(ptr0, len0, ptr1, len1, fragment_size);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
  * Validate a seed phrase
  * @param {string} seed_phrase
  * @returns {boolean}
@@ -1384,7 +1537,89 @@ export function wbg_rayon_start_worker(receiver) {
     wasm.wbg_rayon_start_worker(receiver);
 }
 
-function __wbg_get_imports(memory) {
+/**
+ * Extract a merkle path from a stored per-note witness. Returns JSON
+ * `{position, root_hex, path: [{hash}]}`. The caller must cross-check
+ * `root_hex` against the anchor they intend to sign over.
+ * @param {string} witness_hex
+ * @returns {any}
+ */
+export function witness_extract_path(witness_hex) {
+    const ptr0 = passStringToWasm0(witness_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.witness_extract_path(ptr0, len0);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Advance tracked witnesses over a range of compact blocks, optionally
+ * seeding new ones. Returns JSON
+ * `{end_frontier_hex, anchor_hex, witnesses: [{id, position, witness_hex}], seeded_ids: [...], end_position}`.
+ *
+ * # Arguments
+ * * `start_frontier_hex` - tree state BEFORE the first block
+ * * `compact_blocks_json` - `[{height, actions: [{cmx_hex}]}]` in order
+ * * `existing_witnesses_json` - `[{id, witness_hex}]` - witnesses to advance
+ * * `new_notes_json` - `[{id, position}]` - witnesses to seed within this range
+ * @param {string} start_frontier_hex
+ * @param {string} compact_blocks_json
+ * @param {string} existing_witnesses_json
+ * @param {string} new_notes_json
+ * @returns {any}
+ */
+export function witness_sync_update(start_frontier_hex, compact_blocks_json, existing_witnesses_json, new_notes_json) {
+    const ptr0 = passStringToWasm0(start_frontier_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(compact_blocks_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(existing_witnesses_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ptr3 = passStringToWasm0(new_notes_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len3 = WASM_VECTOR_LEN;
+    const ret = wasm.witness_sync_update(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Encode CBOR bytes as zoda transport QR frames (verified erasure coding).
+ * Returns JSON array of `zt:type/hex` strings.
+ * k = minimum frames to reconstruct, n = total frames.
+ * @param {Uint8Array} cbor_data
+ * @param {string} zt_type
+ * @param {number} k
+ * @param {number} n
+ * @returns {string}
+ */
+export function zt_encode_frames(cbor_data, zt_type, k, n) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passArray8ToWasm0(cbor_data, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(zt_type, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.zt_encode_frames(ptr0, len0, ptr1, len1, k, n);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+function __wbg_get_imports() {
     const import0 = {
         __proto__: null,
         __wbg_Error_83742b46f01ce22d: function(arg0, arg1) {
@@ -1697,7 +1932,6 @@ function __wbg_get_imports(memory) {
             table.set(offset + 2, true);
             table.set(offset + 3, false);
         },
-        memory: memory || new WebAssembly.Memory({initial:49,maximum:32768,shared:true}),
     };
     return {
         __proto__: null,
@@ -1793,7 +2027,7 @@ function getArrayU8FromWasm0(ptr, len) {
 
 let cachedDataViewMemory0 = null;
 function getDataViewMemory0() {
-    if (cachedDataViewMemory0 === null || cachedDataViewMemory0.buffer !== wasm.memory.buffer) {
+    if (cachedDataViewMemory0 === null || cachedDataViewMemory0.buffer.detached === true || (cachedDataViewMemory0.buffer.detached === undefined && cachedDataViewMemory0.buffer !== wasm.memory.buffer)) {
         cachedDataViewMemory0 = new DataView(wasm.memory.buffer);
     }
     return cachedDataViewMemory0;
@@ -1806,7 +2040,7 @@ function getStringFromWasm0(ptr, len) {
 
 let cachedUint8ArrayMemory0 = null;
 function getUint8ArrayMemory0() {
-    if (cachedUint8ArrayMemory0 === null || cachedUint8ArrayMemory0.buffer !== wasm.memory.buffer) {
+    if (cachedUint8ArrayMemory0 === null || cachedUint8ArrayMemory0.byteLength === 0) {
         cachedUint8ArrayMemory0 = new Uint8Array(wasm.memory.buffer);
     }
     return cachedUint8ArrayMemory0;
@@ -1875,9 +2109,8 @@ function takeFromExternrefTable0(idx) {
     return value;
 }
 
-let cachedTextDecoder = (typeof TextDecoder !== 'undefined' ? new TextDecoder('utf-8', { ignoreBOM: true, fatal: true }) : undefined);
-if (cachedTextDecoder) cachedTextDecoder.decode();
-
+let cachedTextDecoder = new TextDecoder('utf-8', { ignoreBOM: true, fatal: true });
+cachedTextDecoder.decode();
 const MAX_SAFARI_DECODE_BYTES = 2146435072;
 let numBytesDecoded = 0;
 function decodeText(ptr, len) {
@@ -1887,12 +2120,12 @@ function decodeText(ptr, len) {
         cachedTextDecoder.decode();
         numBytesDecoded = len;
     }
-    return cachedTextDecoder.decode(getUint8ArrayMemory0().slice(ptr, ptr + len));
+    return cachedTextDecoder.decode(getUint8ArrayMemory0().subarray(ptr, ptr + len));
 }
 
-const cachedTextEncoder = (typeof TextEncoder !== 'undefined' ? new TextEncoder() : undefined);
+const cachedTextEncoder = new TextEncoder();
 
-if (cachedTextEncoder) {
+if (!('encodeInto' in cachedTextEncoder)) {
     cachedTextEncoder.encodeInto = function (arg, view) {
         const buf = cachedTextEncoder.encode(arg);
         view.set(buf);
@@ -1906,16 +2139,12 @@ if (cachedTextEncoder) {
 let WASM_VECTOR_LEN = 0;
 
 let wasmModule, wasm;
-function __wbg_finalize_init(instance, module, thread_stack_size) {
+function __wbg_finalize_init(instance, module) {
     wasm = instance.exports;
     wasmModule = module;
     cachedDataViewMemory0 = null;
     cachedUint8ArrayMemory0 = null;
-    if (typeof thread_stack_size !== 'undefined' && (typeof thread_stack_size !== 'number' || thread_stack_size === 0 || thread_stack_size % 65536 !== 0)) {
-        throw new Error('invalid stack size');
-    }
-
-    wasm.__wbindgen_start(thread_stack_size);
+    wasm.__wbindgen_start();
     return wasm;
 }
 
@@ -1954,33 +2183,33 @@ async function __wbg_load(module, imports) {
     }
 }
 
-function initSync(module, memory) {
+function initSync(module) {
     if (wasm !== undefined) return wasm;
 
-    let thread_stack_size
+
     if (module !== undefined) {
         if (Object.getPrototypeOf(module) === Object.prototype) {
-            ({module, memory, thread_stack_size} = module)
+            ({module} = module)
         } else {
             console.warn('using deprecated parameters for `initSync()`; pass a single object instead')
         }
     }
 
-    const imports = __wbg_get_imports(memory);
+    const imports = __wbg_get_imports();
     if (!(module instanceof WebAssembly.Module)) {
         module = new WebAssembly.Module(module);
     }
     const instance = new WebAssembly.Instance(module, imports);
-    return __wbg_finalize_init(instance, module, thread_stack_size);
+    return __wbg_finalize_init(instance, module);
 }
 
-async function __wbg_init(module_or_path, memory) {
+async function __wbg_init(module_or_path) {
     if (wasm !== undefined) return wasm;
 
-    let thread_stack_size
+
     if (module_or_path !== undefined) {
         if (Object.getPrototypeOf(module_or_path) === Object.prototype) {
-            ({module_or_path, memory, thread_stack_size} = module_or_path)
+            ({module_or_path} = module_or_path)
         } else {
             console.warn('using deprecated parameters for the initialization function; pass a single object instead')
         }
@@ -1989,7 +2218,7 @@ async function __wbg_init(module_or_path, memory) {
     if (module_or_path === undefined) {
         module_or_path = new URL('zafu_wasm_bg.wasm', import.meta.url);
     }
-    const imports = __wbg_get_imports(memory);
+    const imports = __wbg_get_imports();
 
     if (typeof module_or_path === 'string' || (typeof Request === 'function' && module_or_path instanceof Request) || (typeof URL === 'function' && module_or_path instanceof URL)) {
         module_or_path = fetch(module_or_path);
@@ -1997,7 +2226,7 @@ async function __wbg_init(module_or_path, memory) {
 
     const { instance, module } = await __wbg_load(await module_or_path, imports);
 
-    return __wbg_finalize_init(instance, module, thread_stack_size);
+    return __wbg_finalize_init(instance, module);
 }
 
 export { initSync, __wbg_init as default };
