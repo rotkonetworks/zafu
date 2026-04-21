@@ -60,6 +60,7 @@ export const SubscribePage = () => {
   const days = useStore(selectDaysRemaining);
   const pending = useStore(selectPending);
   const { fetchLicense } = useStore(licenseSelector);
+  const currentLicense = useStore(s => s.license.license);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const enabledNetworks = useStore(s => s.keyRing.enabledNetworks);
   const zcashEnabled = enabledNetworks.includes('zcash');
@@ -82,6 +83,10 @@ export const SubscribePage = () => {
   const unsignedTxRef = useRef<SendTxUnsignedResult | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const buildStartRef = useRef<number>(0);
+  // baseline `expires` captured before a new payment starts; polling waits
+  // for the server's reported expires to INCREASE past this, so existing pro
+  // licenses don't trigger an instant false "pro activated" after extension.
+  const baselineExpiresRef = useRef<number>(0);
 
   // listen for send progress events from worker
   useEffect(() => {
@@ -136,11 +141,16 @@ export const SubscribePage = () => {
     setTimeout(() => setCopied(null), 2000);
   };
 
+  // returns true once the server-reported expires is strictly greater than
+  // the baseline we captured before the payment started. for fresh subscribers
+  // baseline is 0, so any pro license flips it; for extensions, we wait until
+  // the new on-chain payment actually credits.
   const checkLicense = useCallback(async () => {
     if (!zidPubkey) return false;
     try {
       const license = await fetchLicense(zidPubkey, ringPubkeyBytes ?? undefined);
-      return !!license;
+      if (!license) return false;
+      return license.expires > baselineExpiresRef.current;
     } catch {
       return false;
     }
@@ -202,6 +212,7 @@ export const SubscribePage = () => {
     const authorized = await requestAuth();
     if (!authorized) { setPayState('review'); return; }
 
+    baselineExpiresRef.current = currentLicense?.expires ?? 0;
     setSendSteps([]);
     buildStartRef.current = Date.now();
     setPayState('building');
@@ -233,7 +244,7 @@ export const SubscribePage = () => {
       );
       setPayState('error');
     }
-  }, [keyInfo?.id, memo, activeZcashWallet, getMnemonic, zidecarUrl, amountZat, amountZec, startPolling, requestAuth]);
+  }, [keyInfo?.id, memo, activeZcashWallet, getMnemonic, zidecarUrl, amountZat, amountZec, startPolling, requestAuth, currentLicense]);
 
   // zigner variant: build unsigned tx, show sign-request QR, wait for signature scan.
   const handleZignerBuild = useCallback(async () => {
@@ -243,6 +254,7 @@ export const SubscribePage = () => {
       setPayState('error');
       return;
     }
+    baselineExpiresRef.current = currentLicense?.expires ?? 0;
     setSendSteps([]);
     buildStartRef.current = Date.now();
     setPayState('building');
@@ -281,7 +293,7 @@ export const SubscribePage = () => {
       );
       setPayState('error');
     }
-  }, [keyInfo?.id, memo, activeZcashWallet, zidecarUrl, amountZat, amountZec, daysAdded]);
+  }, [keyInfo?.id, memo, activeZcashWallet, zidecarUrl, amountZat, amountZec, daysAdded, currentLicense]);
 
   const handleZignerSignatureScanned = useCallback(async (data: string) => {
     if (!isZcashSignatureQR(data)) {
