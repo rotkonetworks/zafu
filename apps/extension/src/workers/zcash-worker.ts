@@ -526,7 +526,7 @@ const getTreeFrontier = async (walletId: string): Promise<string | null> => {
 
 /** periodic frontier snapshots for privacy-safe witness building.
  *  stored as array of {height, frontier} in IDB, one per SNAPSHOT_INTERVAL blocks. */
-const FRONTIER_SNAPSHOT_INTERVAL = 50_000;
+const FRONTIER_SNAPSHOT_INTERVAL = 5_000;
 
 interface FrontierSnapshot { height: number; frontier: string }
 
