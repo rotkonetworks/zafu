@@ -5,6 +5,17 @@ on:
     tags:
       - 'v*.*.*'
   workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag to cut (e.g. v22.0.0-beta.3 or v22.0.0). Leave empty for dry-run.'
+        required: false
+        type: string
+      channel:
+        description: 'Which CWS channel to publish. `auto` infers from tag (prerelease → beta-only, clean → both).'
+        required: false
+        default: auto
+        type: choice
+        options: [auto, beta-only, both, skip]
 
 env:
   DO_NOT_TRACK: 1
@@ -50,21 +61,50 @@ jobs:
       - name: Install crx3
         run: npm install -g "crx3@${CRX3_VERSION}"
 
-      - name: Resolve version
+      - name: Resolve version + release mode
         id: vars
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ inputs.tag_name }}
+          INPUT_CHANNEL: ${{ inputs.channel }}
         run: |
-          ref="${GITHUB_REF_NAME:-}"
-          if [ -z "$ref" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          set -eu
+          event="${{ github.event_name }}"
+
+          if [ "$event" = "push" ]; then
+            ref="${GITHUB_REF_NAME}"                  # e.g. v22.0.0-beta.1
+            release="true"
+          elif [ -n "${INPUT_TAG:-}" ]; then
+            ref="$INPUT_TAG"
+            # Create + push the tag at the current commit so the rest of
+            # the steps (release notes, asset naming) see a real ref.
+            git tag "$ref"
+            git push origin "$ref"
+            release="true"
+          else
+            # Dispatch with no tag = dry-run: just build artifacts.
             ref="$(git describe --tags --always --dirty)"
+            release="false"
           fi
           echo "version=$ref" >> "$GITHUB_OUTPUT"
-          # Prerelease tags (v22.0.0-beta.1, -rc.1, -alpha.2) → publish beta
-          # channel only. Clean tags (v22.0.0) → publish both prod + beta.
-          if echo "$ref" | grep -qE '(alpha|beta|rc)'; then
-            echo "channel=beta-only" >> "$GITHUB_OUTPUT"
-          else
-            echo "channel=both" >> "$GITHUB_OUTPUT"
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+
+          # Channel resolution
+          # - `auto` → prerelease tags publish beta only, clean → both
+          # - `skip` → no CWS publish at all
+          # - explicit beta-only/both honored as-is
+          channel="${INPUT_CHANNEL:-auto}"
+          if [ "$release" != "true" ]; then
+            channel="skip"
+          elif [ "$channel" = "auto" ]; then
+            if echo "$ref" | grep -qE '(alpha|beta|rc)'; then
+              channel="beta-only"
+            else
+              channel="both"
+            fi
           fi
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
+          echo "Resolved: version=$ref release=$release channel=$channel"
 
       - name: Build extension (production)
         working-directory: apps/extension
@@ -160,7 +200,7 @@ jobs:
           cat sha256sums.txt
 
       - name: Create GitHub Release
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        if: steps.vars.outputs.release == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           VER: ${{ steps.vars.outputs.version }}
@@ -170,13 +210,13 @@ jobs:
           if [ "$CHANNEL" = "beta-only" ]; then
             is_prerelease="--prerelease"
           fi
-          gh release create "${{ github.ref_name }}" \
+          gh release create "$VER" \
             "zafu-prod-${VER}.zip" \
             "zafu-prod-${VER}.crx" \
             "zafu-beta-${VER}.zip" \
             "zafu-beta-${VER}.crx" \
             "sha256sums.txt" \
-            --title "zafu ${{ github.ref_name }}" \
+            --title "zafu $VER" \
             $is_prerelease \
             --generate-notes
 
@@ -192,7 +232,7 @@ jobs:
       # itself. The google-auth Python library signs the JWT locally and
       # exchanges it at oauth2.googleapis.com/token — no IAM round-trip.
       - name: Publish to Chrome Web Store
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        if: steps.vars.outputs.channel != 'skip'
         env:
           CWS_PUBLISHER_JSON: ${{ secrets.CWS_PUBLISHER_JSON }}
           VER: ${{ steps.vars.outputs.version }}
@@ -239,16 +279,28 @@ jobs:
               "https://www.googleapis.com/chromewebstore/v1.1/items/${item_id}/publish")"
             echo "publish: $publish_resp"
           }
-          # Beta always publishes. Prod only on clean (non-prerelease) tags.
-          upload_and_publish beta "${CWS_BETA_ITEM_ID}"
-          if [ "${CHANNEL:-both}" = "both" ]; then
-            upload_and_publish prod "${CWS_PROD_ITEM_ID}"
-          else
-            echo "Skipping prod CWS publish — prerelease tag ($VER) only ships beta."
-          fi
+          case "$CHANNEL" in
+            both)
+              upload_and_publish beta "${CWS_BETA_ITEM_ID}"
+              upload_and_publish prod "${CWS_PROD_ITEM_ID}"
+              ;;
+            beta-only)
+              upload_and_publish beta "${CWS_BETA_ITEM_ID}"
+              echo "Skipping prod — channel=beta-only."
+              ;;
+            prod-only)
+              upload_and_publish prod "${CWS_PROD_ITEM_ID}"
+              echo "Skipping beta — channel=prod-only."
+              ;;
+            *)
+              echo "::error::unexpected channel: $CHANNEL"; exit 1 ;;
+          esac
 
-      - name: Upload artifacts (manual dispatch)
-        if: github.event_name == 'workflow_dispatch'
+      # Dry-run (dispatch with no tag_name): expose artifacts as
+      # workflow-scoped downloads so you can sanity-check a build
+      # without creating a release.
+      - name: Upload artifacts (dry run)
+        if: steps.vars.outputs.release == 'false'
         uses: actions/upload-artifact@v4
         with:
           name: zafu-${{ steps.vars.outputs.version }}
