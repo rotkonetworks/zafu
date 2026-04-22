@@ -68,6 +68,19 @@ jobs:
         working-directory: apps/extension
         run: NODE_OPTIONS="--max-old-space-size=8192 --import=tsx" npx webpack --config webpack.beta-config.ts
 
+      # CWS rejects manifests that carry the `key` field (it's a dev-only
+      # aid for "load unpacked" stability). Strip it from the dist manifests
+      # before zipping or CRX-packing — the pubkey still lives in the CRX
+      # header for self-hosted installs, and the CWS assigns its own.
+      - name: Strip `key` from dist manifests
+        working-directory: apps/extension
+        run: |
+          for m in dist/manifest.json beta-dist/manifest.json; do
+            jq 'del(.key)' "$m" > "$m.tmp" && mv "$m.tmp" "$m"
+            echo "--- $m ---"
+            jq '{name, version, description_len: (.description|length), has_key: has("key")}' "$m"
+          done
+
       - name: Stage CRX signing keys
         id: crxkeys
         env:
