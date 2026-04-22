@@ -19,7 +19,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      id-token: write  # required for google-github-actions/auth
 
     steps:
       - name: Checkout
@@ -177,22 +176,36 @@ jobs:
       # Both prod and beta get uploaded as new drafts and submitted for
       # review automatically. Google's review humans still have to approve,
       # but nothing on our side is manual after `git tag`.
-      - name: Auth with Chrome Web Store
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-        id: gauth
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.CWS_PUBLISHER_JSON }}
-          token_format: access_token
-          access_token_scopes: https://www.googleapis.com/auth/chromewebstore
-
+      #
+      # Auth is a direct JWT→OAuth exchange because google-github-actions/
+      # auth@v2 with token_format=access_token uses iamcredentials.google
+      # apis.com which 403s for the chromewebstore scope even with the
+      # API enabled and the SA granted serviceAccountTokenCreator on
+      # itself. The google-auth Python library signs the JWT locally and
+      # exchanges it at oauth2.googleapis.com/token — no IAM round-trip.
       - name: Publish to Chrome Web Store
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         env:
-          TOKEN: ${{ steps.gauth.outputs.access_token }}
+          CWS_PUBLISHER_JSON: ${{ secrets.CWS_PUBLISHER_JSON }}
           VER: ${{ steps.vars.outputs.version }}
         run: |
           set -eu
+          pip install --quiet google-auth requests
+          keyfile="$(mktemp)"
+          printf '%s' "$CWS_PUBLISHER_JSON" > "$keyfile"
+          TOKEN="$(python3 - "$keyfile" <<'PY'
+          import sys
+          from google.oauth2 import service_account
+          from google.auth.transport.requests import Request
+          creds = service_account.Credentials.from_service_account_file(
+              sys.argv[1],
+              scopes=['https://www.googleapis.com/auth/chromewebstore'],
+          )
+          creds.refresh(Request())
+          print(creds.token)
+          PY
+          )"
+          shred -u "$keyfile" 2>/dev/null || rm -f "$keyfile"
           upload_and_publish() {
             local tag="$1"      # "prod" or "beta"
             local item_id="$2"
