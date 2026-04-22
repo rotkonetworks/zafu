@@ -71,8 +71,11 @@ export async function mergeZignerCapabilities(
   // re-encrypt merged data, rebuild vault entry
   const encryptedBox = await key.seal(JSON.stringify(merged));
   const rebuilt = buildZignerVault(
-    existing.id, existing.name, JSON.stringify(encryptedBox.toJson()),
-    merged, mergedNetworks,
+    existing.id,
+    existing.name,
+    JSON.stringify(encryptedBox.toJson()),
+    merged,
+    mergedNetworks,
     { airgapOnly: existing.insensitive['airgapOnly'] === true },
   );
   // preserve original createdAt
@@ -80,7 +83,7 @@ export async function mergeZignerCapabilities(
 
   // write back
   const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
-  const updated = vaults.map(v => v.id === existing.id ? rebuilt : v);
+  const updated = vaults.map(v => (v.id === existing.id ? rebuilt : v));
   await local.set('vaults', updated);
 
   // create per-network wallet entries ONLY for the newly-added networks.

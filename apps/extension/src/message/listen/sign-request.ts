@@ -75,7 +75,9 @@ const handleSignRequest = async (
     const selectedId = await localExtStorage.get('selectedVaultId');
     const selectedVault = vaults.find(v => v.id === selectedId);
     const isAirgap = selectedVault?.type === 'zigner-zafu';
-    const zidPubkey = isAirgap ? (selectedVault?.insensitive?.['zid'] as string | undefined) : undefined;
+    const zidPubkey = isAirgap
+      ? (selectedVault?.insensitive?.['zid'] as string | undefined)
+      : undefined;
 
     const popupResponse = await popup(PopupType.SignRequest, {
       origin: sender.origin,
@@ -102,7 +104,9 @@ const handleSignRequest = async (
     // log the shared zid (done in service worker so it persists even if popup closes)
     if (publicKey) {
       const log = ((await localExtStorage.get('zidShareLog')) ?? []) as ZidShareRecord[];
-      const alreadyLogged = log.some(r => r.publicKey === publicKey && r.sharedWith === sender.origin);
+      const alreadyLogged = log.some(
+        r => r.publicKey === publicKey && r.sharedWith === sender.origin,
+      );
       if (!alreadyLogged) {
         log.push({
           publicKey,
