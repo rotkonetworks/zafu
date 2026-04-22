@@ -310,6 +310,7 @@ export const createZignerSlice =
               accountIndex: urExport.accountIndex,
               label: urExport.label,
               fvkBech32m: urExport.fvk, // store bech32m for decoding
+              zidPublicKey: urExport.zidPublicKey,
             };
             const defaultLabel = urExport.label || 'zigner penumbra';
 
@@ -343,6 +344,7 @@ export const createZignerSlice =
               mainnet: urExport.ufvk.startsWith('uview1'), // mainnet starts with uview1, testnet with uviewtest1
               address: null, // not included in UR format
               ufvk: urExport.ufvk, // store the UFVK string
+              zidPublicKey: urExport.zidPublicKey,
             };
             const defaultLabel = urExport.label || 'zigner zcash';
 

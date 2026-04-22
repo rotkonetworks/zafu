@@ -17,12 +17,16 @@ export interface PenumbraUrExport {
   fvk: string;
   accountIndex: number;
   label: string | null;
+  /** ZID pubkey hex (32 bytes) — canonical device identity if present */
+  zidPublicKey?: string;
 }
 
 export interface ZcashUrExport {
   ufvk: string;
   accountIndex: number;
   label: string | null;
+  /** ZID pubkey hex (32 bytes) — canonical device identity if present */
+  zidPublicKey?: string;
 }
 
 export interface ZignerBackupAccount {
@@ -380,6 +384,7 @@ export function parsePenumbraUr(urString: string): PenumbraUrExport {
   let fvk: string | null = null;
   let accountIndex = 0;
   let label: string | null = null;
+  let zidPublicKey: string | undefined;
 
   for (let i = 0; i < mapLen; i++) {
     const key = reader.readUint();
@@ -408,6 +413,11 @@ export function parsePenumbraUr(urString: string): PenumbraUrExport {
           accountIndex = reader.readUint();
         } else if (accountKey === 3) {
           label = reader.readTextString();
+        } else if (accountKey === 4) {
+          // zid_pubkey (32 bytes) — canonical device identity for zafu dedup
+          const zidBytes = reader.readByteString();
+          zidPublicKey = Array.from(zidBytes)
+            .map(b => b.toString(16).padStart(2, '0')).join('');
         }
       }
 
@@ -435,7 +445,7 @@ export function parsePenumbraUr(urString: string): PenumbraUrExport {
     throw new Error('penumbra-accounts: missing fvk');
   }
 
-  return { walletId, fvk, accountIndex, label };
+  return { walletId, fvk, accountIndex, label, zidPublicKey };
 }
 
 // ============================================================================
@@ -480,6 +490,7 @@ export function parseZcashUr(urString: string): ZcashUrExport {
   let ufvk: string | null = null;
   let accountIndex = 0;
   let label: string | null = null;
+  let zidPublicKey: string | undefined;
 
   for (let i = 0; i < mapLen; i++) {
     const key = reader.readUint();
@@ -506,6 +517,11 @@ export function parseZcashUr(urString: string): ZcashUrExport {
           accountIndex = reader.readUint();
         } else if (accountKey === 3) {
           label = reader.readTextString();
+        } else if (accountKey === 4) {
+          // zid_pubkey (32 bytes) — canonical device identity for zafu dedup
+          const zidBytes = reader.readByteString();
+          zidPublicKey = Array.from(zidBytes)
+            .map(b => b.toString(16).padStart(2, '0')).join('');
         }
       }
     }
@@ -515,7 +531,7 @@ export function parseZcashUr(urString: string): ZcashUrExport {
     throw new Error('zcash-accounts: missing ufvk');
   }
 
-  return { ufvk, accountIndex, label };
+  return { ufvk, accountIndex, label, zidPublicKey };
 }
 
 // ============================================================================

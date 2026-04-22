@@ -100,20 +100,29 @@ export const ImportZigner = () => {
         // penumbra zigner import - convert protobuf to base64 strings
         const fvkInner = walletImport.fullViewingKey.inner;
         const walletIdInner = walletImport.walletId.inner;
+        // use ZID as canonical deviceId when available — same zigner seed
+        // produces same ZID regardless of network, enabling proper dedup.
+        const legacyDeviceId = walletIdInner
+          ? btoa(String.fromCharCode(...walletIdInner))
+          : `penumbra-${Date.now()}`;
         const zignerData: ZignerZafuImport = {
           fullViewingKey: fvkInner ? btoa(String.fromCharCode(...fvkInner)) : undefined,
           accountIndex: walletImport.accountIndex,
-          deviceId: walletIdInner ? btoa(String.fromCharCode(...walletIdInner)) : `penumbra-${Date.now()}`,
+          deviceId: walletImport.zidPublicKey ?? legacyDeviceId,
+          zidPublicKey: walletImport.zidPublicKey,
         };
         await addZignerUnencrypted(zignerData, walletLabel || 'zigner penumbra');
       } else if (zcashWalletImport) {
-        // zcash zigner import
+        // zcash zigner import — use ZID as canonical deviceId so same-device
+        // imports across networks can be deduped. fall back to timestamp for
+        // legacy zigner builds that don't include ZID in the FVK QR.
         const zignerData: ZignerZafuImport = {
           viewingKey: zcashWalletImport.orchardFvk
             ? btoa(String.fromCharCode(...zcashWalletImport.orchardFvk))
             : zcashWalletImport.ufvk ?? undefined,
           accountIndex: zcashWalletImport.accountIndex,
-          deviceId: `zcash-${Date.now()}`,
+          deviceId: zcashWalletImport.zidPublicKey ?? `zcash-${Date.now()}`,
+          zidPublicKey: zcashWalletImport.zidPublicKey,
         };
         await addZignerUnencrypted(zignerData, walletLabel || 'zigner zcash');
       } else if (parsedCosmosExport) {

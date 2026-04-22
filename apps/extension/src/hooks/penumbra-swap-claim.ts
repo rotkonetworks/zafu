@@ -11,6 +11,8 @@
 import { useEffect, useRef } from 'react';
 import { viewClient } from '../clients';
 import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
+import { useStore } from '../state';
+import { useLatestBlockHeight } from './latest-block-height';
 
 /** claim all unclaimed swaps, one at a time */
 async function claimUnclaimedSwaps(account: number): Promise<number> {
@@ -58,13 +60,26 @@ async function claimUnclaimedSwaps(account: number): Promise<number> {
 
 export function usePenumbraSwapClaim(activeNetwork: string, onLoginPage: boolean, penumbraAccount: number) {
   const claimingRef = useRef(false);
+  const fullSyncHeight = useStore((state: { network: { fullSyncHeight?: number } }) => state.network.fullSyncHeight);
+  const { data: latestBlockHeight } = useLatestBlockHeight();
+
+  // track sync state in a ref so the interval callback always sees latest values
+  // without re-creating timers on every sync height update
+  const syncRef = useRef({ fullSyncHeight, latestBlockHeight });
+  syncRef.current = { fullSyncHeight, latestBlockHeight };
 
   useEffect(() => {
     if (activeNetwork !== 'penumbra') return;
     if (onLoginPage) return;
 
+    const isSynced = () => {
+      const { fullSyncHeight: fsh, latestBlockHeight: lbh } = syncRef.current;
+      return fsh !== undefined && lbh !== undefined && lbh - fsh <= 10;
+    };
+
     const tryClaimOnce = () => {
       if (claimingRef.current) return;
+      if (!isSynced()) return;
       claimingRef.current = true;
 
       claimUnclaimedSwaps(penumbraAccount)

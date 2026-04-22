@@ -12,12 +12,15 @@
  * sign requests from unapproved origins are silently denied.
  */
 
-import { getOriginPermissions } from '@repo/storage-chrome/origin';
+import { getOriginPermissions, grantCapability } from '@repo/storage-chrome/origin';
 import { hasCapability } from '@repo/storage-chrome/capabilities';
 import { UserChoice } from '@repo/storage-chrome/records';
 import { PopupType } from '../../message/popup';
 import { popup } from '../../popup';
 import { isValidExternalSender } from '../../senders/external';
+import { localExtStorage } from '@repo/storage-chrome/local';
+import type { EncryptedVault } from '../../state/keyring/types';
+import type { ZidShareRecord } from '../../state/identity';
 
 interface SignRequestMessage {
   type: 'zafu_sign';
@@ -61,34 +64,64 @@ const handleSignRequest = async (
   req: SignRequestMessage,
   sender: { origin: string; tab: chrome.tabs.Tab },
 ): Promise<SignResponse> => {
-  // only sign for origins with sign_identity capability (or at least connect)
-  const perms = await getOriginPermissions(sender.origin);
-  if (!hasCapability(perms, 'sign_identity') && !hasCapability(perms, 'connect')) {
-    return { success: false, error: 'origin not approved — call connect() first' };
-  }
-
   // validate challenge
   if (!req.challengeHex || req.challengeHex.length < 2 || req.challengeHex.length > 2048) {
     return { success: false, error: 'invalid challenge: must be 1-1024 bytes hex-encoded' };
   }
 
   try {
+    // detect wallet type for mnemonic vs zigner signing flow
+    const vaults = ((await localExtStorage.get('vaults')) ?? []) as EncryptedVault[];
+    const selectedId = await localExtStorage.get('selectedVaultId');
+    const selectedVault = vaults.find(v => v.id === selectedId);
+    const isAirgap = selectedVault?.type === 'zigner-zafu';
+    const zidPubkey = isAirgap
+      ? (selectedVault?.insensitive?.['zid'] as string | undefined)
+      : undefined;
+
     const popupResponse = await popup(PopupType.SignRequest, {
       origin: sender.origin,
       favIconUrl: sender.tab?.favIconUrl,
       title: sender.tab?.title,
       challengeHex: req.challengeHex,
       statement: req.statement,
+      isAirgap,
+      zidPubkey,
     });
 
     if (!popupResponse || popupResponse.choice !== UserChoice.Approved) {
       return { success: false, error: 'user denied' };
     }
 
+    const { signature, publicKey } = popupResponse;
+
+    // auto-grant sign_identity capability so the site appears in the identity page
+    const perms = await getOriginPermissions(sender.origin);
+    if (!hasCapability(perms, 'sign_identity')) {
+      await grantCapability(sender.origin, 'sign_identity');
+    }
+
+    // log the shared zid (done in service worker so it persists even if popup closes)
+    if (publicKey) {
+      const log = ((await localExtStorage.get('zidShareLog')) ?? []) as ZidShareRecord[];
+      const alreadyLogged = log.some(
+        r => r.publicKey === publicKey && r.sharedWith === sender.origin,
+      );
+      if (!alreadyLogged) {
+        log.push({
+          publicKey,
+          sharedWith: sender.origin,
+          sharedAt: Date.now(),
+          identity: 'default',
+        });
+        await localExtStorage.set('zidShareLog', log);
+      }
+    }
+
     return {
       success: true,
-      signature: popupResponse.signature,
-      publicKey: popupResponse.publicKey,
+      signature,
+      publicKey,
     };
   } catch (e) {
     console.error('sign request failed:', e);

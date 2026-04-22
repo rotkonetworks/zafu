@@ -65,6 +65,9 @@ import {
 // migration
 import { migrateOrphanedMultisigs, hasOrphanedMultisigs } from './migration';
 
+// zigner same-device vault merging (one device = one wallet, even across networks)
+import { mergeZignerCapabilities } from './zigner-merge';
+
 export * from './types';
 export * from './network-loader';
 
@@ -174,6 +177,19 @@ export const createKeyRingSlice = (
         state.keyRing.enabledNetworks = enabledNetworks as NetworkType[];
         state.wallets.activeIndex = syncedWalletIndex;
       });
+
+      // check pro license after auto-unlock
+      if (sessionKey) {
+        void (async () => {
+          try {
+            const selected = keyInfos.find(k => k.isSelected);
+            const zidPubkey = selected?.insensitive?.['zid'] as string | undefined;
+            if (zidPubkey) {
+              await get().license.fetchLicense(zidPubkey);
+            }
+          } catch { /* server unreachable — no-op */ }
+        })();
+      }
     },
 
     // ── password / unlock / lock ──
@@ -220,6 +236,16 @@ export const createKeyRingSlice = (
 
       await session.set('passwordKey', result.keyJson);
       set(state => { state.keyRing.status = 'unlocked'; });
+
+      // check pro license status after unlock
+      void (async () => {
+        try {
+          const keyInfo = get().keyRing.selectedKeyInfo;
+          const zidPubkey = keyInfo?.insensitive?.['zid'] as string | undefined;
+          if (zidPubkey) await get().license.fetchLicense(zidPubkey);
+        } catch { /* server unreachable — treat as free */ }
+      })();
+
       return true;
     },
 
@@ -275,6 +301,34 @@ export const createKeyRingSlice = (
     },
 
     newZignerZafuKey: async (data: ZignerZafuImport, name: string) => {
+      // merge-by-ZID: if we already have a vault for this zigner device+account,
+      // add the new network capability to it instead of creating a separate vault.
+      if (data.zidPublicKey) {
+        const existingVaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+        const mergeTarget = existingVaults.find(v =>
+          v.type === 'zigner-zafu'
+          && v.insensitive['zid'] === data.zidPublicKey
+          && v.insensitive['accountIndex'] === data.accountIndex,
+        );
+        if (mergeTarget) {
+          const mergedId = await mergeZignerCapabilities(mergeTarget, data, local, session);
+          const updatedVaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+          const selectedId = (await local.get('selectedVaultId')) as string;
+          const enabledNetworks = mergeEnabledNetworks(
+            ((await local.get('enabledNetworks')) ?? []) as NetworkType[],
+            zignerSupportedNetworks(data),
+          );
+          await local.set('enabledNetworks', enabledNetworks);
+          const keyInfos = vaultsToKeyInfos(updatedVaults, selectedId);
+          set(state => {
+            state.keyRing.keyInfos = keyInfos;
+            state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
+            state.keyRing.enabledNetworks = enabledNetworks;
+          });
+          return mergedId;
+        }
+      }
+
       const vaultId = generateVaultId();
       const encryptedData = await encrypt(ctx, JSON.stringify(data));
       const supportedNetworks = zignerSupportedNetworks(data);
@@ -304,8 +358,40 @@ export const createKeyRingSlice = (
     },
 
     addZignerUnencrypted: async (data: ZignerZafuImport, name: string) => {
-      // dedup: check if a vault with the same viewing key already exists
       const existingVaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+
+      // ── merge-by-ZID: same zigner device importing a different network ──
+      // if incoming import carries a ZID and there's an existing zigner-zafu
+      // vault with the same ZID + accountIndex, merge the new viewing key(s)
+      // into it instead of creating a separate vault. keeps "one device = one
+      // wallet" invariant across network imports.
+      if (data.zidPublicKey) {
+        const mergeTarget = existingVaults.find(v =>
+          v.type === 'zigner-zafu'
+          && v.insensitive['zid'] === data.zidPublicKey
+          && v.insensitive['accountIndex'] === data.accountIndex,
+        );
+        if (mergeTarget) {
+          const mergedVaultId = await mergeZignerCapabilities(mergeTarget, data, local, session);
+          const updatedVaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+          const selectedId = (await local.get('selectedVaultId')) as string;
+          const keyInfos = vaultsToKeyInfos(updatedVaults, selectedId);
+          const enabledNetworks = mergeEnabledNetworks(
+            ((await local.get('enabledNetworks')) ?? []) as NetworkType[],
+            zignerSupportedNetworks(data),
+          );
+          await local.set('enabledNetworks', enabledNetworks);
+          set(state => {
+            state.keyRing.keyInfos = keyInfos;
+            state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
+            state.keyRing.status = 'unlocked';
+            state.keyRing.enabledNetworks = enabledNetworks;
+          });
+          return mergedVaultId;
+        }
+      }
+
+      // dedup: check if a vault with the same viewing key already exists
       for (const v of existingVaults) {
         if (v.type !== 'zigner-zafu') continue;
         // match by deviceId + accountIndex (same device, same account = same keys)

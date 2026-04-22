@@ -1,0 +1,448 @@
+<!doctype html>
+<html>
+  <head>
+    <title>ZID Integration Example</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        font-family: monospace;
+        background: #0d1117;
+        color: #c9d1d9;
+        padding: 2rem;
+        max-width: 720px;
+        margin: 0 auto;
+      }
+      h1 {
+        color: #58a6ff;
+        font-size: 1.4rem;
+        border-bottom: 1px solid #21262d;
+        padding-bottom: 12px;
+      }
+      h2 {
+        color: #8b949e;
+        font-size: 1rem;
+        margin-top: 2rem;
+      }
+
+      .setup {
+        background: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 24px;
+      }
+      .setup label {
+        color: #8b949e;
+        font-size: 12px;
+        display: block;
+        margin-bottom: 4px;
+      }
+      .setup input {
+        font-family: monospace;
+        width: 100%;
+        padding: 8px;
+        background: #0d1117;
+        color: #c9d1d9;
+        border: 1px solid #30363d;
+        border-radius: 4px;
+      }
+
+      .step {
+        background: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 16px;
+      }
+      .step-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .step-num {
+        background: #58a6ff;
+        color: #0d1117;
+        font-weight: bold;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        flex-shrink: 0;
+      }
+      .step-title {
+        color: #f0f6fc;
+        font-size: 14px;
+      }
+      .step-desc {
+        color: #8b949e;
+        font-size: 12px;
+        margin-bottom: 12px;
+        line-height: 1.5;
+      }
+
+      pre.code {
+        background: #0d1117;
+        border: 1px solid #30363d;
+        border-radius: 4px;
+        padding: 12px;
+        font-size: 11px;
+        overflow-x: auto;
+        color: #8b949e;
+        margin: 8px 0 12px;
+        white-space: pre-wrap;
+      }
+      pre.code .kw {
+        color: #ff7b72;
+      }
+      pre.code .str {
+        color: #a5d6ff;
+      }
+      pre.code .cm {
+        color: #484f58;
+      }
+      pre.code .fn {
+        color: #d2a8ff;
+      }
+
+      button {
+        font-family: monospace;
+        padding: 8px 20px;
+        cursor: pointer;
+        background: #21262d;
+        color: #c9d1d9;
+        border: 1px solid #30363d;
+        border-radius: 6px;
+        font-size: 13px;
+      }
+      button:hover {
+        background: #30363d;
+        border-color: #58a6ff;
+      }
+      button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
+      .result {
+        margin-top: 12px;
+        padding: 12px;
+        border-radius: 4px;
+        font-size: 12px;
+        line-height: 1.6;
+      }
+      .result.success {
+        background: #0d1117;
+        border: 1px solid #238636;
+      }
+      .result.error {
+        background: #0d1117;
+        border: 1px solid #da3633;
+      }
+      .result.waiting {
+        background: #0d1117;
+        border: 1px solid #58a6ff;
+        color: #58a6ff;
+      }
+      .result .label {
+        color: #8b949e;
+      }
+      .result .value {
+        color: #58a6ff;
+        word-break: break-all;
+      }
+      .result .value.green {
+        color: #3fb950;
+      }
+      .result .value.red {
+        color: #f85149;
+      }
+
+      .identity-card {
+        background: #0d1117;
+        border: 1px solid #30363d;
+        border-radius: 8px;
+        padding: 16px;
+        margin-top: 12px;
+      }
+      .identity-card .addr {
+        color: #58a6ff;
+        font-size: 16px;
+        letter-spacing: 1px;
+      }
+      .identity-card .pk {
+        color: #484f58;
+        font-size: 10px;
+        word-break: break-all;
+        margin-top: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>ZID — identity signing example</h1>
+    <p style="color: #8b949e; font-size: 12px; line-height: 1.6">
+      ZID lets websites prove who a user is without passwords.<br />
+      The wallet signs a challenge → website verifies the signature → user is authenticated.<br />
+      Each site gets a unique key. Sites cannot link your identities across origins.
+    </p>
+
+    <!-- setup -->
+    <div class="setup">
+      <label>zafu extension ID (from chrome://extensions)</label>
+      <input id="extId" placeholder="bfdfeleokgpdladfmipfmffgpjfjibbe" />
+    </div>
+
+    <!-- step 1: detect -->
+    <div class="step">
+      <div class="step-header">
+        <div class="step-num">1</div>
+        <div class="step-title">detect zafu wallet</div>
+      </div>
+      <div class="step-desc">
+        Check if zafu is installed. Send a <code>ping</code> message — if it responds, the wallet is
+        available.
+      </div>
+      <pre class="code"><span class="cm">// detect zafu</span>
+<span class="kw">chrome.runtime</span>.<span class="fn">sendMessage</span>(EXTENSION_ID, {
+  <span class="str">type</span>: <span class="str">"ping"</span>
+}, (resp) => {
+  <span class="kw">if</span> (resp?.zafu) {
+    <span class="cm">// zafu is installed, version = resp.version</span>
+  }
+});</pre>
+      <button onclick="detectWallet()">detect wallet</button>
+      <div id="result-detect"></div>
+    </div>
+
+    <!-- step 2: authenticate -->
+    <div class="step">
+      <div class="step-header">
+        <div class="step-num">2</div>
+        <div class="step-title">authenticate user</div>
+      </div>
+      <div class="step-desc">
+        Generate a random challenge and ask zafu to sign it.<br />
+        The wallet shows an approval popup — user reviews and confirms.<br />
+        On success, you get a <b>signature</b> and the user's <b>public key</b> for your site.
+      </div>
+      <pre class="code"><span class="cm">// generate random 32-byte challenge</span>
+<span class="kw">const</span> challenge = <span class="kw">new</span> Uint8Array(32);
+crypto.<span class="fn">getRandomValues</span>(challenge);
+<span class="kw">const</span> challengeHex = <span class="fn">bytesToHex</span>(challenge);
+
+<span class="cm">// request identity signature</span>
+<span class="kw">chrome.runtime</span>.<span class="fn">sendMessage</span>(EXTENSION_ID, {
+  <span class="str">type</span>: <span class="str">"zafu_sign"</span>,
+  <span class="str">challengeHex</span>: challengeHex,
+  <span class="str">statement</span>: <span class="str">"Log in to My App"</span>,  <span class="cm">// shown to user</span>
+}, (resp) => {
+  <span class="kw">if</span> (resp?.success) {
+    <span class="cm">// resp.publicKey = user's ed25519 pubkey (hex, unique per site)</span>
+    <span class="cm">// resp.signature = ed25519 signature of your challenge (hex)</span>
+  }
+});</pre>
+      <button onclick="authenticate()" id="btn-auth">authenticate</button>
+      <div id="result-auth"></div>
+    </div>
+
+    <!-- step 3: verify -->
+    <div class="step">
+      <div class="step-header">
+        <div class="step-num">3</div>
+        <div class="step-title">verify signature (server-side)</div>
+      </div>
+      <div class="step-desc">
+        Verify the ed25519 signature against the challenge you sent.<br />
+        In production, do this on your <b>server</b> — never trust the client.<br />
+        The public key is the user's persistent identity on your site.
+      </div>
+      <pre
+        class="code"
+      ><span class="cm">// verify ed25519 signature (server-side in production)</span>
+<span class="kw">const</span> key = <span class="kw">await</span> crypto.subtle.<span class="fn">importKey</span>(
+  <span class="str">"raw"</span>, pubkeyBytes, <span class="str">"Ed25519"</span>, <span class="kw">false</span>, [<span class="str">"verify"</span>]
+);
+<span class="kw">const</span> valid = <span class="kw">await</span> crypto.subtle.<span class="fn">verify</span>(
+  <span class="str">"Ed25519"</span>, key, signatureBytes, challengeBytes
+);
+<span class="cm">// valid === true → user is authenticated</span>
+<span class="cm">// store publicKey as the user's identity for your site</span></pre>
+      <button onclick="verify()" id="btn-verify" disabled>verify signature</button>
+      <div id="result-verify"></div>
+    </div>
+
+    <!-- identity card -->
+    <div class="step" id="identity-section" style="display: none">
+      <div class="step-header">
+        <div class="step-num" style="background: #3fb950">✓</div>
+        <div class="step-title">authenticated identity</div>
+      </div>
+      <div class="step-desc">
+        This is the user's persistent identity on your site. Same user = same pubkey every time.<br />
+        Different site = different pubkey (unlinkable).
+      </div>
+      <div class="identity-card">
+        <div class="addr" id="id-addr"></div>
+        <div class="pk" id="id-pk"></div>
+      </div>
+    </div>
+
+    <script>
+      // ── state ──
+      let lastAuth = null;
+
+      // ── helpers ──
+      function bytesToHex(bytes) {
+        return Array.from(bytes)
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join('');
+      }
+      function hexToBytes(hex) {
+        return new Uint8Array(hex.match(/.{2}/g).map(h => parseInt(h, 16)));
+      }
+      function getExtId() {
+        const id = document.getElementById('extId').value.trim();
+        if (!id) {
+          alert('Paste your extension ID first');
+          return null;
+        }
+        return id;
+      }
+      function showResult(elId, html, cls) {
+        document.getElementById(elId).innerHTML = `<div class="result ${cls}">${html}</div>`;
+      }
+
+      // ── step 1: detect ──
+      function detectWallet() {
+        const extId = getExtId();
+        if (!extId) return;
+
+        showResult('result-detect', '<span class="label">connecting...</span>', 'waiting');
+
+        chrome.runtime.sendMessage(extId, { type: 'ping' }, resp => {
+          if (chrome.runtime.lastError) {
+            showResult(
+              'result-detect',
+              `<span class="value red">not found — ${chrome.runtime.lastError.message}</span>`,
+              'error',
+            );
+            return;
+          }
+          if (resp?.zafu) {
+            showResult(
+              'result-detect',
+              `<span class="value green">zafu v${resp.version} detected</span>`,
+              'success',
+            );
+          } else {
+            showResult(
+              'result-detect',
+              `<span class="value red">unexpected response</span>`,
+              'error',
+            );
+          }
+        });
+      }
+
+      // ── step 2: authenticate ──
+      function authenticate() {
+        const extId = getExtId();
+        if (!extId) return;
+
+        const challenge = new Uint8Array(32);
+        crypto.getRandomValues(challenge);
+        const challengeHex = bytesToHex(challenge);
+
+        showResult(
+          'result-auth',
+          '<span class="label">waiting for user approval in zafu...</span>',
+          'waiting',
+        );
+
+        chrome.runtime.sendMessage(
+          extId,
+          {
+            type: 'zafu_sign',
+            challengeHex,
+            statement: 'Log in to ZID Test Page',
+          },
+          resp => {
+            if (chrome.runtime.lastError) {
+              showResult(
+                'result-auth',
+                `<span class="value red">${chrome.runtime.lastError.message}</span>`,
+                'error',
+              );
+              return;
+            }
+            if (resp?.success) {
+              lastAuth = { ...resp, challengeHex };
+              document.getElementById('btn-verify').disabled = false;
+              showResult(
+                'result-auth',
+                `
+            <span class="label">public key</span><br>
+            <span class="value">${resp.publicKey}</span><br><br>
+            <span class="label">signature</span><br>
+            <span class="value">${resp.signature}</span>
+          `,
+                'success',
+              );
+
+              // show identity card
+              document.getElementById('identity-section').style.display = 'block';
+              document.getElementById('id-addr').textContent = 'zid' + resp.publicKey.slice(0, 16);
+              document.getElementById('id-pk').textContent = resp.publicKey;
+            } else {
+              showResult(
+                'result-auth',
+                `<span class="value red">${resp?.error || 'user denied'}</span>`,
+                'error',
+              );
+            }
+          },
+        );
+      }
+
+      // ── step 3: verify ──
+      async function verify() {
+        if (!lastAuth) return;
+
+        try {
+          const { publicKey, signature, challengeHex } = lastAuth;
+          const pubBytes = hexToBytes(publicKey);
+          const sigBytes = hexToBytes(signature);
+          const chalBytes = hexToBytes(challengeHex);
+
+          const key = await crypto.subtle.importKey('raw', pubBytes, 'Ed25519', false, ['verify']);
+          const valid = await crypto.subtle.verify('Ed25519', key, sigBytes, chalBytes);
+
+          if (valid) {
+            showResult(
+              'result-verify',
+              '<span class="value green">signature valid — user is authenticated</span>',
+              'success',
+            );
+          } else {
+            showResult(
+              'result-verify',
+              '<span class="value red">signature invalid</span>',
+              'error',
+            );
+          }
+        } catch (e) {
+          showResult(
+            'result-verify',
+            `<span class="value red">verify error: ${e.message}</span>`,
+            'error',
+          );
+        }
+      }
+    </script>
+  </body>
+</html>

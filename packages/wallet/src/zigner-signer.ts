@@ -63,6 +63,8 @@ export interface ZignerFvkExportData {
   walletIdBytes: Uint8Array;
   /** Full viewing key as bech32m string - from UR format */
   fvkBech32m?: string;
+  /** ZID pubkey (hex) - canonical device identity, if present (v2 QR) */
+  zidPublicKey?: string;
 }
 
 /**
@@ -77,6 +79,8 @@ export interface ZignerWalletImport {
   walletId: WalletId;
   /** Original account index from Zigner */
   accountIndex: number;
+  /** ZID pubkey (hex) - canonical device identity for zigner dedup */
+  zidPublicKey?: string;
 }
 
 // ============================================================================
@@ -150,12 +154,21 @@ export function parseZignerFvkQR(hex: string): ZignerFvkExportData {
     throw new Error('Invalid Zigner QR: missing wallet ID');
   }
   const walletIdBytes = new Uint8Array(data.subarray(offset, offset + 32));
+  offset += 32;
+
+  // Optional v2 ZID extension: [0x01][32 bytes]
+  let zidPublicKey: string | undefined;
+  if (offset < data.length && data[offset] === 0x01 && offset + 1 + 32 <= data.length) {
+    const zidBytes = data.subarray(offset + 1, offset + 1 + 32);
+    zidPublicKey = Array.from(zidBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
 
   return {
     accountIndex,
     label,
     fvkBytes,
     walletIdBytes,
+    zidPublicKey,
   };
 }
 
@@ -195,6 +208,7 @@ export function createWalletImport(
     fullViewingKey,
     walletId,
     accountIndex: exportData.accountIndex,
+    zidPublicKey: exportData.zidPublicKey,
   };
 }
 

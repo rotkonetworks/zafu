@@ -40,6 +40,7 @@ const hiddenTabRoutes = [
   PopupPath.TRANSACTION_APPROVAL,
   PopupPath.ORIGIN_APPROVAL,
   PopupPath.SIGN_APPROVAL,
+  PopupPath.CAPABILITY_APPROVAL,
   PopupPath.COSMOS_SIGN,
   PopupPath.SEND,
   PopupPath.RECEIVE,
@@ -55,6 +56,7 @@ const hiddenHeaderRoutes = [
   PopupPath.TRANSACTION_APPROVAL,
   PopupPath.ORIGIN_APPROVAL,
   PopupPath.SIGN_APPROVAL,
+  PopupPath.CAPABILITY_APPROVAL,
   PopupPath.COSMOS_SIGN,
 ];
 

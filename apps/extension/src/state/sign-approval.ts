@@ -12,6 +12,8 @@ export interface SignApprovalSlice {
   challengeHex?: string;
   statement?: string;
   algorithm?: 'ed25519' | 'es256'; // ed25519 = ZID default, es256 = WebAuthn/passkey compat
+  isAirgap?: boolean;
+  zidPubkey?: string;
   choice?: UserChoice;
 
   acceptRequest: (
@@ -46,6 +48,8 @@ export const createSignApprovalSlice = (): SliceCreator<SignApprovalSlice> => (s
       state.signApproval.challengeHex = req.challengeHex;
       state.signApproval.statement = req.statement;
       state.signApproval.algorithm = req.algorithm ?? 'ed25519';
+      state.signApproval.isAirgap = req.isAirgap;
+      state.signApproval.zidPubkey = req.zidPubkey;
     });
 
     return responder.promise;
@@ -81,6 +85,8 @@ export const createSignApprovalSlice = (): SliceCreator<SignApprovalSlice> => (s
         state.signApproval.challengeHex = undefined;
         state.signApproval.statement = undefined;
         state.signApproval.algorithm = undefined;
+        state.signApproval.isAirgap = undefined;
+        state.signApproval.zidPubkey = undefined;
       });
     }
   },
