@@ -58,6 +58,13 @@ jobs:
             ref="$(git describe --tags --always --dirty)"
           fi
           echo "version=$ref" >> "$GITHUB_OUTPUT"
+          # Prerelease tags (v22.0.0-beta.1, -rc.1, -alpha.2) → publish beta
+          # channel only. Clean tags (v22.0.0) → publish both prod + beta.
+          if echo "$ref" | grep -qE '(alpha|beta|rc)'; then
+            echo "channel=beta-only" >> "$GITHUB_OUTPUT"
+          else
+            echo "channel=both" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Build extension (production)
         working-directory: apps/extension
@@ -157,9 +164,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VER: ${{ steps.vars.outputs.version }}
+          CHANNEL: ${{ steps.vars.outputs.channel }}
         run: |
           is_prerelease=""
-          if echo "${VER}" | grep -qE '(alpha|beta|rc)'; then
+          if [ "$CHANNEL" = "beta-only" ]; then
             is_prerelease="--prerelease"
           fi
           gh release create "${{ github.ref_name }}" \
@@ -188,6 +196,7 @@ jobs:
         env:
           CWS_PUBLISHER_JSON: ${{ secrets.CWS_PUBLISHER_JSON }}
           VER: ${{ steps.vars.outputs.version }}
+          CHANNEL: ${{ steps.vars.outputs.channel }}
         run: |
           set -eu
           pip install --quiet google-auth requests
@@ -230,8 +239,13 @@ jobs:
               "https://www.googleapis.com/chromewebstore/v1.1/items/${item_id}/publish")"
             echo "publish: $publish_resp"
           }
-          upload_and_publish prod "${CWS_PROD_ITEM_ID}"
+          # Beta always publishes. Prod only on clean (non-prerelease) tags.
           upload_and_publish beta "${CWS_BETA_ITEM_ID}"
+          if [ "${CHANNEL:-both}" = "both" ]; then
+            upload_and_publish prod "${CWS_PROD_ITEM_ID}"
+          else
+            echo "Skipping prod CWS publish — prerelease tag ($VER) only ships beta."
+          fi
 
       - name: Upload artifacts (manual dispatch)
         if: github.event_name == 'workflow_dispatch'
