@@ -7,6 +7,7 @@ import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../state';
 import { selectLock, selectActiveNetwork, selectEffectiveKeyInfo, selectKeyInfos } from '../state/keyring';
+import { isPro } from '../state/license';
 import { PopupPath } from '../routes/popup/paths';
 import { cn } from '@repo/ui/lib/utils';
 import { isSidePanel } from '../utils/popup-detection';
@@ -30,6 +31,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
   const activeNetwork = useStore(selectActiveNetwork);
   const keyInfo = useStore(selectEffectiveKeyInfo);
   const allKeyInfos = useStore(selectKeyInfos);
+  const pro = useStore(isPro);
   const inSidePanel = isSidePanel();
   const [zidCopied, setZidCopied] = useState(false);
 
@@ -157,16 +159,26 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
           ))}
         </nav>
 
-        {/* footer  - donate + about */}
+        {/* footer — upgrade CTA for free users, donate for pros */}
         <div className='mt-auto border-t border-border-soft px-4 py-3'>
-          {donation && (
+          {!pro ? (
             <button
-              onClick={handleDonate}
-              className='flex w-full items-center gap-2 px-3 py-2 mb-3 rounded-md border border-border-soft text-[13px] text-fg-muted hover:text-fg-high hover:bg-elev-1 transition-colors'
+              onClick={() => { navigate(PopupPath.SUBSCRIBE); onClose(); }}
+              className='flex w-full items-center justify-center gap-2 px-3 py-2 mb-3 rounded-md bg-zigner-gold text-zigner-dark hover:bg-zigner-gold-light transition-colors text-[13px] lowercase tracking-[0.04em]'
             >
-              <span className='i-lucide-heart h-3.5 w-3.5' />
-              <span>donate {activeNetwork}</span>
+              <span className='i-lucide-zap h-3.5 w-3.5' />
+              <span>upgrade to pro</span>
             </button>
+          ) : (
+            donation && (
+              <button
+                onClick={handleDonate}
+                className='flex w-full items-center gap-2 px-3 py-2 mb-3 rounded-md border border-border-soft text-[13px] text-fg-muted hover:text-fg-high hover:bg-elev-1 transition-colors'
+              >
+                <span className='i-lucide-heart h-3.5 w-3.5' />
+                <span>donate {activeNetwork}</span>
+              </button>
+            )
           )}
 
           <div className='flex items-center gap-3 text-[10px] text-fg-dim lowercase tracking-[0.04em]'>
