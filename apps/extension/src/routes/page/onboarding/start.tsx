@@ -17,11 +17,12 @@ export const OnboardingStart = () => {
     <FadeTransition>
       <div className='flex flex-col items-center gap-8 max-w-lg mx-auto'>
         {/* header */}
-        <div className='flex flex-col items-center gap-2 pt-4'>
-          <h1 className='bg-text-linear bg-clip-text font-headline text-4xl font-bold text-transparent'>
+        <div className='flex flex-col items-center gap-1 pt-4'>
+          <span className='kicker'>welcome</span>
+          <h1 className='text-[40px] text-zigner-gold lowercase tracking-[-0.01em] leading-none'>
             zafu
           </h1>
-          <p className='text-fg-muted text-center'>
+          <p className='mt-2 text-xs text-fg-muted text-center lowercase tracking-[0.02em]'>
             privacy wallet for zcash and penumbra
           </p>
         </div>

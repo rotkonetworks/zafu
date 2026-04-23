@@ -135,7 +135,7 @@ export const OriginApproval = () => {
                       />
                     </div>
                   )}
-                  <div className='-ml-3 w-full truncate p-2 pl-6 font-headline text-lg'>
+                  <div className='-ml-3 w-full truncate p-2 pl-6 text-[15px] text-fg-high tracking-[-0.005em]'>
                     {title ? (
                       <span className='text-zigner-dark'>{title}</span>
                     ) : (

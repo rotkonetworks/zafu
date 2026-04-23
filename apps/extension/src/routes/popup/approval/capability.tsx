@@ -58,9 +58,10 @@ export const CapabilityApproval = () => {
   return (
     <FadeTransition>
       <div className='flex min-h-screen w-screen flex-col gap-6'>
-        <h1 className='flex h-[70px] items-center justify-center border-b border-border-soft font-headline text-xl font-medium leading-[30px]'>
-          Permission Request
-        </h1>
+        <header className='flex h-[70px] flex-col items-center justify-center border-b border-border-soft'>
+          <span className='kicker mb-1'>capability request</span>
+          <h1 className='text-[18px] text-fg-high lowercase tracking-[-0.01em]'>permission request</h1>
+        </header>
         <div className='mx-auto size-20'>
           <LinkGradientIcon />
         </div>

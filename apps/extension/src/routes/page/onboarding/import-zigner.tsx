@@ -278,7 +278,7 @@ title="Scan Zafu Zigner QR"
             {scanState === 'scanned' && detectedNetwork === 'penumbra' && walletImport && (
               <div className='flex flex-col gap-4'>
                 <div className='p-6'>
-                  <div className='font-headline text-lg'>Success!</div>
+                  <div className='text-[15px] text-fg-high lowercase tracking-[-0.005em]'>Success!</div>
                   <div className={cn('font-mono text-fg-muted', 'text-xs', 'break-all', 'mt-2')}>
                     Account #{walletImport.accountIndex}
                   </div>
@@ -338,7 +338,7 @@ title="Scan Zafu Zigner QR"
             {scanState === 'scanned' && detectedNetwork === 'zcash' && zcashWalletImport && (
               <div className='flex flex-col gap-4'>
                 <div className='p-6'>
-                  <div className='font-headline text-lg'>Zcash Wallet Detected!</div>
+                  <div className='text-[15px] text-fg-high lowercase tracking-[-0.005em]'>Zcash Wallet Detected!</div>
                   <div className={cn('font-mono text-fg-muted', 'text-xs', 'break-all', 'mt-2')}>
                     Account #{zcashWalletImport.accountIndex}
                     <span className='ml-2'>{zcashWalletImport.mainnet ? '(mainnet)' : '(testnet)'}</span>
@@ -399,7 +399,7 @@ title="Scan Zafu Zigner QR"
             {scanState === 'scanned' && detectedNetwork === 'cosmos' && parsedCosmosExport && (
               <div className='flex flex-col gap-4'>
                 <div className='p-6'>
-                  <div className='font-headline text-lg'>Cosmos Account Detected!</div>
+                  <div className='text-[15px] text-fg-high lowercase tracking-[-0.005em]'>Cosmos Account Detected!</div>
                   {parsedCosmosExport.addresses.map(a => (
                     <div key={a.chainId} className={cn('font-mono text-fg-muted', 'text-xs', 'break-all', 'mt-2')}>
                       <span className='text-fg capitalize'>{a.chainId}:</span>{' '}
@@ -462,7 +462,7 @@ title="Scan Zafu Zigner QR"
             {scanState === 'scanned' && detectedNetwork === 'polkadot' && parsedPolkadotExport && (
               <div className='flex flex-col gap-4'>
                 <div className='p-6'>
-                  <div className='font-headline text-lg'>Polkadot Account Detected!</div>
+                  <div className='text-[15px] text-fg-high lowercase tracking-[-0.005em]'>Polkadot Account Detected!</div>
                   <div className={cn('font-mono text-fg-muted', 'text-xs', 'break-all', 'mt-2')}>
                     {parsedPolkadotExport.address.slice(0, 12)}...{parsedPolkadotExport.address.slice(-8)}
                   </div>
