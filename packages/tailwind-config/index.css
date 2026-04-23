@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* Make sure Tailwind's content scan reaches every directory that
+   references design-system utilities. Without this, classes only used
+   inside packages/ui/components/editorial/ get pruned as "unused". */
+@source "../ui/components/**/*.{ts,tsx}";
+@source "../ui/lib/**/*.{ts,tsx}";
+@source "../../apps/extension/src/**/*.{ts,tsx}";
+
 /* Zafu terminal theme - CSS-first config (Tailwind v4) */
 @theme {
   --font-body: "Iosevka Term", "Courier New", Courier, monospace;
@@ -13,7 +20,35 @@
   --radius-2xl: 0;
   --radius-full: 0;
 
-  /* semantic color tokens (hsl CSS vars defined in globals.css) */
+  /* ==============================================================
+   * v2 design-system tokens — register with Tailwind so utilities
+   * like `text-fg`, `bg-elev-1`, `border-border-soft`, `bg-zigner-gold`
+   * compile. Values come from packages/ui/styles/globals.css.
+   *
+   * Spec: packages/ui/docs/design-preview/
+   * ============================================================== */
+
+  /* ink */
+  --color-fg:       var(--fg);
+  --color-fg-high:  var(--fg-high);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-dim:   var(--fg-dim);
+
+  /* surfaces */
+  --color-canvas:      var(--surface-canvas);
+  --color-elev-1:      var(--surface-elev-1);
+  --color-elev-2:      var(--surface-elev-2);
+  --color-border-soft: var(--surface-border-soft);
+  --color-border-hard: var(--surface-border);
+
+  /* zafu-blue triplet (sibling of zigner-gold below) */
+  --color-zafu-blue:       var(--zafu-blue);
+  --color-zafu-blue-light: var(--zafu-blue-light);
+  --color-zafu-blue-dark:  var(--zafu-blue-dark);
+
+  /* legacy shadcn-style tokens — kept as aliases onto the same hex
+     values. Existing components using hsl(var(--foreground)) etc. still
+     work. Prefer the new tokens above for new code. */
   --color-border: hsl(var(--border));
   --color-border-secondary: var(--border-secondary);
   --color-input: hsl(var(--input));
@@ -124,3 +159,38 @@
 @utility contain-style { contain: style; }
 @utility contain-paint { contain: paint; }
 @utility transform-gpu { transform: translateZ(0); }
+
+/* ==============================================================
+ * v2 design-system editorial shortcuts.
+ * Recurring editorial patterns extracted from the preview sheets,
+ * so they can be applied as single classes instead of stacked utilities.
+ * ============================================================== */
+
+/* lowercase kicker — dim wide-tracked label above a masthead or section */
+@utility kicker {
+  font-size: 10px;
+  color: var(--fg-dim);
+  text-transform: lowercase;
+  letter-spacing: 0.2em;
+}
+
+/* small label (inside SectionHead, form labels, nav items) */
+@utility section-label {
+  font-size: 11px;
+  color: var(--fg-high);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+}
+
+/* numeric monospace — addresses, amounts, timestamps */
+@utility tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.005em;
+}
+
+/* hairline rule — the 1px divider used in masthead, section-head, ruler */
+@utility rule {
+  height: 1px;
+  background: var(--surface-border);
+}
