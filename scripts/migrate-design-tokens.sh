@@ -36,21 +36,24 @@ SUBS=(
   # hover states (must come before their non-hover forms)
   's/\bhover:bg-muted\/50\b/hover:bg-elev-1/g'
   's/\bhover:bg-muted\/30\b/hover:bg-elev-1/g'
-  's/\bhover:bg-muted\b/hover:bg-elev-1/g'
-  's/\bhover:bg-accent\b/hover:bg-elev-1/g'
-  's/\bhover:text-foreground\b/hover:text-fg-high/g'
-  's/\bhover:text-primary\b/hover:text-zigner-gold/g'
-  's/\bhover:text-muted-foreground\b/hover:text-fg-muted/g'
+  's/\bhover:bg-muted(?![-\w])/hover:bg-elev-1/g'
+  's/\bhover:bg-accent(?![-\w])/hover:bg-elev-1/g'
+  's/\bhover:text-foreground(?![-\w])/hover:text-fg-high/g'
+  's/\bhover:text-primary(?![-\w])/hover:text-zigner-gold/g'
+  's/\bhover:text-muted-foreground(?![-\w])/hover:text-fg-muted/g'
 
-  # muted-foreground family
+  # *-muted-foreground family — MUST come before bare *-muted rules below
+  # so `bg-muted-foreground/30` doesn't get mangled into `bg-elev-2-foreground/30`.
+  's/\b(bg|text|border|ring|divide|from|to|via|fill|stroke|shadow)-muted-foreground(?![-\w])/$1-fg-muted/g'
   's/\btext-muted-foreground\/60\b/text-fg-dim/g'
   's/\btext-muted-foreground\/80\b/text-fg-muted/g'
-  's/\btext-muted-foreground\b/text-fg-muted/g'
 
-  # surfaces (muted background family)
+  # surfaces (muted background family). Negative lookahead so we don't touch
+  # a migrated token like `bg-muted-foreground` (already covered above) and
+  # so `bg-muted-radial` / `bg-muted-whatever-custom` aren't double-mutated.
   's/\bbg-muted\/50\b/bg-elev-2/g'
   's/\bbg-muted\/30\b/bg-elev-2/g'
-  's/\bbg-muted\b/bg-elev-2/g'
+  's/\bbg-muted(?![-\w])/bg-elev-2/g'
 
   # borders — alpha forms collapse to the dedicated soft hairline token.
   # IMPORTANT: the bare `border-border` rule uses a negative lookahead so it
@@ -67,21 +70,23 @@ SUBS=(
   's/\btext-foreground\b(?!\/)/text-fg/g'
   's/\bbg-foreground\b(?!\/)/bg-fg/g'
 
-  # shadcn card / popover surfaces collapse onto elev-1
-  's/\btext-card-foreground\b/text-fg/g'
-  's/\bbg-card\b(?!\/)/bg-elev-1/g'
-  's/\btext-popover-foreground\b/text-fg/g'
-  's/\bbg-popover\b(?!\/)/bg-elev-1/g'
+  # shadcn card / popover surfaces collapse onto elev-1. Negative lookahead
+  # `(?![-\w])` prevents mauling custom siblings like `bg-card-radial` (a
+  # radial-gradient utility defined in tailwind-config).
+  's/\btext-card-foreground(?![-\w])/text-fg/g'
+  's/\bbg-card(?![-\w\/])/bg-elev-1/g'
+  's/\btext-popover-foreground(?![-\w])/text-fg/g'
+  's/\bbg-popover(?![-\w\/])/bg-elev-1/g'
 
   # accent (was a gold-tinted dark) → elev-1 (system prefers hairline greys)
-  's/\btext-accent-foreground\b/text-fg-high/g'
-  's/\bbg-accent\b(?!\/)/bg-elev-1/g'
+  's/\btext-accent-foreground(?![-\w])/text-fg-high/g'
+  's/\bbg-accent(?![-\w\/])/bg-elev-1/g'
 
   # primary = zigner-gold
-  's/\btext-primary-foreground\b/text-zigner-dark/g'
-  's/\btext-primary\b/text-zigner-gold/g'
-  's/\bbg-primary\b(?!\/)/bg-zigner-gold/g'
-  's/\bborder-primary\b(?!\/)/border-zigner-gold/g'
+  's/\btext-primary-foreground(?![-\w])/text-zigner-dark/g'
+  's/\btext-primary(?![-\w])/text-zigner-gold/g'
+  's/\bbg-primary(?![-\w\/])/bg-zigner-gold/g'
+  's/\bborder-primary(?![-\w\/])/border-zigner-gold/g'
 )
 
 # collect files

@@ -683,7 +683,7 @@ function ReceiveTab({ address, loading, activeNetwork }: {
           <button
             onClick={handleToggle}
             className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ${
-              ephemeral ? 'bg-green-500' : 'bg-elev-2-foreground/30'
+              ephemeral ? 'bg-green-500' : 'bg-fg-muted/30'
             }`}
           >
             <span
@@ -750,7 +750,7 @@ function ReceiveTab({ address, loading, activeNetwork }: {
             <button
               onClick={handleTransparentToggle}
               className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ${
-                transparent ? 'bg-red-500' : 'bg-elev-2-foreground/30'
+                transparent ? 'bg-red-500' : 'bg-fg-muted/30'
               }`}
             >
               <span

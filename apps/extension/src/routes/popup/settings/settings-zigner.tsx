@@ -177,7 +177,7 @@ export const SettingsZigner = () => {
     <SettingsScreen title='Zafu Zigner'>
       <div className='flex flex-col gap-4'>
         {/* Info Box */}
-        <div className='rounded-lg border border-border-hard bg-elev-1-radial p-4'>
+        <div className='rounded-lg border border-border-hard bg-card-radial p-4'>
           <p className='text-sm text-fg-muted'>
 Zafu Zigner is a cold wallet that keeps your spending keys offline. Zafu stores only the
             viewing key to show balances. Transactions require QR code signing with your Zafu Zigner
@@ -187,7 +187,7 @@ Zafu Zigner is a cold wallet that keeps your spending keys offline. Zafu stores 
 
         {/* Pro gate */}
         {!pro && (
-          <div className='rounded-lg border border-border-soft bg-elev-1-radial p-4 flex flex-col items-center gap-3'>
+          <div className='rounded-lg border border-border-soft bg-card-radial p-4 flex flex-col items-center gap-3'>
             <div className='i-lucide-lock size-8 text-fg-muted/40' />
             <p className='text-xs text-fg-muted text-center'>
               zigner cold wallet signing is a pro feature
@@ -218,7 +218,7 @@ Zafu Zigner is a cold wallet that keeps your spending keys offline. Zafu stores 
                 return (
                   <div
                     key={vault.id}
-                    className='flex items-center justify-between border border-border-hard bg-elev-1-radial p-3'
+                    className='flex items-center justify-between border border-border-hard bg-card-radial p-3'
                   >
                     <div className='flex flex-col gap-1 min-w-0'>
                       <div className='flex items-center gap-2'>
@@ -283,7 +283,7 @@ Zafu Zigner is a cold wallet that keeps your spending keys offline. Zafu stores 
         {pro && <div className='border-t border-border-hard pt-4'>
           <p className='text-sm font-bold mb-3'>polkadot vault</p>
           <div className='flex flex-col gap-3'>
-            <div className='flex items-center justify-between border border-border-hard bg-elev-1-radial p-3'>
+            <div className='flex items-center justify-between border border-border-hard bg-card-radial p-3'>
               <div className='flex flex-col'>
                 <span className='text-sm'>legacy mode</span>
                 <span className='text-xs text-fg-muted'>

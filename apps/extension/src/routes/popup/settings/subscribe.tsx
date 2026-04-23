@@ -344,7 +344,7 @@ export const SubscribePage = () => {
         ) : (
           <div className='rounded border border-border-soft p-3'>
             <div className='flex items-center gap-2'>
-              <span className='h-2 w-2 rounded-full bg-elev-2-foreground/40' />
+              <span className='h-2 w-2 rounded-full bg-fg-muted/40' />
               <span className='text-xs font-mono'>free plan</span>
             </div>
           </div>

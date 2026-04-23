@@ -836,7 +836,7 @@ const ZcashContent = ({
                     ? 'nomt verified'
                     : 'verifying nomt...'}
           error={syncError?.message}
-          barColor={scanPct > 0 ? 'bg-zigner-gold' : ligeritoPct > 0 ? 'bg-zigner-gold' : 'bg-elev-2-foreground/30'}
+          barColor={scanPct > 0 ? 'bg-zigner-gold' : ligeritoPct > 0 ? 'bg-zigner-gold' : 'bg-fg-muted/30'}
           barDoneColor='bg-zigner-gold'
           currentHeight={workerSyncHeight}
           targetHeight={chainHeight}
