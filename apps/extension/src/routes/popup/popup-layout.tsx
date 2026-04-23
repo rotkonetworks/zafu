@@ -81,7 +81,7 @@ export const PopupLayout = () => {
   const showTabs = showChrome && !matchesRoute(location.pathname, hiddenTabRoutes);
 
   return (
-    <div data-network={activeNetwork} className='relative flex h-full flex-col bg-background contain-layout overflow-hidden'>
+    <div data-network={activeNetwork} className='relative flex h-full flex-col bg-canvas contain-layout overflow-hidden'>
       {showChrome && <AppHeader onMenuClick={() => setMenuOpen(true)} />}
       <div
         className='min-h-0 flex-1 overflow-y-auto transform-gpu'

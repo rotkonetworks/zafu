@@ -43,8 +43,8 @@ const MainPopup = () => {
 
   if (!wasmReady) {
     return (
-      <div className='flex h-full items-center justify-center bg-background text-foreground'>
-        <span className='text-sm text-muted-foreground'>loading...</span>
+      <div className='flex h-full items-center justify-center bg-canvas text-fg'>
+        <span className='text-[13px] text-fg-dim lowercase tracking-[0.04em]'>loading...</span>
       </div>
     );
   }
