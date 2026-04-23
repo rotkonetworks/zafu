@@ -94,7 +94,7 @@ const CapabilityToggle = ({
       <div className='flex items-center gap-1.5'>
         <span className={cn(
           'text-[10px]',
-          meta.risk === 'low' && 'text-muted-foreground',
+          meta.risk === 'low' && 'text-fg-muted',
           meta.risk === 'medium' && 'text-yellow-400',
           meta.risk === 'high' && 'text-orange-400',
           meta.risk === 'critical' && 'text-red-400',
@@ -201,7 +201,7 @@ export const KnownSite = ({
             className='h-auto bg-transparent'
             onClick={() => void discard(site)}
           >
-            <span className='i-lucide-trash-2 h-4 w-4 text-muted-foreground' />
+            <span className='i-lucide-trash-2 h-4 w-4 text-fg-muted' />
           </Button>
         </div>
       </div>
@@ -212,13 +212,13 @@ export const KnownSite = ({
           {/* per-capability toggles */}
           <button
             onClick={() => setCapsExpanded(!capsExpanded)}
-            className='flex items-center gap-1 text-[10px] text-muted-foreground/50 hover:text-muted-foreground transition-colors'
+            className='flex items-center gap-1 text-[10px] text-fg-muted/50 hover:text-fg-muted transition-colors'
           >
             <span className={`i-lucide-chevron-${capsExpanded ? 'down' : 'right'} h-2.5 w-2.5`} />
             capabilities ({perms?.granted.length ?? 0} granted)
           </button>
           {capsExpanded && (
-            <div className='flex flex-col gap-0.5 pl-4 border-l border-border/20'>
+            <div className='flex flex-col gap-0.5 pl-4 border-l border-border-hard/20'>
               {ALL_CAPABILITIES.map(cap => (
                 <CapabilityToggle
                   key={cap}
@@ -234,7 +234,7 @@ export const KnownSite = ({
           {zidAddress ? (
             <button
               onClick={copyZid}
-              className='flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground/70 hover:text-foreground transition-colors'
+              className='flex items-center gap-1.5 text-[10px] font-mono text-fg-muted/70 hover:text-fg-high transition-colors'
               title={copied ? 'copied' : 'copy full pubkey'}
             >
               <span className='i-lucide-fingerprint h-3 w-3 shrink-0' />
@@ -242,7 +242,7 @@ export const KnownSite = ({
               {copied && <span className='text-green-500 shrink-0'>copied</span>}
             </button>
           ) : (
-            <span className='flex items-center gap-1.5 text-[10px] text-muted-foreground/40'>
+            <span className='flex items-center gap-1.5 text-[10px] text-fg-muted/40'>
               <span className='i-lucide-fingerprint h-3 w-3 shrink-0' />
               no zid shared yet
             </span>
@@ -252,7 +252,7 @@ export const KnownSite = ({
           {(penumbraAddr || zcashAddr) && (
             <button
               onClick={() => setExpanded(!expanded)}
-              className='flex items-center gap-1 text-[10px] text-muted-foreground/50 hover:text-muted-foreground transition-colors'
+              className='flex items-center gap-1 text-[10px] text-fg-muted/50 hover:text-fg-muted transition-colors'
             >
               <span className={`i-lucide-chevron-${expanded ? 'down' : 'right'} h-2.5 w-2.5`} />
               addresses
@@ -261,13 +261,13 @@ export const KnownSite = ({
           {expanded && (
             <div className='flex flex-col gap-1 pl-4'>
               {penumbraAddr && (
-                <div className='flex items-center gap-1.5 text-[10px] text-muted-foreground/60'>
+                <div className='flex items-center gap-1.5 text-[10px] text-fg-dim'>
                   <span className='shrink-0'>penumbra</span>
                   <span className='font-mono truncate'>{penumbraAddr.slice(0, 24)}...</span>
                 </div>
               )}
               {zcashAddr && (
-                <div className='flex items-center gap-1.5 text-[10px] text-muted-foreground/60'>
+                <div className='flex items-center gap-1.5 text-[10px] text-fg-dim'>
                   <span className='shrink-0'>zcash</span>
                   <span className='font-mono truncate'>{zcashAddr.slice(0, 24)}...</span>
                 </div>
@@ -279,19 +279,19 @@ export const KnownSite = ({
           <div className='flex items-center gap-2'>
             <button
               onClick={toggleMode}
-              className='flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors'
+              className='flex items-center gap-1 text-[10px] text-fg-muted hover:text-fg-high transition-colors'
             >
               <span className={`${isSiteMode ? 'i-lucide-shield' : 'i-lucide-globe'} h-3 w-3`} />
               {isSiteMode ? 'site identity' : 'global identity'}
             </button>
             {isSiteMode && (
               <>
-                <span className='text-[10px] text-muted-foreground/40'>
+                <span className='text-[10px] text-fg-muted/40'>
                   #{rotation}
                 </span>
                 <button
                   onClick={rotate}
-                  className='flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors'
+                  className='flex items-center gap-0.5 text-[10px] text-fg-muted hover:text-fg-high transition-colors'
                   title='rotate identity - gives this site a new zid'
                 >
                   <span className='i-lucide-refresh-cw h-2.5 w-2.5' />
@@ -311,7 +311,7 @@ export const KnownSite = ({
               <div className='flex gap-2'>
                 <button
                   onClick={() => setConfirming(null)}
-                  className='flex-1 rounded border border-border/40 py-1 text-[10px] text-muted-foreground hover:bg-muted/50 transition-colors'
+                  className='flex-1 rounded border border-border-hard-soft py-1 text-[10px] text-fg-muted hover:bg-elev-1 transition-colors'
                 >
                   cancel
                 </button>
@@ -326,21 +326,21 @@ export const KnownSite = ({
           )}
 
           {confirming === 'rotate' && (
-            <div className='rounded-lg border border-border/40 bg-card p-2.5 flex flex-col gap-2'>
-              <p className='text-[10px] text-muted-foreground'>
+            <div className='rounded-lg border border-border-hard-soft bg-elev-1 p-2.5 flex flex-col gap-2'>
+              <p className='text-[10px] text-fg-muted'>
                 this creates a new identity for this site. the site keeps
                 your old zid - rotation only affects future signatures.
               </p>
               <div className='flex gap-2'>
                 <button
                   onClick={() => setConfirming(null)}
-                  className='flex-1 rounded border border-border/40 py-1 text-[10px] text-muted-foreground hover:bg-muted/50 transition-colors'
+                  className='flex-1 rounded border border-border-hard-soft py-1 text-[10px] text-fg-muted hover:bg-elev-1 transition-colors'
                 >
                   cancel
                 </button>
                 <button
                   onClick={confirmRotate}
-                  className='flex-1 rounded border border-primary/25 py-1 text-[10px] text-primary hover:bg-primary/10 transition-colors'
+                  className='flex-1 rounded border border-primary/25 py-1 text-[10px] text-zigner-gold hover:bg-primary/10 transition-colors'
                 >
                   rotate
                 </button>

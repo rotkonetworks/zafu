@@ -44,7 +44,7 @@ export const PasswordsPage = () => {
   return (
     <SettingsScreen title='passwords' backPath={PopupPath.IDENTITY}>
       <div className='flex flex-col gap-4'>
-        <p className='text-[10px] text-muted-foreground/60 font-mono'>
+        <p className='text-[10px] text-fg-dim font-mono'>
           deterministic. nothing stored. same seed = same password.
         </p>
 
@@ -54,20 +54,20 @@ export const PasswordsPage = () => {
             value={origin}
             onChange={e => { setOrigin(e.target.value); setPassword(null); }}
             placeholder='site (e.g. github.com)'
-            className='w-full rounded border border-border/40 bg-transparent px-3 py-2 text-xs font-mono outline-none focus:border-muted-foreground/60'
+            className='w-full rounded border border-border-hard-soft bg-transparent px-3 py-2 text-xs font-mono outline-none focus:border-muted-foreground/60'
           />
           {origin.trim() && normalizeOrigin(origin) !== origin.trim().toLowerCase() && (
-            <span className='text-[9px] text-muted-foreground/50 font-mono'>→ {normalizeOrigin(origin)}</span>
+            <span className='text-[9px] text-fg-muted/50 font-mono'>→ {normalizeOrigin(origin)}</span>
           )}
           <input
             type='text'
             value={username}
             onChange={e => { setUsername(e.target.value); setPassword(null); }}
             placeholder='username (optional)'
-            className='w-full rounded border border-border/40 bg-transparent px-3 py-2 text-xs font-mono outline-none focus:border-muted-foreground/60'
+            className='w-full rounded border border-border-hard-soft bg-transparent px-3 py-2 text-xs font-mono outline-none focus:border-muted-foreground/60'
           />
           <div className='flex items-center gap-2'>
-            <span className='text-[10px] text-muted-foreground/60 font-mono'>length</span>
+            <span className='text-[10px] text-fg-dim font-mono'>length</span>
             <input
               type='range'
               min={16}
@@ -76,22 +76,22 @@ export const PasswordsPage = () => {
               onChange={e => { setLength(Number(e.target.value)); setPassword(null); }}
               className='flex-1'
             />
-            <span className='text-[10px] text-muted-foreground font-mono w-6 text-right'>{length}</span>
+            <span className='text-[10px] text-fg-muted font-mono w-6 text-right'>{length}</span>
           </div>
           <div className='flex items-center gap-2'>
-            <span className='text-[10px] text-muted-foreground/60 font-mono'>rotation</span>
+            <span className='text-[10px] text-fg-dim font-mono'>rotation</span>
             <button
               onClick={() => { setIndex(Math.max(0, index - 1)); setPassword(null); }}
               disabled={index === 0}
-              className='text-xs font-mono text-muted-foreground hover:text-foreground disabled:opacity-30 px-1'
+              className='text-xs font-mono text-fg-muted hover:text-fg-high disabled:opacity-30 px-1'
             >-</button>
-            <span className='text-[10px] text-muted-foreground font-mono w-6 text-center'>#{index}</span>
+            <span className='text-[10px] text-fg-muted font-mono w-6 text-center'>#{index}</span>
             <button
               onClick={() => { setIndex(index + 1); setPassword(null); }}
-              className='text-xs font-mono text-muted-foreground hover:text-foreground px-1'
+              className='text-xs font-mono text-fg-muted hover:text-fg-high px-1'
             >+</button>
             {index > 0 && (
-              <span className='text-[9px] text-muted-foreground/40 font-mono'>password was rotated {index} time{index !== 1 ? 's' : ''}</span>
+              <span className='text-[9px] text-fg-muted/40 font-mono'>password was rotated {index} time{index !== 1 ? 's' : ''}</span>
             )}
           </div>
         </div>
@@ -99,7 +99,7 @@ export const PasswordsPage = () => {
         <button
           onClick={() => void generate()}
           disabled={!origin.trim() || generating}
-          className='rounded border border-border/40 py-2 text-xs font-mono text-muted-foreground hover:text-foreground hover:border-muted-foreground/60 disabled:opacity-30 transition-colors'
+          className='rounded border border-border-hard-soft py-2 text-xs font-mono text-fg-muted hover:text-fg-high hover:border-muted-foreground/60 disabled:opacity-30 transition-colors'
         >
           {generating ? 'deriving...' : 'generate'}
         </button>
@@ -107,12 +107,12 @@ export const PasswordsPage = () => {
         {password && (
           <button
             onClick={copy}
-            className='w-full rounded border border-border/40 p-3 text-left hover:bg-muted/30 transition-colors'
+            className='w-full rounded border border-border-hard-soft p-3 text-left hover:bg-elev-1 transition-colors'
           >
             <div className='font-mono text-xs break-all select-all leading-relaxed'>
               {password}
             </div>
-            <div className='text-[9px] text-muted-foreground/50 font-mono mt-2'>
+            <div className='text-[9px] text-fg-muted/50 font-mono mt-2'>
               {copied ? 'copied' : 'tap to copy'}
             </div>
           </button>

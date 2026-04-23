@@ -87,7 +87,7 @@ export const SettingsNetworks = () => {
           return (
             <div key={networkId} className={cn(
               'rounded-lg border overflow-hidden transition-colors',
-              isActive ? 'border-primary/60' : 'border-border/40',
+              isActive ? 'border-primary/60' : 'border-border-hard-soft',
             )}>
               {/* network row */}
               <div className='flex items-center p-3'>
@@ -103,9 +103,9 @@ export const SettingsNetworks = () => {
                     className={cn('h-3 w-3 rounded-full', isActive && 'ring-2 ring-primary/40 ring-offset-1 ring-offset-background')}
                     style={{ backgroundColor: getColorHex(network.color) }}
                   />
-                  <span className={cn('font-medium text-sm', !isEnabled && 'text-muted-foreground')}>{network.name}</span>
+                  <span className={cn('font-medium text-sm', !isEnabled && 'text-fg-muted')}>{network.name}</span>
                   {isActive && (
-                    <span className='text-[10px] px-1.5 py-0.5 rounded-md bg-primary/15 text-primary font-medium leading-none'>
+                    <span className='text-[10px] px-1.5 py-0.5 rounded-md bg-primary/15 text-zigner-gold font-medium leading-none'>
                       active
                     </span>
                   )}
@@ -123,7 +123,7 @@ export const SettingsNetworks = () => {
                       onClick={() => handleExpandToggle(networkId)}
                       className={cn(
                         'p-1 transition-colors',
-                        isExpanded ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
+                        isExpanded ? 'text-fg' : 'text-fg-muted hover:text-fg-high'
                       )}
                       title='configure endpoint'
                     >
@@ -136,36 +136,36 @@ export const SettingsNetworks = () => {
                     onClick={() => void handleToggle(networkId)}
                     className={cn(
                       'h-5 w-5 rounded border-2 flex items-center justify-center transition-colors',
-                      isEnabled ? 'border-primary bg-primary' : 'border-muted-foreground/50'
+                      isEnabled ? 'border-zigner-gold bg-zigner-gold' : 'border-muted-foreground/50'
                     )}
                   >
-                    {isEnabled && <span className='i-lucide-check h-3 w-3 text-primary-foreground' />}
+                    {isEnabled && <span className='i-lucide-check h-3 w-3 text-zigner-dark' />}
                   </button>
                 </div>
               </div>
 
               {/* endpoint config — expanded */}
               {isExpanded && isEnabled && (
-                <div className='border-t border-border/40 p-3 bg-muted/10'>
-                  <div className='text-[10px] text-muted-foreground mb-1'>endpoint</div>
+                <div className='border-t border-border-hard-soft p-3 bg-elev-2/10'>
+                  <div className='text-[10px] text-fg-muted mb-1'>endpoint</div>
                   <div className='flex gap-2'>
                     <input
                       type='text'
                       value={editingEndpoint}
                       onChange={e => setEditingEndpoint(e.target.value)}
                       placeholder={state?.endpoint ?? 'https://...'}
-                      className='flex-1 bg-input border border-border/40 px-2 py-1.5 text-xs font-mono focus:border-primary/50 focus:outline-none'
+                      className='flex-1 bg-input border border-border-hard-soft px-2 py-1.5 text-xs font-mono focus:border-primary/50 focus:outline-none'
                     />
                     <button
                       onClick={() => void handleSaveEndpoint(networkId)}
                       disabled={saving}
-                      className='px-3 py-1.5 text-xs bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50'
+                      className='px-3 py-1.5 text-xs bg-zigner-gold text-zigner-dark hover:bg-primary/90 transition-colors disabled:opacity-50'
                     >
                       {saving ? '...' : 'save'}
                     </button>
                   </div>
                   {state?.syncDescription && (
-                    <p className='text-[10px] text-muted-foreground mt-1.5'>{state.syncDescription}</p>
+                    <p className='text-[10px] text-fg-muted mt-1.5'>{state.syncDescription}</p>
                   )}
                 </div>
               )}

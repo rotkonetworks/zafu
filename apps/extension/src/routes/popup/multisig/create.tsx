@@ -164,32 +164,32 @@ export const MultisigCreate = () => {
     <SettingsScreen title='create multisig' backPath={PopupPath.MULTISIG}>
       {step === 'config' && (
         <div className='flex flex-col gap-4'>
-          <label className='text-xs text-muted-foreground'>
+          <label className='text-xs text-fg-muted'>
             relay url
             <input
-              className='mt-1 w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 font-mono text-xs focus:border-primary/50 focus:outline-none'
+              className='mt-1 w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 font-mono text-xs focus:border-primary/50 focus:outline-none'
               value={relayUrl}
               onChange={e => setRelayUrl(e.target.value)}
               placeholder='https://poker.zk.bot'
             />
           </label>
           <div className='flex gap-3'>
-            <label className='flex-1 text-xs text-muted-foreground'>
+            <label className='flex-1 text-xs text-fg-muted'>
               threshold (t)
               <input
                 type='number'
-                className='mt-1 w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm focus:border-primary/50 focus:outline-none'
+                className='mt-1 w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm focus:border-primary/50 focus:outline-none'
                 value={threshold}
                 onChange={e => setThreshold(Number(e.target.value))}
                 min={2}
                 max={maxSigners}
               />
             </label>
-            <label className='flex-1 text-xs text-muted-foreground'>
+            <label className='flex-1 text-xs text-fg-muted'>
               signers (n)
               <input
                 type='number'
-                className='mt-1 w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm focus:border-primary/50 focus:outline-none'
+                className='mt-1 w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm focus:border-primary/50 focus:outline-none'
                 value={maxSigners}
                 onChange={e => setMaxSigners(Number(e.target.value))}
                 min={threshold}
@@ -197,11 +197,11 @@ export const MultisigCreate = () => {
               />
             </label>
           </div>
-          <p className='text-xs text-muted-foreground'>
+          <p className='text-xs text-fg-muted'>
             {threshold}-of-{maxSigners}: requires {threshold} signatures to approve each transaction
           </p>
           <button
-            className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-primary hover:bg-primary/10 transition-colors'
+            className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors'
             onClick={() => void handleCreate()}
           >
             create room
@@ -211,48 +211,48 @@ export const MultisigCreate = () => {
 
       {step === 'waiting' && (
         <div className='flex flex-col items-center gap-4'>
-          <p className='text-xs text-muted-foreground'>share this room code with other participants</p>
+          <p className='text-xs text-fg-muted'>share this room code with other participants</p>
 
           {/* room code + copy */}
-          <div className='flex items-center gap-2 rounded-lg border border-border/40 bg-card px-6 py-4'>
+          <div className='flex items-center gap-2 rounded-lg border border-border-hard-soft bg-elev-1 px-6 py-4'>
             <span className='font-mono text-2xl tracking-wider'>{roomCode}</span>
             <button
               onClick={() => void navigator.clipboard.writeText(roomCode)}
-              className='p-1 text-muted-foreground hover:text-foreground transition-colors'
+              className='p-1 text-fg-muted hover:text-fg-high transition-colors'
             >
               <span className='i-lucide-copy size-4' />
             </button>
           </div>
 
           {/* QR code for room code */}
-          <div className='rounded-lg border border-border/40 bg-card p-3'>
+          <div className='rounded-lg border border-border-hard-soft bg-elev-1 p-3'>
             <QrDisplay data={Array.from(new TextEncoder().encode(roomCode)).map(b => b.toString(16).padStart(2, '0')).join('')} size={160} />
           </div>
 
           {/* participant counter */}
-          <div className='flex items-center gap-2 rounded-md bg-muted/50 px-3 py-1.5'>
-            <span className='i-lucide-users size-3.5 text-muted-foreground' />
+          <div className='flex items-center gap-2 rounded-md bg-elev-2 px-3 py-1.5'>
+            <span className='i-lucide-users size-3.5 text-fg-muted' />
             <span className='text-xs'>
-              <span className='font-medium text-foreground'>{participantCount}</span>
-              <span className='text-muted-foreground'> / {maxSigners} joined</span>
+              <span className='font-medium text-fg'>{participantCount}</span>
+              <span className='text-fg-muted'> / {maxSigners} joined</span>
             </span>
           </div>
 
           {/* countdown + spinner */}
-          <div className='flex items-center gap-2 text-xs text-muted-foreground'>
+          <div className='flex items-center gap-2 text-xs text-fg-muted'>
             <span className='i-lucide-loader-2 size-3.5 animate-spin' />
             waiting for {maxSigners - participantCount} participant(s)...
-            <span className='tabular-nums text-muted-foreground/60'>{countdown}s</span>
+            <span className='tabular-nums text-fg-dim'>{countdown}s</span>
           </div>
         </div>
       )}
 
       {currentRound > 0 && (
         <div className='flex flex-col items-center gap-4'>
-          <div className='flex items-center gap-2 text-xs text-muted-foreground'>
+          <div className='flex items-center gap-2 text-xs text-fg-muted'>
             <span className='i-lucide-loader-2 size-3.5 animate-spin' />
             key generation in progress
-            <span className='tabular-nums text-muted-foreground/60'>{countdown}s</span>
+            <span className='tabular-nums text-fg-dim'>{countdown}s</span>
           </div>
 
           {/* round progress */}
@@ -261,12 +261,12 @@ export const MultisigCreate = () => {
               <div key={s.key} className='flex items-center gap-1.5'>
                 <div className={`flex size-5 items-center justify-center rounded-full text-[10px] font-medium ${
                   i + 1 <= currentRound
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground'
+                    ? 'bg-zigner-gold text-zigner-dark'
+                    : 'bg-elev-2 text-fg-muted'
                 }`}>
                   {i + 1}
                 </div>
-                <span className={`text-xs ${i + 1 <= currentRound ? 'text-foreground' : 'text-muted-foreground'}`}>
+                <span className={`text-xs ${i + 1 <= currentRound ? 'text-fg' : 'text-fg-muted'}`}>
                   {s.label}
                 </span>
               </div>
@@ -274,20 +274,20 @@ export const MultisigCreate = () => {
           </div>
 
           {/* participant counter */}
-          <div className='flex items-center gap-2 rounded-md bg-muted/50 px-3 py-1.5'>
-            <span className='i-lucide-users size-3.5 text-muted-foreground' />
+          <div className='flex items-center gap-2 rounded-md bg-elev-2 px-3 py-1.5'>
+            <span className='i-lucide-users size-3.5 text-fg-muted' />
             <span className='text-xs'>
-              <span className='font-medium text-foreground'>{participantCount}</span>
-              <span className='text-muted-foreground'> / {maxSigners} participants</span>
+              <span className='font-medium text-fg'>{participantCount}</span>
+              <span className='text-fg-muted'> / {maxSigners} participants</span>
             </span>
           </div>
 
           {roomCode && (
-            <div className='flex items-center gap-2 rounded-lg border border-border/40 bg-card px-4 py-2'>
+            <div className='flex items-center gap-2 rounded-lg border border-border-hard-soft bg-elev-1 px-4 py-2'>
               <span className='font-mono text-sm tracking-wider'>{roomCode}</span>
               <button
                 onClick={() => void navigator.clipboard.writeText(roomCode)}
-                className='p-1 text-muted-foreground hover:text-foreground transition-colors'
+                className='p-1 text-fg-muted hover:text-fg-high transition-colors'
               >
                 <span className='i-lucide-copy size-3.5' />
               </button>
@@ -301,11 +301,11 @@ export const MultisigCreate = () => {
           <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-3 text-xs text-green-400'>
             multisig wallet created
           </div>
-          <div className='rounded-lg border border-border/40 bg-card p-3'>
-            <p className='text-[10px] text-muted-foreground'>address</p>
+          <div className='rounded-lg border border-border-hard-soft bg-elev-1 p-3'>
+            <p className='text-[10px] text-fg-muted'>address</p>
             <p className='mt-1 break-all font-mono text-xs'>{address}</p>
           </div>
-          <p className='text-xs text-muted-foreground'>
+          <p className='text-xs text-fg-muted'>
             {threshold}-of-{maxSigners} threshold. {threshold} participants must approve outgoing transactions.
           </p>
         </div>
@@ -318,7 +318,7 @@ export const MultisigCreate = () => {
           </div>
           <button
             onClick={() => { setStep('config'); setError(''); }}
-            className='rounded-lg border border-border/40 py-2 text-xs hover:bg-muted/50 transition-colors'
+            className='rounded-lg border border-border-hard-soft py-2 text-xs hover:bg-elev-1 transition-colors'
           >
             try again
           </button>

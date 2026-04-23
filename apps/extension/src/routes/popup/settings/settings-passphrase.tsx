@@ -37,7 +37,7 @@ export const SettingsPassphrase = () => {
   return (
     <SettingsScreen title='recovery passphrase' backPath={PopupPath.SETTINGS}>
       <div className='flex flex-col gap-4'>
-        <p className='text-sm text-muted-foreground'>
+        <p className='text-sm text-fg-muted'>
           if you change browser or switch to another computer, you will need this recovery
           passphrase to access your accounts.
         </p>
@@ -50,7 +50,7 @@ export const SettingsPassphrase = () => {
           <form onSubmit={submit} className='flex flex-col gap-3'>
             <PasswordInput
               passwordValue={password}
-              label={<p className='text-sm text-muted-foreground'>password</p>}
+              label={<p className='text-sm text-fg-muted'>password</p>}
               onChange={e => {
                 setPassword(e.target.value);
                 setEnteredIncorrect(false);
@@ -68,32 +68,32 @@ export const SettingsPassphrase = () => {
             )}
             <button
               type='submit'
-              className='w-full rounded-lg bg-primary py-2.5 text-sm text-primary-foreground transition-colors hover:bg-primary/90'
+              className='w-full rounded-lg bg-zigner-gold py-2.5 text-sm text-zigner-dark transition-colors hover:bg-primary/90'
             >
               confirm
             </button>
           </form>
         ) : (
           <div className='flex flex-col gap-3'>
-            <div className='flex items-center gap-2 text-[10px] text-muted-foreground/60 font-mono'>
+            <div className='flex items-center gap-2 text-[10px] text-fg-dim font-mono'>
               <span className='h-2 w-2 rounded-full bg-yellow-400' />
               hot wallet — seed is in browser memory
             </div>
             <div
-              className='select-all cursor-text rounded-lg bg-background border border-border/40 p-3 text-xs leading-relaxed break-words'
+              className='select-all cursor-text rounded-lg bg-canvas border border-border-hard-soft p-3 text-xs leading-relaxed break-words'
             >
               {phrase.join(' ')}
             </div>
             <CopyToClipboard
               text={phrase.join(' ')}
-              label={<span className='text-xs text-muted-foreground'>copy to clipboard</span>}
+              label={<span className='text-xs text-fg-muted'>copy to clipboard</span>}
               className='m-auto'
               isSuccessCopyText
             />
 
             {/* backup to zigner */}
-            <div className='border-t border-border/40 pt-3 mt-1'>
-              <p className='text-[10px] text-muted-foreground/60 font-mono mb-2'>
+            <div className='border-t border-border-hard-soft pt-3 mt-1'>
+              <p className='text-[10px] text-fg-dim font-mono mb-2'>
                 scan with zigner to back up this seed on your air-gapped device.
                 the seed goes INTO the air gap — never out.
               </p>
@@ -133,7 +133,7 @@ const QrSeedDisplay = ({ phrase }: { phrase: string }) => {
     return (
       <button
         onClick={() => setShow(true)}
-        className='w-full rounded border border-border/40 py-2 text-xs font-mono text-muted-foreground hover:text-foreground transition-colors'
+        className='w-full rounded border border-border-hard-soft py-2 text-xs font-mono text-fg-muted hover:text-fg-high transition-colors'
       >
         show QR for zigner backup
       </button>
@@ -145,13 +145,13 @@ const QrSeedDisplay = ({ phrase }: { phrase: string }) => {
       <div className='bg-white p-2 rounded'>
         <canvas ref={ref} />
       </div>
-      <p className='text-[9px] text-muted-foreground/50 font-mono text-center'>
+      <p className='text-[9px] text-fg-muted/50 font-mono text-center'>
         scan with zigner camera to import seed.
         close this screen when done.
       </p>
       <button
         onClick={() => setShow(false)}
-        className='text-[10px] font-mono text-muted-foreground hover:text-foreground'
+        className='text-[10px] font-mono text-fg-muted hover:text-fg-high'
       >
         hide QR
       </button>

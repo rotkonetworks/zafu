@@ -142,10 +142,10 @@ export const SettingsParachains = () => {
 
   return (
     <div className='flex flex-col h-full'>
-      <div className='flex items-center gap-3 border-b border-border/40 px-4 py-3'>
+      <div className='flex items-center gap-3 border-b border-border-hard-soft px-4 py-3'>
         <button
           onClick={() => navigate(-1)}
-          className='text-muted-foreground transition-colors hover:text-foreground'
+          className='text-fg-muted transition-colors hover:text-fg-high'
         >
           <span className='i-lucide-arrow-left h-5 w-5' />
         </button>
@@ -153,7 +153,7 @@ export const SettingsParachains = () => {
       </div>
 
       {/* tabs */}
-      <div className='flex border-b border-border/40'>
+      <div className='flex border-b border-border-hard-soft'>
         {(['polkadot', 'kusama', 'custom'] as (RelayNetwork | 'custom')[]).map(tab => (
           <button
             key={tab}
@@ -161,8 +161,8 @@ export const SettingsParachains = () => {
             className={cn(
               'flex-1 py-2 text-sm font-medium transition-colors',
               activeTab === tab
-                ? 'border-b-2 border-primary text-foreground'
-                : 'text-muted-foreground hover:text-foreground'
+                ? 'border-b-2 border-zigner-gold text-fg'
+                : 'text-fg-muted hover:text-fg-high'
             )}
           >
             {tab}
@@ -184,35 +184,35 @@ export const SettingsParachains = () => {
             />
             <button
               onClick={() => fileInputRef.current?.click()}
-              className='flex items-center justify-center gap-2 p-3 rounded-lg border border-dashed border-border/40 hover:border-primary/50 hover:bg-muted/50 transition-colors'
+              className='flex items-center justify-center gap-2 p-3 rounded-lg border border-dashed border-border-hard-soft hover:border-primary/50 hover:bg-elev-1 transition-colors'
             >
               <span className='i-lucide-upload h-4 w-4' />
               <span className='text-sm'>upload chainspec json</span>
             </button>
 
             {customChains.length === 0 ? (
-              <div className='text-center text-sm text-muted-foreground py-12'>
+              <div className='text-center text-sm text-fg-muted py-12'>
                 no custom chainspecs added
               </div>
             ) : (
               <div className='flex flex-col gap-1'>
-                <div className='mb-2 text-xs text-muted-foreground'>
+                <div className='mb-2 text-xs text-fg-muted'>
                   {customChains.length} custom chain{customChains.length !== 1 ? 's' : ''}
                 </div>
                 {customChains.map(chain => (
                   <div
                     key={chain.id}
-                    className='flex items-center justify-between p-3 rounded-lg border border-border/40 text-left'
+                    className='flex items-center justify-between p-3 rounded-lg border border-border-hard-soft text-left'
                   >
                     <div className='flex flex-col'>
                       <span className='font-medium text-sm'>{chain.name}</span>
-                      <span className='text-xs text-muted-foreground'>
+                      <span className='text-xs text-fg-muted'>
                         {chain.symbol ?? 'unknown'} • {chain.relay}
                       </span>
                     </div>
                     <button
                       onClick={() => void handleDeleteCustom(chain.id)}
-                      className='p-2 text-muted-foreground hover:text-destructive transition-colors'
+                      className='p-2 text-fg-muted hover:text-destructive transition-colors'
                     >
                       <span className='i-lucide-trash-2 h-4 w-4' />
                     </button>
@@ -223,15 +223,15 @@ export const SettingsParachains = () => {
           </div>
         ) : loading ? (
           <div className='flex items-center justify-center py-12'>
-            <span className='i-lucide-refresh-cw h-5 w-5 animate-spin text-muted-foreground' />
+            <span className='i-lucide-refresh-cw h-5 w-5 animate-spin text-fg-muted' />
           </div>
         ) : parachains.length === 0 ? (
-          <div className='text-center text-sm text-muted-foreground py-12'>
+          <div className='text-center text-sm text-fg-muted py-12'>
             no parachains available
           </div>
         ) : (
           <div className='flex flex-col gap-1'>
-            <div className='mb-2 text-xs text-muted-foreground'>
+            <div className='mb-2 text-xs text-fg-muted'>
               {parachains.length} parachains available
             </div>
             {parachains.map(chain => {
@@ -241,23 +241,23 @@ export const SettingsParachains = () => {
                   key={chain.id}
                   onClick={() => void handleToggle(chain.id)}
                   className={cn(
-                    'flex items-center justify-between p-3 rounded-lg border border-border/40 transition-colors text-left',
-                    isEnabled ? 'bg-primary/5 border-primary/40' : 'hover:bg-muted/50'
+                    'flex items-center justify-between p-3 rounded-lg border border-border-hard-soft transition-colors text-left',
+                    isEnabled ? 'bg-primary/5 border-primary/40' : 'hover:bg-elev-1'
                   )}
                 >
                   <div className='flex flex-col'>
                     <span className='font-medium text-sm'>{chain.name}</span>
                     {chain.symbol && (
-                      <span className='text-xs text-muted-foreground'>{chain.symbol}</span>
+                      <span className='text-xs text-fg-muted'>{chain.symbol}</span>
                     )}
                   </div>
                   <div
                     className={cn(
                       'h-5 w-5 rounded border-2 flex items-center justify-center transition-colors',
-                      isEnabled ? 'border-primary bg-primary' : 'border-muted-foreground/50'
+                      isEnabled ? 'border-zigner-gold bg-zigner-gold' : 'border-muted-foreground/50'
                     )}
                   >
-                    {isEnabled && <span className='i-lucide-check h-3 w-3 text-primary-foreground' />}
+                    {isEnabled && <span className='i-lucide-check h-3 w-3 text-zigner-dark' />}
                   </div>
                 </button>
               );
@@ -266,8 +266,8 @@ export const SettingsParachains = () => {
         )}
       </div>
 
-      <div className='p-4 border-t border-border/40'>
-        <p className='text-xs text-muted-foreground text-center'>
+      <div className='p-4 border-t border-border-hard-soft'>
+        <p className='text-xs text-fg-muted text-center'>
           chainspecs from paritytech.github.io/chainspecs
         </p>
       </div>

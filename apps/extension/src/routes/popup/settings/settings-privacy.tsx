@@ -60,7 +60,7 @@ function Row({
     <div className='flex items-start justify-between gap-4 py-3'>
       <div className='flex-1'>
         <p className='text-sm font-medium'>{label}</p>
-        <p className={`text-xs mt-0.5 ${checked ? 'text-green-500' : 'text-muted-foreground'}`}>
+        <p className={`text-xs mt-0.5 ${checked ? 'text-green-500' : 'text-fg-muted'}`}>
           {stateLabel}
         </p>
       </div>
@@ -70,7 +70,7 @@ function Row({
       >
         {checked
           ? <span className='i-lucide-toggle-right size-7 text-green-400' />
-          : <span className='i-lucide-toggle-left size-7 text-muted-foreground/40' />
+          : <span className='i-lucide-toggle-left size-7 text-fg-muted/40' />
         }
       </button>
     </div>
@@ -98,14 +98,14 @@ function ProxySection() {
       <div className='flex items-center justify-between'>
         <div>
           <p className='text-sm font-medium'>proxy</p>
-          <p className={`text-xs mt-0.5 ${proxy.enabled ? 'text-green-500' : 'text-muted-foreground'}`}>
+          <p className={`text-xs mt-0.5 ${proxy.enabled ? 'text-green-500' : 'text-fg-muted'}`}>
             {proxy.enabled ? `socks5://${proxy.host}:${proxy.port}` : 'direct connection - ip visible to servers'}
           </p>
         </div>
         <button onClick={() => proxy.enabled ? disable() : (host ? apply() : undefined)} className='shrink-0'>
           {proxy.enabled
             ? <span className='i-lucide-toggle-right size-7 text-green-400' />
-            : <span className='i-lucide-toggle-left size-7 text-muted-foreground/40' />
+            : <span className='i-lucide-toggle-left size-7 text-fg-muted/40' />
           }
         </button>
       </div>
@@ -115,24 +115,24 @@ function ProxySection() {
             value={host}
             onChange={e => setHost(e.target.value)}
             placeholder='host'
-            className='flex-1 rounded border border-border/40 bg-transparent px-2 py-1 text-xs font-mono'
+            className='flex-1 rounded border border-border-hard-soft bg-transparent px-2 py-1 text-xs font-mono'
           />
           <input
             value={port}
             onChange={e => setPort(e.target.value)}
             placeholder='port'
-            className='w-16 rounded border border-border/40 bg-transparent px-2 py-1 text-xs font-mono'
+            className='w-16 rounded border border-border-hard-soft bg-transparent px-2 py-1 text-xs font-mono'
           />
           <button
             onClick={apply}
             disabled={!host.trim()}
-            className='rounded border border-border/40 px-2 py-1 text-xs disabled:opacity-30'
+            className='rounded border border-border-hard-soft px-2 py-1 text-xs disabled:opacity-30'
           >
             connect
           </button>
         </div>
       )}
-      <p className='text-[9px] text-muted-foreground/40 mt-1'>
+      <p className='text-[9px] text-fg-muted/40 mt-1'>
         {pro
           ? 'routes all traffic through proxy - pro includes rotko proxy access'
           : 'routes all traffic through your socks5 proxy - pro includes proxy access'}
@@ -163,7 +163,7 @@ export function SettingsPrivacy() {
         ))}
         <ProxySection />
         {visibleRows.length === 0 && (
-          <p className='py-8 text-center text-sm text-muted-foreground'>
+          <p className='py-8 text-center text-sm text-fg-muted'>
             no privacy settings for this network
           </p>
         )}

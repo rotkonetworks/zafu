@@ -51,11 +51,11 @@ function SettingsRow({
   return (
     <button
       onClick={onClick}
-      className='flex w-full items-center gap-3 py-3 text-left transition-colors hover:bg-muted/50'
+      className='flex w-full items-center gap-3 py-3 text-left transition-colors hover:bg-elev-1'
     >
-      <span className={cn(icon, 'size-5 text-muted-foreground')} />
-      <span className='flex-1 text-sm text-foreground'>{title}</span>
-      <span className='i-lucide-chevron-right size-4 text-muted-foreground' />
+      <span className={cn(icon, 'size-5 text-fg-muted')} />
+      <span className='flex-1 text-sm text-fg'>{title}</span>
+      <span className='i-lucide-chevron-right size-4 text-fg-muted' />
     </button>
   );
 }
@@ -105,15 +105,15 @@ export const Settings = () => {
           ))}
           <button
             onClick={cycleAutoLock}
-            className='flex w-full items-center gap-3 py-3 text-left transition-colors hover:bg-muted/50'
+            className='flex w-full items-center gap-3 py-3 text-left transition-colors hover:bg-elev-1'
           >
-            <span className={cn('i-lucide-timer', 'size-5 text-muted-foreground')} />
-            <span className='flex-1 text-sm text-foreground'>auto-lock</span>
-            <span className='text-xs text-muted-foreground'>{autoLockLabel}</span>
+            <span className={cn('i-lucide-timer', 'size-5 text-fg-muted')} />
+            <span className='flex-1 text-sm text-fg'>auto-lock</span>
+            <span className='text-xs text-fg-muted'>{autoLockLabel}</span>
           </button>
         </div>
 
-        <div className='mt-4 border-t border-border/40 pt-4'>
+        <div className='mt-4 border-t border-border-hard-soft pt-4'>
           <SettingsRow
             icon='i-lucide-log-out'
             title='lock wallet'

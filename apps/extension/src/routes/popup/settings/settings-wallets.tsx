@@ -26,7 +26,7 @@ const networkBadge = (network: string) => {
     kusama: 'bg-pink-500/15 text-pink-400',
   };
   return (
-    <span key={network} className={cn('text-[10px] px-1.5 py-0.5 rounded', colors[network] ?? 'bg-muted text-muted-foreground')}>
+    <span key={network} className={cn('text-[10px] px-1.5 py-0.5 rounded', colors[network] ?? 'bg-elev-2 text-fg-muted')}>
       {network}
     </span>
   );
@@ -244,7 +244,7 @@ export const SettingsWallets = () => {
         {/* ── wallet list ── */}
 
         {keyInfos.length > 0 ? (
-          <div className='flex flex-col divide-y divide-border/40 rounded-lg border border-border/40 bg-card'>
+          <div className='flex flex-col divide-y divide-border/40 rounded-lg border border-border-hard-soft bg-elev-1'>
             {keyInfos.map(v => {
               const networks: string[] = [];
               if (penumbraWallets.some(w => w.vaultId === v.id)) networks.push('penumbra');
@@ -276,21 +276,21 @@ export const SettingsWallets = () => {
             })}
           </div>
         ) : (
-          <p className='py-12 text-center text-sm text-muted-foreground'>no wallets</p>
+          <p className='py-12 text-center text-sm text-fg-muted'>no wallets</p>
         )}
 
         {/* ── removal flow ── */}
 
         {removingVault && removingType === 'mnemonic' && step === 'password' && (
           <RemovalCard title={`remove "${removingVault.name}"`}>
-            <p className='text-xs text-muted-foreground mb-3'>
+            <p className='text-xs text-fg-muted mb-3'>
               enter password to view recovery phrase.
             </p>
             <form onSubmit={e => void verifyPassword(e)} className='flex flex-col gap-2'>
               <input type='password' value={password} autoFocus
                 onChange={e => { setPassword(e.target.value); setPasswordError(false); }}
                 placeholder='password'
-                className='w-full bg-input border border-border/40 px-3 py-2.5 text-sm rounded-lg focus:outline-none focus:border-primary' />
+                className='w-full bg-input border border-border-hard-soft px-3 py-2.5 text-sm rounded-lg focus:outline-none focus:border-zigner-gold' />
               {passwordError && <span className='text-xs text-red-400'>wrong password</span>}
               <div className='flex gap-2 mt-1'>
                 <Btn onClick={resetRemoval}>cancel</Btn>
@@ -302,13 +302,13 @@ export const SettingsWallets = () => {
 
         {removingVault && removingType === 'mnemonic' && step === 'backup' && (
           <RemovalCard title='back up recovery phrase'>
-            <div className='select-all cursor-text rounded-lg bg-background border border-border/40 p-3 mb-3 text-xs leading-relaxed break-words'>
+            <div className='select-all cursor-text rounded-lg bg-canvas border border-border-hard-soft p-3 mb-3 text-xs leading-relaxed break-words'>
               {phrase.join(' ')}
             </div>
             <label className='flex items-start gap-2 mb-3 cursor-pointer select-none'>
               <input type='checkbox' checked={backupAcked}
                 onChange={e => setBackupAcked(e.target.checked)} className='mt-0.5' />
-              <span className='text-xs text-muted-foreground'>i have backed up my phrase</span>
+              <span className='text-xs text-fg-muted'>i have backed up my phrase</span>
             </label>
             <div className='flex gap-2'>
               <Btn onClick={resetRemoval}>cancel</Btn>
@@ -320,7 +320,7 @@ export const SettingsWallets = () => {
 
         {removingVault && step === 'confirm' && (
           <RemovalCard title='confirm removal'>
-            <p className='text-xs text-muted-foreground mb-3'>
+            <p className='text-xs text-fg-muted mb-3'>
               "{removingVault.name}" will be permanently removed.
               {removingType === 'zigner-zafu' && ' re-import from zigner anytime.'}
               {removingType === 'frost-multisig' && ' you would need to run DKG again.'}
@@ -342,14 +342,14 @@ export const SettingsWallets = () => {
 
         {/* ── add wallet ── */}
 
-        <div className='border-t border-border/40 pt-4'>
+        <div className='border-t border-border-hard-soft pt-4'>
           {/* zigner info box — tap 10x for dev paste mode */}
-          <div className='rounded-lg border border-border/40 bg-card p-3 mb-3' onClick={handleSecretTap}>
-            <p className='text-xs text-muted-foreground'>
+          <div className='rounded-lg border border-border-hard-soft bg-elev-1 p-3 mb-3' onClick={handleSecretTap}>
+            <p className='text-xs text-fg-muted'>
               zafu zigner keeps spending keys offline. transactions require QR code signing with your device.
             </p>
             <a href='https://zigner.rotko.net' target='_blank' rel='noopener noreferrer'
-              className='flex items-center gap-1.5 text-xs text-primary hover:underline mt-2'>
+              className='flex items-center gap-1.5 text-xs text-zigner-gold hover:underline mt-2'>
               <span className='i-lucide-external-link h-3 w-3' />
               download zafu zigner
             </a>
@@ -367,9 +367,9 @@ export const SettingsWallets = () => {
               <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-3'>
                 <div className='flex items-center gap-2'>
                   <p className='text-xs text-green-400'>qr code scanned</p>
-                  <span className='text-[10px] px-1 rounded-md bg-muted text-muted-foreground'>{detectedNetwork}</span>
+                  <span className='text-[10px] px-1 rounded-md bg-elev-2 text-fg-muted'>{detectedNetwork}</span>
                 </div>
-                <p className='text-[10px] text-muted-foreground mt-1 font-mono'>
+                <p className='text-[10px] text-fg-muted mt-1 font-mono'>
                   {parsedCosmosExport ? (
                     <>{parsedCosmosExport.addresses.map(a => a.address.slice(0, 10)).join(', ')}...</>
                   ) : parsedPolkadotExport ? (
@@ -399,7 +399,7 @@ export const SettingsWallets = () => {
           {/* manual paste mode (dev) */}
           {showManualInput && (
             <div className='flex flex-col gap-3'>
-              <p className='text-[10px] text-muted-foreground'>developer mode: paste QR hex data</p>
+              <p className='text-[10px] text-fg-muted'>developer mode: paste QR hex data</p>
               <Input placeholder='paste QR code hex (530301...)'
                 onChange={e => { if (e.target.value.trim()) processQrData(e.target.value); }}
                 className='font-mono text-xs' />
@@ -420,13 +420,13 @@ export const SettingsWallets = () => {
           {showInitialState && (
             <div className='flex flex-col gap-2'>
               <button onClick={() => setScanning(true)}
-                className='w-full flex items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-primary hover:bg-primary/10 transition-colors'>
+                className='w-full flex items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors'>
                 <span className='i-lucide-scan-line size-4' />
                 scan zigner QR
               </button>
               {!hasSeedVault && (
                 <button onClick={() => chrome.runtime.openOptionsPage()}
-                  className='w-full rounded-lg border border-dashed border-border/40 py-2.5 text-xs text-muted-foreground hover:text-foreground hover:border-border/60 transition-colors'>
+                  className='w-full rounded-lg border border-dashed border-border-hard-soft py-2.5 text-xs text-fg-muted hover:text-fg-high hover:border-border-hard-soft transition-colors'>
                   + import seed phrase
                 </button>
               )}
@@ -515,7 +515,7 @@ const VaultRow = ({ vault, networks, multisigWallet, onRemove, onRename, disable
                 className='w-full text-sm bg-transparent border-b border-primary/50 outline-none' />
             ) : (
               <button onClick={() => { setDraft(vault.name); setEditing(true); }}
-                className='text-sm text-left truncate hover:text-primary transition-colors'>
+                className='text-sm text-left truncate hover:text-zigner-gold transition-colors'>
                 {vault.name}
               </button>
             )}
@@ -527,7 +527,7 @@ const VaultRow = ({ vault, networks, multisigWallet, onRemove, onRename, disable
           )}
         </div>
         <button onClick={onRemove} disabled={disabled}
-          className='p-1 text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-red-400 transition-colors disabled:opacity-50'>
+          className='p-1 text-fg-muted/0 group-hover:text-fg-muted hover:!text-red-400 transition-colors disabled:opacity-50'>
           <span className='i-lucide-trash-2 size-3.5' />
         </button>
       </div>
@@ -536,24 +536,24 @@ const VaultRow = ({ vault, networks, multisigWallet, onRemove, onRename, disable
       {hasZcash && (
         <div className='mt-2'>
           <div className='flex items-center gap-2'>
-            <span className='text-[10px] text-muted-foreground whitespace-nowrap'>sync from</span>
+            <span className='text-[10px] text-fg-muted whitespace-nowrap'>sync from</span>
             <input
               type='number' min={ZCASH_ORCHARD_ACTIVATION} step='1000' value={birthday}
               onChange={e => setBirthday(e.target.value)}
               onBlur={saveBirthday}
               onKeyDown={e => e.key === 'Enter' && saveBirthday()}
               placeholder='auto'
-              className='w-24 bg-input border border-border/40 px-2 py-1 text-[10px] font-mono rounded focus:outline-none focus:border-primary/50'
+              className='w-24 bg-input border border-border-hard-soft px-2 py-1 text-[10px] font-mono rounded focus:outline-none focus:border-primary/50'
             />
           </div>
-          <p className='text-[9px] text-muted-foreground/60 mt-0.5'>orchard only — sapling/sprout not supported</p>
+          <p className='text-[9px] text-fg-dim mt-0.5'>orchard only — sapling/sprout not supported</p>
         </div>
       )}
 
       {vault.type === 'zigner-zafu' && hasZcash && (
         <button
           onClick={() => navigate(PopupPath.NOTE_SYNC)}
-          className='flex items-center gap-1.5 mt-2 text-[10px] text-muted-foreground hover:text-foreground'
+          className='flex items-center gap-1.5 mt-2 text-[10px] text-fg-muted hover:text-fg-high'
         >
           <span className='i-lucide-qr-code size-3' />
           sync balance to zigner
@@ -562,18 +562,18 @@ const VaultRow = ({ vault, networks, multisigWallet, onRemove, onRename, disable
 
       {multisigWallet && (
         <div className='flex items-center gap-2 mt-2'>
-          <span className='text-[10px] text-muted-foreground'>
+          <span className='text-[10px] text-fg-muted'>
             {String(vault.insensitive['threshold'])}/{String(vault.insensitive['maxSigners'])}
           </span>
           <button
             onClick={() => navigate(`${PopupPath.SETTINGS_MULTISIG}?id=${multisigWallet.id}` as PopupPath)}
-            className='text-[10px] text-muted-foreground hover:text-foreground'
+            className='text-[10px] text-fg-muted hover:text-fg-high'
           >
             edit
           </button>
           <button
             onClick={() => navigate(PopupPath.MULTISIG_SIGN)}
-            className='text-[10px] text-primary'
+            className='text-[10px] text-zigner-gold'
           >
             co-sign
           </button>
@@ -586,7 +586,7 @@ const VaultRow = ({ vault, networks, multisigWallet, onRemove, onRename, disable
 /* ── shared ui ── */
 
 const RemovalCard = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <div className='rounded-lg border border-red-500/20 bg-card p-4'>
+  <div className='rounded-lg border border-red-500/20 bg-elev-1 p-4'>
     <div className='text-sm font-medium text-red-400 mb-2'>{title}</div>
     {children}
   </div>
@@ -604,8 +604,8 @@ const Btn = ({ children, onClick, submit, destructive, primary, disabled }: {
     className={cn(
       'flex-1 rounded-lg py-2 text-xs transition-colors duration-100 disabled:opacity-50',
       destructive && 'bg-red-500/15 text-red-400 border border-red-500/25 hover:bg-red-500/25',
-      primary && 'bg-primary/15 text-primary border border-primary/25 hover:bg-primary/25',
-      !destructive && !primary && 'border border-border/40 hover:bg-muted/50',
+      primary && 'bg-primary/15 text-zigner-gold border border-primary/25 hover:bg-primary/25',
+      !destructive && !primary && 'border border-border-hard-soft hover:bg-elev-1',
     )}>
     {children}
   </button>
