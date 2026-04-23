@@ -27,7 +27,7 @@ export const IdentityKeyComponent = ({ identityKey }: { identityKey: IdentityKey
     <div className='flex min-w-0 items-center gap-2'>
       {ik ? (
         <div className='min-w-0 truncate font-mono'>
-          <span className='text-muted-foreground'>{ik.slice(0, sep)}</span>
+          <span className='text-fg-muted'>{ik.slice(0, sep)}</span>
           {ik.slice(sep)}
           <CopyToClipboardIconButton text={ik} />
         </div>

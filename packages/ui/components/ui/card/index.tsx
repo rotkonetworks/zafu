@@ -10,14 +10,14 @@ export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
 
 const Card = React.forwardRef<HTMLDivElement, CardProps>(
   ({ className, gradient: _gradient, light, children, layout }, ref) => {
-    const baseClasses = 'border border-border/40 p-[30px] overflow-hidden';
+    const baseClasses = 'border border-border-soft p-[30px] overflow-hidden';
     return (
       <motion.div
         layout={layout}
         ref={ref}
         className={cn(
           baseClasses,
-          light ? 'bg-stone-300' : 'bg-card',
+          light ? 'bg-stone-300' : 'bg-elev-1',
           className,
         )}
       >
@@ -50,7 +50,7 @@ const CardDescription = React.forwardRef<
   HTMLParagraphElement,
   React.HTMLAttributes<HTMLParagraphElement>
 >(({ className, ...props }, ref) => (
-  <p ref={ref} className={cn('text-muted-foreground', className)} {...props} />
+  <p ref={ref} className={cn('text-fg-muted', className)} {...props} />
 ));
 CardDescription.displayName = 'CardDescription';
 

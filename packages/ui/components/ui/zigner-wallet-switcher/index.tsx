@@ -74,17 +74,17 @@ function WalletItem({
       onClick={onClick}
       className={cn(
         'w-full px-3 py-2 flex items-center justify-between rounded-lg transition-colors',
-        'hover:bg-muted/50',
-        isActive && 'bg-muted',
+        'hover:bg-elev-1',
+        isActive && 'bg-elev-2',
       )}
     >
       <div className="flex items-center gap-3">
-        <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-          <Wallet className="w-4 h-4 text-muted-foreground" />
+        <div className="w-8 h-8 rounded-full bg-elev-2 flex items-center justify-center">
+          <Wallet className="w-4 h-4 text-fg-muted" />
         </div>
         <div className="text-left">
           <p className="text-sm font-medium">{wallet.label}</p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-fg-muted">
             Account #{wallet.zignerAccountIndex}
           </p>
         </div>
@@ -125,11 +125,11 @@ export function ZignerWalletSwitcher({
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
           'flex items-center gap-2 px-3 py-2 rounded-lg transition-colors',
-          'hover:bg-muted/50 border border-border',
+          'hover:bg-elev-1 border border-border-hard',
         )}
       >
-        <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center">
-          <Wallet className="w-3 h-3 text-muted-foreground" />
+        <div className="w-6 h-6 rounded-full bg-elev-2 flex items-center justify-center">
+          <Wallet className="w-3 h-3 text-fg-muted" />
         </div>
         <span className="text-sm font-medium max-w-[120px] truncate">
           {activeWallet.label}
@@ -141,7 +141,7 @@ export function ZignerWalletSwitcher({
         </div>
         <ChevronDown
           className={cn(
-            'w-4 h-4 text-muted-foreground transition-transform',
+            'w-4 h-4 text-fg-muted transition-transform',
             isOpen && 'rotate-180',
           )}
         />
@@ -160,12 +160,12 @@ export function ZignerWalletSwitcher({
           <div
             className={cn(
               'absolute top-full left-0 mt-1 w-64 z-50',
-              'bg-card border border-border rounded-lg shadow-lg',
+              'bg-elev-1 border border-border-hard rounded-lg shadow-lg',
               'py-1',
             )}
           >
-            <div className="px-3 py-2 border-b border-border">
-              <p className="text-xs text-muted-foreground font-medium uppercase">
+            <div className="px-3 py-2 border-b border-border-hard">
+              <p className="text-xs text-fg-muted font-medium uppercase">
                 zigner wallets
               </p>
             </div>
@@ -185,7 +185,7 @@ export function ZignerWalletSwitcher({
             </div>
 
             {showAddButton && onAddWallet && (
-              <div className="border-t border-border pt-1 px-1">
+              <div className="border-t border-border-hard pt-1 px-1">
                 <button
                   onClick={() => {
                     onAddWallet();
@@ -193,8 +193,8 @@ export function ZignerWalletSwitcher({
                   }}
                   className={cn(
                     'w-full px-3 py-2 flex items-center gap-2 rounded-lg',
-                    'text-sm text-muted-foreground hover:text-foreground',
-                    'hover:bg-muted/50 transition-colors',
+                    'text-sm text-fg-muted hover:text-fg-high',
+                    'hover:bg-elev-1 transition-colors',
                   )}
                 >
                   <Plus className="w-4 h-4" />

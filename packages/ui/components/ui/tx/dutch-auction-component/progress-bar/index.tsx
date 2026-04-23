@@ -52,7 +52,7 @@ export const ProgressBar = ({
 
         {auctionIsUpcoming && (
           <>
-            <div className='flex shrink items-center gap-2 truncate text-xs text-light-brown group-hover:text-muted-foreground'>
+            <div className='flex shrink items-center gap-2 truncate text-xs text-light-brown group-hover:text-fg-muted'>
               <div className='flex items-center gap-1'>
                 <ClockIcon size={12} />
                 <span className='truncate pt-[3px]'>starts in ~{timeTillStart}</span>
@@ -70,7 +70,7 @@ export const ProgressBar = ({
 
         {auctionIsInProgress && (
           <>
-            <div className='flex items-center gap-1 truncate text-xs text-light-brown group-hover:text-muted-foreground'>
+            <div className='flex items-center gap-1 truncate text-xs text-light-brown group-hover:text-fg-muted'>
               <HourglassIcon size={12} />
 
               <span className='truncate pt-[3px]'>
