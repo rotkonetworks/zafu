@@ -50,9 +50,28 @@ Adds a single right-click action on selected text: "Send ZEC/Penumbra to this ad
 
 ### `host_permissions: ["<all_urls>"]`
 ```
-zafu implements the Penumbra wallet provider protocol and an ed25519 identity-signing API that any web application can request. By design, the extension must be able to respond to `postMessage` calls from any origin the user visits (the same way MetaMask, Phantom, and other web wallets work). The extension never reads page content; the content scripts only listen for connection-request messages originating from the page's own JavaScript.
+zafu is a multichain self-custodial wallet (Zcash + Penumbra + Cosmos + Bitcoin + EVM + Polkadot ecosystem) that implements the standard web3 wallet provider pattern. Two independent reasons require broad host access:
 
-No network requests are made to arbitrary URLs — the extension only talks to the Zcash light-server (configurable, defaults to `https://zidecar.rotko.net`) and the Penumbra grpc-web endpoint.
+1. PROVIDER INJECTION. The extension implements the Penumbra wallet provider protocol and an ed25519 identity-signing API that any web application can request. dApps must be able to detect the wallet on page load, before any user gesture. Same architecture as MetaMask, Phantom, Rabby — the content scripts listen for postMessage connection requests on the page's own JavaScript. No page content is read.
+
+2. CHAIN DATA FETCH. The wallet fetches public blockchain data (block headers, compact blocks, RPC queries, market data) from a defined set of endpoints — one per supported chain. All endpoints are user-configurable in settings; an advanced user can swap in their own self-hosted node for any chain.
+
+Default endpoints bundled (grouped by purpose):
+
+- Zcash light-server:  zidecar.rotko.net
+- Penumbra gRPC-web:  penumbra.rotko.net, dex.penumbra.zone, tokenomics.penumbra.zone
+- Cosmos (Polkachu):  celestia-{api,rpc}.polkachu.com, noble-{api,rpc}.polkachu.com
+- Osmosis:  lcd.osmosis.zone, rpc.osmosis.zone
+- Nomic:  rpc.nomic.io, app.nomic.io
+- Bitcoin mempool:  mempool.space
+- Ethereum RPC:  eth.llamarpc.com
+- NEAR cross-chain swap:  1click.chaindefuser.com
+- Polkadot + parachains:  rpc.polkadot.io, kusama-rpc.polkadot.io, rpc.hydradx.cloud, rpc.astar.network, acala-rpc.dwellir.com, karura-rpc.dwellir.com, wss.api.moonbeam.network, wss.api.moonriver.moonbeam.network
+- Polkadot chain metadata:  metadata.novasama.io
+- License (pro subscription):  zpro.rotko.net
+- Poker (optional feature):  poker.zk.bot, relay.zk.bot
+
+The extension does not make arbitrary HTTP requests beyond this set and the user-configured overrides. Each endpoint serves a specific bounded purpose for the chain it supports.
 ```
 
 ### `content_scripts` (ISOLATED + MAIN world)
