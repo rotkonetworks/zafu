@@ -85,33 +85,33 @@ const MultisigOverview = () => {
   };
 
   return (
-    <div className='rounded-lg border border-border-soft bg-elev-1'>
+    <div className='rounded-md border border-border-soft bg-elev-1'>
       <button
         onClick={() => setExpanded(!expanded)}
         className='flex items-center justify-between w-full px-4 py-3 text-left'
       >
         <div className='flex items-center gap-2'>
-          <span className='i-lucide-key-round h-4 w-4 text-yellow-400' />
-          <span className='text-sm font-medium'>
+          <span className='i-lucide-key-round h-4 w-4 text-zigner-gold' />
+          <span className='text-[13px] text-fg-high lowercase tracking-[0.04em]'>
             multisig wallets
           </span>
-          <span className='rounded-full bg-yellow-500/15 px-1.5 py-0.5 text-[10px] text-yellow-400'>
+          <span className='rounded-full bg-zigner-gold/15 px-1.5 py-0.5 text-[10px] text-zigner-gold tabular'>
             {multisigWallets.length}
           </span>
         </div>
         <div className='flex items-center gap-2'>
-          <span className='text-sm font-mono text-fg-muted'>
+          <span className='text-[13px] tabular text-fg-muted'>
             {formatZec(totalZat)} ZEC
           </span>
           <span className={cn(
-            'h-4 w-4 text-fg-muted transition-transform',
+            'h-4 w-4 text-fg-dim transition-transform',
             expanded ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down',
           )} />
         </div>
       </button>
 
       {expanded && (
-        <div className='border-t border-border-hard/20 px-4 py-2 space-y-1'>
+        <div className='border-t border-border-soft px-4 py-2 space-y-1'>
           {multisigWallets.map(w => {
             const bal = balances[w.id] ?? 0n;
             const isActive = w.originalIndex === activeIdx;
@@ -122,20 +122,20 @@ const MultisigOverview = () => {
                   void setActiveZcashWallet(w.originalIndex);
                 }}
                 className={cn(
-                  'flex items-center justify-between w-full rounded-md px-3 py-2 text-left transition-colors',
-                  isActive ? 'bg-primary/10' : 'hover:bg-elev-1',
+                  'flex items-center justify-between w-full rounded-sm px-3 py-2 text-left transition-colors',
+                  isActive ? 'bg-zigner-gold/10' : 'hover:bg-elev-2',
                 )}
               >
                 <div className='flex items-center gap-2 min-w-0'>
-                  <span className='rounded bg-primary/15 px-1.5 py-0.5 text-[9px] font-semibold text-zigner-gold leading-none shrink-0'>
+                  <span className='rounded-sm bg-zigner-gold/15 px-1.5 py-0.5 text-[9px] text-zigner-gold tabular leading-none shrink-0'>
                     {w.multisig!.threshold}/{w.multisig!.maxSigners}
                   </span>
-                  <span className='text-sm truncate'>{w.label}</span>
+                  <span className='text-[13px] text-fg-high truncate'>{w.label}</span>
                   {isActive && (
                     <span className='i-lucide-check h-3 w-3 text-zigner-gold shrink-0' />
                   )}
                 </div>
-                <span className='text-sm font-mono text-fg-muted shrink-0'>
+                <span className='text-[13px] tabular text-fg-muted shrink-0'>
                   {formatZec(bal)}
                 </span>
               </button>
@@ -217,11 +217,11 @@ export const PopupIndex = () => {
                 className='flex items-center gap-1 text-xs text-fg-muted transition-colors duration-100 hover:text-fg-high disabled:opacity-50 disabled:cursor-not-allowed'
               >
                 {isMultisig && (
-                  <span className='rounded bg-primary/15 px-1.5 py-0.5 text-[9px] font-semibold text-zigner-gold leading-none'>
+                  <span className='rounded-sm bg-zigner-gold/15 px-1.5 py-0.5 text-[9px] text-zigner-gold tabular leading-none'>
                     {activeZcashWallet!.multisig!.threshold}/{activeZcashWallet!.multisig!.maxSigners}
                   </span>
                 )}
-                <span className='font-mono'>{displayAddress}</span>
+                <span className='tabular'>{displayAddress}</span>
                 {address && (copied ? <span className='i-lucide-check h-3 w-3' /> : <span className='i-lucide-copy h-3 w-3' />)}
               </button>
               {address && activeNetwork === 'zcash' && (
@@ -391,12 +391,13 @@ const PenumbraContent = ({ account, onAccountChange }: { account: number; onAcco
 
   return (
     <div className='flex-1 flex flex-col gap-3'>
-      {/* balance card */}
-      <div className='rounded-lg border border-border-soft bg-elev-1 p-4'>
-        <div className='text-3xl font-medium tabular-nums text-fg'>
+      {/* balance card — figure renders in the network accent (rebinds per chain) */}
+      <div className='rounded-md border border-border-soft bg-elev-1 p-4'>
+        <span className='kicker'>total balance</span>
+        <div className='mt-1 text-[32px] leading-none text-network-accent tabular'>
           {balanceDisplay}
         </div>
-        <div className='mt-1 text-xs text-fg-muted'>{syncLabel}</div>
+        <div className='mt-1 text-[10px] text-fg-dim tabular'>{syncLabel}</div>
       </div>
 
       {/* sync bar — visible while syncing or connecting */}
@@ -413,7 +414,7 @@ const PenumbraContent = ({ account, onAccountChange }: { account: number; onAcco
       {/* account picker — between sync bar and assets */}
       <PenumbraAccountPicker account={account} onChange={onAccountChange} />
 
-      <div className='mb-2 text-xs font-medium uppercase tracking-wider text-fg-muted'>assets</div>
+      <div className='kicker mb-2'>assets</div>
       <Suspense fallback={<AssetListSkeleton rows={4} />}>
         <AssetsTable account={account} />
       </Suspense>
@@ -702,15 +703,15 @@ const ZcashContent = ({
   return (
     <div className='flex-1 flex flex-col gap-3'>
       {PasswordModal}
-      {/* combined balance */}
-      <div className='rounded-lg border border-primary/20 bg-elev-1 p-4'>
-        <div className='text-xs text-fg-muted'>balance</div>
-        <div className='text-3xl font-medium tabular-nums text-fg'>
+      {/* combined balance — figure in the network accent (zigner-gold for zcash) */}
+      <div className='rounded-md border border-network-accent/20 bg-elev-1 p-4'>
+        <span className='kicker'>balance</span>
+        <div className='mt-1 text-[32px] leading-none text-network-accent tabular'>
           {workerSyncHeight > 0 || totalZat > 0n
             ? `${fmtZec(totalZec)} ZEC`
             : '— ZEC'}
         </div>
-        <div className='mt-1 text-xs text-fg-muted'>
+        <div className='mt-1 text-[10px] text-fg-dim tabular'>
           {chainHeight <= 0
             ? 'connecting...'
             : allSynced
