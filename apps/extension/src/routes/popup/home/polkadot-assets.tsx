@@ -28,14 +28,14 @@ interface PolkadotAssetsProps {
 
 /** single chain balance row */
 const ChainRow = memo(({ balance }: { balance: ChainBalance }) => (
-  <div className='flex items-center justify-between py-2 px-3 border-b border-border/40 last:border-0'>
+  <div className='flex items-center justify-between py-2 px-3 border-b border-border-hard-soft last:border-0'>
     <div className='flex items-center gap-2'>
       <div className='h-6 w-6 bg-primary/10 flex items-center justify-center text-xs font-bold'>
         {balance.symbol.slice(0, 2)}
       </div>
       <div className='flex flex-col'>
         <span className='text-sm font-medium'>{balance.chainName}</span>
-        <span className='text-xs text-muted-foreground'>{balance.symbol}</span>
+        <span className='text-xs text-fg-muted'>{balance.symbol}</span>
       </div>
     </div>
     <div className='text-right'>
@@ -43,7 +43,7 @@ const ChainRow = memo(({ balance }: { balance: ChainBalance }) => (
         {formatBalance(balance.balance, balance.decimals, 4)} {balance.symbol}
       </div>
       {balance.cached && (
-        <div className='text-xs text-muted-foreground/70'>cached</div>
+        <div className='text-xs text-fg-muted/70'>cached</div>
       )}
     </div>
   </div>
@@ -99,7 +99,7 @@ export const PolkadotAssets = ({ publicKey, relay = 'polkadot' }: PolkadotAssets
   if (loading) {
     return (
       <div className='flex items-center justify-center py-12'>
-        <span className='i-lucide-refresh-cw h-5 w-5 animate-spin text-muted-foreground' />
+        <span className='i-lucide-refresh-cw h-5 w-5 animate-spin text-fg-muted' />
       </div>
     );
   }
@@ -107,13 +107,13 @@ export const PolkadotAssets = ({ publicKey, relay = 'polkadot' }: PolkadotAssets
   return (
     <div className='flex flex-col'>
       <div className='flex items-center justify-between mb-2'>
-        <span className='text-xs font-medium uppercase tracking-wider text-muted-foreground'>
+        <span className='text-xs font-medium uppercase tracking-wider text-fg-muted'>
           {relay} ecosystem
         </span>
         <button
           onClick={() => void handleRefresh()}
           disabled={refreshing}
-          className='text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50'
+          className='text-xs text-fg-muted hover:text-fg-high transition-colors disabled:opacity-50'
         >
           {refreshing ? (
             <span className='i-lucide-refresh-cw h-3 w-3 animate-spin' />
@@ -123,11 +123,11 @@ export const PolkadotAssets = ({ publicKey, relay = 'polkadot' }: PolkadotAssets
         </button>
       </div>
 
-      <div className='rounded-lg border border-border/40 bg-card'>
+      <div className='rounded-lg border border-border-hard-soft bg-elev-1'>
         {balances.length === 0 ? (
           <div className='flex flex-col items-center justify-center py-12 text-center'>
-            <span className='text-sm text-muted-foreground'>no balances</span>
-            <span className='text-xs text-muted-foreground/70 mt-1'>
+            <span className='text-sm text-fg-muted'>no balances</span>
+            <span className='text-xs text-fg-muted/70 mt-1'>
               enable parachains in settings
             </span>
           </div>

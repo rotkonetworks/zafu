@@ -126,23 +126,23 @@ function ConversationRow({
         'group relative flex items-start gap-3 rounded-lg border p-3 w-full text-left transition-colors',
         conversation.unread > 0
           ? 'border-primary/40 bg-primary/5 hover:bg-primary/10'
-          : 'border-border/40 bg-card hover:border-border/60',
+          : 'border-border-hard-soft bg-elev-1 hover:border-border-hard-soft',
       )}
       onClick={onClick}
     >
       {/* unread dot */}
       {conversation.unread > 0 && (
-        <div className='absolute left-1 top-1/2 -translate-y-1/2 h-2 w-2 rounded-full bg-primary' />
+        <div className='absolute left-1 top-1/2 -translate-y-1/2 h-2 w-2 rounded-full bg-zigner-gold' />
       )}
 
       {/* icon */}
       <div className={cn(
         'flex h-10 w-10 items-center justify-center rounded-full shrink-0',
-        hasFrost ? 'bg-yellow-500/10' : 'bg-muted/50',
+        hasFrost ? 'bg-yellow-500/10' : 'bg-elev-2',
       )}>
         <span className={cn(
           'h-5 w-5',
-          hasFrost ? 'i-lucide-key-round text-yellow-400' : 'i-lucide-message-square text-muted-foreground',
+          hasFrost ? 'i-lucide-key-round text-yellow-400' : 'i-lucide-message-square text-fg-muted',
         )} />
       </div>
 
@@ -154,12 +154,12 @@ function ConversationRow({
           </span>
           <div className='flex items-center gap-1.5 shrink-0'>
             {conversation.unread > 0 && (
-              <span className='rounded-full bg-primary px-1.5 py-0.5 text-[10px] text-primary-foreground'>
+              <span className='rounded-full bg-zigner-gold px-1.5 py-0.5 text-[10px] text-zigner-dark'>
                 {conversation.unread}
               </span>
             )}
             {lastMsg?.timestamp && (
-              <span className='text-[10px] text-muted-foreground whitespace-nowrap'>
+              <span className='text-[10px] text-fg-muted whitespace-nowrap'>
                 {formatTimestamp(lastMsg.timestamp)}
               </span>
             )}
@@ -167,12 +167,12 @@ function ConversationRow({
         </div>
         <p className={cn(
           'text-xs mt-0.5 line-clamp-1',
-          conversation.unread > 0 ? 'text-foreground' : 'text-muted-foreground',
+          conversation.unread > 0 ? 'text-fg' : 'text-fg-muted',
         )}>
           {preview}
         </p>
         <div className='flex items-center gap-1.5 mt-1'>
-          <span className='text-[10px] text-muted-foreground/60'>
+          <span className='text-[10px] text-fg-dim'>
             {conversation.messages.length} message{conversation.messages.length !== 1 ? 's' : ''}
           </span>
         </div>
@@ -192,13 +192,13 @@ function MessageBubble({ message }: { message: InboxMessage }) {
         'max-w-[85%] rounded-xl px-3 py-2',
         isOutgoing
           ? 'bg-primary/15 rounded-br-sm'
-          : 'bg-muted/60 rounded-bl-sm',
+          : 'bg-elev-2/60 rounded-bl-sm',
       )}>
         {/* type badge for non-text */}
         {message.type !== MemoType.Text && (
           <div className='flex items-center gap-1 mb-1'>
-            <span className={cn(memoTypeIcon(message.type), 'h-3 w-3 text-muted-foreground')} />
-            <span className='text-[10px] text-muted-foreground'>{message.typeLabel}</span>
+            <span className={cn(memoTypeIcon(message.type), 'h-3 w-3 text-fg-muted')} />
+            <span className='text-[10px] text-fg-muted'>{message.typeLabel}</span>
           </div>
         )}
 
@@ -208,7 +208,7 @@ function MessageBubble({ message }: { message: InboxMessage }) {
         {/* meta */}
         <div className='flex items-center gap-2 mt-1'>
           {message.timestamp && (
-            <span className='text-[10px] text-muted-foreground/60'>
+            <span className='text-[10px] text-fg-dim'>
               {formatTimestamp(message.timestamp)}
             </span>
           )}
@@ -237,7 +237,7 @@ function MessageContent({ message }: { message: InboxMessage }) {
     case MemoType.Address:
       return (
         <div className='space-y-1'>
-          <p className='text-xs text-muted-foreground'>shared address</p>
+          <p className='text-xs text-fg-muted'>shared address</p>
           <p className='text-xs font-mono break-all'>{message.body}</p>
         </div>
       );
@@ -245,7 +245,7 @@ function MessageContent({ message }: { message: InboxMessage }) {
     case MemoType.PaymentRequest:
       return (
         <div className='space-y-1'>
-          <p className='text-xs text-muted-foreground'>payment request</p>
+          <p className='text-xs text-fg-muted'>payment request</p>
           <p className='text-sm font-mono break-all'>{message.body}</p>
         </div>
       );
@@ -260,7 +260,7 @@ function MessageContent({ message }: { message: InboxMessage }) {
 
     case MemoType.EncryptedMessage:
       return (
-        <div className='flex items-center gap-1.5 text-muted-foreground'>
+        <div className='flex items-center gap-1.5 text-fg-muted'>
           <span className='i-lucide-lock h-4 w-4' />
           <span className='text-xs'>encrypted message (decryption not yet supported)</span>
         </div>
@@ -280,7 +280,7 @@ function MessageContent({ message }: { message: InboxMessage }) {
       return <FrostSignBubble message={message} />;
 
     default:
-      return <p className='text-xs font-mono text-muted-foreground break-all'>{message.body}</p>;
+      return <p className='text-xs font-mono text-fg-muted break-all'>{message.body}</p>;
   }
 }
 
@@ -294,7 +294,7 @@ function ContactCardBubble({ card }: { card?: ContactCard }) {
     }
   }, [card, findByAddress]);
 
-  if (!card) return <p className='text-xs text-muted-foreground'>malformed contact card</p>;
+  if (!card) return <p className='text-xs text-fg-muted'>malformed contact card</p>;
 
   const handleSave = async () => {
     const contact = await addContact({ name: card.name || 'unnamed' });
@@ -305,14 +305,14 @@ function ContactCardBubble({ card }: { card?: ContactCard }) {
   return (
     <div className='space-y-2'>
       <div className='flex items-center gap-2'>
-        <span className='i-lucide-contact h-4 w-4 text-primary' />
+        <span className='i-lucide-contact h-4 w-4 text-zigner-gold' />
         <span className='text-sm font-medium'>{card.name || 'anonymous'}</span>
       </div>
-      <p className='text-[10px] font-mono text-muted-foreground break-all'>{card.address}</p>
+      <p className='text-[10px] font-mono text-fg-muted break-all'>{card.address}</p>
       {card.zid && (
         <div className='flex items-center gap-1'>
-          <span className='i-lucide-fingerprint h-3 w-3 text-muted-foreground' />
-          <span className='text-[10px] font-mono text-muted-foreground'>
+          <span className='i-lucide-fingerprint h-3 w-3 text-fg-muted' />
+          <span className='text-[10px] font-mono text-fg-muted'>
             zid{card.zid.slice(0, 16)}
           </span>
         </div>
@@ -325,7 +325,7 @@ function ContactCardBubble({ card }: { card?: ContactCard }) {
       ) : (
         <button
           onClick={() => void handleSave()}
-          className='flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-[10px] text-primary hover:bg-primary/20 transition-colors'
+          className='flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-[10px] text-zigner-gold hover:bg-primary/20 transition-colors'
         >
           <span className='i-lucide-user-plus h-3 w-3' />
           save to contacts
@@ -379,18 +379,18 @@ function DataBubble({ body }: { body: string }) {
   return (
     <div className='space-y-1'>
       <div className='flex items-center gap-2'>
-        <span className='rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground'>
+        <span className='rounded bg-elev-2 px-1.5 py-0.5 text-[10px] text-fg-muted'>
           {contentType}
         </span>
         <button
           onClick={() => setExpanded(!expanded)}
-          className='text-[10px] text-primary hover:underline'
+          className='text-[10px] text-zigner-gold hover:underline'
         >
           {expanded ? 'collapse' : 'expand'}
         </button>
       </div>
       {expanded && (
-        <pre className='text-[10px] font-mono text-muted-foreground bg-background/50 rounded p-2 overflow-x-auto max-h-48 whitespace-pre-wrap break-all'>
+        <pre className='text-[10px] font-mono text-fg-muted bg-background/50 rounded p-2 overflow-x-auto max-h-48 whitespace-pre-wrap break-all'>
           {display}
         </pre>
       )}
@@ -409,7 +409,7 @@ function FrostDkgBubble({ message }: { message: InboxMessage }) {
         <span className='i-lucide-key-round h-4 w-4 text-yellow-400' />
         <span className='text-sm font-medium text-yellow-400'>DKG round {round}</span>
       </div>
-      <p className='text-[10px] text-muted-foreground'>
+      <p className='text-[10px] text-fg-muted'>
         {round === 1 && 'key generation started - share your commitment'}
         {round === 2 && 'commitments collected - share your package'}
         {round === 3 && 'packages collected - finalize key generation'}
@@ -442,7 +442,7 @@ function FrostSignBubble({ message }: { message: InboxMessage }) {
         <span className='i-lucide-pen-tool h-4 w-4 text-blue-400' />
         <span className='text-sm font-medium text-blue-400'>{message.typeLabel}</span>
       </div>
-      <p className='text-[10px] text-muted-foreground'>
+      <p className='text-[10px] text-fg-muted'>
         {labels[message.type] ?? 'FROST signing round'}
       </p>
       {message.direction === 'incoming' && message.type === MemoType.SignRequest && (
@@ -500,10 +500,10 @@ function ConversationThread({
   return (
     <div className='flex flex-col h-full'>
       {/* header */}
-      <div className='flex items-center gap-3 px-4 py-3 border-b border-border/40'>
+      <div className='flex items-center gap-3 px-4 py-3 border-b border-border-hard-soft'>
         <button
           onClick={onClose}
-          className='text-muted-foreground hover:text-foreground transition-colors'
+          className='text-fg-muted hover:text-fg-high transition-colors'
         >
           <span className='i-lucide-arrow-left h-5 w-5' />
         </button>
@@ -516,13 +516,13 @@ function ConversationThread({
                 onChange={e => setLabelDraft(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && saveLabel()}
                 autoFocus
-                className='flex-1 bg-transparent border-b border-primary text-sm focus:outline-none'
+                className='flex-1 bg-transparent border-b border-zigner-gold text-sm focus:outline-none'
                 placeholder='conversation label'
               />
-              <button onClick={saveLabel} className='text-primary'>
+              <button onClick={saveLabel} className='text-zigner-gold'>
                 <span className='i-lucide-check h-4 w-4' />
               </button>
-              <button onClick={() => setEditingLabel(false)} className='text-muted-foreground'>
+              <button onClick={() => setEditingLabel(false)} className='text-fg-muted'>
                 <span className='i-lucide-x h-4 w-4' />
               </button>
             </div>
@@ -532,22 +532,22 @@ function ConversationThread({
                 setLabelDraft(conversation.label ?? '');
                 setEditingLabel(true);
               }}
-              className='flex items-center gap-1.5 text-sm font-medium hover:text-primary transition-colors'
+              className='flex items-center gap-1.5 text-sm font-medium hover:text-zigner-gold transition-colors'
             >
               {conversation.label || `conversation #${conversation.diversifierIndex}`}
-              <span className='i-lucide-pencil h-3 w-3 text-muted-foreground' />
+              <span className='i-lucide-pencil h-3 w-3 text-fg-muted' />
             </button>
           )}
         </div>
 
-        <span className='text-[10px] text-muted-foreground'>
+        <span className='text-[10px] text-fg-muted'>
           {conversation.messages.length} msg
         </span>
       </div>
 
       {/* referral attribution */}
       {referral && (
-        <div className='flex items-center gap-1.5 px-4 py-2 text-xs text-blue-400 border-b border-border/20'>
+        <div className='flex items-center gap-1.5 px-4 py-2 text-xs text-blue-400 border-b border-border-hard/20'>
           <span className='i-lucide-share-2 h-3.5 w-3.5' />
           via {referral.sharedWith}
         </div>
@@ -589,7 +589,7 @@ function ConversationCompose({ diversifierIndex }: { diversifierIndex: number })
   };
 
   return (
-    <div className='p-3 border-t border-border/40'>
+    <div className='p-3 border-t border-border-hard-soft'>
       <div className='flex items-end gap-2'>
         <textarea
           value={message}
@@ -602,7 +602,7 @@ function ConversationCompose({ diversifierIndex }: { diversifierIndex: number })
           }}
           placeholder='write a message...'
           rows={1}
-          className='flex-1 rounded-lg border border-border/40 bg-input px-3 py-2 text-sm focus:border-zigner-gold focus:outline-none resize-none'
+          className='flex-1 rounded-lg border border-border-hard-soft bg-input px-3 py-2 text-sm focus:border-zigner-gold focus:outline-none resize-none'
         />
         <button
           onClick={handleSend}
@@ -612,7 +612,7 @@ function ConversationCompose({ diversifierIndex }: { diversifierIndex: number })
           <span className='i-lucide-send h-4 w-4' />
         </button>
       </div>
-      <p className='text-[10px] text-muted-foreground mt-1'>
+      <p className='text-[10px] text-fg-muted mt-1'>
         sends via {activeNetwork} shielded transaction
       </p>
     </div>
@@ -711,8 +711,8 @@ function ComposeMessage({
 
   return (
     <div className='flex flex-col h-full'>
-      <div className='flex items-center gap-3 px-4 py-3 border-b border-border/40'>
-        <button onClick={onClose} className='text-muted-foreground hover:text-foreground transition-colors'>
+      <div className='flex items-center gap-3 px-4 py-3 border-b border-border-hard-soft'>
+        <button onClick={onClose} className='text-fg-muted hover:text-fg-high transition-colors'>
           <span className='i-lucide-arrow-left h-5 w-5' />
         </button>
         <h2 className='text-lg font-medium'>new message</h2>
@@ -720,19 +720,19 @@ function ComposeMessage({
 
       <div className='flex-1 overflow-y-auto p-4 space-y-4'>
         <div>
-          <label className='block text-xs text-muted-foreground mb-1'>to</label>
+          <label className='block text-xs text-fg-muted mb-1'>to</label>
           <input
             type='text'
             value={recipient}
             onChange={e => setRecipient(e.target.value)}
             placeholder={network === 'zcash' ? 'z-address or unified address' : 'penumbra1...'}
             disabled={!!replyTo || txStatus !== 'idle'}
-            className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-xs font-mono focus:border-zigner-gold focus:outline-none disabled:opacity-50'
+            className='w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-xs font-mono focus:border-zigner-gold focus:outline-none disabled:opacity-50'
           />
         </div>
 
         <div>
-          <label className='block text-xs text-muted-foreground mb-1'>
+          <label className='block text-xs text-fg-muted mb-1'>
             amount ({network === 'penumbra' ? 'um' : 'zec'})
           </label>
           <input
@@ -741,13 +741,13 @@ function ComposeMessage({
             onChange={e => setAmount(e.target.value)}
             placeholder='0.00 (optional)'
             disabled={txStatus !== 'idle'}
-            className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none disabled:opacity-50'
+            className='w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none disabled:opacity-50'
           />
-          <p className='text-xs text-muted-foreground mt-1'>send a payment with your message</p>
+          <p className='text-xs text-fg-muted mt-1'>send a payment with your message</p>
         </div>
 
         <div>
-          <label className='block text-xs text-muted-foreground mb-1'>message</label>
+          <label className='block text-xs text-fg-muted mb-1'>message</label>
           <textarea
             value={message}
             onChange={e => setMessage(e.target.value)}
@@ -755,12 +755,12 @@ function ComposeMessage({
             rows={6}
             maxLength={network === 'zcash' && ownAddress ? 512 - ownAddress.length - 7 : 512}
             disabled={txStatus !== 'idle'}
-            className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none resize-none disabled:opacity-50'
+            className='w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none resize-none disabled:opacity-50'
           />
-          <p className='text-xs text-muted-foreground mt-1'>
+          <p className='text-xs text-fg-muted mt-1'>
             {message.length}/{network === 'zcash' && ownAddress ? 512 - ownAddress.length - 7 : 512} characters
             {network === 'zcash' && ownAddress && (
-              <span className='ml-1 text-muted-foreground/60'>(return address reserved)</span>
+              <span className='ml-1 text-fg-dim'>(return address reserved)</span>
             )}
           </p>
         </div>
@@ -768,19 +768,19 @@ function ComposeMessage({
         {txStatus === 'success' && txHash && (
           <div className='rounded-lg border border-green-500/40 bg-green-500/10 p-3'>
             <p className='text-sm text-green-400'>message sent!</p>
-            <p className='text-xs text-muted-foreground mt-1 font-mono break-all'>{txHash}</p>
+            <p className='text-xs text-fg-muted mt-1 font-mono break-all'>{txHash}</p>
           </div>
         )}
 
         {txStatus === 'error' && txError && (
           <div className='rounded-lg border border-red-500/40 bg-red-500/10 p-3'>
             <p className='text-sm text-red-400'>failed to send</p>
-            <p className='text-xs text-muted-foreground mt-1'>{txError}</p>
+            <p className='text-xs text-fg-muted mt-1'>{txError}</p>
           </div>
         )}
       </div>
 
-      <div className='p-4 border-t border-border/40'>
+      <div className='p-4 border-t border-border-hard-soft'>
         <button
           onClick={() => {
             if (txStatus === 'success' || txStatus === 'error') onClose();
@@ -799,7 +799,7 @@ function ComposeMessage({
             <><span className='i-lucide-send h-4 w-4' /> send message</>
           )}
         </button>
-        <p className='text-xs text-muted-foreground text-center mt-2'>
+        <p className='text-xs text-fg-muted text-center mt-2'>
           {network === 'penumbra'
             ? 'message will be encrypted in penumbra memo'
             : 'will open zcash send flow'}
@@ -909,11 +909,11 @@ export function InboxPage() {
   return (
     <div className='flex flex-col h-full'>
       {/* header */}
-      <div className='flex items-center justify-between px-4 py-3 border-b border-border/40'>
+      <div className='flex items-center justify-between px-4 py-3 border-b border-border-hard-soft'>
         <div className='flex items-center gap-2'>
           <h1 className='text-lg font-medium'>inbox</h1>
           {isSyncing && (
-            <span className='flex items-center gap-1 text-xs text-muted-foreground'>
+            <span className='flex items-center gap-1 text-xs text-fg-muted'>
               <span className='i-lucide-refresh-cw h-3 w-3 animate-spin' />
               syncing{currentSyncProgress ? ` (${currentSyncProgress.current})` : '...'}
             </span>
@@ -926,7 +926,7 @@ export function InboxPage() {
               else syncPenumbraMemos();
             }}
             disabled={isSyncing}
-            className='rounded-lg p-1.5 hover:bg-muted/50 transition-colors disabled:opacity-50'
+            className='rounded-lg p-1.5 hover:bg-elev-1 transition-colors disabled:opacity-50'
             title='sync messages'
           >
             <span className={cn('i-lucide-refresh-cw h-4 w-4', isSyncing && 'animate-spin')} />
@@ -942,19 +942,19 @@ export function InboxPage() {
       </div>
 
       {/* tabs */}
-      <div className='flex border-b border-border/40'>
+      <div className='flex border-b border-border-hard-soft'>
         <button
           onClick={() => setTab('conversations')}
           className={cn(
             'flex-1 py-2.5 text-sm font-medium border-b-2 transition-colors',
             tab === 'conversations'
-              ? 'border-zigner-gold text-foreground'
-              : 'border-transparent text-muted-foreground hover:text-foreground',
+              ? 'border-zigner-gold text-fg'
+              : 'border-transparent text-fg-muted hover:text-fg-high',
           )}
         >
           conversations
           {unreadCount > 0 && (
-            <span className='ml-1.5 rounded-full bg-primary px-1.5 py-0.5 text-[10px] text-primary-foreground'>
+            <span className='ml-1.5 rounded-full bg-zigner-gold px-1.5 py-0.5 text-[10px] text-zigner-dark'>
               {unreadCount}
             </span>
           )}
@@ -964,8 +964,8 @@ export function InboxPage() {
           className={cn(
             'flex-1 py-2.5 text-sm font-medium border-b-2 transition-colors',
             tab === 'all'
-              ? 'border-zigner-gold text-foreground'
-              : 'border-transparent text-muted-foreground hover:text-foreground',
+              ? 'border-zigner-gold text-fg'
+              : 'border-transparent text-fg-muted hover:text-fg-high',
           )}
         >
           all messages
@@ -975,13 +975,13 @@ export function InboxPage() {
       {/* search */}
       <div className='px-4 py-3'>
         <div className='relative'>
-          <span className='i-lucide-search absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground' />
+          <span className='i-lucide-search absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-fg-muted' />
           <input
             type='text'
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder={tab === 'conversations' ? 'search conversations...' : 'search messages...'}
-            className='w-full rounded-lg border border-border/40 bg-input pl-9 pr-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
+            className='w-full rounded-lg border border-border-hard-soft bg-input pl-9 pr-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
           />
         </div>
       </div>
@@ -1060,15 +1060,15 @@ function FlatMessageRow({
       className={cn(
         'flex items-start gap-3 rounded-lg border p-3 w-full text-left transition-colors',
         message.read
-          ? 'border-border/40 bg-card hover:border-border/60'
+          ? 'border-border-hard-soft bg-elev-1 hover:border-border-hard-soft'
           : 'border-primary/40 bg-primary/5 hover:bg-primary/10',
       )}
       onClick={onClick}
     >
-      <div className='flex h-8 w-8 items-center justify-center rounded-full bg-muted/50 shrink-0'>
+      <div className='flex h-8 w-8 items-center justify-center rounded-full bg-elev-2 shrink-0'>
         <span className={cn(
           'h-4 w-4',
-          message.read ? 'i-lucide-mail-open text-muted-foreground' : 'i-lucide-mail text-primary',
+          message.read ? 'i-lucide-mail-open text-fg-muted' : 'i-lucide-mail text-zigner-gold',
         )} />
       </div>
       <div className='flex-1 min-w-0'>
@@ -1076,13 +1076,13 @@ function FlatMessageRow({
           <span className={cn('text-sm truncate', !message.read && 'font-medium')}>
             {contactName ?? truncateAddress(displayAddress)}
           </span>
-          <span className='text-[10px] text-muted-foreground whitespace-nowrap'>
+          <span className='text-[10px] text-fg-muted whitespace-nowrap'>
             {formatTimestamp(message.timestamp)}
           </span>
         </div>
         <p className={cn(
           'text-xs mt-0.5 line-clamp-1',
-          message.read ? 'text-muted-foreground' : 'text-foreground',
+          message.read ? 'text-fg-muted' : 'text-fg',
         )}>
           {message.content}
         </p>
@@ -1100,11 +1100,11 @@ function EmptyState({ text, subtitle }: { text: string; subtitle: string }) {
   return (
     <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
       <div className='rounded-full bg-primary/10 p-4'>
-        <span className='i-lucide-mail h-8 w-8 text-primary' />
+        <span className='i-lucide-mail h-8 w-8 text-zigner-gold' />
       </div>
       <div>
         <p className='text-sm font-medium'>{text}</p>
-        <p className='text-xs text-muted-foreground'>{subtitle}</p>
+        <p className='text-xs text-fg-muted'>{subtitle}</p>
       </div>
     </div>
   );

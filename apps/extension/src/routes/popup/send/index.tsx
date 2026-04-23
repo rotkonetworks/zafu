@@ -51,18 +51,18 @@ function ChainSelector({
     <div className='relative'>
       <button
         onClick={() => setOpen(!open)}
-        className='flex w-full items-center justify-between rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50'
+        className='flex w-full items-center justify-between rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50'
       >
         {selected ? (
           <span>{selected.displayName}</span>
         ) : (
-          <span className='text-muted-foreground'>select chain</span>
+          <span className='text-fg-muted'>select chain</span>
         )}
         <span className={cn('i-lucide-chevron-down h-4 w-4 transition-transform', open && 'rotate-180')} />
       </button>
 
       {open && (
-        <div className='absolute top-full left-0 right-0 z-50 mt-1 rounded-lg border border-border/40 bg-background shadow-lg overflow-hidden'>
+        <div className='absolute top-full left-0 right-0 z-50 mt-1 rounded-lg border border-border-hard-soft bg-canvas shadow-lg overflow-hidden'>
           {chains.map(chain => (
             <button
               key={chain.chainId}
@@ -71,8 +71,8 @@ function ChainSelector({
                 setOpen(false);
               }}
               className={cn(
-                'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-muted/50',
-                selected?.chainId === chain.chainId && 'bg-muted/30'
+                'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-elev-1',
+                selected?.chainId === chain.chainId && 'bg-elev-2'
               )}
             >
               {chain.images[0]?.png && (
@@ -102,12 +102,12 @@ function AssetSelector({
   const [open, setOpen] = useState(false);
 
   if (loading) {
-    return <div className='h-10 rounded-lg bg-muted animate-pulse' />;
+    return <div className='h-10 rounded-lg bg-elev-2 animate-pulse' />;
   }
 
   if (assets.length === 0) {
     return (
-      <div className='rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-muted-foreground'>
+      <div className='rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm text-fg-muted'>
         no assets
       </div>
     );
@@ -117,21 +117,21 @@ function AssetSelector({
     <div className='relative'>
       <button
         onClick={() => setOpen(!open)}
-        className='flex w-full items-center justify-between rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50'
+        className='flex w-full items-center justify-between rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50'
       >
         {selected ? (
           <div className='flex items-center gap-2'>
             <span className='font-medium'>{selected.symbol}</span>
-            <span className='text-muted-foreground'>{selected.formatted}</span>
+            <span className='text-fg-muted'>{selected.formatted}</span>
           </div>
         ) : (
-          <span className='text-muted-foreground'>select asset</span>
+          <span className='text-fg-muted'>select asset</span>
         )}
         <span className={cn('i-lucide-chevron-down h-4 w-4 transition-transform', open && 'rotate-180')} />
       </button>
 
       {open && (
-        <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border/40 bg-background shadow-lg'>
+        <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border-hard-soft bg-canvas shadow-lg'>
           {assets.map(asset => (
             <button
               key={asset.denom}
@@ -140,12 +140,12 @@ function AssetSelector({
                 setOpen(false);
               }}
               className={cn(
-                'flex w-full items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-muted/50',
-                selected?.denom === asset.denom && 'bg-muted/30'
+                'flex w-full items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-elev-1',
+                selected?.denom === asset.denom && 'bg-elev-2'
               )}
             >
               <span className='font-medium'>{asset.symbol}</span>
-              <span className='text-muted-foreground'>{asset.formatted}</span>
+              <span className='text-fg-muted'>{asset.formatted}</span>
             </button>
           ))}
         </div>
@@ -182,16 +182,16 @@ function CosmosChainSelector({
     <div className='relative'>
       <button
         onClick={() => setOpen(!open)}
-        className='flex w-full items-center justify-between rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50'
+        className='flex w-full items-center justify-between rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50'
       >
-        <span className={!manuallySelected && !selected ? 'text-muted-foreground' : ''}>
+        <span className={!manuallySelected && !selected ? 'text-fg-muted' : ''}>
           {displayName}
         </span>
         <span className={cn('i-lucide-chevron-down h-4 w-4 transition-transform', open && 'rotate-180')} />
       </button>
 
       {open && (
-        <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border/40 bg-background shadow-lg'>
+        <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border-hard-soft bg-canvas shadow-lg'>
           {/* auto-detect option */}
           <button
             onClick={() => {
@@ -200,11 +200,11 @@ function CosmosChainSelector({
               setOpen(false);
             }}
             className={cn(
-              'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-muted/50',
-              !manuallySelected && 'bg-muted/30'
+              'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-elev-1',
+              !manuallySelected && 'bg-elev-2'
             )}
           >
-            <span className='text-muted-foreground'>auto-detect from address</span>
+            <span className='text-fg-muted'>auto-detect from address</span>
           </button>
           {filteredChains.map(chain => (
             <button
@@ -215,8 +215,8 @@ function CosmosChainSelector({
                 setOpen(false);
               }}
               className={cn(
-                'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-muted/50',
-                manuallySelected && selected === chain.chainId && 'bg-muted/30'
+                'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-elev-1',
+                manuallySelected && selected === chain.chainId && 'bg-elev-2'
               )}
             >
               {chain.logoUri && (
@@ -247,15 +247,15 @@ function SaveContactPrompt({
         <div className='flex items-center gap-2'>
           <span className='i-lucide-user h-4 w-4 text-zigner-gold' />
           <div>
-            <p className='text-sm text-foreground'>save to contacts?</p>
-            <p className='text-xs text-muted-foreground'>
+            <p className='text-sm text-fg'>save to contacts?</p>
+            <p className='text-xs text-fg-muted'>
               you've sent to this address before
             </p>
           </div>
         </div>
         <button
           onClick={onDismiss}
-          className='text-muted-foreground hover:text-foreground transition-colors'
+          className='text-fg-muted hover:text-fg-high transition-colors'
         >
           <span className='i-lucide-x h-4 w-4' />
         </button>
@@ -269,7 +269,7 @@ function SaveContactPrompt({
         </button>
         <button
           onClick={onDismiss}
-          className='flex-1 rounded-md bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground'
+          className='flex-1 rounded-md bg-elev-2 px-3 py-1.5 text-xs text-fg-muted transition-colors hover:bg-elev-1/80 hover:text-fg-high'
         >
           not now
         </button>
@@ -503,12 +503,12 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
       {PasswordModal}
       {/* account selector */}
       <div>
-        <label className='mb-1 block text-xs text-muted-foreground'>account</label>
+        <label className='mb-1 block text-xs text-fg-muted'>account</label>
         <div className='flex items-center gap-2'>
           <select
             value={accountIndex}
             onChange={e => setAccountIndex(parseInt(e.target.value, 10))}
-            className='flex-1 rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground transition-colors focus:border-penumbra-purple focus:outline-none'
+            className='flex-1 rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm text-fg transition-colors focus:border-penumbra-purple focus:outline-none'
           >
             {[0, 1, 2, 3, 4].map(idx => (
               <option key={idx} value={idx}>
@@ -517,7 +517,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
             ))}
           </select>
           {assetsData?.address && (
-            <span className='text-xs text-muted-foreground font-mono'>
+            <span className='text-xs text-fg-muted font-mono'>
               {assetsData.address.slice(0, 10)}...{assetsData.address.slice(-4)}
             </span>
           )}
@@ -526,24 +526,24 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
 
       {/* recipient */}
       <div>
-        <label className='mb-1 block text-xs text-muted-foreground'>recipient</label>
+        <label className='mb-1 block text-xs text-fg-muted'>recipient</label>
         <input
           type='text'
           value={recipient}
           onChange={e => setRecipient(e.target.value)}
           placeholder='cosmos address'
           className={cn(
-            'w-full rounded-lg border bg-input px-3 py-2.5 text-sm text-foreground',
-            'placeholder:text-muted-foreground transition-colors duration-100',
+            'w-full rounded-lg border bg-input px-3 py-2.5 text-sm text-fg',
+            'placeholder:text-fg-muted transition-colors duration-100',
             'focus:border-penumbra-purple focus:outline-none',
-            recipient && !recipientValid ? 'border-red-400' : 'border-border/40'
+            recipient && !recipientValid ? 'border-red-400' : 'border-border-hard-soft'
           )}
         />
         {recipient && !recipientValid && (
           <p className='mt-1 text-xs text-red-400'>invalid cosmos address</p>
         )}
         {detectedChain && !destChainId && (
-          <p className='mt-1 text-xs text-muted-foreground'>
+          <p className='mt-1 text-xs text-fg-muted'>
             detected: {detectedChain.name}
           </p>
         )}
@@ -556,9 +556,9 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
 
       {/* destination chain */}
       <div>
-        <label className='mb-1 block text-xs text-muted-foreground'>destination chain</label>
+        <label className='mb-1 block text-xs text-fg-muted'>destination chain</label>
         {chainsLoading ? (
-          <div className='h-10 rounded-lg bg-muted animate-pulse' />
+          <div className='h-10 rounded-lg bg-elev-2 animate-pulse' />
         ) : (
           <CosmosChainSelector
             chains={skipChains}
@@ -572,7 +572,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
 
       {/* asset selector */}
       <div>
-        <label className='mb-1 block text-xs text-muted-foreground'>asset</label>
+        <label className='mb-1 block text-xs text-fg-muted'>asset</label>
         <AssetSelector
           assets={assetsData?.assets ?? []}
           selected={selectedAsset}
@@ -584,11 +584,11 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
       {/* amount */}
       <div>
         <div className='mb-1 flex items-center justify-between'>
-          <label className='text-xs text-muted-foreground'>
+          <label className='text-xs text-fg-muted'>
             amount {selectedAsset ? `(${selectedAsset.symbol})` : ''}
           </label>
           {selectedAsset && (
-            <span className='text-xs text-muted-foreground'>
+            <span className='text-xs text-fg-muted'>
               balance: {selectedAsset.formatted}
             </span>
           )}
@@ -599,13 +599,13 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
             value={amount}
             onChange={e => setAmount(e.target.value)}
             placeholder='0.00'
-            className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 pr-14 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
+            className='w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 pr-14 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
           />
           {selectedAsset && Number(selectedAsset.amount) > 0 && (
             <button
               type='button'
               onClick={handleSetMax}
-              className='absolute right-2 top-1/2 -translate-y-1/2 rounded-md bg-muted/50 px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground'
+              className='absolute right-2 top-1/2 -translate-y-1/2 rounded-md bg-elev-2 px-2 py-0.5 text-xs text-fg-muted transition-colors hover:bg-elev-1/80 hover:text-fg-high'
             >
               max
             </button>
@@ -615,28 +615,28 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
 
       {/* route info */}
       {routeLoading && (
-        <div className='flex items-center gap-2 text-xs text-muted-foreground'>
+        <div className='flex items-center gap-2 text-xs text-fg-muted'>
           <span className='i-lucide-refresh-cw h-3 w-3 animate-spin' />
           finding route...
         </div>
       )}
       {route && (
-        <div className='rounded-lg border border-border/40 bg-muted/20 p-3'>
+        <div className='rounded-lg border border-border-hard-soft bg-elev-2/20 p-3'>
           <div className='flex items-center justify-between text-xs'>
-            <span className='text-muted-foreground'>receive</span>
+            <span className='text-fg-muted'>receive</span>
             <span className='font-mono'>
               {(parseFloat(route.amountOut) / Math.pow(10, 6)).toFixed(6)}
             </span>
           </div>
           {route.doesSwap && route.swapVenue && (
             <div className='mt-1 flex items-center justify-between text-xs'>
-              <span className='text-muted-foreground'>via</span>
+              <span className='text-fg-muted'>via</span>
               <span>{route.swapVenue.name}</span>
             </div>
           )}
           {route.txsRequired > 1 && (
             <div className='mt-1 flex items-center justify-between text-xs'>
-              <span className='text-muted-foreground'>transactions</span>
+              <span className='text-fg-muted'>transactions</span>
               <span>{route.txsRequired}</span>
             </div>
           )}
@@ -650,7 +650,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
       {txStatus === 'success' && txHash && (
         <div className='rounded-lg border border-green-500/40 bg-green-500/10 p-3'>
           <p className='text-sm text-green-400'>transaction sent!</p>
-          <p className='text-xs text-muted-foreground mt-1 font-mono break-all'>
+          <p className='text-xs text-fg-muted mt-1 font-mono break-all'>
             {txHash}
           </p>
         </div>
@@ -674,14 +674,14 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
 
       {/* contact name modal */}
       {showContactModal && (
-        <div className='rounded-lg border border-border/40 bg-background p-3'>
+        <div className='rounded-lg border border-border-hard-soft bg-canvas p-3'>
           <p className='text-sm font-medium mb-2'>name this contact</p>
           <input
             type='text'
             value={contactName}
             onChange={e => setContactName(e.target.value)}
             placeholder='enter name...'
-            className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm mb-2 focus:border-penumbra-purple focus:outline-none'
+            className='w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm mb-2 focus:border-penumbra-purple focus:outline-none'
             autoFocus
           />
           <div className='flex gap-2'>
@@ -704,7 +704,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
                 setShowContactModal(false);
                 setContactName('');
               }}
-              className='flex-1 rounded-md bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground transition-colors'
+              className='flex-1 rounded-md bg-elev-2 px-3 py-1.5 text-xs text-fg-muted transition-colors'
             >
               cancel
             </button>
@@ -718,24 +718,24 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
           <p className='text-xs font-medium text-zigner-gold mb-2'>confirm transaction</p>
           <div className='flex flex-col gap-1.5 text-xs'>
             <div className='flex justify-between'>
-              <span className='text-muted-foreground'>type</span>
+              <span className='text-fg-muted'>type</span>
               <span>{isSameChain ? 'send' : 'ibc transfer'}</span>
             </div>
             <div className='flex justify-between'>
-              <span className='text-muted-foreground'>chain</span>
+              <span className='text-fg-muted'>chain</span>
               <span>{sourceChain.name}</span>
             </div>
             <div className='flex justify-between gap-2'>
-              <span className='text-muted-foreground shrink-0'>to</span>
+              <span className='text-fg-muted shrink-0'>to</span>
               <span className='font-mono text-right break-all'>{recipient}</span>
             </div>
             <div className='flex justify-between'>
-              <span className='text-muted-foreground'>amount</span>
+              <span className='text-fg-muted'>amount</span>
               <span>{amount} {selectedAsset.symbol}</span>
             </div>
             {!isSameChain && effectiveDestChainId && (
               <div className='flex justify-between'>
-                <span className='text-muted-foreground'>destination</span>
+                <span className='text-fg-muted'>destination</span>
                 <span>{skipChains.find(c => c.chainId === effectiveDestChainId)?.chainName ?? effectiveDestChainId}</span>
               </div>
             )}
@@ -746,12 +746,12 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
             <div className='mt-2'>
               <button
                 onClick={() => setShowRawJson(!showRawJson)}
-                className='text-xs text-muted-foreground hover:text-foreground transition-colors'
+                className='text-xs text-fg-muted hover:text-fg-high transition-colors'
               >
                 {showRawJson ? 'hide' : 'view'} raw transaction json
               </button>
               {showRawJson && (
-                <pre className='mt-2 max-h-48 overflow-auto rounded-md bg-background p-2 text-[10px] font-mono text-muted-foreground leading-relaxed'>
+                <pre className='mt-2 max-h-48 overflow-auto rounded-md bg-canvas p-2 text-[10px] font-mono text-fg-muted leading-relaxed'>
                   {JSON.stringify(txPreview, null, 2)}
                 </pre>
               )}
@@ -770,7 +770,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
             </button>
             <button
               onClick={() => setTxStatus('idle')}
-              className='flex-1 rounded-lg border border-border/40 py-3 text-sm text-muted-foreground hover:text-foreground transition-colors'
+              className='flex-1 rounded-lg border border-border-hard-soft py-3 text-sm text-fg-muted hover:text-fg-high transition-colors'
             >
               back
             </button>
@@ -781,7 +781,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
       {txStatus === 'error' && txError && (
         <div className='rounded-lg border border-red-500/40 bg-red-500/10 p-3'>
           <p className='text-sm text-red-400'>transaction failed</p>
-          <p className='text-xs text-muted-foreground mt-1'>{txError}</p>
+          <p className='text-xs text-fg-muted mt-1'>{txError}</p>
         </div>
       )}
 
@@ -822,7 +822,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
       </button>
 
       {txStatus !== 'confirm' && (
-        <p className='text-center text-xs text-muted-foreground'>
+        <p className='text-center text-xs text-fg-muted'>
           {!isSameChain
             ? 'ibc transfer via skip'
             : isZigner
@@ -843,14 +843,14 @@ function PenumbraSend({ onSuccess }: { onSuccess?: () => void }) {
   return (
     <div className='flex flex-col gap-4'>
       {/* mode tabs */}
-      <div className='flex rounded-lg bg-muted/30 p-1'>
+      <div className='flex rounded-lg bg-elev-2 p-1'>
         <button
           onClick={() => setMode('send')}
           className={cn(
             'flex-1 rounded-md py-2 text-sm font-medium transition-colors',
             mode === 'send'
-              ? 'bg-background text-foreground shadow-sm'
-              : 'text-muted-foreground hover:text-foreground'
+              ? 'bg-canvas text-fg shadow-sm'
+              : 'text-fg-muted hover:text-fg-high'
           )}
         >
           send
@@ -860,8 +860,8 @@ function PenumbraSend({ onSuccess }: { onSuccess?: () => void }) {
           className={cn(
             'flex-1 rounded-md py-2 text-sm font-medium transition-colors',
             mode === 'ibc'
-              ? 'bg-background text-foreground shadow-sm'
-              : 'text-muted-foreground hover:text-foreground'
+              ? 'bg-canvas text-fg shadow-sm'
+              : 'text-fg-muted hover:text-fg-high'
           )}
         >
           ibc withdraw
@@ -987,25 +987,25 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
     <div className='flex flex-col gap-4'>
       {/* asset selector */}
       <div>
-        <label className='mb-1 block text-xs text-muted-foreground'>asset</label>
+        <label className='mb-1 block text-xs text-fg-muted'>asset</label>
         <div className='relative'>
           <button
             onClick={() => setAssetOpen(!assetOpen)}
             disabled={txStatus !== 'idle' || balancesLoading}
-            className='flex w-full items-center justify-between rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50 disabled:opacity-50'
+            className='flex w-full items-center justify-between rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50 disabled:opacity-50'
           >
             {balancesLoading ? (
-              <span className='text-muted-foreground'>loading...</span>
+              <span className='text-fg-muted'>loading...</span>
             ) : selectedAsset ? (
               <span>{selectedSymbol}</span>
             ) : (
-              <span className='text-muted-foreground'>select asset</span>
+              <span className='text-fg-muted'>select asset</span>
             )}
             <span className={cn('i-lucide-chevron-down h-4 w-4 transition-transform', assetOpen && 'rotate-180')} />
           </button>
 
           {assetOpen && (
-            <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border/40 bg-background shadow-lg'>
+            <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border-hard-soft bg-canvas shadow-lg'>
               {balances.map((balance, i) => {
                 if (!balance.balanceView) return null;
                 const symbol = getDisplayDenomFromView(balance.balanceView) || 'Unknown';
@@ -1019,23 +1019,23 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
                       setAssetOpen(false);
                     }}
                     className={cn(
-                      'flex w-full items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-muted/50',
-                      selectedAsset === balance && 'bg-muted/30'
+                      'flex w-full items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-elev-1',
+                      selectedAsset === balance && 'bg-elev-2'
                     )}
                   >
                     <span>{symbol}</span>
-                    <span className='text-muted-foreground'>{amountStr}</span>
+                    <span className='text-fg-muted'>{amountStr}</span>
                   </button>
                 );
               })}
               {balances.length === 0 && (
-                <div className='px-3 py-2 text-sm text-muted-foreground'>no assets</div>
+                <div className='px-3 py-2 text-sm text-fg-muted'>no assets</div>
               )}
             </div>
           )}
         </div>
         {selectedAsset && (
-          <p className='mt-1 text-xs text-muted-foreground'>
+          <p className='mt-1 text-xs text-fg-muted'>
             balance: {selectedBalance} {selectedSymbol}
           </p>
         )}
@@ -1043,7 +1043,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
 
       {/* recipient address */}
       <div>
-        <label className='mb-1 block text-xs text-muted-foreground'>
+        <label className='mb-1 block text-xs text-fg-muted'>
           recipient (penumbra1...)
         </label>
         <div className='flex gap-1'>
@@ -1054,17 +1054,17 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
             placeholder='penumbra1...'
             disabled={txStatus !== 'idle'}
             className={cn(
-              'flex-1 rounded-lg border bg-input px-3 py-2.5 text-sm text-foreground',
-              'placeholder:text-muted-foreground transition-colors duration-100',
+              'flex-1 rounded-lg border bg-input px-3 py-2.5 text-sm text-fg',
+              'placeholder:text-fg-muted transition-colors duration-100',
               'focus:border-penumbra-purple focus:outline-none disabled:opacity-50',
-              sendState.recipient && !addressValid ? 'border-red-400' : 'border-border/40'
+              sendState.recipient && !addressValid ? 'border-red-400' : 'border-border-hard-soft'
             )}
           />
           <button
             type='button'
             onClick={() => setShowQrScanner(true)}
             disabled={txStatus !== 'idle'}
-            className='shrink-0 flex h-[42px] w-[42px] items-center justify-center rounded-lg border border-border/40 bg-input text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50'
+            className='shrink-0 flex h-[42px] w-[42px] items-center justify-center rounded-lg border border-border-hard-soft bg-input text-fg-muted hover:text-fg-high transition-colors disabled:opacity-50'
             title='scan QR code'
           >
             <span className='i-lucide-scan h-4 w-4' />
@@ -1095,7 +1095,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
       {/* amount */}
       <div>
         <div className='flex items-center justify-between mb-1'>
-          <label className='text-xs text-muted-foreground'>amount</label>
+          <label className='text-xs text-fg-muted'>amount</label>
           <button
             onClick={handleMax}
             disabled={txStatus !== 'idle' || !selectedAsset}
@@ -1110,20 +1110,20 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
           onChange={e => sendState.setAmount(e.target.value)}
           placeholder='0.00'
           disabled={txStatus !== 'idle'}
-          className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-100 focus:border-penumbra-purple focus:outline-none disabled:opacity-50'
+          className='w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none disabled:opacity-50'
         />
       </div>
 
       {/* memo */}
       <div>
-        <label className='mb-1 block text-xs text-muted-foreground'>memo (optional)</label>
+        <label className='mb-1 block text-xs text-fg-muted'>memo (optional)</label>
         <input
           type='text'
           value={sendState.memo}
           onChange={e => sendState.setMemo(e.target.value)}
           placeholder='optional message'
           disabled={txStatus !== 'idle'}
-          className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-100 focus:border-penumbra-purple focus:outline-none disabled:opacity-50'
+          className='w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none disabled:opacity-50'
         />
       </div>
 
@@ -1131,7 +1131,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
       {txStatus === 'success' && txHash && (
         <div className='rounded-lg border border-green-500/40 bg-green-500/10 p-3'>
           <p className='text-sm text-green-400'>transaction sent!</p>
-          <p className='text-xs text-muted-foreground mt-1 font-mono break-all'>
+          <p className='text-xs text-fg-muted mt-1 font-mono break-all'>
             {txHash}
           </p>
         </div>
@@ -1140,7 +1140,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
       {txStatus === 'error' && txError && (
         <div className='rounded-lg border border-red-500/40 bg-red-500/10 p-3'>
           <p className='text-sm text-red-400'>transaction failed</p>
-          <p className='text-xs text-muted-foreground mt-1'>{txError}</p>
+          <p className='text-xs text-fg-muted mt-1'>{txError}</p>
         </div>
       )}
 
@@ -1179,7 +1179,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
         <p className='text-center text-xs text-red-400'>{sendState.error}</p>
       )}
 
-      <p className='text-center text-xs text-muted-foreground'>
+      <p className='text-center text-xs text-fg-muted'>
         private transfer within penumbra
       </p>
     </div>
@@ -1327,9 +1327,9 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
     <div className='flex flex-col gap-4'>
       {/* chain selector */}
       <div>
-        <label className='mb-1 block text-xs text-muted-foreground'>destination chain</label>
+        <label className='mb-1 block text-xs text-fg-muted'>destination chain</label>
         {chainsLoading ? (
-          <div className='h-10 rounded-lg bg-muted animate-pulse' />
+          <div className='h-10 rounded-lg bg-elev-2 animate-pulse' />
         ) : (
           <ChainSelector
             chains={chains}
@@ -1341,7 +1341,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
 
       {/* destination address */}
       <div>
-        <label className='mb-1 block text-xs text-muted-foreground'>
+        <label className='mb-1 block text-xs text-fg-muted'>
           recipient {ibcState.chain && `(${ibcState.chain.addressPrefix}1...)`}
         </label>
         <input
@@ -1351,10 +1351,10 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
           placeholder={ibcState.chain ? `${ibcState.chain.addressPrefix}1...` : 'select chain first'}
           disabled={!ibcState.chain || txStatus !== 'idle'}
           className={cn(
-            'w-full rounded-lg border bg-input px-3 py-2.5 text-sm text-foreground',
-            'placeholder:text-muted-foreground transition-colors duration-100',
+            'w-full rounded-lg border bg-input px-3 py-2.5 text-sm text-fg',
+            'placeholder:text-fg-muted transition-colors duration-100',
             'focus:border-penumbra-purple focus:outline-none disabled:opacity-50',
-            ibcState.destinationAddress && !addressValid ? 'border-red-400' : 'border-border/40'
+            ibcState.destinationAddress && !addressValid ? 'border-red-400' : 'border-border-hard-soft'
           )}
         />
         {ibcState.destinationAddress && !addressValid && (
@@ -1370,9 +1370,9 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
       {/* asset selector */}
       {ibcState.chain && (
         <div>
-          <label className='mb-1 block text-xs text-muted-foreground'>asset</label>
+          <label className='mb-1 block text-xs text-fg-muted'>asset</label>
           {withdrawableAssets.length === 0 ? (
-            <p className='text-xs text-muted-foreground/60 py-2'>
+            <p className='text-xs text-fg-dim py-2'>
               no withdrawable assets for {ibcState.chain.displayName}
             </p>
           ) : (
@@ -1380,7 +1380,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
               <button
                 onClick={() => setAssetOpen(!assetOpen)}
                 disabled={txStatus !== 'idle'}
-                className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground text-left disabled:opacity-50'
+                className='w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm text-fg text-left disabled:opacity-50'
               >
                 {selectedAsset
                   ? (getMetadataFromBalancesResponse.optional(selectedAsset)?.symbol
@@ -1389,7 +1389,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
                   : 'select asset'}
               </button>
               {assetOpen && (
-                <div className='absolute z-10 mt-1 w-full rounded-lg border border-border/40 bg-background shadow-lg max-h-48 overflow-y-auto'>
+                <div className='absolute z-10 mt-1 w-full rounded-lg border border-border-hard-soft bg-canvas shadow-lg max-h-48 overflow-y-auto'>
                   {withdrawableAssets.map((b, i) => {
                     const meta = getMetadataFromBalancesResponse.optional(b);
                     const display = meta?.symbol ?? meta?.display ?? meta?.base ?? 'unknown';
@@ -1402,10 +1402,10 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
                           if (meta?.base) ibcState.setDenom(meta.base);
                           setAssetOpen(false);
                         }}
-                        className='w-full px-3 py-2 text-left text-sm hover:bg-muted/30 flex justify-between items-center'
+                        className='w-full px-3 py-2 text-left text-sm hover:bg-elev-1 flex justify-between items-center'
                       >
                         <span>{display}</span>
-                        <span className='text-xs text-muted-foreground'>{amount}</span>
+                        <span className='text-xs text-fg-muted'>{amount}</span>
                       </button>
                     );
                   })}
@@ -1418,14 +1418,14 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
 
       {/* amount */}
       <div>
-        <label className='mb-1 block text-xs text-muted-foreground'>amount</label>
+        <label className='mb-1 block text-xs text-fg-muted'>amount</label>
         <input
           type='text'
           value={ibcState.amount}
           onChange={e => ibcState.setAmount(e.target.value)}
           placeholder='0.00'
           disabled={txStatus !== 'idle'}
-          className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-100 focus:border-penumbra-purple focus:outline-none disabled:opacity-50'
+          className='w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none disabled:opacity-50'
         />
       </div>
 
@@ -1433,7 +1433,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
       {txStatus === 'success' && txHash && (
         <div className='rounded-lg border border-green-500/40 bg-green-500/10 p-3'>
           <p className='text-sm text-green-400'>transaction sent!</p>
-          <p className='text-xs text-muted-foreground mt-1 font-mono break-all'>
+          <p className='text-xs text-fg-muted mt-1 font-mono break-all'>
             {txHash}
           </p>
         </div>
@@ -1457,14 +1457,14 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
 
       {/* contact name modal */}
       {showContactModal && sentToAddress && (
-        <div className='rounded-lg border border-border/40 bg-background p-3'>
+        <div className='rounded-lg border border-border-hard-soft bg-canvas p-3'>
           <p className='text-sm font-medium mb-2'>name this contact</p>
           <input
             type='text'
             value={contactName}
             onChange={e => setContactName(e.target.value)}
             placeholder='enter name...'
-            className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm mb-2 focus:border-penumbra-purple focus:outline-none'
+            className='w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm mb-2 focus:border-penumbra-purple focus:outline-none'
             autoFocus
           />
           <div className='flex gap-2'>
@@ -1487,7 +1487,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
                 setShowContactModal(false);
                 setContactName('');
               }}
-              className='flex-1 rounded-md bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground transition-colors'
+              className='flex-1 rounded-md bg-elev-2 px-3 py-1.5 text-xs text-fg-muted transition-colors'
             >
               cancel
             </button>
@@ -1498,7 +1498,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
       {txStatus === 'error' && txError && (
         <div className='rounded-lg border border-red-500/40 bg-red-500/10 p-3'>
           <p className='text-sm text-red-400'>transaction failed</p>
-          <p className='text-xs text-muted-foreground mt-1'>{txError}</p>
+          <p className='text-xs text-fg-muted mt-1'>{txError}</p>
         </div>
       )}
 
@@ -1537,7 +1537,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
         <p className='text-center text-xs text-red-400'>{ibcState.error}</p>
       )}
 
-      <p className='text-center text-xs text-muted-foreground'>
+      <p className='text-center text-xs text-fg-muted'>
         ibc withdrawal from penumbra to {ibcState.chain?.displayName ?? 'cosmos chain'}
       </p>
     </div>
@@ -1598,16 +1598,16 @@ export function SendPage() {
   return (
     <div className='flex flex-col'>
       {/* Header */}
-      <div className='flex items-center gap-3 border-b border-border/40 px-4 py-3'>
+      <div className='flex items-center gap-3 border-b border-border-hard-soft px-4 py-3'>
         {!inDedicatedWindow && (
           <button
             onClick={goBack}
-            className='text-muted-foreground transition-colors hover:text-foreground'
+            className='text-fg-muted transition-colors hover:text-fg-high'
           >
             <span className='i-lucide-arrow-left h-5 w-5' />
           </button>
         )}
-        <h1 className='text-lg font-medium text-foreground'>{getTitle()}</h1>
+        <h1 className='text-lg font-medium text-fg'>{getTitle()}</h1>
       </div>
 
       {/* Content */}
@@ -1619,20 +1619,20 @@ export function SendPage() {
         ) : (
           <div className='flex flex-col gap-4'>
             <div>
-              <label className='mb-1 block text-xs text-muted-foreground'>recipient</label>
+              <label className='mb-1 block text-xs text-fg-muted'>recipient</label>
               <input
                 type='text'
                 placeholder='enter address'
-                className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
+                className='w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
               />
             </div>
 
             <div>
-              <label className='mb-1 block text-xs text-muted-foreground'>amount</label>
+              <label className='mb-1 block text-xs text-fg-muted'>amount</label>
               <input
                 type='text'
                 placeholder='0.00'
-                className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
+                className='w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
               />
             </div>
 
@@ -1640,7 +1640,7 @@ export function SendPage() {
               continue
             </button>
 
-            <p className='text-center text-xs text-muted-foreground'>
+            <p className='text-center text-xs text-fg-muted'>
               {activeNetwork === 'polkadot' && 'light client transaction'}
             </p>
           </div>

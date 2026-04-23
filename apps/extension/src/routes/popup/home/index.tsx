@@ -85,7 +85,7 @@ const MultisigOverview = () => {
   };
 
   return (
-    <div className='rounded-lg border border-border/40 bg-card'>
+    <div className='rounded-lg border border-border-hard-soft bg-elev-1'>
       <button
         onClick={() => setExpanded(!expanded)}
         className='flex items-center justify-between w-full px-4 py-3 text-left'
@@ -100,18 +100,18 @@ const MultisigOverview = () => {
           </span>
         </div>
         <div className='flex items-center gap-2'>
-          <span className='text-sm font-mono text-muted-foreground'>
+          <span className='text-sm font-mono text-fg-muted'>
             {formatZec(totalZat)} ZEC
           </span>
           <span className={cn(
-            'h-4 w-4 text-muted-foreground transition-transform',
+            'h-4 w-4 text-fg-muted transition-transform',
             expanded ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down',
           )} />
         </div>
       </button>
 
       {expanded && (
-        <div className='border-t border-border/20 px-4 py-2 space-y-1'>
+        <div className='border-t border-border-hard/20 px-4 py-2 space-y-1'>
           {multisigWallets.map(w => {
             const bal = balances[w.id] ?? 0n;
             const isActive = w.originalIndex === activeIdx;
@@ -123,19 +123,19 @@ const MultisigOverview = () => {
                 }}
                 className={cn(
                   'flex items-center justify-between w-full rounded-md px-3 py-2 text-left transition-colors',
-                  isActive ? 'bg-primary/10' : 'hover:bg-muted/50',
+                  isActive ? 'bg-primary/10' : 'hover:bg-elev-1',
                 )}
               >
                 <div className='flex items-center gap-2 min-w-0'>
-                  <span className='rounded bg-primary/15 px-1.5 py-0.5 text-[9px] font-semibold text-primary leading-none shrink-0'>
+                  <span className='rounded bg-primary/15 px-1.5 py-0.5 text-[9px] font-semibold text-zigner-gold leading-none shrink-0'>
                     {w.multisig!.threshold}/{w.multisig!.maxSigners}
                   </span>
                   <span className='text-sm truncate'>{w.label}</span>
                   {isActive && (
-                    <span className='i-lucide-check h-3 w-3 text-primary shrink-0' />
+                    <span className='i-lucide-check h-3 w-3 text-zigner-gold shrink-0' />
                   )}
                 </div>
-                <span className='text-sm font-mono text-muted-foreground shrink-0'>
+                <span className='text-sm font-mono text-fg-muted shrink-0'>
                   {formatZec(bal)}
                 </span>
               </button>
@@ -206,7 +206,7 @@ export const PopupIndex = () => {
     <div className='flex min-h-full flex-col'>
       <div className='flex flex-col gap-3 p-4'>
         {/* address + actions row */}
-        <div className='rounded-lg border border-border/40 bg-card p-4'>
+        <div className='rounded-lg border border-border-hard-soft bg-elev-1 p-4'>
 {/* account picker moved into PenumbraContent below sync bar */}
           <div className='flex items-center justify-between'>
           <div>
@@ -214,10 +214,10 @@ export const PopupIndex = () => {
               <button
                 onClick={copyAddress}
                 disabled={!address}
-                className='flex items-center gap-1 text-xs text-muted-foreground transition-colors duration-100 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed'
+                className='flex items-center gap-1 text-xs text-fg-muted transition-colors duration-100 hover:text-fg-high disabled:opacity-50 disabled:cursor-not-allowed'
               >
                 {isMultisig && (
-                  <span className='rounded bg-primary/15 px-1.5 py-0.5 text-[9px] font-semibold text-primary leading-none'>
+                  <span className='rounded bg-primary/15 px-1.5 py-0.5 text-[9px] font-semibold text-zigner-gold leading-none'>
                     {activeZcashWallet!.multisig!.threshold}/{activeZcashWallet!.multisig!.maxSigners}
                   </span>
                 )}
@@ -232,7 +232,7 @@ export const PopupIndex = () => {
                       void chrome.storage.local.set({ zcashShieldedIndex: next });
                     });
                   }}
-                  className='p-0.5 text-muted-foreground transition-colors hover:text-foreground'
+                  className='p-0.5 text-fg-muted transition-colors hover:text-fg-high'
                   title='rotate address'
                 >
                   <span className='i-lucide-refresh-cw h-3 w-3' />
@@ -244,14 +244,14 @@ export const PopupIndex = () => {
           <div className='flex gap-2'>
             <button
               onClick={() => navigate(PopupPath.RECEIVE)}
-              className='flex h-10 w-10 items-center justify-center bg-muted transition-colors hover:bg-muted/80'
+              className='flex h-10 w-10 items-center justify-center bg-elev-2 transition-colors hover:bg-elev-1/80'
               title='receive'
             >
               <span className='i-lucide-arrow-down h-5 w-5' />
             </button>
             <button
               onClick={() => navigate(PopupPath.SWAP)}
-              className='flex h-10 w-10 items-center justify-center bg-muted transition-colors hover:bg-muted/80'
+              className='flex h-10 w-10 items-center justify-center bg-elev-2 transition-colors hover:bg-elev-1/80'
               title='swap'
             >
               <span className='i-lucide-arrow-left-right h-5 w-5' />
@@ -262,7 +262,7 @@ export const PopupIndex = () => {
                 'flex h-10 w-10 items-center justify-center transition-colors',
                 activeNetwork === 'penumbra'
                   ? 'bg-penumbra-purple text-white hover:bg-penumbra-purple-dark'
-                  : 'bg-primary text-primary-foreground hover:bg-primary/90',
+                  : 'bg-zigner-gold text-zigner-dark hover:bg-primary/90',
               )}
               title='send'
             >
@@ -392,11 +392,11 @@ const PenumbraContent = ({ account, onAccountChange }: { account: number; onAcco
   return (
     <div className='flex-1 flex flex-col gap-3'>
       {/* balance card */}
-      <div className='rounded-lg border border-border/40 bg-card p-4'>
-        <div className='text-3xl font-medium tabular-nums text-foreground'>
+      <div className='rounded-lg border border-border-hard-soft bg-elev-1 p-4'>
+        <div className='text-3xl font-medium tabular-nums text-fg'>
           {balanceDisplay}
         </div>
-        <div className='mt-1 text-xs text-muted-foreground'>{syncLabel}</div>
+        <div className='mt-1 text-xs text-fg-muted'>{syncLabel}</div>
       </div>
 
       {/* sync bar — visible while syncing or connecting */}
@@ -413,7 +413,7 @@ const PenumbraContent = ({ account, onAccountChange }: { account: number; onAcco
       {/* account picker — between sync bar and assets */}
       <PenumbraAccountPicker account={account} onChange={onAccountChange} />
 
-      <div className='mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground'>assets</div>
+      <div className='mb-2 text-xs font-medium uppercase tracking-wider text-fg-muted'>assets</div>
       <Suspense fallback={<AssetListSkeleton rows={4} />}>
         <AssetsTable account={account} />
       </Suspense>
@@ -661,8 +661,8 @@ const ZcashContent = ({
   if (!hasWallet) {
     return (
       <div className='flex flex-col items-center justify-center py-12 text-center'>
-        <div className='text-sm text-muted-foreground'>no zcash wallet</div>
-        <div className='text-xs text-muted-foreground mt-1'>
+        <div className='text-sm text-fg-muted'>no zcash wallet</div>
+        <div className='text-xs text-fg-muted mt-1'>
           create a wallet or import a viewing key from zigner
         </div>
       </div>
@@ -703,14 +703,14 @@ const ZcashContent = ({
     <div className='flex-1 flex flex-col gap-3'>
       {PasswordModal}
       {/* combined balance */}
-      <div className='rounded-lg border border-primary/20 bg-card p-4'>
-        <div className='text-xs text-muted-foreground'>balance</div>
-        <div className='text-3xl font-medium tabular-nums text-foreground'>
+      <div className='rounded-lg border border-primary/20 bg-elev-1 p-4'>
+        <div className='text-xs text-fg-muted'>balance</div>
+        <div className='text-3xl font-medium tabular-nums text-fg'>
           {workerSyncHeight > 0 || totalZat > 0n
             ? `${fmtZec(totalZec)} ZEC`
             : '— ZEC'}
         </div>
-        <div className='mt-1 text-xs text-muted-foreground'>
+        <div className='mt-1 text-xs text-fg-muted'>
           {chainHeight <= 0
             ? 'connecting...'
             : allSynced
@@ -771,13 +771,13 @@ const ZcashContent = ({
               <div className='flex gap-2 w-full'>
                 <button
                   onClick={() => setZignerShieldStep('scanning')}
-                  className='flex-1 text-xs font-medium bg-primary text-primary-foreground py-1.5 hover:bg-primary/90 transition-colors'
+                  className='flex-1 text-xs font-medium bg-zigner-gold text-zigner-dark py-1.5 hover:bg-primary/90 transition-colors'
                 >
                   scan signature
                 </button>
                 <button
                   onClick={() => { setZignerShieldStep('idle'); setShieldSignRequestQr(null); }}
-                  className='text-xs text-muted-foreground hover:text-foreground px-2 transition-colors'
+                  className='text-xs text-fg-muted hover:text-fg-high px-2 transition-colors'
                 >
                   cancel
                 </button>
@@ -835,8 +835,8 @@ const ZcashContent = ({
                     ? 'nomt verified'
                     : 'verifying nomt...'}
           error={syncError?.message}
-          barColor={scanPct > 0 ? 'bg-primary' : ligeritoPct > 0 ? 'bg-primary' : 'bg-muted-foreground/30'}
-          barDoneColor='bg-primary'
+          barColor={scanPct > 0 ? 'bg-zigner-gold' : ligeritoPct > 0 ? 'bg-zigner-gold' : 'bg-elev-2-foreground/30'}
+          barDoneColor='bg-zigner-gold'
           currentHeight={workerSyncHeight}
           targetHeight={chainHeight}
           startBlock={walletBirthday}
@@ -860,8 +860,8 @@ const PolkadotContent = ({
   if (!publicKey) {
     return (
       <div className='flex flex-col items-center justify-center py-12 text-center'>
-        <div className='text-sm text-muted-foreground'>no {relay} wallet</div>
-        <div className='text-xs text-muted-foreground mt-1'>
+        <div className='text-sm text-fg-muted'>no {relay} wallet</div>
+        <div className='text-xs text-fg-muted mt-1'>
           import a polkadot account to get started
         </div>
       </div>
@@ -886,8 +886,8 @@ const CosmosContent = ({ chainId }: { chainId: CosmosChainId }) => {
   if (error) {
     return (
       <div className='flex flex-col items-center justify-center py-12 text-center'>
-        <div className='text-sm text-muted-foreground'>failed to load balances</div>
-        <div className='text-xs text-muted-foreground mt-1'>{error instanceof Error ? error.message : 'unknown error'}</div>
+        <div className='text-sm text-fg-muted'>failed to load balances</div>
+        <div className='text-xs text-fg-muted mt-1'>{error instanceof Error ? error.message : 'unknown error'}</div>
       </div>
     );
   }
@@ -895,26 +895,26 @@ const CosmosContent = ({ chainId }: { chainId: CosmosChainId }) => {
   if (!assetsData && !isLoading) {
     return (
       <div className='flex flex-col items-center justify-center py-12 text-center'>
-        <div className='text-sm text-muted-foreground'>enable transparent balance fetching in privacy settings to view {config.name} balances</div>
+        <div className='text-sm text-fg-muted'>enable transparent balance fetching in privacy settings to view {config.name} balances</div>
       </div>
     );
   }
 
   return (
     <div className='flex-1'>
-      <div className='mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground'>assets</div>
+      <div className='mb-2 text-xs font-medium uppercase tracking-wider text-fg-muted'>assets</div>
       {isLoading ? (
         <AssetListSkeleton rows={2} />
       ) : assetsData?.assets.length === 0 ? (
-        <div className='rounded-lg border border-border/40 bg-card p-4'>
+        <div className='rounded-lg border border-border-hard-soft bg-elev-1 p-4'>
           <div className='flex items-center justify-between'>
             <div className='flex items-center gap-2'>
-              <div className='h-8 w-8 bg-muted flex items-center justify-center'>
+              <div className='h-8 w-8 bg-elev-2 flex items-center justify-center'>
                 <span className='text-sm font-bold'>{config.symbol[0]}</span>
               </div>
               <div>
                 <div className='text-sm font-medium'>{config.symbol}</div>
-                <div className='text-xs text-muted-foreground'>{config.name}</div>
+                <div className='text-xs text-fg-muted'>{config.name}</div>
               </div>
             </div>
             <div className='text-right'>
@@ -925,15 +925,15 @@ const CosmosContent = ({ chainId }: { chainId: CosmosChainId }) => {
       ) : (
         <div className='flex flex-col gap-1'>
           {assetsData?.assets.map(asset => (
-            <div key={asset.denom} className='rounded-lg border border-border/40 bg-card p-4'>
+            <div key={asset.denom} className='rounded-lg border border-border-hard-soft bg-elev-1 p-4'>
               <div className='flex items-center justify-between'>
                 <div className='flex items-center gap-2'>
-                  <div className='h-8 w-8 bg-muted flex items-center justify-center'>
+                  <div className='h-8 w-8 bg-elev-2 flex items-center justify-center'>
                     <span className='text-sm font-bold'>{asset.symbol[0]}</span>
                   </div>
                   <div>
                     <div className='text-sm font-medium'>{asset.symbol}</div>
-                    <div className='text-xs text-muted-foreground truncate max-w-[120px]'>{asset.denom}</div>
+                    <div className='text-xs text-fg-muted truncate max-w-[120px]'>{asset.denom}</div>
                   </div>
                 </div>
                 <div className='text-right'>
@@ -1080,19 +1080,19 @@ function TxRow({ tx }: { tx: ParsedTransaction }) {
   return (
     <div
       className={cn(
-        'rounded-lg border border-border/40 bg-card p-3 transition-colors',
-        hasMemo ? 'cursor-pointer hover:border-border/40' : '',
+        'rounded-lg border border-border-hard-soft bg-elev-1 p-3 transition-colors',
+        hasMemo ? 'cursor-pointer hover:border-border-hard-soft' : '',
       )}
       onClick={hasMemo ? () => setExpanded(e => !e) : undefined}
     >
       <div className='flex items-center gap-3'>
         <div className={cn(
           'flex h-8 w-8 items-center justify-center rounded-full',
-          isSh ? 'bg-blue-500/10' : isIn ? 'bg-green-500/10' : 'bg-muted/50',
+          isSh ? 'bg-blue-500/10' : isIn ? 'bg-green-500/10' : 'bg-elev-2',
         )}>
           {isSh ? <span className='i-lucide-move-horizontal h-4 w-4 text-blue-500' />
             : isIn ? <span className='i-lucide-arrow-down h-4 w-4 text-green-400' />
-            : <span className='i-lucide-arrow-up h-4 w-4 text-muted-foreground' />}
+            : <span className='i-lucide-arrow-up h-4 w-4 text-fg-muted' />}
         </div>
         <div className='flex-1 min-w-0'>
           <div className='flex items-center justify-between gap-2'>
@@ -1100,30 +1100,30 @@ function TxRow({ tx }: { tx: ParsedTransaction }) {
             <div className='flex items-center gap-1'>
               {tx.amount && (
                 <span className={cn('text-xs font-mono',
-                  isSh ? 'text-blue-500' : isIn ? 'text-green-400' : 'text-muted-foreground',
+                  isSh ? 'text-blue-500' : isIn ? 'text-green-400' : 'text-fg-muted',
                 )}>
                   {isIn ? '+' : ''}{tx.amount} {tx.asset ?? ''}
                 </span>
               )}
               {hasMemo && (
                 <span className={cn(
-                  'i-lucide-chevron-down h-3 w-3 text-muted-foreground transition-transform',
+                  'i-lucide-chevron-down h-3 w-3 text-fg-muted transition-transform',
                   expanded && 'rotate-180',
                 )} />
               )}
             </div>
           </div>
           <div className='flex items-center justify-between gap-2 mt-0.5'>
-            <span className='text-[10px] text-muted-foreground font-mono truncate'>{tx.id.slice(0, 16)}...</span>
-            <span className='text-[10px] text-muted-foreground whitespace-nowrap'>
+            <span className='text-[10px] text-fg-muted font-mono truncate'>{tx.id.slice(0, 16)}...</span>
+            <span className='text-[10px] text-fg-muted whitespace-nowrap'>
               {tx.height > 0 ? `#${tx.height}` : fmtTime(tx.timestamp)}
             </span>
           </div>
         </div>
       </div>
       {expanded && tx.memo && (
-        <div className='mt-2 ml-11 border-l-2 border-border/40 pl-3'>
-          <p className='text-xs text-muted-foreground whitespace-pre-wrap break-words'>{tx.memo}</p>
+        <div className='mt-2 ml-11 border-l-2 border-border-hard-soft pl-3'>
+          <p className='text-xs text-fg-muted whitespace-pre-wrap break-words'>{tx.memo}</p>
         </div>
       )}
     </div>
@@ -1214,18 +1214,18 @@ const HistoryContent = ({ network, penumbraAccount }: { network: NetworkType; pe
   if (!historyEnabled) {
     return (
       <div className='px-4 py-6 text-center'>
-        <p className='text-xs text-muted-foreground/50'>
+        <p className='text-xs text-fg-muted/50'>
           transaction history is off
         </p>
         <button
           onClick={() => void setSetting('enableTransactionHistory', true)}
-          className='mt-3 text-xs text-primary/70 hover:text-primary transition-colors'
+          className='mt-3 text-xs text-zigner-gold/70 hover:text-zigner-gold transition-colors'
         >
           enable transaction history
         </button>
         <a
           href={`#${PopupPath.SETTINGS_PRIVACY}`}
-          className='text-[10px] text-muted-foreground/30 hover:text-primary mt-2 inline-block'
+          className='text-[10px] text-fg-muted/30 hover:text-zigner-gold mt-2 inline-block'
         >
           privacy settings
         </a>
@@ -1246,8 +1246,8 @@ const HistoryContent = ({ network, penumbraAccount }: { network: NetworkType; pe
   if (q.isLoading && txs.length === 0) {
     return (
       <div className='flex flex-col items-center justify-center gap-3 py-12'>
-        <span className='i-lucide-refresh-cw h-5 w-5 animate-spin text-muted-foreground' />
-        <span className='text-xs text-muted-foreground'>loading...</span>
+        <span className='i-lucide-refresh-cw h-5 w-5 animate-spin text-fg-muted' />
+        <span className='text-xs text-fg-muted'>loading...</span>
       </div>
     );
   }
@@ -1256,7 +1256,7 @@ const HistoryContent = ({ network, penumbraAccount }: { network: NetworkType; pe
     return (
       <div className='flex flex-col items-center justify-center gap-3 py-12'>
         <span className='text-xs text-red-400'>failed to load</span>
-        <button onClick={() => void q.refetch()} className='text-xs text-primary hover:underline'>retry</button>
+        <button onClick={() => void q.refetch()} className='text-xs text-zigner-gold hover:underline'>retry</button>
       </div>
     );
   }
@@ -1264,8 +1264,8 @@ const HistoryContent = ({ network, penumbraAccount }: { network: NetworkType; pe
   if (txs.length === 0) {
     return (
       <div className='flex flex-col items-center justify-center gap-3 py-12'>
-        <span className='i-lucide-clock h-5 w-5 text-muted-foreground' />
-        <span className='text-xs text-muted-foreground'>no transactions yet</span>
+        <span className='i-lucide-clock h-5 w-5 text-fg-muted' />
+        <span className='text-xs text-fg-muted'>no transactions yet</span>
       </div>
     );
   }
@@ -1275,11 +1275,11 @@ const HistoryContent = ({ network, penumbraAccount }: { network: NetworkType; pe
   return (
     <div className='flex flex-col gap-1'>
       <div className='mb-1'>
-        <span className='text-xs font-medium uppercase tracking-wider text-muted-foreground'>recent activity</span>
+        <span className='text-xs font-medium uppercase tracking-wider text-fg-muted'>recent activity</span>
       </div>
       {recent.map(tx => <TxRow key={tx.id} tx={tx} />)}
       {txs.length > 20 && (
-        <div className='py-2 text-center text-xs text-muted-foreground'>
+        <div className='py-2 text-center text-xs text-fg-muted'>
           {txs.length - 20} more transactions
         </div>
       )}
@@ -1290,6 +1290,6 @@ const HistoryContent = ({ network, penumbraAccount }: { network: NetworkType; pe
 /** placeholder for networks not yet implemented */
 const NetworkPlaceholder = ({ network }: { network: NetworkType }) => (
   <div className='flex flex-col items-center justify-center py-12 text-center'>
-    <div className='text-sm text-muted-foreground'>{network} support coming soon</div>
+    <div className='text-sm text-fg-muted'>{network} support coming soon</div>
   </div>
 );

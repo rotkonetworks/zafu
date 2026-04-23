@@ -25,7 +25,7 @@ export const Result = ({
 
         <div className='flex flex-col'>
           Belongs to this wallet
-          <span className='text-xs text-muted-foreground'>
+          <span className='text-xs text-fg-muted'>
             {addressOwnershipInfo.addressIndexAccount === 0
               ? 'Main Account'
               : `Sub-Account #${addressOwnershipInfo.addressIndexAccount}`}
