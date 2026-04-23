@@ -182,9 +182,9 @@
   letter-spacing: 0.04em;
 }
 
-/* numeric monospace — addresses, amounts, timestamps */
+/* numeric monospace — addresses, amounts, timestamps.
+   font-family is inherited from body (Iosevka Term); no need to re-declare. */
 @utility tabular {
-  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.005em;
 }
@@ -193,4 +193,40 @@
 @utility rule {
   height: 1px;
   background: var(--surface-border);
+}
+
+/* ==============================================================
+ * Glass — the v2 translucent surface for "about to commit" moments.
+ * Dark cool fill with a 1px gold-tinted rim on top. Never frosty white.
+ *
+ * Accent override: set `--glass-accent` on the element (or an ancestor)
+ * to rebind the top-rim colour, e.g. for non-gold chains:
+ *   <div class="glass-surface" style="--glass-accent: rgba(98,153,148,0.25)">
+ * Default: zigner-gold at 18% alpha.
+ *
+ * Defined in @layer components (not @utility) so the rule is always
+ * present in the stylesheet — independent of whether the scanner
+ * picked the class literal out of cn() call sites. This is a
+ * component-class, not a utility, and only ships ~400 bytes.
+ *
+ * Kept as a plain CSS rule (not inline styles) so the definition lives
+ * in the cascade with the rest of the tokens, avoids per-render style-
+ * object churn, and survives userscripts that strip inline styles.
+ * ============================================================== */
+@layer components {
+  .glass-surface {
+    --glass-accent: rgba(244, 183, 40, 0.18);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0) 40%),
+      linear-gradient(180deg, rgba(10, 10, 10, 0.72) 0%, rgba(4, 4, 4, 0.82) 100%);
+    backdrop-filter: blur(10px) saturate(140%);
+    -webkit-backdrop-filter: blur(10px) saturate(140%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-top-color: var(--glass-accent);
+    border-radius: var(--radius-md);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.04),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.5),
+      0 8px 24px -12px rgba(0, 0, 0, 0.8);
+  }
 }

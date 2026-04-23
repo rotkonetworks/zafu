@@ -159,29 +159,28 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
           ))}
         </nav>
 
-        {/* footer — upgrade CTA for free users, donate for pros */}
-        <div className='mt-auto border-t border-border-soft px-4 py-3'>
-          {!pro ? (
+        {/* footer — upgrade (if free) + donate (always offered when available) + about */}
+        <div className='mt-auto border-t border-border-soft px-4 py-3 flex flex-col gap-2'>
+          {!pro && (
             <button
               onClick={() => { navigate(PopupPath.SUBSCRIBE); onClose(); }}
-              className='flex w-full items-center justify-center gap-2 px-3 py-2 mb-3 rounded-md bg-zigner-gold text-zigner-dark hover:bg-zigner-gold-light transition-colors text-[13px] lowercase tracking-[0.04em]'
+              className='flex w-full items-center justify-center gap-2 px-3 py-2 rounded-md bg-zigner-gold text-zigner-dark hover:bg-zigner-gold-light transition-colors text-[13px] lowercase tracking-[0.04em]'
             >
               <span className='i-lucide-zap h-3.5 w-3.5' />
               <span>upgrade to pro</span>
             </button>
-          ) : (
-            donation && (
-              <button
-                onClick={handleDonate}
-                className='flex w-full items-center gap-2 px-3 py-2 mb-3 rounded-md border border-border-soft text-[13px] text-fg-muted hover:text-fg-high hover:bg-elev-1 transition-colors'
-              >
-                <span className='i-lucide-heart h-3.5 w-3.5' />
-                <span>donate {activeNetwork}</span>
-              </button>
-            )
+          )}
+          {donation && (
+            <button
+              onClick={handleDonate}
+              className='flex w-full items-center justify-center gap-2 px-3 py-2 rounded-md border border-border-soft text-[13px] text-fg-muted hover:text-fg-high hover:bg-elev-1 transition-colors'
+            >
+              <span className='i-lucide-heart h-3.5 w-3.5' />
+              <span>donate {activeNetwork}</span>
+            </button>
           )}
 
-          <div className='flex items-center gap-3 text-[10px] text-fg-dim lowercase tracking-[0.04em]'>
+          <div className='mt-1 flex items-center gap-3 text-[10px] text-fg-dim lowercase tracking-[0.04em]'>
             <a href='https://rotko.net' target='_blank' rel='noopener noreferrer' className='hover:text-fg-high'>rotko.net</a>
             <a href='https://github.com/rotkonetworks/zafu' target='_blank' rel='noopener noreferrer' className='hover:text-fg-high'>github</a>
             <a href='https://zigner.rotko.net' target='_blank' rel='noopener noreferrer' className='hover:text-fg-high'>zigner</a>
