@@ -122,11 +122,10 @@ export const TransactionApproval = () => {
   if (isAirgap && airgapStep === 'show-qr') {
     return (
       <div className='flex h-screen flex-col'>
-        <div className='border-b border-border-soft p-4'>
-          <h1 className='bg-text-linear bg-clip-text pb-0 font-headline text-2xl font-bold text-transparent'>
-            Sign with Zigner
-          </h1>
-        </div>
+        <header className='border-b border-border-soft p-4'>
+          <span className='kicker'>transaction</span>
+          <h1 className='mt-1 text-[18px] text-fg-high lowercase tracking-[-0.01em]'>sign with zigner</h1>
+        </header>
 
         <div className='grow overflow-auto p-4 flex flex-col items-center justify-center'>
           <QrDisplay
@@ -191,16 +190,15 @@ export const TransactionApproval = () => {
   // Review step (shared between normal and airgap)
   return (
     <div className='flex h-screen flex-col'>
-      <div className='border-b border-border-soft p-4'>
-        <h1 className='bg-text-linear bg-clip-text pb-0 font-headline text-2xl font-bold text-transparent'>
-          Confirm Transaction
-        </h1>
-      </div>
+      <header className='border-b border-border-soft p-4'>
+        <span className='kicker'>transaction</span>
+        <h1 className='mt-1 text-[18px] text-fg-high lowercase tracking-[-0.01em]'>confirm transaction</h1>
+      </header>
 
       <div className='grow overflow-auto p-4'>
         {invalidPlan && (
-          <div className='mb-4 rounded-lg border content-center border-red-400/40 p-2 text-sm text-red-400 text-center'>
-            <h2>⚠ Invalid Transaction</h2>
+          <div className='mb-4 rounded-md border border-red-400/40 p-3 text-xs text-red-400'>
+            <h2 className='kicker mb-1 text-red-400/80'>⚠ invalid transaction</h2>
             <p>
               {invalidPlan instanceof ConnectError ? invalidPlan.rawMessage : String(invalidPlan)}
             </p>
@@ -210,14 +208,14 @@ export const TransactionApproval = () => {
         {selectedTransactionViewName === TransactionViewTab.SENDER && (
           <>
             {hasTransparentAddress(selectedTransactionView) && (
-              <div className='mb-4 rounded-lg border content-center border-yellow-400/40 p-3 text-sm text-yellow-400'>
-                <h2>⚠ Privacy Warning</h2>
+              <div className='mb-4 rounded-md border border-yellow-400/40 bg-yellow-400/5 p-3 text-xs text-yellow-400'>
+                <h2 className='kicker mb-1 text-yellow-400/80'>⚠ privacy warning</h2>
                 <p>This transaction uses a transparent address which may reduce privacy.</p>
               </div>
             )}
             {!hasAltGasFee(selectedTransactionView) && (
-              <div className='mb-4 rounded-lg border content-center border-yellow-400/40 p-3 text-sm text-yellow-400'>
-                <h2>⚠ Privacy Warning</h2>
+              <div className='mb-4 rounded-md border border-yellow-400/40 bg-yellow-400/5 p-3 text-xs text-yellow-400'>
+                <h2 className='kicker mb-1 text-yellow-400/80'>⚠ privacy warning</h2>
                 <p>
                   Transaction uses a non-native fee token. To reduce gas costs and protect your
                   privacy, maintain an UM balance for fees.
