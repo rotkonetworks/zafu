@@ -48,7 +48,7 @@ export const Login = () => {
           <PasswordInput
             passwordValue={input}
             label={
-              <p className='font-headline text-2xl font-medium text-foreground'>
+              <p className='font-headline text-2xl font-medium text-fg'>
                 Enter password
               </p>
             }
@@ -66,7 +66,7 @@ export const Login = () => {
           </Button>
         </form>
         <div className='flex flex-col gap-1'>
-          <p className='text-center text-muted-foreground'>
+          <p className='text-center text-fg-muted'>
             Need help?{' '}
             <a
               className='cursor-pointer text-teal hover:underline transition-colors'
@@ -77,7 +77,7 @@ export const Login = () => {
               Chat with us
             </a>
           </p>
-          <p className='text-center text-xs text-muted-foreground/50'>
+          <p className='text-center text-xs text-fg-muted/50'>
             {BUILD_COMMIT}-{BUILD_DATE}
           </p>
         </div>

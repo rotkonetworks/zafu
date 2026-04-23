@@ -192,7 +192,7 @@ title="Scan Zafu Zigner QR"
       <Card className={cn('p-6', 'w-[600px]')} gradient>
         <CardHeader className='items-center'>
           <div onClick={handleIconClick} className='cursor-pointer'>
-            <span className='i-lucide-eye size-8 mb-2 text-muted-foreground' />
+            <span className='i-lucide-eye size-8 mb-2 text-fg-muted' />
           </div>
           <CardTitle className='font-medium'>Connect Zafu Zigner</CardTitle>
           <CardDescription className='text-center'>
@@ -238,7 +238,7 @@ title="Scan Zafu Zigner QR"
             {/* Hidden manual input mode (developer mode) */}
             {showManualInput && (
               <div className='flex flex-col gap-4 text-left'>
-                <p className='text-sm text-muted-foreground text-center'>
+                <p className='text-sm text-fg-muted text-center'>
                   Developer mode: Paste QR hex data
                 </p>
                 <Input
@@ -279,7 +279,7 @@ title="Scan Zafu Zigner QR"
               <div className='flex flex-col gap-4'>
                 <div className='p-6'>
                   <div className='font-headline text-lg'>Success!</div>
-                  <div className={cn('font-mono text-muted-foreground', 'text-xs', 'break-all', 'mt-2')}>
+                  <div className={cn('font-mono text-fg-muted', 'text-xs', 'break-all', 'mt-2')}>
                     Account #{walletImport.accountIndex}
                   </div>
                 </div>
@@ -293,7 +293,7 @@ title="Scan Zafu Zigner QR"
 
                 <div className='rounded-lg border border-yellow-500/40 bg-yellow-500/10 p-3 text-sm text-yellow-400 text-left'>
                   <p className='font-medium'>Airgap Signer</p>
-                  <p className='mt-1 text-muted-foreground text-xs'>
+                  <p className='mt-1 text-fg-muted text-xs'>
                     View balances and create transactions. Signing requires your Zafu Zigner device.
                   </p>
                 </div>
@@ -311,7 +311,7 @@ title="Scan Zafu Zigner QR"
                   >
                     Set Password
                   </Button>
-                  <p className='text-xs text-muted-foreground text-center'>
+                  <p className='text-xs text-fg-muted text-center'>
                     Requires login to use apps. More secure.
                   </p>
 
@@ -323,7 +323,7 @@ title="Scan Zafu Zigner QR"
                   >
                     {importing ? 'Importing...' : 'Skip Password'}
                   </Button>
-                  <p className='text-xs text-muted-foreground text-center'>
+                  <p className='text-xs text-fg-muted text-center'>
                     No login required. Less secure.
                   </p>
 
@@ -339,7 +339,7 @@ title="Scan Zafu Zigner QR"
               <div className='flex flex-col gap-4'>
                 <div className='p-6'>
                   <div className='font-headline text-lg'>Zcash Wallet Detected!</div>
-                  <div className={cn('font-mono text-muted-foreground', 'text-xs', 'break-all', 'mt-2')}>
+                  <div className={cn('font-mono text-fg-muted', 'text-xs', 'break-all', 'mt-2')}>
                     Account #{zcashWalletImport.accountIndex}
                     <span className='ml-2'>{zcashWalletImport.mainnet ? '(mainnet)' : '(testnet)'}</span>
                   </div>
@@ -354,7 +354,7 @@ title="Scan Zafu Zigner QR"
 
                 <div className='rounded-lg border border-yellow-500/40 bg-yellow-500/10 p-3 text-sm text-yellow-400 text-left'>
                   <p className='font-medium'>Airgap Signer</p>
-                  <p className='mt-1 text-muted-foreground text-xs'>
+                  <p className='mt-1 text-fg-muted text-xs'>
                     View balances and create transactions. Signing requires your Zafu Zigner device.
                   </p>
                 </div>
@@ -372,7 +372,7 @@ title="Scan Zafu Zigner QR"
                   >
                     Set Password
                   </Button>
-                  <p className='text-xs text-muted-foreground text-center'>
+                  <p className='text-xs text-fg-muted text-center'>
                     Requires login to use apps. More secure.
                   </p>
 
@@ -384,7 +384,7 @@ title="Scan Zafu Zigner QR"
                   >
                     {importing ? 'Importing...' : 'Skip Password'}
                   </Button>
-                  <p className='text-xs text-muted-foreground text-center'>
+                  <p className='text-xs text-fg-muted text-center'>
                     No login required. Less secure.
                   </p>
 
@@ -401,8 +401,8 @@ title="Scan Zafu Zigner QR"
                 <div className='p-6'>
                   <div className='font-headline text-lg'>Cosmos Account Detected!</div>
                   {parsedCosmosExport.addresses.map(a => (
-                    <div key={a.chainId} className={cn('font-mono text-muted-foreground', 'text-xs', 'break-all', 'mt-2')}>
-                      <span className='text-foreground capitalize'>{a.chainId}:</span>{' '}
+                    <div key={a.chainId} className={cn('font-mono text-fg-muted', 'text-xs', 'break-all', 'mt-2')}>
+                      <span className='text-fg capitalize'>{a.chainId}:</span>{' '}
                       {a.address.slice(0, 12)}...{a.address.slice(-8)}
                     </div>
                   ))}
@@ -417,7 +417,7 @@ title="Scan Zafu Zigner QR"
 
                 <div className='rounded-lg border border-pink-500/40 bg-pink-500/10 p-3 text-sm text-pink-200 text-left'>
                   <p className='font-medium'>Watch-Only Account</p>
-                  <p className='mt-1 text-muted-foreground text-xs'>
+                  <p className='mt-1 text-fg-muted text-xs'>
                     View balances and create unsigned transactions. Signing requires your Zafu Zigner device via QR codes.
                   </p>
                 </div>
@@ -435,7 +435,7 @@ title="Scan Zafu Zigner QR"
                   >
                     Set Password
                   </Button>
-                  <p className='text-xs text-muted-foreground text-center'>
+                  <p className='text-xs text-fg-muted text-center'>
                     Requires login to use apps. More secure.
                   </p>
 
@@ -447,7 +447,7 @@ title="Scan Zafu Zigner QR"
                   >
                     {importing ? 'Importing...' : 'Skip Password'}
                   </Button>
-                  <p className='text-xs text-muted-foreground text-center'>
+                  <p className='text-xs text-fg-muted text-center'>
                     No login required. Less secure.
                   </p>
 
@@ -463,7 +463,7 @@ title="Scan Zafu Zigner QR"
               <div className='flex flex-col gap-4'>
                 <div className='p-6'>
                   <div className='font-headline text-lg'>Polkadot Account Detected!</div>
-                  <div className={cn('font-mono text-muted-foreground', 'text-xs', 'break-all', 'mt-2')}>
+                  <div className={cn('font-mono text-fg-muted', 'text-xs', 'break-all', 'mt-2')}>
                     {parsedPolkadotExport.address.slice(0, 12)}...{parsedPolkadotExport.address.slice(-8)}
                   </div>
                 </div>
@@ -477,7 +477,7 @@ title="Scan Zafu Zigner QR"
 
                 <div className='rounded-lg border border-pink-500/40 bg-pink-500/10 p-3 text-sm text-pink-200 text-left'>
                   <p className='font-medium'>Watch-Only Account</p>
-                  <p className='mt-1 text-muted-foreground text-xs'>
+                  <p className='mt-1 text-fg-muted text-xs'>
                     View balances and create unsigned transactions. Signing requires your Zafu Zigner device via QR codes.
                   </p>
                 </div>
@@ -495,7 +495,7 @@ title="Scan Zafu Zigner QR"
                   >
                     Set Password
                   </Button>
-                  <p className='text-xs text-muted-foreground text-center'>
+                  <p className='text-xs text-fg-muted text-center'>
                     Requires login to use apps. More secure.
                   </p>
 
@@ -507,7 +507,7 @@ title="Scan Zafu Zigner QR"
                   >
                     {importing ? 'Importing...' : 'Skip Password'}
                   </Button>
-                  <p className='text-xs text-muted-foreground text-center'>
+                  <p className='text-xs text-fg-muted text-center'>
                     No login required. Less secure.
                   </p>
 
@@ -531,7 +531,7 @@ title="Scan Zafu Zigner QR"
             {/* Importing state */}
             {scanState === 'importing' && (
               <div className='flex flex-col items-center gap-4 p-8'>
-                <div className='text-muted-foreground'>Importing wallet...</div>
+                <div className='text-fg-muted'>Importing wallet...</div>
               </div>
             )}
           </div>

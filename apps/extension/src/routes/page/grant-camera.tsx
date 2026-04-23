@@ -59,7 +59,7 @@ export const GrantCamera = () => {
               ) : state === 'denied' ? (
                 <span className='i-lucide-x size-10 text-red-400' />
               ) : (
-                <span className='i-lucide-camera size-10 text-primary' />
+                <span className='i-lucide-camera size-10 text-zigner-gold' />
               )}
             </div>
             <CardTitle className='font-medium text-xl'>
@@ -73,7 +73,7 @@ export const GrantCamera = () => {
               {state === 'granted' && (
                 <>
                   <p>You can now scan QR codes in Zafu.</p>
-                  <p className='mt-2 font-medium text-foreground'>
+                  <p className='mt-2 font-medium text-fg'>
                     Close this tab and return to the extension popup.
                   </p>
                 </>
@@ -92,7 +92,7 @@ export const GrantCamera = () => {
 <p>
                     Zafu needs camera access to scan QR codes from your Zafu Zigner device.
                   </p>
-                  <p className='mt-2 text-muted-foreground text-sm'>
+                  <p className='mt-2 text-fg-muted text-sm'>
                     Click the button below to grant access. Your browser will show
                     a permission prompt.
                   </p>
@@ -139,7 +139,7 @@ export const GrantCamera = () => {
               {(state === 'not-granted' || state === 'denied') && (
                 <Button
                   variant='ghost'
-                  className='w-full text-muted-foreground'
+                  className='w-full text-fg-muted'
                   onClick={handleClose}
                 >
                   Cancel
