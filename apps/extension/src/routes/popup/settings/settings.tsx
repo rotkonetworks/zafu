@@ -51,11 +51,11 @@ function SettingsRow({
   return (
     <button
       onClick={onClick}
-      className='flex w-full items-center gap-3 py-3 text-left transition-colors hover:bg-elev-1'
+      className='flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-elev-1 hover:text-fg-high group'
     >
-      <span className={cn(icon, 'size-5 text-fg-muted')} />
-      <span className='flex-1 text-sm text-fg'>{title}</span>
-      <span className='i-lucide-chevron-right size-4 text-fg-muted' />
+      <span className={cn(icon, 'size-5 text-fg-muted group-hover:text-fg-high')} />
+      <span className='flex-1 text-[13px] text-fg group-hover:text-fg-high lowercase tracking-[0.02em]'>{title}</span>
+      <span className='i-lucide-chevron-right size-4 text-fg-dim group-hover:text-fg-muted' />
     </button>
   );
 }
@@ -94,7 +94,7 @@ export const Settings = () => {
   return (
     <SettingsScreen title='settings' backPath={PopupPath.INDEX}>
       <div className='flex grow flex-col justify-between'>
-        <div className='flex flex-col divide-y divide-border/40'>
+        <div className='flex flex-col divide-y divide-border-soft'>
           {visibleLinks.map(l => (
             <SettingsRow
               key={l.href}
@@ -105,11 +105,11 @@ export const Settings = () => {
           ))}
           <button
             onClick={cycleAutoLock}
-            className='flex w-full items-center gap-3 py-3 text-left transition-colors hover:bg-elev-1'
+            className='flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-elev-1 hover:text-fg-high group'
           >
-            <span className={cn('i-lucide-timer', 'size-5 text-fg-muted')} />
-            <span className='flex-1 text-sm text-fg'>auto-lock</span>
-            <span className='text-xs text-fg-muted'>{autoLockLabel}</span>
+            <span className={cn('i-lucide-timer', 'size-5 text-fg-muted group-hover:text-fg-high')} />
+            <span className='flex-1 text-[13px] text-fg group-hover:text-fg-high lowercase tracking-[0.02em]'>auto-lock</span>
+            <span className='text-[10px] tabular text-fg-dim group-hover:text-fg-muted'>{autoLockLabel}</span>
           </button>
         </div>
 

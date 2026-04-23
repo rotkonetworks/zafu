@@ -19,7 +19,7 @@ export const SettingsHeader = ({
       >
         <span className='i-lucide-arrow-left h-5 w-5' />
       </button>
-      <h1 className='text-lg font-medium text-fg'>{title}</h1>
+      <h1 className='text-[15px] text-fg-high lowercase tracking-[-0.01em]'>{title}</h1>
     </div>
   );
 };
