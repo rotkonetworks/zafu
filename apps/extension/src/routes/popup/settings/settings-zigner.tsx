@@ -177,19 +177,19 @@ export const SettingsZigner = () => {
     <SettingsScreen title='Zafu Zigner'>
       <div className='flex flex-col gap-4'>
         {/* Info Box */}
-        <div className='rounded-lg border border-border-hard bg-card-radial p-4'>
-          <p className='text-sm text-fg-muted'>
-Zafu Zigner is a cold wallet that keeps your spending keys offline. Zafu stores only the
-            viewing key to show balances. Transactions require QR code signing with your Zafu Zigner
-            device.
+        <div className='rounded-md border border-border-soft bg-elev-1 p-4'>
+          <p className='text-xs text-fg'>
+            Zafu Zigner is a cold wallet that keeps your spending keys offline. Zafu stores only
+            the viewing key to show balances. Transactions require QR code signing with your Zafu
+            Zigner device.
           </p>
         </div>
 
         {/* Pro gate */}
         {!pro && (
-          <div className='rounded-lg border border-border-soft bg-card-radial p-4 flex flex-col items-center gap-3'>
-            <div className='i-lucide-lock size-8 text-fg-muted/40' />
-            <p className='text-xs text-fg-muted text-center'>
+          <div className='rounded-md border border-border-soft bg-elev-1 p-4 flex flex-col items-center gap-3'>
+            <div className='i-lucide-lock size-8 text-fg-dim' />
+            <p className='text-xs text-fg-muted text-center lowercase tracking-[0.02em]'>
               zigner cold wallet signing is a pro feature
             </p>
             <Button
@@ -204,8 +204,8 @@ Zafu Zigner is a cold wallet that keeps your spending keys offline. Zafu stores 
 
         {/* Zigner Wallets — unified list from keyring */}
         {pro && zignerVaults.length > 0 && (
-          <div className='border-t border-border-hard pt-4'>
-            <p className='text-sm font-bold mb-3'>wallets</p>
+          <div className='border-t border-border-soft pt-4'>
+            <p className='kicker mb-3'>wallets</p>
             <div className='flex flex-col gap-2'>
               {zignerVaults.map(vault => {
                 const networks = (vault.insensitive['supportedNetworks'] as string[] | undefined) ?? [];
@@ -218,25 +218,25 @@ Zafu Zigner is a cold wallet that keeps your spending keys offline. Zafu stores 
                 return (
                   <div
                     key={vault.id}
-                    className='flex items-center justify-between border border-border-hard bg-card-radial p-3'
+                    className='flex items-center justify-between rounded-md border border-border-soft bg-elev-1 p-3'
                   >
                     <div className='flex flex-col gap-1 min-w-0'>
                       <div className='flex items-center gap-2'>
                         <EyeOpenIcon className={`size-4 ${colorClass} flex-shrink-0`} />
-                        <span className='text-sm truncate'>{vault.name}</span>
+                        <span className='text-[13px] text-fg-high truncate'>{vault.name}</span>
                         {networks.map(n => (
-                          <span key={n} className='text-[10px] px-1 bg-elev-2 text-fg-muted'>
+                          <span key={n} className='rounded-sm text-[10px] px-1 bg-elev-2 text-fg-dim lowercase tracking-[0.04em]'>
                             {n}
                           </span>
                         ))}
                       </div>
                       {cosmosAddrs?.map(a => (
-                        <span key={a.chainId} className='text-[10px] font-mono text-fg-muted pl-6'>
+                        <span key={a.chainId} className='text-[10px] tabular text-fg-muted pl-6'>
                           {a.chainId}: {a.address.slice(0, 10)}...{a.address.slice(-6)}
                         </span>
                       ))}
                       {ss58 && (
-                        <span className='text-[10px] font-mono text-fg-muted pl-6'>
+                        <span className='text-[10px] tabular text-fg-muted pl-6'>
                           {ss58.slice(0, 8)}...{ss58.slice(-6)}
                         </span>
                       )}
