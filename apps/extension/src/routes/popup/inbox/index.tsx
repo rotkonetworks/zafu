@@ -154,12 +154,12 @@ function ConversationRow({
           </span>
           <div className='flex items-center gap-1.5 shrink-0'>
             {conversation.unread > 0 && (
-              <span className='rounded-full bg-zigner-gold px-1.5 py-0.5 text-[10px] text-zigner-dark'>
+              <span className='rounded-full bg-zigner-gold px-1.5 py-0.5 text-[10px] tabular text-zigner-dark'>
                 {conversation.unread}
               </span>
             )}
             {lastMsg?.timestamp && (
-              <span className='text-[10px] text-fg-muted whitespace-nowrap'>
+              <span className='text-[10px] tabular text-fg-dim whitespace-nowrap'>
                 {formatTimestamp(lastMsg.timestamp)}
               </span>
             )}
@@ -167,12 +167,12 @@ function ConversationRow({
         </div>
         <p className={cn(
           'text-xs mt-0.5 line-clamp-1',
-          conversation.unread > 0 ? 'text-fg' : 'text-fg-muted',
+          conversation.unread > 0 ? 'text-fg-high' : 'text-fg-muted',
         )}>
           {preview}
         </p>
         <div className='flex items-center gap-1.5 mt-1'>
-          <span className='text-[10px] text-fg-dim'>
+          <span className='text-[10px] tabular text-fg-dim lowercase tracking-[0.04em]'>
             {conversation.messages.length} message{conversation.messages.length !== 1 ? 's' : ''}
           </span>
         </div>
@@ -208,7 +208,7 @@ function MessageBubble({ message }: { message: InboxMessage }) {
         {/* meta */}
         <div className='flex items-center gap-2 mt-1'>
           {message.timestamp && (
-            <span className='text-[10px] text-fg-dim'>
+            <span className='text-[10px] tabular text-fg-dim'>
               {formatTimestamp(message.timestamp)}
             </span>
           )}

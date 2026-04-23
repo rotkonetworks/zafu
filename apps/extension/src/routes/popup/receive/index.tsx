@@ -636,21 +636,21 @@ function ReceiveTab({ address, loading, activeNetwork }: {
 
   return (
     <div className='flex flex-col items-center gap-4'>
-      <div className='rounded-lg border border-border-soft bg-white p-2'>
+      <div className='rounded-md border border-border-soft bg-white p-2'>
         {isLoading ? (
           <div className='flex h-48 w-48 items-center justify-center'>
-            <span className='text-xs text-fg-muted'>loading...</span>
+            <span className='text-[10px] text-fg-dim lowercase tracking-[0.04em]'>loading...</span>
           </div>
         ) : displayAddress ? (
           <canvas ref={canvasRef} className='h-48 w-48' />
         ) : (
           <div className='flex h-48 w-48 items-center justify-center'>
-            <span className='text-xs text-fg-muted'>no wallet</span>
+            <span className='text-[10px] text-fg-dim lowercase tracking-[0.04em]'>no wallet</span>
           </div>
         )}
       </div>
 
-      <span className='rounded-md bg-elev-2 px-3 py-1 text-xs font-medium capitalize'>
+      <span className='rounded-sm border border-network-accent/30 bg-network-accent/10 px-2.5 py-0.5 text-[10px] text-network-accent lowercase tracking-[0.08em]'>
         {activeNetwork}
       </span>
 
