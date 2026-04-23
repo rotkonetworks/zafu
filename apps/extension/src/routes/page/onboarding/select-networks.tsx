@@ -152,7 +152,7 @@ export const SelectNetworks = () => {
                     'flex items-center gap-4 p-4 rounded-lg border transition-colors text-left',
                     isSelected
                       ? 'border-zigner-gold bg-primary/10'
-                      : 'border-border-hard-soft hover:border-muted-foreground/50',
+                      : 'border-border-soft hover:border-muted-foreground/50',
                   )}
                 >
                   <div
@@ -195,7 +195,7 @@ export const SelectNetworks = () => {
 
           {/* zcash sync start - only shown when zcash is selected */}
           {selected.has('zcash') && (
-            <div className='mt-4 rounded-lg border border-border-hard-soft p-3'>
+            <div className='mt-4 rounded-lg border border-border-soft p-3'>
               <div className='flex items-center justify-between mb-2'>
                 <span className='text-xs font-medium'>wallet birthday</span>
                 <button
@@ -221,7 +221,7 @@ export const SelectNetworks = () => {
                       setZcashBirthday('');
                     }
                   }}
-                  className='w-full bg-input border border-border-hard-soft px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-zigner-gold'
+                  className='w-full bg-input border border-border-soft px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-zigner-gold'
                 />
               ) : (
                 <input
@@ -237,7 +237,7 @@ export const SelectNetworks = () => {
                     }
                   }}
                   placeholder='leave blank for new wallets'
-                  className='w-full bg-input border border-border-hard-soft px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-zigner-gold'
+                  className='w-full bg-input border border-border-soft px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-zigner-gold'
                 />
               )}
 

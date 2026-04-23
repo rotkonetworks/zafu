@@ -113,7 +113,7 @@ export const Settings = () => {
           </button>
         </div>
 
-        <div className='mt-4 border-t border-border-hard-soft pt-4'>
+        <div className='mt-4 border-t border-border-soft pt-4'>
           <SettingsRow
             icon='i-lucide-log-out'
             title='lock wallet'

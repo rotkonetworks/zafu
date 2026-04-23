@@ -129,7 +129,7 @@ export function AnimatedQrDisplay({
 
   return (
     <div className='flex flex-col items-center gap-3'>
-      {title && <h3 className='text-sm font-medium text-foreground'>{title}</h3>}
+      {title && <h3 className='text-sm font-medium text-fg'>{title}</h3>}
 
       <div className='relative rounded-lg bg-white p-3'>
         <canvas ref={canvasRef} />
@@ -141,17 +141,17 @@ export function AnimatedQrDisplay({
       </div>
 
       {frames.length > 1 && (
-        <div className='flex items-center gap-2 text-[10px] text-muted-foreground'>
+        <div className='flex items-center gap-2 text-[10px] text-fg-muted'>
           <span className='i-lucide-loader-2 size-3 animate-spin' />
           scanning — hold camera steady
         </div>
       )}
 
       {description && (
-        <p className='text-xs text-muted-foreground text-center max-w-xs'>{description}</p>
+        <p className='text-xs text-fg-muted text-center max-w-xs'>{description}</p>
       )}
 
-      <p className='text-[10px] text-muted-foreground'>
+      <p className='text-[10px] text-fg-muted'>
         {(totalBytes ?? data?.length ?? 0).toLocaleString()} bytes · {frames.length} frame{frames.length !== 1 ? 's' : ''}
       </p>
     </div>

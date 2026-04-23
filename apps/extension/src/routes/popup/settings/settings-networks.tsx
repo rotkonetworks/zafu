@@ -87,7 +87,7 @@ export const SettingsNetworks = () => {
           return (
             <div key={networkId} className={cn(
               'rounded-lg border overflow-hidden transition-colors',
-              isActive ? 'border-primary/60' : 'border-border-hard-soft',
+              isActive ? 'border-primary/60' : 'border-border-soft',
             )}>
               {/* network row */}
               <div className='flex items-center p-3'>
@@ -146,7 +146,7 @@ export const SettingsNetworks = () => {
 
               {/* endpoint config — expanded */}
               {isExpanded && isEnabled && (
-                <div className='border-t border-border-hard-soft p-3 bg-elev-2/10'>
+                <div className='border-t border-border-soft p-3 bg-elev-2/10'>
                   <div className='text-[10px] text-fg-muted mb-1'>endpoint</div>
                   <div className='flex gap-2'>
                     <input
@@ -154,7 +154,7 @@ export const SettingsNetworks = () => {
                       value={editingEndpoint}
                       onChange={e => setEditingEndpoint(e.target.value)}
                       placeholder={state?.endpoint ?? 'https://...'}
-                      className='flex-1 bg-input border border-border-hard-soft px-2 py-1.5 text-xs font-mono focus:border-primary/50 focus:outline-none'
+                      className='flex-1 bg-input border border-border-soft px-2 py-1.5 text-xs font-mono focus:border-primary/50 focus:outline-none'
                     />
                     <button
                       onClick={() => void handleSaveEndpoint(networkId)}

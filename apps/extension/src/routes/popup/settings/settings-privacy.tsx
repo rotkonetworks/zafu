@@ -115,18 +115,18 @@ function ProxySection() {
             value={host}
             onChange={e => setHost(e.target.value)}
             placeholder='host'
-            className='flex-1 rounded border border-border-hard-soft bg-transparent px-2 py-1 text-xs font-mono'
+            className='flex-1 rounded border border-border-soft bg-transparent px-2 py-1 text-xs font-mono'
           />
           <input
             value={port}
             onChange={e => setPort(e.target.value)}
             placeholder='port'
-            className='w-16 rounded border border-border-hard-soft bg-transparent px-2 py-1 text-xs font-mono'
+            className='w-16 rounded border border-border-soft bg-transparent px-2 py-1 text-xs font-mono'
           />
           <button
             onClick={apply}
             disabled={!host.trim()}
-            className='rounded border border-border-hard-soft px-2 py-1 text-xs disabled:opacity-30'
+            className='rounded border border-border-soft px-2 py-1 text-xs disabled:opacity-30'
           >
             connect
           </button>

@@ -151,30 +151,30 @@ export const SignApproval = () => {
   return (
     <FadeTransition>
       <div className='flex min-h-screen w-screen flex-col gap-6'>
-        <h1 className='flex h-[70px] items-center justify-center border-b border-border/40 font-headline text-xl font-medium leading-[30px]'>
+        <h1 className='flex h-[70px] items-center justify-center border-b border-border-soft font-headline text-xl font-medium leading-[30px]'>
           {step === 'show-qr' ? 'Sign with Zigner' : step === 'scan-qr' ? 'Scan Response' : 'Sign Message'}
         </h1>
 
         {/* ── review step ── */}
         {step === 'review' && (
           <>
-            <div className='mx-auto flex size-20 items-center justify-center rounded-full bg-muted'>
-              <span className='i-lucide-fingerprint h-10 w-10 text-muted-foreground' />
+            <div className='mx-auto flex size-20 items-center justify-center rounded-full bg-elev-2'>
+              <span className='i-lucide-fingerprint h-10 w-10 text-fg-muted' />
             </div>
             <div className='w-full px-[30px]'>
               <div className='flex flex-col gap-3'>
-                <div className='flex min-h-11 w-full items-center overflow-x-auto rounded-lg bg-muted p-3 text-muted-foreground'>
+                <div className='flex min-h-11 w-full items-center overflow-x-auto rounded-lg bg-elev-2 p-3 text-fg-muted'>
                   <div className='mx-auto items-center text-center leading-[0.8em]'>
                     {origin && <DisplayOriginURL url={new URL(origin)} />}
                   </div>
                 </div>
                 {statement && (
-                  <div className='rounded-lg border border-border/40 p-3 text-sm text-muted-foreground'>
+                  <div className='rounded-lg border border-border-soft p-3 text-sm text-fg-muted'>
                     {statement}
                   </div>
                 )}
-                <div className='rounded-lg bg-muted p-3'>
-                  <p className='text-xs text-muted-foreground'>challenge</p>
+                <div className='rounded-lg bg-elev-2 p-3'>
+                  <p className='text-xs text-fg-muted'>challenge</p>
                   <p className='mt-1 break-all font-mono text-xs'>
                     {challengeHex && challengeHex.length > 64
                       ? challengeHex.slice(0, 64) + '...'
@@ -182,14 +182,14 @@ export const SignApproval = () => {
                   </p>
                 </div>
                 {previewAddress && (
-                  <div className='rounded-lg border border-border/40 p-3'>
-                    <p className='text-[10px] text-muted-foreground/60 mb-1'>
+                  <div className='rounded-lg border border-border-soft p-3'>
+                    <p className='text-[10px] text-fg-dim mb-1'>
                       signing as ({signingMode}){isAirgap ? ' — zigner' : ''}
                     </p>
                     <p className='font-mono text-xs break-all'>{previewAddress}</p>
                   </div>
                 )}
-                <p className='text-sm text-muted-foreground'>
+                <p className='text-sm text-fg-muted'>
                   this site is requesting a signature from your identity key.
                   this will not authorize any transactions.
                 </p>
@@ -204,17 +204,17 @@ export const SignApproval = () => {
         {/* ── password step (mnemonic only) ── */}
         {step === 'password' && (
           <div className='w-full px-[30px] flex flex-col gap-4'>
-            <div className='mx-auto flex size-16 items-center justify-center rounded-full bg-muted'>
-              <span className='i-lucide-lock h-8 w-8 text-muted-foreground' />
+            <div className='mx-auto flex size-16 items-center justify-center rounded-full bg-elev-2'>
+              <span className='i-lucide-lock h-8 w-8 text-fg-muted' />
             </div>
-            <p className='text-sm text-muted-foreground text-center'>enter password to sign</p>
+            <p className='text-sm text-fg-muted text-center'>enter password to sign</p>
             <input
               type='password'
               autoFocus
               value={password}
               onChange={e => setPassword(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') void handlePasswordSubmit(); }}
-              className='w-full rounded-lg border border-border/40 bg-muted p-3 text-sm outline-none focus:border-foreground/40'
+              className='w-full rounded-lg border border-border-soft bg-elev-2 p-3 text-sm outline-none focus:border-foreground/40'
               placeholder='password'
             />
             {passwordError && (
@@ -223,13 +223,13 @@ export const SignApproval = () => {
             <div className='flex gap-3 mt-2'>
               <button
                 onClick={() => { setStep('review'); setPassword(''); setPasswordError(''); }}
-                className='flex-1 rounded-lg border border-border/40 p-3 text-sm text-muted-foreground hover:bg-muted'
+                className='flex-1 rounded-lg border border-border-soft p-3 text-sm text-fg-muted hover:bg-elev-1'
               >
                 back
               </button>
               <button
                 onClick={() => void handlePasswordSubmit()}
-                className='flex-1 rounded-lg bg-foreground p-3 text-sm text-background font-medium hover:bg-foreground/90'
+                className='flex-1 rounded-lg bg-fg p-3 text-sm text-background font-medium hover:bg-foreground/90'
               >
                 sign
               </button>
@@ -240,33 +240,33 @@ export const SignApproval = () => {
         {/* ── signing spinner ── */}
         {step === 'signing' && (
           <div className='flex flex-col items-center justify-center gap-3 py-12'>
-            <span className='i-lucide-loader-2 h-8 w-8 text-muted-foreground animate-spin' />
-            <p className='text-sm text-muted-foreground'>signing...</p>
+            <span className='i-lucide-loader-2 h-8 w-8 text-fg-muted animate-spin' />
+            <p className='text-sm text-fg-muted'>signing...</p>
           </div>
         )}
 
         {/* ── show QR step (zigner only) ── */}
         {step === 'show-qr' && (
           <div className='w-full px-[30px] flex flex-col gap-4 items-center'>
-            <p className='text-sm text-muted-foreground text-center'>
+            <p className='text-sm text-fg-muted text-center'>
               scan this QR with your zigner device
             </p>
             <div className='bg-white p-3 rounded-lg'>
               <QrCanvas data={challengeQr} size={240} />
             </div>
-            <div className='rounded-lg bg-muted p-3 w-full'>
-              <p className='text-[10px] text-muted-foreground/60'>origin</p>
+            <div className='rounded-lg bg-elev-2 p-3 w-full'>
+              <p className='text-[10px] text-fg-dim'>origin</p>
               <p className='font-mono text-xs'>{origin}</p>
             </div>
             <button
               onClick={() => setStep('scan-qr')}
-              className='w-full rounded-lg bg-foreground p-3 text-sm text-background font-medium hover:bg-foreground/90'
+              className='w-full rounded-lg bg-fg p-3 text-sm text-background font-medium hover:bg-foreground/90'
             >
               scan signed response
             </button>
             <button
               onClick={() => setStep('review')}
-              className='text-xs text-muted-foreground hover:text-foreground'
+              className='text-xs text-fg-muted hover:text-fg-high'
             >
               back
             </button>

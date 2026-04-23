@@ -142,7 +142,7 @@ export const SettingsParachains = () => {
 
   return (
     <div className='flex flex-col h-full'>
-      <div className='flex items-center gap-3 border-b border-border-hard-soft px-4 py-3'>
+      <div className='flex items-center gap-3 border-b border-border-soft px-4 py-3'>
         <button
           onClick={() => navigate(-1)}
           className='text-fg-muted transition-colors hover:text-fg-high'
@@ -153,7 +153,7 @@ export const SettingsParachains = () => {
       </div>
 
       {/* tabs */}
-      <div className='flex border-b border-border-hard-soft'>
+      <div className='flex border-b border-border-soft'>
         {(['polkadot', 'kusama', 'custom'] as (RelayNetwork | 'custom')[]).map(tab => (
           <button
             key={tab}
@@ -184,7 +184,7 @@ export const SettingsParachains = () => {
             />
             <button
               onClick={() => fileInputRef.current?.click()}
-              className='flex items-center justify-center gap-2 p-3 rounded-lg border border-dashed border-border-hard-soft hover:border-primary/50 hover:bg-elev-1 transition-colors'
+              className='flex items-center justify-center gap-2 p-3 rounded-lg border border-dashed border-border-soft hover:border-primary/50 hover:bg-elev-1 transition-colors'
             >
               <span className='i-lucide-upload h-4 w-4' />
               <span className='text-sm'>upload chainspec json</span>
@@ -202,7 +202,7 @@ export const SettingsParachains = () => {
                 {customChains.map(chain => (
                   <div
                     key={chain.id}
-                    className='flex items-center justify-between p-3 rounded-lg border border-border-hard-soft text-left'
+                    className='flex items-center justify-between p-3 rounded-lg border border-border-soft text-left'
                   >
                     <div className='flex flex-col'>
                       <span className='font-medium text-sm'>{chain.name}</span>
@@ -241,7 +241,7 @@ export const SettingsParachains = () => {
                   key={chain.id}
                   onClick={() => void handleToggle(chain.id)}
                   className={cn(
-                    'flex items-center justify-between p-3 rounded-lg border border-border-hard-soft transition-colors text-left',
+                    'flex items-center justify-between p-3 rounded-lg border border-border-soft transition-colors text-left',
                     isEnabled ? 'bg-primary/5 border-primary/40' : 'hover:bg-elev-1'
                   )}
                 >
@@ -266,7 +266,7 @@ export const SettingsParachains = () => {
         )}
       </div>
 
-      <div className='p-4 border-t border-border-hard-soft'>
+      <div className='p-4 border-t border-border-soft'>
         <p className='text-xs text-fg-muted text-center'>
           chainspecs from paritytech.github.io/chainspecs
         </p>

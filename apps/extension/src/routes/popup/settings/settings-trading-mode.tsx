@@ -72,7 +72,7 @@ export const SettingsTradingMode = () => {
     <SettingsScreen title='trading mode'>
       <div className='flex flex-col gap-4'>
         {/* Info Box */}
-        <div className='rounded-lg border border-border-hard-soft bg-elev-1 p-3'>
+        <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
           <p className='text-sm text-fg-muted'>
             Enable auto-signing for swap transactions from whitelisted sites. Sends and withdrawals
             always require manual approval.
@@ -95,7 +95,7 @@ export const SettingsTradingMode = () => {
         )}
 
         {/* Auto-sign Toggle */}
-        <div className='border-t border-border-hard-soft pt-4'>
+        <div className='border-t border-border-soft pt-4'>
           <div className='flex items-center justify-between'>
             <div className='flex flex-col gap-1'>
               <span className='text-sm font-medium'>Auto-sign Swaps</span>
@@ -110,7 +110,7 @@ export const SettingsTradingMode = () => {
         {settings.autoSign && (
           <>
             {/* Session Duration */}
-            <div className='border-t border-border-hard-soft pt-4'>
+            <div className='border-t border-border-soft pt-4'>
               <p className='text-sm font-medium mb-3'>Session Duration</p>
               <div className='flex items-center gap-2'>
                 <Input
@@ -126,7 +126,7 @@ export const SettingsTradingMode = () => {
             </div>
 
             {/* Max Value */}
-            <div className='border-t border-border-hard-soft pt-4'>
+            <div className='border-t border-border-soft pt-4'>
               <p className='text-sm font-medium mb-3'>Max Value Per Swap</p>
               <div className='flex items-center gap-2'>
                 <Input
@@ -142,11 +142,11 @@ export const SettingsTradingMode = () => {
             </div>
 
             {/* Allowed Origins */}
-            <div className='border-t border-border-hard-soft pt-4'>
+            <div className='border-t border-border-soft pt-4'>
               <p className='text-sm font-medium mb-3'>Allowed Sites</p>
 
               {settings.allowedOrigins.length === 0 ? (
-                <div className='rounded-lg border border-border-hard-soft bg-elev-1 p-3'>
+                <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
                   <p className='text-xs text-fg-muted'>
                     No sites selected. Add at least one site to enable auto-signing.
                   </p>
@@ -156,7 +156,7 @@ export const SettingsTradingMode = () => {
                   {settings.allowedOrigins.map((origin: string) => (
                     <div
                       key={origin}
-                      className='flex items-center justify-between rounded-lg border border-border-hard-soft bg-elev-1 p-3'
+                      className='flex items-center justify-between rounded-lg border border-border-soft bg-elev-1 p-3'
                     >
                       <span className='text-sm truncate'>{new URL(origin).hostname}</span>
                       <button
@@ -190,7 +190,7 @@ export const SettingsTradingMode = () => {
             </div>
 
             {/* Actions */}
-            <div className='border-t border-border-hard-soft pt-4'>
+            <div className='border-t border-border-soft pt-4'>
               <div className='flex gap-2'>
                 <Button
                   variant='secondary'
@@ -211,7 +211,7 @@ export const SettingsTradingMode = () => {
         )}
 
         {!settings.autoSign && (
-          <div className='border-t border-border-hard-soft pt-4'>
+          <div className='border-t border-border-soft pt-4'>
             <Button variant='secondary' className='w-full' onClick={handleSave} disabled={saving}>
               {saving ? 'Saving...' : 'Save'}
             </Button>

@@ -50,9 +50,9 @@ function stateColor(state: string): string {
   switch (state) {
     case 'voting': return 'text-green-400';
     case 'withdrawn': return 'text-yellow-400';
-    case 'finished': return 'text-muted-foreground';
-    case 'claimed': return 'text-muted-foreground';
-    default: return 'text-muted-foreground';
+    case 'finished': return 'text-fg-muted';
+    case 'claimed': return 'text-fg-muted';
+    default: return 'text-fg-muted';
   }
 }
 
@@ -69,7 +69,7 @@ function voteColor(vote: Vote_Vote): string {
   switch (vote) {
     case Vote_Vote.YES: return 'bg-green-500/20 text-green-400 hover:bg-green-500/30';
     case Vote_Vote.NO: return 'bg-red-500/20 text-red-400 hover:bg-red-500/30';
-    case Vote_Vote.ABSTAIN: return 'bg-muted text-muted-foreground hover:bg-muted/80';
+    case Vote_Vote.ABSTAIN: return 'bg-elev-2 text-fg-muted hover:bg-elev-1/80';
     default: return '';
   }
 }
@@ -157,13 +157,13 @@ export function VotePage() {
       <div className='flex items-center gap-2'>
         <button
           onClick={() => setShowInactive(false)}
-          className={`text-xs px-2 py-1 rounded-md transition-colors ${!showInactive ? 'text-foreground bg-muted' : 'text-muted-foreground hover:text-foreground'}`}
+          className={`text-xs px-2 py-1 rounded-md transition-colors ${!showInactive ? 'text-fg bg-elev-2' : 'text-fg-muted hover:text-fg-high'}`}
         >
           active
         </button>
         <button
           onClick={() => setShowInactive(true)}
-          className={`text-xs px-2 py-1 rounded-md transition-colors ${showInactive ? 'text-foreground bg-muted' : 'text-muted-foreground hover:text-foreground'}`}
+          className={`text-xs px-2 py-1 rounded-md transition-colors ${showInactive ? 'text-fg bg-elev-2' : 'text-fg-muted hover:text-fg-high'}`}
         >
           all
         </button>
@@ -178,14 +178,14 @@ export function VotePage() {
 
       {proposalsQuery.isLoading && (
         <div className='flex items-center justify-center py-12'>
-          <div className='h-5 w-5 animate-spin border-2 border-primary border-t-transparent rounded-full' />
+          <div className='h-5 w-5 animate-spin border-2 border-zigner-gold border-t-transparent rounded-full' />
         </div>
       )}
 
       {proposalsQuery.error && (
         <div className='text-center py-12'>
           <p className='text-sm text-red-400'>failed to load proposals</p>
-          <button onClick={() => void proposalsQuery.refetch()} className='text-sm text-primary hover:underline mt-1'>
+          <button onClick={() => void proposalsQuery.refetch()} className='text-sm text-zigner-gold hover:underline mt-1'>
             retry
           </button>
         </div>
@@ -193,7 +193,7 @@ export function VotePage() {
 
       {!proposalsQuery.isLoading && proposals.length === 0 && (
         <div className='text-center py-12'>
-          <p className='text-sm text-muted-foreground'>
+          <p className='text-sm text-fg-muted'>
             {showInactive ? 'no proposals found' : 'no active proposals'}
           </p>
         </div>
@@ -207,31 +207,31 @@ export function VotePage() {
           const canVote = p.state === 'voting';
 
           return (
-            <div key={String(p.id)} className='rounded-lg border border-border/40 bg-card'>
+            <div key={String(p.id)} className='rounded-lg border border-border-soft bg-elev-1'>
               {/* header */}
               <button
                 onClick={() => setExpandedId(isExpanded ? null : p.id)}
-                className='w-full flex items-start justify-between p-3 text-left hover:bg-muted/50 transition-colors'
+                className='w-full flex items-start justify-between p-3 text-left hover:bg-elev-1 transition-colors'
               >
                 <div className='flex-1 min-w-0'>
                   <div className='flex items-center gap-2'>
-                    <span className='text-[10px] font-mono text-muted-foreground'>#{String(p.id)}</span>
+                    <span className='text-[10px] font-mono text-fg-muted'>#{String(p.id)}</span>
                     <span className={`text-[10px] ${stateColor(p.state)}`}>{p.state}</span>
-                    <span className='text-[10px] text-muted-foreground'>{p.kind}</span>
+                    <span className='text-[10px] text-fg-muted'>{p.kind}</span>
                   </div>
                   <p className='text-sm mt-0.5 truncate'>{p.title}</p>
                 </div>
-                {isExpanded ? <span className='i-lucide-chevron-up h-4 w-4 shrink-0 text-muted-foreground' /> : <span className='i-lucide-chevron-down h-4 w-4 shrink-0 text-muted-foreground' />}
+                {isExpanded ? <span className='i-lucide-chevron-up h-4 w-4 shrink-0 text-fg-muted' /> : <span className='i-lucide-chevron-down h-4 w-4 shrink-0 text-fg-muted' />}
               </button>
 
               {/* expanded detail */}
               {isExpanded && (
-                <div className='border-t border-border/40 p-3'>
-                  <p className='text-xs text-muted-foreground whitespace-pre-wrap max-h-[200px] overflow-y-auto'>
+                <div className='border-t border-border-soft p-3'>
+                  <p className='text-xs text-fg-muted whitespace-pre-wrap max-h-[200px] overflow-y-auto'>
                     {p.description || 'no description'}
                   </p>
 
-                  <div className='flex items-center gap-3 mt-2 text-[10px] text-muted-foreground'>
+                  <div className='flex items-center gap-3 mt-2 text-[10px] text-fg-muted'>
                     <span>start: {p.startBlock.toLocaleString()}</span>
                     <span>end: {p.endBlock.toLocaleString()}</span>
                   </div>

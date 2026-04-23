@@ -53,24 +53,24 @@ export const NetworkSelector = ({
         <button
           onClick={toggle}
           className={cn(
-            'flex items-center gap-2 rounded-lg border border-border/40 bg-background/50 px-2.5 py-1.5 text-sm',
-            'transition-colors hover:bg-muted/50',
+            'flex items-center gap-2 rounded-lg border border-border-soft bg-background/50 px-2.5 py-1.5 text-sm',
+            'transition-colors hover:bg-elev-1',
             className
           )}
         >
           <NetworkIcon network={currentNetwork.id} color={currentNetwork.color} size='sm' />
           <span className='max-w-[80px] truncate font-medium'>{currentNetwork.name}</span>
           {currentNetwork.testnet && (
-            <span className='text-[10px] text-muted-foreground'>testnet</span>
+            <span className='text-[10px] text-fg-muted'>testnet</span>
           )}
-          <span className={cn('i-lucide-chevron-down h-4 w-4 text-muted-foreground transition-transform', open && 'rotate-180')} />
+          <span className={cn('i-lucide-chevron-down h-4 w-4 text-fg-muted transition-transform', open && 'rotate-180')} />
         </button>
       )}
     >
       {({ close }) => (
-        <div className='absolute right-0 top-full z-50 mt-1 w-52 max-h-60 overflow-y-auto rounded-lg border border-border/40 bg-background shadow-lg'>
+        <div className='absolute right-0 top-full z-50 mt-1 w-52 max-h-60 overflow-y-auto rounded-lg border border-border-soft bg-canvas shadow-lg'>
           <div className='p-1'>
-            <div className='px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground'>
+            <div className='px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-fg-muted'>
               active networks
             </div>
             {activeNetworks.map(network => (
@@ -82,31 +82,31 @@ export const NetworkSelector = ({
                 }}
                 className={cn(
                   'flex w-full items-center justify-between px-2 py-1.5 text-sm transition-colors',
-                  network.id === currentNetwork.id ? 'bg-muted/50' : 'hover:bg-muted/50'
+                  network.id === currentNetwork.id ? 'bg-elev-2' : 'hover:bg-elev-1'
                 )}
               >
                 <div className='flex items-center gap-2'>
                   <NetworkIcon network={network.id} color={network.color} size='sm' />
                   <span>{network.name}</span>
                   {network.testnet && (
-                    <span className='text-[10px] text-muted-foreground'>testnet</span>
+                    <span className='text-[10px] text-fg-muted'>testnet</span>
                   )}
                 </div>
                 {network.id === currentNetwork.id && (
-                  <div className='h-1.5 w-1.5 bg-primary' />
+                  <div className='h-1.5 w-1.5 bg-zigner-gold' />
                 )}
               </button>
             ))}
           </div>
 
           {onAddNetwork && (
-            <div className='border-t border-border/40 p-1'>
+            <div className='border-t border-border-soft p-1'>
               <button
                 onClick={() => {
                   close();
                   onAddNetwork();
                 }}
-                className='flex w-full items-center gap-2 px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground'
+                className='flex w-full items-center gap-2 px-2 py-1.5 text-sm text-fg-muted transition-colors hover:bg-elev-1 hover:text-fg-high'
               >
                 <span className='i-lucide-plus h-4 w-4' />
                 <span>add network</span>

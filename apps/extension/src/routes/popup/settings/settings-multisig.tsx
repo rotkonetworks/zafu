@@ -52,7 +52,7 @@ export const SettingsMultisig = () => {
     <SettingsScreen title='multisig settings' backPath={PopupPath.SETTINGS_WALLETS}>
       <div className='flex flex-col gap-4'>
         {/* info */}
-        <div className='rounded-lg border border-border-hard-soft bg-elev-1 p-3'>
+        <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
           <div className='flex items-center gap-2'>
             <span className='rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-zigner-gold'>
               {ms.threshold}/{ms.maxSigners}
@@ -66,7 +66,7 @@ export const SettingsMultisig = () => {
         <label className='text-xs text-fg-muted'>
           label
           <input
-            className='mt-1 w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm focus:border-primary/50 focus:outline-none'
+            className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-primary/50 focus:outline-none'
             value={label}
             onChange={e => setLabel(e.target.value)}
           />
@@ -75,7 +75,7 @@ export const SettingsMultisig = () => {
         <label className='text-xs text-fg-muted'>
           relay url
           <input
-            className='mt-1 w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 font-mono text-xs focus:border-primary/50 focus:outline-none'
+            className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-xs focus:border-primary/50 focus:outline-none'
             value={relayUrl}
             onChange={e => setRelayUrl(e.target.value)}
             placeholder='https://poker.zk.bot'
@@ -96,7 +96,7 @@ export const SettingsMultisig = () => {
         )}
 
         {/* delete */}
-        <div className='border-t border-border-hard-soft pt-4'>
+        <div className='border-t border-border-soft pt-4'>
           {!confirmDelete ? (
             <button
               onClick={() => setConfirmDelete(true)}
@@ -112,7 +112,7 @@ export const SettingsMultisig = () => {
               <div className='flex gap-2'>
                 <button
                   onClick={() => setConfirmDelete(false)}
-                  className='flex-1 rounded-lg border border-border-hard-soft py-2 text-xs hover:bg-elev-1 transition-colors'
+                  className='flex-1 rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
                 >
                   cancel
                 </button>

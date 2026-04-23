@@ -41,7 +41,7 @@ export const PasswordInput = ({
           {reveal ? (
             <span className='i-lucide-eye' onClick={() => setReveal(false)} />
           ) : (
-            <span className='i-lucide-eye-off text-muted-foreground' onClick={() => setReveal(true)} />
+            <span className='i-lucide-eye-off text-fg-muted' onClick={() => setReveal(true)} />
           )}
         </div>
         <Input

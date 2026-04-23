@@ -10,9 +10,9 @@ import { CAPABILITY_META, type Capability, type RiskLevel } from '@repo/storage-
 
 const riskStyles: Record<RiskLevel, { border: string; bg: string; text: string; banner?: string }> = {
   low: {
-    border: 'border-border/40',
+    border: 'border-border-soft',
     bg: '',
-    text: 'text-muted-foreground',
+    text: 'text-fg-muted',
   },
   medium: {
     border: 'border-yellow-500/30',
@@ -48,7 +48,7 @@ const CapabilityItem = ({ cap }: { cap: Capability }) => {
         <span className={cn('text-sm font-medium', style.text)}>{meta.label}</span>
         <span className={cn(
           'rounded px-1.5 py-0.5 text-[10px] uppercase',
-          meta.risk === 'low' && 'bg-muted text-muted-foreground',
+          meta.risk === 'low' && 'bg-elev-2 text-fg-muted',
           meta.risk === 'medium' && 'bg-yellow-500/10 text-yellow-400',
           meta.risk === 'high' && 'bg-orange-500/10 text-orange-400',
           meta.risk === 'critical' && 'bg-red-500/10 text-red-400',
@@ -56,7 +56,7 @@ const CapabilityItem = ({ cap }: { cap: Capability }) => {
           {meta.risk}
         </span>
       </div>
-      <p className='mt-1 text-xs text-muted-foreground'>{meta.description}</p>
+      <p className='mt-1 text-xs text-fg-muted'>{meta.description}</p>
     </div>
   );
 };
@@ -97,7 +97,7 @@ export const OriginApproval = () => {
   return (
     <FadeTransition>
       <div className='flex min-h-screen w-screen flex-col gap-6'>
-        <h1 className='flex h-[70px] items-center justify-center border-b border-border/40 font-headline text-xl font-medium leading-[30px]'>
+        <h1 className='flex h-[70px] items-center justify-center border-b border-border-soft font-headline text-xl font-medium leading-[30px]'>
           Connect
         </h1>
         <div className='mx-auto size-20'>
@@ -115,7 +115,7 @@ export const OriginApproval = () => {
               )}
             >
               <div className='flex flex-col items-center gap-2'>
-                <div className='flex h-11 max-w-full items-center rounded-lg bg-black p-2 text-muted-foreground [z-index:30]'>
+                <div className='flex h-11 max-w-full items-center rounded-lg bg-black p-2 text-fg-muted [z-index:30]'>
                   {!!favIconUrl && (
                     <div
                       className={cn(
@@ -136,15 +136,15 @@ export const OriginApproval = () => {
                   )}
                   <div className='-ml-3 w-full truncate p-2 pl-6 font-headline text-lg'>
                     {title ? (
-                      <span className='text-primary-foreground'>{title}</span>
+                      <span className='text-zigner-dark'>{title}</span>
                     ) : (
-                      <span className='text-muted-foreground underline decoration-dotted decoration-2 underline-offset-4'>
+                      <span className='text-fg-muted underline decoration-dotted decoration-2 underline-offset-4'>
                         no title
                       </span>
                     )}
                   </div>
                 </div>
-                <div className='z-30 flex min-h-11 w-full items-center overflow-x-auto rounded-lg bg-background p-2 text-muted-foreground'>
+                <div className='z-30 flex min-h-11 w-full items-center overflow-x-auto rounded-lg bg-canvas p-2 text-fg-muted'>
                   <div className='mx-auto items-center p-2 text-center leading-[0.8em]'>
                     <DisplayOriginURL url={new URL(requestOrigin)} />
                   </div>
@@ -154,7 +154,7 @@ export const OriginApproval = () => {
 
             {/* capability list with risk styling */}
             <div className='mt-3 flex flex-col gap-2'>
-              <p className='text-sm text-muted-foreground'>
+              <p className='text-sm text-fg-muted'>
                 this site is requesting the following permissions:
               </p>
               {requestedCapabilities.map(cap => (
@@ -175,7 +175,7 @@ export const OriginApproval = () => {
               </div>
             )}
 
-            <p className='mt-1 text-xs text-muted-foreground'>
+            <p className='mt-1 text-xs text-fg-muted'>
               your viewing keys stay local - they never leave the extension.
             </p>
           </div>

@@ -167,7 +167,7 @@ export const MultisigCreate = () => {
           <label className='text-xs text-fg-muted'>
             relay url
             <input
-              className='mt-1 w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 font-mono text-xs focus:border-primary/50 focus:outline-none'
+              className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-xs focus:border-primary/50 focus:outline-none'
               value={relayUrl}
               onChange={e => setRelayUrl(e.target.value)}
               placeholder='https://poker.zk.bot'
@@ -178,7 +178,7 @@ export const MultisigCreate = () => {
               threshold (t)
               <input
                 type='number'
-                className='mt-1 w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm focus:border-primary/50 focus:outline-none'
+                className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-primary/50 focus:outline-none'
                 value={threshold}
                 onChange={e => setThreshold(Number(e.target.value))}
                 min={2}
@@ -189,7 +189,7 @@ export const MultisigCreate = () => {
               signers (n)
               <input
                 type='number'
-                className='mt-1 w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm focus:border-primary/50 focus:outline-none'
+                className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-primary/50 focus:outline-none'
                 value={maxSigners}
                 onChange={e => setMaxSigners(Number(e.target.value))}
                 min={threshold}
@@ -214,7 +214,7 @@ export const MultisigCreate = () => {
           <p className='text-xs text-fg-muted'>share this room code with other participants</p>
 
           {/* room code + copy */}
-          <div className='flex items-center gap-2 rounded-lg border border-border-hard-soft bg-elev-1 px-6 py-4'>
+          <div className='flex items-center gap-2 rounded-lg border border-border-soft bg-elev-1 px-6 py-4'>
             <span className='font-mono text-2xl tracking-wider'>{roomCode}</span>
             <button
               onClick={() => void navigator.clipboard.writeText(roomCode)}
@@ -225,7 +225,7 @@ export const MultisigCreate = () => {
           </div>
 
           {/* QR code for room code */}
-          <div className='rounded-lg border border-border-hard-soft bg-elev-1 p-3'>
+          <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
             <QrDisplay data={Array.from(new TextEncoder().encode(roomCode)).map(b => b.toString(16).padStart(2, '0')).join('')} size={160} />
           </div>
 
@@ -283,7 +283,7 @@ export const MultisigCreate = () => {
           </div>
 
           {roomCode && (
-            <div className='flex items-center gap-2 rounded-lg border border-border-hard-soft bg-elev-1 px-4 py-2'>
+            <div className='flex items-center gap-2 rounded-lg border border-border-soft bg-elev-1 px-4 py-2'>
               <span className='font-mono text-sm tracking-wider'>{roomCode}</span>
               <button
                 onClick={() => void navigator.clipboard.writeText(roomCode)}
@@ -301,7 +301,7 @@ export const MultisigCreate = () => {
           <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-3 text-xs text-green-400'>
             multisig wallet created
           </div>
-          <div className='rounded-lg border border-border-hard-soft bg-elev-1 p-3'>
+          <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
             <p className='text-[10px] text-fg-muted'>address</p>
             <p className='mt-1 break-all font-mono text-xs'>{address}</p>
           </div>
@@ -318,7 +318,7 @@ export const MultisigCreate = () => {
           </div>
           <button
             onClick={() => { setStep('config'); setError(''); }}
-            className='rounded-lg border border-border-hard-soft py-2 text-xs hover:bg-elev-1 transition-colors'
+            className='rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
           >
             try again
           </button>

@@ -52,11 +52,15 @@ SUBS=(
   's/\bbg-muted\/30\b/bg-elev-2/g'
   's/\bbg-muted\b/bg-elev-2/g'
 
-  # borders — alpha forms collapse to the dedicated soft hairline token
+  # borders — alpha forms collapse to the dedicated soft hairline token.
+  # IMPORTANT: the bare `border-border` rule uses a negative lookahead so it
+  # does NOT match inside `border-border-soft` / `border-border-hard` (the v2
+  # replacements). Without that, re-running the script would double-mutate
+  # a migrated file into `border-border-hard-soft`.
   's/\bborder-border\/40\b/border-border-soft/g'
   's/\bborder-border\/60\b/border-border-soft/g'
   's/\bborder-border\/30\b/border-border-soft/g'
-  's/\bborder-border\b/border-border-hard/g'
+  's/\bborder-border(?![-\w])/border-border-hard/g'
 
   # canvas / foreground (keep /N alpha forms intact via HSL aliases)
   's/\bbg-background\b(?!\/)/bg-canvas/g'

@@ -311,7 +311,7 @@ export const KnownSite = ({
               <div className='flex gap-2'>
                 <button
                   onClick={() => setConfirming(null)}
-                  className='flex-1 rounded border border-border-hard-soft py-1 text-[10px] text-fg-muted hover:bg-elev-1 transition-colors'
+                  className='flex-1 rounded border border-border-soft py-1 text-[10px] text-fg-muted hover:bg-elev-1 transition-colors'
                 >
                   cancel
                 </button>
@@ -326,7 +326,7 @@ export const KnownSite = ({
           )}
 
           {confirming === 'rotate' && (
-            <div className='rounded-lg border border-border-hard-soft bg-elev-1 p-2.5 flex flex-col gap-2'>
+            <div className='rounded-lg border border-border-soft bg-elev-1 p-2.5 flex flex-col gap-2'>
               <p className='text-[10px] text-fg-muted'>
                 this creates a new identity for this site. the site keeps
                 your old zid - rotation only affects future signatures.
@@ -334,7 +334,7 @@ export const KnownSite = ({
               <div className='flex gap-2'>
                 <button
                   onClick={() => setConfirming(null)}
-                  className='flex-1 rounded border border-border-hard-soft py-1 text-[10px] text-fg-muted hover:bg-elev-1 transition-colors'
+                  className='flex-1 rounded border border-border-soft py-1 text-[10px] text-fg-muted hover:bg-elev-1 transition-colors'
                 >
                   cancel
                 </button>

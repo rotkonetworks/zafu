@@ -126,7 +126,7 @@ function ConversationRow({
         'group relative flex items-start gap-3 rounded-lg border p-3 w-full text-left transition-colors',
         conversation.unread > 0
           ? 'border-primary/40 bg-primary/5 hover:bg-primary/10'
-          : 'border-border-hard-soft bg-elev-1 hover:border-border-hard-soft',
+          : 'border-border-soft bg-elev-1 hover:border-border-soft',
       )}
       onClick={onClick}
     >
@@ -500,7 +500,7 @@ function ConversationThread({
   return (
     <div className='flex flex-col h-full'>
       {/* header */}
-      <div className='flex items-center gap-3 px-4 py-3 border-b border-border-hard-soft'>
+      <div className='flex items-center gap-3 px-4 py-3 border-b border-border-soft'>
         <button
           onClick={onClose}
           className='text-fg-muted hover:text-fg-high transition-colors'
@@ -589,7 +589,7 @@ function ConversationCompose({ diversifierIndex }: { diversifierIndex: number })
   };
 
   return (
-    <div className='p-3 border-t border-border-hard-soft'>
+    <div className='p-3 border-t border-border-soft'>
       <div className='flex items-end gap-2'>
         <textarea
           value={message}
@@ -602,7 +602,7 @@ function ConversationCompose({ diversifierIndex }: { diversifierIndex: number })
           }}
           placeholder='write a message...'
           rows={1}
-          className='flex-1 rounded-lg border border-border-hard-soft bg-input px-3 py-2 text-sm focus:border-zigner-gold focus:outline-none resize-none'
+          className='flex-1 rounded-lg border border-border-soft bg-input px-3 py-2 text-sm focus:border-zigner-gold focus:outline-none resize-none'
         />
         <button
           onClick={handleSend}
@@ -711,7 +711,7 @@ function ComposeMessage({
 
   return (
     <div className='flex flex-col h-full'>
-      <div className='flex items-center gap-3 px-4 py-3 border-b border-border-hard-soft'>
+      <div className='flex items-center gap-3 px-4 py-3 border-b border-border-soft'>
         <button onClick={onClose} className='text-fg-muted hover:text-fg-high transition-colors'>
           <span className='i-lucide-arrow-left h-5 w-5' />
         </button>
@@ -727,7 +727,7 @@ function ComposeMessage({
             onChange={e => setRecipient(e.target.value)}
             placeholder={network === 'zcash' ? 'z-address or unified address' : 'penumbra1...'}
             disabled={!!replyTo || txStatus !== 'idle'}
-            className='w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-xs font-mono focus:border-zigner-gold focus:outline-none disabled:opacity-50'
+            className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-xs font-mono focus:border-zigner-gold focus:outline-none disabled:opacity-50'
           />
         </div>
 
@@ -741,7 +741,7 @@ function ComposeMessage({
             onChange={e => setAmount(e.target.value)}
             placeholder='0.00 (optional)'
             disabled={txStatus !== 'idle'}
-            className='w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none disabled:opacity-50'
+            className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none disabled:opacity-50'
           />
           <p className='text-xs text-fg-muted mt-1'>send a payment with your message</p>
         </div>
@@ -755,7 +755,7 @@ function ComposeMessage({
             rows={6}
             maxLength={network === 'zcash' && ownAddress ? 512 - ownAddress.length - 7 : 512}
             disabled={txStatus !== 'idle'}
-            className='w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none resize-none disabled:opacity-50'
+            className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none resize-none disabled:opacity-50'
           />
           <p className='text-xs text-fg-muted mt-1'>
             {message.length}/{network === 'zcash' && ownAddress ? 512 - ownAddress.length - 7 : 512} characters
@@ -780,7 +780,7 @@ function ComposeMessage({
         )}
       </div>
 
-      <div className='p-4 border-t border-border-hard-soft'>
+      <div className='p-4 border-t border-border-soft'>
         <button
           onClick={() => {
             if (txStatus === 'success' || txStatus === 'error') onClose();
@@ -909,7 +909,7 @@ export function InboxPage() {
   return (
     <div className='flex flex-col h-full'>
       {/* header */}
-      <div className='flex items-center justify-between px-4 py-3 border-b border-border-hard-soft'>
+      <div className='flex items-center justify-between px-4 py-3 border-b border-border-soft'>
         <div className='flex items-center gap-2'>
           <h1 className='text-lg font-medium'>inbox</h1>
           {isSyncing && (
@@ -942,7 +942,7 @@ export function InboxPage() {
       </div>
 
       {/* tabs */}
-      <div className='flex border-b border-border-hard-soft'>
+      <div className='flex border-b border-border-soft'>
         <button
           onClick={() => setTab('conversations')}
           className={cn(
@@ -981,7 +981,7 @@ export function InboxPage() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder={tab === 'conversations' ? 'search conversations...' : 'search messages...'}
-            className='w-full rounded-lg border border-border-hard-soft bg-input pl-9 pr-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
+            className='w-full rounded-lg border border-border-soft bg-input pl-9 pr-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
           />
         </div>
       </div>
@@ -1060,7 +1060,7 @@ function FlatMessageRow({
       className={cn(
         'flex items-start gap-3 rounded-lg border p-3 w-full text-left transition-colors',
         message.read
-          ? 'border-border-hard-soft bg-elev-1 hover:border-border-hard-soft'
+          ? 'border-border-soft bg-elev-1 hover:border-border-soft'
           : 'border-primary/40 bg-primary/5 hover:bg-primary/10',
       )}
       onClick={onClick}

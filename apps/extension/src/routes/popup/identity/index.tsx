@@ -206,7 +206,7 @@ export const IdentityPage = () => {
             )}
           </div>
 
-          <hr className='border-border-hard-soft' />
+          <hr className='border-border-soft' />
 
           <div className='flex flex-col gap-2'>
             <button
@@ -230,7 +230,7 @@ export const IdentityPage = () => {
       <div className='flex flex-col gap-5'>
 
         {/* -- identity card -- */}
-        <section className='rounded border border-border-hard-soft p-3'>
+        <section className='rounded border border-border-soft p-3'>
           <div className='flex items-start gap-3'>
             <ZidFingerprint pubkeyHex={zidPubkey} size={44} />
             <div className='flex-1 min-w-0'>
@@ -255,7 +255,7 @@ export const IdentityPage = () => {
                 <span className={`text-[9px] font-mono px-1.5 py-0 rounded ${
                   pro
                     ? 'bg-green-500/15 text-green-400 border border-green-500/20'
-                    : 'bg-elev-2 text-fg-muted/70 border border-border-hard-soft'
+                    : 'bg-elev-2 text-fg-muted/70 border border-border-soft'
                 }`}>
                   {plan}{pro && days > 0 ? ` - ${days}d` : ''}
                 </span>
@@ -292,7 +292,7 @@ export const IdentityPage = () => {
           )}
 
           {/* action bar */}
-          <div className='flex items-center gap-3 mt-3 pt-2 border-t border-border-hard-soft'>
+          <div className='flex items-center gap-3 mt-3 pt-2 border-t border-border-soft'>
             <button
               onClick={() => setShowQr(!showQr)}
               className='flex items-center gap-1 text-[10px] text-fg-muted/70 hover:text-fg-muted font-mono'
@@ -310,7 +310,7 @@ export const IdentityPage = () => {
         </section>
 
         {/* -- derivation info -- */}
-        <section className='rounded border border-border-hard-soft p-3'>
+        <section className='rounded border border-border-soft p-3'>
           <div className='flex items-center gap-1.5 mb-2'>
             <span className='i-lucide-info size-3 text-fg-muted' />
             <span className='text-[10px] font-mono text-fg-muted'>how zid works</span>
@@ -402,7 +402,7 @@ export const IdentityPage = () => {
           </section>
         )}
 
-        <hr className='border-border-hard-soft' />
+        <hr className='border-border-soft' />
 
         {/* -- links -- */}
         <div className='flex flex-col gap-2'>
@@ -556,7 +556,7 @@ const SiteRow = ({
                 className={`flex items-center gap-1 px-2 py-0.5 rounded-l border text-[10px] transition-colors ${
                   isSiteMode
                     ? 'bg-green-500/15 border-green-500/30 text-green-400'
-                    : 'border-border-hard-soft hover:text-fg-high'
+                    : 'border-border-soft hover:text-fg-high'
                 }`}
               >
                 <span className='i-lucide-shield-check size-3' />
@@ -567,7 +567,7 @@ const SiteRow = ({
                 className={`flex items-center gap-1 px-2 py-0.5 rounded-r border border-l-0 text-[10px] transition-colors ${
                   !isSiteMode
                     ? 'bg-yellow-500/15 border-yellow-500/30 text-yellow-400'
-                    : 'border-border-hard-soft hover:text-fg-high'
+                    : 'border-border-soft hover:text-fg-high'
                 }`}
               >
                 <span className='i-lucide-link size-3' />
@@ -602,7 +602,7 @@ const SiteRow = ({
                     const v = Math.max(0, parseInt(e.target.value, 10) || 0);
                     void onUpdatePref(site.origin, { ...site.pref, rotation: v });
                   }}
-                  className='w-8 bg-transparent border border-border-hard-soft rounded text-center text-[10px] font-mono py-0.5 outline-none'
+                  className='w-8 bg-transparent border border-border-soft rounded text-center text-[10px] font-mono py-0.5 outline-none'
                 />
                 <button
                   onClick={() => onConfirm('rotate')}
@@ -640,7 +640,7 @@ const SiteRow = ({
 
           {/* capabilities */}
           {capsOpen && site.perms && (
-            <div className='flex flex-col gap-0.5 pl-2 border-l border-border-hard-soft'>
+            <div className='flex flex-col gap-0.5 pl-2 border-l border-border-soft'>
               {ALL_CAPS.map(cap => (
                 <label key={cap} className='flex items-center justify-between py-0.5'>
                   <span>{CAPABILITY_META[cap].label.toLowerCase()}</span>
@@ -669,7 +669,7 @@ const SiteRow = ({
             </div>
           )}
           {confirming === 'rotate' && (
-            <div className='pl-2 border-l-2 border-border-hard-soft'>
+            <div className='pl-2 border-l-2 border-border-soft'>
               <p className='mb-1.5'>
                 new key #{rotation + 1}. old key #{rotation} is abandoned - site keeps whatever key it had.
               </p>

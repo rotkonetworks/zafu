@@ -54,7 +54,7 @@ export const SettingsAbout = () => {
           </div>
         </div>
 
-        <div className="border-t border-border-hard-soft pt-3">
+        <div className="border-t border-border-soft pt-3">
           <p className="text-[10px] text-fg-muted">
             MIT license — built by rotko networks
           </p>

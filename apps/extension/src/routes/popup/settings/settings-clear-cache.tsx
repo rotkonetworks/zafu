@@ -122,7 +122,7 @@ export const SettingsClearCache = () => {
             {grouped.map(g => (
               <div key={g.type}>
                 <p className='mb-2 text-xs font-medium text-fg-muted uppercase tracking-wider'>{g.label}</p>
-                <div className='flex flex-col divide-y divide-border/40 rounded-lg border border-border-hard-soft bg-elev-1'>
+                <div className='flex flex-col divide-y divide-border/40 rounded-lg border border-border-soft bg-elev-1'>
                   {g.vaults.map(v => {
                     const hasZcash = zcashWallets.some(w => w.vaultId === v.id) || v.type === 'mnemonic';
                     const hasPenumbra = penumbraWallets.some(w => w.vaultId === v.id) || v.type === 'mnemonic';

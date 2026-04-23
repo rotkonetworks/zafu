@@ -162,7 +162,7 @@ export const MultisigJoin = () => {
           <label className='text-xs text-fg-muted'>
             relay url
             <input
-              className='mt-1 w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 font-mono text-xs focus:border-primary/50 focus:outline-none'
+              className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-xs focus:border-primary/50 focus:outline-none'
               value={relayUrl}
               onChange={e => setRelayUrl(e.target.value)}
               placeholder='https://poker.zk.bot'
@@ -171,7 +171,7 @@ export const MultisigJoin = () => {
           <label className='text-xs text-fg-muted'>
             room code
             <input
-              className='mt-1 w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
+              className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
               value={roomCode}
               onChange={e => setRoomCode(e.target.value)}
               placeholder='acid-blue-cave'
@@ -220,7 +220,7 @@ export const MultisigJoin = () => {
           <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-3 text-xs text-green-400'>
             joined multisig wallet
           </div>
-          <div className='rounded-lg border border-border-hard-soft bg-elev-1 p-3'>
+          <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
             <p className='text-[10px] text-fg-muted'>address</p>
             <p className='mt-1 break-all font-mono text-xs'>{address}</p>
           </div>
@@ -234,7 +234,7 @@ export const MultisigJoin = () => {
           </div>
           <button
             onClick={() => { setStep('input'); setError(''); }}
-            className='rounded-lg border border-border-hard-soft py-2 text-xs hover:bg-elev-1 transition-colors'
+            className='rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
           >
             try again
           </button>

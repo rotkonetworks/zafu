@@ -121,7 +121,7 @@ function TransactionRow({ tx }: { tx: ParsedTransaction }) {
   const isShield = tx.type === 'shield';
 
   return (
-    <div className='flex items-center gap-3 rounded-lg border border-border-hard-soft bg-elev-1 p-3 hover:border-muted-foreground/30 transition-colors'>
+    <div className='flex items-center gap-3 rounded-lg border border-border-soft bg-elev-1 p-3 hover:border-muted-foreground/30 transition-colors'>
       <div className={cn(
         'flex h-10 w-10 items-center justify-center rounded-full',
         isShield ? 'bg-blue-500/10' : isIncoming ? 'bg-green-500/10' : 'bg-elev-2'
@@ -170,7 +170,7 @@ export const HistoryPage = () => {
   if (!historyEnabled) {
     return (
       <div className='flex flex-col h-full'>
-        <div className='flex items-center px-4 py-3 border-b border-border-hard-soft'>
+        <div className='flex items-center px-4 py-3 border-b border-border-soft'>
           <h1 className='text-lg font-medium'>History</h1>
         </div>
         <div className='flex-1 flex flex-col items-center justify-center gap-3 p-8 text-center'>
@@ -274,7 +274,7 @@ export const HistoryPage = () => {
   return (
     <div className='flex flex-col h-full'>
       {/* header */}
-      <div className='flex items-center justify-between px-4 py-3 border-b border-border-hard-soft'>
+      <div className='flex items-center justify-between px-4 py-3 border-b border-border-soft'>
         <h1 className='text-lg font-medium'>History</h1>
         <button
           onClick={() => void refetch()}

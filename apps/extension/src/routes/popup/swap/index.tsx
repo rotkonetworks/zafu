@@ -502,7 +502,7 @@ const ZcashCrosschainSwap = () => {
     <div className='flex flex-col gap-3 p-4'>
       {PasswordModal}
       {/* header with back arrow */}
-      <div className='flex items-center gap-3 -mx-4 -mt-4 border-b border-border-hard-soft px-4 py-3'>
+      <div className='flex items-center gap-3 -mx-4 -mt-4 border-b border-border-soft px-4 py-3'>
         <button
           onClick={() => navigate(-1)}
           className='text-fg-muted transition-colors hover:text-fg-high'
@@ -515,7 +515,7 @@ const ZcashCrosschainSwap = () => {
       {step === 'input' && (
         <>
           {/* FROM card */}
-          <div className='rounded-lg border border-border-hard-soft bg-elev-2/20 p-3'>
+          <div className='rounded-lg border border-border-soft bg-elev-2/20 p-3'>
             <div className='flex items-center justify-between mb-2'>
               <span className='text-xs text-fg-muted'>you send</span>
               {isFromZec && balanceZec && (
@@ -565,7 +565,7 @@ const ZcashCrosschainSwap = () => {
           <div className='flex justify-center -my-1.5 z-10'>
             <button
               onClick={handleFlipDirection}
-              className='rounded-full border border-border-hard-soft bg-canvas p-1.5 shadow-sm transition-colors hover:bg-elev-1'
+              className='rounded-full border border-border-soft bg-canvas p-1.5 shadow-sm transition-colors hover:bg-elev-1'
               title='flip direction'
             >
               <div className='flex flex-col items-center'>
@@ -575,7 +575,7 @@ const ZcashCrosschainSwap = () => {
           </div>
 
           {/* TO card */}
-          <div className='rounded-lg border border-border-hard-soft bg-elev-2/20 p-3'>
+          <div className='rounded-lg border border-border-soft bg-elev-2/20 p-3'>
             <div className='flex items-center justify-between mb-2'>
               <span className='text-xs text-fg-muted'>you receive</span>
             </div>
@@ -610,7 +610,7 @@ const ZcashCrosschainSwap = () => {
 
           {/* token picker dropdown */}
           {tokenPickerOpen && (
-            <div className='rounded-lg border border-border-hard-soft bg-canvas max-h-48 overflow-y-auto -mt-2'>
+            <div className='rounded-lg border border-border-soft bg-canvas max-h-48 overflow-y-auto -mt-2'>
               {sortedTokens.map(t => (
                 <button
                   key={t.assetId}
@@ -635,7 +635,7 @@ const ZcashCrosschainSwap = () => {
           )}
 
           {/* destination address */}
-          <div className='rounded-lg border border-border-hard-soft bg-elev-2/20 p-3'>
+          <div className='rounded-lg border border-border-soft bg-elev-2/20 p-3'>
             <div className='flex items-center justify-between mb-1'>
               <span className='text-xs text-fg-muted'>
                 {isFromZec
@@ -760,7 +760,7 @@ const ZcashCrosschainSwap = () => {
 
               <button
                 onClick={() => setStep('input')}
-                className='flex-1 rounded-lg border border-border-hard-soft py-3 text-sm text-fg-muted transition-colors hover:text-fg-high'
+                className='flex-1 rounded-lg border border-border-soft py-3 text-sm text-fg-muted transition-colors hover:text-fg-high'
               >
                 back
               </button>
@@ -854,7 +854,7 @@ const ZcashCrosschainSwap = () => {
       {(step === 'deposit' || step === 'polling') && quote && (
         <div className='flex flex-col gap-3'>
           {/* quote summary */}
-          <div className='rounded-lg border border-border-hard-soft bg-elev-2/20 p-3'>
+          <div className='rounded-lg border border-border-soft bg-elev-2/20 p-3'>
             <div className='flex justify-between text-sm'>
               <span className='text-fg-muted'>send</span>
               <span className='font-medium'>
@@ -876,7 +876,7 @@ const ZcashCrosschainSwap = () => {
           </div>
 
           {/* status */}
-          <div className='rounded-lg border border-border-hard-soft bg-elev-2/20 p-3'>
+          <div className='rounded-lg border border-border-soft bg-elev-2/20 p-3'>
             <div className='flex items-center gap-2'>
               {step === 'polling' ? (
                 <span className='i-lucide-refresh-cw h-4 w-4 animate-spin text-zigner-gold' />
@@ -1179,7 +1179,7 @@ const PenumbraSwap = () => {
 
   return (
     <div className='flex flex-col gap-4 p-4'>
-      <div className='flex items-center gap-3 -mx-4 -mt-4 border-b border-border-hard-soft px-4 py-3 mb-1'>
+      <div className='flex items-center gap-3 -mx-4 -mt-4 border-b border-border-soft px-4 py-3 mb-1'>
         <button
           onClick={() => navigate(-1)}
           className='text-fg-muted transition-colors hover:text-fg-high'
@@ -1190,7 +1190,7 @@ const PenumbraSwap = () => {
       </div>
 
       {/* input asset */}
-      <div className='rounded-lg border border-border-hard-soft bg-elev-2/20 p-3'>
+      <div className='rounded-lg border border-border-soft bg-elev-2/20 p-3'>
         <div className='flex items-center justify-between mb-2'>
           <span className='text-xs text-fg-muted'>you pay</span>
           {selectedIn && (
@@ -1236,7 +1236,7 @@ const PenumbraSwap = () => {
           </button>
 
           {assetInOpen && (
-            <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border-hard-soft bg-canvas shadow-lg'>
+            <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border-soft bg-canvas shadow-lg'>
               {inputAssets.map((item, i) => (
                 <button
                   key={i}
@@ -1266,14 +1266,14 @@ const PenumbraSwap = () => {
         <button
           onClick={handleFlip}
           disabled={txStatus !== 'idle' || !selectedIn || !selectedOut}
-          className='rounded-full border border-border-hard-soft bg-canvas p-2 shadow-sm transition-colors hover:bg-elev-1 disabled:opacity-50'
+          className='rounded-full border border-border-soft bg-canvas p-2 shadow-sm transition-colors hover:bg-elev-1 disabled:opacity-50'
         >
           <span className='i-lucide-arrow-down h-4 w-4' />
         </button>
       </div>
 
       {/* output asset */}
-      <div className='rounded-lg border border-border-hard-soft bg-elev-2/20 p-3'>
+      <div className='rounded-lg border border-border-soft bg-elev-2/20 p-3'>
         <div className='flex items-center justify-between mb-2'>
           <span className='text-xs text-fg-muted'>you receive</span>
           {simLoading && (
@@ -1310,7 +1310,7 @@ const PenumbraSwap = () => {
           </button>
 
           {assetOutOpen && (
-            <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border-hard-soft bg-canvas shadow-lg'>
+            <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border-soft bg-canvas shadow-lg'>
               {outputAssets
                 .filter(a => {
                   if (!selectedIn?.assetId || !a.assetId) return true;

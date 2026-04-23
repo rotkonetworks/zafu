@@ -186,7 +186,7 @@ export const MultisigPage = () => {
         {walletsWithIndex.length > 0 && (
           <button
             onClick={() => navigate(PopupPath.MULTISIG_SIGN)}
-            className='flex items-center justify-center gap-1.5 rounded-lg border border-border-hard-soft px-3 py-2.5 text-sm font-medium text-fg transition-colors hover:bg-elev-1'
+            className='flex items-center justify-center gap-1.5 rounded-lg border border-border-soft px-3 py-2.5 text-sm font-medium text-fg transition-colors hover:bg-elev-1'
           >
             <span className='i-lucide-pen-tool h-4 w-4' />
             Co-sign transaction

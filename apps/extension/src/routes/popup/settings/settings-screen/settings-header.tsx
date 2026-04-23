@@ -12,7 +12,7 @@ export const SettingsHeader = ({
   const target = backPath ?? PopupPath.SETTINGS;
 
   return (
-    <div className='flex items-center gap-3 border-b border-border-hard-soft px-4 py-3'>
+    <div className='flex items-center gap-3 border-b border-border-soft px-4 py-3'>
       <button
         onClick={() => navigate(target)}
         className='text-fg-muted transition-colors hover:text-fg-high'

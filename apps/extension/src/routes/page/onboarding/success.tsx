@@ -39,14 +39,14 @@ export const OnboardingSuccess = () => {
             href='https://poker.zk.bot'
             target='_blank'
             rel='noopener noreferrer'
-            className='flex flex-col items-center gap-2 rounded-lg border border-border-hard-soft bg-elev-1 p-4 hover:bg-elev-1 transition-colors'
+            className='flex flex-col items-center gap-2 rounded-lg border border-border-soft bg-elev-1 p-4 hover:bg-elev-1 transition-colors'
           >
             <span className='i-lucide-spade h-5 w-5 text-fg-muted' />
             <span className='text-xs'>play poker</span>
           </a>
           <a
             href={chrome.runtime.getURL('zitadel.html')}
-            className='flex flex-col items-center gap-2 rounded-lg border border-border-hard-soft bg-elev-1 p-4 hover:bg-elev-1 transition-colors'
+            className='flex flex-col items-center gap-2 rounded-lg border border-border-soft bg-elev-1 p-4 hover:bg-elev-1 transition-colors'
           >
             <span className='i-lucide-message-circle h-5 w-5 text-fg-muted' />
             <span className='text-xs'>chat</span>
@@ -55,14 +55,14 @@ export const OnboardingSuccess = () => {
             href='https://dex.penumbra.zone'
             target='_blank'
             rel='noopener noreferrer'
-            className='flex flex-col items-center gap-2 rounded-lg border border-border-hard-soft bg-elev-1 p-4 hover:bg-elev-1 transition-colors'
+            className='flex flex-col items-center gap-2 rounded-lg border border-border-soft bg-elev-1 p-4 hover:bg-elev-1 transition-colors'
           >
             <span className='i-lucide-arrow-left-right h-5 w-5 text-fg-muted' />
             <span className='text-xs'>trade with penumbra dex</span>
           </a>
           <a
             href={chrome.runtime.getURL('docs/index.html')}
-            className='flex flex-col items-center gap-2 rounded-lg border border-border-hard-soft bg-elev-1 p-4 hover:bg-elev-1 transition-colors'
+            className='flex flex-col items-center gap-2 rounded-lg border border-border-soft bg-elev-1 p-4 hover:bg-elev-1 transition-colors'
           >
             <span className='i-lucide-book-open h-5 w-5 text-fg-muted' />
             <span className='text-xs'>docs</span>

@@ -187,7 +187,7 @@ Zafu Zigner is a cold wallet that keeps your spending keys offline. Zafu stores 
 
         {/* Pro gate */}
         {!pro && (
-          <div className='rounded-lg border border-border-hard-soft bg-elev-1-radial p-4 flex flex-col items-center gap-3'>
+          <div className='rounded-lg border border-border-soft bg-elev-1-radial p-4 flex flex-col items-center gap-3'>
             <div className='i-lucide-lock size-8 text-fg-muted/40' />
             <p className='text-xs text-fg-muted text-center'>
               zigner cold wallet signing is a pro feature

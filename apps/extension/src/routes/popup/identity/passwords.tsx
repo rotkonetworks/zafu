@@ -54,7 +54,7 @@ export const PasswordsPage = () => {
             value={origin}
             onChange={e => { setOrigin(e.target.value); setPassword(null); }}
             placeholder='site (e.g. github.com)'
-            className='w-full rounded border border-border-hard-soft bg-transparent px-3 py-2 text-xs font-mono outline-none focus:border-muted-foreground/60'
+            className='w-full rounded border border-border-soft bg-transparent px-3 py-2 text-xs font-mono outline-none focus:border-muted-foreground/60'
           />
           {origin.trim() && normalizeOrigin(origin) !== origin.trim().toLowerCase() && (
             <span className='text-[9px] text-fg-muted/50 font-mono'>→ {normalizeOrigin(origin)}</span>
@@ -64,7 +64,7 @@ export const PasswordsPage = () => {
             value={username}
             onChange={e => { setUsername(e.target.value); setPassword(null); }}
             placeholder='username (optional)'
-            className='w-full rounded border border-border-hard-soft bg-transparent px-3 py-2 text-xs font-mono outline-none focus:border-muted-foreground/60'
+            className='w-full rounded border border-border-soft bg-transparent px-3 py-2 text-xs font-mono outline-none focus:border-muted-foreground/60'
           />
           <div className='flex items-center gap-2'>
             <span className='text-[10px] text-fg-dim font-mono'>length</span>
@@ -99,7 +99,7 @@ export const PasswordsPage = () => {
         <button
           onClick={() => void generate()}
           disabled={!origin.trim() || generating}
-          className='rounded border border-border-hard-soft py-2 text-xs font-mono text-fg-muted hover:text-fg-high hover:border-muted-foreground/60 disabled:opacity-30 transition-colors'
+          className='rounded border border-border-soft py-2 text-xs font-mono text-fg-muted hover:text-fg-high hover:border-muted-foreground/60 disabled:opacity-30 transition-colors'
         >
           {generating ? 'deriving...' : 'generate'}
         </button>
@@ -107,7 +107,7 @@ export const PasswordsPage = () => {
         {password && (
           <button
             onClick={copy}
-            className='w-full rounded border border-border-hard-soft p-3 text-left hover:bg-elev-1 transition-colors'
+            className='w-full rounded border border-border-soft p-3 text-left hover:bg-elev-1 transition-colors'
           >
             <div className='font-mono text-xs break-all select-all leading-relaxed'>
               {password}

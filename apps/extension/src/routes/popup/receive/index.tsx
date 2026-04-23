@@ -231,7 +231,7 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
   }, []);
 
   return (
-    <div className='w-full border-t border-border-hard-soft pt-4'>
+    <div className='w-full border-t border-border-soft pt-4'>
       {PasswordModal}
       <div className='mb-3 text-xs font-medium uppercase tracking-wider text-fg-muted'>Shield Assets via IBC</div>
 
@@ -242,7 +242,7 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
           ref={chainBtnRef}
           onClick={() => setShowChainDropdown(prev => !prev)}
           disabled={chainsLoading}
-          className='flex w-full items-center justify-between rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm text-fg transition-colors duration-100 hover:border-zigner-gold disabled:opacity-50'
+          className='flex w-full items-center justify-between rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg transition-colors duration-100 hover:border-zigner-gold disabled:opacity-50'
         >
           <span>{selectedIbcChain?.displayName ?? (chainsLoading ? 'loading...' : 'select source chain')}</span>
           <span className='i-lucide-chevron-down h-4 w-4 text-fg-muted' />
@@ -251,7 +251,7 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
           const rect = chainBtnRef.current!.getBoundingClientRect();
           return (
             <div
-              className='fixed z-50 rounded-lg border border-border-hard-soft bg-canvas shadow-lg'
+              className='fixed z-50 rounded-lg border border-border-soft bg-canvas shadow-lg'
               style={{ top: rect.bottom + 4, left: rect.left, width: rect.width }}
             >
               {ibcChains.map(chain => (
@@ -284,7 +284,7 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
             <div className='mb-1 text-xs text-fg-muted'>
               your wallet on {selectedIbcChain.displayName}
             </div>
-            <div className='flex items-center gap-2 rounded-lg border border-border-hard-soft bg-elev-2 p-3'>
+            <div className='flex items-center gap-2 rounded-lg border border-border-soft bg-elev-2 p-3'>
               <code className='flex-1 break-all text-xs'>
                 {assetsLoading ? 'loading...' : assetsData?.address ?? 'no cosmos wallet found'}
               </code>
@@ -298,21 +298,21 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
               balances on {selectedIbcChain.displayName}
             </div>
             {assetsLoading ? (
-              <div className='rounded-lg border border-border-hard-soft bg-elev-2 p-3'>
+              <div className='rounded-lg border border-border-soft bg-elev-2 p-3'>
                 <span className='text-xs text-fg-muted'>loading balances...</span>
               </div>
             ) : !assetsData ? (
-              <div className='rounded-lg border border-border-hard-soft bg-elev-2 p-3'>
+              <div className='rounded-lg border border-border-soft bg-elev-2 p-3'>
                 <span className='text-xs text-fg-muted'>no cosmos wallet found — import from Zigner</span>
               </div>
             ) : assetsData.assets.length === 0 ? (
-              <div className='rounded-lg border border-border-hard-soft bg-elev-2 p-3'>
+              <div className='rounded-lg border border-border-soft bg-elev-2 p-3'>
                 <span className='text-xs text-fg-muted'>no assets found</span>
               </div>
             ) : (
-              <div className='rounded-lg border border-border-hard-soft bg-elev-2/10'>
+              <div className='rounded-lg border border-border-soft bg-elev-2/10'>
                 {assetsData?.assets.map(asset => (
-                  <div key={asset.denom} className='flex items-center justify-between px-3 py-2 text-xs border-b border-border-hard-soft last:border-0'>
+                  <div key={asset.denom} className='flex items-center justify-between px-3 py-2 text-xs border-b border-border-soft last:border-0'>
                     <span className='text-fg-muted truncate max-w-[60%]'>
                       {asset.symbol}
                     </span>
@@ -333,7 +333,7 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
                   ref={assetBtnRef}
                   onClick={() => setShowAssetDropdown(prev => !prev)}
                   disabled={!assetsData?.assets.length}
-                  className='flex w-full items-center justify-between rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-xs disabled:opacity-50'
+                  className='flex w-full items-center justify-between rounded-lg border border-border-soft bg-input px-3 py-2.5 text-xs disabled:opacity-50'
                 >
                   <span>{selectedAsset?.symbol ?? 'select asset'}</span>
                   <span className='i-lucide-chevron-down h-3 w-3 text-fg-muted' />
@@ -342,7 +342,7 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
                   const rect = assetBtnRef.current!.getBoundingClientRect();
                   return (
                     <div
-                      className='fixed z-50 rounded-lg border border-border-hard-soft bg-canvas shadow-lg'
+                      className='fixed z-50 rounded-lg border border-border-soft bg-canvas shadow-lg'
                       style={{ top: rect.bottom + 4, left: rect.left, width: rect.width }}
                     >
                       {assetsData.assets.map(asset => (
@@ -370,7 +370,7 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
                 onChange={e => setAmount(e.target.value)}
                 placeholder='amount'
                 disabled={txStatus !== 'idle'}
-                className='flex-1 rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-xs text-fg placeholder:text-fg-muted focus:border-zigner-gold focus:outline-none disabled:opacity-50'
+                className='flex-1 rounded-lg border border-border-soft bg-input px-3 py-2.5 text-xs text-fg placeholder:text-fg-muted focus:border-zigner-gold focus:outline-none disabled:opacity-50'
               />
             </div>
           </div>
@@ -636,7 +636,7 @@ function ReceiveTab({ address, loading, activeNetwork }: {
 
   return (
     <div className='flex flex-col items-center gap-4'>
-      <div className='rounded-lg border border-border-hard-soft bg-white p-2'>
+      <div className='rounded-lg border border-border-soft bg-white p-2'>
         {isLoading ? (
           <div className='flex h-48 w-48 items-center justify-center'>
             <span className='text-xs text-fg-muted'>loading...</span>
@@ -666,7 +666,7 @@ function ReceiveTab({ address, loading, activeNetwork }: {
                 <span className='i-lucide-info h-3.5 w-3.5' />
               </button>
               {showTooltip && (
-                <div className='absolute left-1/2 top-6 z-50 w-72 -translate-x-1/2 rounded-lg border border-border-hard-soft bg-canvas p-3 text-xs text-fg shadow-lg'>
+                <div className='absolute left-1/2 top-6 z-50 w-72 -translate-x-1/2 rounded-lg border border-border-soft bg-canvas p-3 text-xs text-fg shadow-lg'>
                   <p className='mb-1.5 font-medium'>Your main address is stable.</p>
                   <p className='mb-1.5 text-fg-muted'>
                     Anyone you share it with can recognize future payments to the same address.
@@ -732,7 +732,7 @@ function ReceiveTab({ address, loading, activeNetwork }: {
                   <span className='i-lucide-info h-3.5 w-3.5' />
                 </button>
                 {showTransparentTooltip && (
-                  <div className='absolute left-1/2 top-6 z-50 w-72 -translate-x-1/2 rounded-lg border border-border-hard-soft bg-canvas p-3 text-xs text-fg shadow-lg'>
+                  <div className='absolute left-1/2 top-6 z-50 w-72 -translate-x-1/2 rounded-lg border border-border-soft bg-canvas p-3 text-xs text-fg shadow-lg'>
                     <p className='mb-1.5 font-medium'>Transparent addresses are fully visible on-chain.</p>
                     <p className='mb-1.5 text-fg-muted'>
                       Anyone can see your balance and transaction history.
@@ -814,7 +814,7 @@ function ReceiveTab({ address, loading, activeNetwork }: {
             ? 'border-green-500/40 bg-green-500/5'
             : transparent && isZcash
               ? 'border-red-500/40 bg-red-500/5'
-              : 'border-border-hard-soft bg-elev-2'
+              : 'border-border-soft bg-elev-2'
         }`}>
           <code className={`flex-1 break-all text-xs ${
             ephemeral && isPenumbra ? 'text-green-400' : transparent && isZcash ? 'text-red-400' : ''
@@ -859,7 +859,7 @@ export function ReceivePage() {
 
   return (
     <div className='flex h-full flex-col'>
-      <div className='flex shrink-0 items-center gap-3 border-b border-border-hard-soft px-4 py-3'>
+      <div className='flex shrink-0 items-center gap-3 border-b border-border-soft px-4 py-3'>
         <button
           onClick={() => navigate(PopupPath.INDEX)}
           className='text-fg-muted transition-colors hover:text-fg-high'

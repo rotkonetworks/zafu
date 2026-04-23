@@ -122,7 +122,7 @@ export const TransactionApproval = () => {
   if (isAirgap && airgapStep === 'show-qr') {
     return (
       <div className='flex h-screen flex-col'>
-        <div className='border-b border-border/40 p-4'>
+        <div className='border-b border-border-soft p-4'>
           <h1 className='bg-text-linear bg-clip-text pb-0 font-headline text-2xl font-bold text-transparent'>
             Sign with Zigner
           </h1>
@@ -138,7 +138,7 @@ export const TransactionApproval = () => {
           />
         </div>
 
-        <div className='border-t border-border/40 p-4 flex gap-3'>
+        <div className='border-t border-border-soft p-4 flex gap-3'>
           <Button
             variant='gradient'
             className='flex-1 py-3.5 text-base'
@@ -191,7 +191,7 @@ export const TransactionApproval = () => {
   // Review step (shared between normal and airgap)
   return (
     <div className='flex h-screen flex-col'>
-      <div className='border-b border-border/40 p-4'>
+      <div className='border-b border-border-soft p-4'>
         <h1 className='bg-text-linear bg-clip-text pb-0 font-headline text-2xl font-bold text-transparent'>
           Confirm Transaction
         </h1>
@@ -244,10 +244,10 @@ export const TransactionApproval = () => {
           </div>
         )}
       </div>
-      <div className='border-t border-border/40 p-0'>
+      <div className='border-t border-border-soft p-0'>
         {isAirgap ? (
           <div
-            className='flex flex-row justify-between gap-4 rounded-lg bg-card px-4 py-7 shadow-lg'
+            className='flex flex-row justify-between gap-4 rounded-lg bg-elev-1 px-4 py-7 shadow-lg'
           >
             <Button
               variant='gradient'

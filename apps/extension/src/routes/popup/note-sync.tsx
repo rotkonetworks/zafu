@@ -65,8 +65,8 @@ export const NoteSyncPage = () => {
     <SettingsScreen title='sync to zigner' backPath={PopupPath.SETTINGS_WALLETS}>
       {(step === 'loading' || step === 'building') && (
         <div className='flex flex-col items-center gap-3 py-8'>
-          <span className='i-lucide-loader-2 size-5 animate-spin text-muted-foreground' />
-          <p className='text-xs text-muted-foreground'>
+          <span className='i-lucide-loader-2 size-5 animate-spin text-fg-muted' />
+          <p className='text-xs text-fg-muted'>
             {step === 'loading' ? 'loading notes...' : 'building merkle witnesses...'}
           </p>
         </div>
@@ -74,14 +74,14 @@ export const NoteSyncPage = () => {
 
       {step === 'display' && encoded && encoded.noteCount > 0 && activeWallet && (
         <div className='flex flex-col gap-4'>
-          <div className='rounded-lg border border-border/40 bg-card p-3'>
-            <p className='text-[10px] text-muted-foreground'>wallet</p>
+          <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
+            <p className='text-[10px] text-fg-muted'>wallet</p>
             <p className='text-sm font-medium truncate'>{activeWallet.label}</p>
             <div className='mt-1 flex items-center gap-2'>
               <span className='text-lg font-mono font-medium'>{balanceDisplay}</span>
-              <span className='text-xs text-muted-foreground'>ZEC</span>
+              <span className='text-xs text-fg-muted'>ZEC</span>
             </div>
-            <p className='text-[10px] text-muted-foreground mt-1'>
+            <p className='text-[10px] text-fg-muted mt-1'>
               {encoded.noteCount} spendable note{encoded.noteCount !== 1 ? 's' : ''} · {encoded.cborBytes.toLocaleString()} bytes
             </p>
           </div>
@@ -96,7 +96,7 @@ export const NoteSyncPage = () => {
       )}
 
       {step === 'display' && encoded && encoded.noteCount === 0 && (
-        <div className='rounded-lg border border-border/40 bg-card p-3 text-xs text-muted-foreground'>
+        <div className='rounded-lg border border-border-soft bg-elev-1 p-3 text-xs text-fg-muted'>
           no spendable notes — sync the wallet first
         </div>
       )}

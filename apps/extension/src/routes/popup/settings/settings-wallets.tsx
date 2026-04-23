@@ -244,7 +244,7 @@ export const SettingsWallets = () => {
         {/* ── wallet list ── */}
 
         {keyInfos.length > 0 ? (
-          <div className='flex flex-col divide-y divide-border/40 rounded-lg border border-border-hard-soft bg-elev-1'>
+          <div className='flex flex-col divide-y divide-border/40 rounded-lg border border-border-soft bg-elev-1'>
             {keyInfos.map(v => {
               const networks: string[] = [];
               if (penumbraWallets.some(w => w.vaultId === v.id)) networks.push('penumbra');
@@ -290,7 +290,7 @@ export const SettingsWallets = () => {
               <input type='password' value={password} autoFocus
                 onChange={e => { setPassword(e.target.value); setPasswordError(false); }}
                 placeholder='password'
-                className='w-full bg-input border border-border-hard-soft px-3 py-2.5 text-sm rounded-lg focus:outline-none focus:border-zigner-gold' />
+                className='w-full bg-input border border-border-soft px-3 py-2.5 text-sm rounded-lg focus:outline-none focus:border-zigner-gold' />
               {passwordError && <span className='text-xs text-red-400'>wrong password</span>}
               <div className='flex gap-2 mt-1'>
                 <Btn onClick={resetRemoval}>cancel</Btn>
@@ -302,7 +302,7 @@ export const SettingsWallets = () => {
 
         {removingVault && removingType === 'mnemonic' && step === 'backup' && (
           <RemovalCard title='back up recovery phrase'>
-            <div className='select-all cursor-text rounded-lg bg-canvas border border-border-hard-soft p-3 mb-3 text-xs leading-relaxed break-words'>
+            <div className='select-all cursor-text rounded-lg bg-canvas border border-border-soft p-3 mb-3 text-xs leading-relaxed break-words'>
               {phrase.join(' ')}
             </div>
             <label className='flex items-start gap-2 mb-3 cursor-pointer select-none'>
@@ -342,9 +342,9 @@ export const SettingsWallets = () => {
 
         {/* ── add wallet ── */}
 
-        <div className='border-t border-border-hard-soft pt-4'>
+        <div className='border-t border-border-soft pt-4'>
           {/* zigner info box — tap 10x for dev paste mode */}
-          <div className='rounded-lg border border-border-hard-soft bg-elev-1 p-3 mb-3' onClick={handleSecretTap}>
+          <div className='rounded-lg border border-border-soft bg-elev-1 p-3 mb-3' onClick={handleSecretTap}>
             <p className='text-xs text-fg-muted'>
               zafu zigner keeps spending keys offline. transactions require QR code signing with your device.
             </p>
@@ -426,7 +426,7 @@ export const SettingsWallets = () => {
               </button>
               {!hasSeedVault && (
                 <button onClick={() => chrome.runtime.openOptionsPage()}
-                  className='w-full rounded-lg border border-dashed border-border-hard-soft py-2.5 text-xs text-fg-muted hover:text-fg-high hover:border-border-hard-soft transition-colors'>
+                  className='w-full rounded-lg border border-dashed border-border-soft py-2.5 text-xs text-fg-muted hover:text-fg-high hover:border-border-soft transition-colors'>
                   + import seed phrase
                 </button>
               )}
@@ -543,7 +543,7 @@ const VaultRow = ({ vault, networks, multisigWallet, onRemove, onRename, disable
               onBlur={saveBirthday}
               onKeyDown={e => e.key === 'Enter' && saveBirthday()}
               placeholder='auto'
-              className='w-24 bg-input border border-border-hard-soft px-2 py-1 text-[10px] font-mono rounded focus:outline-none focus:border-primary/50'
+              className='w-24 bg-input border border-border-soft px-2 py-1 text-[10px] font-mono rounded focus:outline-none focus:border-primary/50'
             />
           </div>
           <p className='text-[9px] text-fg-dim mt-0.5'>orchard only — sapling/sprout not supported</p>
@@ -605,7 +605,7 @@ const Btn = ({ children, onClick, submit, destructive, primary, disabled }: {
       'flex-1 rounded-lg py-2 text-xs transition-colors duration-100 disabled:opacity-50',
       destructive && 'bg-red-500/15 text-red-400 border border-red-500/25 hover:bg-red-500/25',
       primary && 'bg-primary/15 text-zigner-gold border border-primary/25 hover:bg-primary/25',
-      !destructive && !primary && 'border border-border-hard-soft hover:bg-elev-1',
+      !destructive && !primary && 'border border-border-soft hover:bg-elev-1',
     )}>
     {children}
   </button>

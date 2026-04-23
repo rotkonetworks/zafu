@@ -335,14 +335,14 @@ export const SubscribePage = () => {
 
         {/* status */}
         {pro ? (
-          <div className='rounded border border-border-hard-soft p-3'>
+          <div className='rounded border border-border-soft p-3'>
             <div className='flex items-center gap-2'>
               <span className='h-2 w-2 rounded-full bg-green-400' />
               <span className='text-xs font-mono'>pro - {days} days remaining</span>
             </div>
           </div>
         ) : (
-          <div className='rounded border border-border-hard-soft p-3'>
+          <div className='rounded border border-border-soft p-3'>
             <div className='flex items-center gap-2'>
               <span className='h-2 w-2 rounded-full bg-elev-2-foreground/40' />
               <span className='text-xs font-mono'>free plan</span>
@@ -393,14 +393,14 @@ export const SubscribePage = () => {
 
         {/* payment flow — works for new subscribers and for extending pro users */}
         <>
-            <hr className='border-border-hard-soft' />
+            <hr className='border-border-soft' />
 
             {/* month selector */}
             <div className='flex items-center gap-3'>
               <button
                 onClick={() => setMonths(m => Math.max(1, m - 1))}
                 disabled={months <= 1 || payState !== 'idle'}
-                className='rounded border border-border-hard-soft px-3 py-1.5 text-sm font-mono text-fg-muted hover:text-fg-high disabled:opacity-30 transition-colors'
+                className='rounded border border-border-soft px-3 py-1.5 text-sm font-mono text-fg-muted hover:text-fg-high disabled:opacity-30 transition-colors'
               >
                 -
               </button>
@@ -413,7 +413,7 @@ export const SubscribePage = () => {
               <button
                 onClick={() => setMonths(m => Math.min(12, m + 1))}
                 disabled={months >= 12 || payState !== 'idle'}
-                className='rounded border border-border-hard-soft px-3 py-1.5 text-sm font-mono text-fg-muted hover:text-fg-high disabled:opacity-30 transition-colors'
+                className='rounded border border-border-soft px-3 py-1.5 text-sm font-mono text-fg-muted hover:text-fg-high disabled:opacity-30 transition-colors'
               >
                 +
               </button>
@@ -469,7 +469,7 @@ export const SubscribePage = () => {
                 <div className='flex gap-2 mt-2'>
                   <button
                     onClick={() => setPayState('idle')}
-                    className='flex-1 rounded border border-border-hard-soft py-2 text-xs font-mono text-fg-muted hover:text-fg-high'
+                    className='flex-1 rounded border border-border-soft py-2 text-xs font-mono text-fg-muted hover:text-fg-high'
                   >
                     cancel
                   </button>
@@ -500,7 +500,7 @@ export const SubscribePage = () => {
                 <div className='flex gap-2 w-full'>
                   <button
                     onClick={() => { unsignedTxRef.current = null; setSignRequestQr(null); setPayState('idle'); }}
-                    className='flex-1 rounded border border-border-hard-soft py-2 text-xs font-mono text-fg-muted hover:text-fg-high'
+                    className='flex-1 rounded border border-border-soft py-2 text-xs font-mono text-fg-muted hover:text-fg-high'
                   >
                     cancel
                   </button>
@@ -529,7 +529,7 @@ export const SubscribePage = () => {
 
             {/* building/broadcasting */}
             {(payState === 'building' || payState === 'broadcasting') && (
-              <div className='rounded border border-border-hard-soft p-3 flex flex-col gap-2'>
+              <div className='rounded border border-border-soft p-3 flex flex-col gap-2'>
                 <div className='flex items-center justify-between'>
                   <span className='text-xs font-mono text-fg'>
                     {payState === 'building' ? 'building transaction' : 'broadcasting'}
@@ -617,7 +617,7 @@ export const SubscribePage = () => {
             {/* manual copy fallback — shown only when in-wallet pay isn't available
                  (e.g. zcash not enabled, or user wants to pay from external wallet) */}
             {isZignerWallet && (
-              <div className='rounded border border-border-hard-soft p-3'>
+              <div className='rounded border border-border-soft p-3'>
                 <p className='text-[10px] font-mono text-fg-muted mb-2'>
                   or pay from an external wallet
                 </p>
@@ -646,7 +646,7 @@ export const SubscribePage = () => {
               <button
                 onClick={() => void manualCheck()}
                 disabled={checking || !zidPubkey}
-                className='rounded border border-border-hard-soft py-2 text-xs font-mono text-fg-muted hover:text-fg-high disabled:opacity-30 transition-colors'
+                className='rounded border border-border-soft py-2 text-xs font-mono text-fg-muted hover:text-fg-high disabled:opacity-30 transition-colors'
               >
                 {checking ? 'checking...' : checkResult ?? 'check payment status'}
               </button>

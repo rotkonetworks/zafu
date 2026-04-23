@@ -151,7 +151,7 @@ export const MultisigSign = () => {
 
   return (
     <SettingsScreen title='co-sign' backPath={PopupPath.MULTISIG}>
-      <div className='mb-4 rounded-lg border border-border-hard-soft bg-elev-1 p-3'>
+      <div className='mb-4 rounded-lg border border-border-soft bg-elev-1 p-3'>
         <p className='text-[10px] text-fg-muted'>signing as</p>
         <p className='mt-0.5 text-sm font-medium truncate'>{activeWallet!.label}</p>
         <p className='text-[10px] font-mono text-fg-muted truncate'>
@@ -167,7 +167,7 @@ export const MultisigSign = () => {
           <label className='text-xs text-fg-muted'>
             room code
             <input
-              className='mt-1 w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
+              className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
               value={roomCode}
               onChange={e => setRoomCode(e.target.value)}
               placeholder='acid-blue-cave'
@@ -213,7 +213,7 @@ export const MultisigSign = () => {
           </div>
           <button
             onClick={() => { setStep('input'); setError(''); }}
-            className='rounded-lg border border-border-hard-soft py-2 text-xs hover:bg-elev-1 transition-colors'
+            className='rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
           >
             try again
           </button>

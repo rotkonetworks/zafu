@@ -114,11 +114,11 @@ export const StakePage = () => {
     return (
       <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
         <div className='rounded-full bg-primary/10 p-4'>
-          <span className='i-lucide-layers h-8 w-8 text-primary' />
+          <span className='i-lucide-layers h-8 w-8 text-zigner-gold' />
         </div>
         <div>
           <h2 className='text-lg font-medium'>staking</h2>
-          <p className='mt-1 text-sm text-muted-foreground'>
+          <p className='mt-1 text-sm text-fg-muted'>
             staking is not available for this network.
           </p>
         </div>
@@ -331,7 +331,7 @@ export const StakePage = () => {
         {/* header */}
         <div className='flex items-center justify-between'>
           <h2 className='text-lg font-medium'>{isDelegate ? 'delegate' : 'undelegate'}</h2>
-          <button onClick={closeForm} className='text-muted-foreground hover:text-foreground transition-colors'>
+          <button onClick={closeForm} className='text-fg-muted hover:text-fg-high transition-colors'>
             <span className='i-lucide-x h-5 w-5' />
           </button>
         </div>
@@ -339,11 +339,11 @@ export const StakePage = () => {
         {/* validator/delegation selector */}
         {isDelegate ? (
           <div>
-            <label className='mb-1 block text-xs text-muted-foreground'>validator</label>
+            <label className='mb-1 block text-xs text-fg-muted'>validator</label>
             <select
               value={selectedValidator ? validators.indexOf(selectedValidator) : ''}
               onChange={e => setSelectedValidator(validators[parseInt(e.target.value, 10)])}
-              className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground'
+              className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg'
             >
               <option value=''>select validator...</option>
               {validators.filter(v => v.state === 'active').map((v, i) => (
@@ -355,11 +355,11 @@ export const StakePage = () => {
           </div>
         ) : (
           <div>
-            <label className='mb-1 block text-xs text-muted-foreground'>delegation</label>
+            <label className='mb-1 block text-xs text-fg-muted'>delegation</label>
             <select
               value={selectedDelegation ? delegations.indexOf(selectedDelegation) : ''}
               onChange={e => setSelectedDelegation(delegations[parseInt(e.target.value, 10)])}
-              className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground'
+              className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg'
             >
               <option value=''>select delegation...</option>
               {delegations.map((d, i) => {
@@ -379,7 +379,7 @@ export const StakePage = () => {
         {/* amount */}
         <div>
           <div className='mb-1 flex items-center justify-between'>
-            <label className='text-xs text-muted-foreground'>amount</label>
+            <label className='text-xs text-fg-muted'>amount</label>
             <button
               onClick={() => setAmount(maxAmount)}
               className='text-xs text-zigner-gold hover:text-zigner-gold-light'
@@ -392,7 +392,7 @@ export const StakePage = () => {
             value={amount}
             onChange={e => setAmount(e.target.value)}
             placeholder='0.00'
-            className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground'
+            className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg'
           />
         </div>
 
@@ -400,14 +400,14 @@ export const StakePage = () => {
         {txStatus === 'success' && txHash && (
           <div className='rounded-lg border border-green-500/40 bg-green-500/10 p-3'>
             <p className='text-sm text-green-400'>{isDelegate ? 'delegation' : 'undelegation'} successful!</p>
-            <p className='text-xs text-muted-foreground mt-1 font-mono break-all'>{txHash}</p>
+            <p className='text-xs text-fg-muted mt-1 font-mono break-all'>{txHash}</p>
           </div>
         )}
 
         {txStatus === 'error' && txError && (
           <div className='rounded-lg border border-red-500/40 bg-red-500/10 p-3'>
             <p className='text-sm text-red-400'>transaction failed</p>
-            <p className='text-xs text-muted-foreground mt-1'>{txError}</p>
+            <p className='text-xs text-fg-muted mt-1'>{txError}</p>
           </div>
         )}
 
@@ -450,15 +450,15 @@ export const StakePage = () => {
         <h2 className='text-lg font-medium'>staking</h2>
         <button
           onClick={() => { void refetchValidators(); void refetchDelegations(); }}
-          className='text-muted-foreground hover:text-foreground transition-colors'
+          className='text-fg-muted hover:text-fg-high transition-colors'
         >
           <span className='i-lucide-refresh-cw h-4 w-4' />
         </button>
       </div>
 
       {/* staking balance */}
-      <div className='rounded-lg border border-border/40 bg-muted/20 p-4'>
-        <p className='text-xs text-muted-foreground'>available to stake</p>
+      <div className='rounded-lg border border-border-soft bg-elev-2/20 p-4'>
+        <p className='text-xs text-fg-muted'>available to stake</p>
         <p className='text-xl font-medium'>{stakingBalance || '0'} {STAKING_TOKEN}</p>
         <button
           onClick={() => setAction('delegate')}
@@ -470,14 +470,14 @@ export const StakePage = () => {
 
       {/* user delegations */}
       <div>
-        <h3 className='mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground'>your delegations</h3>
+        <h3 className='mb-2 text-xs font-medium uppercase tracking-wider text-fg-muted'>your delegations</h3>
         {delegationsLoading ? (
-          <div className='flex items-center gap-2 py-12 text-sm text-muted-foreground'>
+          <div className='flex items-center gap-2 py-12 text-sm text-fg-muted'>
             <span className='i-lucide-refresh-cw h-4 w-4 animate-spin' />
             loading...
           </div>
         ) : delegations.length === 0 ? (
-          <p className='py-12 text-center text-sm text-muted-foreground'>no active delegations</p>
+          <p className='py-12 text-center text-sm text-fg-muted'>no active delegations</p>
         ) : (
           <div className='flex flex-col gap-2'>
             {delegations.map((d, i) => {
@@ -495,11 +495,11 @@ export const StakePage = () => {
               return (
                 <div
                   key={i}
-                  className='flex items-center justify-between rounded-lg border border-border/40 bg-muted/10 p-3'
+                  className='flex items-center justify-between rounded-lg border border-border-soft bg-elev-2/10 p-3'
                 >
                   <div className='min-w-0 flex-1'>
                     <p className='text-sm font-medium truncate'>{displayName}</p>
-                    <p className='text-xs text-muted-foreground'>
+                    <p className='text-xs text-fg-muted'>
                       {balStr} staked
                     </p>
                   </div>
@@ -508,7 +508,7 @@ export const StakePage = () => {
                       setSelectedDelegation(d);
                       setAction('undelegate');
                     }}
-                    className='ml-2 rounded-md bg-muted/50 px-3 py-1 text-xs text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-colors'
+                    className='ml-2 rounded-md bg-elev-2 px-3 py-1 text-xs text-fg-muted hover:bg-elev-1/80 hover:text-fg-high transition-colors'
                   >
                     undelegate
                   </button>
@@ -521,11 +521,11 @@ export const StakePage = () => {
 
       {/* validators */}
       <div>
-        <h3 className='mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground'>
+        <h3 className='mb-2 text-xs font-medium uppercase tracking-wider text-fg-muted'>
           validators ({validators.filter(v => v.state === 'active').length} active)
         </h3>
         {validatorsLoading ? (
-          <div className='flex items-center gap-2 py-12 text-sm text-muted-foreground'>
+          <div className='flex items-center gap-2 py-12 text-sm text-fg-muted'>
             <span className='i-lucide-refresh-cw h-4 w-4 animate-spin' />
             loading validators...
           </div>
@@ -540,15 +540,15 @@ export const StakePage = () => {
                     setSelectedValidator(v);
                     setAction('delegate');
                   }}
-                  className='flex items-center justify-between rounded-lg border border-border/40 bg-muted/10 p-2 text-left hover:bg-muted/50 transition-colors'
+                  className='flex items-center justify-between rounded-lg border border-border-soft bg-elev-2/10 p-2 text-left hover:bg-elev-1 transition-colors'
                 >
                   <div className='flex-1 min-w-0'>
                     <p className='text-sm font-medium truncate'>{v.name}</p>
-                    <p className='text-xs text-muted-foreground'>
+                    <p className='text-xs text-fg-muted'>
                       {pct.toFixed(2)}% · {v.commission}% fee
                     </p>
                   </div>
-                  <span className='i-lucide-chevron-down h-4 w-4 text-muted-foreground rotate-[-90deg]' />
+                  <span className='i-lucide-chevron-down h-4 w-4 text-fg-muted rotate-[-90deg]' />
                 </button>
               );
             })}

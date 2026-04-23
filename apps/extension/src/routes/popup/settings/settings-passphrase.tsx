@@ -80,7 +80,7 @@ export const SettingsPassphrase = () => {
               hot wallet — seed is in browser memory
             </div>
             <div
-              className='select-all cursor-text rounded-lg bg-canvas border border-border-hard-soft p-3 text-xs leading-relaxed break-words'
+              className='select-all cursor-text rounded-lg bg-canvas border border-border-soft p-3 text-xs leading-relaxed break-words'
             >
               {phrase.join(' ')}
             </div>
@@ -92,7 +92,7 @@ export const SettingsPassphrase = () => {
             />
 
             {/* backup to zigner */}
-            <div className='border-t border-border-hard-soft pt-3 mt-1'>
+            <div className='border-t border-border-soft pt-3 mt-1'>
               <p className='text-[10px] text-fg-dim font-mono mb-2'>
                 scan with zigner to back up this seed on your air-gapped device.
                 the seed goes INTO the air gap — never out.
@@ -133,7 +133,7 @@ const QrSeedDisplay = ({ phrase }: { phrase: string }) => {
     return (
       <button
         onClick={() => setShow(true)}
-        className='w-full rounded border border-border-hard-soft py-2 text-xs font-mono text-fg-muted hover:text-fg-high transition-colors'
+        className='w-full rounded border border-border-soft py-2 text-xs font-mono text-fg-muted hover:text-fg-high transition-colors'
       >
         show QR for zigner backup
       </button>

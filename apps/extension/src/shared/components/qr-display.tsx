@@ -96,7 +96,7 @@ export function QrDisplay({
   return (
     <div className="flex flex-col items-center gap-3">
       {title && (
-        <h3 className="text-lg font-medium text-foreground">{title}</h3>
+        <h3 className="text-lg font-medium text-fg">{title}</h3>
       )}
 
       <div className="bg-white p-3 rounded-lg">
@@ -104,7 +104,7 @@ export function QrDisplay({
       </div>
 
       {description && (
-        <p className="text-sm text-muted-foreground text-center max-w-xs">
+        <p className="text-sm text-fg-muted text-center max-w-xs">
           {description}
         </p>
       )}

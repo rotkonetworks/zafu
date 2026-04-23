@@ -51,7 +51,7 @@ function ChainSelector({
     <div className='relative'>
       <button
         onClick={() => setOpen(!open)}
-        className='flex w-full items-center justify-between rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50'
+        className='flex w-full items-center justify-between rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50'
       >
         {selected ? (
           <span>{selected.displayName}</span>
@@ -62,7 +62,7 @@ function ChainSelector({
       </button>
 
       {open && (
-        <div className='absolute top-full left-0 right-0 z-50 mt-1 rounded-lg border border-border-hard-soft bg-canvas shadow-lg overflow-hidden'>
+        <div className='absolute top-full left-0 right-0 z-50 mt-1 rounded-lg border border-border-soft bg-canvas shadow-lg overflow-hidden'>
           {chains.map(chain => (
             <button
               key={chain.chainId}
@@ -107,7 +107,7 @@ function AssetSelector({
 
   if (assets.length === 0) {
     return (
-      <div className='rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm text-fg-muted'>
+      <div className='rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg-muted'>
         no assets
       </div>
     );
@@ -117,7 +117,7 @@ function AssetSelector({
     <div className='relative'>
       <button
         onClick={() => setOpen(!open)}
-        className='flex w-full items-center justify-between rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50'
+        className='flex w-full items-center justify-between rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50'
       >
         {selected ? (
           <div className='flex items-center gap-2'>
@@ -131,7 +131,7 @@ function AssetSelector({
       </button>
 
       {open && (
-        <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border-hard-soft bg-canvas shadow-lg'>
+        <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border-soft bg-canvas shadow-lg'>
           {assets.map(asset => (
             <button
               key={asset.denom}
@@ -182,7 +182,7 @@ function CosmosChainSelector({
     <div className='relative'>
       <button
         onClick={() => setOpen(!open)}
-        className='flex w-full items-center justify-between rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50'
+        className='flex w-full items-center justify-between rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50'
       >
         <span className={!manuallySelected && !selected ? 'text-fg-muted' : ''}>
           {displayName}
@@ -191,7 +191,7 @@ function CosmosChainSelector({
       </button>
 
       {open && (
-        <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border-hard-soft bg-canvas shadow-lg'>
+        <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border-soft bg-canvas shadow-lg'>
           {/* auto-detect option */}
           <button
             onClick={() => {
@@ -508,7 +508,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
           <select
             value={accountIndex}
             onChange={e => setAccountIndex(parseInt(e.target.value, 10))}
-            className='flex-1 rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm text-fg transition-colors focus:border-penumbra-purple focus:outline-none'
+            className='flex-1 rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg transition-colors focus:border-penumbra-purple focus:outline-none'
           >
             {[0, 1, 2, 3, 4].map(idx => (
               <option key={idx} value={idx}>
@@ -536,7 +536,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
             'w-full rounded-lg border bg-input px-3 py-2.5 text-sm text-fg',
             'placeholder:text-fg-muted transition-colors duration-100',
             'focus:border-penumbra-purple focus:outline-none',
-            recipient && !recipientValid ? 'border-red-400' : 'border-border-hard-soft'
+            recipient && !recipientValid ? 'border-red-400' : 'border-border-soft'
           )}
         />
         {recipient && !recipientValid && (
@@ -599,7 +599,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
             value={amount}
             onChange={e => setAmount(e.target.value)}
             placeholder='0.00'
-            className='w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 pr-14 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
+            className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 pr-14 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
           />
           {selectedAsset && Number(selectedAsset.amount) > 0 && (
             <button
@@ -621,7 +621,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
         </div>
       )}
       {route && (
-        <div className='rounded-lg border border-border-hard-soft bg-elev-2/20 p-3'>
+        <div className='rounded-lg border border-border-soft bg-elev-2/20 p-3'>
           <div className='flex items-center justify-between text-xs'>
             <span className='text-fg-muted'>receive</span>
             <span className='font-mono'>
@@ -674,14 +674,14 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
 
       {/* contact name modal */}
       {showContactModal && (
-        <div className='rounded-lg border border-border-hard-soft bg-canvas p-3'>
+        <div className='rounded-lg border border-border-soft bg-canvas p-3'>
           <p className='text-sm font-medium mb-2'>name this contact</p>
           <input
             type='text'
             value={contactName}
             onChange={e => setContactName(e.target.value)}
             placeholder='enter name...'
-            className='w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm mb-2 focus:border-penumbra-purple focus:outline-none'
+            className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm mb-2 focus:border-penumbra-purple focus:outline-none'
             autoFocus
           />
           <div className='flex gap-2'>
@@ -770,7 +770,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
             </button>
             <button
               onClick={() => setTxStatus('idle')}
-              className='flex-1 rounded-lg border border-border-hard-soft py-3 text-sm text-fg-muted hover:text-fg-high transition-colors'
+              className='flex-1 rounded-lg border border-border-soft py-3 text-sm text-fg-muted hover:text-fg-high transition-colors'
             >
               back
             </button>
@@ -992,7 +992,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
           <button
             onClick={() => setAssetOpen(!assetOpen)}
             disabled={txStatus !== 'idle' || balancesLoading}
-            className='flex w-full items-center justify-between rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50 disabled:opacity-50'
+            className='flex w-full items-center justify-between rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50 disabled:opacity-50'
           >
             {balancesLoading ? (
               <span className='text-fg-muted'>loading...</span>
@@ -1005,7 +1005,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
           </button>
 
           {assetOpen && (
-            <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border-hard-soft bg-canvas shadow-lg'>
+            <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border-soft bg-canvas shadow-lg'>
               {balances.map((balance, i) => {
                 if (!balance.balanceView) return null;
                 const symbol = getDisplayDenomFromView(balance.balanceView) || 'Unknown';
@@ -1057,14 +1057,14 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
               'flex-1 rounded-lg border bg-input px-3 py-2.5 text-sm text-fg',
               'placeholder:text-fg-muted transition-colors duration-100',
               'focus:border-penumbra-purple focus:outline-none disabled:opacity-50',
-              sendState.recipient && !addressValid ? 'border-red-400' : 'border-border-hard-soft'
+              sendState.recipient && !addressValid ? 'border-red-400' : 'border-border-soft'
             )}
           />
           <button
             type='button'
             onClick={() => setShowQrScanner(true)}
             disabled={txStatus !== 'idle'}
-            className='shrink-0 flex h-[42px] w-[42px] items-center justify-center rounded-lg border border-border-hard-soft bg-input text-fg-muted hover:text-fg-high transition-colors disabled:opacity-50'
+            className='shrink-0 flex h-[42px] w-[42px] items-center justify-center rounded-lg border border-border-soft bg-input text-fg-muted hover:text-fg-high transition-colors disabled:opacity-50'
             title='scan QR code'
           >
             <span className='i-lucide-scan h-4 w-4' />
@@ -1110,7 +1110,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
           onChange={e => sendState.setAmount(e.target.value)}
           placeholder='0.00'
           disabled={txStatus !== 'idle'}
-          className='w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none disabled:opacity-50'
+          className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none disabled:opacity-50'
         />
       </div>
 
@@ -1123,7 +1123,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
           onChange={e => sendState.setMemo(e.target.value)}
           placeholder='optional message'
           disabled={txStatus !== 'idle'}
-          className='w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none disabled:opacity-50'
+          className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none disabled:opacity-50'
         />
       </div>
 
@@ -1354,7 +1354,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
             'w-full rounded-lg border bg-input px-3 py-2.5 text-sm text-fg',
             'placeholder:text-fg-muted transition-colors duration-100',
             'focus:border-penumbra-purple focus:outline-none disabled:opacity-50',
-            ibcState.destinationAddress && !addressValid ? 'border-red-400' : 'border-border-hard-soft'
+            ibcState.destinationAddress && !addressValid ? 'border-red-400' : 'border-border-soft'
           )}
         />
         {ibcState.destinationAddress && !addressValid && (
@@ -1380,7 +1380,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
               <button
                 onClick={() => setAssetOpen(!assetOpen)}
                 disabled={txStatus !== 'idle'}
-                className='w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm text-fg text-left disabled:opacity-50'
+                className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg text-left disabled:opacity-50'
               >
                 {selectedAsset
                   ? (getMetadataFromBalancesResponse.optional(selectedAsset)?.symbol
@@ -1389,7 +1389,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
                   : 'select asset'}
               </button>
               {assetOpen && (
-                <div className='absolute z-10 mt-1 w-full rounded-lg border border-border-hard-soft bg-canvas shadow-lg max-h-48 overflow-y-auto'>
+                <div className='absolute z-10 mt-1 w-full rounded-lg border border-border-soft bg-canvas shadow-lg max-h-48 overflow-y-auto'>
                   {withdrawableAssets.map((b, i) => {
                     const meta = getMetadataFromBalancesResponse.optional(b);
                     const display = meta?.symbol ?? meta?.display ?? meta?.base ?? 'unknown';
@@ -1425,7 +1425,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
           onChange={e => ibcState.setAmount(e.target.value)}
           placeholder='0.00'
           disabled={txStatus !== 'idle'}
-          className='w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none disabled:opacity-50'
+          className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none disabled:opacity-50'
         />
       </div>
 
@@ -1457,14 +1457,14 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
 
       {/* contact name modal */}
       {showContactModal && sentToAddress && (
-        <div className='rounded-lg border border-border-hard-soft bg-canvas p-3'>
+        <div className='rounded-lg border border-border-soft bg-canvas p-3'>
           <p className='text-sm font-medium mb-2'>name this contact</p>
           <input
             type='text'
             value={contactName}
             onChange={e => setContactName(e.target.value)}
             placeholder='enter name...'
-            className='w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm mb-2 focus:border-penumbra-purple focus:outline-none'
+            className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm mb-2 focus:border-penumbra-purple focus:outline-none'
             autoFocus
           />
           <div className='flex gap-2'>
@@ -1598,7 +1598,7 @@ export function SendPage() {
   return (
     <div className='flex flex-col'>
       {/* Header */}
-      <div className='flex items-center gap-3 border-b border-border-hard-soft px-4 py-3'>
+      <div className='flex items-center gap-3 border-b border-border-soft px-4 py-3'>
         {!inDedicatedWindow && (
           <button
             onClick={goBack}
@@ -1623,7 +1623,7 @@ export function SendPage() {
               <input
                 type='text'
                 placeholder='enter address'
-                className='w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
+                className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
               />
             </div>
 
@@ -1632,7 +1632,7 @@ export function SendPage() {
               <input
                 type='text'
                 placeholder='0.00'
-                className='w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
+                className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none'
               />
             </div>
 

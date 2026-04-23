@@ -494,12 +494,12 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     placeholder="u1... / zs... / t1..."
                     value={recipient}
                     onChange={(e) => setRecipient(e.target.value)}
-                    className="flex-1 rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 font-mono text-sm text-fg placeholder:text-fg-muted transition-colors focus:border-zigner-gold focus:outline-none"
+                    className="flex-1 rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-sm text-fg placeholder:text-fg-muted transition-colors focus:border-zigner-gold focus:outline-none"
                   />
                   <button
                     type="button"
                     onClick={() => setShowQrScanner(true)}
-                    className="shrink-0 flex h-[42px] w-[42px] items-center justify-center rounded-lg border border-border-hard-soft bg-input text-fg-muted hover:text-fg-high transition-colors"
+                    className="shrink-0 flex h-[42px] w-[42px] items-center justify-center rounded-lg border border-border-soft bg-input text-fg-muted hover:text-fg-high transition-colors"
                     title="scan QR code"
                   >
                     <span className="i-lucide-scan h-4 w-4" />
@@ -544,13 +544,13 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     onChange={(e) => setAmount(e.target.value)}
                     step="0.0001"
                     min="0"
-                    className="flex-1 rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors focus:border-zigner-gold focus:outline-none"
+                    className="flex-1 rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors focus:border-zigner-gold focus:outline-none"
                   />
                   <button
                     type="button"
                     onClick={() => setAmount(maxSendZec > 0 ? maxSendZec.toFixed(8).replace(/0+$/, '').replace(/\.$/, '') : '0')}
                     disabled={maxSendZec <= 0}
-                    className="shrink-0 h-[42px] rounded-lg border border-border-hard-soft bg-input px-3 text-xs text-fg-muted hover:text-fg-high transition-colors disabled:opacity-50"
+                    className="shrink-0 h-[42px] rounded-lg border border-border-soft bg-input px-3 text-xs text-fg-muted hover:text-fg-high transition-colors disabled:opacity-50"
                   >
                     max
                   </button>
@@ -567,7 +567,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                   value={memo}
                   onChange={(e) => setMemo(e.target.value)}
                   maxLength={512}
-                  className="w-full rounded-lg border border-border-hard-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors focus:border-zigner-gold focus:outline-none"
+                  className="w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors focus:border-zigner-gold focus:outline-none"
                 />
               </div>
 
@@ -577,7 +577,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             </div>
 
             <div className="flex gap-2 mt-4">
-              <button onClick={handleClose} className="flex-1 rounded-lg border border-border-hard-soft bg-input py-2.5 text-sm text-fg-muted hover:text-fg-high transition-colors">
+              <button onClick={handleClose} className="flex-1 rounded-lg border border-border-soft bg-input py-2.5 text-sm text-fg-muted hover:text-fg-high transition-colors">
                 cancel
               </button>
               <button onClick={handleReview} className="flex-1 rounded-lg bg-zigner-gold py-2.5 text-sm font-medium text-zigner-dark hover:bg-primary/90 transition-colors">
@@ -597,7 +597,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               <h2 className="text-lg font-medium">review transaction</h2>
             </div>
 
-            <div className="bg-elev-1 border border-border-hard-soft rounded-lg p-4 flex flex-col gap-3">
+            <div className="bg-elev-1 border border-border-soft rounded-lg p-4 flex flex-col gap-3">
               <div className="flex justify-between">
                 <span className="text-fg-muted">network</span>
                 <span className="font-medium">
@@ -618,7 +618,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 <span className="text-fg-muted">fee</span>
                 <span className="text-sm">{fee} zec</span>
               </div>
-              <div className="border-t border-border-hard-soft pt-2 flex justify-between">
+              <div className="border-t border-border-soft pt-2 flex justify-between">
                 <span className="text-fg-muted">total</span>
                 <span className="font-medium">
                   {(Number(amount) + Number(fee)).toFixed(4)} zec
@@ -780,7 +780,7 @@ description="point camera at zafu zigner's signature qr code"
                       void dismissSuggestion(recipient);
                       setShowSavePrompt(false);
                     }}
-                    className="flex-1 rounded-lg border border-border-hard-soft py-2 text-xs text-fg-muted hover:text-fg-high transition-colors"
+                    className="flex-1 rounded-lg border border-border-soft py-2 text-xs text-fg-muted hover:text-fg-high transition-colors"
                   >
                     skip
                   </button>

@@ -107,7 +107,7 @@ export const PageIndex = () => {
           <h1 className='text-xl font-medium'>zafu</h1>
           <button
             onClick={() => setAdding(!adding)}
-            className='flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors'
+            className='flex items-center gap-1.5 text-xs text-fg-muted hover:text-fg-high transition-colors'
           >
             <span className='i-lucide-plus h-3.5 w-3.5' />
             add zapp
@@ -115,36 +115,36 @@ export const PageIndex = () => {
         </div>
 
         {adding && (
-          <div className='rounded-lg border border-border/40 bg-card p-4 flex flex-col gap-3'>
+          <div className='rounded-lg border border-border-soft bg-elev-1 p-4 flex flex-col gap-3'>
             <input
               value={draft.name}
               onChange={e => setDraft({ ...draft, name: e.target.value })}
               placeholder='name'
-              className='w-full bg-input border border-border/40 px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-primary'
+              className='w-full bg-input border border-border-soft px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-zigner-gold'
             />
             <input
               value={draft.url}
               onChange={e => setDraft({ ...draft, url: e.target.value })}
               placeholder='https://...'
-              className='w-full bg-input border border-border/40 px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-primary'
+              className='w-full bg-input border border-border-soft px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-zigner-gold'
             />
             <input
               value={draft.description}
               onChange={e => setDraft({ ...draft, description: e.target.value })}
               placeholder='description (optional)'
-              className='w-full bg-input border border-border/40 px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-primary'
+              className='w-full bg-input border border-border-soft px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-zigner-gold'
             />
             <div className='flex gap-2'>
               <button
                 onClick={() => setAdding(false)}
-                className='flex-1 rounded-lg border border-border/40 py-2 text-xs hover:bg-muted/50 transition-colors'
+                className='flex-1 rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
               >
                 cancel
               </button>
               <button
                 onClick={handleAdd}
                 disabled={!draft.name || !draft.url}
-                className='flex-1 rounded-lg bg-primary/15 text-primary border border-primary/25 py-2 text-xs hover:bg-primary/25 transition-colors disabled:opacity-50'
+                className='flex-1 rounded-lg bg-primary/15 text-zigner-gold border border-primary/25 py-2 text-xs hover:bg-primary/25 transition-colors disabled:opacity-50'
               >
                 add
               </button>
@@ -154,7 +154,7 @@ export const PageIndex = () => {
 
         {grouped.map(([category, zapps]) => (
           <div key={category}>
-            <h2 className='text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2'>
+            <h2 className='text-[10px] font-medium text-fg-muted uppercase tracking-wider mb-2'>
               {CATEGORY_LABELS[category]}
             </h2>
             <div className='grid grid-cols-3 gap-3'>
@@ -162,11 +162,11 @@ export const PageIndex = () => {
                 <div key={zapp.id} className='group relative'>
                   <button
                     onClick={() => handleClick(zapp)}
-                    className='w-full flex flex-col items-center gap-2 rounded-lg border border-border/40 bg-card p-4 hover:bg-muted/50 transition-colors'
+                    className='w-full flex flex-col items-center gap-2 rounded-lg border border-border-soft bg-elev-1 p-4 hover:bg-elev-1 transition-colors'
                   >
-                    <span className={`${zapp.icon} h-6 w-6 text-muted-foreground`} />
+                    <span className={`${zapp.icon} h-6 w-6 text-fg-muted`} />
                     <span className='text-xs font-medium'>{zapp.name}</span>
-                    <span className='text-[10px] text-muted-foreground/60'>{zapp.description}</span>
+                    <span className='text-[10px] text-fg-dim'>{zapp.description}</span>
                   </button>
                   {!zapp.builtin && (
                     <button
@@ -182,7 +182,7 @@ export const PageIndex = () => {
           </div>
         ))}
 
-        <div className='text-[10px] text-muted-foreground/40 text-center pb-4'>
+        <div className='text-[10px] text-fg-muted/40 text-center pb-4'>
           GPL-3.0 - rotko networks
         </div>
       </div>

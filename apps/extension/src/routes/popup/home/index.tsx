@@ -85,7 +85,7 @@ const MultisigOverview = () => {
   };
 
   return (
-    <div className='rounded-lg border border-border-hard-soft bg-elev-1'>
+    <div className='rounded-lg border border-border-soft bg-elev-1'>
       <button
         onClick={() => setExpanded(!expanded)}
         className='flex items-center justify-between w-full px-4 py-3 text-left'
@@ -206,7 +206,7 @@ export const PopupIndex = () => {
     <div className='flex min-h-full flex-col'>
       <div className='flex flex-col gap-3 p-4'>
         {/* address + actions row */}
-        <div className='rounded-lg border border-border-hard-soft bg-elev-1 p-4'>
+        <div className='rounded-lg border border-border-soft bg-elev-1 p-4'>
 {/* account picker moved into PenumbraContent below sync bar */}
           <div className='flex items-center justify-between'>
           <div>
@@ -392,7 +392,7 @@ const PenumbraContent = ({ account, onAccountChange }: { account: number; onAcco
   return (
     <div className='flex-1 flex flex-col gap-3'>
       {/* balance card */}
-      <div className='rounded-lg border border-border-hard-soft bg-elev-1 p-4'>
+      <div className='rounded-lg border border-border-soft bg-elev-1 p-4'>
         <div className='text-3xl font-medium tabular-nums text-fg'>
           {balanceDisplay}
         </div>
@@ -906,7 +906,7 @@ const CosmosContent = ({ chainId }: { chainId: CosmosChainId }) => {
       {isLoading ? (
         <AssetListSkeleton rows={2} />
       ) : assetsData?.assets.length === 0 ? (
-        <div className='rounded-lg border border-border-hard-soft bg-elev-1 p-4'>
+        <div className='rounded-lg border border-border-soft bg-elev-1 p-4'>
           <div className='flex items-center justify-between'>
             <div className='flex items-center gap-2'>
               <div className='h-8 w-8 bg-elev-2 flex items-center justify-center'>
@@ -925,7 +925,7 @@ const CosmosContent = ({ chainId }: { chainId: CosmosChainId }) => {
       ) : (
         <div className='flex flex-col gap-1'>
           {assetsData?.assets.map(asset => (
-            <div key={asset.denom} className='rounded-lg border border-border-hard-soft bg-elev-1 p-4'>
+            <div key={asset.denom} className='rounded-lg border border-border-soft bg-elev-1 p-4'>
               <div className='flex items-center justify-between'>
                 <div className='flex items-center gap-2'>
                   <div className='h-8 w-8 bg-elev-2 flex items-center justify-center'>
@@ -1080,8 +1080,8 @@ function TxRow({ tx }: { tx: ParsedTransaction }) {
   return (
     <div
       className={cn(
-        'rounded-lg border border-border-hard-soft bg-elev-1 p-3 transition-colors',
-        hasMemo ? 'cursor-pointer hover:border-border-hard-soft' : '',
+        'rounded-lg border border-border-soft bg-elev-1 p-3 transition-colors',
+        hasMemo ? 'cursor-pointer hover:border-border-soft' : '',
       )}
       onClick={hasMemo ? () => setExpanded(e => !e) : undefined}
     >
@@ -1122,7 +1122,7 @@ function TxRow({ tx }: { tx: ParsedTransaction }) {
         </div>
       </div>
       {expanded && tx.memo && (
-        <div className='mt-2 ml-11 border-l-2 border-border-hard-soft pl-3'>
+        <div className='mt-2 ml-11 border-l-2 border-border-soft pl-3'>
           <p className='text-xs text-fg-muted whitespace-pre-wrap break-words'>{tx.memo}</p>
         </div>
       )}

@@ -76,7 +76,7 @@ export const NewFrontendInput = forwardRef<HTMLInputElement, NewFrontendInputPro
             value={customFrontend}
             placeholder='Enter the URL'
             className={cn(
-              'w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none transition-colors outline-0',
+              'w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none transition-colors outline-0',
             )}
             onInput={event => setCustomFrontend(event.currentTarget.value)}
             onKeyDown={onEnter}

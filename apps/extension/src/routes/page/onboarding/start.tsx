@@ -96,7 +96,7 @@ export const OnboardingStart = () => {
 };
 
 const InfoCard = ({ icon, title, text }: { icon: string; title: string; text: string }) => (
-  <div className='rounded-lg border border-border-hard-soft bg-elev-1 p-3'>
+  <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
     <div className='flex items-center gap-2 mb-1.5'>
       <span className={`${icon} h-4 w-4 text-fg-muted`} />
       <span className='text-xs font-medium'>{title}</span>
