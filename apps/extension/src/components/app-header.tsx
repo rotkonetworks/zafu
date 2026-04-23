@@ -63,11 +63,11 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
   };
 
   return (
-    <header className='sticky top-0 z-50 flex shrink-0 items-center justify-between px-3 py-2 border-b border-border/40 bg-background/80 backdrop-blur-sm'>
+    <header className='sticky top-0 z-50 flex shrink-0 items-center justify-between px-3 py-2 border-b border-border-soft bg-canvas/80 backdrop-blur-sm'>
       {/* network indicator — tap to cycle */}
       <button
         onClick={cycleNetwork}
-        className='flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-muted/50 transition-colors'
+        className='flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-elev-1 transition-colors'
         title={`${networkInfo.name} — tap to switch network`}
       >
         <div className='flex items-center gap-1'>
@@ -82,13 +82,13 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
             />
           ))}
         </div>
-        <span className='text-sm font-medium'>{networkInfo.name}</span>
+        <span className='text-[13px] text-fg-high'>{networkInfo.name}</span>
       </button>
 
       {/* wallet name — tap to cycle identity, shows dot per vault */}
       <button
         onClick={cycleWallet}
-        className='flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-muted/50 transition-colors'
+        className='flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-elev-1 transition-colors'
         title={`${walletName} — tap to switch wallet`}
       >
         {keyInfos.length > 1 && (
@@ -97,20 +97,22 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
               <div
                 key={k.id}
                 className={cn(
-                  'rounded-full bg-foreground transition-all',
-                  k.id === selectedKeyInfo?.id ? 'h-1.5 w-1.5' : 'h-1 w-1 opacity-30',
+                  'rounded-full transition-all',
+                  k.id === selectedKeyInfo?.id
+                    ? 'h-1.5 w-1.5 bg-fg-high'
+                    : 'h-1 w-1 bg-fg-dim',
                 )}
               />
             ))}
           </div>
         )}
-        <span className='text-sm font-medium truncate max-w-[120px]'>{walletName}</span>
+        <span className='text-[13px] text-fg-high truncate max-w-[120px]'>{walletName}</span>
       </button>
 
       {/* menu */}
       <button
         onClick={onMenuClick}
-        className='p-2 rounded-lg hover:bg-muted/50 transition-colors'
+        className='p-2 rounded-md text-fg-muted hover:text-fg-high hover:bg-elev-1 transition-colors'
       >
         <span className='i-lucide-menu h-4 w-4' />
       </button>
