@@ -185,25 +185,36 @@ export const SettingsZigner = () => {
           </p>
         </div>
 
-        {/* Pro gate */}
+        {/* Upgrade CTA — shown to free users, but non-blocking.
+            Free users can still use their imported Zigner wallet(s) and pay
+            for Pro with them. Pro unlocks additional identities, vault legacy
+            mode, and broader signing beyond the subscription tx. */}
         {!pro && (
-          <div className='rounded-md border border-border-soft bg-elev-1 p-4 flex flex-col items-center gap-3'>
-            <div className='i-lucide-lock size-8 text-fg-dim' />
-            <p className='text-xs text-fg-muted text-center lowercase tracking-[0.02em]'>
-              zigner cold wallet signing is a pro feature
-            </p>
+          <div className='rounded-md border border-zigner-gold/30 bg-zigner-gold/5 p-4 flex flex-col gap-3'>
+            <div className='flex items-start gap-3'>
+              <span className='i-lucide-zap size-5 text-zigner-gold shrink-0 mt-0.5' />
+              <div className='flex flex-col gap-1'>
+                <p className='text-[13px] text-fg-high lowercase tracking-[0.02em]'>unlock the full zigner workflow</p>
+                <p className='text-xs text-fg-muted'>
+                  Your imported Zigner wallet is active. Pro unlocks additional identities,
+                  multi-network signing, and vault legacy mode. You can pay for Pro by signing
+                  the 0.01 ZEC subscription tx with your Zigner device.
+                </p>
+              </div>
+            </div>
             <Button
               variant='secondary'
               size='sm'
               onClick={() => navigate(PopupPath.SUBSCRIBE)}
+              className='self-start'
             >
               subscribe
             </Button>
           </div>
         )}
 
-        {/* Zigner Wallets — unified list from keyring */}
-        {pro && zignerVaults.length > 0 && (
+        {/* Zigner Wallets — unified list from keyring (visible to all users) */}
+        {zignerVaults.length > 0 && (
           <div className='border-t border-border-soft pt-4'>
             <p className='kicker mb-3'>wallets</p>
             <div className='flex flex-col gap-2'>
