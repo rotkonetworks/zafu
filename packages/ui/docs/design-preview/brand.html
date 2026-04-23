@@ -1,0 +1,330 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Zafu · Brand</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body { background: #000; padding: 0; }
+  .sheet { max-width: 1040px; margin: 0 auto; padding: 48px 56px 64px; }
+
+  .masthead { display: grid; grid-template-columns: 1fr auto; align-items: end; padding-bottom: 20px; border-bottom: 1px solid var(--border); margin-bottom: 40px; }
+  .kicker { font-size: 10px; color: var(--fg-dim); text-transform: lowercase; letter-spacing: .2em; margin-bottom: 6px; }
+  .masthead h1 { font-size: 36px; color: var(--fg-high); letter-spacing: -.01em; line-height: 1; }
+  .masthead h1 .s { color: var(--fg-dim); margin: 0 10px; }
+  .masthead h1 .a { color: var(--zigner-gold); }
+  .meta { text-align: right; font-size: 10px; color: var(--fg-dim); line-height: 1.7; }
+  .meta b { color: var(--fg-muted); font-weight: 400; }
+
+  .section { margin-top: 40px; }
+  .section-head { display: grid; grid-template-columns: 12ch 1fr auto; align-items: center; gap: 18px; margin-bottom: 22px; }
+  .section-head .n { font-size: 10px; color: var(--fg-dim); letter-spacing: .1em; font-variant-numeric: tabular-nums; }
+  .section-head .label { font-size: 11px; color: var(--fg-high); text-transform: lowercase; letter-spacing: .04em; }
+  .section-head .rule { height: 1px; background: var(--border); }
+  .section-head .hint { font-size: 10px; color: var(--fg-dim); text-transform: lowercase; }
+
+  /* HERO wordmark — the one canonical Zafu logotype */
+  .hero-mark {
+    position: relative;
+    padding: 80px 48px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    background:
+      radial-gradient(700px 400px at 75% 50%, rgba(244,183,40,0.10), transparent 60%),
+      radial-gradient(500px 300px at 20% 40%, rgba(59,130,246,0.06), transparent 65%),
+      #000;
+  }
+  .hero-mark .stamp {
+    position: absolute; top: 16px; left: 24px;
+    font-size: 10px; color: var(--fg-dim); letter-spacing: .2em; text-transform: lowercase;
+  }
+  .hero-mark .stamp b { color: var(--zigner-gold); font-weight: 400; }
+  .hero-mark .glyph-row {
+    display: flex; align-items: center; gap: 32px;
+  }
+  /* The Zafu mark: a stacked dot motif — four dots arranged as a 2×2 rotating toward the viewer.
+     Four dots = four chains. The bright one = active network. Generative, compact, and a signature
+     we already use in the UI (network dots). */
+  .zafu-glyph {
+    width: 140px; height: 140px; position: relative;
+    display: grid; grid-template-columns: 1fr 1fr; place-items: center; gap: 12px;
+    padding: 18px;
+    border: 1px solid rgba(244,183,40,0.28);
+    border-radius: 24px;
+    background:
+      linear-gradient(180deg, rgba(244,183,40,0.06) 0%, rgba(0,0,0,0) 60%),
+      #050505;
+    box-shadow:
+      inset 0 1px 0 rgba(244,183,40,0.18),
+      inset 0 -1px 0 rgba(0,0,0,0.6),
+      0 0 0 1px rgba(244,183,40,0.12),
+      0 0 48px -12px rgba(244,183,40,0.35);
+  }
+  .zafu-glyph .d { width: 40px; height: 40px; border-radius: 50%; }
+  .zafu-glyph .d.gold { background: radial-gradient(circle at 35% 30%, #fff4c0 0%, #fcd34d 30%, #f4b728 65%, #b8860b 100%); box-shadow: 0 0 16px rgba(244,183,40,0.6), inset 0 -2px 4px rgba(120,80,0,0.4); }
+  .zafu-glyph .d.blue { background: radial-gradient(circle at 35% 30%, #cfe0ff 0%, #60a5fa 35%, #3b82f6 70%, #1d4ed8 100%); box-shadow: 0 0 14px rgba(59,130,246,0.35), inset 0 -2px 4px rgba(29,78,216,0.5); }
+  .zafu-glyph .d.dark { background: radial-gradient(circle at 35% 30%, #3a3a3a 0%, #1a1a1a 50%, #0a0a0a 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.06); }
+
+  .hero-mark .wordmark {
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .hero-mark .wordmark .logotype {
+    font-size: 84px; color: var(--fg-high); letter-spacing: -.04em; line-height: .9;
+  }
+  .hero-mark .wordmark .logotype .slash { color: var(--fg-dim); margin: 0 .02em; }
+  .hero-mark .wordmark .logotype .wallet { color: var(--zigner-gold); }
+  .hero-mark .wordmark .tag {
+    font-size: 12px; color: var(--fg-muted); text-transform: lowercase; letter-spacing: .06em; max-width: 440px; line-height: 1.6;
+  }
+  .hero-mark .wordmark .tag b { color: var(--fg-high); font-weight: 400; }
+
+  /* Grid of Zafu-only marks */
+  .marks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+  .mark-cell { background: #000; padding: 28px 24px; display: flex; flex-direction: column; gap: 14px; }
+  .mark-cell .canvas {
+    height: 140px; display: flex; align-items: center; justify-content: center;
+    border-radius: 4px; background: #050505; border: 1px solid #1a1a1a; position: relative; overflow: hidden;
+  }
+  .mark-cell .meta { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 12px; }
+  .mark-cell .nm { font-size: 12px; color: var(--fg-high); text-transform: lowercase; letter-spacing: .02em; }
+  .mark-cell .path { font-size: 10px; color: var(--fg-dim); font-variant-numeric: tabular-nums; }
+  .mark-cell .desc { font-size: 11px; color: var(--fg-muted); line-height: 1.6; }
+
+  /* Lockup · inline logo */
+  .inline-lock {
+    display: inline-flex; align-items: center; gap: 10px;
+    font-size: 26px; color: var(--fg-high); letter-spacing: -.02em;
+  }
+  .inline-lock .g-mini {
+    width: 26px; height: 26px; border-radius: 6px; padding: 3px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 2px;
+    background: #050505; border: 1px solid rgba(244,183,40,0.3);
+    box-shadow: inset 0 1px 0 rgba(244,183,40,0.15);
+  }
+  .inline-lock .g-mini span { border-radius: 50%; display: block; }
+  .inline-lock .g-mini .gold  { background: #f4b728; box-shadow: 0 0 4px rgba(244,183,40,0.6); }
+  .inline-lock .g-mini .blue  { background: #3b82f6; }
+  .inline-lock .g-mini .dark  { background: #1a1a1a; }
+  .inline-lock .wallet { color: var(--zigner-gold); }
+
+  /* Tiny: favicon scale */
+  .fav-row {
+    display: flex; align-items: end; gap: 22px; justify-content: center;
+  }
+  .fav {
+    border-radius: 4px; padding: 4px;
+    background: #050505; border: 1px solid #1a1a1a;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 1px;
+  }
+  .fav span { display: block; border-radius: 50%; }
+
+  /* Tokens panel */
+  .tokens { border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+  .token-row { display: grid; grid-template-columns: 16ch 1fr auto; align-items: center; gap: 18px; padding: 14px 20px; border-bottom: 1px solid var(--border); }
+  .token-row:last-child { border-bottom: none; }
+  .token-row .k { font-size: 11px; color: var(--zigner-gold); text-transform: lowercase; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+  .token-row .v { font-size: 11px; color: var(--fg); }
+  .token-row .h { font-size: 10px; color: var(--fg-dim); font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+
+  /* Clear-space / rules */
+  .rules { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+  .rule-cell { background: #000; padding: 20px 22px; }
+  .rule-cell .h { font-size: 11px; color: var(--zigner-gold); text-transform: lowercase; letter-spacing: .04em; margin-bottom: 12px; display: flex; align-items: center; gap: 10px; }
+  .rule-cell .h::before { content: ''; width: 18px; height: 1px; background: var(--zigner-gold); }
+  .rule-cell .b { font-size: 11px; color: var(--fg); line-height: 1.7; }
+  .rule-cell .b b { color: var(--fg-high); font-weight: 400; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="masthead">
+    <div>
+      <div class="kicker">zafu design system / 05</div>
+      <h1>brand<span class="s">·</span><span class="a">zafu</span></h1>
+    </div>
+    <div class="meta">
+      <b>mark</b> four-dot glyph<br/>
+      <b>logotype</b> iosevka term ss03 · 400<br/>
+      <b>palette</b> black · gold · blue
+    </div>
+  </header>
+
+  <!-- HERO -->
+  <div class="hero-mark">
+    <div class="stamp">primary <b>// lockup</b></div>
+    <div class="glyph-row">
+      <div class="zafu-glyph">
+        <span class="d gold"></span>
+        <span class="d blue"></span>
+        <span class="d dark"></span>
+        <span class="d dark"></span>
+      </div>
+      <div class="wordmark">
+        <div class="logotype">zafu<span class="slash">/</span><span class="wallet">wallet</span></div>
+        <div class="tag">
+          multi-network hot wallet. holds viewing keys only. signs via the air-gapped <b>zigner</b> over animated qr.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MARK VARIANTS -->
+  <section class="section">
+    <div class="section-head"><div class="n">01</div><div class="label">mark · four-dot glyph</div><div class="rule"></div><div class="hint">four dots · four chains · active = gold</div></div>
+    <div class="marks">
+      <!-- primary -->
+      <div class="mark-cell">
+        <div class="canvas">
+          <div class="zafu-glyph" style="width:96px;height:96px;padding:12px;">
+            <span class="d gold" style="width:26px;height:26px;"></span>
+            <span class="d blue" style="width:26px;height:26px;"></span>
+            <span class="d dark" style="width:26px;height:26px;"></span>
+            <span class="d dark" style="width:26px;height:26px;"></span>
+          </div>
+        </div>
+        <div class="meta"><div class="nm">primary · active zcash</div><div class="path">1 active</div></div>
+        <div class="desc">default state · gold top-left = zigner/zcash is the selected network</div>
+      </div>
+      <!-- penumbra active -->
+      <div class="mark-cell">
+        <div class="canvas">
+          <div class="zafu-glyph" style="width:96px;height:96px;padding:12px;">
+            <span class="d dark" style="width:26px;height:26px;"></span>
+            <span class="d" style="width:26px;height:26px;background: radial-gradient(circle at 35% 30%, #cfe8e4 0%, #8cbcb6 30%, #629994 65%, #3b6561 100%); box-shadow: 0 0 14px rgba(98,153,148,0.5), inset 0 -2px 4px rgba(20,50,45,0.5);"></span>
+            <span class="d dark" style="width:26px;height:26px;"></span>
+            <span class="d dark" style="width:26px;height:26px;"></span>
+          </div>
+        </div>
+        <div class="meta"><div class="nm">network-aware</div><div class="path">active rebinds</div></div>
+        <div class="desc">color of the active dot tracks the selected chain · the glyph is the network dots, zoomed</div>
+      </div>
+      <!-- monochrome -->
+      <div class="mark-cell">
+        <div class="canvas">
+          <div class="zafu-glyph" style="width:96px;height:96px;padding:12px;border-color:rgba(255,255,255,0.2);background:#050505;box-shadow:inset 0 1px 0 rgba(255,255,255,0.08);">
+            <span class="d" style="width:26px;height:26px;background:#f5f5f5"></span>
+            <span class="d" style="width:26px;height:26px;background:#5a5a5a"></span>
+            <span class="d" style="width:26px;height:26px;background:#2a2a2a"></span>
+            <span class="d" style="width:26px;height:26px;background:#2a2a2a"></span>
+          </div>
+        </div>
+        <div class="meta"><div class="nm">monochrome</div><div class="path">docs · print</div></div>
+        <div class="desc">single-ink version for grayscale output and one-color print</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LOCKUPS -->
+  <section class="section">
+    <div class="section-head"><div class="n">02</div><div class="label">lockups · wordmark variants</div><div class="rule"></div><div class="hint">one glyph, four ways</div></div>
+    <div class="marks">
+      <div class="mark-cell">
+        <div class="canvas" style="justify-content:flex-start;padding:0 28px;">
+          <span class="inline-lock">
+            <span class="g-mini"><span class="gold"></span><span class="blue"></span><span class="dark"></span><span class="dark"></span></span>
+            <span>zafu<span style="color:var(--fg-dim)">/</span><span class="wallet">wallet</span></span>
+          </span>
+        </div>
+        <div class="meta"><div class="nm">horizontal</div><div class="path">header · nav</div></div>
+        <div class="desc">default lockup · glyph + zafu/wallet at 26px</div>
+      </div>
+      <div class="mark-cell">
+        <div class="canvas">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:10px">
+            <span style="display:grid;grid-template-columns:1fr 1fr;gap:3px;padding:4px;border:1px solid rgba(244,183,40,0.3);border-radius:8px;width:36px;height:36px;">
+              <span style="background:#f4b728;border-radius:50%;"></span>
+              <span style="background:#3b82f6;border-radius:50%;"></span>
+              <span style="background:#1a1a1a;border-radius:50%;"></span>
+              <span style="background:#1a1a1a;border-radius:50%;"></span>
+            </span>
+            <span style="font-size:26px;color:var(--fg-high);letter-spacing:-.02em">zafu<span style="color:var(--fg-dim)">/</span><span style="color:var(--zigner-gold)">wallet</span></span>
+          </div>
+        </div>
+        <div class="meta"><div class="nm">stacked</div><div class="path">splash · login</div></div>
+        <div class="desc">glyph over logotype · for the onboarding splash</div>
+      </div>
+      <div class="mark-cell">
+        <div class="canvas">
+          <span style="font-size:44px;color:var(--fg-high);letter-spacing:-.04em;line-height:1">zafu<span style="color:var(--zigner-gold)">.</span></span>
+        </div>
+        <div class="meta"><div class="nm">wordmark-only</div><div class="path">body · inline</div></div>
+        <div class="desc">short form · a gold dot replaces the glyph when space is tight</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAVICON / ICON SCALE -->
+  <section class="section">
+    <div class="section-head"><div class="n">03</div><div class="label">icon scale · 16 → 128</div><div class="rule"></div><div class="hint">chrome extension icons · the glyph reduces to two ink dots at 16px</div></div>
+    <div style="border: 1px solid var(--border); border-radius: 4px; padding: 36px; background: #050505;">
+      <div class="fav-row">
+        <div style="text-align:center;">
+          <div class="fav" style="width:16px;height:16px;">
+            <span style="background:#f4b728"></span><span style="background:#3b82f6"></span>
+            <span style="background:#1a1a1a"></span><span style="background:#1a1a1a"></span>
+          </div>
+          <div style="font-size:10px;color:var(--fg-dim);margin-top:8px;font-variant-numeric:tabular-nums">16</div>
+        </div>
+        <div style="text-align:center;">
+          <div class="fav" style="width:32px;height:32px;padding:6px;gap:2px;">
+            <span style="background:#f4b728;box-shadow:0 0 4px rgba(244,183,40,0.5)"></span><span style="background:#3b82f6"></span>
+            <span style="background:#1a1a1a"></span><span style="background:#1a1a1a"></span>
+          </div>
+          <div style="font-size:10px;color:var(--fg-dim);margin-top:8px;font-variant-numeric:tabular-nums">32</div>
+        </div>
+        <div style="text-align:center;">
+          <div class="fav" style="width:48px;height:48px;padding:8px;gap:3px;border-radius:8px;">
+            <span style="background:radial-gradient(circle at 35% 30%, #fcd34d, #f4b728);box-shadow:0 0 6px rgba(244,183,40,0.6)"></span>
+            <span style="background:radial-gradient(circle at 35% 30%, #60a5fa, #3b82f6)"></span>
+            <span style="background:#1a1a1a"></span><span style="background:#1a1a1a"></span>
+          </div>
+          <div style="font-size:10px;color:var(--fg-dim);margin-top:8px;font-variant-numeric:tabular-nums">48</div>
+        </div>
+        <div style="text-align:center;">
+          <div class="fav" style="width:96px;height:96px;padding:14px;gap:6px;border-radius:16px;box-shadow:0 0 0 1px rgba(244,183,40,0.2), inset 0 1px 0 rgba(244,183,40,0.15);">
+            <span style="background:radial-gradient(circle at 35% 30%, #fff4c0, #fcd34d 30%, #f4b728 65%, #b8860b);box-shadow:0 0 12px rgba(244,183,40,0.5)"></span>
+            <span style="background:radial-gradient(circle at 35% 30%, #cfe0ff, #60a5fa 35%, #3b82f6 70%, #1d4ed8)"></span>
+            <span style="background:#1a1a1a"></span><span style="background:#1a1a1a"></span>
+          </div>
+          <div style="font-size:10px;color:var(--fg-dim);margin-top:8px;font-variant-numeric:tabular-nums">128</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TOKENS -->
+  <section class="section">
+    <div class="section-head"><div class="n">04</div><div class="label">tokens · brand</div><div class="rule"></div><div class="hint">consumed by css + tailwind config</div></div>
+    <div class="tokens">
+      <div class="token-row"><div class="k">--zigner-gold</div><div class="v">primary accent · active dot · logotype `wallet` slot</div><div class="h">#f4b728</div></div>
+      <div class="token-row"><div class="k">--zafu-blue</div><div class="v">secondary · hot-wallet side of architecture · second dot</div><div class="h">#3b82f6</div></div>
+      <div class="token-row"><div class="k">--bg</div><div class="v">canvas · #000 — non-negotiable</div><div class="h">#000000</div></div>
+      <div class="token-row"><div class="k">--fg-high</div><div class="v">`zafu` slot in logotype · titles</div><div class="h">#f5f5f5</div></div>
+      <div class="token-row"><div class="k">--font-mono</div><div class="v">iosevka term ss03 · used for logotype (no separate display font)</div><div class="h">400 only</div></div>
+    </div>
+  </section>
+
+  <!-- RULES -->
+  <section class="section">
+    <div class="section-head"><div class="n">05</div><div class="label">rules · clear-space · do · don't</div><div class="rule"></div><div class="hint">restraint over ornament</div></div>
+    <div class="rules">
+      <div class="rule-cell">
+        <div class="h">clear-space</div>
+        <div class="b">minimum padding around any lockup = <b>height of the glyph</b>. at 16px favicon, no padding. never place on non-black backgrounds without a <b>#050505</b> card behind it.</div>
+      </div>
+      <div class="rule-cell">
+        <div class="h">do</div>
+        <div class="b">use on <b>#000</b>.<br/>rebind the active-dot colour to the current chain.<br/>keep the slash <b>/</b> in <b>fg-dim</b>, never in gold.</div>
+      </div>
+      <div class="rule-cell">
+        <div class="h">don't</div>
+        <div class="b">never tilt, skew, or 3d the glyph.<br/>never recolour <b>zafu</b> itself — only the <b>wallet</b> half.<br/>never pair with emoji or illustrative icons.</div>
+      </div>
+    </div>
+  </section>
+
+</div>
+</body>
+</html>

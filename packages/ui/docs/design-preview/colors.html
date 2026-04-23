@@ -1,0 +1,485 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Zafu · Palette</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body {
+    padding: 0;
+    background: #000;
+    color: var(--fg);
+  }
+  .sheet {
+    max-width: 1040px;
+    margin: 0 auto;
+    padding: 48px 56px 64px;
+  }
+
+  /* editorial masthead */
+  .masthead {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 24px;
+    align-items: end;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 40px;
+  }
+  .masthead .ident {
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .masthead .kicker {
+    font-size: 10px; color: var(--fg-dim); text-transform: lowercase; letter-spacing: .2em;
+  }
+  .masthead h1 {
+    font-size: 36px; color: var(--fg-high); letter-spacing: -.01em; line-height: 1;
+  }
+  .masthead h1 .sep { color: var(--fg-dim); margin: 0 10px; }
+  .masthead h1 .accent { color: var(--zigner-gold); }
+  .masthead .meta {
+    text-align: right; font-size: 10px; color: var(--fg-dim); line-height: 1.7;
+    font-variant-numeric: tabular-nums;
+  }
+  .masthead .meta b { color: var(--fg-muted); font-weight: 400; }
+
+  /* section header — simple rule + label */
+  .section {
+    margin-top: 40px;
+  }
+  .section-head {
+    display: grid;
+    grid-template-columns: 12ch 1fr auto;
+    align-items: center;
+    gap: 18px;
+    margin-bottom: 18px;
+  }
+  .section-head .n {
+    font-size: 10px; color: var(--fg-dim); font-variant-numeric: tabular-nums;
+    letter-spacing: .1em;
+  }
+  .section-head .label {
+    font-size: 11px; color: var(--fg-high); text-transform: lowercase; letter-spacing: .04em;
+  }
+  .section-head .rule {
+    justify-self: stretch; height: 1px; background: var(--border);
+  }
+  .section-head .hint {
+    font-size: 10px; color: var(--fg-dim); text-transform: lowercase;
+  }
+
+  /* large hero swatch (for zigner gold — the one that matters) */
+  .hero {
+    display: grid;
+    grid-template-columns: 2fr 3fr;
+    gap: 40px;
+    margin-bottom: 8px;
+  }
+  .hero-chip {
+    background: var(--zigner-gold);
+    height: 220px;
+    border-radius: 4px;
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    padding: 20px;
+    box-shadow: 0 0 0 1px rgba(244,183,40,.3), 0 0 64px -16px rgba(244,183,40,.25);
+  }
+  .hero-chip .stamp {
+    color: #0a0a0a; font-size: 64px; line-height: .85; letter-spacing: -.03em;
+  }
+  .hero-chip .stamp span { display: block; font-size: 11px; letter-spacing: .2em; text-transform: lowercase; margin-bottom: 8px; }
+
+  .hero-desc dl { display: grid; grid-template-columns: 14ch 1fr; row-gap: 10px; column-gap: 16px; margin: 0; }
+  .hero-desc dt { font-size: 10px; color: var(--fg-dim); text-transform: lowercase; letter-spacing: .08em; padding-top: 2px; }
+  .hero-desc dd { margin: 0; font-size: 13px; color: var(--fg-high); font-variant-numeric: tabular-nums; }
+  .hero-desc dd.body { font-size: 12px; color: var(--fg); line-height: 1.6; font-variant-numeric: normal; }
+  .hero-desc .role { color: var(--zigner-gold); }
+
+  /* flat palette row — type-driven, no boxes */
+  .scale-row {
+    display: grid;
+    grid-template-columns: repeat(var(--cols, 6), 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .scale-cell {
+    background: #000;
+    padding: 14px 14px 16px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    min-height: 140px;
+    position: relative;
+  }
+  .scale-cell .chip {
+    height: 36px; border-radius: 3px; margin-bottom: 14px;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.04);
+  }
+  .scale-cell .name {
+    font-size: 11px; color: var(--fg-high); text-transform: lowercase; letter-spacing: .03em;
+    margin-bottom: 2px;
+  }
+  .scale-cell .role {
+    font-size: 10px; color: var(--fg-dim); text-transform: lowercase; margin-bottom: 10px;
+    letter-spacing: .04em;
+  }
+  .scale-cell .hex {
+    font-size: 10px; color: var(--fg-muted); font-variant-numeric: tabular-nums; letter-spacing: .02em;
+  }
+
+  /* text spec — on dark, each shade rendered as actual text */
+  .text-spec {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px 48px;
+    padding: 4px 0 8px;
+  }
+  .text-line {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: baseline;
+    gap: 20px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .text-line:last-child { border-bottom: none; }
+  .text-line .sample { font-size: 16px; letter-spacing: 0; }
+  .text-line .trail { text-align: right; font-size: 10px; color: var(--fg-dim); font-variant-numeric: tabular-nums; line-height: 1.5; }
+  .text-line .trail b { display: block; color: var(--fg-muted); font-weight: 400; font-size: 11px; text-transform: lowercase; letter-spacing: .04em; }
+
+  /* chain stack — one horizontal strip */
+  .chains {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .chain {
+    padding: 18px 12px;
+    border-right: 1px solid var(--border);
+    background: #000;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .chain:last-child { border-right: none; }
+  .chain .mark {
+    width: 100%; height: 48px; border-radius: 3px;
+    position: relative;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.05);
+  }
+  .chain .nm { font-size: 11px; color: var(--fg-high); text-transform: lowercase; letter-spacing: .02em; }
+  .chain .hx { font-size: 10px; color: var(--fg-muted); font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+
+  /* semantic — wider spaced, dots */
+  .semantic {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px;
+    padding: 8px 0;
+  }
+  .semantic .s {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 0;
+    border-top: 1px solid var(--border);
+  }
+  .semantic .s .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .semantic .s .t { font-size: 13px; color: var(--fg-high); text-transform: lowercase; }
+  .semantic .s .hx { font-size: 10px; color: var(--fg-dim); font-variant-numeric: tabular-nums; margin-left: auto; }
+  .semantic .s .example { font-size: 10px; color: var(--fg-muted); text-transform: lowercase; font-style: italic; }
+
+  /* usage cross-ref */
+  .usage {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 8px;
+  }
+  .usage .card {
+    background: #000;
+    padding: 18px 18px 20px;
+  }
+  .usage .card .h {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 11px; color: var(--zigner-gold); text-transform: lowercase; letter-spacing: .04em;
+    margin-bottom: 14px;
+  }
+  .usage .card .h::before {
+    content: ''; width: 18px; height: 1px; background: var(--zigner-gold);
+  }
+  .usage .card .do, .usage .card .dont {
+    font-size: 11px; line-height: 1.7; color: var(--fg);
+  }
+  .usage .card .do b, .usage .card .dont b { color: var(--fg-high); font-weight: 400; }
+
+  /* mini demo — a tiny composition proving the palette works */
+  .demo {
+    margin-top: 8px;
+    padding: 24px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: #0a0a0a;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 32px;
+  }
+  .demo .panel .k { font-size: 10px; color: var(--fg-dim); text-transform: lowercase; letter-spacing: .08em; margin-bottom: 4px; }
+  .demo .panel .v { font-size: 24px; color: var(--zigner-gold); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+  .demo .panel .v .u { font-size: 12px; color: var(--fg-muted); margin-left: 8px; letter-spacing: 0; }
+  .demo .panel .sub { font-size: 11px; color: var(--fg-muted); margin-top: 6px; }
+  .demo .panel .tag { display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 10px; color: var(--success); }
+  .demo .panel .tag::before { content:''; width:5px; height:5px; border-radius:50%; background: var(--success); box-shadow: 0 0 6px var(--success); }
+  .demo hr { border: none; border-left: 1px solid var(--border); margin: 0; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="masthead">
+    <div class="ident">
+      <div class="kicker">zafu design system / 01</div>
+      <h1>palette<span class="sep">·</span><span class="accent">terminal dark</span></h1>
+    </div>
+    <div class="meta">
+      <b>rev</b> 2026.04.23<br/>
+      <b>source</b> packages/ui/styles/globals.css<br/>
+      <b>theme</b> single · dark only
+    </div>
+  </header>
+
+  <!-- HERO: the color that carries the brand -->
+  <div class="hero">
+    <div class="hero-chip">
+      <div class="stamp">
+        <span>primary accent</span>
+        #f4b728
+      </div>
+    </div>
+    <div class="hero-desc">
+      <dl>
+        <dt>token</dt><dd>--zigner-gold</dd>
+        <dt>role</dt><dd class="role">brand · focus · link · headings · figure</dd>
+        <dt>hsl</dt><dd>42 91% 55%</dd>
+        <dt>contrast</dt><dd>AA on #000 body · AAA as fg at 16px+</dd>
+        <dt>use</dt><dd class="body">
+          the one chromatic value in the whole interface. every heading, focus ring, link, balance figure, and active-state uses it. treat it as ink — restraint is the point.
+        </dd>
+      </dl>
+    </div>
+  </div>
+
+  <!-- SURFACES -->
+  <section class="section">
+    <div class="section-head">
+      <div class="n">02</div>
+      <div class="label">surface · elevations</div>
+      <div class="rule"></div>
+      <div class="hint">pitch black → hairline greys · never shadow-based</div>
+    </div>
+    <div class="scale-row" style="--cols: 6">
+      <div class="scale-cell">
+        <div class="chip" style="background:#000; outline:1px solid #0f0f0f;"></div>
+        <div><div class="name">canvas</div><div class="role">page · popup bg</div><div class="hex">#000000</div></div>
+      </div>
+      <div class="scale-cell">
+        <div class="chip" style="background:#0a0a0a"></div>
+        <div><div class="name">elev-1</div><div class="role">cards · code</div><div class="hex">#0a0a0a</div></div>
+      </div>
+      <div class="scale-cell">
+        <div class="chip" style="background:#0f0f0f"></div>
+        <div><div class="name">elev-2</div><div class="role">popovers · inputs</div><div class="hex">#0f0f0f</div></div>
+      </div>
+      <div class="scale-cell">
+        <div class="chip" style="background:#1a1a1a"></div>
+        <div><div class="name">border-soft</div><div class="role">row hairlines</div><div class="hex">#1a1a1a</div></div>
+      </div>
+      <div class="scale-cell">
+        <div class="chip" style="background:#212121"></div>
+        <div><div class="name">border</div><div class="role">card · input edge</div><div class="hex">#212121</div></div>
+      </div>
+      <div class="scale-cell">
+        <div class="chip" style="background: linear-gradient(90deg,#000,#0a0a0a,#0f0f0f,#1a1a1a,#212121);"></div>
+        <div><div class="name">depth</div><div class="role">0 → 1 → 2 → rule</div><div class="hex">5 stops</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TEXT SHADES (rendered on dark, as real text) -->
+  <section class="section">
+    <div class="section-head">
+      <div class="n">03</div>
+      <div class="label">ink · text shades</div>
+      <div class="rule"></div>
+      <div class="hint">hierarchy by weight-of-grey, not by size</div>
+    </div>
+    <div class="text-spec">
+      <div class="text-line">
+        <div class="sample" style="color:#f5f5f5">Signed by zigner · ready to broadcast</div>
+        <div class="trail"><b>fg-high</b>#f5f5f5</div>
+      </div>
+      <div class="text-line">
+        <div class="sample" style="color:#dcdcdc">Scan the animated QR from your device to complete the handoff</div>
+        <div class="trail"><b>fg</b>#dcdcdc</div>
+      </div>
+      <div class="text-line">
+        <div class="sample" style="color:#8a8a8a">awaiting signer · 2 of 3 frames received</div>
+        <div class="trail"><b>fg-muted</b>#8a8a8a</div>
+      </div>
+      <div class="text-line">
+        <div class="sample" style="color:#5a5a5a">2026-04-23 · 14:12:03 UTC</div>
+        <div class="trail"><b>fg-dim</b>#5a5a5a</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BRAND pair: gold + blue -->
+  <section class="section">
+    <div class="section-head">
+      <div class="n">04</div>
+      <div class="label">brand · gold & blue</div>
+      <div class="rule"></div>
+      <div class="hint">two-sided architecture — zigner (cold) · zafu (hot)</div>
+    </div>
+    <div class="scale-row" style="--cols: 6">
+      <div class="scale-cell">
+        <div class="chip" style="background:#b8860b"></div>
+        <div><div class="name">gold-dark</div><div class="role">pressed · disabled</div><div class="hex">#b8860b</div></div>
+      </div>
+      <div class="scale-cell">
+        <div class="chip" style="background:#f4b728"></div>
+        <div><div class="name" style="color:var(--zigner-gold)">zigner-gold</div><div class="role">primary · zigner/zcash</div><div class="hex">#f4b728</div></div>
+      </div>
+      <div class="scale-cell">
+        <div class="chip" style="background:#fcd34d"></div>
+        <div><div class="name">gold-light</div><div class="role">hover · highlight</div><div class="hex">#fcd34d</div></div>
+      </div>
+      <div class="scale-cell">
+        <div class="chip" style="background:#1d4ed8"></div>
+        <div><div class="name">blue-dark</div><div class="role">pressed</div><div class="hex">#1d4ed8</div></div>
+      </div>
+      <div class="scale-cell">
+        <div class="chip" style="background:#3b82f6"></div>
+        <div><div class="name" style="color:var(--zafu-blue)">zafu-blue</div><div class="role">secondary · zafu (hot)</div><div class="hex">#3b82f6</div></div>
+      </div>
+      <div class="scale-cell">
+        <div class="chip" style="background:#60a5fa"></div>
+        <div><div class="name">blue-light</div><div class="role">hover</div><div class="hex">#60a5fa</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CHAIN ACCENTS -->
+  <section class="section">
+    <div class="section-head">
+      <div class="n">05</div>
+      <div class="label">chain accents · [data-network]</div>
+      <div class="rule"></div>
+      <div class="hint">one colour per chain · rebinds --network-accent</div>
+    </div>
+    <div class="chains">
+      <div class="chain"><div class="mark" style="background:#f4b728"></div><div class="nm">zcash</div><div class="hx">#f4b728</div></div>
+      <div class="chain"><div class="mark" style="background:#629994"></div><div class="nm">penumbra</div><div class="hx">#629994</div></div>
+      <div class="chain"><div class="mark" style="background:#60a5fa"></div><div class="nm">noble</div><div class="hx">#60a5fa</div></div>
+      <div class="chain"><div class="mark" style="background:#a78bfa"></div><div class="nm">osmosis</div><div class="hx">#a78bfa</div></div>
+      <div class="chain"><div class="mark" style="background:#7c3aed"></div><div class="nm">celestia</div><div class="hx">#7c3aed</div></div>
+      <div class="chain"><div class="mark" style="background:#3b82f6"></div><div class="nm">ethereum</div><div class="hx">#3b82f6</div></div>
+      <div class="chain"><div class="mark" style="background:#f97316"></div><div class="nm">bitcoin</div><div class="hx">#f97316</div></div>
+      <div class="chain"><div class="mark" style="background:#6b7280"></div><div class="nm">polkadot</div><div class="hx">#6b7280</div></div>
+    </div>
+  </section>
+
+  <!-- SEMANTIC -->
+  <section class="section">
+    <div class="section-head">
+      <div class="n">06</div>
+      <div class="label">semantic · state</div>
+      <div class="rule"></div>
+      <div class="hint">terminal green/red · gold carries warn + info</div>
+    </div>
+    <div class="semantic">
+      <div class="s">
+        <span class="dot" style="background:#55ff55; box-shadow:0 0 10px #55ff55"></span>
+        <div><div class="t">success</div><div class="example">confirmed · synced</div></div>
+        <div class="hx">#55ff55</div>
+      </div>
+      <div class="s">
+        <span class="dot" style="background:#f4b728; box-shadow:0 0 10px #f4b72866"></span>
+        <div><div class="t">warning</div><div class="example">awaiting signer</div></div>
+        <div class="hx">#f4b728</div>
+      </div>
+      <div class="s">
+        <span class="dot" style="background:#ff5555; box-shadow:0 0 10px #ff555566"></span>
+        <div><div class="t">error</div><div class="example">signature rejected</div></div>
+        <div class="hx">#ff5555</div>
+      </div>
+      <div class="s">
+        <span class="dot" style="background:#f4b728"></span>
+        <div><div class="t">info</div><div class="example">(= warning tone)</div></div>
+        <div class="hx">#f4b728</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DEMO -->
+  <section class="section">
+    <div class="section-head">
+      <div class="n">07</div>
+      <div class="label">in context</div>
+      <div class="rule"></div>
+      <div class="hint">balance card · two chains</div>
+    </div>
+    <div class="demo">
+      <div class="panel">
+        <div class="k">total shielded · zcash</div>
+        <div class="v">84.2500<span class="u">ZEC</span></div>
+        <div class="sub">≈ $2,812.40 · block 1,247,892</div>
+        <div class="tag">synced</div>
+      </div>
+      <hr/>
+      <div class="panel" data-network="penumbra" style="--network-accent:#629994">
+        <div class="k">total shielded · penumbra</div>
+        <div class="v" style="color:#629994">1,284.0250<span class="u">UM</span></div>
+        <div class="sub">≈ $1,067.70 · block 3,820,004</div>
+        <div class="tag" style="color:#f4b728">awaiting signer</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- USAGE / RULES -->
+  <section class="section">
+    <div class="section-head">
+      <div class="n">08</div>
+      <div class="label">rules</div>
+      <div class="rule"></div>
+      <div class="hint">restraint over range</div>
+    </div>
+    <div class="usage">
+      <div class="card">
+        <div class="h">keep</div>
+        <div class="do">
+          <b>one</b> accent per view. rebind only through <b>[data-network]</b>.<br/>
+          <b>borders</b>, never shadows, express elevation.<br/>
+          <b>tabular-nums</b> on every figure, hash and timestamp.
+        </div>
+      </div>
+      <div class="card">
+        <div class="h">avoid</div>
+        <div class="dont">
+          gradients · aurora backgrounds · rainbow badges.<br/>
+          <b>coloured body text.</b> grey shades only.<br/>
+          soft pastels · anything that reads "fintech".
+        </div>
+      </div>
+      <div class="card">
+        <div class="h">instead of</div>
+        <div class="do">
+          a red error card → a single <b>#ff5555</b> word.<br/>
+          a success toast → a <b>#55ff55</b> dot next to the label.<br/>
+          multi-stop gradients → one colour on black.
+        </div>
+      </div>
+    </div>
+  </section>
+
+</div>
+</body>
+</html>

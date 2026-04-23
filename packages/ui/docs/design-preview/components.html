@@ -1,0 +1,342 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Zafu · Components</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body { background: #000; padding: 48px 56px; min-height: 100vh; }
+  .masthead { display: grid; grid-template-columns: 1fr auto; align-items: end; border-bottom: 1px solid var(--border); padding-bottom: 20px; margin-bottom: 36px; }
+  .kicker { font-size: 10px; color: var(--fg-dim); text-transform: lowercase; letter-spacing: .2em; margin-bottom: 6px; }
+  .masthead h1 { font-size: 36px; color: var(--fg-high); letter-spacing: -.01em; line-height: 1; }
+  .masthead h1 .s { color: var(--fg-dim); margin: 0 10px; }
+  .masthead h1 .a { color: var(--zigner-gold); }
+  .meta { text-align: right; font-size: 10px; color: var(--fg-dim); line-height: 1.7; }
+  .meta b { color: var(--fg-muted); font-weight: 400; }
+
+  .section { margin-top: 36px; }
+  .section-head { display: grid; grid-template-columns: 12ch 1fr auto; align-items: center; gap: 18px; margin-bottom: 18px; }
+  .section-head .n { font-size: 10px; color: var(--fg-dim); letter-spacing: .1em; font-variant-numeric: tabular-nums; }
+  .section-head .label { font-size: 11px; color: var(--fg-high); text-transform: lowercase; letter-spacing: .04em; }
+  .section-head .rule { height: 1px; background: var(--border); }
+  .section-head .hint { font-size: 10px; color: var(--fg-dim); text-transform: lowercase; }
+
+  /* ===== glass primitives =====
+     The Zafu glass: a very dark, slightly cool translucent fill with a 1px gold-tinted rim on top and a thin inner highlight. Never frosty white — the background behind must still feel black. */
+  .glass {
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0) 40%),
+      linear-gradient(180deg, rgba(10,10,10,0.72) 0%, rgba(4,4,4,0.82) 100%);
+    backdrop-filter: blur(10px) saturate(140%);
+    -webkit-backdrop-filter: blur(10px) saturate(140%);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-top-color: rgba(244,183,40,0.18);
+    border-radius: 6px;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.04),
+      inset 0 -1px 0 rgba(0,0,0,0.5),
+      0 8px 24px -12px rgba(0,0,0,0.8);
+  }
+
+  /* ===== BUTTONS =====
+     Classy, not glassy: flat solids, a crisp 1px rim, no inner highlights,
+     no translucency, no lift/press jump. Hover = a subtle rim + color shift. */
+  .btn {
+    position: relative;
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 18px;
+    font: inherit; font-size: 12.5px;
+    color: var(--fg-high);
+    background: #141414;
+    border: 1px solid #383838;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: color 120ms linear, border-color 120ms linear, background-color 120ms linear;
+    letter-spacing: .01em;
+  }
+  .btn:hover { color: var(--zigner-gold); border-color: #555; background: #1a1a1a; }
+  .btn:focus-visible { outline: none; border-color: var(--zigner-gold); box-shadow: 0 0 0 1px var(--zigner-gold); }
+
+  .btn.primary {
+    color: #0a0a0a;
+    background: var(--zigner-gold);
+    border: 1px solid var(--zigner-gold);
+  }
+  .btn.primary:hover { background: #fcd34d; border-color: #fcd34d; color: #0a0a0a; }
+
+  .btn.ghost {
+    background: transparent;
+    border: 1px solid #2a2a2a;
+    color: var(--fg);
+  }
+  .btn.ghost:hover { color: var(--zigner-gold); background: transparent; border-color: #444; }
+
+  .btn.destructive {
+    color: #ffb0b0;
+    background: #1a0c0c;
+    border: 1px solid #5a2020;
+  }
+  .btn.destructive:hover { color: #fff; border-color: #ff5555; background: #221010; }
+
+  .btn[disabled] { opacity: .45; cursor: not-allowed; }
+  .btn[disabled]:hover { color: var(--fg-high); border-color: #383838; background: #141414; }
+  .btn.sm { padding: 6px 12px; font-size: 11px; }
+  .btn.lg { padding: 14px 22px; font-size: 13.5px; }
+  .btn svg { width: 14px; height: 14px; }
+
+  /* ===== PILLS ===== */
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px;
+    font-size: 11px;
+    border-radius: 2px;
+    color: var(--fg-high);
+    background: #141414;
+    border: 1px solid #383838;
+    letter-spacing: .01em;
+    text-transform: lowercase;
+  }
+  .pill .ledge {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: currentColor;
+    flex-shrink: 0;
+  }
+  .pill.gold    { color: var(--zigner-gold); border-color: #6a4c10; background: #1a1405; }
+  .pill.success { color: #55ff55; border-color: #1a5020; background: #061a08; }
+  .pill.error   { color: #ff7070; border-color: #5a2020; background: #1a0808; }
+  .pill.dashed  { border-style: dashed; color: var(--fg-muted); border-color: #4a4a4a; background: transparent; }
+
+  .pill.chain-penumbra { color: #9bccc4; border-color: #2c4644; background: #0a1615; }
+  .pill.chain-osmo     { color: #c4b5fd; border-color: #3a2e5e; background: #0d0a1c; }
+  .pill.chain-noble    { color: #93c5fd; border-color: #1e3a5e; background: #0a1220; }
+
+  /* ===== INPUTS ===== */
+  .input-field label { display: block; font-size: 10px; color: var(--fg-muted); text-transform: lowercase; letter-spacing: .08em; margin-bottom: 6px; }
+  .input-field input {
+    width: 100%; box-sizing: border-box;
+    padding: 10px 12px; font: inherit; font-size: 13px;
+    color: var(--fg-high); background: #141414;
+    border: 1px solid #383838;
+    border-radius: 2px;
+    font-variant-numeric: tabular-nums;
+    font-variant-numeric: tabular-nums;
+  }
+  .input-field input:focus {
+    outline: none;
+    border-color: var(--zigner-gold);
+    box-shadow: 0 0 0 1px var(--zigner-gold);
+  }
+  .input-field.error input { border-color: rgba(255,85,85,0.5); }
+  .input-field .hint { font-size: 10px; color: var(--fg-dim); margin-top: 6px; }
+
+  /* ===== ROW / LIST ===== */
+  .list-card {
+    border-radius: 2px; overflow: hidden;
+    background: #0e0e0e;
+    border: 1px solid #2a2a2a;
+  }
+  .lrow { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #202020; }
+  .lrow:last-child { border-bottom: none; }
+  .lrow:hover { background: #141414; }
+  .lrow .l { display: flex; flex-direction: column; }
+  .lrow .t { font-size: 13px; color: var(--fg-high); }
+  .lrow .s { font-size: 10.5px; color: var(--fg-muted); text-transform: lowercase; }
+  .lrow .r { font-size: 13px; color: var(--zigner-gold); font-variant-numeric: tabular-nums; }
+
+  /* ===== DOTS ===== */
+  .dots-stage {
+    padding: 16px 20px; border-radius: 2px;
+    background: #0e0e0e;
+    border: 1px solid #2a2a2a;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .dots { display: flex; gap: 6px; align-items: center; }
+  .dots .d { width: 6px; height: 6px; border-radius: 50%; background: var(--fg-dim); opacity: .45; transition: 140ms; }
+  .dots .d.active { width: 8px; height: 8px; opacity: 1; }
+  .dots .zcash    { background: #f4b728; color: #f4b728; }
+  .dots .penumbra { background: #629994; color: #629994; }
+  .dots .osmosis  { background: #a78bfa; color: #a78bfa; }
+  .dots .noble    { background: #60a5fa; color: #60a5fa; }
+  .dots .celestia { background: #7c3aed; color: #7c3aed; }
+
+  /* ===== SWITCH ===== */
+  .sw-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid #202020; }
+  .sw-row:last-child { border-bottom: none; }
+  .sw-row .lbl { font-size: 12px; color: var(--fg-high); }
+  .sw-row .desc { font-size: 10px; color: var(--fg-muted); }
+  /* Switch — the ONE pill in the system. Toggles need an affordance that says "slides". */
+  .switch {
+    position: relative; width: 34px; height: 18px; border-radius: 9999px;
+    background: #141414;
+    border: 1px solid #3a3a3a;
+    cursor: pointer; transition: 160ms linear;
+  }
+  .switch::after {
+    content: ''; position: absolute; top: 2px; left: 2px;
+    width: 12px; height: 12px; border-radius: 50%;
+    background: #6a6a6a;
+    transition: 160ms linear;
+  }
+  .switch.on {
+    background: #100c04;
+    border-color: var(--zigner-gold);
+  }
+  .switch.on::after {
+    left: 18px;
+    background: var(--zigner-gold);
+  }
+
+  .panel {
+    padding: 18px 20px; border-radius: 2px;
+    background: #0e0e0e;
+    border: 1px solid #2a2a2a;
+  }
+  .panel h4 { color: var(--zigner-gold); font-size: 11px; text-transform: lowercase; letter-spacing: .04em; margin-bottom: 14px; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  .inline { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .stack { display: flex; flex-direction: column; gap: 14px; }
+</style>
+</head>
+<body>
+  <header class="masthead">
+    <div>
+      <div class="kicker">zafu design system / 03</div>
+      <h1>components<span class="s">·</span><span class="a">flat · sharp</span></h1>
+    </div>
+    <div class="meta"><b>material</b> flat · #141414 on #000<br/><b>radius</b> 2px (buttons, inputs, panels)<br/><b>motion</b> 120ms linear</div>
+  </header>
+
+  <section class="section">
+    <div class="section-head"><div class="n">01</div><div class="label">buttons</div><div class="rule"></div><div class="hint">one primary per screen</div></div>
+    <div class="grid">
+      <div class="panel">
+        <h4>primary · secondary · ghost</h4>
+        <div class="stack">
+          <div class="inline">
+            <button class="btn primary lg">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M21 2l-9.6 9.6"/><path d="M15.5 7.5 18 10"/></svg>
+              sign with zigner
+            </button>
+            <button class="btn">cancel</button>
+            <button class="btn ghost">skip</button>
+          </div>
+          <div class="inline">
+            <button class="btn primary">approve</button>
+            <button class="btn sm">resync</button>
+            <button class="btn sm ghost">+ add</button>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <h4>state</h4>
+        <div class="stack">
+          <div class="inline">
+            <button class="btn destructive">remove wallet</button>
+            <button class="btn" disabled>broadcasting…</button>
+          </div>
+          <div class="inline">
+            <button class="btn primary" disabled>insufficient balance</button>
+            <button class="btn destructive sm">delete key</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head"><div class="n">02</div><div class="label">pills · status · chain</div><div class="rule"></div><div class="hint">glass + tinted rim · dot for live state</div></div>
+    <div class="grid">
+      <div class="panel">
+        <h4>state</h4>
+        <div class="inline">
+          <span class="pill gold"><span class="ledge"></span>synced</span>
+          <span class="pill success"><span class="ledge"></span>confirmed</span>
+          <span class="pill error"><span class="ledge"></span>rejected</span>
+          <span class="pill"><span class="ledge" style="background:var(--fg-muted);box-shadow:none;"></span>pending · 1 of 2</span>
+          <span class="pill dashed">+ add contact</span>
+        </div>
+      </div>
+      <div class="panel">
+        <h4>chain</h4>
+        <div class="inline">
+          <span class="pill gold">zcash</span>
+          <span class="pill chain-penumbra">penumbra</span>
+          <span class="pill chain-osmo">osmosis</span>
+          <span class="pill chain-noble">noble</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head"><div class="n">03</div><div class="label">inputs</div><div class="rule"></div><div class="hint">recessed, focus = gold ring</div></div>
+    <div class="grid">
+      <div class="panel">
+        <h4>form fields</h4>
+        <div class="stack">
+          <div class="input-field"><label>recipient address</label><input value="u1m3f5q8xvpntu7zey5zkfhgwqa9ahq3hnjn8p4k" /></div>
+          <div class="input-field"><label>amount · zec</label><input value="10.2500" style="color: var(--zigner-gold)" /></div>
+          <div class="input-field error"><label>memo — too long</label><input value="gift for alice: happy birthday …" /></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h4>list · balances</h4>
+        <div class="list-card">
+          <div class="lrow"><div class="l"><div class="t">ZEC</div><div class="s">zcash · shielded</div></div><div class="r">84.2500</div></div>
+          <div class="lrow"><div class="l"><div class="t">UM</div><div class="s">penumbra · shielded</div></div><div class="r">1,284.0250</div></div>
+          <div class="lrow"><div class="l"><div class="t">USDC</div><div class="s">noble · ibc</div></div><div class="r">512.00</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head"><div class="n">04</div><div class="label">network dots · toggles</div><div class="rule"></div><div class="hint">the signature motif</div></div>
+    <div class="grid">
+      <div class="panel">
+        <h4>network dots</h4>
+        <div class="stack">
+          <div class="dots-stage">
+            <span class="dots">
+              <span class="d zcash active"></span>
+              <span class="d penumbra"></span>
+              <span class="d osmosis"></span>
+              <span class="d noble"></span>
+              <span class="d celestia"></span>
+            </span>
+            <span style="font-size: 10px; color: var(--fg-muted); text-transform: lowercase;">zcash · 4 more</span>
+          </div>
+          <div class="dots-stage">
+            <span class="dots">
+              <span class="d zcash"></span>
+              <span class="d penumbra active"></span>
+              <span class="d osmosis"></span>
+              <span class="d noble"></span>
+            </span>
+            <span style="font-size: 10px; color: var(--fg-muted); text-transform: lowercase;">penumbra · active</span>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <h4>toggles</h4>
+        <div>
+          <div class="sw-row">
+            <div><div class="lbl">enable testnet</div><div class="desc">routes rpc to test endpoints</div></div>
+            <span class="switch"></span>
+          </div>
+          <div class="sw-row">
+            <div><div class="lbl">use zigner signer</div><div class="desc">sign via air-gapped qr</div></div>
+            <span class="switch on"></span>
+          </div>
+          <div class="sw-row">
+            <div><div class="lbl">auto-broadcast</div><div class="desc">submit signed tx without prompt</div></div>
+            <span class="switch on"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</body>
+</html>

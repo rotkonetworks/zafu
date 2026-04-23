@@ -1,0 +1,258 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Zafu · Type</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  :root {
+    /* higher-contrast text shades for the specimen */
+    --t-high: #f5f5f5;
+    --t-body: #dcdcdc;
+    --t-mute: #8a8a8a;
+    --t-dim:  #5a5a5a;
+  }
+  body { background: #000; padding: 0; color: var(--t-body); }
+  .sheet { max-width: 1040px; margin: 0 auto; padding: 48px 56px 64px; }
+
+  .masthead { display: grid; grid-template-columns: 1fr auto; align-items: end; padding-bottom: 20px; border-bottom: 1px solid var(--border); margin-bottom: 40px; }
+  .kicker { font-size: 10px; color: var(--t-dim); text-transform: lowercase; letter-spacing: .2em; margin-bottom: 6px; }
+  .masthead h1 { font-size: 36px; color: var(--t-high); letter-spacing: -.01em; line-height: 1; }
+  .masthead h1 .s { color: var(--t-dim); margin: 0 10px; }
+  .masthead h1 .a { color: var(--zigner-gold); }
+  .meta { text-align: right; font-size: 10px; color: var(--t-dim); line-height: 1.7; font-variant-numeric: tabular-nums; }
+  .meta b { color: var(--t-mute); font-weight: 400; }
+
+  .section { margin-top: 40px; }
+  .section-head { display: grid; grid-template-columns: 12ch 1fr auto; align-items: center; gap: 18px; margin-bottom: 22px; }
+  .section-head .n { font-size: 10px; color: var(--t-dim); letter-spacing: .1em; font-variant-numeric: tabular-nums; }
+  .section-head .label { font-size: 11px; color: var(--t-high); text-transform: lowercase; letter-spacing: .04em; }
+  .section-head .rule { height: 1px; background: var(--border); }
+  .section-head .hint { font-size: 10px; color: var(--t-dim); text-transform: lowercase; }
+
+  /* Scale display: each size on its own line, big, with metrics on the right */
+  .scale-row {
+    display: grid; grid-template-columns: 7ch 1fr auto;
+    align-items: baseline;
+    gap: 28px;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .scale-row:last-child { border-bottom: none; }
+  .scale-row .n { font-size: 11px; color: var(--t-dim); font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+  .scale-row .sample { color: var(--t-high); letter-spacing: -.005em; }
+  .scale-row .m { text-align: right; font-size: 10px; color: var(--t-dim); font-variant-numeric: tabular-nums; line-height: 1.6; }
+  .scale-row .m b { color: var(--t-mute); font-weight: 400; }
+
+  .s-32 { font-size: 32px; color: var(--zigner-gold) !important; line-height: 1.1; }
+  .s-24 { font-size: 24px; color: var(--zigner-gold) !important; line-height: 1.2; }
+  .s-20 { font-size: 20px; color: var(--zigner-gold) !important; }
+  .s-18 { font-size: 18px; color: var(--zigner-gold) !important; }
+  .s-16 { font-size: 16px; }
+  .s-15 { font-size: 15px; }
+  .s-14 { font-size: 14px; }
+  .s-13 { font-size: 13px; }
+  .s-12 { font-size: 12px; color: var(--t-body); }
+  .s-11 { font-size: 11px; color: var(--t-mute); text-transform: lowercase; letter-spacing: .06em; }
+  .s-10 { font-size: 10px; color: var(--t-dim); font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+
+  /* Color / weight usage in context */
+  .contrast-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
+    background: var(--border); border: 1px solid var(--border); border-radius: 4px; overflow: hidden;
+  }
+  .contrast-grid .cell {
+    background: #000; padding: 22px 20px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .contrast-grid .cell .swatch { height: 28px; border-radius: 2px; margin-bottom: 10px; }
+  .contrast-grid .cell .name { font-size: 11px; color: var(--t-high); text-transform: lowercase; letter-spacing: .02em; }
+  .contrast-grid .cell .role { font-size: 10px; color: var(--t-dim); text-transform: lowercase; }
+  .contrast-grid .cell .hex { font-size: 10px; color: var(--t-mute); font-variant-numeric: tabular-nums; margin-top: 6px; }
+  .contrast-grid .cell .example {
+    margin-top: 14px; padding-top: 14px; border-top: 1px solid #1a1a1a;
+    font-size: 13px;
+  }
+  .contrast-grid .cell .ratio {
+    font-size: 10px; color: var(--t-mute); margin-top: 6px; font-variant-numeric: tabular-nums;
+  }
+  .contrast-grid .cell .ratio b { color: var(--success); font-weight: 400; }
+
+  /* Numbers in context */
+  .numbers {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 40px;
+    padding: 8px 0;
+  }
+  .num-panel {
+    padding: 24px 26px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: linear-gradient(180deg, #0a0a0a, #050505);
+  }
+  .num-panel .k { font-size: 10px; color: var(--t-dim); text-transform: lowercase; letter-spacing: .08em; margin-bottom: 6px; }
+  .num-panel .v {
+    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+    letter-spacing: -.01em;
+  }
+  .num-panel .v .u { color: var(--t-mute); margin-left: 8px; letter-spacing: 0; }
+  .num-panel .aux { font-size: 11px; color: var(--t-mute); margin-top: 6px; font-variant-numeric: tabular-nums; }
+
+  /* Address / hash row */
+  .addr-stack {
+    padding: 0 24px;
+    display: grid; gap: 14px;
+  }
+  .addr-row {
+    display: grid; grid-template-columns: 12ch 1fr auto; align-items: baseline;
+    gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--border-soft);
+  }
+  .addr-row:last-child { border: none; }
+  .addr-row .k { font-size: 10px; color: var(--t-dim); text-transform: lowercase; letter-spacing: .06em; }
+  .addr-row .v { font-family: var(--font-mono); color: var(--t-body); font-variant-numeric: tabular-nums; font-size: 13px; word-break: break-all; }
+  .addr-row .v .gold { color: var(--zigner-gold); }
+  .addr-row .v .dim { color: var(--t-dim); }
+  .addr-row .tag { font-size: 10px; color: var(--success); text-transform: lowercase; }
+
+  .footer-note {
+    margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--border);
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px;
+  }
+  .footer-note .k { font-size: 10px; color: var(--t-dim); text-transform: lowercase; letter-spacing: .08em; margin-bottom: 6px; }
+  .footer-note .v { font-size: 12px; color: var(--t-high); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="masthead">
+    <div>
+      <div class="kicker">zafu design system / 04</div>
+      <h1>type<span class="s">·</span><span class="a">iosevka term ss03</span></h1>
+    </div>
+    <div class="meta">
+      <b>family</b> iosevka term ss03<br/>
+      <b>weights</b> 400 only · regular + italic<br/>
+      <b>base</b> 13px · 1.5 · tabular
+    </div>
+  </header>
+
+  <section class="section">
+    <div class="section-head">
+      <div class="n">01</div>
+      <div class="label">scale · 10 → 32</div>
+      <div class="rule"></div>
+      <div class="hint">hierarchy by color + size · never by weight</div>
+    </div>
+
+    <div>
+      <div class="scale-row"><div class="n">32</div><div class="sample s-32">zafu wallet</div><div class="m"><b>h0 · display</b>1.1 line · gold</div></div>
+      <div class="scale-row"><div class="n">24</div><div class="sample s-24">send shielded zec</div><div class="m"><b>h1 · screen</b>1.2 line · gold</div></div>
+      <div class="scale-row"><div class="n">20</div><div class="sample s-20">approve on zigner</div><div class="m"><b>h2 · section</b>gold</div></div>
+      <div class="scale-row"><div class="n">18</div><div class="sample s-18">awaiting signer</div><div class="m"><b>h2s · state</b>gold</div></div>
+      <div class="scale-row"><div class="n">16</div><div class="sample s-16">Shielded balance across four chains</div><div class="m"><b>h3 · lead</b>high ink</div></div>
+      <div class="scale-row"><div class="n">15</div><div class="sample s-15">The quick brown fox jumps over 13 lazy dogs</div><div class="m"><b>lg · emphasis</b>body-high</div></div>
+      <div class="scale-row"><div class="n">14</div><div class="sample s-14">Shielded transfer built — approve on zigner to sign the transaction</div><div class="m"><b>md · body+</b>body</div></div>
+      <div class="scale-row"><div class="n">13</div><div class="sample s-13">Zafu holds only your viewing key. Signing happens on the air-gapped zigner device via an animated QR handoff.</div><div class="m"><b>body · base</b>body</div></div>
+      <div class="scale-row"><div class="n">12</div><div class="sample s-12">no fee estimation available for this asset yet</div><div class="m"><b>sm · meta</b>body</div></div>
+      <div class="scale-row"><div class="n">11</div><div class="sample s-11">block sync · 1,247,892 / 1,247,892</div><div class="m"><b>label</b>muted · .06em</div></div>
+      <div class="scale-row"><div class="n">10</div><div class="sample s-10">2026-04-23 · 14:12:03 UTC</div><div class="m"><b>meta</b>dim · tabular</div></div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <div class="n">02</div>
+      <div class="label">ink · four shades of grey</div>
+      <div class="rule"></div>
+      <div class="hint">hierarchy by grey weight — tuned for wcag aa on #000</div>
+    </div>
+    <div class="contrast-grid">
+      <div class="cell">
+        <div class="swatch" style="background: #f5f5f5"></div>
+        <div class="name">fg-high</div>
+        <div class="role">titles · selected</div>
+        <div class="hex">#f5f5f5</div>
+        <div class="example" style="color:#f5f5f5">Signed by zigner · ready</div>
+        <div class="ratio"><b>18.5 : 1</b> · AAA</div>
+      </div>
+      <div class="cell">
+        <div class="swatch" style="background: #dcdcdc"></div>
+        <div class="name">fg (body)</div>
+        <div class="role">default body</div>
+        <div class="hex">#dcdcdc</div>
+        <div class="example" style="color:#dcdcdc">Scan the animated QR to complete</div>
+        <div class="ratio"><b>14.1 : 1</b> · AAA</div>
+      </div>
+      <div class="cell">
+        <div class="swatch" style="background: #8a8a8a"></div>
+        <div class="name">fg-muted</div>
+        <div class="role">secondary · status</div>
+        <div class="hex">#8a8a8a</div>
+        <div class="example" style="color:#8a8a8a">awaiting signer · 2/3 frames</div>
+        <div class="ratio"><b>5.6 : 1</b> · AA</div>
+      </div>
+      <div class="cell">
+        <div class="swatch" style="background: #5a5a5a"></div>
+        <div class="name">fg-dim</div>
+        <div class="role">meta · timestamps</div>
+        <div class="hex">#5a5a5a</div>
+        <div class="example" style="color:#5a5a5a">2026-04-23 · 14:12 UTC</div>
+        <div class="ratio"><b>3.1 : 1</b> · AA large</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <div class="n">03</div>
+      <div class="label">numbers · tabular nums</div>
+      <div class="rule"></div>
+      <div class="hint">every figure vertically aligns · every address mono-spaced</div>
+    </div>
+    <div class="numbers">
+      <div class="num-panel">
+        <div class="k">shielded balance · zcash</div>
+        <div class="v" style="font-size: 34px; color: var(--zigner-gold);">84.2500<span class="u" style="font-size: 13px;">ZEC</span></div>
+        <div class="aux">≈ $2,812.40 · block 1,247,892</div>
+      </div>
+      <div class="num-panel">
+        <div class="k">shielded balance · penumbra</div>
+        <div class="v" style="font-size: 34px; color: #9bccc4;">1,284.0250<span class="u" style="font-size: 13px;">UM</span></div>
+        <div class="aux">≈ $1,067.70 · block 3,820,004</div>
+      </div>
+    </div>
+
+    <div class="addr-stack" style="margin-top: 24px;">
+      <div class="addr-row">
+        <div class="k">txid</div>
+        <div class="v"><span class="gold">a3f9…e81c</span> <span class="dim">· 0x… full</span></div>
+        <div class="tag">confirmed</div>
+      </div>
+      <div class="addr-row">
+        <div class="k">to</div>
+        <div class="v">penumbra1qwz8x4n9k2v3r5m7t8y0p1q2w3e4r5t6y7u8i9o0p1a<span class="dim">2s3d4f5g6h7j8k9l0zmn</span></div>
+        <div class="tag" style="color: var(--t-mute)">shielded</div>
+      </div>
+      <div class="addr-row">
+        <div class="k">amount</div>
+        <div class="v"><span class="gold">10.0000</span> ZEC <span class="dim">· $334.20</span></div>
+        <div class="tag" style="color: var(--t-mute)">out</div>
+      </div>
+      <div class="addr-row">
+        <div class="k">fee</div>
+        <div class="v">0.0001 ZEC <span class="dim">· $0.0033</span></div>
+        <div class="tag" style="color: var(--t-mute)">—</div>
+      </div>
+    </div>
+  </section>
+
+  <div class="footer-note">
+    <div><div class="k">family</div><div class="v">Iosevka Term SS03</div></div>
+    <div><div class="k">weights</div><div class="v">400 (reg · italic)</div></div>
+    <div><div class="k">numeric</div><div class="v">tabular on all figures</div></div>
+    <div><div class="k">case</div><div class="v">lowercase ui · sentence prose</div></div>
+  </div>
+
+</div>
+</body>
+</html>
