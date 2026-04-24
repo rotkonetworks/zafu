@@ -1099,7 +1099,7 @@ function FlatMessageRow({
 function EmptyState({ text, subtitle }: { text: string; subtitle: string }) {
   return (
     <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
-      <div className='rounded-full bg-primary/10 p-4'>
+      <div className='rounded-lg bg-zigner-gold/10 p-4'>
         <span className='i-lucide-mail h-8 w-8 text-zigner-gold' />
       </div>
       <div>

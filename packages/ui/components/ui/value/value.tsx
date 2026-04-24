@@ -106,7 +106,7 @@ const UnbondingTooltipContent = ({
         <button
           type='button'
           onClick={e => { e.stopPropagation(); onClaim(); }}
-          className='mt-1 rounded-md bg-teal px-3 py-1.5 text-sm font-medium text-black hover:bg-teal/80 transition-colors'
+          className='mt-1 rounded-md bg-zigner-gold px-3 py-1.5 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors'
         >
           Claim
         </button>
@@ -115,7 +115,7 @@ const UnbondingTooltipContent = ({
         href={UNBONDING_DOCS_URL}
         target='_blank'
         rel='noopener noreferrer'
-        className='text-[10px] text-teal hover:underline'
+        className='text-[10px] text-zigner-gold hover:underline'
       >
         Learn more
       </a>

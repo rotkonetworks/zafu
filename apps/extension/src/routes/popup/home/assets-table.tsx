@@ -296,34 +296,36 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
 
   return (
     <>
-      <Table>
-        <TableHeader className='group'>
-          <TableRow>
-            <TableHead>Balance</TableHead>
-            <TableHead>Value</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {balances.map((balance, i) => {
-            const info = getUnbondingInfo(balance);
-            const validatorName = info?.idKey ? validatorNames?.get(info.idKey) : undefined;
+      <div className='rounded-lg border border-border-soft bg-elev-1 overflow-hidden [&_td]:px-3 [&_th]:px-3'>
+        <Table>
+          <TableHeader className='group'>
+            <TableRow>
+              <TableHead>Balance</TableHead>
+              <TableHead>Value</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {balances.map((balance, i) => {
+              const info = getUnbondingInfo(balance);
+              const validatorName = info?.idKey ? validatorNames?.get(info.idKey) : undefined;
 
-            // determine if this unbonding token is ready to claim
-            const isReady = info && latestBlockHeight !== undefined
-              && latestBlockHeight >= info.startAt + UNBONDING_DELAY_BLOCKS;
+              // determine if this unbonding token is ready to claim
+              const isReady = info && latestBlockHeight !== undefined
+                && latestBlockHeight >= info.startAt + UNBONDING_DELAY_BLOCKS;
 
-            return (
-              <AssetRow
-                key={i}
-                balance={balance}
-                currentBlockHeight={latestBlockHeight}
-                validatorName={validatorName}
-                onClaim={isReady ? () => openClaimForBalance(balance) : undefined}
-              />
-            );
-          })}
-        </TableBody>
-      </Table>
+              return (
+                <AssetRow
+                  key={i}
+                  balance={balance}
+                  currentBlockHeight={latestBlockHeight}
+                  validatorName={validatorName}
+                  onClaim={isReady ? () => openClaimForBalance(balance) : undefined}
+                />
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
 
       {/* claim confirmation modal */}
       {claimBalance && claimStatus !== 'idle' && (
