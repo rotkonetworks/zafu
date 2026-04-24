@@ -51,7 +51,15 @@ waitForMsgType(self, 'wasm_bindgen_worker_init').then(async ({ init, receiver })
   // OTOH, even though it can't be inlined, it should be still reasonably
   // cheap since the requested file is already in cache (it was loaded by
   // the main thread).
-  const pkg = await import('../../..');
+  // ── LOCAL PATCH — DO NOT OVERWRITE BY RERUNNING wasm-bindgen ──
+  // Stock wasm-bindgen-rayon uses `await import('../../..')` which
+  // resolves to the parent directory. Web browsers accept directory
+  // imports; Chrome extensions don't — directory imports throw.
+  // Resolve to the concrete JS entry instead. Reapply on rebuild:
+  // stock line was `const pkg = await import('../../..');`
+  // ───────────────────────────────────────────────────────────────
+  const base = new URL('../../..', import.meta.url).href;
+  const pkg = await import(base.endsWith('/') ? base + 'zafu_wasm.js' : base);
   await pkg.default(init);
   postMessage({ type: 'wasm_bindgen_worker_ready' });
   pkg.wbg_rayon_start_worker(receiver);

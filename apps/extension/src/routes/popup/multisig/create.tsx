@@ -13,7 +13,9 @@ import {
   frostDkgPart1InWorker,
   frostDkgPart2InWorker,
   frostDkgPart3InWorker,
-  frostDeriveAddressInWorker,
+  frostDeriveAddressFromSkInWorker,
+  frostSampleFvkSkInWorker,
+  frostDeriveUfvkInWorker,
 } from '../../../state/keyring/network-worker';
 import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../../state/frost-session';
 import { useDeadlineCountdown } from '../../../hooks/use-deadline-countdown';
@@ -27,6 +29,7 @@ type Step =
   | 'dkg-round1'
   | 'dkg-round2'
   | 'dkg-round3'
+  | 'fvk-echo'
   | 'complete'
   | 'error';
 
@@ -53,7 +56,9 @@ export const MultisigCreate = () => {
   const newFrostMultisigKey = useStore(s => s.keyRing.newFrostMultisigKey);
 
   const countdown = useDeadlineCountdown(
-    step === 'waiting' || step.startsWith('dkg-round') ? deadline : null,
+    step === 'waiting' || step.startsWith('dkg-round') || step === 'fvk-echo'
+      ? deadline
+      : null,
   );
 
   const handleCreate = async () => {
@@ -85,14 +90,21 @@ export const MultisigCreate = () => {
 
       const peerBroadcasts: string[] = [];
       const peerRound2: string[] = [];
+      const peerFvks: string[] = [];
 
-      // messages are tagged with their round at send time (R1: / R2:) so the
-      // receiver can bucket them correctly regardless of its own local phase.
-      // without this, a faster peer could send its round 2 package before we
-      // transitioned out of round 1 locally, and we'd push the r2 package
-      // into peerBroadcasts — dkg_part2 would then fail to parse it as an r1
-      // broadcast. host additionally embeds T:N in its r1 so fresh joiners
-      // can read the params off the wire.
+      // host samples the nk/rivk-deriving `sk` and broadcasts it alongside
+      // T:N in its own R1. every peer reconstructs the same UFVK locally
+      // via frostDeriveUfvkInWorker(pkg, sk, mainnet). we echo-broadcast
+      // the resulting UFVK after round 3 and abort on any mismatch —
+      // that's what guards against a tampered broadcast.
+      const fvkSk = await frostSampleFvkSkInWorker();
+
+      // messages are tagged with their round at send time (R1: / R2: / FVK:)
+      // so receivers bucket by sender's phase, not their own. a faster peer
+      // could otherwise send round 2 before we left round 1 locally, and we'd
+      // push the r2 package into peerBroadcasts. host additionally embeds
+      // T:N:SK:<hex> in its r1 so fresh joiners can read the DKG params and
+      // the shared fvk seed off the wire.
       let joined = false;
       void relay.joinRoom(
         code,
@@ -103,9 +115,11 @@ export const MultisigCreate = () => {
             setParticipantCount(event.participant.participantCount);
           } else if (event.type === 'message') {
             const text = new TextDecoder().decode(event.message.payload);
-            const r1 = text.match(/^R1:(?:(\d+):(\d+):)?([\s\S]*)$/);
+            // host form: R1:T:N:SK:<64-hex>:<broadcast>
+            // peer form: R1:<broadcast>
+            const r1 = text.match(/^R1:(?:(\d+):(\d+):SK:([0-9a-fA-F]{64}):)?([\s\S]*)$/);
             if (r1) {
-              peerBroadcasts.push(r1[3]!);
+              peerBroadcasts.push(r1[4]!);
               return;
             }
             const r2 = text.match(/^R2:([\s\S]*)$/);
@@ -113,7 +127,11 @@ export const MultisigCreate = () => {
               peerRound2.push(r2[1]!);
               return;
             }
-            // unknown/legacy message — drop rather than corrupt a bucket
+            const fvk = text.match(/^FVK:([\s\S]*)$/);
+            if (fvk) {
+              peerFvks.push(fvk[1]!);
+              return;
+            }
             console.warn('[multisig-create] unknown frost message, dropping:', text.slice(0, 32));
           } else if (event.type === 'closed') {
             setError(`room closed: ${event.reason}`);
@@ -126,8 +144,9 @@ export const MultisigCreate = () => {
       // wait until we're joined before sending
       await waitForUntil(() => joined, sessionDeadline);
 
-      // send our round1 broadcast with round tag + DKG params for fresh joiners
-      const prefixedBroadcast = `R1:${threshold}:${maxSigners}:${round1.broadcast}`;
+      // send our round1 broadcast — host embeds T:N + the fvk sk so joiners
+      // can derive the identical UFVK locally
+      const prefixedBroadcast = `R1:${threshold}:${maxSigners}:SK:${fvkSk}:${round1.broadcast}`;
       await relay.sendMessage(code, participantId, new TextEncoder().encode(prefixedBroadcast));
 
       await waitForUntil(() => peerBroadcasts.length >= maxSigners - 1, sessionDeadline);
@@ -157,12 +176,35 @@ export const MultisigCreate = () => {
       setStep('dkg-round3');
       const round3 = await frostDkgPart3InWorker(round2.secret, peerBroadcasts, peerRound2);
 
-      const addr = await frostDeriveAddressInWorker(round3.public_key_package, 0);
+      // derive address + UFVK from the same (pkg, sk) pair so they share
+      // one source of truth for nk/rivk. using the non-sk address derivation
+      // here would produce per-participant random addresses even though the
+      // UFVK agrees — wallet records would diverge silently.
+      const addr = await frostDeriveAddressFromSkInWorker(round3.public_key_package, fvkSk, 0);
       setAddress(addr);
+
+      const orchardFvk = await frostDeriveUfvkInWorker(round3.public_key_package, fvkSk, true);
+
+      // echo-broadcast our UFVK, wait for every peer's echo, abort on any
+      // mismatch. this catches a dishonest host (sending different sk to
+      // different peers), a corrupted R1 broadcast, or any bug in local
+      // derivation — all before we commit anything to storage.
+      setStep('fvk-echo');
+      await relay.sendMessage(code, participantId, new TextEncoder().encode(`FVK:${orchardFvk}`));
+      await waitForUntil(() => peerFvks.length >= maxSigners - 1, sessionDeadline);
+      for (const peerFvk of peerFvks) {
+        if (peerFvk !== orchardFvk) {
+          throw new Error(
+            `FVK mismatch: peer saw a different viewing key — ` +
+              `ours ends …${orchardFvk.slice(-8)}, theirs ends …${peerFvk.slice(-8)}`,
+          );
+        }
+      }
 
       await newFrostMultisigKey({
         label: `${threshold}-of-${maxSigners} multisig`,
         address: addr,
+        orchardFvk,
         keyPackage: round3.key_package,
         publicKeyPackage: round3.public_key_package,
         ephemeralSeed: round3.ephemeral_seed,
@@ -324,6 +366,19 @@ export const MultisigCreate = () => {
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {step === 'fvk-echo' && (
+        <div className='flex flex-col items-center gap-3'>
+          <div className='flex items-center gap-2 text-xs text-fg-muted'>
+            <span className='i-lucide-loader-2 size-3.5 animate-spin' />
+            verifying viewing key agreement...
+            <span className='tabular-nums text-fg-dim'>{countdown}s</span>
+          </div>
+          <p className='text-[10px] text-fg-muted'>
+            every participant must see the same UFVK before the wallet is saved
+          </p>
         </div>
       )}
 

@@ -12,7 +12,8 @@ import {
   frostDkgPart1InWorker,
   frostDkgPart2InWorker,
   frostDkgPart3InWorker,
-  frostDeriveAddressInWorker,
+  frostDeriveAddressFromSkInWorker,
+  frostDeriveUfvkInWorker,
 } from '../../../state/keyring/network-worker';
 import { FrostRelayClient } from '../../../state/keyring/frost-relay-client';
 import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../../state/frost-session';
@@ -20,7 +21,7 @@ import { useDeadlineCountdown } from '../../../hooks/use-deadline-countdown';
 import { SettingsScreen } from '../settings/settings-screen';
 import { PopupPath } from '../paths';
 
-type Step = 'input' | 'joining' | 'dkg' | 'complete' | 'error';
+type Step = 'input' | 'joining' | 'dkg' | 'fvk-echo' | 'complete' | 'error';
 
 export const MultisigJoin = () => {
   const [roomCode, setRoomCode] = useState('');
@@ -37,7 +38,7 @@ export const MultisigJoin = () => {
   const newFrostMultisigKey = useStore(s => s.keyRing.newFrostMultisigKey);
 
   const countdown = useDeadlineCountdown(
-    step === 'joining' || step === 'dkg' ? deadline : null,
+    step === 'joining' || step === 'dkg' || step === 'fvk-echo' ? deadline : null,
   );
 
   const handleJoin = async () => {
@@ -56,8 +57,10 @@ export const MultisigJoin = () => {
 
       let threshold = 0;
       let maxSignersLocal = 0;
+      let fvkSk = '';
       const peerBroadcasts: string[] = [];
       const peerRound2: string[] = [];
+      const peerFvks: string[] = [];
 
       setStep('dkg');
       setProgress('waiting for coordinator...');
@@ -67,24 +70,30 @@ export const MultisigJoin = () => {
           setParticipantCount(event.participant.participantCount);
         } else if (event.type === 'message') {
           const text = new TextDecoder().decode(event.message.payload);
-          // messages are tagged with their round (R1: / R2:) so we bucket by
-          // sender's phase, not ours. a faster peer could otherwise send its
-          // r2 packages before we leave r1 locally and we'd misfile them.
-          const r1 = text.match(/^R1:(?:(\d+):(\d+):)?([\s\S]*)$/);
+          // messages are tagged with their round (R1: / R2: / FVK:) so we
+          // bucket by sender's phase, not ours. host's R1 additionally
+          // carries T:N + the 32-byte fvk seed (SK) so we learn both off
+          // the wire and can derive the shared UFVK locally.
+          const r1 = text.match(/^R1:(?:(\d+):(\d+):SK:([0-9a-fA-F]{64}):)?([\s\S]*)$/);
           if (r1) {
-            if (r1[1] && r1[2]) {
-              // host's r1 carries T:N so we learn the DKG params off the wire
+            if (r1[1] && r1[2] && r1[3]) {
               threshold = Number(r1[1]);
               maxSignersLocal = Number(r1[2]);
+              fvkSk = r1[3];
               setThresholdInfo(`${threshold}-of-${maxSignersLocal}`);
               setMaxSignersDisplay(maxSignersLocal);
             }
-            peerBroadcasts.push(r1[3]!);
+            peerBroadcasts.push(r1[4]!);
             return;
           }
           const r2 = text.match(/^R2:([\s\S]*)$/);
           if (r2) {
             peerRound2.push(r2[1]!);
+            return;
+          }
+          const fvk = text.match(/^FVK:([\s\S]*)$/);
+          if (fvk) {
+            peerFvks.push(fvk[1]!);
             return;
           }
           console.warn('[multisig-join] unknown frost message, dropping:', text.slice(0, 32));
@@ -94,7 +103,10 @@ export const MultisigJoin = () => {
         }
       }, abortController.signal);
 
-      await waitForUntil(() => threshold > 0 && maxSignersLocal > 0, sessionDeadline);
+      await waitForUntil(
+        () => threshold > 0 && maxSignersLocal > 0 && fvkSk.length === 64,
+        sessionDeadline,
+      );
       setProgress('round 1: generating commitment...');
 
       const round1 = await frostDkgPart1InWorker(maxSignersLocal, threshold);
@@ -124,12 +136,33 @@ export const MultisigJoin = () => {
         peerRound2,
       );
 
-      const addr = await frostDeriveAddressInWorker(round3.public_key_package, 0);
+      // derive address + UFVK from the same (pkg, sk) pair so coordinator
+      // and joiner converge on byte-identical values for both.
+      const addr = await frostDeriveAddressFromSkInWorker(round3.public_key_package, fvkSk, 0);
       setAddress(addr);
+
+      const orchardFvk = await frostDeriveUfvkInWorker(round3.public_key_package, fvkSk, true);
+
+      // echo-broadcast our UFVK and wait for every peer's echo. any
+      // disagreement means someone saw a different sk or derived
+      // incorrectly; abort before persisting anything.
+      setStep('fvk-echo');
+      setProgress('verifying viewing key agreement...');
+      await relay.sendMessage(roomCode.trim(), participantId, new TextEncoder().encode(`FVK:${orchardFvk}`));
+      await waitForUntil(() => peerFvks.length >= maxSignersLocal - 1, sessionDeadline);
+      for (const peerFvk of peerFvks) {
+        if (peerFvk !== orchardFvk) {
+          throw new Error(
+            `FVK mismatch: peer saw a different viewing key — ` +
+              `ours ends …${orchardFvk.slice(-8)}, theirs ends …${peerFvk.slice(-8)}`,
+          );
+        }
+      }
 
       await newFrostMultisigKey({
         label: `${threshold}-of-${maxSignersLocal} multisig`,
         address: addr,
+        orchardFvk,
         keyPackage: round3.key_package,
         publicKeyPackage: round3.public_key_package,
         ephemeralSeed: round3.ephemeral_seed,
@@ -180,7 +213,7 @@ export const MultisigJoin = () => {
         </div>
       )}
 
-      {(step === 'joining' || step === 'dkg') && (
+      {(step === 'joining' || step === 'dkg' || step === 'fvk-echo') && (
         <div className='flex flex-col items-center gap-4'>
           {thresholdInfo && (
             <span className='rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-zigner-gold'>

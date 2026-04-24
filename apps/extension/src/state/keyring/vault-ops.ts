@@ -92,6 +92,11 @@ export const buildZignerVault = (
 export interface FrostMultisigParams {
   label: string;
   address: string;
+  /** Orchard-only UFVK (`uview1…`) — derived from the group public key
+   * package + the host-broadcast `sk`. every participant computes this
+   * locally and we verify agreement via echo-broadcast before persisting,
+   * so this value is guaranteed to match across all N participants. */
+  orchardFvk: string;
   keyPackage: string;
   publicKeyPackage: string;
   ephemeralSeed: string;
@@ -129,7 +134,7 @@ export const buildFrostZcashWallet = (
 ): ZcashWalletJson => ({
   id: generateZcashWalletId(),
   label: params.label,
-  orchardFvk: '',
+  orchardFvk: params.orchardFvk,
   address: params.address,
   accountIndex: 0,
   mainnet: true,

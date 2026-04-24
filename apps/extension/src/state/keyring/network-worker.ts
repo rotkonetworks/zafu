@@ -17,7 +17,7 @@
 import type { NetworkType } from './types';
 
 export interface NetworkWorkerMessage {
-  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-multi' | 'send-tx-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'note-sync-encode' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos' | 'frost-dkg-part1' | 'frost-dkg-part2' | 'frost-dkg-part3' | 'frost-sign-round1' | 'frost-spend-sign' | 'frost-spend-aggregate' | 'frost-derive-address';
+  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-multi' | 'send-tx-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'note-sync-encode' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos' | 'frost-dkg-part1' | 'frost-dkg-part2' | 'frost-dkg-part3' | 'frost-sign-round1' | 'frost-spend-sign' | 'frost-spend-aggregate' | 'frost-derive-address' | 'frost-derive-address-from-sk' | 'frost-sample-fvk-sk' | 'frost-derive-ufvk';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -665,12 +665,50 @@ export const frostSpendAggregateInWorker = async (
   });
 };
 
-/** derive multisig Orchard address from FROST group key */
+/** derive multisig Orchard address from FROST group key (non-deterministic
+ * — only use for single-party derive-and-broadcast flows) */
 export const frostDeriveAddressInWorker = async (
   publicKeyPackageHex: string,
   diversifierIndex: number,
 ): Promise<string> => {
   return callWorker('zcash', 'frost-derive-address', { publicKeyPackageHex, diversifierIndex });
+};
+
+/** derive multisig Orchard address deterministically from pkg + host-broadcast sk.
+ * pair with `frostDeriveUfvkInWorker` so address and UFVK share one source of
+ * truth for nk/rivk — otherwise participants end up with matching UFVK but
+ * different addresses. */
+export const frostDeriveAddressFromSkInWorker = async (
+  publicKeyPackageHex: string,
+  skHex: string,
+  diversifierIndex: number,
+): Promise<string> => {
+  return callWorker('zcash', 'frost-derive-address-from-sk', {
+    publicKeyPackageHex, skHex, diversifierIndex,
+  });
+};
+
+/**
+ * host-only: sample a random 32-byte `sk` (hex) for nk/rivk derivation.
+ * the host then broadcasts this sk to peers in its R1 message so every
+ * participant can reconstruct the same UFVK locally.
+ */
+export const frostSampleFvkSkInWorker = async (): Promise<string> => {
+  return callWorker('zcash', 'frost-sample-fvk-sk', {});
+};
+
+/**
+ * derive the Orchard-only UFVK string (`uview1…`) from the FROST group
+ * public key package and the host-broadcast `sk`. given identical inputs
+ * on every participant, output is byte-identical — this is the property
+ * we echo-broadcast to verify before persisting the wallet.
+ */
+export const frostDeriveUfvkInWorker = async (
+  publicKeyPackageHex: string,
+  skHex: string,
+  mainnet: boolean,
+): Promise<string> => {
+  return callWorker('zcash', 'frost-derive-ufvk', { publicKeyPackageHex, skHex, mainnet });
 };
 
 // worker URLs per network

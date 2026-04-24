@@ -288,8 +288,28 @@ export function frost_dealer_keygen(min_signers: number, max_signers: number): s
 
 /**
  * derive the multisig wallet's Orchard address (raw 43-byte address, hex-encoded)
+ * from the group public key package and a caller-supplied `sk`. deterministic —
+ * every participant computing this with the same inputs lands on byte-identical
+ * output. pair with `frost_derive_ufvk(pkg, sk, mainnet)` so the stored address
+ * and stored UFVK share a single source of truth for nk/rivk.
+ */
+export function frost_derive_address_from_sk(public_key_package_hex: string, sk_hex: string, diversifier_index: number): string;
+
+/**
+ * derive the multisig wallet's Orchard address (raw 43-byte address, hex-encoded).
+ * non-deterministic — internally generates a random nk/rivk. only safe when a
+ * single party derives-and-broadcasts. interactive DKG should use
+ * `frost_derive_address_from_sk` instead.
  */
 export function frost_derive_address_raw(public_key_package_hex: string, diversifier_index: number): string;
+
+/**
+ * derive the Orchard-only UFVK string (`uview1…` / `uviewtest1…`) from a
+ * caller-supplied 32-byte SpendingKey and a FROST public key package.
+ * every participant, given the same `sk_hex` + `public_key_package_hex`,
+ * lands on byte-identical output.
+ */
+export function frost_derive_ufvk(public_key_package_hex: string, sk_hex: string, mainnet: boolean): string;
 
 /**
  * DKG round 1: generate ephemeral identity + signed commitment
@@ -310,6 +330,13 @@ export function frost_dkg_part3(secret_hex: string, round1_broadcasts_json: stri
  * coordinator: generate signed randomizer
  */
 export function frost_generate_randomizer(ephemeral_seed_hex: string, message_hex: string, commitments_json: string): string;
+
+/**
+ * host-only: sample a random 32-byte SpendingKey for nk/rivk derivation.
+ * retries until the sampled bytes land in the Pallas scalar range.
+ * returns hex-encoded 32-byte `sk` that the host broadcasts to peers in R1.
+ */
+export function frost_sample_fvk_sk(): string;
 
 /**
  * signing round 1: generate nonces + signed commitments
@@ -443,7 +470,6 @@ export function zt_encode_frames(cbor_data: Uint8Array, zt_type: string, k: numb
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
-    readonly memory: WebAssembly.Memory;
     readonly __wbg_walletkeys_free: (a: number, b: number) => void;
     readonly __wbg_watchonlywallet_free: (a: number, b: number) => void;
     readonly address_from_ufvk: (a: number, b: number, c: number) => [number, number, number, number];
@@ -497,11 +523,14 @@ export interface InitOutput {
     readonly frost_attestation_digest: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly frost_attestation_verify: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number];
     readonly frost_dealer_keygen: (a: number, b: number) => [number, number, number, number];
+    readonly frost_derive_address_from_sk: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
     readonly frost_derive_address_raw: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly frost_derive_ufvk: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
     readonly frost_dkg_part1: (a: number, b: number) => [number, number, number, number];
     readonly frost_dkg_part2: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly frost_dkg_part3: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly frost_generate_randomizer: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly frost_sample_fvk_sk: () => [number, number];
     readonly frost_sign_round1: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly frost_sign_round2: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number, number];
     readonly frost_spend_aggregate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number, number];
@@ -517,6 +546,7 @@ export interface InitOutput {
     readonly wbg_rayon_poolbuilder_numThreads: (a: number) => number;
     readonly wbg_rayon_poolbuilder_receiver: (a: number) => number;
     readonly wbg_rayon_start_worker: (a: number) => void;
+    readonly memory: WebAssembly.Memory;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_exn_store: (a: number) => void;
@@ -524,7 +554,8 @@ export interface InitOutput {
     readonly __wbindgen_externrefs: WebAssembly.Table;
     readonly __wbindgen_free: (a: number, b: number, c: number) => void;
     readonly __externref_table_dealloc: (a: number) => void;
-    readonly __wbindgen_start: () => void;
+    readonly __wbindgen_thread_destroy: (a?: number, b?: number, c?: number) => void;
+    readonly __wbindgen_start: (a: number) => void;
 }
 
 export type SyncInitInput = BufferSource | WebAssembly.Module;
@@ -533,18 +564,20 @@ export type SyncInitInput = BufferSource | WebAssembly.Module;
  * Instantiates the given `module`, which can either be bytes or
  * a precompiled `WebAssembly.Module`.
  *
- * @param {{ module: SyncInitInput }} module - Passing `SyncInitInput` directly is deprecated.
+ * @param {{ module: SyncInitInput, memory?: WebAssembly.Memory, thread_stack_size?: number }} module - Passing `SyncInitInput` directly is deprecated.
+ * @param {WebAssembly.Memory} memory - Deprecated.
  *
  * @returns {InitOutput}
  */
-export function initSync(module: { module: SyncInitInput } | SyncInitInput): InitOutput;
+export function initSync(module: { module: SyncInitInput, memory?: WebAssembly.Memory, thread_stack_size?: number } | SyncInitInput, memory?: WebAssembly.Memory): InitOutput;
 
 /**
  * If `module_or_path` is {RequestInfo} or {URL}, makes a request and
  * for everything else, calls `WebAssembly.instantiate` directly.
  *
- * @param {{ module_or_path: InitInput | Promise<InitInput> }} module_or_path - Passing `InitInput` directly is deprecated.
+ * @param {{ module_or_path: InitInput | Promise<InitInput>, memory?: WebAssembly.Memory, thread_stack_size?: number }} module_or_path - Passing `InitInput` directly is deprecated.
+ * @param {WebAssembly.Memory} memory - Deprecated.
  *
  * @returns {Promise<InitOutput>}
  */
-export default function __wbg_init (module_or_path?: { module_or_path: InitInput | Promise<InitInput> } | InitInput | Promise<InitInput>): Promise<InitOutput>;
+export default function __wbg_init (module_or_path?: { module_or_path: InitInput | Promise<InitInput>, memory?: WebAssembly.Memory, thread_stack_size?: number } | InitInput | Promise<InitInput>, memory?: WebAssembly.Memory): Promise<InitOutput>;
