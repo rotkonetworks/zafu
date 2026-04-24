@@ -459,8 +459,10 @@ function ReceiveTab({ address, loading, activeNetwork }: {
   const isPenumbra = activeNetwork === 'penumbra';
   const isZcash = activeNetwork === 'zcash';
   const isMnemonic = selectedKeyInfo?.type === 'mnemonic';
+  const isMultisig = selectedKeyInfo?.type === 'frost-multisig';
   const zcashUfvk = zcashWallet?.ufvk ?? (zcashWallet?.orchardFvk?.startsWith('uview') ? zcashWallet.orchardFvk : undefined);
-  const canTransparent = isMnemonic || !!zcashUfvk;
+  // multisig UFVKs are orchard-only, no transparent component to derive.
+  const canTransparent = (isMnemonic || !!zcashUfvk) && !isMultisig;
 
   // zcash shielded diversifier index (synced with chrome.storage)
   const [shieldedIndex, setShieldedIndex] = useState(0);

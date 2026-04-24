@@ -22,7 +22,15 @@ export function useTransparentAddresses(isMainnet: boolean) {
   const isMnemonic = selectedKeyInfo?.type === 'mnemonic';
 
   useEffect(() => {
+    // clear before deriving — previous vault's addresses would otherwise
+    // bleed into the new vault's history query when derivation bails out.
+    setTAddresses([]);
+
     if (!selectedKeyInfo) {
+      setIsLoading(false);
+      return;
+    }
+    if (selectedKeyInfo.type === 'frost-multisig') {
       setIsLoading(false);
       return;
     }

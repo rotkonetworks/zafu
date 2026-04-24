@@ -165,6 +165,7 @@ export const PopupIndex = () => {
   const penumbraAccount = useStore(selectPenumbraAccount);
   const setPenumbraAccount = useStore(selectSetPenumbraAccount);
   const activeZcashWallet = useStore(selectActiveZcashWallet);
+  const zcashWallets = useStore(selectZcashWallets);
   const { address } = useActiveAddress();
   const { publicKey: polkadotPublicKey } = usePolkadotPublicKey();
 
@@ -195,7 +196,12 @@ export const PopupIndex = () => {
     ? activeZcashWallet?.label ?? selectedKeyInfo?.name ?? 'no wallet'
     : selectedKeyInfo?.name ?? 'no wallet';
 
-  const isMultisig = !!activeZcashWallet?.multisig;
+  // gate on the selected vault, not activeZcashIndex — the index lags on
+  // vault switches to mnemonic (which has no zcash wallet record).
+  const selectedMultisigWallet = selectedKeyInfo?.type === 'frost-multisig'
+    ? zcashWallets.find(w => w.vaultId === selectedKeyInfo.id && w.multisig)
+    : undefined;
+  const isMultisig = !!selectedMultisigWallet;
 
   // truncate address for display
   const displayAddress = address
@@ -218,7 +224,7 @@ export const PopupIndex = () => {
               >
                 {isMultisig && (
                   <span className='rounded-sm bg-zigner-gold/15 px-1.5 py-0.5 text-[9px] text-zigner-gold tabular leading-none'>
-                    {activeZcashWallet!.multisig!.threshold}/{activeZcashWallet!.multisig!.maxSigners}
+                    {selectedMultisigWallet!.multisig!.threshold}/{selectedMultisigWallet!.multisig!.maxSigners}
                   </span>
                 )}
                 <span className='tabular'>{displayAddress}</span>
