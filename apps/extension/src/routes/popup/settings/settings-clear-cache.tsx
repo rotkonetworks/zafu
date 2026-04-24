@@ -93,24 +93,24 @@ export const SettingsClearCache = () => {
       <div className='flex flex-col gap-4'>
         {clearingState.inProgress ? (
           <div className='flex flex-col gap-3'>
-            <div className='h-1.5 w-full rounded-full bg-muted overflow-hidden'>
+            <div className='h-1.5 w-full rounded-full bg-elev-2 overflow-hidden'>
               <div
-                className='h-full bg-primary transition-all duration-300 ease-out'
+                className='h-full bg-zigner-gold transition-all duration-300 ease-out'
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
-            <div className='flex justify-between text-xs text-muted-foreground'>
+            <div className='flex justify-between text-xs text-fg-muted'>
               <span>{getClearCacheStepLabel(clearingState.step)}</span>
               <span>{progressPercent}%</span>
             </div>
-            <p className='text-[10px] text-muted-foreground'>
+            <p className='text-[10px] text-fg-muted'>
               do not close the extension.
             </p>
           </div>
         ) : (
           <>
             <div className='flex flex-col gap-3'>
-              <p className='text-sm text-muted-foreground'>
+              <p className='text-sm text-fg-muted'>
                 clears sync data per network and resynchronizes from chain.
               </p>
               <p className='flex items-center gap-2 text-xs text-rust'>
@@ -121,8 +121,8 @@ export const SettingsClearCache = () => {
 
             {grouped.map(g => (
               <div key={g.type}>
-                <p className='mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider'>{g.label}</p>
-                <div className='flex flex-col divide-y divide-border/40 rounded-lg border border-border/40 bg-card'>
+                <p className='mb-2 text-xs font-medium text-fg-muted uppercase tracking-wider'>{g.label}</p>
+                <div className='flex flex-col divide-y divide-border/40 rounded-lg border border-border-soft bg-elev-1'>
                   {g.vaults.map(v => {
                     const hasZcash = zcashWallets.some(w => w.vaultId === v.id) || v.type === 'mnemonic';
                     const hasPenumbra = penumbraWallets.some(w => w.vaultId === v.id) || v.type === 'mnemonic';

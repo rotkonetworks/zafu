@@ -17,11 +17,12 @@ export const OnboardingStart = () => {
     <FadeTransition>
       <div className='flex flex-col items-center gap-8 max-w-lg mx-auto'>
         {/* header */}
-        <div className='flex flex-col items-center gap-2 pt-4'>
-          <h1 className='bg-text-linear bg-clip-text font-headline text-4xl font-bold text-transparent'>
+        <div className='flex flex-col items-center gap-1 pt-4'>
+          <span className='kicker'>welcome</span>
+          <h1 className='text-[40px] text-zigner-gold lowercase tracking-[-0.01em] leading-none'>
             zafu
           </h1>
-          <p className='text-muted-foreground text-center'>
+          <p className='mt-2 text-xs text-fg-muted text-center lowercase tracking-[0.02em]'>
             privacy wallet for zcash and penumbra
           </p>
         </div>
@@ -84,11 +85,11 @@ export const OnboardingStart = () => {
         </div>
 
         {/* links */}
-        <div className='flex items-center gap-4 text-xs text-muted-foreground pb-8'>
-          <a href='https://rotko.net' target='_blank' rel='noopener noreferrer' className='hover:text-foreground transition-colors'>rotko.net</a>
-          <a href='https://github.com/rotkonetworks/zafu' target='_blank' rel='noopener noreferrer' className='hover:text-foreground transition-colors'>source code</a>
-          <a href='https://zigner.rotko.net' target='_blank' rel='noopener noreferrer' className='hover:text-foreground transition-colors'>zigner app</a>
-          <span className='text-muted-foreground/40'>GPL-3.0</span>
+        <div className='flex items-center gap-4 text-xs text-fg-muted pb-8'>
+          <a href='https://rotko.net' target='_blank' rel='noopener noreferrer' className='hover:text-fg-high transition-colors'>rotko.net</a>
+          <a href='https://github.com/rotkonetworks/zafu' target='_blank' rel='noopener noreferrer' className='hover:text-fg-high transition-colors'>source code</a>
+          <a href='https://zigner.rotko.net' target='_blank' rel='noopener noreferrer' className='hover:text-fg-high transition-colors'>zigner app</a>
+          <span className='text-fg-muted/40'>GPL-3.0</span>
         </div>
       </div>
     </FadeTransition>
@@ -96,11 +97,11 @@ export const OnboardingStart = () => {
 };
 
 const InfoCard = ({ icon, title, text }: { icon: string; title: string; text: string }) => (
-  <div className='rounded-lg border border-border/40 bg-card p-3'>
+  <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
     <div className='flex items-center gap-2 mb-1.5'>
-      <span className={`${icon} h-4 w-4 text-muted-foreground`} />
+      <span className={`${icon} h-4 w-4 text-fg-muted`} />
       <span className='text-xs font-medium'>{title}</span>
     </div>
-    <p className='text-[10px] text-muted-foreground/70 leading-relaxed'>{text}</p>
+    <p className='text-[10px] text-fg-muted/70 leading-relaxed'>{text}</p>
   </div>
 );

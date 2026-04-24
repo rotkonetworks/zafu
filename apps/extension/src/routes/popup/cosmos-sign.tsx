@@ -56,7 +56,7 @@ function parseTxSummary(signDoc: SignDocLike) {
 function SummaryRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className='flex justify-between gap-2 py-1.5'>
-      <span className='text-xs text-muted-foreground shrink-0'>{label}</span>
+      <span className='text-xs text-fg-muted shrink-0'>{label}</span>
       <span className={`text-xs text-right break-all ${mono ? 'font-mono' : ''}`}>{value}</span>
     </div>
   );
@@ -158,8 +158,8 @@ export const CosmosSign = () => {
   // Loading
   if (step === 'loading') {
     return (
-      <div className='flex h-screen items-center justify-center bg-background'>
-        <p className='text-sm text-muted-foreground'>loading...</p>
+      <div className='flex h-screen items-center justify-center bg-canvas'>
+        <p className='text-sm text-fg-muted'>loading...</p>
       </div>
     );
   }
@@ -167,18 +167,17 @@ export const CosmosSign = () => {
   // Show QR for Zigner to scan
   if (step === 'show-qr' && signData) {
     return (
-      <div className='flex h-screen flex-col bg-background'>
-        <div className='border-b border-border/40 p-4'>
-          <h1 className='bg-text-linear bg-clip-text pb-0 font-headline text-2xl font-bold text-transparent'>
-            Sign with Zigner
-          </h1>
-        </div>
+      <div className='flex h-screen flex-col bg-canvas'>
+        <header className='border-b border-border-soft p-4'>
+          <span className='kicker'>ibc / cosmos transaction</span>
+          <h1 className='mt-1 text-[18px] text-fg-high lowercase tracking-[-0.01em]'>sign with zigner</h1>
+        </header>
 
         <div className='grow overflow-auto p-4 flex flex-col gap-4'>
           {/* Transaction summary */}
           {txSummary && (
-            <div className='rounded-lg border border-border/40 bg-card/50 p-3'>
-              <p className='text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2'>transaction summary</p>
+            <div className='rounded-md border border-border-soft bg-elev-1 p-3'>
+              <p className='kicker mb-2'>transaction summary</p>
               <SummaryRow label='chain' value={txSummary.chainName} />
               {txSummary.msgs.map((msg: { type: string; to?: string; amount?: string; channel?: string }, i: number) => (
                 <div key={i}>
@@ -206,7 +205,7 @@ export const CosmosSign = () => {
           </div>
         </div>
 
-        <div className='border-t border-border/40 p-4 flex gap-3'>
+        <div className='border-t border-border-soft p-4 flex gap-3'>
           <Button
             variant='gradient'
             className='flex-1 py-3.5 text-base'
@@ -231,7 +230,7 @@ export const CosmosSign = () => {
   // Scan signature from Zigner
   if (step === 'scan-qr') {
     return (
-      <div className='flex h-screen flex-col bg-background'>
+      <div className='flex h-screen flex-col bg-canvas'>
         <QrScanner
           onScan={handleScan}
           onClose={() => setStep('show-qr')}
@@ -245,9 +244,9 @@ export const CosmosSign = () => {
   // Broadcasting
   if (step === 'broadcasting') {
     return (
-      <div className='flex h-screen flex-col items-center justify-center bg-background gap-4'>
-        <div className='animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent' />
-        <p className='text-sm text-muted-foreground'>broadcasting transaction...</p>
+      <div className='flex h-screen flex-col items-center justify-center bg-canvas gap-4'>
+        <div className='animate-spin rounded-full h-6 w-6 border-2 border-zigner-gold border-t-transparent' />
+        <p className='text-[13px] text-fg lowercase tracking-[0.02em]'>broadcasting transaction...</p>
       </div>
     );
   }
@@ -255,13 +254,16 @@ export const CosmosSign = () => {
   // Success
   if (step === 'success') {
     return (
-      <div className='flex h-screen flex-col items-center justify-center bg-background gap-4 p-6'>
-        <div className='w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center'>
-          <span className='i-lucide-check w-8 h-8 text-green-400' />
+      <div className='flex h-screen flex-col items-center justify-center bg-canvas gap-4 p-6'>
+        <div className='w-16 h-16 rounded-full bg-success/20 flex items-center justify-center'>
+          <span className='i-lucide-check w-8 h-8 text-success' />
         </div>
-        <h2 className='text-lg font-medium'>Transaction Sent!</h2>
+        <div className='flex flex-col items-center gap-1'>
+          <span className='kicker'>broadcast complete</span>
+          <h2 className='text-[18px] text-fg-high lowercase tracking-[-0.01em]'>transaction sent</h2>
+        </div>
         {txHash && (
-          <p className='text-xs text-muted-foreground font-mono break-all text-center'>
+          <p className='text-[10px] text-fg-muted tabular break-all text-center'>
             {txHash}
           </p>
         )}
@@ -274,7 +276,7 @@ export const CosmosSign = () => {
 
   // Error
   return (
-    <div className='flex h-screen flex-col items-center justify-center bg-background gap-4 p-6'>
+    <div className='flex h-screen flex-col items-center justify-center bg-canvas gap-4 p-6'>
       <p className='text-red-400 text-center'>{error}</p>
       <div className='flex gap-3'>
         <Button variant='gradient' onClick={() => {

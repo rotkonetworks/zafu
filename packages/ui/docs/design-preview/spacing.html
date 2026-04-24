@@ -1,0 +1,420 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Zafu · Spacing, radii, motion</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body { padding: 0; background: #000; }
+  .sheet { max-width: 1040px; margin: 0 auto; padding: 48px 56px 64px; }
+
+  .masthead {
+    display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: end;
+    padding-bottom: 20px; border-bottom: 1px solid var(--border); margin-bottom: 40px;
+  }
+  .masthead .kicker { font-size: 10px; color: var(--fg-dim); text-transform: lowercase; letter-spacing: .2em; margin-bottom: 6px; }
+  .masthead h1 { font-size: 36px; color: var(--fg-high); letter-spacing: -.01em; line-height: 1; }
+  .masthead h1 .sep { color: var(--fg-dim); margin: 0 10px; }
+  .masthead h1 .accent { color: var(--zigner-gold); }
+  .masthead .meta { text-align: right; font-size: 10px; color: var(--fg-dim); line-height: 1.7; font-variant-numeric: tabular-nums; }
+  .masthead .meta b { color: var(--fg-muted); font-weight: 400; }
+
+  .section { margin-top: 40px; }
+  .section-head {
+    display: grid; grid-template-columns: 12ch 1fr auto;
+    align-items: center; gap: 18px; margin-bottom: 22px;
+  }
+  .section-head .n { font-size: 10px; color: var(--fg-dim); letter-spacing: .1em; font-variant-numeric: tabular-nums; }
+  .section-head .label { font-size: 11px; color: var(--fg-high); text-transform: lowercase; letter-spacing: .04em; }
+  .section-head .rule { height: 1px; background: var(--border); }
+  .section-head .hint { font-size: 10px; color: var(--fg-dim); text-transform: lowercase; }
+
+  /* SPACING — a drawn ruler, not stacked bars */
+  .ruler {
+    position: relative;
+    background: #050505;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 72px 32px 24px;
+    overflow: hidden;
+  }
+  .ruler::before {
+    content: ''; position: absolute; inset: 44px 32px auto 32px; height: 1px;
+    background: repeating-linear-gradient(90deg, #1a1a1a 0 1px, transparent 1px 4px);
+  }
+  .ruler .tick {
+    position: absolute; top: 44px;
+    width: 1px; height: 12px; background: var(--fg-dim);
+  }
+  .ruler .tick.major { background: var(--zigner-gold); height: 16px; }
+  .ruler .tick .val {
+    position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+    font-size: 10px; color: var(--fg-dim); font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .ruler .tick.major .val { color: var(--zigner-gold); }
+  .ruler .seg {
+    position: absolute; top: 62px; height: 8px; border-radius: 2px;
+    background: linear-gradient(90deg, var(--zigner-gold-dark), var(--zigner-gold));
+  }
+  .ruler .seg .lbl {
+    position: absolute; top: 18px; left: 50%; transform: translateX(-50%);
+    font-size: 10px; color: var(--fg); white-space: nowrap;
+  }
+
+  .spacing-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 1px;
+    background: var(--border); border: 1px solid var(--border); border-radius: 4px; overflow: hidden;
+    margin-top: 16px;
+  }
+  .spacing-grid .cell { background: #000; padding: 18px 20px; }
+  .spacing-grid .cell h4 { font-size: 11px; color: var(--zigner-gold); text-transform: lowercase; letter-spacing: .04em; margin-bottom: 14px; }
+  .spacing-grid .cell dl { display: grid; grid-template-columns: 4ch 1fr 8ch; gap: 8px 16px; margin: 0; }
+  .spacing-grid .cell dt { font-size: 11px; color: var(--fg-high); font-variant-numeric: tabular-nums; }
+  .spacing-grid .cell dd { font-size: 11px; color: var(--fg-muted); text-transform: lowercase; margin: 0; letter-spacing: .02em; }
+  .spacing-grid .cell dd.ex { color: var(--fg-dim); text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* RADII — each sample set inside a row with a live mini-example */
+  .radii-table {
+    border: 1px solid var(--border); border-radius: 4px; overflow: hidden;
+  }
+  .radii-row {
+    display: grid;
+    grid-template-columns: 88px 1fr 96px 1fr;
+    align-items: center;
+    gap: 24px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .radii-row:last-child { border-bottom: none; }
+  .radii-row .name { font-size: 12px; color: var(--fg-high); text-transform: lowercase; }
+  .radii-row .val  { font-size: 11px; color: var(--fg-dim); font-variant-numeric: tabular-nums; }
+  .radii-row .swatch { width: 56px; height: 56px; background: var(--border); border: 1px solid var(--border); justify-self: start; }
+  .radii-row .use { font-size: 11px; color: var(--fg-muted); line-height: 1.6; }
+  .radii-row .use b { color: var(--fg); font-weight: 400; }
+
+  /* SHADOW / FOCUS — a simulated focused input, glow button, and flat card */
+  .shadow-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;
+  }
+  .shadow-cell {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 28px 24px 24px;
+    background: #050505;
+    display: flex; flex-direction: column; gap: 20px;
+  }
+  .shadow-cell .title { font-size: 11px; color: var(--zigner-gold); text-transform: lowercase; letter-spacing: .04em; }
+  .shadow-cell .desc { font-size: 11px; color: var(--fg-muted); line-height: 1.6; }
+  .shadow-cell .desc b { color: var(--fg); font-weight: 400; }
+  .shadow-cell .example-input {
+    background: #0a0a0a; border: 1px solid var(--zigner-gold); border-radius: 6px;
+    padding: 10px 12px; color: var(--fg); font-family: var(--font-mono); font-size: 13px;
+    box-shadow: 0 0 0 1px var(--zigner-gold), 0 0 0 2px #000;
+    width: 100%; box-sizing: border-box;
+  }
+  .shadow-cell .example-btn {
+    background: #f4b728; color: #000; border: 1px solid #f4b728; border-radius: 6px;
+    padding: 10px 14px; font-family: var(--font-mono); font-size: 12px; text-align: center;
+    box-shadow: 0 0 0 1px #f4b728, 0 0 32px -4px rgba(244,183,40,.45);
+  }
+  .shadow-cell .example-flat {
+    background: #0a0a0a; border: 1px solid var(--border); border-radius: 6px;
+    padding: 12px 14px; font-size: 12px; color: var(--fg-high);
+  }
+
+  /* LAYOUT — popup at real size, annotated */
+  .layout-stage {
+    display: grid; grid-template-columns: 400px 1fr; gap: 40px; align-items: start;
+  }
+  .popup {
+    width: 400px; height: 600px; background: #000;
+    border: 1px solid #212121; border-radius: 8px;
+    display: flex; flex-direction: column;
+    position: relative;
+    box-shadow: 0 20px 40px -20px rgba(0,0,0,.8);
+  }
+  .popup .hdr {
+    height: 44px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 14px;
+    font-size: 11px; color: var(--fg-muted);
+    position: relative;
+  }
+  .popup .hdr .tag { position: absolute; top: -8px; right: 14px; background: #000; padding: 0 6px; font-size: 9px; color: var(--zigner-gold); font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+  .popup .body { flex: 1; padding: 16px; position: relative; overflow: hidden; }
+  .popup .body .content-rule {
+    position: absolute; left: 0; right: 0; border-top: 1px dashed #1a1a1a;
+    font-size: 9px; color: var(--fg-dim); padding-left: 8px; text-transform: lowercase;
+  }
+  .popup .ft {
+    height: 48px; border-top: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; color: var(--fg-muted);
+    position: relative;
+  }
+  .popup .ft .tag { position: absolute; bottom: -8px; right: 14px; background: #000; padding: 0 6px; font-size: 9px; color: var(--zigner-gold); font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+  .popup .size-label {
+    position: absolute; top: -24px; left: 0;
+    font-size: 10px; color: var(--fg-dim); letter-spacing: .08em; text-transform: lowercase;
+  }
+  .popup .size-label b { color: var(--zigner-gold); font-weight: 400; font-variant-numeric: tabular-nums; }
+
+  .layout-notes dl {
+    display: grid; grid-template-columns: 14ch 1fr; row-gap: 14px; column-gap: 18px; margin: 0;
+  }
+  .layout-notes dt { font-size: 10px; color: var(--fg-dim); text-transform: lowercase; letter-spacing: .08em; padding-top: 4px; }
+  .layout-notes dd { margin: 0; font-size: 12px; color: var(--fg); line-height: 1.65; }
+  .layout-notes dd b { color: var(--zigner-gold); font-weight: 400; }
+  .layout-notes dd code { color: var(--zigner-gold); background: transparent; font-size: 11px; }
+
+  /* MOTION — tiny animated samples */
+  .motion-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;
+  }
+  .motion-cell {
+    border: 1px solid var(--border); border-radius: 4px; padding: 24px;
+    background: #050505;
+    display: flex; flex-direction: column; gap: 16px; min-height: 140px;
+  }
+  .motion-cell .t { font-size: 11px; color: var(--zigner-gold); text-transform: lowercase; letter-spacing: .04em; }
+  .motion-cell .d { font-size: 11px; color: var(--fg-muted); line-height: 1.6; }
+  .motion-cell .demo { height: 32px; position: relative; overflow: hidden; border-top: 1px solid var(--border-soft); padding-top: 16px; }
+  .pulse-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--success);
+    box-shadow: 0 0 10px var(--success);
+    animation: pulseAnim 1.6s ease-in-out infinite;
+  }
+  @keyframes pulseAnim { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.85); } }
+  .shimmer {
+    width: 100%; height: 3px; background: var(--border); border-radius: 2px; position: relative; overflow: hidden;
+  }
+  .shimmer::after {
+    content: ''; position: absolute; inset: 0; width: 40%;
+    background: linear-gradient(90deg, transparent, var(--zigner-gold), transparent);
+    animation: shimmerAnim 1.4s linear infinite;
+  }
+  @keyframes shimmerAnim { from { transform: translateX(-100%); } to { transform: translateX(280%); } }
+  .hover-row {
+    display: flex; justify-content: space-between; align-items: center; padding: 6px 8px;
+    font-size: 12px; color: var(--fg); transition: background 120ms;
+    border-radius: 4px; cursor: pointer;
+  }
+  .hover-row:hover { background: #0a0a0a; }
+  .hover-row span:last-child { color: var(--zigner-gold); font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="masthead">
+    <div>
+      <div class="kicker">zafu design system / 02</div>
+      <h1>form<span class="sep">·</span><span class="accent">space, radii, motion</span></h1>
+    </div>
+    <div class="meta">
+      <b>grid</b> 4px base<br/>
+      <b>radius</b> 6px default<br/>
+      <b>motion</b> 120–200ms, linear
+    </div>
+  </header>
+
+  <!-- SPACING RULER -->
+  <section class="section">
+    <div class="section-head">
+      <div class="n">01</div>
+      <div class="label">spacing · 4px grid</div>
+      <div class="rule"></div>
+      <div class="hint">seven steps cover everything · 4 · 8 · 12 · 16 · 24 · 32 · 48</div>
+    </div>
+
+    <div class="ruler" style="min-height: 140px;">
+      <!-- ticks every 4px × factor to fit ~880px wide -->
+      <!-- segments -->
+      <div class="seg" style="left: 32px; width: 4px;"></div>
+      <div class="seg" style="left: 40px; width: 8px;"><span class="lbl"></span></div>
+      <div class="seg" style="left: 52px; width: 12px;"></div>
+      <div class="seg" style="left: 68px; width: 16px;"></div>
+      <div class="seg" style="left: 88px; width: 20px;"></div>
+      <div class="seg" style="left: 112px; width: 24px;"></div>
+      <div class="seg" style="left: 140px; width: 32px;"></div>
+      <div class="seg" style="left: 176px; width: 48px;"></div>
+
+      <!-- tick labels -->
+      <div class="tick major" style="left: 32px;"><span class="val">4</span></div>
+      <div class="tick" style="left: 40px;"><span class="val">8</span></div>
+      <div class="tick" style="left: 52px;"><span class="val">12</span></div>
+      <div class="tick" style="left: 68px;"><span class="val">16</span></div>
+      <div class="tick" style="left: 88px;"><span class="val">20</span></div>
+      <div class="tick" style="left: 112px;"><span class="val">24</span></div>
+      <div class="tick major" style="left: 140px;"><span class="val">32</span></div>
+      <div class="tick major" style="left: 176px;"><span class="val">48px</span></div>
+
+      <div style="position:absolute; right: 32px; top: 44px; font-size: 10px; color: var(--fg-dim); text-transform: lowercase; letter-spacing: .06em;">
+        everything past 48 → multiples of 8
+      </div>
+    </div>
+
+    <div class="spacing-grid">
+      <div class="cell">
+        <h4>row · card · list</h4>
+        <dl>
+          <dt>4</dt>  <dd>icon ↔ label · dot gaps</dd>                 <dd class="ex">--space-1</dd>
+          <dt>8</dt>  <dd>form field label ↔ input</dd>                 <dd class="ex">--space-2</dd>
+          <dt>12</dt> <dd>between form fields</dd>                       <dd class="ex">--space-3</dd>
+          <dt>16</dt> <dd>screen inner padding · popup body</dd>         <dd class="ex">--space-4</dd>
+        </dl>
+      </div>
+      <div class="cell">
+        <h4>section · card · screen</h4>
+        <dl>
+          <dt>20</dt> <dd>section header → content</dd>                  <dd class="ex">--space-5</dd>
+          <dt>24</dt> <dd>card interior · modal margin</dd>              <dd class="ex">--space-6</dd>
+          <dt>32</dt> <dd>between major blocks</dd>                      <dd class="ex">--space-8</dd>
+          <dt>48</dt> <dd>page edge · onboarding gutter</dd>              <dd class="ex">2 × 24</dd>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+  <!-- RADII -->
+  <section class="section">
+    <div class="section-head">
+      <div class="n">02</div>
+      <div class="label">radii</div>
+      <div class="rule"></div>
+      <div class="hint">one default (6) · never softer than that on primary surfaces</div>
+    </div>
+    <div class="radii-table">
+      <div class="radii-row">
+        <div><div class="name">sharp</div><div class="val">0</div></div>
+        <div class="swatch" style="border-radius: 0; background: var(--zigner-gold);"></div>
+        <div class="name" style="color: var(--fg-muted);">0px</div>
+        <div class="use"><b>terminal forms.</b> buttons in the extension are sharp rectangles — the visual rhyme with a CLI prompt is the point.</div>
+      </div>
+      <div class="radii-row">
+        <div><div class="name">sm</div><div class="val">2</div></div>
+        <div class="swatch" style="border-radius: 2px; background: var(--zigner-gold);"></div>
+        <div class="name" style="color: var(--fg-muted);">2px</div>
+        <div class="use"><b>inline chips</b> · progress bars · tags in dense lists. just soft enough to not look CAD-like.</div>
+      </div>
+      <div class="radii-row">
+        <div><div class="name">md</div><div class="val" style="color:var(--zigner-gold)">default</div></div>
+        <div class="swatch" style="border-radius: 6px; background: var(--zigner-gold);"></div>
+        <div class="name" style="color: var(--zigner-gold);">6px</div>
+        <div class="use"><b>cards, inputs, buttons, popovers.</b> the system's one radius. <code>--radius: 0.375rem</code>.</div>
+      </div>
+      <div class="radii-row">
+        <div><div class="name">lg</div><div class="val">8 – 12</div></div>
+        <div class="swatch" style="border-radius: 10px; background: var(--zigner-gold);"></div>
+        <div class="name" style="color: var(--fg-muted);">8–12px</div>
+        <div class="use"><b>popup frame · balance hero cards.</b> reserved for the single largest surface on screen.</div>
+      </div>
+      <div class="radii-row">
+        <div><div class="name">pill</div><div class="val">∞</div></div>
+        <div class="swatch" style="border-radius: 9999px; width: 112px; background: var(--zigner-gold);"></div>
+        <div class="name" style="color: var(--fg-muted);">9999px</div>
+        <div class="use"><b>pills, status badges, network dots, toggle tracks.</b> never on elements containing more than a single line of text.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SHADOW / FOCUS / GLOW -->
+  <section class="section">
+    <div class="section-head">
+      <div class="n">03</div>
+      <div class="label">depth · focus · glow</div>
+      <div class="rule"></div>
+      <div class="hint">almost no shadow — elevation is border-based</div>
+    </div>
+    <div class="shadow-grid">
+      <div class="shadow-cell">
+        <div class="title">flat · default</div>
+        <div class="example-flat">send to alice.zec</div>
+        <div class="desc"><b>1px border</b> on black. 99% of surfaces. no shadow, no blur, no fake depth.</div>
+      </div>
+      <div class="shadow-cell">
+        <div class="title">focus ring</div>
+        <input class="example-input" value="penumbra1qwz8x…" />
+        <div class="desc">double ring — <b>1px gold + 2px black</b>. the only a11y-critical shadow. applied on <code>:focus-visible</code>.</div>
+      </div>
+      <div class="shadow-cell">
+        <div class="title">gold glow</div>
+        <div class="example-btn">approve on zigner</div>
+        <div class="desc">reserved for <b>one cta per screen</b> · splash, login, active qr frame. <code>0 0 32px -4px rgba(244,183,40,.45)</code>.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LAYOUT -->
+  <section class="section">
+    <div class="section-head">
+      <div class="n">04</div>
+      <div class="label">layout · popup frame</div>
+      <div class="rule"></div>
+      <div class="hint">400 × 600 · 44 header · 48 tabs · 508 usable</div>
+    </div>
+    <div class="layout-stage">
+      <div class="popup">
+        <div class="size-label"><b>400</b> × <b>600</b> px</div>
+        <div class="hdr"><span>app-header</span><span class="tag">44</span></div>
+        <div class="body">
+          <div class="content-rule" style="top: 16px">16 · top padding</div>
+          <div class="content-rule" style="top: 100px">content starts</div>
+          <div class="content-rule" style="bottom: 16px">16 · bottom padding</div>
+        </div>
+        <div class="ft"><span>bottom tabs</span><span class="tag">48</span></div>
+      </div>
+      <div class="layout-notes">
+        <dl>
+          <dt>frame</dt>
+          <dd><b>400 × 600</b> — Chrome's minimum popup. exact pixels, not responsive. everything longer scrolls.</dd>
+          <dt>header</dt>
+          <dd><b>44px sticky</b> · <code>bg-background/80 backdrop-blur-sm</code> so content slides visibly under it.</dd>
+          <dt>tab bar</dt>
+          <dd><b>48px fixed foot</b> · 4 tabs · icon + 9px lowercase label.</dd>
+          <dt>body</dt>
+          <dd>508px usable · padded 16px inline, 12–16px top, 16px bottom. one vertical list per screen.</dd>
+          <dt>options page</dt>
+          <dd>desktop-width. centre column <b>max 720–960px</b>. use popup spacing scale, not new tokens.</dd>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+  <!-- MOTION -->
+  <section class="section">
+    <div class="section-head">
+      <div class="n">05</div>
+      <div class="label">motion</div>
+      <div class="rule"></div>
+      <div class="hint">functional only · no bounce · no spring</div>
+    </div>
+    <div class="motion-grid">
+      <div class="motion-cell">
+        <div class="t">120ms · colour</div>
+        <div class="d">hover, focus, tab-switch. linear. <b>no transform</b>, no scale.</div>
+        <div class="demo">
+          <div class="hover-row"><span>shielded · 84.2500 ZEC</span><span>+ 2.40</span></div>
+          <div class="hover-row"><span>shielded · 512.00 USDC</span><span>+ 0.00</span></div>
+        </div>
+      </div>
+      <div class="motion-cell">
+        <div class="t">1.6s · status pulse</div>
+        <div class="d">block sync · live-dot in the balance card. opacity + scale, <b>ease-in-out</b>.</div>
+        <div class="demo" style="display:flex;align-items:center;gap:10px;">
+          <span class="pulse-dot"></span>
+          <span style="font-size:11px;color:var(--success);text-transform:lowercase">syncing · 84.6%</span>
+        </div>
+      </div>
+      <div class="motion-cell">
+        <div class="t">1.4s · qr shimmer</div>
+        <div class="d">active frame in the pczt handoff to zigner. one gold bar traversing a rail.</div>
+        <div class="demo" style="display:flex;align-items:center;">
+          <div class="shimmer"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</div>
+</body>
+</html>

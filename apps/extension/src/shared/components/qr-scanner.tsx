@@ -239,10 +239,10 @@ export const QrScanner = ({
     return (
       <div className='flex flex-col gap-2'>
         <div className='flex items-center justify-between'>
-          <span className='text-xs text-muted-foreground'>{title}</span>
+          <span className='text-xs text-fg-muted'>{title}</span>
           <button
             onClick={handleClose}
-            className='p-0.5 text-muted-foreground hover:text-foreground transition-colors'
+            className='p-0.5 text-fg-muted hover:text-fg-high transition-colors'
           >
             <span className='i-lucide-x h-3.5 w-3.5' />
           </button>
@@ -251,7 +251,7 @@ export const QrScanner = ({
           {cameraView}
         </div>
         {description && (
-          <p className='text-[10px] text-muted-foreground text-center'>{description}</p>
+          <p className='text-[10px] text-fg-muted text-center'>{description}</p>
         )}
         <style>{`
           @keyframes scan {

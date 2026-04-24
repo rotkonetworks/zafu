@@ -15,10 +15,10 @@ describe('<AddressComponent />', () => {
     expect(baseElement).toHaveTextContent(address);
   });
 
-  test('uses text-muted-foreground for non-ephemeral addresses', () => {
+  test('uses text-fg-muted for non-ephemeral addresses', () => {
     const { getByText } = render(<AddressComponent address={pbAddress} />);
 
-    expect(getByText(address)).toHaveClass('text-muted-foreground');
+    expect(getByText(address)).toHaveClass('text-fg-muted');
   });
 
   test('uses colored text for ephemeral addresses', () => {

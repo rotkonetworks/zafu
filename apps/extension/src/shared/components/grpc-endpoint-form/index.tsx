@@ -81,7 +81,7 @@ export const GrpcEndpointForm = ({
                   ref={customGrpcEndpointInput}
                   value={isCustomGrpcEndpoint && !!grpcEndpointInput ? grpcEndpointInput : ''}
                   onChange={e => setGrpcEndpointInput(e.target.value)}
-                  className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm outline-0 transition-colors focus:border-zigner-gold focus:outline-none'
+                  className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm outline-0 transition-colors focus:border-zigner-gold focus:outline-none'
                 />
               }
               onSelect={() => {
@@ -97,7 +97,7 @@ export const GrpcEndpointForm = ({
 
           <LoadingList isLoading={grpcEndpointsQuery.isLoading} />
 
-          <div className='sticky bottom-0 left-0 right-0 w-full backdrop-blur-md bg-background/70 border-t border-border/40 z-10 mt-4 pb-[10px]'>
+          <div className='sticky bottom-0 left-0 right-0 w-full backdrop-blur-md bg-background/70 border-t border-border-soft z-10 mt-4 pb-[10px]'>
             <Button
               variant='gradient'
               type='submit'

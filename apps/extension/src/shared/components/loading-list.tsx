@@ -14,7 +14,7 @@ export const LoadingList = ({ isLoading }: { isLoading: boolean }) => {
               exit={{ opacity: 0 }}
               className='flex gap-1'
             >
-              <span className='text-xs text-muted-foreground'>Loading list</span>
+              <span className='text-xs text-fg-muted'>Loading list</span>
               <LineWave
                 visible={true}
                 height='30'
@@ -30,7 +30,7 @@ export const LoadingList = ({ isLoading }: { isLoading: boolean }) => {
         href='https://github.com/prax-wallet/registry/tree/main/registry'
         target='_blank'
         rel='noreferrer'
-        className='text-xs text-muted-foreground'
+        className='text-xs text-fg-muted'
       >
         Add to this list
       </a>

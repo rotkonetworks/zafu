@@ -91,11 +91,11 @@ export const SwapPage = () => {
   return (
     <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
       <div className='rounded-full bg-primary/10 p-4'>
-        <span className='i-lucide-shuffle h-8 w-8 text-primary' />
+        <span className='i-lucide-shuffle h-8 w-8 text-zigner-gold' />
       </div>
       <div>
         <h2 className='text-lg font-medium'>swap</h2>
-        <p className='mt-1 text-sm text-muted-foreground'>
+        <p className='mt-1 text-sm text-fg-muted'>
           swapping is not available for this network.
         </p>
       </div>
@@ -128,7 +128,7 @@ function LiveTimer({ startMs }: { startMs: number }) {
     return () => clearInterval(id);
   }, [startMs]);
 
-  return <div className='font-mono text-2xl tabular-nums text-primary'>{elapsed}s</div>;
+  return <div className='font-mono text-2xl tabular-nums text-zigner-gold'>{elapsed}s</div>;
 }
 
 const ZcashCrosschainSwap = () => {
@@ -502,10 +502,10 @@ const ZcashCrosschainSwap = () => {
     <div className='flex flex-col gap-3 p-4'>
       {PasswordModal}
       {/* header with back arrow */}
-      <div className='flex items-center gap-3 -mx-4 -mt-4 border-b border-border/40 px-4 py-3'>
+      <div className='flex items-center gap-3 -mx-4 -mt-4 border-b border-border-soft px-4 py-3'>
         <button
           onClick={() => navigate(-1)}
-          className='text-muted-foreground transition-colors hover:text-foreground'
+          className='text-fg-muted transition-colors hover:text-fg-high'
         >
           <span className='i-lucide-arrow-left h-5 w-5' />
         </button>
@@ -515,16 +515,16 @@ const ZcashCrosschainSwap = () => {
       {step === 'input' && (
         <>
           {/* FROM card */}
-          <div className='rounded-lg border border-border/40 bg-muted/20 p-3'>
+          <div className='rounded-lg border border-border-soft bg-elev-2/20 p-3'>
             <div className='flex items-center justify-between mb-2'>
-              <span className='text-xs text-muted-foreground'>you send</span>
+              <span className='text-xs text-fg-muted'>you send</span>
               {isFromZec && balanceZec && (
                 <button
                   onClick={() => {
                     const max = Math.max(0, parseFloat(balanceZec) - 0.0001);
                     setAmountIn(max.toFixed(8).replace(/0+$/, '').replace(/\.$/, ''));
                   }}
-                  className='text-xs text-muted-foreground hover:text-foreground'
+                  className='text-xs text-fg-muted hover:text-fg-high'
                 >
                   bal: {parseFloat(balanceZec).toFixed(4)}
                 </button>
@@ -537,17 +537,17 @@ const ZcashCrosschainSwap = () => {
                 value={amountIn}
                 onChange={e => setAmountIn(e.target.value)}
                 placeholder='0.00'
-                className='flex-1 bg-transparent text-xl font-medium text-foreground placeholder:text-muted-foreground focus:outline-none'
+                className='flex-1 bg-transparent text-xl font-medium text-fg placeholder:text-fg-muted focus:outline-none'
               />
               {isFromZec ? (
-                <div className='shrink-0 rounded-md bg-muted px-3 py-1.5 text-sm font-medium'>
+                <div className='shrink-0 rounded-md bg-elev-2 px-3 py-1.5 text-sm font-medium'>
                   ZEC
                 </div>
               ) : (
                 <button
                   onClick={() => setTokenPickerOpen(!tokenPickerOpen)}
                   disabled={tokensLoading}
-                  className='shrink-0 flex items-center gap-1 rounded-md bg-muted px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted/80 disabled:opacity-50'
+                  className='shrink-0 flex items-center gap-1 rounded-md bg-elev-2 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-elev-1/80 disabled:opacity-50'
                 >
                   {tokensLoading ? '...' : (selectedToken?.symbol ?? 'select')}
                   <span
@@ -565,7 +565,7 @@ const ZcashCrosschainSwap = () => {
           <div className='flex justify-center -my-1.5 z-10'>
             <button
               onClick={handleFlipDirection}
-              className='rounded-full border border-border/40 bg-background p-1.5 shadow-sm transition-colors hover:bg-muted/50'
+              className='rounded-full border border-border-soft bg-canvas p-1.5 shadow-sm transition-colors hover:bg-elev-1'
               title='flip direction'
             >
               <div className='flex flex-col items-center'>
@@ -575,17 +575,17 @@ const ZcashCrosschainSwap = () => {
           </div>
 
           {/* TO card */}
-          <div className='rounded-lg border border-border/40 bg-muted/20 p-3'>
+          <div className='rounded-lg border border-border-soft bg-elev-2/20 p-3'>
             <div className='flex items-center justify-between mb-2'>
-              <span className='text-xs text-muted-foreground'>you receive</span>
+              <span className='text-xs text-fg-muted'>you receive</span>
             </div>
             <div className='flex items-center gap-2'>
-              <div className='flex-1 text-xl font-medium text-muted-foreground/50'>--</div>
+              <div className='flex-1 text-xl font-medium text-fg-muted/50'>--</div>
               {isFromZec ? (
                 <button
                   onClick={() => setTokenPickerOpen(!tokenPickerOpen)}
                   disabled={tokensLoading}
-                  className='shrink-0 flex items-center gap-1 rounded-md bg-muted px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted/80 disabled:opacity-50'
+                  className='shrink-0 flex items-center gap-1 rounded-md bg-elev-2 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-elev-1/80 disabled:opacity-50'
                 >
                   {tokensLoading ? '...' : (selectedToken?.symbol ?? 'select')}
                   <span
@@ -596,13 +596,13 @@ const ZcashCrosschainSwap = () => {
                   />
                 </button>
               ) : (
-                <div className='shrink-0 rounded-md bg-muted px-3 py-1.5 text-sm font-medium'>
+                <div className='shrink-0 rounded-md bg-elev-2 px-3 py-1.5 text-sm font-medium'>
                   ZEC
                 </div>
               )}
             </div>
             {selectedToken && (
-              <div className='mt-1 text-xs text-muted-foreground'>
+              <div className='mt-1 text-xs text-fg-muted'>
                 on {selectedToken.blockchain}
               </div>
             )}
@@ -610,7 +610,7 @@ const ZcashCrosschainSwap = () => {
 
           {/* token picker dropdown */}
           {tokenPickerOpen && (
-            <div className='rounded-lg border border-border/40 bg-background max-h-48 overflow-y-auto -mt-2'>
+            <div className='rounded-lg border border-border-soft bg-canvas max-h-48 overflow-y-auto -mt-2'>
               {sortedTokens.map(t => (
                 <button
                   key={t.assetId}
@@ -620,24 +620,24 @@ const ZcashCrosschainSwap = () => {
                     setDestinationAddress('');
                   }}
                   className={cn(
-                    'flex w-full items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-muted/50',
-                    selectedToken?.assetId === t.assetId && 'bg-muted/30',
+                    'flex w-full items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-elev-1',
+                    selectedToken?.assetId === t.assetId && 'bg-elev-2',
                   )}
                 >
                   <span className='font-medium'>{t.symbol}</span>
-                  <span className='text-xs text-muted-foreground'>{t.blockchain}</span>
+                  <span className='text-xs text-fg-muted'>{t.blockchain}</span>
                 </button>
               ))}
               {sortedTokens.length === 0 && (
-                <div className='px-3 py-2 text-sm text-muted-foreground'>no tokens available</div>
+                <div className='px-3 py-2 text-sm text-fg-muted'>no tokens available</div>
               )}
             </div>
           )}
 
           {/* destination address */}
-          <div className='rounded-lg border border-border/40 bg-muted/20 p-3'>
+          <div className='rounded-lg border border-border-soft bg-elev-2/20 p-3'>
             <div className='flex items-center justify-between mb-1'>
-              <span className='text-xs text-muted-foreground'>
+              <span className='text-xs text-fg-muted'>
                 {isFromZec
                   ? `${selectedToken?.blockchain ?? 'destination'} recipient`
                   : `your ${selectedToken?.blockchain ?? 'source'} address`}
@@ -648,8 +648,8 @@ const ZcashCrosschainSwap = () => {
                   className={cn(
                     'p-0.5 transition-colors',
                     showContacts
-                      ? 'text-foreground'
-                      : 'text-muted-foreground hover:text-foreground',
+                      ? 'text-fg'
+                      : 'text-fg-muted hover:text-fg-high',
                   )}
                   title='address book'
                 >
@@ -665,7 +665,7 @@ const ZcashCrosschainSwap = () => {
                 setShowContacts(false);
               }}
               placeholder={isFromZec ? 'recipient address' : 'your address (for sending + refund)'}
-              className='w-full bg-transparent text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none'
+              className='w-full bg-transparent text-sm font-mono text-fg placeholder:text-fg-muted focus:outline-none'
             />
             {/* contact book suggestions */}
             {showContacts && destContacts.length > 0 && (
@@ -677,7 +677,7 @@ const ZcashCrosschainSwap = () => {
                       setDestinationAddress(c.address);
                       setShowContacts(false);
                     }}
-                    className='rounded-md bg-muted/50 px-2 py-1 text-xs text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-colors'
+                    className='rounded-md bg-elev-2 px-2 py-1 text-xs text-fg-muted hover:bg-elev-1/80 hover:text-fg-high transition-colors'
                   >
                     {c.name}
                   </button>
@@ -700,7 +700,7 @@ const ZcashCrosschainSwap = () => {
             onClick={() => void handleRequestQuote()}
             disabled={!canQuote}
             className={cn(
-              'w-full bg-primary py-3 text-sm font-medium text-primary-foreground',
+              'w-full bg-zigner-gold py-3 text-sm font-medium text-zigner-dark',
               'transition-colors hover:bg-primary/90',
               'disabled:opacity-50 disabled:cursor-not-allowed',
             )}
@@ -708,7 +708,7 @@ const ZcashCrosschainSwap = () => {
             get quote
           </button>
 
-          <p className='text-center text-[10px] text-muted-foreground/60'>
+          <p className='text-center text-[10px] text-fg-dim'>
             via NEAR 1Click — swap details shared with third-party API
           </p>
         </>
@@ -716,8 +716,8 @@ const ZcashCrosschainSwap = () => {
 
       {step === 'quoting' && (
         <div className='flex flex-col items-center gap-3 py-12'>
-          <span className='i-lucide-refresh-cw h-6 w-6 animate-spin text-muted-foreground' />
-          <p className='text-sm text-muted-foreground'>fetching quote...</p>
+          <span className='i-lucide-refresh-cw h-6 w-6 animate-spin text-fg-muted' />
+          <p className='text-sm text-fg-muted'>fetching quote...</p>
         </div>
       )}
 
@@ -728,24 +728,24 @@ const ZcashCrosschainSwap = () => {
 
             <div className='flex flex-col gap-1.5 text-xs'>
               <div className='flex justify-between'>
-                <span className='text-muted-foreground'>you send</span>
+                <span className='text-fg-muted'>you send</span>
                 <span>{amountIn} ZEC</span>
               </div>
 
               <div className='flex justify-between'>
-                <span className='text-muted-foreground'>you receive</span>
+                <span className='text-fg-muted'>you receive</span>
                 <span>
                   {quote.quote.amountOutFormatted} {isFromZec ? selectedToken?.symbol : 'ZEC'}
                 </span>
               </div>
 
               <div className='flex justify-between gap-2'>
-                <span className='shrink-0 text-muted-foreground'>recipient</span>
+                <span className='shrink-0 text-fg-muted'>recipient</span>
                 <span className='break-all text-right font-mono'>{destinationAddress}</span>
               </div>
 
               <div className='flex justify-between gap-2'>
-                <span className='shrink-0 text-muted-foreground'>deposit address</span>
+                <span className='shrink-0 text-fg-muted'>deposit address</span>
                 <span className='break-all text-right font-mono'>{quote.quote.depositAddress}</span>
               </div>
             </div>
@@ -760,7 +760,7 @@ const ZcashCrosschainSwap = () => {
 
               <button
                 onClick={() => setStep('input')}
-                className='flex-1 rounded-lg border border-border/40 py-3 text-sm text-muted-foreground transition-colors hover:text-foreground'
+                className='flex-1 rounded-lg border border-border-soft py-3 text-sm text-fg-muted transition-colors hover:text-fg-high'
               >
                 back
               </button>
@@ -781,9 +781,9 @@ const ZcashCrosschainSwap = () => {
           </div>
 
           <div className='text-center'>
-            <p className='text-sm text-muted-foreground'>1. open zigner on your phone</p>
-            <p className='text-sm text-muted-foreground'>2. scan this qr code</p>
-            <p className='text-sm text-muted-foreground'>3. review and approve the transaction</p>
+            <p className='text-sm text-fg-muted'>1. open zigner on your phone</p>
+            <p className='text-sm text-fg-muted'>2. scan this qr code</p>
+            <p className='text-sm text-fg-muted'>3. review and approve the transaction</p>
           </div>
 
           <button
@@ -811,7 +811,7 @@ const ZcashCrosschainSwap = () => {
       {step === 'sending' && (
         <div className='flex flex-col items-center gap-4 p-6'>
           <div className='w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center'>
-            <div className='w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin' />
+            <div className='w-8 h-8 border-2 border-zigner-gold border-t-transparent rounded-full animate-spin' />
           </div>
           <h2 className='text-lg font-medium'>building transaction</h2>
 
@@ -828,7 +828,7 @@ const ZcashCrosschainSwap = () => {
                   <div
                     key={i}
                     className={`flex items-start gap-2 text-xs ${
-                      isLast ? 'text-foreground' : 'text-muted-foreground'
+                      isLast ? 'text-fg' : 'text-fg-muted'
                     }`}
                   >
                     <span className='font-mono w-12 text-right shrink-0'>
@@ -836,9 +836,9 @@ const ZcashCrosschainSwap = () => {
                     </span>
                     <span>
                       {s.step}
-                      {s.detail && <span className='text-muted-foreground ml-1'>({s.detail})</span>}
+                      {s.detail && <span className='text-fg-muted ml-1'>({s.detail})</span>}
                       {!isLast && Number(stepDuration) >= 0.5 && (
-                        <span className='text-muted-foreground ml-1'>+{stepDuration}s</span>
+                        <span className='text-fg-muted ml-1'>+{stepDuration}s</span>
                       )}
                     </span>
                   </div>
@@ -846,7 +846,7 @@ const ZcashCrosschainSwap = () => {
               })}
             </div>
           ) : (
-            <p className='text-sm text-muted-foreground text-center'>preparing...</p>
+            <p className='text-sm text-fg-muted text-center'>preparing...</p>
           )}
         </div>
       )}
@@ -854,21 +854,21 @@ const ZcashCrosschainSwap = () => {
       {(step === 'deposit' || step === 'polling') && quote && (
         <div className='flex flex-col gap-3'>
           {/* quote summary */}
-          <div className='rounded-lg border border-border/40 bg-muted/20 p-3'>
+          <div className='rounded-lg border border-border-soft bg-elev-2/20 p-3'>
             <div className='flex justify-between text-sm'>
-              <span className='text-muted-foreground'>send</span>
+              <span className='text-fg-muted'>send</span>
               <span className='font-medium'>
                 {quote.quote.amountInFormatted} {isFromZec ? 'ZEC' : selectedToken?.symbol}
               </span>
             </div>
             <div className='flex justify-between text-sm mt-1'>
-              <span className='text-muted-foreground'>receive</span>
+              <span className='text-fg-muted'>receive</span>
               <span className='font-medium'>
                 {quote.quote.amountOutFormatted} {isFromZec ? selectedToken?.symbol : 'ZEC'}
               </span>
             </div>
             {quote.quote.amountInUsd !== '0' && (
-              <div className='flex justify-between text-xs text-muted-foreground mt-1'>
+              <div className='flex justify-between text-xs text-fg-muted mt-1'>
                 <span>value</span>
                 <span>${parseFloat(quote.quote.amountInUsd).toFixed(2)}</span>
               </div>
@@ -876,10 +876,10 @@ const ZcashCrosschainSwap = () => {
           </div>
 
           {/* status */}
-          <div className='rounded-lg border border-border/40 bg-muted/20 p-3'>
+          <div className='rounded-lg border border-border-soft bg-elev-2/20 p-3'>
             <div className='flex items-center gap-2'>
               {step === 'polling' ? (
-                <span className='i-lucide-refresh-cw h-4 w-4 animate-spin text-primary' />
+                <span className='i-lucide-refresh-cw h-4 w-4 animate-spin text-zigner-gold' />
               ) : (
                 <div className='h-2 w-2 rounded-full bg-yellow-500 animate-pulse' />
               )}
@@ -895,7 +895,7 @@ const ZcashCrosschainSwap = () => {
 
           <button
             onClick={handleReset}
-            className='text-xs text-muted-foreground hover:text-foreground'
+            className='text-xs text-fg-muted hover:text-fg-high'
           >
             cancel
           </button>
@@ -907,7 +907,7 @@ const ZcashCrosschainSwap = () => {
           <div className='rounded-lg border border-green-500/40 bg-green-500/10 p-3'>
             <p className='text-sm text-green-400'>swap complete</p>
             {quote && (
-              <p className='text-xs text-muted-foreground mt-1'>
+              <p className='text-xs text-fg-muted mt-1'>
                 {quote.quote.amountInFormatted} {isFromZec ? 'ZEC' : selectedToken?.symbol}
                 {' → '}
                 {quote.quote.amountOutFormatted} {isFromZec ? selectedToken?.symbol : 'ZEC'}
@@ -916,7 +916,7 @@ const ZcashCrosschainSwap = () => {
           </div>
           <button
             onClick={handleReset}
-            className='w-full rounded-lg bg-primary py-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90'
+            className='w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark transition-colors hover:bg-primary/90'
           >
             swap again
           </button>
@@ -927,11 +927,11 @@ const ZcashCrosschainSwap = () => {
         <div className='flex flex-col gap-3'>
           <div className='rounded-lg border border-red-500/40 bg-red-500/10 p-3'>
             <p className='text-sm text-red-400'>swap failed</p>
-            <p className='text-xs text-muted-foreground mt-1'>{error}</p>
+            <p className='text-xs text-fg-muted mt-1'>{error}</p>
           </div>
           <button
             onClick={handleReset}
-            className='w-full rounded-lg bg-primary py-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90'
+            className='w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark transition-colors hover:bg-primary/90'
           >
             try again
           </button>
@@ -1179,10 +1179,10 @@ const PenumbraSwap = () => {
 
   return (
     <div className='flex flex-col gap-4 p-4'>
-      <div className='flex items-center gap-3 -mx-4 -mt-4 border-b border-border/40 px-4 py-3 mb-1'>
+      <div className='flex items-center gap-3 -mx-4 -mt-4 border-b border-border-soft px-4 py-3 mb-1'>
         <button
           onClick={() => navigate(-1)}
-          className='text-muted-foreground transition-colors hover:text-foreground'
+          className='text-fg-muted transition-colors hover:text-fg-high'
         >
           <span className='i-lucide-arrow-left h-5 w-5' />
         </button>
@@ -1190,11 +1190,11 @@ const PenumbraSwap = () => {
       </div>
 
       {/* input asset */}
-      <div className='rounded-lg border border-border/40 bg-muted/20 p-3'>
+      <div className='rounded-lg border border-border-soft bg-elev-2/20 p-3'>
         <div className='flex items-center justify-between mb-2'>
-          <span className='text-xs text-muted-foreground'>you pay</span>
+          <span className='text-xs text-fg-muted'>you pay</span>
           {selectedIn && (
-            <span className='text-xs text-muted-foreground'>balance: {selectedIn.amount}</span>
+            <span className='text-xs text-fg-muted'>balance: {selectedIn.amount}</span>
           )}
         </div>
         <div className='flex items-center gap-2'>
@@ -1204,7 +1204,7 @@ const PenumbraSwap = () => {
             onChange={e => setAmountIn(e.target.value)}
             placeholder='0.00'
             disabled={txStatus !== 'idle'}
-            className='flex-1 bg-transparent text-lg font-medium text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50'
+            className='flex-1 bg-transparent text-lg font-medium text-fg placeholder:text-fg-muted focus:outline-none disabled:opacity-50'
           />
           <button
             onClick={handleMax}
@@ -1218,14 +1218,14 @@ const PenumbraSwap = () => {
           <button
             onClick={() => setAssetInOpen(!assetInOpen)}
             disabled={txStatus !== 'idle' || balancesLoading}
-            className='flex items-center gap-2 rounded-md bg-background/50 px-3 py-1.5 text-sm transition-colors hover:bg-background disabled:opacity-50'
+            className='flex items-center gap-2 rounded-md bg-background/50 px-3 py-1.5 text-sm transition-colors hover:bg-canvas disabled:opacity-50'
           >
             {balancesLoading ? (
-              <span className='text-muted-foreground'>loading...</span>
+              <span className='text-fg-muted'>loading...</span>
             ) : selectedIn ? (
               <span className='font-medium'>{selectedIn.symbol}</span>
             ) : (
-              <span className='text-muted-foreground'>select</span>
+              <span className='text-fg-muted'>select</span>
             )}
             <span
               className={cn(
@@ -1236,7 +1236,7 @@ const PenumbraSwap = () => {
           </button>
 
           {assetInOpen && (
-            <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border/40 bg-background shadow-lg'>
+            <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border-soft bg-canvas shadow-lg'>
               {inputAssets.map((item, i) => (
                 <button
                   key={i}
@@ -1245,16 +1245,16 @@ const PenumbraSwap = () => {
                     setAssetInOpen(false);
                   }}
                   className={cn(
-                    'flex w-full items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-muted/50',
-                    selectedIn === item && 'bg-muted/30',
+                    'flex w-full items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-elev-1',
+                    selectedIn === item && 'bg-elev-2',
                   )}
                 >
                   <span>{item.symbol}</span>
-                  <span className='text-muted-foreground'>{item.amount}</span>
+                  <span className='text-fg-muted'>{item.amount}</span>
                 </button>
               ))}
               {inputAssets.length === 0 && (
-                <div className='px-3 py-2 text-sm text-muted-foreground'>no assets</div>
+                <div className='px-3 py-2 text-sm text-fg-muted'>no assets</div>
               )}
             </div>
           )}
@@ -1266,25 +1266,25 @@ const PenumbraSwap = () => {
         <button
           onClick={handleFlip}
           disabled={txStatus !== 'idle' || !selectedIn || !selectedOut}
-          className='rounded-full border border-border/40 bg-background p-2 shadow-sm transition-colors hover:bg-muted/50 disabled:opacity-50'
+          className='rounded-full border border-border-soft bg-canvas p-2 shadow-sm transition-colors hover:bg-elev-1 disabled:opacity-50'
         >
           <span className='i-lucide-arrow-down h-4 w-4' />
         </button>
       </div>
 
       {/* output asset */}
-      <div className='rounded-lg border border-border/40 bg-muted/20 p-3'>
+      <div className='rounded-lg border border-border-soft bg-elev-2/20 p-3'>
         <div className='flex items-center justify-between mb-2'>
-          <span className='text-xs text-muted-foreground'>you receive</span>
+          <span className='text-xs text-fg-muted'>you receive</span>
           {simLoading && (
-            <span className='flex items-center gap-1 text-xs text-muted-foreground'>
+            <span className='flex items-center gap-1 text-xs text-fg-muted'>
               <span className='i-lucide-refresh-cw h-3 w-3 animate-spin' />
               simulating...
             </span>
           )}
         </div>
         <div className='flex items-center gap-2'>
-          <div className='flex-1 text-lg font-medium text-foreground'>
+          <div className='flex-1 text-lg font-medium text-fg'>
             {simulation?.outputAmount ?? '0.00'}
           </div>
         </div>
@@ -1292,14 +1292,14 @@ const PenumbraSwap = () => {
           <button
             onClick={() => setAssetOutOpen(!assetOutOpen)}
             disabled={txStatus !== 'idle' || assetsLoading}
-            className='flex items-center gap-2 rounded-md bg-background/50 px-3 py-1.5 text-sm transition-colors hover:bg-background disabled:opacity-50'
+            className='flex items-center gap-2 rounded-md bg-background/50 px-3 py-1.5 text-sm transition-colors hover:bg-canvas disabled:opacity-50'
           >
             {assetsLoading ? (
-              <span className='text-muted-foreground'>loading...</span>
+              <span className='text-fg-muted'>loading...</span>
             ) : selectedOut ? (
               <span className='font-medium'>{selectedOut.symbol}</span>
             ) : (
-              <span className='text-muted-foreground'>select</span>
+              <span className='text-fg-muted'>select</span>
             )}
             <span
               className={cn(
@@ -1310,7 +1310,7 @@ const PenumbraSwap = () => {
           </button>
 
           {assetOutOpen && (
-            <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border/40 bg-background shadow-lg'>
+            <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border-soft bg-canvas shadow-lg'>
               {outputAssets
                 .filter(a => {
                   if (!selectedIn?.assetId || !a.assetId) return true;
@@ -1325,15 +1325,15 @@ const PenumbraSwap = () => {
                       setAssetOutOpen(false);
                     }}
                     className={cn(
-                      'flex w-full items-center px-3 py-2 text-sm transition-colors hover:bg-muted/50',
-                      selectedOut?.symbol === item.symbol && 'bg-muted/30',
+                      'flex w-full items-center px-3 py-2 text-sm transition-colors hover:bg-elev-1',
+                      selectedOut?.symbol === item.symbol && 'bg-elev-2',
                     )}
                   >
                     <span>{item.symbol}</span>
                   </button>
                 ))}
               {outputAssets.length === 0 && (
-                <div className='px-3 py-2 text-sm text-muted-foreground'>no assets</div>
+                <div className='px-3 py-2 text-sm text-fg-muted'>no assets</div>
               )}
             </div>
           )}
@@ -1355,8 +1355,8 @@ const PenumbraSwap = () => {
       {txStatus === 'success' && txHash && (
         <div className='rounded-lg border border-green-500/40 bg-green-500/10 p-3'>
           <p className='text-sm text-green-400'>swap submitted!</p>
-          <p className='text-xs text-muted-foreground mt-1 font-mono break-all'>{txHash}</p>
-          <p className='text-xs text-muted-foreground mt-2'>
+          <p className='text-xs text-fg-muted mt-1 font-mono break-all'>{txHash}</p>
+          <p className='text-xs text-fg-muted mt-2'>
             note: swap outputs will be available after the claim transaction is processed.
           </p>
         </div>
@@ -1365,7 +1365,7 @@ const PenumbraSwap = () => {
       {txStatus === 'error' && txError && (
         <div className='rounded-lg border border-red-500/40 bg-red-500/10 p-3'>
           <p className='text-sm text-red-400'>swap failed</p>
-          <p className='text-xs text-muted-foreground mt-1'>{txError}</p>
+          <p className='text-xs text-fg-muted mt-1'>{txError}</p>
         </div>
       )}
 
@@ -1394,7 +1394,7 @@ const PenumbraSwap = () => {
         {txStatus === 'error' && 'retry'}
       </button>
 
-      <p className='text-center text-xs text-muted-foreground'>private swap using penumbra dex</p>
+      <p className='text-center text-xs text-fg-muted'>private swap using penumbra dex</p>
     </div>
   );
 };

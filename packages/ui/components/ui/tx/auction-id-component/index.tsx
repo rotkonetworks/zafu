@@ -24,7 +24,7 @@ export const AuctionIdComponent = ({ auctionId }: { auctionId?: AuctionId }) => 
   return (
     <div className='flex min-w-0 items-center gap-2'>
       <div className='min-w-0 truncate font-mono'>
-        <span className='text-muted-foreground'>{id.slice(0, SEPARATOR_INDEX)}</span>
+        <span className='text-fg-muted'>{id.slice(0, SEPARATOR_INDEX)}</span>
         {id.slice(SEPARATOR_INDEX)}
       </div>
       <CopyToClipboardIconButton text={id} />

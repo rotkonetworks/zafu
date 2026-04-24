@@ -44,7 +44,7 @@ export function SaveContactModal({ address, network, onDone, onCancel }: SaveCon
   };
 
   return (
-    <div className='rounded-lg border border-border/40 bg-card p-3'>
+    <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
       <p className='text-sm font-medium mb-3'>save to contacts</p>
 
       {safeContacts.length > 0 && mode === 'choose' && (
@@ -52,7 +52,7 @@ export function SaveContactModal({ address, network, onDone, onCancel }: SaveCon
           <select
             value={selectedContactId}
             onChange={e => setSelectedContactId(e.target.value)}
-            className='w-full rounded-lg border border-border/40 bg-input px-3 py-2 text-sm focus:outline-none mb-2'
+            className='w-full rounded-lg border border-border-soft bg-input px-3 py-2 text-sm focus:outline-none mb-2'
           >
             <option value=''>select existing contact...</option>
             {safeContacts.map(c => (
@@ -65,13 +65,13 @@ export function SaveContactModal({ address, network, onDone, onCancel }: SaveCon
               <button
                 onClick={() => void handleSaveExisting()}
                 disabled={saving}
-                className='flex-1 rounded-lg bg-primary py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50'
+                className='flex-1 rounded-lg bg-zigner-gold py-2 text-xs font-medium text-zigner-dark hover:bg-primary/90 transition-colors disabled:opacity-50'
               >
                 add address
               </button>
               <button
                 onClick={onCancel}
-                className='flex-1 rounded-lg border border-border/40 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors'
+                className='flex-1 rounded-lg border border-border-soft py-2 text-xs text-fg-muted hover:text-fg-high transition-colors'
               >
                 cancel
               </button>
@@ -81,7 +81,7 @@ export function SaveContactModal({ address, network, onDone, onCancel }: SaveCon
           {!selectedContactId && (
             <button
               onClick={() => setMode('new')}
-              className='w-full text-xs text-muted-foreground hover:text-foreground transition-colors py-1'
+              className='w-full text-xs text-fg-muted hover:text-fg-high transition-colors py-1'
             >
               + new contact
             </button>
@@ -97,19 +97,19 @@ export function SaveContactModal({ address, network, onDone, onCancel }: SaveCon
             onChange={e => setNewName(e.target.value)}
             placeholder='contact name'
             autoFocus
-            className='w-full rounded-lg border border-border/40 bg-input px-3 py-2 text-sm focus:outline-none mb-2'
+            className='w-full rounded-lg border border-border-soft bg-input px-3 py-2 text-sm focus:outline-none mb-2'
           />
           <div className='flex gap-2'>
             <button
               onClick={() => void handleSaveNew()}
               disabled={!newName.trim() || saving}
-              className='flex-1 rounded-lg bg-primary py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50'
+              className='flex-1 rounded-lg bg-zigner-gold py-2 text-xs font-medium text-zigner-dark hover:bg-primary/90 transition-colors disabled:opacity-50'
             >
               save
             </button>
             <button
               onClick={safeContacts.length > 0 ? () => setMode('choose') : onCancel}
-              className='flex-1 rounded-lg border border-border/40 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors'
+              className='flex-1 rounded-lg border border-border-soft py-2 text-xs text-fg-muted hover:text-fg-high transition-colors'
             >
               {safeContacts.length > 0 ? 'back' : 'cancel'}
             </button>

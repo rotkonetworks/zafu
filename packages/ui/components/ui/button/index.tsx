@@ -8,15 +8,15 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: 'border border-primary text-primary hover:bg-primary hover:text-primary-foreground',
-        gradient: 'border border-primary text-primary hover:bg-primary hover:text-primary-foreground',
-        secondary: 'border border-border/40 text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+        default: 'border border-zigner-gold text-zigner-gold hover:bg-zigner-gold hover:text-zigner-gold-foreground',
+        gradient: 'border border-zigner-gold text-zigner-gold hover:bg-zigner-gold hover:text-zigner-gold-foreground',
+        secondary: 'border border-border-soft text-fg-muted hover:bg-elev-1 hover:text-fg-high',
         destructive: 'border border-destructive text-destructive hover:bg-destructive hover:text-white',
         destructiveSecondary: 'border border-destructive/50 text-destructive hover:bg-destructive/20',
-        outline: 'border border-border/40 text-muted-foreground hover:text-foreground',
-        ghost: 'hover:bg-accent hover:text-accent-foreground',
-        link: 'text-muted-foreground underline-offset-4 hover:underline',
-        onLight: 'border border-primary text-primary hover:bg-primary hover:text-primary-foreground',
+        outline: 'border border-border-soft text-fg-muted hover:text-fg-high',
+        ghost: 'hover:bg-elev-1 hover:text-fg-high',
+        link: 'text-fg-muted underline-offset-4 hover:underline',
+        onLight: 'border border-zigner-gold text-zigner-gold hover:bg-zigner-gold hover:text-zigner-gold-foreground',
       },
       size: {
         default: 'h-9 md:h-11',

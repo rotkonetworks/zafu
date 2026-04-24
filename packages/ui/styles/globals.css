@@ -3,26 +3,90 @@
 
 @layer base {
   :root {
+    /* ==============================================================
+     * design system v2 — canonical tokens
+     * source of truth · see packages/ui/docs/design-preview/*.html
+     *
+     * surfaces:     canvas → elev-1 → elev-2 → border-soft → border
+     * ink:          fg-high → fg → fg-muted → fg-dim (hierarchy by weight, not size)
+     * brand:        zigner-gold (cold · zigner/zcash) · zafu-blue (hot · zafu)
+     * network:      --network-accent rebound per [data-network]
+     * typography:   monospace only (Iosevka Term, mono fallback)
+     * radius:       6px default (md); scale 0/2/6/8-12/∞
+     * spacing:      4 · 8 · 12 · 16 · 20 · 24 · 32 · 48
+     * ============================================================== */
+
+    /* surfaces */
+    --surface-canvas:      #000000;
+    --surface-elev-1:      #0a0a0a;
+    --surface-elev-2:      #0f0f0f;
+    --surface-border-soft: #1a1a1a;
+    --surface-border:      #212121;
+
+    /* ink */
+    --fg-high:  #f5f5f5;
+    --fg:       #dcdcdc;
+    --fg-muted: #8a8a8a;
+    --fg-dim:   #5a5a5a;
+
+    /* brand — gold (cold side) */
+    --zigner-gold-dark:  #b8860b;
+    --zigner-gold:       #f4b728;
+    --zigner-gold-light: #fcd34d;
+    --zigner-dark:       #0a0a0a;
+    --zigner-darker:     #000000;
+
+    /* brand — blue (hot side) */
+    --zafu-blue-dark:  #1d4ed8;
+    --zafu-blue:       #3b82f6;
+    --zafu-blue-light: #60a5fa;
+
+    /* spacing */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-12: 48px;
+
+    /* radius */
+    --radius-sharp: 0;
+    --radius-sm:    2px;
+    --radius-md:    6px;
+    --radius-lg:    10px;
+    --radius-pill:  9999px;
+
+    /* typography stack — monospace is the only stack */
+    --font-mono: 'Iosevka Term', 'Courier New', Courier, monospace;
+
+    /* ==============================================================
+     * shadcn / tailwind HSL layer — aliases onto the v2 tokens above.
+     * Kept because existing components use hsl(var(--foreground)).
+     * Values chosen to match the hex tokens precisely.
+     * ============================================================== */
+
     /* terminal dark theme - black bg, gold accent, monospace */
-    --background: 0 0% 0%;
-    --foreground: 0 0% 80%;
+    --background: 0 0% 0%;             /* --surface-canvas      #000000 */
+    --foreground: 0 0% 86%;            /* --fg                  #dcdcdc */
 
     /* muted text */
-    --muted: 0 0% 6%;
-    --muted-foreground: 0 0% 40%;
+    --muted: 0 0% 6%;                  /* --surface-elev-2      #0f0f0f */
+    --muted-foreground: 0 0% 54%;      /* --fg-muted            #8a8a8a */
 
     /* popover/dropdown */
-    --popover: 0 0% 4%;
-    --popover-foreground: 0 0% 80%;
+    --popover: 0 0% 4%;                /* --surface-elev-1      #0a0a0a */
+    --popover-foreground: 0 0% 96%;    /* --fg-high             #f5f5f5 */
 
     /* card - subtle elevation */
-    --card: 0 0% 4%;
-    --card-foreground: 0 0% 80%;
+    --card: 0 0% 4%;                   /* --surface-elev-1      #0a0a0a */
+    --card-foreground: 0 0% 86%;       /* --fg                  #dcdcdc */
 
     /* border */
-    --border: 0 0% 13%;
-    --border-secondary: 0 0% 10%;
-    --input: 0 0% 6%;
+    --border: 0 0% 13%;                /* --surface-border      #212121 */
+    --border-secondary: 0 0% 10%;      /* --surface-border-soft #1a1a1a */
+    --input: 0 0% 6%;                  /* --surface-elev-2      #0f0f0f */
 
     /* primary - zcash gold */
     --primary: 42 91% 55%;
@@ -41,22 +105,12 @@
     --destructive-foreground: 0 0% 100%;
 
     --ring: 42 91% 55%;
-    --radius: 0.375rem;
+    --radius: 0.375rem;                /* = --radius-md, 6px */
 
     /* network-aware accent (overridden by [data-network]) */
     --network-accent: var(--zigner-gold);
     --network-accent-light: var(--zigner-gold-light);
     --network-accent-foreground: var(--zigner-dark);
-
-    /* brand colors */
-    --zigner-gold: #f4b728;
-    --zigner-gold-light: #fcd34d;
-    --zigner-gold-dark: #b8860b;
-    --zafu-blue: #3b82f6;
-    --zafu-blue-light: #60a5fa;
-    --zafu-blue-dark: #1d4ed8;
-    --zigner-dark: #0a0a0a;
-    --zigner-darker: #000000;
 
     /* penumbra brand */
     --penumbra-purple: #7c3aed;

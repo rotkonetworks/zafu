@@ -109,7 +109,7 @@ export function RecipientPicker({ network, onSelect, show }: RecipientPickerProp
     <div ref={wrapperRef} className='relative mt-2'>
       {/* search input */}
       <div className='relative'>
-        <span className='i-lucide-search absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground' />
+        <span className='i-lucide-search absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-fg-muted' />
         <input
           ref={inputRef}
           type='text'
@@ -117,13 +117,13 @@ export function RecipientPicker({ network, onSelect, show }: RecipientPickerProp
           onChange={e => { setQuery(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
           placeholder={`search ${allEntries.length} address${allEntries.length === 1 ? '' : 'es'}...`}
-          className='w-full rounded-lg border border-border/40 bg-input pl-8 pr-3 py-1.5 text-xs focus:border-primary/50 focus:outline-none'
+          className='w-full rounded-lg border border-border-soft bg-input pl-8 pr-3 py-1.5 text-xs focus:border-primary/50 focus:outline-none'
         />
       </div>
 
       {/* dropdown */}
       {open && filtered.length > 0 && (
-        <div className='absolute z-20 left-0 right-0 mt-1 max-h-[240px] overflow-y-auto rounded-lg border border-border/40 bg-card shadow-lg'>
+        <div className='absolute z-20 left-0 right-0 mt-1 max-h-[240px] overflow-y-auto rounded-lg border border-border-soft bg-elev-1 shadow-lg'>
           {filtered.map((entry, i) => {
             const prevCategory = i > 0 ? filtered[i - 1]!.category : null;
             const showHeader = entry.category !== prevCategory;
@@ -132,18 +132,18 @@ export function RecipientPicker({ network, onSelect, show }: RecipientPickerProp
               <div key={`${entry.category}-${entry.address}`}>
                 {showHeader && (
                   <div className='flex items-center gap-1.5 px-3 pt-2 pb-1'>
-                    <span className={cn(categoryIcon[entry.category], 'h-3 w-3 text-muted-foreground')} />
-                    <span className='text-[10px] text-muted-foreground uppercase tracking-wider'>
+                    <span className={cn(categoryIcon[entry.category], 'h-3 w-3 text-fg-muted')} />
+                    <span className='text-[10px] text-fg-muted uppercase tracking-wider'>
                       {entry.category === 'wallet' ? 'my wallets' : entry.category}
                     </span>
                   </div>
                 )}
                 <button
                   onClick={() => { onSelect(entry.address); setOpen(false); setQuery(''); }}
-                  className='flex w-full flex-col px-3 py-1.5 text-left hover:bg-muted/50 transition-colors'
+                  className='flex w-full flex-col px-3 py-1.5 text-left hover:bg-elev-1 transition-colors'
                 >
                   <span className='text-xs truncate'>{entry.label}</span>
-                  <span className='text-[10px] font-mono text-muted-foreground truncate'>
+                  <span className='text-[10px] font-mono text-fg-muted truncate'>
                     {entry.address.slice(0, 16)}...{entry.address.slice(-8)}
                   </span>
                 </button>
@@ -151,7 +151,7 @@ export function RecipientPicker({ network, onSelect, show }: RecipientPickerProp
             );
           })}
           {query && filtered.length === 0 && (
-            <p className='px-3 py-2 text-xs text-muted-foreground'>no matches</p>
+            <p className='px-3 py-2 text-xs text-fg-muted'>no matches</p>
           )}
         </div>
       )}

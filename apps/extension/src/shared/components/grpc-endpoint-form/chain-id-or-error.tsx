@@ -16,7 +16,7 @@ export const ChainIdOrError = ({
   return (
     <div
       className={cn(
-        'flex justify-center font-mono text-xs text-muted-foreground',
+        'flex justify-center font-mono text-xs text-fg-muted',
         !!error && 'text-red-400',
         !error && chainIdChanged && 'text-rust',
       )}

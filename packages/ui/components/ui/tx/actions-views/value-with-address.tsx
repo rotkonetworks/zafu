@@ -20,7 +20,7 @@ export const ValueWithAddress = ({
 
     {addressView && (
       <div className='flex items-center gap-2 overflow-hidden'>
-        <span className='whitespace-nowrap font-mono text-sm italic text-foreground'>{label}</span>
+        <span className='whitespace-nowrap font-mono text-sm italic text-fg'>{label}</span>
         <AddressViewComponent view={addressView} />
       </div>
     )}

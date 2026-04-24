@@ -121,17 +121,17 @@ function TransactionRow({ tx }: { tx: ParsedTransaction }) {
   const isShield = tx.type === 'shield';
 
   return (
-    <div className='flex items-center gap-3 rounded-lg border border-border/40 bg-card p-3 hover:border-muted-foreground/30 transition-colors'>
+    <div className='flex items-center gap-3 rounded-lg border border-border-soft bg-elev-1 p-3 hover:border-muted-foreground/30 transition-colors'>
       <div className={cn(
         'flex h-10 w-10 items-center justify-center rounded-full',
-        isShield ? 'bg-blue-500/10' : isIncoming ? 'bg-green-500/10' : 'bg-muted/50'
+        isShield ? 'bg-blue-500/10' : isIncoming ? 'bg-green-500/10' : 'bg-elev-2'
       )}>
         {isShield ? (
           <span className='i-lucide-move-horizontal h-5 w-5 text-blue-500' />
         ) : isIncoming ? (
           <span className='i-lucide-arrow-down h-5 w-5 text-green-400' />
         ) : (
-          <span className='i-lucide-arrow-up h-5 w-5 text-muted-foreground' />
+          <span className='i-lucide-arrow-up h-5 w-5 text-fg-muted' />
         )}
       </div>
 
@@ -140,17 +140,17 @@ function TransactionRow({ tx }: { tx: ParsedTransaction }) {
           <span className='text-sm font-medium'>{tx.description}</span>
           {tx.amount && (
             <span className={cn('text-sm font-mono',
-              isShield ? 'text-blue-500' : isIncoming ? 'text-green-400' : 'text-muted-foreground'
+              isShield ? 'text-blue-500' : isIncoming ? 'text-green-400' : 'text-fg-muted'
             )}>
               {isIncoming ? '+' : ''}{tx.amount} {tx.asset ?? ''}
             </span>
           )}
         </div>
         <div className='flex items-center justify-between gap-2 mt-0.5'>
-          <p className='text-xs text-muted-foreground font-mono truncate'>
+          <p className='text-xs text-fg-muted font-mono truncate'>
             {tx.id.slice(0, 16)}...
           </p>
-          <span className='text-xs text-muted-foreground whitespace-nowrap'>
+          <span className='text-xs text-fg-muted whitespace-nowrap'>
             {tx.height > 0 ? `#${tx.height}` : formatTimestamp(tx.timestamp)}
           </span>
         </div>
@@ -170,13 +170,13 @@ export const HistoryPage = () => {
   if (!historyEnabled) {
     return (
       <div className='flex flex-col h-full'>
-        <div className='flex items-center px-4 py-3 border-b border-border/40'>
+        <div className='flex items-center px-4 py-3 border-b border-border-soft'>
           <h1 className='text-lg font-medium'>History</h1>
         </div>
         <div className='flex-1 flex flex-col items-center justify-center gap-3 p-8 text-center'>
-          <span className='i-lucide-eye-off h-8 w-8 text-muted-foreground/30' />
-          <p className='text-sm text-muted-foreground'>transaction history is disabled</p>
-          <p className='text-xs text-muted-foreground/50'>
+          <span className='i-lucide-eye-off h-8 w-8 text-fg-muted/30' />
+          <p className='text-sm text-fg-muted'>transaction history is disabled</p>
+          <p className='text-xs text-fg-muted/50'>
             enable in settings &rarr; privacy to see past transactions
           </p>
         </div>
@@ -274,12 +274,12 @@ export const HistoryPage = () => {
   return (
     <div className='flex flex-col h-full'>
       {/* header */}
-      <div className='flex items-center justify-between px-4 py-3 border-b border-border/40'>
+      <div className='flex items-center justify-between px-4 py-3 border-b border-border-soft'>
         <h1 className='text-lg font-medium'>History</h1>
         <button
           onClick={() => void refetch()}
           disabled={isLoading}
-          className='rounded-lg p-1.5 hover:bg-muted/50 transition-colors disabled:opacity-50'
+          className='rounded-lg p-1.5 hover:bg-elev-1 transition-colors disabled:opacity-50'
           title='refresh'
         >
           <span className={cn('i-lucide-refresh-cw h-4 w-4', isLoading && 'animate-spin')} />
@@ -290,15 +290,15 @@ export const HistoryPage = () => {
       <div className='flex-1 overflow-y-auto p-4'>
         {isLoading && filteredTransactions.length === 0 ? (
           <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
-            <span className='i-lucide-refresh-cw h-6 w-6 animate-spin text-muted-foreground' />
-            <p className='text-sm text-muted-foreground'>Loading transactions...</p>
+            <span className='i-lucide-refresh-cw h-6 w-6 animate-spin text-fg-muted' />
+            <p className='text-sm text-fg-muted'>Loading transactions...</p>
           </div>
         ) : error ? (
           <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
             <p className='text-sm text-red-400'>Failed to load transactions</p>
             <button
               onClick={() => void refetch()}
-              className='text-xs text-primary hover:underline'
+              className='text-xs text-zigner-gold hover:underline'
             >
               Try again
             </button>
@@ -306,11 +306,11 @@ export const HistoryPage = () => {
         ) : filteredTransactions.length === 0 ? (
           <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
             <div className='rounded-full bg-primary/10 p-4'>
-              <span className='i-lucide-clock h-8 w-8 text-primary' />
+              <span className='i-lucide-clock h-8 w-8 text-zigner-gold' />
             </div>
             <div>
               <p className='text-sm font-medium'>No transactions yet</p>
-              <p className='text-xs text-muted-foreground'>
+              <p className='text-xs text-fg-muted'>
                 Your transaction history will appear here
               </p>
             </div>

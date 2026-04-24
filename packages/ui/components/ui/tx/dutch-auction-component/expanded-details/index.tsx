@@ -117,10 +117,10 @@ const Row = ({
   highlight?: boolean;
 }) => (
   <div className='flex items-center justify-between'>
-    <span className={cn('font-mono text-nowrap', !highlight && 'text-muted-foreground')}>
+    <span className={cn('font-mono text-nowrap', !highlight && 'text-fg-muted')}>
       {label}
     </span>
     <Separator />
-    <span className={cn('overflow-hidden', !highlight && 'text-muted-foreground')}>{children}</span>
+    <span className={cn('overflow-hidden', !highlight && 'text-fg-muted')}>{children}</span>
   </div>
 );

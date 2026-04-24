@@ -76,32 +76,32 @@ function ContactModal({
 
   return (
     <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm'>
-      <div className='w-full max-w-sm mx-4 rounded-lg bg-background border border-border/40 p-5 shadow-xl'>
+      <div className='w-full max-w-sm mx-4 rounded-lg bg-canvas border border-border-soft p-5 shadow-xl'>
         <h2 className='text-lg font-medium mb-4'>
           {editContact ? 'edit contact' : 'new contact'}
         </h2>
 
         <div className='space-y-3'>
           <div>
-            <label className='block text-xs text-muted-foreground mb-1'>name</label>
+            <label className='block text-xs text-fg-muted mb-1'>name</label>
             <input
               type='text'
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder='alice'
               autoFocus
-              className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
+              className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
             />
           </div>
 
           <div>
-            <label className='block text-xs text-muted-foreground mb-1'>notes (optional)</label>
+            <label className='block text-xs text-fg-muted mb-1'>notes (optional)</label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder='notes about this contact...'
               rows={2}
-              className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none resize-none'
+              className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none resize-none'
             />
           </div>
         </div>
@@ -109,7 +109,7 @@ function ContactModal({
         <div className='flex gap-2 mt-4'>
           <button
             onClick={onClose}
-            className='flex-1 rounded-lg border border-border/40 py-3 text-sm hover:bg-muted/50 transition-colors'
+            className='flex-1 rounded-lg border border-border-soft py-3 text-sm hover:bg-elev-1 transition-colors'
           >
             cancel
           </button>
@@ -156,18 +156,18 @@ function AddressModal({
 
   return (
     <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm'>
-      <div className='w-full max-w-sm mx-4 rounded-lg bg-background border border-border/40 p-5 shadow-xl'>
+      <div className='w-full max-w-sm mx-4 rounded-lg bg-canvas border border-border-soft p-5 shadow-xl'>
         <h2 className='text-lg font-medium mb-4'>
           {editAddress ? 'edit address' : 'add address'}
         </h2>
 
         <div className='space-y-3'>
           <div>
-            <label className='block text-xs text-muted-foreground mb-1'>network</label>
+            <label className='block text-xs text-fg-muted mb-1'>network</label>
             <select
               value={network}
               onChange={(e) => setNetwork(e.target.value as ContactNetwork)}
-              className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
+              className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
             >
               {Object.entries(NETWORK_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>
@@ -179,36 +179,36 @@ function AddressModal({
 
           {network === 'cosmos' && (
             <div>
-              <label className='block text-xs text-muted-foreground mb-1'>chain (optional)</label>
+              <label className='block text-xs text-fg-muted mb-1'>chain (optional)</label>
               <input
                 type='text'
                 value={chainId}
                 onChange={(e) => setChainId(e.target.value)}
                 placeholder='osmosis, noble, etc'
-                className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
+                className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
               />
             </div>
           )}
 
           <div>
-            <label className='block text-xs text-muted-foreground mb-1'>address</label>
+            <label className='block text-xs text-fg-muted mb-1'>address</label>
             <input
               type='text'
               value={address}
               onChange={(e) => setAddress(e.target.value)}
               placeholder='paste address...'
-              className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-xs font-mono focus:border-zigner-gold focus:outline-none'
+              className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-xs font-mono focus:border-zigner-gold focus:outline-none'
             />
           </div>
 
           <div>
-            <label className='block text-xs text-muted-foreground mb-1'>notes (optional)</label>
+            <label className='block text-xs text-fg-muted mb-1'>notes (optional)</label>
             <input
               type='text'
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder='notes for this address...'
-              className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
+              className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
             />
           </div>
         </div>
@@ -216,7 +216,7 @@ function AddressModal({
         <div className='flex gap-2 mt-4'>
           <button
             onClick={onClose}
-            className='flex-1 rounded-lg border border-border/40 py-3 text-sm hover:bg-muted/50 transition-colors'
+            className='flex-1 rounded-lg border border-border-soft py-3 text-sm hover:bg-elev-1 transition-colors'
           >
             cancel
           </button>
@@ -252,18 +252,18 @@ function AddressRow({
   }, [address.address]);
 
   return (
-    <div className='group flex items-center justify-between py-2 px-3 rounded-lg hover:bg-muted/50 transition-colors'>
+    <div className='group flex items-center justify-between py-2 px-3 rounded-lg hover:bg-elev-1 transition-colors'>
       <div className='flex items-center gap-2 min-w-0 flex-1'>
         <span className={cn('shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium', NETWORK_COLORS[address.network])}>
           {NETWORK_LABELS[address.network]}
           {address.chainId && ` / ${address.chainId}`}
         </span>
-        <span className='font-mono text-xs text-muted-foreground truncate'>
+        <span className='font-mono text-xs text-fg-muted truncate'>
           {address.address}
         </span>
         <button
           onClick={copyAddress}
-          className='shrink-0 p-1 text-muted-foreground hover:text-foreground'
+          className='shrink-0 p-1 text-fg-muted hover:text-fg-high'
         >
           {copied ? (
             <span className='i-lucide-check h-3 w-3 text-green-400' />
@@ -274,10 +274,10 @@ function AddressRow({
       </div>
 
       <div className='flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity'>
-        <button onClick={onEdit} className='p-1 rounded-lg hover:bg-muted/50 transition-colors'>
-          <span className='i-lucide-pencil h-3 w-3 text-muted-foreground' />
+        <button onClick={onEdit} className='p-1 rounded-lg hover:bg-elev-1 transition-colors'>
+          <span className='i-lucide-pencil h-3 w-3 text-fg-muted' />
         </button>
-        <button onClick={onDelete} className='p-1 rounded-lg hover:bg-muted/50 transition-colors'>
+        <button onClick={onDelete} className='p-1 rounded-lg hover:bg-elev-1 transition-colors'>
           <span className='i-lucide-trash-2 h-3 w-3 text-red-400' />
         </button>
       </div>
@@ -308,10 +308,10 @@ function ContactCard({
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className='rounded-lg border border-border/40 bg-card overflow-hidden'>
+    <div className='rounded-lg border border-border-soft bg-elev-1 overflow-hidden'>
       {/* header - always visible */}
       <div
-        className='flex items-center justify-between p-3 cursor-pointer hover:bg-muted/50 transition-colors'
+        className='flex items-center justify-between p-3 cursor-pointer hover:bg-elev-1 transition-colors'
         onClick={() => setExpanded(!expanded)}
       >
         <div className='flex items-center gap-3'>
@@ -323,25 +323,25 @@ function ContactCard({
             className='p-0.5'
           >
             {expanded ? (
-              <span className='i-lucide-chevron-down h-4 w-4 text-muted-foreground' />
+              <span className='i-lucide-chevron-down h-4 w-4 text-fg-muted' />
             ) : (
-              <span className='i-lucide-chevron-right h-4 w-4 text-muted-foreground' />
+              <span className='i-lucide-chevron-right h-4 w-4 text-fg-muted' />
             )}
           </button>
 
           <div className='flex h-8 w-8 items-center justify-center rounded-full bg-primary/10'>
-            <span className='i-lucide-user h-4 w-4 text-primary' />
+            <span className='i-lucide-user h-4 w-4 text-zigner-gold' />
           </div>
 
           <div>
             <div className='flex items-center gap-2'>
               <span className='font-medium'>{contact.name}</span>
-              <span className='text-xs text-muted-foreground'>
+              <span className='text-xs text-fg-muted'>
                 {contact.addresses.length} address{contact.addresses.length !== 1 && 'es'}
               </span>
             </div>
             {contact.notes && (
-              <p className='text-xs text-muted-foreground truncate max-w-[180px]'>
+              <p className='text-xs text-fg-muted truncate max-w-[180px]'>
                 {contact.notes}
               </p>
             )}
@@ -351,18 +351,18 @@ function ContactCard({
         <div className='flex items-center gap-1' onClick={(e) => e.stopPropagation()}>
           <button
             onClick={onToggleFavorite}
-            className='p-1.5 rounded-lg hover:bg-muted/50 transition-colors'
+            className='p-1.5 rounded-lg hover:bg-elev-1 transition-colors'
           >
             {contact.favorite ? (
               <span className='i-lucide-star h-4 w-4 text-yellow-400' />
             ) : (
-              <span className='i-lucide-star h-4 w-4 text-muted-foreground' />
+              <span className='i-lucide-star h-4 w-4 text-fg-muted' />
             )}
           </button>
-          <button onClick={onEditContact} className='p-1.5 rounded-lg hover:bg-muted/50 transition-colors'>
-            <span className='i-lucide-pencil h-4 w-4 text-muted-foreground' />
+          <button onClick={onEditContact} className='p-1.5 rounded-lg hover:bg-elev-1 transition-colors'>
+            <span className='i-lucide-pencil h-4 w-4 text-fg-muted' />
           </button>
-          <button onClick={onDeleteContact} className='p-1.5 rounded-lg hover:bg-muted/50 transition-colors'>
+          <button onClick={onDeleteContact} className='p-1.5 rounded-lg hover:bg-elev-1 transition-colors'>
             <span className='i-lucide-trash-2 h-4 w-4 text-red-400' />
           </button>
         </div>
@@ -370,10 +370,10 @@ function ContactCard({
 
       {/* expanded addresses */}
       {expanded && (
-        <div className='border-t border-border/40 bg-muted/10'>
+        <div className='border-t border-border-soft bg-elev-2/10'>
           {contact.addresses.length === 0 ? (
             <div className='p-4 text-center'>
-              <p className='text-xs text-muted-foreground'>no addresses yet</p>
+              <p className='text-xs text-fg-muted'>no addresses yet</p>
             </div>
           ) : (
             <div className='py-1'>
@@ -389,10 +389,10 @@ function ContactCard({
           )}
 
           {/* actions */}
-          <div className='p-2 border-t border-border/40 flex gap-2'>
+          <div className='p-2 border-t border-border-soft flex gap-2'>
             <button
               onClick={onAddAddress}
-              className='flex flex-1 items-center justify-center gap-1 rounded-lg border border-dashed border-border/40 py-2 text-xs text-muted-foreground hover:border-zigner-gold hover:text-zigner-gold transition-colors'
+              className='flex flex-1 items-center justify-center gap-1 rounded-lg border border-dashed border-border-soft py-2 text-xs text-fg-muted hover:border-zigner-gold hover:text-zigner-gold transition-colors'
             >
               <span className='i-lucide-plus h-3 w-3' />
               add address
@@ -400,7 +400,7 @@ function ContactCard({
             {onShareCard && (
               <button
                 onClick={onShareCard}
-                className='flex flex-1 items-center justify-center gap-1 rounded-lg border border-dashed border-border/40 py-2 text-xs text-muted-foreground hover:border-primary hover:text-primary transition-colors'
+                className='flex flex-1 items-center justify-center gap-1 rounded-lg border border-dashed border-border-soft py-2 text-xs text-fg-muted hover:border-zigner-gold hover:text-zigner-gold transition-colors'
               >
                 <span className='i-lucide-send h-3 w-3' />
                 share via zcash
@@ -623,11 +623,11 @@ export function ContactsPage() {
       />
 
       {/* header */}
-      <div className='flex items-center justify-between px-4 py-3 border-b border-border/40'>
+      <div className='flex items-center justify-between px-4 py-3 border-b border-border-soft'>
         <div className='flex items-center gap-3'>
           <button
             onClick={() => navigate(PopupPath.INDEX)}
-            className='text-muted-foreground transition-colors hover:text-foreground'
+            className='text-fg-muted transition-colors hover:text-fg-high'
           >
             <span className='i-lucide-arrow-left h-5 w-5' />
           </button>
@@ -638,24 +638,24 @@ export function ContactsPage() {
           <div className='relative'>
             <button
               onClick={() => setShowMenu(!showMenu)}
-              className='rounded-lg p-1.5 hover:bg-muted/50 transition-colors'
+              className='rounded-lg p-1.5 hover:bg-elev-1 transition-colors'
             >
               <span className='i-lucide-more-horizontal h-5 w-5' />
             </button>
             {showMenu && (
               <>
                 <div className='fixed inset-0 z-50' onClick={() => setShowMenu(false)} />
-                <div className='absolute right-0 top-full mt-1 z-50 w-40 rounded-lg border border-border/40 bg-background shadow-lg'>
+                <div className='absolute right-0 top-full mt-1 z-50 w-40 rounded-lg border border-border-soft bg-canvas shadow-lg'>
                   <button
                     onClick={() => void handleExport()}
-                    className='flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50 transition-colors'
+                    className='flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-elev-1 transition-colors'
                   >
                     <span className='i-lucide-download h-4 w-4' />
                     export
                   </button>
                   <button
                     onClick={() => fileInputRef.current?.click()}
-                    className='flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50 transition-colors'
+                    className='flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-elev-1 transition-colors'
                   >
                     <span className='i-lucide-upload h-4 w-4' />
                     import
@@ -695,13 +695,13 @@ export function ContactsPage() {
       {/* search and filter */}
       <div className='px-4 py-3 space-y-2'>
         <div className='relative'>
-          <span className='i-lucide-search absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground' />
+          <span className='i-lucide-search absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-fg-muted' />
           <input
             type='text'
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder='search contacts...'
-            className='w-full rounded-lg border border-border/40 bg-input pl-9 pr-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
+            className='w-full rounded-lg border border-border-soft bg-input pl-9 pr-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
           />
         </div>
         <div className='flex gap-2'>
@@ -711,7 +711,7 @@ export function ContactsPage() {
               'rounded-md px-3 py-1 text-xs transition-colors',
               filter === 'all'
                 ? 'bg-zigner-gold text-zigner-dark'
-                : 'bg-muted/50 text-muted-foreground hover:bg-muted/80'
+                : 'bg-elev-2 text-fg-muted hover:bg-elev-1/80'
             )}
           >
             all
@@ -722,7 +722,7 @@ export function ContactsPage() {
               'rounded-md px-3 py-1 text-xs transition-colors',
               filter === 'favorites'
                 ? 'bg-zigner-gold text-zigner-dark'
-                : 'bg-muted/50 text-muted-foreground hover:bg-muted/80'
+                : 'bg-elev-2 text-fg-muted hover:bg-elev-1/80'
             )}
           >
             favorites
@@ -735,11 +735,11 @@ export function ContactsPage() {
         {filteredContacts.length === 0 ? (
           <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
             <div className='rounded-full bg-primary/10 p-4'>
-              <span className='i-lucide-user h-8 w-8 text-primary' />
+              <span className='i-lucide-user h-8 w-8 text-zigner-gold' />
             </div>
             <div>
               <p className='text-sm font-medium'>no contacts</p>
-              <p className='text-xs text-muted-foreground'>
+              <p className='text-xs text-fg-muted'>
                 {search ? 'no contacts match your search' : 'add your first contact to get started'}
               </p>
             </div>

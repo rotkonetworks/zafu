@@ -7,6 +7,7 @@ import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../state';
 import { selectLock, selectActiveNetwork, selectEffectiveKeyInfo, selectKeyInfos } from '../state/keyring';
+import { isPro } from '../state/license';
 import { PopupPath } from '../routes/popup/paths';
 import { cn } from '@repo/ui/lib/utils';
 import { isSidePanel } from '../utils/popup-detection';
@@ -30,6 +31,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
   const activeNetwork = useStore(selectActiveNetwork);
   const keyInfo = useStore(selectEffectiveKeyInfo);
   const allKeyInfos = useStore(selectKeyInfos);
+  const pro = useStore(isPro);
   const inSidePanel = isSidePanel();
   const [zidCopied, setZidCopied] = useState(false);
 
@@ -113,11 +115,11 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
       />
 
       {/* drawer */}
-      <div className='fixed right-0 top-0 bottom-0 z-50 w-64 bg-background border-l border-border/40 shadow-xl flex flex-col'>
+      <div className='fixed right-0 top-0 bottom-0 z-50 w-64 bg-canvas border-l border-border-soft shadow-xl flex flex-col'>
         {/* header */}
-        <div className='flex items-center justify-between px-4 py-3 border-b border-border/40'>
-          <span className='font-medium'>zafu</span>
-          <button onClick={onClose} className='p-1 rounded-lg hover:bg-muted/50 transition-colors'>
+        <div className='flex items-center justify-between px-4 py-3 border-b border-border-soft'>
+          <span className='text-[13px] text-fg-high'>zafu</span>
+          <button onClick={onClose} className='p-1 rounded-md text-fg-muted hover:text-fg-high hover:bg-elev-1 transition-colors'>
             <span className='i-lucide-x h-4 w-4' />
           </button>
         </div>
@@ -130,11 +132,11 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
               setZidCopied(true);
               setTimeout(() => setZidCopied(false), 1500);
             }}
-            className='mx-4 mt-3 flex items-center gap-2 rounded-lg border border-border/40 px-3 py-2 text-left hover:bg-muted/50 transition-colors'
+            className='mx-4 mt-3 flex items-center gap-2 rounded-md border border-border-soft px-3 py-2 text-left hover:bg-elev-1 transition-colors'
           >
-            <span className='i-lucide-fingerprint h-3.5 w-3.5 text-muted-foreground' />
-            <span className='text-xs font-mono text-muted-foreground truncate'>{zidAddress}</span>
-            <span className='text-[10px] text-muted-foreground/60 ml-auto'>
+            <span className='i-lucide-fingerprint h-3.5 w-3.5 text-fg-dim' />
+            <span className='text-xs tabular text-fg-muted truncate'>{zidAddress}</span>
+            <span className='text-[10px] text-fg-dim ml-auto lowercase tracking-[0.04em]'>
               {zidCopied ? 'copied' : 'zid'}
             </span>
           </button>
@@ -147,8 +149,8 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
               key={i}
               onClick={item.onClick}
               className={cn(
-                'flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors hover:bg-muted/50',
-                item.className
+                'flex w-full items-center gap-3 px-3 py-2.5 rounded-md text-[13px] text-fg hover:text-fg-high transition-colors hover:bg-elev-1',
+                item.className,
               )}
             >
               <span className={cn(item.icon, 'h-4 w-4')} />
@@ -157,24 +159,33 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
           ))}
         </nav>
 
-        {/* footer  - donate + about */}
-        <div className='mt-auto border-t border-border/40 px-4 py-3'>
+        {/* footer — upgrade (if free) + donate (always offered when available) + about */}
+        <div className='mt-auto border-t border-border-soft px-4 py-3 flex flex-col gap-2'>
+          {!pro && (
+            <button
+              onClick={() => { navigate(PopupPath.SUBSCRIBE); onClose(); }}
+              className='flex w-full items-center justify-center gap-2 px-3 py-2 rounded-md bg-zigner-gold text-zigner-dark hover:bg-zigner-gold-light transition-colors text-[13px] lowercase tracking-[0.04em]'
+            >
+              <span className='i-lucide-zap h-3.5 w-3.5' />
+              <span>upgrade to pro</span>
+            </button>
+          )}
           {donation && (
             <button
               onClick={handleDonate}
-              className='flex w-full items-center gap-2 px-3 py-2 mb-3 rounded-lg border border-border/40 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors'
+              className='flex w-full items-center justify-center gap-2 px-3 py-2 rounded-md border border-border-soft text-[13px] text-fg-muted hover:text-fg-high hover:bg-elev-1 transition-colors'
             >
               <span className='i-lucide-heart h-3.5 w-3.5' />
               <span>donate {activeNetwork}</span>
             </button>
           )}
 
-          <div className='flex items-center gap-3 text-[10px] text-muted-foreground'>
-            <a href='https://rotko.net' target='_blank' rel='noopener noreferrer' className='hover:text-foreground'>rotko.net</a>
-            <a href='https://github.com/rotkonetworks/zafu' target='_blank' rel='noopener noreferrer' className='hover:text-foreground'>github</a>
-            <a href='https://zigner.rotko.net' target='_blank' rel='noopener noreferrer' className='hover:text-foreground'>zigner</a>
+          <div className='mt-1 flex items-center gap-3 text-[10px] text-fg-dim lowercase tracking-[0.04em]'>
+            <a href='https://rotko.net' target='_blank' rel='noopener noreferrer' className='hover:text-fg-high'>rotko.net</a>
+            <a href='https://github.com/rotkonetworks/zafu' target='_blank' rel='noopener noreferrer' className='hover:text-fg-high'>github</a>
+            <a href='https://zigner.rotko.net' target='_blank' rel='noopener noreferrer' className='hover:text-fg-high'>zigner</a>
           </div>
-          <p className='text-[9px] text-muted-foreground/50 mt-1'>GPL-3.0</p>
+          <p className='text-[9px] text-fg-dim mt-1 tabular'>GPL-3.0</p>
         </div>
       </div>
     </>

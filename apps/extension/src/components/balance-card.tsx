@@ -51,18 +51,18 @@ export const BalanceCard = ({
   return (
     <div
       className={cn(
-        'relative overflow-hidden rounded-lg border border-border/40 bg-gradient-to-br from-card to-card/80 p-5',
-        className
+        'relative overflow-hidden rounded-md border border-border-soft bg-elev-1 p-5',
+        className,
       )}
     >
       {/* Balance Section */}
       <div className='mb-6'>
         <div className='flex items-center justify-between'>
-          <span className='text-sm text-muted-foreground'>{balanceLabel}</span>
+          <span className='kicker'>{balanceLabel}</span>
           {onTogglePrivacy && (
             <button
               onClick={onTogglePrivacy}
-              className='rounded-full p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground'
+              className='rounded-full p-1 text-fg-dim hover:text-fg-high hover:bg-elev-2 transition-colors'
             >
               {isPrivacyMode ? (
                 <span className='i-lucide-eye-off h-4 w-4' />
@@ -74,9 +74,11 @@ export const BalanceCard = ({
         </div>
         <div className='mt-1'>
           {isLoading ? (
-            <div className='h-9 w-32 animate-pulse rounded-md bg-muted' />
+            <div className='h-9 w-32 animate-pulse rounded-md bg-elev-2' />
           ) : (
-            <span className='text-3xl font-medium tracking-tight'>
+            // balance IS the figure — gold is reserved for headings + figures per
+            // design system. tabular-nums so digits don't dance.
+            <span className='text-[32px] text-zigner-gold tabular leading-none tracking-[-0.01em]'>
               {isPrivacyMode ? '••••••' : totalBalance}
             </span>
           )}
@@ -95,13 +97,13 @@ export const BalanceCard = ({
             className='flex flex-col items-center gap-1 py-3'
           >
             {action.icon}
-            <span className='text-xs'>{action.label}</span>
+            <span className='text-xs lowercase tracking-[0.04em]'>{action.label}</span>
           </Button>
         ))}
       </div>
 
-      {/* Decorative gradient */}
-      <div className='pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-primary/10 blur-3xl' />
+      {/* Decorative gold halo */}
+      <div className='pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-zigner-gold/10 blur-3xl' />
     </div>
   );
 };

@@ -15,7 +15,7 @@ export const ApproveDeny = ({
 
   return (
     <div
-      className='flex flex-row justify-between gap-4 rounded-lg bg-card px-4 py-7 shadow-lg'
+      className='flex flex-row justify-between gap-4 rounded-lg bg-elev-1 px-4 py-7 shadow-lg'
     >
       <Button
         variant='gradient'

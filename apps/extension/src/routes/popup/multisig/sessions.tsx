@@ -67,31 +67,31 @@ const WalletRow = ({
   <div
     className={cn(
       'flex items-center w-full rounded-lg px-3 py-3 transition-colors',
-      isActive ? 'bg-primary/10 ring-1 ring-primary/20' : 'hover:bg-muted/50',
+      isActive ? 'bg-primary/10 ring-1 ring-primary/20' : 'hover:bg-elev-1',
     )}
   >
     <button onClick={onSelect} className='flex flex-1 items-center justify-between min-w-0 text-left'>
       <div className='flex flex-col gap-1 min-w-0'>
         <div className='flex items-center gap-2'>
-          <span className='rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary leading-none shrink-0'>
+          <span className='rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-zigner-gold leading-none shrink-0'>
             {wallet.multisig!.threshold}-of-{wallet.multisig!.maxSigners}
           </span>
           <span className='text-sm font-medium truncate'>{wallet.label}</span>
           {isActive && (
-            <span className='i-lucide-check h-3 w-3 text-primary shrink-0' />
+            <span className='i-lucide-check h-3 w-3 text-zigner-gold shrink-0' />
           )}
         </div>
-        <span className='text-[11px] text-muted-foreground font-mono'>
+        <span className='text-[11px] text-fg-muted font-mono'>
           {truncateAddr(wallet.address)}
         </span>
       </div>
-      <span className='text-sm font-mono text-muted-foreground shrink-0 ml-2'>
+      <span className='text-sm font-mono text-fg-muted shrink-0 ml-2'>
         {formatZec(balance)} ZEC
       </span>
     </button>
     <button
       onClick={onEdit}
-      className='ml-2 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors shrink-0'
+      className='ml-2 p-1.5 rounded-md text-fg-muted hover:text-fg-high hover:bg-elev-1 transition-colors shrink-0'
       title='wallet settings'
     >
       <span className='i-lucide-settings h-3.5 w-3.5' />
@@ -131,11 +131,11 @@ export const MultisigPage = () => {
       {/* header */}
       <div className='flex items-center justify-between'>
         <div className='flex items-center gap-2'>
-          <span className='i-lucide-shield h-5 w-5 text-primary' />
+          <span className='i-lucide-shield h-5 w-5 text-zigner-gold' />
           <h2 className='text-base font-semibold'>Multisig</h2>
         </div>
         {walletsWithIndex.length > 0 && (
-          <span className='text-sm font-mono text-muted-foreground'>
+          <span className='text-sm font-mono text-fg-muted'>
             {formatZec(totalZat)} ZEC
           </span>
         )}
@@ -159,7 +159,7 @@ export const MultisigPage = () => {
           ))}
         </div>
       ) : (
-        <div className='flex flex-col items-center gap-2 py-8 text-center text-muted-foreground'>
+        <div className='flex flex-col items-center gap-2 py-8 text-center text-fg-muted'>
           <span className='i-lucide-shield-off h-8 w-8 opacity-50' />
           <p className='text-sm'>No multisig wallets yet</p>
         </div>
@@ -170,14 +170,14 @@ export const MultisigPage = () => {
         <div className='flex gap-2'>
           <button
             onClick={() => navigate(PopupPath.MULTISIG_CREATE)}
-            className='flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary/10 px-3 py-2.5 text-sm font-medium text-primary transition-colors hover:bg-primary/20'
+            className='flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary/10 px-3 py-2.5 text-sm font-medium text-zigner-gold transition-colors hover:bg-primary/20'
           >
             <span className='i-lucide-plus h-4 w-4' />
             Create
           </button>
           <button
             onClick={() => navigate(PopupPath.MULTISIG_JOIN)}
-            className='flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary/10 px-3 py-2.5 text-sm font-medium text-primary transition-colors hover:bg-primary/20'
+            className='flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary/10 px-3 py-2.5 text-sm font-medium text-zigner-gold transition-colors hover:bg-primary/20'
           >
             <span className='i-lucide-user-plus h-4 w-4' />
             Join
@@ -186,7 +186,7 @@ export const MultisigPage = () => {
         {walletsWithIndex.length > 0 && (
           <button
             onClick={() => navigate(PopupPath.MULTISIG_SIGN)}
-            className='flex items-center justify-center gap-1.5 rounded-lg border border-border/40 px-3 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted/50'
+            className='flex items-center justify-center gap-1.5 rounded-lg border border-border-soft px-3 py-2.5 text-sm font-medium text-fg transition-colors hover:bg-elev-1'
           >
             <span className='i-lucide-pen-tool h-4 w-4' />
             Co-sign transaction

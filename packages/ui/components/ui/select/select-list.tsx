@@ -80,7 +80,7 @@ type OptionProps<T = never> = OptionPropsWithValue<T> | OptionPropsWithoutValue;
 const Option = <T,>({ label, secondary, isSelected, image, ...rest }: OptionProps<T>) => (
   <div
     className={cn(
-      'flex items-center cursor-pointer gap-4 rounded-[6px] border-[1px] border-DEFAULT border-solid border-border bg-charcoal p-4 transition-colors',
+      'flex items-center cursor-pointer gap-4 rounded-[6px] border-[1px] border-DEFAULT border-solid border-border-hard bg-charcoal p-4 transition-colors',
       isSelected && 'border-teal',
     )}
     role='button'
@@ -98,7 +98,7 @@ const Option = <T,>({ label, secondary, isSelected, image, ...rest }: OptionProp
     <div className='flex grow flex-col gap-1'>
       <div>{label}</div>
 
-      {!!secondary && <span className='text-xs text-muted-foreground'>{secondary}</span>}
+      {!!secondary && <span className='text-xs text-fg-muted'>{secondary}</span>}
     </div>
   </div>
 );

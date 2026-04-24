@@ -135,12 +135,12 @@ DialogContent.displayName = DialogPrimitive.Content.displayName;
 const DialogHeader = ({ children }: { children?: React.ReactNode }) => (
   <div
     className={cn(
-      'flex items-center gap-4 px-4 text-xl leading-[30px] font-headline font-medium h-[70px] border-b border-border/40 shrink-0 overflow-hidden w-full',
+      'flex items-center gap-4 px-4 text-xl leading-[30px] font-headline font-medium h-[70px] border-b border-border-soft shrink-0 overflow-hidden w-full',
     )}
   >
     <DialogPrimitive.Close
       aria-label='Close'
-      className='rounded-sm text-muted-foreground ring-offset-background transition-opacity hover:opacity-50 focus:outline-none focus:ring-0 focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent'
+      className='rounded-sm text-fg-muted ring-offset-background transition-opacity hover:opacity-50 focus:outline-none focus:ring-0 focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-elev-1'
     >
       <Cross2Icon className='size-6' />
     </DialogPrimitive.Close>
@@ -179,7 +179,7 @@ const DialogDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Description
     ref={ref}
-    className={cn('text-sm text-muted-foreground', className)}
+    className={cn('text-sm text-fg-muted', className)}
     {...props}
   />
 ));

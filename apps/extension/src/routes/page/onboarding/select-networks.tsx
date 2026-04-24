@@ -151,16 +151,16 @@ export const SelectNetworks = () => {
                   className={cn(
                     'flex items-center gap-4 p-4 rounded-lg border transition-colors text-left',
                     isSelected
-                      ? 'border-primary bg-primary/10'
-                      : 'border-border/40 hover:border-muted-foreground/50',
+                      ? 'border-zigner-gold bg-primary/10'
+                      : 'border-border-soft hover:border-muted-foreground/50',
                   )}
                 >
                   <div
                     className={cn(
                       'w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold',
                       isSelected
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted text-muted-foreground'
+                        ? 'bg-zigner-gold text-zigner-dark'
+                        : 'bg-elev-2 text-fg-muted'
                     )}
                   >
                     {network.icon}
@@ -174,7 +174,7 @@ export const SelectNetworks = () => {
                         </span>
                       )}
                     </div>
-                    <div className='text-sm text-muted-foreground'>
+                    <div className='text-sm text-fg-muted'>
                       {network.description}
                     </div>
                   </div>
@@ -182,11 +182,11 @@ export const SelectNetworks = () => {
                       className={cn(
                         'w-5 h-5 rounded border-2 flex items-center justify-center transition-colors',
                         isSelected
-                          ? 'border-primary bg-primary'
+                          ? 'border-zigner-gold bg-zigner-gold'
                           : 'border-muted-foreground/50'
                       )}
                     >
-                      {isSelected && <span className='i-lucide-check h-3 w-3 text-primary-foreground' />}
+                      {isSelected && <span className='i-lucide-check h-3 w-3 text-zigner-dark' />}
                     </div>
                 </button>
               );
@@ -195,13 +195,13 @@ export const SelectNetworks = () => {
 
           {/* zcash sync start - only shown when zcash is selected */}
           {selected.has('zcash') && (
-            <div className='mt-4 rounded-lg border border-border/40 p-3'>
+            <div className='mt-4 rounded-lg border border-border-soft p-3'>
               <div className='flex items-center justify-between mb-2'>
                 <span className='text-xs font-medium'>wallet birthday</span>
                 <button
                   type='button'
                   onClick={() => setInputMode(inputMode === 'date' ? 'block' : 'date')}
-                  className='text-[10px] text-muted-foreground hover:text-foreground transition-colors'
+                  className='text-[10px] text-fg-muted hover:text-fg-high transition-colors'
                 >
                   {inputMode === 'date' ? 'enter block instead' : 'enter date instead'}
                 </button>
@@ -221,7 +221,7 @@ export const SelectNetworks = () => {
                       setZcashBirthday('');
                     }
                   }}
-                  className='w-full bg-input border border-border/40 px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-primary'
+                  className='w-full bg-input border border-border-soft px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-zigner-gold'
                 />
               ) : (
                 <input
@@ -237,17 +237,17 @@ export const SelectNetworks = () => {
                     }
                   }}
                   placeholder='leave blank for new wallets'
-                  className='w-full bg-input border border-border/40 px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-primary'
+                  className='w-full bg-input border border-border-soft px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-zigner-gold'
                 />
               )}
 
               {zcashBirthday && (
-                <p className='mt-1.5 text-[10px] text-muted-foreground'>
+                <p className='mt-1.5 text-[10px] text-fg-muted'>
                   ~block {Number(zcashBirthday).toLocaleString()}
                   {zcashDate && ` (~${zcashDate})`}
                 </p>
               )}
-              <p className='mt-1 text-[10px] text-muted-foreground'>
+              <p className='mt-1 text-[10px] text-fg-muted'>
                 for existing wallets, pick the approximate date you created the wallet.
                 leave blank for new wallets. rounded for privacy.
               </p>

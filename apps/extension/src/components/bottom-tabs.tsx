@@ -27,12 +27,12 @@ const TabButton = memo(({
     onClick={() => onNavigate(tab.path)}
     className={cn(
       'flex flex-1 flex-col items-center justify-center gap-0.5',
-      'transition-colors',
-      isActive ? 'text-primary' : 'text-muted-foreground'
+      'transition-colors hover:text-fg-high',
+      isActive ? 'text-zigner-gold' : 'text-fg-dim',
     )}
   >
     {isActive && tab.activeIcon ? tab.activeIcon : tab.icon}
-    <span className='text-[10px]'>{tab.label}</span>
+    <span className='text-[10px] lowercase tracking-[0.04em]'>{tab.label}</span>
   </button>
 ));
 TabButton.displayName = 'TabButton';
@@ -51,11 +51,11 @@ export const BottomTabs = memo(({ tabs }: BottomTabsProps) => {
     <nav
       className={cn(
         'fixed bottom-0 left-0 right-0 z-50',
-        'border-t border-border/40 bg-background',
+        'border-t border-border-soft bg-canvas',
         // GPU layer for smooth scrolling
         'transform-gpu will-change-transform',
         // CSS containment
-        'contain-layout contain-style'
+        'contain-layout contain-style',
       )}
     >
       <div className='flex h-12 items-center justify-around'>

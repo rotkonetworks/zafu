@@ -67,13 +67,13 @@ export function AddContactDialog({
 
   return (
     <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm' onClick={onClose}>
-      <div className='w-full max-w-sm mx-4 rounded-lg border border-border/40 bg-background shadow-xl' onClick={e => e.stopPropagation()}>
+      <div className='w-full max-w-sm mx-4 rounded-lg border border-border-soft bg-canvas shadow-xl' onClick={e => e.stopPropagation()}>
         {/* header */}
-        <div className='flex items-center justify-between border-b border-border/40 px-4 py-3'>
+        <div className='flex items-center justify-between border-b border-border-soft px-4 py-3'>
           <h2 className='text-lg font-medium'>add to contacts</h2>
           <button
             onClick={onClose}
-            className='rounded-lg p-1 hover:bg-muted/50 transition-colors'
+            className='rounded-lg p-1 hover:bg-elev-1 transition-colors'
           >
             <span className='i-lucide-x h-4 w-4' />
           </button>
@@ -82,25 +82,25 @@ export function AddContactDialog({
         {/* content */}
         <div className='p-4 space-y-4'>
           {/* address preview */}
-          <div className='rounded-lg border border-border/40 bg-muted/30 p-3'>
-            <div className='text-xs text-muted-foreground mb-1'>address</div>
+          <div className='rounded-lg border border-border-soft bg-elev-2 p-3'>
+            <div className='text-xs text-fg-muted mb-1'>address</div>
             <div className='text-sm font-mono break-all'>{address}</div>
             <div className='mt-1'>
-              <span className='rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground'>
+              <span className='rounded-md bg-elev-2 px-1.5 py-0.5 text-[10px] text-fg-muted'>
                 {network}
               </span>
             </div>
           </div>
 
           {/* mode tabs */}
-          <div className='flex rounded-lg border border-border/40 overflow-hidden'>
+          <div className='flex rounded-lg border border-border-soft overflow-hidden'>
             <button
               onClick={() => setMode('new')}
               className={cn(
                 'flex-1 py-2 text-sm font-medium transition-colors',
                 mode === 'new'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted/30 hover:bg-muted/50'
+                  ? 'bg-zigner-gold text-zigner-dark'
+                  : 'bg-elev-2 hover:bg-elev-1'
               )}
             >
               <span className='i-lucide-plus h-4 w-4 inline mr-1' />
@@ -112,8 +112,8 @@ export function AddContactDialog({
               className={cn(
                 'flex-1 py-2 text-sm font-medium transition-colors',
                 mode === 'existing'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted/30 hover:bg-muted/50',
+                  ? 'bg-zigner-gold text-zigner-dark'
+                  : 'bg-elev-2 hover:bg-elev-1',
                 existingContacts.length === 0 && 'opacity-50 cursor-not-allowed'
               )}
             >
@@ -125,7 +125,7 @@ export function AddContactDialog({
           {mode === 'new' ? (
             /* new contact form */
             <div>
-              <label className='block text-xs text-muted-foreground mb-1'>
+              <label className='block text-xs text-fg-muted mb-1'>
                 contact name
               </label>
               <input
@@ -133,32 +133,32 @@ export function AddContactDialog({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder={defaultName}
-                className='w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
+                className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
                 autoFocus
               />
-              <p className='text-xs text-muted-foreground mt-1'>
+              <p className='text-xs text-fg-muted mt-1'>
                 leave empty to use address as name
               </p>
             </div>
           ) : (
             /* existing contact selector */
             <div>
-              <label className='block text-xs text-muted-foreground mb-1'>
+              <label className='block text-xs text-fg-muted mb-1'>
                 select contact
               </label>
-              <div className='max-h-40 overflow-y-auto rounded-lg border border-border/40'>
+              <div className='max-h-40 overflow-y-auto rounded-lg border border-border-soft'>
                 {existingContacts.map((contact) => (
                   <button
                     key={contact.id}
                     onClick={() => setSelectedContact(contact)}
                     className={cn(
-                      'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-muted/50',
+                      'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-elev-1',
                       selectedContact?.id === contact.id && 'bg-primary/10'
                     )}
                   >
-                    <span className='i-lucide-user h-4 w-4 text-muted-foreground' />
+                    <span className='i-lucide-user h-4 w-4 text-fg-muted' />
                     <span className='truncate'>{contact.name}</span>
-                    <span className='ml-auto text-xs text-muted-foreground'>
+                    <span className='ml-auto text-xs text-fg-muted'>
                       {contact.addresses.length} addr
                     </span>
                   </button>
@@ -169,10 +169,10 @@ export function AddContactDialog({
         </div>
 
         {/* footer */}
-        <div className='flex gap-2 border-t border-border/40 px-4 py-3'>
+        <div className='flex gap-2 border-t border-border-soft px-4 py-3'>
           <button
             onClick={onClose}
-            className='flex-1 rounded-lg border border-border/40 py-3 text-sm font-medium hover:bg-muted/50 transition-colors'
+            className='flex-1 rounded-lg border border-border-soft py-3 text-sm font-medium hover:bg-elev-1 transition-colors'
           >
             cancel
           </button>

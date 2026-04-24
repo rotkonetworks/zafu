@@ -75,16 +75,16 @@ const UnbondingTooltipContent = ({
     <div className='flex flex-col gap-2 font-normal text-left'>
       <div className='font-medium text-white'>Unbonding Token</div>
       <div>
-        <span className='text-muted-foreground'>Start: </span>
+        <span className='text-fg-muted'>Start: </span>
         <span className='text-white font-mono'>{info.startAt.toLocaleString()}</span>
       </div>
       <div>
-        <span className='text-muted-foreground'>End: </span>
+        <span className='text-fg-muted'>End: </span>
         <span className='text-white font-mono'>{info.claimableAt.toLocaleString()}</span>
       </div>
       {currentBlockHeight !== undefined && blocksRemaining !== undefined && (
         <div>
-          <span className='text-muted-foreground'>Current: </span>
+          <span className='text-fg-muted'>Current: </span>
           <span className='text-white font-mono'>{currentBlockHeight.toLocaleString()}</span>
           {isReady ? (
             <span className='text-green-400 ml-2'>Ready!</span>
@@ -96,7 +96,7 @@ const UnbondingTooltipContent = ({
         </div>
       )}
       <div>
-        <span className='text-muted-foreground'>Validator: </span>
+        <span className='text-fg-muted'>Validator: </span>
         {info.validatorName && (
           <div className='text-white font-medium'>{info.validatorName}</div>
         )}
@@ -106,7 +106,7 @@ const UnbondingTooltipContent = ({
         <button
           type='button'
           onClick={e => { e.stopPropagation(); onClaim(); }}
-          className='mt-1 rounded-md bg-teal px-3 py-1.5 text-sm font-medium text-black hover:bg-teal/80 transition-colors'
+          className='mt-1 rounded-md bg-zigner-gold px-3 py-1.5 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors'
         >
           Claim
         </button>
@@ -115,7 +115,7 @@ const UnbondingTooltipContent = ({
         href={UNBONDING_DOCS_URL}
         target='_blank'
         rel='noopener noreferrer'
-        className='text-[10px] text-teal hover:underline'
+        className='text-[10px] text-zigner-gold hover:underline'
       >
         Learn more
       </a>
@@ -157,7 +157,7 @@ export const ValueComponent = ({
           <span
             className={cn(
               symbol.startsWith('delUM') ? 'max-w-[40px]' : 'max-w-[80px]',
-              'truncate font-mono text-xs text-muted-foreground',
+              'truncate font-mono text-xs text-fg-muted',
             )}
             title={symbol}
           >

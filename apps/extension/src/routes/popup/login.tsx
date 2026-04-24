@@ -39,17 +39,18 @@ export const Login = () => {
   return (
     <FadeTransition className='flex flex-col items-stretch justify-start'>
       <div className='flex h-screen flex-col justify-between p-[30px] pt-10 '>
-        <div className='mx-auto my-0 flex flex-col items-center'>
-          <h1 className='bg-text-linear bg-clip-text font-headline text-3xl font-bold text-transparent'>
-            Zafu
+        <div className='mx-auto my-0 flex flex-col items-center gap-1'>
+          <span className='kicker'>privacy wallet</span>
+          <h1 className='text-[32px] text-zigner-gold lowercase tracking-[-0.01em] leading-none'>
+            zafu
           </h1>
         </div>
         <form onSubmit={handleUnlock} className='grid gap-4'>
           <PasswordInput
             passwordValue={input}
             label={
-              <p className='font-headline text-2xl font-medium text-foreground'>
-                Enter password
+              <p className='text-[18px] text-fg-high lowercase tracking-[-0.01em]'>
+                enter password
               </p>
             }
             onChange={handleChangePassword}
@@ -66,7 +67,7 @@ export const Login = () => {
           </Button>
         </form>
         <div className='flex flex-col gap-1'>
-          <p className='text-center text-muted-foreground'>
+          <p className='text-center text-fg-muted'>
             Need help?{' '}
             <a
               className='cursor-pointer text-teal hover:underline transition-colors'
@@ -77,7 +78,7 @@ export const Login = () => {
               Chat with us
             </a>
           </p>
-          <p className='text-center text-xs text-muted-foreground/50'>
+          <p className='text-center text-xs text-fg-muted/50'>
             {BUILD_COMMIT}-{BUILD_DATE}
           </p>
         </div>

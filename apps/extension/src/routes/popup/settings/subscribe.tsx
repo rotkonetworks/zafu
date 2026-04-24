@@ -49,7 +49,7 @@ function LiveTimer({ startMs }: { startMs: number }) {
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [startMs]);
-  return <span className='font-mono text-xs text-muted-foreground tabular-nums'>{elapsed}s</span>;
+  return <span className='font-mono text-xs text-fg-muted tabular-nums'>{elapsed}s</span>;
 }
 
 export const SubscribePage = () => {
@@ -335,23 +335,23 @@ export const SubscribePage = () => {
 
         {/* status */}
         {pro ? (
-          <div className='rounded border border-border/40 p-3'>
+          <div className='rounded border border-border-soft p-3'>
             <div className='flex items-center gap-2'>
               <span className='h-2 w-2 rounded-full bg-green-400' />
               <span className='text-xs font-mono'>pro - {days} days remaining</span>
             </div>
           </div>
         ) : (
-          <div className='rounded border border-border/40 p-3'>
+          <div className='rounded border border-border-soft p-3'>
             <div className='flex items-center gap-2'>
-              <span className='h-2 w-2 rounded-full bg-muted-foreground/40' />
+              <span className='h-2 w-2 rounded-full bg-fg-muted/40' />
               <span className='text-xs font-mono'>free plan</span>
             </div>
           </div>
         )}
 
         {/* features list */}
-        <div className='text-[10px] font-mono text-muted-foreground/60'>
+        <div className='text-[10px] font-mono text-fg-dim'>
           <p className='mb-2'>free for everyone:</p>
           <ul className='flex flex-col gap-0.5 pl-2 mb-3'>
             {FREE_FEATURES.map(f => (
@@ -365,7 +365,7 @@ export const SubscribePage = () => {
           <ul className='flex flex-col gap-0.5 pl-2'>
             {PRO_FEATURES.map(f => (
               <li key={f} className='flex items-center gap-1.5'>
-                <span className={pro ? 'i-lucide-check size-3 text-green-400' : 'size-3 text-muted-foreground/30'}>
+                <span className={pro ? 'i-lucide-check size-3 text-green-400' : 'size-3 text-fg-muted/30'}>
                   {pro ? '' : '\u00b7'}
                 </span>
                 {f.replace(/_/g, ' ')}
@@ -383,7 +383,7 @@ export const SubscribePage = () => {
                 payment detected - {(pending.pendingZat / 1e8).toFixed(4)} ZEC
               </span>
             </div>
-            <div className='text-[9px] font-mono text-muted-foreground/60 mt-1'>
+            <div className='text-[9px] font-mono text-fg-dim mt-1'>
               {pending.requiredConfs === 0
                 ? 'crediting...'
                 : `${pending.pendingConfs}/${pending.requiredConfs} confirmations`}
@@ -393,35 +393,35 @@ export const SubscribePage = () => {
 
         {/* payment flow — works for new subscribers and for extending pro users */}
         <>
-            <hr className='border-border/40' />
+            <hr className='border-border-soft' />
 
             {/* month selector */}
             <div className='flex items-center gap-3'>
               <button
                 onClick={() => setMonths(m => Math.max(1, m - 1))}
                 disabled={months <= 1 || payState !== 'idle'}
-                className='rounded border border-border/40 px-3 py-1.5 text-sm font-mono text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors'
+                className='rounded border border-border-soft px-3 py-1.5 text-sm font-mono text-fg-muted hover:text-fg-high disabled:opacity-30 transition-colors'
               >
                 -
               </button>
               <div className='flex-1 text-center'>
-                <span className='text-lg font-mono text-foreground'>{months}</span>
-                <span className='text-xs font-mono text-muted-foreground ml-1.5'>
+                <span className='text-lg font-mono text-fg'>{months}</span>
+                <span className='text-xs font-mono text-fg-muted ml-1.5'>
                   {months === 1 ? 'month' : 'months'}
                 </span>
               </div>
               <button
                 onClick={() => setMonths(m => Math.min(12, m + 1))}
                 disabled={months >= 12 || payState !== 'idle'}
-                className='rounded border border-border/40 px-3 py-1.5 text-sm font-mono text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors'
+                className='rounded border border-border-soft px-3 py-1.5 text-sm font-mono text-fg-muted hover:text-fg-high disabled:opacity-30 transition-colors'
               >
                 +
               </button>
             </div>
 
             <div className='text-center'>
-              <span className='text-sm font-mono text-foreground'>{amountZec} ZEC</span>
-              <span className='text-xs font-mono text-muted-foreground ml-2'>
+              <span className='text-sm font-mono text-fg'>{amountZec} ZEC</span>
+              <span className='text-xs font-mono text-fg-muted ml-2'>
                 {pro ? `= +${daysAdded} days` : `= ${daysAdded} days`}
               </span>
             </div>
@@ -430,7 +430,7 @@ export const SubscribePage = () => {
             {payState === 'idle' && memo && (
               <button
                 onClick={handleReview}
-                className='rounded border border-primary/40 bg-primary/10 py-3 text-sm font-mono text-primary hover:bg-primary/20 transition-colors'
+                className='rounded border border-primary/40 bg-primary/10 py-3 text-sm font-mono text-zigner-gold hover:bg-primary/20 transition-colors'
               >
                 {pro
                   ? `extend +${daysAdded} days${isZignerWallet ? ' with zigner' : ''}`
@@ -444,32 +444,32 @@ export const SubscribePage = () => {
                 signing; mnemonic builds + broadcasts locally after password gate. */}
             {payState === 'review' && (
               <div className='rounded border border-primary/40 bg-primary/5 p-3 flex flex-col gap-2'>
-                <p className='text-xs font-mono text-muted-foreground'>transaction summary</p>
+                <p className='text-xs font-mono text-fg-muted'>transaction summary</p>
                 <div className='flex justify-between text-xs font-mono'>
-                  <span className='text-muted-foreground'>amount</span>
-                  <span className='text-foreground'>{amountZec} ZEC</span>
+                  <span className='text-fg-muted'>amount</span>
+                  <span className='text-fg'>{amountZec} ZEC</span>
                 </div>
                 <div className='flex justify-between text-xs font-mono'>
-                  <span className='text-muted-foreground'>duration</span>
-                  <span className='text-foreground'>{daysAdded} days pro</span>
+                  <span className='text-fg-muted'>duration</span>
+                  <span className='text-fg'>{daysAdded} days pro</span>
                 </div>
                 <div className='flex justify-between items-start text-xs font-mono gap-2'>
-                  <span className='text-muted-foreground shrink-0'>to</span>
-                  <span className='text-foreground text-right break-all text-[10px]'>{ROTKO_LICENSE_ADDRESS.slice(0, 20)}...{ROTKO_LICENSE_ADDRESS.slice(-8)}</span>
+                  <span className='text-fg-muted shrink-0'>to</span>
+                  <span className='text-fg text-right break-all text-[10px]'>{ROTKO_LICENSE_ADDRESS.slice(0, 20)}...{ROTKO_LICENSE_ADDRESS.slice(-8)}</span>
                 </div>
                 <div className='flex justify-between items-start text-xs font-mono gap-2'>
-                  <span className='text-muted-foreground shrink-0'>memo</span>
-                  <span className='text-foreground text-right break-all text-[10px]'>{memo.slice(0, 12)}...{memo.slice(-8)}</span>
+                  <span className='text-fg-muted shrink-0'>memo</span>
+                  <span className='text-fg text-right break-all text-[10px]'>{memo.slice(0, 12)}...{memo.slice(-8)}</span>
                 </div>
                 {isZignerWallet && (
-                  <p className='text-[10px] font-mono text-muted-foreground/80 mt-1'>
+                  <p className='text-[10px] font-mono text-fg-muted mt-1'>
                     next: build an unsigned tx, scan the QR with your zigner device, then scan its signature back.
                   </p>
                 )}
                 <div className='flex gap-2 mt-2'>
                   <button
                     onClick={() => setPayState('idle')}
-                    className='flex-1 rounded border border-border/40 py-2 text-xs font-mono text-muted-foreground hover:text-foreground'
+                    className='flex-1 rounded border border-border-soft py-2 text-xs font-mono text-fg-muted hover:text-fg-high'
                   >
                     cancel
                   </button>
@@ -478,7 +478,7 @@ export const SubscribePage = () => {
                       if (isZignerWallet) void handleZignerBuild();
                       else void handleConfirm();
                     }}
-                    className='flex-1 rounded border border-primary/40 bg-primary/10 py-2 text-xs font-mono text-primary hover:bg-primary/20'
+                    className='flex-1 rounded border border-primary/40 bg-primary/10 py-2 text-xs font-mono text-zigner-gold hover:bg-primary/20'
                   >
                     {isZignerWallet ? 'continue to sign' : 'confirm & pay'}
                   </button>
@@ -489,9 +489,9 @@ export const SubscribePage = () => {
             {/* zigner: show sign-request QR */}
             {payState === 'zigner-sign' && signRequestQr && (
               <div className='rounded border border-primary/40 bg-primary/5 p-3 flex flex-col gap-3 items-center'>
-                <p className='text-xs font-mono text-muted-foreground'>sign with zafu zigner</p>
+                <p className='text-xs font-mono text-fg-muted'>sign with zafu zigner</p>
                 <QrDisplay data={signRequestQr} size={220} />
-                <div className='text-[10px] font-mono text-muted-foreground/80 text-center leading-relaxed'>
+                <div className='text-[10px] font-mono text-fg-muted text-center leading-relaxed'>
                   1. open zafu zigner on your phone<br />
                   2. scan this qr<br />
                   3. review & approve the transaction<br />
@@ -500,13 +500,13 @@ export const SubscribePage = () => {
                 <div className='flex gap-2 w-full'>
                   <button
                     onClick={() => { unsignedTxRef.current = null; setSignRequestQr(null); setPayState('idle'); }}
-                    className='flex-1 rounded border border-border/40 py-2 text-xs font-mono text-muted-foreground hover:text-foreground'
+                    className='flex-1 rounded border border-border-soft py-2 text-xs font-mono text-fg-muted hover:text-fg-high'
                   >
                     cancel
                   </button>
                   <button
                     onClick={() => setPayState('zigner-scan')}
-                    className='flex-1 rounded border border-primary/40 bg-primary/10 py-2 text-xs font-mono text-primary hover:bg-primary/20'
+                    className='flex-1 rounded border border-primary/40 bg-primary/10 py-2 text-xs font-mono text-zigner-gold hover:bg-primary/20'
                   >
                     scan signature
                   </button>
@@ -529,9 +529,9 @@ export const SubscribePage = () => {
 
             {/* building/broadcasting */}
             {(payState === 'building' || payState === 'broadcasting') && (
-              <div className='rounded border border-border/40 p-3 flex flex-col gap-2'>
+              <div className='rounded border border-border-soft p-3 flex flex-col gap-2'>
                 <div className='flex items-center justify-between'>
-                  <span className='text-xs font-mono text-foreground'>
+                  <span className='text-xs font-mono text-fg'>
                     {payState === 'building' ? 'building transaction' : 'broadcasting'}
                   </span>
                   <LiveTimer startMs={buildStartRef.current} />
@@ -543,13 +543,13 @@ export const SubscribePage = () => {
                       const prevMs = i > 0 ? sendSteps[i - 1]!.elapsedMs : 0;
                       const dur = ((s.elapsedMs - prevMs) / 1000).toFixed(1);
                       return (
-                        <div key={i} className={`flex items-start gap-2 text-[10px] font-mono ${isLast ? 'text-foreground' : 'text-muted-foreground'}`}>
+                        <div key={i} className={`flex items-start gap-2 text-[10px] font-mono ${isLast ? 'text-fg' : 'text-fg-muted'}`}>
                           <span className='w-10 text-right shrink-0 tabular-nums'>{(s.elapsedMs / 1000).toFixed(1)}s</span>
                           <span>
                             {s.step}
-                            {s.detail && <span className='text-muted-foreground ml-1'>({s.detail})</span>}
+                            {s.detail && <span className='text-fg-muted ml-1'>({s.detail})</span>}
                             {!isLast && Number(dur) >= 0.5 && (
-                              <span className='text-muted-foreground ml-1'>+{dur}s</span>
+                              <span className='text-fg-muted ml-1'>+{dur}s</span>
                             )}
                           </span>
                         </div>
@@ -557,7 +557,7 @@ export const SubscribePage = () => {
                     })}
                   </div>
                 ) : (
-                  <span className='text-[10px] font-mono text-muted-foreground animate-pulse'>preparing...</span>
+                  <span className='text-[10px] font-mono text-fg-muted animate-pulse'>preparing...</span>
                 )}
               </div>
             )}
@@ -572,7 +572,7 @@ export const SubscribePage = () => {
                   </span>
                 </div>
                 {txid && (
-                  <div className='text-[9px] font-mono text-muted-foreground/50 mt-1 break-all'>
+                  <div className='text-[9px] font-mono text-fg-muted/50 mt-1 break-all'>
                     txid: {txid}
                   </div>
                 )}
@@ -594,7 +594,7 @@ export const SubscribePage = () => {
                   payment sent - may need a few more confirmations
                 </p>
                 {txid && (
-                  <div className='text-[9px] font-mono text-muted-foreground/50 mt-1 break-all'>
+                  <div className='text-[9px] font-mono text-fg-muted/50 mt-1 break-all'>
                     txid: {txid}
                   </div>
                 )}
@@ -607,7 +607,7 @@ export const SubscribePage = () => {
                 <p className='text-xs font-mono text-red-400'>{error}</p>
                 <button
                   onClick={() => { setPayState('idle'); setError(null); }}
-                  className='text-[10px] font-mono text-muted-foreground hover:text-foreground mt-2'
+                  className='text-[10px] font-mono text-fg-muted hover:text-fg-high mt-2'
                 >
                   try again
                 </button>
@@ -617,22 +617,22 @@ export const SubscribePage = () => {
             {/* manual copy fallback — shown only when in-wallet pay isn't available
                  (e.g. zcash not enabled, or user wants to pay from external wallet) */}
             {isZignerWallet && (
-              <div className='rounded border border-border/40 p-3'>
-                <p className='text-[10px] font-mono text-muted-foreground mb-2'>
+              <div className='rounded border border-border-soft p-3'>
+                <p className='text-[10px] font-mono text-fg-muted mb-2'>
                   or pay from an external wallet
                 </p>
                 <button
                   onClick={() => copy(ROTKO_LICENSE_ADDRESS, 'address')}
                   className='w-full text-left mb-2'
                 >
-                  <span className='text-[9px] font-mono text-muted-foreground/50'>
+                  <span className='text-[9px] font-mono text-fg-muted/50'>
                     {copied === 'address' ? 'copied' : 'tap to copy address'}
                   </span>
                   <p className='font-mono text-[10px] break-all'>{ROTKO_LICENSE_ADDRESS}</p>
                 </button>
                 {memo && (
                   <button onClick={() => copy(memo, 'memo')} className='w-full text-left'>
-                    <span className='text-[9px] font-mono text-muted-foreground/50'>
+                    <span className='text-[9px] font-mono text-fg-muted/50'>
                       {copied === 'memo' ? 'copied' : 'tap to copy memo'}
                     </span>
                     <p className='font-mono text-[10px] break-all'>{memo}</p>
@@ -646,7 +646,7 @@ export const SubscribePage = () => {
               <button
                 onClick={() => void manualCheck()}
                 disabled={checking || !zidPubkey}
-                className='rounded border border-border/40 py-2 text-xs font-mono text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors'
+                className='rounded border border-border-soft py-2 text-xs font-mono text-fg-muted hover:text-fg-high disabled:opacity-30 transition-colors'
               >
                 {checking ? 'checking...' : checkResult ?? 'check payment status'}
               </button>

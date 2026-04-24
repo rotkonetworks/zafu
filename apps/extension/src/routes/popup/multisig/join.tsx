@@ -159,19 +159,19 @@ export const MultisigJoin = () => {
     <SettingsScreen title='join multisig' backPath={PopupPath.MULTISIG}>
       {step === 'input' && (
         <div className='flex flex-col gap-4'>
-          <label className='text-xs text-muted-foreground'>
+          <label className='text-xs text-fg-muted'>
             relay url
             <input
-              className='mt-1 w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 font-mono text-xs focus:border-primary/50 focus:outline-none'
+              className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-xs focus:border-primary/50 focus:outline-none'
               value={relayUrl}
               onChange={e => setRelayUrl(e.target.value)}
               placeholder='https://poker.zk.bot'
             />
           </label>
-          <label className='text-xs text-muted-foreground'>
+          <label className='text-xs text-fg-muted'>
             room code
             <input
-              className='mt-1 w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
+              className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
               value={roomCode}
               onChange={e => setRoomCode(e.target.value)}
               placeholder='acid-blue-cave'
@@ -179,7 +179,7 @@ export const MultisigJoin = () => {
             />
           </label>
           <button
-            className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-primary hover:bg-primary/10 transition-colors disabled:opacity-50'
+            className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-50'
             onClick={() => void handleJoin()}
             disabled={!roomCode.trim()}
           >
@@ -191,26 +191,26 @@ export const MultisigJoin = () => {
       {(step === 'joining' || step === 'dkg') && (
         <div className='flex flex-col items-center gap-4'>
           {thresholdInfo && (
-            <span className='rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary'>
+            <span className='rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-zigner-gold'>
               {thresholdInfo}
             </span>
           )}
 
           {/* participant counter */}
           {maxSigners > 0 && (
-            <div className='flex items-center gap-2 rounded-md bg-muted/50 px-3 py-1.5'>
-              <span className='i-lucide-users size-3.5 text-muted-foreground' />
+            <div className='flex items-center gap-2 rounded-md bg-elev-2 px-3 py-1.5'>
+              <span className='i-lucide-users size-3.5 text-fg-muted' />
               <span className='text-xs'>
-                <span className='font-medium text-foreground'>{participantCount}</span>
-                <span className='text-muted-foreground'> / {maxSigners} joined</span>
+                <span className='font-medium text-fg'>{participantCount}</span>
+                <span className='text-fg-muted'> / {maxSigners} joined</span>
               </span>
             </div>
           )}
 
-          <div className='flex items-center gap-2 text-xs text-muted-foreground'>
+          <div className='flex items-center gap-2 text-xs text-fg-muted'>
             <span className='i-lucide-loader-2 size-3.5 animate-spin' />
             {progress || 'connecting...'}
-            <span className='tabular-nums text-muted-foreground/60'>{countdown}s</span>
+            <span className='tabular-nums text-fg-dim'>{countdown}s</span>
           </div>
         </div>
       )}
@@ -220,8 +220,8 @@ export const MultisigJoin = () => {
           <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-3 text-xs text-green-400'>
             joined multisig wallet
           </div>
-          <div className='rounded-lg border border-border/40 bg-card p-3'>
-            <p className='text-[10px] text-muted-foreground'>address</p>
+          <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
+            <p className='text-[10px] text-fg-muted'>address</p>
             <p className='mt-1 break-all font-mono text-xs'>{address}</p>
           </div>
         </div>
@@ -234,7 +234,7 @@ export const MultisigJoin = () => {
           </div>
           <button
             onClick={() => { setStep('input'); setError(''); }}
-            className='rounded-lg border border-border/40 py-2 text-xs hover:bg-muted/50 transition-colors'
+            className='rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
           >
             try again
           </button>

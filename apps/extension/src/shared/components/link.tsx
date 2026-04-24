@@ -17,7 +17,7 @@ export const CustomLink = ({ icon, title, onClick, disabled }: LinkProps) => {
       onClick={onClick}
     >
       <div className='h-[22px]'>{icon}</div>
-      <p className='text-muted-foreground'>{title}</p>
+      <p className='text-fg-muted'>{title}</p>
     </Button>
   );
 };

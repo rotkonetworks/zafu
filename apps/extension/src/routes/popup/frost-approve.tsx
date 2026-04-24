@@ -293,32 +293,33 @@ export const FrostApprove = () => {
   return (
     <div className='flex flex-col h-full p-4 gap-4'>
       <div className='text-center'>
-        <h2 className='text-lg font-semibold'>{actionLabel}</h2>
-        <p className='text-xs text-muted-foreground mt-1'>requested by {app}</p>
+        <span className='kicker'>frost multisig</span>
+        <h2 className='mt-1 text-[18px] text-fg-high lowercase tracking-[-0.01em]'>{actionLabel}</h2>
+        <p className='mt-1 text-[10px] text-fg-dim lowercase tracking-[0.04em]'>requested by {app}</p>
       </div>
 
       {phase === 'confirm' && (
         <div className='flex flex-col gap-4 flex-1'>
-          <div className='rounded-lg border border-border/40 p-3 text-xs space-y-2'>
+          <div className='rounded-md border border-border-soft bg-elev-1 p-3 text-xs space-y-2 text-fg'>
             {action === 'frost-create' && (
               <>
-                <p>Create a {threshold}-of-{maxSigners} FROST multisig wallet.</p>
-                <p className='text-muted-foreground'>This generates a shared key via distributed key generation. All participants must be online.</p>
+                <p>Create a <span className='tabular text-zigner-gold'>{threshold}-of-{maxSigners}</span> FROST multisig wallet.</p>
+                <p className='text-fg-muted'>This generates a shared key via distributed key generation. All participants must be online.</p>
               </>
             )}
             {action === 'frost-join' && (
               <>
-                <p>Join FROST DKG room: <span className='font-mono text-primary'>{roomCode}</span></p>
-                <p className='text-muted-foreground'>You will participate in key generation to create a shared multisig wallet.</p>
+                <p>Join FROST DKG room: <span className='tabular text-zigner-gold'>{roomCode}</span></p>
+                <p className='text-fg-muted'>You will participate in key generation to create a shared multisig wallet.</p>
               </>
             )}
             {action === 'frost-sign' && (
               <>
                 <p>Co-sign a transaction with your FROST key share.</p>
-                <p className='text-muted-foreground font-mono break-all'>sighash: {sighashHex.slice(0, 16)}...{sighashHex.slice(-16)}</p>
+                <p className='text-fg-muted tabular break-all'>sighash: {sighashHex.slice(0, 16)}...{sighashHex.slice(-16)}</p>
               </>
             )}
-            <p className='text-muted-foreground'>Relay: {relayUrl}</p>
+            <p className='text-fg-dim tabular'>relay: {relayUrl}</p>
           </div>
 
           <div className='flex gap-2 mt-auto'>
@@ -330,17 +331,17 @@ export const FrostApprove = () => {
 
       {phase === 'running' && (
         <div className='flex flex-col items-center gap-3 flex-1 justify-center'>
-          <span className='i-lucide-loader-2 size-8 animate-spin text-primary' />
-          <p className='text-sm text-center'>{status}</p>
+          <span className='i-lucide-loader-2 size-8 animate-spin text-zigner-gold' />
+          <p className='text-[13px] text-fg text-center lowercase tracking-[0.02em]'>{status}</p>
         </div>
       )}
 
       {phase === 'complete' && (
         <div className='flex flex-col items-center gap-3 flex-1 justify-center'>
           <span className='i-lucide-check-circle size-10 text-green-400' />
-          <p className='text-sm'>done</p>
+          <p className='text-[13px] text-fg-high lowercase tracking-[0.02em]'>done</p>
           {typeof result?.['address'] === 'string' && (
-            <p className='text-xs font-mono text-muted-foreground break-all px-4'>
+            <p className='text-xs tabular text-fg-muted break-all px-4'>
               {result['address'].slice(0, 20)}...
             </p>
           )}
@@ -351,7 +352,7 @@ export const FrostApprove = () => {
       {phase === 'error' && (
         <div className='flex flex-col items-center gap-3 flex-1 justify-center'>
           <span className='i-lucide-x-circle size-10 text-red-400' />
-          <p className='text-sm text-red-400 text-center'>{error}</p>
+          <p className='text-[13px] text-red-400 text-center'>{error}</p>
           <Button variant='secondary' onClick={() => window.close()}>close</Button>
         </div>
       )}

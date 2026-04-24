@@ -151,23 +151,23 @@ export const MultisigSign = () => {
 
   return (
     <SettingsScreen title='co-sign' backPath={PopupPath.MULTISIG}>
-      <div className='mb-4 rounded-lg border border-border/40 bg-card p-3'>
-        <p className='text-[10px] text-muted-foreground'>signing as</p>
+      <div className='mb-4 rounded-lg border border-border-soft bg-elev-1 p-3'>
+        <p className='text-[10px] text-fg-muted'>signing as</p>
         <p className='mt-0.5 text-sm font-medium truncate'>{activeWallet!.label}</p>
-        <p className='text-[10px] font-mono text-muted-foreground truncate'>
+        <p className='text-[10px] font-mono text-fg-muted truncate'>
           {activeWallet!.address.slice(0, 16)}...{activeWallet!.address.slice(-8)}
         </p>
-        <span className='mt-1 inline-block rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary'>
+        <span className='mt-1 inline-block rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-zigner-gold'>
           {ms.threshold}/{ms.maxSigners}
         </span>
       </div>
 
       {step === 'input' && (
         <div className='flex flex-col gap-4'>
-          <label className='text-xs text-muted-foreground'>
+          <label className='text-xs text-fg-muted'>
             room code
             <input
-              className='mt-1 w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
+              className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
               value={roomCode}
               onChange={e => setRoomCode(e.target.value)}
               placeholder='acid-blue-cave'
@@ -175,7 +175,7 @@ export const MultisigSign = () => {
             />
           </label>
           <button
-            className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-primary hover:bg-primary/10 transition-colors disabled:opacity-50'
+            className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-50'
             onClick={() => void handleSign()}
             disabled={!roomCode.trim()}
           >
@@ -192,10 +192,10 @@ export const MultisigSign = () => {
               <p className='mt-0.5 text-sm font-medium text-yellow-300'>{txSummary}</p>
             </div>
           )}
-          <div className='flex items-center gap-2 text-xs text-muted-foreground'>
+          <div className='flex items-center gap-2 text-xs text-fg-muted'>
             <span className='i-lucide-loader-2 size-3.5 animate-spin' />
             {progress}
-            <span className='tabular-nums text-muted-foreground/60'>{countdown}s</span>
+            <span className='tabular-nums text-fg-dim'>{countdown}s</span>
           </div>
         </div>
       )}
@@ -213,7 +213,7 @@ export const MultisigSign = () => {
           </div>
           <button
             onClick={() => { setStep('input'); setError(''); }}
-            className='rounded-lg border border-border/40 py-2 text-xs hover:bg-muted/50 transition-colors'
+            className='rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
           >
             try again
           </button>

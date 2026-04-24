@@ -32,7 +32,7 @@ export const SettingsNetworkEndpoints = () => {
     <SettingsScreen title='network endpoints'>
       <div className="flex flex-col gap-4">
         {enabledNetworks.length === 0 ? (
-          <p className="text-muted-foreground text-sm">
+          <p className="text-fg-muted text-sm">
             No networks enabled. Enable networks in settings to configure endpoints.
           </p>
         ) : (
@@ -45,7 +45,7 @@ export const SettingsNetworkEndpoints = () => {
                     <span className="ml-2 text-xs text-green-400">(trustless)</span>
                   )}
                 </label>
-                <span className="text-xs text-muted-foreground">{network.symbol}</span>
+                <span className="text-xs text-fg-muted">{network.symbol}</span>
               </div>
               <div className="flex gap-2">
                 <input
@@ -56,20 +56,20 @@ export const SettingsNetworkEndpoints = () => {
                     [network.id]: e.target.value,
                   }))}
                   placeholder={`Enter ${network.name} endpoint`}
-                  className="flex-1 rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none"
+                  className="flex-1 rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none"
                 />
                 {editingEndpoints[network.id] !== undefined && (
                   <button
                     onClick={() => handleSave(network.id)}
                     disabled={saving === network.id}
-                    className="rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+                    className="rounded-lg bg-zigner-gold px-3 py-2 text-sm text-zigner-dark hover:bg-primary/90 transition-colors disabled:opacity-50"
                   >
                     {saving === network.id ? '...' : 'Save'}
                   </button>
                 )}
               </div>
               {network.syncDescription && (
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-fg-muted">
                   {network.syncDescription}
                 </p>
               )}
@@ -78,9 +78,9 @@ export const SettingsNetworkEndpoints = () => {
         )}
 
         {enabledNetworks.length > 0 && (
-          <div className="mt-4 border-t border-border/40 pt-4">
+          <div className="mt-4 border-t border-border-soft pt-4">
             <h3 className="text-sm font-medium mb-2">Default Endpoints</h3>
-            <div className="text-xs text-muted-foreground space-y-1">
+            <div className="text-xs text-fg-muted space-y-1">
               {networks.zcash?.enabled && <p><strong>Zcash:</strong> https://zcash.rotko.net (zidecar)</p>}
               {networks.penumbra?.enabled && <p><strong>Penumbra:</strong> https://penumbra.rotko.net</p>}
               {networks.polkadot?.enabled && <p><strong>Polkadot:</strong> wss://rpc.polkadot.io (light client)</p>}

@@ -66,7 +66,7 @@ function LiveTimer({ startMs }: { startMs: number }) {
     return () => clearInterval(id);
   }, [startMs]);
   return (
-    <div className="font-mono text-2xl tabular-nums text-primary">
+    <div className="font-mono text-2xl tabular-nums text-zigner-gold">
       {elapsed}s
     </div>
   );
@@ -476,7 +476,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             <div className="flex items-center gap-3">
               <button
                 onClick={onClose}
-                className="text-muted-foreground hover:text-foreground transition-colors"
+                className="text-fg-muted hover:text-fg-high transition-colors"
               >
                 <span className="i-lucide-arrow-left h-5 w-5" />
               </button>
@@ -485,7 +485,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
             <div className="flex flex-col gap-3">
               <div>
-                <label className="mb-1 block text-xs text-muted-foreground">
+                <label className="mb-1 block text-xs text-fg-muted">
                   recipient address
                 </label>
                 <div className="flex gap-1">
@@ -494,12 +494,12 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     placeholder="u1... / zs... / t1..."
                     value={recipient}
                     onChange={(e) => setRecipient(e.target.value)}
-                    className="flex-1 rounded-lg border border-border/40 bg-input px-3 py-2.5 font-mono text-sm text-foreground placeholder:text-muted-foreground transition-colors focus:border-zigner-gold focus:outline-none"
+                    className="flex-1 rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-sm text-fg placeholder:text-fg-muted transition-colors focus:border-zigner-gold focus:outline-none"
                   />
                   <button
                     type="button"
                     onClick={() => setShowQrScanner(true)}
-                    className="shrink-0 flex h-[42px] w-[42px] items-center justify-center rounded-lg border border-border/40 bg-input text-muted-foreground hover:text-foreground transition-colors"
+                    className="shrink-0 flex h-[42px] w-[42px] items-center justify-center rounded-lg border border-border-soft bg-input text-fg-muted hover:text-fg-high transition-colors"
                     title="scan QR code"
                   >
                     <span className="i-lucide-scan h-4 w-4" />
@@ -527,11 +527,11 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs text-muted-foreground">
+                  <label className="text-xs text-fg-muted">
                     amount (zec)
                   </label>
                   {balanceZec !== null && (
-                    <span className="text-xs text-muted-foreground tabular-nums">
+                    <span className="text-xs text-fg-muted tabular-nums">
                       balance: {balanceZec.toFixed(8).replace(/0+$/, '').replace(/\.$/, '')} ZEC
                     </span>
                   )}
@@ -544,13 +544,13 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     onChange={(e) => setAmount(e.target.value)}
                     step="0.0001"
                     min="0"
-                    className="flex-1 rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors focus:border-zigner-gold focus:outline-none"
+                    className="flex-1 rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors focus:border-zigner-gold focus:outline-none"
                   />
                   <button
                     type="button"
                     onClick={() => setAmount(maxSendZec > 0 ? maxSendZec.toFixed(8).replace(/0+$/, '').replace(/\.$/, '') : '0')}
                     disabled={maxSendZec <= 0}
-                    className="shrink-0 h-[42px] rounded-lg border border-border/40 bg-input px-3 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                    className="shrink-0 h-[42px] rounded-lg border border-border-soft bg-input px-3 text-xs text-fg-muted hover:text-fg-high transition-colors disabled:opacity-50"
                   >
                     max
                   </button>
@@ -558,7 +558,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               </div>
 
               <div>
-                <label className="mb-1 block text-xs text-muted-foreground">
+                <label className="mb-1 block text-xs text-fg-muted">
                   memo (optional)
                 </label>
                 <input
@@ -567,7 +567,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                   value={memo}
                   onChange={(e) => setMemo(e.target.value)}
                   maxLength={512}
-                  className="w-full rounded-lg border border-border/40 bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors focus:border-zigner-gold focus:outline-none"
+                  className="w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors focus:border-zigner-gold focus:outline-none"
                 />
               </div>
 
@@ -577,10 +577,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             </div>
 
             <div className="flex gap-2 mt-4">
-              <button onClick={handleClose} className="flex-1 rounded-lg border border-border/40 bg-input py-2.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+              <button onClick={handleClose} className="flex-1 rounded-lg border border-border-soft bg-input py-2.5 text-sm text-fg-muted hover:text-fg-high transition-colors">
                 cancel
               </button>
-              <button onClick={handleReview} className="flex-1 rounded-lg bg-primary py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
+              <button onClick={handleReview} className="flex-1 rounded-lg bg-zigner-gold py-2.5 text-sm font-medium text-zigner-dark hover:bg-primary/90 transition-colors">
                 continue
               </button>
             </div>
@@ -591,35 +591,35 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         return (
           <div className="flex flex-col gap-4 p-4">
             <div className="flex items-center gap-2">
-              <button onClick={handleBack} className="text-muted-foreground hover:text-foreground transition-colors">
+              <button onClick={handleBack} className="text-fg-muted hover:text-fg-high transition-colors">
                 <span className="i-lucide-arrow-left w-5 h-5" />
               </button>
               <h2 className="text-lg font-medium">review transaction</h2>
             </div>
 
-            <div className="bg-card border border-border/40 rounded-lg p-4 flex flex-col gap-3">
+            <div className="bg-elev-1 border border-border-soft rounded-lg p-4 flex flex-col gap-3">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">network</span>
+                <span className="text-fg-muted">network</span>
                 <span className="font-medium">
                   zcash {mainnet ? 'mainnet' : 'testnet'}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">to</span>
+                <span className="text-fg-muted">to</span>
                 <span className="font-mono text-sm truncate max-w-[180px]">
                   {recipient}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">amount</span>
+                <span className="text-fg-muted">amount</span>
                 <span className="font-medium">{amount} zec</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">fee</span>
+                <span className="text-fg-muted">fee</span>
                 <span className="text-sm">{fee} zec</span>
               </div>
-              <div className="border-t border-border/40 pt-2 flex justify-between">
-                <span className="text-muted-foreground">total</span>
+              <div className="border-t border-border-soft pt-2 flex justify-between">
+                <span className="text-fg-muted">total</span>
                 <span className="font-medium">
                   {(Number(amount) + Number(fee)).toFixed(4)} zec
                 </span>
@@ -641,7 +641,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         return (
           <div className="flex flex-col items-center gap-4 p-6">
             <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center">
-              <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              <div className="w-8 h-8 border-2 border-zigner-gold border-t-transparent rounded-full animate-spin" />
             </div>
             <h2 className="text-lg font-medium">building transaction</h2>
 
@@ -655,15 +655,15 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                   const prevMs = i > 0 ? sendSteps[i - 1]!.elapsedMs : 0;
                   const stepDuration = ((s.elapsedMs - prevMs) / 1000).toFixed(1);
                   return (
-                    <div key={i} className={`flex items-start gap-2 text-xs ${isLast ? 'text-foreground' : 'text-muted-foreground'}`}>
+                    <div key={i} className={`flex items-start gap-2 text-xs ${isLast ? 'text-fg' : 'text-fg-muted'}`}>
                       <span className="font-mono w-12 text-right shrink-0">
                         {(s.elapsedMs / 1000).toFixed(1)}s
                       </span>
                       <span className={isLast ? '' : ''}>
                         {s.step}
-                        {s.detail && <span className="text-muted-foreground ml-1">({s.detail})</span>}
+                        {s.detail && <span className="text-fg-muted ml-1">({s.detail})</span>}
                         {!isLast && Number(stepDuration) >= 0.5 && (
-                          <span className="text-muted-foreground ml-1">+{stepDuration}s</span>
+                          <span className="text-fg-muted ml-1">+{stepDuration}s</span>
                         )}
                       </span>
                     </div>
@@ -671,7 +671,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 })}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground text-center">
+              <p className="text-sm text-fg-muted text-center">
                 preparing...
               </p>
             )}
@@ -682,7 +682,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         return (
           <div className="flex flex-col gap-4 p-4">
             <div className="flex items-center gap-2">
-              <button onClick={handleBack} className="text-muted-foreground hover:text-foreground transition-colors">
+              <button onClick={handleBack} className="text-fg-muted hover:text-fg-high transition-colors">
                 <span className="i-lucide-arrow-left w-5 h-5" />
               </button>
 <h2 className="text-lg font-medium">sign with zafu zigner</h2>
@@ -699,13 +699,13 @@ title="scan with zafu zigner"
               )}
 
               <div className="text-center">
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-fg-muted">
 1. open zafu zigner app on your phone
                 </p>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-fg-muted">
                   2. scan this qr code
                 </p>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-fg-muted">
                   3. review and approve the transaction
                 </p>
               </div>
@@ -735,10 +735,10 @@ description="point camera at zafu zigner's signature qr code"
         return (
           <div className="flex flex-col items-center gap-4 p-8">
             <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center animate-pulse">
-              <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              <div className="w-8 h-8 border-2 border-zigner-gold border-t-transparent rounded-full animate-spin" />
             </div>
             <h2 className="text-lg font-medium">broadcasting transaction</h2>
-            <p className="text-sm text-muted-foreground text-center">
+            <p className="text-sm text-fg-muted text-center">
               sending your transaction to the zcash network...
             </p>
           </div>
@@ -751,12 +751,12 @@ description="point camera at zafu zigner's signature qr code"
               <span className="i-lucide-check w-8 h-8 text-green-400" />
             </div>
             <h2 className="text-lg font-medium">transaction sent!</h2>
-            <p className="text-sm text-muted-foreground text-center">
+            <p className="text-sm text-fg-muted text-center">
               {amount} zec sent successfully
               {totalElapsedSec !== null && ` in ${totalElapsedSec}s`}
             </p>
             {txHash && (
-              <p className="font-mono text-xs text-muted-foreground break-all">
+              <p className="font-mono text-xs text-fg-muted break-all">
                 {txHash}
               </p>
             )}
@@ -765,13 +765,13 @@ description="point camera at zafu zigner's signature qr code"
             {showSavePrompt && recipient && !findByAddress(recipient) && !showContactModal && (
               <div className="w-full rounded-lg border border-primary/40 bg-primary/10 p-3">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="i-lucide-user h-4 w-4 text-primary" />
+                  <span className="i-lucide-user h-4 w-4 text-zigner-gold" />
                   <p className="text-sm">save to contacts?</p>
                 </div>
                 <div className="flex gap-2">
                   <button
                     onClick={() => setShowContactModal(true)}
-                    className="flex-1 rounded-lg bg-primary py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+                    className="flex-1 rounded-lg bg-zigner-gold py-2 text-xs font-medium text-zigner-dark hover:bg-primary/90 transition-colors"
                   >
                     save
                   </button>
@@ -780,7 +780,7 @@ description="point camera at zafu zigner's signature qr code"
                       void dismissSuggestion(recipient);
                       setShowSavePrompt(false);
                     }}
-                    className="flex-1 rounded-lg border border-border/40 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    className="flex-1 rounded-lg border border-border-soft py-2 text-xs text-fg-muted hover:text-fg-high transition-colors"
                   >
                     skip
                   </button>
@@ -808,23 +808,23 @@ description="point camera at zafu zigner's signature qr code"
         return (
           <div className="flex flex-col items-center gap-6 p-8">
             <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center">
-              <span className="i-lucide-users w-8 h-8 text-primary" />
+              <span className="i-lucide-users w-8 h-8 text-zigner-gold" />
             </div>
             <h2 className="text-lg font-medium">multisig signing</h2>
 
             {frostRoomCode && (
               <div className="flex flex-col items-center gap-2">
-                <p className="text-xs text-muted-foreground">share this code with co-signers:</p>
-                <div className="rounded bg-muted px-4 py-2 font-mono text-lg">{frostRoomCode}</div>
+                <p className="text-xs text-fg-muted">share this code with co-signers:</p>
+                <div className="rounded bg-elev-2 px-4 py-2 font-mono text-lg">{frostRoomCode}</div>
               </div>
             )}
 
             <div className="flex flex-col items-center gap-2">
               <p className="text-sm">{frostProgress}</p>
-              <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-zigner-gold border-t-transparent" />
             </div>
 
-            <div className="w-full rounded bg-muted/30 p-3 text-xs text-muted-foreground">
+            <div className="w-full rounded bg-elev-2 p-3 text-xs text-fg-muted">
               <p>{activeZcashWallet?.multisig?.threshold}-of-{activeZcashWallet?.multisig?.maxSigners} threshold</p>
               <p className="mt-1">send {amount} ZEC to {recipient.slice(0, 16)}...{recipient.slice(-8)}</p>
               <p className="mt-1">fee: {fee} ZEC</p>
@@ -863,7 +863,7 @@ description="point camera at zafu zigner's signature qr code"
   };
 
   return (
-    <div className="h-full bg-background">
+    <div className="h-full bg-canvas">
       {PasswordModal}
       {renderContent()}
     </div>

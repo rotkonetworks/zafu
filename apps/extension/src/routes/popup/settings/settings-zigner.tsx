@@ -177,40 +177,51 @@ export const SettingsZigner = () => {
     <SettingsScreen title='Zafu Zigner'>
       <div className='flex flex-col gap-4'>
         {/* Info Box */}
-        <div className='rounded-lg border border-border bg-card-radial p-4'>
-          <p className='text-sm text-muted-foreground'>
-Zafu Zigner is a cold wallet that keeps your spending keys offline. Zafu stores only the
-            viewing key to show balances. Transactions require QR code signing with your Zafu Zigner
-            device.
+        <div className='rounded-md border border-border-soft bg-elev-1 p-4'>
+          <p className='text-xs text-fg'>
+            Zafu Zigner is a cold wallet that keeps your spending keys offline. Zafu stores only
+            the viewing key to show balances. Transactions require QR code signing with your Zafu
+            Zigner device.
           </p>
         </div>
 
-        {/* Pro gate */}
+        {/* Upgrade CTA — shown to free users, but non-blocking.
+            Free users can still use their imported Zigner wallet(s) and pay
+            for Pro with them. Pro unlocks additional identities, vault legacy
+            mode, and broader signing beyond the subscription tx. */}
         {!pro && (
-          <div className='rounded-lg border border-border/40 bg-card-radial p-4 flex flex-col items-center gap-3'>
-            <div className='i-lucide-lock size-8 text-muted-foreground/40' />
-            <p className='text-xs text-muted-foreground text-center'>
-              zigner cold wallet signing is a pro feature
-            </p>
+          <div className='rounded-md border border-zigner-gold/30 bg-zigner-gold/5 p-4 flex flex-col gap-3'>
+            <div className='flex items-start gap-3'>
+              <span className='i-lucide-zap size-5 text-zigner-gold shrink-0 mt-0.5' />
+              <div className='flex flex-col gap-1'>
+                <p className='text-[13px] text-fg-high lowercase tracking-[0.02em]'>unlock the full zigner workflow</p>
+                <p className='text-xs text-fg-muted'>
+                  Your imported Zigner wallet is active. Pro unlocks additional identities,
+                  multi-network signing, and vault legacy mode. You can pay for Pro by signing
+                  the 0.01 ZEC subscription tx with your Zigner device.
+                </p>
+              </div>
+            </div>
             <Button
               variant='secondary'
               size='sm'
               onClick={() => navigate(PopupPath.SUBSCRIBE)}
+              className='self-start'
             >
               subscribe
             </Button>
           </div>
         )}
 
-        {/* Zigner Wallets — unified list from keyring */}
-        {pro && zignerVaults.length > 0 && (
-          <div className='border-t border-border pt-4'>
-            <p className='text-sm font-bold mb-3'>wallets</p>
+        {/* Zigner Wallets — unified list from keyring (visible to all users) */}
+        {zignerVaults.length > 0 && (
+          <div className='border-t border-border-soft pt-4'>
+            <p className='kicker mb-3'>wallets</p>
             <div className='flex flex-col gap-2'>
               {zignerVaults.map(vault => {
                 const networks = (vault.insensitive['supportedNetworks'] as string[] | undefined) ?? [];
                 const primaryNetwork = networks[0] ?? 'unknown';
-                const colorClass = networkColors[primaryNetwork] ?? 'text-muted-foreground';
+                const colorClass = networkColors[primaryNetwork] ?? 'text-fg-muted';
                 const cosmosAddrs = vault.insensitive['cosmosAddresses'] as
                   { chainId: string; address: string; prefix: string }[] | undefined;
                 const ss58 = vault.insensitive['polkadotSs58'] as string | undefined;
@@ -218,25 +229,25 @@ Zafu Zigner is a cold wallet that keeps your spending keys offline. Zafu stores 
                 return (
                   <div
                     key={vault.id}
-                    className='flex items-center justify-between border border-border bg-card-radial p-3'
+                    className='flex items-center justify-between rounded-md border border-border-soft bg-elev-1 p-3'
                   >
                     <div className='flex flex-col gap-1 min-w-0'>
                       <div className='flex items-center gap-2'>
                         <EyeOpenIcon className={`size-4 ${colorClass} flex-shrink-0`} />
-                        <span className='text-sm truncate'>{vault.name}</span>
+                        <span className='text-[13px] text-fg-high truncate'>{vault.name}</span>
                         {networks.map(n => (
-                          <span key={n} className='text-[10px] px-1 bg-muted text-muted-foreground'>
+                          <span key={n} className='rounded-sm text-[10px] px-1 bg-elev-2 text-fg-dim lowercase tracking-[0.04em]'>
                             {n}
                           </span>
                         ))}
                       </div>
                       {cosmosAddrs?.map(a => (
-                        <span key={a.chainId} className='text-[10px] font-mono text-muted-foreground pl-6'>
+                        <span key={a.chainId} className='text-[10px] tabular text-fg-muted pl-6'>
                           {a.chainId}: {a.address.slice(0, 10)}...{a.address.slice(-6)}
                         </span>
                       ))}
                       {ss58 && (
-                        <span className='text-[10px] font-mono text-muted-foreground pl-6'>
+                        <span className='text-[10px] tabular text-fg-muted pl-6'>
                           {ss58.slice(0, 8)}...{ss58.slice(-6)}
                         </span>
                       )}
@@ -269,7 +280,7 @@ Zafu Zigner is a cold wallet that keeps your spending keys offline. Zafu stores 
                         disabled={keyInfos.length <= 1}
                         title={keyInfos.length <= 1 ? 'cannot remove the last wallet' : 'remove wallet'}
                       >
-                        <TrashIcon className='size-4 text-muted-foreground hover:text-red-400' />
+                        <TrashIcon className='size-4 text-fg-muted hover:text-red-400' />
                       </Button>
                     )}
                   </div>
@@ -280,13 +291,13 @@ Zafu Zigner is a cold wallet that keeps your spending keys offline. Zafu stores 
         )}
 
         {/* Polkadot Vault Settings */}
-        {pro && <div className='border-t border-border pt-4'>
+        {pro && <div className='border-t border-border-hard pt-4'>
           <p className='text-sm font-bold mb-3'>polkadot vault</p>
           <div className='flex flex-col gap-3'>
-            <div className='flex items-center justify-between border border-border bg-card-radial p-3'>
+            <div className='flex items-center justify-between border border-border-hard bg-card-radial p-3'>
               <div className='flex flex-col'>
                 <span className='text-sm'>legacy mode</span>
-                <span className='text-xs text-muted-foreground'>
+                <span className='text-xs text-fg-muted'>
                   for older parity signer / polkadot vault devices
                 </span>
               </div>
@@ -305,7 +316,7 @@ Zafu Zigner is a cold wallet that keeps your spending keys offline. Zafu stores 
                   href='https://metadata.novasama.io/'
                   target='_blank'
                   rel='noopener noreferrer'
-                  className='flex items-center gap-1.5 text-xs text-primary hover:underline'
+                  className='flex items-center gap-1.5 text-xs text-zigner-gold hover:underline'
                 >
                   <Link2Icon className='size-3' />
                   update metadata at novasama.io
@@ -323,13 +334,13 @@ wallet added successfully!
         )}
 
 {/* Add Wallet section */}
-        {pro && <div className='border-t border-border pt-4'>
+        {pro && <div className='border-t border-border-hard pt-4'>
           <p className='text-sm font-bold mb-3'>add wallet</p>
 
           {/* Manual input (hidden by default, developer mode) */}
           {showManualInput && (
             <div className='flex flex-col gap-3'>
-              <p className='text-xs text-muted-foreground'>
+              <p className='text-xs text-fg-muted'>
                 Developer mode: Paste QR hex data
               </p>
 
@@ -369,11 +380,11 @@ wallet added successfully!
               <div className='border border-green-500/30 bg-green-500/10 p-3'>
                 <div className='flex items-center gap-2'>
                   <p className='text-sm font-medium text-green-400'>qr code scanned</p>
-                  <span className='text-[10px] px-1.5 py-0.5 bg-muted text-muted-foreground'>
+                  <span className='text-[10px] px-1.5 py-0.5 bg-elev-2 text-fg-muted'>
                     {detectedNetwork}
                   </span>
                 </div>
-                <p className='text-xs text-muted-foreground mt-1'>
+                <p className='text-xs text-fg-muted mt-1'>
                   {parsedCosmosExport ? (
                     <span className='font-mono'>
                       {parsedCosmosExport.addresses.map(a => a.address.slice(0, 10)).join(', ')}...
@@ -423,7 +434,7 @@ wallet added successfully!
           {showInitialState && (
             <div className='flex flex-col gap-2'>
               {/* Always open scanner in new tab for better camera experience */}
-              <p className='text-xs text-muted-foreground text-center mb-2'>
+              <p className='text-xs text-fg-muted text-center mb-2'>
                 Opens camera in a new tab for scanning
               </p>
               <Button

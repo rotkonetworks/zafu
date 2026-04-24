@@ -272,7 +272,7 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
 
   if (isLoading) {
     return (
-      <div className='flex items-center justify-center py-12 text-sm text-muted-foreground'>
+      <div className='flex items-center justify-center py-12 text-sm text-fg-muted'>
         loading...
       </div>
     );
@@ -281,8 +281,8 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
   if (error || !balances.length) {
     return (
       <div className='flex flex-col items-center justify-center py-12 text-center'>
-        <span className='text-sm text-muted-foreground'>No assets yet</span>
-        <span className='text-xs text-muted-foreground/70'>
+        <span className='text-sm text-fg-muted'>No assets yet</span>
+        <span className='text-xs text-fg-muted/70'>
           Receive funds to get started
         </span>
       </div>
@@ -296,43 +296,45 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
 
   return (
     <>
-      <Table>
-        <TableHeader className='group'>
-          <TableRow>
-            <TableHead>Balance</TableHead>
-            <TableHead>Value</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {balances.map((balance, i) => {
-            const info = getUnbondingInfo(balance);
-            const validatorName = info?.idKey ? validatorNames?.get(info.idKey) : undefined;
+      <div className='rounded-lg border border-border-soft bg-elev-1 overflow-hidden [&_td]:px-3 [&_th]:px-3'>
+        <Table>
+          <TableHeader className='group'>
+            <TableRow>
+              <TableHead>Balance</TableHead>
+              <TableHead>Value</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {balances.map((balance, i) => {
+              const info = getUnbondingInfo(balance);
+              const validatorName = info?.idKey ? validatorNames?.get(info.idKey) : undefined;
 
-            // determine if this unbonding token is ready to claim
-            const isReady = info && latestBlockHeight !== undefined
-              && latestBlockHeight >= info.startAt + UNBONDING_DELAY_BLOCKS;
+              // determine if this unbonding token is ready to claim
+              const isReady = info && latestBlockHeight !== undefined
+                && latestBlockHeight >= info.startAt + UNBONDING_DELAY_BLOCKS;
 
-            return (
-              <AssetRow
-                key={i}
-                balance={balance}
-                currentBlockHeight={latestBlockHeight}
-                validatorName={validatorName}
-                onClaim={isReady ? () => openClaimForBalance(balance) : undefined}
-              />
-            );
-          })}
-        </TableBody>
-      </Table>
+              return (
+                <AssetRow
+                  key={i}
+                  balance={balance}
+                  currentBlockHeight={latestBlockHeight}
+                  validatorName={validatorName}
+                  onClaim={isReady ? () => openClaimForBalance(balance) : undefined}
+                />
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
 
       {/* claim confirmation modal */}
       {claimBalance && claimStatus !== 'idle' && (
         <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm'>
-          <div className='mx-4 w-full max-w-sm rounded-lg border border-border/40 bg-background p-5 shadow-xl'>
+          <div className='mx-4 w-full max-w-sm rounded-lg border border-border-soft bg-canvas p-5 shadow-xl'>
             <div className='flex items-center justify-between mb-4'>
               <h2 className='text-lg font-medium'>Claim Unbonding Tokens</h2>
               {(claimStatus === 'confirm' || claimStatus === 'success' || claimStatus === 'error') && (
-                <button onClick={closeClaim} className='text-muted-foreground hover:text-foreground transition-colors'>
+                <button onClick={closeClaim} className='text-fg-muted hover:text-fg-high transition-colors'>
                   <span className='i-lucide-x h-4 w-4' />
                 </button>
               )}
@@ -340,22 +342,22 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
 
             {claimStatus === 'confirm' && claimInfo && (
               <div className='flex flex-col gap-3'>
-                <div className='rounded-lg border border-border/40 bg-card p-3'>
-                  <div className='text-xs text-muted-foreground'>Amount to receive</div>
+                <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
+                  <div className='text-xs text-fg-muted'>Amount to receive</div>
                   <div className='text-lg font-medium tabular-nums'>{claimDisplayAmount} UM</div>
                 </div>
 
                 <div className='text-sm'>
                   <div className='flex justify-between py-1'>
-                    <span className='text-muted-foreground'>Validator</span>
+                    <span className='text-fg-muted'>Validator</span>
                     <span className='text-right font-medium'>{claimValidatorName ?? 'Unknown'}</span>
                   </div>
                   <div className='flex justify-between py-1'>
-                    <span className='text-muted-foreground'>Unbonding start</span>
+                    <span className='text-fg-muted'>Unbonding start</span>
                     <span className='font-mono text-xs'>{claimInfo.startAt.toLocaleString()}</span>
                   </div>
                   <div className='flex justify-between py-1'>
-                    <span className='text-muted-foreground'>Status</span>
+                    <span className='text-fg-muted'>Status</span>
                     <span className='text-green-400'>Ready to claim</span>
                   </div>
                 </div>
@@ -363,7 +365,7 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
                 <div className='flex gap-2 mt-2'>
                   <button
                     onClick={closeClaim}
-                    className='flex-1 rounded-lg border border-border/40 py-3 text-sm hover:bg-muted/50 transition-colors'
+                    className='flex-1 rounded-lg border border-border-soft py-3 text-sm hover:bg-elev-1 transition-colors'
                   >
                     Cancel
                   </button>
@@ -379,8 +381,8 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
 
             {(claimStatus === 'planning' || claimStatus === 'signing' || claimStatus === 'broadcasting') && (
               <div className='flex flex-col items-center gap-3 py-12'>
-                <div className='h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent' />
-                <p className='text-sm text-muted-foreground'>
+                <div className='h-6 w-6 animate-spin rounded-full border-2 border-zigner-gold border-t-transparent' />
+                <p className='text-sm text-fg-muted'>
                   {claimStatus === 'planning' && 'building transaction plan...'}
                   {claimStatus === 'signing' && 'signing transaction...'}
                   {claimStatus === 'broadcasting' && 'broadcasting...'}
@@ -392,13 +394,13 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
               <div className='flex flex-col gap-3'>
                 <p className='text-sm text-green-400'>Claim successful!</p>
                 {claimTxHash && (
-                  <p className='text-xs text-muted-foreground font-mono break-all'>
+                  <p className='text-xs text-fg-muted font-mono break-all'>
                     tx: {claimTxHash}
                   </p>
                 )}
                 <button
                   onClick={closeClaim}
-                  className='mt-2 w-full rounded-lg border border-border/40 py-2 text-sm hover:bg-muted/50 transition-colors'
+                  className='mt-2 w-full rounded-lg border border-border-soft py-2 text-sm hover:bg-elev-1 transition-colors'
                 >
                   Close
                 </button>
@@ -411,7 +413,7 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
                 <div className='flex gap-2 mt-2'>
                   <button
                     onClick={closeClaim}
-                    className='flex-1 rounded-lg border border-border/40 py-3 text-sm hover:bg-muted/50 transition-colors'
+                    className='flex-1 rounded-lg border border-border-soft py-3 text-sm hover:bg-elev-1 transition-colors'
                   >
                     Close
                   </button>

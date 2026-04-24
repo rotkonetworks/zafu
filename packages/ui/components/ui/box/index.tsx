@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { PropsWithChildren, ReactNode } from 'react';
 import { cn } from '../../../lib/utils';
 
-const variants = cva('rounded-lg border bg-background', {
+const variants = cva('rounded-lg border bg-canvas', {
   variants: {
     spacing: {
       /** Useful for e.g., wrapping around a transparent `<Input />`. */

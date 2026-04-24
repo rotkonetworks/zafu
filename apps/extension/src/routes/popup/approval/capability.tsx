@@ -8,9 +8,9 @@ import { LinkGradientIcon } from '../../../icons/link-gradient';
 
 const riskStyles: Record<RiskLevel, { border: string; bg: string; text: string; banner?: string }> = {
   low: {
-    border: 'border-border/40',
+    border: 'border-border-soft',
     bg: '',
-    text: 'text-muted-foreground',
+    text: 'text-fg-muted',
   },
   medium: {
     border: 'border-yellow-500/30',
@@ -58,23 +58,24 @@ export const CapabilityApproval = () => {
   return (
     <FadeTransition>
       <div className='flex min-h-screen w-screen flex-col gap-6'>
-        <h1 className='flex h-[70px] items-center justify-center border-b border-border/40 font-headline text-xl font-medium leading-[30px]'>
-          Permission Request
-        </h1>
+        <header className='flex h-[70px] flex-col items-center justify-center border-b border-border-soft'>
+          <span className='kicker mb-1'>capability request</span>
+          <h1 className='text-[18px] text-fg-high lowercase tracking-[-0.01em]'>permission request</h1>
+        </header>
         <div className='mx-auto size-20'>
           <LinkGradientIcon />
         </div>
         <div className='w-full px-[30px]'>
           <div className='flex flex-col gap-2'>
             {/* origin display */}
-            <div className='flex items-center gap-2 rounded-lg bg-background p-3'>
+            <div className='flex items-center gap-2 rounded-lg bg-canvas p-3'>
               {!!favIconUrl && (
                 <img src={favIconUrl} alt='' className='size-8 rounded-full' />
               )}
               <div className='flex flex-col overflow-hidden'>
                 {title && <span className='text-sm truncate'>{title}</span>}
                 {origin && (
-                  <span className='text-xs text-muted-foreground truncate'>
+                  <span className='text-xs text-fg-muted truncate'>
                     <DisplayOriginURL url={new URL(origin)} />
                   </span>
                 )}
@@ -92,7 +93,7 @@ export const CapabilityApproval = () => {
                 <span className={cn('text-base font-medium', style.text)}>{meta.label}</span>
                 <span className={cn(
                   'rounded px-1.5 py-0.5 text-[10px] uppercase',
-                  meta.risk === 'low' && 'bg-muted text-muted-foreground',
+                  meta.risk === 'low' && 'bg-elev-2 text-fg-muted',
                   meta.risk === 'medium' && 'bg-yellow-500/10 text-yellow-400',
                   meta.risk === 'high' && 'bg-orange-500/10 text-orange-400',
                   meta.risk === 'critical' && 'bg-red-500/10 text-red-400',
@@ -100,7 +101,7 @@ export const CapabilityApproval = () => {
                   {meta.risk}
                 </span>
               </div>
-              <p className='mt-2 text-sm text-muted-foreground'>{meta.description}</p>
+              <p className='mt-2 text-sm text-fg-muted'>{meta.description}</p>
             </div>
 
             {/* extra warning for critical */}

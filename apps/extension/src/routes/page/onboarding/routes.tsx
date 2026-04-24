@@ -20,7 +20,7 @@ const OnboardingSuccess = lazy(() =>
 
 const LazyFallback = () => (
   <div className="flex h-full items-center justify-center">
-    <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+    <div className="h-6 w-6 animate-spin rounded-full border-2 border-zigner-gold border-t-transparent" />
   </div>
 );
 

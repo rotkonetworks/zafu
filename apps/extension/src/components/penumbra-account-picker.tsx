@@ -17,17 +17,17 @@ export function PenumbraAccountPicker({
       <button
         disabled={account <= 0}
         onClick={() => onChange(account - 1)}
-        className='p-1 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50'
+        className='p-1 text-fg-muted transition-colors hover:text-fg-high disabled:opacity-50'
       >
         <span className='i-lucide-chevron-left h-4 w-4' />
       </button>
-      <span className='min-w-[110px] text-center text-xs font-medium text-muted-foreground'>
+      <span className='min-w-[110px] text-center text-xs font-medium text-fg-muted'>
         {accountLabel(account)}
       </span>
       <button
         disabled={account >= MAX_ACCOUNT}
         onClick={() => onChange(account + 1)}
-        className='p-1 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50'
+        className='p-1 text-fg-muted transition-colors hover:text-fg-high disabled:opacity-50'
       >
         <span className='i-lucide-chevron-right h-4 w-4' />
       </button>
