@@ -6,7 +6,7 @@
  * 3. store key package + public key package as multisig wallet
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { useStore } from '../../../state';
 import {
   frostDkgPart1InWorker,
@@ -15,34 +15,12 @@ import {
   frostDeriveAddressInWorker,
 } from '../../../state/keyring/network-worker';
 import { FrostRelayClient } from '../../../state/keyring/frost-relay-client';
+import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../../state/frost-session';
+import { useDeadlineCountdown } from '../../../hooks/use-deadline-countdown';
 import { SettingsScreen } from '../settings/settings-screen';
 import { PopupPath } from '../paths';
 
 type Step = 'input' | 'joining' | 'dkg' | 'complete' | 'error';
-
-const ROUND_TIMEOUT_MS = 120_000;
-
-function useCountdown(active: boolean, totalMs: number) {
-  const [remaining, setRemaining] = useState(Math.ceil(totalMs / 1000));
-  const startRef = useRef(Date.now());
-
-  useEffect(() => {
-    if (!active) {
-      setRemaining(Math.ceil(totalMs / 1000));
-      startRef.current = Date.now();
-      return;
-    }
-    startRef.current = Date.now();
-    const iv = setInterval(() => {
-      const elapsed = Date.now() - startRef.current;
-      const left = Math.max(0, Math.ceil((totalMs - elapsed) / 1000));
-      setRemaining(left);
-    }, 1000);
-    return () => clearInterval(iv);
-  }, [active, totalMs]);
-
-  return remaining;
-}
 
 export const MultisigJoin = () => {
   const [roomCode, setRoomCode] = useState('');
@@ -54,15 +32,20 @@ export const MultisigJoin = () => {
   const [thresholdInfo, setThresholdInfo] = useState('');
   const [participantCount, setParticipantCount] = useState(0);
   const [maxSigners, setMaxSignersDisplay] = useState(0);
+  // single end-to-end deadline for the whole DKG session (10 min total)
+  const [deadline, setDeadline] = useState<number | null>(null);
   const newFrostMultisigKey = useStore(s => s.keyRing.newFrostMultisigKey);
 
-  const isActive = step === 'joining' || step === 'dkg';
-  const countdown = useCountdown(isActive, ROUND_TIMEOUT_MS);
+  const countdown = useDeadlineCountdown(
+    step === 'joining' || step === 'dkg' ? deadline : null,
+  );
 
   const handleJoin = async () => {
     if (!roomCode.trim()) return;
 
     const abortController = new AbortController();
+    const sessionDeadline = Date.now() + FROST_SESSION_TIMEOUT_MS;
+    setDeadline(sessionDeadline);
     try {
       const url = relayUrl || 'https://poker.zk.bot';
       setStep('joining');
@@ -75,7 +58,6 @@ export const MultisigJoin = () => {
       let maxSignersLocal = 0;
       const peerBroadcasts: string[] = [];
       const peerRound2: string[] = [];
-      let dkgPhase: 'round1' | 'round2' | 'done' = 'round1';
 
       setStep('dkg');
       setProgress('waiting for coordinator...');
@@ -85,46 +67,56 @@ export const MultisigJoin = () => {
           setParticipantCount(event.participant.participantCount);
         } else if (event.type === 'message') {
           const text = new TextDecoder().decode(event.message.payload);
-          if (dkgPhase === 'round1') {
-            const dkgMatch = text.match(/^DKG:(\d+):(\d+):([\s\S]*)$/);
-            if (dkgMatch) {
-              threshold = Number(dkgMatch[1]);
-              maxSignersLocal = Number(dkgMatch[2]);
+          // messages are tagged with their round (R1: / R2:) so we bucket by
+          // sender's phase, not ours. a faster peer could otherwise send its
+          // r2 packages before we leave r1 locally and we'd misfile them.
+          const r1 = text.match(/^R1:(?:(\d+):(\d+):)?([\s\S]*)$/);
+          if (r1) {
+            if (r1[1] && r1[2]) {
+              // host's r1 carries T:N so we learn the DKG params off the wire
+              threshold = Number(r1[1]);
+              maxSignersLocal = Number(r1[2]);
               setThresholdInfo(`${threshold}-of-${maxSignersLocal}`);
               setMaxSignersDisplay(maxSignersLocal);
-              peerBroadcasts.push(dkgMatch[3]!);
-            } else {
-              peerBroadcasts.push(text);
             }
-          } else if (dkgPhase === 'round2') {
-            peerRound2.push(text);
+            peerBroadcasts.push(r1[3]!);
+            return;
           }
+          const r2 = text.match(/^R2:([\s\S]*)$/);
+          if (r2) {
+            peerRound2.push(r2[1]!);
+            return;
+          }
+          console.warn('[multisig-join] unknown frost message, dropping:', text.slice(0, 32));
         } else if (event.type === 'closed') {
           setError(`room closed: ${event.reason}`);
           setStep('error');
         }
       }, abortController.signal);
 
-      await waitFor(() => threshold > 0 && maxSignersLocal > 0, ROUND_TIMEOUT_MS);
+      await waitForUntil(() => threshold > 0 && maxSignersLocal > 0, sessionDeadline);
       setProgress('round 1: generating commitment...');
 
       const round1 = await frostDkgPart1InWorker(maxSignersLocal, threshold);
-      await relay.sendMessage(roomCode.trim(), participantId, new TextEncoder().encode(round1.broadcast));
+      // diagnostic: confirm the broadcast we send is a hex string (the format
+      // dkg_part2 expects). a non-hex value here is the source of the
+      // "invalid type: map" error on the peer side.
+      console.log('[multisig-join] sending round1.broadcast:',
+        { len: round1.broadcast.length, head: round1.broadcast.slice(0, 32), looksHex: /^[0-9a-f]+$/i.test(round1.broadcast) });
+      await relay.sendMessage(roomCode.trim(), participantId, new TextEncoder().encode(`R1:${round1.broadcast}`));
 
       setProgress(`round 1: waiting for ${maxSignersLocal - 1} participant(s)...`);
-      await waitFor(() => peerBroadcasts.length >= maxSignersLocal - 1, ROUND_TIMEOUT_MS);
+      await waitForUntil(() => peerBroadcasts.length >= maxSignersLocal - 1, sessionDeadline);
 
-      dkgPhase = 'round2';
       setProgress('round 2: exchanging key shares...');
       const round2 = await frostDkgPart2InWorker(round1.secret, peerBroadcasts);
       for (const pkg of round2.peer_packages) {
-        await relay.sendMessage(roomCode.trim(), participantId, new TextEncoder().encode(pkg));
+        await relay.sendMessage(roomCode.trim(), participantId, new TextEncoder().encode(`R2:${pkg}`));
       }
 
       setProgress(`round 2: waiting for ${maxSignersLocal - 1} peer package(s)...`);
-      await waitFor(() => peerRound2.length >= maxSignersLocal - 1, ROUND_TIMEOUT_MS);
+      await waitForUntil(() => peerRound2.length >= maxSignersLocal - 1, sessionDeadline);
 
-      dkgPhase = 'done';
       setProgress('round 3: finalizing...');
       const round3 = await frostDkgPart3InWorker(
         round2.secret,
@@ -243,14 +235,3 @@ export const MultisigJoin = () => {
     </SettingsScreen>
   );
 };
-
-const waitFor = (condition: () => boolean, timeoutMs: number): Promise<void> =>
-  new Promise((resolve, reject) => {
-    const start = Date.now();
-    const check = () => {
-      if (condition()) return resolve();
-      if (Date.now() - start > timeoutMs) return reject(new Error('timeout waiting for participants'));
-      setTimeout(check, 500);
-    };
-    check();
-  });

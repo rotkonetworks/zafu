@@ -7,7 +7,7 @@
  * 4. coordinator aggregates - we're done
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { useStore } from '../../../state';
 import { selectActiveZcashWallet } from '../../../state/wallets';
 import {
@@ -15,34 +15,12 @@ import {
   frostSpendSignInWorker,
 } from '../../../state/keyring/network-worker';
 import { FrostRelayClient } from '../../../state/keyring/frost-relay-client';
+import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../../state/frost-session';
+import { useDeadlineCountdown } from '../../../hooks/use-deadline-countdown';
 import { SettingsScreen } from '../settings/settings-screen';
 import { PopupPath } from '../paths';
 
 type Step = 'input' | 'waiting' | 'signing' | 'complete' | 'error';
-
-const ROUND_TIMEOUT_MS = 120_000;
-
-function useCountdown(active: boolean, totalMs: number) {
-  const [remaining, setRemaining] = useState(Math.ceil(totalMs / 1000));
-  const startRef = useRef(Date.now());
-
-  useEffect(() => {
-    if (!active) {
-      setRemaining(Math.ceil(totalMs / 1000));
-      startRef.current = Date.now();
-      return;
-    }
-    startRef.current = Date.now();
-    const iv = setInterval(() => {
-      const elapsed = Date.now() - startRef.current;
-      const left = Math.max(0, Math.ceil((totalMs - elapsed) / 1000));
-      setRemaining(left);
-    }, 1000);
-    return () => clearInterval(iv);
-  }, [active, totalMs]);
-
-  return remaining;
-}
 
 export const MultisigSign = () => {
   const [roomCode, setRoomCode] = useState('');
@@ -50,17 +28,22 @@ export const MultisigSign = () => {
   const [error, setError] = useState('');
   const [progress, setProgress] = useState('');
   const [txSummary, setTxSummary] = useState('');
+  // single end-to-end deadline for the whole signing session (10 min total)
+  const [deadline, setDeadline] = useState<number | null>(null);
 
   const activeWallet = useStore(selectActiveZcashWallet);
   const ms = activeWallet?.multisig;
 
-  const isActive = step === 'waiting' || step === 'signing';
-  const countdown = useCountdown(isActive, ROUND_TIMEOUT_MS);
+  const countdown = useDeadlineCountdown(
+    step === 'waiting' || step === 'signing' ? deadline : null,
+  );
 
   const handleSign = async () => {
     if (!roomCode.trim() || !ms) return;
 
     const abortController = new AbortController();
+    const sessionDeadline = Date.now() + FROST_SESSION_TIMEOUT_MS;
+    setDeadline(sessionDeadline);
     try {
       const relayUrl = (typeof ms.relayUrl === 'string' ? ms.relayUrl : '') || 'https://poker.zk.bot';
       setStep('waiting');
@@ -97,7 +80,7 @@ export const MultisigSign = () => {
       }, abortController.signal);
 
       setProgress('waiting for transaction data...');
-      await waitFor(() => sighash.length > 0, ROUND_TIMEOUT_MS);
+      await waitForUntil(() => sighash.length > 0, sessionDeadline);
 
       setStep('signing');
       const numActions = alphas.length;
@@ -112,7 +95,7 @@ export const MultisigSign = () => {
       await relay.sendMessage(roomCode.trim(), participantId, new TextEncoder().encode(ourCommitments));
 
       setProgress('round 1: waiting for coordinator...');
-      await waitFor(() => peerCommitmentBundle !== null, ROUND_TIMEOUT_MS);
+      await waitForUntil(() => peerCommitmentBundle !== null, sessionDeadline);
 
       if (peerCommitmentBundle!.length < numActions) {
         throw new Error(`coordinator sent ${peerCommitmentBundle!.length} commitments but ${numActions} actions needed`);
@@ -222,14 +205,3 @@ export const MultisigSign = () => {
     </SettingsScreen>
   );
 };
-
-const waitFor = (condition: () => boolean, timeoutMs: number): Promise<void> =>
-  new Promise((resolve, reject) => {
-    const start = Date.now();
-    const check = () => {
-      if (condition()) return resolve();
-      if (Date.now() - start > timeoutMs) return reject(new Error('timeout waiting for signing data'));
-      setTimeout(check, 500);
-    };
-    check();
-  });

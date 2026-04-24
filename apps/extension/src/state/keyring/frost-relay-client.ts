@@ -63,12 +63,12 @@ export class FrostRelayClient {
       ws.onmessage = (ev) => {
         try {
           const msg = JSON.parse(ev.data as string) as Record<string, unknown>;
-          // check one-shot waiters first (handshake messages)
-          for (let i = 0; i < this.waiters.length; i++) {
-            if (this.waiters[i]!(msg)) {
-              this.waiters.splice(i, 1);
-              return;
-            }
+          // resolve any handshake waiters matching this message, then still
+          // dispatch as a normal event. previously we `return`-ed after
+          // resolving a waiter, which swallowed the joiner's own `joined`
+          // event and left participantCount stuck at 0 in the UI.
+          for (let i = this.waiters.length - 1; i >= 0; i--) {
+            if (this.waiters[i]!(msg)) this.waiters.splice(i, 1);
           }
           this.dispatch(msg);
         } catch { /* malformed message */ }
@@ -91,10 +91,26 @@ export class FrostRelayClient {
       };
       if (this.onEvent) this.onEvent(event);
       else this.pendingEvents.push(event);
+    } else if (t === 'joined') {
+      // structured join event from the relay (sent both to the joiner and as
+      // `system` text to existing participants).
+      const count = typeof msg['count'] === 'number' ? msg['count'] as number : 0;
+      const event: RoomEvent = {
+        type: 'joined',
+        participant: {
+          participantId: new Uint8Array(0),
+          participantCount: count,
+          maxSigners: 0,
+        },
+      };
+      if (this.onEvent) this.onEvent(event);
+      else this.pendingEvents.push(event);
     } else if (t === 'system') {
+      // existing participants receive a system text "abc1... joined (N)"
+      // when a peer joins. parse N out of the trailing parenthesized count.
       const text = (msg['text'] as string) || '';
       if (text.includes('joined')) {
-        const match = text.match(/\((\d+) players\)/);
+        const match = text.match(/\((\d+)\)/);
         const event: RoomEvent = {
           type: 'joined',
           participant: {

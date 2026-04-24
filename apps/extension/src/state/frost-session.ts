@@ -9,6 +9,45 @@ import { AllSlices, SliceCreator } from '.';
 import { FrostRelayClient, type RoomEvent } from './keyring/frost-relay-client';
 import type { DkgSession, SigningSession } from './keyring/multisig-types';
 
+/**
+ * Total time budget for a FROST DKG or signing session, end-to-end.
+ *
+ * This is a single deadline that spans the whole interactive flow —
+ * waiting for peers to join, exchanging round messages, finalizing.
+ * Each individual `waitForUntil` call eats from this same budget; the
+ * session aborts whenever the deadline is hit, regardless of which
+ * step is currently waiting.
+ *
+ * 10 min comfortably covers humans coordinating room codes out of
+ * band (chat, DM, copy-paste). Network round-trips for DKG messages
+ * are sub-second on a healthy relay, so the bulk of this budget is
+ * spent on people, not bytes.
+ */
+export const FROST_SESSION_TIMEOUT_MS = 10 * 60_000;
+
+/**
+ * Wait for `condition` to become true, or until `deadline` (ms epoch).
+ * Throws on timeout. Pass the same `deadline` to every wait in a
+ * session so the cumulative budget is enforced rather than each wait
+ * getting its own fresh timeout.
+ */
+export const waitForUntil = (
+  condition: () => boolean,
+  deadline: number,
+  pollMs = 100,
+): Promise<void> =>
+  new Promise((resolve, reject) => {
+    const tick = () => {
+      if (condition()) { clearInterval(iv); resolve(); return; }
+      if (Date.now() >= deadline) {
+        clearInterval(iv);
+        reject(new Error('frost session timed out'));
+      }
+    };
+    const iv = setInterval(tick, pollMs);
+    tick();
+  });
+
 export interface FrostSessionSlice {
   /** active DKG session (null when not in DKG) */
   dkg: DkgSession | null;

@@ -7,7 +7,7 @@
  * 4. store key package + public key package as multisig wallet
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { useStore } from '../../../state';
 import {
   frostDkgPart1InWorker,
@@ -15,43 +15,26 @@ import {
   frostDkgPart3InWorker,
   frostDeriveAddressInWorker,
 } from '../../../state/keyring/network-worker';
-import { FrostRelayClient } from '../../../state/keyring/frost-relay-client';
+import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../../state/frost-session';
+import { useDeadlineCountdown } from '../../../hooks/use-deadline-countdown';
 import { SettingsScreen } from '../settings/settings-screen';
 import { PopupPath } from '../paths';
 import { QrDisplay } from '../../../shared/components/qr-display';
 
-type Step = 'config' | 'waiting' | 'dkg-round1' | 'dkg-round2' | 'dkg-round3' | 'complete' | 'error';
+type Step =
+  | 'config'
+  | 'waiting'
+  | 'dkg-round1'
+  | 'dkg-round2'
+  | 'dkg-round3'
+  | 'complete'
+  | 'error';
 
 const DKG_STEPS = [
   { key: 'dkg-round1', label: 'commitments' },
   { key: 'dkg-round2', label: 'key shares' },
   { key: 'dkg-round3', label: 'finalize' },
 ] as const;
-
-const ROUND_TIMEOUT_MS = 120_000;
-
-/** countdown hook - returns seconds remaining */
-function useCountdown(active: boolean, totalMs: number) {
-  const [remaining, setRemaining] = useState(Math.ceil(totalMs / 1000));
-  const startRef = useRef(Date.now());
-
-  useEffect(() => {
-    if (!active) {
-      setRemaining(Math.ceil(totalMs / 1000));
-      startRef.current = Date.now();
-      return;
-    }
-    startRef.current = Date.now();
-    const iv = setInterval(() => {
-      const elapsed = Date.now() - startRef.current;
-      const left = Math.max(0, Math.ceil((totalMs - elapsed) / 1000));
-      setRemaining(left);
-    }, 1000);
-    return () => clearInterval(iv);
-  }, [active, totalMs]);
-
-  return remaining;
-}
 
 export const MultisigCreate = () => {
   const [threshold, setThreshold] = useState(2);
@@ -62,15 +45,22 @@ export const MultisigCreate = () => {
   const [address, setAddress] = useState('');
   const [relayUrl, setRelayUrl] = useState('');
   const [participantCount, setParticipantCount] = useState(1); // self = 1
+  // single end-to-end deadline for the whole DKG session (10 min total).
+  // null while idle; set once `handleCreate` starts.
+  const [deadline, setDeadline] = useState<number | null>(null);
 
   const startDkg = useStore(s => s.frostSession.startDkg);
   const newFrostMultisigKey = useStore(s => s.keyRing.newFrostMultisigKey);
 
-  const isWaiting = step === 'waiting' || step.startsWith('dkg-round');
-  const countdown = useCountdown(isWaiting, ROUND_TIMEOUT_MS);
+  const countdown = useDeadlineCountdown(
+    step === 'waiting' || step.startsWith('dkg-round') ? deadline : null,
+  );
 
   const handleCreate = async () => {
     const abortController = new AbortController();
+    // single deadline shared by every wait in this DKG session.
+    const sessionDeadline = Date.now() + FROST_SESSION_TIMEOUT_MS;
+    setDeadline(sessionDeadline);
     try {
       const url = relayUrl || 'https://poker.zk.bot';
       const code = await startDkg(url, threshold, maxSigners);
@@ -78,7 +68,14 @@ export const MultisigCreate = () => {
       setStep('waiting');
       setParticipantCount(1);
 
-      const relay = new FrostRelayClient(url);
+      // reuse the relay client that startDkg already created and joined.
+      // opening a second `new FrostRelayClient(url)` here would put TWO
+      // WebSocket connections from this tab into the room, inflating the
+      // participant count, echoing our own broadcast back to us as a
+      // "peer", and breaking dkg_part2 (which sees its own message in
+      // the peer set and the parse fails).
+      const relay = useStore.getState().frostSession.relay;
+      if (!relay) throw new Error('frost relay missing — startDkg did not initialize it');
 
       setStep('dkg-round1');
       const round1 = await frostDkgPart1InWorker(maxSigners, threshold);
@@ -88,52 +85,77 @@ export const MultisigCreate = () => {
 
       const peerBroadcasts: string[] = [];
       const peerRound2: string[] = [];
-      let dkgPhase: 'round1' | 'round2' | 'done' = 'round1';
 
-      // join room first (server requires participant membership to send)
+      // messages are tagged with their round at send time (R1: / R2:) so the
+      // receiver can bucket them correctly regardless of its own local phase.
+      // without this, a faster peer could send its round 2 package before we
+      // transitioned out of round 1 locally, and we'd push the r2 package
+      // into peerBroadcasts — dkg_part2 would then fail to parse it as an r1
+      // broadcast. host additionally embeds T:N in its r1 so fresh joiners
+      // can read the params off the wire.
       let joined = false;
-      void relay.joinRoom(code, participantId, (event) => {
-        if (event.type === 'joined') {
-          joined = true;
-          setParticipantCount(event.participant.participantCount);
-        } else if (event.type === 'message') {
-          const text = new TextDecoder().decode(event.message.payload);
-          if (dkgPhase === 'round1') {
-            peerBroadcasts.push(text);
-          } else if (dkgPhase === 'round2') {
-            peerRound2.push(text);
+      void relay.joinRoom(
+        code,
+        participantId,
+        event => {
+          if (event.type === 'joined') {
+            joined = true;
+            setParticipantCount(event.participant.participantCount);
+          } else if (event.type === 'message') {
+            const text = new TextDecoder().decode(event.message.payload);
+            const r1 = text.match(/^R1:(?:(\d+):(\d+):)?([\s\S]*)$/);
+            if (r1) {
+              peerBroadcasts.push(r1[3]!);
+              return;
+            }
+            const r2 = text.match(/^R2:([\s\S]*)$/);
+            if (r2) {
+              peerRound2.push(r2[1]!);
+              return;
+            }
+            // unknown/legacy message — drop rather than corrupt a bucket
+            console.warn('[multisig-create] unknown frost message, dropping:', text.slice(0, 32));
+          } else if (event.type === 'closed') {
+            setError(`room closed: ${event.reason}`);
+            setStep('error');
           }
-        } else if (event.type === 'closed') {
-          setError(`room closed: ${event.reason}`);
-          setStep('error');
-        }
-      }, abortController.signal);
+        },
+        abortController.signal,
+      );
 
       // wait until we're joined before sending
-      await waitFor(() => joined, 10_000);
+      await waitForUntil(() => joined, sessionDeadline);
 
-      // send our round1 broadcast with DKG params prefix
-      const prefixedBroadcast = `DKG:${threshold}:${maxSigners}:${round1.broadcast}`;
+      // send our round1 broadcast with round tag + DKG params for fresh joiners
+      const prefixedBroadcast = `R1:${threshold}:${maxSigners}:${round1.broadcast}`;
       await relay.sendMessage(code, participantId, new TextEncoder().encode(prefixedBroadcast));
 
-      await waitFor(() => peerBroadcasts.length >= maxSigners - 1, ROUND_TIMEOUT_MS);
+      await waitForUntil(() => peerBroadcasts.length >= maxSigners - 1, sessionDeadline);
 
-      dkgPhase = 'round2';
+      // diagnostic: log peer broadcasts before handing to FROST worker.
+      // a "serialize: parse: invalid type: map" error here means one of these
+      // strings isn't a valid hex-encoded SignedMessage.
+      console.log(
+        '[multisig-create] peerBroadcasts before part2:',
+        peerBroadcasts.map((s, i) => ({
+          i,
+          len: s.length,
+          head: s.slice(0, 32),
+          looksHex: /^[0-9a-f]+$/i.test(s),
+        })),
+      );
+
       setStep('dkg-round2');
       const round2 = await frostDkgPart2InWorker(round1.secret, peerBroadcasts);
 
       for (const pkg of round2.peer_packages) {
-        await relay.sendMessage(code, participantId, new TextEncoder().encode(pkg));
+        await relay.sendMessage(code, participantId, new TextEncoder().encode(`R2:${pkg}`));
       }
 
-      await waitFor(() => peerRound2.length >= maxSigners - 1, ROUND_TIMEOUT_MS);
+      await waitForUntil(() => peerRound2.length >= maxSigners - 1, sessionDeadline);
 
       setStep('dkg-round3');
-      const round3 = await frostDkgPart3InWorker(
-        round2.secret,
-        peerBroadcasts,
-        peerRound2,
-      );
+      const round3 = await frostDkgPart3InWorker(round2.secret, peerBroadcasts, peerRound2);
 
       const addr = await frostDeriveAddressInWorker(round3.public_key_package, 0);
       setAddress(addr);
@@ -226,7 +248,12 @@ export const MultisigCreate = () => {
 
           {/* QR code for room code */}
           <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
-            <QrDisplay data={Array.from(new TextEncoder().encode(roomCode)).map(b => b.toString(16).padStart(2, '0')).join('')} size={160} />
+            <QrDisplay
+              data={Array.from(new TextEncoder().encode(roomCode))
+                .map(b => b.toString(16).padStart(2, '0'))
+                .join('')}
+              size={160}
+            />
           </div>
 
           {/* participant counter */}
@@ -251,7 +278,9 @@ export const MultisigCreate = () => {
         <div className='flex flex-col items-center gap-4'>
           <div className='flex items-center gap-2 text-xs text-fg-muted'>
             <span className='i-lucide-loader-2 size-3.5 animate-spin' />
-            key generation in progress
+            {currentRound < 3
+              ? `exchanging ${DKG_STEPS[currentRound - 1]?.label ?? ''}...`
+              : 'finalizing...'}
             <span className='tabular-nums text-fg-dim'>{countdown}s</span>
           </div>
 
@@ -259,11 +288,13 @@ export const MultisigCreate = () => {
           <div className='flex gap-2'>
             {DKG_STEPS.map((s, i) => (
               <div key={s.key} className='flex items-center gap-1.5'>
-                <div className={`flex size-5 items-center justify-center rounded-full text-[10px] font-medium ${
-                  i + 1 <= currentRound
-                    ? 'bg-zigner-gold text-zigner-dark'
-                    : 'bg-elev-2 text-fg-muted'
-                }`}>
+                <div
+                  className={`flex size-5 items-center justify-center rounded-full text-[10px] font-medium ${
+                    i + 1 <= currentRound
+                      ? 'bg-zigner-gold text-zigner-dark'
+                      : 'bg-elev-2 text-fg-muted'
+                  }`}
+                >
                   {i + 1}
                 </div>
                 <span className={`text-xs ${i + 1 <= currentRound ? 'text-fg' : 'text-fg-muted'}`}>
@@ -306,7 +337,8 @@ export const MultisigCreate = () => {
             <p className='mt-1 break-all font-mono text-xs'>{address}</p>
           </div>
           <p className='text-xs text-fg-muted'>
-            {threshold}-of-{maxSigners} threshold. {threshold} participants must approve outgoing transactions.
+            {threshold}-of-{maxSigners} threshold. {threshold} participants must approve outgoing
+            transactions.
           </p>
         </div>
       )}
@@ -317,7 +349,10 @@ export const MultisigCreate = () => {
             {error}
           </div>
           <button
-            onClick={() => { setStep('config'); setError(''); }}
+            onClick={() => {
+              setStep('config');
+              setError('');
+            }}
             className='rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
           >
             try again
@@ -327,15 +362,3 @@ export const MultisigCreate = () => {
     </SettingsScreen>
   );
 };
-
-/** poll until condition is true, with timeout */
-const waitFor = (condition: () => boolean, timeoutMs: number): Promise<void> =>
-  new Promise((resolve, reject) => {
-    const start = Date.now();
-    const check = () => {
-      if (condition()) return resolve();
-      if (Date.now() - start > timeoutMs) return reject(new Error('timeout waiting for participants'));
-      setTimeout(check, 500);
-    };
-    check();
-  });
