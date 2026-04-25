@@ -87,29 +87,17 @@ export const NETWORK_DERIVATIONS: Partial<Record<NetworkType, NetworkDerivation>
     prefix: 'u', // unified address
   },
   // ibc/cosmos chains - all use cosmos coin type 118
-  osmosis: {
-    network: 'osmosis',
-    coinType: 118,
-    pathTemplate: "m/44'/118'/0'/0/0",
-    prefix: 'osmo',
-  },
   noble: {
     network: 'noble',
     coinType: 118,
     pathTemplate: "m/44'/118'/0'/0/0",
     prefix: 'noble',
   },
-  nomic: {
-    network: 'nomic',
+  cosmoshub: {
+    network: 'cosmoshub',
     coinType: 118,
     pathTemplate: "m/44'/118'/0'/0/0",
-    prefix: 'nomic',
-  },
-  celestia: {
-    network: 'celestia',
-    coinType: 118,
-    pathTemplate: "m/44'/118'/0'/0/0",
-    prefix: 'celestia',
+    prefix: 'cosmos',
   },
   // transparent networks
   polkadot: {

@@ -1544,7 +1544,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
   );
 }
 
-const COSMOS_CHAIN_IDS: CosmosChainId[] = ['osmosis', 'noble', 'nomic', 'celestia'];
+const COSMOS_CHAIN_IDS: CosmosChainId[] = ['noble', 'cosmoshub'];
 
 /** location state for prefilling forms from inbox */
 interface SendLocationState {

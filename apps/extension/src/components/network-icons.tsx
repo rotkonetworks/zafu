@@ -35,15 +35,6 @@ const ZcashIcon = () => (
   </svg>
 );
 
-/** osmosis lab flask */
-const OsmosisIcon = () => (
-  <svg viewBox='0 0 32 32' className={iconClass}>
-    <circle cx='16' cy='16' r='14' fill='#A78BFA' />
-    <circle cx='16' cy='16' r='6' fill='none' stroke='white' strokeWidth='1.5' />
-    <circle cx='16' cy='16' r='2.5' fill='white' />
-  </svg>
-);
-
 /** noble */
 const NobleIcon = () => (
   <svg viewBox='0 0 32 32' className={iconClass}>
@@ -52,19 +43,11 @@ const NobleIcon = () => (
   </svg>
 );
 
-/** nomic */
-const NomicIcon = () => (
+/** cosmos hub */
+const CosmosHubIcon = () => (
   <svg viewBox='0 0 32 32' className={iconClass}>
-    <circle cx='16' cy='16' r='14' fill='#F97316' />
-    <text x='16' y='21' textAnchor='middle' fill='white' fontSize='12' fontWeight='bold' fontFamily='sans-serif'>nBTC</text>
-  </svg>
-);
-
-/** celestia */
-const CelestiaIcon = () => (
-  <svg viewBox='0 0 32 32' className={iconClass}>
-    <circle cx='16' cy='16' r='14' fill='#9333EA' />
-    <text x='16' y='21' textAnchor='middle' fill='white' fontSize='14' fontWeight='bold' fontFamily='sans-serif'>C</text>
+    <circle cx='16' cy='16' r='14' fill='#6366F1' />
+    <text x='16' y='21' textAnchor='middle' fill='white' fontSize='13' fontWeight='bold' fontFamily='sans-serif'>ATOM</text>
   </svg>
 );
 
@@ -78,10 +61,8 @@ const FallbackIcon = ({ color }: { color: string }) => (
 const NETWORK_ICON_MAP: Partial<Record<NetworkType, () => JSX.Element>> = {
   penumbra: PenumbraIcon,
   zcash: ZcashIcon,
-  osmosis: OsmosisIcon,
   noble: NobleIcon,
-  nomic: NomicIcon,
-  celestia: CelestiaIcon,
+  cosmoshub: CosmosHubIcon,
 };
 
 const FALLBACK_COLORS: Record<string, string> = {

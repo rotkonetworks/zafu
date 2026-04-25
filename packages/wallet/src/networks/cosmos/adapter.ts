@@ -38,7 +38,7 @@ export class CosmosAdapter implements NetworkAdapter {
 
   private ready = false;
   /** default chain for operations */
-  private defaultChain: CosmosChainId = 'osmosis';
+  private defaultChain: CosmosChainId = 'noble';
 
   async initialize(): Promise<void> {
     console.log('[cosmos] initializing adapter');

@@ -6,28 +6,22 @@ import type { LocalStorageState } from '@repo/storage-chrome/local';
  * Supported network ecosystems.
  *
  * Privacy networks (zcash, penumbra): require trusted sync endpoint
- * IBC chains (osmosis, noble, nomic, celestia): cosmos-sdk chains for IBC transfers
+ * IBC chains (noble, cosmoshub): cosmos-sdk chains for IBC transfers
  * Transparent networks (polkadot, ethereum): simple RPC balance queries
  *
  * Core focus:
  * - Penumbra: private DEX, shielded assets
  * - Zcash: shielded ZEC
- * - Nomic: Bitcoin bridge (nBTC) - deposit/withdraw BTC
- * - Osmosis: DEX, IBC routing hub
- * - Noble: USDC native issuance
- * - Celestia: DA layer, TIA
- *
- * The killer flow: BTC → Nomic (nBTC) → Penumbra (shielded nBTC)
+ * - Noble: USDC native issuance, IBC bridge into Penumbra
+ * - Cosmos Hub: ATOM, IBC bridge into Penumbra
  */
 export type NetworkId =
   // privacy networks (local sync required)
   | 'penumbra'
   | 'zcash'
   // ibc/cosmos chains (for penumbra deposits/withdrawals)
-  | 'osmosis'
   | 'noble'
-  | 'nomic'
-  | 'celestia'
+  | 'cosmoshub'
   // other transparent networks
   | 'polkadot'
   | 'kusama'
@@ -98,19 +92,6 @@ const DEFAULT_NETWORKS: Record<NetworkId, NetworkConfig> = {
   },
 
   // === IBC/Cosmos Chains (for Penumbra deposits/withdrawals) ===
-  osmosis: {
-    id: 'osmosis',
-    name: 'Osmosis',
-    symbol: 'OSMO',
-    decimals: 6,
-    denom: 'uosmo',
-    enabled: false,
-    endpoint: 'https://rpc.osmosis.zone',
-    restEndpoint: 'https://lcd.osmosis.zone',
-    chainId: 'osmosis-1',
-    isIbcChain: true,
-    bech32Prefix: 'osmo',
-  },
   noble: {
     id: 'noble',
     name: 'Noble',
@@ -124,31 +105,18 @@ const DEFAULT_NETWORKS: Record<NetworkId, NetworkConfig> = {
     isIbcChain: true,
     bech32Prefix: 'noble',
   },
-  nomic: {
-    id: 'nomic',
-    name: 'Nomic (nBTC)',
-    symbol: 'nBTC',
-    decimals: 8, // satoshis like bitcoin
-    denom: 'usat',
-    enabled: false,
-    endpoint: 'https://rpc.nomic.io',
-    restEndpoint: 'https://app.nomic.io:8443', // relayer endpoint for deposits
-    chainId: 'nomic-stakenet-3',
-    isIbcChain: true,
-    bech32Prefix: 'nomic',
-  },
-  celestia: {
-    id: 'celestia',
-    name: 'Celestia',
-    symbol: 'TIA',
+  cosmoshub: {
+    id: 'cosmoshub',
+    name: 'Cosmos Hub',
+    symbol: 'ATOM',
     decimals: 6,
-    denom: 'utia',
+    denom: 'uatom',
     enabled: false,
-    endpoint: 'https://celestia-rpc.polkachu.com',
-    restEndpoint: 'https://celestia-api.polkachu.com',
-    chainId: 'celestia',
+    endpoint: 'https://cosmos-rpc.polkachu.com',
+    restEndpoint: 'https://cosmos-api.polkachu.com',
+    chainId: 'cosmoshub-4',
     isIbcChain: true,
-    bech32Prefix: 'celestia',
+    bech32Prefix: 'cosmos',
   },
 
   // === Other Transparent Networks ===

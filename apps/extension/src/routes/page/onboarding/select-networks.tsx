@@ -30,11 +30,9 @@ const NETWORK_DESCRIPTIONS: Record<string, { description: string; icon: string }
   penumbra: { description: 'private defi', icon: 'P' },
   kusama: { description: 'expect chaos', icon: 'K' },
   polkadot: { description: 'multi-chain ecosystem', icon: 'D' },
-  osmosis: { description: 'cosmos dex hub', icon: 'O' },
   noble: { description: 'native usdc', icon: 'U' },
-  nomic: { description: 'bitcoin bridge (nBTC)', icon: 'N' },
+  cosmoshub: { description: 'cosmos hub (atom)', icon: 'A' },
   bitcoin: { description: 'digital gold', icon: 'B' },
-  celestia: { description: 'modular data availability', icon: 'C' },
   ethereum: { description: 'smart contracts', icon: 'E' },
 };
 

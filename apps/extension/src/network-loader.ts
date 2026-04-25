@@ -8,7 +8,7 @@
 import { localExtStorage } from '@repo/storage-chrome/local';
 import type { NetworkAdapter } from '@repo/wallet/networks';
 
-export type NetworkId = 'zcash' | 'penumbra' | 'osmosis' | 'noble' | 'nomic' | 'celestia' | 'polkadot' | 'kusama' | 'ethereum' | 'bitcoin';
+export type NetworkId = 'zcash' | 'penumbra' | 'noble' | 'cosmoshub' | 'polkadot' | 'kusama' | 'ethereum' | 'bitcoin';
 
 /** Currently loaded network adapters */
 const loadedAdapters = new Map<NetworkId, NetworkAdapter>();
@@ -65,10 +65,8 @@ async function loadAdapter(network: NetworkId): Promise<NetworkAdapter> {
         break;
       }
       // IBC chains use a shared cosmos adapter
-      case 'osmosis':
       case 'noble':
-      case 'nomic':
-      case 'celestia': {
+      case 'cosmoshub': {
         const { CosmosAdapter } = await import(
           /* webpackChunkName: "adapter-cosmos" */
           '@repo/wallet/networks/cosmos/adapter'
