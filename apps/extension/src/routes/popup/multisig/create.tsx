@@ -53,6 +53,7 @@ export const MultisigCreate = () => {
   const [deadline, setDeadline] = useState<number | null>(null);
 
   const startDkg = useStore(s => s.frostSession.startDkg);
+  const resetDkg = useStore(s => s.frostSession.resetDkg);
   const newFrostMultisigKey = useStore(s => s.keyRing.newFrostMultisigKey);
 
   const countdown = useDeadlineCountdown(
@@ -214,9 +215,11 @@ export const MultisigCreate = () => {
       });
 
       setStep('complete');
+      resetDkg();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setStep('error');
+      resetDkg();
     } finally {
       abortController.abort();
     }
