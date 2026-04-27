@@ -61,22 +61,23 @@ export const MultisigSign = () => {
       let sighash = '';
       let alphas: string[] = [];
       let peerCommitmentBundle: string[] | null = null;
-      let phase: 'init' | 'commitments' | 'done' = 'init';
       void relay.joinRoom(roomCode.trim(), participantId, (event) => {
-        if (event.type === 'message') {
-          const text = new TextDecoder().decode(event.message.payload);
-          if (phase === 'init') {
-            const signMatch = text.match(/^SIGN:([0-9a-fA-F]+):([^:]+):(.*)$/);
-            if (signMatch) {
-              sighash = signMatch[1]!;
-              alphas = signMatch[2]!.split(',');
-              setTxSummary(signMatch[3] || '');
-              phase = 'commitments';
-            }
-          } else if (phase === 'commitments' && !peerCommitmentBundle) {
-            peerCommitmentBundle = text.split('|');
-          }
+        if (event.type !== 'message') return;
+        const text = new TextDecoder().decode(event.message.payload);
+        const signMatch = text.match(/^SIGN:([0-9a-fA-F]+):([^:]+):(.*)$/);
+        if (signMatch) {
+          sighash = signMatch[1]!;
+          alphas = signMatch[2]!.split(',');
+          setTxSummary(signMatch[3] || '');
+          return;
         }
+        const commitMatch = text.match(/^C:([\s\S]*)$/);
+        if (commitMatch && !peerCommitmentBundle) {
+          peerCommitmentBundle = commitMatch[1]!.split('|');
+          return;
+        }
+        // S:<idx>:<share> messages from peers in the same room are ignored
+        // here — joiner only reads coordinator's commitments, doesn't aggregate.
       }, abortController.signal);
 
       setProgress('waiting for transaction data...');
@@ -92,7 +93,7 @@ export const MultisigSign = () => {
       }
 
       const ourCommitments = round1s.map(r => r.commitments).join('|');
-      await relay.sendMessage(roomCode.trim(), participantId, new TextEncoder().encode(ourCommitments));
+      await relay.sendMessage(roomCode.trim(), participantId, new TextEncoder().encode(`C:${ourCommitments}`));
 
       setProgress('round 1: waiting for coordinator...');
       await waitForUntil(() => peerCommitmentBundle !== null, sessionDeadline);
@@ -101,7 +102,6 @@ export const MultisigSign = () => {
         throw new Error(`coordinator sent ${peerCommitmentBundle!.length} commitments but ${numActions} actions needed`);
       }
 
-      phase = 'done';
       setProgress('round 2: signing...');
 
       for (let i = 0; i < numActions; i++) {

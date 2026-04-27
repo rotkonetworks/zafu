@@ -251,46 +251,43 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         // per-action commitment and share collection from peers
         const peerCommitmentsPerAction: string[][] = Array.from({ length: numActions }, () => []);
         const peerSharesPerAction: string[][] = Array.from({ length: numActions }, () => []);
-        let signingPhase: 'commitments' | 'shares' | 'done' = 'commitments';
 
         const abortController = frostAbort = new AbortController();
         void relay.joinRoom(room.roomCode, participantId, (event) => {
-          if (event.type === 'message') {
-            const text = new TextDecoder().decode(event.message.payload);
-            if (text.startsWith('SIGN:')) return; // skip echoed SIGN prefix
-            if (signingPhase === 'commitments') {
-              // peers send pipe-delimited commitments for all actions
-              const parts = text.split('|');
-              for (let i = 0; i < parts.length && i < numActions; i++) {
-                peerCommitmentsPerAction[i]!.push(parts[i]!);
-              }
-            } else if (signingPhase === 'shares') {
-              // shares are tagged: S:<actionIndex>:<shareData>
-              const shareMatch = text.match(/^S:(\d+):(.+)$/);
-              if (shareMatch) {
-                const actionIdx = Number(shareMatch[1]);
-                if (actionIdx >= 0 && actionIdx < numActions) {
-                  peerSharesPerAction[actionIdx]!.push(shareMatch[2]!);
-                }
-              }
+          if (event.type !== 'message') return;
+          const text = new TextDecoder().decode(event.message.payload);
+          if (text.startsWith('SIGN:')) return;
+          // bucket by tag at receive time so a faster peer's S:<idx>: share
+          // can't be misfiled into the commitments bundle (and vice versa).
+          const commitMatch = text.match(/^C:([\s\S]*)$/);
+          if (commitMatch) {
+            const parts = commitMatch[1]!.split('|');
+            for (let i = 0; i < parts.length && i < numActions; i++) {
+              peerCommitmentsPerAction[i]!.push(parts[i]!);
+            }
+            return;
+          }
+          const shareMatch = text.match(/^S:(\d+):(.+)$/);
+          if (shareMatch) {
+            const actionIdx = Number(shareMatch[1]);
+            if (actionIdx >= 0 && actionIdx < numActions) {
+              peerSharesPerAction[actionIdx]!.push(shareMatch[2]!);
             }
           }
         }, abortController.signal);
 
-        // broadcast SIGN prefix with tx summary so co-signers can verify
         const amountZec = (Number(amountZat) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
         const summary = `${amountZec} ZEC to ${recipient.trim().slice(0, 16)}...`;
         const signPrefix = `SIGN:${result.sighash}:${result.alphas.join(',')}:${summary}`;
         await relay.sendMessage(room.roomCode, participantId, new TextEncoder().encode(signPrefix));
         const ourCommitments = round1s.map(r => r.commitments).join('|');
-        await relay.sendMessage(room.roomCode, participantId, new TextEncoder().encode(ourCommitments));
+        await relay.sendMessage(room.roomCode, participantId, new TextEncoder().encode(`C:${ourCommitments}`));
 
         // wait for threshold-1 peer commitment bundles
         setFrostProgress(`round 1: waiting for ${ms.threshold - 1} co-signer(s)...`);
         await waitFor(() => peerCommitmentsPerAction[0]!.length >= ms.threshold - 1, 120000);
 
         // round 2: sign each action with its own nonces
-        signingPhase = 'shares';
         setFrostProgress('round 2: signing...');
 
         const orchardSigs: string[] = [];
@@ -313,7 +310,6 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           orchardSigs.push(sig);
         }
 
-        signingPhase = 'done';
         abortController.abort();
 
         // complete transaction with aggregated signatures
