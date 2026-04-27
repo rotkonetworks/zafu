@@ -172,7 +172,9 @@ export const MultisigCreate = () => {
         await relay.sendMessage(code, participantId, new TextEncoder().encode(`R2:${pkg}`));
       }
 
-      await waitForUntil(() => peerRound2.length >= maxSigners - 1, sessionDeadline);
+      // each peer broadcasts n-1 r2 packages (one per recipient) → (n-1)² on
+      // the wire; WASM dkg_part3 filters to ours-only so we wait for all.
+      await waitForUntil(() => peerRound2.length >= (maxSigners - 1) ** 2, sessionDeadline);
 
       setStep('dkg-round3');
       const round3 = await frostDkgPart3InWorker(round2.secret, peerBroadcasts, peerRound2);

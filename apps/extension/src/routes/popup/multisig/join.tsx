@@ -126,8 +126,11 @@ export const MultisigJoin = () => {
         await relay.sendMessage(roomCode.trim(), participantId, new TextEncoder().encode(`R2:${pkg}`));
       }
 
-      setProgress(`round 2: waiting for ${maxSignersLocal - 1} peer package(s)...`);
-      await waitForUntil(() => peerRound2.length >= maxSignersLocal - 1, sessionDeadline);
+      // each peer broadcasts n-1 r2 packages (one per recipient) → (n-1)² on
+      // the wire; WASM dkg_part3 filters to ours-only so we wait for all.
+      const expectedR2 = (maxSignersLocal - 1) ** 2;
+      setProgress(`round 2: waiting for ${expectedR2} peer package(s)...`);
+      await waitForUntil(() => peerRound2.length >= expectedR2, sessionDeadline);
 
       setProgress('round 3: finalizing...');
       const round3 = await frostDkgPart3InWorker(
