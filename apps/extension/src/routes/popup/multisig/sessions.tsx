@@ -18,6 +18,7 @@ import {
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { frostDkgSelector, frostSigningSelector } from '../../../state/frost-session';
 import { getBalanceInWorker } from '../../../state/keyring/network-worker';
+import { useZcashSyncStatus } from '../../../hooks/zcash-sync';
 import { cn } from '@repo/ui/lib/utils';
 import { PopupPath } from '../paths';
 
@@ -105,6 +106,7 @@ export const MultisigPage = () => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const multisigWallets = useStore(selectMultisigWallets);
   const { setActiveZcashWallet } = useStore(walletsSelector);
+  const { workerSyncHeight } = useZcashSyncStatus();
   const [balances, setBalances] = useState<Record<string, bigint>>({});
 
   const walletsWithIndex = useMemo(
@@ -115,14 +117,31 @@ export const MultisigPage = () => {
     [multisigWallets, zcashWallets],
   );
 
-  // fetch balances for all multisig wallets
+  // fetch balances for all multisig wallets. sync writes notes keyed by
+  // vaultId (selectedKeyInfo.id), not zcashWallet.id, so the balance lookup
+  // must use vaultId; local state stays keyed by w.id for row identity.
+  // re-fetch on every sync-progress tick so the active vault's row stays
+  // in step with the home-page balance.
   useEffect(() => {
-    for (const w of walletsWithIndex) {
-      getBalanceInWorker('zcash', w.id)
-        .then(bal => setBalances(prev => ({ ...prev, [w.id]: BigInt(bal) })))
-        .catch(() => {});
-    }
-  }, [walletsWithIndex]);
+    const fetchAll = () => {
+      for (const w of walletsWithIndex) {
+        if (!w.vaultId) continue;
+        const vaultId = w.vaultId;
+        const rowId = w.id;
+        getBalanceInWorker('zcash', vaultId)
+          .then(bal => setBalances(prev => ({ ...prev, [rowId]: BigInt(bal) })))
+          .catch(() => {});
+      }
+    };
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.network !== 'zcash') return;
+      fetchAll();
+    };
+    window.addEventListener('network-sync-progress', handler);
+    fetchAll();
+    return () => window.removeEventListener('network-sync-progress', handler);
+  }, [walletsWithIndex, workerSyncHeight]);
 
   const totalZat = Object.values(balances).reduce((sum, b) => sum + b, 0n);
 
