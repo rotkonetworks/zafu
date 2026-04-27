@@ -208,8 +208,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         }
       } else if (activeZcashWallet?.multisig) {
         // ── FROST multisig: build unsigned tx → relay signing rounds ──
+        const authorized = await requestAuth();
+        if (!authorized) { setStep('review'); return; }
         const ms = activeZcashWallet.multisig;
-        // decrypt secret key material from vault
         const secrets = await useStore.getState().keyRing.getMultisigSecrets(activeZcashWallet.vaultId);
         if (!secrets) throw new Error('failed to decrypt multisig keys — unlock wallet first');
         const result = await buildSendTxInWorker(
@@ -276,9 +277,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           }
         }, abortController.signal);
 
-        const amountZec = (Number(amountZat) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
-        const summary = `${amountZec} ZEC to ${recipient.trim().slice(0, 16)}...`;
-        const signPrefix = `SIGN:${result.sighash}:${result.alphas.join(',')}:${summary}`;
+        // structured: SIGN:<sighash>:<alphas>:<recipient>:<amountZat>:<feeZat>
+        // joiner formats display values locally so nothing is truncated.
+        const signPrefix = `SIGN:${result.sighash}:${result.alphas.join(',')}:${recipient.trim()}:${amountZat}:${result.fee}`;
         await relay.sendMessage(room.roomCode, participantId, new TextEncoder().encode(signPrefix));
         const ourCommitments = round1s.map(r => r.commitments).join('|');
         await relay.sendMessage(room.roomCode, participantId, new TextEncoder().encode(`C:${ourCommitments}`));
