@@ -8,7 +8,7 @@
  * Trust model: same as Parity's verifier key in Polkadot Vault.
  */
 export const ROTKO_ZCASH_VERIFIER =
-  '5fbcaabe9b00d23a2bebb6370f1acba30e61854ece40200df6f323d6a21ac784';
+  'ab2672aa1d6f0cb441bd6e46e2a2bfe9abde56acc0c140fab32f98b47dda2651';
 
 /**
  * Domain-separated attestation digest.

@@ -41,7 +41,7 @@ export function daysForPayment(amountZat: number): number {
 }
 
 /** rotko's receiving address for license payments */
-export const ROTKO_LICENSE_ADDRESS = 'u153khs43zxz6hcnlwnut77knyqmursnutmungxjxd7khruunhj77ea6tmpzxct9wzlgen66jxwc93ea053j22afkktu7hrs9rmsz003h3';
+export const ROTKO_LICENSE_ADDRESS = 'u1c6wkke2ytaysykam55gratnrne62yx0rvup45qrcyrt5j2wy0g3qvp4y3z97rsq5madg82sntg0gpkadfccelyd7jh0mks65rc9z9wss';
 
 /** features gated behind pro */
 export const PRO_FEATURES = [
