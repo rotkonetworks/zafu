@@ -227,7 +227,7 @@ resolve: {
         '@penumbra-zone/services': '@rotko/penumbra-services',
         // protobufjs ships an `inquire()` helper that uses eval() to
         // optionally load long.js. MV3 CSP blocks all eval. Stub it.
-        '@protobufjs/inquire': path.resolve(__dirname, 'src/stubs/protobufjs-inquire.js'),
+        '@protobufjs/inquire': path.resolve(__dirname, 'src/stubs/protobufjs-inquire.cjs'),
       },
       fallback: {
         crypto: false, // use webcrypto instead of node crypto
@@ -336,7 +336,7 @@ resolve: {
         '@penumbra-zone/types': '@rotko/penumbra-types',
         '@penumbra-zone/wasm': '@rotko/penumbra-wasm',
         '@penumbra-zone/services': '@rotko/penumbra-services',
-        '@protobufjs/inquire': path.resolve(__dirname, 'src/stubs/protobufjs-inquire.js'),
+        '@protobufjs/inquire': path.resolve(__dirname, 'src/stubs/protobufjs-inquire.cjs'),
       },
     },
     plugins: [...sharedPlugins],
