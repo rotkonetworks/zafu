@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "coal";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-9f0443aa.js";
+            window.path_to_searchindex_js = "../searchindex-016ab5f2.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4cbd2bf8.js"></script>
@@ -242,19 +242,8 @@ RPC nodes, which can observe address activity and correlate it with IP
 addresses.</p>
 <p>all cosmos chains use BIP44 secp256k1 key derivation with path
 <code>m/44'/118'/0'/0/0</code> and chain-specific bech32 prefixes.</p>
-<p>these networks are not yet launched in the UI.</p>
-<h3 id="osmosis"><a class="header" href="#osmosis">osmosis</a></h3>
-<ul>
-<li>symbol: OSMO</li>
-<li>decimals: 6</li>
-<li>denomination: uosmo</li>
-<li>chain ID: osmosis-1</li>
-<li>bech32 prefix: osmo</li>
-<li>default RPC: <code>https://rpc.osmosis.zone</code></li>
-<li>default LCD: <code>https://lcd.osmosis.zone</code></li>
-<li>features: staking, swaps</li>
-<li>role: DEX and IBC routing hub</li>
-</ul>
+<p>these networks are not yet launched in the UI. only chains with an active
+relay channel against penumbra are tracked here.</p>
 <h3 id="noble"><a class="header" href="#noble">noble</a></h3>
 <ul>
 <li>symbol: USDC</li>
@@ -265,33 +254,21 @@ addresses.</p>
 <li>default RPC: <code>https://noble-rpc.polkachu.com</code></li>
 <li>default LCD: <code>https://noble-api.polkachu.com</code></li>
 <li>features: none (transfer only)</li>
-<li>role: native USDC issuance chain</li>
+<li>role: native USDC issuance chain. IBC channel to penumbra: noble-side
+<code>channel-89</code>, penumbra-side <code>channel-2</code>.</li>
 </ul>
-<h3 id="nomic"><a class="header" href="#nomic">nomic</a></h3>
+<h3 id="cosmoshub"><a class="header" href="#cosmoshub">cosmoshub</a></h3>
 <ul>
-<li>symbol: nBTC</li>
-<li>decimals: 8 (satoshis)</li>
-<li>denomination: usat</li>
-<li>chain ID: nomic-stakenet-3</li>
-<li>bech32 prefix: nomic</li>
-<li>default RPC: <code>https://rpc.nomic.io</code></li>
-<li>default REST: <code>https://app.nomic.io:8443</code> (relayer endpoint for deposits)</li>
-<li>features: none (transfer only)</li>
-<li>role: bitcoin bridge - deposit BTC, receive nBTC, transfer to penumbra
-via IBC for shielded bitcoin</li>
-</ul>
-<p>the intended flow: BTC -&gt; nomic (nBTC) -&gt; penumbra (shielded nBTC).</p>
-<h3 id="celestia"><a class="header" href="#celestia">celestia</a></h3>
-<ul>
-<li>symbol: TIA</li>
+<li>symbol: ATOM</li>
 <li>decimals: 6</li>
-<li>denomination: utia</li>
-<li>chain ID: celestia</li>
-<li>bech32 prefix: celestia</li>
-<li>default RPC: <code>https://celestia-rpc.polkachu.com</code></li>
-<li>default LCD: <code>https://celestia-api.polkachu.com</code></li>
+<li>denomination: uatom</li>
+<li>chain ID: cosmoshub-4</li>
+<li>bech32 prefix: cosmos</li>
+<li>default RPC: <code>https://cosmos-rpc.polkachu.com</code></li>
+<li>default LCD: <code>https://cosmos-api.polkachu.com</code></li>
 <li>features: staking</li>
-<li>role: data availability layer</li>
+<li>role: cosmos hub - the original IBC router. IBC channel to penumbra:
+cosmoshub-side <code>channel-940</code>, penumbra-side <code>channel-0</code>.</li>
 </ul>
 <h2 id="transparent-networks"><a class="header" href="#transparent-networks">transparent networks</a></h2>
 <p>fully public ledgers. all balances and transactions are visible on-chain.

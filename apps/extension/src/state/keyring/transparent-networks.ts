@@ -41,10 +41,8 @@ export const deriveTransparentAddress = async (
 
   switch (network) {
     // IBC/Cosmos chains - all use same derivation with different bech32 prefix
-    case 'osmosis':
     case 'noble':
-    case 'nomic':
-    case 'celestia':
+    case 'cosmoshub':
       return deriveCosmosAddress(network, mnemonic, accountIndex, config.bech32Prefix!);
 
     // Transparent networks
@@ -74,10 +72,8 @@ export const getTransparentBalance = async (
 ): Promise<BalanceResult> => {
   switch (network) {
     // IBC/Cosmos chains
-    case 'osmosis':
     case 'noble':
-    case 'nomic':
-    case 'celestia':
+    case 'cosmoshub':
       return getCosmosBalance(address, rpcUrl, denom);
 
     // Transparent networks

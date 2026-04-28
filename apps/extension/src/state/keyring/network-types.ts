@@ -8,7 +8,7 @@
  * - sr25519/ed25519/ecdsa: substrate chains (polkadot, kusama, all parachains)
  * - penumbra: shielded dex
  * - zcash: ZIP-32 derivation for shielded txs
- * - cosmos: BIP44 secp256k1 (osmosis, noble, nomic, celestia)
+ * - cosmos: BIP44 secp256k1 (noble, cosmoshub)
  * - bitcoin: BIP-84 native segwit
  * - ethereum: standard secp256k1
  *
@@ -19,8 +19,8 @@
  *    - penumbra: shielded dex
  *
  * 2. ibc/cosmos chains - same key derivation, different bech32 prefix
- *    - osmosis, noble, nomic, celestia
- *    - for penumbra deposits/withdrawals
+ *    - noble, cosmoshub
+ *    - the only IBC channels currently relayed to/from Penumbra
  *
  * 3. substrate networks - polkadot/kusama umbrella for all parachains
  *    - same adapter, different ss58 prefixes per chain
@@ -28,12 +28,10 @@
  *
  * 4. other transparent networks
  *    - ethereum, bitcoin
- *
- * The killer flow: BTC → Nomic (nBTC) → Penumbra (shielded)
  */
 
 export type PrivacyNetwork = 'zcash' | 'penumbra';
-export type IbcNetwork = 'osmosis' | 'noble' | 'nomic' | 'celestia';
+export type IbcNetwork = 'noble' | 'cosmoshub';
 export type TransparentNetwork = 'polkadot' | 'kusama' | 'ethereum' | 'bitcoin';
 export type NetworkType = PrivacyNetwork | IbcNetwork | TransparentNetwork;
 
@@ -71,10 +69,8 @@ export const NETWORK_DEFAULT_ENCRYPTION: Record<NetworkType, EncryptionType> = {
   zcash: 'zcash',
   penumbra: 'penumbra',
   // ibc/cosmos - all use same cosmos encryption
-  osmosis: 'cosmos',
   noble: 'cosmos',
-  nomic: 'cosmos',
-  celestia: 'cosmos',
+  cosmoshub: 'cosmos',
   // substrate - default sr25519 (but ed25519/ecdsa also supported)
   polkadot: 'sr25519',
   kusama: 'sr25519',
@@ -134,16 +130,6 @@ export const NETWORK_CONFIGS: Record<NetworkType, NetworkConfig> = {
   },
 
   // ibc/cosmos chains - for penumbra deposits/withdrawals
-  osmosis: {
-    id: 'osmosis',
-    name: 'Osmosis',
-    symbol: 'OSMO',
-    decimals: 6,
-    type: 'ibc',
-    bech32Prefix: 'osmo',
-    denom: 'uosmo',
-    derivationPath: "m/44'/118'/0'/0/0",
-  },
   noble: {
     id: 'noble',
     name: 'Noble',
@@ -154,24 +140,14 @@ export const NETWORK_CONFIGS: Record<NetworkType, NetworkConfig> = {
     denom: 'uusdc',
     derivationPath: "m/44'/118'/0'/0/0",
   },
-  nomic: {
-    id: 'nomic',
-    name: 'Nomic',
-    symbol: 'nBTC',
-    decimals: 8,
-    type: 'ibc',
-    bech32Prefix: 'nomic',
-    denom: 'usat',
-    derivationPath: "m/44'/118'/0'/0/0",
-  },
-  celestia: {
-    id: 'celestia',
-    name: 'Celestia',
-    symbol: 'TIA',
+  cosmoshub: {
+    id: 'cosmoshub',
+    name: 'Cosmos Hub',
+    symbol: 'ATOM',
     decimals: 6,
     type: 'ibc',
-    bech32Prefix: 'celestia',
-    denom: 'utia',
+    bech32Prefix: 'cosmos',
+    denom: 'uatom',
     derivationPath: "m/44'/118'/0'/0/0",
   },
 

@@ -349,10 +349,8 @@ const NetworkContent = ({
     case 'kusama':
       return <PolkadotContent publicKey={polkadotPublicKey} relay='kusama' />;
 
-    case 'osmosis':
     case 'noble':
-    case 'nomic':
-    case 'celestia':
+    case 'cosmoshub':
       return <CosmosContent chainId={network as CosmosChainId} />;
 
     default:

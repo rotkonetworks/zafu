@@ -21,11 +21,9 @@ import unocssPostcss from '@unocss/postcss';
 
 export default ({
   WEBPACK_WATCH = false,
-  ZAFU_ID,
 }: {
   ['WEBPACK_WATCH']?: boolean;
-  ZAFU_ID: string;
-}): webpack.Configuration[] => {
+} = {}): webpack.Configuration[] => {
   const gitCommit = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
   const gitDate = execSync('git log -1 --format=%cd --date=short', { encoding: 'utf-8' }).trim();
 
@@ -63,10 +61,12 @@ export default ({
    * - These should be declared in `zafu.d.ts` for TypeScript awareness.
    * - `process.env.NODE_ENV` and other env vars are implicitly defined.
    * - Replacement is literal, so the values must be stringified.
+   *
+   * Note: extension id / origin are NOT injected here. They're resolved at
+   * runtime via chrome.runtime.id, so the same build runs correctly under
+   * any install method (unpacked, beta Web Store, prod Web Store).
    */
   const DefinePlugin = new webpack.DefinePlugin({
-    ZAFU: JSON.stringify(ZAFU_ID),
-    ZAFU_ORIGIN: JSON.stringify(`chrome-extension://${ZAFU_ID}`),
     'globalThis.__DEV__': JSON.stringify(process.env['NODE_ENV'] !== 'production'),
     'globalThis.__ASSERT_ROOT__': JSON.stringify(false),
     BUILD_COMMIT: JSON.stringify(gitCommit),
@@ -225,6 +225,9 @@ resolve: {
         '@penumbra-zone/types': '@rotko/penumbra-types',
         '@penumbra-zone/wasm': '@rotko/penumbra-wasm',
         '@penumbra-zone/services': '@rotko/penumbra-services',
+        // protobufjs ships an `inquire()` helper that uses eval() to
+        // optionally load long.js. MV3 CSP blocks all eval. Stub it.
+        '@protobufjs/inquire': path.resolve(__dirname, 'src/stubs/protobufjs-inquire.cjs'),
       },
       fallback: {
         crypto: false, // use webcrypto instead of node crypto
@@ -333,6 +336,7 @@ resolve: {
         '@penumbra-zone/types': '@rotko/penumbra-types',
         '@penumbra-zone/wasm': '@rotko/penumbra-wasm',
         '@penumbra-zone/services': '@rotko/penumbra-services',
+        '@protobufjs/inquire': path.resolve(__dirname, 'src/stubs/protobufjs-inquire.cjs'),
       },
     },
     plugins: [...sharedPlugins],

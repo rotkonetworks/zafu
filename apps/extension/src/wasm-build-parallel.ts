@@ -19,12 +19,13 @@ import type { ParallelBuildRequest } from '@rotko/penumbra-types/internal-msg/of
 import { FullViewingKey } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
 import actionKeys from '@penumbra-zone/keys';
 
-// Map action types to proving key URLs
-// In dev mode, use self.location.origin (Chrome assigns dynamic ID for unpacked extensions)
+// Proving key URLs are relative to the extension origin. self.location.origin
+// is the chrome-extension://<id> origin in any extension worker context, so
+// it's correct for unpacked, beta, and Web Store installs alike.
 const keyFileNames: Partial<Record<string, URL>> = Object.fromEntries(
   Object.entries(actionKeys).map(([action, keyFile]) => [
     action,
-    new URL('keys/' + keyFile, globalThis.__DEV__ ? self.location.origin : ZAFU_ORIGIN),
+    new URL('keys/' + keyFile, self.location.origin),
   ]),
 );
 

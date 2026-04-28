@@ -21,9 +21,7 @@ const TEN_MINS_MS = 10 * 60 * 1000;
 /** REST endpoints for counterparty chains (for querying latest block height) */
 const CHAIN_REST_ENDPOINTS: Record<string, string> = {
   'noble-1': 'https://noble-api.polkachu.com',
-  'osmosis-1': 'https://lcd.osmosis.zone',
-  'nomic-stakenet-3': 'https://app.nomic.io:8443',
-  'celestia': 'https://celestia-api.polkachu.com',
+  'cosmoshub-4': 'https://cosmos-api.polkachu.com',
 };
 
 /** query the latest block height on a counterparty cosmos chain */

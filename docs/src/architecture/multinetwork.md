@@ -21,12 +21,11 @@ encrypted and must be trial-decrypted against the user's viewing keys.
 ### ibc/cosmos chains
 
 transparent chains using BIP44 secp256k1 with bech32 address encoding. primarily
-used for deposits into and withdrawals from penumbra via ibc.
+used for deposits into and withdrawals from penumbra via ibc. only chains with
+an active relay channel against penumbra are listed here.
 
-- **osmosis** - bech32 prefix `osmo`, denom `uosmo`
 - **noble** - bech32 prefix `noble`, denom `uusdc`
-- **nomic** - bech32 prefix `nomic`, denom `usat` (nBTC)
-- **celestia** - bech32 prefix `celestia`, denom `utia`
+- **cosmoshub** - bech32 prefix `cosmos`, denom `uatom`
 
 all ibc chains use the same coin type 118 and derivation path `m/44'/118'/0'/0/0`,
 differing only in bech32 prefix.
@@ -75,18 +74,16 @@ the keyring vault system (described in detail in [state.md](state.md)) maps one
 vault to multiple network keys. a single bip39 mnemonic stored in a vault can
 derive keys for every supported network using standard derivation paths:
 
-| network   | coin type | path                    |
-|-----------|-----------|-------------------------|
-| penumbra  | 6532      | `m/44'/6532'/0'`        |
-| zcash     | 133       | `m/44'/133'/0'/0/0`     |
-| osmosis   | 118       | `m/44'/118'/0'/0/0`     |
-| noble     | 118       | `m/44'/118'/0'/0/0`     |
-| nomic     | 118       | `m/44'/118'/0'/0/0`     |
-| celestia  | 118       | `m/44'/118'/0'/0/0`     |
-| polkadot  | 354       | `m/44'/354'/0'/0'/0'`   |
-| kusama    | 434       | `m/44'/434'/0'/0'/0'`   |
-| ethereum  | 60        | `m/44'/60'/0'/0/0`      |
-| bitcoin   | 0         | `m/84'/0'/0'/0/0`       |
+| network    | coin type | path                    |
+|------------|-----------|-------------------------|
+| penumbra   | 6532      | `m/44'/6532'/0'`        |
+| zcash      | 133       | `m/44'/133'/0'/0/0`     |
+| noble      | 118       | `m/44'/118'/0'/0/0`     |
+| cosmoshub  | 118       | `m/44'/118'/0'/0/0`     |
+| polkadot   | 354       | `m/44'/354'/0'/0'/0'`   |
+| kusama     | 434       | `m/44'/434'/0'/0'/0'`   |
+| ethereum   | 60        | `m/44'/60'/0'/0/0`      |
+| bitcoin    | 0         | `m/84'/0'/0'/0/0`       |
 
 zigner-zafu vaults import viewing keys (not mnemonics) from an air-gapped
 signing device. these vaults declare which networks they support based on the

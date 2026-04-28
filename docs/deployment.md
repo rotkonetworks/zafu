@@ -1,15 +1,34 @@
-# Deployment Workflows
+# Deployment
 
-### Prax Chrome Extension
+Zafu publishes two artefacts on every tagged release:
 
-Create a [github issue deployment issue](https://github.com/penumbra-zone/web/issues/new?template=deployment.md&title=Publish+vX.X.X+extension+%2B+web+app) to track deployment progress and steps.
+- a beta `.crx` for the beta extension ID `hlnodmbpndgjbhophnfbnfpgcbogiohh`
+- a production `.crx` for the production extension ID
+  `bfdfeleokgpdladfmipfmffgpjfjibbe`
 
-Upon a new [git tag](https://github.com/penumbra-zone/web/releases/tag/v4.2.0) being pushed to the repo,
-a [workflow](../.github/workflows/extension-publish.yml) is kicked off. It then requests permission to
-continue from [github group](https://github.com/orgs/penumbra-zone/teams/penumbra-labs) and, after approval,
-bundles the extension into a .zip which gets put in the Chrome Webstore review queue. It typically takes
-1-3 days to go live. The publication status can be monitored in the [Chrome Developer Dashboard](https://chrome.google.com/webstore/devconsole/aabc0949-93db-4e77-ad9f-e6ca1d132501?hl=en).
+Both are built by the `release.yml` GitHub Actions workflow on push of a
+`v*` tag. Tag pushes also create a GitHub Release with the signed `.crx`
+files, the source `.zip` bundles, and `sha256sums.txt` attached.
 
-### Web app
+Production publication to the Chrome Web Store runs as a separate step in
+the same workflow. Until the CWS app is approved, that step is expected to
+fail. Pass `channel=skip` to `gh workflow run release.yml` to bypass it.
 
-Manually run [Deploy Firebase Dapp](https://github.com/penumbra-zone/web/actions/workflows/deploy-firebase-dapp.yml) github action on main branch.
+## Manual release sketch
+
+```sh
+git tag v24.X.Y
+git push origin v24.X.Y
+gh workflow run release.yml -f tag_name=v24.X.Y -f channel=skip
+gh release view v24.X.Y
+```
+
+The workflow signs both `.crx` files with the release private key (held in
+the repo's GitHub Actions secrets) and uploads them to the GitHub Release.
+
+## Beta vs production
+
+The two manifests differ in `name`, `version`, `key`, and the externally
+connectable origin allowlist. They are otherwise identical. The build
+toggle is `webpack.beta-config.ts` vs `webpack.prod-config.ts`; both pull
+from the same `webpack.config.ts` base.

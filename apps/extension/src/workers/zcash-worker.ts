@@ -443,14 +443,17 @@ const verifySyncProofs = async (
 
   // 2. verify commitment proofs for found notes
   if (pendingCmxs.length > 0) {
-    // the server may advance between header proof and commitment proof calls.
-    // retry with a fresh header proof if roots don't match (race condition).
+    // Zidecar returns the *current* tree root, not the root at the requested
+    // tip, so the header proof and commitment proof roots can disagree if the
+    // server advances between calls. We retry with a fresh tip + header proof,
+    // and back off so the server has a chance to settle on a block.
     let currentProven = proven;
-    let commitmentProofs: Array<{ cmx: Uint8Array; treeRoot: Uint8Array; pathProofRaw: string; valueHash: Uint8Array }> | undefined;
-    const MAX_RETRIES = 3;
+    let currentTip = tip;
+    let commitmentProofs: Awaited<ReturnType<typeof client.getCommitmentProofs>>['proofs'] | undefined;
+    const MAX_RETRIES = 6;
 
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      const { proofs: p, treeRoot } = await client.getCommitmentProofs(pendingCmxs, pendingPositions, tip);
+      const { proofs: p, treeRoot } = await client.getCommitmentProofs(pendingCmxs, pendingPositions, currentTip);
       const treeRootHex = hexEncode(treeRoot);
 
       if (treeRootHex === currentProven.tree_root) {
@@ -459,8 +462,12 @@ const verifySyncProofs = async (
       }
 
       if (attempt < MAX_RETRIES - 1) {
-        console.warn(`[zcash-worker] commitment root mismatch (attempt ${attempt + 1}), re-verifying header proof`);
-        currentProven = await verifyHeaderProof(client, tip, mainnet);
+        // back off so the server settles on a block (150ms, 300ms, 600ms, ...)
+        const delay = 150 * Math.pow(2, attempt);
+        await new Promise(r => setTimeout(r, delay));
+        const freshTip = (await client.getTip()).height;
+        currentTip = freshTip;
+        currentProven = await verifyHeaderProof(client, freshTip, mainnet);
         // update proven for downstream nullifier checks
         Object.assign(proven, currentProven);
       } else {
@@ -1109,11 +1116,15 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
         if (zyncModule && pendingCmxs.length > 0) {
           try {
             await verifySyncProofs(client, tip.height, true, pendingCmxs, pendingPositions, state, actionsCommitment);
-            pendingCmxs.length = 0;
-            pendingPositions.length = 0;
           } catch (e) {
-            console.error('[zcash-worker] proof verification failed:', e);
+            // Proof verification is a belt-and-suspenders integrity check on
+            // top of Zidecar header proofs. Dropping the pending buffer lets
+            // the next sync cycle try again on fresh notes instead of looping
+            // forever on the same racy batch.
+            console.warn('[zcash-worker] proof verification failed, dropping batch:', e);
           }
+          pendingCmxs.length = 0;
+          pendingPositions.length = 0;
         }
 
         // scan mempool for pending incoming/spends

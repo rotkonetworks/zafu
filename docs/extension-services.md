@@ -1,8 +1,10 @@
 # Extension Services
 
-Prax uses a custom transport for `@connectrpc/connect` to provide
+Zafu uses a custom transport for `@connectrpc/connect` to provide
 Protobuf-specified services via a DOM channel `MessagePort` and the Chrome
-extension runtime.
+extension runtime. The transport itself is inherited from the upstream
+Prax fork; see `@penumbra-zone/transport-dom` and
+`@penumbra-zone/transport-chrome`.
 
 Interestingly, this transport should be generally applicable to any
 Protobuf-specified interface, including all auto-generated clients and server
@@ -27,16 +29,13 @@ clients. Developers using React queriers may be interested in
 Creation is fully synchronous from the constructor's perspective, and the client
 is immediately useable, but requests are delayed until init actually completes.
 
-### Connection to Prax
+### Connection to Zafu
 
-For developing a dapp that connects to Prax, you may use the convenience functions in `@penumbra-zone/client`.
-
-```ts
-import { createPraxClient } from '@penumbra-zone/client';
-import { ViewService } from '@penumbra-zone/protobuf';
-
-const viewClient = createPraxClient(ViewService);
-```
+For developing a dapp that connects to Zafu, use the generic provider
+discovery from `@penumbra-zone/client` and target Zafu's extension origin.
+`createPraxClient` from `@penumbra-zone/client` is hard-coded to the Prax
+extension ID and will not work; prefer `getAnyPenumbraPort` and the
+explicit transport path shown below.
 
 An incredibly simple use might be something like this.
 

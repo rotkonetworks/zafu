@@ -47,7 +47,7 @@ type LOCAL = {
   /** Flag indicating cache clearing is in progress (survives extension restart) */
   clearingCache?: boolean;
   /** Active network type for multi-network wallet */
-  activeNetwork?: 'penumbra' | 'zcash' | 'polkadot' | 'kusama' | 'osmosis' | 'noble' | 'nomic' | 'celestia' | 'ethereum' | 'bitcoin';
+  activeNetwork?: 'penumbra' | 'zcash' | 'polkadot' | 'kusama' | 'noble' | 'cosmoshub' | 'ethereum' | 'bitcoin';
   /** Zcash-specific wallets */
   zcashWallets?: {
     id: string;
@@ -99,15 +99,13 @@ type LOCAL = {
     enablePriceFetching: boolean;
   };
   /** Enabled networks - only these get loaded at startup */
-  enabledNetworks?: ('penumbra' | 'zcash' | 'osmosis' | 'noble' | 'nomic' | 'celestia' | 'polkadot' | 'kusama' | 'ethereum' | 'bitcoin')[];
+  enabledNetworks?: ('penumbra' | 'zcash' | 'noble' | 'cosmoshub' | 'polkadot' | 'kusama' | 'ethereum' | 'bitcoin')[];
   /** Per-network custom endpoints */
   networkEndpoints?: {
     penumbra?: string;
     zcash?: string;
-    osmosis?: string;
     noble?: string;
-    nomic?: string;
-    celestia?: string;
+    cosmoshub?: string;
     polkadot?: string;
     kusama?: string;
     ethereum?: string;

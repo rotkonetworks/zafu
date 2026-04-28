@@ -10,6 +10,7 @@ import { viewClient, stakeClient } from '../../../clients';
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
 import { useStore } from '../../../state';
 import { selectActiveNetwork, selectPenumbraAccount } from '../../../state/keyring';
+import { NetworkUnavailable } from '../../../shared/components/network-unavailable';
 import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
 import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances-response';
@@ -109,26 +110,14 @@ export const StakePage = () => {
 
   const penumbraTx = usePenumbraTransaction();
 
-  // only show for penumbra network
-  if (activeNetwork !== 'penumbra') {
-    return (
-      <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
-        <div className='rounded-full bg-primary/10 p-4'>
-          <span className='i-lucide-layers h-8 w-8 text-zigner-gold' />
-        </div>
-        <div>
-          <h2 className='text-lg font-medium'>staking</h2>
-          <p className='mt-1 text-sm text-fg-muted'>
-            staking is not available for this network.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  // gate network-only queries via the hook's `enabled` flag rather than an
+  // early return — Rules of Hooks require the same hook count on every render.
+  const isPenumbra = activeNetwork === 'penumbra';
 
   // fetch validators
   const { data: validators = [], isLoading: validatorsLoading, refetch: refetchValidators } = useQuery({
     queryKey: ['validators'],
+    enabled: isPenumbra,
     staleTime: 60_000,
     queryFn: async () => {
       const result: ValidatorRow[] = [];
@@ -166,6 +155,7 @@ export const StakePage = () => {
   // fetch user balances to find delegations
   const { data: delegations = [], isLoading: delegationsLoading, refetch: refetchDelegations } = useQuery({
     queryKey: ['delegations', penumbraAccount],
+    enabled: isPenumbra,
     staleTime: 30_000,
     queryFn: async () => {
       const result: BalancesResponse[] = [];
@@ -186,6 +176,7 @@ export const StakePage = () => {
   // fetch staking token balance
   const { data: stakingBalance } = useQuery({
     queryKey: ['staking-balance', penumbraAccount],
+    enabled: isPenumbra,
     staleTime: 30_000,
     queryFn: async () => {
       try {
@@ -309,6 +300,12 @@ export const StakePage = () => {
     setTxHash(undefined);
     setTxError(undefined);
   }, []);
+
+  // placed after every hook so the count stays consistent across network
+  // switches (was triggering React #300).
+  if (!isPenumbra) {
+    return <NetworkUnavailable feature='staking' iconClass='i-lucide-layers' />;
+  }
 
   // delegation/undelegate form modal
   if (action) {

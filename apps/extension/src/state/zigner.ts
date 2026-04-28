@@ -260,9 +260,8 @@ export const createZignerSlice =
 
           if (address && genesisHash && genesisHash.startsWith('0x')) {
             // Detect chain from address prefix
-            const chainId = address.startsWith('osmo') ? 'osmosis'
-              : address.startsWith('noble') ? 'noble'
-              : address.startsWith('celestia') ? 'celestia'
+            const chainId = address.startsWith('noble') ? 'noble'
+              : address.startsWith('cosmos') ? 'cosmoshub'
               : 'cosmos';
 
             const cosmosData: CosmosImportData = {

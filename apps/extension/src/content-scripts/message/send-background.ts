@@ -36,8 +36,10 @@ export function listenBackground<R = never>(
     sender: chrome.runtime.MessageSender,
     respond: (response: R) => void,
   ): boolean => {
-    // In dev mode, use runtime ID (Chrome assigns dynamic ID for unpacked extensions)
-    if (sender.id !== ZAFU) {
+    // Filter to messages from our own extension. chrome.runtime.id is the
+    // canonical runtime value — works for both unpacked and Web Store
+    // installs without a build-time constant.
+    if (sender.id !== chrome.runtime.id) {
       return false;
     }
 

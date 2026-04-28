@@ -15,10 +15,11 @@ import {
   walletsSelector,
   type ZcashWalletJson,
 } from '../../../state/wallets';
-import { selectEffectiveKeyInfo } from '../../../state/keyring';
+import { selectActiveNetwork, selectEffectiveKeyInfo } from '../../../state/keyring';
 import { frostDkgSelector, frostSigningSelector } from '../../../state/frost-session';
 import { getBalanceInWorker } from '../../../state/keyring/network-worker';
 import { useZcashSyncStatus } from '../../../hooks/zcash-sync';
+import { NetworkUnavailable } from '../../../shared/components/network-unavailable';
 import { cn } from '@repo/ui/lib/utils';
 import { PopupPath } from '../paths';
 
@@ -102,12 +103,18 @@ const WalletRow = ({
 
 export const MultisigPage = () => {
   const navigate = useNavigate();
+  const activeNetwork = useStore(selectActiveNetwork);
   const zcashWallets = useStore(selectZcashWallets);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const multisigWallets = useStore(selectMultisigWallets);
   const { setActiveZcashWallet } = useStore(walletsSelector);
   const { workerSyncHeight } = useZcashSyncStatus();
   const [balances, setBalances] = useState<Record<string, bigint>>({});
+
+  // multisig is zcash-only; placeholder elsewhere. Computed early but
+  // applied as an early-return only after every hook below has run, so
+  // the hook count stays stable across network switches.
+  const isZcash = activeNetwork === 'zcash';
 
   const walletsWithIndex = useMemo(
     () => multisigWallets.map(w => ({
@@ -121,8 +128,10 @@ export const MultisigPage = () => {
   // vaultId (selectedKeyInfo.id), not zcashWallet.id, so the balance lookup
   // must use vaultId; local state stays keyed by w.id for row identity.
   // re-fetch on every sync-progress tick so the active vault's row stays
-  // in step with the home-page balance.
+  // in step with the home-page balance. skip entirely when off zcash —
+  // gate inside the effect, not around it (Rules of Hooks).
   useEffect(() => {
+    if (!isZcash) return;
     const fetchAll = () => {
       for (const w of walletsWithIndex) {
         if (!w.vaultId) continue;
@@ -141,7 +150,7 @@ export const MultisigPage = () => {
     window.addEventListener('network-sync-progress', handler);
     fetchAll();
     return () => window.removeEventListener('network-sync-progress', handler);
-  }, [walletsWithIndex, workerSyncHeight]);
+  }, [walletsWithIndex, workerSyncHeight, isZcash]);
 
   const totalZat = Object.values(balances).reduce((sum, b) => sum + b, 0n);
 
@@ -152,6 +161,10 @@ export const MultisigPage = () => {
   const activeMs = selectedKeyInfo?.type === 'frost-multisig'
     ? walletsWithIndex.find(w => w.vaultId === selectedKeyInfo.id)
     : undefined;
+
+  if (!isZcash) {
+    return <NetworkUnavailable feature='multisig' iconClass='i-lucide-shield' />;
+  }
 
   return (
     <div className='flex flex-col gap-3 p-4'>

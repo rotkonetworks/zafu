@@ -20,10 +20,8 @@ const networkColors: Record<string, string> = {
   zcash: 'text-yellow-500',
   polkadot: 'text-pink-500',
   cosmos: 'text-pink-500',
-  osmosis: 'text-pink-500',
   noble: 'text-pink-500',
-  nomic: 'text-pink-500',
-  celestia: 'text-pink-500',
+  cosmoshub: 'text-indigo-500',
 };
 
 /**

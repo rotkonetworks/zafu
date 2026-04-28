@@ -61,14 +61,6 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     launched: false,
     features: { stake: true, swap: false, vote: false, inbox: false },
   },
-  osmosis: {
-    name: 'Osmosis',
-    color: 'bg-purple-400',
-    focusColor: 'focus:border-purple-400',
-    transparent: true,
-    launched: false,
-    features: { stake: true, swap: true, vote: false, inbox: false },
-  },
   noble: {
     name: 'Noble',
     color: 'bg-blue-400',
@@ -77,18 +69,10 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     launched: false,
     features: { stake: false, swap: false, vote: false, inbox: false },
   },
-  nomic: {
-    name: 'Nomic',
-    color: 'bg-orange-500',
-    focusColor: 'focus:border-orange-500',
-    transparent: true,
-    launched: false,
-    features: { stake: false, swap: false, vote: false, inbox: false },
-  },
-  celestia: {
-    name: 'Celestia',
-    color: 'bg-purple-600',
-    focusColor: 'focus:border-purple-600',
+  cosmoshub: {
+    name: 'Cosmos Hub',
+    color: 'bg-indigo-500',
+    focusColor: 'focus:border-indigo-500',
     transparent: true,
     launched: false,
     features: { stake: true, swap: false, vote: false, inbox: false },

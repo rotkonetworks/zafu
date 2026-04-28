@@ -197,7 +197,7 @@ export const SettingsWallets = () => {
           zidPublicKey: zcashWalletImport.zidPublicKey,
         };
         await addZignerUnencrypted(zignerData, walletLabel || zcashWalletImport.label || 'zigner zcash');
-      } else if (detectedNetwork === 'cosmos' && parsedCosmosExport && isLaunched('osmosis')) {
+      } else if (detectedNetwork === 'cosmos' && parsedCosmosExport && isLaunched('noble')) {
         const zignerData: ZignerZafuImport = {
           cosmosAddresses: parsedCosmosExport.addresses,
           publicKey: parsedCosmosExport.publicKey || undefined,
@@ -257,7 +257,7 @@ export const SettingsWallets = () => {
               const networks: string[] = [];
               if (penumbraWallets.some(w => w.vaultId === v.id)) networks.push('penumbra');
               if (zcashWallets.some(w => w.vaultId === v.id)) networks.push('zcash');
-              if (v.insensitive['cosmosAddresses'] && isLaunched('osmosis')) networks.push('cosmos');
+              if (v.insensitive['cosmosAddresses'] && isLaunched('noble')) networks.push('cosmos');
               if (v.insensitive['polkadotSs58'] && isLaunched('polkadot')) networks.push('polkadot');
               // seed wallets derive keys for all networks
               if (v.type === 'mnemonic') {

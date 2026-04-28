@@ -67,9 +67,9 @@ export const useAllCosmosBalances = (accountIndex = 0) => {
 
       const mnemonic = await getMnemonic(selectedKeyInfo.id);
 
-      // derive base address (osmosis) then convert to other chains
-      const { address: osmoAddress } = await createSigningClient('osmosis', mnemonic, accountIndex);
-      const addresses = deriveAllChainAddresses(osmoAddress);
+      // derive base address (noble) then convert to other chains
+      const { address: nobleAddress } = await createSigningClient('noble', mnemonic, accountIndex);
+      const addresses = deriveAllChainAddresses(nobleAddress);
 
       // fetch all balances in parallel
       const results = await Promise.all(

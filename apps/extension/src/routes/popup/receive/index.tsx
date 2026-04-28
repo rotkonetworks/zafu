@@ -49,10 +49,8 @@ function CopyButton({ text, className }: { text: string; className?: string }) {
 /** map IBC chain registry chainId to our CosmosChainId */
 function ibcChainToCosmosId(ibcChain: IbcChain): CosmosChainId | undefined {
   const map: Record<string, CosmosChainId> = {
-    'osmosis-1': 'osmosis',
     'noble-1': 'noble',
-    'nomic-stakenet-3': 'nomic',
-    'celestia': 'celestia',
+    'cosmoshub-4': 'cosmoshub',
   };
   return map[ibcChain.chainId];
 }
@@ -129,7 +127,7 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
 
   // fetch balances on selected chain
   const { data: assetsData, isLoading: assetsLoading } = useCosmosAssets(
-    cosmosChainId ?? 'osmosis',
+    cosmosChainId ?? 'noble',
     0,
   );
   const chainBtnRef = useRef<HTMLButtonElement>(null);

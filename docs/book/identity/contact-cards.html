@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "coal";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-9f0443aa.js";
+            window.path_to_searchindex_js = "../searchindex-016ab5f2.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4cbd2bf8.js"></script>
@@ -180,17 +180,42 @@
                         <h1 id="contact-cards"><a class="header" href="#contact-cards">contact cards</a></h1>
 <h2 id="overview"><a class="header" href="#overview">overview</a></h2>
 <p>a contact card is a structured zcash memo that shares your name and
-address with another zafu user. the recipient’s wallet detects the
-card and offers to save you as a contact.</p>
+receiving address with another zafu user. the recipient’s wallet
+detects the card and offers to save you as a contact.</p>
 <p>contact cards are sent inside zcash shielded notes. only the sender
 and recipient can read them.</p>
 <h2 id="whats-in-a-card"><a class="header" href="#whats-in-a-card">what’s in a card</a></h2>
 <ul>
 <li><strong>name</strong> - your display name (UTF-8, up to 255 bytes)</li>
-<li><strong>address</strong> - your zcash unified address</li>
+<li><strong>address</strong> - a diversified zcash address unique to this contact</li>
 <li><strong>zid</strong> - your per-contact identity (optional, 32-byte ed25519 pubkey)</li>
 </ul>
-<p>the zid in the card is unique to the recipient (see <a href="zid.html#per-contact-identity">per-contact identity</a>).</p>
+<p>both the address and zid are unique per recipient. this enables
+referral tracking at two layers:</p>
+<ul>
+<li><strong>transport layer</strong>: the diversified address tells you which
+contact’s address was used for a payment, even without a memo</li>
+<li><strong>identity layer</strong>: the zid tells you which contact introduced
+the sender, even if the sender uses a different address</li>
+</ul>
+<h2 id="diversified-addresses"><a class="header" href="#diversified-addresses">diversified addresses</a></h2>
+<p>when you share a contact card, zafu derives a unique zcash address
+for that relationship:</p>
+<pre><code>index = 1000 + (SHA-256(contact_id) mod 2^31)
+address = get_address_at(index)
+</code></pre>
+<p>all diversified addresses decrypt to the same wallet during sync.
+the diversifier index identifies which contact the payment came
+through.</p>
+<p>index allocation:</p>
+<ul>
+<li><code>0</code> - default receiving address (your public address)</li>
+<li><code>1-999</code> - reserved for manual address rotation</li>
+<li><code>1000+</code> - per-contact diversified addresses</li>
+</ul>
+<p>when a payment arrives on a per-contact address, zafu checks the
+diversified address records to show “via alice” - regardless of
+whether the sender included any memo.</p>
 <h2 id="wire-format"><a class="header" href="#wire-format">wire format</a></h2>
 <p>contact cards use MemoType 0x05 in the zafu memo protocol. the payload
 is binary with TLV (tag-length-value) extensions after the core fields.</p>
@@ -201,23 +226,45 @@ wire format.</p>
 <li>go to contacts</li>
 <li>select a contact with a zcash address</li>
 <li>tap “share via zcash”</li>
+<li>zafu derives a diversified address and per-contact zid</li>
 <li>the card is encoded as a memo and attached to the send flow</li>
 </ol>
 <p>the card is sent as a standard zcash transaction with a dust amount.
 the memo carries the encoded contact card.</p>
+<p>zafu records both the diversified address and zid in the encrypted
+share log and diversified address records. this enables referral
+tracing at both the transport and identity layers.</p>
 <h2 id="receiving-a-card"><a class="header" href="#receiving-a-card">receiving a card</a></h2>
 <p>when zafu detects a contact card during zcash sync, it appears in
 your inbox. you can:</p>
 <ul>
 <li>view the sender’s name and address</li>
 <li>see their zid (if included)</li>
+<li>see who introduced them (“via alice”) if:
+<ul>
+<li>the zid matches a previously shared per-contact identity, or</li>
+<li>the payment arrived on a per-contact diversified address</li>
+</ul>
+</li>
 <li>save them to your contacts with one tap</li>
 </ul>
+<h3 id="referral-display"><a class="header" href="#referral-display">referral display</a></h3>
+<p>if someone sends you a payment or contact card through an address
+you shared with alice, zafu shows the introduction:</p>
+<blockquote>
+<p><strong>bob</strong> wants to connect
+via alice - shared 2026-03-15</p>
+</blockquote>
+<p>this works even for plain payments with no memo - the diversified
+address itself is the referral signal.</p>
 <h2 id="privacy-properties"><a class="header" href="#privacy-properties">privacy properties</a></h2>
 <ul>
 <li>the card is encrypted inside the zcash shielded note</li>
 <li>only the recipient can read it</li>
-<li>the sender’s zid is unique per recipient (leak detection)</li>
+<li>the address is unique per recipient (transport-layer referral tracking)</li>
+<li>the zid is unique per recipient (identity-layer referral tracking)</li>
+<li>the share log and address records are encrypted at rest</li>
+<li>diversified addresses are unlinkable on-chain (same FVK, different address)</li>
 <li>no metadata leaks to the network</li>
 </ul>
 

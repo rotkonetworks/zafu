@@ -1,20 +1,20 @@
 /**
  * cosmos chain registry
  *
- * chains we care about for penumbra integration:
- * - osmosis: DEX hub, IBC routing
+ * chains we currently relay IBC packets for between Penumbra and:
  * - noble: native USDC issuance
- * - nomic: bitcoin bridge (nBTC)
- * - celestia: DA layer
+ * - cosmoshub: ATOM, the Cosmos Hub
+ *
+ * other cosmos chains (osmosis, nomic, celestia) were previously listed
+ * but are not part of the active relay set; their entries can be re-added
+ * when those channels open.
  *
  * all use same key derivation (m/44'/118'/0'/0/0) with different bech32 prefix
  */
 
 export type CosmosChainId =
-  | 'osmosis'
   | 'noble'
-  | 'nomic'
-  | 'celestia';
+  | 'cosmoshub';
 
 export interface CosmosChainConfig {
   id: CosmosChainId;
@@ -42,19 +42,6 @@ export interface CosmosChainConfig {
 }
 
 export const COSMOS_CHAINS: Record<CosmosChainId, CosmosChainConfig> = {
-  osmosis: {
-    id: 'osmosis',
-    name: 'Osmosis',
-    chainId: 'osmosis-1',
-    bech32Prefix: 'osmo',
-    symbol: 'OSMO',
-    denom: 'uosmo',
-    decimals: 6,
-    rpcEndpoint: 'https://rpc.osmosis.zone',
-    restEndpoint: 'https://lcd.osmosis.zone',
-    gasPrice: '0.05uosmo',
-    penumbraChannel: 'channel-1279', // osmosis -> penumbra
-  },
   noble: {
     id: 'noble',
     name: 'Noble',
@@ -66,31 +53,22 @@ export const COSMOS_CHAINS: Record<CosmosChainId, CosmosChainConfig> = {
     rpcEndpoint: 'https://noble-rpc.polkachu.com',
     restEndpoint: 'https://noble-api.polkachu.com',
     gasPrice: '0.1uusdc',
-    penumbraChannel: 'channel-4', // noble -> penumbra
+    penumbraChannel: 'channel-89', // noble -> penumbra
+    penumbraSourceChannel: 'channel-2', // penumbra -> noble
   },
-  nomic: {
-    id: 'nomic',
-    name: 'Nomic',
-    chainId: 'nomic-stakenet-3',
-    bech32Prefix: 'nomic',
-    symbol: 'nBTC',
-    denom: 'usat', // micro-satoshis
-    decimals: 6, // usat has 6 decimals (1 nBTC = 1e6 usat = 1e8 satoshis)
-    rpcEndpoint: 'https://rpc.nomic.io',
-    restEndpoint: 'https://app.nomic.io:8443',
-    gasPrice: '0unom', // nomic uses NOM for gas, but simple transfers are often free
-  },
-  celestia: {
-    id: 'celestia',
-    name: 'Celestia',
-    chainId: 'celestia',
-    bech32Prefix: 'celestia',
-    symbol: 'TIA',
-    denom: 'utia',
+  cosmoshub: {
+    id: 'cosmoshub',
+    name: 'Cosmos Hub',
+    chainId: 'cosmoshub-4',
+    bech32Prefix: 'cosmos',
+    symbol: 'ATOM',
+    denom: 'uatom',
     decimals: 6,
-    rpcEndpoint: 'https://celestia-rpc.polkachu.com',
-    restEndpoint: 'https://celestia-api.polkachu.com',
-    gasPrice: '0.002utia',
+    rpcEndpoint: 'https://cosmos-rpc.polkachu.com',
+    restEndpoint: 'https://cosmos-api.polkachu.com',
+    gasPrice: '0.025uatom',
+    penumbraChannel: 'channel-940', // cosmoshub -> penumbra
+    penumbraSourceChannel: 'channel-0', // penumbra -> cosmoshub
   },
 };
 

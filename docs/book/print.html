@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "coal";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "searchindex-9f0443aa.js";
+            window.path_to_searchindex_js = "searchindex-016ab5f2.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-4cbd2bf8.js"></script>
@@ -393,19 +393,8 @@ RPC nodes, which can observe address activity and correlate it with IP
 addresses.</p>
 <p>all cosmos chains use BIP44 secp256k1 key derivation with path
 <code>m/44'/118'/0'/0/0</code> and chain-specific bech32 prefixes.</p>
-<p>these networks are not yet launched in the UI.</p>
-<h3 id="osmosis"><a class="header" href="#osmosis">osmosis</a></h3>
-<ul>
-<li>symbol: OSMO</li>
-<li>decimals: 6</li>
-<li>denomination: uosmo</li>
-<li>chain ID: osmosis-1</li>
-<li>bech32 prefix: osmo</li>
-<li>default RPC: <code>https://rpc.osmosis.zone</code></li>
-<li>default LCD: <code>https://lcd.osmosis.zone</code></li>
-<li>features: staking, swaps</li>
-<li>role: DEX and IBC routing hub</li>
-</ul>
+<p>these networks are not yet launched in the UI. only chains with an active
+relay channel against penumbra are tracked here.</p>
 <h3 id="noble"><a class="header" href="#noble">noble</a></h3>
 <ul>
 <li>symbol: USDC</li>
@@ -416,33 +405,21 @@ addresses.</p>
 <li>default RPC: <code>https://noble-rpc.polkachu.com</code></li>
 <li>default LCD: <code>https://noble-api.polkachu.com</code></li>
 <li>features: none (transfer only)</li>
-<li>role: native USDC issuance chain</li>
+<li>role: native USDC issuance chain. IBC channel to penumbra: noble-side
+<code>channel-89</code>, penumbra-side <code>channel-2</code>.</li>
 </ul>
-<h3 id="nomic"><a class="header" href="#nomic">nomic</a></h3>
+<h3 id="cosmoshub"><a class="header" href="#cosmoshub">cosmoshub</a></h3>
 <ul>
-<li>symbol: nBTC</li>
-<li>decimals: 8 (satoshis)</li>
-<li>denomination: usat</li>
-<li>chain ID: nomic-stakenet-3</li>
-<li>bech32 prefix: nomic</li>
-<li>default RPC: <code>https://rpc.nomic.io</code></li>
-<li>default REST: <code>https://app.nomic.io:8443</code> (relayer endpoint for deposits)</li>
-<li>features: none (transfer only)</li>
-<li>role: bitcoin bridge - deposit BTC, receive nBTC, transfer to penumbra
-via IBC for shielded bitcoin</li>
-</ul>
-<p>the intended flow: BTC -&gt; nomic (nBTC) -&gt; penumbra (shielded nBTC).</p>
-<h3 id="celestia"><a class="header" href="#celestia">celestia</a></h3>
-<ul>
-<li>symbol: TIA</li>
+<li>symbol: ATOM</li>
 <li>decimals: 6</li>
-<li>denomination: utia</li>
-<li>chain ID: celestia</li>
-<li>bech32 prefix: celestia</li>
-<li>default RPC: <code>https://celestia-rpc.polkachu.com</code></li>
-<li>default LCD: <code>https://celestia-api.polkachu.com</code></li>
+<li>denomination: uatom</li>
+<li>chain ID: cosmoshub-4</li>
+<li>bech32 prefix: cosmos</li>
+<li>default RPC: <code>https://cosmos-rpc.polkachu.com</code></li>
+<li>default LCD: <code>https://cosmos-api.polkachu.com</code></li>
 <li>features: staking</li>
-<li>role: data availability layer</li>
+<li>role: cosmos hub - the original IBC router. IBC channel to penumbra:
+cosmoshub-side <code>channel-940</code>, penumbra-side <code>channel-0</code>.</li>
 </ul>
 <h2 id="transparent-networks"><a class="header" href="#transparent-networks">transparent networks</a></h2>
 <p>fully public ledgers. all balances and transactions are visible on-chain.
@@ -540,7 +517,7 @@ networks are controlled by the privacy toggles described below.</p>
 are not displayed.</li>
 <li>when on: queries RPC nodes for account balances on cosmos chains. the RPC
 node learns which bech32 addresses you control.</li>
-<li>scope: cosmos/IBC chains only (osmosis, noble, nomic, celestia). does not
+<li>scope: cosmos/IBC chains only (noble, cosmoshub). does not
 affect penumbra or zcash, which are always safe.</li>
 <li>visible when: active network is an IBC chain or penumbra</li>
 </ul>
@@ -634,76 +611,252 @@ cryptographic identity of the person behind the wallet.</p>
 <ul>
 <li>authenticate you to websites and apps</li>
 <li>sign arbitrary messages</li>
-<li>identify you in contact cards</li>
-<li>enable encrypted messaging between wallets</li>
-<li>detect if someone forwarded your contact information</li>
+<li>provide DH keypairs for end-to-end encrypted messaging</li>
+<li>identify you in contact cards for sender authentication</li>
 </ul>
+<h2 id="separation-of-concerns"><a class="header" href="#separation-of-concerns">separation of concerns</a></h2>
+<p>zafu uses two distinct systems for two distinct purposes:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>layer</th><th>mechanism</th><th>purpose</th></tr>
+</thead>
+<tbody>
+<tr><td>diversified address</td><td>zcash FVK diversifier</td><td>payment routing + referral tracking</td></tr>
+<tr><td>per-site zid</td><td>ed25519 per origin</td><td>website authentication</td></tr>
+<tr><td>per-contact zid</td><td>ed25519 per contact</td><td>sender auth + e2ee (X25519 DH)</td></tr>
+</tbody>
+</table>
+</div>
+<p>referral tracking (“via alice”) is handled entirely by diversified
+zcash addresses at the transport layer. see
+<a href="#diversified-addresses">contact cards</a> for details.</p>
+<p>zid handles identity and encryption - not payment routing.</p>
 <h2 id="derivation"><a class="header" href="#derivation">derivation</a></h2>
 <p>all zid keys are derived deterministically from the wallet mnemonic
 using HMAC-SHA512 with a versioned domain separator.</p>
+<h3 id="named-identities"><a class="header" href="#named-identities">named identities</a></h3>
+<p>a single seed phrase produces multiple independent identities, each
+identified by a stable name. the name is a derivation path component,
+not a secret — the mnemonic provides all entropy.</p>
 <pre><code>root = HMAC-SHA512("zid-v1", mnemonic)
+
+identity["default"]  = HMAC-SHA512(root, "identity:default")
+identity["poker"]    = HMAC-SHA512(root, "identity:poker")
+identity["personal"] = HMAC-SHA512(root, "identity:personal")
 </code></pre>
-<p>from the root, multiple keypairs are derived:</p>
-<pre><code>global:      HMAC-SHA512(root, 0x00000000)
-per-site:    HMAC-SHA512(root, "site:" + origin)
-per-contact: HMAC-SHA512(root, "contact:" + contact_id)
+<p>identities are unlinkable — no one can determine that two identities
+derive from the same seed. users create identities by choosing a name:</p>
+<ul>
+<li>“default” — created automatically for new wallets</li>
+<li>“poker” — gaming pseudonym</li>
+<li>“personal” — friends and family</li>
+<li>“work” — professional contacts</li>
+</ul>
+<p>the name is stable. changing it changes the derived keys, which breaks
+all connections to sites and contacts under that identity. the user-facing
+label (displayed in the UI) can change freely without affecting keys.</p>
+<h3 id="per-identity-subtree"><a class="header" href="#per-identity-subtree">per-identity subtree</a></h3>
+<p>each identity has its own complete derivation subtree:</p>
+<pre><code>identity["poker"]:
+  per-site:    HMAC-SHA512(identity, "site:" + origin)       default
+  rotated:     HMAC-SHA512(identity, "site:" + origin + ":" + counter)
+  per-contact: HMAC-SHA512(identity, "contact:" + contact_id)
+  cross-site:  HMAC-SHA512(identity, "cross-site")           opt-in only
 </code></pre>
 <p>the first 32 bytes of each derived value become the ed25519 private
 key. the public key is derived from it. all intermediate values are
 zeroized after use.</p>
+<p><strong>per-site</strong> keys are the default. <strong>cross-site</strong> keys are opt-in only
+and require explicit confirmation with a warning about cross-origin
+linking. the cross-site key is never displayed on the identity card.</p>
+<h3 id="contacts-are-scoped-to-identity"><a class="header" href="#contacts-are-scoped-to-identity">contacts are scoped to identity</a></h3>
+<p>per-contact zids are derived under the identity subtree, not the root.
+your “poker” identity’s contacts are completely separate from your
+“personal” identity’s contacts. sharing a contact card from “poker”
+produces a different zid than sharing from “personal”, even for the
+same contact.</p>
 <h2 id="address-format"><a class="header" href="#address-format">address format</a></h2>
 <p>for display, a zid is shown as:</p>
 <pre><code>zid + first 16 hex characters of the public key
 </code></pre>
 <p>example: <code>zid8a3f72b1e9c04d5a</code></p>
 <p>the full 32-byte public key is available for copy/export.</p>
+<h2 id="per-site-identity-default"><a class="header" href="#per-site-identity-default">per-site identity (default)</a></h2>
+<p>every website gets a unique zid derived from the active identity
+and the site’s origin:</p>
+<pre><code>zid_for_example = HMAC-SHA512(identity["poker"], "site:https://example.com")
+</code></pre>
+<p>this is the default mode. websites cannot correlate your activity
+across sites because they each see a different public key.</p>
+<h3 id="cross-site-key-opt-in-dangerous"><a class="header" href="#cross-site-key-opt-in-dangerous">cross-site key (opt-in, dangerous)</a></h3>
+<p>each identity has a cross-site key that is the same across all origins.
+sharing it enables cross-origin linking within that identity.</p>
+<pre><code>cross_site = HMAC-SHA512(identity["poker"], "cross-site")
+</code></pre>
+<p>this does NOT link across identities — the “poker” cross-site key
+cannot be correlated with the “personal” cross-site key.</p>
+<p><strong>this is never shared by default.</strong> switching to cross-site mode for
+any origin requires:</p>
+<ol>
+<li>explicit toggle in identity settings</li>
+<li>warning dialog: “this links your activity across all sites using
+your [poker] identity. anyone who learns this key can correlate
+your sessions.”</li>
+<li>separate confirmation</li>
+</ol>
+<p>the cross-site key is NOT shown on the identity card. it lives in
+settings &gt; identity &gt; advanced.</p>
+<h3 id="rotation"><a class="header" href="#rotation">rotation</a></h3>
+<p>you can rotate your identity for a site. this creates a new zid
+derived from <code>"site:" + origin + ":" + N</code> where N is the rotation
+counter. the old identity is not invalidated - the site keeps
+whatever pubkeys you previously shared. rotation only affects
+future signatures.</p>
 <h2 id="per-contact-identity"><a class="header" href="#per-contact-identity">per-contact identity</a></h2>
-<p>when you share a contact card with someone, zafu derives a unique
-zid for that relationship:</p>
-<pre><code>zid_for_alice = HMAC-SHA512(root, "contact:" + alice_zid_pubkey)
+<p>when you share a contact card, zafu derives a unique zid for that
+relationship under the active identity:</p>
+<pre><code>zid_for_alice = HMAC-SHA512(identity["poker"], "contact:" + alice_contact_id)
 </code></pre>
-<p>if alice forwards your card to bob, bob will present the zid you
-created for alice. you can detect the forwarding because you know
-which zid was given to which contact.</p>
-<p>this is like giving each person a different phone number. if spam
-arrives on the number you only gave to your dentist, you know who
-shared it.</p>
-<h2 id="per-site-identity"><a class="header" href="#per-site-identity">per-site identity</a></h2>
-<p>by default, each website gets a unique zid derived from its origin:</p>
-<pre><code>zid_for_example = HMAC-SHA512(root, "site:https://example.com")
-</code></pre>
-<p>websites cannot correlate your activity across sites because they
-each see a different public key.</p>
-<p>you can opt to share your global zid (index 0) with a site if you
-want to be recognizable across services.</p>
+<p>this zid is included in the contact card as a TLV extension
+(tag 0x01, 32 bytes). it serves two purposes:</p>
+<ol>
+<li>
+<p><strong>sender authentication</strong> - the recipient can verify that a
+message came from you specifically, not just from “someone who
+knows my address”</p>
+</li>
+<li>
+<p><strong>key exchange</strong> - the ed25519 key can be converted to X25519
+for Diffie-Hellman key agreement, enabling encrypted messaging
+on top of zcash memos</p>
+</li>
+</ol>
+<p>per-contact zids are NOT used for referral tracking. that’s handled
+by diversified zcash addresses at the transport layer.</p>
+<h3 id="limitations"><a class="header" href="#limitations">limitations</a></h3>
+<p><strong>no forward secrecy.</strong> per-contact zid keys are deterministic from
+the seed phrase. if the seed is compromised, all past encrypted
+messages can be decrypted. for poker game channels where session
+confidentiality matters, consider ephemeral DH with ratcheting
+on top of zid authentication (future work). for v0.3.0, the zcash
+note-level encryption provides the primary confidentiality layer.</p>
+<p><strong>no revocation.</strong> a compromised identity cannot signal its
+compromise to contacts. rotation creates a new per-site key but
+the old key remains valid. a revocation certificate protocol
+(sign “revoked, trust new key” with old key) requires a
+distribution channel and is planned for a future release.</p>
+<p><strong>contactId must be stable.</strong> the per-contact zid is derived from
+the contact’s internal ID (not their zid pubkey, which may rotate).
+changing the ID changes the keypair, breaking e2ee continuity for
+that relationship.</p>
+<h2 id="identity-manager"><a class="header" href="#identity-manager">identity manager</a></h2>
+<p>the identity screen shows:</p>
+<ul>
+<li>list of identities with labels (“Personal”, “Poker”, “Anon”)</li>
+<li>create new identity (choose a stable name — cannot change later)</li>
+<li>rename label (display only, does not affect keys)</li>
+<li>delete identity</li>
+<li>active identity indicator</li>
+<li>per-identity: list of connected sites + per-contact zids</li>
+<li><strong>never</strong> shows the cross-site key on the main screen</li>
+</ul>
+<p>switching identities changes which zid apps see on next connection.
+existing connections keep whatever identity was used.</p>
+<h3 id="identity-selection-in-apps"><a class="header" href="#identity-selection-in-apps">identity selection in apps</a></h3>
+<p>when an app requests connection via <code>zid.connect()</code>:</p>
+<ol>
+<li>if only one identity exists, use it automatically</li>
+<li>if multiple exist, show identity picker popup</li>
+<li>the user picks which identity to present to this app</li>
+<li>the choice is remembered per origin</li>
+</ol>
 <h2 id="sign-in-flow"><a class="header" href="#sign-in-flow">sign-in flow</a></h2>
 <ol>
 <li>a website sends a sign request: <code>{ type: "zafu_sign", challengeHex, statement? }</code></li>
-<li>zafu shows an approval popup with the origin and challenge</li>
+<li>zafu shows an approval popup with the origin, active identity label, and which per-site zid will sign</li>
 <li>you approve or deny</li>
-<li>if approved, zafu signs the challenge with your zid and returns the signature</li>
-<li>the website verifies the signature against your public key</li>
+<li>if approved, zafu signs the challenge with the per-site zid for the active identity</li>
+<li>the signature and pubkey are returned to the website</li>
+<li>the pubkey is recorded in the encrypted share log</li>
 </ol>
 <p>no transaction is created. no funds are at risk. the signature only
 proves you control the zid private key.</p>
+<h2 id="connections"><a class="header" href="#connections">connections</a></h2>
+<p>each approved site appears in the connections page showing:</p>
+<ul>
+<li>which identity was used (label + per-site zid)</li>
+<li>your network addresses (penumbra, zcash) if applicable</li>
+<li>rotation counter and rotate button</li>
+</ul>
+<p>switching to cross-site mode shows a strong warning.
+rotating shows a notice that the site keeps old identities.</p>
+<h2 id="storage"><a class="header" href="#storage">storage</a></h2>
+<p>zid preferences and the share log are encrypted at rest alongside
+wallet keys. they are not readable without the wallet password.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>data</th><th>encrypted</th><th>purpose</th></tr>
+</thead>
+<tbody>
+<tr><td>zidIdentities</td><td>yes</td><td>identity names + labels</td></tr>
+<tr><td>zidPreferences</td><td>yes</td><td>per-origin identity choice + mode + rotation counter</td></tr>
+<tr><td>zidShareLog</td><td>yes</td><td>site authentication records</td></tr>
+<tr><td>diversifiedAddresses</td><td>yes</td><td>per-contact zcash address mapping</td></tr>
+</tbody>
+</table>
+</div>
+<p>all identity information is encrypted. no zid pubkeys are stored
+in plaintext vault metadata.</p>
 <h2 id="recovery"><a class="header" href="#recovery">recovery</a></h2>
-<p>because the zid is derived from your seed phrase, it is automatically
-recovered when you restore your wallet. no separate backup is needed.</p>
+<p>because all identities are derived from the seed phrase, they are
+automatically recovered when you restore your wallet — provided you
+remember the identity names. identity labels, share logs, preferences,
+and diversified address records exist only in encrypted local storage
+and are not recoverable from the seed alone.</p>
+<p>after recovery, you get the same keypairs (for known identity names)
+but must re-establish connections to sites and re-share contact cards.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="contact-cards"><a class="header" href="#contact-cards">contact cards</a></h1>
 <h2 id="overview"><a class="header" href="#overview">overview</a></h2>
 <p>a contact card is a structured zcash memo that shares your name and
-address with another zafu user. the recipient’s wallet detects the
-card and offers to save you as a contact.</p>
+receiving address with another zafu user. the recipient’s wallet
+detects the card and offers to save you as a contact.</p>
 <p>contact cards are sent inside zcash shielded notes. only the sender
 and recipient can read them.</p>
 <h2 id="whats-in-a-card"><a class="header" href="#whats-in-a-card">what’s in a card</a></h2>
 <ul>
 <li><strong>name</strong> - your display name (UTF-8, up to 255 bytes)</li>
-<li><strong>address</strong> - your zcash unified address</li>
+<li><strong>address</strong> - a diversified zcash address unique to this contact</li>
 <li><strong>zid</strong> - your per-contact identity (optional, 32-byte ed25519 pubkey)</li>
 </ul>
-<p>the zid in the card is unique to the recipient (see <a href="#per-contact-identity">per-contact identity</a>).</p>
+<p>both the address and zid are unique per recipient. this enables
+referral tracking at two layers:</p>
+<ul>
+<li><strong>transport layer</strong>: the diversified address tells you which
+contact’s address was used for a payment, even without a memo</li>
+<li><strong>identity layer</strong>: the zid tells you which contact introduced
+the sender, even if the sender uses a different address</li>
+</ul>
+<h2 id="diversified-addresses"><a class="header" href="#diversified-addresses">diversified addresses</a></h2>
+<p>when you share a contact card, zafu derives a unique zcash address
+for that relationship:</p>
+<pre><code>index = 1000 + (SHA-256(contact_id) mod 2^31)
+address = get_address_at(index)
+</code></pre>
+<p>all diversified addresses decrypt to the same wallet during sync.
+the diversifier index identifies which contact the payment came
+through.</p>
+<p>index allocation:</p>
+<ul>
+<li><code>0</code> - default receiving address (your public address)</li>
+<li><code>1-999</code> - reserved for manual address rotation</li>
+<li><code>1000+</code> - per-contact diversified addresses</li>
+</ul>
+<p>when a payment arrives on a per-contact address, zafu checks the
+diversified address records to show “via alice” - regardless of
+whether the sender included any memo.</p>
 <h2 id="wire-format"><a class="header" href="#wire-format">wire format</a></h2>
 <p>contact cards use MemoType 0x05 in the zafu memo protocol. the payload
 is binary with TLV (tag-length-value) extensions after the core fields.</p>
@@ -714,23 +867,45 @@ wire format.</p>
 <li>go to contacts</li>
 <li>select a contact with a zcash address</li>
 <li>tap “share via zcash”</li>
+<li>zafu derives a diversified address and per-contact zid</li>
 <li>the card is encoded as a memo and attached to the send flow</li>
 </ol>
 <p>the card is sent as a standard zcash transaction with a dust amount.
 the memo carries the encoded contact card.</p>
+<p>zafu records both the diversified address and zid in the encrypted
+share log and diversified address records. this enables referral
+tracing at both the transport and identity layers.</p>
 <h2 id="receiving-a-card"><a class="header" href="#receiving-a-card">receiving a card</a></h2>
 <p>when zafu detects a contact card during zcash sync, it appears in
 your inbox. you can:</p>
 <ul>
 <li>view the sender’s name and address</li>
 <li>see their zid (if included)</li>
+<li>see who introduced them (“via alice”) if:
+<ul>
+<li>the zid matches a previously shared per-contact identity, or</li>
+<li>the payment arrived on a per-contact diversified address</li>
+</ul>
+</li>
 <li>save them to your contacts with one tap</li>
 </ul>
+<h3 id="referral-display"><a class="header" href="#referral-display">referral display</a></h3>
+<p>if someone sends you a payment or contact card through an address
+you shared with alice, zafu shows the introduction:</p>
+<blockquote>
+<p><strong>bob</strong> wants to connect
+via alice - shared 2026-03-15</p>
+</blockquote>
+<p>this works even for plain payments with no memo - the diversified
+address itself is the referral signal.</p>
 <h2 id="privacy-properties"><a class="header" href="#privacy-properties">privacy properties</a></h2>
 <ul>
 <li>the card is encrypted inside the zcash shielded note</li>
 <li>only the recipient can read it</li>
-<li>the sender’s zid is unique per recipient (leak detection)</li>
+<li>the address is unique per recipient (transport-layer referral tracking)</li>
+<li>the zid is unique per recipient (identity-layer referral tracking)</li>
+<li>the share log and address records are encrypted at rest</li>
+<li>diversified addresses are unlinkable on-chain (same FVK, different address)</li>
 <li>no metadata leaks to the network</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
@@ -1145,7 +1320,7 @@ documentation.</li>
 <li><strong>re-running DKG</strong>: if a participant loses their key package, the group must
 run DKG again. there is no key recovery mechanism for individual shares.</li>
 </ul>
-<h2 id="limitations"><a class="header" href="#limitations">limitations</a></h2>
+<h2 id="limitations-1"><a class="header" href="#limitations-1">limitations</a></h2>
 <ul>
 <li>only zcash orchard is supported for FROST multisig. sapling and sprout are
 not supported.</li>
@@ -2563,12 +2738,11 @@ wasm module: <code>@rotko/penumbra-wasm</code>.</li>
 </ul>
 <h3 id="ibccosmos-chains-1"><a class="header" href="#ibccosmos-chains-1">ibc/cosmos chains</a></h3>
 <p>transparent chains using BIP44 secp256k1 with bech32 address encoding. primarily
-used for deposits into and withdrawals from penumbra via ibc.</p>
+used for deposits into and withdrawals from penumbra via ibc. only chains with
+an active relay channel against penumbra are listed here.</p>
 <ul>
-<li><strong>osmosis</strong> - bech32 prefix <code>osmo</code>, denom <code>uosmo</code></li>
 <li><strong>noble</strong> - bech32 prefix <code>noble</code>, denom <code>uusdc</code></li>
-<li><strong>nomic</strong> - bech32 prefix <code>nomic</code>, denom <code>usat</code> (nBTC)</li>
-<li><strong>celestia</strong> - bech32 prefix <code>celestia</code>, denom <code>utia</code></li>
+<li><strong>cosmoshub</strong> - bech32 prefix <code>cosmos</code>, denom <code>uatom</code></li>
 </ul>
 <p>all ibc chains use the same coin type 118 and derivation path <code>m/44'/118'/0'/0/0</code>,
 differing only in bech32 prefix.</p>
@@ -2614,10 +2788,8 @@ derive keys for every supported network using standard derivation paths:</p>
 <tbody>
 <tr><td>penumbra</td><td>6532</td><td><code>m/44'/6532'/0'</code></td></tr>
 <tr><td>zcash</td><td>133</td><td><code>m/44'/133'/0'/0/0</code></td></tr>
-<tr><td>osmosis</td><td>118</td><td><code>m/44'/118'/0'/0/0</code></td></tr>
 <tr><td>noble</td><td>118</td><td><code>m/44'/118'/0'/0/0</code></td></tr>
-<tr><td>nomic</td><td>118</td><td><code>m/44'/118'/0'/0/0</code></td></tr>
-<tr><td>celestia</td><td>118</td><td><code>m/44'/118'/0'/0/0</code></td></tr>
+<tr><td>cosmoshub</td><td>118</td><td><code>m/44'/118'/0'/0/0</code></td></tr>
 <tr><td>polkadot</td><td>354</td><td><code>m/44'/354'/0'/0'/0'</code></td></tr>
 <tr><td>kusama</td><td>434</td><td><code>m/44'/434'/0'/0'/0'</code></td></tr>
 <tr><td>ethereum</td><td>60</td><td><code>m/44'/60'/0'/0/0</code></td></tr>

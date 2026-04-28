@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "coal";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-9f0443aa.js";
+            window.path_to_searchindex_js = "../searchindex-016ab5f2.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4cbd2bf8.js"></script>
@@ -194,12 +194,11 @@ wasm module: <code>@rotko/penumbra-wasm</code>.</li>
 </ul>
 <h3 id="ibccosmos-chains"><a class="header" href="#ibccosmos-chains">ibc/cosmos chains</a></h3>
 <p>transparent chains using BIP44 secp256k1 with bech32 address encoding. primarily
-used for deposits into and withdrawals from penumbra via ibc.</p>
+used for deposits into and withdrawals from penumbra via ibc. only chains with
+an active relay channel against penumbra are listed here.</p>
 <ul>
-<li><strong>osmosis</strong> - bech32 prefix <code>osmo</code>, denom <code>uosmo</code></li>
 <li><strong>noble</strong> - bech32 prefix <code>noble</code>, denom <code>uusdc</code></li>
-<li><strong>nomic</strong> - bech32 prefix <code>nomic</code>, denom <code>usat</code> (nBTC)</li>
-<li><strong>celestia</strong> - bech32 prefix <code>celestia</code>, denom <code>utia</code></li>
+<li><strong>cosmoshub</strong> - bech32 prefix <code>cosmos</code>, denom <code>uatom</code></li>
 </ul>
 <p>all ibc chains use the same coin type 118 and derivation path <code>m/44'/118'/0'/0/0</code>,
 differing only in bech32 prefix.</p>
@@ -245,10 +244,8 @@ derive keys for every supported network using standard derivation paths:</p>
 <tbody>
 <tr><td>penumbra</td><td>6532</td><td><code>m/44'/6532'/0'</code></td></tr>
 <tr><td>zcash</td><td>133</td><td><code>m/44'/133'/0'/0/0</code></td></tr>
-<tr><td>osmosis</td><td>118</td><td><code>m/44'/118'/0'/0/0</code></td></tr>
 <tr><td>noble</td><td>118</td><td><code>m/44'/118'/0'/0/0</code></td></tr>
-<tr><td>nomic</td><td>118</td><td><code>m/44'/118'/0'/0/0</code></td></tr>
-<tr><td>celestia</td><td>118</td><td><code>m/44'/118'/0'/0/0</code></td></tr>
+<tr><td>cosmoshub</td><td>118</td><td><code>m/44'/118'/0'/0/0</code></td></tr>
 <tr><td>polkadot</td><td>354</td><td><code>m/44'/354'/0'/0'/0'</code></td></tr>
 <tr><td>kusama</td><td>434</td><td><code>m/44'/434'/0'/0'/0'</code></td></tr>
 <tr><td>ethereum</td><td>60</td><td><code>m/44'/60'/0'/0/0</code></td></tr>

@@ -2,101 +2,128 @@
 
 # Zafu
 
-Multi-network browser extension for Penumbra, Zcash, Noble, Osmosis, and Celestia
-
-Part of the [Zafu Zigner](https://zigner.rotko.net) ecosystem
+A privacy-centric multichain wallet with client-side state.
 
 </div>
 
-## what is zafu
+## what
 
-Zafu is a browser extension wallet forked from [Prax](https://github.com/prax-wallet/prax).
-It acts as the hot wallet counterpart to [Zigner](https://github.com/rotkonetworks/zigner),
-the air-gapped cold signer.
+Zafu is a Chrome extension wallet built around two principles:
 
-Zafu holds only viewing keys. it can build unsigned transactions and display
-balances, but cannot sign without the air-gapped device. when used standalone
-(without Zigner), it can also hold spending keys directly.
+1. **Privacy is a first-class chain property.** Penumbra and Zcash are the
+   production shielded chains with mature crypto, and Zafu is a first-class
+   client for both. Other networks are supported as bridging infrastructure;
+   the privacy chains are the organizing principle of the wallet, not items
+   on a list.
 
-## supported networks
+2. **State is client-side.** Zafu does not depend on a custodial backend.
+   Viewing keys live on the user's device, notes are decrypted locally, and
+   transactions are built locally. Network calls go only to chain RPC
+   endpoints - which can be self-hosted - for state and broadcast.
 
-- **penumbra** - shielded transactions, DEX swaps, staking, IBC
-- **zcash** - orchard shielded + transparent via PCZT
-- **noble** - USDC transfers and IBC
-- **osmosis** - swaps and liquidity
-- **celestia** - data availability and staking
+The recommended security posture pairs Zafu with
+[Zigner](https://github.com/rotkonetworks/zigner), an air-gapped cold signer
+running on a dedicated phone. Zafu holds only viewing keys, Zigner holds
+spending keys, and the channel between them is QR codes only.
 
-## how it works with zigner
+A standalone mode is available for users who don't want air-gap. In
+standalone mode, spending keys are encrypted at rest with a passphrase and
+held on the host browser.
 
-1. zafu builds an unsigned transaction
-2. displays it as a QR code
-3. zigner (air-gapped phone) scans, reviews, signs
-4. zafu scans the signed QR back and broadcasts
+## what it does
 
-the only communication channel between hot and cold wallet is QR codes.
-no bluetooth, wifi, or USB.
+- **Penumbra** - shielded transfers, swaps, staking, delegated voting, IBC
+- **Zcash** - Orchard pool send/receive, transparent (`t1…`) send/receive,
+  shield-to-Orchard
+- **Multisig** - t-of-n FROST vaults on both chains, with QR-based DKG and
+  signing. See [docs/MULTISIG.md](docs/MULTISIG.md).
+- **Hot/cold** - viewing-key-only mode that pairs with Zigner via QR
 
-see [zigner.rotko.net](https://zigner.rotko.net) for setup instructions.
+## privacy properties
 
-## wire formats
+| property                          | preserved |
+|-----------------------------------|-----------|
+| sender / receiver / amount        | yes (chain-level) |
+| cross-tx linkability              | yes (chain-level) |
+| view-only delegation              | yes (Zigner pairing) |
+| forward secrecy on key leak       | no - chain history is permanent |
+| metadata vs query backend         | no - run your own Zidecar / pd |
+| host-process compromise           | depends on custody mode |
 
-| chain | format | viewing key |
-|-------|--------|-------------|
-| penumbra | UR / CBOR | full viewing key (bech32m) |
-| zcash | UR / PCZT / ZIP-316 | UFVK |
-| substrate | UOS | public key |
+Full threat model: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md). For the
+broader doc index, see [docs/README.md](docs/README.md).
 
-## development
+## who this is not for
 
-### prerequisites
+- users who want a 30-chain swiss-army wallet
+- users who need cloud-synced transaction history
+- users who can't or won't run a self-hosted query backend, if metadata
+  privacy is in their threat model
 
-- node.js 22+
-- pnpm (via corepack)
-- google chrome or chromium
+## install
 
-or use nix: `nix develop`
+Beta: signed `.crx` builds on the
+[releases page](https://github.com/rotkonetworks/zafu/releases). Current
+version: `v24.0.0-beta.1`.
 
-### building
+Production (Chrome Web Store): pending review.
+
+## build
+
+Requires Node.js 22+, pnpm (via corepack), and Chrome or Chromium. Or
+`nix develop`.
 
 ```sh
 git clone https://github.com/rotkonetworks/zafu
 cd zafu
-pnpm install && pnpm dev
+pnpm install
+pnpm dev
 ```
 
-optionally launch a dedicated browser profile with the extension loaded:
+Output lands in `apps/extension/dist`. Load it via `chrome://extensions` →
+developer mode → "load unpacked".
+
+For a dedicated browser profile:
 
 ```sh
 CHROMIUM_PROFILE=chromium-profile pnpm dev
 ```
 
-the extension build output is at `apps/extension/dist`. to manually load it:
+Production and beta bundles:
 
-1. go to `chrome://extensions`
-2. enable developer mode
-3. click "load unpacked" and select `apps/extension/dist`
+```sh
+pnpm build
+```
 
-### monorepo structure
+Outputs `apps/extension/dist` (prod, ID `bfdfeleokgpdladfmipfmffgpjfjibbe`)
+and `apps/extension/beta-dist` (beta, ID
+`hlnodmbpndgjbhophnfbnfpgcbogiohh`).
+
+## monorepo
 
 ```
 apps/
-  extension/          browser extension (chrome)
+  extension/          chrome MV3 extension
 packages/
   context/            shared react context
-  custody-chrome/     key custody in chrome storage
-  encryption/         encryption utilities
-  noble/              noble chain support
+  custody-chrome/     key custody backed by chrome storage
+  encryption/         passphrase-derived encryption helpers
+  finagle/            internal utilities
+  mock-chrome/        chrome API stubs for tests
   query/              chain query layer
   storage-chrome/     chrome storage abstraction
   ui/                 shared UI components
-  wallet/             wallet logic
-  zcash-wasm/         zcash orchard derivation (WASM)
+  wallet/             cross-chain wallet logic
+  zcash-wasm/         zcash orchard derivation (WASM, rayon)
+  zid/                zafu identity SDK
+  tailwind-config/    shared tailwind preset
+  tsconfig/           shared tsconfig presets
 ```
 
 ## upstream
 
-forked from [prax-wallet/prax](https://github.com/prax-wallet/prax).
-penumbra-specific packages from [@penumbra-zone/web](https://github.com/penumbra-zone/web).
+Forked from [prax-wallet/prax](https://github.com/prax-wallet/prax). Penumbra
+packages from [@penumbra-zone/web](https://github.com/penumbra-zone/web).
 
 ## license
 

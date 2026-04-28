@@ -77,19 +77,8 @@ addresses.
 all cosmos chains use BIP44 secp256k1 key derivation with path
 `m/44'/118'/0'/0/0` and chain-specific bech32 prefixes.
 
-these networks are not yet launched in the UI.
-
-### osmosis
-
-- symbol: OSMO
-- decimals: 6
-- denomination: uosmo
-- chain ID: osmosis-1
-- bech32 prefix: osmo
-- default RPC: `https://rpc.osmosis.zone`
-- default LCD: `https://lcd.osmosis.zone`
-- features: staking, swaps
-- role: DEX and IBC routing hub
+these networks are not yet launched in the UI. only chains with an active
+relay channel against penumbra are tracked here.
 
 ### noble
 
@@ -101,34 +90,21 @@ these networks are not yet launched in the UI.
 - default RPC: `https://noble-rpc.polkachu.com`
 - default LCD: `https://noble-api.polkachu.com`
 - features: none (transfer only)
-- role: native USDC issuance chain
+- role: native USDC issuance chain. IBC channel to penumbra: noble-side
+  `channel-89`, penumbra-side `channel-2`.
 
-### nomic
+### cosmoshub
 
-- symbol: nBTC
-- decimals: 8 (satoshis)
-- denomination: usat
-- chain ID: nomic-stakenet-3
-- bech32 prefix: nomic
-- default RPC: `https://rpc.nomic.io`
-- default REST: `https://app.nomic.io:8443` (relayer endpoint for deposits)
-- features: none (transfer only)
-- role: bitcoin bridge - deposit BTC, receive nBTC, transfer to penumbra
-  via IBC for shielded bitcoin
-
-the intended flow: BTC -> nomic (nBTC) -> penumbra (shielded nBTC).
-
-### celestia
-
-- symbol: TIA
+- symbol: ATOM
 - decimals: 6
-- denomination: utia
-- chain ID: celestia
-- bech32 prefix: celestia
-- default RPC: `https://celestia-rpc.polkachu.com`
-- default LCD: `https://celestia-api.polkachu.com`
+- denomination: uatom
+- chain ID: cosmoshub-4
+- bech32 prefix: cosmos
+- default RPC: `https://cosmos-rpc.polkachu.com`
+- default LCD: `https://cosmos-api.polkachu.com`
 - features: staking
-- role: data availability layer
+- role: cosmos hub - the original IBC router. IBC channel to penumbra:
+  cosmoshub-side `channel-940`, penumbra-side `channel-0`.
 
 ## transparent networks
 
