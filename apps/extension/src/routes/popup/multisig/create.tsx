@@ -8,6 +8,7 @@
  */
 
 import { useState } from 'react';
+import { Navigate } from 'react-router-dom';
 import { useStore } from '../../../state';
 import {
   frostDkgPart1InWorker,
@@ -17,6 +18,7 @@ import {
   frostSampleFvkSkInWorker,
   frostDeriveUfvkInWorker,
 } from '../../../state/keyring/network-worker';
+import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../../state/frost-session';
 import { useDeadlineCountdown } from '../../../hooks/use-deadline-countdown';
 import { SettingsScreen } from '../settings/settings-screen';
@@ -40,6 +42,13 @@ const DKG_STEPS = [
 ] as const;
 
 export const MultisigCreate = () => {
+  // zigner-imported wallets cannot mint a hot FROST share — redirect to
+  // the QR-mediated host flow where the share is born and stored on zigner.
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  if (selectedKeyInfo?.type === 'zigner-zafu') {
+    return <Navigate to={PopupPath.MULTISIG_CREATE_ZIGNER} replace />;
+  }
+
   const [threshold, setThreshold] = useState(2);
   const [maxSigners, setMaxSigners] = useState(3);
   const [step, setStep] = useState<Step>('config');

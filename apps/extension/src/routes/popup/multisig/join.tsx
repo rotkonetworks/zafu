@@ -7,6 +7,7 @@
  */
 
 import { useState } from 'react';
+import { Navigate } from 'react-router-dom';
 import { useStore } from '../../../state';
 import {
   frostDkgPart1InWorker,
@@ -15,6 +16,7 @@ import {
   frostDeriveAddressFromSkInWorker,
   frostDeriveUfvkInWorker,
 } from '../../../state/keyring/network-worker';
+import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { FrostRelayClient } from '../../../state/keyring/frost-relay-client';
 import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../../state/frost-session';
 import { useDeadlineCountdown } from '../../../hooks/use-deadline-countdown';
@@ -24,6 +26,13 @@ import { PopupPath } from '../paths';
 type Step = 'input' | 'joining' | 'dkg' | 'fvk-echo' | 'complete' | 'error';
 
 export const MultisigJoin = () => {
+  // zigner-imported wallets cannot mint a hot FROST share — redirect to
+  // the QR-mediated joiner flow where the share is born and stored on zigner.
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  if (selectedKeyInfo?.type === 'zigner-zafu') {
+    return <Navigate to={PopupPath.MULTISIG_JOIN_ZIGNER} replace />;
+  }
+
   const [roomCode, setRoomCode] = useState('');
   const [step, setStep] = useState<Step>('input');
   const [error, setError] = useState('');
