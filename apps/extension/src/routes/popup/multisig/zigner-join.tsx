@@ -142,15 +142,16 @@ export const MultisigJoinZigner = () => {
     }
   };
 
-  const onZignerR1 = async (jsonText: string) => {
+  // r1 ack: bare round-1 broadcast hex (matches WASM frost_dkg_part1 result)
+  const onZignerR1 = async (raw: string) => {
     try {
-      const parsed = JSON.parse(jsonText) as { frost?: string; broadcast?: string };
-      if (parsed.frost !== 'r1' || !parsed.broadcast) throw new Error('not an r1 ack');
-
+      if (!/^[0-9a-fA-F]+$/.test(raw) || raw.length === 0) {
+        throw new Error('expected bare hex broadcast');
+      }
       const relay = relayRef.current;
       if (!relay || !participantIdRef.current) throw new Error('relay not initialized');
       // joiner R1 has no T:N:SK prefix — host already broadcast that
-      await relay.sendMessage(roomCode.trim(), participantIdRef.current, new TextEncoder().encode(`R1:${parsed.broadcast}`));
+      await relay.sendMessage(roomCode.trim(), participantIdRef.current, new TextEncoder().encode(`R1:${raw}`));
       setStep('waiting-r1');
     } catch (e) {
       setError(`r1 scan: ${e instanceof Error ? e.message : String(e)}`);
@@ -158,14 +159,16 @@ export const MultisigJoinZigner = () => {
     }
   };
 
-  const onZignerR2 = async (jsonText: string) => {
+  // r2 ack: JSON.stringify(peer_packages) — string[] from WASM frost_dkg_part2
+  const onZignerR2 = async (raw: string) => {
     try {
-      const parsed = JSON.parse(jsonText) as { frost?: string; packages?: string[] };
-      if (parsed.frost !== 'r2' || !Array.isArray(parsed.packages)) throw new Error('not an r2 ack');
-
+      const packages = JSON.parse(raw) as unknown;
+      if (!Array.isArray(packages) || !packages.every(p => typeof p === 'string')) {
+        throw new Error('expected JSON string array');
+      }
       const relay = relayRef.current;
       if (!relay || !participantIdRef.current) throw new Error('relay not initialized');
-      for (const pkg of parsed.packages) {
+      for (const pkg of packages) {
         await relay.sendMessage(roomCode.trim(), participantIdRef.current, new TextEncoder().encode(`R2:${pkg}`));
       }
       setStep('waiting-r2');
@@ -175,9 +178,10 @@ export const MultisigJoinZigner = () => {
     }
   };
 
-  const onZignerR3 = (jsonText: string) => {
+  // r3 ack uses an envelope so we can carry both public_key_package and wallet_id
+  const onZignerR3 = (raw: string) => {
     try {
-      const parsed = JSON.parse(jsonText) as {
+      const parsed = JSON.parse(raw) as {
         frost?: string;
         public_key_package?: string;
         wallet_id?: string;
@@ -356,7 +360,7 @@ export const MultisigJoinZigner = () => {
       )}
 
       {step === 'dkg1-scan' && (
-        <ScanZignerJson
+        <ScanZignerResponse
           title='scan zigner round-1 broadcast'
           onScan={raw => void onZignerR1(raw)}
           onCancel={() => setStep('dkg1-show')}
@@ -382,7 +386,7 @@ export const MultisigJoinZigner = () => {
       )}
 
       {step === 'dkg2-scan' && (
-        <ScanZignerJson
+        <ScanZignerResponse
           title='scan zigner round-2 packages'
           onScan={raw => void onZignerR2(raw)}
           onCancel={() => setStep('dkg2-show')}
@@ -408,7 +412,7 @@ export const MultisigJoinZigner = () => {
       )}
 
       {step === 'dkg3-scan' && (
-        <ScanZignerJson
+        <ScanZignerResponse
           title='scan zigner r3 ack (public_key_package)'
           onScan={onZignerR3}
           onCancel={() => setStep('dkg3-show')}
@@ -483,25 +487,14 @@ const ScreenWithTriggerQr = ({ headline, body, triggerJson, nextLabel, onNext }:
 
 interface ScanProps {
   title: string;
-  onScan: (jsonText: string) => void;
+  onScan: (raw: string) => void;
   onCancel: () => void;
 }
 
-const ScanZignerJson = ({ title, onScan, onCancel }: ScanProps) => (
-  <QrScanner
-    title={title}
-    onScan={raw => {
-      const looksHex = /^[0-9a-fA-F]+$/.test(raw) && raw.length % 2 === 0;
-      const text = looksHex
-        ? new TextDecoder().decode(
-            Uint8Array.from(raw.match(/.{2}/g) ?? [], h => parseInt(h, 16)),
-          )
-        : raw;
-      onScan(text);
-    }}
-    onClose={onCancel}
-    inline
-  />
+// Pass scanner output through verbatim — the per-round handler decides
+// whether to treat it as bare hex (r1) or JSON (r2/r3).
+const ScanZignerResponse = ({ title, onScan, onCancel }: ScanProps) => (
+  <QrScanner title={title} onScan={onScan} onClose={onCancel} inline />
 );
 
 const WaitingForRelay = ({ headline, body, countdown }: { headline: string; body: string; countdown: number | null }) => (
