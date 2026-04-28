@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "coal";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../searchindex-9f0443aa.js";
+            window.path_to_searchindex_js = "../searchindex-016ab5f2.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4cbd2bf8.js"></script>
@@ -186,61 +186,212 @@ cryptographic identity of the person behind the wallet.</p>
 <ul>
 <li>authenticate you to websites and apps</li>
 <li>sign arbitrary messages</li>
-<li>identify you in contact cards</li>
-<li>enable encrypted messaging between wallets</li>
-<li>detect if someone forwarded your contact information</li>
+<li>provide DH keypairs for end-to-end encrypted messaging</li>
+<li>identify you in contact cards for sender authentication</li>
 </ul>
+<h2 id="separation-of-concerns"><a class="header" href="#separation-of-concerns">separation of concerns</a></h2>
+<p>zafu uses two distinct systems for two distinct purposes:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>layer</th><th>mechanism</th><th>purpose</th></tr>
+</thead>
+<tbody>
+<tr><td>diversified address</td><td>zcash FVK diversifier</td><td>payment routing + referral tracking</td></tr>
+<tr><td>per-site zid</td><td>ed25519 per origin</td><td>website authentication</td></tr>
+<tr><td>per-contact zid</td><td>ed25519 per contact</td><td>sender auth + e2ee (X25519 DH)</td></tr>
+</tbody>
+</table>
+</div>
+<p>referral tracking (“via alice”) is handled entirely by diversified
+zcash addresses at the transport layer. see
+<a href="contact-cards.html#diversified-addresses">contact cards</a> for details.</p>
+<p>zid handles identity and encryption - not payment routing.</p>
 <h2 id="derivation"><a class="header" href="#derivation">derivation</a></h2>
 <p>all zid keys are derived deterministically from the wallet mnemonic
 using HMAC-SHA512 with a versioned domain separator.</p>
+<h3 id="named-identities"><a class="header" href="#named-identities">named identities</a></h3>
+<p>a single seed phrase produces multiple independent identities, each
+identified by a stable name. the name is a derivation path component,
+not a secret — the mnemonic provides all entropy.</p>
 <pre><code>root = HMAC-SHA512("zid-v1", mnemonic)
+
+identity["default"]  = HMAC-SHA512(root, "identity:default")
+identity["poker"]    = HMAC-SHA512(root, "identity:poker")
+identity["personal"] = HMAC-SHA512(root, "identity:personal")
 </code></pre>
-<p>from the root, multiple keypairs are derived:</p>
-<pre><code>global:      HMAC-SHA512(root, 0x00000000)
-per-site:    HMAC-SHA512(root, "site:" + origin)
-per-contact: HMAC-SHA512(root, "contact:" + contact_id)
+<p>identities are unlinkable — no one can determine that two identities
+derive from the same seed. users create identities by choosing a name:</p>
+<ul>
+<li>“default” — created automatically for new wallets</li>
+<li>“poker” — gaming pseudonym</li>
+<li>“personal” — friends and family</li>
+<li>“work” — professional contacts</li>
+</ul>
+<p>the name is stable. changing it changes the derived keys, which breaks
+all connections to sites and contacts under that identity. the user-facing
+label (displayed in the UI) can change freely without affecting keys.</p>
+<h3 id="per-identity-subtree"><a class="header" href="#per-identity-subtree">per-identity subtree</a></h3>
+<p>each identity has its own complete derivation subtree:</p>
+<pre><code>identity["poker"]:
+  per-site:    HMAC-SHA512(identity, "site:" + origin)       default
+  rotated:     HMAC-SHA512(identity, "site:" + origin + ":" + counter)
+  per-contact: HMAC-SHA512(identity, "contact:" + contact_id)
+  cross-site:  HMAC-SHA512(identity, "cross-site")           opt-in only
 </code></pre>
 <p>the first 32 bytes of each derived value become the ed25519 private
 key. the public key is derived from it. all intermediate values are
 zeroized after use.</p>
+<p><strong>per-site</strong> keys are the default. <strong>cross-site</strong> keys are opt-in only
+and require explicit confirmation with a warning about cross-origin
+linking. the cross-site key is never displayed on the identity card.</p>
+<h3 id="contacts-are-scoped-to-identity"><a class="header" href="#contacts-are-scoped-to-identity">contacts are scoped to identity</a></h3>
+<p>per-contact zids are derived under the identity subtree, not the root.
+your “poker” identity’s contacts are completely separate from your
+“personal” identity’s contacts. sharing a contact card from “poker”
+produces a different zid than sharing from “personal”, even for the
+same contact.</p>
 <h2 id="address-format"><a class="header" href="#address-format">address format</a></h2>
 <p>for display, a zid is shown as:</p>
 <pre><code>zid + first 16 hex characters of the public key
 </code></pre>
 <p>example: <code>zid8a3f72b1e9c04d5a</code></p>
 <p>the full 32-byte public key is available for copy/export.</p>
+<h2 id="per-site-identity-default"><a class="header" href="#per-site-identity-default">per-site identity (default)</a></h2>
+<p>every website gets a unique zid derived from the active identity
+and the site’s origin:</p>
+<pre><code>zid_for_example = HMAC-SHA512(identity["poker"], "site:https://example.com")
+</code></pre>
+<p>this is the default mode. websites cannot correlate your activity
+across sites because they each see a different public key.</p>
+<h3 id="cross-site-key-opt-in-dangerous"><a class="header" href="#cross-site-key-opt-in-dangerous">cross-site key (opt-in, dangerous)</a></h3>
+<p>each identity has a cross-site key that is the same across all origins.
+sharing it enables cross-origin linking within that identity.</p>
+<pre><code>cross_site = HMAC-SHA512(identity["poker"], "cross-site")
+</code></pre>
+<p>this does NOT link across identities — the “poker” cross-site key
+cannot be correlated with the “personal” cross-site key.</p>
+<p><strong>this is never shared by default.</strong> switching to cross-site mode for
+any origin requires:</p>
+<ol>
+<li>explicit toggle in identity settings</li>
+<li>warning dialog: “this links your activity across all sites using
+your [poker] identity. anyone who learns this key can correlate
+your sessions.”</li>
+<li>separate confirmation</li>
+</ol>
+<p>the cross-site key is NOT shown on the identity card. it lives in
+settings &gt; identity &gt; advanced.</p>
+<h3 id="rotation"><a class="header" href="#rotation">rotation</a></h3>
+<p>you can rotate your identity for a site. this creates a new zid
+derived from <code>"site:" + origin + ":" + N</code> where N is the rotation
+counter. the old identity is not invalidated - the site keeps
+whatever pubkeys you previously shared. rotation only affects
+future signatures.</p>
 <h2 id="per-contact-identity"><a class="header" href="#per-contact-identity">per-contact identity</a></h2>
-<p>when you share a contact card with someone, zafu derives a unique
-zid for that relationship:</p>
-<pre><code>zid_for_alice = HMAC-SHA512(root, "contact:" + alice_zid_pubkey)
+<p>when you share a contact card, zafu derives a unique zid for that
+relationship under the active identity:</p>
+<pre><code>zid_for_alice = HMAC-SHA512(identity["poker"], "contact:" + alice_contact_id)
 </code></pre>
-<p>if alice forwards your card to bob, bob will present the zid you
-created for alice. you can detect the forwarding because you know
-which zid was given to which contact.</p>
-<p>this is like giving each person a different phone number. if spam
-arrives on the number you only gave to your dentist, you know who
-shared it.</p>
-<h2 id="per-site-identity"><a class="header" href="#per-site-identity">per-site identity</a></h2>
-<p>by default, each website gets a unique zid derived from its origin:</p>
-<pre><code>zid_for_example = HMAC-SHA512(root, "site:https://example.com")
-</code></pre>
-<p>websites cannot correlate your activity across sites because they
-each see a different public key.</p>
-<p>you can opt to share your global zid (index 0) with a site if you
-want to be recognizable across services.</p>
+<p>this zid is included in the contact card as a TLV extension
+(tag 0x01, 32 bytes). it serves two purposes:</p>
+<ol>
+<li>
+<p><strong>sender authentication</strong> - the recipient can verify that a
+message came from you specifically, not just from “someone who
+knows my address”</p>
+</li>
+<li>
+<p><strong>key exchange</strong> - the ed25519 key can be converted to X25519
+for Diffie-Hellman key agreement, enabling encrypted messaging
+on top of zcash memos</p>
+</li>
+</ol>
+<p>per-contact zids are NOT used for referral tracking. that’s handled
+by diversified zcash addresses at the transport layer.</p>
+<h3 id="limitations"><a class="header" href="#limitations">limitations</a></h3>
+<p><strong>no forward secrecy.</strong> per-contact zid keys are deterministic from
+the seed phrase. if the seed is compromised, all past encrypted
+messages can be decrypted. for poker game channels where session
+confidentiality matters, consider ephemeral DH with ratcheting
+on top of zid authentication (future work). for v0.3.0, the zcash
+note-level encryption provides the primary confidentiality layer.</p>
+<p><strong>no revocation.</strong> a compromised identity cannot signal its
+compromise to contacts. rotation creates a new per-site key but
+the old key remains valid. a revocation certificate protocol
+(sign “revoked, trust new key” with old key) requires a
+distribution channel and is planned for a future release.</p>
+<p><strong>contactId must be stable.</strong> the per-contact zid is derived from
+the contact’s internal ID (not their zid pubkey, which may rotate).
+changing the ID changes the keypair, breaking e2ee continuity for
+that relationship.</p>
+<h2 id="identity-manager"><a class="header" href="#identity-manager">identity manager</a></h2>
+<p>the identity screen shows:</p>
+<ul>
+<li>list of identities with labels (“Personal”, “Poker”, “Anon”)</li>
+<li>create new identity (choose a stable name — cannot change later)</li>
+<li>rename label (display only, does not affect keys)</li>
+<li>delete identity</li>
+<li>active identity indicator</li>
+<li>per-identity: list of connected sites + per-contact zids</li>
+<li><strong>never</strong> shows the cross-site key on the main screen</li>
+</ul>
+<p>switching identities changes which zid apps see on next connection.
+existing connections keep whatever identity was used.</p>
+<h3 id="identity-selection-in-apps"><a class="header" href="#identity-selection-in-apps">identity selection in apps</a></h3>
+<p>when an app requests connection via <code>zid.connect()</code>:</p>
+<ol>
+<li>if only one identity exists, use it automatically</li>
+<li>if multiple exist, show identity picker popup</li>
+<li>the user picks which identity to present to this app</li>
+<li>the choice is remembered per origin</li>
+</ol>
 <h2 id="sign-in-flow"><a class="header" href="#sign-in-flow">sign-in flow</a></h2>
 <ol>
 <li>a website sends a sign request: <code>{ type: "zafu_sign", challengeHex, statement? }</code></li>
-<li>zafu shows an approval popup with the origin and challenge</li>
+<li>zafu shows an approval popup with the origin, active identity label, and which per-site zid will sign</li>
 <li>you approve or deny</li>
-<li>if approved, zafu signs the challenge with your zid and returns the signature</li>
-<li>the website verifies the signature against your public key</li>
+<li>if approved, zafu signs the challenge with the per-site zid for the active identity</li>
+<li>the signature and pubkey are returned to the website</li>
+<li>the pubkey is recorded in the encrypted share log</li>
 </ol>
 <p>no transaction is created. no funds are at risk. the signature only
 proves you control the zid private key.</p>
+<h2 id="connections"><a class="header" href="#connections">connections</a></h2>
+<p>each approved site appears in the connections page showing:</p>
+<ul>
+<li>which identity was used (label + per-site zid)</li>
+<li>your network addresses (penumbra, zcash) if applicable</li>
+<li>rotation counter and rotate button</li>
+</ul>
+<p>switching to cross-site mode shows a strong warning.
+rotating shows a notice that the site keeps old identities.</p>
+<h2 id="storage"><a class="header" href="#storage">storage</a></h2>
+<p>zid preferences and the share log are encrypted at rest alongside
+wallet keys. they are not readable without the wallet password.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>data</th><th>encrypted</th><th>purpose</th></tr>
+</thead>
+<tbody>
+<tr><td>zidIdentities</td><td>yes</td><td>identity names + labels</td></tr>
+<tr><td>zidPreferences</td><td>yes</td><td>per-origin identity choice + mode + rotation counter</td></tr>
+<tr><td>zidShareLog</td><td>yes</td><td>site authentication records</td></tr>
+<tr><td>diversifiedAddresses</td><td>yes</td><td>per-contact zcash address mapping</td></tr>
+</tbody>
+</table>
+</div>
+<p>all identity information is encrypted. no zid pubkeys are stored
+in plaintext vault metadata.</p>
 <h2 id="recovery"><a class="header" href="#recovery">recovery</a></h2>
-<p>because the zid is derived from your seed phrase, it is automatically
-recovered when you restore your wallet. no separate backup is needed.</p>
+<p>because all identities are derived from the seed phrase, they are
+automatically recovered when you restore your wallet — provided you
+remember the identity names. identity labels, share logs, preferences,
+and diversified address records exist only in encrypted local storage
+and are not recoverable from the seed alone.</p>
+<p>after recovery, you get the same keypairs (for known identity names)
+but must re-establish connections to sites and re-share contact cards.</p>
 
                     </main>
 
