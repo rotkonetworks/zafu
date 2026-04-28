@@ -188,6 +188,19 @@ export const MultisigSign = () => {
     );
   }
 
+  // airgapSigner wallets hold their share on a zigner device — refuse to
+  // run the local sign flow until the QR-mediated sign path is built.
+  if (ms.custody === 'airgapSigner') {
+    return (
+      <SettingsScreen title='co-sign' backPath={PopupPath.MULTISIG}>
+        <div className='rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-3 text-xs text-yellow-400'>
+          this wallet's share lives on a zigner device. the QR-mediated
+          sign flow is not yet built — use a self-custody multisig for now.
+        </div>
+      </SettingsScreen>
+    );
+  }
+
   return (
     <SettingsScreen title='co-sign' backPath={PopupPath.MULTISIG}>
       {PasswordModal}

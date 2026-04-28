@@ -11,6 +11,7 @@ import {
   frostDeriveAddressFromSkInWorker,
   frostDeriveUfvkInWorker,
 } from '../../../state/keyring/network-worker';
+import { useStore } from '../../../state';
 import { FrostRelayClient } from '../../../state/keyring/frost-relay-client';
 import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../../state/frost-session';
 import { useDeadlineCountdown } from '../../../hooks/use-deadline-countdown';
@@ -63,6 +64,8 @@ export const MultisigJoinZigner = () => {
   const peerFvksRef = useRef<string[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const relayRef = useRef<FrostRelayClient | null>(null);
+
+  const newFrostMultisigKey = useStore(s => s.keyRing.newFrostMultisigKey);
 
   const countdown = useDeadlineCountdown(
     step === 'waiting-host-r1' || step.startsWith('dkg') || step === 'fvk-echo' || step.startsWith('waiting')
@@ -260,6 +263,18 @@ export const MultisigJoinZigner = () => {
         }
 
         if (cancelled) return;
+        // persist as airgapSigner — public bits only; share lives on zigner
+        await newFrostMultisigKey({
+          label: `${threshold}-of-${maxSigners} multisig`,
+          address: addr,
+          orchardFvk: ufvk,
+          publicKeyPackage,
+          threshold,
+          maxSigners,
+          relayUrl: relayUrl || 'https://poker.zk.bot',
+          custody: 'airgapSigner',
+        });
+
         setOrchardFvk(ufvk);
         setAddress(addr);
         setStep('complete');
@@ -270,7 +285,7 @@ export const MultisigJoinZigner = () => {
       }
     })();
     return () => { cancelled = true; };
-  }, [step, deadline, publicKeyPackage, maxSigners, roomCode]);
+  }, [step, deadline, publicKeyPackage, maxSigners, roomCode, threshold, relayUrl, newFrostMultisigKey]);
 
   // teardown on unmount: abort relay subscription
   useEffect(() => {
@@ -411,17 +426,14 @@ export const MultisigJoinZigner = () => {
       {step === 'complete' && (
         <div className='flex flex-col gap-3'>
           <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-3 text-xs text-green-400'>
-            DKG complete — share lives on zigner only
+            multisig wallet saved — share lives on zigner only
           </div>
           <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
             <p className='text-[10px] text-fg-muted'>address</p>
             <p className='mt-1 break-all font-mono text-xs'>{address}</p>
           </div>
           <p className='text-[10px] text-fg-muted'>
-            wallet_id: <span className='font-mono'>{walletId}</span>
-          </p>
-          <p className='text-[10px] text-fg-muted'>
-            TODO(slice-5): persist wallet record with custody=airgapSigner
+            zigner wallet_id: <span className='font-mono'>{walletId}</span>
           </p>
         </div>
       )}

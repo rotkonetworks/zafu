@@ -487,9 +487,16 @@ export const createKeyRingSlice = (
 
     newFrostMultisigKey: async (params) => {
       const vaultId = generateVaultId();
-      const encryptedData = await encrypt(
-        ctx, JSON.stringify({ keyPackage: params.keyPackage, ephemeralSeed: params.ephemeralSeed }),
-      );
+
+      // airgapSigner: share lives on zigner. nothing secret to persist; we
+      // still call encrypt({}) to keep the vault.encryptedData invariant.
+      const isAirgap = params.custody === 'airgapSigner';
+      const encryptedData = isAirgap
+        ? await encrypt(ctx, '{}')
+        : await encrypt(
+            ctx,
+            JSON.stringify({ keyPackage: params.keyPackage, ephemeralSeed: params.ephemeralSeed }),
+          );
       const vault = buildFrostVault(vaultId, params, encryptedData);
 
       const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
@@ -497,8 +504,13 @@ export const createKeyRingSlice = (
       await local.set('vaults', newVaults);
       await local.set('selectedVaultId', vaultId);
 
-      // create linked zcash wallet
-      const { encKeyPackage, encEphemeralSeed } = await encryptFrostSecrets(ctx, params.keyPackage, params.ephemeralSeed);
+      let encKeyPackage: Awaited<ReturnType<typeof encryptFrostSecrets>>['encKeyPackage'] | undefined;
+      let encEphemeralSeed: Awaited<ReturnType<typeof encryptFrostSecrets>>['encEphemeralSeed'] | undefined;
+      if (!isAirgap) {
+        const enc = await encryptFrostSecrets(ctx, params.keyPackage!, params.ephemeralSeed!);
+        encKeyPackage = enc.encKeyPackage;
+        encEphemeralSeed = enc.encEphemeralSeed;
+      }
       const zcashWallet = buildFrostZcashWallet(params, vaultId, encKeyPackage, encEphemeralSeed);
       const existingZcash = ((await local.get('zcashWallets')) ?? []) as ZcashWalletJson[];
       await local.set('zcashWallets', [zcashWallet, ...existingZcash]);
@@ -622,9 +634,12 @@ export const createKeyRingSlice = (
       const vault = vaults.find(v => v.id === vaultId);
 
       if (vault?.type === 'frost-multisig') {
+        // airgapSigner wallets keep the share on zigner — no secrets to surface here
+        if (vault.insensitive['custody'] === 'airgapSigner') return null;
         const decrypted = await decryptVault(ctx, vault);
         try {
           const parsed = JSON.parse(decrypted);
+          if (!parsed.keyPackage || !parsed.ephemeralSeed) return null;
           return { keyPackage: parsed.keyPackage as string, ephemeralSeed: parsed.ephemeralSeed as string };
         } catch {
           return null;
@@ -634,7 +649,8 @@ export const createKeyRingSlice = (
       // fallback: legacy zcash wallet records
       const zcashWallets = ((await local.get('zcashWallets')) ?? []) as ZcashWalletJson[];
       const wallet = zcashWallets.find(w => w.vaultId === vaultId);
-      if (!wallet?.multisig) return null;
+      if (!wallet?.multisig || wallet.multisig.custody === 'airgapSigner') return null;
+      if (!wallet.multisig.keyPackage || !wallet.multisig.ephemeralSeed) return null;
       return decryptMultisigSecrets(ctx, wallet.multisig.keyPackage, wallet.multisig.ephemeralSeed);
     },
 
