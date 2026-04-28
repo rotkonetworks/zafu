@@ -1,9 +1,9 @@
-import { isZafuMessageEvent, type ZafuMessageEvent } from './zafu-message-event';
+import { isZafuMessageEvent, ZAFU_MSG_NS, type ZafuMessageEvent } from './zafu-message-event';
 
 /** @note not private. could be observed by anything in this window. */
 export const sendWindow = <P = never>(contents: NoInfer<P>) =>
   window.postMessage(
-    { [ZAFU]: contents } satisfies Record<typeof ZAFU, P>,
+    { [ZAFU_MSG_NS]: contents } satisfies Record<typeof ZAFU_MSG_NS, P>,
     '/', // restrict to the same origin
     contents instanceof MessagePort ? [contents] : [],
   );

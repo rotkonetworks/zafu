@@ -3,13 +3,12 @@ import config from './webpack.config.js';
 
 const __dirname = new URL('.', import.meta.url).pathname;
 
-const ZAFU_ID = 'bfdfeleokgpdladfmipfmffgpjfjibbe';
-
 /**
- * This config defines the zafu Chrome ID and the output directory
+ * Prod build only changes the output directory. The extension id is resolved
+ * at runtime via chrome.runtime.id so no per-build constant is needed.
  */
 export default ({ WEBPACK_WATCH = false }: { ['WEBPACK_WATCH']?: boolean }) => {
-  const configs = config({ ZAFU_ID, WEBPACK_WATCH });
+  const configs = config({ WEBPACK_WATCH });
   const distPath = path.join(__dirname, 'dist');
   return configs.map(cfg => ({
     ...cfg,

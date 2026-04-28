@@ -250,7 +250,7 @@ const handlerReady = new Promise<HandlerFn>(r => { resolveHandler = r; });
 const deferredHandler: HandlerFn = (request, signal, timeoutMs) =>
   handlerReady.then(h => h(request, signal, timeoutMs));
 
-CRSessionManager.init(ZAFU, deferredHandler as never, validateSessionPort);
+CRSessionManager.init(chrome.runtime.id, deferredHandler as never, validateSessionPort);
 
 // start services in background — resolves handlerReady when done
 void backOff(() => initHandler(), {

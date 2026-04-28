@@ -6,6 +6,12 @@ import { ZafuMessageEvent, unwrapZafuMessageEvent } from './message/zafu-message
 import { listenBackground, sendBackground } from './message/send-background';
 import { listenWindow, sendWindow } from './message/send-window';
 
+// Bridge our extension id to the MAIN-world content script
+// (injected-penumbra-global.ts), which has no chrome.runtime access.
+// Manifest order has this ISOLATED script ahead of the MAIN one, so the
+// dataset attribute is always set before MAIN reads it.
+document.documentElement.dataset['zafuExtensionId'] = chrome.runtime.id;
+
 const zafuDocumentListener = (ev: ZafuMessageEvent): void => {
   const request = unwrapZafuMessageEvent(ev);
   if (isZafuConnection(request)) {
@@ -23,8 +29,7 @@ const zafuExtensionListener = (message: unknown, responder: (response: null) => 
     return false;
   }
 
-  // ZAFU is replaced at build time with the extension ID string
-  const extensionId = ZAFU;
+  const extensionId = chrome.runtime.id;
   switch (message) {
     case ZafuControl.Init:
       sendWindow<MessagePort>(CRSessionClient.init(extensionId));
