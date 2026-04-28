@@ -16,14 +16,13 @@ const BetaManifestReplacerPlugin = new CopyPlugin({
   ],
 });
 
-const ZAFU_ID = 'hlnodmbpndgjbhophnfbnfpgcbogiohh';
-
 /**
- * This config defines the zafu Chrome ID, changes the output directory,
- * and modifies the `manifest.json` file to use the correct extension information
+ * Beta build differs from prod only in output directory and the swapped
+ * manifest. The extension id is resolved at runtime via chrome.runtime.id
+ * so no per-build constant is needed.
  */
 export default ({ WEBPACK_WATCH = false }: { ['WEBPACK_WATCH']?: boolean }) => {
-  const configs = config({ ZAFU_ID, WEBPACK_WATCH });
+  const configs = config({ WEBPACK_WATCH });
   const distPath = path.join(__dirname, 'beta-dist');
 
   return configs.map((cfg, index) => ({

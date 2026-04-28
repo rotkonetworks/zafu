@@ -18,6 +18,8 @@ import {
 } from '../../../state/wallets';
 import { frostDkgSelector, frostSigningSelector } from '../../../state/frost-session';
 import { getBalanceInWorker } from '../../../state/keyring/network-worker';
+import { selectActiveNetwork } from '../../../state/keyring';
+import { NetworkUnavailable } from '../../../shared/components/network-unavailable';
 import { cn } from '@repo/ui/lib/utils';
 import { PopupPath } from '../paths';
 
@@ -101,11 +103,17 @@ const WalletRow = ({
 
 export const MultisigPage = () => {
   const navigate = useNavigate();
+  const activeNetwork = useStore(selectActiveNetwork);
   const zcashWallets = useStore(selectZcashWallets);
   const activeIdx = useStore(selectActiveZcashIndex);
   const multisigWallets = useStore(selectMultisigWallets);
   const { setActiveZcashWallet } = useStore(walletsSelector);
   const [balances, setBalances] = useState<Record<string, bigint>>({});
+
+  // multisig is zcash-only; placeholder elsewhere. Computed early but
+  // applied as an early-return only after every hook below has run, so
+  // the hook count stays stable across network switches.
+  const isZcash = activeNetwork === 'zcash';
 
   const walletsWithIndex = useMemo(
     () => multisigWallets.map(w => ({
@@ -115,16 +123,22 @@ export const MultisigPage = () => {
     [multisigWallets, zcashWallets],
   );
 
-  // fetch balances for all multisig wallets
+  // fetch balances only when actually on zcash; gate inside the effect
+  // so the hook itself still runs every render (Rules of Hooks).
   useEffect(() => {
+    if (!isZcash) return;
     for (const w of walletsWithIndex) {
       getBalanceInWorker('zcash', w.id)
         .then(bal => setBalances(prev => ({ ...prev, [w.id]: BigInt(bal) })))
         .catch(() => {});
     }
-  }, [walletsWithIndex]);
+  }, [walletsWithIndex, isZcash]);
 
   const totalZat = Object.values(balances).reduce((sum, b) => sum + b, 0n);
+
+  if (!isZcash) {
+    return <NetworkUnavailable feature='multisig' iconClass='i-lucide-shield' />;
+  }
 
   return (
     <div className='flex flex-col gap-3 p-4'>

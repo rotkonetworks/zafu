@@ -38,13 +38,16 @@ const prerenderComplete = new Promise<void>(resolve =>
     : resolve(),
 );
 
-// ZAFU_ORIGIN is replaced at build time by DefinePlugin with the correct
-// chrome-extension:// URL. Always use it — chrome.runtime is unavailable
-// in MAIN world content scripts, and __DEV__ is unreliable across build modes.
-const extensionOrigin = ZAFU_ORIGIN;
+// MAIN-world has no chrome.runtime; the ISOLATED-world content script
+// (injected-session.ts, listed first in the manifest) writes our extension
+// id to a DOM dataset attribute before this script runs. Reading it here
+// keeps the build agnostic to the install method (unpacked vs Web Store).
+const extensionId = document.documentElement.dataset['zafuExtensionId'] ?? '';
+const extensionOrigin = extensionId ? `chrome-extension://${extensionId}` : '';
 
-// bail if we can't determine our origin (avoids "Cannot redefine property: chrome-extension://undefined")
-if (!extensionOrigin || extensionOrigin.endsWith('undefined')) {
+// bail if the bridge wasn't populated — page reloaded with no zafu, or we
+// raced the ISOLATED script (shouldn't happen given manifest order)
+if (!extensionOrigin) {
   // eslint-disable-next-line no-console
   console.debug('[zafu] skipping penumbra provider injection: extension origin unavailable');
 } else {

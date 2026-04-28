@@ -9,8 +9,7 @@ let sessionPort: MessagePort | undefined;
 
 const getOrCreatePort = (): Promise<MessagePort> => {
   if (!sessionPort) {
-    const extensionId = ZAFU;
-    sessionPort = CRSessionClient.init(extensionId);
+    sessionPort = CRSessionClient.init(chrome.runtime.id);
   }
   return Promise.resolve(sessionPort);
 };

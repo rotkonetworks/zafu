@@ -10,6 +10,9 @@ import { governanceClient } from '../../../clients';
 import { Vote_Vote } from '@penumbra-zone/protobuf/penumbra/core/component/governance/v1/governance_pb';
 import type { ProposalListResponse } from '@penumbra-zone/protobuf/penumbra/core/component/governance/v1/governance_pb';
 import { viewClient } from '../../../clients';
+import { useStore } from '../../../state';
+import { selectActiveNetwork } from '../../../state/keyring';
+import { NetworkUnavailable } from '../../../shared/components/network-unavailable';
 
 type ProposalEntry = {
   id: bigint;
@@ -75,13 +78,19 @@ function voteColor(vote: Vote_Vote): string {
 }
 
 export function VotePage() {
+  const activeNetwork = useStore(selectActiveNetwork);
   const [showInactive, setShowInactive] = useState(false);
   const [expandedId, setExpandedId] = useState<bigint | null>(null);
   const [votingId, setVotingId] = useState<bigint | null>(null);
   const [voteError, setVoteError] = useState<string | null>(null);
 
+  // gate the network query via `enabled` so the hook still runs when on
+  // another network — Rules of Hooks require a stable hook count.
+  const isPenumbra = activeNetwork === 'penumbra';
+
   const proposalsQuery = useQuery({
     queryKey: ['governance', 'proposals', showInactive],
+    enabled: isPenumbra,
     staleTime: 30_000,
     queryFn: async () => {
       const proposals: ProposalEntry[] = [];
@@ -143,6 +152,12 @@ export function VotePage() {
 
   const proposals = proposalsQuery.data ?? [];
   const activeCount = proposals.filter(p => p.state === 'voting').length;
+
+  // placeholder for other networks. Placed after every hook call so the
+  // count stays stable across switches.
+  if (!isPenumbra) {
+    return <NetworkUnavailable feature='governance' iconClass='i-lucide-vote' />;
+  }
 
   return (
     <div className='flex flex-col gap-3 p-4'>

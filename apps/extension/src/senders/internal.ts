@@ -1,5 +1,5 @@
-const getExtensionId = () => ZAFU;
-const getExtensionOrigin = () => ZAFU_ORIGIN;
+const getExtensionId = () => chrome.runtime.id;
+const getExtensionOrigin = () => `chrome-extension://${chrome.runtime.id}`;
 
 export type ValidInternalSender = chrome.runtime.MessageSender & {
   id: string;
