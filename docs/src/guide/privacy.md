@@ -52,7 +52,7 @@ all toggles default to off (false). settings are persisted in local storage.
   are not displayed.
 - when on: queries RPC nodes for account balances on cosmos chains. the RPC
   node learns which bech32 addresses you control.
-- scope: cosmos/IBC chains only (osmosis, noble, nomic, celestia). does not
+- scope: cosmos/IBC chains only (noble, cosmoshub). does not
   affect penumbra or zcash, which are always safe.
 - visible when: active network is an IBC chain or penumbra
 

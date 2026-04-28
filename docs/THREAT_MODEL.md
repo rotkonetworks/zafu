@@ -30,7 +30,10 @@ therefore in their threat model.
 ### Standalone
 
 - spending keys live on the host browser, encrypted at rest with a
-  passphrase-derived key
+  passphrase-derived key. Concretely: PBKDF2-HMAC-SHA-512 with 210,000
+  iterations and a per-wallet random salt, deriving an AES-256-GCM key
+  with a 96-bit random nonce. See
+  `packages/encryption/src/key-stretching.ts`.
 - decrypted into renderer memory at sign time
 - intended for users who explicitly accept host-process compromise as part
   of their threat model
@@ -51,15 +54,29 @@ but cannot retroactively unmask shielded history any more than the
 chain-level cryptography already permits.
 
 ### Malicious multisig coordinator
-A coordinator that drives a FROST signing session cannot:
-- forge signatures (FROST verifies aggregate share consistency)
+A FROST aggregator cannot produce a valid signature with fewer than `t`
+valid shares. A coordinator that drives a signing session therefore cannot:
+- forge signatures (a valid signature requires `t` real shares from real
+  signers; the coordinator holds none on its own behalf)
 - replay a participant's nonce commitment across sessions (sessions are
   bound to a session ID and have a fixed end-to-end deadline)
 - complete signing without `t` honest participants
 
+A coordinator who is itself one of the `t` signers contributes one share
+like any other. They do not gain extra signing power from being the
+coordinator.
+
 A coordinator can still censor a session (refuse to forward messages) or
 equivocate (forward different messages to different participants). These
 are liveness, not safety, failures.
+
+### Address reuse on Zcash
+The Zcash receive screen automatically bumps both the shielded diversifier
+index and the transparent index every time it is opened. Both indices are
+persisted in `chrome.storage.local`, so a user who opens Receive once a
+day gets a fresh address per day with no manual action. Manual rotation
+is also exposed as a button. See
+`apps/extension/src/routes/popup/receive/index.tsx:489`.
 
 ## Not defended against
 
@@ -69,6 +86,33 @@ renderer memory at sign time. A compromised browser process - via a
 malicious extension, a Chromium 0-day, or a process-injection attack - can
 read the keys at that moment. Pair with Zigner if this is in your threat
 model.
+
+### Active network adversary with compromised TLS trust
+TLS to the query backends (Zidecar, pd, RPC nodes) is sufficient against
+passive observers and untrusted networks. It is *not* sufficient against
+an attacker who can issue or substitute trusted root certificates - for
+example, a corporate transparent proxy with a CA in the user's OS trust
+store, or a state-level CA-issuance attack. Such an attacker can both
+read and modify queries.
+
+Cryptographic proof verification (Zidecar header proofs, Penumbra block
+processor) protects against the *modify* side - fabricated chain state
+will not validate. It does not protect against the *read* side - the
+attacker still learns query metadata. Users in this threat environment
+should self-host both Zidecar and pd and reach them through a VPN or Tor.
+
+### Viewing key compromise
+For privacy wallets the viewing key is as sensitive as the spending key,
+in a different way. A leaked spending key lets an attacker spend
+remaining funds. A leaked **viewing key** (Zcash UFVK or Penumbra
+`FullViewingKey`) lets an attacker decrypt every shielded note ever sent
+to that user, past and future, for as long as the chain history is
+reachable. Pairing with Zigner protects spending keys but viewing keys
+remain on the host. A compromised host browser - even one that cannot
+sign new transactions - can therefore retroactively unmask the user's
+shielded history. Users who consider their full transaction graph
+sensitive should treat viewing keys as secrets, not as "watch-only"
+credentials.
 
 ### Network metadata leaks
 For Zcash, Zafu queries a [Zidecar](https://github.com/rotkonetworks/zidecar)
@@ -112,16 +156,29 @@ provide.
 |-----------------------------------|-----------|
 | sender / receiver / amount        | yes (chain-level) |
 | cross-tx linkability              | yes (chain-level, modulo voting linkability per Penumbra spec) |
+| address reuse on Zcash            | yes - auto-rotated on every Receive screen open |
 | view-only delegation              | yes (Zigner pairing) |
-| forward secrecy on key leak       | no - chain history is permanent |
+| forward secrecy on spending-key leak | no - chain history is permanent |
+| forward secrecy on viewing-key leak  | no - all shielded receipts past and future become readable |
 | metadata vs query backend         | no - run your own |
+| TLS trust against active adversary | partial - proofs catch tampering, queries still leak |
 | host-process compromise (standalone) | no - pair with Zigner |
-| host-process compromise (Zigner-paired) | yes for spending; viewing keys still exposed |
+| host-process compromise (Zigner-paired) | spending: yes, viewing: no (see "Viewing key compromise" above) |
 
 ## A note on Penumbra voting
 
 The Penumbra protocol re-uses the voting note's nullifier across multiple
 votes on the same proposal. This means a single note used to vote multiple
-times produces linkable Vote descriptions on chain. Zafu rolls voting notes
-over after first use to mitigate cross-proposal linkability, as recommended
-by the Penumbra spec.
+times produces linkable Vote descriptions on chain, and a subsequent spend
+of that note is linkable to the prior votes.
+
+The mitigation, recommended by the Penumbra spec, is to *roll the note
+over*: when casting a vote, bundle a `Spend` and `Output` of the same note
+into the same transaction so the value moves to a fresh note. Future votes
+and spends use the fresh note, isolating the original nullifier.
+
+The Penumbra planner (upstream `penumbra-web/packages/wasm/crate/src/planner.rs`,
+~line 720) constructs vote transactions this way: for each staked
+delegation note used to vote, it emits a paired vote plan and spend plan
+that rolls the value over. Zafu uses this planner unmodified, so vote
+transactions built by Zafu inherit the rollover behavior.

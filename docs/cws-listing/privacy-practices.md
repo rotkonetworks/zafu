@@ -60,9 +60,7 @@ Default endpoints bundled (grouped by purpose):
 
 - Zcash light-server:  zidecar.rotko.net
 - Penumbra gRPC-web:  penumbra.rotko.net, dex.penumbra.zone, tokenomics.penumbra.zone
-- Cosmos (Polkachu):  celestia-{api,rpc}.polkachu.com, noble-{api,rpc}.polkachu.com
-- Osmosis:  lcd.osmosis.zone, rpc.osmosis.zone
-- Nomic:  rpc.nomic.io, app.nomic.io
+- Cosmos (Polkachu):  noble-{api,rpc}.polkachu.com, cosmos-{api,rpc}.polkachu.com
 - Bitcoin mempool:  mempool.space
 - Ethereum RPC:  eth.llamarpc.com
 - NEAR cross-chain swap:  1click.chaindefuser.com

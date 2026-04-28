@@ -150,9 +150,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     }
     const r = recipient.trim();
     const validPrefix = r.startsWith('u1') || r.startsWith('utest1')
-      || r.startsWith('zs') || r.startsWith('t1') || r.startsWith('t3');
+      || r.startsWith('t1') || r.startsWith('t3');
     if (!validPrefix) {
-      setFormError('invalid zcash address — expected unified (u1), sapling (zs), or transparent (t1/t3)');
+      setFormError('invalid zcash address - expected unified (u1) or transparent (t1/t3). sapling (zs) is not supported.');
       return false;
     }
     if (!amount.trim() || isNaN(Number(amount)) || Number(amount) <= 0) {
