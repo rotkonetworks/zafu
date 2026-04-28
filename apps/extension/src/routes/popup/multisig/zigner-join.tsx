@@ -3,12 +3,17 @@
  *
  * Mirrors zigner-create.tsx but bootstraps T/N/sk from the host's
  * R1 broadcast (parsed off the relay) rather than from a config form.
- *
- * Slice 2: scaffolding only. Relay calls and FROST WASM are stubbed
- * with TODO markers; slices 3+ plug in the real I/O.
+ * Joiner's R1 broadcast does NOT carry the T:N:SK prefix.
  */
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import {
+  frostDeriveAddressFromSkInWorker,
+  frostDeriveUfvkInWorker,
+} from '../../../state/keyring/network-worker';
+import { FrostRelayClient } from '../../../state/keyring/frost-relay-client';
+import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../../state/frost-session';
+import { useDeadlineCountdown } from '../../../hooks/use-deadline-countdown';
 import { QrDisplay } from '../../../shared/components/qr-display';
 import { QrScanner } from '../../../shared/components/qr-scanner';
 import { SettingsScreen } from '../settings/settings-screen';
@@ -39,18 +44,31 @@ export const MultisigJoinZigner = () => {
   const [roomCode, setRoomCode] = useState('');
   const [step, setStep] = useState<Step>('input');
   const [error, setError] = useState('');
+  const [participantCount, setParticipantCount] = useState(0);
 
-  // bootstrap from host's R1 — slice 3 fills these from relay traffic
+  // bootstrap from host's R1 (parsed off the wire)
   const [threshold, setThreshold] = useState(0);
   const [maxSigners, setMaxSigners] = useState(0);
-  // const [fvkSk, setFvkSk] = useState('');  // slice 3: parse off host R1
 
-  const [peerR1] = useState<string[]>([]);
-  const [peerR2] = useState<string[]>([]);
-  const [zignerR1Bcast, setZignerR1Bcast] = useState('');
-  const [, setZignerR2Pkgs] = useState<string[]>([]);
   const [publicKeyPackage, setPublicKeyPackage] = useState('');
   const [walletId, setWalletId] = useState('');
+  const [, setOrchardFvk] = useState('');
+  const [address, setAddress] = useState('');
+  const [deadline, setDeadline] = useState<number | null>(null);
+
+  const participantIdRef = useRef<Uint8Array | null>(null);
+  const fvkSkRef = useRef('');
+  const peerR1Ref = useRef<string[]>([]);
+  const peerR2Ref = useRef<string[]>([]);
+  const peerFvksRef = useRef<string[]>([]);
+  const abortRef = useRef<AbortController | null>(null);
+  const relayRef = useRef<FrostRelayClient | null>(null);
+
+  const countdown = useDeadlineCountdown(
+    step === 'waiting-host-r1' || step.startsWith('dkg') || step === 'fvk-echo' || step.startsWith('waiting')
+      ? deadline
+      : null,
+  );
 
   const dkg1Trigger = JSON.stringify({
     frost: 'dkg1',
@@ -62,22 +80,74 @@ export const MultisigJoinZigner = () => {
 
   const dkg2Trigger = JSON.stringify({
     frost: 'dkg2',
-    broadcasts: peerR1,
+    broadcasts: peerR1Ref.current,
   });
-
   const dkg3Trigger = JSON.stringify({
     frost: 'dkg3',
-    r1: [zignerR1Bcast, ...peerR1].filter(Boolean),
-    r2: peerR2,
+    r1: peerR1Ref.current,
+    r2: peerR2Ref.current,
   });
 
-  const onZignerR1 = (jsonText: string) => {
+  const handleJoin = async () => {
+    if (!roomCode.trim()) return;
+    try {
+      const url = relayUrl || 'https://poker.zk.bot';
+      const sessionDeadline = Date.now() + FROST_SESSION_TIMEOUT_MS;
+      setDeadline(sessionDeadline);
+
+      const relay = new FrostRelayClient(url);
+      relayRef.current = relay;
+
+      const pid = new Uint8Array(32);
+      crypto.getRandomValues(pid);
+      participantIdRef.current = pid;
+
+      abortRef.current = new AbortController();
+
+      void relay.joinRoom(roomCode.trim(), pid, event => {
+        if (event.type === 'joined') {
+          setParticipantCount(event.participant.participantCount);
+        } else if (event.type === 'message') {
+          const text = new TextDecoder().decode(event.message.payload);
+          // host R1 carries T:N:SK prefix; joiners' do not. parse the
+          // first one we see to bootstrap T/N/sk; bucket the bare
+          // broadcast hex either way.
+          const r1 = text.match(/^R1:(?:(\d+):(\d+):SK:([0-9a-fA-F]{64}):)?([\s\S]*)$/);
+          if (r1) {
+            if (r1[1] && r1[2] && r1[3] && fvkSkRef.current === '') {
+              setThreshold(Number(r1[1]));
+              setMaxSigners(Number(r1[2]));
+              fvkSkRef.current = r1[3];
+            }
+            peerR1Ref.current.push(r1[4]!);
+            return;
+          }
+          const r2 = text.match(/^R2:([\s\S]*)$/);
+          if (r2) { peerR2Ref.current.push(r2[1]!); return; }
+          const fvk = text.match(/^FVK:([\s\S]*)$/);
+          if (fvk) { peerFvksRef.current.push(fvk[1]!); return; }
+        } else if (event.type === 'closed') {
+          setError(`room closed: ${event.reason}`);
+          setStep('error');
+        }
+      }, abortRef.current.signal);
+
+      setStep('waiting-host-r1');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setStep('error');
+    }
+  };
+
+  const onZignerR1 = async (jsonText: string) => {
     try {
       const parsed = JSON.parse(jsonText) as { frost?: string; broadcast?: string };
       if (parsed.frost !== 'r1' || !parsed.broadcast) throw new Error('not an r1 ack');
-      setZignerR1Bcast(parsed.broadcast);
-      // TODO(slice-4): broadcast `R1:${parsed.broadcast}` to relay (joiner
-      // does NOT prefix with T:N:SK — only the host carries that)
+
+      const relay = relayRef.current;
+      if (!relay || !participantIdRef.current) throw new Error('relay not initialized');
+      // joiner R1 has no T:N:SK prefix — host already broadcast that
+      await relay.sendMessage(roomCode.trim(), participantIdRef.current, new TextEncoder().encode(`R1:${parsed.broadcast}`));
       setStep('waiting-r1');
     } catch (e) {
       setError(`r1 scan: ${e instanceof Error ? e.message : String(e)}`);
@@ -85,12 +155,16 @@ export const MultisigJoinZigner = () => {
     }
   };
 
-  const onZignerR2 = (jsonText: string) => {
+  const onZignerR2 = async (jsonText: string) => {
     try {
       const parsed = JSON.parse(jsonText) as { frost?: string; packages?: string[] };
       if (parsed.frost !== 'r2' || !Array.isArray(parsed.packages)) throw new Error('not an r2 ack');
-      setZignerR2Pkgs(parsed.packages);
-      // TODO(slice-4): for each pkg, send `R2:${pkg}` to relay
+
+      const relay = relayRef.current;
+      if (!relay || !participantIdRef.current) throw new Error('relay not initialized');
+      for (const pkg of parsed.packages) {
+        await relay.sendMessage(roomCode.trim(), participantIdRef.current, new TextEncoder().encode(`R2:${pkg}`));
+      }
       setStep('waiting-r2');
     } catch (e) {
       setError(`r2 scan: ${e instanceof Error ? e.message : String(e)}`);
@@ -110,8 +184,6 @@ export const MultisigJoinZigner = () => {
       }
       setPublicKeyPackage(parsed.public_key_package);
       setWalletId(parsed.wallet_id);
-      // TODO(slice-4): derive UFVK from public_key_package + sk (parsed
-      // from host R1), echo-broadcast on relay, verify peers, save record.
       setStep('fvk-echo');
     } catch (e) {
       setError(`r3 scan: ${e instanceof Error ? e.message : String(e)}`);
@@ -119,20 +191,94 @@ export const MultisigJoinZigner = () => {
     }
   };
 
-  const handleJoin = () => {
-    if (!roomCode.trim()) return;
-    // TODO(slice-4): connect to relay, join room. State machine then
-    // sits in waiting-host-r1 until the host's R1 prefix arrives.
-    setStep('waiting-host-r1');
-  };
+  // auto-advance from waiting-host-r1 once we've parsed T/N/sk off it
+  useEffect(() => {
+    if (step !== 'waiting-host-r1' || !deadline) return;
+    let cancelled = false;
+    void waitForUntil(
+      () => threshold > 0 && maxSigners > 0 && fvkSkRef.current.length === 64,
+      deadline,
+    )
+      .then(() => { if (!cancelled) setStep('dkg1-show'); })
+      .catch(e => {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : String(e));
+        setStep('error');
+      });
+    return () => { cancelled = true; };
+  }, [step, threshold, maxSigners, deadline]);
 
-  // dev-only stub: simulate host R1 arrival to advance the state machine
-  // before slice-4 wires the real relay listener.
-  const stubHostR1 = () => {
-    setThreshold(2);
-    setMaxSigners(3);
-    setStep('dkg1-show');
-  };
+  // wait for n-1 peer R1 broadcasts (joiner counts host + other joiners)
+  useEffect(() => {
+    if (step !== 'waiting-r1' || !deadline) return;
+    let cancelled = false;
+    void waitForUntil(() => peerR1Ref.current.length >= maxSigners - 1, deadline)
+      .then(() => { if (!cancelled) setStep('dkg2-show'); })
+      .catch(e => {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : String(e));
+        setStep('error');
+      });
+    return () => { cancelled = true; };
+  }, [step, maxSigners, deadline]);
+
+  // wait for (n-1)² peer R2 packages
+  useEffect(() => {
+    if (step !== 'waiting-r2' || !deadline) return;
+    let cancelled = false;
+    void waitForUntil(() => peerR2Ref.current.length >= (maxSigners - 1) ** 2, deadline)
+      .then(() => { if (!cancelled) setStep('dkg3-show'); })
+      .catch(e => {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : String(e));
+        setStep('error');
+      });
+    return () => { cancelled = true; };
+  }, [step, maxSigners, deadline]);
+
+  // FVK echo: derive UFVK + address, broadcast, wait for n-1 peers, verify
+  useEffect(() => {
+    if (step !== 'fvk-echo' || !deadline || !publicKeyPackage) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const ufvk = await frostDeriveUfvkInWorker(publicKeyPackage, fvkSkRef.current, true);
+        const addr = await frostDeriveAddressFromSkInWorker(publicKeyPackage, fvkSkRef.current, 0);
+        if (cancelled) return;
+
+        const relay = relayRef.current;
+        if (!relay || !participantIdRef.current) throw new Error('relay not initialized');
+        await relay.sendMessage(roomCode.trim(), participantIdRef.current, new TextEncoder().encode(`FVK:${ufvk}`));
+
+        await waitForUntil(() => peerFvksRef.current.length >= maxSigners - 1, deadline);
+        for (const peerFvk of peerFvksRef.current) {
+          if (peerFvk !== ufvk) {
+            throw new Error(
+              `FVK mismatch: ours …${ufvk.slice(-8)}, theirs …${peerFvk.slice(-8)}`,
+            );
+          }
+        }
+
+        if (cancelled) return;
+        setOrchardFvk(ufvk);
+        setAddress(addr);
+        setStep('complete');
+      } catch (e) {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : String(e));
+        setStep('error');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [step, deadline, publicKeyPackage, maxSigners, roomCode]);
+
+  // teardown on unmount: abort relay subscription
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+      relayRef.current?.disconnect();
+    };
+  }, []);
 
   return (
     <SettingsScreen title='join multisig (zigner)' backPath={PopupPath.MULTISIG}>
@@ -163,7 +309,7 @@ export const MultisigJoinZigner = () => {
           </label>
           <button
             className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-50'
-            onClick={handleJoin}
+            onClick={() => void handleJoin()}
             disabled={!roomCode.trim()}
           >
             join
@@ -175,15 +321,12 @@ export const MultisigJoinZigner = () => {
         <div className='flex flex-col items-center gap-3'>
           <p className='text-xs text-fg-muted'>waiting for host's round 1 broadcast…</p>
           <span className='i-lucide-loader-2 size-4 animate-spin text-fg-muted' />
-          <p className='text-[10px] text-fg-muted text-center'>
-            TODO(slice-4): parse T:N:SK from host R1
-          </p>
-          <button
-            className='rounded-lg border border-primary/40 bg-primary/5 px-3 py-1.5 text-xs text-zigner-gold'
-            onClick={stubHostR1}
-          >
-            (dev) skip → fake 2-of-3 host
-          </button>
+          {participantCount > 0 && (
+            <p className='text-[10px] text-fg-muted'>
+              {participantCount} participant(s) joined
+            </p>
+          )}
+          <span className='text-[10px] text-fg-muted tabular-nums'>{countdown}s</span>
         </div>
       )}
 
@@ -200,7 +343,7 @@ export const MultisigJoinZigner = () => {
       {step === 'dkg1-scan' && (
         <ScanZignerJson
           title='scan zigner round-1 broadcast'
-          onScan={onZignerR1}
+          onScan={raw => void onZignerR1(raw)}
           onCancel={() => setStep('dkg1-show')}
         />
       )}
@@ -209,7 +352,7 @@ export const MultisigJoinZigner = () => {
         <WaitingForRelay
           headline='round 1 sent'
           body={`waiting for ${maxSigners - 1} peer R1 broadcast(s)…`}
-          onSkip={() => setStep('dkg2-show')}
+          countdown={countdown}
         />
       )}
 
@@ -226,7 +369,7 @@ export const MultisigJoinZigner = () => {
       {step === 'dkg2-scan' && (
         <ScanZignerJson
           title='scan zigner round-2 packages'
-          onScan={onZignerR2}
+          onScan={raw => void onZignerR2(raw)}
           onCancel={() => setStep('dkg2-show')}
         />
       )}
@@ -235,7 +378,7 @@ export const MultisigJoinZigner = () => {
         <WaitingForRelay
           headline='round 2 sent'
           body={`waiting for ${(maxSigners - 1) ** 2} peer R2 package(s)…`}
-          onSkip={() => setStep('dkg3-show')}
+          countdown={countdown}
         />
       )}
 
@@ -258,24 +401,28 @@ export const MultisigJoinZigner = () => {
       )}
 
       {step === 'fvk-echo' && (
-        <div className='flex flex-col gap-3 text-xs text-fg-muted'>
-          <p>TODO(slice-4): derive UFVK + address, echo on relay, verify peers, save wallet.</p>
-          <p className='font-mono break-all text-[10px]'>
-            wallet_id: {walletId}<br />
-            pkg: {publicKeyPackage.slice(0, 32)}…
-          </p>
-          <button
-            className='rounded-lg border border-primary/40 bg-primary/5 px-3 py-1.5 text-xs text-zigner-gold'
-            onClick={() => setStep('complete')}
-          >
-            (dev) skip echo → complete
-          </button>
+        <div className='flex flex-col items-center gap-3'>
+          <p className='text-xs text-fg-muted'>verifying viewing key agreement…</p>
+          <span className='i-lucide-loader-2 size-4 animate-spin text-fg-muted' />
+          <p className='text-[10px] text-fg-muted tabular-nums'>{countdown}s</p>
         </div>
       )}
 
       {step === 'complete' && (
-        <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-3 text-xs text-green-400'>
-          multisig wallet saved (custody: zigner)
+        <div className='flex flex-col gap-3'>
+          <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-3 text-xs text-green-400'>
+            DKG complete — share lives on zigner only
+          </div>
+          <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
+            <p className='text-[10px] text-fg-muted'>address</p>
+            <p className='mt-1 break-all font-mono text-xs'>{address}</p>
+          </div>
+          <p className='text-[10px] text-fg-muted'>
+            wallet_id: <span className='font-mono'>{walletId}</span>
+          </p>
+          <p className='text-[10px] text-fg-muted'>
+            TODO(slice-5): persist wallet record with custody=airgapSigner
+          </p>
         </div>
       )}
 
@@ -345,16 +492,13 @@ const ScanZignerJson = ({ title, onScan, onCancel }: ScanProps) => (
   />
 );
 
-const WaitingForRelay = ({ headline, body, onSkip }: { headline: string; body: string; onSkip: () => void }) => (
+const WaitingForRelay = ({ headline, body, countdown }: { headline: string; body: string; countdown: number | null }) => (
   <div className='flex flex-col items-center gap-3'>
     <p className='text-xs text-fg-muted'>{headline}</p>
     <p className='text-[10px] text-fg-muted text-center'>{body}</p>
     <span className='i-lucide-loader-2 size-4 animate-spin text-fg-muted' />
-    <button
-      className='rounded-lg border border-primary/40 bg-primary/5 px-3 py-1.5 text-xs text-zigner-gold'
-      onClick={onSkip}
-    >
-      (dev) skip
-    </button>
+    {countdown != null && (
+      <span className='text-[10px] text-fg-muted tabular-nums'>{countdown}s</span>
+    )}
   </div>
 );
