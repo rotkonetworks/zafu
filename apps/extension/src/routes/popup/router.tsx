@@ -32,7 +32,9 @@ const ReceivePage = lazy(() => import('./receive').then(m => ({ default: m.Recei
 const CosmosSign = lazy(() => import('./cosmos-sign').then(m => ({ default: m.CosmosSign })));
 const MultisigSessions = lazy(() => import('./multisig/sessions').then(m => ({ default: m.MultisigPage })));
 const MultisigCreate = lazy(() => import('./multisig/create').then(m => ({ default: m.MultisigCreate })));
+const MultisigCreateZigner = lazy(() => import('./multisig/zigner-create').then(m => ({ default: m.MultisigCreateZigner })));
 const MultisigJoin = lazy(() => import('./multisig/join').then(m => ({ default: m.MultisigJoin })));
+const MultisigJoinZigner = lazy(() => import('./multisig/zigner-join').then(m => ({ default: m.MultisigJoinZigner })));
 const MultisigSign = lazy(() => import('./multisig/sign').then(m => ({ default: m.MultisigSign })));
 const NoteSyncPage = lazy(() => import('./note-sync').then(m => ({ default: m.NoteSyncPage })));
 const IdentityPage = lazy(() => import('./identity').then(m => ({ default: m.IdentityPage })));
@@ -178,6 +180,22 @@ export const popupRoutes: RouteObject[] = [
         element: (
           <Suspense fallback={<LazyFallback />}>
             <MultisigJoin />
+          </Suspense>
+        ),
+      },
+      {
+        path: PopupPath.MULTISIG_CREATE_ZIGNER,
+        element: (
+          <Suspense fallback={<LazyFallback />}>
+            <MultisigCreateZigner />
+          </Suspense>
+        ),
+      },
+      {
+        path: PopupPath.MULTISIG_JOIN_ZIGNER,
+        element: (
+          <Suspense fallback={<LazyFallback />}>
+            <MultisigJoinZigner />
           </Suspense>
         ),
       },
