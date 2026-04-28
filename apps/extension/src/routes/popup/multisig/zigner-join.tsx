@@ -142,16 +142,19 @@ export const MultisigJoinZigner = () => {
     }
   };
 
-  // r1 ack: bare round-1 broadcast hex (matches WASM frost_dkg_part1 result)
+  // r1 ack: zigner may send bare hex or pre-decoded JSON bytes (binary-QR
+  // optimization). Normalize to hex for the relay.
   const onZignerR1 = async (raw: string) => {
     try {
-      if (!/^[0-9a-fA-F]+$/.test(raw) || raw.length === 0) {
-        throw new Error('expected bare hex broadcast');
-      }
+      if (raw.length === 0) throw new Error('empty r1 ack');
+      const broadcastHex = /^[0-9a-fA-F]+$/.test(raw) && raw.length % 2 === 0
+        ? raw
+        : Array.from(new TextEncoder().encode(raw))
+            .map(b => b.toString(16).padStart(2, '0'))
+            .join('');
       const relay = relayRef.current;
       if (!relay || !participantIdRef.current) throw new Error('relay not initialized');
-      // joiner R1 has no T:N:SK prefix — host already broadcast that
-      await relay.sendMessage(roomCode.trim(), participantIdRef.current, new TextEncoder().encode(`R1:${raw}`));
+      await relay.sendMessage(roomCode.trim(), participantIdRef.current, new TextEncoder().encode(`R1:${broadcastHex}`));
       setStep('waiting-r1');
     } catch (e) {
       setError(`r1 scan: ${e instanceof Error ? e.message : String(e)}`);

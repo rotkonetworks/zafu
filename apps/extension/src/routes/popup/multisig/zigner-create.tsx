@@ -142,17 +142,21 @@ export const MultisigCreateZigner = () => {
     }
   };
 
-  // r1 ack: zigner displays the bare round-1 broadcast hex (matches the
-  // shape WASM frost_dkg_part1 returns and what zafu's mnemonic flow already
-  // wraps as `R1:<...>:<broadcast>` before relay broadcast).
+  // r1 ack: zigner displays a binary QR containing either the bare hex
+  // broadcast or — when zigner pre-decodes the hex to halve QR size — the
+  // raw bytes of the SignedMessage JSON. Either way we normalize to the
+  // hex shape the relay expects.
   const onZignerR1 = async (raw: string) => {
     try {
-      if (!/^[0-9a-fA-F]+$/.test(raw) || raw.length === 0) {
-        throw new Error('expected bare hex broadcast');
-      }
+      if (raw.length === 0) throw new Error('empty r1 ack');
+      const broadcastHex = /^[0-9a-fA-F]+$/.test(raw) && raw.length % 2 === 0
+        ? raw
+        : Array.from(new TextEncoder().encode(raw))
+            .map(b => b.toString(16).padStart(2, '0'))
+            .join('');
       const relay = useStore.getState().frostSession.relay;
       if (!relay || !participantIdRef.current) throw new Error('relay not initialized');
-      const prefixed = `R1:${threshold}:${maxSigners}:SK:${fvkSkRef.current}:${raw}`;
+      const prefixed = `R1:${threshold}:${maxSigners}:SK:${fvkSkRef.current}:${broadcastHex}`;
       await relay.sendMessage(roomCode, participantIdRef.current, new TextEncoder().encode(prefixed));
       setStep('waiting-r1');
     } catch (e) {
