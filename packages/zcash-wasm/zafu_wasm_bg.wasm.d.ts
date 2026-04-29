@@ -53,11 +53,14 @@ export const frost_aggregate_shares: (a: number, b: number, c: number, d: number
 export const frost_attestation_digest: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
 export const frost_attestation_verify: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number];
 export const frost_dealer_keygen: (a: number, b: number) => [number, number, number, number];
+export const frost_derive_address_from_sk: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
 export const frost_derive_address_raw: (a: number, b: number, c: number) => [number, number, number, number];
+export const frost_derive_ufvk: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
 export const frost_dkg_part1: (a: number, b: number) => [number, number, number, number];
 export const frost_dkg_part2: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const frost_dkg_part3: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
 export const frost_generate_randomizer: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+export const frost_sample_fvk_sk: () => [number, number];
 export const frost_sign_round1: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const frost_sign_round2: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number, number];
 export const frost_spend_aggregate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number, number];
