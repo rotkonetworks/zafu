@@ -21,6 +21,7 @@ import { useDeadlineCountdown } from '../../../hooks/use-deadline-countdown';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { SettingsScreen } from '../settings/settings-screen';
 import { PopupPath } from '../paths';
+import { FrostAirgapJoinerSignFlow } from '../../popup/send/frost-multisig';
 
 type Step = 'input' | 'joining' | 'review' | 'signing' | 'complete' | 'error';
 
@@ -188,16 +189,14 @@ export const MultisigSign = () => {
     );
   }
 
-  // airgapSigner wallets hold their share on a zigner device — refuse to
-  // run the local sign flow until the QR-mediated sign path is built.
+  // airgapSigner wallets: share lives on zigner. QR-mediated co-sign flow.
   if (ms.custody === 'airgapSigner') {
     return (
-      <SettingsScreen title='co-sign' backPath={PopupPath.MULTISIG}>
-        <div className='rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-3 text-xs text-yellow-400'>
-          this wallet's share lives on a zigner device. the QR-mediated
-          sign flow is not yet built — use a self-custody multisig for now.
-        </div>
-      </SettingsScreen>
+      <AirgapJoinerWrapper
+        ms={ms}
+        walletLabel={activeWallet!.label}
+        walletAddress={activeWallet!.address}
+      />
     );
   }
 
@@ -334,6 +333,110 @@ export const MultisigSign = () => {
           </button>
         </div>
       )}
+    </SettingsScreen>
+  );
+};
+
+type WrapperPhase = 'input' | 'active' | 'done';
+
+// airgap joiner: paste room code → delegate to FrostAirgapJoinerSignFlow,
+// then land on a green "shares sent" confirmation (matches mnemonic joiner).
+const AirgapJoinerWrapper = ({
+  ms, walletLabel, walletAddress,
+}: {
+  ms: { publicKeyPackage: string; threshold: number; maxSigners: number; relayUrl?: string };
+  walletLabel: string;
+  walletAddress: string;
+}) => {
+  const [room, setRoom] = useState('');
+  const [phase, setPhase] = useState<WrapperPhase>('input');
+  const [error, setError] = useState('');
+
+  const reset = () => { setPhase('input'); setRoom(''); setError(''); };
+
+  const WalletCard = () => (
+    <div className='mb-4 rounded-lg border border-border-soft bg-elev-1 p-3'>
+      <p className='text-[10px] text-fg-muted'>signing as</p>
+      <p className='mt-0.5 text-sm font-medium truncate'>{walletLabel}</p>
+      <p className='text-[10px] font-mono text-fg-muted truncate'>
+        {walletAddress.slice(0, 16)}...{walletAddress.slice(-8)}
+      </p>
+      <span className='mt-1 inline-block rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-zigner-gold'>
+        {ms.threshold}/{ms.maxSigners} · airgap
+      </span>
+    </div>
+  );
+
+  if (phase === 'active') {
+    if (error) {
+      return (
+        <SettingsScreen title='co-sign' backPath={PopupPath.MULTISIG}>
+          <div className='flex flex-col gap-3'>
+            <div className='rounded-lg border border-red-500/40 bg-red-500/5 p-3 text-xs text-red-400'>{error}</div>
+            <button
+              onClick={reset}
+              className='rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
+            >
+              try again
+            </button>
+          </div>
+        </SettingsScreen>
+      );
+    }
+    return (
+      <FrostAirgapJoinerSignFlow
+        ms={ms}
+        roomCode={room}
+        walletLabel={walletLabel}
+        walletAddress={walletAddress}
+        onComplete={() => setPhase('done')}
+        onCancel={reset}
+        onError={setError}
+      />
+    );
+  }
+
+  if (phase === 'done') {
+    return (
+      <SettingsScreen title='co-sign' backPath={PopupPath.MULTISIG}>
+        <WalletCard />
+        <div className='flex flex-col gap-3'>
+          <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-3 text-xs text-green-400'>
+            signing shares sent — coordinator will broadcast the transaction
+          </div>
+          <button
+            onClick={reset}
+            className='rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
+          >
+            co-sign another
+          </button>
+        </div>
+      </SettingsScreen>
+    );
+  }
+
+  return (
+    <SettingsScreen title='co-sign' backPath={PopupPath.MULTISIG}>
+      <WalletCard />
+      <div className='flex flex-col gap-4'>
+        <label className='text-xs text-fg-muted'>
+          room code
+          <input
+            className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
+            value={room}
+            onChange={e => setRoom(e.target.value)}
+            placeholder='acid-blue-cave'
+            autoFocus
+          />
+        </label>
+        <button
+          className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-50'
+          onClick={() => setPhase('active')}
+          disabled={!room.trim()}
+        >
+          join
+        </button>
+      </div>
     </SettingsScreen>
   );
 };

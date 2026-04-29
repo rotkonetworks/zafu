@@ -204,7 +204,7 @@ export function FrostAirgapSignFlow({ ms, unsigned, recipient, amount, fee, onCo
             <p>fee: {fee} ZEC</p>
           </div>
           <Button variant="gradient" onClick={() => setStep('r1-in')} className="w-full">
-            zigner has scanned — show me its response
+            scan qr from zigner
           </Button>
           <Button variant="secondary" onClick={cancel} className="w-full">cancel</Button>
           <p className="text-[10px] text-fg-muted/70 leading-snug pt-1">
@@ -263,7 +263,7 @@ export function FrostAirgapSignFlow({ ms, unsigned, recipient, amount, fee, onCo
           <p className="text-sm text-fg-high">show this QR to zigner</p>
           {trigger2 && <AnimatedQrDisplay data={trigger2} urType="zafu-frost-sign" size={220} />}
           <Button variant="gradient" onClick={() => setStep('r2-in')} className="w-full">
-            zigner has scanned — show me its share
+            scan qr from zigner
           </Button>
           <Button variant="secondary" onClick={cancel} className="w-full">cancel</Button>
           <p className="text-[10px] text-fg-muted/70 leading-snug pt-1">

@@ -25,6 +25,14 @@ export async function openRelayRoom(
   return { relay, roomCode: room.roomCode, participantId, abort: new AbortController() };
 }
 
+/** joiner variant — connects to an existing room by code (no createRoom). */
+export function openJoinerSession(relayUrl: string, roomCode: string): RelaySession {
+  const relay = new FrostRelayClient(relayUrl);
+  const participantId = new Uint8Array(32);
+  crypto.getRandomValues(participantId);
+  return { relay, roomCode, participantId, abort: new AbortController() };
+}
+
 export interface PeerBuckets {
   /** peerCommits[actionIdx][peerIdx] */
   peerCommits: string[][];
@@ -37,13 +45,18 @@ export function subscribePeers(
   s: RelaySession,
   numActions: number,
   onCommitsCount?: (n: number) => void,
+  onSign?: (sighash: string, alphas: string[], recipient: string, amountZat: string, feeZat: string) => void,
 ): PeerBuckets {
   const peerCommits: string[][] = Array.from({ length: numActions }, () => []);
   const peerShares: string[][] = Array.from({ length: numActions }, () => []);
   void s.relay.joinRoom(s.roomCode, s.participantId, (event) => {
     if (event.type !== 'message') return;
     const text = new TextDecoder().decode(event.message.payload);
-    if (text.startsWith('SIGN:')) return;
+    const sg = text.match(/^SIGN:([0-9a-fA-F]+):([^:]+):([^:]+):(\d+):(\d+)$/);
+    if (sg) {
+      onSign?.(sg[1]!, sg[2]!.split(','), sg[3]!, sg[4]!, sg[5]!);
+      return;
+    }
     const cm = text.match(/^C:([\s\S]*)$/);
     if (cm) {
       const parts = cm[1]!.split('|');
