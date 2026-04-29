@@ -36,6 +36,9 @@ export interface ZcashWalletJson {
     keyPackage?: BoxJson | string;
     /** ephemeral seed — present only for self-custody wallets */
     ephemeralSeed?: BoxJson | string;
+    /** zigner-side wallet_id from frost_store_wallet (airgapSigner only).
+     *  enables O(1) lookup at sign time vs scanning all FROST wallets. */
+    zignerWalletId?: string;
   };
 }
 

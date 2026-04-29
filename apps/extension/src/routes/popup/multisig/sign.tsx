@@ -46,7 +46,8 @@ export const MultisigSign = () => {
   const abortRef = useRef<AbortController | null>(null);
   const sighashRef = useRef('');
   const alphasRef = useRef<string[]>([]);
-  const peerCommitmentsRef = useRef<string[] | null>(null);
+  // raw "c0|c1|..." per peer; per-action split happens after numActions known.
+  const peerCommitsRawRef = useRef<string[]>([]);
 
   const countdown = useDeadlineCountdown(
     step === 'joining' || step === 'review' || step === 'signing' ? deadline : null,
@@ -59,7 +60,7 @@ export const MultisigSign = () => {
     abortRef.current = null;
     sighashRef.current = '';
     alphasRef.current = [];
-    peerCommitmentsRef.current = null;
+    peerCommitsRawRef.current = [];
   };
 
   const handleJoin = async () => {
@@ -93,9 +94,10 @@ export const MultisigSign = () => {
           setFeeZat(signMatch[5]!);
           return;
         }
+        // collect ALL peer C: bundles — t≥3 needs threshold-1 of them, not just 1.
         const commitMatch = text.match(/^C:([\s\S]*)$/);
-        if (commitMatch && !peerCommitmentsRef.current) {
-          peerCommitmentsRef.current = commitMatch[1]!.split('|');
+        if (commitMatch) {
+          peerCommitsRawRef.current.push(commitMatch[1]!);
         }
       }, abortController.signal);
 
@@ -139,17 +141,22 @@ export const MultisigSign = () => {
       const ourCommitments = round1s.map(r => r.commitments).join('|');
       await relay.sendMessage(roomCode.trim(), participantId, new TextEncoder().encode(`C:${ourCommitments}`));
 
-      setProgress('round 1: waiting for coordinator...');
-      await waitForUntil(() => peerCommitmentsRef.current !== null, sessionDeadline);
+      setProgress(`round 1: waiting for ${ms.threshold - 1} co-signer(s)...`);
+      await waitForUntil(() => peerCommitsRawRef.current.length >= ms.threshold - 1, sessionDeadline);
 
-      const peerCommits = peerCommitmentsRef.current!;
-      if (peerCommits.length < numActions) {
-        throw new Error(`coordinator sent ${peerCommits.length} commitments but ${numActions} actions needed`);
+      // split each peer's "c0|c1|..." into per-action lists.
+      const peerPerAction: string[][] = Array.from({ length: numActions }, () => []);
+      for (const raw of peerCommitsRawRef.current) {
+        const parts = raw.split('|');
+        if (parts.length < numActions) {
+          throw new Error(`peer sent ${parts.length} commitments but ${numActions} actions needed`);
+        }
+        for (let i = 0; i < numActions; i++) peerPerAction[i]!.push(parts[i]!);
       }
 
       for (let i = 0; i < numActions; i++) {
         setProgress(`round 2: signing action ${i + 1}/${numActions}...`);
-        const allCommitments = [round1s[i]!.commitments, peerCommits[i]!];
+        const allCommitments = [round1s[i]!.commitments, ...peerPerAction[i]!];
         const share = await frostSpendSignInWorker(
           secrets.keyPackage, round1s[i]!.nonces, sighash, alphas[i]!, allCommitments,
         );
@@ -344,7 +351,7 @@ type WrapperPhase = 'input' | 'active' | 'done';
 const AirgapJoinerWrapper = ({
   ms, walletLabel, walletAddress,
 }: {
-  ms: { publicKeyPackage: string; threshold: number; maxSigners: number; relayUrl?: string };
+  ms: { publicKeyPackage: string; threshold: number; maxSigners: number; relayUrl?: string; zignerWalletId?: string };
   walletLabel: string;
   walletAddress: string;
 }) => {

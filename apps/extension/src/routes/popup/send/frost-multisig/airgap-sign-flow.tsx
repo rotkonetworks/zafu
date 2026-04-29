@@ -25,6 +25,8 @@ export interface AirgapMultisig {
   threshold: number;
   maxSigners: number;
   relayUrl?: string;
+  /** zigner-side wallet_id for O(1) lookup; falls back to publicKeyPackage scan if absent. */
+  zignerWalletId?: string;
 }
 
 interface Props {
@@ -70,6 +72,7 @@ export function FrostAirgapSignFlow({ ms, unsigned, recipient, amount, fee, onCo
         const trigger = JSON.stringify({
           frost: 'sign1',
           publicKeyPackage: ms.publicKeyPackage,
+          ...(ms.zignerWalletId ? { walletId: ms.zignerWalletId } : {}),
           sighash: unsigned.sighash,
           alphas: unsigned.alphas,
           summary: {
@@ -124,6 +127,7 @@ export function FrostAirgapSignFlow({ ms, unsigned, recipient, amount, fee, onCo
       const trigger = JSON.stringify({
         frost: 'sign2',
         publicKeyPackage: ms.publicKeyPackage,
+        ...(ms.zignerWalletId ? { walletId: ms.zignerWalletId } : {}),
         sighash: unsigned.sighash,
         alphas: unsigned.alphas,
         bundledCommitments: bundled,

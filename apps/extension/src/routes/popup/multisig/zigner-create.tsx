@@ -272,6 +272,7 @@ export const MultisigCreateZigner = () => {
           threshold,
           maxSigners,
           relayUrl: relayUrl || 'https://poker.zk.bot',
+          zignerWalletId: walletId,
           custody: 'airgapSigner',
         });
 

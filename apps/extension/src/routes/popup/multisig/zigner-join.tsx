@@ -275,6 +275,7 @@ export const MultisigJoinZigner = () => {
           maxSigners,
           relayUrl: relayUrl || 'https://poker.zk.bot',
           custody: 'airgapSigner',
+          zignerWalletId: walletId,
         });
 
         setOrchardFvk(ufvk);

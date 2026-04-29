@@ -110,6 +110,8 @@ export interface FrostMultisigParams {
   keyPackage?: string;
   /** required when custody === 'self'; absent for airgapSigner */
   ephemeralSeed?: string;
+  /** zigner-side wallet_id from frost_store_wallet (airgapSigner only). */
+  zignerWalletId?: string;
 }
 
 export const buildFrostVault = (
@@ -153,7 +155,10 @@ export const buildFrostZcashWallet = (
     maxSigners: params.maxSigners,
     relayUrl: params.relayUrl,
     ...(params.custody === 'airgapSigner'
-      ? { custody: 'airgapSigner' as const }
+      ? {
+          custody: 'airgapSigner' as const,
+          ...(params.zignerWalletId ? { zignerWalletId: params.zignerWalletId } : {}),
+        }
       : { keyPackage: encKeyPackage!, ephemeralSeed: encEphemeralSeed! }),
   },
 });

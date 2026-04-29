@@ -162,6 +162,14 @@ export const MultisigPage = () => {
     ? walletsWithIndex.find(w => w.vaultId === selectedKeyInfo.id)
     : undefined;
 
+  // route to zigner-airgap flows when the user is signing through a zigner —
+  // either the active multisig is airgap, or the active single-sig is zigner-imported.
+  const useAirgap =
+    activeMs?.multisig?.custody === 'airgapSigner'
+    || selectedKeyInfo?.type === 'zigner-zafu';
+  const createPath = useAirgap ? PopupPath.MULTISIG_CREATE_ZIGNER : PopupPath.MULTISIG_CREATE;
+  const joinPath = useAirgap ? PopupPath.MULTISIG_JOIN_ZIGNER : PopupPath.MULTISIG_JOIN;
+
   if (!isZcash) {
     return <NetworkUnavailable feature='multisig' iconClass='i-lucide-shield' />;
   }
@@ -209,7 +217,7 @@ export const MultisigPage = () => {
           {/* secondary actions: small icon-buttons in a footer */}
           <div className='flex items-center justify-center gap-4 pt-1'>
             <button
-              onClick={() => navigate(PopupPath.MULTISIG_CREATE)}
+              onClick={() => navigate(createPath)}
               className='flex items-center gap-1.5 text-xs text-fg-muted transition-colors hover:text-zigner-gold'
             >
               <span className='i-lucide-plus h-3.5 w-3.5' />
@@ -217,7 +225,7 @@ export const MultisigPage = () => {
             </button>
             <span className='h-3 w-px bg-border-soft' />
             <button
-              onClick={() => navigate(PopupPath.MULTISIG_JOIN)}
+              onClick={() => navigate(joinPath)}
               className='flex items-center gap-1.5 text-xs text-fg-muted transition-colors hover:text-zigner-gold'
             >
               <span className='i-lucide-user-plus h-3.5 w-3.5' />
@@ -251,14 +259,14 @@ export const MultisigPage = () => {
           <div className='flex flex-col gap-2 pt-2'>
             <div className='flex gap-2'>
               <button
-                onClick={() => navigate(PopupPath.MULTISIG_CREATE)}
+                onClick={() => navigate(createPath)}
                 className='flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary/10 px-3 py-2.5 text-sm font-medium text-zigner-gold transition-colors hover:bg-primary/20'
               >
                 <span className='i-lucide-plus h-4 w-4' />
                 Create
               </button>
               <button
-                onClick={() => navigate(PopupPath.MULTISIG_JOIN)}
+                onClick={() => navigate(joinPath)}
                 className='flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary/10 px-3 py-2.5 text-sm font-medium text-zigner-gold transition-colors hover:bg-primary/20'
               >
                 <span className='i-lucide-user-plus h-4 w-4' />

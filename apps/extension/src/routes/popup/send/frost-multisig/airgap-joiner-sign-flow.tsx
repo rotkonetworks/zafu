@@ -19,6 +19,8 @@ export interface JoinerMultisig {
   threshold: number;
   maxSigners: number;
   relayUrl?: string;
+  /** zigner-side wallet_id for O(1) lookup; falls back to publicKeyPackage scan if absent. */
+  zignerWalletId?: string;
 }
 
 interface Props {
@@ -44,9 +46,9 @@ export function FrostAirgapJoinerSignFlow({
   const [tx, setTx] = useState<{ sighash: string; alphas: string[]; recipient: string; amountZat: string; feeZat: string } | null>(null);
   const sessionRef = useRef<RelaySession | null>(null);
   const zignerCommitsRef = useRef<string[] | null>(null);
-  // raw peer payloads — split per-action only after numActions is known.
+  // raw peer C: payloads — split per-action only after numActions is known.
+  // joiner doesn't aggregate, so peer S: shares are intentionally not buffered.
   const peerCommitsRawRef = useRef<string[]>([]);
-  const peerSharesRawRef = useRef<{ idx: number; share: string }[]>([]);
 
   // single subscription for the whole flow. handler latches SIGN:, accumulates
   // raw C:/S: payloads; per-action bucketing happens after numActions is known.
@@ -74,10 +76,7 @@ export function FrostAirgapJoinerSignFlow({
           setPeersReady(peerCommitsRawRef.current.length);
           return;
         }
-        const sm = text.match(/^S:(\d+):(.+)$/);
-        if (sm) {
-          peerSharesRawRef.current.push({ idx: Number(sm[1]), share: sm[2]! });
-        }
+        // S: peer shares — joiner ignores; only the host aggregates.
       }, s.abort.signal);
     } catch (err) {
       onError(err instanceof Error ? err.message : 'failed to join room');
@@ -101,6 +100,7 @@ export function FrostAirgapJoinerSignFlow({
     const trigger = JSON.stringify({
       frost: 'sign1',
       publicKeyPackage: ms.publicKeyPackage,
+      ...(ms.zignerWalletId ? { walletId: ms.zignerWalletId } : {}),
       sighash: tx.sighash,
       alphas: tx.alphas,
       summary: {
@@ -147,6 +147,7 @@ export function FrostAirgapJoinerSignFlow({
       const trigger = JSON.stringify({
         frost: 'sign2',
         publicKeyPackage: ms.publicKeyPackage,
+        ...(ms.zignerWalletId ? { walletId: ms.zignerWalletId } : {}),
         sighash: tx.sighash,
         alphas: tx.alphas,
         bundledCommitments: bundled,
