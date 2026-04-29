@@ -30,6 +30,8 @@ import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
 import { QrDisplay } from '../../../shared/components/qr-display';
 import { QrScanner } from '../../../shared/components/qr-scanner';
+import { AnimatedQrDisplay } from '../../../shared/components/animated-qr-display';
+import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanner';
 import { RecipientPicker } from '../../../components/recipient-picker';
 import { SaveContactModal } from '../../../components/save-contact-modal';
 import { usePasswordGate } from '../../../hooks/password-gate';
@@ -53,7 +55,75 @@ interface ZcashSendProps {
   };
 }
 
-type SendStep = 'form' | 'review' | 'building' | 'sign' | 'scan' | 'broadcast' | 'complete' | 'error' | 'frost-room' | 'frost-signing';
+type SendStep =
+  | 'form' | 'review' | 'building' | 'sign' | 'scan' | 'broadcast' | 'complete' | 'error'
+  | 'frost-room' | 'frost-signing'
+  // airgap multisig (zigner-mediated FROST sign):
+  // r1-out: show trigger1 → zigner; r1-in: scan zigner commitments
+  // r1-relay: zafu publishes, waits for peer commitments
+  // r2-out: show trigger2 (bundled commitments) → zigner; r2-in: scan zigner shares
+  // r2-relay: zafu publishes shares, waits, aggregates, broadcasts
+  | 'airgap-r1-out' | 'airgap-r1-in' | 'airgap-r1-relay'
+  | 'airgap-r2-out' | 'airgap-r2-in' | 'airgap-r2-relay';
+
+/** the 3 sign rounds shown as a [N]-label stepper (mirrors DKG host-create). */
+const SIGN_STEPS = [
+  { key: 1, label: 'commitments' },
+  { key: 2, label: 'shares' },
+  { key: 3, label: 'finalize' },
+] as const;
+
+function SignStepProgress({ current }: { current: 1 | 2 | 3 }) {
+  return (
+    <div className="flex gap-2">
+      {SIGN_STEPS.map((s) => (
+        <div key={s.key} className="flex items-center gap-1.5">
+          <div
+            className={`flex size-5 items-center justify-center rounded-full text-[10px] font-medium ${
+              s.key <= current ? 'bg-zigner-gold text-zigner-dark' : 'bg-elev-2 text-fg-muted'
+            }`}
+          >
+            {s.key}
+          </div>
+          <span className={`text-xs ${s.key <= current ? 'text-fg' : 'text-fg-muted'}`}>{s.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** small horizontal room-code chip with copy icon (matches multisig/create). */
+function RoomCodeChip({ code }: { code: string }) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-border-soft bg-elev-1 px-4 py-2">
+      <span className="font-mono text-sm tracking-wider">{code}</span>
+      <button
+        onClick={() => void navigator.clipboard.writeText(code)}
+        className="p-1 text-fg-muted hover:text-fg-high transition-colors"
+        title="copy room code"
+      >
+        <span className="i-lucide-copy size-3.5" />
+      </button>
+    </div>
+  );
+}
+
+/** small amber warning icon with a hover-tooltip that floats to the left.
+ * placed in the header row of each airgap-multisig step so the warning is
+ * present without a full-width box dominating the layout. */
+function DontQuitIcon() {
+  return (
+    <div className="relative group ml-auto">
+      <span
+        className="i-lucide-alert-triangle size-4 text-amber-400 cursor-help"
+        aria-label="don't close this page — closing cancels signing"
+      />
+      <div className="absolute right-full top-1/2 -translate-y-1/2 mr-2 hidden group-hover:block w-48 rounded bg-elev-2 px-2 py-1.5 text-[10px] leading-snug text-fg shadow-lg ring-1 ring-amber-500/30 z-20 pointer-events-none">
+        don't close this page — closing cancels signing
+      </div>
+    </div>
+  );
+}
 
 /** live elapsed timer — ticks every second so the build screen never looks frozen */
 function LiveTimer({ startMs }: { startMs: number }) {
@@ -107,6 +177,15 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   // FROST multisig state
   const [frostRoomCode, setFrostRoomCode] = useState('');
   const [frostProgress, setFrostProgress] = useState('');
+
+  // airgap-multisig (zigner-mediated FROST sign) state
+  const [airgapTrigger1, setAirgapTrigger1] = useState<Uint8Array | null>(null);
+  const [airgapTrigger2, setAirgapTrigger2] = useState<Uint8Array | null>(null);
+  const [airgapPeersWaiting, setAirgapPeersWaiting] = useState(0);
+  const airgapZignerCommitsRef = useRef<string[] | null>(null);    // commitments[actionIdx]
+  const airgapPeerCommitsRef = useRef<string[][] | null>(null);     // peerCommits[actionIdx][peerIdx]
+  const airgapPeerSharesRef = useRef<string[][] | null>(null);      // peerShares[actionIdx][peerIdx]
+  const airgapRelayRef = useRef<{ relay: FrostRelayClient; roomCode: string; participantId: Uint8Array; abort: AbortController } | null>(null);
 
   // store access for wallet id and server url
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
@@ -206,8 +285,57 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             setShowSavePrompt(true);
           }
         }
+      } else if (activeZcashWallet?.multisig?.custody === 'airgapSigner') {
+        // ── airgap-multisig (zigner-mediated FROST sign) ──
+        // zafu has only the FVK + public key package; the FROST share lives on zigner.
+        // zafu builds the tx, hands sighash + alphas to zigner via QR, mediates relay
+        // traffic between zigner and the other co-signers, then aggregates + broadcasts.
+        const ms = activeZcashWallet.multisig;
+        const result = await buildSendTxInWorker(
+          'zcash', walletId, zidecarUrl, recipient.trim(), amountZat, memo, accountIndex, mainnet,
+          undefined, ufvk,
+        );
+        if (!('sighash' in result)) {
+          throw new Error('unexpected result from unsigned tx build');
+        }
+        unsignedTxRef.current = result;
+        const feeZec = (Number(result.fee) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
+        setFee(feeZec);
+
+        // open relay room ahead of round 1 so peers can join while user scans QR
+        const relayUrl = ms.relayUrl || 'https://poker.zk.bot';
+        const relay = new FrostRelayClient(relayUrl);
+        const room = await relay.createRoom(ms.threshold, ms.maxSigners, 600);
+        setFrostRoomCode(room.roomCode);
+
+        const participantId = new Uint8Array(32);
+        crypto.getRandomValues(participantId);
+        const abort = new AbortController();
+        airgapRelayRef.current = { relay, roomCode: room.roomCode, participantId, abort };
+
+        // build round-1 trigger payload for zigner. publicKeyPackage uniquely
+        // identifies the FROST wallet; zigner looks up its share by matching it.
+        const trigger1 = JSON.stringify({
+          frost: 'sign1',
+          publicKeyPackage: ms.publicKeyPackage,
+          sighash: result.sighash,
+          alphas: result.alphas,
+          summary: {
+            recipient: recipient.trim(),
+            amountZat,
+            feeZat: result.fee,
+            mainnet,
+            threshold: ms.threshold,
+            maxSigners: ms.maxSigners,
+            roomCode: room.roomCode,
+            relayUrl,
+          },
+        });
+        setAirgapTrigger1(new TextEncoder().encode(trigger1));
+        setStep('airgap-r1-out');
+        return;
       } else if (activeZcashWallet?.multisig) {
-        // ── FROST multisig: build unsigned tx → relay signing rounds ──
+        // ── FROST multisig (self-custody): build unsigned tx → relay signing rounds ──
         const authorized = await requestAuth();
         if (!authorized) { setStep('review'); return; }
         const ms = activeZcashWallet.multisig;
@@ -449,6 +577,14 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         break;
       case 'frost-room':
       case 'frost-signing':
+      case 'airgap-r1-out':
+      case 'airgap-r1-in':
+      case 'airgap-r1-relay':
+      case 'airgap-r2-out':
+      case 'airgap-r2-in':
+      case 'airgap-r2-relay':
+        airgapRelayRef.current?.abort.abort();
+        airgapRelayRef.current = null;
         setStep('review');
         break;
       case 'error':
@@ -460,8 +596,136 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   };
 
   const handleClose = () => {
+    airgapRelayRef.current?.abort.abort();
+    airgapRelayRef.current = null;
     reset();
     onClose();
+  };
+
+  // ── airgap-multisig handlers ──
+
+  // user has scanned zigner's response to trigger 1 (zigner's round-1 commitments).
+  // publish to relay and wait for peer commitments.
+  const handleAirgapR1Response = async (raw: string) => {
+    try {
+      const json = JSON.parse(raw);
+      if (json.frost !== 'sign1-resp' || !Array.isArray(json.commitments)) {
+        throw new Error('unexpected zigner response — expected sign1-resp');
+      }
+      airgapZignerCommitsRef.current = json.commitments as string[];
+      setStep('airgap-r1-relay');
+
+      const ms = activeZcashWallet!.multisig!;
+      const result = unsignedTxRef.current!;
+      const numActions = result.alphas.length;
+      const peerCommits: string[][] = Array.from({ length: numActions }, () => []);
+      const peerShares: string[][] = Array.from({ length: numActions }, () => []);
+      airgapPeerCommitsRef.current = peerCommits;
+      airgapPeerSharesRef.current = peerShares;
+
+      const { relay, roomCode, participantId, abort } = airgapRelayRef.current!;
+      void relay.joinRoom(roomCode, participantId, (event) => {
+        if (event.type !== 'message') return;
+        const text = new TextDecoder().decode(event.message.payload);
+        if (text.startsWith('SIGN:')) return;
+        const cm = text.match(/^C:([\s\S]*)$/);
+        if (cm) {
+          const parts = cm[1]!.split('|');
+          for (let i = 0; i < parts.length && i < numActions; i++) {
+            peerCommits[i]!.push(parts[i]!);
+          }
+          setAirgapPeersWaiting(peerCommits[0]!.length);
+          return;
+        }
+        const sm = text.match(/^S:(\d+):(.+)$/);
+        if (sm) {
+          const idx = Number(sm[1]);
+          if (idx >= 0 && idx < numActions) peerShares[idx]!.push(sm[2]!);
+        }
+      }, abort.signal);
+
+      // publish tx context + zigner's commitments
+      const signPrefix = `SIGN:${result.sighash}:${result.alphas.join(',')}:${recipient.trim()}:${Math.round(Number(amount) * 1e8)}:${result.fee}`;
+      await relay.sendMessage(roomCode, participantId, new TextEncoder().encode(signPrefix));
+      const ourCommitments = airgapZignerCommitsRef.current.join('|');
+      await relay.sendMessage(roomCode, participantId, new TextEncoder().encode(`C:${ourCommitments}`));
+
+      // wait for threshold-1 peers
+      await waitFor(() => peerCommits[0]!.length >= ms.threshold - 1, 300_000);
+
+      // build round-2 trigger: per-action bundled commitments (peers + zigner's own)
+      const bundledCommits: string[][] = [];
+      for (let i = 0; i < numActions; i++) {
+        bundledCommits.push([airgapZignerCommitsRef.current[i]!, ...peerCommits[i]!]);
+      }
+      const trigger2 = JSON.stringify({
+        frost: 'sign2',
+        publicKeyPackage: ms.publicKeyPackage,
+        sighash: result.sighash,
+        alphas: result.alphas,
+        bundledCommitments: bundledCommits,
+      });
+      setAirgapTrigger2(new TextEncoder().encode(trigger2));
+      setStep('airgap-r2-out');
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'round 1 failed');
+      setStep('error');
+    }
+  };
+
+  // user has scanned zigner's response to trigger 2 (zigner's round-2 shares).
+  // publish to relay, wait for peer shares, aggregate, broadcast.
+  const handleAirgapR2Response = async (raw: string) => {
+    try {
+      const json = JSON.parse(raw);
+      if (json.frost !== 'sign2-resp' || !Array.isArray(json.shares)) {
+        throw new Error('unexpected zigner response — expected sign2-resp');
+      }
+      const zignerShares = json.shares as string[];
+      setStep('airgap-r2-relay');
+
+      const ms = activeZcashWallet!.multisig!;
+      const result = unsignedTxRef.current!;
+      const numActions = result.alphas.length;
+      const peerCommits = airgapPeerCommitsRef.current!;
+      const peerShares = airgapPeerSharesRef.current!;
+      const { relay, roomCode, participantId, abort } = airgapRelayRef.current!;
+
+      // publish each action's share, wait for peer shares, aggregate
+      const orchardSigs: string[] = [];
+      for (let i = 0; i < numActions; i++) {
+        await relay.sendMessage(roomCode, participantId, new TextEncoder().encode(`S:${i}:${zignerShares[i]}`));
+        setFrostProgress(`collecting peer shares (${i + 1}/${numActions})…`);
+        await waitFor(() => peerShares[i]!.length >= ms.threshold - 1, 300_000);
+
+        const allCommits = [airgapZignerCommitsRef.current![i]!, ...peerCommits[i]!];
+        const allShares = [zignerShares[i]!, ...peerShares[i]!];
+        const sig = await frostSpendAggregateInWorker(
+          ms.publicKeyPackage, result.sighash, result.alphas[i]!, allCommits, allShares,
+        );
+        orchardSigs.push(sig);
+      }
+
+      abort.abort();
+      airgapRelayRef.current = null;
+
+      setStep('broadcast');
+      setFrostProgress('broadcasting…');
+      const finalResult = await completeSendTxInWorker(
+        'zcash', selectedKeyInfo!.id, zidecarUrl,
+        result.unsignedTx, { orchardSigs, transparentSigs: [] }, result.spendIndices,
+      );
+      complete(finalResult.txid);
+      setTotalElapsedSec(Math.round((Date.now() - buildStartRef.current) / 1000));
+      setStep('complete');
+      void recordUsage(recipient, 'zcash');
+      if (shouldSuggestSave(recipient)) setShowSavePrompt(true);
+    } catch (err) {
+      airgapRelayRef.current?.abort.abort();
+      airgapRelayRef.current = null;
+      setFormError(err instanceof Error ? err.message : 'round 2 failed');
+      setStep('error');
+    }
   };
 
   // render based on current step
@@ -830,6 +1094,184 @@ description="point camera at zafu zigner's signature qr code"
             <Button variant="secondary" onClick={handleClose} className="w-full mt-2">
               cancel
             </Button>
+          </div>
+        );
+
+      case 'airgap-r1-out':
+        return (
+          <div className="flex flex-col items-center gap-3 p-4">
+            <div className="flex items-center gap-3 w-full">
+              <button onClick={handleClose} className="text-fg-muted hover:text-fg-high transition-colors">
+                <span className="i-lucide-arrow-left h-5 w-5" />
+              </button>
+              <h2 className="text-base font-medium flex-1">multisig sign</h2>
+              <DontQuitIcon />
+            </div>
+
+            <SignStepProgress current={1} />
+
+            <p className="text-sm text-fg-high">show this QR to zigner</p>
+            {airgapTrigger1 && (
+              <AnimatedQrDisplay data={airgapTrigger1} urType="zafu-frost-sign" size={220} />
+            )}
+
+            <RoomCodeChip code={frostRoomCode} />
+
+            <div className="w-full rounded bg-elev-2 p-2 text-[11px] text-fg-muted space-y-0.5">
+              <p>{activeZcashWallet?.multisig?.threshold}-of-{activeZcashWallet?.multisig?.maxSigners} threshold</p>
+              <p>send {amount} ZEC to {recipient.slice(0, 16)}…{recipient.slice(-8)}</p>
+              <p>fee: {fee} ZEC</p>
+            </div>
+
+            <Button variant="gradient" onClick={() => setStep('airgap-r1-in')} className="w-full">
+              zigner has scanned — show me its response
+            </Button>
+            <Button variant="secondary" onClick={handleClose} className="w-full">cancel</Button>
+
+            <p className="text-[10px] text-fg-muted/70 leading-snug pt-1">
+              this QR carries sighash + per-action alphas + room code. zigner reads it, generates fresh round-1 nonces locally, and shows commitments back.
+            </p>
+          </div>
+        );
+
+      case 'airgap-r1-in':
+        return (
+          <div className="flex flex-col items-center gap-3 p-4">
+            <div className="flex items-center gap-3 w-full">
+              <button onClick={() => setStep('airgap-r1-out')} className="text-fg-muted hover:text-fg-high transition-colors">
+                <span className="i-lucide-arrow-left h-5 w-5" />
+              </button>
+              <h2 className="text-base font-medium flex-1">multisig sign</h2>
+              <DontQuitIcon />
+            </div>
+
+            <SignStepProgress current={1} />
+
+            <p className="text-sm text-fg-high">scan zigner's commitments QR</p>
+
+            <AnimatedQrScanner
+              inline
+              title="scan zigner round-1 commitments"
+              onComplete={(data) => void handleAirgapR1Response(new TextDecoder().decode(data))}
+              onClose={() => setStep('airgap-r1-out')}
+            />
+
+            <p className="text-[10px] text-fg-muted/70 leading-snug pt-1">
+              public part of zigner's nonces. zafu publishes to the relay so co-signers compute the same challenge — no secret leaves zigner.
+            </p>
+          </div>
+        );
+
+      case 'airgap-r1-relay':
+        return (
+          <div className="flex flex-col items-center gap-4 p-6">
+            <div className="flex items-center gap-3 w-full">
+              <h2 className="text-base font-medium flex-1">multisig sign</h2>
+              <DontQuitIcon />
+            </div>
+
+            <SignStepProgress current={1} />
+
+            <div className="flex items-center gap-2 text-xs text-fg-muted">
+              <span className="i-lucide-loader-2 size-3.5 animate-spin" />
+              exchanging commitments...
+            </div>
+
+            <RoomCodeChip code={frostRoomCode} />
+
+            <div className="flex items-center gap-2 rounded-md bg-elev-2 px-3 py-1.5">
+              <span className="i-lucide-users size-3.5 text-fg-muted" />
+              <span className="text-xs">
+                <span className="font-medium text-fg">{airgapPeersWaiting + 1}</span>
+                <span className="text-fg-muted"> / {activeZcashWallet?.multisig?.threshold} ready</span>
+              </span>
+            </div>
+
+            <Button variant="secondary" onClick={handleClose} className="w-full mt-2">cancel</Button>
+
+            <p className="text-[10px] text-fg-muted/70 leading-snug pt-1 text-center">
+              zigner's commitments are on the relay. waiting on peer commitment bundle(s) before zigner can compute its share.
+            </p>
+          </div>
+        );
+
+      case 'airgap-r2-out':
+        return (
+          <div className="flex flex-col items-center gap-3 p-4">
+            <div className="flex items-center gap-3 w-full">
+              <button onClick={handleClose} className="text-fg-muted hover:text-fg-high transition-colors">
+                <span className="i-lucide-arrow-left h-5 w-5" />
+              </button>
+              <h2 className="text-base font-medium flex-1">multisig sign</h2>
+              <DontQuitIcon />
+            </div>
+
+            <SignStepProgress current={2} />
+
+            <p className="text-sm text-fg-high">show this QR to zigner</p>
+            {airgapTrigger2 && (
+              <AnimatedQrDisplay data={airgapTrigger2} urType="zafu-frost-sign" size={220} />
+            )}
+
+            <Button variant="gradient" onClick={() => setStep('airgap-r2-in')} className="w-full">
+              zigner has scanned — show me its share
+            </Button>
+            <Button variant="secondary" onClick={handleClose} className="w-full">cancel</Button>
+
+            <p className="text-[10px] text-fg-muted/70 leading-snug pt-1">
+              all co-signers' round-1 commitments grouped per action. zigner uses them to derive ρ and compute its share — nonces stay on zigner.
+            </p>
+          </div>
+        );
+
+      case 'airgap-r2-in':
+        return (
+          <div className="flex flex-col items-center gap-3 p-4">
+            <div className="flex items-center gap-3 w-full">
+              <button onClick={() => setStep('airgap-r2-out')} className="text-fg-muted hover:text-fg-high transition-colors">
+                <span className="i-lucide-arrow-left h-5 w-5" />
+              </button>
+              <h2 className="text-base font-medium flex-1">multisig sign</h2>
+              <DontQuitIcon />
+            </div>
+
+            <SignStepProgress current={2} />
+
+            <p className="text-sm text-fg-high">scan zigner's shares QR</p>
+
+            <AnimatedQrScanner
+              inline
+              title="scan zigner round-2 shares"
+              onComplete={(data) => void handleAirgapR2Response(new TextDecoder().decode(data))}
+              onClose={() => setStep('airgap-r2-out')}
+            />
+
+            <p className="text-[10px] text-fg-muted/70 leading-snug pt-1">
+              one share per action. zafu publishes to the relay, collects peer shares, aggregates into orchard signatures, then broadcasts.
+            </p>
+          </div>
+        );
+
+      case 'airgap-r2-relay':
+        return (
+          <div className="flex flex-col items-center gap-4 p-6">
+            <div className="flex items-center gap-3 w-full">
+              <h2 className="text-base font-medium flex-1">multisig sign</h2>
+              <DontQuitIcon />
+            </div>
+
+            <SignStepProgress current={3} />
+
+            <div className="flex items-center gap-2 text-xs text-fg-muted">
+              <span className="i-lucide-loader-2 size-3.5 animate-spin" />
+              {frostProgress || 'finalizing...'}
+            </div>
+
+            <RoomCodeChip code={frostRoomCode} />
+
+            <p className="text-[10px] text-fg-muted/70 leading-snug pt-1 text-center">
+              publishing shares, waiting on peer shares, aggregating signatures, broadcasting tx.
+            </p>
           </div>
         );
 
