@@ -495,6 +495,7 @@ interface ScanProps {
 
 const ScanZignerResponse = ({ title, onScan, onCancel }: ScanProps) => (
   <AnimatedQrScanner
+    inline
     title={title}
     onComplete={(data) => onScan(new TextDecoder().decode(data))}
     onClose={onCancel}

@@ -510,6 +510,7 @@ interface ScanProps {
 // the original bytes. Decode UTF-8 → string and hand to per-round handler.
 const ScanZignerResponse = ({ title, onScan, onCancel }: ScanProps) => (
   <AnimatedQrScanner
+    inline
     title={title}
     onComplete={(data) => onScan(new TextDecoder().decode(data))}
     onClose={onCancel}
