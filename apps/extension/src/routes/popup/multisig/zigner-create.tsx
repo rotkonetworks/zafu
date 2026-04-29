@@ -15,8 +15,8 @@ import {
 } from '../../../state/keyring/network-worker';
 import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../../state/frost-session';
 import { useDeadlineCountdown } from '../../../hooks/use-deadline-countdown';
-import { QrDisplay } from '../../../shared/components/qr-display';
-import { QrScanner } from '../../../shared/components/qr-scanner';
+import { AnimatedQrDisplay } from '../../../shared/components/animated-qr-display';
+import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanner';
 import { SettingsScreen } from '../settings/settings-screen';
 import { PopupPath } from '../paths';
 
@@ -34,11 +34,6 @@ type Step =
   | 'fvk-echo'
   | 'complete'
   | 'error';
-
-const utf8ToHex = (s: string): string =>
-  Array.from(new TextEncoder().encode(s))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
 
 export const MultisigCreateZigner = () => {
   const [threshold, setThreshold] = useState(2);
@@ -486,20 +481,24 @@ interface TriggerProps {
   onNext: () => void;
 }
 
-const ScreenWithTriggerQr = ({ headline, body, triggerJson, nextLabel, onNext }: TriggerProps) => (
-  <div className='flex flex-col items-center gap-3'>
-    <p className='text-xs text-fg-muted'>{headline}</p>
-    <p className='text-[10px] text-fg-muted text-center max-w-xs'>{body}</p>
-    <QrDisplay data={utf8ToHex(triggerJson)} size={200} />
-    <p className='text-[10px] text-fg-muted'>{triggerJson.length} chars</p>
-    <button
-      className='rounded-lg border border-primary/40 bg-primary/5 px-3 py-1.5 text-xs text-zigner-gold'
-      onClick={onNext}
-    >
-      {nextLabel}
-    </button>
-  </div>
-);
+const TRIGGER_UR_TYPE = 'zafu-frost-dkg';
+
+const ScreenWithTriggerQr = ({ headline, body, triggerJson, nextLabel, onNext }: TriggerProps) => {
+  const bytes = new TextEncoder().encode(triggerJson);
+  return (
+    <div className='flex flex-col items-center gap-3'>
+      <p className='text-xs text-fg-muted'>{headline}</p>
+      <p className='text-[10px] text-fg-muted text-center max-w-xs'>{body}</p>
+      <AnimatedQrDisplay data={bytes} urType={TRIGGER_UR_TYPE} size={200} />
+      <button
+        className='rounded-lg border border-primary/40 bg-primary/5 px-3 py-1.5 text-xs text-zigner-gold'
+        onClick={onNext}
+      >
+        {nextLabel}
+      </button>
+    </div>
+  );
+};
 
 interface ScanProps {
   title: string;
@@ -507,11 +506,14 @@ interface ScanProps {
   onCancel: () => void;
 }
 
-// QrScanner.resultToHex passes printable ASCII through as-is, so r1 (bare
-// hex) and r2/r3 (JSON) both arrive verbatim. The per-round handler decides
-// whether to treat it as hex or JSON — don't pre-decode here.
+// AnimatedQrScanner reassembles multi-frame P-frame QR sequences and yields
+// the original bytes. Decode UTF-8 → string and hand to per-round handler.
 const ScanZignerResponse = ({ title, onScan, onCancel }: ScanProps) => (
-  <QrScanner title={title} onScan={onScan} onClose={onCancel} inline />
+  <AnimatedQrScanner
+    title={title}
+    onComplete={(data) => onScan(new TextDecoder().decode(data))}
+    onClose={onCancel}
+  />
 );
 
 const WaitingForRelay = ({ headline, body, countdown }: { headline: string; body: string; countdown: number | null }) => (
