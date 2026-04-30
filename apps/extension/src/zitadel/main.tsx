@@ -642,6 +642,25 @@ function boot() {
     render();
   }
 
+  /** Leave the currently-viewed room or switch back from a DM. Shared
+   * by the /part and /leave commands and the sidebar × affordance.
+   * Default channels rejoin on the next sidebar render via the merge
+   * with DEFAULT_CHANNELS - matches mIRC's "always-rejoin defaults". */
+  function partActiveView() {
+    if (activeDm) {
+      activeDm = null;
+      encState = 'public';
+      render();
+    } else if (currentRoom) {
+      wsSend({ t: 'part' });
+      joinedRooms.delete(currentRoom);
+      addMsg('zitadel', `left #${currentRoom}`, true);
+      currentRoom = null;
+      encState = 'public';
+      render();
+    }
+  }
+
   // -- DM channel management --
 
   async function openDmChannel(peerPubkey: string): Promise<ZidChannel | null> {
@@ -751,7 +770,13 @@ function boot() {
         const badge = unread > 0 && !active
           ? ` <span style="color:${isHighlight ? C.gold : C.muted};font-weight:600">(${unread > 99 ? '99+' : unread})</span>`
           : '';
-        return `<div class="ch" data-room="${esc(r)}" style="padding:5px 12px;cursor:pointer;background:${bg};color:${col};font-size:13px;font-weight:${fontWeight};transition:background 0.1s;">#${esc(r)}${badge}</div>`;
+        // close affordance: × shown only on the active channel so we
+        // don't clutter idle rows with controls. clicking parts the
+        // current view (same path as /part).
+        const closeBtn = active
+          ? ` <span class="ch-close" title="leave channel" style="color:${C.muted};margin-left:auto;padding:0 4px;cursor:pointer">×</span>`
+          : '';
+        return `<div class="ch" data-room="${esc(r)}" style="padding:5px 12px;cursor:pointer;background:${bg};color:${col};font-size:13px;font-weight:${fontWeight};transition:background 0.1s;display:flex;align-items:center;gap:4px;">#${esc(r)}${badge}${closeBtn}</div>`;
       }).join('')}
       ${dmPeers.length ? `<div style="padding:10px 12px;border-top:1px solid ${C.border};border-bottom:1px solid ${C.border};margin-top:4px;">
         <b style="color:${C.bright};font-size:13px;">DMs [e2ee]</b>
@@ -778,7 +803,15 @@ function boot() {
     `;
 
     sidebar.querySelectorAll('.ch').forEach(el => {
-      el.addEventListener('click', () => {
+      el.addEventListener('click', (ev) => {
+        // × inside the row parts the channel; stopPropagation prevents
+        // the parent row from also firing switchRoom.
+        const target = ev.target as HTMLElement | null;
+        if (target?.classList.contains('ch-close')) {
+          ev.stopPropagation();
+          partActiveView();
+          return;
+        }
         const r = (el as HTMLElement).dataset['room'];
         if (r) switchRoom(r);
       });
@@ -1475,20 +1508,8 @@ function boot() {
           if (ws && ws.readyState !== WebSocket.CLOSED) ws.close();
           break;
 
-        case 'part':
-          if (activeDm) {
-            // switch back to room view
-            activeDm = null;
-            encState = 'public';
-            render();
-          } else if (currentRoom) {
-            wsSend({ t: 'part' });
-            joinedRooms.delete(currentRoom);
-            addMsg('zitadel', `left #${currentRoom}`, true);
-            currentRoom = null;
-            encState = 'public';
-            render();
-          }
+        case 'part': case 'leave':
+          partActiveView();
           break;
 
         case 'msg': {
