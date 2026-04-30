@@ -12,6 +12,7 @@ import { PopupPath } from '../paths';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { BackupModal } from '../multisig/backup/backup-modal';
 import { ImportModal } from '../multisig/backup/import-modal';
+import { AirgapQrImportModal } from '../multisig/backup/airgap-qr-import-modal';
 import {
   exportBatchBackup,
   exportSingleBackup,
@@ -25,6 +26,7 @@ export const SettingsMultisigBackup = () => {
   const [batchOpen, setBatchOpen] = useState(false);
   const [singleTarget, setSingleTarget] = useState<typeof allMs[number] | null>(null);
   const [restoreOpen, setRestoreOpen] = useState(false);
+  const [airgapQrOpen, setAirgapQrOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   const { requestAuth, PasswordModal } = usePasswordGate();
@@ -64,6 +66,14 @@ export const SettingsMultisigBackup = () => {
         onClose={() => setRestoreOpen(false)}
         onImported={(s) => showToast(
           `restored ${s.imported} wallet${s.imported === 1 ? '' : 's'}` +
+          (s.skipped ? ` (${s.skipped} already existed)` : ''),
+        )}
+      />
+      <AirgapQrImportModal
+        open={airgapQrOpen}
+        onClose={() => setAirgapQrOpen(false)}
+        onImported={(s) => showToast(
+          `imported ${s.imported} airgap wallet${s.imported === 1 ? '' : 's'}` +
           (s.skipped ? ` (${s.skipped} already existed)` : ''),
         )}
       />
@@ -150,19 +160,28 @@ export const SettingsMultisigBackup = () => {
         )}
 
         {/* restore */}
-        <div className='border-t border-border-soft pt-4'>
+        <div className='border-t border-border-soft pt-4 flex flex-col gap-2'>
           <p className='text-sm font-medium'>Restore</p>
-          <p className='mt-1 text-[11px] text-fg-muted'>
-            Import an encrypted backup file. Already-known wallets are
-            skipped, not overwritten.
+          <p className='text-[11px] text-fg-muted'>
+            Import an encrypted backup file (self-custody share material), or
+            scan an airgap QR from a zigner to re-add airgap multisig wallets.
+            Already-known wallets are skipped, not overwritten.
           </p>
           <button
             onClick={async () => {
               if (await requestAuth()) setRestoreOpen(true);
             }}
-            className='mt-3 w-full rounded-lg border border-border-soft py-2.5 text-xs hover:bg-elev-2 transition-colors'
+            className='w-full rounded-lg border border-border-soft py-2.5 text-xs hover:bg-elev-2 transition-colors'
           >
             restore from backup file
+          </button>
+          <button
+            onClick={async () => {
+              if (await requestAuth()) setAirgapQrOpen(true);
+            }}
+            className='w-full rounded-lg border border-border-soft py-2.5 text-xs hover:bg-elev-2 transition-colors'
+          >
+            import airgap QR from zigner
           </button>
         </div>
       </div>

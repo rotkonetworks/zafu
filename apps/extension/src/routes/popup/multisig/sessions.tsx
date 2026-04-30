@@ -93,6 +93,11 @@ const WalletRow = ({
         <span className='text-[11px] text-fg-muted font-mono'>
           {truncateAddr(wallet.address)}
         </span>
+        {wallet.multisig?.zignerWalletId && (
+          <span className='text-[10px] text-fg-dim font-mono'>
+            zigner: {wallet.multisig.zignerWalletId}
+          </span>
+        )}
       </div>
       <span className='text-sm font-mono text-fg-muted shrink-0 ml-2'>
         {formatZec(balance)} ZEC
