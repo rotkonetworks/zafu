@@ -949,6 +949,7 @@ function boot() {
     '/channels': '/channels           list open DM channels',
     '/close':    '/close [pubkey]     close a DM channel',
     '/whois':    '/whois              show ZID identity + status',
+    '/login':    '/login              unlock zafu and sign messages',
     '/clear':    '/clear              clear messages',
     '/connect':  '/connect            reconnect to relay',
     '/server':   '/server <url|reset> change relay (wss://...)',
@@ -1033,7 +1034,7 @@ function boot() {
       const [cmd, ...args] = text.slice(1).split(/\s+/);
       switch (cmd?.toLowerCase()) {
         case 'help':
-          addMsg('zitadel', '/nick /j /part /msg /dm /channels /close /whois [nick|pubkey] /clear /connect', true);
+          addMsg('zitadel', '/nick /j /part /msg /dm /channels /close /whois [nick|pubkey] /login /clear /connect', true);
           addMsg('zitadel', 'DMs use Noise IK e2ee. /msg <nick_or_pubkey> <text> to start.', true);
           break;
 
@@ -1219,6 +1220,53 @@ function boot() {
               addMsg('zitadel', `zid: ${shortPub(peerPubkey)}`, true);
               addMsg('zitadel', `verified: ${verified ? 'yes (zid-auth-v1)' : 'no - nick claim is unsigned'}`, true);
             }
+          }
+          break;
+        }
+
+        case 'login': {
+          // /login: surface the wallet-unlock requirement, then re-resolve
+          // identity. if the wallet is already unlocked elsewhere, this
+          // immediately picks up the privkey and re-announces under
+          // zid-auth-v1 so the room sees the upgrade from unsigned to
+          // signed binding. if still locked, we try to open the popup
+          // (best-effort; needs user gesture and may be blocked) and
+          // tell the user what to do.
+          if (zidPrivkey) {
+            addMsg('zitadel', `already logged in as ${shortPub(zidPubkey!)}.`, true);
+            break;
+          }
+          // try to nudge the unlock popup. /login is dispatched from a
+          // keypress handler (Enter on the input), so we have a user
+          // gesture - chrome.action.openPopup() may succeed.
+          try {
+            const action = (chrome as unknown as { action?: { openPopup?: () => Promise<void> } }).action;
+            if (action?.openPopup) {
+              await action.openPopup();
+            }
+          } catch { /* popup may be unavailable or already open */ }
+          addMsg('zitadel', 'resolving identity...', true);
+          const zid = await resolveZidIdentity();
+          loggedIn = zid.loggedIn;
+          zidPubkey = zid.pubkey;
+          zidPrivkey = zid.privkey;
+          if (!zid.pubkey) {
+            addMsg('zitadel', 'no zafu identity found. install/create a wallet first.', true);
+            break;
+          }
+          if (!zid.privkey) {
+            addMsg('zitadel', 'wallet still locked. click the zafu icon in the toolbar to unlock, then /login again.', true);
+            break;
+          }
+          addMsg('zitadel', `logged in. zid: ${shortPub(zid.pubkey)} - messages will now carry zid-msg-v1 signatures.`, true);
+          // re-announce under signed mode so peers update from "unsigned
+          // binding" to verified +nick. without this they'd keep showing
+          // the old unsigned claim until the next reconnect.
+          if (currentRoom) {
+            const proof = signAnnounce(zid.privkey, zid.pubkey, nick, relayHost(relayUrl));
+            wsSend({ t: 'announce', ...proof });
+            verifiedNicks.add(nick);
+            render();
           }
           break;
         }
