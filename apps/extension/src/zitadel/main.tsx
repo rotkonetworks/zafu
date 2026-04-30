@@ -905,6 +905,23 @@ function boot() {
     bar.appendChild(inp);
     inp.focus();
     renderSidebar();
+    updateDocumentTitle();
+  }
+
+  /** Reflect total unread across all views into document.title so the
+   * tab list shows "(3) #foo - zitadel" while the user is on another
+   * tab. The currently-viewed view never has unread (markRead clears
+   * it on switch), so this captures attention from the views the user
+   * is *not* watching - exactly what a tab-list nudge should do. */
+  function updateDocumentTitle() {
+    let totalUnread = 0;
+    for (const n of unreadCount.values()) totalUnread += n;
+    const viewName = activeDm
+      ? (pubkeyToNick.get(activeDm) || shortPub(activeDm))
+      : `#${currentRoom || initialRoom}`;
+    document.title = totalUnread > 0
+      ? `(${totalUnread > 99 ? '99+' : totalUnread}) ${viewName} - zitadel`
+      : `${viewName} - zitadel`;
   }
 
   // WebSocket
