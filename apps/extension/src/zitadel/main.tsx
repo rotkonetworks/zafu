@@ -661,9 +661,9 @@ function boot() {
           : '';
         return `<div class="dm-ch" data-pubkey="${esc(pub)}" style="padding:5px 12px;cursor:pointer;background:${bg};color:${col};font-size:12px;font-weight:${fontWeight};transition:background 0.1s;">[e2ee] ${esc(label)}${badge}</div>`;
       }).join('')}
-      <div style="padding:8px 12px;margin-top:auto;border-top:1px solid ${C.border};">
-        <div style="color:${C.muted};font-size:11px;">${esc(nick)}</div>
-        <div style="color:${loggedIn ? C.green : C.muted};font-size:10px;">${loggedIn ? 'zid' : 'anon'}</div>
+      <div class="me-chip" style="padding:8px 12px;margin-top:auto;border-top:1px solid ${C.border};cursor:pointer;transition:background 0.1s;" title="${zidPrivkey ? 'click for /whois (your identity)' : (zidPubkey ? 'click to /login' : 'no zafu identity - install zafu first')}">
+        <div style="color:${C.muted};font-size:11px;">${zidPrivkey ? `<span style="color:${C.green}">+</span>` : ''}${esc(nick)}</div>
+        <div style="color:${loggedIn ? C.green : C.muted};font-size:10px;">${zidPubkey ? shortPub(zidPubkey) : 'anon · click to login'}</div>
       </div>
     `;
 
@@ -691,6 +691,19 @@ function boot() {
         if (activeDm !== pub) (el as HTMLElement).style.background = 'transparent';
       });
     });
+
+    // identity chip in the footer: click runs /login if locked, or
+    // self-/whois if already unlocked. surfaces the most useful action
+    // for the current state without making the user remember a verb.
+    const meChip = sidebar.querySelector('.me-chip') as HTMLElement | null;
+    if (meChip) {
+      meChip.addEventListener('click', () => {
+        if (zidPubkey && !zidPrivkey) void runLogin();
+        else runSelfWhois();
+      });
+      meChip.addEventListener('mouseenter', () => { meChip.style.background = C.border; });
+      meChip.addEventListener('mouseleave', () => { meChip.style.background = 'transparent'; });
+    }
   }
 
   // irssi-style nick column: pad the nick block to a fixed min-width
@@ -1031,6 +1044,60 @@ function boot() {
     }
   }
 
+  /** Print self-whois (own identity card) into chat. Same body as
+   * `/whois` with no arg - extracted so the sidebar identity chip can
+   * call it on click without simulating a slash command. */
+  function runSelfWhois() {
+    if (zidPubkey) {
+      addMsg('zitadel', `--- ZID identity ---`, true);
+      addMsg('zitadel', `nick: ${nick}`, true);
+      addMsg('zitadel', `zid: ${shortPub(zidPubkey)}`, true);
+      addMsg('zitadel', `pubkey: ${zidPubkey}`, true);
+      addMsg('zitadel', `room: ${currentRoom || 'none'}`, true);
+      addMsg('zitadel', `encryption: ${encState}`, true);
+      addMsg('zitadel', `DM channels: ${dmChannels.size}`, true);
+      addMsg('zitadel', `Noise capable: ${zidPrivkey ? 'yes' : 'no (wallet locked)'}`, true);
+      addMsg('zitadel', `relay: ${connected ? 'ok' : 'disconnected'}`, true);
+    } else {
+      addMsg('zitadel', `you are ${nick} | ephemeral session | room: ${currentRoom || 'none'} | relay: ${connected ? 'ok' : 'disconnected'}`, true);
+      addMsg('zitadel', `connect zafu for ZID identity and e2ee DMs.`, true);
+    }
+  }
+
+  /** Run the /login flow. Tries to open the wallet popup, re-resolves
+   * identity, re-announces on success. Extracted so the sidebar chip
+   * can call it without dispatching a slash command. */
+  async function runLogin() {
+    if (zidPrivkey) {
+      addMsg('zitadel', `already logged in as ${shortPub(zidPubkey!)}.`, true);
+      return;
+    }
+    try {
+      const action = (chrome as unknown as { action?: { openPopup?: () => Promise<void> } }).action;
+      if (action?.openPopup) await action.openPopup();
+    } catch { /* popup may be unavailable or already open */ }
+    addMsg('zitadel', 'resolving identity...', true);
+    const zid = await resolveZidIdentity();
+    loggedIn = zid.loggedIn;
+    zidPubkey = zid.pubkey;
+    zidPrivkey = zid.privkey;
+    if (!zid.pubkey) {
+      addMsg('zitadel', 'no zafu identity found. install/create a wallet first.', true);
+      return;
+    }
+    if (!zid.privkey) {
+      addMsg('zitadel', 'wallet still locked. click the zafu icon in the toolbar to unlock, then try again.', true);
+      return;
+    }
+    addMsg('zitadel', `logged in. zid: ${shortPub(zid.pubkey)} - messages will now carry zid-msg-v1 signatures.`, true);
+    if (currentRoom) {
+      const proof = signAnnounce(zid.privkey, zid.pubkey, nick, relayHost(relayUrl));
+      wsSend({ t: 'announce', ...proof });
+      verifiedNicks.add(nick);
+      render();
+    }
+  }
+
   /** Send a room message, optionally as a /me action. Wraps in
    * zid-msg-v1 when the wallet is unlocked - the action marker is
    * inside the signed payload so it's bound to the proof. */
@@ -1305,20 +1372,7 @@ function boot() {
           // nick lookup falls back to first-claim-wins binding.
           const target = args[0];
           if (!target) {
-            if (zidPubkey) {
-              addMsg('zitadel', `--- ZID identity ---`, true);
-              addMsg('zitadel', `nick: ${nick}`, true);
-              addMsg('zitadel', `zid: ${shortPub(zidPubkey)}`, true);
-              addMsg('zitadel', `pubkey: ${zidPubkey}`, true);
-              addMsg('zitadel', `room: ${currentRoom || 'none'}`, true);
-              addMsg('zitadel', `encryption: ${encState}`, true);
-              addMsg('zitadel', `DM channels: ${dmChannels.size}`, true);
-              addMsg('zitadel', `Noise capable: ${zidPrivkey ? 'yes' : 'no (wallet locked)'}`, true);
-              addMsg('zitadel', `relay: ${connected ? 'ok' : 'disconnected'}`, true);
-            } else {
-              addMsg('zitadel', `you are ${nick} | ephemeral session | room: ${currentRoom || 'none'} | relay: ${connected ? 'ok' : 'disconnected'}`, true);
-              addMsg('zitadel', `connect zafu for ZID identity and e2ee DMs.`, true);
-            }
+            runSelfWhois();
           } else {
             // peer lookup: accept either a hex pubkey or a nick.
             let peerNick: string | undefined;
@@ -1394,52 +1448,9 @@ function boot() {
           break;
         }
 
-        case 'login': {
-          // /login: surface the wallet-unlock requirement, then re-resolve
-          // identity. if the wallet is already unlocked elsewhere, this
-          // immediately picks up the privkey and re-announces under
-          // zid-auth-v1 so the room sees the upgrade from unsigned to
-          // signed binding. if still locked, we try to open the popup
-          // (best-effort; needs user gesture and may be blocked) and
-          // tell the user what to do.
-          if (zidPrivkey) {
-            addMsg('zitadel', `already logged in as ${shortPub(zidPubkey!)}.`, true);
-            break;
-          }
-          // try to nudge the unlock popup. /login is dispatched from a
-          // keypress handler (Enter on the input), so we have a user
-          // gesture - chrome.action.openPopup() may succeed.
-          try {
-            const action = (chrome as unknown as { action?: { openPopup?: () => Promise<void> } }).action;
-            if (action?.openPopup) {
-              await action.openPopup();
-            }
-          } catch { /* popup may be unavailable or already open */ }
-          addMsg('zitadel', 'resolving identity...', true);
-          const zid = await resolveZidIdentity();
-          loggedIn = zid.loggedIn;
-          zidPubkey = zid.pubkey;
-          zidPrivkey = zid.privkey;
-          if (!zid.pubkey) {
-            addMsg('zitadel', 'no zafu identity found. install/create a wallet first.', true);
-            break;
-          }
-          if (!zid.privkey) {
-            addMsg('zitadel', 'wallet still locked. click the zafu icon in the toolbar to unlock, then /login again.', true);
-            break;
-          }
-          addMsg('zitadel', `logged in. zid: ${shortPub(zid.pubkey)} - messages will now carry zid-msg-v1 signatures.`, true);
-          // re-announce under signed mode so peers update from "unsigned
-          // binding" to verified +nick. without this they'd keep showing
-          // the old unsigned claim until the next reconnect.
-          if (currentRoom) {
-            const proof = signAnnounce(zid.privkey, zid.pubkey, nick, relayHost(relayUrl));
-            wsSend({ t: 'announce', ...proof });
-            verifiedNicks.add(nick);
-            render();
-          }
+        case 'login':
+          await runLogin();
           break;
-        }
 
         case 'connect':
           if (!connected) connectRelay();
