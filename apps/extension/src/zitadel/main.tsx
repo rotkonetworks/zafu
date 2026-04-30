@@ -236,7 +236,21 @@ const C = {
 
 interface Msg {
   nick: string; text: string; time: string;
-  system?: boolean; color?: string; dm?: boolean;
+  system?: boolean; color?: string; dm?: boolean; action?: boolean;
+}
+
+/** CTCP ACTION marker - same wire format IRC has used since 1994. The
+ * marker travels inside the signed text, so an attacker cannot strip
+ * the action-ness without invalidating the zid-msg-v1 signature, and
+ * cannot graft the marker onto a non-action message. */
+const ACTION_PREFIX = '\x01ACTION ';
+const ACTION_SUFFIX = '\x01';
+
+function isActionText(s: string): boolean {
+  return s.startsWith(ACTION_PREFIX) && s.endsWith(ACTION_SUFFIX);
+}
+function stripAction(s: string): string {
+  return s.slice(ACTION_PREFIX.length, s.length - ACTION_SUFFIX.length);
 }
 
 const NICK_COLORS = [C.gold, C.cyan, C.green, C.purple, C.red, "#60A5FA", "#FB923C", "#E879F9", "#FBBF24", "#34D399"];
@@ -458,11 +472,11 @@ function boot() {
     if (dm || mentionsMe(text, fromNick)) mentioned.add(viewKey);
   }
 
-  function addMsg(n: string, text: string, system = false, room?: string, dm = false) {
+  function addMsg(n: string, text: string, system = false, room?: string, dm = false, action = false) {
     const key = room || (activeDm ? (DM_PREFIX + activeDm) : (currentRoom || initialRoom));
     let arr = messagesPerRoom.get(key);
     if (!arr) { arr = []; messagesPerRoom.set(key, arr); }
-    arr.push({ nick: n, text, time: now(), system, color: system ? undefined : nickColor(n), dm });
+    arr.push({ nick: n, text, time: now(), system, color: system ? undefined : nickColor(n), dm, action });
     trackUnread(key, n, text, system, dm);
     render();
   }
@@ -691,6 +705,12 @@ function boot() {
     // they always show the marker.
     const verified = m.dm || verifiedNicks.has(m.nick);
     const verifyMark = verified ? `<span style="color:${C.green}">+</span>` : '';
+    // /me actions render as "* nick text" - IRC convention. The
+    // signature bound the action-ness, so a verified action carries
+    // the same `+` weight as a verified message.
+    if (m.action) {
+      return `<div style="line-height:1.4"><span style="color:${C.muted}">${m.time}</span>${dmTag}<span style="color:${C.purple}"> * </span>${verifyMark}<b style="color:${col}">${esc(m.nick)}</b> <span style="color:${C.text}">${esc(m.text)}</span></div>`;
+    }
     return `<div style="line-height:1.4"><span style="color:${C.muted}">${m.time}</span>${dmTag}<span style="color:${C.border}"> &lt;</span>${verifyMark}<b style="color:${col}">${esc(m.nick)}</b><span style="color:${C.border}">&gt; </span>${esc(m.text)}</div>`;
   }
 
@@ -868,7 +888,12 @@ function boot() {
             // peers we've seen announce.
             const senderPub = senderPubkey || nickToPubkey.get(msg.nick);
             if (senderPub && ignoredPubkeys.has(senderPub.toLowerCase())) break;
-            addMsg(msg.nick, visibleText, false, msg.room || currentRoom || undefined);
+            // detect IRC-style /me action via CTCP marker. for signed
+            // messages, the marker travels inside the signature so it
+            // can't be added or stripped without invalidating the proof.
+            const isAction = isActionText(visibleText);
+            const renderText = isAction ? stripAction(visibleText) : visibleText;
+            addMsg(msg.nick, renderText, false, msg.room || currentRoom || undefined, false, isAction);
             break;
           }
           case 'joined':
@@ -993,9 +1018,26 @@ function boot() {
     }
   }
 
+  /** Send a room message, optionally as a /me action. Wraps in
+   * zid-msg-v1 when the wallet is unlocked - the action marker is
+   * inside the signed payload so it's bound to the proof. */
+  function sendRoomMessage(text: string, action = false) {
+    if (!connected) { addMsg('zitadel', 'not connected. type /connect', true); return; }
+    if (!currentRoom) { addMsg('zitadel', 'not in a channel. type /j <room>', true); return; }
+    const wireText = action ? `${ACTION_PREFIX}${text}${ACTION_SUFFIX}` : text;
+    if (zidPrivkey && zidPubkey) {
+      const proof = signMsg(zidPrivkey, zidPubkey, nick, currentRoom, relayHost(relayUrl), wireText);
+      wsSend({ t: 'msg', text: JSON.stringify(proof) });
+    } else {
+      wsSend({ t: 'msg', text: wireText });
+    }
+    addMsg(nick, text, false, undefined, false, action);
+  }
+
   // command hints
   const CMDS: Record<string, string> = {
     '/nick':     '/nick <name>        change your nickname',
+    '/me':       '/me <action>        send an IRC action ("* nick ...")',
     '/j':        '/j <room>           join or create a channel',
     '/part':     '/part               leave current channel',
     '/msg':      '/msg <target> <text>  DM (nick or pubkey)',
@@ -1091,7 +1133,7 @@ function boot() {
       const [cmd, ...args] = text.slice(1).split(/\s+/);
       switch (cmd?.toLowerCase()) {
         case 'help':
-          addMsg('zitadel', '/nick /j /part /msg /dm /channels /close /whois [nick|pubkey] /ignore /unignore /ignored /login /clear /connect', true);
+          addMsg('zitadel', '/nick /me /j /part /msg /dm /channels /close /whois [nick|pubkey] /ignore /unignore /ignored /login /clear /connect', true);
           addMsg('zitadel', 'DMs use Noise IK e2ee. /msg <nick_or_pubkey> <text> to start.', true);
           break;
 
@@ -1121,6 +1163,14 @@ function boot() {
             render();
           }
           break;
+
+        case 'me': {
+          // /me <action> - IRC convention. renders as "* nick text".
+          const actionText = args.join(' ').trim();
+          if (!actionText) { addMsg('zitadel', 'usage: /me <action>', true); break; }
+          sendRoomMessage(actionText, true);
+          break;
+        }
 
         case 'j': case 'join':
           if (args[0]) { switchRoom(args[0]); }
@@ -1398,24 +1448,9 @@ function boot() {
       }
 
       // send to relay (room message). public rooms are cleartext - the
-      // relay sees the message bytes. when the wallet is unlocked we
-      // wrap the text in a zid-msg-v1 envelope so receivers can verify
-      // each message individually (closes the spoofing-after-announce
-      // gap). locked clients fall back to plain text.
-      if (connected && currentRoom) {
-        if (zidPrivkey && zidPubkey) {
-          const proof = signMsg(zidPrivkey, zidPubkey, nick, currentRoom, relayHost(relayUrl), text);
-          wsSend({ t: 'msg', text: JSON.stringify(proof) });
-        } else {
-          wsSend({ t: 'msg', text });
-        }
-        // add locally (relay will broadcast to others, we show ours immediately)
-        addMsg(nick, text);
-      } else if (!connected) {
-        addMsg('zitadel', 'not connected. type /connect', true);
-      } else {
-        addMsg('zitadel', 'not in a channel. type /j <room>', true);
-      }
+      // relay sees the message bytes. sendRoomMessage handles signing,
+      // wrapping, and the connection-state error paths.
+      sendRoomMessage(text);
     }
   });
 
