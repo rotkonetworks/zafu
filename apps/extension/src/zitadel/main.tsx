@@ -931,7 +931,6 @@ function boot() {
     '/nick':     '/nick <name>        change your nickname',
     '/j':        '/j <room>           join or create a channel',
     '/part':     '/part               leave current channel',
-    '/poker':    '/poker [code]       create or join poker table',
     '/msg':      '/msg <target> <text>  DM (nick or pubkey)',
     '/dm':       '/dm <pubkey> <text>   DM by explicit pubkey',
     '/channels': '/channels           list open DM channels',
@@ -1021,7 +1020,7 @@ function boot() {
       const [cmd, ...args] = text.slice(1).split(/\s+/);
       switch (cmd?.toLowerCase()) {
         case 'help':
-          addMsg('zitadel', '/nick /j /part /poker /msg /dm /channels /close /whois [nick|pubkey] /clear /connect', true);
+          addMsg('zitadel', '/nick /j /part /msg /dm /channels /close /whois [nick|pubkey] /clear /connect', true);
           addMsg('zitadel', 'DMs use Noise IK e2ee. /msg <nick_or_pubkey> <text> to start.', true);
           break;
 
@@ -1077,14 +1076,6 @@ function boot() {
             render();
           }
           break;
-
-        case 'poker': {
-          const room = args[0] || 'new';
-          const pokerUrl = `https://poker.zk.bot/${room}`;
-          addMsg('zitadel', `opening poker table${args[0] ? ' ' + args[0] : ''}...`, true);
-          window.open(pokerUrl, '_blank');
-          break;
-        }
 
         case 'msg': {
           // /msg <nick_or_pubkey> <text>
