@@ -45,7 +45,7 @@ export const MultisigCreateZigner = () => {
   const [participantCount, setParticipantCount] = useState(1);
   const [publicKeyPackage, setPublicKeyPackage] = useState('');
   const [walletId, setWalletId] = useState('');
-  // orchardFvk + address are state because slice 5 reads them at the save call
+  // orchardFvk + address are state because slice 5 reads them at the save call.
   const [, setOrchardFvk] = useState('');
   const [address, setAddress] = useState('');
   const [deadline, setDeadline] = useState<number | null>(null);
@@ -55,6 +55,10 @@ export const MultisigCreateZigner = () => {
   const participantIdRef = useRef<Uint8Array | null>(null);
   const fvkSkRef = useRef('');
   const peerR1Ref = useRef<string[]>([]);
+  // populated from r3 ack when zigner derived them itself; used to skip
+  // local derivation in the FVK echo step.
+  const zignerDerivedUfvkRef = useRef('');
+  const zignerDerivedAddrRef = useRef('');
   const peerR2Ref = useRef<string[]>([]);
   const peerFvksRef = useRef<string[]>([]);
   const abortRef = useRef<AbortController | null>(null);
@@ -84,10 +88,16 @@ export const MultisigCreateZigner = () => {
     frost: 'dkg2',
     broadcasts: peerR1Ref.current,
   });
+  // dkg3 carries sk + relay_url so zigner can derive UFVK/address itself
+  // during part-3 and bake them into its r3 ack — eliminates the post-DKG
+  // r4-meta round-trip.
   const dkg3Trigger = JSON.stringify({
     frost: 'dkg3',
     r1: peerR1Ref.current,
     r2: peerR2Ref.current,
+    sk: fvkSkRef.current,
+    relay_url: relayUrl || 'https://poker.zk.bot',
+    mainnet: true,
   });
 
   const handleStart = async () => {
@@ -181,21 +191,27 @@ export const MultisigCreateZigner = () => {
     }
   };
 
-  // r3 ack uses an envelope because there's no parallel in zafu's mnemonic
-  // flow — we need both the public key package AND a label to disambiguate
-  // it from the bare-hex r1 ack.
+  // r3 ack uses an envelope: public_key_package + wallet_id always; plus
+  // orchard_fvk_uview / address / relay_url when zigner derived them in
+  // part-3 (newer zigner builds). older zigner builds without these fields
+  // still work — zafu falls back to deriving them itself during FVK echo.
   const onZignerR3 = (raw: string) => {
     try {
       const parsed = JSON.parse(raw) as {
         frost?: string;
         public_key_package?: string;
         wallet_id?: string;
+        orchard_fvk_uview?: string;
+        address?: string;
+        relay_url?: string;
       };
       if (parsed.frost !== 'r3' || !parsed.public_key_package || !parsed.wallet_id) {
         throw new Error('not an r3 ack');
       }
       setPublicKeyPackage(parsed.public_key_package);
       setWalletId(parsed.wallet_id);
+      if (parsed.orchard_fvk_uview) zignerDerivedUfvkRef.current = parsed.orchard_fvk_uview;
+      if (parsed.address) zignerDerivedAddrRef.current = parsed.address;
       setStep('fvk-echo');
     } catch (e) {
       setError(`r3 scan: ${e instanceof Error ? e.message : String(e)}`);
@@ -238,15 +254,18 @@ export const MultisigCreateZigner = () => {
     return () => { cancelled = true; };
   }, [step, maxSigners, deadline]);
 
-  // FVK echo: derive UFVK + address from public_key_package + sk,
-  // broadcast on relay, wait for n-1 peer FVKs, abort on mismatch
+  // FVK echo: derive UFVK + address from public_key_package + sk
+  // (or use zigner's value if present in the r3 ack), broadcast on
+  // relay, wait for n-1 peer FVKs, abort on mismatch.
   useEffect(() => {
     if (step !== 'fvk-echo' || !deadline || !publicKeyPackage) return;
     let cancelled = false;
     void (async () => {
       try {
-        const ufvk = await frostDeriveUfvkInWorker(publicKeyPackage, fvkSkRef.current, true);
-        const addr = await frostDeriveAddressFromSkInWorker(publicKeyPackage, fvkSkRef.current, 0);
+        const ufvk = zignerDerivedUfvkRef.current
+          || await frostDeriveUfvkInWorker(publicKeyPackage, fvkSkRef.current, true);
+        const addr = zignerDerivedAddrRef.current
+          || await frostDeriveAddressFromSkInWorker(publicKeyPackage, fvkSkRef.current, 0);
         if (cancelled) return;
 
         const relay = useStore.getState().frostSession.relay;

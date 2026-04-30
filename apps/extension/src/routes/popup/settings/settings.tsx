@@ -33,6 +33,12 @@ const links: SettingsLink[] = [
     href: PopupPath.SETTINGS_PRIVACY,
   },
   {
+    title: 'multisig backup',
+    icon: 'i-lucide-shield',
+    href: PopupPath.SETTINGS_MULTISIG_BACKUP,
+    networks: ['zcash'],
+  },
+  {
     title: 'clear cache',
     icon: 'i-lucide-trash-2',
     href: PopupPath.SETTINGS_CLEAR_CACHE,

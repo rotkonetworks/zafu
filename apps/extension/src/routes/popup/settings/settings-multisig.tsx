@@ -6,6 +6,9 @@ import { keyRingSelector } from '../../../state/keyring';
 import { SettingsScreen } from './settings-screen';
 import { PopupPath } from '../paths';
 import { usePopupNav } from '../../../utils/navigate';
+import { usePasswordGate } from '../../../hooks/password-gate';
+import { BackupModal } from '../multisig/backup/backup-modal';
+import { exportSingleBackup } from '../multisig/backup/export-helpers';
 
 export const SettingsMultisig = () => {
   const [params] = useSearchParams();
@@ -22,6 +25,8 @@ export const SettingsMultisig = () => {
   const [relayUrl, setRelayUrl] = useState(wallet?.multisig?.relayUrl ?? '');
   const [saved, setSaved] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [backupOpen, setBackupOpen] = useState(false);
+  const { requestAuth, PasswordModal } = usePasswordGate();
 
   if (!wallet?.multisig) {
     return (
@@ -56,6 +61,14 @@ export const SettingsMultisig = () => {
 
   return (
     <SettingsScreen title='multisig settings' backPath={PopupPath.SETTINGS_WALLETS}>
+      {PasswordModal}
+      <BackupModal
+        open={backupOpen}
+        title={`Export "${wallet.label}"`}
+        walletLabel={wallet.label}
+        onConfirm={(passphrase) => exportSingleBackup(wallet, passphrase)}
+        onClose={() => setBackupOpen(false)}
+      />
       <div className='flex flex-col gap-4'>
         {/* info */}
         <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
@@ -100,6 +113,30 @@ export const SettingsMultisig = () => {
             saved
           </div>
         )}
+
+        {/* backup */}
+        <div className='border-t border-border-soft pt-4'>
+          {ms.custody === 'airgapSigner' ? (
+            <div className='rounded-lg border border-border-soft bg-elev-1 p-3 text-[11px] text-fg-muted'>
+              <p className='font-medium text-fg'>Backup</p>
+              <p className='mt-1'>
+                This wallet's FROST share lives on your zigner device. Export the
+                backup from there: Settings → Multisig wallets → tap your wallet
+                → Export backup.
+              </p>
+            </div>
+          ) : (
+            <button
+              onClick={async () => {
+                const ok = await requestAuth();
+                if (ok) setBackupOpen(true);
+              }}
+              className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-xs text-zigner-gold hover:bg-primary/10 transition-colors'
+            >
+              export backup
+            </button>
+          )}
+        </div>
 
         {/* delete */}
         <div className='border-t border-border-soft pt-4'>

@@ -31,6 +31,9 @@ const SettingsAbout = lazy(() =>
 const SettingsMultisig = lazy(() =>
   import('./settings-multisig').then(m => ({ default: m.SettingsMultisig })),
 );
+const SettingsMultisigBackup = lazy(() =>
+  import('./settings-multisig-backup').then(m => ({ default: m.SettingsMultisigBackup })),
+);
 const SubscribePage = lazy(() =>
   import('./subscribe').then(m => ({ default: m.SubscribePage })),
 );
@@ -95,5 +98,9 @@ export const settingsRoutes = [
   {
     path: PopupPath.SETTINGS_MULTISIG,
     element: withSuspense(SettingsMultisig),
+  },
+  {
+    path: PopupPath.SETTINGS_MULTISIG_BACKUP,
+    element: withSuspense(SettingsMultisigBackup),
   },
 ];

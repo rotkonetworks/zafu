@@ -52,6 +52,7 @@ export enum PopupPath {
 
   // Settings sub-pages (multisig)
   SETTINGS_MULTISIG = '/settings/multisig',
+  SETTINGS_MULTISIG_BACKUP = '/settings/multisig-backup',
 
   // Subscribe
   SUBSCRIBE = '/settings/subscribe',
