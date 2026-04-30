@@ -909,6 +909,25 @@ function boot() {
 
   // WebSocket
   let pingTimer: ReturnType<typeof setInterval> | null = null;
+  // exponential backoff for reconnect. base 2s doubling per failure,
+  // capped at 60s, with up-to-1s of jitter so a fleet of clients
+  // returning after a relay outage doesn't synchronize their reconnect
+  // and DDoS the relay back down. attempts resets to 0 on successful
+  // open. retryTimer holds the pending setTimeout so /connect can
+  // cancel it for an immediate retry.
+  let reconnectAttempts = 0;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  function scheduleReconnect() {
+    const baseMs = Math.min(60_000, 2_000 * Math.pow(2, reconnectAttempts));
+    const jitterMs = Math.floor(Math.random() * 1000);
+    const delayMs = baseMs + jitterMs;
+    reconnectAttempts += 1;
+    addMsg('zitadel',
+      `reconnecting in ${Math.round(delayMs / 1000)}s (attempt ${reconnectAttempts})`,
+      true);
+    if (retryTimer) clearTimeout(retryTimer);
+    retryTimer = setTimeout(() => { retryTimer = null; connectRelay(); }, delayMs);
+  }
 
   function connectRelay() {
     addMsg('zitadel', `connecting to relay...`, true);
@@ -921,6 +940,7 @@ function boot() {
 
     ws.onopen = () => {
       connected = true;
+      reconnectAttempts = 0;
       addMsg('zitadel', 'connected to relay', true);
       // join the initial room first - announces are scoped to a room
       // (relay only forwards them when the sender is in a room).
@@ -1115,8 +1135,7 @@ function boot() {
       }
       addMsg('zitadel', 'disconnected from relay', true);
       render();
-      // reconnect after 3s
-      setTimeout(connectRelay, 3000);
+      scheduleReconnect();
     };
 
     ws.onerror = () => {
@@ -1539,8 +1558,14 @@ function boot() {
           break;
 
         case 'connect':
-          if (!connected) connectRelay();
-          else addMsg('zitadel', 'already connected', true);
+          if (connected) { addMsg('zitadel', 'already connected', true); break; }
+          // /connect bypasses any pending backoff: cancel the timer,
+          // reset attempts, try immediately. matches the user's intent
+          // ("retry now") rather than making them wait for the next
+          // scheduled tick.
+          if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+          reconnectAttempts = 0;
+          connectRelay();
           break;
 
         case 'clear':
