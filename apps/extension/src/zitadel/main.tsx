@@ -1021,7 +1021,7 @@ function boot() {
       const [cmd, ...args] = text.slice(1).split(/\s+/);
       switch (cmd?.toLowerCase()) {
         case 'help':
-          addMsg('zitadel', '/nick /j /part /poker /msg /dm /channels /close /whois /clear /connect', true);
+          addMsg('zitadel', '/nick /j /part /poker /msg /dm /channels /close /whois [nick|pubkey] /clear /connect', true);
           addMsg('zitadel', 'DMs use Noise IK e2ee. /msg <nick_or_pubkey> <text> to start.', true);
           break;
 
@@ -1149,19 +1149,49 @@ function boot() {
         }
 
         case 'whois': {
-          if (zidPubkey) {
-            addMsg('zitadel', `--- ZID identity ---`, true);
-            addMsg('zitadel', `nick: ${nick}`, true);
-            addMsg('zitadel', `zid: ${shortPub(zidPubkey)}`, true);
-            addMsg('zitadel', `pubkey: ${zidPubkey}`, true);
-            addMsg('zitadel', `room: ${currentRoom || 'none'}`, true);
-            addMsg('zitadel', `encryption: ${encState}`, true);
-            addMsg('zitadel', `DM channels: ${dmChannels.size}`, true);
-            addMsg('zitadel', `Noise capable: ${zidPrivkey ? 'yes' : 'no (wallet locked)'}`, true);
-            addMsg('zitadel', `relay: ${connected ? 'ok' : 'disconnected'}`, true);
+          // /whois with no arg: print your own identity (self-whois).
+          // /whois <nick> or /whois <pubkey>: look up a peer in the
+          // current room. matches IRC convention - the question users
+          // actually ask is "who is alice", not "who am I". pubkey
+          // lookup is the safer query (immune to nick collisions);
+          // nick lookup falls back to first-claim-wins binding.
+          const target = args[0];
+          if (!target) {
+            if (zidPubkey) {
+              addMsg('zitadel', `--- ZID identity ---`, true);
+              addMsg('zitadel', `nick: ${nick}`, true);
+              addMsg('zitadel', `zid: ${shortPub(zidPubkey)}`, true);
+              addMsg('zitadel', `pubkey: ${zidPubkey}`, true);
+              addMsg('zitadel', `room: ${currentRoom || 'none'}`, true);
+              addMsg('zitadel', `encryption: ${encState}`, true);
+              addMsg('zitadel', `DM channels: ${dmChannels.size}`, true);
+              addMsg('zitadel', `Noise capable: ${zidPrivkey ? 'yes' : 'no (wallet locked)'}`, true);
+              addMsg('zitadel', `relay: ${connected ? 'ok' : 'disconnected'}`, true);
+            } else {
+              addMsg('zitadel', `you are ${nick} | ephemeral session | room: ${currentRoom || 'none'} | relay: ${connected ? 'ok' : 'disconnected'}`, true);
+              addMsg('zitadel', `connect zafu for ZID identity and e2ee DMs.`, true);
+            }
           } else {
-            addMsg('zitadel', `you are ${nick} | ephemeral session | room: ${currentRoom || 'none'} | relay: ${connected ? 'ok' : 'disconnected'}`, true);
-            addMsg('zitadel', `connect zafu for ZID identity and e2ee DMs.`, true);
+            // peer lookup: accept either a hex pubkey or a nick.
+            let peerNick: string | undefined;
+            let peerPubkey: string | undefined;
+            if (isHexPubkey(target)) {
+              peerPubkey = target.toLowerCase();
+              peerNick = pubkeyToNick.get(peerPubkey);
+            } else {
+              peerNick = target;
+              peerPubkey = nickToPubkey.get(target);
+            }
+            if (!peerPubkey) {
+              addMsg('zitadel', `whois: no binding for ${target}. they may not have announced under zid-auth-v1.`, true);
+            } else {
+              const verified = peerNick && verifiedNicks.has(peerNick);
+              addMsg('zitadel', `--- whois ${peerNick ?? '(no nick)'} ---`, true);
+              addMsg('zitadel', `nick: ${peerNick ?? '(unbound)'}`, true);
+              addMsg('zitadel', `pubkey: ${peerPubkey}`, true);
+              addMsg('zitadel', `zid: ${shortPub(peerPubkey)}`, true);
+              addMsg('zitadel', `verified: ${verified ? 'yes (zid-auth-v1)' : 'no - nick claim is unsigned'}`, true);
+            }
           }
           break;
         }
