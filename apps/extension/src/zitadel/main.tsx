@@ -231,6 +231,16 @@ function boot() {
   const history: string[] = [];
   let histIdx = -1;
 
+  // append-only render bookkeeping. msgArea is updated in two modes:
+  //   1. view switched (or first render): clear and render every message
+  //      in the new view's buffer.
+  //   2. same view: append the new messages since the last render.
+  // motivated by irssi-style smoothness - rebuilding 500-line scrollback
+  // on every new message is the dominant frontend stutter source.
+  let renderedView: string | null = null;
+  const renderedCount = new Map<string, number>();
+  // tab-completion cycle state. null when no completion is in progress.
+  let tabState: { prefix: string; before: string; after: string; matches: string[]; idx: number } | null = null;
   // DM channels: pubkey -> ZidChannel
   const dmChannels = new Map<string, ZidChannel>();
   // nick -> pubkey mapping from relay user list
@@ -460,6 +470,21 @@ function boot() {
     });
   }
 
+  // Render one message into HTML. Pulled out of render() so the same
+  // template is used for the full-rebuild path and the append path.
+  function renderMsgLineHTML(m: Msg): string {
+    if (m.system) return `<div style="line-height:1.4"><span style="color:${C.muted}">${m.time}</span><span style="color:${C.gold}"> -!- </span><span style="color:${C.muted}">${esc(m.text)}</span></div>`;
+    const col = m.color || C.gold;
+    const dmTag = m.dm ? `<span style="color:${C.dm}">[e2ee] </span>` : '';
+    // verified peer (zid-auth-v1) gets a green `+` prefix on the
+    // nick - same convention IRC uses for voice (+) / op (@). DM
+    // messages are inherently authenticated through Noise IK so
+    // they always show the marker.
+    const verified = m.dm || verifiedNicks.has(m.nick);
+    const verifyMark = verified ? `<span style="color:${C.green}">+</span>` : '';
+    return `<div style="line-height:1.4"><span style="color:${C.muted}">${m.time}</span>${dmTag}<span style="color:${C.border}"> &lt;</span>${verifyMark}<b style="color:${col}">${esc(m.nick)}</b><span style="color:${C.border}">&gt; </span>${esc(m.text)}</div>`;
+  }
+
   function render() {
     const room = currentRoom || initialRoom;
     const msgs = roomMessages();
@@ -480,21 +505,34 @@ function boot() {
       topbar.innerHTML = `<b style="color:${C.bright}">#${esc(room)}</b><span style="color:${C.border}">|</span><span style="color:${C.muted}">public channel · /help for commands</span><span style="margin-left:auto;color:${C.muted}">relay: ${relayStatus}</span>`;
     }
 
-    msgArea.innerHTML = msgs.map(m => {
-      if (m.system) return `<div style="line-height:1.4"><span style="color:${C.muted}">${m.time}</span><span style="color:${C.gold}"> -!- </span><span style="color:${C.muted}">${esc(m.text)}</span></div>`;
-      const col = m.color || C.gold;
-      const dmTag = m.dm ? `<span style="color:${C.dm}">[e2ee] </span>` : '';
-      // verified peer (zid-auth-v1) gets a green `+` prefix on the
-      // nick - same convention IRC uses for voice (+) / op (@). DM
-      // messages are inherently authenticated through Noise IK so
-      // they always show the marker.
-      const verified = m.dm || verifiedNicks.has(m.nick);
-      const verifyMark = verified
-        ? `<span style="color:${C.green}">+</span>`
-        : '';
-      return `<div style="line-height:1.4"><span style="color:${C.muted}">${m.time}</span>${dmTag}<span style="color:${C.border}"> &lt;</span>${verifyMark}<b style="color:${col}">${esc(m.nick)}</b><span style="color:${C.border}">&gt; </span>${esc(m.text)}</div>`;
-    }).join('');
-    msgArea.scrollTop = msgArea.scrollHeight;
+    // current view key (room or DM). used to decide rebuild vs append.
+    const viewKey = activeDm ? (DM_PREFIX + activeDm) : (currentRoom || initialRoom);
+    // preserve scroll position: only auto-scroll to bottom if the user
+    // is already near the bottom. if they've scrolled up to read
+    // history, leave them where they are.
+    const NEAR_BOTTOM_PX = 80;
+    const wasAtBottom =
+      msgArea.scrollHeight - msgArea.scrollTop - msgArea.clientHeight < NEAR_BOTTOM_PX;
+
+    if (renderedView !== viewKey) {
+      // view switched: full rebuild. one-shot innerHTML write so the
+      // browser only does one layout pass.
+      msgArea.innerHTML = msgs.map(renderMsgLineHTML).join('');
+      renderedView = viewKey;
+      renderedCount.set(viewKey, msgs.length);
+      msgArea.scrollTop = msgArea.scrollHeight;
+    } else {
+      // same view: append only the lines added since the last render.
+      const already = renderedCount.get(viewKey) ?? msgs.length;
+      if (msgs.length > already) {
+        const fragment = msgs.slice(already).map(renderMsgLineHTML).join('');
+        msgArea.insertAdjacentHTML('beforeend', fragment);
+        renderedCount.set(viewKey, msgs.length);
+      }
+      if (wasAtBottom) {
+        msgArea.scrollTop = msgArea.scrollHeight;
+      }
+    }
 
     // single chip carries identity + transport status. no separate
     // [zid|anon] and [plain|e2ee] split - they're related and the
@@ -736,6 +774,44 @@ function boot() {
     hint.style.display = 'none';
     if (e.key === 'ArrowUp') { if (histIdx < history.length - 1) { histIdx++; inp.value = history[histIdx] ?? ''; } return; }
     if (e.key === 'ArrowDown') { if (histIdx > 0) { histIdx--; inp.value = history[histIdx] ?? ''; } else { histIdx = -1; inp.value = ''; } return; }
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      // Tab completion for nicks. cycles through matches on repeated
+      // Tab presses. matches drawn from the announced nick→pubkey map
+      // so completions only fire for peers we've actually heard from.
+      if (!tabState) {
+        const value = inp.value;
+        const cursor = inp.selectionStart ?? value.length;
+        const upToCursor = value.slice(0, cursor);
+        // last whitespace-separated token
+        const m = upToCursor.match(/(?:^|\s)([^\s]*)$/);
+        const prefix = m?.[1] ?? '';
+        if (!prefix) return; // nothing to complete
+        const before = upToCursor.slice(0, upToCursor.length - prefix.length);
+        const after = value.slice(cursor);
+        const candidates: string[] = [];
+        for (const n of nickToPubkey.keys()) {
+          if (n.toLowerCase().startsWith(prefix.toLowerCase()) && n !== nick) candidates.push(n);
+        }
+        candidates.sort();
+        if (!candidates.length) return;
+        tabState = { prefix, before, after, matches: candidates, idx: 0 };
+      } else {
+        tabState.idx = (tabState.idx + 1) % tabState.matches.length;
+      }
+      const completion = tabState.matches[tabState.idx]!;
+      // if the prefix was at the very start of the input, IRC
+      // convention adds ": " - addressing someone. otherwise just
+      // the nick + a space.
+      const suffix = tabState.before === '' ? ': ' : ' ';
+      const next = tabState.before + completion + suffix + tabState.after;
+      inp.value = next;
+      const newCursor = tabState.before.length + completion.length + suffix.length;
+      inp.setSelectionRange(newCursor, newCursor);
+      return;
+    }
+    // any other key resets the tab cycle
+    tabState = null;
     if (e.key !== 'Enter') return;
     e.preventDefault();
     const text = inp.value.trim();
