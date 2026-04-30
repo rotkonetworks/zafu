@@ -1,6 +1,13 @@
-// zitadel: shielded lobby served locally from the zafu extension.
-// plain DOM, zero framework deps. WebSocket to relay.zk.bot.
-// e2ee DMs via Noise IK channels, ZID identity from zafu keyring.
+// zitadel: irc-style public channels + e2ee DMs, served locally from
+// the zafu extension. plain DOM, zero framework deps.
+//
+// rooms are PUBLIC — messages are cleartext to the relay and to anyone
+// it forwards them to. nick claims are signed under zid-auth-v1
+// (ed25519 over canonical bytes); peers verify per-claim. there is no
+// room-level encryption.
+//
+// DMs use Noise IK over a separate WebSocket. they are end-to-end
+// encrypted between two ZID keypairs.
 
 import { ed25519 } from '@noble/curves/ed25519'
 import { createNoiseChannel, type ZidChannel } from '../../../../packages/zid/src'
@@ -186,43 +193,12 @@ async function resolveZidIdentity(): Promise<ZidInfo> {
   return { loggedIn: true, pubkey };
 }
 
-// -- Room encryption (HKDF-derived room key) --
-
-async function deriveRoomKey(roomName: string): Promise<CryptoKey> {
-  const enc = new TextEncoder();
-  const ikm = await crypto.subtle.importKey('raw', enc.encode(roomName), 'HKDF', false, ['deriveKey']);
-  return crypto.subtle.deriveKey(
-    { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(32), info: enc.encode('zitadel-room-v1') },
-    ikm,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt'],
-  );
-}
-
-async function encryptRoomMsg(key: CryptoKey, text: string): Promise<{ ct: string; iv: string }> {
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const pt = new TextEncoder().encode(text);
-  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, pt));
-  return { ct: btoa(String.fromCharCode(...ct)), iv: btoa(String.fromCharCode(...iv)) };
-}
-
-async function decryptRoomMsg(key: CryptoKey, ct64: string, iv64: string): Promise<string | null> {
-  try {
-    const ct = Uint8Array.from(atob(ct64), c => c.charCodeAt(0));
-    const iv = Uint8Array.from(atob(iv64), c => c.charCodeAt(0));
-    const pt = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct));
-    return new TextDecoder().decode(pt);
-  } catch (e) {
-    console.debug('[zitadel] room-key decrypt failed:', (e as Error).message,
-      `(ct.len=${ct64.length}, iv.len=${iv64.length})`);
-    return null;
-  }
-}
-
 // -- encryption state label --
+//
+// rooms are public (cleartext to the relay). DMs are e2ee via Noise IK.
+// no third "room-key" state - it lied about security.
 
-type EncState = 'e2ee' | 'room-key' | 'plain';
+type EncState = 'e2ee' | 'public';
 
 function esc(s: string) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 function now() { const d = new Date(); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
@@ -248,8 +224,7 @@ function boot() {
   let currentRoom: string | null = null;
   let ws: WebSocket | null = null;
   let connected = false;
-  let encState: EncState = 'plain';
-  let roomKey: CryptoKey | null = null;
+  let encState: EncState = 'public';
   const messagesPerRoom = new Map<string, Msg[]>();
   const joinedRooms = new Set<string>();
   const DEFAULT_CHANNELS = ['zitadel', 'support', 'dev'];
@@ -335,7 +310,7 @@ function boot() {
 
   function switchToDm(pubkey: string) {
     activeDm = pubkey;
-    encState = dmChannels.has(pubkey) ? 'e2ee' : 'plain';
+    encState = dmChannels.has(pubkey) ? 'e2ee' : 'public';
     render();
   }
 
@@ -407,7 +382,7 @@ function boot() {
       addMsg('zitadel', `closed DM channel with ${shortPub(peerPubkey)}`, true, DM_PREFIX + peerPubkey);
       if (activeDm === peerPubkey) {
         activeDm = null;
-        encState = roomKey ? 'room-key' : 'plain';
+        encState = 'public';
       }
       render();
     }
@@ -491,9 +466,9 @@ function boot() {
 
     // determine encryption state for display
     if (activeDm) {
-      encState = dmChannels.has(activeDm) ? 'e2ee' : 'plain';
+      encState = dmChannels.has(activeDm) ? 'e2ee' : 'public';
     } else {
-      encState = roomKey ? 'room-key' : 'plain';
+      encState = 'public';
     }
 
     const relayStatus = connected ? `<span style="color:${C.green}">ok</span>` : `<span style="color:${C.red}">--</span>`;
@@ -502,7 +477,7 @@ function boot() {
       const peerLabel = pubkeyToNick.get(activeDm) || shortPub(activeDm);
       topbar.innerHTML = `<b style="color:${C.dm}">[e2ee] ${esc(peerLabel)}</b><span style="color:${C.border}">|</span><span style="color:${C.muted}">encrypted DM | /close to end</span><span style="margin-left:auto;color:${C.muted}">relay: ${relayStatus}</span>`;
     } else {
-      topbar.innerHTML = `<b style="color:${C.bright}">#${esc(room)}</b><span style="color:${C.border}">|</span><span style="color:${C.muted}">shielded lobby | /help</span><span style="margin-left:auto;color:${C.muted}">relay: ${relayStatus}</span>`;
+      topbar.innerHTML = `<b style="color:${C.bright}">#${esc(room)}</b><span style="color:${C.border}">|</span><span style="color:${C.muted}">public channel · /help for commands</span><span style="margin-left:auto;color:${C.muted}">relay: ${relayStatus}</span>`;
     }
 
     msgArea.innerHTML = msgs.map(m => {
@@ -521,16 +496,21 @@ function boot() {
     }).join('');
     msgArea.scrollTop = msgArea.scrollHeight;
 
-    const tag = loggedIn ? `<span style="color:${C.green}">zid</span>` : `<span style="color:${C.muted}">anon</span>`;
-    const encTag = encState === 'e2ee'
-      ? `<span style="color:${C.dm}">[e2ee]</span>`
-      : encState === 'room-key'
-      ? `<span style="color:${C.amber}">[room-key]</span>`
-      : `<span style="color:${C.muted}">[plain]</span>`;
+    // single chip carries identity + transport status. no separate
+    // [zid|anon] and [plain|e2ee] split - they're related and the
+    // user only needs to know the resulting condition:
+    //
+    //   +nick · public    signed-in identity, public room
+    //    nick · public    locked wallet, anon-style nick, public room
+    //   +peer · e2ee      signed-in identity, e2ee DM with peer
+    const myMark = loggedIn ? `<span style="color:${C.green}">+</span>` : '';
+    const transport = encState === 'e2ee'
+      ? `<span style="color:${C.dm}">e2ee</span>`
+      : `<span style="color:${C.muted}">public</span>`;
     const viewLabel = activeDm
       ? `<span style="color:${C.dm}">${esc(pubkeyToNick.get(activeDm) || shortPub(activeDm))}</span>`
       : `<span style="color:${C.amber}">#${esc(room)}</span>`;
-    statusEl.innerHTML = `<span>[${viewLabel}]</span><span>[<span style="color:${C.gold}">${esc(nick)}</span>]</span><span>[${tag}]</span><span>${encTag}</span><span style="margin-left:auto">zitadel &#x2B21; zafu</span>`;
+    statusEl.innerHTML = `<span>[${viewLabel}]</span><span>${myMark}<span style="color:${C.gold}">${esc(nick)}</span> · ${transport}</span><span style="margin-left:auto">zitadel &#x2B21; zafu</span>`;
 
     bar.innerHTML = `<span style="color:${C.border}">[</span><b style="color:${C.gold}">${esc(nick)}</b><span style="color:${C.border}">]</span>`;
     bar.appendChild(inp);
@@ -581,42 +561,17 @@ function boot() {
               nickToPubkey.set(msg.nick, msg.pubkey);
               pubkeyToNick.set(msg.pubkey, msg.nick);
             }
-            // try to decrypt room-encrypted message; suppress entirely if
-            // we can't decrypt rather than spilling raw envelopes into chat.
-            // typical reason for failure: server is replaying old messages
-            // from before the room key derivation was finalized for the
-            // current client version.
-            let text: string | null = msg.text;
+            // legacy: drop messages flagged enc=true. previous client
+            // versions encrypted with a deterministic HKDF-from-room-name
+            // key (room-key mode), which has been removed. those payloads
+            // would render as raw {"ct":"...","iv":"..."} envelopes if
+            // shown verbatim, so suppress them silently.
             if (msg.enc) {
-              text = null; // default to suppressed unless we successfully decrypt
-              if (!roomKey) {
-                console.debug('[zitadel] enc=true but no roomKey yet, suppressing',
-                  `(room=${msg.room ?? '?'}, currentRoom=${currentRoom ?? '?'})`);
-              } else {
-                try {
-                  const envelope = JSON.parse(msg.text);
-                  if (envelope.ct && envelope.iv) {
-                    const decrypted = await decryptRoomMsg(roomKey, envelope.ct, envelope.iv);
-                    if (decrypted !== null) {
-                      text = decrypted;
-                    } else {
-                      console.debug('[zitadel] room-key decrypt returned null, suppressing',
-                        `(room=${msg.room ?? currentRoom ?? '?'})`);
-                    }
-                  } else {
-                    console.debug('[zitadel] enc=true but envelope missing ct/iv, suppressing:',
-                      Object.keys(envelope));
-                  }
-                } catch (e) {
-                  console.debug('[zitadel] enc=true but msg.text is not JSON envelope, suppressing:',
-                    (e as Error).message, msg.text?.slice(0, 60));
-                }
-              }
+              console.debug('[zitadel] dropping legacy enc=true message',
+                `(room=${msg.room ?? currentRoom ?? '?'})`);
+              break;
             }
-            // skip rendering when we couldn't decrypt - silent drop instead
-            // of pasting raw ciphertext into the chat scrollback
-            if (text === null) break;
-            addMsg(msg.nick, text, false, msg.room || currentRoom || undefined);
+            addMsg(msg.nick, msg.text, false, msg.room || currentRoom || undefined);
             break;
           }
           case 'joined':
@@ -624,9 +579,7 @@ function boot() {
             joinedRooms.add(msg.room);
             joinRetried = false;
             addMsg('zitadel', `joined #${msg.room} (${msg.count} users)`, true);
-            // derive room key for encryption
-            roomKey = await deriveRoomKey(msg.room);
-            if (!activeDm) encState = 'room-key';
+            if (!activeDm) encState = 'public';
             // announce our ZID identity to the room. signed if the
             // wallet is unlocked; unsigned otherwise (degraded mode).
             // peers ignore unsigned announces for nick binding.
@@ -812,15 +765,14 @@ function boot() {
           if (activeDm) {
             // switch back to room view
             activeDm = null;
-            encState = roomKey ? 'room-key' : 'plain';
+            encState = 'public';
             render();
           } else if (currentRoom) {
             wsSend({ t: 'part' });
             joinedRooms.delete(currentRoom);
             addMsg('zitadel', `left #${currentRoom}`, true);
             currentRoom = null;
-            roomKey = null;
-            encState = 'plain';
+            encState = 'public';
             render();
           }
           break;
@@ -932,16 +884,12 @@ function boot() {
         return;
       }
 
-      // send to relay (room message)
+      // send to relay (room message). public rooms are cleartext - the
+      // relay sees the message bytes. nick claim is authenticated via
+      // the announce-on-join under zid-auth-v1; messages themselves
+      // carry no per-message proof in this version.
       if (connected && currentRoom) {
-        if (roomKey) {
-          // encrypt with room key
-          void encryptRoomMsg(roomKey, text).then(({ ct, iv }) => {
-            wsSend({ t: 'msg', text: JSON.stringify({ ct, iv }), enc: true });
-          });
-        } else {
-          wsSend({ t: 'msg', text });
-        }
+        wsSend({ t: 'msg', text });
         // add locally (relay will broadcast to others, we show ours immediately)
         addMsg(nick, text);
       } else if (!connected) {
