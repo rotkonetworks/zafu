@@ -367,6 +367,11 @@ function boot() {
   // on every new message is the dominant frontend stutter source.
   let renderedView: string | null = null;
   const renderedCount = new Map<string, number>();
+  // index of the first unread message at the moment the user switched
+  // *into* a view. drawn as an irssi-style "── N new ──" divider on
+  // the next full rebuild of that view, then cleared so it doesn't
+  // reappear after the user has actually read past it.
+  const firstNewIdx = new Map<string, number>();
   // unread + mention state per non-active view. cleared when the user
   // switches into the view. used to decorate the channel/DM row in the
   // sidebar.
@@ -483,8 +488,22 @@ function boot() {
     mentioned.delete(viewKey);
   }
 
+  /** Mark the divider position for an unread view we're about to enter.
+   * Capture once *before* markRead so the next full rebuild can draw a
+   * divider above the first message that arrived while the user was
+   * away. Skipped when there's no unread - no divider to show. */
+  function captureDivider(viewKey: string) {
+    const unread = unreadCount.get(viewKey) ?? 0;
+    if (unread <= 0) return;
+    const arr = messagesPerRoom.get(viewKey);
+    const len = arr?.length ?? 0;
+    const idx = Math.max(0, len - unread);
+    firstNewIdx.set(viewKey, idx);
+  }
+
   function switchRoom(room: string) {
     activeDm = null;
+    captureDivider(room);
     markRead(room);
     if (room === currentRoom) { render(); return; }
     if (currentRoom) wsSend({ t: 'part' });
@@ -493,6 +512,7 @@ function boot() {
 
   function switchToDm(pubkey: string) {
     activeDm = pubkey;
+    captureDivider(DM_PREFIX + pubkey);
     markRead(DM_PREFIX + pubkey);
     encState = dmChannels.has(pubkey) ? 'e2ee' : 'public';
     render();
@@ -705,8 +725,20 @@ function boot() {
 
     if (renderedView !== viewKey) {
       // view switched: full rebuild. one-shot innerHTML write so the
-      // browser only does one layout pass.
-      msgArea.innerHTML = msgs.map(renderMsgLineHTML).join('');
+      // browser only does one layout pass. inject an irssi-style "new
+      // messages" divider above the first unread (if any), then clear
+      // the marker so it doesn't haunt later renders.
+      const divIdx = firstNewIdx.get(viewKey);
+      if (typeof divIdx === 'number' && divIdx >= 0 && divIdx < msgs.length) {
+        const before = msgs.slice(0, divIdx).map(renderMsgLineHTML).join('');
+        const after = msgs.slice(divIdx).map(renderMsgLineHTML).join('');
+        const count = msgs.length - divIdx;
+        const divider = `<div style="line-height:1.4;color:${C.amber};text-align:center;padding:2px 0;font-size:11px;letter-spacing:1px">─── ${count} new ───</div>`;
+        msgArea.innerHTML = before + divider + after;
+      } else {
+        msgArea.innerHTML = msgs.map(renderMsgLineHTML).join('');
+      }
+      firstNewIdx.delete(viewKey);
       renderedView = viewKey;
       renderedCount.set(viewKey, msgs.length);
       msgArea.scrollTop = msgArea.scrollHeight;
