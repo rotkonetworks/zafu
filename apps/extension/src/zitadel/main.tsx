@@ -540,19 +540,8 @@ function boot() {
     ws.onopen = () => {
       connected = true;
       addMsg('zitadel', 'connected to relay', true);
-      // announce ZID pubkey to peers, signed if we have the privkey.
-      // unsigned announces still go out (degraded mode for locked
-      // wallet), but receivers will not bind nick -> pubkey for them.
-      if (zidPubkey) {
-        if (zidPrivkey) {
-          const proof = signAnnounce(zidPrivkey, zidPubkey, nick);
-          wsSend({ t: 'announce', ...proof });
-        } else {
-          // unsigned - peers will see the pubkey but not trust the nick claim
-          wsSend({ t: 'announce', pubkey: zidPubkey, nick });
-        }
-      }
-      // auto-join initial room (create if doesn't exist)
+      // join the initial room first - announces are scoped to a room
+      // (relay only forwards them when the sender is in a room).
       wsSend({ t: 'join', room: initialRoom, nick });
       // keepalive ping every 30s. some intermediaries (Cloudflare,
       // residential ISPs, the relay itself) close idle WebSockets after
@@ -625,8 +614,41 @@ function boot() {
             // derive room key for encryption
             roomKey = await deriveRoomKey(msg.room);
             if (!activeDm) encState = 'room-key';
+            // announce our ZID identity to the room. signed if the
+            // wallet is unlocked; unsigned otherwise (degraded mode).
+            // peers ignore unsigned announces for nick binding.
+            if (zidPubkey) {
+              if (zidPrivkey) {
+                const proof = signAnnounce(zidPrivkey, zidPubkey, nick);
+                wsSend({ t: 'announce', ...proof });
+              } else {
+                wsSend({ t: 'announce', pubkey: zidPubkey, nick });
+              }
+            }
             render();
             break;
+          case 'announce': {
+            // peer claiming a nick. verify under zid-auth-v1 before
+            // we trust the nick -> pubkey binding. first-claim-wins:
+            // if we already have a binding for this nick to a
+            // different pubkey, we keep the original and ignore the
+            // new one (logged for visibility).
+            const proof = verifyAnnounce(msg);
+            if (!proof) {
+              console.debug('[zitadel] announce failed verification, ignoring',
+                { nick: msg.nick, pubkey: msg.pubkey?.slice(0, 16) });
+              break;
+            }
+            const existing = nickToPubkey.get(proof.nick);
+            if (existing && existing !== proof.pubkey) {
+              console.debug('[zitadel] announce nick collision, keeping first binding',
+                { nick: proof.nick, existing: existing.slice(0, 16), new: proof.pubkey.slice(0, 16) });
+              break;
+            }
+            nickToPubkey.set(proof.nick, proof.pubkey);
+            pubkeyToNick.set(proof.pubkey, proof.nick);
+            break;
+          }
           case 'created':
             addMsg('zitadel', `room created: ${msg.room}`, true);
             // auto-join the room we just created
