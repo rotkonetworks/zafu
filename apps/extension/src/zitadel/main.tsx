@@ -771,12 +771,20 @@ function boot() {
     const nickEl = isSelf
       ? `<b style="color:${col}">${esc(m.nick)}</b>`
       : `<b class="nick-click" data-nick="${esc(m.nick)}" style="color:${col};cursor:pointer">${esc(m.nick)}</b>`;
+    // mention highlight: irssi paints the whole line with a left border
+    // and slight background tint when the user's nick is name-checked
+    // so the eye finds it at scrollback speed. DMs aren't highlighted
+    // here because every DM is implicitly directed at you.
+    const isMention = !isSelf && !m.dm && mentionsMe(m.text, m.nick);
+    const lineStyle = isMention
+      ? `line-height:1.4;border-left:2px solid ${C.gold};background:rgba(244,183,40,0.07);padding-left:6px;margin-left:-8px;`
+      : 'line-height:1.4';
     if (m.action) {
       const nickBlock = `<span style="display:inline-block;min-width:${NICK_COL_MIN};text-align:right"><span style="color:${C.purple}">*</span> ${verifyMark}${nickEl}</span>`;
-      return `<div style="line-height:1.4"><span style="color:${C.muted}">${m.time}</span> ${dmTag}${nickBlock} <span style="color:${C.text}">${esc(m.text)}</span></div>`;
+      return `<div style="${lineStyle}"><span style="color:${C.muted}">${m.time}</span> ${dmTag}${nickBlock} <span style="color:${C.text}">${esc(m.text)}</span></div>`;
     }
     const nickBlock = `<span style="display:inline-block;min-width:${NICK_COL_MIN};text-align:right"><span style="color:${C.border}">&lt;</span>${verifyMark}${nickEl}<span style="color:${C.border}">&gt;</span></span>`;
-    return `<div style="line-height:1.4"><span style="color:${C.muted}">${m.time}</span> ${dmTag}${nickBlock} ${esc(m.text)}</div>`;
+    return `<div style="${lineStyle}"><span style="color:${C.muted}">${m.time}</span> ${dmTag}${nickBlock} ${esc(m.text)}</div>`;
   }
 
   function render() {
