@@ -34,7 +34,14 @@ import { isLicenseValid, type License } from '../../../../packages/wallet/src/li
 const ZID_AUTH_VERSION = 'zid-auth-v1';
 const ZID_AUTH_DOMAIN = 'zafu-zid-auth-v1';
 const ZID_AUTH_FRESHNESS_MS = 60_000;
-const ZID_AUTH_SERVER = 'relay.zk.bot';
+
+/** Server identity used in zid-auth-v1 signed payloads. Derived from the
+ * active relay's WebSocket URL host so users can switch relays and
+ * still sign/verify announces consistently with their peers on the
+ * same relay. */
+function relayHost(wsUrl: string): string {
+  try { return new URL(wsUrl).host; } catch { return wsUrl; }
+}
 
 function zidAuthPayload(server: string, nick: string, pubkey: string, ts: number): Uint8Array {
   return new TextEncoder().encode(
@@ -51,7 +58,7 @@ interface AnnounceProof {
   sig: string;
 }
 
-function signAnnounce(priv: Uint8Array, pubkey: string, nick: string, server = ZID_AUTH_SERVER): AnnounceProof {
+function signAnnounce(priv: Uint8Array, pubkey: string, nick: string, server: string): AnnounceProof {
   const ts = Date.now();
   const payload = zidAuthPayload(server, nick, pubkey, ts);
   const sig = ed25519.sign(payload, priv);
@@ -65,7 +72,7 @@ function signAnnounce(priv: Uint8Array, pubkey: string, nick: string, server = Z
   };
 }
 
-function verifyAnnounce(a: unknown, expectedServer = ZID_AUTH_SERVER): AnnounceProof | null {
+function verifyAnnounce(a: unknown, expectedServer: string): AnnounceProof | null {
   if (!a || typeof a !== 'object') return null;
   const o = a as Record<string, unknown>;
   if (o['v'] !== ZID_AUTH_VERSION) return null;
@@ -100,8 +107,35 @@ async function isProUser(): Promise<boolean> {
   }
 }
 
-export const RELAY_WS = "wss://relay.zk.bot/ws";
-const RELAY_ZID_WS = "wss://relay.zk.bot/ws/zid";
+/** Default relay. Users can switch via `/server <url>` (persisted in
+ * chrome.storage.local under RELAY_URL_KEY). The DM transport is
+ * derived by appending `/zid` to the chat URL's path - relays that
+ * implement zitadel are expected to expose both at adjacent paths. */
+export const DEFAULT_RELAY_WS = "wss://relay.zk.bot/ws";
+const RELAY_URL_KEY = 'zitadelRelayUrl';
+
+/** Returns true if the URL parses as wss:// or ws:// */
+function isValidRelayUrl(s: string): boolean {
+  try {
+    const u = new URL(s);
+    return u.protocol === 'wss:' || u.protocol === 'ws:';
+  } catch { return false; }
+}
+
+/** Derive the DM (zid) WebSocket URL from the chat URL by appending
+ * `/zid` to its path. e.g. wss://relay.example/ws → wss://relay.example/ws/zid */
+function deriveZidWsUrl(chatUrl: string): string {
+  try {
+    const u = new URL(chatUrl);
+    u.pathname = (u.pathname.replace(/\/+$/, '')) + '/zid';
+    return u.toString();
+  } catch { return chatUrl + '/zid'; }
+}
+
+/** Back-compat re-export so other code paths that still import RELAY_WS
+ * see the default value. The runtime uses the mutable relayUrl in
+ * boot() instead. */
+export const RELAY_WS = DEFAULT_RELAY_WS;
 
 const C = {
   bg: "#0F0F1A", panel: "#16162A", border: "#2A2A4A",
@@ -230,6 +264,10 @@ function boot() {
   const DEFAULT_CHANNELS = ['zitadel', 'support', 'dev'];
   const history: string[] = [];
   let histIdx = -1;
+
+  // active relay URL (for chat WebSocket). DM (zid) URL is derived.
+  // both can be retargeted at runtime via /server <url>.
+  let relayUrl: string = DEFAULT_RELAY_WS;
 
   // append-only render bookkeeping. msgArea is updated in two modes:
   //   1. view switched (or first render): clear and render every message
@@ -391,7 +429,7 @@ function boot() {
     addMsg('zitadel', `opening e2ee channel to ${shortPub(peerPubkey)}...`, true, DM_PREFIX + peerPubkey);
 
     try {
-      const ch = await createNoiseChannel(session, peerPubkey, RELAY_ZID_WS);
+      const ch = await createNoiseChannel(session, peerPubkey, deriveZidWsUrl(relayUrl));
 
       ch.on('message', (data: Uint8Array) => {
         try {
@@ -558,7 +596,7 @@ function boot() {
       const peerLabel = pubkeyToNick.get(activeDm) || shortPub(activeDm);
       topbar.innerHTML = `<b style="color:${C.dm}">[e2ee] ${esc(peerLabel)}</b><span style="color:${C.border}">|</span><span style="color:${C.muted}">encrypted DM | /close to end</span><span style="margin-left:auto;color:${C.muted}">relay: ${relayStatus}</span>`;
     } else {
-      topbar.innerHTML = `<b style="color:${C.bright}">#${esc(room)}</b><span style="color:${C.border}">|</span><span style="color:${C.muted}">public channel · /help for commands</span><span style="margin-left:auto;color:${C.muted}">relay: ${relayStatus}</span>`;
+      topbar.innerHTML = `<b style="color:${C.bright}">#${esc(room)}</b><span style="color:${C.border}">|</span><span style="color:${C.muted}">public channel · /help for commands</span><span style="margin-left:auto;color:${C.muted}" title="${esc(relayUrl)}">relay: ${relayStatus} · ${esc(relayHost(relayUrl))}</span>`;
     }
 
     // current view key (room or DM). used to decide rebuild vs append.
@@ -618,7 +656,7 @@ function boot() {
   function connectRelay() {
     addMsg('zitadel', `connecting to relay...`, true);
     try {
-      ws = new WebSocket(RELAY_WS);
+      ws = new WebSocket(relayUrl);
     } catch (e) {
       addMsg('zitadel', `ws error: ${e}`, true);
       return;
@@ -679,7 +717,7 @@ function boot() {
             // peers ignore unsigned announces for nick binding.
             if (zidPubkey) {
               if (zidPrivkey) {
-                const proof = signAnnounce(zidPrivkey, zidPubkey, nick);
+                const proof = signAnnounce(zidPrivkey, zidPubkey, nick, relayHost(relayUrl));
                 wsSend({ t: 'announce', ...proof });
                 // self-verified: we just signed our own announce
                 verifiedNicks.add(nick);
@@ -695,7 +733,7 @@ function boot() {
             // if we already have a binding for this nick to a
             // different pubkey, we keep the original and ignore the
             // new one (logged for visibility).
-            const proof = verifyAnnounce(msg);
+            const proof = verifyAnnounce(msg, relayHost(relayUrl));
             if (!proof) {
               console.debug('[zitadel] announce failed verification, ignoring',
                 { nick: msg.nick, pubkey: msg.pubkey?.slice(0, 16) });
@@ -799,6 +837,7 @@ function boot() {
     '/whois':    '/whois              show ZID identity + status',
     '/clear':    '/clear              clear messages',
     '/connect':  '/connect            reconnect to relay',
+    '/server':   '/server <url|reset> change relay (wss://...)',
     '/help':     '/help               show all commands',
   };
 
@@ -891,6 +930,34 @@ function boot() {
         case 'j': case 'join':
           if (args[0]) { switchRoom(args[0]); }
           else addMsg('zitadel', 'usage: /j <room>', true);
+          break;
+
+        case 'server':
+          if (!args[0]) {
+            addMsg('zitadel', `current relay: ${relayUrl}`, true);
+            addMsg('zitadel', 'usage: /server <wss://host/path> | /server reset', true);
+            break;
+          }
+          if (args[0] === 'reset') {
+            relayUrl = DEFAULT_RELAY_WS;
+            void localStore?.remove(RELAY_URL_KEY);
+            addMsg('zitadel', `relay reset to ${relayUrl}, reconnecting...`, true);
+          } else if (!isValidRelayUrl(args[0])) {
+            addMsg('zitadel', `invalid relay url: ${args[0]} (expected wss://... or ws://...)`, true);
+            break;
+          } else {
+            relayUrl = args[0];
+            void localStore?.set({ [RELAY_URL_KEY]: relayUrl });
+            addMsg('zitadel', `relay set to ${relayUrl}, reconnecting...`, true);
+          }
+          // close the existing socket; the onclose handler will
+          // reconnect after 3s with the new URL. clear nick→pubkey
+          // bindings since they were verified against the old server
+          // identity and may not match the new one.
+          nickToPubkey.clear();
+          pubkeyToNick.clear();
+          verifiedNicks.clear();
+          if (ws && ws.readyState !== WebSocket.CLOSED) ws.close();
           break;
 
         case 'part':
@@ -1055,6 +1122,17 @@ function boot() {
       addMsg('zitadel', 'ephemeral session. connect zafu for ZID identity and e2ee DMs.', true);
     }
     addMsg('zitadel', 'welcome to zitadel. type /help for commands.', true);
+    // load persisted relay choice (if any) before opening the socket
+    if (localStore) {
+      try {
+        const saved = await new Promise<Record<string, unknown>>(r => localStore.get(RELAY_URL_KEY, r));
+        const candidate = saved?.[RELAY_URL_KEY];
+        if (typeof candidate === 'string' && isValidRelayUrl(candidate)) {
+          relayUrl = candidate;
+        }
+      } catch { /* not in extension context */ }
+    }
+    addMsg('zitadel', `relay: ${relayUrl}`, true);
     render();
     // auto-connect to relay and join initial room
     connectRelay();
