@@ -200,6 +200,10 @@ function isValidNick(s: string): boolean {
   return s.length > 0 && s.length <= 32 && !/[\s\0]/.test(s);
 }
 
+/** Storage key for the user's pubkey-based ignore list. Stored as a
+ * JSON array of lowercase hex pubkeys so the set survives reload. */
+const ZID_IGNORE_KEY = 'zidIgnore';
+
 /** Returns true if the URL parses as wss:// or ws:// */
 function isValidRelayUrl(s: string): boolean {
   try {
@@ -381,6 +385,11 @@ function boot() {
   // user can tell at a glance which peers proved possession of their
   // ZID. the user's own nick is added on first signed announce we send.
   const verifiedNicks = new Set<string>();
+  // pubkeys the user has chosen to silence. keyed on pubkey not nick
+  // because nicks are mutable and collidable - only the pubkey is
+  // unforgeable. messages and announces from these pubkeys are dropped
+  // before render. persisted in chrome.storage.local under "zidIgnore".
+  const ignoredPubkeys = new Set<string>();
   // DM messages stored under "dm:<pubkey>" key
   const DM_PREFIX = 'dm:';
   // track which DM we're viewing (null = room view)
@@ -794,6 +803,7 @@ function boot() {
             // but won't earn the verified `+` mark. binding room and
             // server into the signature prevents cross-room replay.
             let visibleText: string = msg.text;
+            let senderPubkey: string | undefined = msg.pubkey;
             if (typeof msg.text === 'string' && msg.text.startsWith('{')) {
               try {
                 const obj = JSON.parse(msg.text);
@@ -815,9 +825,17 @@ function boot() {
                   pubkeyToNick.set(proof.pubkey, proof.nick);
                   verifiedNicks.add(proof.nick);
                   visibleText = proof.text;
+                  senderPubkey = proof.pubkey;
                 }
               } catch { /* not JSON, treat as legacy cleartext */ }
             }
+            // pubkey-based ignore: if we resolved a pubkey for this
+            // sender (either via verified envelope or out-of-band
+            // mapping) and it's in the ignore set, drop silently. fall
+            // back to nick lookup so /ignore <nick> still works for
+            // peers we've seen announce.
+            const senderPub = senderPubkey || nickToPubkey.get(msg.nick);
+            if (senderPub && ignoredPubkeys.has(senderPub.toLowerCase())) break;
             addMsg(msg.nick, visibleText, false, msg.room || currentRoom || undefined);
             break;
           }
@@ -854,6 +872,10 @@ function boot() {
                 { nick: msg.nick, pubkey: msg.pubkey?.slice(0, 16) });
               break;
             }
+            // pubkey-based ignore applies to announces too: don't even
+            // bind a nick for this identity, otherwise the join/verify
+            // chrome would still surface them.
+            if (ignoredPubkeys.has(proof.pubkey.toLowerCase())) break;
             const existing = nickToPubkey.get(proof.nick);
             if (existing && existing !== proof.pubkey) {
               console.debug('[zitadel] announce nick collision, keeping first binding',
@@ -949,6 +971,9 @@ function boot() {
     '/channels': '/channels           list open DM channels',
     '/close':    '/close [pubkey]     close a DM channel',
     '/whois':    '/whois              show ZID identity + status',
+    '/ignore':   '/ignore <nick|pub>  silence a pubkey (persists)',
+    '/unignore': '/unignore <nick|pub> remove from ignore list',
+    '/ignored':  '/ignored            list ignored pubkeys',
     '/login':    '/login              unlock zafu and sign messages',
     '/clear':    '/clear              clear messages',
     '/connect':  '/connect            reconnect to relay',
@@ -1034,7 +1059,7 @@ function boot() {
       const [cmd, ...args] = text.slice(1).split(/\s+/);
       switch (cmd?.toLowerCase()) {
         case 'help':
-          addMsg('zitadel', '/nick /j /part /msg /dm /channels /close /whois [nick|pubkey] /login /clear /connect', true);
+          addMsg('zitadel', '/nick /j /part /msg /dm /channels /close /whois [nick|pubkey] /ignore /unignore /ignored /login /clear /connect', true);
           addMsg('zitadel', 'DMs use Noise IK e2ee. /msg <nick_or_pubkey> <text> to start.', true);
           break;
 
@@ -1224,6 +1249,56 @@ function boot() {
           break;
         }
 
+        case 'ignore': {
+          // /ignore <pubkey or nick>. accept either form because users
+          // think in nicks, but persist as pubkey so a renamed peer
+          // stays silenced. unbound nicks are an error - we have no
+          // pubkey to record.
+          const target = args[0];
+          if (!target) { addMsg('zitadel', 'usage: /ignore <nick|pubkey>', true); break; }
+          let pub: string | undefined;
+          if (isHexPubkey(target)) pub = target.toLowerCase();
+          else pub = nickToPubkey.get(target);
+          if (!pub) { addMsg('zitadel', `no pubkey known for ${target}. they must announce first.`, true); break; }
+          if (zidPubkey && pub === zidPubkey.toLowerCase()) {
+            addMsg('zitadel', 'refusing to ignore your own ZID.', true);
+            break;
+          }
+          ignoredPubkeys.add(pub);
+          if (localStore) void localStore.set({ [ZID_IGNORE_KEY]: Array.from(ignoredPubkeys) });
+          addMsg('zitadel', `ignoring ${pubkeyToNick.get(pub) ?? shortPub(pub)} (${pub.slice(0, 16)}...)`, true);
+          break;
+        }
+
+        case 'unignore': {
+          const target = args[0];
+          if (!target) { addMsg('zitadel', 'usage: /unignore <nick|pubkey>', true); break; }
+          let pub: string | undefined;
+          if (isHexPubkey(target)) pub = target.toLowerCase();
+          else pub = nickToPubkey.get(target);
+          if (!pub || !ignoredPubkeys.has(pub)) {
+            addMsg('zitadel', `${target} is not in the ignore list.`, true);
+            break;
+          }
+          ignoredPubkeys.delete(pub);
+          if (localStore) void localStore.set({ [ZID_IGNORE_KEY]: Array.from(ignoredPubkeys) });
+          addMsg('zitadel', `no longer ignoring ${pubkeyToNick.get(pub) ?? shortPub(pub)}.`, true);
+          break;
+        }
+
+        case 'ignored': {
+          if (ignoredPubkeys.size === 0) {
+            addMsg('zitadel', 'ignore list is empty.', true);
+            break;
+          }
+          addMsg('zitadel', `--- ignored (${ignoredPubkeys.size}) ---`, true);
+          for (const p of ignoredPubkeys) {
+            const knownNick = pubkeyToNick.get(p);
+            addMsg('zitadel', `  ${knownNick ?? shortPub(p)}  ${p}`, true);
+          }
+          break;
+        }
+
         case 'login': {
           // /login: surface the wallet-unlock requirement, then re-resolve
           // identity. if the wallet is already unlocked elsewhere, this
@@ -1354,6 +1429,15 @@ function boot() {
         const candidate = saved?.[RELAY_URL_KEY];
         if (typeof candidate === 'string' && isValidRelayUrl(candidate)) {
           relayUrl = candidate;
+        }
+      } catch { /* not in extension context */ }
+      // load persisted ignore list - pubkeys are kept across sessions so
+      // a peer you silenced in one session stays silent in the next.
+      try {
+        const r = await new Promise<Record<string, unknown>>(res => localStore.get(ZID_IGNORE_KEY, res));
+        const stored = r?.[ZID_IGNORE_KEY];
+        if (Array.isArray(stored)) {
+          for (const p of stored) if (typeof p === 'string' && isHexPubkey(p)) ignoredPubkeys.add(p.toLowerCase());
         }
       } catch { /* not in extension context */ }
     }
