@@ -16,6 +16,7 @@
 
 import { getOriginPermissions, grantCapability, denyCapability } from '@repo/storage-chrome/origin';
 import { hasCapability, isDenied, type Capability, CAPABILITY_META } from '@repo/storage-chrome/capabilities';
+import { isPro } from '../../state/license';
 
 // pending pick requests: requestId → sendResponse callback
 const pendingPicks = new Map<string, (r: unknown) => void>();
@@ -91,25 +92,35 @@ export const externalMessageListener = (
     }
 
     case 'zafu_frost_create': {
-      // open FROST DKG approval popup - user confirms creating a multisig
-      const threshold = Number(msg['threshold']) || 2;
-      const maxSigners = Number(msg['maxSigners']) || 3;
-      const relayUrl = String(msg['relayUrl'] || 'https://poker.zk.bot');
-      const appOrigin = sender.origin || sender.url || 'unknown';
-      const requestId = crypto.randomUUID();
+      // open FROST DKG approval popup - user confirms creating a multisig.
+      // creation is a Pro-only capability; joining (zafu_frost_join) and
+      // signing (zafu_frost_sign) remain available to free users so they
+      // can participate in vaults / poker games hosted by Pro creators.
+      void (async () => {
+        const { useStore } = await import('../../state');
+        if (!useStore.getState().license.license || !isPro(useStore.getState())) {
+          sendResponse({ error: 'pro subscription required to create multisig vaults / games' });
+          return;
+        }
+        const threshold = Number(msg['threshold']) || 2;
+        const maxSigners = Number(msg['maxSigners']) || 3;
+        const relayUrl = String(msg['relayUrl'] || 'https://poker.zk.bot');
+        const appOrigin = sender.origin || sender.url || 'unknown';
+        const requestId = crypto.randomUUID();
 
-      pendingPicks.set(requestId, sendResponse);
+        pendingPicks.set(requestId, sendResponse);
 
-      const params = new URLSearchParams({
-        app: appOrigin,
-        action: 'frost-create',
-        threshold: String(threshold),
-        maxSigners: String(maxSigners),
-        relayUrl,
-        requestId,
-      });
-      const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
-      void chrome.windows.create({ url, type: 'popup', width: 400, height: 520 });
+        const params = new URLSearchParams({
+          app: appOrigin,
+          action: 'frost-create',
+          threshold: String(threshold),
+          maxSigners: String(maxSigners),
+          relayUrl,
+          requestId,
+        });
+        const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
+        void chrome.windows.create({ url, type: 'popup', width: 400, height: 520 });
+      })();
       return true;
     }
 

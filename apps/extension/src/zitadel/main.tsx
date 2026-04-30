@@ -4,6 +4,23 @@
 
 import { createNoiseChannel, type ZidChannel } from '../../../../packages/zid/src'
 import type { SessionKey } from '../../../../packages/zid/src/noise-channel'
+import { isLicenseValid, type License } from '../../../../packages/wallet/src/license'
+
+/** Read the persisted license blob from chrome.storage.local and check
+ * that it's currently valid. Channel creation is gated on Pro because
+ * channels are persistent state on the relay; free users can join any
+ * existing channel but cannot mint new ones. */
+async function isProUser(): Promise<boolean> {
+  try {
+    const r = await chrome.storage.local.get('proLicense');
+    const raw = r['proLicense'];
+    if (typeof raw !== 'string' || !raw) return false;
+    const license: License = JSON.parse(raw);
+    return isLicenseValid(license);
+  } catch {
+    return false;
+  }
+}
 
 export const RELAY_WS = "wss://relay.zk.bot/ws";
 const RELAY_ZID_WS = "wss://relay.zk.bot/ws/zid";
@@ -554,11 +571,17 @@ function boot() {
             addMsg('zitadel', msg.text, true);
             break;
           case 'error':
-            // if lobby doesn't exist, create it (persistent, TTL=0)
+            // if room doesn't exist, only Pro users may create one.
+            // free users can join any existing room but cannot mint
+            // new ones (channels are persistent state on the relay).
             if (msg.msg === 'room not found or expired' && !joinRetried) {
               joinRetried = true;
-              addMsg('zitadel', 'room not found, creating...', true);
-              wsSend({ t: 'create', nick, room: initialRoom });
+              if (await isProUser()) {
+                addMsg('zitadel', 'room not found, creating...', true);
+                wsSend({ t: 'create', nick, room: initialRoom });
+              } else {
+                addMsg('zitadel', `room not found. creating channels requires zafu pro.`, true);
+              }
             } else {
               addMsg('zitadel', `error: ${msg.msg}`, true);
             }
