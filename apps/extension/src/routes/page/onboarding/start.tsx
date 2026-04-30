@@ -89,7 +89,7 @@ export const OnboardingStart = () => {
           <a href='https://rotko.net' target='_blank' rel='noopener noreferrer' className='hover:text-fg-high transition-colors'>rotko.net</a>
           <a href='https://github.com/rotkonetworks/zafu' target='_blank' rel='noopener noreferrer' className='hover:text-fg-high transition-colors'>source code</a>
           <a href='https://zigner.rotko.net' target='_blank' rel='noopener noreferrer' className='hover:text-fg-high transition-colors'>zigner app</a>
-          <span className='text-fg-muted/40'>GPL-3.0</span>
+          <span className='text-fg-muted/40'>MIT</span>
         </div>
       </div>
     </FadeTransition>
