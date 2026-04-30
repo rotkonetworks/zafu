@@ -204,6 +204,12 @@ function isValidNick(s: string): boolean {
  * JSON array of lowercase hex pubkeys so the set survives reload. */
 const ZID_IGNORE_KEY = 'zidIgnore';
 
+/** Storage key for the desktop-notification opt-in. We never request
+ * Notification permission on page load - the user opts in via /notify,
+ * which both flips this flag and (if needed) triggers the browser's
+ * permission prompt. Stored as the literal string "1" or absent. */
+const ZID_NOTIFY_KEY = 'zidNotify';
+
 /** Returns true if the URL parses as wss:// or ws:// */
 function isValidRelayUrl(s: string): boolean {
   try {
@@ -437,6 +443,10 @@ function boot() {
   // security messages instead of actual impersonation - silent failure
   // would be worse, but loud failure has its own DoS shape.
   const collisionWarned = new Set<string>();
+  // desktop notifications opt-in flag. on /notify, set true and ensure
+  // permission. fires only when the page is hidden so an active reader
+  // isn't double-pinged by both the in-page render and a system popup.
+  let notifyEnabled = false;
   function warnCollision(claimedNick: string, attemptedPubkey: string, source: 'announce' | 'msg') {
     const key = `${claimedNick}\0${attemptedPubkey}`;
     if (collisionWarned.has(key)) return;
@@ -542,6 +552,24 @@ function boot() {
     return re.test(text);
   }
 
+  /** Fire a desktop notification for a directed message (DM or
+   * mention) when the page is hidden. Skips if the user hasn't opted
+   * in, if permission isn't granted, or if the page is currently
+   * focused (the in-page nick highlight is already enough). Click on
+   * the notification focuses the chat tab. */
+  function maybeNotify(viewKey: string, fromNick: string, text: string, dm: boolean) {
+    if (!notifyEnabled) return;
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    if (!document.hidden) return;
+    if (!dm && !mentionsMe(text, fromNick)) return;
+    const title = dm ? `DM from ${fromNick}` : `${fromNick} mentioned you`;
+    const body = text.length > 140 ? text.slice(0, 137) + '...' : text;
+    try {
+      const n = new Notification(title, { body, tag: viewKey });
+      n.onclick = () => { window.focus(); n.close(); };
+    } catch { /* notification API may be restricted in some contexts */ }
+  }
+
   /** Bookkeeping for unread + mention markers. Increments only when the
    * message is for a view the user isn't currently looking at, isn't
    * from the user themselves, and isn't a system line. DMs always count
@@ -551,6 +579,7 @@ function boot() {
     if (viewKey === currentViewKey()) return;
     unreadCount.set(viewKey, (unreadCount.get(viewKey) ?? 0) + 1);
     if (dm || mentionsMe(text, fromNick)) mentioned.add(viewKey);
+    maybeNotify(viewKey, fromNick, text, dm);
   }
 
   function addMsg(n: string, text: string, system = false, room?: string, dm = false, action = false) {
@@ -1275,6 +1304,7 @@ function boot() {
     '/unignore': '/unignore <nick|pub> remove from ignore list',
     '/ignored':  '/ignored            list ignored pubkeys',
     '/login':    '/login              unlock zafu and sign messages',
+    '/notify':   '/notify [on|off]    desktop alerts on mention/DM',
     '/clear':    '/clear              clear messages',
     '/connect':  '/connect            reconnect to relay',
     '/server':   '/server <url|reset> change relay (wss://...)',
@@ -1373,7 +1403,7 @@ function boot() {
       const [cmd, ...args] = text.slice(1).split(/\s+/);
       switch (cmd?.toLowerCase()) {
         case 'help':
-          addMsg('zitadel', '/nick /me /j /part /msg /dm /channels /close /whois [nick|pubkey] /ignore /unignore /ignored /login /clear /connect', true);
+          addMsg('zitadel', '/nick /me /j /part /msg /dm /channels /close /whois [nick|pubkey] /ignore /unignore /ignored /login /notify /clear /connect', true);
           addMsg('zitadel', 'DMs use Noise IK e2ee. /msg <nick_or_pubkey> <text> to start.', true);
           break;
 
@@ -1612,6 +1642,42 @@ function boot() {
           await runLogin();
           break;
 
+        case 'notify': {
+          // /notify        - status / toggle
+          // /notify on     - request permission if needed, enable
+          // /notify off    - disable
+          const arg = args[0]?.toLowerCase();
+          if (typeof Notification === 'undefined') {
+            addMsg('zitadel', 'desktop notifications not supported in this browser.', true);
+            break;
+          }
+          if (arg === 'off') {
+            notifyEnabled = false;
+            if (localStore) void localStore.remove(ZID_NOTIFY_KEY);
+            addMsg('zitadel', 'desktop notifications: off', true);
+            break;
+          }
+          // any other arg (or none) means turn on. ask for permission
+          // if we don't already have it. /notify is dispatched from
+          // the Enter keypress so we have a user gesture - the
+          // permission prompt will actually appear.
+          if (Notification.permission === 'denied') {
+            addMsg('zitadel', 'browser blocked notifications. allow them in site settings, then /notify again.', true);
+            break;
+          }
+          if (Notification.permission === 'default') {
+            const result = await Notification.requestPermission();
+            if (result !== 'granted') {
+              addMsg('zitadel', `notifications not enabled (browser said: ${result}).`, true);
+              break;
+            }
+          }
+          notifyEnabled = true;
+          if (localStore) void localStore.set({ [ZID_NOTIFY_KEY]: '1' });
+          addMsg('zitadel', 'desktop notifications: on - alerts on mention or DM while tab is hidden. /notify off to stop.', true);
+          break;
+        }
+
         case 'connect':
           if (connected) { addMsg('zitadel', 'already connected', true); break; }
           // /connect bypasses any pending backoff: cancel the timer,
@@ -1695,6 +1761,15 @@ function boot() {
         const stored = r?.[ZID_IGNORE_KEY];
         if (Array.isArray(stored)) {
           for (const p of stored) if (typeof p === 'string' && isHexPubkey(p)) ignoredPubkeys.add(p.toLowerCase());
+        }
+      } catch { /* not in extension context */ }
+      // load notification opt-in. only honor it if the browser has
+      // already granted permission - otherwise the user has to /notify
+      // again to re-prompt (cleaner than silently noop'ing forever).
+      try {
+        const r = await new Promise<Record<string, unknown>>(res => localStore.get(ZID_NOTIFY_KEY, res));
+        if (r?.[ZID_NOTIFY_KEY] === '1' && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+          notifyEnabled = true;
         }
       } catch { /* not in extension context */ }
     }
