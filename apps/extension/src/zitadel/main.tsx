@@ -409,6 +409,21 @@ function boot() {
   // unforgeable. messages and announces from these pubkeys are dropped
   // before render. persisted in chrome.storage.local under "zidIgnore".
   const ignoredPubkeys = new Set<string>();
+  // dedupe collision warnings: once we've told the user that pubkey X
+  // tried to claim nick alice, don't warn again for the same pair.
+  // without this, a persistent attacker could spam the chat with
+  // security messages instead of actual impersonation - silent failure
+  // would be worse, but loud failure has its own DoS shape.
+  const collisionWarned = new Set<string>();
+  function warnCollision(claimedNick: string, attemptedPubkey: string, source: 'announce' | 'msg') {
+    const key = `${claimedNick}\0${attemptedPubkey}`;
+    if (collisionWarned.has(key)) return;
+    collisionWarned.add(key);
+    const existing = nickToPubkey.get(claimedNick);
+    addMsg('zitadel',
+      `!! nick collision on ${claimedNick}: ${shortPub(attemptedPubkey)} tried to claim it via ${source}, but it's bound to ${existing ? shortPub(existing) : '?'}. attempt dropped. /ignore ${attemptedPubkey} to silence.`,
+      true);
+  }
   // DM messages stored under "dm:<pubkey>" key
   const DM_PREFIX = 'dm:';
   // track which DM we're viewing (null = room view)
@@ -897,6 +912,7 @@ function boot() {
                     console.debug('[zitadel] zid-msg nick collision, dropping',
                       { nick: proof.nick, existing: existing.slice(0, 16),
                         new: proof.pubkey.slice(0, 16) });
+                    warnCollision(proof.nick, proof.pubkey, 'msg');
                     break;
                   }
                   nickToPubkey.set(proof.nick, proof.pubkey);
@@ -963,6 +979,7 @@ function boot() {
             if (existing && existing !== proof.pubkey) {
               console.debug('[zitadel] announce nick collision, keeping first binding',
                 { nick: proof.nick, existing: existing.slice(0, 16), new: proof.pubkey.slice(0, 16) });
+              warnCollision(proof.nick, proof.pubkey, 'announce');
               break;
             }
             const wasVerified = verifiedNicks.has(proof.nick);
