@@ -125,7 +125,11 @@ async function decryptRoomMsg(key: CryptoKey, ct64: string, iv64: string): Promi
     const iv = Uint8Array.from(atob(iv64), c => c.charCodeAt(0));
     const pt = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct));
     return new TextDecoder().decode(pt);
-  } catch { return null; }
+  } catch (e) {
+    console.debug('[zitadel] room-key decrypt failed:', (e as Error).message,
+      `(ct.len=${ct64.length}, iv.len=${iv64.length})`);
+    return null;
+  }
 }
 
 // -- encryption state label --
@@ -434,6 +438,8 @@ function boot() {
   }
 
   // WebSocket
+  let pingTimer: ReturnType<typeof setInterval> | null = null;
+
   function connectRelay() {
     addMsg('zitadel', `connecting to relay...`, true);
     try {
@@ -452,6 +458,16 @@ function boot() {
       }
       // auto-join initial room (create if doesn't exist)
       wsSend({ t: 'join', room: initialRoom, nick });
+      // keepalive ping every 30s. some intermediaries (Cloudflare,
+      // residential ISPs, the relay itself) close idle WebSockets after
+      // ~60s. without a heartbeat the connection drops every time the
+      // user goes idle, forcing reconnect + history replay.
+      if (pingTimer) clearInterval(pingTimer);
+      pingTimer = setInterval(() => {
+        if (ws?.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ t: 'ping' }));
+        }
+      }, 30000);
     };
 
     let joinRetried = false;
@@ -467,17 +483,41 @@ function boot() {
               nickToPubkey.set(msg.nick, msg.pubkey);
               pubkeyToNick.set(msg.pubkey, msg.nick);
             }
-            // try to decrypt room-encrypted message
-            let text = msg.text;
-            if (roomKey && msg.enc) {
-              try {
-                const envelope = JSON.parse(msg.text);
-                if (envelope.ct && envelope.iv) {
-                  const decrypted = await decryptRoomMsg(roomKey, envelope.ct, envelope.iv);
-                  if (decrypted !== null) text = decrypted;
+            // try to decrypt room-encrypted message; suppress entirely if
+            // we can't decrypt rather than spilling raw envelopes into chat.
+            // typical reason for failure: server is replaying old messages
+            // from before the room key derivation was finalized for the
+            // current client version.
+            let text: string | null = msg.text;
+            if (msg.enc) {
+              text = null; // default to suppressed unless we successfully decrypt
+              if (!roomKey) {
+                console.debug('[zitadel] enc=true but no roomKey yet, suppressing',
+                  `(room=${msg.room ?? '?'}, currentRoom=${currentRoom ?? '?'})`);
+              } else {
+                try {
+                  const envelope = JSON.parse(msg.text);
+                  if (envelope.ct && envelope.iv) {
+                    const decrypted = await decryptRoomMsg(roomKey, envelope.ct, envelope.iv);
+                    if (decrypted !== null) {
+                      text = decrypted;
+                    } else {
+                      console.debug('[zitadel] room-key decrypt returned null, suppressing',
+                        `(room=${msg.room ?? currentRoom ?? '?'})`);
+                    }
+                  } else {
+                    console.debug('[zitadel] enc=true but envelope missing ct/iv, suppressing:',
+                      Object.keys(envelope));
+                  }
+                } catch (e) {
+                  console.debug('[zitadel] enc=true but msg.text is not JSON envelope, suppressing:',
+                    (e as Error).message, msg.text?.slice(0, 60));
                 }
-              } catch { /* not encrypted or decrypt failed - show as-is */ }
+              }
             }
+            // skip rendering when we couldn't decrypt - silent drop instead
+            // of pasting raw ciphertext into the chat scrollback
+            if (text === null) break;
             addMsg(msg.nick, text, false, msg.room || currentRoom || undefined);
             break;
           }
@@ -529,6 +569,10 @@ function boot() {
 
     ws.onclose = () => {
       connected = false;
+      if (pingTimer) {
+        clearInterval(pingTimer);
+        pingTimer = null;
+      }
       addMsg('zitadel', 'disconnected from relay', true);
       render();
       // reconnect after 3s
