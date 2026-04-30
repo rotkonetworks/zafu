@@ -20,8 +20,12 @@ import { frostDkgSelector, frostSigningSelector } from '../../../state/frost-ses
 import { getBalanceInWorker } from '../../../state/keyring/network-worker';
 import { useZcashSyncStatus } from '../../../hooks/zcash-sync';
 import { NetworkUnavailable } from '../../../shared/components/network-unavailable';
+import { usePasswordGate } from '../../../hooks/password-gate';
 import { cn } from '@repo/ui/lib/utils';
 import { PopupPath } from '../paths';
+import { BackupModal } from './backup/backup-modal';
+import { ImportModal } from './backup/import-modal';
+import { exportSingleBackup } from './backup/export-helpers';
 
 /** format zatoshi to ZEC display string */
 const formatZec = (zat: bigint) => {
@@ -59,12 +63,15 @@ const WalletRow = ({
   isActive,
   onSelect,
   onEdit,
+  onBackup,
 }: {
   wallet: ZcashWalletJson & { originalIndex: number };
   balance: bigint;
   isActive: boolean;
   onSelect: () => void;
   onEdit: () => void;
+  /** present only for self-custody multisig — airgap shows nothing here. */
+  onBackup?: () => void;
 }) => (
   <div
     className={cn(
@@ -91,9 +98,18 @@ const WalletRow = ({
         {formatZec(balance)} ZEC
       </span>
     </button>
+    {onBackup && (
+      <button
+        onClick={onBackup}
+        className='ml-1 p-1.5 rounded-md text-fg-muted hover:text-fg-high hover:bg-elev-1 transition-colors shrink-0'
+        title='backup wallet'
+      >
+        <span className='i-lucide-download h-3.5 w-3.5' />
+      </button>
+    )}
     <button
       onClick={onEdit}
-      className='ml-2 p-1.5 rounded-md text-fg-muted hover:text-fg-high hover:bg-elev-1 transition-colors shrink-0'
+      className='ml-1 p-1.5 rounded-md text-fg-muted hover:text-fg-high hover:bg-elev-1 transition-colors shrink-0'
       title='wallet settings'
     >
       <span className='i-lucide-settings h-3.5 w-3.5' />
@@ -110,6 +126,12 @@ export const MultisigPage = () => {
   const { setActiveZcashWallet } = useStore(walletsSelector);
   const { workerSyncHeight } = useZcashSyncStatus();
   const [balances, setBalances] = useState<Record<string, bigint>>({});
+
+  // backup / restore UI state
+  const [backupTarget, setBackupTarget] = useState<ZcashWalletJson | null>(null);
+  const [restoreOpen, setRestoreOpen] = useState(false);
+  const [importToast, setImportToast] = useState<string | null>(null);
+  const { requestAuth, PasswordModal } = usePasswordGate();
 
   // multisig is zcash-only; placeholder elsewhere. Computed early but
   // applied as an early-return only after every hook below has run, so
@@ -176,6 +198,30 @@ export const MultisigPage = () => {
 
   return (
     <div className='flex flex-col gap-3 p-4'>
+      {PasswordModal}
+      <BackupModal
+        open={backupTarget !== null}
+        title={backupTarget ? `Export "${backupTarget.label}"` : ''}
+        walletLabel={backupTarget?.label ?? ''}
+        onConfirm={async (passphrase) => {
+          if (backupTarget) await exportSingleBackup(backupTarget, passphrase);
+        }}
+        onClose={() => setBackupTarget(null)}
+      />
+      <ImportModal
+        open={restoreOpen}
+        onClose={() => setRestoreOpen(false)}
+        onImported={(s) => {
+          setImportToast(`restored ${s.imported} wallet${s.imported === 1 ? '' : 's'}` +
+            (s.skipped ? ` (${s.skipped} already existed)` : ''));
+          setTimeout(() => setImportToast(null), 4000);
+        }}
+      />
+      {importToast && (
+        <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-2 text-xs text-green-400'>
+          {importToast}
+        </div>
+      )}
       {/* header */}
       <div className='flex items-center justify-between'>
         <div className='flex items-center gap-2'>
@@ -212,6 +258,13 @@ export const MultisigPage = () => {
             isActive
             onSelect={() => {}}
             onEdit={() => navigate(`${PopupPath.SETTINGS_MULTISIG}?id=${activeMs.id}`)}
+            onBackup={
+              activeMs.multisig?.custody === 'airgapSigner'
+                ? undefined
+                : async () => {
+                    if (await requestAuth()) setBackupTarget(activeMs);
+                  }
+            }
           />
 
           {/* secondary actions: small icon-buttons in a footer */}
@@ -231,6 +284,16 @@ export const MultisigPage = () => {
               <span className='i-lucide-user-plus h-3.5 w-3.5' />
               Join existing
             </button>
+            <span className='h-3 w-px bg-border-soft' />
+            <button
+              onClick={async () => {
+                if (await requestAuth()) setRestoreOpen(true);
+              }}
+              className='flex items-center gap-1.5 text-xs text-fg-muted transition-colors hover:text-zigner-gold'
+            >
+              <span className='i-lucide-upload h-3.5 w-3.5' />
+              Restore
+            </button>
           </div>
         </>
       ) : (
@@ -246,6 +309,13 @@ export const MultisigPage = () => {
                   isActive={w.vaultId === selectedKeyInfo?.id}
                   onSelect={() => void setActiveZcashWallet(w.originalIndex)}
                   onEdit={() => navigate(`${PopupPath.SETTINGS_MULTISIG}?id=${w.id}`)}
+                  onBackup={
+                    w.multisig?.custody === 'airgapSigner'
+                      ? undefined
+                      : async () => {
+                          if (await requestAuth()) setBackupTarget(w);
+                        }
+                  }
                 />
               ))}
             </div>
@@ -282,6 +352,15 @@ export const MultisigPage = () => {
                 Co-sign transaction
               </button>
             )}
+            <button
+              onClick={async () => {
+                if (await requestAuth()) setRestoreOpen(true);
+              }}
+              className='flex items-center justify-center gap-1.5 rounded-lg border border-border-soft px-3 py-2 text-xs text-fg-muted transition-colors hover:bg-elev-1'
+            >
+              <span className='i-lucide-upload h-3.5 w-3.5' />
+              Restore from backup file
+            </button>
           </div>
         </>
       )}
