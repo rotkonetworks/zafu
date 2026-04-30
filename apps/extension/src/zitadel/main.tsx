@@ -239,6 +239,11 @@ function boot() {
   // on every new message is the dominant frontend stutter source.
   let renderedView: string | null = null;
   const renderedCount = new Map<string, number>();
+  // unread + mention state per non-active view. cleared when the user
+  // switches into the view. used to decorate the channel/DM row in the
+  // sidebar.
+  const unreadCount = new Map<string, number>();
+  const mentioned = new Set<string>();
   // tab-completion cycle state. null when no completion is in progress.
   let tabState: { prefix: string; before: string; after: string; matches: string[]; idx: number } | null = null;
   // DM channels: pubkey -> ZidChannel
@@ -289,11 +294,38 @@ function boot() {
 
   function mkEl(tag: string, css: string) { const e = document.createElement(tag); e.style.cssText = css; return e; }
 
+  /** Current view key (room name or `dm:<pubkey>`). */
+  function currentViewKey(): string {
+    return activeDm ? (DM_PREFIX + activeDm) : (currentRoom || initialRoom);
+  }
+
+  /** Word-boundary, case-insensitive own-nick match. Skips matches
+   * that are part of a longer identifier so "alicia" doesn't trigger
+   * highlight for a user nicked "alic". */
+  function mentionsMe(text: string, fromNick: string): boolean {
+    if (!nick || nick === '...' || fromNick === nick) return false;
+    const escaped = nick.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`(?:^|[^A-Za-z0-9_])${escaped}(?:[^A-Za-z0-9_]|$)`, 'i');
+    return re.test(text);
+  }
+
+  /** Bookkeeping for unread + mention markers. Increments only when the
+   * message is for a view the user isn't currently looking at, isn't
+   * from the user themselves, and isn't a system line. DMs always count
+   * (they're inherently directed). */
+  function trackUnread(viewKey: string, fromNick: string, text: string, system: boolean, dm: boolean) {
+    if (system || fromNick === nick) return;
+    if (viewKey === currentViewKey()) return;
+    unreadCount.set(viewKey, (unreadCount.get(viewKey) ?? 0) + 1);
+    if (dm || mentionsMe(text, fromNick)) mentioned.add(viewKey);
+  }
+
   function addMsg(n: string, text: string, system = false, room?: string, dm = false) {
     const key = room || (activeDm ? (DM_PREFIX + activeDm) : (currentRoom || initialRoom));
     let arr = messagesPerRoom.get(key);
     if (!arr) { arr = []; messagesPerRoom.set(key, arr); }
     arr.push({ nick: n, text, time: now(), system, color: system ? undefined : nickColor(n), dm });
+    trackUnread(key, n, text, system, dm);
     render();
   }
 
@@ -308,11 +340,19 @@ function boot() {
       dm: true,
       color: outgoing ? C.gold : C.dm,
     });
+    if (!outgoing) trackUnread(key, fromNick, text, false, true);
     render();
+  }
+
+  /** Clear unread + mention state for a view we just switched into. */
+  function markRead(viewKey: string) {
+    unreadCount.delete(viewKey);
+    mentioned.delete(viewKey);
   }
 
   function switchRoom(room: string) {
     activeDm = null;
+    markRead(room);
     if (room === currentRoom) { render(); return; }
     if (currentRoom) wsSend({ t: 'part' });
     wsSend({ t: 'join', room, nick });
@@ -320,6 +360,7 @@ function boot() {
 
   function switchToDm(pubkey: string) {
     activeDm = pubkey;
+    markRead(DM_PREFIX + pubkey);
     encState = dmChannels.has(pubkey) ? 'e2ee' : 'public';
     render();
   }
@@ -425,8 +466,15 @@ function boot() {
       ${allRooms.map(r => {
         const active = !activeDm && r === room;
         const bg = active ? C.border : 'transparent';
-        const col = active ? C.bright : C.muted;
-        return `<div class="ch" data-room="${esc(r)}" style="padding:5px 12px;cursor:pointer;background:${bg};color:${col};font-size:13px;transition:background 0.1s;">#${esc(r)}</div>`;
+        const unread = unreadCount.get(r) ?? 0;
+        const isHighlight = mentioned.has(r);
+        // priority: active > highlighted > unread > idle
+        const col = active ? C.bright : (isHighlight ? C.gold : (unread ? C.text : C.muted));
+        const fontWeight = (isHighlight || unread) && !active ? '600' : '400';
+        const badge = unread > 0 && !active
+          ? ` <span style="color:${isHighlight ? C.gold : C.muted};font-weight:600">(${unread > 99 ? '99+' : unread})</span>`
+          : '';
+        return `<div class="ch" data-room="${esc(r)}" style="padding:5px 12px;cursor:pointer;background:${bg};color:${col};font-size:13px;font-weight:${fontWeight};transition:background 0.1s;">#${esc(r)}${badge}</div>`;
       }).join('')}
       ${dmPeers.length ? `<div style="padding:10px 12px;border-top:1px solid ${C.border};border-bottom:1px solid ${C.border};margin-top:4px;">
         <b style="color:${C.bright};font-size:13px;">DMs [e2ee]</b>
@@ -434,9 +482,17 @@ function boot() {
       ${dmPeers.map(pub => {
         const active = activeDm === pub;
         const bg = active ? C.border : 'transparent';
-        const col = active ? C.dm : C.muted;
+        const dmKey = DM_PREFIX + pub;
+        const unread = unreadCount.get(dmKey) ?? 0;
+        // DMs are inherently personal so any unread DM is rendered as
+        // a highlight - same color as a mention in a public room.
+        const col = active ? C.dm : (unread > 0 ? C.dm : C.muted);
+        const fontWeight = unread > 0 && !active ? '600' : '400';
         const label = pubkeyToNick.get(pub) || shortPub(pub);
-        return `<div class="dm-ch" data-pubkey="${esc(pub)}" style="padding:5px 12px;cursor:pointer;background:${bg};color:${col};font-size:12px;transition:background 0.1s;">[e2ee] ${esc(label)}</div>`;
+        const badge = unread > 0 && !active
+          ? ` <span style="color:${C.dm};font-weight:600">(${unread > 99 ? '99+' : unread})</span>`
+          : '';
+        return `<div class="dm-ch" data-pubkey="${esc(pub)}" style="padding:5px 12px;cursor:pointer;background:${bg};color:${col};font-size:12px;font-weight:${fontWeight};transition:background 0.1s;">[e2ee] ${esc(label)}${badge}</div>`;
       }).join('')}
       <div style="padding:8px 12px;margin-top:auto;border-top:1px solid ${C.border};">
         <div style="color:${C.muted};font-size:11px;">${esc(nick)}</div>
