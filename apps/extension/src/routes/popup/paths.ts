@@ -30,6 +30,11 @@ export enum PopupPath {
   MULTISIG = '/multisig',
   MULTISIG_CREATE = '/multisig/create',
   MULTISIG_JOIN = '/multisig/join',
+  // QR-mediated DKG variants used when the active wallet is a zigner-imported
+  // (airgapSigner) account. zafu mediates between the FROST relay and zigner;
+  // the FROST share is born and stored on zigner only.
+  MULTISIG_CREATE_ZIGNER = '/multisig/create-zigner',
+  MULTISIG_JOIN_ZIGNER = '/multisig/join-zigner',
   MULTISIG_SIGN = '/multisig/sign',
   NOTE_SYNC = '/note-sync',
 

@@ -7,6 +7,7 @@
  */
 
 import { useState } from 'react';
+import { Navigate } from 'react-router-dom';
 import { useStore } from '../../../state';
 import {
   frostDkgPart1InWorker,
@@ -15,6 +16,7 @@ import {
   frostDeriveAddressFromSkInWorker,
   frostDeriveUfvkInWorker,
 } from '../../../state/keyring/network-worker';
+import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { FrostRelayClient } from '../../../state/keyring/frost-relay-client';
 import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../../state/frost-session';
 import { useDeadlineCountdown } from '../../../hooks/use-deadline-countdown';
@@ -24,6 +26,13 @@ import { PopupPath } from '../paths';
 type Step = 'input' | 'joining' | 'dkg' | 'fvk-echo' | 'complete' | 'error';
 
 export const MultisigJoin = () => {
+  // zigner-imported wallets cannot mint a hot FROST share — redirect to
+  // the QR-mediated joiner flow where the share is born and stored on zigner.
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  if (selectedKeyInfo?.type === 'zigner-zafu') {
+    return <Navigate to={PopupPath.MULTISIG_JOIN_ZIGNER} replace />;
+  }
+
   const [roomCode, setRoomCode] = useState('');
   const [step, setStep] = useState<Step>('input');
   const [error, setError] = useState('');
@@ -126,8 +135,11 @@ export const MultisigJoin = () => {
         await relay.sendMessage(roomCode.trim(), participantId, new TextEncoder().encode(`R2:${pkg}`));
       }
 
-      setProgress(`round 2: waiting for ${maxSignersLocal - 1} peer package(s)...`);
-      await waitForUntil(() => peerRound2.length >= maxSignersLocal - 1, sessionDeadline);
+      // each peer broadcasts n-1 r2 packages (one per recipient) → (n-1)² on
+      // the wire; WASM dkg_part3 filters to ours-only so we wait for all.
+      const expectedR2 = (maxSignersLocal - 1) ** 2;
+      setProgress(`round 2: waiting for ${expectedR2} peer package(s)...`);
+      await waitForUntil(() => peerRound2.length >= expectedR2, sessionDeadline);
 
       setProgress('round 3: finalizing...');
       const round3 = await frostDkgPart3InWorker(

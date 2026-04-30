@@ -9,6 +9,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { BrowserQRCodeReader } from '@zxing/browser';
+import { DecodeHintType } from '@zxing/library';
 import { Button } from '@repo/ui/components/ui/button';
 
 interface AnimatedQrScannerProps {
@@ -18,6 +19,8 @@ interface AnimatedQrScannerProps {
   onClose: () => void;
   title?: string;
   description?: string;
+  /** render inline (card) instead of fullscreen overlay — popup contexts trap `fixed` */
+  inline?: boolean;
 }
 
 export const AnimatedQrScanner = ({
@@ -26,6 +29,7 @@ export const AnimatedQrScanner = ({
   onClose,
   title = 'scan animated QR',
   description,
+  inline = false,
 }: AnimatedQrScannerProps) => {
   const [progress, setProgress] = useState(0);
   const [isScanning, setIsScanning] = useState(false);
@@ -63,7 +67,19 @@ export const AnimatedQrScanner = ({
 
     try {
       setError(null);
-      const reader = new BrowserQRCodeReader();
+      // TRY_HARDER + faster scan cadence — animated QR cycles ~5 fps so we
+      // need to look at frames more aggressively than a static QR.
+      const hints = new Map<DecodeHintType, unknown>();
+      hints.set(DecodeHintType.TRY_HARDER, true);
+
+      const reader = new BrowserQRCodeReader(hints, {
+        delayBetweenScanAttempts: 100,
+      });
+
+      // prime camera permission before enumerateDevices (Chrome MV3 quirk)
+      const initialStream = await navigator.mediaDevices.getUserMedia({ video: true });
+      initialStream.getTracks().forEach(t => t.stop());
+
       const devices = await BrowserQRCodeReader.listVideoInputDevices();
       const camera = devices.find((d: MediaDeviceInfo) =>
         /back|rear|environment/i.test(d.label),
@@ -71,8 +87,19 @@ export const AnimatedQrScanner = ({
 
       if (!camera) throw new Error('no camera found');
 
+      const videoConstraints: MediaTrackConstraints = {
+        deviceId: camera.deviceId,
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+      };
+      Object.assign(videoConstraints, { focusMode: { ideal: 'continuous' } });
+
+      const stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints });
+      videoRef.current.srcObject = stream;
+      await videoRef.current.play();
+
       const controls = await reader.decodeFromVideoDevice(
-        camera.deviceId,
+        undefined,
         videoRef.current,
         (result) => {
           if (!result || completedRef.current) return;
@@ -153,6 +180,97 @@ export const AnimatedQrScanner = ({
     onClose();
   };
 
+  const cornerColor = inline ? 'border-yellow-500' : 'border-green-500';
+  const progressColor = inline ? 'bg-yellow-500' : 'bg-green-500';
+
+  const cameraView = (
+    <>
+      <video
+        ref={videoRef}
+        className='absolute inset-0 h-full w-full object-cover'
+        playsInline
+        muted
+      />
+
+      {isScanning && (
+        <div className='absolute inset-0 pointer-events-none flex items-center justify-center'>
+          <div className={`relative ${inline ? 'w-44 h-44' : 'w-64 h-64'}`}>
+            <div className={`absolute top-0 left-0 w-6 h-6 border-t-[3px] border-l-[3px] ${cornerColor} rounded-tl-lg`} />
+            <div className={`absolute top-0 right-0 w-6 h-6 border-t-[3px] border-r-[3px] ${cornerColor} rounded-tr-lg`} />
+            <div className={`absolute bottom-0 left-0 w-6 h-6 border-b-[3px] border-l-[3px] ${cornerColor} rounded-bl-lg`} />
+            <div className={`absolute bottom-0 right-0 w-6 h-6 border-b-[3px] border-r-[3px] ${cornerColor} rounded-br-lg`} />
+          </div>
+        </div>
+      )}
+
+      {!isScanning && !error && (
+        <div className='absolute inset-0 flex items-center justify-center bg-black'>
+          <div className='flex flex-col items-center gap-2 text-white'>
+            <span className='i-lucide-camera size-8 animate-pulse' />
+            <span className='text-sm'>starting camera...</span>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div className='absolute inset-0 flex items-center justify-center bg-black p-4'>
+          <div className='flex flex-col items-center gap-3 text-center'>
+            <div className='rounded-full bg-red-500/20 p-3'>
+              <span className='i-lucide-camera size-6 text-red-400' />
+            </div>
+            <p className='text-xs text-red-400'>{error}</p>
+            <div className='flex gap-2'>
+              <Button variant='secondary' size='sm' onClick={handleClose}>cancel</Button>
+              <Button size='sm' onClick={startScanning}>retry</Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+
+  const progressBar = (
+    <>
+      <div className='flex items-center gap-3'>
+        <div className={`flex-1 ${inline ? 'h-1' : 'h-1.5'} rounded-full bg-white/10 overflow-hidden`}>
+          <div
+            className={`h-full rounded-full ${progressColor} transition-all duration-300`}
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+        <span className={`${inline ? 'text-[10px]' : 'text-xs'} font-mono text-white/80 w-12 text-right`}>
+          {progress}%
+        </span>
+      </div>
+      <p className={`mt-1.5 ${inline ? 'text-[9px]' : 'text-[10px]'} text-white/40 text-center`}>
+        {partsReceived} part{partsReceived !== 1 ? 's' : ''} received — hold camera steady over animated QR
+      </p>
+    </>
+  );
+
+  if (inline) {
+    return (
+      <div className='flex flex-col gap-2'>
+        <div className='flex items-center justify-between'>
+          <span className='text-xs text-fg-muted'>{title}</span>
+          <button
+            onClick={handleClose}
+            className='p-0.5 text-fg-muted hover:text-fg-high transition-colors'
+          >
+            <span className='i-lucide-x h-3.5 w-3.5' />
+          </button>
+        </div>
+        <div className='relative aspect-square w-full overflow-hidden rounded-lg border border-yellow-500/40 bg-black'>
+          {cameraView}
+        </div>
+        {description && (
+          <p className='text-[10px] text-fg-muted text-center'>{description}</p>
+        )}
+        <div className='rounded-md bg-black/60 p-2'>{progressBar}</div>
+      </div>
+    );
+  }
+
   return (
     <div className='fixed inset-0 z-50 flex flex-col overflow-hidden bg-black'>
       <div className='flex-none flex items-center justify-between p-4 bg-black/80'>
@@ -168,67 +286,9 @@ export const AnimatedQrScanner = ({
         </button>
       </div>
 
-      <div className='flex-1 relative min-h-0 overflow-hidden'>
-        <video
-          ref={videoRef}
-          className='absolute inset-0 h-full w-full object-cover'
-          playsInline
-          muted
-        />
+      <div className='flex-1 relative min-h-0 overflow-hidden'>{cameraView}</div>
 
-        {isScanning && (
-          <div className='absolute inset-0 pointer-events-none flex items-center justify-center'>
-            <div className='relative w-64 h-64'>
-              <div className='absolute top-0 left-0 w-6 h-6 border-t-[3px] border-l-[3px] border-green-500 rounded-tl-lg' />
-              <div className='absolute top-0 right-0 w-6 h-6 border-t-[3px] border-r-[3px] border-green-500 rounded-tr-lg' />
-              <div className='absolute bottom-0 left-0 w-6 h-6 border-b-[3px] border-l-[3px] border-green-500 rounded-bl-lg' />
-              <div className='absolute bottom-0 right-0 w-6 h-6 border-b-[3px] border-r-[3px] border-green-500 rounded-br-lg' />
-            </div>
-          </div>
-        )}
-
-        {!isScanning && !error && (
-          <div className='absolute inset-0 flex items-center justify-center bg-black'>
-            <div className='flex flex-col items-center gap-2 text-white'>
-              <span className='i-lucide-camera size-8 animate-pulse' />
-              <span className='text-sm'>starting camera...</span>
-            </div>
-          </div>
-        )}
-
-        {error && (
-          <div className='absolute inset-0 flex items-center justify-center bg-black p-4'>
-            <div className='flex flex-col items-center gap-3 text-center'>
-              <div className='rounded-full bg-red-500/20 p-3'>
-                <span className='i-lucide-camera size-6 text-red-400' />
-              </div>
-              <p className='text-xs text-red-400'>{error}</p>
-              <div className='flex gap-2'>
-                <Button variant='secondary' size='sm' onClick={handleClose}>cancel</Button>
-                <Button size='sm' onClick={startScanning}>retry</Button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* progress bar */}
-      <div className='flex-none bg-black/80 p-4'>
-        <div className='flex items-center gap-3'>
-          <div className='flex-1 h-1.5 rounded-full bg-white/10 overflow-hidden'>
-            <div
-              className='h-full rounded-full bg-green-500 transition-all duration-300'
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-          <span className='text-xs font-mono text-white/80 w-12 text-right'>
-            {progress}%
-          </span>
-        </div>
-        <p className='mt-1.5 text-[10px] text-white/40 text-center'>
-          {partsReceived} part{partsReceived !== 1 ? 's' : ''} received — hold camera steady over animated QR
-        </p>
-      </div>
+      <div className='flex-none bg-black/80 p-4'>{progressBar}</div>
     </div>
   );
 };

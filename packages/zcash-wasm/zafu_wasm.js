@@ -925,6 +925,43 @@ export function frost_dealer_keygen(min_signers, max_signers) {
 
 /**
  * derive the multisig wallet's Orchard address (raw 43-byte address, hex-encoded)
+ * from the group public key package and a caller-supplied `sk`. deterministic —
+ * every participant computing this with the same inputs lands on byte-identical
+ * output. pair with `frost_derive_ufvk(pkg, sk, mainnet)` so the stored address
+ * and stored UFVK share a single source of truth for nk/rivk.
+ * @param {string} public_key_package_hex
+ * @param {string} sk_hex
+ * @param {number} diversifier_index
+ * @returns {string}
+ */
+export function frost_derive_address_from_sk(public_key_package_hex, sk_hex, diversifier_index) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(public_key_package_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(sk_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_derive_address_from_sk(ptr0, len0, ptr1, len1, diversifier_index);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
+ * derive the multisig wallet's Orchard address (raw 43-byte address, hex-encoded).
+ * non-deterministic — internally generates a random nk/rivk. only safe when a
+ * single party derives-and-broadcasts. interactive DKG should use
+ * `frost_derive_address_from_sk` instead.
  * @param {string} public_key_package_hex
  * @param {number} diversifier_index
  * @returns {string}
@@ -947,6 +984,39 @@ export function frost_derive_address_raw(public_key_package_hex, diversifier_ind
         return getStringFromWasm0(ptr2, len2);
     } finally {
         wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * derive the Orchard-only UFVK string (`uview1…` / `uviewtest1…`) from a
+ * caller-supplied 32-byte SpendingKey and a FROST public key package.
+ * every participant, given the same `sk_hex` + `public_key_package_hex`,
+ * lands on byte-identical output.
+ * @param {string} public_key_package_hex
+ * @param {string} sk_hex
+ * @param {boolean} mainnet
+ * @returns {string}
+ */
+export function frost_derive_ufvk(public_key_package_hex, sk_hex, mainnet) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(public_key_package_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(sk_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_derive_ufvk(ptr0, len0, ptr1, len1, mainnet);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
 }
 
@@ -1065,6 +1135,25 @@ export function frost_generate_randomizer(ephemeral_seed_hex, message_hex, commi
         return getStringFromWasm0(ptr4, len4);
     } finally {
         wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
+    }
+}
+
+/**
+ * host-only: sample a random 32-byte SpendingKey for nk/rivk derivation.
+ * retries until the sampled bytes land in the Pallas scalar range.
+ * returns hex-encoded 32-byte `sk` that the host broadcasts to peers in R1.
+ * @returns {string}
+ */
+export function frost_sample_fvk_sk() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.frost_sample_fvk_sk();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
     }
 }
 

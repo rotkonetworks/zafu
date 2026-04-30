@@ -11,14 +11,14 @@ import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../../state';
 import {
   selectZcashWallets,
-  selectActiveZcashIndex,
   selectMultisigWallets,
   walletsSelector,
   type ZcashWalletJson,
 } from '../../../state/wallets';
+import { selectActiveNetwork, selectEffectiveKeyInfo } from '../../../state/keyring';
 import { frostDkgSelector, frostSigningSelector } from '../../../state/frost-session';
 import { getBalanceInWorker } from '../../../state/keyring/network-worker';
-import { selectActiveNetwork } from '../../../state/keyring';
+import { useZcashSyncStatus } from '../../../hooks/zcash-sync';
 import { NetworkUnavailable } from '../../../shared/components/network-unavailable';
 import { cn } from '@repo/ui/lib/utils';
 import { PopupPath } from '../paths';
@@ -105,9 +105,10 @@ export const MultisigPage = () => {
   const navigate = useNavigate();
   const activeNetwork = useStore(selectActiveNetwork);
   const zcashWallets = useStore(selectZcashWallets);
-  const activeIdx = useStore(selectActiveZcashIndex);
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const multisigWallets = useStore(selectMultisigWallets);
   const { setActiveZcashWallet } = useStore(walletsSelector);
+  const { workerSyncHeight } = useZcashSyncStatus();
   const [balances, setBalances] = useState<Record<string, bigint>>({});
 
   // multisig is zcash-only; placeholder elsewhere. Computed early but
@@ -123,18 +124,51 @@ export const MultisigPage = () => {
     [multisigWallets, zcashWallets],
   );
 
-  // fetch balances only when actually on zcash; gate inside the effect
-  // so the hook itself still runs every render (Rules of Hooks).
+  // fetch balances for all multisig wallets. sync writes notes keyed by
+  // vaultId (selectedKeyInfo.id), not zcashWallet.id, so the balance lookup
+  // must use vaultId; local state stays keyed by w.id for row identity.
+  // re-fetch on every sync-progress tick so the active vault's row stays
+  // in step with the home-page balance. skip entirely when off zcash —
+  // gate inside the effect, not around it (Rules of Hooks).
   useEffect(() => {
     if (!isZcash) return;
-    for (const w of walletsWithIndex) {
-      getBalanceInWorker('zcash', w.id)
-        .then(bal => setBalances(prev => ({ ...prev, [w.id]: BigInt(bal) })))
-        .catch(() => {});
-    }
-  }, [walletsWithIndex, isZcash]);
+    const fetchAll = () => {
+      for (const w of walletsWithIndex) {
+        if (!w.vaultId) continue;
+        const vaultId = w.vaultId;
+        const rowId = w.id;
+        getBalanceInWorker('zcash', vaultId)
+          .then(bal => setBalances(prev => ({ ...prev, [rowId]: BigInt(bal) })))
+          .catch(() => {});
+      }
+    };
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.network !== 'zcash') return;
+      fetchAll();
+    };
+    window.addEventListener('network-sync-progress', handler);
+    fetchAll();
+    return () => window.removeEventListener('network-sync-progress', handler);
+  }, [walletsWithIndex, workerSyncHeight, isZcash]);
 
   const totalZat = Object.values(balances).reduce((sum, b) => sum + b, 0n);
+
+  // operate-mode: gate on the selected vault, not activeZcashIndex — the
+  // index lags on switches to mnemonic (which has no zcash wallet record),
+  // so the index can still point at a multisig vault while the user is on
+  // a mnemonic. selectedKeyInfo.type is the source of truth.
+  const activeMs = selectedKeyInfo?.type === 'frost-multisig'
+    ? walletsWithIndex.find(w => w.vaultId === selectedKeyInfo.id)
+    : undefined;
+
+  // route to zigner-airgap flows when the user is signing through a zigner —
+  // either the active multisig is airgap, or the active single-sig is zigner-imported.
+  const useAirgap =
+    activeMs?.multisig?.custody === 'airgapSigner'
+    || selectedKeyInfo?.type === 'zigner-zafu';
+  const createPath = useAirgap ? PopupPath.MULTISIG_CREATE_ZIGNER : PopupPath.MULTISIG_CREATE;
+  const joinPath = useAirgap ? PopupPath.MULTISIG_JOIN_ZIGNER : PopupPath.MULTISIG_JOIN;
 
   if (!isZcash) {
     return <NetworkUnavailable feature='multisig' iconClass='i-lucide-shield' />;
@@ -158,55 +192,99 @@ export const MultisigPage = () => {
       {/* active session indicator */}
       <SessionBadge />
 
-      {/* wallet list */}
-      {walletsWithIndex.length > 0 ? (
-        <div className='flex flex-col gap-1.5'>
-          {walletsWithIndex.map(w => (
-            <WalletRow
-              key={w.id}
-              wallet={w}
-              balance={balances[w.id] ?? 0n}
-              isActive={w.originalIndex === activeIdx}
-              onSelect={() => void setActiveZcashWallet(w.originalIndex)}
-              onEdit={() => navigate(`${PopupPath.SETTINGS_MULTISIG}?id=${w.id}`)}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className='flex flex-col items-center gap-2 py-8 text-center text-fg-muted'>
-          <span className='i-lucide-shield-off h-8 w-8 opacity-50' />
-          <p className='text-sm'>No multisig wallets yet</p>
-        </div>
-      )}
-
-      {/* quick actions */}
-      <div className='flex flex-col gap-2 pt-2'>
-        <div className='flex gap-2'>
-          <button
-            onClick={() => navigate(PopupPath.MULTISIG_CREATE)}
-            className='flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary/10 px-3 py-2.5 text-sm font-medium text-zigner-gold transition-colors hover:bg-primary/20'
-          >
-            <span className='i-lucide-plus h-4 w-4' />
-            Create
-          </button>
-          <button
-            onClick={() => navigate(PopupPath.MULTISIG_JOIN)}
-            className='flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary/10 px-3 py-2.5 text-sm font-medium text-zigner-gold transition-colors hover:bg-primary/20'
-          >
-            <span className='i-lucide-user-plus h-4 w-4' />
-            Join
-          </button>
-        </div>
-        {walletsWithIndex.length > 0 && (
+      {activeMs ? (
+        // operate mode — active vault is multisig
+        <>
+          {/* primary CTA: co-sign */}
           <button
             onClick={() => navigate(PopupPath.MULTISIG_SIGN)}
-            className='flex items-center justify-center gap-1.5 rounded-lg border border-border-soft px-3 py-2.5 text-sm font-medium text-fg transition-colors hover:bg-elev-1'
+            className='flex items-center justify-center gap-2 rounded-lg bg-primary/15 px-4 py-4 text-base font-semibold text-zigner-gold transition-colors hover:bg-primary/25'
           >
-            <span className='i-lucide-pen-tool h-4 w-4' />
+            <span className='i-lucide-pen-tool h-5 w-5' />
             Co-sign transaction
           </button>
-        )}
-      </div>
+
+          {/* active vault card */}
+          <WalletRow
+            key={activeMs.id}
+            wallet={activeMs}
+            balance={balances[activeMs.id] ?? 0n}
+            isActive
+            onSelect={() => {}}
+            onEdit={() => navigate(`${PopupPath.SETTINGS_MULTISIG}?id=${activeMs.id}`)}
+          />
+
+          {/* secondary actions: small icon-buttons in a footer */}
+          <div className='flex items-center justify-center gap-4 pt-1'>
+            <button
+              onClick={() => navigate(createPath)}
+              className='flex items-center gap-1.5 text-xs text-fg-muted transition-colors hover:text-zigner-gold'
+            >
+              <span className='i-lucide-plus h-3.5 w-3.5' />
+              New vault
+            </button>
+            <span className='h-3 w-px bg-border-soft' />
+            <button
+              onClick={() => navigate(joinPath)}
+              className='flex items-center gap-1.5 text-xs text-fg-muted transition-colors hover:text-zigner-gold'
+            >
+              <span className='i-lucide-user-plus h-3.5 w-3.5' />
+              Join existing
+            </button>
+          </div>
+        </>
+      ) : (
+        // overview mode — active wallet is not multisig (or none exist)
+        <>
+          {walletsWithIndex.length > 0 ? (
+            <div className='flex flex-col gap-1.5'>
+              {walletsWithIndex.map(w => (
+                <WalletRow
+                  key={w.id}
+                  wallet={w}
+                  balance={balances[w.id] ?? 0n}
+                  isActive={w.vaultId === selectedKeyInfo?.id}
+                  onSelect={() => void setActiveZcashWallet(w.originalIndex)}
+                  onEdit={() => navigate(`${PopupPath.SETTINGS_MULTISIG}?id=${w.id}`)}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className='flex flex-col items-center gap-2 py-8 text-center text-fg-muted'>
+              <span className='i-lucide-shield-off h-8 w-8 opacity-50' />
+              <p className='text-sm'>No multisig wallets yet</p>
+            </div>
+          )}
+
+          <div className='flex flex-col gap-2 pt-2'>
+            <div className='flex gap-2'>
+              <button
+                onClick={() => navigate(createPath)}
+                className='flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary/10 px-3 py-2.5 text-sm font-medium text-zigner-gold transition-colors hover:bg-primary/20'
+              >
+                <span className='i-lucide-plus h-4 w-4' />
+                Create
+              </button>
+              <button
+                onClick={() => navigate(joinPath)}
+                className='flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary/10 px-3 py-2.5 text-sm font-medium text-zigner-gold transition-colors hover:bg-primary/20'
+              >
+                <span className='i-lucide-user-plus h-4 w-4' />
+                Join
+              </button>
+            </div>
+            {walletsWithIndex.length > 0 && (
+              <button
+                onClick={() => navigate(PopupPath.MULTISIG_SIGN)}
+                className='flex items-center justify-center gap-1.5 rounded-lg border border-border-soft px-3 py-2.5 text-sm font-medium text-fg transition-colors hover:bg-elev-1'
+              >
+                <span className='i-lucide-pen-tool h-4 w-4' />
+                Co-sign transaction
+              </button>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 };

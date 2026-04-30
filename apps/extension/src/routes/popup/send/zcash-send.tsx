@@ -20,16 +20,13 @@ import {
   buildSendTxInWorker,
   completeSendTxInWorker,
   getBalanceInWorker,
-  frostSignRound1InWorker,
-  frostSpendSignInWorker,
-  frostSpendAggregateInWorker,
   type SendTxUnsignedResult,
 } from '../../../state/keyring/network-worker';
-import { FrostRelayClient } from '../../../state/keyring/frost-relay-client';
 import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
 import { QrDisplay } from '../../../shared/components/qr-display';
 import { QrScanner } from '../../../shared/components/qr-scanner';
+import { FrostAirgapSignFlow, runMnemonicFrostSign } from './frost-multisig';
 import { RecipientPicker } from '../../../components/recipient-picker';
 import { SaveContactModal } from '../../../components/save-contact-modal';
 import { usePasswordGate } from '../../../hooks/password-gate';
@@ -53,7 +50,10 @@ interface ZcashSendProps {
   };
 }
 
-type SendStep = 'form' | 'review' | 'building' | 'sign' | 'scan' | 'broadcast' | 'complete' | 'error' | 'frost-room' | 'frost-signing';
+type SendStep =
+  | 'form' | 'review' | 'building' | 'sign' | 'scan' | 'broadcast' | 'complete' | 'error'
+  | 'frost-room' | 'frost-signing'
+  | 'airgap-flow';  // self-contained 4-step zigner-mediated multisig sign
 
 /** live elapsed timer — ticks every second so the build screen never looks frozen */
 function LiveTimer({ startMs }: { startMs: number }) {
@@ -104,9 +104,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const [totalElapsedSec, setTotalElapsedSec] = useState<number | null>(null);
   const buildStartRef = useRef<number>(0);
 
-  // FROST multisig state
+  // self-custody multisig (mnemonic FROST) state
   const [frostRoomCode, setFrostRoomCode] = useState('');
   const [frostProgress, setFrostProgress] = useState('');
+  const frostAbortRef = useRef<AbortController | null>(null);
 
   // store access for wallet id and server url
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
@@ -170,7 +171,6 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   };
 
   const handleSign = async () => {
-    let frostAbort: AbortController | null = null;
     if (!selectedKeyInfo) {
       setFormError('no wallet selected');
       return;
@@ -206,132 +206,58 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             setShowSavePrompt(true);
           }
         }
+      } else if (activeZcashWallet?.multisig?.custody === 'airgapSigner') {
+        // airgap multisig: build unsigned tx then hand off to FrostAirgapSignFlow.
+        const result = await buildSendTxInWorker(
+          'zcash', walletId, zidecarUrl, recipient.trim(), amountZat, memo, accountIndex, mainnet,
+          undefined, ufvk,
+        );
+        if (!('sighash' in result)) throw new Error('unexpected result from unsigned tx build');
+        unsignedTxRef.current = result;
+        setFee((Number(result.fee) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, ''));
+        setStep('airgap-flow');
       } else if (activeZcashWallet?.multisig) {
-        // ── FROST multisig: build unsigned tx → relay signing rounds ──
+        // self-custody multisig: zafu has the encrypted FROST share locally.
+        const authorized = await requestAuth();
+        if (!authorized) { setStep('review'); return; }
         const ms = activeZcashWallet.multisig;
-        // decrypt secret key material from vault
         const secrets = await useStore.getState().keyRing.getMultisigSecrets(activeZcashWallet.vaultId);
         if (!secrets) throw new Error('failed to decrypt multisig keys — unlock wallet first');
         const result = await buildSendTxInWorker(
           'zcash', walletId, zidecarUrl, recipient.trim(), amountZat, memo, accountIndex, mainnet,
           undefined, ufvk,
         );
-
-        if (!('sighash' in result)) {
-          throw new Error('unexpected result from unsigned tx build');
-        }
+        if (!('sighash' in result)) throw new Error('unexpected result from unsigned tx build');
 
         unsignedTxRef.current = result;
-        const feeZec = (Number(result.fee) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
-        setFee(feeZec);
+        setFee((Number(result.fee) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, ''));
 
-        // create relay room for signing session
         setStep('frost-room');
-        const relayUrl = ms.relayUrl || 'https://poker.zk.bot';
-        const relay = new FrostRelayClient(relayUrl);
-        const room = await relay.createRoom(ms.threshold, ms.maxSigners, 300);
-        setFrostRoomCode(room.roomCode);
+        try {
+          const orchardSigs = await runMnemonicFrostSign({
+            ms,
+            secrets,
+            unsigned: result,
+            recipient: recipient.trim(),
+            amountZat,
+            setFrostAbort: a => { frostAbortRef.current = a; },
+            setRoomCode: code => { setFrostRoomCode(code); setStep('frost-signing'); },
+            setProgress: setFrostProgress,
+          });
 
-        // signing: generate fresh nonces per action to prevent nonce reuse
-        setStep('frost-signing');
-        setFrostProgress('round 1: generating commitments...');
-
-        const numActions = result.alphas.length;
-
-        // generate one round1 (nonces + commitments) per action
-        const round1s: { nonces: string; commitments: string }[] = [];
-        for (let i = 0; i < numActions; i++) {
-          round1s.push(await frostSignRound1InWorker(secrets.ephemeralSeed, secrets.keyPackage));
-        }
-
-        // join room and set up message collection
-        const participantId = new Uint8Array(32);
-        crypto.getRandomValues(participantId);
-
-        // per-action commitment and share collection from peers
-        const peerCommitmentsPerAction: string[][] = Array.from({ length: numActions }, () => []);
-        const peerSharesPerAction: string[][] = Array.from({ length: numActions }, () => []);
-        let signingPhase: 'commitments' | 'shares' | 'done' = 'commitments';
-
-        const abortController = frostAbort = new AbortController();
-        void relay.joinRoom(room.roomCode, participantId, (event) => {
-          if (event.type === 'message') {
-            const text = new TextDecoder().decode(event.message.payload);
-            if (text.startsWith('SIGN:')) return; // skip echoed SIGN prefix
-            if (signingPhase === 'commitments') {
-              // peers send pipe-delimited commitments for all actions
-              const parts = text.split('|');
-              for (let i = 0; i < parts.length && i < numActions; i++) {
-                peerCommitmentsPerAction[i]!.push(parts[i]!);
-              }
-            } else if (signingPhase === 'shares') {
-              // shares are tagged: S:<actionIndex>:<shareData>
-              const shareMatch = text.match(/^S:(\d+):(.+)$/);
-              if (shareMatch) {
-                const actionIdx = Number(shareMatch[1]);
-                if (actionIdx >= 0 && actionIdx < numActions) {
-                  peerSharesPerAction[actionIdx]!.push(shareMatch[2]!);
-                }
-              }
-            }
-          }
-        }, abortController.signal);
-
-        // broadcast SIGN prefix with tx summary so co-signers can verify
-        const amountZec = (Number(amountZat) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
-        const summary = `${amountZec} ZEC to ${recipient.trim().slice(0, 16)}...`;
-        const signPrefix = `SIGN:${result.sighash}:${result.alphas.join(',')}:${summary}`;
-        await relay.sendMessage(room.roomCode, participantId, new TextEncoder().encode(signPrefix));
-        const ourCommitments = round1s.map(r => r.commitments).join('|');
-        await relay.sendMessage(room.roomCode, participantId, new TextEncoder().encode(ourCommitments));
-
-        // wait for threshold-1 peer commitment bundles
-        setFrostProgress(`round 1: waiting for ${ms.threshold - 1} co-signer(s)...`);
-        await waitFor(() => peerCommitmentsPerAction[0]!.length >= ms.threshold - 1, 120000);
-
-        // round 2: sign each action with its own nonces
-        signingPhase = 'shares';
-        setFrostProgress('round 2: signing...');
-
-        const orchardSigs: string[] = [];
-        for (let i = 0; i < numActions; i++) {
-          const allCommitments = [round1s[i]!.commitments, ...peerCommitmentsPerAction[i]!];
-
-          const share = await frostSpendSignInWorker(
-            secrets.keyPackage, round1s[i]!.nonces, result.sighash, result.alphas[i]!, allCommitments,
+          setStep('broadcast');
+          setFrostProgress('broadcasting...');
+          const finalResult = await completeSendTxInWorker(
+            'zcash', walletId, zidecarUrl, result.unsignedTx,
+            { orchardSigs, transparentSigs: [] }, result.spendIndices,
           );
-          // tag share with action index so peers can bucket correctly
-          await relay.sendMessage(room.roomCode, participantId, new TextEncoder().encode(`S:${i}:${share}`));
-
-          setFrostProgress(`round 2: collecting shares (${i + 1}/${numActions})...`);
-          await waitFor(() => peerSharesPerAction[i]!.length >= ms.threshold - 1, 120000);
-
-          const allSharesForAction = [share, ...peerSharesPerAction[i]!];
-          const sig = await frostSpendAggregateInWorker(
-            ms.publicKeyPackage, result.sighash, result.alphas[i]!, allCommitments, allSharesForAction,
-          );
-          orchardSigs.push(sig);
-        }
-
-        signingPhase = 'done';
-        abortController.abort();
-
-        // complete transaction with aggregated signatures
-        setStep('broadcast');
-        setFrostProgress('broadcasting...');
-        const finalResult = await completeSendTxInWorker(
-          'zcash', walletId, zidecarUrl,
-          result.unsignedTx,
-          { orchardSigs, transparentSigs: [] },
-          result.spendIndices,
-        );
-
-        complete(finalResult.txid);
-        setTotalElapsedSec(Math.round((Date.now() - buildStartRef.current) / 1000));
-        setStep('complete');
-        void recordUsage(recipient, 'zcash');
-        if (shouldSuggestSave(recipient)) {
-          setShowSavePrompt(true);
+          complete(finalResult.txid);
+          setTotalElapsedSec(Math.round((Date.now() - buildStartRef.current) / 1000));
+          setStep('complete');
+          void recordUsage(recipient, 'zcash');
+          if (shouldSuggestSave(recipient)) setShowSavePrompt(true);
+        } finally {
+          frostAbortRef.current = null;
         }
       } else {
         // zigner wallet: build unsigned tx → QR signing flow
@@ -375,7 +301,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         setStep('sign');
       }
     } catch (err) {
-      frostAbort?.abort();
+      frostAbortRef.current?.abort();
+      frostAbortRef.current = null;
       setFormError(err instanceof Error ? err.message : 'failed to build transaction');
       setStep('error');
     }
@@ -452,6 +379,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         break;
       case 'frost-room':
       case 'frost-signing':
+      case 'airgap-flow':
+        frostAbortRef.current?.abort();
+        frostAbortRef.current = null;
         setStep('review');
         break;
       case 'error':
@@ -463,8 +393,30 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   };
 
   const handleClose = () => {
+    frostAbortRef.current?.abort();
+    frostAbortRef.current = null;
     reset();
     onClose();
+  };
+
+  // airgap-flow finished: broadcast with the aggregated orchard sigs.
+  const handleAirgapComplete = async (orchardSigs: string[]) => {
+    setStep('broadcast');
+    try {
+      const result = unsignedTxRef.current!;
+      const finalResult = await completeSendTxInWorker(
+        'zcash', selectedKeyInfo!.id, zidecarUrl,
+        result.unsignedTx, { orchardSigs, transparentSigs: [] }, result.spendIndices,
+      );
+      complete(finalResult.txid);
+      setTotalElapsedSec(Math.round((Date.now() - buildStartRef.current) / 1000));
+      setStep('complete');
+      void recordUsage(recipient, 'zcash');
+      if (shouldSuggestSave(recipient)) setShowSavePrompt(true);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'broadcast failed');
+      setStep('error');
+    }
   };
 
   // render based on current step
@@ -836,6 +788,21 @@ description="point camera at zafu zigner's signature qr code"
           </div>
         );
 
+      case 'airgap-flow':
+        if (!unsignedTxRef.current || !activeZcashWallet?.multisig) return null;
+        return (
+          <FrostAirgapSignFlow
+            ms={activeZcashWallet.multisig}
+            unsigned={unsignedTxRef.current}
+            recipient={recipient.trim()}
+            amount={amount}
+            fee={fee}
+            onComplete={handleAirgapComplete}
+            onCancel={handleClose}
+            onError={(msg) => { setFormError(msg); setStep('error'); }}
+          />
+        );
+
       case 'error':
         return (
           <div className="flex flex-col items-center gap-4 p-8">
@@ -869,15 +836,3 @@ description="point camera at zafu zigner's signature qr code"
     </div>
   );
 }
-
-/** poll until condition is true, with timeout */
-const waitFor = (condition: () => boolean, timeoutMs: number): Promise<void> =>
-  new Promise((resolve, reject) => {
-    const start = Date.now();
-    const check = () => {
-      if (condition()) return resolve();
-      if (Date.now() - start > timeoutMs) return reject(new Error('timeout waiting for co-signers'));
-      setTimeout(check, 500);
-    };
-    check();
-  });

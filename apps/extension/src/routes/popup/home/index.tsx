@@ -57,6 +57,7 @@ const MultisigOverview = () => {
   const zcashWallets = useStore(selectZcashWallets);
   const activeIdx = useStore(selectActiveZcashIndex);
   const { setActiveZcashWallet } = useStore(walletsSelector);
+  const { workerSyncHeight } = useZcashSyncStatus();
   const [expanded, setExpanded] = useState(false);
   const [balances, setBalances] = useState<Record<string, bigint>>({});
 
@@ -65,14 +66,31 @@ const MultisigOverview = () => {
     [zcashWallets],
   );
 
-  // fetch balances for all multisig wallets
+  // fetch balances for all multisig wallets. sync writes notes keyed by
+  // vaultId (selectedKeyInfo.id), not zcashWallet.id, so the balance lookup
+  // must use vaultId; local state stays keyed by w.id for row identity.
+  // re-fetch on every sync-progress tick — only the *active* wallet emits
+  // these, but that's enough to refresh the active multisig vault's row.
   useEffect(() => {
-    for (const w of multisigWallets) {
-      getBalanceInWorker('zcash', w.id)
-        .then(bal => setBalances(prev => ({ ...prev, [w.id]: BigInt(bal) })))
-        .catch(() => {});
-    }
-  }, [multisigWallets]);
+    const fetchAll = () => {
+      for (const w of multisigWallets) {
+        if (!w.vaultId) continue;
+        const vaultId = w.vaultId;
+        const rowId = w.id;
+        getBalanceInWorker('zcash', vaultId)
+          .then(bal => setBalances(prev => ({ ...prev, [rowId]: BigInt(bal) })))
+          .catch(() => {});
+      }
+    };
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.network !== 'zcash') return;
+      fetchAll();
+    };
+    window.addEventListener('network-sync-progress', handler);
+    fetchAll();
+    return () => window.removeEventListener('network-sync-progress', handler);
+  }, [multisigWallets, workerSyncHeight]);
 
   if (multisigWallets.length === 0) return null;
 

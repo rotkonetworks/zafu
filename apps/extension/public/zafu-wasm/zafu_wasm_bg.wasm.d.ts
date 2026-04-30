@@ -17,6 +17,7 @@ export const encode_notes_bundle: (a: number, b: number, c: number, d: number, e
 export const frontier_tree_size: (a: number, b: number) => [bigint, number, number];
 export const generate_seed_phrase: () => [number, number, number, number];
 export const get_commitment_proof_request: (a: number, b: number) => [number, number, number, number];
+export const num_threads: () => number;
 export const parse_signature_response: (a: number, b: number) => [number, number, number];
 export const transparent_address_from_ufvk: (a: number, b: number, c: number) => [number, number, number, number];
 export const transparent_pubkey_from_ufvk: (a: number, b: number, c: number) => [number, number, number, number];
@@ -48,7 +49,6 @@ export const witness_extract_path: (a: number, b: number) => [number, number, nu
 export const witness_sync_update: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number];
 export const zt_encode_frames: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
 export const init: () => void;
-export const num_threads: () => number;
 export const frost_aggregate_shares: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number, number];
 export const frost_attestation_digest: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
 export const frost_attestation_verify: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number];
@@ -70,12 +70,6 @@ export const rustsecp256k1_v0_10_0_default_error_callback_fn: (a: number, b: num
 export const rustsecp256k1_v0_10_0_default_illegal_callback_fn: (a: number, b: number) => void;
 export const rustsecp256k1_v0_10_0_context_destroy: (a: number) => void;
 export const rustsecp256k1_v0_10_0_context_create: (a: number) => number;
-export const __wbg_wbg_rayon_poolbuilder_free: (a: number, b: number) => void;
-export const initThreadPool: (a: number) => any;
-export const wbg_rayon_poolbuilder_build: (a: number) => void;
-export const wbg_rayon_poolbuilder_numThreads: (a: number) => number;
-export const wbg_rayon_poolbuilder_receiver: (a: number) => number;
-export const wbg_rayon_start_worker: (a: number) => void;
 export const memory: WebAssembly.Memory;
 export const __wbindgen_malloc: (a: number, b: number) => number;
 export const __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

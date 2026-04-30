@@ -89,6 +89,8 @@ export const buildZignerVault = (
   },
 });
 
+export type FrostCustody = 'self' | 'airgapSigner';
+
 export interface FrostMultisigParams {
   label: string;
   address: string;
@@ -97,12 +99,19 @@ export interface FrostMultisigParams {
    * locally and we verify agreement via echo-broadcast before persisting,
    * so this value is guaranteed to match across all N participants. */
   orchardFvk: string;
-  keyPackage: string;
   publicKeyPackage: string;
-  ephemeralSeed: string;
   threshold: number;
   maxSigners: number;
   relayUrl: string;
+  /** secret share location. defaults to 'self' (encrypted on zafu).
+   * 'airgapSigner' = share lives on zigner only; keyPackage / ephemeralSeed must be omitted. */
+  custody?: FrostCustody;
+  /** required when custody === 'self'; absent for airgapSigner */
+  keyPackage?: string;
+  /** required when custody === 'self'; absent for airgapSigner */
+  ephemeralSeed?: string;
+  /** zigner-side wallet_id from frost_store_wallet (airgapSigner only). */
+  zignerWalletId?: string;
 }
 
 export const buildFrostVault = (
@@ -123,14 +132,15 @@ export const buildFrostVault = (
     relayUrl: params.relayUrl,
     address: params.address,
     supportedNetworks: ['zcash'],
+    ...(params.custody === 'airgapSigner' ? { custody: 'airgapSigner' as const } : {}),
   },
 });
 
 export const buildFrostZcashWallet = (
   params: FrostMultisigParams,
   vaultId: string,
-  encKeyPackage: BoxJson | string,
-  encEphemeralSeed: BoxJson | string,
+  encKeyPackage: BoxJson | string | undefined,
+  encEphemeralSeed: BoxJson | string | undefined,
 ): ZcashWalletJson => ({
   id: generateZcashWalletId(),
   label: params.label,
@@ -140,12 +150,16 @@ export const buildFrostZcashWallet = (
   mainnet: true,
   vaultId,
   multisig: {
-    keyPackage: encKeyPackage,
     publicKeyPackage: params.publicKeyPackage,
-    ephemeralSeed: encEphemeralSeed,
     threshold: params.threshold,
     maxSigners: params.maxSigners,
     relayUrl: params.relayUrl,
+    ...(params.custody === 'airgapSigner'
+      ? {
+          custody: 'airgapSigner' as const,
+          ...(params.zignerWalletId ? { zignerWalletId: params.zignerWalletId } : {}),
+        }
+      : { keyPackage: encKeyPackage!, ephemeralSeed: encEphemeralSeed! }),
   },
 });
 

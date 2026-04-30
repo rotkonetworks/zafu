@@ -8,7 +8,7 @@ import { AppHeader } from '../../components/app-header';
 import { MenuDrawer } from '../../components/menu-drawer';
 import { PopupPath } from './paths';
 import { useStore } from '../../state';
-import { selectActiveNetwork, selectPenumbraAccount, type NetworkType } from '../../state/keyring';
+import { selectActiveNetwork, selectEffectiveKeyInfo, selectPenumbraAccount, type NetworkType } from '../../state/keyring';
 import { isPro } from '../../state/license';
 import { hasFeature } from '../../config/networks';
 
@@ -23,7 +23,9 @@ const ALL_TABS: ReadonlyArray<{ path: PopupPath; icon: JSX.Element; label: strin
   { path: PopupPath.VOTE,   icon: <span className='i-lucide-vote h-5 w-5' />,              label: 'Vote',   feature: 'vote' },
 ];
 
-/** multisig tab — injected only when user has FROST wallets */
+/** multisig tab — visible whenever the active wallet is a FROST vault
+ * (so users can always operate existing multisigs, regardless of pro state),
+ * otherwise gated by pro license (creation requires pro). */
 const MULTISIG_TAB = {
   path: PopupPath.MULTISIG,
   icon: <span className='i-lucide-shield h-5 w-5' />,
@@ -70,13 +72,17 @@ export const PopupLayout = () => {
   const location = useLocation();
   const activeNetwork = useStore(selectActiveNetwork);
   const penumbraAccount = useStore(selectPenumbraAccount);
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const pro = useStore(isPro);
   const onLoginPage = location.pathname === '/login';
   usePenumbraSwapClaim(activeNetwork, onLoginPage, penumbraAccount);
   const [menuOpen, setMenuOpen] = useState(false);
 
+  const onMultisigWallet = selectedKeyInfo?.type === 'frost-multisig';
   const networkTabs = getTabsForNetwork(activeNetwork);
-  const tabs = activeNetwork === 'zcash' && pro ? [...networkTabs, MULTISIG_TAB] : networkTabs;
+  const tabs = activeNetwork === 'zcash' && (onMultisigWallet || pro)
+    ? [...networkTabs, MULTISIG_TAB]
+    : networkTabs;
   const showChrome = !matchesRoute(location.pathname, hiddenHeaderRoutes);
   const showTabs = showChrome && !matchesRoute(location.pathname, hiddenTabRoutes);
 

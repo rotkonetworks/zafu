@@ -41,6 +41,7 @@ export const SettingsWallets = () => {
   const {
     all: penumbraWallets,
     zcashWallets,
+    updateMultisigWallet,
   } = useStore(walletsSelector);
   const {
     scanState,
@@ -141,7 +142,14 @@ export const SettingsWallets = () => {
 
   const handleRename = async (id: string, name: string) => {
     const trimmed = name.trim();
-    if (trimmed) await renameKeyRing(id, trimmed).catch(() => {});
+    if (!trimmed) return;
+    await renameKeyRing(id, trimmed).catch(() => {});
+    // for multisig vaults, also update the linked zcashWallet.label so the
+    // multisig tab + overview show the same name.
+    const linkedMs = zcashWallets.find(w => w.vaultId === id && w.multisig);
+    if (linkedMs) {
+      await updateMultisigWallet(linkedMs.id, { label: trimmed }).catch(() => {});
+    }
   };
 
   // -- add wallet logic --

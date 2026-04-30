@@ -14,7 +14,7 @@ export const SettingsMultisig = () => {
 
   const zcashWallets = useStore(selectZcashWallets);
   const { updateMultisigWallet } = useStore(walletsSelector);
-  const { deleteKeyRing } = useStore(keyRingSelector);
+  const { deleteKeyRing, renameKeyRing } = useStore(keyRingSelector);
 
   const wallet = zcashWallets.find(w => w.id === walletId);
 
@@ -34,10 +34,16 @@ export const SettingsMultisig = () => {
   const ms = wallet.multisig;
 
   const handleSave = async () => {
+    const trimmed = label.trim() || wallet.label;
     await updateMultisigWallet(wallet.id, {
-      label: label.trim() || wallet.label,
+      label: trimmed,
       relayUrl: relayUrl.trim(),
     });
+    // also rename the parent keyring vault so the wallets settings page
+    // shows the same name (vault.name and zcashWallet.label otherwise drift).
+    if (wallet.vaultId) {
+      await renameKeyRing(wallet.vaultId, trimmed).catch(() => {});
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };

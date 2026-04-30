@@ -21,18 +21,24 @@ export interface ZcashWalletJson {
   vaultId: string;
   /** FROST multisig fields — present only for multisig wallets */
   multisig?: {
-    /** FROST key package — encrypted BoxJson when password is set, raw hex string otherwise */
-    keyPackage: BoxJson | string;
     /** hex-encoded FROST public key package (shared, non-sensitive) */
     publicKeyPackage: string;
-    /** ephemeral seed — encrypted BoxJson when password is set, raw hex string otherwise */
-    ephemeralSeed: BoxJson | string;
     /** signing threshold */
     threshold: number;
     /** total signers */
     maxSigners: number;
     /** relay server URL used for signing sessions */
     relayUrl: string;
+    /** where the FROST share lives. undefined / 'self' = encrypted on zafu;
+     * 'airgapSigner' = on a zigner device only, signing requires QR round-trip */
+    custody?: 'self' | 'airgapSigner';
+    /** FROST key package — present only for self-custody wallets */
+    keyPackage?: BoxJson | string;
+    /** ephemeral seed — present only for self-custody wallets */
+    ephemeralSeed?: BoxJson | string;
+    /** zigner-side wallet_id from frost_store_wallet (airgapSigner only).
+     *  enables O(1) lookup at sign time vs scanning all FROST wallets. */
+    zignerWalletId?: string;
   };
 }
 
