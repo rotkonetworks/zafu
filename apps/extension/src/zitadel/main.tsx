@@ -693,10 +693,21 @@ function boot() {
     });
   }
 
+  // irssi-style nick column: pad the nick block to a fixed min-width
+  // and right-align so the closing `>` (or action `*`) lands at the
+  // same column regardless of nick length. Long nicks expand the
+  // column for that line only - the eye still finds the message text
+  // at a consistent left edge for the common case.
+  const NICK_COL_MIN = '12ch';
+
   // Render one message into HTML. Pulled out of render() so the same
   // template is used for the full-rebuild path and the append path.
   function renderMsgLineHTML(m: Msg): string {
-    if (m.system) return `<div style="line-height:1.4"><span style="color:${C.muted}">${m.time}</span><span style="color:${C.gold}"> -!- </span><span style="color:${C.muted}">${esc(m.text)}</span></div>`;
+    if (m.system) {
+      // pad the "-!-" sigil to the same width as the nick column so
+      // system lines align with chat lines below them.
+      return `<div style="line-height:1.4"><span style="color:${C.muted}">${m.time}</span> <span style="display:inline-block;min-width:${NICK_COL_MIN};text-align:right;color:${C.gold}">-!-</span> <span style="color:${C.muted}">${esc(m.text)}</span></div>`;
+    }
     const col = m.color || C.gold;
     const dmTag = m.dm ? `<span style="color:${C.dm}">[e2ee] </span>` : '';
     // verified peer (zid-auth-v1) gets a green `+` prefix on the
@@ -709,9 +720,11 @@ function boot() {
     // signature bound the action-ness, so a verified action carries
     // the same `+` weight as a verified message.
     if (m.action) {
-      return `<div style="line-height:1.4"><span style="color:${C.muted}">${m.time}</span>${dmTag}<span style="color:${C.purple}"> * </span>${verifyMark}<b style="color:${col}">${esc(m.nick)}</b> <span style="color:${C.text}">${esc(m.text)}</span></div>`;
+      const nickBlock = `<span style="display:inline-block;min-width:${NICK_COL_MIN};text-align:right"><span style="color:${C.purple}">*</span> ${verifyMark}<b style="color:${col}">${esc(m.nick)}</b></span>`;
+      return `<div style="line-height:1.4"><span style="color:${C.muted}">${m.time}</span> ${dmTag}${nickBlock} <span style="color:${C.text}">${esc(m.text)}</span></div>`;
     }
-    return `<div style="line-height:1.4"><span style="color:${C.muted}">${m.time}</span>${dmTag}<span style="color:${C.border}"> &lt;</span>${verifyMark}<b style="color:${col}">${esc(m.nick)}</b><span style="color:${C.border}">&gt; </span>${esc(m.text)}</div>`;
+    const nickBlock = `<span style="display:inline-block;min-width:${NICK_COL_MIN};text-align:right"><span style="color:${C.border}">&lt;</span>${verifyMark}<b style="color:${col}">${esc(m.nick)}</b><span style="color:${C.border}">&gt;</span></span>`;
+    return `<div style="line-height:1.4"><span style="color:${C.muted}">${m.time}</span> ${dmTag}${nickBlock} ${esc(m.text)}</div>`;
   }
 
   function render() {
