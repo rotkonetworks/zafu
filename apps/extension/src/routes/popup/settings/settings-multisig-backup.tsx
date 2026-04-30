@@ -101,8 +101,9 @@ export const SettingsMultisigBackup = () => {
               onClick={async () => {
                 if (await requestAuth()) setBatchOpen(true);
               }}
-              className='mt-3 w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-xs text-zigner-gold hover:bg-primary/10 transition-colors'
+              className='mt-3 w-full flex items-center justify-center gap-1.5 rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-xs text-zigner-gold hover:bg-primary/10 transition-colors'
             >
+              <span className='i-lucide-archive h-3.5 w-3.5' />
               export all ({selfCustody.length} wallet{selfCustody.length === 1 ? '' : 's'})
             </button>
           )}
@@ -167,22 +168,26 @@ export const SettingsMultisigBackup = () => {
             scan an airgap QR from a zigner to re-add airgap multisig wallets.
             Already-known wallets are skipped, not overwritten.
           </p>
-          <button
-            onClick={async () => {
-              if (await requestAuth()) setRestoreOpen(true);
-            }}
-            className='w-full rounded-lg border border-border-soft py-2.5 text-xs hover:bg-elev-2 transition-colors'
-          >
-            restore from backup file
-          </button>
-          <button
-            onClick={async () => {
-              if (await requestAuth()) setAirgapQrOpen(true);
-            }}
-            className='w-full rounded-lg border border-border-soft py-2.5 text-xs hover:bg-elev-2 transition-colors'
-          >
-            import airgap QR from zigner
-          </button>
+          <div className='flex gap-2'>
+            <button
+              onClick={async () => {
+                if (await requestAuth()) setRestoreOpen(true);
+              }}
+              className='flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-border-soft py-2.5 text-xs hover:bg-elev-2 transition-colors'
+            >
+              <span className='i-lucide-file-up h-3.5 w-3.5' />
+              from backup file
+            </button>
+            <button
+              onClick={async () => {
+                if (await requestAuth()) setAirgapQrOpen(true);
+              }}
+              className='flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-border-soft py-2.5 text-xs hover:bg-elev-2 transition-colors'
+            >
+              <span className='i-lucide-qr-code h-3.5 w-3.5' />
+              from zigner QR
+            </button>
+          </div>
         </div>
       </div>
     </SettingsScreen>

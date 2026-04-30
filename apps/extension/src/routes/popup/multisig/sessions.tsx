@@ -24,7 +24,6 @@ import { usePasswordGate } from '../../../hooks/password-gate';
 import { cn } from '@repo/ui/lib/utils';
 import { PopupPath } from '../paths';
 import { BackupModal } from './backup/backup-modal';
-import { ImportModal } from './backup/import-modal';
 import { exportSingleBackup } from './backup/export-helpers';
 
 /** format zatoshi to ZEC display string */
@@ -132,10 +131,8 @@ export const MultisigPage = () => {
   const { workerSyncHeight } = useZcashSyncStatus();
   const [balances, setBalances] = useState<Record<string, bigint>>({});
 
-  // backup / restore UI state
+  // per-wallet backup UI state. restore is on the settings backup page.
   const [backupTarget, setBackupTarget] = useState<ZcashWalletJson | null>(null);
-  const [restoreOpen, setRestoreOpen] = useState(false);
-  const [importToast, setImportToast] = useState<string | null>(null);
   const { requestAuth, PasswordModal } = usePasswordGate();
 
   // multisig is zcash-only; placeholder elsewhere. Computed early but
@@ -213,20 +210,6 @@ export const MultisigPage = () => {
         }}
         onClose={() => setBackupTarget(null)}
       />
-      <ImportModal
-        open={restoreOpen}
-        onClose={() => setRestoreOpen(false)}
-        onImported={(s) => {
-          setImportToast(`restored ${s.imported} wallet${s.imported === 1 ? '' : 's'}` +
-            (s.skipped ? ` (${s.skipped} already existed)` : ''));
-          setTimeout(() => setImportToast(null), 4000);
-        }}
-      />
-      {importToast && (
-        <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-2 text-xs text-green-400'>
-          {importToast}
-        </div>
-      )}
       {/* header */}
       <div className='flex items-center justify-between'>
         <div className='flex items-center gap-2'>
@@ -289,16 +272,6 @@ export const MultisigPage = () => {
               <span className='i-lucide-user-plus h-3.5 w-3.5' />
               Join existing
             </button>
-            <span className='h-3 w-px bg-border-soft' />
-            <button
-              onClick={async () => {
-                if (await requestAuth()) setRestoreOpen(true);
-              }}
-              className='flex items-center gap-1.5 text-xs text-fg-muted transition-colors hover:text-zigner-gold'
-            >
-              <span className='i-lucide-upload h-3.5 w-3.5' />
-              Restore
-            </button>
           </div>
         </>
       ) : (
@@ -358,13 +331,11 @@ export const MultisigPage = () => {
               </button>
             )}
             <button
-              onClick={async () => {
-                if (await requestAuth()) setRestoreOpen(true);
-              }}
+              onClick={() => navigate(PopupPath.SETTINGS_MULTISIG_BACKUP)}
               className='flex items-center justify-center gap-1.5 rounded-lg border border-border-soft px-3 py-2 text-xs text-fg-muted transition-colors hover:bg-elev-1'
             >
               <span className='i-lucide-upload h-3.5 w-3.5' />
-              Restore from backup file
+              Restore backup / Import from zigner
             </button>
           </div>
         </>
