@@ -225,12 +225,15 @@ jobs:
       # review automatically. Google's review humans still have to approve,
       # but nothing on our side is manual after `git tag`.
       #
-      # Auth is a direct JWT→OAuth exchange because google-github-actions/
-      # auth@v2 with token_format=access_token uses iamcredentials.google
-      # apis.com which 403s for the chromewebstore scope even with the
-      # API enabled and the SA granted serviceAccountTokenCreator on
-      # itself. The google-auth Python library signs the JWT locally and
-      # exchanges it at oauth2.googleapis.com/token — no IAM round-trip.
+      # Auth uses OAuth user credentials (installed-application flow), not
+      # a service account. The Chrome Web Store v1.1 API does not accept
+      # service-account auth — it requires an OAuth user that has been
+      # added as a publisher on each listing. The CWS_PUBLISHER_JSON
+      # secret therefore holds {clientId, clientSecret, refreshToken},
+      # produced once via `npx chrome-webstore-upload-keys` against a
+      # Google account that owns the listings. The Python step exchanges
+      # the refresh token for a short-lived access token at
+      # oauth2.googleapis.com/token.
       - name: Publish to Chrome Web Store
         if: steps.vars.outputs.channel != 'skip'
         env:
@@ -240,21 +243,28 @@ jobs:
         run: |
           set -eu
           pip install --quiet google-auth requests
-          keyfile="$(mktemp)"
-          printf '%s' "$CWS_PUBLISHER_JSON" > "$keyfile"
-          TOKEN="$(python3 - "$keyfile" <<'PY'
-          import sys
-          from google.oauth2 import service_account
+          TOKEN="$(python3 - <<'PY'
+          import json, os
+          from google.oauth2.credentials import Credentials
           from google.auth.transport.requests import Request
-          creds = service_account.Credentials.from_service_account_file(
-              sys.argv[1],
+          j = json.loads(os.environ['CWS_PUBLISHER_JSON'])
+          # Accept both camelCase (chrome-webstore-upload-keys output) and
+          # snake_case (manual JSON) keys for forward compat.
+          client_id = j.get('clientId') or j['client_id']
+          client_secret = j.get('clientSecret') or j['client_secret']
+          refresh_token = j.get('refreshToken') or j['refresh_token']
+          creds = Credentials(
+              token=None,
+              refresh_token=refresh_token,
+              client_id=client_id,
+              client_secret=client_secret,
+              token_uri='https://oauth2.googleapis.com/token',
               scopes=['https://www.googleapis.com/auth/chromewebstore'],
           )
           creds.refresh(Request())
           print(creds.token)
           PY
           )"
-          shred -u "$keyfile" 2>/dev/null || rm -f "$keyfile"
           upload_and_publish() {
             local tag="$1"      # "prod" or "beta"
             local item_id="$2"
