@@ -4,7 +4,7 @@
   "short_name": "zafu BETA",
   "version": "24.1.2",
   "description": "Zcash + Penumbra privacy wallet. Cold signing, FROST multisig, client-side proving, ed25519 app identity, verified lightclient.",
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzpxFq+skBCPK5rCIenZfZ9ijPDyar61d3S4DzyxHBXdviLYtVvrK1byXXnCpUwyaYrR9N9QjNCCPT1lEOS5HBUViCI/K1tsJvlWrm0r8+wipNtwb/tVoo+AVUuhyaR4pkm2ckQnYWN10PNhf24Gw8QkjSNNk/oVUbn4gqRcQ4V1WN/E3RiINjaBz0TnDK/8bxqo0z3k5Z7W1YGzA/tB9ZSSTw3QQLUwXlrJbbkqcnNhE91Q9d3dO1ZSao9Qcheg2WFR39nGI7nYnmFEhUDpo8+C56/zUzWAoh08b4lX0IonQy3KOACUkbM10C8VvPuxnKM8IR1d/RWelj1Cul4oqZwIDAQAB",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAumLcmfQnXRpyRqpga9emIAK2NszJC0GbCtacZXNFKRr/ZvsBCasAeu91plM7BPhuFd6E9cjsJafmesmhZ3eVQijR+rrjE77coqB5Aff5otsCFd8l0+HcWcLZrpDO2HAxlJMCceylA75DzYx4ewSc/mW1e69G6xjUxb8azaWqhCK8t6bwrYCN7YGhRYjpNzbHRtB3EA/6lf8kEVMFrTX/wlD+AJMo+Yq5ggikECK4VmRAoAxM4M+hE4M3LtKypMrj2q0+wqnMU+NdyIyMaEeEl8UbsuP6UymQf1j+NIcAkoS4HCHA9oZ68GRzDH2cpXf+TaQJnmEAnI9cjpaUiU1TFQIDAQAB",
   "minimum_chrome_version": "119",
   "action": {
     "default_popup": "popup.html"
