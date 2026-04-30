@@ -262,6 +262,11 @@ function boot() {
   const nickToPubkey = new Map<string, string>();
   // pubkey -> nick (reverse)
   const pubkeyToNick = new Map<string, string>();
+  // nicks for which we have verified a zid-auth-v1 announce. these are
+  // rendered with a green `+` sigil (IRC voice-mode convention) so the
+  // user can tell at a glance which peers proved possession of their
+  // ZID. the user's own nick is added on first signed announce we send.
+  const verifiedNicks = new Set<string>();
   // DM messages stored under "dm:<pubkey>" key
   const DM_PREFIX = 'dm:';
   // track which DM we're viewing (null = room view)
@@ -504,7 +509,15 @@ function boot() {
       if (m.system) return `<div style="line-height:1.4"><span style="color:${C.muted}">${m.time}</span><span style="color:${C.gold}"> -!- </span><span style="color:${C.muted}">${esc(m.text)}</span></div>`;
       const col = m.color || C.gold;
       const dmTag = m.dm ? `<span style="color:${C.dm}">[e2ee] </span>` : '';
-      return `<div style="line-height:1.4"><span style="color:${C.muted}">${m.time}</span>${dmTag}<span style="color:${C.border}"> &lt;</span><b style="color:${col}">${esc(m.nick)}</b><span style="color:${C.border}">&gt; </span>${esc(m.text)}</div>`;
+      // verified peer (zid-auth-v1) gets a green `+` prefix on the
+      // nick - same convention IRC uses for voice (+) / op (@). DM
+      // messages are inherently authenticated through Noise IK so
+      // they always show the marker.
+      const verified = m.dm || verifiedNicks.has(m.nick);
+      const verifyMark = verified
+        ? `<span style="color:${C.green}">+</span>`
+        : '';
+      return `<div style="line-height:1.4"><span style="color:${C.muted}">${m.time}</span>${dmTag}<span style="color:${C.border}"> &lt;</span>${verifyMark}<b style="color:${col}">${esc(m.nick)}</b><span style="color:${C.border}">&gt; </span>${esc(m.text)}</div>`;
     }).join('');
     msgArea.scrollTop = msgArea.scrollHeight;
 
@@ -621,6 +634,8 @@ function boot() {
               if (zidPrivkey) {
                 const proof = signAnnounce(zidPrivkey, zidPubkey, nick);
                 wsSend({ t: 'announce', ...proof });
+                // self-verified: we just signed our own announce
+                verifiedNicks.add(nick);
               } else {
                 wsSend({ t: 'announce', pubkey: zidPubkey, nick });
               }
@@ -645,8 +660,18 @@ function boot() {
                 { nick: proof.nick, existing: existing.slice(0, 16), new: proof.pubkey.slice(0, 16) });
               break;
             }
+            const wasVerified = verifiedNicks.has(proof.nick);
             nickToPubkey.set(proof.nick, proof.pubkey);
             pubkeyToNick.set(proof.pubkey, proof.nick);
+            verifiedNicks.add(proof.nick);
+            // first-time verification announcement, so the user sees
+            // it surface in chat (vs silently flipping the +).
+            if (!wasVerified) {
+              addMsg('zitadel',
+                `+${proof.nick} verified (zid ${proof.pubkey.slice(0, 16)})`,
+                true, msg.room || currentRoom || undefined);
+              render();
+            }
             break;
           }
           case 'created':
