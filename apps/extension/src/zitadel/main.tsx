@@ -339,6 +339,28 @@ async function resolveZidIdentity(): Promise<ZidInfo> {
 type EncState = 'e2ee' | 'public';
 
 function esc(s: string) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+/** Render text with http/https URLs as clickable links. Restricted to
+ * http(s) so a malicious peer can't sneak in javascript:, data:, or
+ * file: schemes. Anchor uses noopener+noreferrer so the destination
+ * can't grab window.opener and the referrer doesn't leak the chat
+ * page URL. The href and visible text are both escaped - we never
+ * concatenate raw URL into HTML. */
+function linkify(text: string, linkColor: string): string {
+  const urlRe = /(https?:\/\/[^\s<>"']+)/g;
+  let result = '';
+  let lastIdx = 0;
+  for (const m of text.matchAll(urlRe)) {
+    const idx = m.index!;
+    const url = m[1]!;
+    result += esc(text.slice(lastIdx, idx));
+    const eu = esc(url);
+    result += `<a href="${eu}" target="_blank" rel="noopener noreferrer" style="color:${linkColor};text-decoration:underline">${eu}</a>`;
+    lastIdx = idx + url.length;
+  }
+  result += esc(text.slice(lastIdx));
+  return result;
+}
 function now() { const d = new Date(); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
 
 function boot() {
@@ -777,8 +799,9 @@ function boot() {
   function renderMsgLineHTML(m: Msg): string {
     if (m.system) {
       // pad the "-!-" sigil to the same width as the nick column so
-      // system lines align with chat lines below them.
-      return `<div style="line-height:1.4"><span style="color:${C.muted}">${m.time}</span> <span style="display:inline-block;min-width:${NICK_COL_MIN};text-align:right;color:${C.gold}">-!-</span> <span style="color:${C.muted}">${esc(m.text)}</span></div>`;
+      // system lines align with chat lines below them. linkify so
+      // /help URLs and other guidance with links are clickable.
+      return `<div style="line-height:1.4"><span style="color:${C.muted}">${m.time}</span> <span style="display:inline-block;min-width:${NICK_COL_MIN};text-align:right;color:${C.gold}">-!-</span> <span style="color:${C.muted}">${linkify(m.text, C.cyan)}</span></div>`;
     }
     const col = m.color || C.gold;
     const dmTag = m.dm ? `<span style="color:${C.dm}">[e2ee] </span>` : '';
@@ -807,12 +830,13 @@ function boot() {
     const lineStyle = isMention
       ? `line-height:1.4;border-left:2px solid ${C.gold};background:rgba(244,183,40,0.07);padding-left:6px;margin-left:-8px;`
       : 'line-height:1.4';
+    const bodyHtml = linkify(m.text, C.cyan);
     if (m.action) {
       const nickBlock = `<span style="display:inline-block;min-width:${NICK_COL_MIN};text-align:right"><span style="color:${C.purple}">*</span> ${verifyMark}${nickEl}</span>`;
-      return `<div style="${lineStyle}"><span style="color:${C.muted}">${m.time}</span> ${dmTag}${nickBlock} <span style="color:${C.text}">${esc(m.text)}</span></div>`;
+      return `<div style="${lineStyle}"><span style="color:${C.muted}">${m.time}</span> ${dmTag}${nickBlock} <span style="color:${C.text}">${bodyHtml}</span></div>`;
     }
     const nickBlock = `<span style="display:inline-block;min-width:${NICK_COL_MIN};text-align:right"><span style="color:${C.border}">&lt;</span>${verifyMark}${nickEl}<span style="color:${C.border}">&gt;</span></span>`;
-    return `<div style="${lineStyle}"><span style="color:${C.muted}">${m.time}</span> ${dmTag}${nickBlock} ${esc(m.text)}</div>`;
+    return `<div style="${lineStyle}"><span style="color:${C.muted}">${m.time}</span> ${dmTag}${nickBlock} ${bodyHtml}</div>`;
   }
 
   function render() {
