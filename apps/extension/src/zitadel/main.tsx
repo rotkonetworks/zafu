@@ -446,18 +446,46 @@ function boot() {
   // DOM - sidebar + main layout
   root.style.cssText = `background:${C.bg};color:${C.text};font-family:'IBM Plex Mono',monospace;font-size:14px;height:100vh;display:flex;`;
   const sidebar = mkEl('div', `width:180px;min-width:180px;background:${C.panel};border-right:1px solid ${C.border};display:flex;flex-direction:column;overflow-y:auto;`);
-  const main = mkEl('div', `flex:1;display:flex;flex-direction:column;min-width:0;`);
+  const main = mkEl('div', `flex:1;display:flex;flex-direction:column;min-width:0;position:relative;`);
   const topbar = mkEl('div', `background:${C.panel};border-bottom:1px solid ${C.border};padding:6px 12px;display:flex;align-items:center;gap:8px;`);
   const msgArea = mkEl('div', `flex:1;overflow-y:auto;padding:8px 12px;`);
   const statusEl = mkEl('div', `background:${C.panel};border-top:1px solid ${C.border};padding:4px 12px;font-size:11px;color:${C.muted};display:flex;gap:16px;`);
   const bar = mkEl('div', `background:${C.bg};border-top:1px solid ${C.border};padding:8px 12px;display:flex;align-items:center;gap:8px;`);
+  // floating "↓ N new" pill - hidden by default, surfaced when the user
+  // is scrolled up and new messages have arrived. position is anchored
+  // to the relatively-positioned `main` above the status bar.
+  const scrollPill = mkEl('div', `position:absolute;right:16px;bottom:64px;background:${C.gold};color:${C.bg};padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;cursor:pointer;display:none;box-shadow:0 2px 6px rgba(0,0,0,0.4);z-index:10;`);
   const inp = document.createElement('input');
   inp.type = 'text'; inp.autofocus = true;
   inp.placeholder = 'type a message... (/ for commands)';
   inp.style.cssText = `flex:1;background:transparent;border:none;outline:none;color:${C.bright};font-family:inherit;font-size:inherit;caret-color:${C.gold};`;
   bar.appendChild(inp);
-  main.append(topbar, msgArea, statusEl, bar);
+  main.append(topbar, msgArea, statusEl, bar, scrollPill);
   root.append(sidebar, main);
+
+  // unseen-while-scrolled bookkeeping. only the currently viewed view
+  // has a pill; switching views resets it (the new view's history is
+  // already visible from the top of the rebuild).
+  let unseenScrolled = 0;
+  function showPill() {
+    if (unseenScrolled <= 0) { scrollPill.style.display = 'none'; return; }
+    scrollPill.textContent = `↓ ${unseenScrolled} new`;
+    scrollPill.style.display = 'block';
+  }
+  function resetPill() {
+    unseenScrolled = 0;
+    scrollPill.style.display = 'none';
+  }
+  scrollPill.addEventListener('click', () => {
+    msgArea.scrollTop = msgArea.scrollHeight;
+    resetPill();
+  });
+  msgArea.addEventListener('scroll', () => {
+    const NEAR_BOTTOM_PX = 80;
+    const atBottom =
+      msgArea.scrollHeight - msgArea.scrollTop - msgArea.clientHeight < NEAR_BOTTOM_PX;
+    if (atBottom) resetPill();
+  });
 
   // delegated click on peer nicks in the message stream: opens a DM
   // view. avoids re-binding handlers on every render churn. the same
@@ -835,16 +863,25 @@ function boot() {
       renderedView = viewKey;
       renderedCount.set(viewKey, msgs.length);
       msgArea.scrollTop = msgArea.scrollHeight;
+      // view switched: the new view is rendered scrolled-to-bottom, so
+      // any unseen counter from the previous view is irrelevant.
+      resetPill();
     } else {
       // same view: append only the lines added since the last render.
       const already = renderedCount.get(viewKey) ?? msgs.length;
-      if (msgs.length > already) {
+      const added = msgs.length - already;
+      if (added > 0) {
         const fragment = msgs.slice(already).map(renderMsgLineHTML).join('');
         msgArea.insertAdjacentHTML('beforeend', fragment);
         renderedCount.set(viewKey, msgs.length);
       }
       if (wasAtBottom) {
         msgArea.scrollTop = msgArea.scrollHeight;
+      } else if (added > 0) {
+        // user is reading scrollback; surface a pill so they know
+        // new messages have arrived without yanking them down.
+        unseenScrolled += added;
+        showPill();
       }
     }
 
