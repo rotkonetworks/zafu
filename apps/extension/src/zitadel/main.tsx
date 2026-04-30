@@ -242,6 +242,10 @@ const C = {
 
 interface Msg {
   nick: string; text: string; time: string;
+  /** absolute receive time in ms; used for the tooltip date and the
+   * day-divider in scrollback. distinct from `time` (HH:MM) so we
+   * don't reformat strings to find the date. */
+  tsMs: number;
   system?: boolean; color?: string; dm?: boolean; action?: boolean;
 }
 
@@ -368,6 +372,20 @@ function linkify(text: string, linkColor: string): string {
   return result;
 }
 function now() { const d = new Date(); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
+/** YYYY-MM-DD in local time. used to detect date-boundary crossings
+ * for the irssi-style day separator. */
+function localDateKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+/** Human-readable absolute timestamp for the time-tooltip (e.g.
+ * "Wed 2026-05-01 14:32:14 local"). */
+function fullTime(ts: number): string {
+  const d = new Date(ts);
+  const h = String(d.getHours()).padStart(2, '0');
+  const m = String(d.getMinutes()).padStart(2, '0');
+  const s = String(d.getSeconds()).padStart(2, '0');
+  return `${localDateKey(d)} ${h}:${m}:${s}`;
+}
 
 function boot() {
   const root = document.getElementById('zitadel-root');
@@ -586,7 +604,7 @@ function boot() {
     const key = room || (activeDm ? (DM_PREFIX + activeDm) : (currentRoom || initialRoom));
     let arr = messagesPerRoom.get(key);
     if (!arr) { arr = []; messagesPerRoom.set(key, arr); }
-    arr.push({ nick: n, text, time: now(), system, color: system ? undefined : nickColor(n), dm, action });
+    arr.push({ nick: n, text, time: now(), tsMs: Date.now(), system, color: system ? undefined : nickColor(n), dm, action });
     trackUnread(key, n, text, system, dm);
     render();
   }
@@ -599,6 +617,7 @@ function boot() {
       nick: fromNick,
       text,
       time: now(),
+      tsMs: Date.now(),
       dm: true,
       color: outgoing ? C.gold : C.dm,
     });
@@ -856,14 +875,24 @@ function boot() {
   // at a consistent left edge for the common case.
   const NICK_COL_MIN = '12ch';
 
+  /** "── 2026-05-02 ──" centered separator. used both at view rebuild
+   * (between consecutive messages whose local date differs) and at
+   * append (when a new message crosses midnight from the prior). */
+  function dayDividerHTML(dateKey: string): string {
+    return `<div style="line-height:1.4;color:${C.muted};text-align:center;padding:4px 0;font-size:11px;letter-spacing:1px">─── ${dateKey} ───</div>`;
+  }
+
   // Render one message into HTML. Pulled out of render() so the same
   // template is used for the full-rebuild path and the append path.
   function renderMsgLineHTML(m: Msg): string {
+    // tooltip shows full datetime so a scrollback session that spans
+    // hours/days isn't ambiguous about when each line happened.
+    const timeAttr = m.tsMs ? ` title="${esc(fullTime(m.tsMs))}"` : '';
     if (m.system) {
       // pad the "-!-" sigil to the same width as the nick column so
       // system lines align with chat lines below them. linkify so
       // /help URLs and other guidance with links are clickable.
-      return `<div style="line-height:1.4"><span style="color:${C.muted}">${m.time}</span> <span style="display:inline-block;min-width:${NICK_COL_MIN};text-align:right;color:${C.gold}">-!-</span> <span style="color:${C.muted}">${linkify(m.text, C.cyan)}</span></div>`;
+      return `<div style="line-height:1.4"><span style="color:${C.muted}"${timeAttr}>${m.time}</span> <span style="display:inline-block;min-width:${NICK_COL_MIN};text-align:right;color:${C.gold}">-!-</span> <span style="color:${C.muted}">${linkify(m.text, C.cyan)}</span></div>`;
     }
     const col = m.color || C.gold;
     const dmTag = m.dm ? `<span style="color:${C.dm}">[e2ee] </span>` : '';
@@ -895,10 +924,10 @@ function boot() {
     const bodyHtml = linkify(m.text, C.cyan);
     if (m.action) {
       const nickBlock = `<span style="display:inline-block;min-width:${NICK_COL_MIN};text-align:right"><span style="color:${C.purple}">*</span> ${verifyMark}${nickEl}</span>`;
-      return `<div style="${lineStyle}"><span style="color:${C.muted}">${m.time}</span> ${dmTag}${nickBlock} <span style="color:${C.text}">${bodyHtml}</span></div>`;
+      return `<div style="${lineStyle}"><span style="color:${C.muted}"${timeAttr}>${m.time}</span> ${dmTag}${nickBlock} <span style="color:${C.text}">${bodyHtml}</span></div>`;
     }
     const nickBlock = `<span style="display:inline-block;min-width:${NICK_COL_MIN};text-align:right"><span style="color:${C.border}">&lt;</span>${verifyMark}${nickEl}<span style="color:${C.border}">&gt;</span></span>`;
-    return `<div style="${lineStyle}"><span style="color:${C.muted}">${m.time}</span> ${dmTag}${nickBlock} ${bodyHtml}</div>`;
+    return `<div style="${lineStyle}"><span style="color:${C.muted}"${timeAttr}>${m.time}</span> ${dmTag}${nickBlock} ${bodyHtml}</div>`;
   }
 
   function render() {
@@ -932,19 +961,25 @@ function boot() {
 
     if (renderedView !== viewKey) {
       // view switched: full rebuild. one-shot innerHTML write so the
-      // browser only does one layout pass. inject an irssi-style "new
-      // messages" divider above the first unread (if any), then clear
-      // the marker so it doesn't haunt later renders.
+      // browser only does one layout pass. interleave day dividers
+      // and the irssi-style "new messages" marker (if any).
       const divIdx = firstNewIdx.get(viewKey);
-      if (typeof divIdx === 'number' && divIdx >= 0 && divIdx < msgs.length) {
-        const before = msgs.slice(0, divIdx).map(renderMsgLineHTML).join('');
-        const after = msgs.slice(divIdx).map(renderMsgLineHTML).join('');
-        const count = msgs.length - divIdx;
-        const divider = `<div style="line-height:1.4;color:${C.amber};text-align:center;padding:2px 0;font-size:11px;letter-spacing:1px">─── ${count} new ───</div>`;
-        msgArea.innerHTML = before + divider + after;
-      } else {
-        msgArea.innerHTML = msgs.map(renderMsgLineHTML).join('');
+      let html = '';
+      let lastDate: string | null = null;
+      for (let i = 0; i < msgs.length; i++) {
+        if (i === divIdx) {
+          const count = msgs.length - i;
+          html += `<div style="line-height:1.4;color:${C.amber};text-align:center;padding:2px 0;font-size:11px;letter-spacing:1px">─── ${count} new ───</div>`;
+        }
+        const m = msgs[i]!;
+        if (m.tsMs) {
+          const d = localDateKey(new Date(m.tsMs));
+          if (lastDate && d !== lastDate) html += dayDividerHTML(d);
+          lastDate = d;
+        }
+        html += renderMsgLineHTML(m);
       }
+      msgArea.innerHTML = html;
       firstNewIdx.delete(viewKey);
       renderedView = viewKey;
       renderedCount.set(viewKey, msgs.length);
@@ -957,7 +992,20 @@ function boot() {
       const already = renderedCount.get(viewKey) ?? msgs.length;
       const added = msgs.length - already;
       if (added > 0) {
-        const fragment = msgs.slice(already).map(renderMsgLineHTML).join('');
+        // walk new messages, injecting a day divider on midnight
+        // crossings relative to the previously-rendered tail.
+        let fragment = '';
+        const tailMsg = already > 0 ? msgs[already - 1] : undefined;
+        let prevDate = tailMsg?.tsMs ? localDateKey(new Date(tailMsg.tsMs)) : null;
+        for (let i = already; i < msgs.length; i++) {
+          const m = msgs[i]!;
+          if (m.tsMs) {
+            const d = localDateKey(new Date(m.tsMs));
+            if (prevDate && d !== prevDate) fragment += dayDividerHTML(d);
+            prevDate = d;
+          }
+          fragment += renderMsgLineHTML(m);
+        }
         msgArea.insertAdjacentHTML('beforeend', fragment);
         renderedCount.set(viewKey, msgs.length);
       }
