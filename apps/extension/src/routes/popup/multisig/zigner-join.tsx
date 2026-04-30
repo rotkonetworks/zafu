@@ -55,6 +55,10 @@ export const MultisigJoinZigner = () => {
   const participantIdRef = useRef<Uint8Array | null>(null);
   const fvkSkRef = useRef('');
   const peerR1Ref = useRef<string[]>([]);
+  // populated from r3 ack when zigner derived them itself; used to skip
+  // local derivation in the FVK echo step.
+  const zignerDerivedUfvkRef = useRef('');
+  const zignerDerivedAddrRef = useRef('');
   const peerR2Ref = useRef<string[]>([]);
   const peerFvksRef = useRef<string[]>([]);
   const abortRef = useRef<AbortController | null>(null);
@@ -80,10 +84,15 @@ export const MultisigJoinZigner = () => {
     frost: 'dkg2',
     broadcasts: peerR1Ref.current,
   });
+  // dkg3 carries sk (parsed from host's R1) + relay_url so zigner derives
+  // UFVK/address itself during part-3, no post-DKG round-trip needed.
   const dkg3Trigger = JSON.stringify({
     frost: 'dkg3',
     r1: peerR1Ref.current,
     r2: peerR2Ref.current,
+    sk: fvkSkRef.current,
+    relay_url: relayUrl || 'https://poker.zk.bot',
+    mainnet: true,
   });
 
   const handleJoin = async () => {
@@ -176,19 +185,26 @@ export const MultisigJoinZigner = () => {
     }
   };
 
-  // r3 ack uses an envelope so we can carry both public_key_package and wallet_id
+  // r3 ack envelope: pkg + wallet_id always; UFVK/address/relay_url when
+  // the joiner's zigner derived them in part-3. Older zigner builds without
+  // these fields fall back to local derivation in FVK echo.
   const onZignerR3 = (raw: string) => {
     try {
       const parsed = JSON.parse(raw) as {
         frost?: string;
         public_key_package?: string;
         wallet_id?: string;
+        orchard_fvk_uview?: string;
+        address?: string;
+        relay_url?: string;
       };
       if (parsed.frost !== 'r3' || !parsed.public_key_package || !parsed.wallet_id) {
         throw new Error('not an r3 ack');
       }
       setPublicKeyPackage(parsed.public_key_package);
       setWalletId(parsed.wallet_id);
+      if (parsed.orchard_fvk_uview) zignerDerivedUfvkRef.current = parsed.orchard_fvk_uview;
+      if (parsed.address) zignerDerivedAddrRef.current = parsed.address;
       setStep('fvk-echo');
     } catch (e) {
       setError(`r3 scan: ${e instanceof Error ? e.message : String(e)}`);
@@ -247,8 +263,11 @@ export const MultisigJoinZigner = () => {
     let cancelled = false;
     void (async () => {
       try {
-        const ufvk = await frostDeriveUfvkInWorker(publicKeyPackage, fvkSkRef.current, true);
-        const addr = await frostDeriveAddressFromSkInWorker(publicKeyPackage, fvkSkRef.current, 0);
+        // skip local derivation when zigner already provided the values in r3 ack.
+        const ufvk = zignerDerivedUfvkRef.current
+          || await frostDeriveUfvkInWorker(publicKeyPackage, fvkSkRef.current, true);
+        const addr = zignerDerivedAddrRef.current
+          || await frostDeriveAddressFromSkInWorker(publicKeyPackage, fvkSkRef.current, 0);
         if (cancelled) return;
 
         const relay = relayRef.current;
