@@ -1270,9 +1270,12 @@ function boot() {
     if (e.key === 'ArrowDown') { if (histIdx > 0) { histIdx--; inp.value = history[histIdx] ?? ''; } else { histIdx = -1; inp.value = ''; } return; }
     if (e.key === 'Tab') {
       e.preventDefault();
-      // Tab completion for nicks. cycles through matches on repeated
-      // Tab presses. matches drawn from the announced nick→pubkey map
-      // so completions only fire for peers we've actually heard from.
+      // Tab completion. cycles through matches on repeated Tab. two
+      // sources depending on the prefix: slash commands when the
+      // prefix starts with `/` (drawn from the CMDS table so /help
+      // and tab agree about what exists), nicks otherwise (drawn from
+      // the announced nick→pubkey map so completions only fire for
+      // peers we've actually heard from).
       if (!tabState) {
         const value = inp.value;
         const cursor = inp.selectionStart ?? value.length;
@@ -1284,8 +1287,15 @@ function boot() {
         const before = upToCursor.slice(0, upToCursor.length - prefix.length);
         const after = value.slice(cursor);
         const candidates: string[] = [];
-        for (const n of nickToPubkey.keys()) {
-          if (n.toLowerCase().startsWith(prefix.toLowerCase()) && n !== nick) candidates.push(n);
+        const isCmd = prefix.startsWith('/') && before === '';
+        if (isCmd) {
+          for (const c of Object.keys(CMDS)) {
+            if (c.toLowerCase().startsWith(prefix.toLowerCase())) candidates.push(c);
+          }
+        } else {
+          for (const n of nickToPubkey.keys()) {
+            if (n.toLowerCase().startsWith(prefix.toLowerCase()) && n !== nick) candidates.push(n);
+          }
         }
         candidates.sort();
         if (!candidates.length) return;
@@ -1294,10 +1304,14 @@ function boot() {
         tabState.idx = (tabState.idx + 1) % tabState.matches.length;
       }
       const completion = tabState.matches[tabState.idx]!;
-      // if the prefix was at the very start of the input, IRC
-      // convention adds ": " - addressing someone. otherwise just
-      // the nick + a space.
-      const suffix = tabState.before === '' ? ': ' : ' ';
+      // suffix logic depends on what was completed:
+      //   - slash command at start: " " so the user can type args.
+      //   - nick at start of line: ": " (IRC convention - addressing).
+      //   - nick mid-message: " " (just a separator).
+      const isCmdCompletion = completion.startsWith('/');
+      const suffix = isCmdCompletion
+        ? ' '
+        : (tabState.before === '' ? ': ' : ' ');
       const next = tabState.before + completion + suffix + tabState.after;
       inp.value = next;
       const newCursor = tabState.before.length + completion.length + suffix.length;
