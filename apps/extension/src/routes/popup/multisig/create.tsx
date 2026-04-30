@@ -18,6 +18,8 @@ import {
   frostSampleFvkSkInWorker,
   frostDeriveUfvkInWorker,
 } from '../../../state/keyring/network-worker';
+import { encodeOrchardUnifiedAddress } from '@repo/wallet/networks/zcash/unified-address';
+import { hexToBytes } from '@repo/wallet/networks';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../../state/frost-session';
 import { useDeadlineCountdown } from '../../../hooks/use-deadline-countdown';
@@ -192,7 +194,10 @@ export const MultisigCreate = () => {
       // one source of truth for nk/rivk. using the non-sk address derivation
       // here would produce per-participant random addresses even though the
       // UFVK agrees — wallet records would diverge silently.
-      const addr = await frostDeriveAddressFromSkInWorker(round3.public_key_package, fvkSk, 0);
+      // wasm returns raw 43-byte hex; encode to ZIP-316 unified `u1…` format
+      // so it matches what zigner-imported wallets store.
+      const addrRaw = await frostDeriveAddressFromSkInWorker(round3.public_key_package, fvkSk, 0);
+      const addr = encodeOrchardUnifiedAddress(hexToBytes(addrRaw), true);
       setAddress(addr);
 
       const orchardFvk = await frostDeriveUfvkInWorker(round3.public_key_package, fvkSk, true);

@@ -16,6 +16,8 @@ import {
   frostDeriveAddressFromSkInWorker,
   frostDeriveUfvkInWorker,
 } from '../../../state/keyring/network-worker';
+import { encodeOrchardUnifiedAddress } from '@repo/wallet/networks/zcash/unified-address';
+import { hexToBytes } from '@repo/wallet/networks';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { FrostRelayClient } from '../../../state/keyring/frost-relay-client';
 import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../../state/frost-session';
@@ -150,7 +152,10 @@ export const MultisigJoin = () => {
 
       // derive address + UFVK from the same (pkg, sk) pair so coordinator
       // and joiner converge on byte-identical values for both.
-      const addr = await frostDeriveAddressFromSkInWorker(round3.public_key_package, fvkSk, 0);
+      // wasm returns raw 43-byte hex; encode to ZIP-316 `u1…` for display
+      // and storage parity with the zigner-imported flow.
+      const addrRaw = await frostDeriveAddressFromSkInWorker(round3.public_key_package, fvkSk, 0);
+      const addr = encodeOrchardUnifiedAddress(hexToBytes(addrRaw), true);
       setAddress(addr);
 
       const orchardFvk = await frostDeriveUfvkInWorker(round3.public_key_package, fvkSk, true);
