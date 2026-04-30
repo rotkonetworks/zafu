@@ -17,6 +17,7 @@ import { internalRevokeListener } from './message/listen/internal-revoke';
 import { internalServiceListener } from './message/listen/internal-services';
 import { externalMessageListener } from './message/listen/external-easteregg';
 import { encryptionMessageListener } from './message/listen/external-encryption';
+import { internalZidListener } from './message/listen/internal-zid';
 
 // all rpc implementations, local and proxy
 import { getRpcImpls } from './rpc';
@@ -238,6 +239,7 @@ chrome.runtime.onMessage.addListener(contentScriptConnectListener);
 chrome.runtime.onMessage.addListener(contentScriptDisconnectListener);
 chrome.runtime.onMessage.addListener(contentScriptLoadListener);
 chrome.runtime.onMessage.addListener(internalRevokeListener);
+chrome.runtime.onMessage.addListener(internalZidListener);
 
 // CRSessionManager must be initialized NOW — before wallet services are
 // ready — so content scripts can establish session ports right after the
