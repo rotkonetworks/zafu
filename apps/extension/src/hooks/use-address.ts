@@ -84,7 +84,10 @@ async function loadZcashWasm() {
   const wasmJsUrl = chrome.runtime.getURL('zafu-wasm/zafu_wasm.js');
   const wasmBinaryUrl = chrome.runtime.getURL('zafu-wasm/zafu_wasm_bg.wasm');
   const zcashWasm = await import(/* webpackIgnore: true */ wasmJsUrl);
-  const memory = new WebAssembly.Memory({ initial: 49, maximum: 32768, shared: true });
+  // Initial pages must match (or exceed) what zafu_wasm.js declares — bump
+  // when wasm rebuild bumps its module-level static footprint, otherwise
+  // WebAssembly.instantiate throws LinkError "memory has N pages, declared initial of M".
+  const memory = new WebAssembly.Memory({ initial: 50, maximum: 32768, shared: true });
   await zcashWasm.default({ module_or_path: wasmBinaryUrl, memory });
   zcashWasmCache = zcashWasm;
   return zcashWasm;

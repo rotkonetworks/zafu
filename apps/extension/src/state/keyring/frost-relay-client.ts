@@ -44,7 +44,7 @@ export class FrostRelayClient {
   private waiters: Array<(msg: Record<string, unknown>) => boolean> = [];
 
   constructor(serverUrl: string) {
-    // accept https://poker.zk.bot or wss://poker.zk.bot - normalize to wss
+    // accept either https:// or wss:// — normalize to wss
     const url = serverUrl.replace(/^http/, 'ws').replace(/\/$/, '');
     this.wsUrl = url.includes('/ws') ? url : `${url}/ws`;
     // random nick - relay only sees this opaque string

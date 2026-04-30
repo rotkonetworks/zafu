@@ -332,6 +332,42 @@ export function frost_dkg_part3(secret_hex: string, round1_broadcasts_json: stri
 export function frost_generate_randomizer(ephemeral_seed_hex: string, message_hex: string, commitments_json: string): string;
 
 /**
+ * Parse the unsigned v5 transaction and recover what each Orchard action
+ * is sending, using the FROST wallet's UFVK to OVK-decrypt outputs.
+ *
+ * The spender (= each FROST joiner) owns the OVK that was used to encrypt
+ * every action's output, so OVK decryption yields:
+ *   - external scope hits → real recipients of the spend
+ *   - internal scope hits → change back to our own multisig
+ *   - non-decryptable     → dummy padding action (zero value by construction)
+ *
+ * Each joiner runs this on the unsigned tx bytes the host claims to have
+ * built and compares the derived summary to the host's claimed
+ * (recipient, amount, fee). A mismatch means the host lied.
+ *
+ * `orchard_fvk_uview` is the ZIP-316 unified viewing key string
+ * (`uview1…` / `uviewtest1…`) stored alongside the wallet.
+ *
+ * Returns JSON:
+ * {
+ *   "actions": [
+ *     { "index": u32,
+ *       "amount_zat": u64,
+ *       "recipient_raw_hex": "<43-byte hex>" | null,
+ *       "is_change": bool,
+ *       "decrypted": bool }
+ *   ],
+ *   "summary": {
+ *     "total_send_zat": u64,
+ *     "total_change_zat": u64,
+ *     "decrypted_count": u32,
+ *     "action_count": u32
+ *   }
+ * }
+ */
+export function frost_parse_tx_outputs(unsigned_tx_hex: string, orchard_fvk_uview: string): string;
+
+/**
  * host-only: sample a random 32-byte SpendingKey for nk/rivk derivation.
  * retries until the sampled bytes land in the Pallas scalar range.
  * returns hex-encoded 32-byte `sk` that the host broadcasts to peers in R1.
@@ -530,6 +566,7 @@ export interface InitOutput {
     readonly frost_dkg_part2: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly frost_dkg_part3: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly frost_generate_randomizer: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly frost_parse_tx_outputs: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly frost_sample_fvk_sk: () => [number, number];
     readonly frost_sign_round1: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly frost_sign_round2: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number, number];

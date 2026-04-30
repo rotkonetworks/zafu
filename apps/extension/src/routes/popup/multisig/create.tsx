@@ -79,7 +79,7 @@ export const MultisigCreate = () => {
     const sessionDeadline = Date.now() + FROST_SESSION_TIMEOUT_MS;
     setDeadline(sessionDeadline);
     try {
-      const url = relayUrl || 'https://poker.zk.bot';
+      const url = relayUrl || 'wss://zrelay.rotko.net';
       const code = await startDkg(url, threshold, maxSigners);
       setRoomCode(code);
       setStep('waiting');
@@ -253,7 +253,7 @@ export const MultisigCreate = () => {
               className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-xs focus:border-primary/50 focus:outline-none'
               value={relayUrl}
               onChange={e => setRelayUrl(e.target.value)}
-              placeholder='https://poker.zk.bot'
+              placeholder='wss://zrelay.rotko.net'
             />
           </label>
           <div className='flex gap-3'>

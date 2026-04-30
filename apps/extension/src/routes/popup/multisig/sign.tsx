@@ -14,7 +14,10 @@ import { selectActiveZcashWallet } from '../../../state/wallets';
 import {
   frostSignRound1InWorker,
   frostSpendSignInWorker,
+  frostParseTxOutputsInWorker,
+  type FrostParsedTx,
 } from '../../../state/keyring/network-worker';
+import { computeVerdict, type Verdict } from '../send/frost-multisig/wysiwys';
 import { FrostRelayClient } from '../../../state/keyring/frost-relay-client';
 import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../../state/frost-session';
 import { useDeadlineCountdown } from '../../../hooks/use-deadline-countdown';
@@ -34,6 +37,9 @@ export const MultisigSign = () => {
   const [amountZat, setAmountZat] = useState('');
   const [feeZat, setFeeZat] = useState('');
   const [deadline, setDeadline] = useState<number | null>(null);
+  const [verdict, setVerdict] = useState<Verdict>({ kind: 'pending' });
+  const [parsed, setParsed] = useState<FrostParsedTx | null>(null);
+  const [acknowledged, setAcknowledged] = useState(false);
 
   const activeWallet = useStore(selectActiveZcashWallet);
   const ms = activeWallet?.multisig;
@@ -72,7 +78,7 @@ export const MultisigSign = () => {
     setProgress('connecting to signing session...');
 
     try {
-      const relayUrl = (typeof ms.relayUrl === 'string' ? ms.relayUrl : '') || 'https://poker.zk.bot';
+      const relayUrl = (typeof ms.relayUrl === 'string' ? ms.relayUrl : '') || 'wss://zrelay.rotko.net';
       const relay = new FrostRelayClient(relayUrl);
       const participantId = new Uint8Array(32);
       crypto.getRandomValues(participantId);
@@ -84,14 +90,44 @@ export const MultisigSign = () => {
       void relay.joinRoom(roomCode.trim(), participantId, (event) => {
         if (event.type !== 'message') return;
         const text = new TextDecoder().decode(event.message.payload);
-        // SIGN:<sighash>:<alphas>:<recipient>:<amountZat>:<feeZat>
-        const signMatch = text.match(/^SIGN:([0-9a-fA-F]+):([^:]+):([^:]+):(\d+):(\d+)$/);
+        // SIGN:<sighash>:<alphas>:<recipient>:<amountZat>:<feeZat>[:<unsignedTxHex>]
+        const signMatch = text.match(/^SIGN:([0-9a-fA-F]+):([^:]+):([^:]+):(\d+):(\d+)(?::([0-9a-fA-F]+))?$/);
         if (signMatch) {
           sighashRef.current = signMatch[1]!;
           alphasRef.current = signMatch[2]!.split(',');
-          setRecipient(signMatch[3]!);
-          setAmountZat(signMatch[4]!);
+          const claimedRecipient = signMatch[3]!;
+          const claimedAmount = signMatch[4]!;
+          const unsignedTxHex = signMatch[6];
+          setRecipient(claimedRecipient);
+          setAmountZat(claimedAmount);
           setFeeZat(signMatch[5]!);
+
+          // WYSIWYS: derive output truth from tx bytes; mismatch hard-blocks approve.
+          if (!unsignedTxHex) {
+            setVerdict({ kind: 'unverified', reason: 'host did not publish unsigned tx bytes (older client?)' });
+          } else if (!activeWallet?.ufvk) {
+            setVerdict({ kind: 'unverified', reason: 'wallet has no UFVK on file — cannot verify' });
+          } else {
+            const ufvk = activeWallet.ufvk;
+            const isMain = activeWallet.mainnet;
+            void (async () => {
+              try {
+                const p = await frostParseTxOutputsInWorker(unsignedTxHex, ufvk);
+                setParsed(p);
+                setVerdict(computeVerdict({
+                  parsed: p,
+                  claimedRecipient,
+                  claimedAmountZat: claimedAmount,
+                  mainnet: isMain,
+                }));
+              } catch (err) {
+                setVerdict({
+                  kind: 'unverified',
+                  reason: err instanceof Error ? err.message : 'parse failed',
+                });
+              }
+            })();
+          }
           return;
         }
         // collect ALL peer C: bundles — t≥3 needs threshold-1 of them, not just 1.
@@ -203,6 +239,8 @@ export const MultisigSign = () => {
         ms={ms}
         walletLabel={activeWallet!.label}
         walletAddress={activeWallet!.address}
+        orchardFvkUview={activeWallet!.ufvk}
+        mainnet={activeWallet!.mainnet}
       />
     );
   }
@@ -281,6 +319,68 @@ export const MultisigSign = () => {
             </div>
           </div>
 
+          {/* WYSIWYS verdict */}
+          {verdict.kind === 'pending' && (
+            <div className='rounded-lg border border-border-soft bg-elev-1 p-2.5 text-[10px] text-fg-muted flex items-center gap-2'>
+              <span className='i-lucide-loader-2 size-3 animate-spin' />
+              verifying tx bytes match host claim…
+            </div>
+          )}
+          {verdict.kind === 'match' && (
+            <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-2.5 text-[10px] text-green-400 flex items-start gap-2'>
+              <span className='i-lucide-shield-check size-3.5 mt-0.5 shrink-0' />
+              <span>
+                bytes verified — derived recipient + amount match host claim
+                {verdict.changeZat > 0n && (
+                  <> (+{formatZec(verdict.changeZat.toString())} ZEC change to self)</>
+                )}
+              </span>
+            </div>
+          )}
+          {verdict.kind === 'unverified' && (
+            <div className='rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-2.5 text-[10px] text-yellow-400 flex items-start gap-2'>
+              <span className='i-lucide-alert-triangle size-3.5 mt-0.5 shrink-0' />
+              <span>host claim shown without verification — {verdict.reason}</span>
+            </div>
+          )}
+          {verdict.kind === 'mismatch' && (
+            <div className='rounded-lg border border-red-500/60 bg-red-500/10 p-3 flex flex-col gap-2'>
+              <div className='flex items-center gap-2 text-[11px] font-medium text-red-400'>
+                <span className='i-lucide-shield-x size-4' />
+                mismatch — host claim disagrees with tx bytes
+              </div>
+              <ul className='text-[10px] text-red-300/90 list-disc pl-4 space-y-0.5'>
+                {verdict.reasons.map((r, i) => (<li key={i}>{r}</li>))}
+              </ul>
+              {parsed && parsed.actions.some(a => a.decrypted && !a.is_change) && (
+                <div className='rounded border border-red-500/30 bg-red-500/5 p-2 text-[10px] font-mono text-red-300/80'>
+                  <p className='text-[9px] uppercase tracking-wider text-red-400/80 mb-1'>derived outputs</p>
+                  {parsed.actions
+                    .filter(a => a.decrypted && !a.is_change)
+                    .map((a) => (
+                      <div key={a.index} className='break-all'>
+                        action {a.index}: {formatZec(String(a.amount_zat))} ZEC →{' '}
+                        {a.recipient_raw_hex
+                          ? `${a.recipient_raw_hex.slice(0, 16)}…`
+                          : 'unknown'}
+                      </div>
+                    ))}
+                </div>
+              )}
+              <label className='flex items-start gap-2 text-[10px] text-red-300/90 cursor-pointer mt-1'>
+                <input
+                  type='checkbox'
+                  checked={acknowledged}
+                  onChange={e => setAcknowledged(e.target.checked)}
+                  className='mt-0.5'
+                />
+                <span>
+                  I see the mismatch. Override and sign at my own risk.
+                </span>
+              </label>
+            </div>
+          )}
+
           <p className='text-[10px] text-fg-muted'>
             approving signs with this wallet's share. coordinator aggregates and broadcasts.
           </p>
@@ -294,9 +394,10 @@ export const MultisigSign = () => {
             </button>
             <button
               onClick={() => void handleApprove()}
-              className='rounded-lg border border-primary/40 bg-primary/5 py-2 text-xs text-zigner-gold hover:bg-primary/10 transition-colors'
+              disabled={verdict.kind === 'pending' || (verdict.kind === 'mismatch' && !acknowledged)}
+              className='rounded-lg border border-primary/40 bg-primary/5 py-2 text-xs text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
             >
-              approve &amp; sign
+              {verdict.kind === 'mismatch' ? 'approve anyway' : 'approve & sign'}
             </button>
           </div>
         </div>
@@ -349,11 +450,13 @@ type WrapperPhase = 'input' | 'active' | 'done';
 // airgap joiner: paste room code → delegate to FrostAirgapJoinerSignFlow,
 // then land on a green "shares sent" confirmation (matches mnemonic joiner).
 const AirgapJoinerWrapper = ({
-  ms, walletLabel, walletAddress,
+  ms, walletLabel, walletAddress, orchardFvkUview, mainnet,
 }: {
   ms: { publicKeyPackage: string; threshold: number; maxSigners: number; relayUrl?: string; zignerWalletId?: string };
   walletLabel: string;
   walletAddress: string;
+  orchardFvkUview?: string;
+  mainnet: boolean;
 }) => {
   const [room, setRoom] = useState('');
   const [phase, setPhase] = useState<WrapperPhase>('input');
@@ -392,7 +495,7 @@ const AirgapJoinerWrapper = ({
     }
     return (
       <FrostAirgapJoinerSignFlow
-        ms={ms}
+        ms={{ ...ms, orchardFvkUview, mainnet }}
         roomCode={room}
         walletLabel={walletLabel}
         walletAddress={walletAddress}

@@ -54,9 +54,14 @@ waitForMsgType(self, 'wasm_bindgen_worker_init').then(async ({ init, receiver })
   // ── LOCAL PATCH — DO NOT OVERWRITE BY RERUNNING wasm-bindgen ──
   // Stock wasm-bindgen-rayon uses `await import('../../..')` which
   // resolves to the parent directory. Web browsers accept directory
-  // imports; Chrome extensions don't — directory imports throw.
-  // Resolve to the concrete JS entry instead. Reapply on rebuild:
-  // stock line was `const pkg = await import('../../..');`
+  // imports (they look for an index/main); Chrome extensions don't —
+  // directory imports throw. If that fires here, every rayon sub-worker
+  // hangs loading the WASM module, halo2 falls back to single-threaded,
+  // and a ~10s proof turns into ~15 minutes (actual production regression).
+  //
+  // Resolve to the concrete JS entry instead. If you rebuild the WASM,
+  // reapply this patch — the stock line is:
+  //     const pkg = await import('../../..');
   // ───────────────────────────────────────────────────────────────
   const base = new URL('../../..', import.meta.url).href;
   const pkg = await import(base.endsWith('/') ? base + 'zafu_wasm.js' : base);
