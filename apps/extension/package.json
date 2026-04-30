@@ -2,7 +2,7 @@
   "name": "zafu",
   "version": "24.1.2",
   "private": true,
-  "license": "(MIT OR Apache-2.0)",
+  "license": "MIT",
   "description": "multi-chain privacy wallet for penumbra, zcash, and more",
   "type": "module",
   "scripts": {

@@ -44,7 +44,7 @@ communication.
 
 ## source
 
-zafu is free software released under the GPL-3.0 license.
+zafu is free software released under the MIT license.
 
 - source: [github.com/rotkonetworks/zafu](https://github.com/rotkonetworks/zafu)
 - zigner: [zigner.rotko.net](https://zigner.rotko.net)
