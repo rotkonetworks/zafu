@@ -459,6 +459,22 @@ function boot() {
   main.append(topbar, msgArea, statusEl, bar);
   root.append(sidebar, main);
 
+  // delegated click on peer nicks in the message stream: opens a DM
+  // view. avoids re-binding handlers on every render churn. the same
+  // approach IRC GUIs use to make scrollback feel alive.
+  msgArea.addEventListener('click', (ev) => {
+    const t = ev.target as HTMLElement | null;
+    if (!t || !t.classList.contains('nick-click')) return;
+    const peerNick = t.dataset['nick'];
+    if (!peerNick) return;
+    const pub = nickToPubkey.get(peerNick);
+    if (!pub) {
+      addMsg('zitadel', `no pubkey for ${peerNick} yet - they haven't announced under zid-auth-v1.`, true);
+      return;
+    }
+    switchToDm(pub);
+  });
+
   function mkEl(tag: string, css: string) { const e = document.createElement(tag); e.style.cssText = css; return e; }
 
   /** Current view key (room name or `dm:<pubkey>`). */
@@ -747,11 +763,19 @@ function boot() {
     // /me actions render as "* nick text" - IRC convention. The
     // signature bound the action-ness, so a verified action carries
     // the same `+` weight as a verified message.
+    // wrap peer nicks in a clickable element. one delegated click
+    // handler on msgArea (set up in boot) turns the click into a
+    // switchToDm. own nick is non-clickable - the sidebar identity
+    // chip already covers self-actions.
+    const isSelf = m.nick === nick;
+    const nickEl = isSelf
+      ? `<b style="color:${col}">${esc(m.nick)}</b>`
+      : `<b class="nick-click" data-nick="${esc(m.nick)}" style="color:${col};cursor:pointer">${esc(m.nick)}</b>`;
     if (m.action) {
-      const nickBlock = `<span style="display:inline-block;min-width:${NICK_COL_MIN};text-align:right"><span style="color:${C.purple}">*</span> ${verifyMark}<b style="color:${col}">${esc(m.nick)}</b></span>`;
+      const nickBlock = `<span style="display:inline-block;min-width:${NICK_COL_MIN};text-align:right"><span style="color:${C.purple}">*</span> ${verifyMark}${nickEl}</span>`;
       return `<div style="line-height:1.4"><span style="color:${C.muted}">${m.time}</span> ${dmTag}${nickBlock} <span style="color:${C.text}">${esc(m.text)}</span></div>`;
     }
-    const nickBlock = `<span style="display:inline-block;min-width:${NICK_COL_MIN};text-align:right"><span style="color:${C.border}">&lt;</span>${verifyMark}<b style="color:${col}">${esc(m.nick)}</b><span style="color:${C.border}">&gt;</span></span>`;
+    const nickBlock = `<span style="display:inline-block;min-width:${NICK_COL_MIN};text-align:right"><span style="color:${C.border}">&lt;</span>${verifyMark}${nickEl}<span style="color:${C.border}">&gt;</span></span>`;
     return `<div style="line-height:1.4"><span style="color:${C.muted}">${m.time}</span> ${dmTag}${nickBlock} ${esc(m.text)}</div>`;
   }
 
