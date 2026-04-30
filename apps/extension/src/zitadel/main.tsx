@@ -2,9 +2,80 @@
 // plain DOM, zero framework deps. WebSocket to relay.zk.bot.
 // e2ee DMs via Noise IK channels, ZID identity from zafu keyring.
 
+import { ed25519 } from '@noble/curves/ed25519'
 import { createNoiseChannel, type ZidChannel } from '../../../../packages/zid/src'
 import type { SessionKey } from '../../../../packages/zid/src/noise-channel'
 import { isLicenseValid, type License } from '../../../../packages/wallet/src/license'
+
+// ─── zid-auth-v1: signed nick claims ────────────────────────────────────
+//
+// each client signs an `announce` payload binding (server, nick, pubkey, ts).
+// receivers verify before trusting the nick → pubkey mapping. relay
+// stays dumb (no signature verification on the server side); identity
+// is verified peer-to-peer using ZID ed25519 keys.
+//
+// signed payload (canonical bytes):
+//   "zafu-zid-auth-v1" 0x00 server 0x00 nick 0x00 pubkey_hex 0x00 ts_str
+//
+// receiver checks (in order):
+//   1. v === 'zid-auth-v1'
+//   2. |now - ts| <= 60_000 ms          (freshness, no replay over time)
+//   3. server === expected server URL    (no replay across servers)
+//   4. ed25519.verify(pubkey, payload, sig)
+//   5. first claim wins for a given nick (reject re-binding)
+
+const ZID_AUTH_VERSION = 'zid-auth-v1';
+const ZID_AUTH_DOMAIN = 'zafu-zid-auth-v1';
+const ZID_AUTH_FRESHNESS_MS = 60_000;
+const ZID_AUTH_SERVER = 'relay.zk.bot';
+
+function zidAuthPayload(server: string, nick: string, pubkey: string, ts: number): Uint8Array {
+  return new TextEncoder().encode(
+    [ZID_AUTH_DOMAIN, server, nick, pubkey, String(ts)].join('\0'),
+  );
+}
+
+interface AnnounceProof {
+  v: string;
+  server: string;
+  pubkey: string;
+  nick: string;
+  ts: number;
+  sig: string;
+}
+
+function signAnnounce(priv: Uint8Array, pubkey: string, nick: string, server = ZID_AUTH_SERVER): AnnounceProof {
+  const ts = Date.now();
+  const payload = zidAuthPayload(server, nick, pubkey, ts);
+  const sig = ed25519.sign(payload, priv);
+  return {
+    v: ZID_AUTH_VERSION,
+    server,
+    pubkey,
+    nick,
+    ts,
+    sig: hex(sig),
+  };
+}
+
+function verifyAnnounce(a: unknown, expectedServer = ZID_AUTH_SERVER): AnnounceProof | null {
+  if (!a || typeof a !== 'object') return null;
+  const o = a as Record<string, unknown>;
+  if (o['v'] !== ZID_AUTH_VERSION) return null;
+  if (typeof o['server'] !== 'string' || o['server'] !== expectedServer) return null;
+  if (typeof o['pubkey'] !== 'string' || !isHexPubkey(o['pubkey'])) return null;
+  if (typeof o['nick'] !== 'string' || !o['nick']) return null;
+  if (typeof o['ts'] !== 'number' || !Number.isFinite(o['ts'])) return null;
+  if (typeof o['sig'] !== 'string' || !/^[0-9a-f]{128}$/i.test(o['sig'])) return null;
+  if (Math.abs(Date.now() - o['ts']) > ZID_AUTH_FRESHNESS_MS) return null;
+  try {
+    const payload = zidAuthPayload(o['server'], o['nick'], o['pubkey'], o['ts']);
+    if (!ed25519.verify(unhex(o['sig']), payload, unhex(o['pubkey']))) return null;
+  } catch {
+    return null;
+  }
+  return o as unknown as AnnounceProof;
+}
 
 /** Read the persisted license blob from chrome.storage.local and check
  * that it's currently valid. Channel creation is gated on Pro because
@@ -469,9 +540,17 @@ function boot() {
     ws.onopen = () => {
       connected = true;
       addMsg('zitadel', 'connected to relay', true);
-      // announce ZID pubkey to relay so others can look us up
+      // announce ZID pubkey to peers, signed if we have the privkey.
+      // unsigned announces still go out (degraded mode for locked
+      // wallet), but receivers will not bind nick -> pubkey for them.
       if (zidPubkey) {
-        wsSend({ t: 'announce', pubkey: zidPubkey });
+        if (zidPrivkey) {
+          const proof = signAnnounce(zidPrivkey, zidPubkey, nick);
+          wsSend({ t: 'announce', ...proof });
+        } else {
+          // unsigned - peers will see the pubkey but not trust the nick claim
+          wsSend({ t: 'announce', pubkey: zidPubkey, nick });
+        }
       }
       // auto-join initial room (create if doesn't exist)
       wsSend({ t: 'join', room: initialRoom, nick });
