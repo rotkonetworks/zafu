@@ -186,6 +186,19 @@ async function isProUser(): Promise<boolean> {
  * implement zitadel are expected to expose both at adjacent paths. */
 export const DEFAULT_RELAY_WS = "wss://relay.zk.bot/ws";
 const RELAY_URL_KEY = 'zitadelRelayUrl';
+/** Per-ZID persisted nickname. Stored under `zidNick:<pubkey>` in
+ * chrome.storage.local so the same identity gets the same nick across
+ * sessions. Survives extension restart but not vault wipe / mnemonic
+ * restore - that would require putting it in the vault insensitive
+ * blob, which is a larger change. */
+const ZID_NICK_PREFIX = 'zidNick:';
+
+/** Reject nicks that would break the wire protocol or look like junk.
+ * Forbidden: empty, length > 32, whitespace, NUL (used as field
+ * separator in zid-msg-v1 canonical payload and DM packing). */
+function isValidNick(s: string): boolean {
+  return s.length > 0 && s.length <= 32 && !/[\s\0]/.test(s);
+}
 
 /** Returns true if the URL parses as wss:// or ws:// */
 function isValidRelayUrl(s: string): boolean {
@@ -1025,7 +1038,30 @@ function boot() {
           break;
 
         case 'nick':
-          if (args[0]) { const old = nick; nick = args[0]; addMsg('zitadel', `${old} is now known as ${nick}`, true); render(); }
+          if (args[0]) {
+            if (!isValidNick(args[0])) {
+              addMsg('zitadel', `invalid nick. 1-32 chars, no whitespace.`, true);
+              break;
+            }
+            const old = nick;
+            nick = args[0];
+            // persist the binding so the same ZID gets the same nick
+            // next session. ephemeral sessions (no zidPubkey) don't
+            // persist - the random anon prefix is regenerated each load.
+            if (zidPubkey && localStore) {
+              void localStore.set({ [ZID_NICK_PREFIX + zidPubkey]: nick });
+            }
+            addMsg('zitadel', `${old} is now known as ${nick}`, true);
+            // re-announce so peers in the current room learn the new
+            // binding under a fresh zid-auth-v1 proof. without this,
+            // peers keep showing the old nick until reconnect.
+            if (currentRoom && zidPubkey && zidPrivkey) {
+              const proof = signAnnounce(zidPrivkey, zidPubkey, nick, relayHost(relayUrl));
+              wsSend({ t: 'announce', ...proof });
+              verifiedNicks.add(nick);
+            }
+            render();
+          }
           break;
 
         case 'j': case 'join':
@@ -1235,7 +1271,19 @@ function boot() {
     zidPrivkey = zid.privkey;
 
     if (zid.pubkey) {
+      // default to derived shortPub; overridden below if we have a
+      // persisted /nick choice for this ZID.
       nick = shortPub(zid.pubkey);
+      if (localStore) {
+        try {
+          const key = ZID_NICK_PREFIX + zid.pubkey;
+          const r = await new Promise<Record<string, unknown>>(res => localStore.get(key, res));
+          const stored = r?.[key];
+          if (typeof stored === 'string' && isValidNick(stored)) {
+            nick = stored;
+          }
+        } catch { /* not in extension context */ }
+      }
     } else {
       nick = 'anon' + String((Math.random() * 100000) | 0).padStart(5, '0');
     }
