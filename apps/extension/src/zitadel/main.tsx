@@ -72,6 +72,79 @@ function signAnnounce(priv: Uint8Array, pubkey: string, nick: string, server: st
   };
 }
 
+// ─── zid-msg-v1: signed chat messages ───────────────────────────────────
+//
+// Each chat line, when the sender's wallet is unlocked, is wrapped in
+// a JSON envelope that carries an ed25519 signature over the message
+// content. Receivers verify the envelope and use it as both message
+// integrity proof AND an implicit announce - if no nick→pubkey
+// binding exists for the sender, the verified envelope establishes
+// one (subject to first-claim-wins).
+//
+// This closes the gap left by the announce-on-join model: a peer who
+// never explicitly announced could still send messages tagged with
+// any nick. Per-message proofs make every line carry its own
+// authentication.
+//
+// Wire format (carried in the relay's `text` field):
+//   {
+//     v: 'zid-msg-v1',
+//     text: '<plaintext message>',
+//     pubkey: '<hex 64>',
+//     nick: '<utf8>',
+//     room: '<channel>',
+//     ts: <unix ms>,
+//     sig: '<hex 128>'
+//   }
+//
+// Signed payload (canonical bytes):
+//   "zafu-zid-msg-v1" 0x00 server 0x00 room 0x00 nick 0x00 pubkey 0x00 ts 0x00 text
+
+const ZID_MSG_VERSION = 'zid-msg-v1';
+const ZID_MSG_DOMAIN = 'zafu-zid-msg-v1';
+const ZID_MSG_FRESHNESS_MS = 60_000;
+
+interface MsgProof {
+  v: string;
+  text: string;
+  pubkey: string;
+  nick: string;
+  room: string;
+  ts: number;
+  sig: string;
+}
+
+function zidMsgPayload(server: string, room: string, nick: string, pubkey: string, ts: number, text: string): Uint8Array {
+  return new TextEncoder().encode(
+    [ZID_MSG_DOMAIN, server, room, nick, pubkey, String(ts), text].join('\0'),
+  );
+}
+
+function signMsg(priv: Uint8Array, pubkey: string, nick: string, room: string, server: string, text: string): MsgProof {
+  const ts = Date.now();
+  const payload = zidMsgPayload(server, room, nick, pubkey, ts, text);
+  const sig = ed25519.sign(payload, priv);
+  return { v: ZID_MSG_VERSION, text, pubkey, nick, room, ts, sig: hex(sig) };
+}
+
+function verifyMsg(a: unknown, expectedServer: string): MsgProof | null {
+  if (!a || typeof a !== 'object') return null;
+  const o = a as Record<string, unknown>;
+  if (o['v'] !== ZID_MSG_VERSION) return null;
+  if (typeof o['text'] !== 'string') return null;
+  if (typeof o['pubkey'] !== 'string' || !isHexPubkey(o['pubkey'])) return null;
+  if (typeof o['nick'] !== 'string' || !o['nick']) return null;
+  if (typeof o['room'] !== 'string') return null;
+  if (typeof o['ts'] !== 'number' || !Number.isFinite(o['ts'])) return null;
+  if (typeof o['sig'] !== 'string' || !/^[0-9a-f]{128}$/i.test(o['sig'])) return null;
+  if (Math.abs(Date.now() - o['ts']) > ZID_MSG_FRESHNESS_MS) return null;
+  try {
+    const payload = zidMsgPayload(expectedServer, o['room'], o['nick'], o['pubkey'], o['ts'], o['text']);
+    if (!ed25519.verify(unhex(o['sig']), payload, unhex(o['pubkey']))) return null;
+  } catch { return null; }
+  return o as unknown as MsgProof;
+}
+
 function verifyAnnounce(a: unknown, expectedServer: string): AnnounceProof | null {
   if (!a || typeof a !== 'object') return null;
   const o = a as Record<string, unknown>;
@@ -703,7 +776,36 @@ function boot() {
                 `(room=${msg.room ?? currentRoom ?? '?'})`);
               break;
             }
-            addMsg(msg.nick, msg.text, false, msg.room || currentRoom || undefined);
+            // zid-msg-v1: if text parses as a signed envelope, verify
+            // before rendering. unsigned messages (legacy) still render
+            // but won't earn the verified `+` mark. binding room and
+            // server into the signature prevents cross-room replay.
+            let visibleText: string = msg.text;
+            if (typeof msg.text === 'string' && msg.text.startsWith('{')) {
+              try {
+                const obj = JSON.parse(msg.text);
+                if (obj && obj.v === ZID_MSG_VERSION) {
+                  const proof = verifyMsg(obj, relayHost(relayUrl));
+                  if (!proof || proof.room !== currentRoom) {
+                    console.debug('[zitadel] zid-msg verify failed, dropping',
+                      { nick: msg.nick, room: obj.room });
+                    break;
+                  }
+                  const existing = nickToPubkey.get(proof.nick);
+                  if (existing && existing !== proof.pubkey) {
+                    console.debug('[zitadel] zid-msg nick collision, dropping',
+                      { nick: proof.nick, existing: existing.slice(0, 16),
+                        new: proof.pubkey.slice(0, 16) });
+                    break;
+                  }
+                  nickToPubkey.set(proof.nick, proof.pubkey);
+                  pubkeyToNick.set(proof.pubkey, proof.nick);
+                  verifiedNicks.add(proof.nick);
+                  visibleText = proof.text;
+                }
+              } catch { /* not JSON, treat as legacy cleartext */ }
+            }
+            addMsg(msg.nick, visibleText, false, msg.room || currentRoom || undefined);
             break;
           }
           case 'joined':
@@ -1084,11 +1186,17 @@ function boot() {
       }
 
       // send to relay (room message). public rooms are cleartext - the
-      // relay sees the message bytes. nick claim is authenticated via
-      // the announce-on-join under zid-auth-v1; messages themselves
-      // carry no per-message proof in this version.
+      // relay sees the message bytes. when the wallet is unlocked we
+      // wrap the text in a zid-msg-v1 envelope so receivers can verify
+      // each message individually (closes the spoofing-after-announce
+      // gap). locked clients fall back to plain text.
       if (connected && currentRoom) {
-        wsSend({ t: 'msg', text });
+        if (zidPrivkey && zidPubkey) {
+          const proof = signMsg(zidPrivkey, zidPubkey, nick, currentRoom, relayHost(relayUrl), text);
+          wsSend({ t: 'msg', text: JSON.stringify(proof) });
+        } else {
+          wsSend({ t: 'msg', text });
+        }
         // add locally (relay will broadcast to others, we show ours immediately)
         addMsg(nick, text);
       } else if (!connected) {
