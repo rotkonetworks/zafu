@@ -154,6 +154,13 @@ function verifyMsg(a: unknown, expectedServer: string): MsgProof | null {
   if (typeof o['room'] !== 'string') return null;
   if (typeof o['ts'] !== 'number' || !Number.isFinite(o['ts'])) return null;
   if (typeof o['sig'] !== 'string' || !/^[0-9a-f]{128}$/i.test(o['sig'])) return null;
+  // The canonical payload joins all fields with NUL. If any field
+  // (text, nick, room) contains NUL, the parse is ambiguous - two
+  // different field tuples can serialize to identical bytes.
+  // Reject on any embedded NUL to keep the encoding injective.
+  if ((o['text'] as string).indexOf('\0') !== -1) return null;
+  if ((o['nick'] as string).indexOf('\0') !== -1) return null;
+  if ((o['room'] as string).indexOf('\0') !== -1) return null;
   try {
     const payload = zidMsgPayload(expectedServer, o['room'], o['nick'], o['pubkey'], o['ts'], o['text']);
     if (!ed25519.verify(unhex(o['sig']), payload, unhex(o['pubkey']))) return null;
@@ -177,6 +184,11 @@ function verifyAnnounce(a: unknown, expectedServer: string): AnnounceProof | nul
   if (typeof o['nick'] !== 'string' || !o['nick']) return null;
   if (typeof o['ts'] !== 'number' || !Number.isFinite(o['ts'])) return null;
   if (typeof o['sig'] !== 'string' || !/^[0-9a-f]{128}$/i.test(o['sig'])) return null;
+  // Same NUL-injection defense as verifyMsg: the canonical payload
+  // joins fields with NUL, so any embedded NUL in nick or server
+  // breaks injective serialization.
+  if ((o['nick'] as string).indexOf('\0') !== -1) return null;
+  if ((o['server'] as string).indexOf('\0') !== -1) return null;
   try {
     const payload = zidAuthPayload(o['server'], o['nick'], o['pubkey'], o['ts']);
     if (!ed25519.verify(unhex(o['sig']), payload, unhex(o['pubkey']))) return null;
@@ -1564,6 +1576,15 @@ function boot() {
   function sendRoomMessage(text: string, action = false) {
     if (!connected) { addMsg('zitadel', 'not connected. type /connect', true); return; }
     if (!currentRoom) { addMsg('zitadel', 'not in a channel. type /j <room>', true); return; }
+    if (text.indexOf('\0') !== -1) {
+      // NUL is used as the field separator in the zid-msg-v1
+      // canonical payload; sending it would break injective
+      // serialization. peers reject too, but it's friendlier to fail
+      // here with a clear reason than to silently drop on the other
+      // side.
+      addMsg('zitadel', 'message contains NUL byte, rejected.', true);
+      return;
+    }
     const byteLen = new TextEncoder().encode(text).byteLength;
     if (byteLen > MAX_MESSAGE_BYTES) {
       addMsg('zitadel',
