@@ -404,7 +404,12 @@ function esc(s: string) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').
  * the regex grabbed greedily is stripped off the URL and rendered as
  * plain text, so "see https://x.com." links to https://x.com and the
  * period stays visible after the link. Newlines render as <br>. */
-const URL_TRAILING_PUNCT = /[.,;:!?)\]}>'"]+$/;
+// Trailing punctuation that's almost never part of a URL. Excludes
+// closing brackets - URLs legitimately end with `)` (Wikipedia
+// disambiguation links), `]` (IPv6 hosts: https://[::1]/), or `}`
+// (rare but real). Stripping those broke real links; the upside of
+// removing them on the off chance was minimal.
+const URL_TRAILING_PUNCT = /[.,;:!?'"]+$/;
 function linkify(text: string, linkColor: string): string {
   const urlRe = /(https?:\/\/[^\s<>"']+)/g;
   let result = '';
