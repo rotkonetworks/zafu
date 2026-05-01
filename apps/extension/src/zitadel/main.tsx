@@ -1639,14 +1639,30 @@ function boot() {
             void localStore?.set({ [RELAY_URL_KEY]: relayUrl });
             addMsg('zitadel', `relay set to ${relayUrl}, reconnecting...`, true);
           }
-          // close the existing socket; the onclose handler will
-          // reconnect after 3s with the new URL. clear nick→pubkey
-          // bindings since they were verified against the old server
-          // identity and may not match the new one.
+          // close the existing socket; onclose schedules a reconnect
+          // with the new URL via exponential backoff. clear all state
+          // that was scoped to the old relay:
+          //
+          // - nick↔pubkey bindings: zid-auth-v1 binds the server name
+          //   into the signature, so old-server proofs don't apply on
+          //   the new server.
+          // - DM Noise sessions: the channels were established over
+          //   the old relay's participant routing; closing them here
+          //   releases the keys and forces fresh handshakes.
+          // - collision dedupe: warnings about pubkey X claiming nick
+          //   alice on the old server don't apply to the new universe.
+          //
+          // ignoredPubkeys is intentionally NOT cleared - the user's
+          // ignore preferences are pubkey-keyed, server-independent.
           nickToPubkey.clear();
           pubkeyToNick.clear();
           verifiedNicks.clear();
+          collisionWarned.clear();
+          for (const ch of dmChannels.values()) ch.close();
+          dmChannels.clear();
+          if (activeDm) { activeDm = null; encState = 'public'; }
           if (ws && ws.readyState !== WebSocket.CLOSED) ws.close();
+          render();
           break;
 
         case 'part': case 'leave':
