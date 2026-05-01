@@ -1530,9 +1530,22 @@ function boot() {
       const [cmd, ...args] = text.slice(1).split(/\s+/);
       switch (cmd?.toLowerCase()) {
         case 'help':
-          addMsg('zitadel', '/nick /me /j /part /msg /dm /channels /close /whois [nick|pubkey] /share /ignore /unignore /ignored /login /notify /clear /connect', true);
-          addMsg('zitadel', 'DMs use Noise IK e2ee. /msg <nick_or_pubkey> <text> to start.', true);
-          addMsg('zitadel', 'Alt+1..9 jump to channel by index, Alt+0 jumps to the 10th. Tab completes nicks and /commands.', true);
+          addMsg('zitadel', '── commands ─────────────────────────', true);
+          addMsg('zitadel', '  channels:  /j /part (or /leave) /channels /clear', true);
+          addMsg('zitadel', '  messages:  /me <text>   (action)', true);
+          addMsg('zitadel', '  DMs:       /msg <nick|pub> <text>   /dm <pub> <text>   /close', true);
+          addMsg('zitadel', '  identity:  /login   /nick <name>   /whois [nick|pub]   /share [nick|pub]', true);
+          addMsg('zitadel', '  safety:    /ignore /unignore /ignored', true);
+          addMsg('zitadel', '  config:    /server <url|reset>   /notify [on|off]   /connect', true);
+          addMsg('zitadel', '── keyboard ─────────────────────────', true);
+          addMsg('zitadel', '  Tab        complete /command or peer nick', true);
+          addMsg('zitadel', '  Alt+1..9   switch to that channel/DM by index (Alt+0 = 10th)', true);
+          addMsg('zitadel', '  ↑ ↓        navigate input history', true);
+          addMsg('zitadel', '  Esc        clear input', true);
+          addMsg('zitadel', '── identity ─────────────────────────', true);
+          addMsg('zitadel', '  Public messages are signed under zid-msg-v1 (per-message ed25519).', true);
+          addMsg('zitadel', '  Verified peers show a green + on their nick. Click a nick to DM.', true);
+          addMsg('zitadel', '  DMs use Noise IK end-to-end encryption (the [e2ee] tag).', true);
           break;
 
         case 'nick':
