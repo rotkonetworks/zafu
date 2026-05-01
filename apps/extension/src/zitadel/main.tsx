@@ -1160,9 +1160,13 @@ function boot() {
       connected = true;
       reconnectAttempts = 0;
       addMsg('zitadel', 'connected to relay', true);
-      // join the initial room first - announces are scoped to a room
-      // (relay only forwards them when the sender is in a room).
-      wsSend({ t: 'join', room: initialRoom, nick });
+      // rejoin whatever room the user was on, falling back to the
+      // initial default. without this, a mid-session disconnect would
+      // yank the user out of #foo back to #zitadel on every reconnect.
+      // currentRoom is preserved across onclose specifically so we
+      // can rejoin here.
+      const targetRoom = currentRoom || initialRoom;
+      wsSend({ t: 'join', room: targetRoom, nick });
       // keepalive ping every 30s. some intermediaries (Cloudflare,
       // residential ISPs, the relay itself) close idle WebSockets after
       // ~60s. without a heartbeat the connection drops every time the
