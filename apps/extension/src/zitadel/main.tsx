@@ -1888,7 +1888,15 @@ function boot() {
           break;
 
         case 'clear':
-          roomMessages().length = 0; render();
+          // emptying the array isn't enough - render's append path
+          // can't shrink the DOM. force a full rebuild by resetting
+          // the per-view bookkeeping. otherwise the data is gone but
+          // the screen still shows the old lines.
+          roomMessages().length = 0;
+          renderedView = null;
+          renderedCount.delete(currentViewKey());
+          firstNewIdx.delete(currentViewKey());
+          render();
           break;
 
         default:
