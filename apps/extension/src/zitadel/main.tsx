@@ -104,6 +104,12 @@ const ZID_MSG_VERSION = 'zid-msg-v1';
 const ZID_MSG_DOMAIN = 'zafu-zid-msg-v1';
 const ZID_MSG_FRESHNESS_MS = 60_000;
 
+/** Per-message size cap. Generous compared to IRC's 512 bytes but
+ * tight enough that an accidental paste of a multi-page document
+ * doesn't claim the whole 1 MiB room buffer in one go. UTF-8 bytes
+ * (not JS string length) so emoji-heavy messages count fairly. */
+const MAX_MESSAGE_BYTES = 4096;
+
 interface MsgProof {
   v: string;
   text: string;
@@ -848,6 +854,13 @@ function boot() {
   }
 
   async function sendDm(peerPubkey: string, text: string) {
+    const byteLen = new TextEncoder().encode(text).byteLength;
+    if (byteLen > MAX_MESSAGE_BYTES) {
+      addMsg('zitadel',
+        `DM too long: ${byteLen} bytes, max ${MAX_MESSAGE_BYTES}. break it up.`,
+        true);
+      return;
+    }
     let ch = dmChannels.get(peerPubkey);
     if (!ch) {
       ch = await openDmChannel(peerPubkey);
@@ -1545,6 +1558,13 @@ function boot() {
   function sendRoomMessage(text: string, action = false) {
     if (!connected) { addMsg('zitadel', 'not connected. type /connect', true); return; }
     if (!currentRoom) { addMsg('zitadel', 'not in a channel. type /j <room>', true); return; }
+    const byteLen = new TextEncoder().encode(text).byteLength;
+    if (byteLen > MAX_MESSAGE_BYTES) {
+      addMsg('zitadel',
+        `message too long: ${byteLen} bytes, max ${MAX_MESSAGE_BYTES}. break it up.`,
+        true);
+      return;
+    }
     const wireText = action ? `${ACTION_PREFIX}${text}${ACTION_SUFFIX}` : text;
     const signed = !!(zidPrivkey && zidPubkey);
     if (signed) {
