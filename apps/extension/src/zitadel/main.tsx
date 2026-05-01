@@ -788,16 +788,26 @@ function boot() {
 
   function closeDmChannel(peerPubkey: string) {
     const ch = dmChannels.get(peerPubkey);
-    if (ch) {
-      ch.close();
-      dmChannels.delete(peerPubkey);
-      addMsg('zitadel', `closed DM channel with ${shortPub(peerPubkey)}`, true, DM_PREFIX + peerPubkey);
-      if (activeDm === peerPubkey) {
-        activeDm = null;
-        encState = 'public';
-      }
-      render();
+    if (!ch) return;
+    ch.close();
+    dmChannels.delete(peerPubkey);
+    // wipe all view state for this DM so reopening starts clean -
+    // no stale unread badge, no stale "N new" divider, no stale
+    // message log. closed should mean closed.
+    const key = DM_PREFIX + peerPubkey;
+    messagesPerRoom.delete(key);
+    unreadCount.delete(key);
+    mentioned.delete(key);
+    renderedCount.delete(key);
+    firstNewIdx.delete(key);
+    if (renderedView === key) renderedView = null;
+    if (activeDm === peerPubkey) {
+      activeDm = null;
+      encState = 'public';
     }
+    // log the close to the user's current view (room or another DM),
+    // not into the just-wiped DM log.
+    addMsg('zitadel', `closed DM channel with ${shortPub(peerPubkey)}`, true);
   }
 
   /** Resolve a nick or pubkey target to a pubkey. */
