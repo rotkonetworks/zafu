@@ -433,6 +433,11 @@ function boot() {
   let zidPubkey: string | undefined;
   let zidPrivkey: Uint8Array | undefined;
   let currentRoom: string | null = null;
+  // room we asked the relay to join, set when we send {t:'join'} and
+  // cleared on 'joined'. used by the 'error' handler to know which
+  // room to create on "room not found" - the relay's error message
+  // doesn't echo the room name back, so we have to track it locally.
+  let pendingJoinRoom: string | null = null;
   let ws: WebSocket | null = null;
   let connected = false;
   let encState: EncState = 'public';
@@ -721,6 +726,7 @@ function boot() {
     markRead(room);
     if (room === currentRoom) { render(); return; }
     if (currentRoom) wsSend({ t: 'part' });
+    pendingJoinRoom = room;
     wsSend({ t: 'join', room, nick });
   }
 
@@ -1207,6 +1213,7 @@ function boot() {
       // currentRoom is preserved across onclose specifically so we
       // can rejoin here.
       const targetRoom = currentRoom || initialRoom;
+      pendingJoinRoom = targetRoom;
       wsSend({ t: 'join', room: targetRoom, nick });
       // keepalive ping every 30s. some intermediaries (Cloudflare,
       // residential ISPs, the relay itself) close idle WebSockets after
@@ -1293,6 +1300,7 @@ function boot() {
           }
           case 'joined':
             currentRoom = msg.room;
+            pendingJoinRoom = null;
             joinedRooms.add(msg.room);
             joinRetried = false;
             addMsg('zitadel', `joined #${msg.room} (${msg.count} users)`, true);
@@ -1349,6 +1357,7 @@ function boot() {
           case 'created':
             addMsg('zitadel', `room created: ${msg.room}`, true);
             // auto-join the room we just created
+            pendingJoinRoom = msg.room;
             wsSend({ t: 'join', room: msg.room, nick });
             break;
           case 'left':
@@ -1368,11 +1377,16 @@ function boot() {
             // new ones (channels are persistent state on the relay).
             if (msg.msg === 'room not found or expired' && !joinRetried) {
               joinRetried = true;
+              // create the room the user actually tried to join. the
+              // relay's error doesn't echo the room name, so we read
+              // it from pendingJoinRoom (set on every join site). fall
+              // back to initialRoom if somehow unset.
+              const roomToCreate = pendingJoinRoom || initialRoom;
               if (await isProUser()) {
-                addMsg('zitadel', 'room not found, creating...', true);
-                wsSend({ t: 'create', nick, room: initialRoom });
+                addMsg('zitadel', `room ${roomToCreate} not found, creating...`, true);
+                wsSend({ t: 'create', nick, room: roomToCreate });
               } else {
-                addMsg('zitadel', `room not found. creating channels requires zafu pro.`, true);
+                addMsg('zitadel', `room ${roomToCreate} not found. creating channels requires zafu pro.`, true);
               }
             } else {
               addMsg('zitadel', `error: ${msg.msg}`, true);
