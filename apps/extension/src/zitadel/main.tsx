@@ -1259,6 +1259,25 @@ function boot() {
   // cancel it for an immediate retry.
   let reconnectAttempts = 0;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Detach handlers from the current ws and close it. Used when we
+   * want to take an explicit reconnect path without the old socket's
+   * handlers racing against the new one. After this, the global ws
+   * binding may still point at the (closing) old socket but none of
+   * its events can mutate state - the new connectRelay() call
+   * reassigns ws and wires fresh handlers. */
+  function disposeWs() {
+    if (ws) {
+      ws.onopen = null;
+      ws.onclose = null;
+      ws.onerror = null;
+      ws.onmessage = null;
+      if (ws.readyState !== WebSocket.CLOSED) ws.close();
+    }
+    if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+    if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
+    connected = false;
+  }
+
   function scheduleReconnect() {
     const baseMs = Math.min(60_000, 2_000 * Math.pow(2, reconnectAttempts));
     const jitterMs = Math.floor(Math.random() * 1000);
@@ -1847,20 +1866,12 @@ function boot() {
           for (const ch of dmChannels.values()) ch.close();
           dmChannels.clear();
           if (activeDm) { activeDm = null; encState = 'public'; }
-          // Detach the old onclose so it doesn't schedule a reconnect
-          // racing with the explicit one below. Then cancel any
-          // pending backoff timer and reconnect immediately - this
-          // also handles the case where ws is null or already CLOSED
-          // (the old "ws.close() triggers reconnect" path silently
-          // did nothing in that state).
-          if (ws) {
-            ws.onclose = null;
-            if (ws.readyState !== WebSocket.CLOSED) ws.close();
-          }
-          if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
-          if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
+          // disposeWs detaches handlers from the old socket and
+          // cancels the retry/ping timers, so nothing from the old
+          // relay can race against the new connection below. handles
+          // null and CLOSED states cleanly too.
+          disposeWs();
           reconnectAttempts = 0;
-          connected = false;
           render();
           connectRelay();
           break;
@@ -2115,11 +2126,10 @@ function boot() {
 
         case 'connect':
           if (connected) { addMsg('zitadel', 'already connected', true); break; }
-          // /connect bypasses any pending backoff: cancel the timer,
-          // reset attempts, try immediately. matches the user's intent
-          // ("retry now") rather than making them wait for the next
-          // scheduled tick.
-          if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+          // /connect = "retry now". cancel any pending backoff and
+          // dispose any half-open ws so its onopen can't fire after
+          // we've already created a fresh one.
+          disposeWs();
           reconnectAttempts = 0;
           connectRelay();
           break;
