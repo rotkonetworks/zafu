@@ -62,7 +62,7 @@ export function FrostAirgapSignFlow({ ms, unsigned, recipient, amount, fee, onCo
     (async () => {
       try {
         const session = await openRelayRoom(
-          ms.relayUrl || 'https://poker.zk.bot',
+          ms.relayUrl || 'wss://zrelay.rotko.net',
           ms.threshold,
           ms.maxSigners,
           600,
@@ -114,7 +114,15 @@ export function FrostAirgapSignFlow({ ms, unsigned, recipient, amount, fee, onCo
       const buckets = subscribePeers(s, numActions, setPeersReady);
       peerBucketsRef.current = buckets;
 
-      await sendSignPrefix(s, unsigned.sighash, unsigned.alphas, recipient, amountZat, unsigned.fee);
+      await sendSignPrefix(
+        s,
+        unsigned.sighash,
+        unsigned.alphas,
+        recipient,
+        amountZat,
+        unsigned.fee,
+        unsigned.unsignedTx,
+      );
       await sendCommitments(s, zignerCommitsRef.current!);
 
       await waitFor(() => buckets.peerCommits[0]!.length >= ms.threshold - 1, 300_000);

@@ -1138,6 +1138,66 @@ export function frost_generate_randomizer(ephemeral_seed_hex, message_hex, commi
 }
 
 /**
+ * Parse the unsigned v5 transaction and recover what each Orchard action
+ * is sending, using the FROST wallet's UFVK to OVK-decrypt outputs.
+ *
+ * The spender (= each FROST joiner) owns the OVK that was used to encrypt
+ * every action's output, so OVK decryption yields:
+ *   - external scope hits → real recipients of the spend
+ *   - internal scope hits → change back to our own multisig
+ *   - non-decryptable     → dummy padding action (zero value by construction)
+ *
+ * Each joiner runs this on the unsigned tx bytes the host claims to have
+ * built and compares the derived summary to the host's claimed
+ * (recipient, amount, fee). A mismatch means the host lied.
+ *
+ * `orchard_fvk_uview` is the ZIP-316 unified viewing key string
+ * (`uview1…` / `uviewtest1…`) stored alongside the wallet.
+ *
+ * Returns JSON:
+ * {
+ *   "actions": [
+ *     { "index": u32,
+ *       "amount_zat": u64,
+ *       "recipient_raw_hex": "<43-byte hex>" | null,
+ *       "is_change": bool,
+ *       "decrypted": bool }
+ *   ],
+ *   "summary": {
+ *     "total_send_zat": u64,
+ *     "total_change_zat": u64,
+ *     "decrypted_count": u32,
+ *     "action_count": u32
+ *   }
+ * }
+ * @param {string} unsigned_tx_hex
+ * @param {string} orchard_fvk_uview
+ * @returns {string}
+ */
+export function frost_parse_tx_outputs(unsigned_tx_hex, orchard_fvk_uview) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(unsigned_tx_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(orchard_fvk_uview, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_parse_tx_outputs(ptr0, len0, ptr1, len1);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
  * host-only: sample a random 32-byte SpendingKey for nk/rivk derivation.
  * retries until the sampled bytes land in the Pallas scalar range.
  * returns hex-encoded 32-byte `sk` that the host broadcasts to peers in R1.
@@ -1944,7 +2004,7 @@ function __wbg_get_imports(memory) {
             table.set(offset + 2, true);
             table.set(offset + 3, false);
         },
-        memory: memory || new WebAssembly.Memory({initial:49,maximum:32768,shared:true}),
+        memory: memory || new WebAssembly.Memory({initial:50,maximum:32768,shared:true}),
     };
     return {
         __proto__: null,

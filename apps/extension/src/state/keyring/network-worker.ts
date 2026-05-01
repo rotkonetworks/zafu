@@ -17,7 +17,7 @@
 import type { NetworkType } from './types';
 
 export interface NetworkWorkerMessage {
-  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-multi' | 'send-tx-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'note-sync-encode' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos' | 'frost-dkg-part1' | 'frost-dkg-part2' | 'frost-dkg-part3' | 'frost-sign-round1' | 'frost-spend-sign' | 'frost-spend-aggregate' | 'frost-derive-address' | 'frost-derive-address-from-sk' | 'frost-sample-fvk-sk' | 'frost-derive-ufvk';
+  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-multi' | 'send-tx-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'note-sync-encode' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos' | 'frost-dkg-part1' | 'frost-dkg-part2' | 'frost-dkg-part3' | 'frost-sign-round1' | 'frost-spend-sign' | 'frost-spend-aggregate' | 'frost-derive-address' | 'frost-derive-address-from-sk' | 'frost-sample-fvk-sk' | 'frost-derive-ufvk' | 'frost-parse-tx-outputs';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -709,6 +709,44 @@ export const frostDeriveUfvkInWorker = async (
   mainnet: boolean,
 ): Promise<string> => {
   return callWorker('zcash', 'frost-derive-ufvk', { publicKeyPackageHex, skHex, mainnet });
+};
+
+/** Multisig verifier: parse outputs of an unsigned v5 tx using the FROST UFVK
+ * so each joiner can derive (recipient, amount, is_change) per Orchard action
+ * without trusting the host's claim. Returns parsed JSON. */
+export interface FrostParsedAction {
+  index: number;
+  amount_zat: number;
+  recipient_raw_hex: string | null;
+  is_change: boolean;
+  decrypted: boolean;
+}
+export interface FrostParsedTx {
+  actions: FrostParsedAction[];
+  summary: {
+    total_send_zat: number;
+    total_change_zat: number;
+    decrypted_count: number;
+    action_count: number;
+  };
+  /** ZIP-244 sighash recomputed from the unsigned tx bytes the joiner was
+   * given. Compare to the host's claimed sighash from the SIGN: payload —
+   * a mismatch means the host published a decoy bundle for display while
+   * asking the joiner to actually sign a different tx. `null` means the
+   * tx shape (transparent or sapling component present) isn't covered by
+   * this verifier yet — fall back to OVK-only check with a warning. */
+  computed_sighash_hex: string | null;
+}
+export const frostParseTxOutputsInWorker = async (
+  unsignedTxHex: string,
+  orchardFvkUview: string,
+): Promise<FrostParsedTx> => {
+  const json = await callWorker<string>(
+    'zcash',
+    'frost-parse-tx-outputs',
+    { unsignedTxHex, orchardFvkUview },
+  );
+  return JSON.parse(json) as FrostParsedTx;
 };
 
 // worker URLs per network

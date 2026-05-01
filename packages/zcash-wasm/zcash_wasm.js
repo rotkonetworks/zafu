@@ -481,11 +481,12 @@ export function build_shielding_transaction(utxos_json, privkey_hex, recipient, 
  * @param {any} merkle_paths_json
  * @param {number} account_index
  * @param {boolean} mainnet
+ * @param {string | null} [memo_hex]
  * @returns {string}
  */
-export function build_signed_spend_transaction(seed_phrase, notes_json, recipient, amount, fee, anchor_hex, merkle_paths_json, account_index, mainnet) {
-    let deferred5_0;
-    let deferred5_1;
+export function build_signed_spend_transaction(seed_phrase, notes_json, recipient, amount, fee, anchor_hex, merkle_paths_json, account_index, mainnet, memo_hex) {
+    let deferred6_0;
+    let deferred6_1;
     try {
         const ptr0 = passStringToWasm0(seed_phrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
@@ -493,46 +494,94 @@ export function build_signed_spend_transaction(seed_phrase, notes_json, recipien
         const len1 = WASM_VECTOR_LEN;
         const ptr2 = passStringToWasm0(anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len2 = WASM_VECTOR_LEN;
-        const ret = wasm.build_signed_spend_transaction(ptr0, len0, notes_json, ptr1, len1, amount, fee, ptr2, len2, merkle_paths_json, account_index, mainnet);
-        var ptr4 = ret[0];
-        var len4 = ret[1];
+        var ptr3 = isLikeNone(memo_hex) ? 0 : passStringToWasm0(memo_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len3 = WASM_VECTOR_LEN;
+        const ret = wasm.build_signed_spend_transaction(ptr0, len0, notes_json, ptr1, len1, amount, fee, ptr2, len2, merkle_paths_json, account_index, mainnet, ptr3, len3);
+        var ptr5 = ret[0];
+        var len5 = ret[1];
         if (ret[3]) {
-            ptr4 = 0; len4 = 0;
+            ptr5 = 0; len5 = 0;
             throw takeFromExternrefTable0(ret[2]);
         }
-        deferred5_0 = ptr4;
-        deferred5_1 = len4;
-        return getStringFromWasm0(ptr4, len4);
+        deferred6_0 = ptr5;
+        deferred6_1 = len5;
+        return getStringFromWasm0(ptr5, len5);
     } finally {
-        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
+        wasm.__wbindgen_free(deferred6_0, deferred6_1, 1);
     }
 }
 
 /**
- * Build an unsigned transaction and return the data needed for cold signing
- * This is called by the online watch-only wallet.
+ * Build an unsigned shielding transaction (transparent → orchard) for cold-wallet signing.
+ *
+ * Same as `build_shielding_transaction` but does NOT sign the transparent inputs.
+ * Instead, returns the per-input sighashes so an external signer (e.g. Zigner) can sign them.
+ *
+ * Returns JSON: `{ sighashes: [hex], unsigned_tx_hex: hex, summary: string }`
+ * @param {string} utxos_json
+ * @param {string} recipient
+ * @param {bigint} amount
+ * @param {bigint} fee
+ * @param {number} anchor_height
+ * @param {boolean} mainnet
+ * @returns {string}
+ */
+export function build_unsigned_shielding_transaction(utxos_json, recipient, amount, fee, anchor_height, mainnet) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(utxos_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.build_unsigned_shielding_transaction(ptr0, len0, ptr1, len1, amount, fee, anchor_height, mainnet);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
+ * Build an unsigned transaction and return the data needed for cold signing.
+ * Uses the PCZT (Partially Constructed Zcash Transaction) flow from the orchard
+ * crate to produce real v5 transaction bytes with Halo 2 proofs.
  *
  * Returns JSON with:
- * - sighash: the transaction sighash (hex)
- * - alphas: array of alpha randomizers for each orchard action (hex)
- * - unsigned_tx: the serialized unsigned transaction (hex)
+ * - sighash: the transaction sighash (hex, 32 bytes)
+ * - alphas: array of alpha randomizers for real spend actions only (hex, 32 bytes each)
+ * - unsigned_tx: the serialized v5 transaction with dummy spend auth sigs (hex)
+ * - spend_indices: array of action indices that need external signatures
  * - summary: human-readable transaction summary
+ * @param {string} ufvk_str
  * @param {any} notes_json
  * @param {string} recipient
  * @param {bigint} amount
  * @param {bigint} fee
  * @param {string} anchor_hex
  * @param {any} merkle_paths_json
- * @param {number} account_index
- * @param {boolean} _mainnet
+ * @param {number} _account_index
+ * @param {boolean} mainnet
+ * @param {string | null} [memo_hex]
  * @returns {any}
  */
-export function build_unsigned_transaction(notes_json, recipient, amount, fee, anchor_hex, merkle_paths_json, account_index, _mainnet) {
-    const ptr0 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+export function build_unsigned_transaction(ufvk_str, notes_json, recipient, amount, fee, anchor_hex, merkle_paths_json, _account_index, mainnet, memo_hex) {
+    const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const ptr1 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len1 = WASM_VECTOR_LEN;
-    const ret = wasm.build_unsigned_transaction(notes_json, ptr0, len0, amount, fee, ptr1, len1, merkle_paths_json, account_index, _mainnet);
+    const ptr2 = passStringToWasm0(anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    var ptr3 = isLikeNone(memo_hex) ? 0 : passStringToWasm0(memo_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len3 = WASM_VECTOR_LEN;
+    const ret = wasm.build_unsigned_transaction(ptr0, len0, notes_json, ptr1, len1, amount, fee, ptr2, len2, merkle_paths_json, _account_index, mainnet, ptr3, len3);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
@@ -540,19 +589,90 @@ export function build_unsigned_transaction(notes_json, recipient, amount, fee, a
 }
 
 /**
- * Complete a transaction by applying signatures from cold wallet
- * Returns the serialized signed transaction ready for broadcast
- * @param {string} unsigned_tx_json
- * @param {any} signatures_json
+ * One-shot witness + path builder used for initial backfill: replays blocks
+ * the same way `build_merkle_paths` does but also returns serialized
+ * witnesses and the resulting frontier so the caller can cache them.
+ *
+ * Returns JSON
+ * `{anchor_hex, end_frontier_hex, entries: [{position, witness_hex, path: [{hash}]}]}`.
+ * @param {string} tree_state_hex
+ * @param {string} compact_blocks_json
+ * @param {string} note_positions_json
+ * @returns {any}
+ */
+export function build_witnesses_and_paths(tree_state_hex, compact_blocks_json, note_positions_json) {
+    const ptr0 = passStringToWasm0(tree_state_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(compact_blocks_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(note_positions_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ret = wasm.build_witnesses_and_paths(ptr0, len0, ptr1, len1, ptr2, len2);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Complete an unsigned shielding transaction by patching in transparent signatures.
+ *
+ * Takes the unsigned tx hex (with empty scriptSigs) and an array of `{sig_hex, pubkey_hex}`
+ * per transparent input. Constructs the P2PKH scriptSig for each input and returns the
+ * final signed transaction hex.
+ * @param {string} unsigned_tx_hex
+ * @param {string} signatures_json
  * @returns {string}
  */
-export function complete_transaction(unsigned_tx_json, signatures_json) {
+export function complete_shielding_transaction(unsigned_tx_hex, signatures_json) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(unsigned_tx_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(signatures_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.complete_shielding_transaction(ptr0, len0, ptr1, len1);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
+ * Complete a transaction by patching in spend auth signatures from cold wallet.
+ *
+ * Takes the unsigned v5 tx hex (with zero spend auth sigs for real spends) and an
+ * array of hex-encoded 64-byte RedPallas signatures. Patches them into the correct
+ * offsets in the orchard bundle.
+ *
+ * # Arguments
+ * * `unsigned_tx_hex` - hex-encoded v5 transaction bytes from build_unsigned_transaction
+ * * `signatures_json` - JSON array of hex-encoded 64-byte signatures, one per spend_index
+ * * `spend_indices_json` - JSON array of action indices that need signatures (from build result)
+ *
+ * # Returns
+ * Hex-encoded signed v5 transaction bytes ready for broadcast
+ * @param {string} unsigned_tx_hex
+ * @param {any} signatures_json
+ * @param {any} spend_indices_json
+ * @returns {string}
+ */
+export function complete_transaction(unsigned_tx_hex, signatures_json, spend_indices_json) {
     let deferred3_0;
     let deferred3_1;
     try {
-        const ptr0 = passStringToWasm0(unsigned_tx_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const ptr0 = passStringToWasm0(unsigned_tx_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.complete_transaction(ptr0, len0, signatures_json);
+        const ret = wasm.complete_transaction(ptr0, len0, signatures_json, spend_indices_json);
         var ptr2 = ret[0];
         var len2 = ret[1];
         if (ret[3]) {
@@ -632,6 +752,45 @@ export function derive_transparent_privkey(seed_phrase, account, index) {
 }
 
 /**
+ * Encode notes + merkle paths into CBOR bytes for ur:zcash-notes.
+ *
+ * This produces the exact format zigner expects: CBOR map with anchor,
+ * height, mainnet flag, notes array with merkle paths, and optional
+ * attestation signature.
+ *
+ * # Arguments
+ * * `notes_json` - JSON array of `[{value, nullifier, cmx, position, block_height}]`
+ * * `merkle_result_json` - JSON from build_merkle_paths: `{anchor_hex, paths: [{position, path: [{hash}]}]}`
+ * * `anchor_height` - block height of the anchor
+ * * `mainnet` - true for mainnet, false for testnet
+ * * `attestation_hex` - optional hex-encoded 64-byte FROST attestation signature
+ *
+ * # Returns
+ * `Uint8Array` of CBOR bytes ready for UR fountain encoding
+ * @param {string} notes_json
+ * @param {string} merkle_result_json
+ * @param {number} anchor_height
+ * @param {boolean} mainnet
+ * @param {string | null} [attestation_hex]
+ * @returns {Uint8Array}
+ */
+export function encode_notes_bundle(notes_json, merkle_result_json, anchor_height, mainnet, attestation_hex) {
+    const ptr0 = passStringToWasm0(notes_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(merkle_result_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    var ptr2 = isLikeNone(attestation_hex) ? 0 : passStringToWasm0(attestation_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len2 = WASM_VECTOR_LEN;
+    const ret = wasm.encode_notes_bundle(ptr0, len0, ptr1, len1, anchor_height, mainnet, ptr2, len2);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v4 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v4;
+}
+
+/**
  * Compute the tree size from a hex-encoded frontier.
  * @param {string} tree_state_hex
  * @returns {bigint}
@@ -644,6 +803,605 @@ export function frontier_tree_size(tree_state_hex) {
         throw takeFromExternrefTable0(ret[1]);
     }
     return BigInt.asUintN(64, ret[0]);
+}
+
+/**
+ * coordinator: aggregate signed shares into final signature
+ * @param {string} public_key_package_hex
+ * @param {string} message_hex
+ * @param {string} commitments_json
+ * @param {string} shares_json
+ * @param {string} randomizer_hex
+ * @returns {string}
+ */
+export function frost_aggregate_shares(public_key_package_hex, message_hex, commitments_json, shares_json, randomizer_hex) {
+    let deferred7_0;
+    let deferred7_1;
+    try {
+        const ptr0 = passStringToWasm0(public_key_package_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(message_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(commitments_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passStringToWasm0(shares_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len3 = WASM_VECTOR_LEN;
+        const ptr4 = passStringToWasm0(randomizer_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len4 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_aggregate_shares(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4);
+        var ptr6 = ret[0];
+        var len6 = ret[1];
+        if (ret[3]) {
+            ptr6 = 0; len6 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred7_0 = ptr6;
+        deferred7_1 = len6;
+        return getStringFromWasm0(ptr6, len6);
+    } finally {
+        wasm.__wbindgen_free(deferred7_0, deferred7_1, 1);
+    }
+}
+
+/**
+ * Compute the attestation digest for an anchor.
+ * Returns hex-encoded 32-byte SHA-256 digest.
+ * @param {string} public_key_package_hex
+ * @param {string} anchor_hex
+ * @param {number} anchor_height
+ * @param {boolean} mainnet
+ * @returns {string}
+ */
+export function frost_attestation_digest(public_key_package_hex, anchor_hex, anchor_height, mainnet) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(public_key_package_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_attestation_digest(ptr0, len0, ptr1, len1, anchor_height, mainnet);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
+ * Verify an attestation (96 bytes: sig || randomizer).
+ * @param {string} attestation_hex
+ * @param {string} public_key_package_hex
+ * @param {string} anchor_hex
+ * @param {number} anchor_height
+ * @param {boolean} mainnet
+ * @returns {boolean}
+ */
+export function frost_attestation_verify(attestation_hex, public_key_package_hex, anchor_hex, anchor_height, mainnet) {
+    const ptr0 = passStringToWasm0(attestation_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(public_key_package_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ret = wasm.frost_attestation_verify(ptr0, len0, ptr1, len1, ptr2, len2, anchor_height, mainnet);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return ret[0] !== 0;
+}
+
+/**
+ * trusted dealer: generate key packages for all participants
+ * @param {number} min_signers
+ * @param {number} max_signers
+ * @returns {string}
+ */
+export function frost_dealer_keygen(min_signers, max_signers) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ret = wasm.frost_dealer_keygen(min_signers, max_signers);
+        var ptr1 = ret[0];
+        var len1 = ret[1];
+        if (ret[3]) {
+            ptr1 = 0; len1 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred2_0 = ptr1;
+        deferred2_1 = len1;
+        return getStringFromWasm0(ptr1, len1);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * derive the multisig wallet's Orchard address (raw 43-byte address, hex-encoded)
+ * from the group public key package and a caller-supplied `sk`. deterministic —
+ * every participant computing this with the same inputs lands on byte-identical
+ * output. pair with `frost_derive_ufvk(pkg, sk, mainnet)` so the stored address
+ * and stored UFVK share a single source of truth for nk/rivk.
+ * @param {string} public_key_package_hex
+ * @param {string} sk_hex
+ * @param {number} diversifier_index
+ * @returns {string}
+ */
+export function frost_derive_address_from_sk(public_key_package_hex, sk_hex, diversifier_index) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(public_key_package_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(sk_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_derive_address_from_sk(ptr0, len0, ptr1, len1, diversifier_index);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
+ * derive the multisig wallet's Orchard address (raw 43-byte address, hex-encoded).
+ * non-deterministic — internally generates a random nk/rivk. only safe when a
+ * single party derives-and-broadcasts. interactive DKG should use
+ * `frost_derive_address_from_sk` instead.
+ * @param {string} public_key_package_hex
+ * @param {number} diversifier_index
+ * @returns {string}
+ */
+export function frost_derive_address_raw(public_key_package_hex, diversifier_index) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(public_key_package_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_derive_address_raw(ptr0, len0, diversifier_index);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * derive the Orchard-only UFVK string (`uview1…` / `uviewtest1…`) from a
+ * caller-supplied 32-byte SpendingKey and a FROST public key package.
+ * every participant, given the same `sk_hex` + `public_key_package_hex`,
+ * lands on byte-identical output.
+ * @param {string} public_key_package_hex
+ * @param {string} sk_hex
+ * @param {boolean} mainnet
+ * @returns {string}
+ */
+export function frost_derive_ufvk(public_key_package_hex, sk_hex, mainnet) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(public_key_package_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(sk_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_derive_ufvk(ptr0, len0, ptr1, len1, mainnet);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
+ * DKG round 1: generate ephemeral identity + signed commitment
+ * @param {number} max_signers
+ * @param {number} min_signers
+ * @returns {string}
+ */
+export function frost_dkg_part1(max_signers, min_signers) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ret = wasm.frost_dkg_part1(max_signers, min_signers);
+        var ptr1 = ret[0];
+        var len1 = ret[1];
+        if (ret[3]) {
+            ptr1 = 0; len1 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred2_0 = ptr1;
+        deferred2_1 = len1;
+        return getStringFromWasm0(ptr1, len1);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * DKG round 2: process signed round1 broadcasts, produce per-peer packages
+ * @param {string} secret_hex
+ * @param {string} peer_broadcasts_json
+ * @returns {string}
+ */
+export function frost_dkg_part2(secret_hex, peer_broadcasts_json) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(secret_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(peer_broadcasts_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_dkg_part2(ptr0, len0, ptr1, len1);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
+ * DKG round 3: finalize — returns key package + public key package
+ * @param {string} secret_hex
+ * @param {string} round1_broadcasts_json
+ * @param {string} round2_packages_json
+ * @returns {string}
+ */
+export function frost_dkg_part3(secret_hex, round1_broadcasts_json, round2_packages_json) {
+    let deferred5_0;
+    let deferred5_1;
+    try {
+        const ptr0 = passStringToWasm0(secret_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(round1_broadcasts_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(round2_packages_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_dkg_part3(ptr0, len0, ptr1, len1, ptr2, len2);
+        var ptr4 = ret[0];
+        var len4 = ret[1];
+        if (ret[3]) {
+            ptr4 = 0; len4 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred5_0 = ptr4;
+        deferred5_1 = len4;
+        return getStringFromWasm0(ptr4, len4);
+    } finally {
+        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
+    }
+}
+
+/**
+ * coordinator: generate signed randomizer
+ * @param {string} ephemeral_seed_hex
+ * @param {string} message_hex
+ * @param {string} commitments_json
+ * @returns {string}
+ */
+export function frost_generate_randomizer(ephemeral_seed_hex, message_hex, commitments_json) {
+    let deferred5_0;
+    let deferred5_1;
+    try {
+        const ptr0 = passStringToWasm0(ephemeral_seed_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(message_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(commitments_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_generate_randomizer(ptr0, len0, ptr1, len1, ptr2, len2);
+        var ptr4 = ret[0];
+        var len4 = ret[1];
+        if (ret[3]) {
+            ptr4 = 0; len4 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred5_0 = ptr4;
+        deferred5_1 = len4;
+        return getStringFromWasm0(ptr4, len4);
+    } finally {
+        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
+    }
+}
+
+/**
+ * Parse the unsigned v5 transaction and recover what each Orchard action
+ * is sending, using the FROST wallet's UFVK to OVK-decrypt outputs.
+ *
+ * The spender (= each FROST joiner) owns the OVK that was used to encrypt
+ * every action's output, so OVK decryption yields:
+ *   - external scope hits → real recipients of the spend
+ *   - internal scope hits → change back to our own multisig
+ *   - non-decryptable     → dummy padding action (zero value by construction)
+ *
+ * Each joiner runs this on the unsigned tx bytes the host claims to have
+ * built and compares the derived summary to the host's claimed
+ * (recipient, amount, fee). A mismatch means the host lied.
+ *
+ * `orchard_fvk_uview` is the ZIP-316 unified viewing key string
+ * (`uview1…` / `uviewtest1…`) stored alongside the wallet.
+ *
+ * Returns JSON:
+ * {
+ *   "actions": [
+ *     { "index": u32,
+ *       "amount_zat": u64,
+ *       "recipient_raw_hex": "<43-byte hex>" | null,
+ *       "is_change": bool,
+ *       "decrypted": bool }
+ *   ],
+ *   "summary": {
+ *     "total_send_zat": u64,
+ *     "total_change_zat": u64,
+ *     "decrypted_count": u32,
+ *     "action_count": u32
+ *   }
+ * }
+ * @param {string} unsigned_tx_hex
+ * @param {string} orchard_fvk_uview
+ * @returns {string}
+ */
+export function frost_parse_tx_outputs(unsigned_tx_hex, orchard_fvk_uview) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(unsigned_tx_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(orchard_fvk_uview, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_parse_tx_outputs(ptr0, len0, ptr1, len1);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
+ * host-only: sample a random 32-byte SpendingKey for nk/rivk derivation.
+ * retries until the sampled bytes land in the Pallas scalar range.
+ * returns hex-encoded 32-byte `sk` that the host broadcasts to peers in R1.
+ * @returns {string}
+ */
+export function frost_sample_fvk_sk() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.frost_sample_fvk_sk();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
+ * signing round 1: generate nonces + signed commitments
+ * @param {string} ephemeral_seed_hex
+ * @param {string} key_package_hex
+ * @returns {string}
+ */
+export function frost_sign_round1(ephemeral_seed_hex, key_package_hex) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(ephemeral_seed_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(key_package_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_sign_round1(ptr0, len0, ptr1, len1);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
+ * signing round 2: produce signed signature share
+ * @param {string} ephemeral_seed_hex
+ * @param {string} key_package_hex
+ * @param {string} nonces_hex
+ * @param {string} message_hex
+ * @param {string} commitments_json
+ * @param {string} randomizer_hex
+ * @returns {string}
+ */
+export function frost_sign_round2(ephemeral_seed_hex, key_package_hex, nonces_hex, message_hex, commitments_json, randomizer_hex) {
+    let deferred8_0;
+    let deferred8_1;
+    try {
+        const ptr0 = passStringToWasm0(ephemeral_seed_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(key_package_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(nonces_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passStringToWasm0(message_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len3 = WASM_VECTOR_LEN;
+        const ptr4 = passStringToWasm0(commitments_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len4 = WASM_VECTOR_LEN;
+        const ptr5 = passStringToWasm0(randomizer_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len5 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_sign_round2(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, ptr5, len5);
+        var ptr7 = ret[0];
+        var len7 = ret[1];
+        if (ret[3]) {
+            ptr7 = 0; len7 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred8_0 = ptr7;
+        deferred8_1 = len7;
+        return getStringFromWasm0(ptr7, len7);
+    } finally {
+        wasm.__wbindgen_free(deferred8_0, deferred8_1, 1);
+    }
+}
+
+/**
+ * coordinator: aggregate shares into Orchard SpendAuth signature (64 bytes hex)
+ * @param {string} public_key_package_hex
+ * @param {string} sighash_hex
+ * @param {string} alpha_hex
+ * @param {string} commitments_json
+ * @param {string} shares_json
+ * @returns {string}
+ */
+export function frost_spend_aggregate(public_key_package_hex, sighash_hex, alpha_hex, commitments_json, shares_json) {
+    let deferred7_0;
+    let deferred7_1;
+    try {
+        const ptr0 = passStringToWasm0(public_key_package_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(sighash_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(alpha_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passStringToWasm0(commitments_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len3 = WASM_VECTOR_LEN;
+        const ptr4 = passStringToWasm0(shares_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len4 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_spend_aggregate(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4);
+        var ptr6 = ret[0];
+        var len6 = ret[1];
+        if (ret[3]) {
+            ptr6 = 0; len6 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred7_0 = ptr6;
+        deferred7_1 = len6;
+        return getStringFromWasm0(ptr6, len6);
+    } finally {
+        wasm.__wbindgen_free(deferred7_0, deferred7_1, 1);
+    }
+}
+
+/**
+ * sighash-bound round 2: produce FROST share for one Orchard action
+ * @param {string} key_package_hex
+ * @param {string} nonces_hex
+ * @param {string} sighash_hex
+ * @param {string} alpha_hex
+ * @param {string} commitments_json
+ * @returns {string}
+ */
+export function frost_spend_sign_round2(key_package_hex, nonces_hex, sighash_hex, alpha_hex, commitments_json) {
+    let deferred7_0;
+    let deferred7_1;
+    try {
+        const ptr0 = passStringToWasm0(key_package_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(nonces_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(sighash_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passStringToWasm0(alpha_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len3 = WASM_VECTOR_LEN;
+        const ptr4 = passStringToWasm0(commitments_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len4 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_spend_sign_round2(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4);
+        var ptr6 = ret[0];
+        var len6 = ret[1];
+        if (ret[3]) {
+            ptr6 = 0; len6 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred7_0 = ptr6;
+        deferred7_1 = len6;
+        return getStringFromWasm0(ptr6, len6);
+    } finally {
+        wasm.__wbindgen_free(deferred7_0, deferred7_1, 1);
+    }
+}
+
+/**
+ * authenticated variant: wraps share in SignedMessage for relay transport
+ * @param {string} ephemeral_seed_hex
+ * @param {string} key_package_hex
+ * @param {string} nonces_hex
+ * @param {string} sighash_hex
+ * @param {string} alpha_hex
+ * @param {string} commitments_json
+ * @returns {string}
+ */
+export function frost_spend_sign_round2_signed(ephemeral_seed_hex, key_package_hex, nonces_hex, sighash_hex, alpha_hex, commitments_json) {
+    let deferred8_0;
+    let deferred8_1;
+    try {
+        const ptr0 = passStringToWasm0(ephemeral_seed_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(key_package_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(nonces_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passStringToWasm0(sighash_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len3 = WASM_VECTOR_LEN;
+        const ptr4 = passStringToWasm0(alpha_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len4 = WASM_VECTOR_LEN;
+        const ptr5 = passStringToWasm0(commitments_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len5 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_spend_sign_round2_signed(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, ptr5, len5);
+        var ptr7 = ret[0];
+        var len7 = ret[1];
+        if (ret[3]) {
+            ptr7 = 0; len7 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred8_0 = ptr7;
+        deferred8_1 = len7;
+        return getStringFromWasm0(ptr7, len7);
+    } finally {
+        wasm.__wbindgen_free(deferred8_0, deferred8_1, 1);
+    }
 }
 
 /**
@@ -766,6 +1524,36 @@ export function transparent_address_from_ufvk(ufvk_str, address_index) {
 }
 
 /**
+ * Derive compressed public key from UFVK transparent component for a given address index.
+ *
+ * Uses BIP44 external path: `m/44'/133'/account'/0/<address_index>`
+ * Returns hex-encoded 33-byte compressed secp256k1 public key.
+ * @param {string} ufvk_str
+ * @param {number} address_index
+ * @returns {string}
+ */
+export function transparent_pubkey_from_ufvk(ufvk_str, address_index) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.transparent_pubkey_from_ufvk(ptr0, len0, address_index);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
  * Compute the tree root from a hex-encoded frontier.
  * @param {string} tree_state_hex
  * @returns {string}
@@ -788,6 +1576,39 @@ export function tree_root_hex(tree_state_hex) {
         return getStringFromWasm0(ptr2, len2);
     } finally {
         wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * Encode CBOR bytes as UR-encoded animated QR string frames.
+ * Returns JSON array of UR strings suitable for QR display.
+ * ur_type: e.g. "zcash-notes", "zigner-contacts", "zigner-backup"
+ * fragment_size: max bytes per QR frame (200-500 typical, 0 = single QR)
+ * @param {Uint8Array} cbor_data
+ * @param {string} ur_type
+ * @param {number} fragment_size
+ * @returns {string}
+ */
+export function ur_encode_frames(cbor_data, ur_type, fragment_size) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passArray8ToWasm0(cbor_data, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(ur_type, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.ur_encode_frames(ptr0, len0, ptr1, len1, fragment_size);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
 }
 
@@ -865,14 +1686,96 @@ export function wbg_rayon_start_worker(receiver) {
     wasm.wbg_rayon_start_worker(receiver);
 }
 
+/**
+ * Extract a merkle path from a stored per-note witness. Returns JSON
+ * `{position, root_hex, path: [{hash}]}`. The caller must cross-check
+ * `root_hex` against the anchor they intend to sign over.
+ * @param {string} witness_hex
+ * @returns {any}
+ */
+export function witness_extract_path(witness_hex) {
+    const ptr0 = passStringToWasm0(witness_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.witness_extract_path(ptr0, len0);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Advance tracked witnesses over a range of compact blocks, optionally
+ * seeding new ones. Returns JSON
+ * `{end_frontier_hex, anchor_hex, witnesses: [{id, position, witness_hex}], seeded_ids: [...], end_position}`.
+ *
+ * # Arguments
+ * * `start_frontier_hex` - tree state BEFORE the first block
+ * * `compact_blocks_json` - `[{height, actions: [{cmx_hex}]}]` in order
+ * * `existing_witnesses_json` - `[{id, witness_hex}]` - witnesses to advance
+ * * `new_notes_json` - `[{id, position}]` - witnesses to seed within this range
+ * @param {string} start_frontier_hex
+ * @param {string} compact_blocks_json
+ * @param {string} existing_witnesses_json
+ * @param {string} new_notes_json
+ * @returns {any}
+ */
+export function witness_sync_update(start_frontier_hex, compact_blocks_json, existing_witnesses_json, new_notes_json) {
+    const ptr0 = passStringToWasm0(start_frontier_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(compact_blocks_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(existing_witnesses_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ptr3 = passStringToWasm0(new_notes_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len3 = WASM_VECTOR_LEN;
+    const ret = wasm.witness_sync_update(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Encode CBOR bytes as zoda transport QR frames (verified erasure coding).
+ * Returns JSON array of `zt:type/hex` strings.
+ * k = minimum frames to reconstruct, n = total frames.
+ * @param {Uint8Array} cbor_data
+ * @param {string} zt_type
+ * @param {number} k
+ * @param {number} n
+ * @returns {string}
+ */
+export function zt_encode_frames(cbor_data, zt_type, k, n) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passArray8ToWasm0(cbor_data, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(zt_type, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.zt_encode_frames(ptr0, len0, ptr1, len1, k, n);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
 function __wbg_get_imports(memory) {
     const import0 = {
         __proto__: null,
-        __wbg_Error_4577686b3a6d9b3a: function(arg0, arg1) {
+        __wbg_Error_83742b46f01ce22d: function(arg0, arg1) {
             const ret = Error(getStringFromWasm0(arg0, arg1));
             return ret;
         },
-        __wbg_Number_e89e48a2fe1a6355: function(arg0) {
+        __wbg_Number_a5a435bd7bbec835: function(arg0) {
             const ret = Number(arg0);
             return ret;
         },
@@ -883,72 +1786,72 @@ function __wbg_get_imports(memory) {
             getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
             getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
         },
-        __wbg___wbindgen_bigint_get_as_i64_578010f8442e0319: function(arg0, arg1) {
+        __wbg___wbindgen_bigint_get_as_i64_447a76b5c6ef7bda: function(arg0, arg1) {
             const v = arg1;
             const ret = typeof(v) === 'bigint' ? v : undefined;
             getDataViewMemory0().setBigInt64(arg0 + 8 * 1, isLikeNone(ret) ? BigInt(0) : ret, true);
             getDataViewMemory0().setInt32(arg0 + 4 * 0, !isLikeNone(ret), true);
         },
-        __wbg___wbindgen_boolean_get_18c4ed9422296fff: function(arg0) {
+        __wbg___wbindgen_boolean_get_c0f3f60bac5a78d1: function(arg0) {
             const v = arg0;
             const ret = typeof(v) === 'boolean' ? v : undefined;
             return isLikeNone(ret) ? 0xFFFFFF : ret ? 1 : 0;
         },
-        __wbg___wbindgen_debug_string_ddde1867f49c2442: function(arg0, arg1) {
+        __wbg___wbindgen_debug_string_5398f5bb970e0daa: function(arg0, arg1) {
             const ret = debugString(arg1);
             const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
             const len1 = WASM_VECTOR_LEN;
             getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
             getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
         },
-        __wbg___wbindgen_in_1064a108f4d18b9e: function(arg0, arg1) {
+        __wbg___wbindgen_in_41dbb8413020e076: function(arg0, arg1) {
             const ret = arg0 in arg1;
             return ret;
         },
-        __wbg___wbindgen_is_bigint_a157f0734ca85901: function(arg0) {
+        __wbg___wbindgen_is_bigint_e2141d4f045b7eda: function(arg0) {
             const ret = typeof(arg0) === 'bigint';
             return ret;
         },
-        __wbg___wbindgen_is_function_d633e708baf0d146: function(arg0) {
+        __wbg___wbindgen_is_function_3c846841762788c1: function(arg0) {
             const ret = typeof(arg0) === 'function';
             return ret;
         },
-        __wbg___wbindgen_is_object_4b3de556756ee8a8: function(arg0) {
+        __wbg___wbindgen_is_object_781bc9f159099513: function(arg0) {
             const val = arg0;
             const ret = typeof(val) === 'object' && val !== null;
             return ret;
         },
-        __wbg___wbindgen_is_string_7debe47dc1e045c2: function(arg0) {
+        __wbg___wbindgen_is_string_7ef6b97b02428fae: function(arg0) {
             const ret = typeof(arg0) === 'string';
             return ret;
         },
-        __wbg___wbindgen_is_undefined_c18285b9fc34cb7d: function(arg0) {
+        __wbg___wbindgen_is_undefined_52709e72fb9f179c: function(arg0) {
             const ret = arg0 === undefined;
             return ret;
         },
-        __wbg___wbindgen_jsval_eq_a6afb59d8c5e78d6: function(arg0, arg1) {
+        __wbg___wbindgen_jsval_eq_ee31bfad3e536463: function(arg0, arg1) {
             const ret = arg0 === arg1;
             return ret;
         },
-        __wbg___wbindgen_jsval_loose_eq_1562ceb9af84e990: function(arg0, arg1) {
+        __wbg___wbindgen_jsval_loose_eq_5bcc3bed3c69e72b: function(arg0, arg1) {
             const ret = arg0 == arg1;
             return ret;
         },
-        __wbg___wbindgen_memory_f1258f0b3cab52b2: function() {
+        __wbg___wbindgen_memory_edb3f01e3930bbf6: function() {
             const ret = wasm.memory;
             return ret;
         },
-        __wbg___wbindgen_module_39ff3d28752148a9: function() {
+        __wbg___wbindgen_module_bf945c07123bafe2: function() {
             const ret = wasmModule;
             return ret;
         },
-        __wbg___wbindgen_number_get_5854912275df1894: function(arg0, arg1) {
+        __wbg___wbindgen_number_get_34bb9d9dcfa21373: function(arg0, arg1) {
             const obj = arg1;
             const ret = typeof(obj) === 'number' ? obj : undefined;
             getDataViewMemory0().setFloat64(arg0 + 8 * 1, isLikeNone(ret) ? 0 : ret, true);
             getDataViewMemory0().setInt32(arg0 + 4 * 0, !isLikeNone(ret), true);
         },
-        __wbg___wbindgen_string_get_3e5751597f39a112: function(arg0, arg1) {
+        __wbg___wbindgen_string_get_395e606bd0ee4427: function(arg0, arg1) {
             const obj = arg1;
             const ret = typeof(obj) === 'string' ? obj : undefined;
             var ptr1 = isLikeNone(ret) ? 0 : passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
@@ -956,22 +1859,22 @@ function __wbg_get_imports(memory) {
             getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
             getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
         },
-        __wbg___wbindgen_throw_39bc967c0e5a9b58: function(arg0, arg1) {
+        __wbg___wbindgen_throw_6ddd609b62940d55: function(arg0, arg1) {
             throw new Error(getStringFromWasm0(arg0, arg1));
         },
-        __wbg_call_08ad0d89caa7cb79: function() { return handleError(function (arg0, arg1, arg2) {
+        __wbg_call_2d781c1f4d5c0ef8: function() { return handleError(function (arg0, arg1, arg2) {
             const ret = arg0.call(arg1, arg2);
             return ret;
         }, arguments); },
-        __wbg_call_73af281463ec8b58: function() { return handleError(function (arg0, arg1) {
+        __wbg_call_e133b57c9155d22c: function() { return handleError(function (arg0, arg1) {
             const ret = arg0.call(arg1);
             return ret;
         }, arguments); },
-        __wbg_crypto_48300657fced39f9: function(arg0) {
+        __wbg_crypto_38df2bab126b63dc: function(arg0) {
             const ret = arg0.crypto;
             return ret;
         },
-        __wbg_done_5aad55ec6b1954b1: function(arg0) {
+        __wbg_done_08ce71ee07e3bd17: function(arg0) {
             const ret = arg0.done;
             return ret;
         },
@@ -986,14 +1889,14 @@ function __wbg_get_imports(memory) {
                 wasm.__wbindgen_free(deferred0_0, deferred0_1, 1);
             }
         },
-        __wbg_getRandomValues_263d0aa5464054ee: function() { return handleError(function (arg0, arg1) {
+        __wbg_getRandomValues_c44a50d8cfdaebeb: function() { return handleError(function (arg0, arg1) {
             arg0.getRandomValues(arg1);
         }, arguments); },
-        __wbg_get_4920fefd3451364b: function() { return handleError(function (arg0, arg1) {
+        __wbg_get_326e41e095fb2575: function() { return handleError(function (arg0, arg1) {
             const ret = Reflect.get(arg0, arg1);
             return ret;
         }, arguments); },
-        __wbg_get_unchecked_3d0f4b91c8eca4f0: function(arg0, arg1) {
+        __wbg_get_unchecked_329cfe50afab7352: function(arg0, arg1) {
             const ret = arg0[arg1 >>> 0];
             return ret;
         },
@@ -1001,7 +1904,7 @@ function __wbg_get_imports(memory) {
             const ret = arg0[arg1];
             return ret;
         },
-        __wbg_instanceof_ArrayBuffer_15859862b80b732d: function(arg0) {
+        __wbg_instanceof_ArrayBuffer_101e2bf31071a9f6: function(arg0) {
             let result;
             try {
                 result = arg0 instanceof ArrayBuffer;
@@ -1011,7 +1914,7 @@ function __wbg_get_imports(memory) {
             const ret = result;
             return ret;
         },
-        __wbg_instanceof_Uint8Array_2240b7046ac16f05: function(arg0) {
+        __wbg_instanceof_Uint8Array_740438561a5b956d: function(arg0) {
             let result;
             try {
                 result = arg0 instanceof Uint8Array;
@@ -1021,7 +1924,7 @@ function __wbg_get_imports(memory) {
             const ret = result;
             return ret;
         },
-        __wbg_instanceof_Window_4aba49e4d1a12365: function(arg0) {
+        __wbg_instanceof_Window_23e677d2c6843922: function(arg0) {
             let result;
             try {
                 result = arg0 instanceof Window;
@@ -1031,77 +1934,80 @@ function __wbg_get_imports(memory) {
             const ret = result;
             return ret;
         },
-        __wbg_isArray_fad08a0d12828686: function(arg0) {
+        __wbg_isArray_33b91feb269ff46e: function(arg0) {
             const ret = Array.isArray(arg0);
             return ret;
         },
-        __wbg_isSafeInteger_10e4151eb694e42a: function(arg0) {
+        __wbg_isSafeInteger_ecd6a7f9c3e053cd: function(arg0) {
             const ret = Number.isSafeInteger(arg0);
             return ret;
         },
-        __wbg_iterator_fc7ad8d33bab9e26: function() {
+        __wbg_iterator_d8f549ec8fb061b1: function() {
             const ret = Symbol.iterator;
             return ret;
         },
-        __wbg_length_5855c1f289dfffc1: function(arg0) {
+        __wbg_length_b3416cf66a5452c8: function(arg0) {
             const ret = arg0.length;
             return ret;
         },
-        __wbg_length_a31e05262e09b7f8: function(arg0) {
+        __wbg_length_ea16607d7b61445b: function(arg0) {
             const ret = arg0.length;
             return ret;
         },
-        __wbg_msCrypto_8c6d45a75ef1d3da: function(arg0) {
+        __wbg_log_5bad81a8c5e4232f: function(arg0, arg1) {
+            console.log(getStringFromWasm0(arg0, arg1));
+        },
+        __wbg_msCrypto_bd5a034af96bcba6: function(arg0) {
             const ret = arg0.msCrypto;
-            return ret;
-        },
-        __wbg_new_09959f7b4c92c246: function(arg0) {
-            const ret = new Uint8Array(arg0);
             return ret;
         },
         __wbg_new_227d7c05414eb861: function() {
             const ret = new Error();
             return ret;
         },
-        __wbg_new_cbee8c0d5c479eac: function() {
+        __wbg_new_5f486cdf45a04d78: function(arg0) {
+            const ret = new Uint8Array(arg0);
+            return ret;
+        },
+        __wbg_new_a70fbab9066b301f: function() {
             const ret = new Array();
             return ret;
         },
-        __wbg_new_ed69e637b553a997: function() {
+        __wbg_new_ab79df5bd7c26067: function() {
             const ret = new Object();
             return ret;
         },
-        __wbg_new_with_length_c8449d782396d344: function(arg0) {
+        __wbg_new_with_length_825018a1616e9e55: function(arg0) {
             const ret = new Uint8Array(arg0 >>> 0);
             return ret;
         },
-        __wbg_next_a5fe6f328f7affc2: function(arg0) {
-            const ret = arg0.next;
-            return ret;
-        },
-        __wbg_next_e592122bb4ed4c67: function() { return handleError(function (arg0) {
+        __wbg_next_11b99ee6237339e3: function() { return handleError(function (arg0) {
             const ret = arg0.next();
             return ret;
         }, arguments); },
-        __wbg_node_95beb7570492fd97: function(arg0) {
+        __wbg_next_e01a967809d1aa68: function(arg0) {
+            const ret = arg0.next;
+            return ret;
+        },
+        __wbg_node_84ea875411254db1: function(arg0) {
             const ret = arg0.node;
             return ret;
         },
-        __wbg_process_b2fea42461d03994: function(arg0) {
+        __wbg_process_44c7a14e11e9f69e: function(arg0) {
             const ret = arg0.process;
             return ret;
         },
-        __wbg_prototypesetcall_f034d444741426c3: function(arg0, arg1, arg2) {
+        __wbg_prototypesetcall_d62e5099504357e6: function(arg0, arg1, arg2) {
             Uint8Array.prototype.set.call(getArrayU8FromWasm0(arg0, arg1), arg2);
         },
-        __wbg_randomFillSync_ca9f178fb14c88cb: function() { return handleError(function (arg0, arg1) {
+        __wbg_randomFillSync_6c25eac9869eb53c: function() { return handleError(function (arg0, arg1) {
             arg0.randomFillSync(arg1);
         }, arguments); },
-        __wbg_require_7a9419e39d796c95: function() { return handleError(function () {
+        __wbg_require_b4edbdcf3e2a1ef0: function() { return handleError(function () {
             const ret = module.require;
             return ret;
         }, arguments); },
-        __wbg_set_4c81cfb5dc3a333c: function(arg0, arg1, arg2) {
+        __wbg_set_282384002438957f: function(arg0, arg1, arg2) {
             arg0[arg1 >>> 0] = arg2;
         },
         __wbg_set_6be42768c690e380: function(arg0, arg1, arg2) {
@@ -1118,31 +2024,31 @@ function __wbg_get_imports(memory) {
             const ret = startWorkers(arg0, arg1, wbg_rayon_PoolBuilder.__wrap(arg2));
             return ret;
         },
-        __wbg_static_accessor_GLOBAL_THIS_14325d8cca34bb77: function() {
-            const ret = typeof globalThis === 'undefined' ? null : globalThis;
-            return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
-        },
-        __wbg_static_accessor_GLOBAL_f3a1e69f9c5a7e8e: function() {
+        __wbg_static_accessor_GLOBAL_8adb955bd33fac2f: function() {
             const ret = typeof global === 'undefined' ? null : global;
             return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
         },
-        __wbg_static_accessor_SELF_50cdb5b517789aca: function() {
+        __wbg_static_accessor_GLOBAL_THIS_ad356e0db91c7913: function() {
+            const ret = typeof globalThis === 'undefined' ? null : globalThis;
+            return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
+        },
+        __wbg_static_accessor_SELF_f207c857566db248: function() {
             const ret = typeof self === 'undefined' ? null : self;
             return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
         },
-        __wbg_static_accessor_WINDOW_d6c4126e4c244380: function() {
+        __wbg_static_accessor_WINDOW_bb9f1ba69d61b386: function() {
             const ret = typeof window === 'undefined' ? null : window;
             return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
         },
-        __wbg_subarray_7ad5f01d4a9c1c4d: function(arg0, arg1, arg2) {
+        __wbg_subarray_a068d24e39478a8a: function(arg0, arg1, arg2) {
             const ret = arg0.subarray(arg1 >>> 0, arg2 >>> 0);
             return ret;
         },
-        __wbg_value_667dcb90597486a6: function(arg0) {
+        __wbg_value_21fc78aab0322612: function(arg0) {
             const ret = arg0.value;
             return ret;
         },
-        __wbg_versions_215a3ab1c9d5745a: function(arg0) {
+        __wbg_versions_276b2795b1c6a219: function(arg0) {
             const ret = arg0.versions;
             return ret;
         },
@@ -1175,7 +2081,7 @@ function __wbg_get_imports(memory) {
             table.set(offset + 2, true);
             table.set(offset + 3, false);
         },
-        memory: memory || new WebAssembly.Memory({initial:43,maximum:16384,shared:true}),
+        memory: memory || new WebAssembly.Memory({initial:50,maximum:32768,shared:true}),
     };
     return {
         __proto__: null,

@@ -91,14 +91,14 @@ export const MultisigJoinZigner = () => {
     r1: peerR1Ref.current,
     r2: peerR2Ref.current,
     sk: fvkSkRef.current,
-    relay_url: relayUrl || 'https://poker.zk.bot',
+    relay_url: relayUrl || 'wss://zrelay.rotko.net',
     mainnet: true,
   });
 
   const handleJoin = async () => {
     if (!roomCode.trim()) return;
     try {
-      const url = relayUrl || 'https://poker.zk.bot';
+      const url = relayUrl || 'wss://zrelay.rotko.net';
       const sessionDeadline = Date.now() + FROST_SESSION_TIMEOUT_MS;
       setDeadline(sessionDeadline);
 
@@ -292,7 +292,7 @@ export const MultisigJoinZigner = () => {
           publicKeyPackage,
           threshold,
           maxSigners,
-          relayUrl: relayUrl || 'https://poker.zk.bot',
+          relayUrl: relayUrl || 'wss://zrelay.rotko.net',
           custody: 'airgapSigner',
           zignerWalletId: walletId,
         });
@@ -331,7 +331,7 @@ export const MultisigJoinZigner = () => {
               className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-xs focus:border-primary/50 focus:outline-none'
               value={relayUrl}
               onChange={e => setRelayUrl(e.target.value)}
-              placeholder='https://poker.zk.bot'
+              placeholder='wss://zrelay.rotko.net'
             />
           </label>
           <label className='text-xs text-fg-muted'>

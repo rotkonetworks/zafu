@@ -17,7 +17,7 @@ import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
 const workerSelf = globalThis as any as DedicatedWorkerGlobalScope;
 
 interface WorkerMessage {
-  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-multi' | 'send-tx-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'note-sync-encode' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos' | 'frost-dkg-part1' | 'frost-dkg-part2' | 'frost-dkg-part3' | 'frost-sign-round1' | 'frost-spend-sign' | 'frost-spend-aggregate' | 'frost-derive-address' | 'frost-derive-address-from-sk' | 'frost-sample-fvk-sk' | 'frost-derive-ufvk';
+  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-multi' | 'send-tx-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'note-sync-encode' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos' | 'frost-dkg-part1' | 'frost-dkg-part2' | 'frost-dkg-part3' | 'frost-sign-round1' | 'frost-spend-sign' | 'frost-spend-aggregate' | 'frost-derive-address' | 'frost-derive-address-from-sk' | 'frost-sample-fvk-sk' | 'frost-derive-ufvk' | 'frost-parse-tx-outputs';
   id: string;
   network: 'zcash';
   walletId?: string;
@@ -121,6 +121,7 @@ interface WasmModule {
   frost_derive_ufvk(public_key_package_hex: string, sk_hex: string, mainnet: boolean): string;
   frost_spend_sign_round2(key_package_hex: string, nonces_hex: string, sighash_hex: string, alpha_hex: string, commitments_json: string): string;
   frost_spend_aggregate(public_key_package_hex: string, sighash_hex: string, alpha_hex: string, commitments_json: string, shares_json: string): string;
+  frost_parse_tx_outputs(unsigned_tx_hex: string, orchard_fvk_uview: string): string;
 
   // note sync encoding (CBOR + UR/ZT)
   encode_notes_bundle(notes_json: string, merkle_result_json: string, anchor_height: number, mainnet: boolean, attestation_hex?: string | null): Uint8Array;
@@ -2848,6 +2849,17 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const { publicKeyPackageHex, skHex, mainnet } = payload as { publicKeyPackageHex: string; skHex: string; mainnet: boolean };
         const ufvk = wasmModule!.frost_derive_ufvk(publicKeyPackageHex, skHex, mainnet);
         workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: ufvk });
+        return;
+      }
+
+      case 'frost-parse-tx-outputs': {
+        await initWasm();
+        const { unsignedTxHex, orchardFvkUview } = payload as {
+          unsignedTxHex: string;
+          orchardFvkUview: string;
+        };
+        const json = wasmModule!.frost_parse_tx_outputs(unsignedTxHex, orchardFvkUview);
+        workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: json });
         return;
       }
 

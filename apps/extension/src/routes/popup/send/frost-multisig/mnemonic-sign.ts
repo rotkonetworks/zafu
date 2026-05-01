@@ -53,7 +53,7 @@ export async function runMnemonicFrostSign({
   setProgress,
 }: RunMnemonicFrostSignArgs): Promise<string[]> {
   const session = await openRelayRoom(
-    ms.relayUrl || 'https://poker.zk.bot',
+    ms.relayUrl || 'wss://zrelay.rotko.net',
     ms.threshold,
     ms.maxSigners,
     300,
@@ -72,7 +72,15 @@ export async function runMnemonicFrostSign({
 
   const { peerCommits, peerShares } = subscribePeers(session, numActions);
 
-  await sendSignPrefix(session, unsigned.sighash, unsigned.alphas, recipient, amountZat, unsigned.fee);
+  await sendSignPrefix(
+    session,
+    unsigned.sighash,
+    unsigned.alphas,
+    recipient,
+    amountZat,
+    unsigned.fee,
+    unsigned.unsignedTx,
+  );
   await sendCommitments(session, round1s.map(r => r.commitments));
 
   setProgress(`round 1: waiting for ${ms.threshold - 1} co-signer(s)...`);

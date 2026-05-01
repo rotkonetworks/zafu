@@ -60,6 +60,7 @@ export const frost_dkg_part1: (a: number, b: number) => [number, number, number,
 export const frost_dkg_part2: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const frost_dkg_part3: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
 export const frost_generate_randomizer: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+export const frost_parse_tx_outputs: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const frost_sample_fvk_sk: () => [number, number];
 export const frost_sign_round1: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const frost_sign_round2: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number, number];
