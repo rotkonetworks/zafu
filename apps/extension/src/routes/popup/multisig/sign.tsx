@@ -103,13 +103,18 @@ export const MultisigSign = () => {
           setFeeZat(signMatch[5]!);
 
           // WYSIWYS: derive output truth from tx bytes; mismatch hard-blocks approve.
+          // FROST multisig wallets store the `uview1…` string in `orchardFvk`
+          // (DKG flows save it there); single-key wallets store it in `ufvk`.
+          const ufvkForVerify = activeWallet?.multisig
+            ? activeWallet.orchardFvk
+            : activeWallet?.ufvk;
           if (!unsignedTxHex) {
             setVerdict({ kind: 'unverified', reason: 'host did not publish unsigned tx bytes (older client?)' });
-          } else if (!activeWallet?.ufvk) {
+          } else if (!ufvkForVerify) {
             setVerdict({ kind: 'unverified', reason: 'wallet has no UFVK on file — cannot verify' });
           } else {
-            const ufvk = activeWallet.ufvk;
-            const isMain = activeWallet.mainnet;
+            const ufvk = ufvkForVerify;
+            const isMain = activeWallet!.mainnet;
             void (async () => {
               try {
                 const p = await frostParseTxOutputsInWorker(unsignedTxHex, ufvk);
@@ -234,12 +239,14 @@ export const MultisigSign = () => {
 
   // airgapSigner wallets: share lives on zigner. QR-mediated co-sign flow.
   if (ms.custody === 'airgapSigner') {
+    // FROST multisig wallets store the `uview1…` string in `orchardFvk`;
+    // `ufvk` is always undefined for them.
     return (
       <AirgapJoinerWrapper
         ms={ms}
         walletLabel={activeWallet!.label}
         walletAddress={activeWallet!.address}
-        orchardFvkUview={activeWallet!.ufvk}
+        orchardFvkUview={activeWallet!.orchardFvk}
         mainnet={activeWallet!.mainnet}
       />
     );
