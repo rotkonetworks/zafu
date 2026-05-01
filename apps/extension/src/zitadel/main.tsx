@@ -1625,6 +1625,11 @@ function boot() {
     }
   });
 
+  // hide the slash-command hint when focus leaves the input. without
+  // this, typing `/` then clicking somewhere else (a sidebar channel,
+  // a peer nick) leaves the dropdown floating over the bar.
+  inp.addEventListener('blur', () => { hint.style.display = 'none'; });
+
   // input handler
   inp.addEventListener('keydown', (e: KeyboardEvent) => {
     hint.style.display = 'none';
