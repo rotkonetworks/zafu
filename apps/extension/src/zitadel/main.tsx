@@ -501,6 +501,22 @@ function boot() {
       `!! nick collision on ${claimedNick}: ${shortPub(attemptedPubkey)} tried to claim it via ${source}, but it's bound to ${existing ? shortPub(existing) : '?'}. attempt dropped. /ignore ${attemptedPubkey} to silence.`,
       true);
   }
+  /** Bind a (nick, pubkey) pair after a successful verification.
+   * Cleans up stale forward entries when the same pubkey re-announces
+   * under a new nick (a /nick rename): without that cleanup,
+   * nickToPubkey accumulates the entire history of every peer's old
+   * names, so /share oldnick still resolves to the same pubkey and
+   * verifiedNicks grows unbounded across renames. */
+  function rebindIdentity(newNick: string, pubkey: string) {
+    const oldNick = pubkeyToNick.get(pubkey);
+    if (oldNick && oldNick !== newNick) {
+      nickToPubkey.delete(oldNick);
+      verifiedNicks.delete(oldNick);
+    }
+    nickToPubkey.set(newNick, pubkey);
+    pubkeyToNick.set(pubkey, newNick);
+    verifiedNicks.add(newNick);
+  }
   // DM messages stored under "dm:<pubkey>" key
   const DM_PREFIX = 'dm:';
   // track which DM we're viewing (null = room view)
@@ -1237,9 +1253,7 @@ function boot() {
                     warnCollision(proof.nick, proof.pubkey, 'msg');
                     break;
                   }
-                  nickToPubkey.set(proof.nick, proof.pubkey);
-                  pubkeyToNick.set(proof.pubkey, proof.nick);
-                  verifiedNicks.add(proof.nick);
+                  rebindIdentity(proof.nick, proof.pubkey);
                   visibleText = proof.text;
                   senderPubkey = proof.pubkey;
                   msgVerified = true;
@@ -1305,9 +1319,7 @@ function boot() {
               break;
             }
             const wasVerified = verifiedNicks.has(proof.nick);
-            nickToPubkey.set(proof.nick, proof.pubkey);
-            pubkeyToNick.set(proof.pubkey, proof.nick);
-            verifiedNicks.add(proof.nick);
+            rebindIdentity(proof.nick, proof.pubkey);
             // first-time verification announcement, so the user sees
             // it surface in chat (vs silently flipping the +).
             if (!wasVerified) {
