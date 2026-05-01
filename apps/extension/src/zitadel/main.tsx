@@ -355,21 +355,32 @@ function esc(s: string) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').
  * file: schemes. Anchor uses noopener+noreferrer so the destination
  * can't grab window.opener and the referrer doesn't leak the chat
  * page URL. The href and visible text are both escaped - we never
- * concatenate raw URL into HTML. */
+ * concatenate raw URL into HTML. Trailing sentence punctuation that
+ * the regex grabbed greedily is stripped off the URL and rendered as
+ * plain text, so "see https://x.com." links to https://x.com and the
+ * period stays visible after the link. Newlines render as <br>. */
+const URL_TRAILING_PUNCT = /[.,;:!?)\]}>'"]+$/;
 function linkify(text: string, linkColor: string): string {
   const urlRe = /(https?:\/\/[^\s<>"']+)/g;
   let result = '';
   let lastIdx = 0;
   for (const m of text.matchAll(urlRe)) {
     const idx = m.index!;
-    const url = m[1]!;
+    const raw = m[1]!;
+    const trailMatch = raw.match(URL_TRAILING_PUNCT);
+    const trailing = trailMatch ? trailMatch[0] : '';
+    const url = trailing ? raw.slice(0, raw.length - trailing.length) : raw;
     result += esc(text.slice(lastIdx, idx));
     const eu = esc(url);
     result += `<a href="${eu}" target="_blank" rel="noopener noreferrer" style="color:${linkColor};text-decoration:underline">${eu}</a>`;
-    lastIdx = idx + url.length;
+    if (trailing) result += esc(trailing);
+    lastIdx = idx + raw.length;
   }
   result += esc(text.slice(lastIdx));
-  return result;
+  // newlines: HTML collapses \n to whitespace inside a div, so a
+  // multi-line message would render as one line. wire-format scripts
+  // (poker bots, FROST tooling) can emit \n; render them honestly.
+  return result.replace(/\n/g, '<br>');
 }
 function now() { const d = new Date(); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
 /** YYYY-MM-DD in local time. used to detect date-boundary crossings
