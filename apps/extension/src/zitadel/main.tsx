@@ -1923,10 +1923,12 @@ function boot() {
           const newPriv = crypto.getRandomValues(new Uint8Array(32));
           const newPub = hex(ed25519.getPublicKey(newPriv));
           const oldNick = nick;
-          // close DM channels established under the old key.
-          for (const ch of dmChannels.values()) ch.close();
-          dmChannels.clear();
-          if (activeDm) { activeDm = null; encState = 'public'; }
+          // close every DM channel established under the old key and
+          // wipe its local view state. closeDmChannel handles the
+          // full cleanup (channel close, message log, unread badge,
+          // mentioned tag, render-cache reset, activeDm reset).
+          // snapshot the keys so we don't iterate while mutating.
+          for (const peer of Array.from(dmChannels.keys())) closeDmChannel(peer);
           // drop self from verifiedNicks under the old nick - we're
           // about to be a different identity.
           verifiedNicks.delete(nick);
