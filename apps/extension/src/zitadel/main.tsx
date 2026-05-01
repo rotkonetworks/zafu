@@ -1866,6 +1866,18 @@ function boot() {
           for (const ch of dmChannels.values()) ch.close();
           dmChannels.clear();
           if (activeDm) { activeDm = null; encState = 'public'; }
+          // wipe local scrollback too. messages from the old relay's
+          // rooms aren't going to be relevant on the new relay, even
+          // if the user happens to /j a channel with the same name.
+          // mixing histories under one room key is the kind of small
+          // lie about identity continuity we shouldn't make. paired
+          // wipes of the render-cache so the next render starts clean.
+          messagesPerRoom.clear();
+          renderedCount.clear();
+          firstNewIdx.clear();
+          renderedView = null;
+          unreadCount.clear();
+          mentioned.clear();
           // disposeWs detaches handlers from the old socket and
           // cancels the retry/ping timers, so nothing from the old
           // relay can race against the new connection below. handles
