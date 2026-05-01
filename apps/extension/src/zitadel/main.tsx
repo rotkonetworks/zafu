@@ -527,17 +527,17 @@ function boot() {
       `!! nick collision on ${claimedNick}: ${shortPub(attemptedPubkey)} tried to claim it via ${source}, but it's bound to ${existing ? shortPub(existing) : '?'}. attempt dropped. /ignore ${attemptedPubkey} to silence.`,
       true);
   }
-  // dedupe clock-skew warnings per (pubkey, side) - either side could
-  // be wrong (us or them), but the message is the same shape so one
-  // warning per peer is enough. without dedupe, every signed message
-  // from a peer with a busted clock would print a fresh warning.
+  // dedupe clock-skew warnings per pubkey. only future-skew is
+  // surfaced (past-skew is treated as legitimate history replay),
+  // so the wording is fixed to "ahead." without dedupe, every
+  // signed message from a fast-clock peer would print a fresh line.
   const skewWarned = new Set<string>();
-  function warnSkew(nick: string, pubkey: string, skewMs: number, side: 'fast' | 'slow') {
+  function warnSkew(nick: string, pubkey: string, skewMs: number, _side: 'fast') {
     if (skewWarned.has(pubkey)) return;
     skewWarned.add(pubkey);
     const sec = Math.round(skewMs / 1000);
     addMsg('zitadel',
-      `!! ${nick}'s clock looks ${side === 'fast' ? 'ahead' : 'behind'} by ~${sec}s - their messages are dropping the freshness check. ${shortPub(pubkey)}. (or yours might be off; check system time.)`,
+      `!! ${nick}'s clock looks ahead by ~${sec}s - their messages are dropping the freshness check. ${shortPub(pubkey)}. (or yours might be off; check system time.)`,
       true);
   }
   /** Bind a (nick, pubkey) pair after a successful verification.
@@ -1313,12 +1313,18 @@ function boot() {
                       { nick: msg.nick, room: obj.room });
                     break;
                   }
-                  // Freshness check moved here so we surface clock-skew
-                  // honestly: signature verified, peer is real, but
-                  // their ts is out of the 60s window.
+                  // Freshness check post-verify, but asymmetric:
+                  //   future-skew: sender's clock is fast OR an
+                  //     attacker is replaying an embargoed signed
+                  //     message from the future. Drop and warn.
+                  //   past-skew: almost always relay history replay
+                  //     (24h TTL on join). The relay's log is the
+                  //     authority on ordering, not our wall clock.
+                  //     Render the message but skip the warn so we
+                  //     don't alarm on every reconnect.
                   const skew = msgSkewMs(proof);
-                  if (skew > ZID_MSG_FRESHNESS_MS) {
-                    warnSkew(proof.nick, proof.pubkey, skew, proof.ts > Date.now() ? 'fast' : 'slow');
+                  if (proof.ts > Date.now() + ZID_MSG_FRESHNESS_MS) {
+                    warnSkew(proof.nick, proof.pubkey, skew, 'fast');
                     break;
                   }
                   const existing = nickToPubkey.get(proof.nick);
@@ -1384,13 +1390,13 @@ function boot() {
                 { nick: msg.nick, pubkey: msg.pubkey?.slice(0, 16) });
               break;
             }
-            // Freshness check post-verify: a real peer with a busted
-            // clock is recoverable info; a forged announce from a
-            // known-bad pubkey just silently drops. We can tell them
-            // apart now because the sig already verified.
+            // Same asymmetric freshness as the message path:
+            // future-skew is a real concern (warn + drop), past-skew
+            // is most likely history replay or a peer with their
+            // clock running slow (accept silently).
             const askew = authSkewMs(proof);
-            if (askew > ZID_AUTH_FRESHNESS_MS) {
-              warnSkew(proof.nick, proof.pubkey, askew, proof.ts > Date.now() ? 'fast' : 'slow');
+            if (proof.ts > Date.now() + ZID_AUTH_FRESHNESS_MS) {
+              warnSkew(proof.nick, proof.pubkey, askew, 'fast');
               break;
             }
             // pubkey-based ignore applies to announces too: don't even
