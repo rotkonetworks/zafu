@@ -537,6 +537,25 @@ function boot() {
     if (atBottom) resetPill();
   });
 
+  // global Alt+1..9 / Alt+0 jumps to the Nth view in the sidebar
+  // (channels first, then DMs in display order). irssi convention
+  // for fast keyboard navigation. preventDefault stops Chrome's
+  // built-in Alt+number tab-switch on extension pages.
+  document.addEventListener('keydown', (e) => {
+    if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    if (!/^[0-9]$/.test(e.key)) return;
+    e.preventDefault();
+    const idx = e.key === '0' ? 9 : parseInt(e.key, 10) - 1;
+    const channels = [...new Set([...DEFAULT_CHANNELS, ...joinedRooms])];
+    const dmPeers = [...dmChannels.keys()];
+    if (idx < channels.length) {
+      switchRoom(channels[idx]!);
+    } else {
+      const dmIdx = idx - channels.length;
+      if (dmIdx < dmPeers.length) switchToDm(dmPeers[dmIdx]!);
+    }
+  });
+
   // delegated click on peer nicks in the message stream: opens a DM
   // view. avoids re-binding handlers on every render churn. the same
   // approach IRC GUIs use to make scrollback feel alive.
@@ -1490,6 +1509,7 @@ function boot() {
         case 'help':
           addMsg('zitadel', '/nick /me /j /part /msg /dm /channels /close /whois [nick|pubkey] /ignore /unignore /ignored /login /notify /clear /connect', true);
           addMsg('zitadel', 'DMs use Noise IK e2ee. /msg <nick_or_pubkey> <text> to start.', true);
+          addMsg('zitadel', 'Alt+1..9 jump to channel by index, Alt+0 jumps to the 10th. Tab completes nicks and /commands.', true);
           break;
 
         case 'nick':
