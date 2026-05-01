@@ -460,6 +460,12 @@ function boot() {
   // room to create on "room not found" - the relay's error message
   // doesn't echo the room name back, so we have to track it locally.
   let pendingJoinRoom: string | null = null;
+  // one-shot retry flag scoped to the *current* pending join. Without
+  // resetting it per join attempt, a "room not found" auto-create on
+  // #foo would prevent the auto-create on a subsequent /j #bar (also
+  // missing) - the user would just see "error: room not found" with
+  // no retry, even though they're a Pro user trying a different room.
+  let joinRetried = false;
   let ws: WebSocket | null = null;
   let connected = false;
   let encState: EncState = 'public';
@@ -762,6 +768,7 @@ function boot() {
     if (room === currentRoom) { render(); return; }
     if (currentRoom) wsSend({ t: 'part' });
     pendingJoinRoom = room;
+    joinRetried = false;
     wsSend({ t: 'join', room, nick });
   }
 
@@ -1272,6 +1279,7 @@ function boot() {
       // can rejoin here.
       const targetRoom = currentRoom || initialRoom;
       pendingJoinRoom = targetRoom;
+      joinRetried = false;
       wsSend({ t: 'join', room: targetRoom, nick });
       // keepalive ping every 30s. some intermediaries (Cloudflare,
       // residential ISPs, the relay itself) close idle WebSockets after
@@ -1284,8 +1292,6 @@ function boot() {
         }
       }, 30000);
     };
-
-    let joinRetried = false;
 
     ws.onmessage = async (ev) => {
       try {
