@@ -1717,12 +1717,21 @@ function boot() {
           // - collision dedupe: warnings about pubkey X claiming nick
           //   alice on the old server don't apply to the new universe.
           //
+          // - joinedRooms: custom channels the user joined on the old
+          //   relay don't necessarily exist on the new one. clearing
+          //   means the sidebar starts at DEFAULT_CHANNELS only.
+          //   currentRoom is also cleared so onopen falls back to
+          //   initialRoom rather than blindly trying to rejoin a
+          //   stale custom channel.
+          //
           // ignoredPubkeys is intentionally NOT cleared - the user's
           // ignore preferences are pubkey-keyed, server-independent.
           nickToPubkey.clear();
           pubkeyToNick.clear();
           verifiedNicks.clear();
           collisionWarned.clear();
+          joinedRooms.clear();
+          currentRoom = null;
           for (const ch of dmChannels.values()) ch.close();
           dmChannels.clear();
           if (activeDm) { activeDm = null; encState = 'public'; }
