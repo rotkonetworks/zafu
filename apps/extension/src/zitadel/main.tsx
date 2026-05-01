@@ -468,6 +468,11 @@ function boot() {
   let tabState: { prefix: string; before: string; after: string; matches: string[]; idx: number } | null = null;
   // DM channels: pubkey -> ZidChannel
   const dmChannels = new Map<string, ZidChannel>();
+  // in-flight Noise IK handshakes per peer pubkey. without this,
+  // two parallel sendDm calls for the same peer (e.g. paste + Enter
+  // twice within the handshake window) would each see dmChannels
+  // empty and start a separate handshake, leaking the loser.
+  const dmChannelPending = new Map<string, Promise<ZidChannel | null>>();
   // nick -> pubkey mapping from relay user list
   const nickToPubkey = new Map<string, string>();
   // pubkey -> nick (reverse)
@@ -757,42 +762,53 @@ function boot() {
     // reuse existing channel
     const existing = dmChannels.get(peerPubkey);
     if (existing) return existing;
+    // coalesce concurrent opens for the same peer onto one promise.
+    const inFlight = dmChannelPending.get(peerPubkey);
+    if (inFlight) return inFlight;
 
     if (!zidPubkey || !zidPrivkey) {
       addMsg('zitadel', 'cannot open DM - wallet not unlocked. unlock zafu for e2ee.', true);
       return null;
     }
 
-    const session: SessionKey = {
-      pubkey: zidPubkey,
-      privkey: zidPrivkey,
-      sign: async (data: Uint8Array) => {
-        // sign with ed25519 via the imported noble library
-        const { ed25519 } = await import('@noble/curves/ed25519');
-        const sig = ed25519.sign(data, zidPrivkey!);
-        return hex(sig);
-      },
-    };
+    const promise = (async (): Promise<ZidChannel | null> => {
+      const session: SessionKey = {
+        pubkey: zidPubkey!,
+        privkey: zidPrivkey!,
+        sign: async (data: Uint8Array) => {
+          const { ed25519 } = await import('@noble/curves/ed25519');
+          const sig = ed25519.sign(data, zidPrivkey!);
+          return hex(sig);
+        },
+      };
 
-    addMsg('zitadel', `opening e2ee channel to ${shortPub(peerPubkey)}...`, true, DM_PREFIX + peerPubkey);
+      addMsg('zitadel', `opening e2ee channel to ${shortPub(peerPubkey)}...`, true, DM_PREFIX + peerPubkey);
 
+      try {
+        const ch = await createNoiseChannel(session, peerPubkey, deriveZidWsUrl(relayUrl));
+
+        ch.on('message', (data: Uint8Array) => {
+          try {
+            const text = new TextDecoder().decode(data);
+            const peerNick = pubkeyToNick.get(peerPubkey) || shortPub(peerPubkey);
+            addDmMsg(peerPubkey, peerNick, text, false);
+          } catch { /* ignore malformed */ }
+        });
+
+        dmChannels.set(peerPubkey, ch);
+        addMsg('zitadel', `[e2ee] channel established with ${shortPub(peerPubkey)}`, true, DM_PREFIX + peerPubkey);
+        return ch;
+      } catch (e) {
+        addMsg('zitadel', `failed to open DM channel: ${e}`, true, DM_PREFIX + peerPubkey);
+        return null;
+      }
+    })();
+
+    dmChannelPending.set(peerPubkey, promise);
     try {
-      const ch = await createNoiseChannel(session, peerPubkey, deriveZidWsUrl(relayUrl));
-
-      ch.on('message', (data: Uint8Array) => {
-        try {
-          const text = new TextDecoder().decode(data);
-          const peerNick = pubkeyToNick.get(peerPubkey) || shortPub(peerPubkey);
-          addDmMsg(peerPubkey, peerNick, text, false);
-        } catch { /* ignore malformed */ }
-      });
-
-      dmChannels.set(peerPubkey, ch);
-      addMsg('zitadel', `[e2ee] channel established with ${shortPub(peerPubkey)}`, true, DM_PREFIX + peerPubkey);
-      return ch;
-    } catch (e) {
-      addMsg('zitadel', `failed to open DM channel: ${e}`, true, DM_PREFIX + peerPubkey);
-      return null;
+      return await promise;
+    } finally {
+      dmChannelPending.delete(peerPubkey);
     }
   }
 
