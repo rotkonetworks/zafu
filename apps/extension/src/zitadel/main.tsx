@@ -1508,6 +1508,7 @@ function boot() {
     '/unignore': '/unignore <nick|pub> remove from ignore list',
     '/ignored':  '/ignored            list ignored pubkeys',
     '/login':    '/login              unlock zafu and sign messages',
+    '/rotate':   '/rotate             ephemeral fresh identity (this session)',
     '/notify':   '/notify [on|off]    desktop alerts on mention/DM',
     '/clear':    '/clear              clear messages',
     '/connect':  '/connect            reconnect to relay',
@@ -1622,7 +1623,7 @@ function boot() {
           addMsg('zitadel', '  channels:  /j /part (or /leave) /channels /clear', true);
           addMsg('zitadel', '  messages:  /me <text>   (action)', true);
           addMsg('zitadel', '  DMs:       /msg <nick|pub> <text>   /dm <pub> <text>   /close', true);
-          addMsg('zitadel', '  identity:  /login   /nick <name>   /whois [nick|pub]   /share [nick|pub]', true);
+          addMsg('zitadel', '  identity:  /login   /rotate   /nick <name>   /whois [nick|pub]   /share [nick|pub]', true);
           addMsg('zitadel', '  safety:    /ignore /unignore /ignored', true);
           addMsg('zitadel', '  config:    /server <url|reset>   /notify [on|off]   /connect', true);
           addMsg('zitadel', '── keyboard ─────────────────────────', true);
@@ -1910,6 +1911,44 @@ function boot() {
         case 'login':
           await runLogin();
           break;
+
+        case 'rotate': {
+          // ephemeral identity rotation - fresh ed25519 keypair, same
+          // session, no wallet changes. /login restores the durable
+          // ZID. peers see this as a new identity joining; the
+          // shortPub nick changes so collision warnings against the
+          // old binding don't fire. dm channels are tied to the old
+          // pubkey and must close - peers that messaged us at the
+          // old pubkey can no longer reach us.
+          const newPriv = crypto.getRandomValues(new Uint8Array(32));
+          const newPub = hex(ed25519.getPublicKey(newPriv));
+          const oldNick = nick;
+          // close DM channels established under the old key.
+          for (const ch of dmChannels.values()) ch.close();
+          dmChannels.clear();
+          if (activeDm) { activeDm = null; encState = 'public'; }
+          // drop self from verifiedNicks under the old nick - we're
+          // about to be a different identity.
+          verifiedNicks.delete(nick);
+          zidPubkey = newPub;
+          zidPrivkey = newPriv;
+          nick = shortPub(newPub);
+          loggedIn = true;
+          addMsg('zitadel',
+            `rotated. ${oldNick} → ${nick} (ephemeral, this session only). /login to restore your zafu identity.`,
+            true);
+          // re-announce in current room under new identity. peers will
+          // bind nick→newPub via verifyAnnounce; the rebindIdentity
+          // helper they run will quietly drop the old nick→oldPub
+          // entry on their side.
+          if (currentRoom) {
+            const proof = signAnnounce(newPriv, newPub, nick, relayHost(relayUrl));
+            wsSend({ t: 'announce', ...proof });
+            verifiedNicks.add(nick);
+          }
+          render();
+          break;
+        }
 
         case 'notify': {
           // /notify        - status / toggle
