@@ -1847,8 +1847,22 @@ function boot() {
           for (const ch of dmChannels.values()) ch.close();
           dmChannels.clear();
           if (activeDm) { activeDm = null; encState = 'public'; }
-          if (ws && ws.readyState !== WebSocket.CLOSED) ws.close();
+          // Detach the old onclose so it doesn't schedule a reconnect
+          // racing with the explicit one below. Then cancel any
+          // pending backoff timer and reconnect immediately - this
+          // also handles the case where ws is null or already CLOSED
+          // (the old "ws.close() triggers reconnect" path silently
+          // did nothing in that state).
+          if (ws) {
+            ws.onclose = null;
+            if (ws.readyState !== WebSocket.CLOSED) ws.close();
+          }
+          if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+          if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
+          reconnectAttempts = 0;
+          connected = false;
           render();
+          connectRelay();
           break;
 
         case 'part':
