@@ -458,7 +458,6 @@ function boot() {
 
   // state
   let nick = '...';
-  let loggedIn = false;
   let zidPubkey: string | undefined;
   let zidPrivkey: Uint8Array | undefined;
   // true when the current zidPrivkey was generated client-side via
@@ -1565,7 +1564,6 @@ function boot() {
     } catch { /* popup may be unavailable or already open */ }
     addMsg('zitadel', 'resolving identity...', true);
     const zid = await resolveZidIdentity();
-    loggedIn = zid.loggedIn;
     zidPubkey = zid.pubkey;
     zidPrivkey = zid.privkey;
     if (!zid.pubkey) {
@@ -2083,7 +2081,6 @@ function boot() {
           zidPrivkey = newPriv;
           ephemeralIdentity = true;
           nick = shortPub(newPub);
-          loggedIn = true;
           addMsg('zitadel',
             `rotated. ${oldNick} → ${nick} (ephemeral, this session only). /login to restore your zafu identity.`,
             true);
@@ -2202,7 +2199,6 @@ function boot() {
 
   // init
   resolveZidIdentity().then(async (zid) => {
-    loggedIn = zid.loggedIn;
     zidPubkey = zid.pubkey;
     zidPrivkey = zid.privkey;
 
