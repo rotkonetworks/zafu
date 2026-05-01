@@ -432,6 +432,11 @@ function boot() {
   let loggedIn = false;
   let zidPubkey: string | undefined;
   let zidPrivkey: Uint8Array | undefined;
+  // true when the current zidPrivkey was generated client-side via
+  // /rotate (not derived from the wallet). matters for the wallet-
+  // lock listener: we should NOT wipe an ephemeral key when the
+  // wallet locks elsewhere - it isn't the wallet's key.
+  let ephemeralIdentity = false;
   let currentRoom: string | null = null;
   // room we asked the relay to join, set when we send {t:'join'} and
   // cleared on 'joined'. used by the 'error' handler to know which
@@ -1463,6 +1468,10 @@ function boot() {
       addMsg('zitadel', 'wallet still locked. click the zafu icon in the toolbar to unlock, then try again.', true);
       return;
     }
+    // /login restored a wallet-derived identity; clear the ephemeral
+    // flag so the wallet-lock listener will react if the wallet later
+    // locks (the key really is from the wallet now).
+    ephemeralIdentity = false;
     addMsg('zitadel', `logged in. zid: ${shortPub(zid.pubkey)} - messages will now carry zid-msg-v1 signatures.`, true);
     if (currentRoom) {
       const proof = signAnnounce(zid.privkey, zid.pubkey, nick, relayHost(relayUrl));
@@ -1934,6 +1943,7 @@ function boot() {
           verifiedNicks.delete(nick);
           zidPubkey = newPub;
           zidPrivkey = newPriv;
+          ephemeralIdentity = true;
           nick = shortPub(newPub);
           loggedIn = true;
           addMsg('zitadel',
@@ -2040,8 +2050,10 @@ function boot() {
       if (areaName !== 'session') return;
       const change = changes['passwordKey'];
       if (!change) return;
-      // newValue absent => key was removed => wallet was just locked
-      if (change.newValue === undefined && zidPrivkey) {
+      // newValue absent => key was removed => wallet was just locked.
+      // skip when we're on an ephemeral /rotate identity: the key
+      // isn't from the wallet, so the wallet's lock doesn't apply.
+      if (change.newValue === undefined && zidPrivkey && !ephemeralIdentity) {
         zidPrivkey = undefined;
         addMsg('zitadel',
           'wallet locked - new messages will be unsigned. /login to re-enable signing.',
