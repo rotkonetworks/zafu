@@ -889,7 +889,17 @@ function boot() {
       ch.send(text);
       addDmMsg(peerPubkey, nick, text, true);
     } catch (e) {
-      addMsg('zitadel', `DM send failed: ${e}`, true, DM_PREFIX + peerPubkey);
+      // The /zid WebSocket can drop independently of the room WS
+      // (network blip, relay restart). ZidChannel doesn't expose a
+      // 'close' event so we can't proactively clean up - instead we
+      // detect at send-time: if send throws, the channel is dead.
+      // Drop the stale reference so the next /msg <peer> spawns a
+      // fresh handshake via openDmChannel rather than failing
+      // identically forever.
+      dmChannels.delete(peerPubkey);
+      addMsg('zitadel',
+        `DM send failed: ${e}. channel reset, retry to reopen.`,
+        true, DM_PREFIX + peerPubkey);
     }
   }
 
