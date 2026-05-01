@@ -1224,18 +1224,17 @@ function boot() {
             joinRetried = false;
             addMsg('zitadel', `joined #${msg.room} (${msg.count} users)`, true);
             if (!activeDm) encState = 'public';
-            // announce our ZID identity to the room. signed if the
-            // wallet is unlocked; unsigned otherwise (degraded mode).
-            // peers ignore unsigned announces for nick binding.
-            if (zidPubkey) {
-              if (zidPrivkey) {
-                const proof = signAnnounce(zidPrivkey, zidPubkey, nick, relayHost(relayUrl));
-                wsSend({ t: 'announce', ...proof });
-                // self-verified: we just signed our own announce
-                verifiedNicks.add(nick);
-              } else {
-                wsSend({ t: 'announce', pubkey: zidPubkey, nick });
-              }
+            // announce our ZID identity to the room - only when we
+            // can actually sign. an unsigned announce was wire-noise:
+            // receivers run verifyAnnounce which rejects anything
+            // without a valid v/sig, so the unsigned form was
+            // pretending to be an identity claim while contributing
+            // nothing. quiet beats dishonest.
+            if (zidPubkey && zidPrivkey) {
+              const proof = signAnnounce(zidPrivkey, zidPubkey, nick, relayHost(relayUrl));
+              wsSend({ t: 'announce', ...proof });
+              // self-verified: we just signed our own announce
+              verifiedNicks.add(nick);
             }
             render();
             break;
