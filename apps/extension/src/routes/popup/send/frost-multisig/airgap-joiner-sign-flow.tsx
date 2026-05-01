@@ -17,7 +17,7 @@ import {
   frostParseTxOutputsInWorker,
   type FrostParsedTx,
 } from '../../../../state/keyring/network-worker';
-import { computeVerdict, type Verdict } from './wysiwys';
+import { computeVerdict, type Verdict } from './multisig-verifier';
 
 export interface JoinerMultisig {
   publicKeyPackage: string;
@@ -26,7 +26,7 @@ export interface JoinerMultisig {
   relayUrl?: string;
   /** zigner-side wallet_id for O(1) lookup; falls back to publicKeyPackage scan if absent. */
   zignerWalletId?: string;
-  /** ZIP-316 unified viewing key (`uview1…`) for WYSIWYS Layer 4 OVK decryption. */
+  /** ZIP-316 unified viewing key (`uview1…`) for multisig-verifier OVK decryption. */
   orchardFvkUview?: string;
   /** mainnet vs testnet — used for unified address re-encoding when comparing. */
   mainnet?: boolean;
@@ -90,7 +90,7 @@ export function FrostAirgapJoinerSignFlow({
           setTx(captured);
           setStep((cur) => cur === 'awaiting-sign' ? 'review' : cur);
 
-          // WYSIWYS: verify host's claim against locally-derived parse.
+          // Verifier: verify host's claim against locally-derived parse.
           if (!captured.unsignedTxHex) {
             setVerdict({ kind: 'unverified', reason: 'host did not publish unsigned tx bytes (older client?)' });
           } else if (!ms.orchardFvkUview) {
@@ -104,6 +104,7 @@ export function FrostAirgapJoinerSignFlow({
                   parsed: p,
                   claimedRecipient: captured.recipient,
                   claimedAmountZat: captured.amountZat,
+                  claimedSighashHex: captured.sighash,
                   mainnet: ms.mainnet ?? true,
                 }));
               } catch (err) {
@@ -297,7 +298,7 @@ export function FrostAirgapJoinerSignFlow({
             </div>
           </div>
 
-          {/* WYSIWYS verdict */}
+          {/* verifier verdict */}
           {verdict.kind === 'pending' && (
             <div className="rounded-lg border border-border-soft bg-elev-1 p-2.5 text-[10px] text-fg-muted flex items-center gap-2">
               <span className="i-lucide-loader-2 size-3 animate-spin" />

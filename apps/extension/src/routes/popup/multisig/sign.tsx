@@ -17,7 +17,7 @@ import {
   frostParseTxOutputsInWorker,
   type FrostParsedTx,
 } from '../../../state/keyring/network-worker';
-import { computeVerdict, type Verdict } from '../send/frost-multisig/wysiwys';
+import { computeVerdict, type Verdict } from '../send/frost-multisig/multisig-verifier';
 import { FrostRelayClient } from '../../../state/keyring/frost-relay-client';
 import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../../state/frost-session';
 import { useDeadlineCountdown } from '../../../hooks/use-deadline-countdown';
@@ -102,7 +102,7 @@ export const MultisigSign = () => {
           setAmountZat(claimedAmount);
           setFeeZat(signMatch[5]!);
 
-          // WYSIWYS: derive output truth from tx bytes; mismatch hard-blocks approve.
+          // Verifier: derive output truth from tx bytes; mismatch hard-blocks approve.
           // FROST multisig wallets store the `uview1…` string in `orchardFvk`
           // (DKG flows save it there); single-key wallets store it in `ufvk`.
           const ufvkForVerify = activeWallet?.multisig
@@ -123,6 +123,7 @@ export const MultisigSign = () => {
                   parsed: p,
                   claimedRecipient,
                   claimedAmountZat: claimedAmount,
+                  claimedSighashHex: signMatch[1]!,
                   mainnet: isMain,
                 }));
               } catch (err) {
@@ -326,7 +327,7 @@ export const MultisigSign = () => {
             </div>
           </div>
 
-          {/* WYSIWYS verdict */}
+          {/* verifier verdict */}
           {verdict.kind === 'pending' && (
             <div className='rounded-lg border border-border-soft bg-elev-1 p-2.5 text-[10px] text-fg-muted flex items-center gap-2'>
               <span className='i-lucide-loader-2 size-3 animate-spin' />

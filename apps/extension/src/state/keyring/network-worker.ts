@@ -711,9 +711,9 @@ export const frostDeriveUfvkInWorker = async (
   return callWorker('zcash', 'frost-derive-ufvk', { publicKeyPackageHex, skHex, mainnet });
 };
 
-/** WYSIWYS: parse outputs of an unsigned v5 tx using the FROST UFVK so each
- * joiner can derive (recipient, amount, is_change) per Orchard action without
- * trusting the host's claim. Returns parsed JSON. */
+/** Multisig verifier: parse outputs of an unsigned v5 tx using the FROST UFVK
+ * so each joiner can derive (recipient, amount, is_change) per Orchard action
+ * without trusting the host's claim. Returns parsed JSON. */
 export interface FrostParsedAction {
   index: number;
   amount_zat: number;
@@ -729,6 +729,13 @@ export interface FrostParsedTx {
     decrypted_count: number;
     action_count: number;
   };
+  /** ZIP-244 sighash recomputed from the unsigned tx bytes the joiner was
+   * given. Compare to the host's claimed sighash from the SIGN: payload —
+   * a mismatch means the host published a decoy bundle for display while
+   * asking the joiner to actually sign a different tx. `null` means the
+   * tx shape (transparent or sapling component present) isn't covered by
+   * this verifier yet — fall back to OVK-only check with a warning. */
+  computed_sighash_hex: string | null;
 }
 export const frostParseTxOutputsInWorker = async (
   unsignedTxHex: string,

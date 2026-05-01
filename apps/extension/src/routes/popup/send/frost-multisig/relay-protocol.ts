@@ -1,6 +1,6 @@
 // wire-tags used by both self-custody and airgap multisig signers on the relay:
 //   SIGN:<sighash>:<alphas>:<recipient>:<amountZat>:<feeZat>[:<unsignedTxHex>]
-//                                                              — joiner display payload + WYSIWYS bytes
+//                                                              — joiner display payload + verifier bytes
 //   C:<commit_a0>|<commit_a1>|...                              — round-1 commitments per action
 //   S:<actionIdx>:<share>                                      — round-2 share per action
 //
