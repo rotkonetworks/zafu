@@ -1150,11 +1150,12 @@ function boot() {
         switch (msg.t) {
           case 'msg': {
             if (msg.nick === nick) break;
-            // track nick -> pubkey mapping if available
-            if (msg.pubkey && msg.nick) {
-              nickToPubkey.set(msg.nick, msg.pubkey);
-              pubkeyToNick.set(msg.pubkey, msg.nick);
-            }
+            // nick -> pubkey bindings are intentionally NOT taken from
+            // unverified relay-side fields. they come only from
+            // verified zid-auth-v1 announces or zid-msg-v1 envelopes
+            // (handled below). a compromised or future relay must not
+            // be able to inject identity claims by attaching a pubkey
+            // field to a 'msg' broadcast.
             // legacy: drop messages flagged enc=true. previous client
             // versions encrypted with a deterministic HKDF-from-room-name
             // key (room-key mode), which has been removed. those payloads
@@ -1278,17 +1279,11 @@ function boot() {
           case 'left':
             addMsg('zitadel', `${msg.nick} left (${msg.count} users)`, true);
             break;
-          case 'users':
-            // relay sends user list with pubkeys on join
-            if (Array.isArray(msg.users)) {
-              for (const u of msg.users) {
-                if (u.nick && u.pubkey) {
-                  nickToPubkey.set(u.nick, u.pubkey);
-                  pubkeyToNick.set(u.pubkey, u.nick);
-                }
-              }
-            }
-            break;
+          // 'users' (a relay-supplied roster with nick/pubkey pairs)
+          // intentionally has no handler. binding identities from an
+          // unverified roster would let the relay forge nick→pubkey
+          // pairings; under zid-auth-v1 each peer must self-announce
+          // and prove possession of its key.
           case 'system':
             addMsg('zitadel', msg.text, true);
             break;
