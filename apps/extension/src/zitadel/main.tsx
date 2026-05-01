@@ -1415,6 +1415,7 @@ function boot() {
     '/channels': '/channels           list open DM channels',
     '/close':    '/close [pubkey]     close a DM channel',
     '/whois':    '/whois              show ZID identity + status',
+    '/share':    '/share [nick|pub]   copy a zid pubkey to clipboard',
     '/ignore':   '/ignore <nick|pub>  silence a pubkey (persists)',
     '/unignore': '/unignore <nick|pub> remove from ignore list',
     '/ignored':  '/ignored            list ignored pubkeys',
@@ -1518,7 +1519,7 @@ function boot() {
       const [cmd, ...args] = text.slice(1).split(/\s+/);
       switch (cmd?.toLowerCase()) {
         case 'help':
-          addMsg('zitadel', '/nick /me /j /part /msg /dm /channels /close /whois [nick|pubkey] /ignore /unignore /ignored /login /notify /clear /connect', true);
+          addMsg('zitadel', '/nick /me /j /part /msg /dm /channels /close /whois [nick|pubkey] /share /ignore /unignore /ignored /login /notify /clear /connect', true);
           addMsg('zitadel', 'DMs use Noise IK e2ee. /msg <nick_or_pubkey> <text> to start.', true);
           addMsg('zitadel', 'Alt+1..9 jump to channel by index, Alt+0 jumps to the 10th. Tab completes nicks and /commands.', true);
           break;
@@ -1696,6 +1697,34 @@ function boot() {
               addMsg('zitadel', `zid: ${shortPub(peerPubkey)}`, true);
               addMsg('zitadel', `verified: ${verified ? 'yes (zid-auth-v1)' : 'no - nick claim is unsigned'}`, true);
             }
+          }
+          break;
+        }
+
+        case 'share': {
+          // /share          copy your own zid pubkey to clipboard
+          // /share <target> copy that peer's pubkey (nick or hex)
+          // Slash dispatch runs under the Enter keypress so we have
+          // the user gesture the clipboard API requires.
+          let pub: string | undefined;
+          let label: string;
+          if (!args[0]) {
+            if (!zidPubkey) { addMsg('zitadel', 'no zafu identity to share. /login first.', true); break; }
+            pub = zidPubkey;
+            label = 'your zid';
+          } else if (isHexPubkey(args[0])) {
+            pub = args[0].toLowerCase();
+            label = pubkeyToNick.get(pub) ?? shortPub(pub);
+          } else {
+            pub = nickToPubkey.get(args[0]);
+            if (!pub) { addMsg('zitadel', `no pubkey known for ${args[0]}. they must announce first.`, true); break; }
+            label = args[0];
+          }
+          try {
+            await navigator.clipboard.writeText(pub);
+            addMsg('zitadel', `copied ${label} pubkey to clipboard: ${pub}`, true);
+          } catch (e) {
+            addMsg('zitadel', `clipboard failed: ${e instanceof Error ? e.message : String(e)}. pubkey: ${pub}`, true);
           }
           break;
         }
