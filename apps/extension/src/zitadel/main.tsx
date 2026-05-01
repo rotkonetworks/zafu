@@ -247,6 +247,13 @@ interface Msg {
    * don't reformat strings to find the date. */
   tsMs: number;
   system?: boolean; color?: string; dm?: boolean; action?: boolean;
+  /** This specific message was cryptographically verified - either
+   * via a zid-msg-v1 envelope that passed verification, or because
+   * it arrived over an authenticated DM channel. The verified `+`
+   * mark on render is gated on this, NOT on per-nick session state,
+   * so a nick-spoofed unsigned message never inherits a verified
+   * mark from an earlier signed announce by the real holder. */
+  verified?: boolean;
 }
 
 /** CTCP ACTION marker - same wire format IRC has used since 1994. The
@@ -630,11 +637,11 @@ function boot() {
     maybeNotify(viewKey, fromNick, text, dm);
   }
 
-  function addMsg(n: string, text: string, system = false, room?: string, dm = false, action = false) {
+  function addMsg(n: string, text: string, system = false, room?: string, dm = false, action = false, verified = false) {
     const key = room || (activeDm ? (DM_PREFIX + activeDm) : (currentRoom || initialRoom));
     let arr = messagesPerRoom.get(key);
     if (!arr) { arr = []; messagesPerRoom.set(key, arr); }
-    arr.push({ nick: n, text, time: now(), tsMs: Date.now(), system, color: system ? undefined : nickColor(n), dm, action });
+    arr.push({ nick: n, text, time: now(), tsMs: Date.now(), system, color: system ? undefined : nickColor(n), dm, action, verified });
     trackUnread(key, n, text, system, dm);
     render();
   }
@@ -649,6 +656,10 @@ function boot() {
       time: now(),
       tsMs: Date.now(),
       dm: true,
+      // DM transport authenticates the peer (Noise IK), so receive-side
+      // DMs are inherently verified. Outgoing self-messages are
+      // trivially verified - we wrote them.
+      verified: true,
       color: outgoing ? C.gold : C.dm,
     });
     if (!outgoing) trackUnread(key, fromNick, text, false, true);
@@ -936,9 +947,11 @@ function boot() {
     // verified peer (zid-auth-v1) gets a green `+` prefix on the
     // nick - same convention IRC uses for voice (+) / op (@). DM
     // messages are inherently authenticated through Noise IK so
-    // they always show the marker.
-    const verified = m.dm || verifiedNicks.has(m.nick);
-    const verifyMark = verified
+    // they always show the marker. The flag is per-message: an
+    // unsigned message claiming a previously-verified peer's nick
+    // does NOT inherit the mark from session state - that would be
+    // a free spoof of the verification UI.
+    const verifyMark = m.verified
       ? `<span style="color:${C.green}" title="verified ZID signature - peer proved possession of their identity">+</span>`
       : '';
     // /me actions render as "* nick text" - IRC convention. The
@@ -1172,11 +1185,12 @@ function boot() {
               break;
             }
             // zid-msg-v1: if text parses as a signed envelope, verify
-            // before rendering. unsigned messages (legacy) still render
-            // but won't earn the verified `+` mark. binding room and
+            // before rendering. unsigned messages still render but
+            // won't earn the verified `+` mark. binding room and
             // server into the signature prevents cross-room replay.
             let visibleText: string = msg.text;
-            let senderPubkey: string | undefined = msg.pubkey;
+            let senderPubkey: string | undefined;
+            let msgVerified = false;
             if (typeof msg.text === 'string' && msg.text.startsWith('{')) {
               try {
                 const obj = JSON.parse(msg.text);
@@ -1200,14 +1214,15 @@ function boot() {
                   verifiedNicks.add(proof.nick);
                   visibleText = proof.text;
                   senderPubkey = proof.pubkey;
+                  msgVerified = true;
                 }
               } catch { /* not JSON, treat as legacy cleartext */ }
             }
             // pubkey-based ignore: if we resolved a pubkey for this
-            // sender (either via verified envelope or out-of-band
-            // mapping) and it's in the ignore set, drop silently. fall
-            // back to nick lookup so /ignore <nick> still works for
-            // peers we've seen announce.
+            // sender via the verified envelope, or from a previously
+            // verified nick→pubkey binding, and it's in the ignore
+            // set, drop silently. nick lookup is allowed because nick
+            // bindings come only from verified paths (iter 31).
             const senderPub = senderPubkey || nickToPubkey.get(msg.nick);
             if (senderPub && ignoredPubkeys.has(senderPub.toLowerCase())) break;
             // detect IRC-style /me action via CTCP marker. for signed
@@ -1215,7 +1230,7 @@ function boot() {
             // can't be added or stripped without invalidating the proof.
             const isAction = isActionText(visibleText);
             const renderText = isAction ? stripAction(visibleText) : visibleText;
-            addMsg(msg.nick, renderText, false, msg.room || currentRoom || undefined, false, isAction);
+            addMsg(msg.nick, renderText, false, msg.room || currentRoom || undefined, false, isAction, msgVerified);
             break;
           }
           case 'joined':
@@ -1394,13 +1409,17 @@ function boot() {
     if (!connected) { addMsg('zitadel', 'not connected. type /connect', true); return; }
     if (!currentRoom) { addMsg('zitadel', 'not in a channel. type /j <room>', true); return; }
     const wireText = action ? `${ACTION_PREFIX}${text}${ACTION_SUFFIX}` : text;
-    if (zidPrivkey && zidPubkey) {
-      const proof = signMsg(zidPrivkey, zidPubkey, nick, currentRoom, relayHost(relayUrl), wireText);
+    const signed = !!(zidPrivkey && zidPubkey);
+    if (signed) {
+      const proof = signMsg(zidPrivkey!, zidPubkey!, nick, currentRoom, relayHost(relayUrl), wireText);
       wsSend({ t: 'msg', text: JSON.stringify(proof) });
     } else {
       wsSend({ t: 'msg', text: wireText });
     }
-    addMsg(nick, text, false, undefined, false, action);
+    // self-echo carries our own verified state so locally-rendered
+    // sent messages get the same `+` semantics as peer messages: only
+    // shown when the message was actually signed.
+    addMsg(nick, text, false, undefined, false, action, signed);
   }
 
   // command hints
