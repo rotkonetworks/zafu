@@ -1651,9 +1651,12 @@ function boot() {
           addMsg('zitadel', '  ↑ ↓        navigate input history', true);
           addMsg('zitadel', '  Esc        clear input', true);
           addMsg('zitadel', '── identity ─────────────────────────', true);
-          addMsg('zitadel', '  Public messages are signed under zid-msg-v1 (per-message ed25519).', true);
-          addMsg('zitadel', '  Verified peers show a green + on their nick. Click a nick to DM.', true);
-          addMsg('zitadel', '  DMs use Noise IK end-to-end encryption (topbar shows [e2ee] when active).', true);
+          addMsg('zitadel', '  Public messages: signed per-line (zid-msg-v1, ed25519).', true);
+          addMsg('zitadel', '  Verified peers show a green + on their nick.', true);
+          addMsg('zitadel', '  Caveat: signed messages give the relay operator a transcript', true);
+          addMsg('zitadel', '  proving you said them. /server <url> to use a different relay.', true);
+          addMsg('zitadel', '  DMs: Noise IK end-to-end encrypted (topbar shows [e2ee]).', true);
+          addMsg('zitadel', '  Click a peer\'s nick in chat to start a DM.', true);
           break;
 
         case 'nick':
