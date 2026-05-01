@@ -749,7 +749,7 @@ function boot() {
   }
 
   /** Leave the currently-viewed room or switch back from a DM. Shared
-   * by the /part and /leave commands and the sidebar × affordance.
+   * by the /part command and the sidebar × affordance.
    * Default channels rejoin on the next sidebar render via the merge
    * with DEFAULT_CHANNELS - matches mIRC's "always-rejoin defaults". */
   function partActiveView() {
@@ -906,7 +906,7 @@ function boot() {
         return `<div class="ch" data-room="${esc(r)}" style="padding:5px 12px;cursor:pointer;background:${bg};color:${col};font-size:13px;font-weight:${fontWeight};transition:background 0.1s;display:flex;align-items:center;gap:4px;">#${esc(r)}${badge}${closeBtn}</div>`;
       }).join('')}
       ${dmPeers.length ? `<div style="padding:10px 12px;border-top:1px solid ${C.border};border-bottom:1px solid ${C.border};margin-top:4px;">
-        <b style="color:${C.bright};font-size:13px;" title="DM peers - traffic is end-to-end encrypted via Noise IK">DMs [e2ee]</b>
+        <b style="color:${C.bright};font-size:13px;" title="DM peers - traffic is end-to-end encrypted via Noise IK">DMs</b>
       </div>` : ''}
       ${dmPeers.map(pub => {
         const active = activeDm === pub;
@@ -921,7 +921,7 @@ function boot() {
         const badge = unread > 0 && !active
           ? ` <span style="color:${C.dm};font-weight:600">(${unread > 99 ? '99+' : unread})</span>`
           : '';
-        return `<div class="dm-ch" data-pubkey="${esc(pub)}" title="end-to-end encrypted DM" style="padding:5px 12px;cursor:pointer;background:${bg};color:${col};font-size:12px;font-weight:${fontWeight};transition:background 0.1s;">[e2ee] ${esc(label)}${badge}</div>`;
+        return `<div class="dm-ch" data-pubkey="${esc(pub)}" title="end-to-end encrypted DM" style="padding:5px 12px;cursor:pointer;background:${bg};color:${col};font-size:12px;font-weight:${fontWeight};transition:background 0.1s;">${esc(label)}${badge}</div>`;
       }).join('')}
       <div class="me-chip" style="padding:8px 12px;margin-top:auto;border-top:1px solid ${C.border};cursor:pointer;transition:background 0.1s;" title="${zidPrivkey ? 'click for /whois (your identity)' : (zidPubkey ? 'click to /login' : 'no zafu identity - install zafu first')}">
         <div style="color:${C.muted};font-size:11px;">${zidPrivkey ? `<span style="color:${C.green}" title="logged in - your messages are signed under zid-msg-v1">+</span>` : ''}${esc(nick)}</div>
@@ -1003,9 +1003,9 @@ function boot() {
       return `<div style="line-height:1.4"><span style="color:${C.muted}"${timeAttr}>${m.time}</span> <span style="display:inline-block;min-width:${NICK_COL_MIN};text-align:right;color:${C.gold}">-!-</span> <span style="color:${C.muted}">${linkify(m.text, C.cyan)}</span></div>`;
     }
     const col = m.color || C.gold;
-    const dmTag = m.dm
-      ? `<span style="color:${C.dm}" title="end-to-end encrypted via Noise IK">[e2ee] </span>`
-      : '';
+    // No per-message [e2ee] tag - the topbar already says we're in a
+    // DM, repeating it on every line is visual noise. The verified +
+    // marker carries the per-message authenticity signal.
     // verified peer (zid-auth-v1) gets a green `+` prefix on the
     // nick - same convention IRC uses for voice (+) / op (@). DM
     // messages are inherently authenticated through Noise IK so
@@ -1038,10 +1038,10 @@ function boot() {
     const bodyHtml = linkify(m.text, C.cyan);
     if (m.action) {
       const nickBlock = `<span style="display:inline-block;min-width:${NICK_COL_MIN};text-align:right"><span style="color:${C.purple}">*</span> ${verifyMark}${nickEl}</span>`;
-      return `<div style="${lineStyle}"><span style="color:${C.muted}"${timeAttr}>${m.time}</span> ${dmTag}${nickBlock} <span style="color:${C.text}">${bodyHtml}</span></div>`;
+      return `<div style="${lineStyle}"><span style="color:${C.muted}"${timeAttr}>${m.time}</span> ${nickBlock} <span style="color:${C.text}">${bodyHtml}</span></div>`;
     }
     const nickBlock = `<span style="display:inline-block;min-width:${NICK_COL_MIN};text-align:right"><span style="color:${C.border}">&lt;</span>${verifyMark}${nickEl}<span style="color:${C.border}">&gt;</span></span>`;
-    return `<div style="${lineStyle}"><span style="color:${C.muted}"${timeAttr}>${m.time}</span> ${dmTag}${nickBlock} ${bodyHtml}</div>`;
+    return `<div style="${lineStyle}"><span style="color:${C.muted}"${timeAttr}>${m.time}</span> ${nickBlock} ${bodyHtml}</div>`;
   }
 
   function render() {
@@ -1351,16 +1351,11 @@ function boot() {
               warnCollision(proof.nick, proof.pubkey, 'announce');
               break;
             }
-            const wasVerified = verifiedNicks.has(proof.nick);
             rebindIdentity(proof.nick, proof.pubkey);
-            // first-time verification announcement, so the user sees
-            // it surface in chat (vs silently flipping the +).
-            if (!wasVerified) {
-              addMsg('zitadel',
-                `+${proof.nick} verified (zid ${proof.pubkey.slice(0, 16)})`,
-                true, msg.room || currentRoom || undefined);
-              render();
-            }
+            // No "+nick verified" chat line: floods on connect when
+            // many peers are present, and the per-message + already
+            // signals verification on the next thing they say.
+            render();
             break;
           }
           case 'created':
@@ -1512,7 +1507,6 @@ function boot() {
     '/j':        '/j <room>           join or create a channel',
     '/part':     '/part               leave current channel',
     '/msg':      '/msg <target> <text>  DM (nick or pubkey)',
-    '/dm':       '/dm <pubkey> <text>   DM by explicit pubkey',
     '/channels': '/channels           list open DM channels',
     '/close':    '/close [pubkey]     close a DM channel',
     '/whois':    '/whois              show ZID identity + status',
@@ -1633,9 +1627,9 @@ function boot() {
       switch (cmd?.toLowerCase()) {
         case 'help':
           addMsg('zitadel', '── commands ─────────────────────────', true);
-          addMsg('zitadel', '  channels:  /j /part (or /leave) /channels /clear', true);
+          addMsg('zitadel', '  channels:  /j /part /channels /clear', true);
           addMsg('zitadel', '  messages:  /me <text>   (action)', true);
-          addMsg('zitadel', '  DMs:       /msg <nick|pub> <text>   /dm <pub> <text>   /close', true);
+          addMsg('zitadel', '  DMs:       /msg <nick|pub> <text>   /close', true);
           addMsg('zitadel', '  identity:  /login   /rotate   /nick <name>   /whois [nick|pub]   /share [nick|pub]', true);
           addMsg('zitadel', '  safety:    /ignore /unignore /ignored', true);
           addMsg('zitadel', '  config:    /server <url|reset>   /notify [on|off]   /connect', true);
@@ -1647,7 +1641,7 @@ function boot() {
           addMsg('zitadel', '── identity ─────────────────────────', true);
           addMsg('zitadel', '  Public messages are signed under zid-msg-v1 (per-message ed25519).', true);
           addMsg('zitadel', '  Verified peers show a green + on their nick. Click a nick to DM.', true);
-          addMsg('zitadel', '  DMs use Noise IK end-to-end encryption (the [e2ee] tag).', true);
+          addMsg('zitadel', '  DMs use Noise IK end-to-end encryption (topbar shows [e2ee] when active).', true);
           break;
 
         case 'nick':
@@ -1743,7 +1737,7 @@ function boot() {
           render();
           break;
 
-        case 'part': case 'leave':
+        case 'part':
           partActiveView();
           break;
 
@@ -1768,35 +1762,15 @@ function boot() {
           break;
         }
 
-        case 'dm': {
-          // /dm <pubkey> <text> - explicit pubkey form
-          if (!args[0] || !args[1]) {
-            addMsg('zitadel', 'usage: /dm <pubkey> <text>', true);
-            break;
-          }
-          if (!isHexPubkey(args[0])) {
-            addMsg('zitadel', 'pubkey must be 64 hex characters. use /msg for nicks.', true);
-            break;
-          }
-          if (zidPubkey && args[0].toLowerCase() === zidPubkey.toLowerCase()) {
-            addMsg('zitadel', `can't DM yourself.`, true);
-            break;
-          }
-          const dmText = args.slice(1).join(' ');
-          switchToDm(args[0]);
-          void sendDm(args[0], dmText);
-          break;
-        }
-
         case 'channels': {
           const chans = [...dmChannels.keys()];
           if (chans.length === 0) {
-            addMsg('zitadel', 'no open DM channels. use /msg or /dm to start one.', true);
+            addMsg('zitadel', 'no open DM channels. use /msg <nick|pubkey> <text> to start one.', true);
           } else {
             addMsg('zitadel', `open DM channels (${chans.length}):`, true);
             for (const pub of chans) {
               const peerNick = pubkeyToNick.get(pub) || 'unknown';
-              addMsg('zitadel', `  [e2ee] ${shortPub(pub)} (${peerNick}) - ${pub}`, true);
+              addMsg('zitadel', `  ${shortPub(pub)} (${peerNick}) - ${pub}`, true);
             }
           }
           break;
