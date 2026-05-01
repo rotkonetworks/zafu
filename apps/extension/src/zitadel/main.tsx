@@ -1006,15 +1006,27 @@ function boot() {
     // No per-message [e2ee] tag - the topbar already says we're in a
     // DM, repeating it on every line is visual noise. The verified +
     // marker carries the per-message authenticity signal.
-    // verified peer (zid-auth-v1) gets a green `+` prefix on the
-    // nick - same convention IRC uses for voice (+) / op (@). DM
-    // messages are inherently authenticated through Noise IK so
-    // they always show the marker. The flag is per-message: an
-    // unsigned message claiming a previously-verified peer's nick
-    // does NOT inherit the mark from session state - that would be
-    // a free spoof of the verification UI.
+    // verified peer gets a green `+` prefix on the nick - same
+    // convention IRC uses for voice (+) / op (@). The proof under
+    // the mark differs by message type:
+    //
+    // - DMs are authenticated by the Noise IK handshake; once the
+    //   channel exists, every message it carries was sent by the
+    //   handshake counterparty (forward-secret).
+    // - Public-room messages are authenticated per-line by
+    //   zid-msg-v1 - an ed25519 signature over (server, room, nick,
+    //   pubkey, ts, text). No forward secrecy, but cryptographic
+    //   non-repudiation: the signature transcript proves who said
+    //   what, including to anyone the relay logs to.
+    //
+    // The flag is per-message: an unsigned message claiming a
+    // previously-verified peer's nick does NOT inherit the mark
+    // from session state.
+    const verifyTooltip = m.dm
+      ? 'verified Noise IK channel - sender authenticated by the handshake, traffic forward-secret'
+      : 'verified zid-msg-v1 signature - peer proved possession of their ZID; relay can prove they said this';
     const verifyMark = m.verified
-      ? `<span style="color:${C.green}" title="verified ZID signature - peer proved possession of their identity">+</span>`
+      ? `<span style="color:${C.green}" title="${verifyTooltip}">+</span>`
       : '';
     // /me actions render as "* nick text" - IRC convention. The
     // signature bound the action-ness, so a verified action carries
