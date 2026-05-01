@@ -1453,6 +1453,17 @@ function boot() {
   // input handler
   inp.addEventListener('keydown', (e: KeyboardEvent) => {
     hint.style.display = 'none';
+    // Esc abandons the in-progress input. Terminal/IRC muscle memory:
+    // start typing a command, change your mind, Esc cleans up. Resets
+    // history index and tab cycle so the next ArrowUp / Tab starts
+    // fresh instead of continuing from the abandoned context.
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      inp.value = '';
+      histIdx = -1;
+      tabState = null;
+      return;
+    }
     if (e.key === 'ArrowUp') { if (histIdx < history.length - 1) { histIdx++; inp.value = history[histIdx] ?? ''; } return; }
     if (e.key === 'ArrowDown') { if (histIdx > 0) { histIdx--; inp.value = history[histIdx] ?? ''; } else { histIdx = -1; inp.value = ''; } return; }
     if (e.key === 'Tab') {
