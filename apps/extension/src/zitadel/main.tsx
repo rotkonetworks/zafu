@@ -1089,7 +1089,12 @@ function boot() {
 
     bar.innerHTML = `<span style="color:${C.border}">[</span><b style="color:${C.gold}">${esc(nick)}</b><span style="color:${C.border}">]</span>`;
     bar.appendChild(inp);
-    inp.focus();
+    // refocus input - but not if the user has an active text
+    // selection somewhere (e.g. they're highlighting message text to
+    // copy). without this guard, every incoming message would clobber
+    // their selection by stealing focus to the input.
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) inp.focus();
     renderSidebar();
     updateDocumentTitle();
   }
