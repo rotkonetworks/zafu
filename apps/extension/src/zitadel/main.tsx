@@ -142,7 +142,12 @@ function verifyMsg(a: unknown, expectedServer: string): MsgProof | null {
     const payload = zidMsgPayload(expectedServer, o['room'], o['nick'], o['pubkey'], o['ts'], o['text']);
     if (!ed25519.verify(unhex(o['sig']), payload, unhex(o['pubkey']))) return null;
   } catch { return null; }
-  return o as unknown as MsgProof;
+  // Normalize to lowercase before returning so downstream key
+  // comparisons (nickToPubkey, ignoredPubkeys lookup) don't have to
+  // care about the sender's hex case.
+  const proof = o as unknown as MsgProof;
+  proof.pubkey = proof.pubkey.toLowerCase();
+  return proof;
 }
 
 function verifyAnnounce(a: unknown, expectedServer: string): AnnounceProof | null {
@@ -161,7 +166,11 @@ function verifyAnnounce(a: unknown, expectedServer: string): AnnounceProof | nul
   } catch {
     return null;
   }
-  return o as unknown as AnnounceProof;
+  // Normalize the pubkey to lowercase so all downstream key
+  // comparisons use one canonical form regardless of sender hex case.
+  const proof = o as unknown as AnnounceProof;
+  proof.pubkey = proof.pubkey.toLowerCase();
+  return proof;
 }
 
 /** Read the persisted license blob from chrome.storage.local and check
