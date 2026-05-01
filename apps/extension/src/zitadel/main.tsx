@@ -925,7 +925,7 @@ function boot() {
       }).join('')}
       <div class="me-chip" style="padding:8px 12px;margin-top:auto;border-top:1px solid ${C.border};cursor:pointer;transition:background 0.1s;" title="${zidPrivkey ? 'click for /whois (your identity)' : (zidPubkey ? 'click to /login' : 'no zafu identity - install zafu first')}">
         <div style="color:${C.muted};font-size:11px;">${zidPrivkey ? `<span style="color:${C.green}" title="logged in - your messages are signed under zid-msg-v1">+</span>` : ''}${esc(nick)}</div>
-        <div style="color:${loggedIn ? C.green : C.muted};font-size:10px;">${zidPubkey ? shortPub(zidPubkey) : 'anon · click to login'}</div>
+        <div style="color:${zidPrivkey ? C.green : C.muted};font-size:10px;">${zidPubkey ? shortPub(zidPubkey) : 'anon · click to login'}</div>
       </div>
     `;
 
@@ -1140,7 +1140,11 @@ function boot() {
     //   +nick · public    signed-in identity, public room
     //    nick · public    locked wallet, anon-style nick, public room
     //   +peer · e2ee      signed-in identity, e2ee DM with peer
-    const myMark = loggedIn ? `<span style="color:${C.green}">+</span>` : '';
+    // status-bar `+` reflects current signing capability, not just
+    // "have a ZID at all". after wallet lock we keep the pubkey but
+    // lose the privkey - we can't sign, so the + should disappear,
+    // matching the per-message render and the chip primary line.
+    const myMark = zidPrivkey ? `<span style="color:${C.green}">+</span>` : '';
     const transport = encState === 'e2ee'
       ? `<span style="color:${C.dm}">e2ee</span>`
       : `<span style="color:${C.muted}">public</span>`;
