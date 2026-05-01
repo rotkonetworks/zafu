@@ -684,6 +684,11 @@ function boot() {
   }
 
   function switchToDm(pubkey: string) {
+    // refuse to open a DM view targeted at self - the resulting Noise
+    // IK channel would loop back through the relay to ourselves and
+    // produce echo-only behavior. defense in depth; the slash
+    // commands also reject earlier with a friendlier message.
+    if (zidPubkey && pubkey.toLowerCase() === zidPubkey.toLowerCase()) return;
     activeDm = pubkey;
     captureDivider(DM_PREFIX + pubkey);
     markRead(DM_PREFIX + pubkey);
@@ -1601,6 +1606,10 @@ function boot() {
             addMsg('zitadel', `unknown target: ${args[0]}. use a nick or 64-char hex pubkey.`, true);
             break;
           }
+          if (zidPubkey && target.toLowerCase() === zidPubkey.toLowerCase()) {
+            addMsg('zitadel', `can't DM yourself.`, true);
+            break;
+          }
           const dmText = args.slice(1).join(' ');
           switchToDm(target);
           void sendDm(target, dmText);
@@ -1615,6 +1624,10 @@ function boot() {
           }
           if (!isHexPubkey(args[0])) {
             addMsg('zitadel', 'pubkey must be 64 hex characters. use /msg for nicks.', true);
+            break;
+          }
+          if (zidPubkey && args[0].toLowerCase() === zidPubkey.toLowerCase()) {
+            addMsg('zitadel', `can't DM yourself.`, true);
             break;
           }
           const dmText = args.slice(1).join(' ');
