@@ -1803,6 +1803,29 @@ function boot() {
     }
   });
 
+  // react to wallet lock/unlock from elsewhere. when the user locks
+  // zafu in another tab, the session-store entry "passwordKey" is
+  // cleared - we use that as the lock signal, drop the privkey from
+  // memory, and surface the state change. without this, the chat
+  // would keep signing under the now-revoked unlock for the rest of
+  // the session, which is exactly the stale-credentials hazard the
+  // user was trying to avoid by locking.
+  try {
+    chrome?.storage?.onChanged?.addListener((changes, areaName) => {
+      if (areaName !== 'session') return;
+      const change = changes['passwordKey'];
+      if (!change) return;
+      // newValue absent => key was removed => wallet was just locked
+      if (change.newValue === undefined && zidPrivkey) {
+        zidPrivkey = undefined;
+        addMsg('zitadel',
+          'wallet locked - new messages will be unsigned. /login to re-enable signing.',
+          true);
+        render();
+      }
+    });
+  } catch { /* not in extension context */ }
+
   // init
   resolveZidIdentity().then(async (zid) => {
     loggedIn = zid.loggedIn;
