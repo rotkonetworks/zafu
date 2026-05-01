@@ -127,6 +127,17 @@ function signMsg(priv: Uint8Array, pubkey: string, nick: string, room: string, s
   return { v: ZID_MSG_VERSION, text, pubkey, nick, room, ts, sig: hex(sig) };
 }
 
+// Verification splits into two phases:
+//   1. structural + signature (returned by verifyMsg / verifyAnnounce)
+//   2. freshness (checked by callers via msgSkewMs / authSkewMs)
+//
+// The freshness check used to live inside the verifier and silently
+// returned null for stale messages. That made clock-skew look
+// identical to forgery, and the user just saw alice "stop talking."
+// By returning a verified proof first and letting callers decide
+// what to do about freshness, we can surface a one-time warning per
+// peer instead of dropping into the void.
+
 function verifyMsg(a: unknown, expectedServer: string): MsgProof | null {
   if (!a || typeof a !== 'object') return null;
   const o = a as Record<string, unknown>;
@@ -137,18 +148,19 @@ function verifyMsg(a: unknown, expectedServer: string): MsgProof | null {
   if (typeof o['room'] !== 'string') return null;
   if (typeof o['ts'] !== 'number' || !Number.isFinite(o['ts'])) return null;
   if (typeof o['sig'] !== 'string' || !/^[0-9a-f]{128}$/i.test(o['sig'])) return null;
-  if (Math.abs(Date.now() - o['ts']) > ZID_MSG_FRESHNESS_MS) return null;
   try {
     const payload = zidMsgPayload(expectedServer, o['room'], o['nick'], o['pubkey'], o['ts'], o['text']);
     if (!ed25519.verify(unhex(o['sig']), payload, unhex(o['pubkey']))) return null;
   } catch { return null; }
-  // Normalize to lowercase before returning so downstream key
-  // comparisons (nickToPubkey, ignoredPubkeys lookup) don't have to
-  // care about the sender's hex case.
   const proof = o as unknown as MsgProof;
   proof.pubkey = proof.pubkey.toLowerCase();
   return proof;
 }
+
+/** Returns absolute clock skew in ms between this client's wall
+ * clock and the proof's ts. Caller decides whether the value
+ * exceeds the freshness window. */
+function msgSkewMs(proof: MsgProof): number { return Math.abs(Date.now() - proof.ts); }
 
 function verifyAnnounce(a: unknown, expectedServer: string): AnnounceProof | null {
   if (!a || typeof a !== 'object') return null;
@@ -159,19 +171,18 @@ function verifyAnnounce(a: unknown, expectedServer: string): AnnounceProof | nul
   if (typeof o['nick'] !== 'string' || !o['nick']) return null;
   if (typeof o['ts'] !== 'number' || !Number.isFinite(o['ts'])) return null;
   if (typeof o['sig'] !== 'string' || !/^[0-9a-f]{128}$/i.test(o['sig'])) return null;
-  if (Math.abs(Date.now() - o['ts']) > ZID_AUTH_FRESHNESS_MS) return null;
   try {
     const payload = zidAuthPayload(o['server'], o['nick'], o['pubkey'], o['ts']);
     if (!ed25519.verify(unhex(o['sig']), payload, unhex(o['pubkey']))) return null;
   } catch {
     return null;
   }
-  // Normalize the pubkey to lowercase so all downstream key
-  // comparisons use one canonical form regardless of sender hex case.
   const proof = o as unknown as AnnounceProof;
   proof.pubkey = proof.pubkey.toLowerCase();
   return proof;
 }
+
+function authSkewMs(proof: AnnounceProof): number { return Math.abs(Date.now() - proof.ts); }
 
 /** Read the persisted license blob from chrome.storage.local and check
  * that it's currently valid. Channel creation is gated on Pro because
@@ -514,6 +525,19 @@ function boot() {
     const existing = nickToPubkey.get(claimedNick);
     addMsg('zitadel',
       `!! nick collision on ${claimedNick}: ${shortPub(attemptedPubkey)} tried to claim it via ${source}, but it's bound to ${existing ? shortPub(existing) : '?'}. attempt dropped. /ignore ${attemptedPubkey} to silence.`,
+      true);
+  }
+  // dedupe clock-skew warnings per (pubkey, side) - either side could
+  // be wrong (us or them), but the message is the same shape so one
+  // warning per peer is enough. without dedupe, every signed message
+  // from a peer with a busted clock would print a fresh warning.
+  const skewWarned = new Set<string>();
+  function warnSkew(nick: string, pubkey: string, skewMs: number, side: 'fast' | 'slow') {
+    if (skewWarned.has(pubkey)) return;
+    skewWarned.add(pubkey);
+    const sec = Math.round(skewMs / 1000);
+    addMsg('zitadel',
+      `!! ${nick}'s clock looks ${side === 'fast' ? 'ahead' : 'behind'} by ~${sec}s - their messages are dropping the freshness check. ${shortPub(pubkey)}. (or yours might be off; check system time.)`,
       true);
   }
   /** Bind a (nick, pubkey) pair after a successful verification.
@@ -1289,6 +1313,14 @@ function boot() {
                       { nick: msg.nick, room: obj.room });
                     break;
                   }
+                  // Freshness check moved here so we surface clock-skew
+                  // honestly: signature verified, peer is real, but
+                  // their ts is out of the 60s window.
+                  const skew = msgSkewMs(proof);
+                  if (skew > ZID_MSG_FRESHNESS_MS) {
+                    warnSkew(proof.nick, proof.pubkey, skew, proof.ts > Date.now() ? 'fast' : 'slow');
+                    break;
+                  }
                   const existing = nickToPubkey.get(proof.nick);
                   if (existing && existing !== proof.pubkey) {
                     console.debug('[zitadel] zid-msg nick collision, dropping',
@@ -1350,6 +1382,15 @@ function boot() {
             if (!proof) {
               console.debug('[zitadel] announce failed verification, ignoring',
                 { nick: msg.nick, pubkey: msg.pubkey?.slice(0, 16) });
+              break;
+            }
+            // Freshness check post-verify: a real peer with a busted
+            // clock is recoverable info; a forged announce from a
+            // known-bad pubkey just silently drops. We can tell them
+            // apart now because the sig already verified.
+            const askew = authSkewMs(proof);
+            if (askew > ZID_AUTH_FRESHNESS_MS) {
+              warnSkew(proof.nick, proof.pubkey, askew, proof.ts > Date.now() ? 'fast' : 'slow');
               break;
             }
             // pubkey-based ignore applies to announces too: don't even
