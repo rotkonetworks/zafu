@@ -1,10 +1,11 @@
 /**
  * animated QR scanner — reassembles multipart QR frames from camera
  *
- * scans multiple QR frames continuously, collecting numbered parts
- * until the full payload is reconstructed. shows progress %.
+ * Supports two modes:
+ * 1. legacy "P<frameIndex>/<totalFrames>/<urType>/<base64chunk>" — fixed parts
+ * 2. BC-UR fountain-coded `ur:<type>/...` — variable parts, decode via WASM
  *
- * frame format: "P<frameIndex>/<totalFrames>/<urType>/<base64chunk>"
+ * Auto-detects mode from the first scanned frame's prefix.
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -21,6 +22,12 @@ interface AnimatedQrScannerProps {
   description?: string;
   /** render inline (card) instead of fullscreen overlay — popup contexts trap `fixed` */
   inline?: boolean;
+  /**
+   * Optional: restrict to a specific UR type. If set and the first scanned
+   * frame is a UR frame, only `ur:<urTypeFilter>/...` frames are accepted.
+   * Useful when scanning a known-format response (e.g. zcash-pczt sign).
+   */
+  urTypeFilter?: string;
 }
 
 export const AnimatedQrScanner = ({
@@ -30,6 +37,7 @@ export const AnimatedQrScanner = ({
   title = 'scan animated QR',
   description,
   inline = false,
+  urTypeFilter,
 }: AnimatedQrScannerProps) => {
   const [progress, setProgress] = useState(0);
   const [isScanning, setIsScanning] = useState(false);
@@ -40,10 +48,19 @@ export const AnimatedQrScanner = ({
   const mountedRef = useRef(true);
   const completedRef = useRef(false);
 
-  // collected frames: index -> base64 chunk
+  // collected frames: index -> base64 chunk (legacy P-format)
   const framesRef = useRef<Map<number, string>>(new Map());
   const totalRef = useRef(0);
   const urTypeRef = useRef('');
+
+  // BC-UR fountain mode state. Distinct set from legacy P-frames because
+  // UR fountain parts don't have a fixed total — we keep accumulating until
+  // ur_decode_frames returns a complete payload.
+  const urPartsRef = useRef<Set<string>>(new Set());
+  // 'p' = legacy P-format, 'ur' = BC-UR fountain, '' = undecided
+  const modeRef = useRef<'' | 'p' | 'ur'>('');
+  // wasm module loaded lazily on first UR frame; ref to avoid re-import flooding
+  const wasmRef = useRef<{ ur_decode_frames: (parts: string, type: string) => string } | null>(null);
 
   const onCompleteRef = useRef(onComplete);
   const onErrorRef = useRef(onError);
@@ -105,7 +122,67 @@ export const AnimatedQrScanner = ({
           if (!result || completedRef.current) return;
 
           const text = result.getText();
-          // parse frame: P<idx>/<total>/<type>/<data>
+
+          // ── BC-UR fountain mode ──
+          // ur:<type>/<seqNum>-<seqLen>/<bytewords> for multipart, or
+          // ur:<type>/<bytewords> for single-part. Either way, accumulate the
+          // raw frame string and let `ur_decode_frames` (wasm) handle dedup +
+          // fountain reconstruction.
+          const lower = text.toLowerCase();
+          if (lower.startsWith('ur:')) {
+            if (modeRef.current === '') modeRef.current = 'ur';
+            if (modeRef.current !== 'ur') return;
+
+            // type filter — defends against unrelated QR contaminating the stream
+            const slashIdx = text.indexOf('/');
+            const urType = slashIdx > 3 ? text.slice(3, slashIdx) : '';
+            if (urTypeFilter && urType.toLowerCase() !== urTypeFilter.toLowerCase()) return;
+            if (urTypeRef.current === '') urTypeRef.current = urType;
+            else if (urTypeRef.current !== urType) return; // type drift, reject
+
+            const before = urPartsRef.current.size;
+            urPartsRef.current.add(text);
+            if (urPartsRef.current.size === before) return; // duplicate
+
+            setPartsReceived(urPartsRef.current.size);
+
+            // Lazy-import wasm. First scan triggers it; subsequent scans hit
+            // the cached `wasmRef.current`.
+            if (!wasmRef.current) {
+              import(/* webpackMode: "eager" */ '@repo/zcash-wasm')
+                .then(mod => {
+                  wasmRef.current = mod as unknown as typeof wasmRef.current;
+                })
+                .catch(() => {/* try again next frame */});
+            }
+            const wasm = wasmRef.current;
+            if (!wasm) return; // not loaded yet; keep accumulating
+
+            try {
+              const partsJson = JSON.stringify([...urPartsRef.current]);
+              const hex = wasm.ur_decode_frames(partsJson, urType);
+              // success → reconstructed
+              completedRef.current = true;
+              stopScanning();
+              const bytes = new Uint8Array(hex.length >> 1);
+              for (let i = 0; i < bytes.length; i++) {
+                bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
+              }
+              setProgress(100);
+              onCompleteRef.current(bytes, urType);
+            } catch {
+              // fountain decoder still wants more frames — that's the normal
+              // hot-path for multipart UR. Indicate visual progress by the
+              // raw count of unique parts received (no total to divide by).
+              setProgress(Math.min(99, urPartsRef.current.size * 10));
+            }
+            return;
+          }
+
+          // ── legacy P-format mode ──
+          if (modeRef.current === '') modeRef.current = 'p';
+          if (modeRef.current !== 'p') return;
+
           const match = text.match(/^P(\d+)\/(\d+)\/([^/]+)\/(.+)$/);
           if (!match) return;
 

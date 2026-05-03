@@ -157,6 +157,14 @@ export interface ZignerZafuImport {
   deviceId: string;
   /** ZID cross-site ed25519 public key (hex), exported from zigner */
   zidPublicKey?: string;
+  /**
+   * Cold signer kind. Defaults to `'zigner'` when omitted (covers all
+   * pre-Keystone watch-only imports). Set to `'keystone'` for FVKs imported
+   * from a Keystone hardware wallet — gates Zigner-only features (Penumbra,
+   * FROST, ZID) in the UI even though the underlying Zcash signing path is
+   * shared via PCZT/UR.
+   */
+  coldSignerType?: 'zigner' | 'keystone';
 }
 
 /**

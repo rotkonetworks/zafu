@@ -96,6 +96,10 @@ export async function createZignerWalletEntries(
         accountIndex: data.accountIndex,
         mainnet: !data.viewingKey.startsWith('uviewtest'),
         vaultId,
+        // Defaults to 'zigner' when omitted on the import side. Keystone
+        // imports flow through the same path and set this explicitly so the
+        // signing UI can hide Penumbra/FROST/ZID affordances.
+        coldSignerType: data.coldSignerType ?? 'zigner',
       };
       await local.set('zcashWallets', [zcashWallet, ...existingZcashWallets]);
       await local.set('activeZcashIndex', 0);

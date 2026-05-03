@@ -17,7 +17,7 @@
 import type { NetworkType } from './types';
 
 export interface NetworkWorkerMessage {
-  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-multi' | 'send-tx-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'note-sync-encode' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos' | 'frost-dkg-part1' | 'frost-dkg-part2' | 'frost-dkg-part3' | 'frost-sign-round1' | 'frost-spend-sign' | 'frost-spend-aggregate' | 'frost-derive-address' | 'frost-derive-address-from-sk' | 'frost-sample-fvk-sk' | 'frost-derive-ufvk' | 'frost-parse-tx-outputs';
+  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-multi' | 'send-tx-complete' | 'send-tx-pczt' | 'send-tx-pczt-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'note-sync-encode' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos' | 'frost-dkg-part1' | 'frost-dkg-part2' | 'frost-dkg-part3' | 'frost-sign-round1' | 'frost-spend-sign' | 'frost-spend-aggregate' | 'frost-derive-address' | 'frost-derive-address-from-sk' | 'frost-sample-fvk-sk' | 'frost-derive-ufvk' | 'frost-parse-tx-outputs';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -25,7 +25,7 @@ export interface NetworkWorkerMessage {
 }
 
 export interface NetworkWorkerResponse {
-  type: 'ready' | 'address' | 'sync-progress' | 'send-progress' | 'sync-started' | 'sync-stopped' | 'sync-reset' | 'balance' | 'tx-result' | 'tx-multi-result' | 'send-tx-unsigned' | 'shield-result' | 'shield-unsigned-result' | 'wallets' | 'wallet-deleted' | 'notes' | 'note-sync-encoded' | 'memos' | 'transparent-history' | 'history' | 'memos-result' | 'sync-memos-progress' | 'mempool-update' | 'prove-request' | 'frost-result' | 'error';
+  type: 'ready' | 'address' | 'sync-progress' | 'send-progress' | 'sync-started' | 'sync-stopped' | 'sync-reset' | 'balance' | 'tx-result' | 'tx-multi-result' | 'send-tx-unsigned' | 'send-tx-pczt-unsigned' | 'shield-result' | 'shield-unsigned-result' | 'wallets' | 'wallet-deleted' | 'notes' | 'note-sync-encoded' | 'memos' | 'transparent-history' | 'history' | 'memos-result' | 'sync-memos-progress' | 'mempool-update' | 'prove-request' | 'frost-result' | 'error';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -502,6 +502,64 @@ export const completeSendTxInWorker = async (
   spendIndices: number[],
 ): Promise<{ txid: string }> => {
   return callWorker(network, 'send-tx-complete', { serverUrl, unsignedTx, signatures, spendIndices }, walletId);
+};
+
+/**
+ * Result of building a PCZT for single-signer cold signing.
+ *
+ * The worker has already CBOR-wrapped the PCZT and UR-fragmented it into
+ * animated-QR frames; the caller just hands `urFrames` to AnimatedQrDisplay.
+ * `pcztHex` is kept around mostly for debug / round-trip verification.
+ */
+export interface SendTxPcztUnsignedResult {
+  pcztHex: string;
+  summary: string;
+  actionCount: number;
+  fee: string;
+  urFrames: string[];
+}
+
+/**
+ * Build a PCZT for cold signing via QR. Replaces the legacy simple-format
+ * (sighash + alphas + summary string) for the single-signer zigner path.
+ *
+ * Caller must provide ufvk and target_height (any height ≥ NU6.1 activation
+ * works for current mainnet).
+ *
+ * `fragmentSize` is the per-frame byte budget for the animated UR encoding.
+ * Defaults to 200 — conservative density that scans reliably on most phone
+ * cameras (Pixel 6+ tested). Drop to 150 for older / cheaper Keystone-class
+ * cameras if frames don't lock; bump to 400 on flagship hardware to halve
+ * scan time. Callers don't normally need to set it; this is escape-hatch
+ * tuning for known device quirks rather than a per-tx knob.
+ */
+export const buildSendTxPcztInWorker = async (
+  network: NetworkType,
+  walletId: string,
+  serverUrl: string,
+  recipient: string,
+  amount: string,
+  memo: string,
+  targetHeight: number,
+  mainnet: boolean,
+  ufvk: string,
+  fragmentSize = 200,
+): Promise<SendTxPcztUnsignedResult> => {
+  return callWorker(network, 'send-tx-pczt', { serverUrl, recipient, amount, memo, targetHeight, mainnet, ufvk, fragmentSize }, walletId);
+};
+
+/**
+ * Extract a broadcast-ready v5 tx from a signed PCZT returned by zigner and
+ * broadcast it. The caller has already reassembled the multi-frame UR scan
+ * into raw PCZT bytes (hex) via wasm `ur_decode_frames`.
+ */
+export const completeSendTxPcztInWorker = async (
+  network: NetworkType,
+  walletId: string,
+  serverUrl: string,
+  signedPcztHex: string,
+): Promise<{ txid: string }> => {
+  return callWorker(network, 'send-tx-pczt-complete', { serverUrl, signedPcztHex }, walletId);
 };
 
 /** result of building an unsigned shielding transaction */

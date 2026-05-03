@@ -63,6 +63,18 @@ type LOCAL = {
     accountIndex: number;
     mainnet: boolean;
     vaultId?: string;
+    /**
+     * Cold signer device that owns this wallet's seed.
+     *
+     * - `'zigner'` (default for legacy/missing): Rotko's own air-gapped Android
+     *   signer. Supports Penumbra, Zcash, FROST multisig, ZID identity, and
+     *   per-tx anchor attestation against a known verifier key.
+     * - `'keystone'`: A Keystone hardware wallet acting as zcash-only cold
+     *   signer. PCZT-only, no Penumbra/FROST/ZID integration.
+     *
+     * Optional for backwards compat — undefined = treat as `'zigner'`.
+     */
+    coldSignerType?: 'zigner' | 'keystone';
   }[];
   /** Active zcash wallet index */
   activeZcashIndex?: number;

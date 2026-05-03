@@ -1,5 +1,4 @@
 /* @ts-self-types="./zafu_wasm.d.ts" */
-import { startWorkers } from './snippets/wasm-bindgen-rayon-38edf6e439f6d70d/src/workerHelpers.js';
 
 /**
  * Wallet keys derived from seed phrase
@@ -512,6 +511,44 @@ export function build_signed_spend_transaction(seed_phrase, notes_json, recipien
 }
 
 /**
+ * Build a PCZT for cold-wallet signing via QR.
+ *
+ * `target_height` selects the consensus branch; pass any height ≥ NU6.1
+ * activation for current mainnet operations. The tx version is derived from
+ * network upgrade rules (currently V5).
+ *
+ * Returns JSON: `{ pczt_hex, summary, action_count }`.
+ * The TS layer wraps `pczt_hex` in CBOR `{1: bytes}` and UR-encodes as
+ * `zcash-pczt` for animated QR transport.
+ * @param {string} ufvk_str
+ * @param {any} notes_json
+ * @param {string} recipient
+ * @param {bigint} amount
+ * @param {bigint} fee
+ * @param {string} anchor_hex
+ * @param {any} merkle_paths_json
+ * @param {number} target_height
+ * @param {boolean} mainnet
+ * @param {string | null} [memo_hex]
+ * @returns {any}
+ */
+export function build_unsigned_pczt(ufvk_str, notes_json, recipient, amount, fee, anchor_hex, merkle_paths_json, target_height, mainnet, memo_hex) {
+    const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    var ptr3 = isLikeNone(memo_hex) ? 0 : passStringToWasm0(memo_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len3 = WASM_VECTOR_LEN;
+    const ret = wasm.build_unsigned_pczt(ptr0, len0, notes_json, ptr1, len1, amount, fee, ptr2, len2, merkle_paths_json, target_height, mainnet, ptr3, len3);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
  * Build an unsigned shielding transaction (transparent → orchard) for cold-wallet signing.
  *
  * Same as `build_shielding_transaction` but does NOT sign the transparent inputs.
@@ -788,6 +825,39 @@ export function encode_notes_bundle(notes_json, merkle_result_json, anchor_heigh
     var v4 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
     wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     return v4;
+}
+
+/**
+ * Extract a broadcast-ready v5 transaction from a signed PCZT returned by zigner.
+ *
+ * Replaces the legacy `parse_signature_response` + `complete_transaction` pair.
+ * Instead of patching raw signature bytes into a hand-serialized tx, we let the
+ * pczt crate's `TransactionExtractor` reassemble the canonical v5 transaction
+ * from the signed PCZT (collecting all auth sigs and validating the proof).
+ *
+ * Returns hex-encoded transaction bytes ready for broadcast.
+ * @param {string} pczt_hex
+ * @returns {string}
+ */
+export function extract_signed_tx_from_pczt(pczt_hex) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(pczt_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.extract_signed_tx_from_pczt(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
 }
 
 /**
@@ -1139,66 +1209,6 @@ export function frost_generate_randomizer(ephemeral_seed_hex, message_hex, commi
 }
 
 /**
- * Parse the unsigned v5 transaction and recover what each Orchard action
- * is sending, using the FROST wallet's UFVK to OVK-decrypt outputs.
- *
- * The spender (= each FROST joiner) owns the OVK that was used to encrypt
- * every action's output, so OVK decryption yields:
- *   - external scope hits → real recipients of the spend
- *   - internal scope hits → change back to our own multisig
- *   - non-decryptable     → dummy padding action (zero value by construction)
- *
- * Each joiner runs this on the unsigned tx bytes the host claims to have
- * built and compares the derived summary to the host's claimed
- * (recipient, amount, fee). A mismatch means the host lied.
- *
- * `orchard_fvk_uview` is the ZIP-316 unified viewing key string
- * (`uview1…` / `uviewtest1…`) stored alongside the wallet.
- *
- * Returns JSON:
- * {
- *   "actions": [
- *     { "index": u32,
- *       "amount_zat": u64,
- *       "recipient_raw_hex": "<43-byte hex>" | null,
- *       "is_change": bool,
- *       "decrypted": bool }
- *   ],
- *   "summary": {
- *     "total_send_zat": u64,
- *     "total_change_zat": u64,
- *     "decrypted_count": u32,
- *     "action_count": u32
- *   }
- * }
- * @param {string} unsigned_tx_hex
- * @param {string} orchard_fvk_uview
- * @returns {string}
- */
-export function frost_parse_tx_outputs(unsigned_tx_hex, orchard_fvk_uview) {
-    let deferred4_0;
-    let deferred4_1;
-    try {
-        const ptr0 = passStringToWasm0(unsigned_tx_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(orchard_fvk_uview, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len1 = WASM_VECTOR_LEN;
-        const ret = wasm.frost_parse_tx_outputs(ptr0, len0, ptr1, len1);
-        var ptr3 = ret[0];
-        var len3 = ret[1];
-        if (ret[3]) {
-            ptr3 = 0; len3 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred4_0 = ptr3;
-        deferred4_1 = len3;
-        return getStringFromWasm0(ptr3, len3);
-    } finally {
-        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
-    }
-}
-
-/**
  * host-only: sample a random 32-byte SpendingKey for nk/rivk derivation.
  * retries until the sampled bytes land in the Pallas scalar range.
  * returns hex-encoded 32-byte `sk` that the host broadcasts to peers in R1.
@@ -1462,15 +1472,6 @@ export function init() {
 }
 
 /**
- * @param {number} num_threads
- * @returns {Promise<any>}
- */
-export function initThreadPool(num_threads) {
-    const ret = wasm.initThreadPool(num_threads);
-    return ret;
-}
-
-/**
  * Get number of threads available (0 if single-threaded)
  * @returns {number}
  */
@@ -1580,6 +1581,47 @@ export function tree_root_hex(tree_state_hex) {
 }
 
 /**
+ * Decode UR-encoded animated QR string frames back into CBOR bytes.
+ *
+ * Accepts a JSON array of UR strings (each `ur:<type>/...`) collected from
+ * successive scans of an animated QR. Returns the reconstructed payload bytes
+ * once the fountain decoder has enough frames (deduplicated internally), or an
+ * error if the parts are malformed or the fountain code can't yet reconstruct.
+ *
+ * `expected_type` is a sanity check: if non-empty, parts whose UR type doesn't
+ * match are rejected. Pass `""` to accept any type.
+ *
+ * Returns hex-encoded payload bytes (caller can hex_decode if it wants raw).
+ * We return hex (rather than `Vec<u8>` directly) to avoid a wasm-bindgen
+ * `Uint8Array` allocation pattern that's been flaky for us in some browsers.
+ * @param {string} parts_json
+ * @param {string} expected_type
+ * @returns {string}
+ */
+export function ur_decode_frames(parts_json, expected_type) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(parts_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(expected_type, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.ur_decode_frames(ptr0, len0, ptr1, len1);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
  * Encode CBOR bytes as UR-encoded animated QR string frames.
  * Returns JSON array of UR strings suitable for QR display.
  * ur_type: e.g. "zcash-notes", "zigner-contacts", "zigner-backup"
@@ -1639,51 +1681,6 @@ export function version() {
     } finally {
         wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
     }
-}
-
-export class wbg_rayon_PoolBuilder {
-    static __wrap(ptr) {
-        ptr = ptr >>> 0;
-        const obj = Object.create(wbg_rayon_PoolBuilder.prototype);
-        obj.__wbg_ptr = ptr;
-        wbg_rayon_PoolBuilderFinalization.register(obj, obj.__wbg_ptr, obj);
-        return obj;
-    }
-    __destroy_into_raw() {
-        const ptr = this.__wbg_ptr;
-        this.__wbg_ptr = 0;
-        wbg_rayon_PoolBuilderFinalization.unregister(this);
-        return ptr;
-    }
-    free() {
-        const ptr = this.__destroy_into_raw();
-        wasm.__wbg_wbg_rayon_poolbuilder_free(ptr, 0);
-    }
-    build() {
-        wasm.wbg_rayon_poolbuilder_build(this.__wbg_ptr);
-    }
-    /**
-     * @returns {number}
-     */
-    numThreads() {
-        const ret = wasm.wbg_rayon_poolbuilder_numThreads(this.__wbg_ptr);
-        return ret >>> 0;
-    }
-    /**
-     * @returns {number}
-     */
-    receiver() {
-        const ret = wasm.wbg_rayon_poolbuilder_receiver(this.__wbg_ptr);
-        return ret >>> 0;
-    }
-}
-if (Symbol.dispose) wbg_rayon_PoolBuilder.prototype[Symbol.dispose] = wbg_rayon_PoolBuilder.prototype.free;
-
-/**
- * @param {number} receiver
- */
-export function wbg_rayon_start_worker(receiver) {
-    wasm.wbg_rayon_start_worker(receiver);
 }
 
 /**
@@ -1768,7 +1765,7 @@ export function zt_encode_frames(cbor_data, zt_type, k, n) {
     }
 }
 
-function __wbg_get_imports(memory) {
+function __wbg_get_imports() {
     const import0 = {
         __proto__: null,
         __wbg_Error_83742b46f01ce22d: function(arg0, arg1) {
@@ -1835,14 +1832,6 @@ function __wbg_get_imports(memory) {
         },
         __wbg___wbindgen_jsval_loose_eq_5bcc3bed3c69e72b: function(arg0, arg1) {
             const ret = arg0 == arg1;
-            return ret;
-        },
-        __wbg___wbindgen_memory_edb3f01e3930bbf6: function() {
-            const ret = wasm.memory;
-            return ret;
-        },
-        __wbg___wbindgen_module_bf945c07123bafe2: function() {
-            const ret = wasmModule;
             return ret;
         },
         __wbg___wbindgen_number_get_34bb9d9dcfa21373: function(arg0, arg1) {
@@ -1918,16 +1907,6 @@ function __wbg_get_imports(memory) {
             let result;
             try {
                 result = arg0 instanceof Uint8Array;
-            } catch (_) {
-                result = false;
-            }
-            const ret = result;
-            return ret;
-        },
-        __wbg_instanceof_Window_23e677d2c6843922: function(arg0) {
-            let result;
-            try {
-                result = arg0 instanceof Window;
             } catch (_) {
                 result = false;
             }
@@ -2020,10 +1999,6 @@ function __wbg_get_imports(memory) {
             getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
             getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
         },
-        __wbg_startWorkers_8b582d57e92bd2d4: function(arg0, arg1, arg2) {
-            const ret = startWorkers(arg0, arg1, wbg_rayon_PoolBuilder.__wrap(arg2));
-            return ret;
-        },
         __wbg_static_accessor_GLOBAL_8adb955bd33fac2f: function() {
             const ret = typeof global === 'undefined' ? null : global;
             return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
@@ -2081,7 +2056,6 @@ function __wbg_get_imports(memory) {
             table.set(offset + 2, true);
             table.set(offset + 3, false);
         },
-        memory: memory || new WebAssembly.Memory({initial:50,maximum:32768,shared:true}),
     };
     return {
         __proto__: null,
@@ -2095,9 +2069,6 @@ const WalletKeysFinalization = (typeof FinalizationRegistry === 'undefined')
 const WatchOnlyWalletFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_watchonlywallet_free(ptr >>> 0, 1));
-const wbg_rayon_PoolBuilderFinalization = (typeof FinalizationRegistry === 'undefined')
-    ? { register: () => {}, unregister: () => {} }
-    : new FinalizationRegistry(ptr => wasm.__wbg_wbg_rayon_poolbuilder_free(ptr >>> 0, 1));
 
 function addToExternrefTable0(obj) {
     const idx = wasm.__externref_table_alloc();
@@ -2177,7 +2148,7 @@ function getArrayU8FromWasm0(ptr, len) {
 
 let cachedDataViewMemory0 = null;
 function getDataViewMemory0() {
-    if (cachedDataViewMemory0 === null || cachedDataViewMemory0.buffer !== wasm.memory.buffer) {
+    if (cachedDataViewMemory0 === null || cachedDataViewMemory0.buffer.detached === true || (cachedDataViewMemory0.buffer.detached === undefined && cachedDataViewMemory0.buffer !== wasm.memory.buffer)) {
         cachedDataViewMemory0 = new DataView(wasm.memory.buffer);
     }
     return cachedDataViewMemory0;
@@ -2190,7 +2161,7 @@ function getStringFromWasm0(ptr, len) {
 
 let cachedUint8ArrayMemory0 = null;
 function getUint8ArrayMemory0() {
-    if (cachedUint8ArrayMemory0 === null || cachedUint8ArrayMemory0.buffer !== wasm.memory.buffer) {
+    if (cachedUint8ArrayMemory0 === null || cachedUint8ArrayMemory0.byteLength === 0) {
         cachedUint8ArrayMemory0 = new Uint8Array(wasm.memory.buffer);
     }
     return cachedUint8ArrayMemory0;
@@ -2259,9 +2230,8 @@ function takeFromExternrefTable0(idx) {
     return value;
 }
 
-let cachedTextDecoder = (typeof TextDecoder !== 'undefined' ? new TextDecoder('utf-8', { ignoreBOM: true, fatal: true }) : undefined);
-if (cachedTextDecoder) cachedTextDecoder.decode();
-
+let cachedTextDecoder = new TextDecoder('utf-8', { ignoreBOM: true, fatal: true });
+cachedTextDecoder.decode();
 const MAX_SAFARI_DECODE_BYTES = 2146435072;
 let numBytesDecoded = 0;
 function decodeText(ptr, len) {
@@ -2271,12 +2241,12 @@ function decodeText(ptr, len) {
         cachedTextDecoder.decode();
         numBytesDecoded = len;
     }
-    return cachedTextDecoder.decode(getUint8ArrayMemory0().slice(ptr, ptr + len));
+    return cachedTextDecoder.decode(getUint8ArrayMemory0().subarray(ptr, ptr + len));
 }
 
-const cachedTextEncoder = (typeof TextEncoder !== 'undefined' ? new TextEncoder() : undefined);
+const cachedTextEncoder = new TextEncoder();
 
-if (cachedTextEncoder) {
+if (!('encodeInto' in cachedTextEncoder)) {
     cachedTextEncoder.encodeInto = function (arg, view) {
         const buf = cachedTextEncoder.encode(arg);
         view.set(buf);
@@ -2290,16 +2260,12 @@ if (cachedTextEncoder) {
 let WASM_VECTOR_LEN = 0;
 
 let wasmModule, wasm;
-function __wbg_finalize_init(instance, module, thread_stack_size) {
+function __wbg_finalize_init(instance, module) {
     wasm = instance.exports;
     wasmModule = module;
     cachedDataViewMemory0 = null;
     cachedUint8ArrayMemory0 = null;
-    if (typeof thread_stack_size !== 'undefined' && (typeof thread_stack_size !== 'number' || thread_stack_size === 0 || thread_stack_size % 65536 !== 0)) {
-        throw new Error('invalid stack size');
-    }
-
-    wasm.__wbindgen_start(thread_stack_size);
+    wasm.__wbindgen_start();
     return wasm;
 }
 
@@ -2338,33 +2304,33 @@ async function __wbg_load(module, imports) {
     }
 }
 
-function initSync(module, memory) {
+function initSync(module) {
     if (wasm !== undefined) return wasm;
 
-    let thread_stack_size
+
     if (module !== undefined) {
         if (Object.getPrototypeOf(module) === Object.prototype) {
-            ({module, memory, thread_stack_size} = module)
+            ({module} = module)
         } else {
             console.warn('using deprecated parameters for `initSync()`; pass a single object instead')
         }
     }
 
-    const imports = __wbg_get_imports(memory);
+    const imports = __wbg_get_imports();
     if (!(module instanceof WebAssembly.Module)) {
         module = new WebAssembly.Module(module);
     }
     const instance = new WebAssembly.Instance(module, imports);
-    return __wbg_finalize_init(instance, module, thread_stack_size);
+    return __wbg_finalize_init(instance, module);
 }
 
-async function __wbg_init(module_or_path, memory) {
+async function __wbg_init(module_or_path) {
     if (wasm !== undefined) return wasm;
 
-    let thread_stack_size
+
     if (module_or_path !== undefined) {
         if (Object.getPrototypeOf(module_or_path) === Object.prototype) {
-            ({module_or_path, memory, thread_stack_size} = module_or_path)
+            ({module_or_path} = module_or_path)
         } else {
             console.warn('using deprecated parameters for the initialization function; pass a single object instead')
         }
@@ -2373,7 +2339,7 @@ async function __wbg_init(module_or_path, memory) {
     if (module_or_path === undefined) {
         module_or_path = new URL('zafu_wasm_bg.wasm', import.meta.url);
     }
-    const imports = __wbg_get_imports(memory);
+    const imports = __wbg_get_imports();
 
     if (typeof module_or_path === 'string' || (typeof Request === 'function' && module_or_path instanceof Request) || (typeof URL === 'function' && module_or_path instanceof URL)) {
         module_or_path = fetch(module_or_path);
@@ -2381,7 +2347,7 @@ async function __wbg_init(module_or_path, memory) {
 
     const { instance, module } = await __wbg_load(await module_or_path, imports);
 
-    return __wbg_finalize_init(instance, module, thread_stack_size);
+    return __wbg_finalize_init(instance, module);
 }
 
 export { initSync, __wbg_init as default };

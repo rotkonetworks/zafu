@@ -167,6 +167,19 @@ export function build_shielding_transaction(utxos_json: string, privkey_hex: str
 export function build_signed_spend_transaction(seed_phrase: string, notes_json: any, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: any, account_index: number, mainnet: boolean, memo_hex?: string | null): string;
 
 /**
+ * Build a PCZT for cold-wallet signing via QR.
+ *
+ * `target_height` selects the consensus branch; pass any height ≥ NU6.1
+ * activation for current mainnet operations. The tx version is derived from
+ * network upgrade rules (currently V5).
+ *
+ * Returns JSON: `{ pczt_hex, summary, action_count }`.
+ * The TS layer wraps `pczt_hex` in CBOR `{1: bytes}` and UR-encodes as
+ * `zcash-pczt` for animated QR transport.
+ */
+export function build_unsigned_pczt(ufvk_str: string, notes_json: any, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: any, target_height: number, mainnet: boolean, memo_hex?: string | null): any;
+
+/**
  * Build an unsigned shielding transaction (transparent → orchard) for cold-wallet signing.
  *
  * Same as `build_shielding_transaction` but does NOT sign the transparent inputs.
@@ -261,6 +274,18 @@ export function derive_transparent_privkey(seed_phrase: string, account: number,
 export function encode_notes_bundle(notes_json: string, merkle_result_json: string, anchor_height: number, mainnet: boolean, attestation_hex?: string | null): Uint8Array;
 
 /**
+ * Extract a broadcast-ready v5 transaction from a signed PCZT returned by zigner.
+ *
+ * Replaces the legacy `parse_signature_response` + `complete_transaction` pair.
+ * Instead of patching raw signature bytes into a hand-serialized tx, we let the
+ * pczt crate's `TransactionExtractor` reassemble the canonical v5 transaction
+ * from the signed PCZT (collecting all auth sigs and validating the proof).
+ *
+ * Returns hex-encoded transaction bytes ready for broadcast.
+ */
+export function extract_signed_tx_from_pczt(pczt_hex: string): string;
+
+/**
  * Compute the tree size from a hex-encoded frontier.
  */
 export function frontier_tree_size(tree_state_hex: string): bigint;
@@ -332,42 +357,6 @@ export function frost_dkg_part3(secret_hex: string, round1_broadcasts_json: stri
 export function frost_generate_randomizer(ephemeral_seed_hex: string, message_hex: string, commitments_json: string): string;
 
 /**
- * Parse the unsigned v5 transaction and recover what each Orchard action
- * is sending, using the FROST wallet's UFVK to OVK-decrypt outputs.
- *
- * The spender (= each FROST joiner) owns the OVK that was used to encrypt
- * every action's output, so OVK decryption yields:
- *   - external scope hits → real recipients of the spend
- *   - internal scope hits → change back to our own multisig
- *   - non-decryptable     → dummy padding action (zero value by construction)
- *
- * Each joiner runs this on the unsigned tx bytes the host claims to have
- * built and compares the derived summary to the host's claimed
- * (recipient, amount, fee). A mismatch means the host lied.
- *
- * `orchard_fvk_uview` is the ZIP-316 unified viewing key string
- * (`uview1…` / `uviewtest1…`) stored alongside the wallet.
- *
- * Returns JSON:
- * {
- *   "actions": [
- *     { "index": u32,
- *       "amount_zat": u64,
- *       "recipient_raw_hex": "<43-byte hex>" | null,
- *       "is_change": bool,
- *       "decrypted": bool }
- *   ],
- *   "summary": {
- *     "total_send_zat": u64,
- *     "total_change_zat": u64,
- *     "decrypted_count": u32,
- *     "action_count": u32
- *   }
- * }
- */
-export function frost_parse_tx_outputs(unsigned_tx_hex: string, orchard_fvk_uview: string): string;
-
-/**
  * host-only: sample a random 32-byte SpendingKey for nk/rivk derivation.
  * retries until the sampled bytes land in the Pallas scalar range.
  * returns hex-encoded 32-byte `sk` that the host broadcasts to peers in R1.
@@ -415,8 +404,6 @@ export function get_commitment_proof_request(note_cmx_hex: string): string;
  */
 export function init(): void;
 
-export function initThreadPool(num_threads: number): Promise<any>;
-
 /**
  * Get number of threads available (0 if single-threaded)
  */
@@ -448,6 +435,23 @@ export function transparent_pubkey_from_ufvk(ufvk_str: string, address_index: nu
 export function tree_root_hex(tree_state_hex: string): string;
 
 /**
+ * Decode UR-encoded animated QR string frames back into CBOR bytes.
+ *
+ * Accepts a JSON array of UR strings (each `ur:<type>/...`) collected from
+ * successive scans of an animated QR. Returns the reconstructed payload bytes
+ * once the fountain decoder has enough frames (deduplicated internally), or an
+ * error if the parts are malformed or the fountain code can't yet reconstruct.
+ *
+ * `expected_type` is a sanity check: if non-empty, parts whose UR type doesn't
+ * match are rejected. Pass `""` to accept any type.
+ *
+ * Returns hex-encoded payload bytes (caller can hex_decode if it wants raw).
+ * We return hex (rather than `Vec<u8>` directly) to avoid a wasm-bindgen
+ * `Uint8Array` allocation pattern that's been flaky for us in some browsers.
+ */
+export function ur_decode_frames(parts_json: string, expected_type: string): string;
+
+/**
  * Encode CBOR bytes as UR-encoded animated QR string frames.
  * Returns JSON array of UR strings suitable for QR display.
  * ur_type: e.g. "zcash-notes", "zigner-contacts", "zigner-backup"
@@ -464,17 +468,6 @@ export function validate_seed_phrase(seed_phrase: string): boolean;
  * Get library version
  */
 export function version(): string;
-
-export class wbg_rayon_PoolBuilder {
-    private constructor();
-    free(): void;
-    [Symbol.dispose](): void;
-    build(): void;
-    numThreads(): number;
-    receiver(): number;
-}
-
-export function wbg_rayon_start_worker(receiver: number): void;
 
 /**
  * Extract a merkle path from a stored per-note witness. Returns JSON
@@ -506,12 +499,14 @@ export function zt_encode_frames(cbor_data: Uint8Array, zt_type: string, k: numb
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
+    readonly memory: WebAssembly.Memory;
     readonly __wbg_walletkeys_free: (a: number, b: number) => void;
     readonly __wbg_watchonlywallet_free: (a: number, b: number) => void;
     readonly address_from_ufvk: (a: number, b: number, c: number) => [number, number, number, number];
     readonly build_merkle_paths: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
     readonly build_shielding_transaction: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number) => [number, number, number, number];
     readonly build_signed_spend_transaction: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number) => [number, number, number, number];
+    readonly build_unsigned_pczt: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number) => [number, number, number];
     readonly build_unsigned_shielding_transaction: (a: number, b: number, c: number, d: number, e: bigint, f: bigint, g: number, h: number) => [number, number, number, number];
     readonly build_unsigned_transaction: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number) => [number, number, number];
     readonly build_witnesses_and_paths: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
@@ -520,13 +515,16 @@ export interface InitOutput {
     readonly create_sign_request: (a: number, b: number, c: number, d: any, e: number, f: number) => [number, number, number, number];
     readonly derive_transparent_privkey: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly encode_notes_bundle: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number, number];
+    readonly extract_signed_tx_from_pczt: (a: number, b: number) => [number, number, number, number];
     readonly frontier_tree_size: (a: number, b: number) => [bigint, number, number];
     readonly generate_seed_phrase: () => [number, number, number, number];
     readonly get_commitment_proof_request: (a: number, b: number) => [number, number, number, number];
+    readonly num_threads: () => number;
     readonly parse_signature_response: (a: number, b: number) => [number, number, number];
     readonly transparent_address_from_ufvk: (a: number, b: number, c: number) => [number, number, number, number];
     readonly transparent_pubkey_from_ufvk: (a: number, b: number, c: number) => [number, number, number, number];
     readonly tree_root_hex: (a: number, b: number) => [number, number, number, number];
+    readonly ur_decode_frames: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly ur_encode_frames: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
     readonly validate_seed_phrase: (a: number, b: number) => number;
     readonly version: () => [number, number];
@@ -554,7 +552,6 @@ export interface InitOutput {
     readonly witness_sync_update: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number];
     readonly zt_encode_frames: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly init: () => void;
-    readonly num_threads: () => number;
     readonly frost_aggregate_shares: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number, number];
     readonly frost_attestation_digest: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly frost_attestation_verify: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number];
@@ -566,24 +563,16 @@ export interface InitOutput {
     readonly frost_dkg_part2: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly frost_dkg_part3: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly frost_generate_randomizer: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
-    readonly frost_parse_tx_outputs: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly frost_sample_fvk_sk: () => [number, number];
     readonly frost_sign_round1: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly frost_sign_round2: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number, number];
     readonly frost_spend_aggregate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number, number];
     readonly frost_spend_sign_round2: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number, number];
     readonly frost_spend_sign_round2_signed: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number, number];
+    readonly rustsecp256k1_v0_10_0_context_create: (a: number) => number;
+    readonly rustsecp256k1_v0_10_0_context_destroy: (a: number) => void;
     readonly rustsecp256k1_v0_10_0_default_error_callback_fn: (a: number, b: number) => void;
     readonly rustsecp256k1_v0_10_0_default_illegal_callback_fn: (a: number, b: number) => void;
-    readonly rustsecp256k1_v0_10_0_context_destroy: (a: number) => void;
-    readonly rustsecp256k1_v0_10_0_context_create: (a: number) => number;
-    readonly __wbg_wbg_rayon_poolbuilder_free: (a: number, b: number) => void;
-    readonly initThreadPool: (a: number) => any;
-    readonly wbg_rayon_poolbuilder_build: (a: number) => void;
-    readonly wbg_rayon_poolbuilder_numThreads: (a: number) => number;
-    readonly wbg_rayon_poolbuilder_receiver: (a: number) => number;
-    readonly wbg_rayon_start_worker: (a: number) => void;
-    readonly memory: WebAssembly.Memory;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_exn_store: (a: number) => void;
@@ -591,8 +580,7 @@ export interface InitOutput {
     readonly __wbindgen_externrefs: WebAssembly.Table;
     readonly __wbindgen_free: (a: number, b: number, c: number) => void;
     readonly __externref_table_dealloc: (a: number) => void;
-    readonly __wbindgen_thread_destroy: (a?: number, b?: number, c?: number) => void;
-    readonly __wbindgen_start: (a: number) => void;
+    readonly __wbindgen_start: () => void;
 }
 
 export type SyncInitInput = BufferSource | WebAssembly.Module;
@@ -601,20 +589,18 @@ export type SyncInitInput = BufferSource | WebAssembly.Module;
  * Instantiates the given `module`, which can either be bytes or
  * a precompiled `WebAssembly.Module`.
  *
- * @param {{ module: SyncInitInput, memory?: WebAssembly.Memory, thread_stack_size?: number }} module - Passing `SyncInitInput` directly is deprecated.
- * @param {WebAssembly.Memory} memory - Deprecated.
+ * @param {{ module: SyncInitInput }} module - Passing `SyncInitInput` directly is deprecated.
  *
  * @returns {InitOutput}
  */
-export function initSync(module: { module: SyncInitInput, memory?: WebAssembly.Memory, thread_stack_size?: number } | SyncInitInput, memory?: WebAssembly.Memory): InitOutput;
+export function initSync(module: { module: SyncInitInput } | SyncInitInput): InitOutput;
 
 /**
  * If `module_or_path` is {RequestInfo} or {URL}, makes a request and
  * for everything else, calls `WebAssembly.instantiate` directly.
  *
- * @param {{ module_or_path: InitInput | Promise<InitInput>, memory?: WebAssembly.Memory, thread_stack_size?: number }} module_or_path - Passing `InitInput` directly is deprecated.
- * @param {WebAssembly.Memory} memory - Deprecated.
+ * @param {{ module_or_path: InitInput | Promise<InitInput> }} module_or_path - Passing `InitInput` directly is deprecated.
  *
  * @returns {Promise<InitOutput>}
  */
-export default function __wbg_init (module_or_path?: { module_or_path: InitInput | Promise<InitInput>, memory?: WebAssembly.Memory, thread_stack_size?: number } | InitInput | Promise<InitInput>, memory?: WebAssembly.Memory): Promise<InitOutput>;
+export default function __wbg_init (module_or_path?: { module_or_path: InitInput | Promise<InitInput> } | InitInput | Promise<InitInput>): Promise<InitOutput>;
