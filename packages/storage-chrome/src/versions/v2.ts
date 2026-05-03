@@ -46,6 +46,12 @@ type LOCAL = {
   zignerCameraEnabled?: boolean;
   /** Flag indicating cache clearing is in progress (survives extension restart) */
   clearingCache?: boolean;
+  /**
+   * Networks with IDB deletion pending until next service worker startup.
+   * Deferred so deletion happens before any wallet services open connections,
+   * which would otherwise cause `deleteDatabase` to fire `onblocked`.
+   */
+  pendingClearCache?: ('penumbra' | 'zcash')[];
   /** Active network type for multi-network wallet */
   activeNetwork?: 'penumbra' | 'zcash' | 'polkadot' | 'kusama' | 'noble' | 'cosmoshub' | 'ethereum' | 'bitcoin';
   /** Zcash-specific wallets */
