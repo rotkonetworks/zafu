@@ -70,7 +70,21 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
 
   if (!open) return null;
 
+  const handleOpenZapps = async () => {
+    onClose();
+    try {
+      await chrome.tabs.create({ url: chrome.runtime.getURL('page.html') });
+    } catch (e) {
+      console.error('Failed to open zapps dashboard:', e);
+    }
+  };
+
   const menuItems = [
+    {
+      icon: 'i-lucide-layout-grid',
+      label: 'zapps',
+      onClick: handleOpenZapps,
+    },
     {
       icon: 'i-lucide-fingerprint',
       label: 'identity & contacts',
@@ -185,7 +199,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
             <a href='https://github.com/rotkonetworks/zafu' target='_blank' rel='noopener noreferrer' className='hover:text-fg-high'>github</a>
             <a href='https://zigner.rotko.net' target='_blank' rel='noopener noreferrer' className='hover:text-fg-high'>zigner</a>
           </div>
-          <p className='text-[9px] text-fg-dim mt-1 tabular'>GPL-3.0</p>
+          <p className='text-[9px] text-fg-dim mt-1 tabular'>MIT</p>
         </div>
       </div>
     </>

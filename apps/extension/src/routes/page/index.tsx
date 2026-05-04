@@ -183,7 +183,7 @@ export const PageIndex = () => {
         ))}
 
         <div className='text-[10px] text-fg-muted/40 text-center pb-4'>
-          GPL-3.0 - rotko networks
+          MIT - rotko networks
         </div>
       </div>
     </FadeTransition>

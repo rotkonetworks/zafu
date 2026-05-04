@@ -2,7 +2,7 @@
   "name": "@repo/ui",
   "version": "5.4.0",
   "private": true,
-  "license": "(MIT OR Apache-2.0)",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "build-storybook": "storybook build",
