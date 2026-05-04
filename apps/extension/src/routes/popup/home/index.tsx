@@ -51,6 +51,12 @@ import type { TransactionInfo } from '@penumbra-zone/protobuf/penumbra/view/v1/v
 /** lazy load network-specific content - only load when needed */
 const AssetsTable = lazy(() => import('./assets-table').then(m => ({ default: m.AssetsTable })));
 const PolkadotAssets = lazy(() => import('./polkadot-assets').then(m => ({ default: m.PolkadotAssets })));
+// Cosmos sub-wallets render under the Penumbra view to surface
+// unshielded balances the user can shield. Lazy so non-Penumbra views
+// don't pay the chunk.
+const CosmosSubwallets = lazy(() =>
+  import('./cosmos-subwallets').then(m => ({ default: m.CosmosSubwallets })),
+);
 
 /** shows all multisig wallets with balances at a glance */
 const MultisigOverview = () => {
@@ -439,6 +445,14 @@ const PenumbraContent = ({ account, onAccountChange }: { account: number; onAcco
       <div className='kicker mb-2'>assets</div>
       <Suspense fallback={<AssetListSkeleton rows={4} />}>
         <AssetsTable account={account} />
+      </Suspense>
+
+      {/* Unshielded Cosmos balances tied to the same key as the Penumbra
+          wallet. Renders nothing when the user has no Cosmos holdings.
+          Account index 0 — the cosmos-balance hooks don't yet split by
+          Penumbra account; v1 uses the wallet's primary derivation. */}
+      <Suspense fallback={null}>
+        <CosmosSubwallets />
       </Suspense>
     </div>
   );

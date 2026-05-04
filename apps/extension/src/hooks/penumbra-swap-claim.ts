@@ -14,6 +14,24 @@ import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view
 import { useStore } from '../state';
 import { useLatestBlockHeight } from './latest-block-height';
 
+/**
+ * Recognize the ConnectRPC error you get when the MessagePort to the
+ * service worker has been closed — happens when Chrome recycles the SW
+ * (~30s idle) or while the popup is being torn down. This is benign;
+ * the next 30s tick gets a fresh port and will retry, so we don't want
+ * to surface it as an error.
+ */
+function isTransientPortClosure(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const msg = String((err as { message?: unknown }).message ?? '');
+  return (
+    msg.includes('[unavailable]') ||
+    msg.includes('Connection closed') ||
+    msg.includes('port closed') ||
+    msg.includes('extension context invalidated')
+  );
+}
+
 /** claim all unclaimed swaps, one at a time */
 async function claimUnclaimedSwaps(account: number): Promise<number> {
   const unclaimed = await Array.fromAsync(viewClient.unclaimedSwaps({}));
@@ -51,6 +69,11 @@ async function claimUnclaimedSwaps(account: number): Promise<number> {
         }
       }
     } catch (err) {
+      if (isTransientPortClosure(err)) {
+        // service worker recycled mid-claim; the next tick retries.
+        console.debug('[swap-claim] port closed during claim, will retry next tick');
+        return claimed;
+      }
       console.error('[swap-claim] failed to claim swap:', err);
     }
   }
@@ -84,7 +107,13 @@ export function usePenumbraSwapClaim(activeNetwork: string, onLoginPage: boolean
 
       claimUnclaimedSwaps(penumbraAccount)
         .then(n => { if (n > 0) console.log(`[swap-claim] claimed ${n} swap(s)`); })
-        .catch(err => console.error('[swap-claim] auto-claim error:', err))
+        .catch(err => {
+          if (isTransientPortClosure(err)) {
+            console.debug('[swap-claim] port closed before claim started, will retry');
+          } else {
+            console.error('[swap-claim] auto-claim error:', err);
+          }
+        })
         .finally(() => { claimingRef.current = false; });
     };
 
