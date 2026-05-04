@@ -511,6 +511,44 @@ export function build_signed_spend_transaction(seed_phrase, notes_json, recipien
 }
 
 /**
+ * Build a PCZT for cold-wallet signing via QR.
+ *
+ * `target_height` selects the consensus branch; pass any height ≥ NU6.1
+ * activation for current mainnet operations. The tx version is derived from
+ * network upgrade rules (currently V5).
+ *
+ * Returns JSON: `{ pczt_hex, summary, action_count }`.
+ * The TS layer wraps `pczt_hex` in CBOR `{1: bytes}` and UR-encodes as
+ * `zcash-pczt` for animated QR transport.
+ * @param {string} ufvk_str
+ * @param {any} notes_json
+ * @param {string} recipient
+ * @param {bigint} amount
+ * @param {bigint} fee
+ * @param {string} anchor_hex
+ * @param {any} merkle_paths_json
+ * @param {number} target_height
+ * @param {boolean} mainnet
+ * @param {string | null} [memo_hex]
+ * @returns {any}
+ */
+export function build_unsigned_pczt(ufvk_str, notes_json, recipient, amount, fee, anchor_hex, merkle_paths_json, target_height, mainnet, memo_hex) {
+    const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    var ptr3 = isLikeNone(memo_hex) ? 0 : passStringToWasm0(memo_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len3 = WASM_VECTOR_LEN;
+    const ret = wasm.build_unsigned_pczt(ptr0, len0, notes_json, ptr1, len1, amount, fee, ptr2, len2, merkle_paths_json, target_height, mainnet, ptr3, len3);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
  * Build an unsigned shielding transaction (transparent → orchard) for cold-wallet signing.
  *
  * Same as `build_shielding_transaction` but does NOT sign the transparent inputs.
@@ -787,6 +825,39 @@ export function encode_notes_bundle(notes_json, merkle_result_json, anchor_heigh
     var v4 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
     wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     return v4;
+}
+
+/**
+ * Extract a broadcast-ready v5 transaction from a signed PCZT returned by zigner.
+ *
+ * Replaces the legacy `parse_signature_response` + `complete_transaction` pair.
+ * Instead of patching raw signature bytes into a hand-serialized tx, we let the
+ * pczt crate's `TransactionExtractor` reassemble the canonical v5 transaction
+ * from the signed PCZT (collecting all auth sigs and validating the proof).
+ *
+ * Returns hex-encoded transaction bytes ready for broadcast.
+ * @param {string} pczt_hex
+ * @returns {string}
+ */
+export function extract_signed_tx_from_pczt(pczt_hex) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(pczt_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.extract_signed_tx_from_pczt(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
 }
 
 /**
@@ -1570,6 +1641,47 @@ export function tree_root_hex(tree_state_hex) {
 }
 
 /**
+ * Decode UR-encoded animated QR string frames back into CBOR bytes.
+ *
+ * Accepts a JSON array of UR strings (each `ur:<type>/...`) collected from
+ * successive scans of an animated QR. Returns the reconstructed payload bytes
+ * once the fountain decoder has enough frames (deduplicated internally), or an
+ * error if the parts are malformed or the fountain code can't yet reconstruct.
+ *
+ * `expected_type` is a sanity check: if non-empty, parts whose UR type doesn't
+ * match are rejected. Pass `""` to accept any type.
+ *
+ * Returns hex-encoded payload bytes (caller can hex_decode if it wants raw).
+ * We return hex (rather than `Vec<u8>` directly) to avoid a wasm-bindgen
+ * `Uint8Array` allocation pattern that's been flaky for us in some browsers.
+ * @param {string} parts_json
+ * @param {string} expected_type
+ * @returns {string}
+ */
+export function ur_decode_frames(parts_json, expected_type) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(parts_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(expected_type, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.ur_decode_frames(ptr0, len0, ptr1, len1);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
  * Encode CBOR bytes as UR-encoded animated QR string frames.
  * Returns JSON array of UR strings suitable for QR display.
  * ur_type: e.g. "zcash-notes", "zigner-contacts", "zigner-backup"
@@ -2004,7 +2116,7 @@ function __wbg_get_imports(memory) {
             table.set(offset + 2, true);
             table.set(offset + 3, false);
         },
-        memory: memory || new WebAssembly.Memory({initial:50,maximum:32768,shared:true}),
+        memory: memory || new WebAssembly.Memory({initial:51,maximum:32768,shared:true}),
     };
     return {
         __proto__: null,
