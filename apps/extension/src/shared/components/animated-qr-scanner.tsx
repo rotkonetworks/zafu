@@ -59,8 +59,11 @@ export const AnimatedQrScanner = ({
   const urPartsRef = useRef<Set<string>>(new Set());
   // 'p' = legacy P-format, 'ur' = BC-UR fountain, '' = undecided
   const modeRef = useRef<'' | 'p' | 'ur'>('');
-  // wasm module loaded lazily on first UR frame; ref to avoid re-import flooding
+  // wasm module loaded lazily on first UR frame
   const wasmRef = useRef<{ ur_decode_frames: (parts: string, type: string) => string } | null>(null);
+  const wasmInitInFlightRef = useRef(false);
+  // seqLen from UR header — drives honest progress vs the emitter's cycle
+  const urSeqLenRef = useRef(0);
 
   const onCompleteRef = useRef(onComplete);
   const onErrorRef = useRef(onError);
@@ -146,14 +149,30 @@ export const AnimatedQrScanner = ({
 
             setPartsReceived(urPartsRef.current.size);
 
-            // Lazy-import wasm. First scan triggers it; subsequent scans hit
-            // the cached `wasmRef.current`.
-            if (!wasmRef.current) {
+            // seqLen drives honest progress; without it we'd pin at 99%.
+            if (urSeqLenRef.current === 0) {
+              const seqMatch = lower.match(/^ur:[^/]+\/(\d+)-(\d+)\//);
+              if (seqMatch) urSeqLenRef.current = Number(seqMatch[2]);
+            }
+
+            // `default()` must be awaited — without it the bindgen glue's
+            // `wasm` is undefined and exported calls die on `__wbindgen_*`.
+            if (!wasmRef.current && !wasmInitInFlightRef.current) {
+              wasmInitInFlightRef.current = true;
               import(/* webpackMode: "eager" */ '@repo/zcash-wasm')
-                .then(mod => {
-                  wasmRef.current = mod as unknown as typeof wasmRef.current;
+                .then(async (mod: unknown) => {
+                  // bindgen's default export fetches+instantiates the .wasm
+                  const m = mod as {
+                    default: (opts?: { module_or_path?: string }) => Promise<unknown>;
+                    ur_decode_frames: (parts: string, type: string) => string;
+                  };
+                  await m.default();
+                  wasmRef.current = m;
                 })
-                .catch(() => {/* try again next frame */});
+                .catch(err => {
+                  console.warn('[ur-scanner] wasm init failed:', err);
+                  wasmInitInFlightRef.current = false; // allow retry on next frame
+                });
             }
             const wasm = wasmRef.current;
             if (!wasm) return; // not loaded yet; keep accumulating
@@ -170,11 +189,18 @@ export const AnimatedQrScanner = ({
               }
               setProgress(100);
               onCompleteRef.current(bytes, urType);
-            } catch {
-              // fountain decoder still wants more frames — that's the normal
-              // hot-path for multipart UR. Indicate visual progress by the
-              // raw count of unique parts received (no total to divide by).
-              setProgress(Math.min(99, urPartsRef.current.size * 10));
+            } catch (e) {
+              // sample errors so a real decode bug surfaces without spam
+              if (urPartsRef.current.size % 8 === 0) {
+                console.warn(
+                  `[ur-scanner] decode failed at ${urPartsRef.current.size} parts (${urType}): ${e instanceof Error ? e.message : String(e)}`,
+                );
+              }
+              const seqLen = urSeqLenRef.current;
+              const pct = seqLen > 0
+                ? Math.min(99, Math.round((urPartsRef.current.size / seqLen) * 100))
+                : Math.min(99, urPartsRef.current.size * 10);
+              setProgress(pct);
             }
             return;
           }

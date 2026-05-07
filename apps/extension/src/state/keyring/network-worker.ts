@@ -526,12 +526,8 @@ export interface SendTxPcztUnsignedResult {
  * Caller must provide ufvk and target_height (any height ≥ NU6.1 activation
  * works for current mainnet).
  *
- * `fragmentSize` is the per-frame byte budget for the animated UR encoding.
- * Defaults to 200 — conservative density that scans reliably on most phone
- * cameras (Pixel 6+ tested). Drop to 150 for older / cheaper Keystone-class
- * cameras if frames don't lock; bump to 400 on flagship hardware to halve
- * scan time. Callers don't normally need to set it; this is escape-hatch
- * tuning for known device quirks rather than a per-tx knob.
+ * `fragmentSize` defaults to 400 (~v25 QR density). Drop to 200 for older /
+ * cheaper Keystone-class cameras if frames don't lock.
  */
 export const buildSendTxPcztInWorker = async (
   network: NetworkType,
@@ -543,7 +539,7 @@ export const buildSendTxPcztInWorker = async (
   targetHeight: number,
   mainnet: boolean,
   ufvk: string,
-  fragmentSize = 200,
+  fragmentSize = 400,
 ): Promise<SendTxPcztUnsignedResult> => {
   return callWorker(network, 'send-tx-pczt', { serverUrl, recipient, amount, memo, targetHeight, mainnet, ufvk, fragmentSize }, walletId);
 };
