@@ -10,7 +10,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { BrowserQRCodeReader } from '@zxing/browser';
-import { DecodeHintType } from '@zxing/library';
+import { BarcodeFormat, DecodeHintType } from '@zxing/library';
 import { Button } from '@repo/ui/components/ui/button';
 
 interface AnimatedQrScannerProps {
@@ -87,13 +87,15 @@ export const AnimatedQrScanner = ({
 
     try {
       setError(null);
-      // TRY_HARDER + faster scan cadence — animated QR cycles ~5 fps so we
-      // need to look at frames more aggressively than a static QR.
+      // TRY_HARDER + QR_CODE-only + tight cadence — animated UR cycles at
+      // 4 fps; ZXing default delay (500ms) misses ~half the frames. 30ms
+      // is the worker thread's natural budget on a typical webcam.
       const hints = new Map<DecodeHintType, unknown>();
       hints.set(DecodeHintType.TRY_HARDER, true);
+      hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.QR_CODE]);
 
       const reader = new BrowserQRCodeReader(hints, {
-        delayBetweenScanAttempts: 100,
+        delayBetweenScanAttempts: 30,
       });
 
       // prime camera permission before enumerateDevices (Chrome MV3 quirk)
@@ -271,6 +273,25 @@ export const AnimatedQrScanner = ({
 
   useEffect(() => {
     mountedRef.current = true;
+    // Pre-load wasm in parallel with camera startup. Without this, the first
+    // ~1-2s of scanning is wasted while the user points the camera and the
+    // wasm module is still fetching/instantiating.
+    if (!wasmRef.current && !wasmInitInFlightRef.current) {
+      wasmInitInFlightRef.current = true;
+      import(/* webpackMode: "eager" */ '@repo/zcash-wasm')
+        .then(async (mod: unknown) => {
+          const m = mod as {
+            default: (opts?: { module_or_path?: string }) => Promise<unknown>;
+            ur_decode_frames: (parts: string, type: string) => string;
+          };
+          await m.default();
+          if (mountedRef.current) wasmRef.current = m;
+        })
+        .catch(err => {
+          console.warn('[ur-scanner] wasm preload failed:', err);
+          wasmInitInFlightRef.current = false;
+        });
+    }
     void startScanning();
     return () => {
       mountedRef.current = false;
