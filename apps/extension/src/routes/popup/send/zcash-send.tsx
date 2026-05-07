@@ -691,6 +691,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               {pcztSignFrames && pcztSignFrames.length > 0 ? (
                 <AnimatedQrDisplay
                   urFrames={pcztSignFrames}
+                  totalBytes={pcztUnsignedRef.current?.cborBytes}
                   size={220}
                   frameInterval={200}
                   title="scan with zafu zigner"

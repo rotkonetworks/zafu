@@ -2527,10 +2527,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         emitProgress('PCZT ready', `${proveDuration}s prove`);
 
         // CBOR-wrap PCZT bytes as `{1: bytes}` then UR-encode for animated QR.
-        // Zigner expects exactly `ur:zcash-pczt/...` frames; the CBOR wrapper
-        // is the standard zashi/keystone-sdk envelope. Caller-supplied fragment
-        // size, default 200 — conservative for mid-range phone cameras.
-        // Some Keystone units want ~150; flagship Pixels can do 400.
+        // CBOR-wrap the PCZT for the standard zashi/keystone-sdk envelope.
         const pcztBytes = hexDecode(parsed.pczt_hex);
         const cbor = cborWrapPczt(pcztBytes);
         const fragSize = sendPayload.fragmentSize && sendPayload.fragmentSize > 0
@@ -2550,6 +2547,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             actionCount: parsed.action_count,
             fee: fee.toString(),
             urFrames,
+            cborBytes: cbor.length,
           },
         });
         return;

@@ -517,6 +517,7 @@ export interface SendTxPcztUnsignedResult {
   actionCount: number;
   fee: string;
   urFrames: string[];
+  cborBytes: number;
 }
 
 /**
