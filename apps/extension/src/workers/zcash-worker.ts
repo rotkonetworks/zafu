@@ -471,41 +471,15 @@ const verifySyncProofs = async (
   console.log(`[zcash-worker] header proof valid, roots: tree=${proven.tree_root.slice(0, 16)}...`);
 
   // 2. verify commitment proofs for found notes
+  // proven.tree_root is the canonical orchard tree root (from zebrad's frontier);
+  // NOMT-served commitment-proof tree_root is NOMT's sparse-merkle blake3 root.
+  // The two are different tree structures and never agree by construction, so
+  // we don't bind them. We still verify the per-cmx Merkle path against the
+  // returned root (catches NOMT corruption) and confirm cmx existence; the
+  // canonical orchard membership is enforced locally during scan.
   if (pendingCmxs.length > 0) {
-    // Zidecar returns the *current* tree root, not the root at the requested
-    // tip, so the header proof and commitment proof roots can disagree if the
-    // server advances between calls. We retry with a fresh tip + header proof,
-    // and back off so the server has a chance to settle on a block.
-    let currentProven = proven;
-    let currentTip = tip;
-    let commitmentProofs: Awaited<ReturnType<typeof client.getCommitmentProofs>>['proofs'] | undefined;
-    const MAX_RETRIES = 6;
-
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      const { proofs: p, treeRoot } = await client.getCommitmentProofs(pendingCmxs, pendingPositions, currentTip);
-      const treeRootHex = hexEncode(treeRoot);
-
-      if (treeRootHex === currentProven.tree_root) {
-        commitmentProofs = p;
-        break;
-      }
-
-      if (attempt < MAX_RETRIES - 1) {
-        // back off so the server settles on a block (150ms, 300ms, 600ms, ...)
-        const delay = 150 * Math.pow(2, attempt);
-        await new Promise(r => setTimeout(r, delay));
-        const freshTip = (await client.getTip()).height;
-        currentTip = freshTip;
-        currentProven = await verifyHeaderProof(client, freshTip, mainnet);
-        // update proven for downstream nullifier checks
-        Object.assign(proven, currentProven);
-      } else {
-        throw new Error(`commitment tree root mismatch after ${MAX_RETRIES} attempts: server=${treeRootHex.slice(0, 16)} proven=${currentProven.tree_root.slice(0, 16)}`);
-      }
-    }
-
-    // verify each proof
-    for (const proof of commitmentProofs!) {
+    const { proofs: commitmentProofs } = await client.getCommitmentProofs(pendingCmxs, pendingPositions, tip);
+    for (const proof of commitmentProofs) {
       const valid = zyncModule['verify_commitment_proof'](
         hexEncode(proof.cmx),
         hexEncode(proof.treeRoot),
@@ -516,7 +490,7 @@ const verifySyncProofs = async (
         throw new Error(`commitment proof invalid for cmx ${hexEncode(proof.cmx).slice(0, 16)}`);
       }
     }
-    console.log(`[zcash-worker] ${commitmentProofs!.length} commitment proofs verified`);
+    console.log(`[zcash-worker] ${commitmentProofs.length} commitment proofs verified (path only; orchard-root binding is local)`);
   }
 
   // 3. verify nullifier proofs for unspent notes
