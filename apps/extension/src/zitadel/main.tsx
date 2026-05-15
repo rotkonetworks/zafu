@@ -1690,7 +1690,7 @@ function boot() {
   inp.addEventListener('blur', () => { hint.style.display = 'none'; });
 
   // input handler
-  inp.addEventListener('keydown', (e: KeyboardEvent) => {
+  inp.addEventListener('keydown', async (e: KeyboardEvent) => {
     hint.style.display = 'none';
     // Esc abandons the in-progress input. Terminal/IRC muscle memory:
     // start typing a command, change your mind, Esc cleans up. Resets
