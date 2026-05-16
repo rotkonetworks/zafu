@@ -64,6 +64,15 @@ export const AnimatedQrScanner = ({
   const wasmInitInFlightRef = useRef(false);
   // seqLen from UR header — drives honest progress vs the emitter's cycle
   const urSeqLenRef = useRef(0);
+  // Stall watchdog. A healthy fountain stream always yields *new* unique
+  // parts; "need more frames" and "this will never complete" are otherwise
+  // indistinguishable, so without this a corrupt/dead signer produces an
+  // unbounded "scanning..." with no failure. If no new unique part arrives
+  // for STALL_MS we surface a hard error. 12s is ~3x the slowest realistic
+  // animated-QR cycle — long enough not to false-positive on a slow camera,
+  // short enough to not be "infinite".
+  const lastNewPartAtRef = useRef(0);
+  const STALL_MS = 12_000;
 
   const onCompleteRef = useRef(onComplete);
   const onErrorRef = useRef(onError);
@@ -149,6 +158,8 @@ export const AnimatedQrScanner = ({
             urPartsRef.current.add(text);
             if (urPartsRef.current.size === before) return; // duplicate
 
+            // a genuinely new unique part — reset the stall clock
+            lastNewPartAtRef.current = Date.now();
             setPartsReceived(urPartsRef.current.size);
 
             // seqLen drives honest progress; without it we'd pin at 99%.
@@ -293,8 +304,28 @@ export const AnimatedQrScanner = ({
         });
     }
     void startScanning();
+
+    // Stall watchdog: fires only once UR accumulation has actually started
+    // (>=1 part) and only if no new unique part has arrived for STALL_MS.
+    // Legacy P-format has a known total so it doesn't need this; the guard
+    // on urPartsRef.size keeps it inert for that path.
+    const stallTimer = setInterval(() => {
+      if (completedRef.current) return;
+      if (urPartsRef.current.size === 0) return; // not accumulating yet
+      if (Date.now() - lastNewPartAtRef.current < STALL_MS) return;
+      completedRef.current = true; // latch so we report once
+      stopScanning();
+      const msg =
+        `scan stalled — no new QR frames for ${Math.round(STALL_MS / 1000)}s ` +
+        `(${urPartsRef.current.size} parts received). The signer may have ` +
+        `closed, or the stream is corrupt. Restart the signing flow.`;
+      if (mountedRef.current) setError(msg);
+      onErrorRef.current?.(msg);
+    }, 2_000);
+
     return () => {
       mountedRef.current = false;
+      clearInterval(stallTimer);
       stopScanning();
     };
   }, [startScanning, stopScanning]);

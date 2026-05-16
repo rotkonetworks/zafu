@@ -432,6 +432,14 @@ export function ContactsPage() {
         const divIndex = await contactDiversifierIndex(contact.id);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const wasm: any = await import('@repo/zcash-wasm');
+        // wasm-bindgen glue: the module-level `wasm` binding stays undefined
+        // until the default export (`__wbg_init`) fetches+instantiates the
+        // .wasm. Calling an export before that throws on `__wbindgen_malloc`.
+        // This popup context is a *separate* module instance from the
+        // worker's, so it is generally uninitialized here. Without this
+        // await, the call below silently throws and we fall back to a
+        // non-diversified address (privacy degradation), not a crash.
+        if (typeof wasm.default === 'function') await wasm.default();
         const rawAddr: string = wasm.address_from_ufvk(ufvk, divIndex);
         // fixOrchardAddress would be needed here for proper bech32m encoding
         // for now use the raw address - the codec handles it
