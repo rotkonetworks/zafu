@@ -17,7 +17,7 @@ import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
 const workerSelf = globalThis as any as DedicatedWorkerGlobalScope;
 
 interface WorkerMessage {
-  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-multi' | 'send-tx-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'note-sync-encode' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos' | 'frost-dkg-part1' | 'frost-dkg-part2' | 'frost-dkg-part3' | 'frost-sign-round1' | 'frost-spend-sign' | 'frost-spend-aggregate' | 'frost-derive-address' | 'frost-derive-address-from-sk' | 'frost-sample-fvk-sk' | 'frost-derive-ufvk' | 'frost-parse-tx-outputs';
+  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-multi' | 'send-tx-complete' | 'send-tx-pczt' | 'send-tx-pczt-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'note-sync-encode' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos' | 'frost-dkg-part1' | 'frost-dkg-part2' | 'frost-dkg-part3' | 'frost-sign-round1' | 'frost-spend-sign' | 'frost-spend-aggregate' | 'frost-derive-address' | 'frost-derive-address-from-sk' | 'frost-sample-fvk-sk' | 'frost-derive-ufvk' | 'frost-parse-tx-outputs';
   id: string;
   network: 'zcash';
   walletId?: string;
@@ -96,6 +96,10 @@ interface WasmModule {
   build_unsigned_transaction(ufvk_str: string, notes_json: unknown, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: unknown, account_index: number, mainnet: boolean, memo_hex?: string | null): unknown;
   build_signed_spend_transaction(seed_phrase: string, notes_json: unknown, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: unknown, account_index: number, mainnet: boolean): string;
   complete_transaction(unsigned_tx_hex: string, signatures: unknown, spend_indices: unknown): string;
+  // PCZT signing flow (replaces simple-format sighash+alphas QR for single-signer zigner)
+  build_unsigned_pczt(ufvk_str: string, notes_json: unknown, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: unknown, target_height: number, mainnet: boolean, memo_hex?: string | null): unknown;
+  extract_signed_tx_from_pczt(pczt_hex: string): string;
+  ur_decode_frames(parts_json: string, expected_type: string): string;
   build_unsigned_shielding_transaction(utxos_json: string, recipient: string, amount: bigint, fee: bigint, anchor_height: number, mainnet: boolean): string;
   complete_shielding_transaction(unsigned_tx_hex: string, signatures_json: string): string;
   derive_transparent_privkey(seed_phrase: string, account: number, index: number): string;
@@ -145,6 +149,30 @@ const hexEncode = (b: Uint8Array): string => {
 const hexDecode = (hex: string): Uint8Array => {
   const out = new Uint8Array(hex.length >> 1);
   for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
+  return out;
+};
+
+/**
+ * Wrap raw PCZT bytes in the CBOR envelope `{1: bytes}` that the
+ * `zcash-pczt` UR type expects (matches zashi/keystone-sdk format).
+ * This is the inverse of `encode_pczt_to_cbor` in zigner's signer.
+ */
+const cborWrapPczt = (pczt: Uint8Array): Uint8Array => {
+  const len = pczt.length;
+  // map(1) + key 1 + bytes(len) header
+  const header: number[] = [0xa1, 0x01];
+  if (len <= 23) {
+    header.push(0x40 | len);
+  } else if (len <= 0xff) {
+    header.push(0x58, len);
+  } else if (len <= 0xffff) {
+    header.push(0x59, (len >> 8) & 0xff, len & 0xff);
+  } else {
+    header.push(0x5a, (len >> 24) & 0xff, (len >> 16) & 0xff, (len >> 8) & 0xff, len & 0xff);
+  }
+  const out = new Uint8Array(header.length + len);
+  out.set(header, 0);
+  out.set(pczt, header.length);
   return out;
 };
 
@@ -546,6 +574,29 @@ const getTreeFrontier = async (walletId: string): Promise<string | null> => {
  *  stored as array of {height, frontier} in IDB, one per SNAPSHOT_INTERVAL blocks. */
 const FRONTIER_SNAPSHOT_INTERVAL = 5_000;
 
+/**
+ * Confirmation depth between the live chain tip and the Orchard anchor we
+ * build witnesses against.
+ *
+ * Anchoring at the *live tip* was the root cause of the "tree root mismatch
+ * at height N" merkle failures seen on hardware: the witness fast-forward
+ * (`getCompactBlocks`), the anchor validation (`getTreeState`), and the
+ * initial `getTip` are three unsynchronized RPCs to a zidecar that may be
+ * load-balanced across replicas at slightly different sync heights, and the
+ * tip is exactly the height where replicas diverge and where reorgs happen.
+ * Pulling the anchor a few blocks back puts it in the region every replica
+ * has agreed on and that is effectively final, so the cross-check at
+ * `getTreeState(anchorHeight)` is stable. Orchard anchors are historical
+ * roots with no max-age constraint, so a slightly-behind anchor is fully
+ * valid - the spent note is confirmed long before the tip regardless.
+ *
+ * Note: this is the *anchor* depth only. The transaction `target_height`
+ * (which drives consensus branch-id and expiry) stays at the live tip,
+ * since the tx will be mined near the tip - those two heights are
+ * deliberately decoupled.
+ */
+const ANCHOR_CONFIRMATIONS = 3;
+
 interface FrontierSnapshot { height: number; frontier: string }
 
 const getFrontierSnapshots = async (walletId: string): Promise<FrontierSnapshot[]> => {
@@ -651,7 +702,7 @@ const verifyHeaderProof = async (
 // runs in parallel across all cores. The offscreen survives popup close.
 
 interface ZcashBuildRequest {
-  fn: 'build_signed_spend' | 'build_unsigned' | 'build_shielding' | 'build_unsigned_shielding';
+  fn: 'build_signed_spend' | 'build_unsigned' | 'build_unsigned_pczt' | 'build_shielding' | 'build_unsigned_shielding';
   args: unknown[];
 }
 
@@ -2364,6 +2415,184 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           completePayload.signatures.orchardSigs,
           completePayload.spendIndices,
         );
+        const txData = hexDecode(txHex);
+
+        const { ZidecarClient: ZC } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
+        const completeClient = new ZC(completePayload.serverUrl);
+        const result = await completeClient.sendTransaction(txData);
+        if (result.errorCode !== 0) {
+          throw new Error(`broadcast failed (${result.errorCode}): ${result.errorMessage}`);
+        }
+
+        const txid = new TextDecoder().decode(result.txid);
+        workerSelf.postMessage({
+          type: 'tx-result', id, network: 'zcash', walletId,
+          payload: { txid },
+        });
+        return;
+      }
+
+      // ── PCZT signing flow (single-signer zigner) ──────────────────────
+      // Mirrors `send-tx` for the unsigned-build phase, but emits a real
+      // pczt::Pczt::serialize() byte stream instead of [sighash][alphas][summary].
+      // The cold device verifies note inclusion + value consistency before
+      // signing, and recomputes the sighash from the PCZT contents — so
+      // display and signed bytes are bound by construction.
+      case 'send-tx-pczt': {
+        if (!walletId) throw new Error('walletId required');
+        await initWasm();
+        if (!wasmModule) throw new Error('wasm not initialized');
+
+        const sendPayload = payload as {
+          serverUrl: string;
+          recipient: string;
+          amount: string; // zatoshi
+          memo: string;
+          targetHeight: number;
+          mainnet: boolean;
+          ufvk: string;
+          /** UR fragment-size override; falls back to 200 for back-compat */
+          fragmentSize?: number;
+        };
+        if (!sendPayload.ufvk) throw new Error('UFVK required for PCZT build');
+
+        // Mirror send-tx note selection / witness build. Inlined rather than
+        // factored out because send-tx's variant has interleaved emitProgress
+        // calls and a fee-recompute loop that we want to keep verbatim — and
+        // because the pczt builder's only meaningful difference from
+        // build_unsigned_transaction is the output format, not the inputs.
+        let memoHex: string | null = null;
+        if (sendPayload.memo) {
+          if (/^[0-9a-f]+$/i.test(sendPayload.memo) && sendPayload.memo.startsWith('ff5a')) {
+            memoHex = sendPayload.memo;
+          } else {
+            const bytes = new TextEncoder().encode(sendPayload.memo);
+            memoHex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+          }
+        }
+
+        const sendStart = performance.now();
+        const emitProgress = (step: string, detail?: string) => {
+          console.log(`[zcash-worker] send-pczt [${((performance.now() - sendStart) / 1000).toFixed(1)}s] ${step}${detail ? ': ' + detail : ''}`);
+          workerSelf.postMessage({
+            type: 'send-progress', id: '', network: 'zcash', walletId,
+            payload: { step, detail, elapsedMs: Math.round(performance.now() - sendStart) },
+          });
+        };
+
+        emitProgress('loading wallet state');
+        const sendState = await loadState(walletId);
+        const amountZat = BigInt(sendPayload.amount);
+
+        const isTransparent = sendPayload.recipient.startsWith('t1') || sendPayload.recipient.startsWith('tm');
+        const nZOutputs = isTransparent ? 0 : 1;
+        const nTOutputs = isTransparent ? 1 : 0;
+
+        emitProgress('selecting notes', `${sendState.notes.length} notes available`);
+        const estFee = computeFee(1, nZOutputs, nTOutputs, true);
+        const selected = selectNotes(sendState.notes, sendState.spentNullifiers, amountZat + estFee);
+        const totalIn = selected.reduce((sum, n) => sum + BigInt(n.value), 0n);
+        const hasChange = totalIn > amountZat + computeFee(selected.length, nZOutputs, nTOutputs, true);
+        const fee = computeFee(selected.length, nZOutputs, nTOutputs, hasChange);
+        if (totalIn < amountZat + fee) {
+          throw new Error(`insufficient funds: have ${totalIn} zat, need ${amountZat + fee} zat`);
+        }
+        emitProgress('notes selected', `${selected.length} notes, fee=${fee}`);
+
+        const { ZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
+        const sendClient = new ZidecarClient(sendPayload.serverUrl);
+        emitProgress('fetching chain tip');
+        const sendTip = await sendClient.getTip();
+        // Anchor a few blocks behind the tip (see ANCHOR_CONFIRMATIONS) so
+        // the witness/anchor cross-check is stable across zidecar replica
+        // skew and immune to tip reorgs. target_height stays at the live
+        // tip for branch_id/expiry correctness.
+        const anchorHeight = Math.max(1, sendTip.height - ANCHOR_CONFIRMATIONS);
+        emitProgress('building merkle witnesses', `anchor=${anchorHeight} (tip=${sendTip.height})`);
+        const { anchorHex, paths } = await buildWitnesses(sendClient, walletId, selected, anchorHeight);
+
+        const notesForWasm = selected.map(n => ({
+          value: Number(n.value),
+          nullifier: n.nullifier,
+          cmx: n.cmx,
+          position: n.position,
+          rseed_hex: n.rseed ?? '',
+          rho_hex: n.rho ?? '',
+          recipient_hex: n.recipient ?? '',
+        }));
+        const pathsForWasm = (paths as Array<{ position: number; path: Array<{ hash: string }> }>).map(p => ({
+          path: p.path.map(e => e.hash),
+          position: p.position,
+        }));
+
+        emitProgress('building & proving PCZT (halo2)', `${selected.length} spends`);
+        const proveStart = performance.now();
+        // Use the live chain tip we just fetched for the merkle anchor as
+        // the builder's target_height. The popup may pass a hint via
+        // `sendPayload.targetHeight` for offline / advanced flows but the
+        // tip we have in hand is authoritative — branch_id derivation
+        // depends on `(network, height)` and using a stale value (e.g.
+        // hardcoded constant) risks producing txs the network rejects on
+        // testnet where activation heights diverge from mainnet.
+        const targetHeight = sendTip.height;
+        const built = await proveViaOffscreen({
+          fn: 'build_unsigned_pczt',
+          args: [
+            sendPayload.ufvk, notesForWasm, sendPayload.recipient,
+            amountZat.toString(), fee.toString(), anchorHex,
+            pathsForWasm, targetHeight, sendPayload.mainnet,
+            memoHex,
+          ],
+        });
+
+        const parsed = built as unknown as {
+          pczt_hex: string;
+          summary: string;
+          action_count: number;
+        };
+
+        const proveDuration = ((performance.now() - proveStart) / 1000).toFixed(1);
+        emitProgress('PCZT ready', `${proveDuration}s prove`);
+
+        // CBOR-wrap PCZT bytes as `{1: bytes}` then UR-encode for animated QR.
+        // CBOR-wrap the PCZT for the standard zashi/keystone-sdk envelope.
+        const pcztBytes = hexDecode(parsed.pczt_hex);
+        const cbor = cborWrapPczt(pcztBytes);
+        const fragSize = sendPayload.fragmentSize && sendPayload.fragmentSize > 0
+          ? sendPayload.fragmentSize
+          : 200;
+        const framesJson = wasmModule.ur_encode_frames(cbor, 'zcash-pczt', fragSize);
+        const urFrames = JSON.parse(framesJson) as string[];
+
+        const totalDuration = ((performance.now() - sendStart) / 1000).toFixed(1);
+        emitProgress('PCZT QR ready', `${urFrames.length} frames, total=${totalDuration}s`);
+
+        workerSelf.postMessage({
+          type: 'send-tx-pczt-unsigned', id, network: 'zcash', walletId,
+          payload: {
+            pcztHex: parsed.pczt_hex,
+            summary: parsed.summary,
+            actionCount: parsed.action_count,
+            fee: fee.toString(),
+            urFrames,
+            cborBytes: cbor.length,
+          },
+        });
+        return;
+      }
+
+      case 'send-tx-pczt-complete': {
+        if (!walletId) throw new Error('walletId required');
+        await initWasm();
+        if (!wasmModule) throw new Error('wasm not initialized');
+
+        const completePayload = payload as { serverUrl: string; signedPcztHex: string };
+
+        // TransactionExtractor reconstructs the canonical v5 tx — collects all
+        // spend auth sigs from the signed PCZT, validates the proof, and emits
+        // a broadcast-ready transaction. No manual offset-patching as in the
+        // legacy `complete_transaction` path.
+        const txHex = wasmModule.extract_signed_tx_from_pczt(completePayload.signedPcztHex);
         const txData = hexDecode(txHex);
 
         const { ZidecarClient: ZC } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');

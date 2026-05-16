@@ -475,8 +475,52 @@ export function parseZcashUr(urString: string): ZcashUrExport {
 
   // Decode UR to CBOR bytes
   const cbor = decodeUr(urString);
+  return parseZcashAccountsCbor(cbor);
+}
 
-  // Parse CBOR
+/**
+ * Structural validity check for a Unified FVK string.
+ *
+ * Cheap guard against malformed payloads writing garbage into the wallet
+ * store. Verifies HRP prefix, bech32m character set, and length bounds.
+ * Does NOT decode the inner unified payload — that requires
+ * `zcash_keys::UnifiedFullViewingKey::decode` (heavy crypto), which we
+ * defer to the signing path where a malformed UFVK fails loudly.
+ *
+ * Per ZIP-316: HRP is `uview` (mainnet) or `uviewtest` (testnet); the
+ * remainder is bech32m-encoded items (orchard fvk, sapling fvk, transparent
+ * xpub, etc.). Real-world UFVKs are 250+ chars.
+ */
+export function isStructurallyValidUfvk(s: unknown): s is string {
+  if (typeof s !== 'string') return false;
+  if (s.length < 100) return false;
+  if (s.length > 4096) return false;
+  const BECH32 = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
+  let hrpEnd: number;
+  if (s.startsWith('uview1')) hrpEnd = 5;
+  else if (s.startsWith('uviewtest1')) hrpEnd = 9;
+  else return false;
+  for (let i = hrpEnd + 1; i < s.length; i++) {
+    if (BECH32.indexOf(s[i]!) === -1) return false;
+  }
+  return true;
+}
+
+/**
+ * Parse `zcash-accounts` payload directly from CBOR bytes.
+ *
+ * Use this when the UR was scanned via the multipart fountain decoder (which
+ * already produces the inner CBOR), e.g. for Keystone-style multi-frame
+ * exports. For a single-frame UR string, prefer `parseZcashUr` which handles
+ * the UR-decode step too.
+ *
+ * Same wire format as the SDK: optional CBOR tag 49201 envelope wrapping
+ * `map(2) { 1: seed_fingerprint(16B), 2: accounts[] }`.
+ *
+ * The returned UFVK is validated structurally before returning. A malformed
+ * payload throws rather than silently writing garbage into the wallet store.
+ */
+export function parseZcashAccountsCbor(cbor: Uint8Array): ZcashUrExport {
   const reader = new CborReader(cbor);
 
   // zcash-accounts may optionally be wrapped in CBOR tag 49201
@@ -530,8 +574,26 @@ export function parseZcashUr(urString: string): ZcashUrExport {
   if (!ufvk) {
     throw new Error('zcash-accounts: missing ufvk');
   }
+  if (!isStructurallyValidUfvk(ufvk)) {
+    // We don't include the bad value in the error message — could be partly
+    // valid bech32m and we don't want to spray fragments into logs.
+    throw new Error(
+      `zcash-accounts: malformed ufvk (length=${ufvk.length}, prefix=${ufvk.slice(0, 12)}…)`,
+    );
+  }
 
   return { ufvk, accountIndex, label, zidPublicKey };
+}
+
+/**
+ * Detect whether a `zcash-accounts` payload originated from a Keystone-class
+ * cold signer (or any non-zigner source). Heuristic: zafu/zigner exports
+ * always include a `zid_pubkey` field (CBOR account-key 4); Keystone /
+ * Zashi-SDK exports do not. Useful for routing UI labels and security
+ * warnings without requiring the user to declare which device they're on.
+ */
+export function isLikelyKeystoneAccountsExport(exp: ZcashUrExport): boolean {
+  return !exp.zidPublicKey;
 }
 
 // ============================================================================

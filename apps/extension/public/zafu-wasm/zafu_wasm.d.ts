@@ -167,6 +167,19 @@ export function build_shielding_transaction(utxos_json: string, privkey_hex: str
 export function build_signed_spend_transaction(seed_phrase: string, notes_json: any, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: any, account_index: number, mainnet: boolean, memo_hex?: string | null): string;
 
 /**
+ * Build a PCZT for cold-wallet signing via QR.
+ *
+ * `target_height` selects the consensus branch; pass any height ≥ NU6.1
+ * activation for current mainnet operations. The tx version is derived from
+ * network upgrade rules (currently V5).
+ *
+ * Returns JSON: `{ pczt_hex, summary, action_count }`.
+ * The TS layer wraps `pczt_hex` in CBOR `{1: bytes}` and UR-encodes as
+ * `zcash-pczt` for animated QR transport.
+ */
+export function build_unsigned_pczt(ufvk_str: string, notes_json: any, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: any, target_height: number, mainnet: boolean, memo_hex?: string | null): any;
+
+/**
  * Build an unsigned shielding transaction (transparent → orchard) for cold-wallet signing.
  *
  * Same as `build_shielding_transaction` but does NOT sign the transparent inputs.
@@ -259,6 +272,18 @@ export function derive_transparent_privkey(seed_phrase: string, account: number,
  * `Uint8Array` of CBOR bytes ready for UR fountain encoding
  */
 export function encode_notes_bundle(notes_json: string, merkle_result_json: string, anchor_height: number, mainnet: boolean, attestation_hex?: string | null): Uint8Array;
+
+/**
+ * Extract a broadcast-ready v5 transaction from a signed PCZT returned by zigner.
+ *
+ * Replaces the legacy `parse_signature_response` + `complete_transaction` pair.
+ * Instead of patching raw signature bytes into a hand-serialized tx, we let the
+ * pczt crate's `TransactionExtractor` reassemble the canonical v5 transaction
+ * from the signed PCZT (collecting all auth sigs and validating the proof).
+ *
+ * Returns hex-encoded transaction bytes ready for broadcast.
+ */
+export function extract_signed_tx_from_pczt(pczt_hex: string): string;
 
 /**
  * Compute the tree size from a hex-encoded frontier.
@@ -446,6 +471,23 @@ export function transparent_pubkey_from_ufvk(ufvk_str: string, address_index: nu
 export function tree_root_hex(tree_state_hex: string): string;
 
 /**
+ * Decode UR-encoded animated QR string frames back into CBOR bytes.
+ *
+ * Accepts a JSON array of UR strings (each `ur:<type>/...`) collected from
+ * successive scans of an animated QR. Returns the reconstructed payload bytes
+ * once the fountain decoder has enough frames (deduplicated internally), or an
+ * error if the parts are malformed or the fountain code can't yet reconstruct.
+ *
+ * `expected_type` is a sanity check: if non-empty, parts whose UR type doesn't
+ * match are rejected. Pass `""` to accept any type.
+ *
+ * Returns hex-encoded payload bytes (caller can hex_decode if it wants raw).
+ * We return hex (rather than `Vec<u8>` directly) to avoid a wasm-bindgen
+ * `Uint8Array` allocation pattern that's been flaky for us in some browsers.
+ */
+export function ur_decode_frames(parts_json: string, expected_type: string): string;
+
+/**
  * Encode CBOR bytes as UR-encoded animated QR string frames.
  * Returns JSON array of UR strings suitable for QR display.
  * ur_type: e.g. "zcash-notes", "zigner-contacts", "zigner-backup"
@@ -499,6 +541,7 @@ export interface InitOutput {
     readonly build_merkle_paths: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
     readonly build_shielding_transaction: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number) => [number, number, number, number];
     readonly build_signed_spend_transaction: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number) => [number, number, number, number];
+    readonly build_unsigned_pczt: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number) => [number, number, number];
     readonly build_unsigned_shielding_transaction: (a: number, b: number, c: number, d: number, e: bigint, f: bigint, g: number, h: number) => [number, number, number, number];
     readonly build_unsigned_transaction: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number) => [number, number, number];
     readonly build_witnesses_and_paths: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
@@ -507,6 +550,7 @@ export interface InitOutput {
     readonly create_sign_request: (a: number, b: number, c: number, d: any, e: number, f: number) => [number, number, number, number];
     readonly derive_transparent_privkey: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly encode_notes_bundle: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number, number];
+    readonly extract_signed_tx_from_pczt: (a: number, b: number) => [number, number, number, number];
     readonly frontier_tree_size: (a: number, b: number) => [bigint, number, number];
     readonly generate_seed_phrase: () => [number, number, number, number];
     readonly get_commitment_proof_request: (a: number, b: number) => [number, number, number, number];
@@ -515,6 +559,7 @@ export interface InitOutput {
     readonly transparent_address_from_ufvk: (a: number, b: number, c: number) => [number, number, number, number];
     readonly transparent_pubkey_from_ufvk: (a: number, b: number, c: number) => [number, number, number, number];
     readonly tree_root_hex: (a: number, b: number) => [number, number, number, number];
+    readonly ur_decode_frames: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly ur_encode_frames: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
     readonly validate_seed_phrase: (a: number, b: number) => number;
     readonly version: () => [number, number];

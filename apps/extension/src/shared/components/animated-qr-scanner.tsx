@@ -1,15 +1,16 @@
 /**
  * animated QR scanner — reassembles multipart QR frames from camera
  *
- * scans multiple QR frames continuously, collecting numbered parts
- * until the full payload is reconstructed. shows progress %.
+ * Supports two modes:
+ * 1. legacy "P<frameIndex>/<totalFrames>/<urType>/<base64chunk>" — fixed parts
+ * 2. BC-UR fountain-coded `ur:<type>/...` — variable parts, decode via WASM
  *
- * frame format: "P<frameIndex>/<totalFrames>/<urType>/<base64chunk>"
+ * Auto-detects mode from the first scanned frame's prefix.
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { BrowserQRCodeReader } from '@zxing/browser';
-import { DecodeHintType } from '@zxing/library';
+import { BarcodeFormat, DecodeHintType } from '@zxing/library';
 import { Button } from '@repo/ui/components/ui/button';
 
 interface AnimatedQrScannerProps {
@@ -21,6 +22,12 @@ interface AnimatedQrScannerProps {
   description?: string;
   /** render inline (card) instead of fullscreen overlay — popup contexts trap `fixed` */
   inline?: boolean;
+  /**
+   * Optional: restrict to a specific UR type. If set and the first scanned
+   * frame is a UR frame, only `ur:<urTypeFilter>/...` frames are accepted.
+   * Useful when scanning a known-format response (e.g. zcash-pczt sign).
+   */
+  urTypeFilter?: string;
 }
 
 export const AnimatedQrScanner = ({
@@ -30,6 +37,7 @@ export const AnimatedQrScanner = ({
   title = 'scan animated QR',
   description,
   inline = false,
+  urTypeFilter,
 }: AnimatedQrScannerProps) => {
   const [progress, setProgress] = useState(0);
   const [isScanning, setIsScanning] = useState(false);
@@ -40,10 +48,31 @@ export const AnimatedQrScanner = ({
   const mountedRef = useRef(true);
   const completedRef = useRef(false);
 
-  // collected frames: index -> base64 chunk
+  // collected frames: index -> base64 chunk (legacy P-format)
   const framesRef = useRef<Map<number, string>>(new Map());
   const totalRef = useRef(0);
   const urTypeRef = useRef('');
+
+  // BC-UR fountain mode state. Distinct set from legacy P-frames because
+  // UR fountain parts don't have a fixed total — we keep accumulating until
+  // ur_decode_frames returns a complete payload.
+  const urPartsRef = useRef<Set<string>>(new Set());
+  // 'p' = legacy P-format, 'ur' = BC-UR fountain, '' = undecided
+  const modeRef = useRef<'' | 'p' | 'ur'>('');
+  // wasm module loaded lazily on first UR frame
+  const wasmRef = useRef<{ ur_decode_frames: (parts: string, type: string) => string } | null>(null);
+  const wasmInitInFlightRef = useRef(false);
+  // seqLen from UR header — drives honest progress vs the emitter's cycle
+  const urSeqLenRef = useRef(0);
+  // Stall watchdog. A healthy fountain stream always yields *new* unique
+  // parts; "need more frames" and "this will never complete" are otherwise
+  // indistinguishable, so without this a corrupt/dead signer produces an
+  // unbounded "scanning..." with no failure. If no new unique part arrives
+  // for STALL_MS we surface a hard error. 12s is ~3x the slowest realistic
+  // animated-QR cycle — long enough not to false-positive on a slow camera,
+  // short enough to not be "infinite".
+  const lastNewPartAtRef = useRef(0);
+  const STALL_MS = 12_000;
 
   const onCompleteRef = useRef(onComplete);
   const onErrorRef = useRef(onError);
@@ -67,13 +96,15 @@ export const AnimatedQrScanner = ({
 
     try {
       setError(null);
-      // TRY_HARDER + faster scan cadence — animated QR cycles ~5 fps so we
-      // need to look at frames more aggressively than a static QR.
+      // TRY_HARDER + QR_CODE-only + tight cadence — animated UR cycles at
+      // 4 fps; ZXing default delay (500ms) misses ~half the frames. 30ms
+      // is the worker thread's natural budget on a typical webcam.
       const hints = new Map<DecodeHintType, unknown>();
       hints.set(DecodeHintType.TRY_HARDER, true);
+      hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.QR_CODE]);
 
       const reader = new BrowserQRCodeReader(hints, {
-        delayBetweenScanAttempts: 100,
+        delayBetweenScanAttempts: 30,
       });
 
       // prime camera permission before enumerateDevices (Chrome MV3 quirk)
@@ -105,7 +136,92 @@ export const AnimatedQrScanner = ({
           if (!result || completedRef.current) return;
 
           const text = result.getText();
-          // parse frame: P<idx>/<total>/<type>/<data>
+
+          // ── BC-UR fountain mode ──
+          // ur:<type>/<seqNum>-<seqLen>/<bytewords> for multipart, or
+          // ur:<type>/<bytewords> for single-part. Either way, accumulate the
+          // raw frame string and let `ur_decode_frames` (wasm) handle dedup +
+          // fountain reconstruction.
+          const lower = text.toLowerCase();
+          if (lower.startsWith('ur:')) {
+            if (modeRef.current === '') modeRef.current = 'ur';
+            if (modeRef.current !== 'ur') return;
+
+            // type filter — defends against unrelated QR contaminating the stream
+            const slashIdx = text.indexOf('/');
+            const urType = slashIdx > 3 ? text.slice(3, slashIdx) : '';
+            if (urTypeFilter && urType.toLowerCase() !== urTypeFilter.toLowerCase()) return;
+            if (urTypeRef.current === '') urTypeRef.current = urType;
+            else if (urTypeRef.current !== urType) return; // type drift, reject
+
+            const before = urPartsRef.current.size;
+            urPartsRef.current.add(text);
+            if (urPartsRef.current.size === before) return; // duplicate
+
+            // a genuinely new unique part — reset the stall clock
+            lastNewPartAtRef.current = Date.now();
+            setPartsReceived(urPartsRef.current.size);
+
+            // seqLen drives honest progress; without it we'd pin at 99%.
+            if (urSeqLenRef.current === 0) {
+              const seqMatch = lower.match(/^ur:[^/]+\/(\d+)-(\d+)\//);
+              if (seqMatch) urSeqLenRef.current = Number(seqMatch[2]);
+            }
+
+            // `default()` must be awaited — without it the bindgen glue's
+            // `wasm` is undefined and exported calls die on `__wbindgen_*`.
+            if (!wasmRef.current && !wasmInitInFlightRef.current) {
+              wasmInitInFlightRef.current = true;
+              import(/* webpackMode: "eager" */ '@repo/zcash-wasm')
+                .then(async (mod: unknown) => {
+                  // bindgen's default export fetches+instantiates the .wasm
+                  const m = mod as {
+                    default: (opts?: { module_or_path?: string }) => Promise<unknown>;
+                    ur_decode_frames: (parts: string, type: string) => string;
+                  };
+                  await m.default();
+                  wasmRef.current = m;
+                })
+                .catch(err => {
+                  console.warn('[ur-scanner] wasm init failed:', err);
+                  wasmInitInFlightRef.current = false; // allow retry on next frame
+                });
+            }
+            const wasm = wasmRef.current;
+            if (!wasm) return; // not loaded yet; keep accumulating
+
+            try {
+              const partsJson = JSON.stringify([...urPartsRef.current]);
+              const hex = wasm.ur_decode_frames(partsJson, urType);
+              // success → reconstructed
+              completedRef.current = true;
+              stopScanning();
+              const bytes = new Uint8Array(hex.length >> 1);
+              for (let i = 0; i < bytes.length; i++) {
+                bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
+              }
+              setProgress(100);
+              onCompleteRef.current(bytes, urType);
+            } catch (e) {
+              // sample errors so a real decode bug surfaces without spam
+              if (urPartsRef.current.size % 8 === 0) {
+                console.warn(
+                  `[ur-scanner] decode failed at ${urPartsRef.current.size} parts (${urType}): ${e instanceof Error ? e.message : String(e)}`,
+                );
+              }
+              const seqLen = urSeqLenRef.current;
+              const pct = seqLen > 0
+                ? Math.min(99, Math.round((urPartsRef.current.size / seqLen) * 100))
+                : Math.min(99, urPartsRef.current.size * 10);
+              setProgress(pct);
+            }
+            return;
+          }
+
+          // ── legacy P-format mode ──
+          if (modeRef.current === '') modeRef.current = 'p';
+          if (modeRef.current !== 'p') return;
+
           const match = text.match(/^P(\d+)\/(\d+)\/([^/]+)\/(.+)$/);
           if (!match) return;
 
@@ -168,9 +284,48 @@ export const AnimatedQrScanner = ({
 
   useEffect(() => {
     mountedRef.current = true;
+    // Pre-load wasm in parallel with camera startup. Without this, the first
+    // ~1-2s of scanning is wasted while the user points the camera and the
+    // wasm module is still fetching/instantiating.
+    if (!wasmRef.current && !wasmInitInFlightRef.current) {
+      wasmInitInFlightRef.current = true;
+      import(/* webpackMode: "eager" */ '@repo/zcash-wasm')
+        .then(async (mod: unknown) => {
+          const m = mod as {
+            default: (opts?: { module_or_path?: string }) => Promise<unknown>;
+            ur_decode_frames: (parts: string, type: string) => string;
+          };
+          await m.default();
+          if (mountedRef.current) wasmRef.current = m;
+        })
+        .catch(err => {
+          console.warn('[ur-scanner] wasm preload failed:', err);
+          wasmInitInFlightRef.current = false;
+        });
+    }
     void startScanning();
+
+    // Stall watchdog: fires only once UR accumulation has actually started
+    // (>=1 part) and only if no new unique part has arrived for STALL_MS.
+    // Legacy P-format has a known total so it doesn't need this; the guard
+    // on urPartsRef.size keeps it inert for that path.
+    const stallTimer = setInterval(() => {
+      if (completedRef.current) return;
+      if (urPartsRef.current.size === 0) return; // not accumulating yet
+      if (Date.now() - lastNewPartAtRef.current < STALL_MS) return;
+      completedRef.current = true; // latch so we report once
+      stopScanning();
+      const msg =
+        `scan stalled — no new QR frames for ${Math.round(STALL_MS / 1000)}s ` +
+        `(${urPartsRef.current.size} parts received). The signer may have ` +
+        `closed, or the stream is corrupt. Restart the signing flow.`;
+      if (mountedRef.current) setError(msg);
+      onErrorRef.current?.(msg);
+    }, 2_000);
+
     return () => {
       mountedRef.current = false;
+      clearInterval(stallTimer);
       stopScanning();
     };
   }, [startScanning, stopScanning]);

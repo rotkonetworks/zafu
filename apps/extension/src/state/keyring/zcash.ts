@@ -74,7 +74,7 @@ export const initZcashWasm = async (): Promise<void> => {
     // Initial pages must match (or exceed) what zafu_wasm.js declares — bump
     // when wasm rebuild bumps its module-level static footprint, otherwise
     // WebAssembly.instantiate throws LinkError "memory has N pages, declared initial of M".
-    const memory = new WebAssembly.Memory({ initial: 50, maximum: 32768, shared: true });
+    const memory = new WebAssembly.Memory({ initial: 51, maximum: 32768, shared: true });
     await wasm.default({ module_or_path: '/zafu-wasm/zafu_wasm_bg.wasm', memory });
 
     // init panic hook

@@ -10,7 +10,18 @@ import { listenWindow, sendWindow } from './message/send-window';
 // (injected-penumbra-global.ts), which has no chrome.runtime access.
 // Manifest order has this ISOLATED script ahead of the MAIN one, so the
 // dataset attribute is always set before MAIN reads it.
-document.documentElement.dataset['zafuExtensionId'] = chrome.runtime.id;
+//
+// `chrome.runtime.id` returns the literal string 'invalid' for orphaned
+// content scripts (i.e. when the extension was reloaded or upgraded
+// while this tab was already open). Don't bridge that — the MAIN script
+// would otherwise inject `chrome-extension://invalid/manifest.json`
+// into window[PenumbraSymbol], which fails and breaks the page's
+// wallet picker. Bail silently; the user will get a fresh injection
+// next time they navigate.
+const runtimeId = chrome.runtime.id;
+if (runtimeId && runtimeId !== 'invalid') {
+  document.documentElement.dataset['zafuExtensionId'] = runtimeId;
+}
 
 const zafuDocumentListener = (ev: ZafuMessageEvent): void => {
   const request = unwrapZafuMessageEvent(ev);

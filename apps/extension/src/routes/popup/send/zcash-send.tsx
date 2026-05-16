@@ -18,23 +18,26 @@ import { selectEffectiveKeyInfo, selectGetMnemonic } from '../../../state/keyrin
 import { selectActiveZcashWallet } from '../../../state/wallets';
 import {
   buildSendTxInWorker,
+  buildSendTxPcztInWorker,
   completeSendTxInWorker,
+  completeSendTxPcztInWorker,
   getBalanceInWorker,
   type SendTxUnsignedResult,
+  type SendTxPcztUnsignedResult,
 } from '../../../state/keyring/network-worker';
 import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
 import { QrDisplay } from '../../../shared/components/qr-display';
 import { QrScanner } from '../../../shared/components/qr-scanner';
+import { AnimatedQrDisplay } from '../../../shared/components/animated-qr-display';
+import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanner';
 import { FrostAirgapSignFlow, runMnemonicFrostSign } from './frost-multisig';
 import { RecipientPicker } from '../../../components/recipient-picker';
 import { SaveContactModal } from '../../../components/save-contact-modal';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import {
-  encodeZcashSignRequest,
   isZcashSignatureQR,
   parseZcashSignatureResponse,
-  hexToBytes,
   bytesToHex,
 } from '@repo/wallet/networks';
 
@@ -54,6 +57,8 @@ type SendStep =
   | 'form' | 'review' | 'building' | 'sign' | 'scan' | 'broadcast' | 'complete' | 'error'
   | 'frost-room' | 'frost-signing'
   | 'airgap-flow';  // self-contained 4-step zigner-mediated multisig sign
+
+import { unwrapCborSinglePczt } from './zcash-send-cbor-helpers';
 
 /** live elapsed timer — ticks every second so the build screen never looks frozen */
 function LiveTimer({ startMs }: { startMs: number }) {
@@ -93,7 +98,15 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const [amount, setAmount] = useState(prefill?.amount ?? '');
   const [memo, setMemo] = useState(prefill?.memo ?? '');
   const [formError, setFormError] = useState<string | null>(null);
-  const [signRequestQr, setSignRequestQr] = useState<string | null>(null);
+  // legacy single-QR signing path (kept for non-PCZT consumers); the PCZT
+  // path uses pcztSignFrames + AnimatedQrDisplay below. Once every flow is
+  // migrated to PCZT we can drop this entirely.
+  const [signRequestQr] = useState<string | null>(null);
+  // PCZT-mode sign request (zigner single-signer). When set, the sign step
+  // shows AnimatedQrDisplay instead of the legacy single QR, and the scan
+  // step uses AnimatedQrScanner with `ur:zcash-pczt` filter.
+  const [pcztSignFrames, setPcztSignFrames] = useState<string[] | null>(null);
+  const pcztUnsignedRef = useRef<SendTxPcztUnsignedResult | null>(null);
   const [showSavePrompt, setShowSavePrompt] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
   const [fee, setFee] = useState('0.0001');
@@ -260,38 +273,34 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           frostAbortRef.current = null;
         }
       } else {
-        // zigner wallet: build unsigned tx → QR signing flow
-        const result = await buildSendTxInWorker(
-          'zcash', walletId, zidecarUrl, recipient.trim(), amountZat, memo, accountIndex, mainnet,
-          undefined, ufvk,
+        // ── zigner wallet (single-signer): PCZT signing flow ──
+        // Replaces the legacy [sighash][alphas][summary] simple format. The
+        // PCZT round-trip ties zigner's display to the signed bytes so a
+        // compromised hot wallet can't decouple them.
+        if (!ufvk) throw new Error('UFVK required for zigner signing');
+        // The worker overrides this with the live chain tip; we pass 0 as
+        // a "no hint" sentinel that the worker treats as "use the tip you
+        // just fetched for the merkle anchor". Hardcoding a stale block
+        // height here historically risked branch_id mismatches on testnet
+        // where activation heights diverge from mainnet.
+        const targetHeightHint = 0;
+        const result = await buildSendTxPcztInWorker(
+          'zcash', walletId, zidecarUrl, recipient.trim(), amountZat, memo,
+          targetHeightHint, mainnet, ufvk,
         );
 
-        if (!('sighash' in result)) {
-          throw new Error('unexpected result from unsigned tx build');
-        }
-
-        unsignedTxRef.current = result;
+        pcztUnsignedRef.current = result;
         const feeZec = (Number(result.fee) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
         setFee(feeZec);
-
-        const sighashBytes = hexToBytes(result.sighash);
-        const alphaBytes = result.alphas.map(a => hexToBytes(a));
-
-        const signRequest = encodeZcashSignRequest({
-          accountIndex,
-          sighash: sighashBytes,
-          orchardAlphas: alphaBytes,
-          summary: result.summary || `send ${amount} zec to ${recipient.slice(0, 20)}...`,
-          mainnet,
-        });
-
-        setSignRequestQr(signRequest);
+        setPcztSignFrames(result.urFrames);
 
         startSigning({
           id: `zcash-${Date.now()}`,
           network: 'zcash',
-          summary: `send ${amount} zec`,
-          signRequestQr: signRequest,
+          summary: result.summary || `send ${amount} zec to ${recipient.slice(0, 20)}...`,
+          // legacy field kept for the signing-store consumers; the actual
+          // QR data the UI displays is `pcztSignFrames` (animated UR).
+          signRequestQr: '',
           recipient,
           amount,
           fee: feeZec,
@@ -361,6 +370,44 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       }
     },
     [processSignature, complete, setError, selectedKeyInfo, zidecarUrl, recipient, recordUsage, shouldSuggestSave]
+  );
+
+  /**
+   * PCZT-mode receive handler. The animated scanner has already accumulated
+   * `ur:zcash-pczt/...` frames and reconstructed the CBOR-wrapped payload via
+   * the wasm fountain decoder; we strip the `{1: bytes}` envelope to recover
+   * the raw PCZT, hex-encode, and hand to the worker for tx extraction +
+   * broadcast.
+   */
+  const handlePcztSignatureScanned = useCallback(
+    async (cborBytes: Uint8Array) => {
+      try {
+        setStep('broadcast');
+        if (!selectedKeyInfo) throw new Error('no wallet selected');
+
+        // Unwrap CBOR `{1: bytes}` → raw PCZT bytes. The envelope shape is
+        // fixed by zigner (matches the wasm `cborWrapPczt` we use on emit).
+        const pcztBytes = unwrapCborSinglePczt(cborBytes);
+        let pcztHex = '';
+        for (let i = 0; i < pcztBytes.length; i++) {
+          pcztHex += pcztBytes[i]!.toString(16).padStart(2, '0');
+        }
+
+        const result = await completeSendTxPcztInWorker(
+          'zcash', selectedKeyInfo.id, zidecarUrl, pcztHex,
+        );
+        pcztUnsignedRef.current = null;
+        complete(result.txid);
+        setStep('complete');
+        void recordUsage(recipient, 'zcash');
+        if (shouldSuggestSave(recipient)) setShowSavePrompt(true);
+      } catch (err) {
+        pcztUnsignedRef.current = null;
+        setError(err instanceof Error ? err.message : 'failed to extract / broadcast PCZT');
+        setStep('error');
+      }
+    },
+    [complete, setError, selectedKeyInfo, zidecarUrl, recipient, recordUsage, shouldSuggestSave]
   );
 
   const handleBack = () => {
@@ -641,18 +688,27 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             </div>
 
             <div className="flex flex-col items-center gap-4 py-4">
-              {signRequestQr && (
+              {pcztSignFrames && pcztSignFrames.length > 0 ? (
+                <AnimatedQrDisplay
+                  urFrames={pcztSignFrames}
+                  totalBytes={pcztUnsignedRef.current?.cborBytes}
+                  size={220}
+                  frameInterval={200}
+                  title="scan with zafu zigner"
+                  description="hold zigner camera steady; multi-frame transfer"
+                />
+              ) : signRequestQr ? (
                 <QrDisplay
                   data={signRequestQr}
                   size={220}
-title="scan with zafu zigner"
+                  title="scan with zafu zigner"
                   description="open zafu zigner camera and scan this qr code to sign the transaction"
                 />
-              )}
+              ) : null}
 
               <div className="text-center">
                 <p className="text-sm text-fg-muted">
-1. open zafu zigner app on your phone
+                  1. open zafu zigner app on your phone
                 </p>
                 <p className="text-sm text-fg-muted">
                   2. scan this qr code
@@ -664,13 +720,25 @@ title="scan with zafu zigner"
             </div>
 
             <Button variant="gradient" onClick={handleScanSignature} className="w-full">
-scan signature from zafu zigner
+              scan signature from zafu zigner
             </Button>
           </div>
         );
 
       case 'scan':
-        return (
+        return pcztUnsignedRef.current ? (
+          <AnimatedQrScanner
+            onComplete={(bytes) => { void handlePcztSignatureScanned(bytes); }}
+            onError={(err) => {
+              setError(err);
+              setStep('error');
+            }}
+            onClose={() => setStep('sign')}
+            title="scan signed PCZT"
+            description="hold camera steady on the animated QR"
+            urTypeFilter="zcash-pczt"
+          />
+        ) : (
           <QrScanner
             onScan={handleSignatureScanned}
             onError={(err) => {
@@ -679,7 +747,7 @@ scan signature from zafu zigner
             }}
             onClose={() => setStep('sign')}
             title="scan signature"
-description="point camera at zafu zigner's signature qr code"
+            description="point camera at zafu zigner's signature qr code"
           />
         );
 

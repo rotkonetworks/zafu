@@ -51,6 +51,7 @@ import { internalTransportOptions } from './transport-options';
 import { walletIdCtx } from '@rotko/penumbra-services/ctx/wallet-id';
 import type { Services } from '@repo/context';
 import { startWalletServices } from './wallet-services';
+import { performPendingClears } from './clear-cache-startup';
 
 import { backOff } from 'exponential-backoff';
 
@@ -183,6 +184,10 @@ localExtStorage.addListener(changes => {
 });
 
 const initHandler = async () => {
+  // run any pending IDB clears requested before the previous reload,
+  // BEFORE wallet services open new connections (which would block deletion)
+  await performPendingClears();
+
   // Track initial wallet index
   currentWalletIndex = (await localExtStorage.get('activeWalletIndex')) ?? 0;
   currentSyncAbort = new AbortController();

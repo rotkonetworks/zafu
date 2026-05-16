@@ -56,6 +56,7 @@ import {
   getUrType,
   parsePenumbraUr,
   parseZcashUr,
+  parseZcashAccountsCbor,
   parseHotWalletUr,
 } from '@repo/wallet/ur-parser';
 
@@ -131,6 +132,18 @@ export interface ZignerSlice {
    * Validates format and parses the FVK export (supports Penumbra and Zcash).
    */
   processQrData: (qrData: string) => void;
+  /**
+   * Process a `zcash-accounts` payload that has already been reassembled from
+   * a multi-frame BC-UR scan (caller is expected to be `AnimatedQrScanner`
+   * with `urTypeFilter: 'zcash-accounts'`). Useful for Keystone-class cold
+   * signers that emit multipart UR.
+   *
+   * `declared` is the user's explicit cold-signer choice from the import
+   * UI ("Scan Zigner" vs "Scan Keystone"). We trust this over byte-level
+   * heuristics, which are kept only as a consistency check that warns on
+   * disagreement (logs to console) so future protocol drift is visible.
+   */
+  processZcashAccountsBytes: (cbor: Uint8Array, declared: 'zigner' | 'keystone') => void;
   /** Set the wallet label */
   setWalletLabel: (label: string) => void;
   /** Set scan state */
@@ -477,6 +490,65 @@ export const createZignerSlice =
       }
     },
 
+    /**
+     * Process a `zcash-accounts` CBOR payload reassembled from multi-frame UR.
+     *
+     * The path differs from `processQrData` because `parseZcashUr` operates
+     * on a single UR string, while a multipart UR scan via the wasm fountain
+     * decoder produces the inner CBOR directly. We parse it through
+     * `parseZcashAccountsCbor` and then build the same `ZcashFvkExportData`
+     * shape so downstream onboarding logic doesn't care which path was taken.
+     */
+    processZcashAccountsBytes: (cbor: Uint8Array, declared: 'zigner' | 'keystone') => {
+      try {
+        const urExport = parseZcashAccountsCbor(cbor);
+        // Trust the user's explicit declaration (which button they clicked).
+        // The byte heuristic — "zid_pubkey present implies zigner, absent
+        // implies non-zigner" — is only a consistency check, not the source
+        // of truth, because:
+        //   1. A future zigner build could legitimately omit zid_pubkey
+        //      (e.g. privacy mode, key rotation in flight).
+        //   2. A non-zigner signer could in principle add a zid_pubkey-like
+        //      field; we'd misclassify silently.
+        // If declaration disagrees with bytes, log so the divergence is
+        // visible during testing but proceed with the declared kind.
+        const heuristic: 'zigner' | 'keystone' = urExport.zidPublicKey ? 'zigner' : 'keystone';
+        if (heuristic !== declared) {
+          console.warn(
+            `[zigner-import] declared cold signer is "${declared}" but byte heuristic suggests "${heuristic}". ` +
+            `zid_pubkey ${urExport.zidPublicKey ? 'present' : 'absent'}. Trusting declaration.`,
+          );
+        }
+        const exportData: ZcashFvkExportData = {
+          accountIndex: urExport.accountIndex,
+          label: urExport.label,
+          orchardFvk: null,
+          transparentXpub: null,
+          mainnet: urExport.ufvk.startsWith('uview1'),
+          address: null,
+          ufvk: urExport.ufvk,
+          zidPublicKey: urExport.zidPublicKey,
+          coldSignerType: declared,
+        };
+        const defaultLabel = urExport.label || (declared === 'zigner' ? 'zigner zcash' : 'keystone zcash');
+        set(state => {
+          state.zigner.qrData = '<multipart-ur:zcash-accounts>'; // sentinel, not a real UR string
+          state.zigner.detectedNetwork = 'zcash';
+          state.zigner.parsedZcashExport = exportData;
+          state.zigner.parsedPenumbraExport = undefined;
+          state.zigner.walletLabel = defaultLabel;
+          state.zigner.scanState = 'scanned';
+          state.zigner.errorMessage = undefined;
+        });
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        set(state => {
+          state.zigner.scanState = 'error';
+          state.zigner.errorMessage = `failed to parse zcash-accounts cbor: ${message}`;
+        });
+      }
+    },
+
     setWalletLabel: (label: string) => {
       set(state => {
         state.zigner.walletLabel = label;
@@ -558,6 +630,7 @@ export const zignerConnectSelector = (state: AllSlices) => {
     walletImport,
     zcashWalletImport,
     processQrData: slice.processQrData,
+    processZcashAccountsBytes: slice.processZcashAccountsBytes,
     setWalletLabel: slice.setWalletLabel,
     setScanState: slice.setScanState,
     setError: slice.setError,
