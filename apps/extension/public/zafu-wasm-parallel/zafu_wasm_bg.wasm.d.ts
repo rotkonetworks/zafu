@@ -1,5 +1,6 @@
 /* tslint:disable */
 /* eslint-disable */
+export const memory: WebAssembly.Memory;
 export const __wbg_walletkeys_free: (a: number, b: number) => void;
 export const __wbg_watchonlywallet_free: (a: number, b: number) => void;
 export const address_from_ufvk: (a: number, b: number, c: number) => [number, number, number, number];
@@ -26,6 +27,7 @@ export const tree_root_hex: (a: number, b: number) => [number, number, number, n
 export const ur_decode_frames: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const ur_encode_frames: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
 export const validate_seed_phrase: (a: number, b: number) => number;
+export const validate_ufvk: (a: number, b: number) => number;
 export const version: () => [number, number];
 export const walletkeys_calculate_balance: (a: number, b: any, c: any) => [bigint, number, number];
 export const walletkeys_decrypt_transaction_memos: (a: number, b: number, c: number) => [number, number, number];
@@ -80,7 +82,6 @@ export const wbg_rayon_poolbuilder_build: (a: number) => void;
 export const wbg_rayon_poolbuilder_numThreads: (a: number) => number;
 export const wbg_rayon_poolbuilder_receiver: (a: number) => number;
 export const wbg_rayon_start_worker: (a: number) => void;
-export const memory: WebAssembly.Memory;
 export const __wbindgen_malloc: (a: number, b: number) => number;
 export const __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
 export const __wbindgen_exn_store: (a: number) => void;
@@ -88,5 +89,4 @@ export const __externref_table_alloc: () => number;
 export const __wbindgen_externrefs: WebAssembly.Table;
 export const __wbindgen_free: (a: number, b: number, c: number) => void;
 export const __externref_table_dealloc: (a: number) => void;
-export const __wbindgen_thread_destroy: (a?: number, b?: number, c?: number) => void;
-export const __wbindgen_start: (a: number) => void;
+export const __wbindgen_start: () => void;

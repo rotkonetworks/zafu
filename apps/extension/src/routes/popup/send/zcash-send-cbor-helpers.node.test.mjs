@@ -16,21 +16,31 @@ function unwrapCborSinglePczt(cbor) {
   if (cbor[1] !== 0x01) throw new Error('expected CBOR key 1 at offset 1');
   let pos = 2;
   const tag = cbor[pos++];
+  const readLen = (nBytes) => {
+    if (pos + nBytes > cbor.length) {
+      throw new Error(`CBOR length header truncated (need ${nBytes} bytes)`);
+    }
+    let v = 0;
+    for (let i = 0; i < nBytes; i++) v = v * 256 + cbor[pos++];
+    return v;
+  };
   let len;
   if (tag >= 0x40 && tag <= 0x57) {
     len = tag - 0x40;
   } else if (tag === 0x58) {
-    len = cbor[pos++];
+    len = readLen(1);
   } else if (tag === 0x59) {
-    len = (cbor[pos] << 8) | cbor[pos + 1];
-    pos += 2;
+    len = readLen(2);
   } else if (tag === 0x5a) {
-    len = (cbor[pos] << 24) | (cbor[pos + 1] << 16) | (cbor[pos + 2] << 8) | cbor[pos + 3];
-    pos += 4;
+    len = readLen(4);
   } else {
     throw new Error(`unexpected CBOR bytes tag 0x${tag.toString(16)}`);
   }
-  if (pos + len > cbor.length) throw new Error('CBOR PCZT length exceeds envelope');
+  if (pos + len !== cbor.length) {
+    throw new Error(
+      `CBOR PCZT envelope not canonical: declared length ${len} at offset ${pos} vs buffer ${cbor.length}`,
+    );
+  }
   return cbor.slice(pos, pos + len);
 }
 
@@ -87,4 +97,38 @@ test('cbor envelope: rejects map with wrong key', () => {
 test('cbor envelope: rejects truncated payload', () => {
   // map(1) { 1: bytes(10) } header but only 5 payload bytes follow
   assert.throws(() => unwrapCborSinglePczt(new Uint8Array([0xa1, 0x01, 0x4a, 1, 2, 3, 4, 5])));
+});
+
+// ── adversarial cases (review: signed-shift / truncated-header / trailing) ──
+// A hostile signer controls these bytes. Each of the following currently
+// slips past the bounds guard and returns a silently-wrong (empty/truncated)
+// PCZT instead of throwing — which then fails opaquely deep in the wasm
+// extractor. They must throw cleanly at the envelope layer.
+
+test('cbor envelope: rejects 0x5a length with high bit set (signed-shift)', () => {
+  // map(1){1: bytes(0x80000004)} — JS `b0<<24` is signed → negative len →
+  // `pos+len > cbor.length` is false → guard bypassed in the buggy impl.
+  const buf = new Uint8Array([0xa1, 0x01, 0x5a, 0x80, 0x00, 0x00, 0x04, 1, 2, 3, 4]);
+  assert.throws(() => unwrapCborSinglePczt(buf), /length|invalid|exceeds/i);
+});
+
+test('cbor envelope: rejects truncated 0x58 length header', () => {
+  // map(1){1: bytes(<1-byte-len>)} but the length byte itself is missing.
+  // Buggy impl: cbor[3] is undefined → len=undefined → NaN guard passes.
+  assert.throws(() => unwrapCborSinglePczt(new Uint8Array([0xa1, 0x01, 0x58])));
+});
+
+test('cbor envelope: rejects truncated 0x5a length header', () => {
+  // 0x5a needs 4 length bytes; only 2 present.
+  assert.throws(() => unwrapCborSinglePczt(new Uint8Array([0xa1, 0x01, 0x5a, 0x00, 0x01])));
+});
+
+test('cbor envelope: rejects trailing bytes after the byte string', () => {
+  // map(1){1: bytes(2)} = a1 01 42 AA BB, then a stray trailing 0xFF.
+  // A canonical single-PCZT envelope must consume exactly the buffer; extra
+  // bytes mean a malformed / smuggled payload.
+  assert.throws(
+    () => unwrapCborSinglePczt(new Uint8Array([0xa1, 0x01, 0x42, 0xaa, 0xbb, 0xff])),
+    /trailing|exact|canonical|exceeds|length/i,
+  );
 });

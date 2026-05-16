@@ -574,6 +574,29 @@ const getTreeFrontier = async (walletId: string): Promise<string | null> => {
  *  stored as array of {height, frontier} in IDB, one per SNAPSHOT_INTERVAL blocks. */
 const FRONTIER_SNAPSHOT_INTERVAL = 5_000;
 
+/**
+ * Confirmation depth between the live chain tip and the Orchard anchor we
+ * build witnesses against.
+ *
+ * Anchoring at the *live tip* was the root cause of the "tree root mismatch
+ * at height N" merkle failures seen on hardware: the witness fast-forward
+ * (`getCompactBlocks`), the anchor validation (`getTreeState`), and the
+ * initial `getTip` are three unsynchronized RPCs to a zidecar that may be
+ * load-balanced across replicas at slightly different sync heights, and the
+ * tip is exactly the height where replicas diverge and where reorgs happen.
+ * Pulling the anchor a few blocks back puts it in the region every replica
+ * has agreed on and that is effectively final, so the cross-check at
+ * `getTreeState(anchorHeight)` is stable. Orchard anchors are historical
+ * roots with no max-age constraint, so a slightly-behind anchor is fully
+ * valid - the spent note is confirmed long before the tip regardless.
+ *
+ * Note: this is the *anchor* depth only. The transaction `target_height`
+ * (which drives consensus branch-id and expiry) stays at the live tip,
+ * since the tx will be mined near the tip - those two heights are
+ * deliberately decoupled.
+ */
+const ANCHOR_CONFIRMATIONS = 3;
+
 interface FrontierSnapshot { height: number; frontier: string }
 
 const getFrontierSnapshots = async (walletId: string): Promise<FrontierSnapshot[]> => {
@@ -2480,8 +2503,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const sendClient = new ZidecarClient(sendPayload.serverUrl);
         emitProgress('fetching chain tip');
         const sendTip = await sendClient.getTip();
-        emitProgress('building merkle witnesses', `anchor=${sendTip.height}`);
-        const { anchorHex, paths } = await buildWitnesses(sendClient, walletId, selected, sendTip.height);
+        // Anchor a few blocks behind the tip (see ANCHOR_CONFIRMATIONS) so
+        // the witness/anchor cross-check is stable across zidecar replica
+        // skew and immune to tip reorgs. target_height stays at the live
+        // tip for branch_id/expiry correctness.
+        const anchorHeight = Math.max(1, sendTip.height - ANCHOR_CONFIRMATIONS);
+        emitProgress('building merkle witnesses', `anchor=${anchorHeight} (tip=${sendTip.height})`);
+        const { anchorHex, paths } = await buildWitnesses(sendClient, walletId, selected, anchorHeight);
 
         const notesForWasm = selected.map(n => ({
           value: Number(n.value),
