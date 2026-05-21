@@ -1563,6 +1563,23 @@ export function SendPage() {
   // get prefill from location state (inbox compose), URL params (external message), or hash params
   const locationState = location.state as SendLocationState | undefined;
   const searchParams = new URLSearchParams(location.search);
+  // `[primary]` expands to the user's oldest non-multisig Zcash wallet (the original onboarding
+  // wallet — new wallets are prepended, so the oldest sits at the END of the array). `[self]`
+  // is kept as an alias for backward compatibility. Letting callers reference the address by
+  // token saves a "what's my address" round-trip; the user can still edit the memo before send.
+  const allZcashWallets = useStore(s => s.wallets.zcashWallets);
+  const primaryAddr = allZcashWallets.filter(w => !w.multisig).at(-1)?.address;
+  const rawMemo = searchParams.get('memo');
+  const memoHasToken = !!rawMemo && (rawMemo.includes('[primary]') || rawMemo.includes('[self]'));
+  // wallets persist asynchronously; if a token is in the memo but the store hasn't hydrated yet,
+  // we show a brief loading state instead of leaking the literal token into the form.
+  const waitingForWallets = memoHasToken && !primaryAddr && allZcashWallets.length === 0;
+  const externalMemo = (() => {
+    if (!rawMemo) return undefined;
+    if (!memoHasToken) return rawMemo;
+    if (!primaryAddr) return rawMemo;
+    return rawMemo.replaceAll('[primary]', primaryAddr).replaceAll('[self]', primaryAddr);
+  })();
   const prefill = locationState?.prefillRecipient ? {
     recipient: locationState.prefillRecipient,
     amount: locationState.prefillAmount,
@@ -1578,6 +1595,7 @@ export function SendPage() {
       if (!Number.isFinite(n) || n <= 0) return undefined;
       return (n / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
     })(),
+    memo: externalMemo,
   } : undefined;
 
   const goBack = () => inDedicatedWindow ? window.close() : navigate(PopupPath.INDEX);
@@ -1594,6 +1612,13 @@ export function SendPage() {
 
   // zcash uses full-screen flow
   if (isZcash) {
+    if (waitingForWallets) {
+      return (
+        <div className='flex h-full items-center justify-center p-6 text-xs text-fg-muted'>
+          loading wallets…
+        </div>
+      );
+    }
     return (
       <ZcashSend
         onClose={goBack}
