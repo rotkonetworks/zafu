@@ -12,6 +12,9 @@
  * - { type: 'zafu_frost_create' } → create FROST DKG, returns approval popup
  * - { type: 'zafu_frost_join', roomCode } → join existing FROST DKG
  * - { type: 'zafu_frost_sign', roomCode, sighashHex, ... } → FROST signing session
+ * - { type: 'zafu_dkg_join', relayUrl, roomCode, threshold, maxSigners, labelPrefix? }
+ *     → join an existing DKG room with the current zafu protocol (R1:T:N:SK + FVK echo);
+ *       persists multisig labeled "<labelPrefix>-YYYY-MM-DD-HHMM" (defaults to origin host)
  */
 
 import { getOriginPermissions, grantCapability, denyCapability } from '@repo/storage-chrome/origin';
@@ -145,6 +148,38 @@ export const externalMessageListener = (
         threshold: String(threshold),
         maxSigners: String(maxSigners),
         relayUrl,
+        requestId,
+      });
+      const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
+      void chrome.windows.create({ url, type: 'popup', width: 400, height: 520 });
+      return true;
+    }
+
+    case 'zafu_dkg_join': {
+      const roomCode = String(msg['roomCode'] || '');
+      if (!roomCode) {
+        sendResponse({ error: 'roomCode required' });
+        return true;
+      }
+      const threshold = Number(msg['threshold']) || 2;
+      const maxSigners = Number(msg['maxSigners']) || 3;
+      const relayUrl = String(msg['relayUrl'] || 'wss://zrelay.rotko.net');
+      const appOrigin = sender.origin || sender.url || 'unknown';
+      // sanitize the caller-supplied label prefix; default to the origin host
+      const rawPrefix = String(msg['labelPrefix'] || new URL(appOrigin).host || 'multisig');
+      const labelPrefix = rawPrefix.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 32) || 'multisig';
+      const requestId = crypto.randomUUID();
+
+      pendingPicks.set(requestId, sendResponse);
+
+      const params = new URLSearchParams({
+        app: appOrigin,
+        action: 'dkg-join',
+        roomCode,
+        threshold: String(threshold),
+        maxSigners: String(maxSigners),
+        relayUrl,
+        labelPrefix,
         requestId,
       });
       const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
