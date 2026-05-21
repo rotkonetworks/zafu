@@ -48,7 +48,13 @@ export const externalMessageListener = (
         sendResponse({ error: 'address required' });
         return true;
       }
-      const url = chrome.runtime.getURL(`popup.html#/send?to=${encodeURIComponent(address)}`);
+      const params = new URLSearchParams({ to: address });
+      // optional zatoshi amount — zafu's send popup converts to ZEC for display
+      const amountZat = Number(msg['amount_zat']);
+      if (Number.isFinite(amountZat) && amountZat > 0) {
+        params.set('amount_zat', String(Math.floor(amountZat)));
+      }
+      const url = chrome.runtime.getURL(`popup.html#/send?${params.toString()}`);
       void chrome.windows.create({ url, type: 'popup', width: 400, height: 628 });
       sendResponse({ ok: true });
       return true;

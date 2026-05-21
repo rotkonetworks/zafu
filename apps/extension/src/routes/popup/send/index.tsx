@@ -1569,6 +1569,15 @@ export function SendPage() {
     memo: locationState.prefillMemo,
   } : searchParams.get('to') ? {
     recipient: searchParams.get('to') ?? undefined,
+    // amount_zat (uint64 string, zatoshi) is the unambiguous unit for external callers;
+    // ZcashSend expects a decimal ZEC string so we convert (1 ZEC = 1e8 zat).
+    amount: (() => {
+      const zat = searchParams.get('amount_zat');
+      if (!zat) return undefined;
+      const n = Number(zat);
+      if (!Number.isFinite(n) || n <= 0) return undefined;
+      return (n / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
+    })(),
   } : undefined;
 
   const goBack = () => inDedicatedWindow ? window.close() : navigate(PopupPath.INDEX);
