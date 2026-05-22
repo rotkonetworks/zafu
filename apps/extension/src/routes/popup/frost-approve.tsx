@@ -403,8 +403,9 @@ export const FrostApprove = () => {
   };
 
   // poker-style PCZT signing: joiner-side. Host (poker-escrow) opened the relay room and
-  // will publish INIT-MULTI:<pkg>:<sighash>:<alphas>. We send our commitments + per-action
-  // shares; host aggregates + broadcasts the tx.
+  // publishes SIGN:<sighash>:<alphas>:<recipient>:<amount>:<fee>. We send our commitments
+  // (pipe-separated, one per action) + per-action shares; host aggregates + broadcasts.
+  // Wire format matches zafu's multisig/sign.tsx so both paths interop.
   const runPokerSign = async () => {
     const vault = multisigLabel
       ? keyInfos.find(k => k.type === 'frost-multisig' && k.name?.startsWith(multisigLabel))
@@ -420,7 +421,6 @@ export const FrostApprove = () => {
     const pid = new Uint8Array(32);
     crypto.getRandomValues(pid);
 
-    let initPkg = '';
     let initSighash = '';
     let initAlphas: string[] = [];
     const peerCommits: string[] = [];
@@ -429,26 +429,25 @@ export const FrostApprove = () => {
     void relay.joinRoom(roomCode, pid, (event) => {
       if (event.type !== 'message') return;
       const text = new TextDecoder().decode(event.message.payload);
-      const im = text.match(/^INIT-MULTI:([^:]+):([0-9a-fA-F]+):([0-9a-fA-F,]+)$/);
-      if (im) {
-        initPkg = im[1]!;
-        initSighash = im[2]!;
-        initAlphas = im[3]!.split(',');
+      const sg = text.match(/^SIGN:([0-9a-fA-F]+):([^:]+):([^:]+):(\d+):(\d+)(?::([0-9a-fA-F]+))?$/);
+      if (sg) {
+        initSighash = sg[1]!;
+        initAlphas = sg[2]!.split(',');
         return;
       }
-      if (text.startsWith('COMMITS:')) {
-        peerCommits.push(text.slice('COMMITS:'.length));
+      const cm = text.match(/^C:([\s\S]*)$/);
+      if (cm) {
+        peerCommits.push(cm[1]!);
         return;
       }
-      const sm = text.match(/^SHARE:(\d+):(.+)$/);
+      const sm = text.match(/^S:(\d+):(.+)$/);
       if (sm) {
         peerShares[Number(sm[1])] = sm[2]!;
       }
     }, abort.signal);
 
-    setStatus('waiting for host INIT-MULTI...');
+    setStatus('waiting for host SIGN...');
     await waitFor(() => initAlphas.length > 0, 120_000);
-    void initPkg;
 
     const n = initAlphas.length;
     setStatus(`round 1: generating ${n} commitment(s)...`);
@@ -456,12 +455,12 @@ export const FrostApprove = () => {
     for (let i = 0; i < n; i++) {
       round1s.push(await frostSignRound1InWorker(secrets.ephemeralSeed, secrets.keyPackage));
     }
-    const commitsCsv = round1s.map(r => r.commitments).join(',');
-    await relay.sendMessage(roomCode, pid, new TextEncoder().encode(`COMMITS:${commitsCsv}`));
+    const commitsCsv = round1s.map(r => r.commitments).join('|');
+    await relay.sendMessage(roomCode, pid, new TextEncoder().encode(`C:${commitsCsv}`));
 
     setStatus('round 1: waiting for host commitments...');
     await waitFor(() => peerCommits.length >= 1, 120_000);
-    const hostCommits = peerCommits[0]!.split(',');
+    const hostCommits = peerCommits[0]!.split('|');
     if (hostCommits.length !== n) {
       throw new Error(`host sent ${hostCommits.length} commits, expected ${n}`);
     }
@@ -472,7 +471,7 @@ export const FrostApprove = () => {
       const share = await frostSpendSignInWorker(
         secrets.keyPackage, round1s[i]!.nonces, initSighash, initAlphas[i]!, allCommits,
       );
-      await relay.sendMessage(roomCode, pid, new TextEncoder().encode(`SHARE:${i}:${share}`));
+      await relay.sendMessage(roomCode, pid, new TextEncoder().encode(`S:${i}:${share}`));
     }
 
     setStatus('done — host will broadcast the transaction');
