@@ -15,6 +15,10 @@
  * - { type: 'zafu_dkg_join', relayUrl, roomCode, threshold, maxSigners, labelPrefix? }
  *     → join an existing DKG room with the current zafu protocol (R1:T:N:SK + FVK echo);
  *       persists multisig labeled "<labelPrefix>-YYYY-MM-DD-HHMM" (defaults to origin host)
+ * - { type: 'zafu_frost_sign_orchard', relayUrl, roomCode, plan, feeZat, multisigLabel? }
+ *     → join an Orchard PCZT signing room as a peer (INIT-MULTI/COMMITS/SHARE wire tags);
+ *       popup shows the plan (outputs + fee), runs round-1/round-2 over the relay,
+ *       caller (host) aggregates + broadcasts.
  */
 
 import { getOriginPermissions, grantCapability, denyCapability } from '@repo/storage-chrome/origin';
@@ -223,6 +227,40 @@ export const externalMessageListener = (
       });
       const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
       void chrome.windows.create({ url, type: 'popup', width: 400, height: 520 });
+      return true;
+    }
+
+    case 'zafu_frost_sign_orchard': {
+      const roomCode = String(msg['roomCode'] || '');
+      if (!roomCode) {
+        sendResponse({ error: 'roomCode required' });
+        return true;
+      }
+      const plan = msg['plan'] as Array<{ address: string; amount_zat: number }> | undefined;
+      if (!plan || !Array.isArray(plan) || plan.length === 0) {
+        sendResponse({ error: 'plan array required' });
+        return true;
+      }
+      const relayUrl = String(msg['relayUrl'] || 'wss://zrelay.rotko.net');
+      const feeZat = Number(msg['feeZat']) || 10_000;
+      const multisigLabel = typeof msg['multisigLabel'] === 'string' ? String(msg['multisigLabel']) : '';
+      const appOrigin = sender.origin || sender.url || 'unknown';
+      const requestId = crypto.randomUUID();
+
+      pendingPicks.set(requestId, sendResponse);
+
+      const params = new URLSearchParams({
+        app: appOrigin,
+        action: 'poker-sign',
+        roomCode,
+        relayUrl,
+        feeZat: String(feeZat),
+        planJson: JSON.stringify(plan),
+        requestId,
+      });
+      if (multisigLabel) params.set('multisigLabel', multisigLabel);
+      const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
+      void chrome.windows.create({ url, type: 'popup', width: 400, height: 560 });
       return true;
     }
 

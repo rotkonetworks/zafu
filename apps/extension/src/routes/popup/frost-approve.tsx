@@ -20,6 +20,8 @@ import {
   frostSignRound1InWorker,
   frostSpendSignInWorker,
 } from '../../state/keyring/network-worker';
+
+interface PokerPayoutOutput { address: string; amount_zat: number }
 import { encodeOrchardUnifiedAddress } from '@repo/wallet/networks/zcash/unified-address';
 import { hexToBytes } from '@repo/wallet/networks';
 import { FrostRelayClient } from '../../state/keyring/frost-relay-client';
@@ -59,6 +61,12 @@ export const FrostApprove = () => {
   const sighashHex = params.get('sighashHex') || '';
   const labelPrefix = params.get('labelPrefix') || 'multisig';
   const requestId = params.get('requestId') || '';
+  const planJson = params.get('planJson') || '';
+  const feeZat = Number(params.get('feeZat')) || 0;
+  const multisigLabel = params.get('multisigLabel') || '';
+  const plan: PokerPayoutOutput[] = planJson ? (() => {
+    try { return JSON.parse(planJson) as PokerPayoutOutput[]; } catch { return []; }
+  })() : [];
 
   const [phase, setPhase] = useState<Phase>('confirm');
   const [status, setStatus] = useState('');
@@ -87,6 +95,8 @@ export const FrostApprove = () => {
         await runDkgJoinV2();
       } else if (action === 'frost-sign') {
         await runSign();
+      } else if (action === 'poker-sign') {
+        await runPokerSign();
       } else {
         throw new Error(`unknown action: ${action}`);
       }
@@ -392,10 +402,92 @@ export const FrostApprove = () => {
     sendResult(requestId, res);
   };
 
+  // poker-style PCZT signing: joiner-side. Host (poker-escrow) opened the relay room and
+  // will publish INIT-MULTI:<pkg>:<sighash>:<alphas>. We send our commitments + per-action
+  // shares; host aggregates + broadcasts the tx.
+  const runPokerSign = async () => {
+    const vault = multisigLabel
+      ? keyInfos.find(k => k.type === 'frost-multisig' && k.name?.startsWith(multisigLabel))
+      : multisigVault;
+    if (!vault) throw new Error('no matching multisig wallet found');
+
+    const abort = new AbortController();
+    const relay = new FrostRelayClient(relayUrl);
+    const secrets = await getMultisigSecrets(vault.id);
+    if (!secrets) throw new Error('failed to decrypt multisig secrets');
+
+    setStatus(`joining payout room ${roomCode}...`);
+    const pid = new Uint8Array(32);
+    crypto.getRandomValues(pid);
+
+    let initPkg = '';
+    let initSighash = '';
+    let initAlphas: string[] = [];
+    const peerCommits: string[] = [];
+    const peerShares: Record<number, string> = {};
+
+    void relay.joinRoom(roomCode, pid, (event) => {
+      if (event.type !== 'message') return;
+      const text = new TextDecoder().decode(event.message.payload);
+      const im = text.match(/^INIT-MULTI:([^:]+):([0-9a-fA-F]+):([0-9a-fA-F,]+)$/);
+      if (im) {
+        initPkg = im[1]!;
+        initSighash = im[2]!;
+        initAlphas = im[3]!.split(',');
+        return;
+      }
+      if (text.startsWith('COMMITS:')) {
+        peerCommits.push(text.slice('COMMITS:'.length));
+        return;
+      }
+      const sm = text.match(/^SHARE:(\d+):(.+)$/);
+      if (sm) {
+        peerShares[Number(sm[1])] = sm[2]!;
+      }
+    }, abort.signal);
+
+    setStatus('waiting for host INIT-MULTI...');
+    await waitFor(() => initAlphas.length > 0, 120_000);
+    void initPkg;
+
+    const n = initAlphas.length;
+    setStatus(`round 1: generating ${n} commitment(s)...`);
+    const round1s: { nonces: string; commitments: string }[] = [];
+    for (let i = 0; i < n; i++) {
+      round1s.push(await frostSignRound1InWorker(secrets.ephemeralSeed, secrets.keyPackage));
+    }
+    const commitsCsv = round1s.map(r => r.commitments).join(',');
+    await relay.sendMessage(roomCode, pid, new TextEncoder().encode(`COMMITS:${commitsCsv}`));
+
+    setStatus('round 1: waiting for host commitments...');
+    await waitFor(() => peerCommits.length >= 1, 120_000);
+    const hostCommits = peerCommits[0]!.split(',');
+    if (hostCommits.length !== n) {
+      throw new Error(`host sent ${hostCommits.length} commits, expected ${n}`);
+    }
+
+    for (let i = 0; i < n; i++) {
+      setStatus(`round 2: signing action ${i + 1}/${n}...`);
+      const allCommits = [round1s[i]!.commitments, hostCommits[i]!];
+      const share = await frostSpendSignInWorker(
+        secrets.keyPackage, round1s[i]!.nonces, initSighash, initAlphas[i]!, allCommits,
+      );
+      await relay.sendMessage(roomCode, pid, new TextEncoder().encode(`SHARE:${i}:${share}`));
+    }
+
+    setStatus('done — host will broadcast the transaction');
+    abort.abort();
+    const res = { success: true, signed: true, actions: n };
+    setResult(res);
+    setPhase('complete');
+    sendResult(requestId, res);
+  };
+
   const actionLabel = action === 'frost-create' ? 'Create Multisig'
     : action === 'frost-join' ? 'Join Multisig'
     : action === 'dkg-join' ? 'Join Multisig'
     : action === 'frost-sign' ? 'Sign Transaction'
+    : action === 'poker-sign' ? 'Approve Payout'
     : action;
 
   return (
@@ -432,6 +524,21 @@ export const FrostApprove = () => {
               <>
                 <p>Co-sign a transaction with your FROST key share.</p>
                 <p className='text-fg-muted tabular break-all'>sighash: {sighashHex.slice(0, 16)}...{sighashHex.slice(-16)}</p>
+              </>
+            )}
+            {action === 'poker-sign' && (
+              <>
+                <p>Approve payout from poker escrow.</p>
+                <div className='mt-1 space-y-1'>
+                  {plan.map((o, i) => (
+                    <p key={i} className='text-fg-muted tabular break-all'>
+                      → {o.address.slice(0, 14)}…{o.address.slice(-8)}
+                      <span className='text-zigner-gold'> {(o.amount_zat / 1e8).toFixed(8)} ZEC</span>
+                    </p>
+                  ))}
+                  <p className='text-fg-dim tabular'>fee {(feeZat / 1e8).toFixed(8)} ZEC</p>
+                </div>
+                <p className='text-fg-muted'>Your FROST share co-signs; escrow finalizes + broadcasts.</p>
               </>
             )}
             <p className='text-fg-dim tabular'>relay: {relayUrl}</p>
