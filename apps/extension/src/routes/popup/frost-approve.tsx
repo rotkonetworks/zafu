@@ -26,6 +26,7 @@ import { encodeOrchardUnifiedAddress } from '@repo/wallet/networks/zcash/unified
 import { hexToBytes } from '@repo/wallet/networks';
 import { FrostRelayClient } from '../../state/keyring/frost-relay-client';
 import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../state/frost-session';
+import { usePasswordGate } from '../../hooks/password-gate';
 
 type Phase = 'confirm' | 'running' | 'complete' | 'error';
 
@@ -79,6 +80,9 @@ export const FrostApprove = () => {
   const keyInfos = useStore(s => s.keyRing.keyInfos);
   // find active multisig vault for signing
   const multisigVault = keyInfos.find(k => k.type === 'frost-multisig');
+
+  // explicit password prompt before runPokerSign decrypts the FROST share
+  const { requestAuth, PasswordModal } = usePasswordGate();
 
   const deny = () => {
     sendResult(requestId, { error: 'user denied' });
@@ -404,15 +408,21 @@ export const FrostApprove = () => {
     sendResult(requestId, res);
   };
 
-  // poker-style PCZT signing: joiner-side. Host (poker-escrow) opened the relay room and
-  // publishes SIGN:<sighash>:<alphas>:<recipient>:<amount>:<fee>. We send our commitments
-  // (pipe-separated, one per action) + per-action shares; host aggregates + broadcasts.
-  // Wire format matches zafu's multisig/sign.tsx so both paths interop.
+  // joiner-side PCZT signing — host (poker-escrow) drives SIGN/C/S wire same as multisig/sign.tsx
   const runPokerSign = async () => {
     const vault = multisigLabel
       ? keyInfos.find(k => k.type === 'frost-multisig' && k.name?.startsWith(multisigLabel))
       : multisigVault;
     if (!vault) throw new Error('no matching multisig wallet found');
+
+    // wallet-password gate before unsealing the FROST share
+    setStatus('awaiting wallet password...');
+    const authorized = await requestAuth();
+    if (!authorized) {
+      sendResult(requestId, { error: 'user denied (password)' });
+      window.close();
+      return;
+    }
 
     const abort = new AbortController();
     const relay = new FrostRelayClient(relayUrl);
@@ -579,6 +589,8 @@ export const FrostApprove = () => {
           <Button variant='secondary' onClick={() => window.close()}>close</Button>
         </div>
       )}
+
+      {PasswordModal}
     </div>
   );
 };
