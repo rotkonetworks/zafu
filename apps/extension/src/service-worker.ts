@@ -386,6 +386,18 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => 
   // side panel not supported in this browser version
 });
 
+// sweep scheduled multisig deletions on service-worker wake. app-driven multisigs
+// (e.g. poker tables) schedule themselves for deletion 24h after settlement; this
+// pass clears any that are past-due whenever the SW spins up.
+void (async () => {
+  try {
+    const { sweepScheduledDeletes } = await import('./state/keyring/scheduled-deletes');
+    await sweepScheduledDeletes();
+  } catch (e) {
+    console.warn('[sw] sweepScheduledDeletes failed:', e);
+  }
+})();
+
 // on install: open onboarding page + create context menu
 chrome.runtime.onInstalled.addListener(({ reason }) => {
   chrome.contextMenus.create({

@@ -64,6 +64,7 @@ export const FrostApprove = () => {
   const planJson = params.get('planJson') || '';
   const feeZat = Number(params.get('feeZat')) || 0;
   const multisigLabel = params.get('multisigLabel') || '';
+  const hide = params.get('hide') === '1';
   const plan: PokerPayoutOutput[] = planJson ? (() => {
     try { return JSON.parse(planJson) as PokerPayoutOutput[]; } catch { return []; }
   })() : [];
@@ -332,6 +333,7 @@ export const FrostApprove = () => {
       threshold: parsedThreshold,
       maxSigners: parsedMaxSigners,
       relayUrl,
+      hidden: hide,
     });
 
     abort.abort();

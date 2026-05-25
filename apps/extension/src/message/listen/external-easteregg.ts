@@ -19,6 +19,10 @@
  *     → join an Orchard PCZT signing room as a peer (INIT-MULTI/COMMITS/SHARE wire tags);
  *       popup shows the plan (outputs + fee), runs round-1/round-2 over the relay,
  *       caller (host) aggregates + broadcasts.
+ * - { type: 'zafu_delete_multisig', multisigLabel, delayMs? }
+ *     → schedule (or immediately do) deletion of a multisig vault by name prefix.
+ *       used by app-driven multisigs (poker tables) to evaporate themselves after settlement.
+ *       no popup — silent operation. delayMs default 0 (immediate).
  */
 
 import { getOriginPermissions, grantCapability, denyCapability } from '@repo/storage-chrome/origin';
@@ -189,6 +193,7 @@ export const externalMessageListener = (
 
       pendingPicks.set(requestId, sendResponse);
 
+      const hide = msg['hide'] === true;
       const params = new URLSearchParams({
         app: appOrigin,
         action: 'dkg-join',
@@ -199,6 +204,7 @@ export const externalMessageListener = (
         labelPrefix,
         requestId,
       });
+      if (hide) params.set('hide', '1');
       const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
       void chrome.windows.create({ url, type: 'popup', width: 400, height: 520 });
       return true;
@@ -261,6 +267,36 @@ export const externalMessageListener = (
       if (multisigLabel) params.set('multisigLabel', multisigLabel);
       const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
       void chrome.windows.create({ url, type: 'popup', width: 400, height: 560 });
+      return true;
+    }
+
+    case 'zafu_delete_multisig': {
+      const multisigLabel = String(msg['multisigLabel'] || '');
+      if (!multisigLabel) {
+        sendResponse({ error: 'multisigLabel required' });
+        return true;
+      }
+      const delayMs = Math.max(0, Number(msg['delayMs']) || 0);
+      void (async () => {
+        try {
+          const { findVaultByLabelPrefix, scheduleMultisigDelete, purgeVault } =
+            await import('../../state/keyring/scheduled-deletes');
+          const vaultId = await findVaultByLabelPrefix(multisigLabel);
+          if (!vaultId) {
+            sendResponse({ success: false, error: 'no matching multisig found' });
+            return;
+          }
+          if (delayMs > 0) {
+            await scheduleMultisigDelete(vaultId, Date.now() + delayMs);
+            sendResponse({ success: true, scheduled: true, vaultId, deleteAt: Date.now() + delayMs });
+          } else {
+            await purgeVault(vaultId);
+            sendResponse({ success: true, scheduled: false, vaultId });
+          }
+        } catch (e) {
+          sendResponse({ success: false, error: e instanceof Error ? e.message : String(e) });
+        }
+      })();
       return true;
     }
 
