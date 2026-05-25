@@ -91,7 +91,7 @@ export async function runMnemonicFrostSign({
   for (let i = 0; i < numActions; i++) {
     const allCommits = [round1s[i]!.commitments, ...peerCommits[i]!];
     const share = await frostSpendSignInWorker(
-      secrets.keyPackage, round1s[i]!.nonces, unsigned.sighash, unsigned.alphas[i]!, allCommits,
+      secrets.ephemeralSeed, secrets.keyPackage, round1s[i]!.nonces, unsigned.sighash, unsigned.alphas[i]!, allCommits,
     );
     await sendShare(session, i, share);
 

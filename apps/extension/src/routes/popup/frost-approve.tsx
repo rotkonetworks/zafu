@@ -390,7 +390,7 @@ export const FrostApprove = () => {
     const allCommitments = [round1.commitments, ...peerCommitments];
     for (const alpha of alphas) {
       const share = await frostSpendSignInWorker(
-        secrets.keyPackage, round1.nonces, sighashHex, alpha, allCommitments,
+        secrets.ephemeralSeed, secrets.keyPackage, round1.nonces, sighashHex, alpha, allCommitments,
       );
       await relay.sendMessage(roomCode, pid, new TextEncoder().encode(`S:${share}`));
     }
@@ -469,7 +469,7 @@ export const FrostApprove = () => {
       setStatus(`round 2: signing action ${i + 1}/${n}...`);
       const allCommits = [round1s[i]!.commitments, hostCommits[i]!];
       const share = await frostSpendSignInWorker(
-        secrets.keyPackage, round1s[i]!.nonces, initSighash, initAlphas[i]!, allCommits,
+        secrets.ephemeralSeed, secrets.keyPackage, round1s[i]!.nonces, initSighash, initAlphas[i]!, allCommits,
       );
       await relay.sendMessage(roomCode, pid, new TextEncoder().encode(`S:${i}:${share}`));
     }
