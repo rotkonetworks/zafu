@@ -74,6 +74,14 @@ export const AnimatedQrScanner = ({
   const lastNewPartAtRef = useRef(0);
   const STALL_MS = 12_000;
 
+  // Hard caps on the accumulator. The stall watchdog catches "no new unique
+  // frames" but is helpless against a hostile or buggy source emitting an
+  // endless stream of unique-but-junk frames — every frame would look healthy
+  // to the watchdog while the Set grows until tab OOM. Per-frame length cap
+  // stops oversized single payloads.
+  const MAX_UR_PARTS = 4096;
+  const MAX_UR_PART_BYTES = 2048;
+
   const onCompleteRef = useRef(onComplete);
   const onErrorRef = useRef(onError);
   onCompleteRef.current = onComplete;
@@ -154,7 +162,19 @@ export const AnimatedQrScanner = ({
             if (urTypeRef.current === '') urTypeRef.current = urType;
             else if (urTypeRef.current !== urType) return; // type drift, reject
 
+            // Reject oversized single frames.
+            if (text.length > MAX_UR_PART_BYTES) return;
+
             const before = urPartsRef.current.size;
+            // Cap the accumulator. Hitting the cap means either a hostile
+            // source or a degenerate (never-completing) fountain — fail
+            // hard rather than keep growing memory.
+            if (before >= MAX_UR_PARTS) {
+              setError(
+                `UR fountain exceeded ${MAX_UR_PARTS} unique frames without completing — aborting scan.`,
+              );
+              return;
+            }
             urPartsRef.current.add(text);
             if (urPartsRef.current.size === before) return; // duplicate
 
