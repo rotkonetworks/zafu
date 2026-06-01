@@ -167,12 +167,16 @@ export const AnimatedQrScanner = ({
 
             const before = urPartsRef.current.size;
             // Cap the accumulator. Hitting the cap means either a hostile
-            // source or a degenerate (never-completing) fountain — fail
-            // hard rather than keep growing memory.
+            // source or a degenerate (never-completing) fountain — abort
+            // the scanner the same way the stall watchdog does, otherwise
+            // the camera + ZXing pipeline keep running and every new
+            // unique frame re-enters this branch.
             if (before >= MAX_UR_PARTS) {
-              setError(
-                `UR fountain exceeded ${MAX_UR_PARTS} unique frames without completing — aborting scan.`,
-              );
+              const msg = `UR fountain exceeded ${MAX_UR_PARTS} unique frames without completing — aborting scan.`;
+              completedRef.current = true; // latch — report once
+              stopScanning();
+              setError(msg);
+              onErrorRef.current?.(msg);
               return;
             }
             urPartsRef.current.add(text);
