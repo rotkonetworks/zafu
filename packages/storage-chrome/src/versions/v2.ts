@@ -46,6 +46,12 @@ type LOCAL = {
   zignerCameraEnabled?: boolean;
   /** Flag indicating cache clearing is in progress (survives extension restart) */
   clearingCache?: boolean;
+  /**
+   * Networks with IDB deletion pending until next service worker startup.
+   * Deferred so deletion happens before any wallet services open connections,
+   * which would otherwise cause `deleteDatabase` to fire `onblocked`.
+   */
+  pendingClearCache?: ('penumbra' | 'zcash')[];
   /** Active network type for multi-network wallet */
   activeNetwork?: 'penumbra' | 'zcash' | 'polkadot' | 'kusama' | 'noble' | 'cosmoshub' | 'ethereum' | 'bitcoin';
   /** Zcash-specific wallets */
@@ -57,6 +63,18 @@ type LOCAL = {
     accountIndex: number;
     mainnet: boolean;
     vaultId?: string;
+    /**
+     * Cold signer device that owns this wallet's seed.
+     *
+     * - `'zigner'` (default for legacy/missing): Rotko's own air-gapped Android
+     *   signer. Supports Penumbra, Zcash, FROST multisig, ZID identity, and
+     *   per-tx anchor attestation against a known verifier key.
+     * - `'keystone'`: A Keystone hardware wallet acting as zcash-only cold
+     *   signer. PCZT-only, no Penumbra/FROST/ZID integration.
+     *
+     * Optional for backwards compat — undefined = treat as `'zigner'`.
+     */
+    coldSignerType?: 'zigner' | 'keystone';
   }[];
   /** Active zcash wallet index */
   activeZcashIndex?: number;

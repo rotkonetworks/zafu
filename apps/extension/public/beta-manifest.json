@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "zafu wallet BETA",
   "short_name": "zafu BETA",
-  "version": "24.1.2",
+  "version": "24.1.3",
   "description": "Zcash + Penumbra privacy wallet. Cold signing, FROST multisig, client-side proving, ed25519 app identity, verified lightclient.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAumLcmfQnXRpyRqpga9emIAK2NszJC0GbCtacZXNFKRr/ZvsBCasAeu91plM7BPhuFd6E9cjsJafmesmhZ3eVQijR+rrjE77coqB5Aff5otsCFd8l0+HcWcLZrpDO2HAxlJMCceylA75DzYx4ewSc/mW1e69G6xjUxb8azaWqhCK8t6bwrYCN7YGhRYjpNzbHRtB3EA/6lf8kEVMFrTX/wlD+AJMo+Yq5ggikECK4VmRAoAxM4M+hE4M3LtKypMrj2q0+wqnMU+NdyIyMaEeEl8UbsuP6UymQf1j+NIcAkoS4HCHA9oZ68GRzDH2cpXf+TaQJnmEAnI9cjpaUiU1TFQIDAQAB",
   "minimum_chrome_version": "119",

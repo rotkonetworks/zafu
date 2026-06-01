@@ -16,6 +16,7 @@ import { keyRingSelector, type ZignerZafuImport } from '../../../state/keyring';
 import { usePageNav } from '../../../utils/navigate';
 import { useCallback, useRef, useState } from 'react';
 import { QrScanner } from '../../../shared/components/qr-scanner';
+import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanner';
 import { LineWave } from 'react-loader-spinner';
 import { PagePath } from '../paths';
 import { setOnboardingValuesInStorage } from './persist-parameters';
@@ -38,11 +39,16 @@ export const ImportZigner = () => {
     detectedNetwork,
     errorMessage,
     processQrData,
+    processZcashAccountsBytes,
     setWalletLabel,
     setScanState,
     setError,
     clearZignerState,
   } = useStore(zignerConnectSelector);
+  // Tracks whether the user picked the Keystone-class flow (animated multipart
+  // UR over `ur:zcash-accounts`). Distinct from the legacy zigner scan to keep
+  // UI semantics clear and avoid regressing the static-QR happy path.
+  const [keystoneMode, setKeystoneMode] = useState(false);
   const { addZignerUnencrypted } = useStore(keyRingSelector);
   const [importing, setImporting] = useState(false);
 
@@ -113,18 +119,41 @@ export const ImportZigner = () => {
         };
         await addZignerUnencrypted(zignerData, walletLabel || 'zigner penumbra');
       } else if (zcashWalletImport) {
-        // zcash zigner import — use ZID as canonical deviceId so same-device
-        // imports across networks can be deduped. fall back to timestamp for
-        // legacy zigner builds that don't include ZID in the FVK QR.
+        // zcash import — for zigner, use ZID as canonical deviceId so
+        // same-device imports across networks dedup. Keystone has no ZID;
+        // fall back to a hash-based deviceId so reimporting the same FVK
+        // still dedups against itself.
+        const kind = zcashWalletImport.coldSignerType ?? 'zigner';
+        const ufvkOrFvkB64 = zcashWalletImport.orchardFvk
+          ? btoa(String.fromCharCode(...zcashWalletImport.orchardFvk))
+          : zcashWalletImport.ufvk ?? undefined;
+        // Stable deviceId for keystone: hash of the ufvk (16-char prefix). The
+        // ufvk is the only canonical, immutable identifier we have for a
+        // Keystone wallet. A timestamp would mean "reimporting the same
+        // wallet" creates a new deviceId every time — bad for dedup.
+        let deviceId = zcashWalletImport.zidPublicKey;
+        if (!deviceId) {
+          if (kind === 'keystone' && ufvkOrFvkB64) {
+            // Quick non-crypto digest sufficient for dedup. Switch to a real
+            // hash if collision becomes a concern.
+            let h = 5381;
+            for (let i = 0; i < ufvkOrFvkB64.length; i++) {
+              h = ((h << 5) + h + ufvkOrFvkB64.charCodeAt(i)) | 0;
+            }
+            deviceId = `keystone-${(h >>> 0).toString(16)}`;
+          } else {
+            deviceId = `zcash-${Date.now()}`;
+          }
+        }
+        const defaultLabel = kind === 'keystone' ? 'keystone zcash' : 'zigner zcash';
         const zignerData: ZignerZafuImport = {
-          viewingKey: zcashWalletImport.orchardFvk
-            ? btoa(String.fromCharCode(...zcashWalletImport.orchardFvk))
-            : zcashWalletImport.ufvk ?? undefined,
+          viewingKey: ufvkOrFvkB64,
           accountIndex: zcashWalletImport.accountIndex,
-          deviceId: zcashWalletImport.zidPublicKey ?? `zcash-${Date.now()}`,
+          deviceId,
           zidPublicKey: zcashWalletImport.zidPublicKey,
+          coldSignerType: kind,
         };
-        await addZignerUnencrypted(zignerData, walletLabel || 'zigner zcash');
+        await addZignerUnencrypted(zignerData, walletLabel || defaultLabel);
       } else if (parsedCosmosExport) {
         // cosmos zigner import - watch-only addresses
         const zignerData: ZignerZafuImport = {
@@ -173,12 +202,37 @@ export const ImportZigner = () => {
 
   // Full-screen scanner mode
   if (scanState === 'scanning') {
+    if (keystoneMode) {
+      // Keystone (and any UR-multipart-emitting cold signer) sends the FVK
+      // as `ur:zcash-accounts` — possibly across multiple frames. The
+      // AnimatedQrScanner accumulates frames, decodes via the wasm fountain
+      // decoder, and hands us the inner CBOR which we parse directly.
+      return (
+        <AnimatedQrScanner
+          onComplete={(bytes, urType) => {
+            if (urType !== 'zcash-accounts') {
+              setError(`expected ur:zcash-accounts, got ur:${urType}`);
+              return;
+            }
+            // Trust the button: this scanner only opens when the user clicked
+            // "Scan Keystone". Pass that explicitly so the state action
+            // doesn't have to infer from byte presence.
+            processZcashAccountsBytes(bytes, 'keystone');
+          }}
+          onError={setError}
+          onClose={() => { setKeystoneMode(false); setScanState('idle'); }}
+          title="Scan Keystone QR"
+          description="Hold the camera steady on the animated zcash-accounts QR"
+          urTypeFilter="zcash-accounts"
+        />
+      );
+    }
     return (
       <QrScanner
         onScan={handleScan}
         onError={setError}
         onClose={() => setScanState('idle')}
-title="Scan Zafu Zigner QR"
+        title="Scan Zafu Zigner QR"
         description="Point camera at your Zafu Zigner's FVK QR code"
       />
     );
@@ -217,16 +271,24 @@ title="Scan Zafu Zigner QR"
         </CardHeader>
         <CardContent>
           <div className='text-center'>
-            {/* Idle state - show scan button */}
+            {/* Idle state - show scan buttons */}
             {scanState === 'idle' && !showManualInput && (
-              <div className='flex flex-col gap-4'>
+              <div className='flex flex-col gap-3'>
                 <Button
                   variant='gradient'
                   className='mt-4'
-                  onClick={() => setScanState('scanning')}
+                  onClick={() => { setKeystoneMode(false); setScanState('scanning'); }}
                 >
                   <span className='i-lucide-camera size-5 mr-2' />
-                  Scan QR Code
+                  Scan QR Code (Zigner)
+                </Button>
+
+                <Button
+                  variant='secondary'
+                  onClick={() => { setKeystoneMode(true); setScanState('scanning'); }}
+                >
+                  <span className='i-lucide-camera size-5 mr-2' />
+                  Scan Keystone (animated UR, zcash only)
                 </Button>
 
                 {errorMessage && (

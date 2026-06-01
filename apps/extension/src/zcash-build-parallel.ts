@@ -78,7 +78,7 @@ const initParallelWasm = async (): Promise<WasmModule> => {
 };
 
 interface ZcashBuildRequest {
-  fn: 'build_signed_spend' | 'build_unsigned' | 'build_shielding' | 'build_unsigned_shielding';
+  fn: 'build_signed_spend' | 'build_unsigned' | 'build_unsigned_pczt' | 'build_shielding' | 'build_unsigned_shielding';
   args: unknown[];
 }
 
@@ -106,6 +106,14 @@ async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
 
     case 'build_unsigned':
       result = wasm['build_unsigned_transaction'](
+        a[0], a[1], a[2], BigInt(a[3] as string), BigInt(a[4] as string),
+        a[5], a[6], a[7], a[8], a[9] ?? null,
+      );
+      break;
+
+    case 'build_unsigned_pczt':
+      // a[7] is target_height (number), not account_index
+      result = wasm['build_unsigned_pczt'](
         a[0], a[1], a[2], BigInt(a[3] as string), BigInt(a[4] as string),
         a[5], a[6], a[7], a[8], a[9] ?? null,
       );
