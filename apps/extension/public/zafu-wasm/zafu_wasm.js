@@ -1641,19 +1641,6 @@ export function tree_root_hex(tree_state_hex) {
 }
 
 /**
- * Decode UR-encoded animated QR string frames back into CBOR bytes.
- *
- * Accepts a JSON array of UR strings (each `ur:<type>/...`) collected from
- * successive scans of an animated QR. Returns the reconstructed payload bytes
- * once the fountain decoder has enough frames (deduplicated internally), or an
- * error if the parts are malformed or the fountain code can't yet reconstruct.
- *
- * `expected_type` is a sanity check: if non-empty, parts whose UR type doesn't
- * match are rejected. Pass `""` to accept any type.
- *
- * Returns hex-encoded payload bytes (caller can hex_decode if it wants raw).
- * We return hex (rather than `Vec<u8>` directly) to avoid a wasm-bindgen
- * `Uint8Array` allocation pattern that's been flaky for us in some browsers.
  * @param {string} parts_json
  * @param {string} expected_type
  * @returns {string}
@@ -1723,6 +1710,31 @@ export function validate_seed_phrase(seed_phrase) {
     const ptr0 = passStringToWasm0(seed_phrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
     const ret = wasm.validate_seed_phrase(ptr0, len0);
+    return ret !== 0;
+}
+
+/**
+ * Authoritatively validate a Unified Full Viewing Key string.
+ *
+ * Returns `true` iff the string decodes via the *same*
+ * `zcash_keys::UnifiedFullViewingKey::decode` the signing path uses. This
+ * is deliberately the one and only UFVK decoder: a separate hand-rolled
+ * bech32m/checksum validator at the import boundary would be a second
+ * implementation that can disagree with the authority, which is worse than
+ * no check. Structural pre-screening (HRP/charset/length) still happens in
+ * the pure `@repo/wallet` parser for cheap fail-fast and to keep that
+ * package wasm-free; this is the cryptographic gate the import dispatch
+ * calls before persisting a wallet record.
+ *
+ * Network is inferred from the HRP (`uview1` = mainnet, else testnet),
+ * matching every other UFVK entry point in this module.
+ * @param {string} ufvk_str
+ * @returns {boolean}
+ */
+export function validate_ufvk(ufvk_str) {
+    const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.validate_ufvk(ptr0, len0);
     return ret !== 0;
 }
 

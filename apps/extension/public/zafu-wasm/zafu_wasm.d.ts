@@ -470,21 +470,6 @@ export function transparent_pubkey_from_ufvk(ufvk_str: string, address_index: nu
  */
 export function tree_root_hex(tree_state_hex: string): string;
 
-/**
- * Decode UR-encoded animated QR string frames back into CBOR bytes.
- *
- * Accepts a JSON array of UR strings (each `ur:<type>/...`) collected from
- * successive scans of an animated QR. Returns the reconstructed payload bytes
- * once the fountain decoder has enough frames (deduplicated internally), or an
- * error if the parts are malformed or the fountain code can't yet reconstruct.
- *
- * `expected_type` is a sanity check: if non-empty, parts whose UR type doesn't
- * match are rejected. Pass `""` to accept any type.
- *
- * Returns hex-encoded payload bytes (caller can hex_decode if it wants raw).
- * We return hex (rather than `Vec<u8>` directly) to avoid a wasm-bindgen
- * `Uint8Array` allocation pattern that's been flaky for us in some browsers.
- */
 export function ur_decode_frames(parts_json: string, expected_type: string): string;
 
 /**
@@ -499,6 +484,24 @@ export function ur_encode_frames(cbor_data: Uint8Array, ur_type: string, fragmen
  * Validate a seed phrase
  */
 export function validate_seed_phrase(seed_phrase: string): boolean;
+
+/**
+ * Authoritatively validate a Unified Full Viewing Key string.
+ *
+ * Returns `true` iff the string decodes via the *same*
+ * `zcash_keys::UnifiedFullViewingKey::decode` the signing path uses. This
+ * is deliberately the one and only UFVK decoder: a separate hand-rolled
+ * bech32m/checksum validator at the import boundary would be a second
+ * implementation that can disagree with the authority, which is worse than
+ * no check. Structural pre-screening (HRP/charset/length) still happens in
+ * the pure `@repo/wallet` parser for cheap fail-fast and to keep that
+ * package wasm-free; this is the cryptographic gate the import dispatch
+ * calls before persisting a wallet record.
+ *
+ * Network is inferred from the HRP (`uview1` = mainnet, else testnet),
+ * matching every other UFVK entry point in this module.
+ */
+export function validate_ufvk(ufvk_str: string): boolean;
 
 /**
  * Get library version
@@ -562,6 +565,7 @@ export interface InitOutput {
     readonly ur_decode_frames: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly ur_encode_frames: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
     readonly validate_seed_phrase: (a: number, b: number) => number;
+    readonly validate_ufvk: (a: number, b: number) => number;
     readonly version: () => [number, number];
     readonly walletkeys_calculate_balance: (a: number, b: any, c: any) => [bigint, number, number];
     readonly walletkeys_decrypt_transaction_memos: (a: number, b: number, c: number) => [number, number, number];

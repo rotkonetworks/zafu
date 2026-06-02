@@ -27,6 +27,7 @@ export const tree_root_hex: (a: number, b: number) => [number, number, number, n
 export const ur_decode_frames: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const ur_encode_frames: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
 export const validate_seed_phrase: (a: number, b: number) => number;
+export const validate_ufvk: (a: number, b: number) => number;
 export const version: () => [number, number];
 export const walletkeys_calculate_balance: (a: number, b: any, c: any) => [bigint, number, number];
 export const walletkeys_decrypt_transaction_memos: (a: number, b: number, c: number) => [number, number, number];
