@@ -26,6 +26,7 @@ import type {
   MemoFilter,
   FetchContext,
 } from '../types';
+import type { BucketStore } from './cache';
 import type { RandomU32 } from './shuffle';
 
 export interface DecoyOptions {
@@ -39,6 +40,14 @@ export interface DecoyOptions {
    * candidate; should be cheap (sync, in-memory check). default: () => false.
    */
   exclude?: (bucket: BucketStart) => boolean;
+  /**
+   * Optional cache to consult: any bucket present here is excluded as a decoy
+   * candidate. Wiring this prevents decoys from landing on real buckets that
+   * we've already fetched (and would otherwise be re-fetched, wasting bandwidth
+   * and producing duplicate events). Combined with `exclude`, both predicates
+   * apply (union).
+   */
+  excludeStore?: BucketStore;
 }
 
 const defaultRng: RandomU32 = (out) => crypto.getRandomValues(out);
@@ -46,7 +55,8 @@ const defaultRng: RandomU32 = (out) => crypto.getRandomValues(out);
 export const withDecoyBuckets = (opts: DecoyOptions): MemoFilter => {
   const ratio = Math.max(0, Math.floor(opts.ratio));
   const rng = opts.rng ?? defaultRng;
-  const exclude = opts.exclude ?? (() => false);
+  const userExclude = opts.exclude ?? (() => false);
+  const excludeStore = opts.excludeStore;
 
   return (inner: MemoFetcher): MemoFetcher =>
     async function* withDecoys(walletId, ownedBuckets, ctx) {
@@ -54,6 +64,8 @@ export const withDecoyBuckets = (opts: DecoyOptions): MemoFilter => {
         yield* inner(walletId, ownedBuckets, ctx);
         return;
       }
+      const seen = excludeStore ? await excludeStore.list(walletId) : null;
+      const exclude = (b: BucketStart) => userExclude(b) || (seen?.has(b) ?? false);
       const decoys = pickDecoys(ownedBuckets, ratio, exclude, rng, ctx);
       const merged = new Set<BucketStart>(ownedBuckets);
       for (const d of decoys) merged.add(d);

@@ -53,15 +53,22 @@ export const withBucketCache = (
       }
       if (fresh.size === 0) return;
 
-      yield* inner(walletId, fresh, ctx);
+      // we record only buckets we actually saw a successful event for AND that
+      // were in our own input set (= real-only when cache is outermost). this
+      // guarantees:
+      //   - errored buckets (no event yielded) are not cached, so the next
+      //     sync retries them naturally
+      //   - decoy buckets (added by inner filters, not in `fresh`) are never
+      //     recorded — keeping the decoy universe over [activation, tip] full
+      //     instead of monotonically shrinking
+      const succeeded = new Set<BucketStart>();
+      for await (const event of inner(walletId, fresh, ctx)) {
+        if (fresh.has(event.bucketStart)) succeeded.add(event.bucketStart);
+        yield event;
+      }
 
-      // mark every bucket the user-set was asked to fetch as processed.
-      // we mark the input set, not what inner saw — if inner widened the set
-      // with decoys, we want those decoys recorded too so future syncs skip
-      // them (otherwise they'd get re-rolled or worse, get fetched a second
-      // time as decoys reusing the same RNG seed).
       const tasks: Promise<void>[] = [];
-      for (const b of ownedBuckets) tasks.push(store.put(walletId, b));
+      for (const b of succeeded) tasks.push(store.put(walletId, b));
       await Promise.all(tasks);
     };
 

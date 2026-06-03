@@ -2006,8 +2006,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const estimateBlockTimeMs = (h: number): number =>
           tipTimeMs + (h - currentTip) * 75000;
 
-        const strategyName = ((payload as { strategy?: MemoSyncStrategy }).strategy ?? 'private') as MemoSyncStrategy;
-        const base = blockRangeFetcher(memoClient, { maxHeight: currentTip });
+        const rawStrategy = (payload as { strategy?: string }).strategy;
+        const strategyName: MemoSyncStrategy =
+          rawStrategy === 'fast' || rawStrategy === 'paranoid' ? rawStrategy : 'private';
+        const base = blockRangeFetcher(memoClient, {
+          maxHeight: currentTip,
+          bucketSize: MEMO_BUCKET_SIZE,
+        });
         const bucketStore = idbBucketStore({ open: () => Promise.resolve(db) });
         const fetcher = buildStrategy(strategyName, {
           base,
@@ -2016,17 +2021,22 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         });
 
         // ── consume the async iterable; decode memos from each yielded bucket ──
+        // progress: the base fetcher knows the post-cache, post-decoy total and
+        // calls ctx.onProgress with accurate (completed, total) — we just
+        // forward those values to the UI.
         const results: Array<{ txId: string; blockHeight: number; timestamp: number; content: string; direction: string; amount: string; memoBytes?: string; diversifierIndex?: number }> = [];
         const abortCtrl = new AbortController();
-        let bucketsCompleted = 0;
-        // we don't know totalBuckets in advance (filters may add decoys), so
-        // estimate from the input. progress is approximate but monotonic.
-        const estimatedTotal = ownedBucketSet.size;
 
         for await (const { blocks } of fetcher(walletId, ownedBucketSet, {
           signal: abortCtrl.signal,
           tip: currentTip,
           activation: ORCHARD_ACTIVATION_HEIGHT,
+          onProgress: (current, total) => {
+            workerSelf.postMessage({
+              type: 'sync-memos-progress', id: '', network: 'zcash', walletId,
+              payload: { current, total },
+            });
+          },
         })) {
           for (const { height, txs } of blocks) {
             const heightNotes = notesByHeight.get(height);
@@ -2088,14 +2098,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             }
           }
 
-          bucketsCompleted += 1;
-          workerSelf.postMessage({
-            type: 'sync-memos-progress', id: '', network: 'zcash', walletId,
-            payload: { current: bucketsCompleted, total: Math.max(estimatedTotal, bucketsCompleted) },
-          });
         }
-        // reference MEMO_BUCKET_SIZE so the import isn't pruned (used implicitly via bucketOf)
-        void MEMO_BUCKET_SIZE;
 
         // persist all scanned note txids + spent_by_txids so we don't re-scan next time
         const allScanned = new Set(scannedTxids);

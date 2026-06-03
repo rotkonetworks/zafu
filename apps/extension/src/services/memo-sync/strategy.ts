@@ -49,26 +49,31 @@ export function buildStrategy(
 ): MemoFetcher {
   const { base, store, rng, alwaysFetch } = params;
   const cache = withBucketCache(store, { alwaysFetch });
+  // ordering note: filters are applied left-to-right, so the LAST entry is the
+  // outermost call-time wrapper. cache must be outermost so:
+  //   - it sees real-only input (never decoys) when deciding what to mark
+  //   - it strips already-cached real buckets before decoy widens the set
+  // see strategy.ts header comment for call-time flow.
   switch (name) {
     case 'fast':
       return compose(base, [
-        cache,
         withConcurrency(8),
+        cache,
       ]);
     case 'paranoid':
       return compose(base, [
-        cache,
-        withDecoyBuckets({ ratio: 5, rng }),
-        withShuffle(rng),
         withConcurrency(2),
+        withShuffle(rng),
+        withDecoyBuckets({ ratio: 5, rng, excludeStore: store }),
+        cache,
       ]);
     case 'private':
     default:
       return compose(base, [
-        cache,
-        withDecoyBuckets({ ratio: 2, rng }),
-        withShuffle(rng),
         withConcurrency(4),
+        withShuffle(rng),
+        withDecoyBuckets({ ratio: 2, rng, excludeStore: store }),
+        cache,
       ]);
   }
 }
@@ -79,20 +84,18 @@ export function buildStrategy(
  * produces `C(B(A(base)))`.
  *
  * call-time order is opposite: C runs first (outermost), then B, then A, then
- * base. for the 'private' stack `[cache, decoy, shuffle, concurrency]`:
+ * base. for the 'private' stack `[concurrency, shuffle, decoy, cache]`:
  *
- *   call() → concurrency annotates ctx
- *          → shuffle reorders the input set
- *          → decoy adds random buckets to the (shuffled) set
- *          → cache strips already-processed buckets from the (real + decoy) set
+ *   call() → cache strips already-processed buckets from the REAL set
+ *          → decoy adds random buckets (excluding cached real via excludeStore)
+ *          → shuffle reorders the (real + decoy) set
+ *          → concurrency annotates ctx
  *          → base fetches the survivors
- *          ← base yields events
- *          ← cache records new buckets as processed
- *          ← decoy / shuffle / concurrency pass-through events unchanged
- *
- * cache stripping decoys that collide with cached real buckets is intentional:
- * we never re-fetch a bucket that's already been correlated with this wallet.
- * the count loss (3N → 3N - collisions) is small and acceptable.
+ *          ← base yields events (one per fetched bucket, including decoys)
+ *          ← concurrency / shuffle / decoy pass-through unchanged
+ *          ← cache records buckets whose events arrived AND were in its
+ *            real-only input (decoys are never marked, keeping the decoy
+ *            universe full for future syncs)
  */
 function compose(
   base: MemoFetcher,

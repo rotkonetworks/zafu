@@ -8,6 +8,23 @@ function recorder(): { fetcher: MemoFetcher; calls: BucketStart[][] } {
   const calls: BucketStart[][] = [];
   const fetcher: MemoFetcher = async function* (_w, owned, _c) {
     calls.push([...owned]);
+    for (const b of owned) yield { bucketStart: b, blocks: [] };
+  };
+  return { fetcher, calls };
+}
+
+/** fetcher that drops a specific bucket (simulates a network error). */
+function flakyRecorder(failOn: ReadonlySet<BucketStart>): {
+  fetcher: MemoFetcher;
+  calls: BucketStart[][];
+} {
+  const calls: BucketStart[][] = [];
+  const fetcher: MemoFetcher = async function* (_w, owned, _c) {
+    calls.push([...owned]);
+    for (const b of owned) {
+      if (failOn.has(b)) continue;
+      yield { bucketStart: b, blocks: [] };
+    }
   };
   return { fetcher, calls };
 }
@@ -61,16 +78,44 @@ describe('withBucketCache', () => {
     expect(new Set(calls[1])).toEqual(new Set([100, 200]));
   });
 
-  test('marks all input buckets including decoys for future skip', async () => {
-    // simulate decoy filter having widened the set: cache is OUTERMOST (call-time
-    // first), so it receives the full real-only set. but the contract is that
-    // future calls with the same input skip; this test pins that.
+  test('marks every input bucket whose event arrived', async () => {
+    // cache is OUTERMOST (call-time first) — its input is real-only.
+    // every bucket the inner generator yields an event for, in this case
+    // every bucket, should be recorded.
     const store = memoryBucketStore();
     const { fetcher } = recorder();
     const wrapped = withBucketCache(store)(fetcher);
     const input = new Set([100, 200, 999_900]);
     await drain(wrapped('w', input, ctx()));
     for (const b of input) expect(await store.has('w', b)).toBe(true);
+  });
+
+  test('does NOT mark buckets that errored (no event yielded)', async () => {
+    // a transient fetch failure (inner skips the bucket) must not poison the
+    // cache. the bucket should retry naturally on the next sync.
+    const store = memoryBucketStore();
+    const { fetcher } = flakyRecorder(new Set([200]));
+    const wrapped = withBucketCache(store)(fetcher);
+    await drain(wrapped('w', new Set([100, 200, 300]), ctx()));
+    expect(await store.has('w', 100)).toBe(true);
+    expect(await store.has('w', 200)).toBe(false);
+    expect(await store.has('w', 300)).toBe(true);
+  });
+
+  test('does NOT mark buckets that were not in its input (e.g. decoys)', async () => {
+    // simulate an inner filter (decoy) widening the set: cache records only
+    // buckets it asked for, even though the inner yields events for more.
+    const store = memoryBucketStore();
+    const widening: MemoFetcher = async function* (_w, owned, _c) {
+      for (const b of owned) yield { bucketStart: b, blocks: [] };
+      // decoy not in cache's input:
+      yield { bucketStart: 555_500, blocks: [] };
+    };
+    const wrapped = withBucketCache(store)(widening);
+    await drain(wrapped('w', new Set([100, 200]), ctx()));
+    expect(await store.has('w', 100)).toBe(true);
+    expect(await store.has('w', 200)).toBe(true);
+    expect(await store.has('w', 555_500)).toBe(false);
   });
 });
 
