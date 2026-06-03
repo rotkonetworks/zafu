@@ -28,6 +28,17 @@ export type NetworkId =
   | 'ethereum'
   | 'bitcoin';
 
+/**
+ * Strategy for fetching memos on shielded networks. Per-server because the
+ * tradeoff (privacy vs bandwidth) makes sense to tune differently for a
+ * public server you don't trust versus a self-hosted node you do.
+ *
+ * See apps/extension/src/services/memo-sync/README.md for what each strategy
+ * does. No strategy ever exposes per-txid lookups; the leaky path is
+ * deliberately not reachable from the UI.
+ */
+export type MemoSyncStrategy = 'private' | 'fast' | 'paranoid';
+
 export interface NetworkConfig {
   id: NetworkId;
   name: string;
@@ -50,6 +61,12 @@ export interface NetworkConfig {
   decimals: number;
   /** Coin denom (e.g., uosmo, unom) */
   denom?: string;
+  /**
+   * Memo-fetch strategy for shielded networks. Optional because non-shielded
+   * networks don't have memos. Default 'private' is set explicitly on the
+   * Zcash entry so it always persists.
+   */
+  memoSyncStrategy?: MemoSyncStrategy;
 }
 
 export interface NetworksSlice {
@@ -61,6 +78,8 @@ export interface NetworksSlice {
   disableNetwork: (id: NetworkId) => Promise<void>;
   /** Update network endpoint */
   setNetworkEndpoint: (id: NetworkId, endpoint: string) => Promise<void>;
+  /** Update memo-sync strategy for a shielded network. */
+  setMemoSyncStrategy: (id: NetworkId, strategy: MemoSyncStrategy) => Promise<void>;
   /** Get list of enabled networks */
   getEnabledNetworks: () => NetworkConfig[];
   /** Check if a network is enabled */
@@ -89,6 +108,7 @@ const DEFAULT_NETWORKS: Record<NetworkId, NetworkConfig> = {
     enabled: false,
     endpoint: 'https://zcash.rotko.net',
     syncDescription: 'Zidecar trustless sync — header chain proven via Ligerito polynomial commitments, nullifier set verified by NOMT merkle proofs. Compact blocks are trial-decrypted locally — keys never leave this device.',
+    memoSyncStrategy: 'private',
   },
 
   // === IBC/Cosmos Chains (for Penumbra deposits/withdrawals) ===
@@ -163,8 +183,9 @@ export const createNetworksSlice =
     void (async () => {
       const enabledNetworks = await local.get('enabledNetworks');
       const networkEndpoints = await local.get('networkEndpoints');
+      const memoSyncStrategies = await local.get('memoSyncStrategies');
 
-      if (enabledNetworks || networkEndpoints) {
+      if (enabledNetworks || networkEndpoints || memoSyncStrategies) {
         set(state => {
           // Apply enabled state from storage
           if (enabledNetworks) {
@@ -179,6 +200,15 @@ export const createNetworksSlice =
             for (const [id, endpoint] of Object.entries(networkEndpoints)) {
               if (state.networks.networks[id as NetworkId]) {
                 state.networks.networks[id as NetworkId].endpoint = endpoint as string;
+              }
+            }
+          }
+          // Apply per-network memo sync strategies
+          if (memoSyncStrategies) {
+            for (const [id, strategy] of Object.entries(memoSyncStrategies)) {
+              const cfg = state.networks.networks[id as NetworkId];
+              if (cfg && strategy) {
+                cfg.memoSyncStrategy = strategy as MemoSyncStrategy;
               }
             }
           }
@@ -242,6 +272,17 @@ export const createNetworksSlice =
         await local.set('networkEndpoints', {
           ...currentEndpoints,
           [id]: endpoint,
+        });
+      },
+
+      setMemoSyncStrategy: async (id: NetworkId, strategy: MemoSyncStrategy) => {
+        set(state => {
+          state.networks.networks[id].memoSyncStrategy = strategy;
+        });
+        const current = (await local.get('memoSyncStrategies')) || {};
+        await local.set('memoSyncStrategies', {
+          ...current,
+          [id]: strategy,
         });
       },
 

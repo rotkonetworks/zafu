@@ -34,22 +34,30 @@ export interface StrategyParams {
   readonly store: BucketStore;
   /** optional RNG override (tests). */
   readonly rng?: RandomU32;
+  /**
+   * predicate: if true for a given bucket, fetch it even when cached.
+   * used by callers (e.g. the worker) to force re-fetch of buckets that
+   * contain notes spent in this sync run so the OVK decode path can rediscover
+   * outgoing memos. defaults to () => false.
+   */
+  readonly alwaysFetch?: (bucket: number) => boolean;
 }
 
 export function buildStrategy(
   name: MemoSyncStrategy,
   params: StrategyParams,
 ): MemoFetcher {
-  const { base, store, rng } = params;
+  const { base, store, rng, alwaysFetch } = params;
+  const cache = withBucketCache(store, { alwaysFetch });
   switch (name) {
     case 'fast':
       return compose(base, [
-        withBucketCache(store),
+        cache,
         withConcurrency(8),
       ]);
     case 'paranoid':
       return compose(base, [
-        withBucketCache(store),
+        cache,
         withDecoyBuckets({ ratio: 5, rng }),
         withShuffle(rng),
         withConcurrency(2),
@@ -57,7 +65,7 @@ export function buildStrategy(
     case 'private':
     default:
       return compose(base, [
-        withBucketCache(store),
+        cache,
         withDecoyBuckets({ ratio: 2, rng }),
         withShuffle(rng),
         withConcurrency(4),

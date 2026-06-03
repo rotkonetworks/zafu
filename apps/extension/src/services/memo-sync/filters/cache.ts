@@ -26,12 +26,31 @@ export interface BucketStore {
   list(walletId: string): Promise<ReadonlySet<BucketStart>>;
 }
 
-export const withBucketCache = (store: BucketStore): MemoFilter =>
+export interface BucketCacheOptions {
+  /**
+   * Optional predicate: if it returns true for a bucket, the bucket is fetched
+   * even if it's already in the cache. Used for cases where the same bucket
+   * needs revisiting under a different decode key (e.g. OVK decryption for
+   * outgoing memos at a spend-height bucket).
+   *
+   * The bucket is still recorded after fetch; the predicate just overrides
+   * the cache-hit short-circuit on input.
+   */
+  readonly alwaysFetch?: (bucket: BucketStart) => boolean;
+}
+
+export const withBucketCache = (
+  store: BucketStore,
+  opts: BucketCacheOptions = {},
+): MemoFilter =>
   (inner: MemoFetcher): MemoFetcher =>
     async function* cached(walletId, ownedBuckets, ctx) {
       const seen = await store.list(walletId);
       const fresh = new Set<BucketStart>();
-      for (const b of ownedBuckets) if (!seen.has(b)) fresh.add(b);
+      const alwaysFetch = opts.alwaysFetch;
+      for (const b of ownedBuckets) {
+        if (alwaysFetch?.(b) || !seen.has(b)) fresh.add(b);
+      }
       if (fresh.size === 0) return;
 
       yield* inner(walletId, fresh, ctx);

@@ -401,7 +401,18 @@ export interface MemoSyncEntry {
 }
 
 /**
- * sync memos in worker (bucket fetch + noise + decrypt — no round-trips)
+ * Memo-fetch strategy chosen by the user per-server. See
+ * services/memo-sync/README.md for what each value means.
+ */
+export type MemoSyncStrategy = 'private' | 'fast' | 'paranoid';
+
+/**
+ * sync memos in worker (bucket fetch + decoys + decrypt — no per-tx round-trips)
+ *
+ * `strategy` selects the filter stack inside the worker. Default 'private'
+ * (2x decoys, shuffle, cache, concurrency 4). 'fast' drops decoys + shuffle;
+ * 'paranoid' raises the decoy ratio. The leaky per-txid path is not reachable
+ * from any strategy.
  */
 export const syncMemosInWorker = async (
   network: NetworkType,
@@ -409,8 +420,14 @@ export const syncMemosInWorker = async (
   serverUrl: string,
   existingTxIds: string[],
   forceResync: boolean,
+  strategy: MemoSyncStrategy = 'private',
 ): Promise<MemoSyncEntry[]> => {
-  return callWorker(network, 'sync-memos', { serverUrl, existingTxIds, forceResync }, walletId);
+  return callWorker(
+    network,
+    'sync-memos',
+    { serverUrl, existingTxIds, forceResync, strategy },
+    walletId,
+  );
 };
 
 export interface ShieldResult {
