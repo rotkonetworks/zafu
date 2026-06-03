@@ -129,6 +129,13 @@ type LOCAL = {
     ethereum?: string;
     bitcoin?: string;
   };
+  /**
+   * Per-network memo-fetch strategy. Currently only Zcash uses this.
+   * Default 'private' is applied at runtime in NetworkConfig if missing.
+   */
+  memoSyncStrategies?: {
+    zcash?: 'private' | 'fast' | 'paranoid';
+  };
 
   /** keyring vaults (keplr-style multi-account) */
   vaults?: {

@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { useStore } from '../../../state';
 import { selectActiveNetwork, selectEnabledNetworks, selectSetActiveNetwork, type NetworkType } from '../../../state/keyring';
 import { isIbcNetwork } from '../../../state/keyring/network-types';
-import { networksSelector, type NetworkId } from '../../../state/networks';
+import { networksSelector, type NetworkId, type MemoSyncStrategy } from '../../../state/networks';
 import { NETWORKS, LAUNCHED_NETWORKS } from '../../../config/networks';
 import { cn } from '@repo/ui/lib/utils';
 import { SettingsScreen } from './settings-screen';
@@ -36,7 +36,7 @@ export const SettingsNetworks = () => {
   const toggleNetwork = useStore(state => state.keyRing.toggleNetwork);
   const privacySetSetting = useStore(state => state.privacy.setSetting);
   const transparentEnabled = useStore(state => state.privacy.settings.enableTransparentBalances);
-  const { networks: networkState, setNetworkEndpoint } = useStore(networksSelector);
+  const { networks: networkState, setNetworkEndpoint, setMemoSyncStrategy } = useStore(networksSelector);
 
   const [expandedNetwork, setExpandedNetwork] = useState<NetworkType | null>(null);
   const [editingEndpoint, setEditingEndpoint] = useState('');
@@ -167,6 +167,13 @@ export const SettingsNetworks = () => {
                   {state?.syncDescription && (
                     <p className='text-[10px] text-fg-muted mt-1.5'>{state.syncDescription}</p>
                   )}
+
+                  {networkId === 'zcash' && (
+                    <MemoSyncStrategyPicker
+                      value={(state as { memoSyncStrategy?: MemoSyncStrategy } | undefined)?.memoSyncStrategy ?? 'private'}
+                      onChange={(s) => void setMemoSyncStrategy('zcash', s)}
+                    />
+                  )}
                 </div>
               )}
             </div>
@@ -176,5 +183,71 @@ export const SettingsNetworks = () => {
     </SettingsScreen>
   );
 };
+
+interface MemoSyncStrategyPickerProps {
+  readonly value: MemoSyncStrategy;
+  readonly onChange: (strategy: MemoSyncStrategy) => void;
+}
+
+const STRATEGY_OPTIONS: ReadonlyArray<{
+  id: MemoSyncStrategy;
+  label: string;
+  hint: string;
+}> = [
+  {
+    id: 'private',
+    label: 'private',
+    hint: 'bucket + 2× decoy + shuffle. recommended default.',
+  },
+  {
+    id: 'fast',
+    label: 'fast',
+    hint: 'bucket only, no decoys. faster sync but server can correlate buckets ↔ wallet.',
+  },
+  {
+    id: 'paranoid',
+    label: 'paranoid',
+    hint: 'bucket + 5× decoy + shuffle. slower; strongest decoy ratio.',
+  },
+];
+
+const MemoSyncStrategyPicker = ({ value, onChange }: MemoSyncStrategyPickerProps) => (
+  <div className='mt-3 pt-3 border-t border-border-soft'>
+    <div className='text-[10px] text-fg-muted mb-1.5'>memo sync privacy</div>
+    <div className='flex flex-col gap-1'>
+      {STRATEGY_OPTIONS.map(opt => {
+        const selected = value === opt.id;
+        return (
+          <button
+            key={opt.id}
+            type='button'
+            onClick={() => onChange(opt.id)}
+            className={cn(
+              'flex items-start gap-2 p-2 rounded border text-left transition-colors',
+              selected ? 'border-primary/60 bg-primary/5' : 'border-border-soft hover:border-border',
+            )}
+          >
+            <div className={cn(
+              'mt-0.5 h-3 w-3 rounded-full border-2 flex-shrink-0',
+              selected ? 'border-zigner-gold bg-zigner-gold' : 'border-muted-foreground/50',
+            )} />
+            <div className='flex-1'>
+              <div className='text-xs font-medium leading-none mb-0.5'>{opt.label}</div>
+              <div className='text-[10px] text-fg-muted leading-snug'>{opt.hint}</div>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+    {value === 'fast' && (
+      <div className='mt-2 p-2 rounded border border-amber-500/30 bg-amber-500/5'>
+        <div className='text-[10px] text-amber-500 leading-snug'>
+          fast mode skips decoy buckets — the server learns which 100-block ranges your wallet cares about.
+          memos themselves remain encrypted.
+        </div>
+      </div>
+    )}
+  </div>
+);
 
 export default SettingsNetworks;
