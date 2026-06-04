@@ -832,12 +832,12 @@ function ReceiveTab({ address, loading, activeNetwork }: {
         </div>
       </div>
 
-      <p className='text-center text-xs text-fg-muted'>
+      <p className='text-center text-xs text-fg-muted leading-snug lowercase'>
         {ephemeral && isPenumbra
-          ? 'Randomized address, unlinkable to your identity. Can be reused, but sharing with multiple parties lets them see they paid the same address.'
+          ? 'a fresh single-use address. share it with one party; reusing it across senders lets them link payments to each other.'
           : transparent && isZcash
-            ? 'Transparent address — balance and history are publicly visible. Use one index per exchange. Shield funds to orchard after receiving.'
-            : `Only send ${activeNetwork?.toUpperCase() ?? ''} assets to this address.`
+            ? 'transparent address — balance and history are publicly visible. use one index per exchange. shield to orchard after receiving for privacy.'
+            : `share with anyone who wants to send you ${activeNetwork?.toUpperCase() ?? ''}. shielded — senders don't see your other transactions.`
         }
       </p>
     </div>

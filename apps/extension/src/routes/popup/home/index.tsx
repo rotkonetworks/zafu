@@ -242,11 +242,15 @@ export const PopupIndex = () => {
 {/* account picker moved into PenumbraContent below sync bar */}
           <div className='flex items-center justify-between'>
           <div>
+            <div className='text-[10px] text-fg-dim mb-0.5 lowercase tracking-[0.05em]'>
+              your address
+            </div>
             <div className='flex items-center gap-1'>
               <button
                 onClick={copyAddress}
                 disabled={!address}
-                className='flex items-center gap-1 text-xs text-fg-muted transition-colors duration-100 hover:text-fg-high disabled:opacity-50 disabled:cursor-not-allowed'
+                title={address ? (copied ? 'copied!' : 'click to copy') : undefined}
+                className='flex items-center gap-1.5 text-xs text-fg transition-colors duration-100 hover:text-fg-high disabled:opacity-50 disabled:cursor-not-allowed'
               >
                 {isMultisig && (
                   <span className='rounded-sm bg-zigner-gold/15 px-1.5 py-0.5 text-[9px] text-zigner-gold tabular leading-none'>
@@ -254,7 +258,16 @@ export const PopupIndex = () => {
                   </span>
                 )}
                 <span className='tabular'>{displayAddress}</span>
-                {address && (copied ? <span className='i-lucide-check h-3 w-3' /> : <span className='i-lucide-copy h-3 w-3' />)}
+                {address && (
+                  copied ? (
+                    <span className='inline-flex items-center gap-0.5 text-zigner-gold'>
+                      <span className='i-lucide-check h-3 w-3' />
+                      <span className='text-[10px] lowercase'>copied</span>
+                    </span>
+                  ) : (
+                    <span className='i-lucide-copy h-3 w-3' />
+                  )
+                )}
               </button>
               {address && activeNetwork === 'zcash' && (
                 <button
