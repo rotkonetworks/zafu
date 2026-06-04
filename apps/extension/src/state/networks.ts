@@ -1,6 +1,7 @@
 import { AllSlices, SliceCreator } from '.';
 import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
+import { detectZcashBackend, type ZcashBackend } from './keyring/zcash-backend';
 
 /**
  * Supported network ecosystems.
@@ -67,6 +68,8 @@ export interface NetworkConfig {
    * Zcash entry so it always persists.
    */
   memoSyncStrategy?: MemoSyncStrategy;
+  /** Detected Zcash sync backend: 'zidecar' (trustless) vs 'lightwalletd' (trusted public). */
+  backend?: ZcashBackend;
 }
 
 export interface NetworksSlice {
@@ -109,6 +112,7 @@ const DEFAULT_NETWORKS: Record<NetworkId, NetworkConfig> = {
     endpoint: 'https://zcash.rotko.net',
     syncDescription: 'Zidecar trustless sync — header chain proven via Ligerito polynomial commitments, nullifier set verified by NOMT merkle proofs. Compact blocks are trial-decrypted locally — keys never leave this device.',
     memoSyncStrategy: 'private',
+    backend: 'zidecar',
   },
 
   // === IBC/Cosmos Chains (for Penumbra deposits/withdrawals) ===
@@ -184,8 +188,9 @@ export const createNetworksSlice =
       const enabledNetworks = await local.get('enabledNetworks');
       const networkEndpoints = await local.get('networkEndpoints');
       const memoSyncStrategies = await local.get('memoSyncStrategies');
+      const zcashBackend = await local.get('zcashBackend');
 
-      if (enabledNetworks || networkEndpoints || memoSyncStrategies) {
+      if (enabledNetworks || networkEndpoints || memoSyncStrategies || zcashBackend) {
         set(state => {
           // Apply enabled state from storage
           if (enabledNetworks) {
@@ -211,6 +216,10 @@ export const createNetworksSlice =
                 cfg.memoSyncStrategy = strategy as MemoSyncStrategy;
               }
             }
+          }
+          // Apply detected Zcash backend (trustless zidecar vs public lightwalletd)
+          if (zcashBackend) {
+            state.networks.networks.zcash.backend = zcashBackend;
           }
         });
       }
@@ -273,6 +282,20 @@ export const createNetworksSlice =
           ...currentEndpoints,
           [id]: endpoint,
         });
+
+        // detect whether a new Zcash endpoint speaks zidecar or generic lightwalletd
+        if (id === 'zcash') {
+          let backend: ZcashBackend = 'zidecar';
+          try {
+            backend = await detectZcashBackend(endpoint);
+          } catch {
+            backend = 'zidecar';
+          }
+          set(state => {
+            state.networks.networks.zcash.backend = backend;
+          });
+          await local.set('zcashBackend', backend);
+        }
       },
 
       setMemoSyncStrategy: async (id: NetworkId, strategy: MemoSyncStrategy) => {

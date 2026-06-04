@@ -23,10 +23,11 @@ import { ZCASH_ORCHARD_ACTIVATION } from '../config/networks';
 import { isPro } from '../state/license';
 import { deriveRingVrfSeed } from '../state/identity';
 import { ZidecarClient } from '../state/keyring/zidecar-client';
+import type { ZcashBackend } from '../state/keyring/zcash-backend';
 
 /** resolve wallet birthday height from storage or chain tip.
  *  never returns below orchard activation — no point scanning pre-orchard blocks. */
-async function resolveBirthday(walletId: string, zidecarUrl: string): Promise<number> {
+async function resolveBirthday(walletId: string, zidecarUrl: string, backend: ZcashBackend): Promise<number> {
   const birthdayKey = `zcashBirthday_${walletId}`;
   const stored = await chrome.storage.local.get(birthdayKey);
   // per-wallet birthday takes priority (user-set or auto-detected)
@@ -35,8 +36,9 @@ async function resolveBirthday(walletId: string, zidecarUrl: string): Promise<nu
   }
   // no birthday set — default to near chain tip (new wallet = recent)
   try {
-    const { ZidecarClient } = await import('../state/keyring/zidecar-client');
-    const tip = await new ZidecarClient(zidecarUrl).getTip();
+    const tip = backend === 'lightwalletd'
+      ? await new (await import('../state/keyring/lightwalletd-client')).LightwalletdClient(zidecarUrl).getTip()
+      : await new ZidecarClient(zidecarUrl).getTip();
     const height = Math.floor(Math.max(ZCASH_ORCHARD_ACTIVATION, tip.height - 100) / 10000) * 10000;
     await chrome.storage.local.set({ [birthdayKey]: height });
     return height;
@@ -52,6 +54,7 @@ export function useZcashAutoSync() {
   const getMnemonic = useStore(selectGetMnemonic);
   const activeZcashWallet = useStore(selectActiveZcashWallet);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
+  const zcashBackend = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';
 
   const onLoginPage = location.pathname === '/login';
   const hasMnemonic = selectedKeyInfo?.type === 'mnemonic';
@@ -97,7 +100,7 @@ export function useZcashAutoSync() {
           if (cancelled) return;
           const mnemonic = await getMnemonic(walletId);
           if (cancelled) return;
-          const startHeight = await resolveBirthday(walletId, zidecarUrl);
+          const startHeight = await resolveBirthday(walletId, zidecarUrl, zcashBackend);
           if (cancelled) return;
           // generate ring VRF session proof for pro priority sync
           if (isPro(useStore.getState())) {
@@ -112,7 +115,7 @@ export function useZcashAutoSync() {
 
           syncingWalletRef.current = walletId;
           console.log('[zcash-sync] starting mnemonic sync for', walletId);
-          await startSyncInWorker('zcash', walletId, mnemonic, zidecarUrl, startHeight);
+          await startSyncInWorker('zcash', walletId, mnemonic, zidecarUrl, startHeight, zcashBackend);
         } catch (err) {
           if (err instanceof Error && err.message.includes('keyring locked')) {
             console.log('[zcash-sync] waiting for unlock');
@@ -158,11 +161,11 @@ export function useZcashAutoSync() {
       try {
         await spawnNetworkWorker('zcash');
         if (cancelled) return;
-        const startHeight = await resolveBirthday(walletId, zidecarUrl);
+        const startHeight = await resolveBirthday(walletId, zidecarUrl, zcashBackend);
         if (cancelled) return;
         syncingWalletRef.current = walletId;
         console.log('[zcash-sync] starting watch-only sync for', walletId);
-        await startWatchOnlySyncInWorker('zcash', walletId, ufvkStr, zidecarUrl, startHeight);
+        await startWatchOnlySyncInWorker('zcash', walletId, ufvkStr, zidecarUrl, startHeight, zcashBackend);
       } catch (err) {
         console.error('[zcash-sync] watch-only auto-sync failed:', err);
       }

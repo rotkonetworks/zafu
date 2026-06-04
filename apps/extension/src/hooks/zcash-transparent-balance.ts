@@ -6,7 +6,8 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { ZidecarClient, type Utxo } from '../state/keyring/zidecar-client';
+import { type Utxo } from '../state/keyring/zidecar-client';
+import { zcashClientFor } from '../state/keyring/zcash-backend';
 import { useStore } from '../state';
 
 const DEFAULT_ZIDECAR_URL = 'https://zcash.rotko.net';
@@ -20,15 +21,16 @@ export interface TransparentBalance {
 
 export function useTransparentBalance(addresses: string[]): TransparentBalance {
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || DEFAULT_ZIDECAR_URL;
+  const backend = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';
   const {
     data,
     isLoading,
     error,
   } = useQuery({
-    queryKey: ['zcashTransparentUtxos', zidecarUrl, ...addresses],
+    queryKey: ['zcashTransparentUtxos', zidecarUrl, backend, ...addresses],
     queryFn: async () => {
       if (addresses.length === 0) return { totalZat: 0n, utxos: [] as Utxo[] };
-      const client = new ZidecarClient(zidecarUrl);
+      const client = await zcashClientFor(zidecarUrl, backend);
       const utxos = await client.getAddressUtxos(addresses);
       const totalZat = utxos.reduce((sum, u) => sum + u.valueZat, 0n);
       return { totalZat, utxos };

@@ -8,6 +8,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ZidecarClient, type SyncStatus, type ChainTip } from '../state/keyring/zidecar-client';
+import { LightwalletdClient } from '../state/keyring/lightwalletd-client';
+import type { ZcashClient } from '../state/keyring/zcash-backend';
 import { useStore } from '../state';
 import { selectEffectiveKeyInfo } from '../state/keyring';
 
@@ -29,6 +31,7 @@ export interface ZcashSyncState {
 
 export function useZcashSyncStatus(): ZcashSyncState {
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || DEFAULT_ZIDECAR_URL;
+  const backend = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const activeWalletId = selectedKeyInfo?.id;
   const [workerSyncHeight, setWorkerSyncHeight] = useState(0);
@@ -68,14 +71,20 @@ export function useZcashSyncStatus(): ZcashSyncState {
     });
   }, []);
 
-  const client = useCallback(() => new ZidecarClient(zidecarUrl), [zidecarUrl]);
+  const client = useCallback(
+    (): ZcashClient =>
+      backend === 'lightwalletd' ? new LightwalletdClient(zidecarUrl) : new ZidecarClient(zidecarUrl),
+    [zidecarUrl, backend],
+  );
 
   const {
     data: syncStatus,
     isLoading: syncLoading,
     error: syncError,
   } = useQuery({
-    queryKey: ['zcashSyncStatus'],
+    queryKey: ['zcashSyncStatus', backend],
+    // GetSyncStatus is a zidecar-only RPC; public lightwalletd endpoints lack it
+    enabled: backend === 'zidecar',
     queryFn: () => client().getSyncStatus(),
     staleTime: POLL_INTERVAL,
     refetchInterval: POLL_INTERVAL,

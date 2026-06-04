@@ -136,6 +136,8 @@ type LOCAL = {
   memoSyncStrategies?: {
     zcash?: 'private' | 'fast' | 'paranoid';
   };
+  /** Detected Zcash sync backend: 'zidecar' (trustless) vs 'lightwalletd' (trusted public). */
+  zcashBackend?: 'zidecar' | 'lightwalletd';
 
   /** keyring vaults (keplr-style multi-account) */
   vaults?: {

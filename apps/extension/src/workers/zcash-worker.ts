@@ -20,9 +20,38 @@ import type {
   BucketStart as MemoBucketStart,
   MemoSyncStrategy,
 } from '../services/memo-sync/types';
+import { detectZcashBackend, type ZcashBackend, type ZcashClient } from '../state/keyring/zcash-backend';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const workerSelf = globalThis as any as DedicatedWorkerGlobalScope;
+
+// Worker can't read chrome.storage, so it probes+caches each endpoint's backend.
+const backendCache = new Map<string, ZcashBackend>();
+
+const resolveBackend = async (serverUrl: string): Promise<ZcashBackend> => {
+  const key = serverUrl.replace(/\/$/, '');
+  const cached = backendCache.get(key);
+  if (cached) return cached;
+  let backend: ZcashBackend;
+  try {
+    backend = await detectZcashBackend(key);
+  } catch {
+    backend = 'zidecar'; // ambiguous (timeout/offline) → assume configured default
+  }
+  backendCache.set(key, backend);
+  console.log(`[zcash-worker] backend for ${key}: ${backend}`);
+  return backend;
+};
+
+const makeZcashClient = async (serverUrl: string): Promise<ZcashClient> => {
+  // eager: a web worker has no `document` for the default (script-tag) chunk loader
+  if ((await resolveBackend(serverUrl)) === 'lightwalletd') {
+    const { LightwalletdClient } = await import(/* webpackMode: "eager" */ '../state/keyring/lightwalletd-client');
+    return new LightwalletdClient(serverUrl);
+  }
+  const { ZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
+  return new ZidecarClient(serverUrl);
+};
 
 interface WorkerMessage {
   type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-multi' | 'send-tx-complete' | 'send-tx-pczt' | 'send-tx-pczt-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'note-sync-encode' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos' | 'frost-dkg-part1' | 'frost-dkg-part2' | 'frost-dkg-part3' | 'frost-sign-round1' | 'frost-spend-sign' | 'frost-spend-aggregate' | 'frost-derive-address' | 'frost-derive-address-from-sk' | 'frost-sample-fvk-sk' | 'frost-derive-ufvk' | 'frost-parse-tx-outputs';
@@ -462,7 +491,7 @@ const saveActionsCommitment = async (walletId: string, commitment: string): Prom
 
 /** verify header proof + commitment proofs + nullifier proofs after sync catches up */
 const verifySyncProofs = async (
-  client: InstanceType<typeof import('../state/keyring/zidecar-client').ZidecarClient>,
+  client: ZcashClient,
   tip: number,
   mainnet: boolean,
   pendingCmxs: Uint8Array[],
@@ -694,7 +723,7 @@ interface ProvenRoots {
 
 /** fetch and verify header proof from zidecar, returns proven NOMT roots */
 const verifyHeaderProof = async (
-  client: InstanceType<typeof import('../state/keyring/zidecar-client').ZidecarClient>,
+  client: ZcashClient,
   tip: number,
   mainnet: boolean,
 ): Promise<ProvenRoots> => {
@@ -1088,8 +1117,9 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
   // use whichever is higher — prevents re-scanning if chrome.storage was stale
   let currentHeight = Math.max(startHeight ?? 0, syncedHeight);
 
-  const { ZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
-  const client = new ZidecarClient(serverUrl);
+  const client = await makeZcashClient(serverUrl);
+  // trustless proofs only exist on zidecar; lightwalletd is a trusted backend
+  const trustless = (await resolveBackend(serverUrl)) === 'zidecar';
 
   // track orchard commitment tree size for note position computation
   let orchardTreeSize = await getTreeSize(walletId);
@@ -1172,8 +1202,8 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
           console.warn('[zcash-worker] failed to cache tree frontier:', e);
         }
 
-        // verify proofs if we have pending notes and zync-core
-        if (zyncModule && pendingCmxs.length > 0) {
+        // verify proofs if we have pending notes and zync-core (zidecar only)
+        if (trustless && zyncModule && pendingCmxs.length > 0) {
           try {
             await verifySyncProofs(client, tip.height, true, pendingCmxs, pendingPositions, state, actionsCommitment);
           } catch (e) {
@@ -1544,9 +1574,11 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       case 'sync': {
         if (!walletId) throw new Error('walletId required');
         await initWasm();
-        const { mnemonic, serverUrl, startHeight, ufvk } = payload as {
-          mnemonic: string; serverUrl: string; startHeight?: number; ufvk?: string;
+        const { mnemonic, serverUrl, startHeight, ufvk, backend } = payload as {
+          mnemonic: string; serverUrl: string; startHeight?: number; ufvk?: string; backend?: ZcashBackend;
         };
+        // seed the popup-detected backend so the worker needn't re-probe
+        if (backend) backendCache.set(serverUrl.replace(/\/$/, ''), backend);
         runSync(walletId, mnemonic, serverUrl, startHeight, ufvk).catch(err =>
           console.error('[zcash-worker] runSync fatal:', err),
         );
@@ -1720,8 +1752,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           return;
         }
 
-        const { ZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
-        const tClient = new ZidecarClient(serverUrl);
+        const tClient = await makeZcashClient(serverUrl);
 
         // build script set for our addresses (p2pkh: OP_DUP OP_HASH160 <20> <hash> OP_EQUALVERIFY OP_CHECKSIG)
         const ourScripts = new Set<string>();
@@ -1775,8 +1806,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const tHistory: Array<{ txid: string; height: number; received: string }> = [];
         if (histTAddresses?.length) {
           try {
-            const { ZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
-            const tClient = new ZidecarClient(histServerUrl);
+            const tClient = await makeZcashClient(histServerUrl);
 
             const ourScripts = new Set<string>();
             for (const addr of histTAddresses) {
@@ -1997,8 +2027,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const spentBuckets = new Set<MemoBucketStart>();
         for (const h of spentHeights) spentBuckets.add(bucketOf(h));
 
-        const { ZidecarClient: MemoZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
-        const memoClient = new MemoZidecarClient(memoServerUrl);
+        const memoClient = await makeZcashClient(memoServerUrl);
         const { height: currentTip } = await memoClient.getTip();
 
         // estimate block time from tip (no per-height GetBlock calls — preserves bucket privacy)
@@ -2178,8 +2207,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         emitProgress('notes selected', `${selected.length} notes, fee=${fee}`);
 
         // build merkle witnesses
-        const { ZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
-        const sendClient = new ZidecarClient(sendPayload.serverUrl);
+        const sendClient = await makeZcashClient(sendPayload.serverUrl);
 
         emitProgress('fetching chain tip');
         const sendTip = await sendClient.getTip();
@@ -2245,8 +2273,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           // broadcast
           emitProgress('broadcasting transaction');
           const txData = hexDecode(txHex);
-          const { ZidecarClient: ZC2 } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
-          const broadcastClient = new ZC2(sendPayload.serverUrl);
+          const broadcastClient = await makeZcashClient(sendPayload.serverUrl);
           let result: { errorCode: number; errorMessage: string; txid: Uint8Array };
           try {
             result = await broadcastClient.sendTransaction(txData);
@@ -2348,8 +2375,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         );
         const txData = hexDecode(txHex);
 
-        const { ZidecarClient: ZC } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
-        const completeClient = new ZC(completePayload.serverUrl);
+        const completeClient = await makeZcashClient(completePayload.serverUrl);
         const result = await completeClient.sendTransaction(txData);
         if (result.errorCode !== 0) {
           throw new Error(`broadcast failed (${result.errorCode}): ${result.errorMessage}`);
@@ -2430,8 +2456,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         }
         emitProgress('notes selected', `${selected.length} notes, fee=${fee}`);
 
-        const { ZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
-        const sendClient = new ZidecarClient(sendPayload.serverUrl);
+        const sendClient = await makeZcashClient(sendPayload.serverUrl);
         emitProgress('fetching chain tip');
         const sendTip = await sendClient.getTip();
         // Anchor a few blocks behind the tip (see ANCHOR_CONFIRMATIONS) so
@@ -2526,8 +2551,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const txHex = wasmModule.extract_signed_tx_from_pczt(completePayload.signedPcztHex);
         const txData = hexDecode(txHex);
 
-        const { ZidecarClient: ZC } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
-        const completeClient = new ZC(completePayload.serverUrl);
+        const completeClient = await makeZcashClient(completePayload.serverUrl);
         const result = await completeClient.sendTransaction(txData);
         if (result.errorCode !== 0) {
           throw new Error(`broadcast failed (${result.errorCode}): ${result.errorMessage}`);
@@ -2641,8 +2665,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           emitMultiProgress(`output ${outputIdx + 1}: notes selected`, `${selected.length} notes, fee=${fee}`);
 
           // build merkle witnesses
-          const { ZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
-          const multiClient = new ZidecarClient(multiPayload.serverUrl);
+          const multiClient = await makeZcashClient(multiPayload.serverUrl);
           const multiTip = await multiClient.getTip();
 
           emitMultiProgress(`output ${outputIdx + 1}: building witnesses`);
@@ -2691,7 +2714,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           // broadcast
           emitMultiProgress(`output ${outputIdx + 1}: broadcasting`);
           const txData = hexDecode(txHex);
-          const broadcastClient = new ZidecarClient(multiPayload.serverUrl);
+          const broadcastClient = await makeZcashClient(multiPayload.serverUrl);
           const broadcastResult = await broadcastClient.sendTransaction(txData);
           if (broadcastResult.errorCode !== 0) {
             throw new Error(`output ${outputIdx}: broadcast failed (${broadcastResult.errorCode}): ${broadcastResult.errorMessage}`);
@@ -2736,8 +2759,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           addressIndexMap?: Record<string, number>;
         };
 
-        const { ZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
-        const client = new ZidecarClient(serverUrl);
+        const client = await makeZcashClient(serverUrl);
         const tip = await client.getTip();
         const allUtxos = await client.getAddressUtxos(tAddresses);
         if (allUtxos.length === 0) throw new Error('no transparent UTXOs to shield');
@@ -2829,8 +2851,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           ufvk: string; addressIndexMap?: Record<string, number>;
         };
 
-        const { ZidecarClient: ZCShieldU } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
-        const shieldUClient = new ZCShieldU(shieldUnsignedPayload.serverUrl);
+        const shieldUClient = await makeZcashClient(shieldUnsignedPayload.serverUrl);
         const shieldUTip = await shieldUClient.getTip();
         const shieldUUtxos = await shieldUClient.getAddressUtxos(shieldUnsignedPayload.tAddresses);
         if (shieldUUtxos.length === 0) throw new Error('no transparent UTXOs to shield');
@@ -2910,8 +2931,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         );
         const shieldCompleteTxData = hexDecode(shieldCompleteTxHex);
 
-        const { ZidecarClient: ZCShieldC } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
-        const shieldCompleteClient = new ZCShieldC(shieldCompletePayload.serverUrl);
+        const shieldCompleteClient = await makeZcashClient(shieldCompletePayload.serverUrl);
         const shieldCompleteResult = await shieldCompleteClient.sendTransaction(shieldCompleteTxData);
         if (shieldCompleteResult.errorCode !== 0) {
           throw new Error(`broadcast failed (${shieldCompleteResult.errorCode}): ${shieldCompleteResult.errorMessage}`);
