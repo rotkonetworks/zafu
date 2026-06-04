@@ -176,8 +176,8 @@ export function ZcashSendApproval() {
       <div className='rounded-md border border-zigner-gold/30 bg-zigner-gold/5 p-3 mb-4'>
         <div className='kicker mb-1 text-zigner-gold/80'>review carefully</div>
         <div className='text-[10px] text-fg'>
-          Sending <span className='tabular text-zigner-gold'>{fmtZec(totalOutputZat)} ZEC</span>
-          {' '}across {outputs.length} output{outputs.length > 1 ? 's' : ''}
+          sending <span className='tabular text-zigner-gold'>{fmtZec(totalOutputZat)} ZEC</span>
+          {outputs.length > 1 && ` across ${outputs.length} outputs`}
           {' '}(+ ~<span className='tabular text-fg-muted'>{fmtZec(totalFeeZat)}</span> fee)
         </div>
       </div>
@@ -185,7 +185,9 @@ export function ZcashSendApproval() {
       {/* outputs list */}
       <div className='flex-1 overflow-auto mb-4'>
         <div className='kicker mb-2'>
-          {outputs.length} output{outputs.length > 1 ? 's' : ''} — each sent as a separate transaction
+          {outputs.length === 1
+            ? 'recipient'
+            : `${outputs.length} outputs — each sent as a separate transaction`}
         </div>
 
         {outputs.map((o, i) => (
@@ -216,7 +218,11 @@ export function ZcashSendApproval() {
         {/* fee display */}
         <div className='rounded-md border border-border-soft bg-elev-1 p-3'>
           <div className='flex justify-between'>
-            <div className='text-[10px] text-fg-dim lowercase tracking-[0.04em]'>network fee (per tx × {outputs.length})</div>
+            <div className='text-[10px] text-fg-dim lowercase tracking-[0.04em]'>
+              {outputs.length === 1
+                ? 'network fee'
+                : `network fee (per tx × ${outputs.length})`}
+            </div>
             <div className='text-[10px] tabular text-fg-muted'>~{fmtZec(totalFeeZat)} ZEC</div>
           </div>
         </div>
