@@ -1,59 +1,84 @@
-import { BackIcon } from '@repo/ui/components/ui/icons/back-icon';
-import { Button } from '@repo/ui/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@repo/ui/components/ui/card';
-import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
+/**
+ * Import recovery-phrase screen — lives inside OnboardingShell.
+ *
+ * Removes the nested Card / brand lockup from the legacy version; the
+ * shell already provides the rounded pane and stepper. What's left is
+ * the actual decision surface: paste-friendly word grid, one CTA, one
+ * back link.
+ */
+
+import { FormEvent, MouseEvent } from 'react';
 import { cn } from '@repo/ui/lib/utils';
+import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
 import { useStore } from '../../../state';
 import { importSelector } from '../../../state/seed-phrase/import';
 import { usePageNav } from '../../../utils/navigate';
 import { ImportForm } from '../../../shared/containers/import-form';
-import { FormEvent, MouseEvent } from 'react';
 import { navigateToNetworkSelection } from './password/utils';
 import { SEED_PHRASE_ORIGIN } from './password/types';
+import { PagePath } from '../paths';
 
 export const ImportSeedPhrase = () => {
   const navigate = usePageNav();
   const { phrase, phraseIsValid } = useStore(importSelector);
 
+  const allFilled = phrase.length > 0 && phrase.every(w => w.length > 0);
+  const valid = allFilled && phraseIsValid();
+
   const handleSubmit = (event: MouseEvent | FormEvent) => {
     event.preventDefault();
+    if (!valid) return;
     navigateToNetworkSelection(navigate, SEED_PHRASE_ORIGIN.IMPORTED);
   };
 
+  const submitLabel = !allFilled
+    ? 'fill in your phrase'
+    : !phraseIsValid()
+      ? 'phrase looks invalid'
+      : 'continue';
+
   return (
     <FadeTransition>
-      <BackIcon className='float-left mb-4' onClick={() => navigate(-1)} />
-      <Card className={cn('p-6', phrase.length === 12 ? 'w-[600px]' : 'w-[816px]')} gradient>
-        <CardHeader className='items-center'>
-          <CardTitle className='font-medium'>Import Wallet with Recovery Phrase</CardTitle>
-          <CardDescription>
-            You can paste your full phrase into the first box and the rest will fill automatically.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form className='mt-6 grid gap-4' onSubmit={handleSubmit}>
-            <ImportForm />
-            <Button
-              className='mt-4'
-              variant='gradient'
-              disabled={!phrase.every(w => w.length > 0) || !phraseIsValid()}
-              onClick={handleSubmit}
-            >
-              {!phrase.length || !phrase.every(w => w.length > 0)
-                ? 'Fill in passphrase'
-                : !phraseIsValid()
-                  ? 'Phrase is invalid'
-                  : 'Import'}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+      <div className='flex h-full flex-col gap-6'>
+        <header className='flex flex-col gap-1'>
+          <button
+            type='button'
+            onClick={() => navigate(PagePath.WELCOME)}
+            className='mb-2 inline-flex items-center gap-1.5 self-start text-[11px] text-fg-muted transition-colors hover:text-fg-high lowercase tracking-[0.02em]'
+          >
+            <span className='i-lucide-arrow-left h-3 w-3' />
+            back
+          </button>
+          <h2 className='text-2xl lowercase tracking-[-0.01em] text-fg-high'>
+            enter your recovery phrase
+          </h2>
+          <p className='text-xs text-fg-muted lowercase tracking-[0.02em]'>
+            12 or 24 words. paste the first box; the rest fill in.
+          </p>
+        </header>
+
+        <form onSubmit={handleSubmit} className='flex flex-col gap-5'>
+          <ImportForm />
+
+          <button
+            type='submit'
+            disabled={!valid}
+            onClick={handleSubmit}
+            className={cn(
+              'group relative flex items-center justify-center gap-2 self-stretch px-5 py-3 text-sm lowercase tracking-[0.01em]',
+              '[border-radius:14px] border transition-[transform,opacity,background-color,border-color] duration-200',
+              valid
+                ? 'border-zigner-gold/30 bg-zigner-gold/10 text-zigner-gold hover:-translate-y-[1px] hover:bg-zigner-gold/15'
+                : 'cursor-not-allowed border-border-soft/60 bg-elev-2/30 text-fg-muted',
+            )}
+          >
+            {submitLabel}
+            {valid && (
+              <span className='i-lucide-arrow-right h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5' />
+            )}
+          </button>
+        </form>
+      </div>
     </FadeTransition>
   );
 };

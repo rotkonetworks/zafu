@@ -1,14 +1,6 @@
 import { useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { BackIcon } from '@repo/ui/components/ui/icons/back-icon';
 import { Button } from '@repo/ui/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@repo/ui/components/ui/card';
 import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
 import { cn } from '@repo/ui/lib/utils';
 import { usePageNav } from '../../../utils/navigate';
@@ -127,17 +119,25 @@ export const SelectNetworks = () => {
 
   return (
     <FadeTransition>
-      <BackIcon className='float-left mb-4' onClick={() => navigate(PagePath.WELCOME)} />
-      <Card className={cn('p-6', 'w-[500px]')} gradient>
-        <CardHeader className='items-center'>
-          <CardTitle className='font-medium'>Select Networks</CardTitle>
-          <CardDescription className='text-center'>
-            Choose which networks you want to use with this wallet.
-            You can change this later in settings.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className='flex flex-col gap-3'>
+      <div className='flex h-full flex-col gap-6'>
+        <header className='flex flex-col gap-1'>
+          <button
+            type='button'
+            onClick={() => navigate(PagePath.WELCOME)}
+            className='mb-2 inline-flex items-center gap-1.5 self-start text-[11px] text-fg-muted transition-colors hover:text-fg-high lowercase tracking-[0.02em]'
+          >
+            <span className='i-lucide-arrow-left h-3 w-3' />
+            back
+          </button>
+          <h2 className='text-2xl lowercase tracking-[-0.01em] text-fg-high'>
+            select networks
+          </h2>
+          <p className='text-xs text-fg-muted lowercase tracking-[0.02em]'>
+            choose which networks to enable. you can change this later in settings.
+          </p>
+        </header>
+
+        <div className='flex flex-col gap-3'>
             {NETWORK_OPTIONS.map(network => {
               const isSelected = selected.has(network.id);
 
@@ -260,8 +260,7 @@ export const SelectNetworks = () => {
           >
             continue with {availableCount} network{availableCount !== 1 ? 's' : ''}
           </Button>
-        </CardContent>
-      </Card>
+      </div>
     </FadeTransition>
   );
 };

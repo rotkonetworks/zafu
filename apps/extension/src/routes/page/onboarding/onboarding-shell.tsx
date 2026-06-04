@@ -161,13 +161,11 @@ export function OnboardingShell({ children, title, subtitle }: OnboardingShellPr
 function BrandLockup() {
   return (
     <div className='flex flex-col gap-1'>
-      <span className='text-[10px] tracking-[0.18em] text-fg-muted uppercase'>welcome to</span>
       <span className='text-3xl font-medium text-zigner-gold lowercase tracking-[-0.02em] leading-none'>
         zafu
       </span>
-      <span className='mt-1 text-[10px] text-fg-muted tracking-[0.02em] lowercase'>
-        a zafu is a meditation cushion.<br/>
-        sit with your keys.
+      <span className='mt-1 text-[11px] text-fg-muted tracking-[0.02em] lowercase'>
+        shielded signing
       </span>
     </div>
   );
