@@ -469,6 +469,7 @@ const ZcashContent = ({
   const hasWallet = !!(hasMnemonic || watchOnly);
   const isMainnet = watchOnly?.mainnet ?? true;
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
+  const zcashBackend = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';
   const { syncStatus, chainTip, workerSyncHeight, error: syncError } = useZcashSyncStatus();
 
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
@@ -722,7 +723,10 @@ const ZcashContent = ({
     ? Math.min(100, Math.round((scanProgress / scanRange) * 100))
     : 0;
 
-  const allSynced = scanPct >= 100 && ligeritoPct >= 100;
+  // lightwalletd has no verification pipeline — synced once the scan catches up
+  const allSynced = zcashBackend === 'lightwalletd'
+    ? scanPct >= 100
+    : scanPct >= 100 && ligeritoPct >= 100;
 
   // overall sync percentage (0-100) with 1 decimal — zashi style
   const overallPct = scanPct > 0
@@ -864,13 +868,15 @@ const ZcashContent = ({
             ? 'connecting...'
             : scanPct > 0
               ? `scanning · ${overallPct.toFixed(1)}%`
-              : gigaproofStatus >= 2
-                ? `ligerito · ${blocksUntilReady <= 0 ? 'verified' : `${blocksUntilReady} blocks`}`
-                : gigaproofStatus === 1
-                  ? 'ligerito proving...'
-                  : nomtPct >= 100
-                    ? 'nomt verified'
-                    : 'verifying nomt...'}
+              : zcashBackend === 'lightwalletd'
+                ? 'starting scan...'
+                : gigaproofStatus >= 2
+                  ? `ligerito · ${blocksUntilReady <= 0 ? 'verified' : `${blocksUntilReady} blocks`}`
+                  : gigaproofStatus === 1
+                    ? 'ligerito proving...'
+                    : nomtPct >= 100
+                      ? 'nomt verified'
+                      : 'verifying nomt...'}
           error={syncError?.message}
           barColor={scanPct > 0 ? 'bg-zigner-gold' : ligeritoPct > 0 ? 'bg-zigner-gold' : 'bg-fg-muted/30'}
           barDoneColor='bg-zigner-gold'

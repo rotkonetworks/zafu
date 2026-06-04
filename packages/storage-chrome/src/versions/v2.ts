@@ -139,10 +139,24 @@ type LOCAL = {
   /**
    * Per-network mempool watch toggle. Currently only Zcash uses this.
    * Default 'off' is applied at runtime in NetworkConfig if missing.
+   * Mempool watch is meaningless on the 'lightwalletd' backend (no
+   * compact-action mempool RPC); the worker treats it as a no-op when
+   * the backend is anything but 'zidecar'.
    */
   mempoolWatchSettings?: {
     zcash?: 'off' | 'on';
   };
+  /**
+   * Zcash sync backend.
+   *   'zidecar'      — trustless: Ligerito header proofs + NOMT nullifier
+   *                    proofs verified locally.
+   *   'lightwalletd' — trusted public indexer (e.g. zec.rocks). No
+   *                    verification pipeline; the wallet trusts what the
+   *                    server returns.
+   * NOT auto-detected at runtime: declarative, set per endpoint. Probes
+   * are a fingerprint vector (only zafu clients hit zidecar-only RPCs).
+   */
+  zcashBackend?: 'zidecar' | 'lightwalletd';
 
   /** keyring vaults (keplr-style multi-account) */
   vaults?: {

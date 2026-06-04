@@ -41,7 +41,9 @@ export const SettingsNetworkEndpoints = () => {
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium">
                   {network.name}
-                  {network.syncDescription && (
+                  {network.id === 'zcash' && network.backend === 'lightwalletd' ? (
+                    <span className="ml-2 text-xs text-amber-400">(general public endpoint)</span>
+                  ) : network.syncDescription && (
                     <span className="ml-2 text-xs text-green-400">(trustless)</span>
                   )}
                 </label>
@@ -68,7 +70,11 @@ export const SettingsNetworkEndpoints = () => {
                   </button>
                 )}
               </div>
-              {network.syncDescription && (
+              {network.id === 'zcash' && network.backend === 'lightwalletd' ? (
+                <p className="text-xs text-amber-400/80">
+                  Generic lightwalletd endpoint — sync works, but this server is trusted for chain tip, balance and spent-status (no trustless header/commitment/nullifier proofs). Compact blocks are still trial-decrypted locally; keys never leave this device.
+                </p>
+              ) : network.syncDescription && (
                 <p className="text-xs text-fg-muted">
                   {network.syncDescription}
                 </p>

@@ -236,9 +236,19 @@ export const startSyncInWorker = async (
   mnemonic: string,
   serverUrl: string,
   startHeight?: number,
+  backend: 'zidecar' | 'lightwalletd' = 'zidecar',
   mempoolWatch: 'off' | 'on' = 'off',
 ): Promise<void> => {
-  return callWorker(network, 'sync', { mnemonic, serverUrl, startHeight, mempoolWatch }, walletId);
+  // Defensive: mempool watch is meaningless on lightwalletd. Coerce
+  // here so the worker never sees the invalid combination, even if
+  // a caller forgets to enforce it upstream.
+  const effectiveMempoolWatch: 'off' | 'on' = backend === 'lightwalletd' ? 'off' : mempoolWatch;
+  return callWorker(
+    network,
+    'sync',
+    { mnemonic, serverUrl, startHeight, backend, mempoolWatch: effectiveMempoolWatch },
+    walletId,
+  );
 };
 
 /**
@@ -250,9 +260,16 @@ export const startWatchOnlySyncInWorker = async (
   ufvk: string,
   serverUrl: string,
   startHeight?: number,
+  backend: 'zidecar' | 'lightwalletd' = 'zidecar',
   mempoolWatch: 'off' | 'on' = 'off',
 ): Promise<void> => {
-  return callWorker(network, 'sync', { mnemonic: '', serverUrl, startHeight, ufvk, mempoolWatch }, walletId);
+  const effectiveMempoolWatch: 'off' | 'on' = backend === 'lightwalletd' ? 'off' : mempoolWatch;
+  return callWorker(
+    network,
+    'sync',
+    { mnemonic: '', serverUrl, startHeight, ufvk, backend, mempoolWatch: effectiveMempoolWatch },
+    walletId,
+  );
 };
 
 /**
