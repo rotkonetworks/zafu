@@ -812,6 +812,7 @@ function ComposeMessage({
 // ---- main inbox page ----
 
 export function InboxPage() {
+  const navigate = useNavigate();
   const conversations = useStore(selectConversations);
   const unreadCount = useStore(selectUnreadCount);
   const messages = useStore(messagesSelector);
@@ -990,7 +991,15 @@ export function InboxPage() {
       <div className='flex-1 overflow-y-auto px-4 pb-4'>
         {tab === 'conversations' ? (
           filteredConversations.length === 0 ? (
-            <EmptyState text='no conversations' subtitle={`encrypted ${activeNetwork} conversations will appear here`} />
+            <EmptyState
+              text='no conversations yet'
+              subtitle={`encrypted ${activeNetwork} conversations show up here. share your address so someone can write to you.`}
+              action={{
+                label: 'show my address',
+                icon: 'i-lucide-arrow-down-to-line',
+                onClick: () => navigate(PopupPath.RECEIVE),
+              }}
+            />
           ) : (
             <div className='space-y-2'>
               {filteredConversations.map(convo => (
@@ -1009,7 +1018,15 @@ export function InboxPage() {
           )
         ) : (
           flatMessages.length === 0 ? (
-            <EmptyState text='no messages' subtitle={`${activeNetwork} messages will appear here`} />
+            <EmptyState
+              text='no memos yet'
+              subtitle={`messages travel inside ${activeNetwork} transactions. once someone sends with a memo, it shows up here.`}
+              action={{
+                label: 'show my address',
+                icon: 'i-lucide-arrow-down-to-line',
+                onClick: () => navigate(PopupPath.RECEIVE),
+              }}
+            />
           ) : (
             <div className='space-y-2'>
               {flatMessages.map(msg => (
@@ -1124,16 +1141,34 @@ function OutgoingStatusBadge({
   );
 }
 
-function EmptyState({ text, subtitle }: { text: string; subtitle: string }) {
+function EmptyState({
+  text,
+  subtitle,
+  action,
+}: {
+  text: string;
+  subtitle: string;
+  action?: { label: string; icon?: string; onClick: () => void };
+}) {
   return (
     <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
       <div className='rounded-lg bg-zigner-gold/10 p-4'>
         <span className='i-lucide-mail h-8 w-8 text-zigner-gold' />
       </div>
-      <div>
+      <div className='flex flex-col gap-1'>
         <p className='text-sm font-medium'>{text}</p>
-        <p className='text-xs text-fg-muted'>{subtitle}</p>
+        <p className='max-w-xs text-xs text-fg-muted leading-snug'>{subtitle}</p>
       </div>
+      {action && (
+        <button
+          type='button'
+          onClick={action.onClick}
+          className='mt-1 inline-flex items-center gap-1.5 bg-zigner-gold/10 px-3 py-1.5 text-xs text-zigner-gold transition-colors hover:bg-zigner-gold/15'
+        >
+          {action.icon && <span className={`${action.icon} h-3.5 w-3.5`} />}
+          {action.label}
+        </button>
+      )}
     </div>
   );
 }
