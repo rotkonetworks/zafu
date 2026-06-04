@@ -242,8 +242,19 @@ export const PopupIndex = () => {
 {/* account picker moved into PenumbraContent below sync bar */}
           <div className='flex items-center justify-between'>
           <div>
-            <div className='text-[10px] text-fg-dim mb-0.5 lowercase tracking-[0.05em]'>
-              your address
+            <div className='mb-0.5 flex items-center gap-1.5'>
+              <span className='text-[10px] text-fg-dim lowercase tracking-[0.05em]'>
+                your address
+              </span>
+              {/* tiny shielded indicator — new users may not realize their
+                  unified/orchard address is privacy-preserving. The shield
+                  icon is universally understood; one icon, no extra text. */}
+              {address && address.startsWith('u') && (
+                <span
+                  className='i-lucide-shield-check h-3 w-3 text-zigner-gold/70'
+                  title='shielded address — senders cannot see your other transactions'
+                />
+              )}
             </div>
             <div className='flex items-center gap-1'>
               <button
