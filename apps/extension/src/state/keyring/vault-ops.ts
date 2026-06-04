@@ -114,6 +114,15 @@ export interface FrostMultisigParams {
   zignerWalletId?: string;
   /** hide from main wallet UI (app-driven multisigs e.g. poker); sign-time lookup still works */
   hidden?: boolean;
+  /**
+   * Origin of the dapp that created the vault via the external API
+   * (zafu_dkg_join / zafu_frost_create). Used by destructive external
+   * operations (zafu_delete_multisig) to enforce same-origin scope —
+   * a malicious site can't target vaults owned by another origin via
+   * a guessed label prefix. Absent for vaults created via the wallet
+   * UI directly (e.g. zigner-multisig flow).
+   */
+  createdByOrigin?: string;
 }
 
 export const buildFrostVault = (
@@ -136,6 +145,7 @@ export const buildFrostVault = (
     supportedNetworks: ['zcash'],
     ...(params.custody === 'airgapSigner' ? { custody: 'airgapSigner' as const } : {}),
     ...(params.hidden ? { hidden: true as const } : {}),
+    ...(params.createdByOrigin ? { createdByOrigin: params.createdByOrigin } : {}),
   },
 });
 

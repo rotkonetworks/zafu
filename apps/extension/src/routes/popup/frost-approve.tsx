@@ -166,6 +166,7 @@ export const FrostApprove = () => {
       threshold,
       maxSigners,
       relayUrl,
+      createdByOrigin: app,
     });
 
     abort.abort();
@@ -238,6 +239,7 @@ export const FrostApprove = () => {
       threshold: parsedThreshold,
       maxSigners: parsedMaxSigners,
       relayUrl,
+      createdByOrigin: app,
     });
 
     abort.abort();
@@ -338,6 +340,7 @@ export const FrostApprove = () => {
       maxSigners: parsedMaxSigners,
       relayUrl,
       hidden: hide,
+      createdByOrigin: app,
     });
 
     abort.abort();

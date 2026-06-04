@@ -60,12 +60,31 @@ export async function purgeVault(vaultId: string): Promise<void> {
   try { await chrome.storage.local.remove(`zcashBirthday_${vaultId}`); } catch {}
 }
 
-/** Resolve a multisig wallet by name prefix; picks the most recent if multiple match. */
-export async function findVaultByLabelPrefix(labelPrefix: string): Promise<string | null> {
+/**
+ * Resolve a multisig wallet by name prefix; picks the most recent if
+ * multiple match.
+ *
+ * For destructive lookups (delete, hide, rename) callers MUST pass
+ * `requireOrigin` so a malicious site cannot target vaults created by
+ * a different origin via a guessed/colliding label prefix. The origin
+ * is matched against the `createdByOrigin` field stored on the vault
+ * at DKG-join time. Vaults missing that field (pre-hardening creation)
+ * are returned only when `requireOrigin` is undefined — the lookup is
+ * fail-closed for any caller that asked for origin-scoping.
+ */
+export async function findVaultByLabelPrefix(
+  labelPrefix: string,
+  requireOrigin?: string,
+): Promise<string | null> {
   if (!labelPrefix) return null;
   const vaults = ((await localExtStorage.get('vaults')) ?? []) as EncryptedVault[];
   const matches = vaults
     .filter(v => v.type === 'frost-multisig' && typeof v.name === 'string' && v.name.startsWith(labelPrefix))
+    .filter(v => {
+      if (requireOrigin === undefined) return true;
+      const createdByOrigin = (v.insensitive?.['createdByOrigin'] ?? null) as string | null;
+      return createdByOrigin === requireOrigin;
+    })
     .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
   return matches[0]?.id ?? null;
 }
