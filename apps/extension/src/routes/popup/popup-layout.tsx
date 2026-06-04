@@ -8,33 +8,28 @@ import { AppHeader } from '../../components/app-header';
 import { MenuDrawer } from '../../components/menu-drawer';
 import { PopupPath } from './paths';
 import { useStore } from '../../state';
-import { selectActiveNetwork, selectEffectiveKeyInfo, selectPenumbraAccount, type NetworkType } from '../../state/keyring';
-import { isPro } from '../../state/license';
+import { selectActiveNetwork, selectPenumbraAccount, type NetworkType } from '../../state/keyring';
 import { hasFeature } from '../../config/networks';
 
 type FeatureKey = 'stake' | 'swap' | 'vote' | 'inbox';
 
-/** all possible tabs — each gated by a network feature */
-const ALL_TABS: ReadonlyArray<{ path: PopupPath; icon: JSX.Element; label: string; feature?: FeatureKey }> = [
-  { path: PopupPath.INDEX,  icon: <span className='i-lucide-home h-5 w-5' />,              label: 'Home' },
-  { path: PopupPath.INBOX,  icon: <span className='i-lucide-mail h-5 w-5' />,              label: 'Inbox',  feature: 'inbox' },
-  { path: PopupPath.STAKE,  icon: <span className='i-lucide-layers h-5 w-5' />,            label: 'Stake',  feature: 'stake' },
-  { path: PopupPath.SWAP,   icon: <span className='i-lucide-arrow-left-right h-5 w-5' />,  label: 'Swap',   feature: 'swap' },
-  { path: PopupPath.VOTE,   icon: <span className='i-lucide-vote h-5 w-5' />,              label: 'Vote',   feature: 'vote' },
+/**
+ * Bottom-tabs are deliberately minimal — Home + Inbox only. Anything
+ * else that used to live on the bottom rail (Stake, Swap, Vote,
+ * Multisig) is now accessed from the menu drawer so the wallet's
+ * primary surface stays focused on receiving + reading memos. The
+ * less-used destinations are one tap further away, not in your face.
+ *
+ * Inbox is still feature-gated by network (e.g. transparent-only
+ * networks don't have memos).
+ */
+const BOTTOM_TABS: ReadonlyArray<{ path: PopupPath; icon: JSX.Element; label: string; feature?: FeatureKey }> = [
+  { path: PopupPath.INDEX, icon: <span className='i-lucide-home h-5 w-5' />, label: 'Home' },
+  { path: PopupPath.INBOX, icon: <span className='i-lucide-mail h-5 w-5' />, label: 'Inbox', feature: 'inbox' },
 ];
 
-/** multisig tab — visible whenever the active wallet is a FROST vault
- * (so users can always operate existing multisigs, regardless of pro state),
- * otherwise gated by pro license (creation requires pro). */
-const MULTISIG_TAB = {
-  path: PopupPath.MULTISIG,
-  icon: <span className='i-lucide-shield h-5 w-5' />,
-  label: 'Multisig',
-} as const;
-
-/** derive tabs from network features — pure filter, no mutation */
 const getTabsForNetwork = (network: NetworkType) =>
-  ALL_TABS.filter(tab => !tab.feature || hasFeature(network, tab.feature));
+  BOTTOM_TABS.filter(tab => !tab.feature || hasFeature(network, tab.feature));
 
 /** routes where bottom tabs should NOT be shown */
 const hiddenTabRoutes = [
@@ -72,17 +67,11 @@ export const PopupLayout = () => {
   const location = useLocation();
   const activeNetwork = useStore(selectActiveNetwork);
   const penumbraAccount = useStore(selectPenumbraAccount);
-  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
-  const pro = useStore(isPro);
   const onLoginPage = location.pathname === '/login';
   usePenumbraSwapClaim(activeNetwork, onLoginPage, penumbraAccount);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const onMultisigWallet = selectedKeyInfo?.type === 'frost-multisig';
-  const networkTabs = getTabsForNetwork(activeNetwork);
-  const tabs = activeNetwork === 'zcash' && (onMultisigWallet || pro)
-    ? [...networkTabs, MULTISIG_TAB]
-    : networkTabs;
+  const tabs = getTabsForNetwork(activeNetwork);
   const showChrome = !matchesRoute(location.pathname, hiddenHeaderRoutes);
   const showTabs = showChrome && !matchesRoute(location.pathname, hiddenTabRoutes);
 

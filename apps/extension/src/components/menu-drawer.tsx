@@ -11,6 +11,7 @@ import { isPro } from '../state/license';
 import { PopupPath } from '../routes/popup/paths';
 import { cn } from '@repo/ui/lib/utils';
 import { isSidePanel } from '../utils/popup-detection';
+import { hasFeature } from '../config/networks';
 
 /** donation addresses per network */
 const DONATE: Record<string, { address: string; name: string }> = {
@@ -70,7 +71,38 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
 
   if (!open) return null;
 
+  // Destinations demoted from the bottom-tabs rail (which now shows
+  // only Home + Inbox). Each is gated by the active network's feature
+  // set so we never offer a destination the network can't fulfill.
+  const onMultisigWallet = keyInfo?.type === 'frost-multisig';
+  const showMultisig = activeNetwork === 'zcash' && (onMultisigWallet || pro);
+
+  type MenuItem = { icon: string; label: string; onClick: () => void; className?: string };
+  const networkDestinations: MenuItem[] = ([
+    hasFeature(activeNetwork, 'stake') && {
+      icon: 'i-lucide-layers',
+      label: 'stake',
+      onClick: () => { navigate(PopupPath.STAKE); onClose(); },
+    },
+    hasFeature(activeNetwork, 'swap') && {
+      icon: 'i-lucide-arrow-left-right',
+      label: 'swap',
+      onClick: () => { navigate(PopupPath.SWAP); onClose(); },
+    },
+    hasFeature(activeNetwork, 'vote') && {
+      icon: 'i-lucide-vote',
+      label: 'vote',
+      onClick: () => { navigate(PopupPath.VOTE); onClose(); },
+    },
+    showMultisig && {
+      icon: 'i-lucide-shield',
+      label: 'multisig',
+      onClick: () => { navigate(PopupPath.MULTISIG); onClose(); },
+    },
+  ].filter(Boolean) as MenuItem[]);
+
   const menuItems = [
+    ...networkDestinations,
     {
       icon: 'i-lucide-fingerprint',
       label: 'identity & contacts',
