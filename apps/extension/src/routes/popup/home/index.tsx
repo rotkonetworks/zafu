@@ -473,6 +473,7 @@ const ZcashContent = ({
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const zcashBackend = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';
   const { syncStatus, chainTip, workerSyncHeight, error: syncError } = useZcashSyncStatus();
+  const navigate = useNavigate();
 
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const keyRing = useStore(keyRingSelector);
@@ -762,6 +763,18 @@ const ZcashContent = ({
         </div>
       </div>
 
+      {/* empty-state hint for new users — only shown when the wallet is
+          synced AND the balance is zero. Disappears the moment any ZEC
+          lands. The hint surfaces concrete next steps (receive address,
+          exchanges, swap from another asset) instead of leaving the new
+          user staring at a 0.00 ZEC card wondering what to do next. */}
+      {allSynced && totalZat === 0n && (
+        <GetZecHint
+          onReceive={() => navigate(PopupPath.RECEIVE)}
+          onSwap={() => navigate(PopupPath.SWAP)}
+        />
+      )}
+
       {/* transparent pool detail — only shown when transparent > 0 */}
       {transparentZat > 0n && (
         <div className='rounded-lg border border-red-500/40 bg-red-500/5 p-3'>
@@ -1007,6 +1020,90 @@ interface ParsedTransaction {
   /** penumbra account indices associated with this transaction (from visible actions) */
   accountIndices?: Set<number>;
 }
+
+/**
+ * Empty-balance hint shown to a new user whose wallet is synced but
+ * holds zero ZEC. Three concrete next steps so the wallet doesn't feel
+ * like a dead end: receive (here's your address), exchanges (where to
+ * buy), swap (already-funded other assets → ZEC via Penumbra DEX).
+ *
+ * Dismissable in the sense that any inbound ZEC makes the panel
+ * disappear naturally — there is no manual hide because the panel is
+ * informational and we want to nudge action.
+ */
+const GetZecHint = ({
+  onReceive,
+  onSwap,
+}: {
+  onReceive: () => void;
+  onSwap: () => void;
+}) => (
+  <div className='rounded-md border border-network-accent/15 bg-elev-1 p-4'>
+    <div className='mb-3 flex items-center gap-2'>
+      <span className='i-lucide-sparkles h-3.5 w-3.5 text-network-accent' />
+      <span className='text-xs font-medium text-fg-high'>get your first zec</span>
+    </div>
+
+    <div className='flex flex-col gap-2'>
+      <HintRow
+        icon='i-lucide-arrow-down-to-line'
+        title='receive from someone'
+        hint='share your shielded address — works for any zec sender'
+        onClick={onReceive}
+      />
+      <HintRow
+        icon='i-lucide-arrow-left-right'
+        title='swap from another asset'
+        hint='trade um or other tokens for zec via penumbra dex'
+        onClick={onSwap}
+      />
+      <a
+        href='https://z.cash/get-started/'
+        target='_blank'
+        rel='noopener noreferrer'
+        className='group flex items-start gap-3 rounded-sm bg-elev-2/40 p-2.5 text-left transition-colors hover:bg-elev-2/60'
+      >
+        <span className='mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center bg-network-accent/10 text-network-accent'>
+          <span className='i-lucide-shopping-bag h-3.5 w-3.5' />
+        </span>
+        <span className='flex flex-1 flex-col'>
+          <span className='text-xs lowercase text-fg-high'>buy at an exchange</span>
+          <span className='mt-0.5 text-[10px] text-fg-muted lowercase'>
+            z.cash list of supported exchanges
+          </span>
+        </span>
+        <span className='i-lucide-external-link mt-1 h-3 w-3 shrink-0 text-fg-muted transition-colors group-hover:text-fg-high' />
+      </a>
+    </div>
+  </div>
+);
+
+const HintRow = ({
+  icon,
+  title,
+  hint,
+  onClick,
+}: {
+  icon: string;
+  title: string;
+  hint: string;
+  onClick: () => void;
+}) => (
+  <button
+    type='button'
+    onClick={onClick}
+    className='group flex items-start gap-3 bg-elev-2/40 p-2.5 text-left transition-colors hover:bg-elev-2/60'
+  >
+    <span className='mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center bg-network-accent/10 text-network-accent'>
+      <span className={`${icon} h-3.5 w-3.5`} />
+    </span>
+    <span className='flex flex-1 flex-col'>
+      <span className='text-xs lowercase text-fg-high'>{title}</span>
+      <span className='mt-0.5 text-[10px] text-fg-muted lowercase'>{hint}</span>
+    </span>
+    <span className='i-lucide-arrow-right mt-1 h-3 w-3 shrink-0 text-fg-muted transition-transform duration-200 group-hover:translate-x-0.5' />
+  </button>
+);
 
 /** extract account index from a visible note's decoded address view */
 function noteAccountIndex(note: unknown): number | undefined {
