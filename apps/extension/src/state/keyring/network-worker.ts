@@ -236,8 +236,9 @@ export const startSyncInWorker = async (
   mnemonic: string,
   serverUrl: string,
   startHeight?: number,
+  mempoolWatch: 'off' | 'on' = 'off',
 ): Promise<void> => {
-  return callWorker(network, 'sync', { mnemonic, serverUrl, startHeight }, walletId);
+  return callWorker(network, 'sync', { mnemonic, serverUrl, startHeight, mempoolWatch }, walletId);
 };
 
 /**
@@ -249,8 +250,9 @@ export const startWatchOnlySyncInWorker = async (
   ufvk: string,
   serverUrl: string,
   startHeight?: number,
+  mempoolWatch: 'off' | 'on' = 'off',
 ): Promise<void> => {
-  return callWorker(network, 'sync', { mnemonic: '', serverUrl, startHeight, ufvk }, walletId);
+  return callWorker(network, 'sync', { mnemonic: '', serverUrl, startHeight, ufvk, mempoolWatch }, walletId);
 };
 
 /**

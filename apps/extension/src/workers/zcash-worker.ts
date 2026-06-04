@@ -1058,9 +1058,86 @@ const deriveAddress = (mnemonic: string, accountIndex: number): string => {
   finally { keys.free(); }
 };
 
+// ── mempool snapshot decode (shared between watcher task and any future caller) ──
+
+/**
+ * Decode one mempool snapshot against the wallet's IVK + spend nullifier set,
+ * post a `mempool-update` message if anything matched. Pure: doesn't touch
+ * wallet state, doesn't talk to network.
+ *
+ * Wire-compatible with the previous inline implementation so the UI doesn't
+ * need to change.
+ */
+function handleMempoolSnapshot(
+  walletId: string,
+  state: WalletState,
+  snap: { entries: ReadonlyArray<{ hash: Uint8Array; actions: ReadonlyArray<{
+    nullifier: Uint8Array; cmx: Uint8Array; ephemeralKey: Uint8Array; ciphertext: Uint8Array;
+  }> }> },
+): void {
+  if (!state.keys) return;
+
+  let totalActions = 0;
+  for (const e of snap.entries) totalActions += e.actions.length;
+  if (totalActions === 0) return;
+
+  const ACTION_SIZE = 32 + 32 + 32 + 52;
+  const mbuf = new Uint8Array(4 + totalActions * ACTION_SIZE);
+  const mview = new DataView(mbuf.buffer);
+  mview.setUint32(0, totalActions, true);
+  let moff = 4;
+
+  // map from nullifier-hex back to the txid that contains it
+  const mempoolNullifiers = new Map<string, string>();
+
+  for (const entry of snap.entries) {
+    const txidHex = hexEncode(entry.hash);
+    for (const a of entry.actions) {
+      if (a.nullifier.length === 32) mbuf.set(a.nullifier, moff); moff += 32;
+      if (a.cmx.length === 32) mbuf.set(a.cmx, moff); moff += 32;
+      if (a.ephemeralKey.length === 32) mbuf.set(a.ephemeralKey, moff); moff += 32;
+      if (a.ciphertext.length >= 52) mbuf.set(a.ciphertext.subarray(0, 52), moff); moff += 52;
+      mempoolNullifiers.set(hexEncode(a.nullifier), txidHex);
+    }
+  }
+
+  const pendingIncoming: Array<{ value: string; txid: string; isChange: boolean }> = [];
+  const pendingSpends: Array<{ nullifier: string; txid: string }> = [];
+
+  try {
+    const found = state.keys.scan_actions_parallel(mbuf);
+    for (const note of found) {
+      pendingIncoming.push({
+        value: note.value,
+        txid: note.cmx, // use cmx as identifier since no confirmed txid yet
+        isChange: note.is_change ?? false,
+      });
+    }
+  } catch (err) {
+    console.log('[zcash-worker] mempool scan decrypt error:', err);
+  }
+
+  for (const note of state.notes) {
+    if (!state.spentNullifiers.has(note.nullifier) && mempoolNullifiers.has(note.nullifier)) {
+      pendingSpends.push({
+        nullifier: note.nullifier,
+        txid: mempoolNullifiers.get(note.nullifier)!,
+      });
+    }
+  }
+
+  if (pendingIncoming.length > 0 || pendingSpends.length > 0) {
+    console.log(`[zcash-worker] mempool: ${pendingIncoming.length} incoming, ${pendingSpends.length} pending spends`);
+    workerSelf.postMessage({
+      type: 'mempool-update', id: '', network: 'zcash', walletId,
+      payload: { pendingIncoming, pendingSpends },
+    });
+  }
+}
+
 // ── sync ──
 
-const runSync = async (walletId: string, mnemonic: string, serverUrl: string, startHeight?: number, ufvk?: string): Promise<void> => {
+const runSync = async (walletId: string, mnemonic: string, serverUrl: string, startHeight?: number, ufvk?: string, mempoolWatch: 'off' | 'on' = 'off'): Promise<void> => {
   if (!wasmModule) throw new Error('wasm not initialized');
 
   const state = getOrCreateWalletState(walletId);
@@ -1153,6 +1230,40 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
   const pendingCmxs: Uint8Array[] = [];
   const pendingPositions: number[] = [];
 
+  // mempool watcher: only spawned when explicitly opted in. runs as a
+  // long-running task alongside the sync loop, paced by the strategy's
+  // own jittered + phase-aligned poll. shut down via the abort controller
+  // when sync stops.
+  const mempoolAbort = new AbortController();
+  if (mempoolWatch === 'on') {
+    const [{ ZidecarClient: MempoolZidecarClient }, mempoolMod, strategyMod] = await Promise.all([
+      import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client'),
+      import('../services/mempool-watch/zidecar-mempool-fetcher'),
+      import('../services/mempool-watch/strategy'),
+    ]);
+    const mempoolClient = new MempoolZidecarClient(serverUrl);
+    const base = mempoolMod.zidecarMempoolFetcher(mempoolClient);
+    const fetcher = strategyMod.buildStrategy('on', { base });
+
+    void (async () => {
+      try {
+        for await (const snap of fetcher(walletId, {
+          signal: mempoolAbort.signal,
+          onStatus: (st) => {
+            workerSelf.postMessage({
+              type: 'mempool-status', id: '', network: 'zcash', walletId, payload: st,
+            });
+          },
+        })) {
+          if (mempoolAbort.signal.aborted || !state.keys) break;
+          handleMempoolSnapshot(walletId, state, snap);
+        }
+      } catch (err) {
+        console.warn('[zcash-worker] mempool watcher exited:', err);
+      }
+    })();
+  }
+
   while (!state.syncAbort) {
     try {
       const tip = await client.getTip();
@@ -1187,73 +1298,8 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
           pendingPositions.length = 0;
         }
 
-        // scan mempool for pending incoming/spends
-        try {
-          const mempoolBlocks = await client.getMempoolStream();
-          let mempoolActions = 0;
-          for (const mb of mempoolBlocks) mempoolActions += mb.actions.length;
-
-          if (mempoolActions > 0 && state.keys) {
-            // build binary buffer for trial decryption (same format as block scanning)
-            const ACTION_SIZE = 32 + 32 + 32 + 52;
-            const mbuf = new Uint8Array(4 + mempoolActions * ACTION_SIZE);
-            const mview = new DataView(mbuf.buffer);
-            mview.setUint32(0, mempoolActions, true);
-            let moff = 4;
-
-            // collect mempool nullifiers for spend detection
-            const mempoolNullifiers = new Map<string, string>(); // nfHex -> txidHex
-
-            for (const mb of mempoolBlocks) {
-              const txidHex = hexEncode(mb.hash); // hash = txid for mempool blocks
-              for (const a of mb.actions) {
-                if (a.nullifier.length === 32) mbuf.set(a.nullifier, moff); moff += 32;
-                if (a.cmx.length === 32) mbuf.set(a.cmx, moff); moff += 32;
-                if (a.ephemeralKey.length === 32) mbuf.set(a.ephemeralKey, moff); moff += 32;
-                if (a.ciphertext.length >= 52) mbuf.set(a.ciphertext.subarray(0, 52), moff); moff += 52;
-                mempoolNullifiers.set(hexEncode(a.nullifier), txidHex);
-              }
-            }
-
-            // trial decrypt mempool actions
-            const pendingIncoming: Array<{ value: string; txid: string; isChange: boolean }> = [];
-            const pendingSpends: Array<{ nullifier: string; txid: string }> = [];
-
-            try {
-              const found = state.keys.scan_actions_parallel(mbuf);
-              for (const note of found) {
-                pendingIncoming.push({
-                  value: note.value,
-                  txid: note.cmx, // use cmx as identifier since no confirmed txid yet
-                  isChange: note.is_change ?? false,
-                });
-              }
-            } catch (err) {
-              console.log('[zcash-worker] mempool scan decrypt error:', err);
-            }
-
-            // check if any wallet nullifiers appear in mempool (pending spends)
-            for (const note of state.notes) {
-              if (!state.spentNullifiers.has(note.nullifier) && mempoolNullifiers.has(note.nullifier)) {
-                pendingSpends.push({
-                  nullifier: note.nullifier,
-                  txid: mempoolNullifiers.get(note.nullifier)!,
-                });
-              }
-            }
-
-            if (pendingIncoming.length > 0 || pendingSpends.length > 0) {
-              console.log(`[zcash-worker] mempool: ${pendingIncoming.length} incoming, ${pendingSpends.length} pending spends`);
-              workerSelf.postMessage({
-                type: 'mempool-update', id: '', network: 'zcash', walletId,
-                payload: { pendingIncoming, pendingSpends },
-              });
-            }
-          }
-        } catch (e) {
-          // mempool scan is best-effort, don't break the sync loop
-          console.log('[zcash-worker] mempool scan skipped:', e);
-        }
+        // mempool scanning lives in the separate watcher task spawned above
+        // when mempoolWatch === 'on'. when off (default), no mempool calls.
 
         workerSelf.postMessage({
           type: 'sync-progress', id: '', network: 'zcash', walletId,
@@ -1506,6 +1552,7 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
   }
 
   state.syncing = false;
+  mempoolAbort.abort();
   console.log(`[zcash-worker] sync stopped wallet=${walletId}`);
 };
 
@@ -1544,10 +1591,11 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       case 'sync': {
         if (!walletId) throw new Error('walletId required');
         await initWasm();
-        const { mnemonic, serverUrl, startHeight, ufvk } = payload as {
+        const { mnemonic, serverUrl, startHeight, ufvk, mempoolWatch } = payload as {
           mnemonic: string; serverUrl: string; startHeight?: number; ufvk?: string;
+          mempoolWatch?: 'off' | 'on';
         };
-        runSync(walletId, mnemonic, serverUrl, startHeight, ufvk).catch(err =>
+        runSync(walletId, mnemonic, serverUrl, startHeight, ufvk, mempoolWatch ?? 'off').catch(err =>
           console.error('[zcash-worker] runSync fatal:', err),
         );
         workerSelf.postMessage({ type: 'sync-started', id, network: 'zcash', walletId });

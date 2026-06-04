@@ -1091,8 +1091,36 @@ function FlatMessageRow({
             {message.direction === 'received' ? '+' : '-'}{message.amount} {message.asset ?? ''}
           </span>
         )}
+        {message.status && message.status !== 'confirmed' && (
+          <OutgoingStatusBadge status={message.status} reason={message.failureReason} />
+        )}
       </div>
     </button>
+  );
+}
+
+function OutgoingStatusBadge({
+  status,
+  reason,
+}: {
+  status: NonNullable<Message['status']>;
+  reason?: string;
+}) {
+  const styles: Record<NonNullable<Message['status']>, { bg: string; fg: string; label: string }> = {
+    submitting:   { bg: 'bg-amber-500/10',  fg: 'text-amber-400',  label: 'sending...' },
+    broadcasting: { bg: 'bg-amber-500/10',  fg: 'text-amber-400',  label: 'broadcasting...' },
+    pending:      { bg: 'bg-blue-500/10',   fg: 'text-blue-400',   label: 'pending' },
+    confirmed:    { bg: 'bg-green-500/10',  fg: 'text-green-400',  label: 'confirmed' },
+    failed:       { bg: 'bg-red-500/10',    fg: 'text-red-400',    label: 'failed' },
+  };
+  const s = styles[status];
+  return (
+    <span
+      className={cn('inline-flex items-center rounded-md px-1.5 py-0.5 ml-1 mt-1 text-[10px]', s.bg, s.fg)}
+      title={status === 'failed' ? reason : undefined}
+    >
+      {s.label}
+    </span>
   );
 }
 

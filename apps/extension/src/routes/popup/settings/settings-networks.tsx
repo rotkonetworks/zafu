@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { useStore } from '../../../state';
 import { selectActiveNetwork, selectEnabledNetworks, selectSetActiveNetwork, type NetworkType } from '../../../state/keyring';
 import { isIbcNetwork } from '../../../state/keyring/network-types';
-import { networksSelector, type NetworkId, type MemoSyncStrategy } from '../../../state/networks';
+import { networksSelector, type NetworkId, type MemoSyncStrategy, type MempoolWatchSetting } from '../../../state/networks';
 import { NETWORKS, LAUNCHED_NETWORKS } from '../../../config/networks';
 import { cn } from '@repo/ui/lib/utils';
 import { SettingsScreen } from './settings-screen';
@@ -36,7 +36,7 @@ export const SettingsNetworks = () => {
   const toggleNetwork = useStore(state => state.keyRing.toggleNetwork);
   const privacySetSetting = useStore(state => state.privacy.setSetting);
   const transparentEnabled = useStore(state => state.privacy.settings.enableTransparentBalances);
-  const { networks: networkState, setNetworkEndpoint, setMemoSyncStrategy } = useStore(networksSelector);
+  const { networks: networkState, setNetworkEndpoint, setMemoSyncStrategy, setMempoolWatch } = useStore(networksSelector);
 
   const [expandedNetwork, setExpandedNetwork] = useState<NetworkType | null>(null);
   const [editingEndpoint, setEditingEndpoint] = useState('');
@@ -169,10 +169,16 @@ export const SettingsNetworks = () => {
                   )}
 
                   {networkId === 'zcash' && (
-                    <MemoSyncStrategyPicker
-                      value={(state as { memoSyncStrategy?: MemoSyncStrategy } | undefined)?.memoSyncStrategy ?? 'private'}
-                      onChange={(s) => void setMemoSyncStrategy('zcash', s)}
-                    />
+                    <>
+                      <MemoSyncStrategyPicker
+                        value={(state as { memoSyncStrategy?: MemoSyncStrategy } | undefined)?.memoSyncStrategy ?? 'private'}
+                        onChange={(s) => void setMemoSyncStrategy('zcash', s)}
+                      />
+                      <MempoolWatchToggle
+                        value={(state as { mempoolWatch?: MempoolWatchSetting } | undefined)?.mempoolWatch ?? 'off'}
+                        onChange={(s) => void setMempoolWatch('zcash', s)}
+                      />
+                    </>
                   )}
                 </div>
               )}
@@ -249,5 +255,50 @@ const MemoSyncStrategyPicker = ({ value, onChange }: MemoSyncStrategyPickerProps
     )}
   </div>
 );
+
+interface MempoolWatchToggleProps {
+  readonly value: MempoolWatchSetting;
+  readonly onChange: (setting: MempoolWatchSetting) => void;
+}
+
+const MempoolWatchToggle = ({ value, onChange }: MempoolWatchToggleProps) => {
+  const enabled = value === 'on';
+  return (
+    <div className='mt-3 pt-3 border-t border-border-soft'>
+      <button
+        type='button'
+        onClick={() => onChange(enabled ? 'off' : 'on')}
+        className='flex items-start gap-2 w-full text-left'
+      >
+        <div className={cn(
+          'mt-0.5 h-4 w-7 rounded-full border-2 flex-shrink-0 relative transition-colors',
+          enabled ? 'border-zigner-gold bg-zigner-gold/30' : 'border-muted-foreground/50',
+        )}>
+          <div className={cn(
+            'absolute top-0 h-3 w-3 rounded-full bg-zigner-gold transition-all',
+            enabled ? 'left-3' : 'left-0',
+          )} />
+        </div>
+        <div className='flex-1'>
+          <div className='text-xs font-medium leading-none mb-0.5'>
+            instant pending (mempool watch)
+          </div>
+          <div className='text-[10px] text-fg-muted leading-snug'>
+            your indexer learns when you're online.
+          </div>
+        </div>
+      </button>
+      {enabled && (
+        <div className='mt-2 p-2 rounded border border-amber-500/30 bg-amber-500/5'>
+          <div className='text-[10px] text-amber-500 leading-snug'>
+            polling at ~10s ± jitter. server cannot see which mempool tx is yours
+            (trial-decrypt is local), but it sees a continuous "online" signal from
+            your wallet.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export default SettingsNetworks;

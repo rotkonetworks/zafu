@@ -39,6 +39,15 @@ export type NetworkId =
  */
 export type MemoSyncStrategy = 'private' | 'fast' | 'paranoid';
 
+/**
+ * Mempool-watch toggle. Off by default (per the hdevalence review): the
+ * feature has a real privacy cost — the indexer learns the wallet is online
+ * and polls on a regular cadence. Users opt in explicitly.
+ *
+ * See apps/extension/src/services/mempool-watch/README.md for the design.
+ */
+export type MempoolWatchSetting = 'off' | 'on';
+
 export interface NetworkConfig {
   id: NetworkId;
   name: string;
@@ -67,6 +76,12 @@ export interface NetworkConfig {
    * Zcash entry so it always persists.
    */
   memoSyncStrategy?: MemoSyncStrategy;
+  /**
+   * Mempool watch toggle for shielded networks. Off by default — opening
+   * a polling subscription reveals to the indexer that this wallet is
+   * online and continuously interested in mempool state. See README.
+   */
+  mempoolWatch?: MempoolWatchSetting;
 }
 
 export interface NetworksSlice {
@@ -80,6 +95,8 @@ export interface NetworksSlice {
   setNetworkEndpoint: (id: NetworkId, endpoint: string) => Promise<void>;
   /** Update memo-sync strategy for a shielded network. */
   setMemoSyncStrategy: (id: NetworkId, strategy: MemoSyncStrategy) => Promise<void>;
+  /** Update mempool-watch toggle for a shielded network. */
+  setMempoolWatch: (id: NetworkId, setting: MempoolWatchSetting) => Promise<void>;
   /** Get list of enabled networks */
   getEnabledNetworks: () => NetworkConfig[];
   /** Check if a network is enabled */
@@ -109,6 +126,7 @@ const DEFAULT_NETWORKS: Record<NetworkId, NetworkConfig> = {
     endpoint: 'https://zcash.rotko.net',
     syncDescription: 'Zidecar trustless sync — header chain proven via Ligerito polynomial commitments, nullifier set verified by NOMT merkle proofs. Compact blocks are trial-decrypted locally — keys never leave this device.',
     memoSyncStrategy: 'private',
+    mempoolWatch: 'off',
   },
 
   // === IBC/Cosmos Chains (for Penumbra deposits/withdrawals) ===
@@ -184,8 +202,9 @@ export const createNetworksSlice =
       const enabledNetworks = await local.get('enabledNetworks');
       const networkEndpoints = await local.get('networkEndpoints');
       const memoSyncStrategies = await local.get('memoSyncStrategies');
+      const mempoolWatchSettings = await local.get('mempoolWatchSettings');
 
-      if (enabledNetworks || networkEndpoints || memoSyncStrategies) {
+      if (enabledNetworks || networkEndpoints || memoSyncStrategies || mempoolWatchSettings) {
         set(state => {
           // Apply enabled state from storage
           if (enabledNetworks) {
@@ -209,6 +228,15 @@ export const createNetworksSlice =
               const cfg = state.networks.networks[id as NetworkId];
               if (cfg && strategy) {
                 cfg.memoSyncStrategy = strategy as MemoSyncStrategy;
+              }
+            }
+          }
+          // Apply per-network mempool-watch settings
+          if (mempoolWatchSettings) {
+            for (const [id, setting] of Object.entries(mempoolWatchSettings)) {
+              const cfg = state.networks.networks[id as NetworkId];
+              if (cfg && setting) {
+                cfg.mempoolWatch = setting as MempoolWatchSetting;
               }
             }
           }
@@ -283,6 +311,17 @@ export const createNetworksSlice =
         await local.set('memoSyncStrategies', {
           ...current,
           [id]: strategy,
+        });
+      },
+
+      setMempoolWatch: async (id: NetworkId, setting: MempoolWatchSetting) => {
+        set(state => {
+          state.networks.networks[id].mempoolWatch = setting;
+        });
+        const current = (await local.get('mempoolWatchSettings')) || {};
+        await local.set('mempoolWatchSettings', {
+          ...current,
+          [id]: setting,
         });
       },
 

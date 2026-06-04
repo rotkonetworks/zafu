@@ -136,6 +136,13 @@ type LOCAL = {
   memoSyncStrategies?: {
     zcash?: 'private' | 'fast' | 'paranoid';
   };
+  /**
+   * Per-network mempool watch toggle. Currently only Zcash uses this.
+   * Default 'off' is applied at runtime in NetworkConfig if missing.
+   */
+  mempoolWatchSettings?: {
+    zcash?: 'off' | 'on';
+  };
 
   /** keyring vaults (keplr-style multi-account) */
   vaults?: {
