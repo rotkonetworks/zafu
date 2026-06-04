@@ -763,6 +763,26 @@ const ZcashContent = ({
         </div>
       </div>
 
+      {/* first-sync reassurance — only when actively syncing with no
+          balance yet (the canonical new-user state). Sets expectations so
+          the user doesn't think the wallet is broken. Disappears once
+          either sync completes or any balance shows up. */}
+      {!allSynced && totalZat === 0n && chainHeight > 0 && (
+        <div className='rounded-md border border-border-soft bg-elev-1 p-3'>
+          <div className='flex items-start gap-2'>
+            <span className='i-lucide-info mt-0.5 h-3.5 w-3.5 shrink-0 text-fg-muted' />
+            <div className='flex-1'>
+              <div className='text-xs text-fg-high lowercase'>scanning for your notes</div>
+              <p className='mt-0.5 text-[10px] text-fg-muted leading-snug'>
+                first sync can take a few minutes. you can leave this open
+                or come back later — the worker keeps running in the
+                background.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* empty-state hint for new users — only shown when the wallet is
           synced AND the balance is zero. Disappears the moment any ZEC
           lands. The hint surfaces concrete next steps (receive address,
