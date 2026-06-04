@@ -30,7 +30,14 @@ export const SetPassword = () => {
   const location = useLocation();
   const origin = getSeedPhraseOrigin(location);
 
-  const canSubmit = password.length > 0 && password === confirmation && !loading;
+  // 8 chars is the floor. Not strong, but enough to nudge users past
+  // 'pass' / 'abc'. We intentionally don't enforce uppercase/symbol
+  // rules — those create predictable mutations ('Password1!') and
+  // annoy users without adding real entropy. Length is what matters.
+  const MIN_PASSWORD_LENGTH = 8;
+  const tooShort = password.length > 0 && password.length < MIN_PASSWORD_LENGTH;
+  const canSubmit =
+    password.length >= MIN_PASSWORD_LENGTH && password === confirmation && !loading;
   const onBack = () => {
     if (origin === SEED_PHRASE_ORIGIN.NEWLY_GENERATED) {
       navigate(PagePath.WELCOME);
@@ -69,6 +76,13 @@ export const SetPassword = () => {
             passwordValue={password}
             label='new password'
             onChange={({ target: { value } }) => setPassword(value)}
+            validations={[
+              {
+                type: 'warn',
+                issue: `at least ${MIN_PASSWORD_LENGTH} characters`,
+                checkFn: () => tooShort,
+              },
+            ]}
           />
           <PasswordInput
             passwordValue={confirmation}
