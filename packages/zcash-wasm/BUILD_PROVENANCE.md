@@ -4,15 +4,15 @@ These vendored .wasm blobs are build artifacts. Do NOT hand-edit.
 Reproduce by checking out the zcli rev below and running the commands.
 
 - source repo: https://github.com/rotkonetworks/zcli (branch staging)
-- source rev:  686d174 (staging tip — `chore(staging): cap ur_decode_frames inputs`)
-- source state: committed (rev above is an exact reproducibility anchor)
-- built (UTC): 2026-06-04T11:21:00Z
+- source rev:  686d174 + uncommitted security fixes (review pass: redactor output-side, ur_decode_frames cap reordered, compute_orchard_digest dedup)
+- source state: uncommitted on zcli staging working tree as of build time
+- built (UTC): 2026-06-05T08:00:00Z
 
 ## single-thread  (packages/zcash-wasm/zafu_wasm_bg.wasm; duplicated as zcash_wasm_bg.wasm)
     cd crates/zcash-wasm
     RUSTFLAGS='-C target-feature=+simd128' \
       wasm-pack build --release --target web --out-dir pkg --no-default-features
-    sha256(zafu_wasm_bg.wasm) = dee6a25b604f27397522bbc3c8e143d96c18cfe24d435c3d2ac97ebbb164dfd3
+    sha256(zafu_wasm_bg.wasm) = 1d423c74fc6ec1ab22f61b890579ebabe901dc715a1cdae9f192280349a0877c
 
 ## parallel / rayon  (apps/extension/public/zafu-wasm-parallel/zafu_wasm_bg.wasm)
     # DO NOT set RUSTFLAGS — env var overrides crates/zcash-wasm/.cargo/config.toml
@@ -29,7 +29,7 @@ Reproduce by checking out the zcli rev below and running the commands.
     wasm-opt -Oz --enable-threads --enable-bulk-memory --enable-simd \
       --enable-mutable-globals --enable-nontrapping-float-to-int \
       pkg-parallel/zafu_wasm_bg.wasm -o pkg-parallel/zafu_wasm_bg.wasm
-    sha256(zafu_wasm_bg.wasm) = af3359357739b223804a9836ec00c0d2ef970d787627671e7cf0acb9ab923adf
+    sha256(zafu_wasm_bg.wasm) = dd474f001dc5050be96f35567546c87c75d51ca24679de45ddfcc88f6359257b
 
     Verify the rebuilt blob has shared imported memory before shipping:
       `'env'.'memory' flags=0x03 shared=True` in the raw output;

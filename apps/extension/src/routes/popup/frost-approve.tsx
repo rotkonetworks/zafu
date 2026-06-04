@@ -350,6 +350,18 @@ export const FrostApprove = () => {
   const runSign = async () => {
     if (!multisigVault) throw new Error('no multisig wallet found');
 
+    // wallet-password gate before unsealing the FROST share. Mirrors
+    // runPokerSign — session-unlock alone is not enough to release the
+    // share for a sighash whose semantics the user can't independently
+    // verify.
+    setStatus('awaiting wallet password...');
+    const authorized = await requestAuth();
+    if (!authorized) {
+      sendResult(requestId, { error: 'user denied (password)' });
+      window.close();
+      return;
+    }
+
     const abort = new AbortController();
     const relay = new FrostRelayClient(relayUrl);
     const secrets = await getMultisigSecrets(multisigVault.id);
@@ -410,8 +422,12 @@ export const FrostApprove = () => {
 
   // joiner-side PCZT signing — host (poker-escrow) drives SIGN/C/S wire same as multisig/sign.tsx
   const runPokerSign = async () => {
-    const vault = multisigLabel
-      ? keyInfos.find(k => k.type === 'frost-multisig' && k.name?.startsWith(multisigLabel))
+    // Re-sanitize the URL param defensively (external-easteregg already does
+    // this on the message-listener boundary, but the popup is its own trust
+    // boundary). Same charset as the listener side.
+    const sanitizedLabel = multisigLabel.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 64);
+    const vault = sanitizedLabel
+      ? keyInfos.find(k => k.type === 'frost-multisig' && k.name?.startsWith(sanitizedLabel))
       : multisigVault;
     if (!vault) throw new Error('no matching multisig wallet found');
 

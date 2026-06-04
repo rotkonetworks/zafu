@@ -10,6 +10,56 @@ const SERVICE = 'cash.z.wallet.sdk.rpc.CompactTxStreamer';
 
 const UNSUPPORTED = (m: string) => new Error(`${m} not available on a public lightwalletd endpoint`);
 
+// Per-method response-size caps. A hostile endpoint can otherwise ship
+// arbitrarily large bytes via Response.arrayBuffer() and OOM the worker.
+// Sized for the maximum legitimate response on each method.
+const MAX_RESP_BYTES: Record<string, number> = {
+  GetLatestBlock: 1 << 12,    // 4 KiB — BlockID is tiny
+  GetTreeState: 1 << 17,      // 128 KiB — orchard tree state is hex-encoded
+  GetBlockRange: 64 << 20,    // 64 MiB — block stream (legitimate range can be large)
+  GetTransaction: 1 << 20,    // 1 MiB — single tx
+  GetMempoolTx: 16 << 20,     // 16 MiB — mempool stream
+  GetLatestTreeState: 1 << 17,
+};
+const DEFAULT_MAX_RESP_BYTES = 1 << 20; // 1 MiB
+
+async function readBoundedBody(resp: Response, method: string): Promise<Uint8Array> {
+  const cap = MAX_RESP_BYTES[method] ?? DEFAULT_MAX_RESP_BYTES;
+  const cl = resp.headers.get('content-length');
+  if (cl !== null) {
+    const n = Number(cl);
+    if (Number.isFinite(n) && n > cap) {
+      throw new Error(`gRPC ${method}: declared response size ${n} exceeds cap ${cap}`);
+    }
+  }
+  const reader = resp.body?.getReader();
+  if (!reader) {
+    const buf = new Uint8Array(await resp.arrayBuffer());
+    if (buf.length > cap) {
+      throw new Error(`gRPC ${method}: response ${buf.length} exceeds cap ${cap}`);
+    }
+    return buf;
+  }
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    if (value) {
+      total += value.length;
+      if (total > cap) {
+        try { await reader.cancel(); } catch { /* swallow */ }
+        throw new Error(`gRPC ${method}: response exceeded cap ${cap} mid-stream`);
+      }
+      chunks.push(value);
+    }
+  }
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) { out.set(c, off); off += c.length; }
+  return out;
+}
+
 export class LightwalletdClient implements ZcashClient {
   private serverUrl: string;
 
@@ -141,7 +191,7 @@ export class LightwalletdClient implements ZcashClient {
 
   private async grpcCall(method: string, msg: Uint8Array): Promise<Uint8Array> {
     const resp = await this.fetchGrpc(method, msg);
-    const buf = new Uint8Array(await resp.arrayBuffer());
+    const buf = await readBoundedBody(resp, method);
 
     if (buf.length < 5) {
       const status = resp.headers.get('grpc-status');
@@ -169,7 +219,7 @@ export class LightwalletdClient implements ZcashClient {
 
   private async grpcCallStream(method: string, msg: Uint8Array): Promise<Uint8Array> {
     const resp = await this.fetchGrpc(method, msg);
-    return new Uint8Array(await resp.arrayBuffer());
+    return readBoundedBody(resp, method);
   }
 
   private async fetchGrpc(method: string, msg: Uint8Array): Promise<Response> {

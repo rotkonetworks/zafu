@@ -186,8 +186,11 @@ export const externalMessageListener = (
       const maxSigners = Number(msg['maxSigners']) || 3;
       const relayUrl = String(msg['relayUrl'] || 'wss://zrelay.rotko.net');
       const appOrigin = sender.origin || sender.url || 'unknown';
-      // sanitize the caller-supplied label prefix; default to the origin host
-      const rawPrefix = String(msg['labelPrefix'] || new URL(appOrigin).host || 'multisig');
+      // sanitize the caller-supplied label prefix; default to the origin host.
+      // new URL() throws on non-URL strings (e.g. 'unknown'); fall back safely.
+      let originHost = 'multisig';
+      try { originHost = new URL(appOrigin).host || 'multisig'; } catch { /* keep default */ }
+      const rawPrefix = String(msg['labelPrefix'] || originHost);
       const labelPrefix = rawPrefix.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 32) || 'multisig';
       const requestId = crypto.randomUUID();
 
@@ -249,7 +252,11 @@ export const externalMessageListener = (
       }
       const relayUrl = String(msg['relayUrl'] || 'wss://zrelay.rotko.net');
       const feeZat = Number(msg['feeZat']) || 10_000;
-      const multisigLabel = typeof msg['multisigLabel'] === 'string' ? String(msg['multisigLabel']) : '';
+      // Sanitize identically to labelPrefix above. Empty is allowed here
+      // because the popup falls back to the default multisigVault. The
+      // popup itself does the lookup via startsWith — same charset rules.
+      const rawLabel = typeof msg['multisigLabel'] === 'string' ? msg['multisigLabel'] : '';
+      const multisigLabel = rawLabel.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 64);
       const appOrigin = sender.origin || sender.url || 'unknown';
       const requestId = crypto.randomUUID();
 
@@ -271,9 +278,15 @@ export const externalMessageListener = (
     }
 
     case 'zafu_delete_multisig': {
-      const multisigLabel = String(msg['multisigLabel'] || '');
-      if (!multisigLabel) {
-        sendResponse({ error: 'multisigLabel required' });
+      // Sanitize + require non-empty + minimum length to make prefix-match
+      // enumeration impractical. Architectural origin-binding (vault-level
+      // creatorOrigin enforced here) is the proper fix and is tracked
+      // separately; this is the mechanical hardening.
+      const rawLabel = typeof msg['multisigLabel'] === 'string' ? msg['multisigLabel'] : '';
+      const multisigLabel = rawLabel.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 64);
+      const MIN_DELETE_LABEL_LEN = 4;
+      if (multisigLabel.length < MIN_DELETE_LABEL_LEN) {
+        sendResponse({ error: `multisigLabel must be at least ${MIN_DELETE_LABEL_LEN} chars after sanitization` });
         return true;
       }
       const delayMs = Math.max(0, Number(msg['delayMs']) || 0);
