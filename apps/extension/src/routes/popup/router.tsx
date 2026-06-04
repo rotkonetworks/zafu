@@ -45,10 +45,20 @@ const ZcashSendApproval = lazy(() =>
   import('./approval/zcash-send').then(m => ({ default: m.ZcashSendApproval })),
 );
 
-// suspense fallback for lazy routes
+/**
+ * Skeleton placeholder for lazy-loaded popup routes.
+ *
+ * Spinner advertises "we're slow" — same wall-clock latency feels
+ * slower to the user. A skeleton of plausible content geometry
+ * (header strip + a couple of card-sized blocks) communicates
+ * "loading layout you're about to see" instead. CSS pulse only, no
+ * JS animation cost, no extra layout shift on resolution.
+ */
 const LazyFallback = () => (
-  <div className='flex h-full items-center justify-center'>
-    <div className='h-6 w-6 animate-spin rounded-full border-2 border-zigner-gold border-t-transparent' />
+  <div className='flex h-full flex-col gap-3 p-4 animate-pulse'>
+    <div className='h-6 w-32 rounded-sm bg-elev-2/50' />
+    <div className='h-24 w-full rounded-md bg-elev-2/30' />
+    <div className='h-16 w-full rounded-md bg-elev-2/20' />
   </div>
 );
 
