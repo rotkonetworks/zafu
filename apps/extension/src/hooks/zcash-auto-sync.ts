@@ -24,6 +24,7 @@ import { isPro } from '../state/license';
 import { deriveRingVrfSeed } from '../state/identity';
 import { ZidecarClient } from '../state/keyring/zidecar-client';
 import type { ZcashBackend } from '../state/keyring/zcash-backend';
+import { isMempoolWatchEnabled } from '../services/mempool-watch/strategy';
 
 /** resolve wallet birthday height from storage or chain tip.
  *  never returns below orchard activation — no point scanning pre-orchard blocks. */
@@ -56,11 +57,10 @@ export function useZcashAutoSync() {
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const zcashBackend = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';
   const mempoolWatchSetting = useStore(s => s.networks.networks.zcash.mempoolWatch) ?? 'off';
-  // Mempool watch only makes sense on zidecar — lightwalletd's GetMempoolStream
-  // returns raw txs we can't trial-decrypt without a full parser. UI also gates
-  // this, but defending in depth here means a wrong toggle can never spawn a
-  // useless watcher.
-  const mempoolWatch: 'off' | 'on' = zcashBackend === 'zidecar' ? mempoolWatchSetting : 'off';
+  // Single-source-of-truth gate. UI and worker also enforce; we run the same
+  // helper at every layer so all surfaces agree on the answer and no single
+  // layer's coercion is silently authoritative.
+  const mempoolWatch: 'off' | 'on' = isMempoolWatchEnabled(mempoolWatchSetting, zcashBackend) ? 'on' : 'off';
 
   const onLoginPage = location.pathname === '/login';
   const hasMnemonic = selectedKeyInfo?.type === 'mnemonic';

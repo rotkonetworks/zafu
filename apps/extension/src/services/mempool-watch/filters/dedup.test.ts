@@ -78,6 +78,29 @@ describe('withDedup', () => {
     expect(got).toHaveLength(1);
   });
 
+  test('lastKey persists across separate inner invocations (poll iterations)', async () => {
+    // withPoll calls inner(walletId, ctx) fresh per iteration. The dedup
+    // filter must hold lastKey at filter-scope (not generator-scope) so
+    // a second iteration with the same snapshot suppresses it. This was
+    // the dedup-is-dead bug: putting `lastKey` inside the generator
+    // reset it every poll, defeating the filter entirely.
+    const ctrl = new AbortController();
+    let callCount = 0;
+    const inner: MempoolFetcher = async function* () {
+      callCount += 1;
+      yield { entries: [entry(1), entry(2)], observedAtMs: callCount };
+    };
+    const wrapped = withDedup()(inner);
+    const got: MempoolSnapshot[] = [];
+    // Two separate drains — mimic two poll cycles. Same snapshot both
+    // times → dedup should suppress the second.
+    for await (const s of wrapped('w', ctx(ctrl.signal))) got.push(s);
+    for await (const s of wrapped('w', ctx(ctrl.signal))) got.push(s);
+    expect(callCount).toBe(2);
+    expect(got).toHaveLength(1);
+    expect(got[0]?.observedAtMs).toBe(1);
+  });
+
   test('first empty snapshot yields, subsequent empty ones do not', async () => {
     const ctrl = new AbortController();
     const wrapped = withDedup()(fromList([

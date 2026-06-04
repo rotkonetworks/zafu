@@ -116,6 +116,21 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     pendingTempTxIdRef.current = null;
   }, [messages]);
 
+  // Defensive cleanup: if the popup is closed (extension popups unmount on
+  // click-outside) while we still have an unresolved optimistic record, mark
+  // it failed so it doesn't sit in 'submitting' forever with no path forward.
+  // The send pipeline running in the worker may complete after the popup is
+  // gone — that's fine, hasMessage() dedup in addMessage will swap the
+  // 'failed' record for the real confirmed one once the block scan lands.
+  useEffect(() => {
+    return () => {
+      if (pendingTempTxIdRef.current !== null) {
+        void messages.markOutgoingFailed(pendingTempTxIdRef.current, 'cancelled');
+        pendingTempTxIdRef.current = null;
+      }
+    };
+  }, [messages]);
+
   const [step, setStep] = useState<SendStep>('form');
   const [recipient, setRecipient] = useState(prefill?.recipient ?? '');
   const [amount, setAmount] = useState(prefill?.amount ?? '');
@@ -209,6 +224,17 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const handleSign = async () => {
     if (!selectedKeyInfo) {
       setFormError('no wallet selected');
+      return;
+    }
+
+    // Re-entrancy guard: if a previous send is still in flight (we've moved
+    // past 'form'/'review' and haven't yet reached 'complete' or 'error'),
+    // ignore the click. Without this, a double-tap creates two temp records
+    // and the first is orphaned in 'submitting' since pendingTempTxIdRef
+    // gets overwritten.
+    const inFlight = step !== 'form' && step !== 'review' && step !== 'complete' && step !== 'error';
+    if (inFlight) {
+      console.warn('[zcash-send] handleSign re-entered while step =', step);
       return;
     }
 
@@ -369,7 +395,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const handleSignatureScanned = useCallback(
     async (data: string) => {
       if (!isZcashSignatureQR(data)) {
-        setError('invalid signature qr code');
+        const reason = 'invalid signature qr code';
+        void markPendingFailed(reason);
+        setError(reason);
         setStep('error');
         return;
       }

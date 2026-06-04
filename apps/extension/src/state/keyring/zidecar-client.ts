@@ -135,9 +135,13 @@ export class ZidecarClient {
     return this.parseBlockStream(resp);
   }
 
-  /** get mempool as compact blocks (height=0, hash=txid) for trial decryption */
-  async getMempoolStream(): Promise<CompactBlock[]> {
-    const resp = await this.grpcCallStream('GetMempoolStream', new Uint8Array(0));
+  /**
+   * Get mempool as compact blocks (height=0, hash=txid) for trial decryption.
+   * Accepts an optional AbortSignal so a long-running poll can be cancelled
+   * mid-fetch when the wallet asks for sync shutdown.
+   */
+  async getMempoolStream(signal?: AbortSignal): Promise<CompactBlock[]> {
+    const resp = await this.grpcCallStream('GetMempoolStream', new Uint8Array(0), signal);
     return this.parseBlockStream(resp);
   }
 
@@ -310,7 +314,7 @@ export class ZidecarClient {
   }
 
   /** raw gRPC-web call for server-streaming RPCs — returns full response with frame headers */
-  private async grpcCallStream(method: string, msg: Uint8Array): Promise<Uint8Array> {
+  private async grpcCallStream(method: string, msg: Uint8Array, signal?: AbortSignal): Promise<Uint8Array> {
     const path = `${this.serverUrl}/zidecar.v1.Zidecar/${method}`;
 
     const body = new Uint8Array(5 + msg.length);
@@ -328,7 +332,7 @@ export class ZidecarClient {
       ...(ZidecarClient.extraHeaders?.() ?? {}),
     };
 
-    const resp = await fetch(path, { method: 'POST', headers, body });
+    const resp = await fetch(path, { method: 'POST', headers, body, signal });
 
     if (!resp.ok) throw new Error(`gRPC HTTP ${resp.status}`);
     return new Uint8Array(await resp.arrayBuffer());

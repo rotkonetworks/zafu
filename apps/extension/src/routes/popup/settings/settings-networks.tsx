@@ -8,6 +8,7 @@ import { selectActiveNetwork, selectEnabledNetworks, selectSetActiveNetwork, typ
 import { isIbcNetwork } from '../../../state/keyring/network-types';
 import { networksSelector, type NetworkId, type MemoSyncStrategy, type MempoolWatchSetting } from '../../../state/networks';
 import { backendTrustDescription, type ZcashBackend } from '../../../state/keyring/zcash-backend';
+import { isMempoolWatchEnabled } from '../../../services/mempool-watch/strategy';
 import { NETWORKS, LAUNCHED_NETWORKS } from '../../../config/networks';
 import { cn } from '@repo/ui/lib/utils';
 import { SettingsScreen } from './settings-screen';
@@ -281,8 +282,9 @@ const MempoolWatchToggle = ({ value, backend, onChange }: MempoolWatchToggleProp
   // lightwalletd returns raw txs we can't trial-decrypt without a heavier
   // parser, so the toggle is meaningless on that backend. show it as
   // disabled with a clear hint instead of silently ignoring clicks.
+  // Same gate the worker + hook use. Centralized so UI can't drift.
   const available = backend === 'zidecar';
-  const enabled = available && value === 'on';
+  const enabled = available && isMempoolWatchEnabled(value, backend);
   return (
     <div className='mt-3 pt-3 border-t border-border-soft'>
       <button
