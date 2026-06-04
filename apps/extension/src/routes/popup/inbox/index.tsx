@@ -8,6 +8,7 @@
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '../../../state';
 import {
   inboxSelector,
@@ -813,7 +814,14 @@ function ComposeMessage({
 
 export function InboxPage() {
   const navigate = useNavigate();
-  const conversations = useStore(selectConversations);
+  // perf: selectConversations() runs Array.from + sort, returning a fresh
+  // array reference every read. Without shallow equality, Zustand re-runs
+  // the InboxPage render tree on every state tick (sync progress, memo
+  // store writes, etc.) even when the conversation list is unchanged.
+  // useShallow compares element-by-element; reference-stable conversation
+  // objects mean the page only re-renders when conversations actually
+  // change. Cascading down: ConversationRow + FlatMessageRow stay stable.
+  const conversations = useStore(useShallow(selectConversations));
   const unreadCount = useStore(selectUnreadCount);
   const messages = useStore(messagesSelector);
   const contacts = useStore(contactsSelector);
