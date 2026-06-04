@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { PagePath } from '../paths';
+import { OnboardingShell } from './onboarding-shell';
 
 // lazy load all onboarding screens
 const OnboardingStart = lazy(() => import('./start').then(m => ({ default: m.OnboardingStart })));
@@ -18,16 +19,26 @@ const OnboardingSuccess = lazy(() =>
   import('./success').then(m => ({ default: m.OnboardingSuccess })),
 );
 
+/**
+ * Skeleton placeholder used while a lazy route bundle is fetched. Avoids
+ * the spinner because spinners advertise "we're slow" — a skeleton with
+ * the same geometry as the real content feels faster even though the
+ * wall-clock latency is identical. Pure CSS, no JS animation cost.
+ */
 const LazyFallback = () => (
-  <div className="flex h-full items-center justify-center">
-    <div className="h-6 w-6 animate-spin rounded-full border-2 border-zigner-gold border-t-transparent" />
+  <div className='flex h-full flex-col gap-4 animate-pulse'>
+    <div className='h-6 w-40 rounded-sm bg-elev-2/60' />
+    <div className='h-3 w-64 rounded-sm bg-elev-2/40' />
+    <div className='mt-4 h-32 w-full rounded-sm bg-elev-2/30' />
   </div>
 );
 
 const withSuspense = (Component: React.LazyExoticComponent<React.ComponentType>) => (
-  <Suspense fallback={<LazyFallback />}>
-    <Component />
-  </Suspense>
+  <OnboardingShell>
+    <Suspense fallback={<LazyFallback />}>
+      <Component />
+    </Suspense>
+  </OnboardingShell>
 );
 
 export const onboardingRoutes = [
