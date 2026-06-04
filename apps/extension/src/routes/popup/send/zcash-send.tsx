@@ -27,7 +27,6 @@ import {
   type SendTxPcztUnsignedResult,
 } from '../../../state/keyring/network-worker';
 import { Button } from '@repo/ui/components/ui/button';
-import { Input } from '@repo/ui/components/ui/input';
 import { QrDisplay } from '../../../shared/components/qr-display';
 import { QrScanner } from '../../../shared/components/qr-scanner';
 import { AnimatedQrDisplay } from '../../../shared/components/animated-qr-display';
@@ -148,7 +147,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const [showSavePrompt, setShowSavePrompt] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
   const [fee, setFee] = useState('0.0001');
-  const [showContacts, setShowContacts] = useState(false);
+  const [, setShowContacts] = useState(false);
   const [showQrScanner, setShowQrScanner] = useState(false);
   const unsignedTxRef = useRef<SendTxUnsignedResult | null>(null);
   const [sendSteps, setSendSteps] = useState<Array<{ step: string; detail?: string; elapsedMs: number }>>([]);
@@ -635,6 +634,22 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     max
                   </button>
                 </div>
+                {/* Inline validation. Two cases we hand-hold:
+                    - wallet has no balance at all → tell the user to receive
+                      first instead of letting them fill the form and fail at
+                      build time.
+                    - amount entered exceeds available — flag immediately so
+                      the user doesn't get a build-time rejection. */}
+                {balanceZec === 0 && (
+                  <p className='mt-1.5 text-[10px] text-amber-400 leading-snug'>
+                    you don't have any zec yet. receive some first — your address is on the home screen.
+                  </p>
+                )}
+                {balanceZec !== null && balanceZec > 0 && Number(amount) > maxSendZec && Number(amount) > 0 && (
+                  <p className='mt-1.5 text-[10px] text-red-400 leading-snug tabular-nums'>
+                    exceeds spendable balance ({maxSendZec.toFixed(8).replace(/0+$/, '').replace(/\.$/, '')} ZEC after fee)
+                  </p>
+                )}
               </div>
 
               <div>
