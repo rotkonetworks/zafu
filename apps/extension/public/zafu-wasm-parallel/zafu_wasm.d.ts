@@ -472,21 +472,6 @@ export function transparent_pubkey_from_ufvk(ufvk_str: string, address_index: nu
  */
 export function tree_root_hex(tree_state_hex: string): string;
 
-/**
- * Decode UR-encoded animated QR string frames back into CBOR bytes.
- *
- * Accepts a JSON array of UR strings (each `ur:<type>/...`) collected from
- * successive scans of an animated QR. Returns the reconstructed payload bytes
- * once the fountain decoder has enough frames (deduplicated internally), or an
- * error if the parts are malformed or the fountain code can't yet reconstruct.
- *
- * `expected_type` is a sanity check: if non-empty, parts whose UR type doesn't
- * match are rejected. Pass `""` to accept any type.
- *
- * Returns hex-encoded payload bytes (caller can hex_decode if it wants raw).
- * We return hex (rather than `Vec<u8>` directly) to avoid a wasm-bindgen
- * `Uint8Array` allocation pattern that's been flaky for us in some browsers.
- */
 export function ur_decode_frames(parts_json: string, expected_type: string): string;
 
 /**
