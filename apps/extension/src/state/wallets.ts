@@ -39,6 +39,8 @@ export interface ZcashWalletJson {
     /** zigner-side wallet_id from frost_store_wallet (airgapSigner only).
      *  enables O(1) lookup at sign time vs scanning all FROST wallets. */
     zignerWalletId?: string;
+    /** hide from main wallet UI (app-driven multisigs e.g. poker); sign-time lookup still works */
+    hidden?: boolean;
   };
 }
 
@@ -253,6 +255,11 @@ export const selectActiveZcashWallet = (state: AllSlices) => {
 export const selectMultisigWallets = (state: AllSlices) => {
   const wallets = Array.isArray(state.wallets.zcashWallets) ? state.wallets.zcashWallets : [];
   return wallets.filter(w => w.multisig);
+};
+/** like selectMultisigWallets but drops hidden=true — use for user-facing lists, NOT backup/dedupe */
+export const selectVisibleMultisigWallets = (state: AllSlices) => {
+  const wallets = Array.isArray(state.wallets.zcashWallets) ? state.wallets.zcashWallets : [];
+  return wallets.filter(w => w.multisig && !w.multisig.hidden);
 };
 export const selectPenumbraWallets = (state: AllSlices) => Array.isArray(state.wallets.all) ? state.wallets.all : [];
 export const selectActivePenumbraIndex = (state: AllSlices) => state.wallets.activeIndex;

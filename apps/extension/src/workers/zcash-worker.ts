@@ -132,6 +132,7 @@ interface WasmModule {
   frost_sample_fvk_sk(): string;
   frost_derive_ufvk(public_key_package_hex: string, sk_hex: string, mainnet: boolean): string;
   frost_spend_sign_round2(key_package_hex: string, nonces_hex: string, sighash_hex: string, alpha_hex: string, commitments_json: string): string;
+  frost_spend_sign_round2_signed(ephemeral_seed_hex: string, key_package_hex: string, nonces_hex: string, sighash_hex: string, alpha_hex: string, commitments_json: string): string;
   frost_spend_aggregate(public_key_package_hex: string, sighash_hex: string, alpha_hex: string, commitments_json: string, shares_json: string): string;
   frost_parse_tx_outputs(unsigned_tx_hex: string, orchard_fvk_uview: string): string;
 
@@ -2963,10 +2964,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
       case 'frost-spend-sign': {
         await initWasm();
-        const { keyPackageHex, noncesHex, sighashHex, alphaHex, commitments } = payload as {
-          keyPackageHex: string; noncesHex: string; sighashHex: string; alphaHex: string; commitments: string;
+        const { ephemeralSeedHex, keyPackageHex, noncesHex, sighashHex, alphaHex, commitments } = payload as {
+          ephemeralSeedHex: string; keyPackageHex: string; noncesHex: string; sighashHex: string; alphaHex: string; commitments: string;
         };
-        const result = wasmModule!.frost_spend_sign_round2(keyPackageHex, noncesHex, sighashHex, alphaHex, commitments);
+        // signed variant — coordinator (zafu/poker-escrow) extracts signer identifier from VK
+        const result = wasmModule!.frost_spend_sign_round2_signed(
+          ephemeralSeedHex, keyPackageHex, noncesHex, sighashHex, alphaHex, commitments,
+        );
         workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: result });
         return;
       }

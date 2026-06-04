@@ -112,6 +112,8 @@ export interface FrostMultisigParams {
   ephemeralSeed?: string;
   /** zigner-side wallet_id from frost_store_wallet (airgapSigner only). */
   zignerWalletId?: string;
+  /** hide from main wallet UI (app-driven multisigs e.g. poker); sign-time lookup still works */
+  hidden?: boolean;
 }
 
 export const buildFrostVault = (
@@ -133,6 +135,7 @@ export const buildFrostVault = (
     address: params.address,
     supportedNetworks: ['zcash'],
     ...(params.custody === 'airgapSigner' ? { custody: 'airgapSigner' as const } : {}),
+    ...(params.hidden ? { hidden: true as const } : {}),
   },
 });
 
@@ -160,6 +163,7 @@ export const buildFrostZcashWallet = (
           ...(params.zignerWalletId ? { zignerWalletId: params.zignerWalletId } : {}),
         }
       : { keyPackage: encKeyPackage!, ephemeralSeed: encEphemeralSeed! }),
+    ...(params.hidden ? { hidden: true as const } : {}),
   },
 });
 

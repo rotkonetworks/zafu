@@ -708,8 +708,9 @@ export const frostSignRound1InWorker = async (
   return callWorker('zcash', 'frost-sign-round1', { ephemeralSeedHex, keyPackageHex });
 };
 
-/** spend-authorize round 2: produce FROST share for each action */
+/** signed FROST share — wrapping is required for cross-party aggregator (poker-escrow) to extract the signer identifier */
 export const frostSpendSignInWorker = async (
+  ephemeralSeedHex: string,
   keyPackageHex: string,
   noncesHex: string,
   sighashHex: string,
@@ -717,7 +718,7 @@ export const frostSpendSignInWorker = async (
   commitments: string[],
 ): Promise<string> => {
   return callWorker('zcash', 'frost-spend-sign', {
-    keyPackageHex, noncesHex, sighashHex, alphaHex,
+    ephemeralSeedHex, keyPackageHex, noncesHex, sighashHex, alphaHex,
     commitments: JSON.stringify(commitments),
   });
 };
