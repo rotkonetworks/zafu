@@ -942,20 +942,23 @@ export function InboxPage() {
         </div>
       </div>
 
-      {/* tabs */}
+      {/* tabs — icon + label so the discriminator is glanceable. unread
+          badge anchors to conversations since that's where the user lives
+          most of the time. */}
       <div className='flex border-b border-border-soft'>
         <button
           onClick={() => setTab('conversations')}
           className={cn(
-            'flex-1 py-2.5 text-sm font-medium border-b-2 transition-colors',
+            'flex flex-1 items-center justify-center gap-1.5 py-2.5 text-sm font-medium border-b-2 transition-colors',
             tab === 'conversations'
               ? 'border-zigner-gold text-fg'
               : 'border-transparent text-fg-muted hover:text-fg-high',
           )}
         >
+          <span className='i-lucide-messages-square h-4 w-4' />
           conversations
           {unreadCount > 0 && (
-            <span className='ml-1.5 rounded-full bg-zigner-gold px-1.5 py-0.5 text-[10px] text-zigner-dark'>
+            <span className='ml-0.5 rounded-full bg-zigner-gold px-1.5 py-0.5 text-[10px] text-zigner-dark'>
               {unreadCount}
             </span>
           )}
@@ -963,12 +966,13 @@ export function InboxPage() {
         <button
           onClick={() => setTab('all')}
           className={cn(
-            'flex-1 py-2.5 text-sm font-medium border-b-2 transition-colors',
+            'flex flex-1 items-center justify-center gap-1.5 py-2.5 text-sm font-medium border-b-2 transition-colors',
             tab === 'all'
               ? 'border-zigner-gold text-fg'
               : 'border-transparent text-fg-muted hover:text-fg-high',
           )}
         >
+          <span className='i-lucide-list h-4 w-4' />
           all messages
         </button>
       </div>
