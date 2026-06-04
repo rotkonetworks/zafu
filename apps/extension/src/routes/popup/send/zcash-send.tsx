@@ -14,6 +14,7 @@ import { useStore } from '../../../state';
 import { zignerSigningSelector } from '../../../state/zigner-signing';
 import { recentAddressesSelector } from '../../../state/recent-addresses';
 import { contactsSelector } from '../../../state/contacts';
+import { messagesSelector } from '../../../state/messages';
 import { selectEffectiveKeyInfo, selectGetMnemonic } from '../../../state/keyring';
 import { selectActiveZcashWallet } from '../../../state/wallets';
 import {
@@ -92,6 +93,43 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   // recent addresses and contacts
   const { recordUsage, shouldSuggestSave, dismissSuggestion } = useStore(recentAddressesSelector);
   const { findByAddress } = useStore(contactsSelector);
+  const messages = useStore(messagesSelector);
+  // tempTxId for the optimistic outgoing record created on send-click;
+  // promoted to the real txid once the build step returns one.
+  const pendingTempTxIdRef = useRef<string | null>(null);
+
+  /** promote the optimistic record to the real txid and mark it broadcasted. */
+  const promoteToBroadcasted = useCallback(async (realTxId: string) => {
+    const tempId = pendingTempTxIdRef.current;
+    if (tempId) {
+      try { await messages.promoteOutgoing(tempId, realTxId); } catch (e) { console.warn(e); }
+      pendingTempTxIdRef.current = null;
+    }
+    try { await messages.markOutgoingBroadcast(realTxId); } catch (e) { console.warn(e); }
+  }, [messages]);
+
+  /** mark the optimistic record failed if one is still pending. */
+  const markPendingFailed = useCallback(async (reason: string) => {
+    const tempId = pendingTempTxIdRef.current;
+    if (!tempId) return;
+    try { await messages.markOutgoingFailed(tempId, reason); } catch (e) { console.warn(e); }
+    pendingTempTxIdRef.current = null;
+  }, [messages]);
+
+  // Defensive cleanup: if the popup is closed (extension popups unmount on
+  // click-outside) while we still have an unresolved optimistic record, mark
+  // it failed so it doesn't sit in 'submitting' forever with no path forward.
+  // The send pipeline running in the worker may complete after the popup is
+  // gone — that's fine, hasMessage() dedup in addMessage will swap the
+  // 'failed' record for the real confirmed one once the block scan lands.
+  useEffect(() => {
+    return () => {
+      if (pendingTempTxIdRef.current !== null) {
+        void messages.markOutgoingFailed(pendingTempTxIdRef.current, 'cancelled');
+        pendingTempTxIdRef.current = null;
+      }
+    };
+  }, [messages]);
 
   const [step, setStep] = useState<SendStep>('form');
   const [recipient, setRecipient] = useState(prefill?.recipient ?? '');
@@ -189,10 +227,38 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       return;
     }
 
+    // Re-entrancy guard: if a previous send is still in flight (we've moved
+    // past 'form'/'review' and haven't yet reached 'complete' or 'error'),
+    // ignore the click. Without this, a double-tap creates two temp records
+    // and the first is orphaned in 'submitting' since pendingTempTxIdRef
+    // gets overwritten.
+    const inFlight = step !== 'form' && step !== 'review' && step !== 'complete' && step !== 'error';
+    if (inFlight) {
+      console.warn('[zcash-send] handleSign re-entered while step =', step);
+      return;
+    }
+
     setStep('building');
     setFormError(null);
     setSendSteps([]);
     buildStartRef.current = Date.now();
+
+    // optimistic outgoing entry — visible in inbox immediately, before
+    // any RPC. promoted to the real txid post-build; marked failed in
+    // the catch block below if anything throws.
+    try {
+      const { tempTxId } = await messages.addOutgoingPending({
+        network: 'zcash',
+        recipientAddress: recipient.trim(),
+        content: memo || '',
+        amount,
+        asset: 'ZEC',
+      });
+      pendingTempTxIdRef.current = tempTxId;
+    } catch (e) {
+      console.warn('[zcash-send] failed to record optimistic pending:', e);
+      pendingTempTxIdRef.current = null;
+    }
 
     try {
       const walletId = selectedKeyInfo.id;
@@ -211,6 +277,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         if ('txid' in result) {
           const feeZec = (Number(result.fee) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
           setFee(feeZec);
+          void promoteToBroadcasted(result.txid);
           complete(result.txid);
           setTotalElapsedSec(Math.round((Date.now() - buildStartRef.current) / 1000));
           setStep('complete');
@@ -264,6 +331,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             'zcash', walletId, zidecarUrl, result.unsignedTx,
             { orchardSigs, transparentSigs: [] }, result.spendIndices,
           );
+          void promoteToBroadcasted(finalResult.txid);
           complete(finalResult.txid);
           setTotalElapsedSec(Math.round((Date.now() - buildStartRef.current) / 1000));
           setStep('complete');
@@ -312,7 +380,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     } catch (err) {
       frostAbortRef.current?.abort();
       frostAbortRef.current = null;
-      setFormError(err instanceof Error ? err.message : 'failed to build transaction');
+      const reason = err instanceof Error ? err.message : 'failed to build transaction';
+      void markPendingFailed(reason);
+      setFormError(reason);
       setStep('error');
     }
   };
@@ -325,7 +395,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const handleSignatureScanned = useCallback(
     async (data: string) => {
       if (!isZcashSignatureQR(data)) {
-        setError('invalid signature qr code');
+        const reason = 'invalid signature qr code';
+        void markPendingFailed(reason);
+        setError(reason);
         setStep('error');
         return;
       }
@@ -357,6 +429,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         );
 
         unsignedTxRef.current = null;
+        void promoteToBroadcasted(result.txid);
         complete(result.txid);
         setStep('complete');
         void recordUsage(recipient, 'zcash');
@@ -365,11 +438,13 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         }
       } catch (err) {
         unsignedTxRef.current = null;
-        setError(err instanceof Error ? err.message : 'failed to broadcast transaction');
+        const reason = err instanceof Error ? err.message : 'failed to broadcast transaction';
+        void markPendingFailed(reason);
+        setError(reason);
         setStep('error');
       }
     },
-    [processSignature, complete, setError, selectedKeyInfo, zidecarUrl, recipient, recordUsage, shouldSuggestSave]
+    [processSignature, complete, setError, selectedKeyInfo, zidecarUrl, recipient, recordUsage, shouldSuggestSave, promoteToBroadcasted, markPendingFailed]
   );
 
   /**
@@ -397,17 +472,20 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           'zcash', selectedKeyInfo.id, zidecarUrl, pcztHex,
         );
         pcztUnsignedRef.current = null;
+        void promoteToBroadcasted(result.txid);
         complete(result.txid);
         setStep('complete');
         void recordUsage(recipient, 'zcash');
         if (shouldSuggestSave(recipient)) setShowSavePrompt(true);
       } catch (err) {
         pcztUnsignedRef.current = null;
-        setError(err instanceof Error ? err.message : 'failed to extract / broadcast PCZT');
+        const reason = err instanceof Error ? err.message : 'failed to extract / broadcast PCZT';
+        void markPendingFailed(reason);
+        setError(reason);
         setStep('error');
       }
     },
-    [complete, setError, selectedKeyInfo, zidecarUrl, recipient, recordUsage, shouldSuggestSave]
+    [complete, setError, selectedKeyInfo, zidecarUrl, recipient, recordUsage, shouldSuggestSave, promoteToBroadcasted, markPendingFailed]
   );
 
   const handleBack = () => {
@@ -455,13 +533,16 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         'zcash', selectedKeyInfo!.id, zidecarUrl,
         result.unsignedTx, { orchardSigs, transparentSigs: [] }, result.spendIndices,
       );
+      void promoteToBroadcasted(finalResult.txid);
       complete(finalResult.txid);
       setTotalElapsedSec(Math.round((Date.now() - buildStartRef.current) / 1000));
       setStep('complete');
       void recordUsage(recipient, 'zcash');
       if (shouldSuggestSave(recipient)) setShowSavePrompt(true);
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'broadcast failed');
+      const reason = err instanceof Error ? err.message : 'broadcast failed';
+      void markPendingFailed(reason);
+      setFormError(reason);
       setStep('error');
     }
   };

@@ -20,9 +20,55 @@ import type {
   BucketStart as MemoBucketStart,
   MemoSyncStrategy,
 } from '../services/memo-sync/types';
+import { type ZcashBackend, type ZcashClient } from '../state/keyring/zcash-backend';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const workerSelf = globalThis as any as DedicatedWorkerGlobalScope;
+
+/**
+ * Worker-local endpoint→backend registry. Populated only via the explicit
+ * `backend` field on the 'sync' payload (the popup classifies endpoints
+ * declaratively via isZidecarEndpoint() and forwards). We deliberately do
+ * NOT auto-probe — probing zidecar-only RPCs is a unique-to-zafu request
+ * signature that fingerprints the wallet.
+ *
+ * Unknown endpoints default to 'zidecar' (the rotko-shipped baseline);
+ * users on a third-party lightwalletd must hit 'sync' first to seed this
+ * map before any other RPC, which is the natural call order anyway.
+ */
+const backendRegistry = new Map<string, ZcashBackend>();
+
+function registerBackend(serverUrl: string, backend: ZcashBackend): void {
+  if (backend !== 'zidecar' && backend !== 'lightwalletd') {
+    throw new Error(`unknown zcash backend: ${String(backend)}`);
+  }
+  backendRegistry.set(serverUrl.replace(/\/$/, ''), backend);
+}
+
+function lookupBackend(serverUrl: string): ZcashBackend {
+  return backendRegistry.get(serverUrl.replace(/\/$/, '')) ?? 'zidecar';
+}
+
+/**
+ * Factory: construct the appropriate sync client for an endpoint+backend.
+ *
+ * Two-arg form is the canonical (defensive) one — pass backend explicitly
+ * when you have it in scope. The one-arg form is for call sites deep in
+ * the worker that don't carry backend through their payload; they fall
+ * back to the registry. Throws on unknown backend, never silently coerces.
+ */
+const makeZcashClient = async (serverUrl: string, backend?: ZcashBackend): Promise<ZcashClient> => {
+  const effective = backend ?? lookupBackend(serverUrl);
+  if (effective === 'lightwalletd') {
+    const { LightwalletdClient } = await import(/* webpackMode: "eager" */ '../state/keyring/lightwalletd-client');
+    return new LightwalletdClient(serverUrl);
+  }
+  if (effective === 'zidecar') {
+    const { ZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
+    return new ZidecarClient(serverUrl);
+  }
+  throw new Error(`unknown zcash backend: ${String(effective)}`);
+};
 
 interface WorkerMessage {
   type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-multi' | 'send-tx-complete' | 'send-tx-pczt' | 'send-tx-pczt-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'note-sync-encode' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos' | 'frost-dkg-part1' | 'frost-dkg-part2' | 'frost-dkg-part3' | 'frost-sign-round1' | 'frost-spend-sign' | 'frost-spend-aggregate' | 'frost-derive-address' | 'frost-derive-address-from-sk' | 'frost-sample-fvk-sk' | 'frost-derive-ufvk' | 'frost-parse-tx-outputs';
@@ -91,6 +137,17 @@ interface WalletState {
   syncAbort: boolean;
   notes: DecryptedNote[];
   spentNullifiers: Set<string>;
+  /**
+   * Abort controller for the mempool watcher task, when one is running.
+   * Lifted out of runSync's scope so stop-sync / reset-sync can abort the
+   * watcher directly without waiting for runSync's backoff to drain.
+   */
+  mempoolAbort?: AbortController;
+  /**
+   * Promise of the watcher's IIFE. waitForSyncStop awaits this alongside
+   * `syncing` so a follow-up runSync can't race a still-alive watcher.
+   */
+  mempoolTask?: Promise<void>;
 }
 
 interface WasmModule {
@@ -202,17 +259,39 @@ const patchBranchId = (buf: Uint8Array): void => {
   }
 };
 
-/** Wait for sync loop to stop after setting syncAbort=true. Polls state.syncing with 50ms interval, max 2s. */
-const waitForSyncStop = (state: WalletState, timeoutMs = 2000): Promise<void> => {
-  if (!state.syncing) return Promise.resolve();
-  return new Promise(resolve => {
-    const start = Date.now();
-    const check = () => {
-      if (!state.syncing || Date.now() - start > timeoutMs) resolve();
-      else setTimeout(check, 50);
-    };
-    check();
-  });
+/**
+ * Wait for both the sync loop AND the mempool watcher to stop after the
+ * caller has set syncAbort=true (or otherwise signaled shutdown). Polls
+ * state.syncing every 50ms up to timeoutMs, then explicitly awaits the
+ * watcher task if one was running — this matters because a freshly-spawned
+ * runSync race can otherwise have two watchers contending against the same
+ * walletId.
+ */
+const waitForSyncStop = async (state: WalletState, timeoutMs = 2000): Promise<void> => {
+  // Abort the watcher (idempotent) so any in-flight fetch / sleep wakes up.
+  state.mempoolAbort?.abort();
+
+  if (state.syncing) {
+    await new Promise<void>(resolve => {
+      const start = Date.now();
+      const check = () => {
+        if (!state.syncing || Date.now() - start > timeoutMs) resolve();
+        else setTimeout(check, 50);
+      };
+      check();
+    });
+  }
+  // Wait for the watcher's promise to settle so we know the IIFE finished.
+  // Bounded by the same timeout — if the watcher is wedged inside a fetch
+  // that ignored the signal, we still return after timeoutMs.
+  if (state.mempoolTask) {
+    await Promise.race([
+      state.mempoolTask.catch(() => undefined),
+      new Promise(resolve => setTimeout(resolve, timeoutMs)),
+    ]);
+    state.mempoolTask = undefined;
+    state.mempoolAbort = undefined;
+  }
 };
 
 const getOrCreateWalletState = (walletId: string): WalletState => {
@@ -463,7 +542,7 @@ const saveActionsCommitment = async (walletId: string, commitment: string): Prom
 
 /** verify header proof + commitment proofs + nullifier proofs after sync catches up */
 const verifySyncProofs = async (
-  client: InstanceType<typeof import('../state/keyring/zidecar-client').ZidecarClient>,
+  client: ZcashClient,
   tip: number,
   mainnet: boolean,
   pendingCmxs: Uint8Array[],
@@ -695,7 +774,7 @@ interface ProvenRoots {
 
 /** fetch and verify header proof from zidecar, returns proven NOMT roots */
 const verifyHeaderProof = async (
-  client: InstanceType<typeof import('../state/keyring/zidecar-client').ZidecarClient>,
+  client: ZcashClient,
   tip: number,
   mainnet: boolean,
 ): Promise<ProvenRoots> => {
@@ -1059,9 +1138,178 @@ const deriveAddress = (mnemonic: string, accountIndex: number): string => {
   finally { keys.free(); }
 };
 
+// ── mempool snapshot decode (shared between watcher task and any future caller) ──
+
+/**
+ * Decode one mempool snapshot against the wallet's IVK + spend nullifier set,
+ * post a `mempool-update` message if anything matched. Pure: doesn't touch
+ * wallet state, doesn't talk to network.
+ *
+ * Wire-compatible with the previous inline implementation so the UI doesn't
+ * need to change.
+ */
+/**
+ * Cap on the number of actions we'll ever pack into a single trial-decrypt
+ * call. A single mempool tx is bounded by the consensus action limit
+ * (≪ 1000 in practice); a whole mempool snapshot stays well under 100k
+ * unless the server is hostile. Mirrors the DoS-hardening cap added for
+ * ur_decode_frames (staging 686d174).
+ */
+const MAX_MEMPOOL_ACTIONS = 100_000;
+
+/** Per-action wire layout the WASM trial-decrypt expects. */
+const ACTION_NULLIFIER_LEN = 32;
+const ACTION_CMX_LEN = 32;
+const ACTION_EPHEMERAL_KEY_LEN = 32;
+/**
+ * 52 bytes = compact note plaintext (ZIP-225 / NU5 Orchard):
+ *   0x02 (version) || d (11) || v (8) || rseed (32)
+ * The version byte is checked below — only 0x02 is supported until the
+ * wallet learns about future variants (e.g. Orchard-ZSA at NU7).
+ */
+const ACTION_COMPACT_CT_LEN = 52;
+const ORCHARD_NOTE_VERSION = 0x02;
+const ACTION_SIZE =
+  ACTION_NULLIFIER_LEN + ACTION_CMX_LEN + ACTION_EPHEMERAL_KEY_LEN + ACTION_COMPACT_CT_LEN;
+
+function handleMempoolSnapshot(
+  walletId: string,
+  state: WalletState,
+  snap: { entries: ReadonlyArray<{ hash: Uint8Array; actions: ReadonlyArray<{
+    nullifier: Uint8Array; cmx: Uint8Array; ephemeralKey: Uint8Array; ciphertext: Uint8Array;
+  }> }> },
+): void {
+  if (!state.keys) return;
+
+  // Defensive: walk entries once to (a) bound work, (b) reject malformed
+  // actions explicitly rather than silently zero-padding a slot (which the
+  // WASM parser would happily accept as a garbage action). A hostile
+  // server can't get us to mis-align the buffer or run a multi-GB alloc.
+  type ValidAction = {
+    nullifier: Uint8Array;
+    cmx: Uint8Array;
+    ephemeralKey: Uint8Array;
+    ciphertext: Uint8Array; // first ACTION_COMPACT_CT_LEN bytes
+    txidHex: string;
+  };
+  const valid: ValidAction[] = [];
+  let rejected = 0;
+
+  for (const entry of snap.entries) {
+    const txidHex = hexEncode(entry.hash);
+    for (const a of entry.actions) {
+      const ok =
+        a.nullifier.length === ACTION_NULLIFIER_LEN &&
+        a.cmx.length === ACTION_CMX_LEN &&
+        a.ephemeralKey.length === ACTION_EPHEMERAL_KEY_LEN &&
+        a.ciphertext.length >= ACTION_COMPACT_CT_LEN &&
+        // Orchard compact-note version byte — refuse forward-compat plaintexts
+        // (e.g. NU7/ZSA) until explicit support lands. Refusing is the safe
+        // default; misinterpreting a different format would silently produce
+        // bogus matches.
+        a.ciphertext[0] === ORCHARD_NOTE_VERSION;
+
+      if (!ok) {
+        rejected += 1;
+        continue;
+      }
+      if (valid.length >= MAX_MEMPOOL_ACTIONS) {
+        // Hard stop — log once per snapshot, don't continue inspecting.
+        console.warn(
+          `[zcash-worker] mempool snapshot exceeded ${MAX_MEMPOOL_ACTIONS} actions; truncating`,
+        );
+        break;
+      }
+      valid.push({
+        nullifier: a.nullifier,
+        cmx: a.cmx,
+        ephemeralKey: a.ephemeralKey,
+        ciphertext: a.ciphertext.subarray(0, ACTION_COMPACT_CT_LEN),
+        txidHex,
+      });
+    }
+    if (valid.length >= MAX_MEMPOOL_ACTIONS) break;
+  }
+
+  if (rejected > 0) {
+    console.warn(`[zcash-worker] mempool: rejected ${rejected} malformed action(s)`);
+  }
+  if (valid.length === 0) return;
+
+  // Pack the validated actions into the binary layout the WASM parser
+  // consumes. Every slice write is guaranteed-sized; the offset advances
+  // by a constant per action, so a corrupted snapshot can't desync the
+  // stream.
+  const mbuf = new Uint8Array(4 + valid.length * ACTION_SIZE);
+  const mview = new DataView(mbuf.buffer);
+  mview.setUint32(0, valid.length, true);
+  let moff = 4;
+
+  // map from nullifier-hex back to the txid that contains it
+  const mempoolNullifiers = new Map<string, string>();
+
+  for (const v of valid) {
+    mbuf.set(v.nullifier, moff); moff += ACTION_NULLIFIER_LEN;
+    mbuf.set(v.cmx, moff); moff += ACTION_CMX_LEN;
+    mbuf.set(v.ephemeralKey, moff); moff += ACTION_EPHEMERAL_KEY_LEN;
+    mbuf.set(v.ciphertext, moff); moff += ACTION_COMPACT_CT_LEN;
+    mempoolNullifiers.set(hexEncode(v.nullifier), v.txidHex);
+  }
+
+  // `txid` on pendingIncoming is misleading — pre-confirmation we only have
+  // the note's cmx. The field carries that until the block scan can replace
+  // it with a real txid. UI consumers must treat it as an opaque identifier,
+  // not a transaction hash.
+  const pendingIncoming: Array<{ value: string; cmx: string; isChange: boolean }> = [];
+  const pendingSpends: Array<{ nullifier: string; txid: string }> = [];
+
+  try {
+    const found = state.keys.scan_actions_parallel(mbuf);
+    for (const note of found) {
+      pendingIncoming.push({
+        value: note.value,
+        cmx: note.cmx,
+        isChange: note.is_change ?? false,
+      });
+    }
+  } catch (err) {
+    console.log('[zcash-worker] mempool scan decrypt error:', err);
+  }
+
+  for (const note of state.notes) {
+    if (!state.spentNullifiers.has(note.nullifier) && mempoolNullifiers.has(note.nullifier)) {
+      pendingSpends.push({
+        nullifier: note.nullifier,
+        txid: mempoolNullifiers.get(note.nullifier)!,
+      });
+    }
+  }
+
+  if (pendingIncoming.length > 0 || pendingSpends.length > 0) {
+    console.log(`[zcash-worker] mempool: ${pendingIncoming.length} incoming, ${pendingSpends.length} pending spends`);
+    workerSelf.postMessage({
+      type: 'mempool-update', id: '', network: 'zcash', walletId,
+      payload: { pendingIncoming, pendingSpends },
+    });
+  }
+}
+
 // ── sync ──
 
-const runSync = async (walletId: string, mnemonic: string, serverUrl: string, startHeight?: number, ufvk?: string): Promise<void> => {
+const runSync = async (
+  walletId: string,
+  mnemonic: string,
+  serverUrl: string,
+  startHeight?: number,
+  ufvk?: string,
+  backend: ZcashBackend = 'zidecar',
+  mempoolWatch: 'off' | 'on' = 'off',
+): Promise<void> => {
+  // Single-source-of-truth gate (services/mempool-watch/strategy). Replaces
+  // the four scattered re-implementations of the same `setting === 'on' &&
+  // backend === 'zidecar'` check.
+  const { isMempoolWatchEnabled } = await import('../services/mempool-watch/strategy');
+  const watcherEnabled = isMempoolWatchEnabled(mempoolWatch, backend);
   if (!wasmModule) throw new Error('wasm not initialized');
 
   const state = getOrCreateWalletState(walletId);
@@ -1089,8 +1337,11 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
   // use whichever is higher — prevents re-scanning if chrome.storage was stale
   let currentHeight = Math.max(startHeight ?? 0, syncedHeight);
 
-  const { ZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
-  const client = new ZidecarClient(serverUrl);
+  const client = await makeZcashClient(serverUrl, backend);
+  // Trustless proofs (Ligerito header proofs, NOMT nullifier proofs) only
+  // exist on zidecar. On lightwalletd we accept the indexer's word — the
+  // UI surfaces this trust delta via the "trusted" badge.
+  const trustless = backend === 'zidecar';
 
   // track orchard commitment tree size for note position computation
   let orchardTreeSize = await getTreeSize(walletId);
@@ -1154,6 +1405,61 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
   const pendingCmxs: Uint8Array[] = [];
   const pendingPositions: number[] = [];
 
+  // mempool watcher: only spawned when explicitly opted in AND on a zidecar
+  // endpoint (lightwalletd has no compact-action mempool RPC, so the watcher
+  // would yield nothing). Lifecycle is owned by `state.mempoolAbort`/
+  // `state.mempoolTask` so stop-sync / reset-sync can abort the watcher
+  // directly, and waitForSyncStop can await the task before declaring the
+  // wallet idle. This avoids a class of races where a fresh runSync raced
+  // a still-alive watcher attached to the previous client.
+  state.mempoolAbort?.abort();
+  state.mempoolAbort = undefined;
+  state.mempoolTask = undefined;
+  if (watcherEnabled) {
+    const [{ ZidecarClient: MempoolZidecarClient }, mempoolMod, strategyMod] = await Promise.all([
+      import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client'),
+      import('../services/mempool-watch/zidecar-mempool-fetcher'),
+      import('../services/mempool-watch/strategy'),
+    ]);
+    const mempoolClient = new MempoolZidecarClient(serverUrl);
+    const base = mempoolMod.zidecarMempoolFetcher(mempoolClient);
+    const fetcher = strategyMod.buildStrategy('on', { base });
+    const localAbort = new AbortController();
+    state.mempoolAbort = localAbort;
+
+    state.mempoolTask = (async () => {
+      try {
+        for await (const snap of fetcher(walletId, {
+          signal: localAbort.signal,
+          onStatus: (st) => {
+            workerSelf.postMessage({
+              type: 'mempool-status', id: '', network: 'zcash', walletId, payload: st,
+            });
+          },
+        })) {
+          // Recheck state.keys per-iteration: reset-sync can free keys
+          // while we're between yields. Without this, handleMempoolSnapshot
+          // would run scan_actions_parallel on a freed WASM object.
+          if (localAbort.signal.aborted || !state.keys) break;
+          handleMempoolSnapshot(walletId, state, snap);
+        }
+      } catch (err) {
+        console.warn('[zcash-worker] mempool watcher exited:', err);
+        // Surface terminal error to UI so the toggle/status badge stops
+        // claiming "connected" / "reconnecting" when the watcher is dead.
+        workerSelf.postMessage({
+          type: 'mempool-status', id: '', network: 'zcash', walletId,
+          payload: { kind: 'error', error: err instanceof Error ? err.message : String(err) },
+        });
+      } finally {
+        // Disconnect state on natural exit so a follow-up runSync starts clean.
+        if (state.mempoolAbort === localAbort) {
+          state.mempoolAbort = undefined;
+        }
+      }
+    })();
+  }
+
   while (!state.syncAbort) {
     try {
       const tip = await client.getTip();
@@ -1173,8 +1479,8 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
           console.warn('[zcash-worker] failed to cache tree frontier:', e);
         }
 
-        // verify proofs if we have pending notes and zync-core
-        if (zyncModule && pendingCmxs.length > 0) {
+        // verify proofs if we have pending notes and zync-core (zidecar only)
+        if (trustless && zyncModule && pendingCmxs.length > 0) {
           try {
             await verifySyncProofs(client, tip.height, true, pendingCmxs, pendingPositions, state, actionsCommitment);
           } catch (e) {
@@ -1188,73 +1494,8 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
           pendingPositions.length = 0;
         }
 
-        // scan mempool for pending incoming/spends
-        try {
-          const mempoolBlocks = await client.getMempoolStream();
-          let mempoolActions = 0;
-          for (const mb of mempoolBlocks) mempoolActions += mb.actions.length;
-
-          if (mempoolActions > 0 && state.keys) {
-            // build binary buffer for trial decryption (same format as block scanning)
-            const ACTION_SIZE = 32 + 32 + 32 + 52;
-            const mbuf = new Uint8Array(4 + mempoolActions * ACTION_SIZE);
-            const mview = new DataView(mbuf.buffer);
-            mview.setUint32(0, mempoolActions, true);
-            let moff = 4;
-
-            // collect mempool nullifiers for spend detection
-            const mempoolNullifiers = new Map<string, string>(); // nfHex -> txidHex
-
-            for (const mb of mempoolBlocks) {
-              const txidHex = hexEncode(mb.hash); // hash = txid for mempool blocks
-              for (const a of mb.actions) {
-                if (a.nullifier.length === 32) mbuf.set(a.nullifier, moff); moff += 32;
-                if (a.cmx.length === 32) mbuf.set(a.cmx, moff); moff += 32;
-                if (a.ephemeralKey.length === 32) mbuf.set(a.ephemeralKey, moff); moff += 32;
-                if (a.ciphertext.length >= 52) mbuf.set(a.ciphertext.subarray(0, 52), moff); moff += 52;
-                mempoolNullifiers.set(hexEncode(a.nullifier), txidHex);
-              }
-            }
-
-            // trial decrypt mempool actions
-            const pendingIncoming: Array<{ value: string; txid: string; isChange: boolean }> = [];
-            const pendingSpends: Array<{ nullifier: string; txid: string }> = [];
-
-            try {
-              const found = state.keys.scan_actions_parallel(mbuf);
-              for (const note of found) {
-                pendingIncoming.push({
-                  value: note.value,
-                  txid: note.cmx, // use cmx as identifier since no confirmed txid yet
-                  isChange: note.is_change ?? false,
-                });
-              }
-            } catch (err) {
-              console.log('[zcash-worker] mempool scan decrypt error:', err);
-            }
-
-            // check if any wallet nullifiers appear in mempool (pending spends)
-            for (const note of state.notes) {
-              if (!state.spentNullifiers.has(note.nullifier) && mempoolNullifiers.has(note.nullifier)) {
-                pendingSpends.push({
-                  nullifier: note.nullifier,
-                  txid: mempoolNullifiers.get(note.nullifier)!,
-                });
-              }
-            }
-
-            if (pendingIncoming.length > 0 || pendingSpends.length > 0) {
-              console.log(`[zcash-worker] mempool: ${pendingIncoming.length} incoming, ${pendingSpends.length} pending spends`);
-              workerSelf.postMessage({
-                type: 'mempool-update', id: '', network: 'zcash', walletId,
-                payload: { pendingIncoming, pendingSpends },
-              });
-            }
-          }
-        } catch (e) {
-          // mempool scan is best-effort, don't break the sync loop
-          console.log('[zcash-worker] mempool scan skipped:', e);
-        }
+        // mempool scanning lives in the separate watcher task spawned above
+        // when mempoolWatch === 'on'. when off (default), no mempool calls.
 
         workerSelf.postMessage({
           type: 'sync-progress', id: '', network: 'zcash', walletId,
@@ -1507,6 +1748,10 @@ const runSync = async (walletId: string, mnemonic: string, serverUrl: string, st
   }
 
   state.syncing = false;
+  // mempool watcher lifecycle is owned by state.mempoolAbort; abort here
+  // so the watcher tears down even if the sync loop exits via a path that
+  // skips waitForSyncStop. Safe to call repeatedly.
+  state.mempoolAbort?.abort();
   console.log(`[zcash-worker] sync stopped wallet=${walletId}`);
 };
 
@@ -1545,12 +1790,39 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       case 'sync': {
         if (!walletId) throw new Error('walletId required');
         await initWasm();
-        const { mnemonic, serverUrl, startHeight, ufvk } = payload as {
-          mnemonic: string; serverUrl: string; startHeight?: number; ufvk?: string;
+        const { mnemonic, serverUrl, startHeight, ufvk, backend, mempoolWatch } = payload as {
+          mnemonic: string;
+          serverUrl: string;
+          startHeight?: number;
+          ufvk?: string;
+          backend?: ZcashBackend;
+          mempoolWatch?: 'off' | 'on';
         };
-        runSync(walletId, mnemonic, serverUrl, startHeight, ufvk).catch(err =>
-          console.error('[zcash-worker] runSync fatal:', err),
-        );
+        // Defensive: validate enum values from cross-context payload.
+        // Silent coercion of an unknown backend to 'zidecar' is a privacy
+        // regression — a user configured to talk to a third-party
+        // lightwalletd would end up hitting the trustless code path (with
+        // its zidecar-only RPCs) and either fail loudly OR, worse, succeed
+        // against a server that happens to implement those endpoints with
+        // a different trust model. Reject unknown explicitly.
+        if (backend !== undefined && backend !== 'zidecar' && backend !== 'lightwalletd') {
+          throw new Error(`unknown zcash backend in sync payload: ${String(backend)}`);
+        }
+        if (mempoolWatch !== undefined && mempoolWatch !== 'off' && mempoolWatch !== 'on') {
+          throw new Error(`unknown mempoolWatch in sync payload: ${String(mempoolWatch)}`);
+        }
+        const effectiveBackend: ZcashBackend = backend ?? 'zidecar';
+        // Gate goes through the single helper so all layers see the same answer.
+        const { isMempoolWatchEnabled } = await import('../services/mempool-watch/strategy');
+        const effectiveMempoolWatch: 'off' | 'on' =
+          isMempoolWatchEnabled(mempoolWatch, effectiveBackend) ? 'on' : 'off';
+        // Seed the registry so subsequent operations (send, history, memo
+        // fetch) construct the right client without re-receiving backend.
+        registerBackend(serverUrl, effectiveBackend);
+        runSync(
+          walletId, mnemonic, serverUrl, startHeight, ufvk,
+          effectiveBackend, effectiveMempoolWatch,
+        ).catch(err => console.error('[zcash-worker] runSync fatal:', err));
         workerSelf.postMessage({ type: 'sync-started', id, network: 'zcash', walletId });
         return;
       }
@@ -1558,7 +1830,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       case 'stop-sync': {
         if (!walletId) throw new Error('walletId required');
         const state = walletStates.get(walletId);
-        if (state) state.syncAbort = true;
+        if (state) {
+          state.syncAbort = true;
+          // Abort the mempool watcher directly. Without this, the watcher
+          // keeps polling for up to one full sync-loop backoff (≈30s) after
+          // stop-sync returns.
+          state.mempoolAbort?.abort();
+        }
         workerSelf.postMessage({ type: 'sync-stopped', id, network: 'zcash', walletId });
         return;
       }
@@ -1568,6 +1846,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const resetState = walletStates.get(walletId);
         if (resetState) {
           resetState.syncAbort = true;
+          resetState.mempoolAbort?.abort();
           if (resetState.keys) { resetState.keys.free(); resetState.keys = null; }
         }
         await waitForSyncStop(resetState ?? getOrCreateWalletState(walletId));
@@ -1721,8 +2000,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           return;
         }
 
-        const { ZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
-        const tClient = new ZidecarClient(serverUrl);
+        const tClient = await makeZcashClient(serverUrl);
 
         // build script set for our addresses (p2pkh: OP_DUP OP_HASH160 <20> <hash> OP_EQUALVERIFY OP_CHECKSIG)
         const ourScripts = new Set<string>();
@@ -1776,8 +2054,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const tHistory: Array<{ txid: string; height: number; received: string }> = [];
         if (histTAddresses?.length) {
           try {
-            const { ZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
-            const tClient = new ZidecarClient(histServerUrl);
+            const tClient = await makeZcashClient(histServerUrl);
 
             const ourScripts = new Set<string>();
             for (const addr of histTAddresses) {
@@ -1998,8 +2275,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const spentBuckets = new Set<MemoBucketStart>();
         for (const h of spentHeights) spentBuckets.add(bucketOf(h));
 
-        const { ZidecarClient: MemoZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
-        const memoClient = new MemoZidecarClient(memoServerUrl);
+        const memoClient = await makeZcashClient(memoServerUrl);
         const { height: currentTip } = await memoClient.getTip();
 
         // estimate block time from tip (no per-height GetBlock calls — preserves bucket privacy)
@@ -2179,8 +2455,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         emitProgress('notes selected', `${selected.length} notes, fee=${fee}`);
 
         // build merkle witnesses
-        const { ZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
-        const sendClient = new ZidecarClient(sendPayload.serverUrl);
+        const sendClient = await makeZcashClient(sendPayload.serverUrl);
 
         emitProgress('fetching chain tip');
         const sendTip = await sendClient.getTip();
@@ -2246,8 +2521,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           // broadcast
           emitProgress('broadcasting transaction');
           const txData = hexDecode(txHex);
-          const { ZidecarClient: ZC2 } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
-          const broadcastClient = new ZC2(sendPayload.serverUrl);
+          const broadcastClient = await makeZcashClient(sendPayload.serverUrl);
           let result: { errorCode: number; errorMessage: string; txid: Uint8Array };
           try {
             result = await broadcastClient.sendTransaction(txData);
@@ -2349,8 +2623,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         );
         const txData = hexDecode(txHex);
 
-        const { ZidecarClient: ZC } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
-        const completeClient = new ZC(completePayload.serverUrl);
+        const completeClient = await makeZcashClient(completePayload.serverUrl);
         const result = await completeClient.sendTransaction(txData);
         if (result.errorCode !== 0) {
           throw new Error(`broadcast failed (${result.errorCode}): ${result.errorMessage}`);
@@ -2431,8 +2704,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         }
         emitProgress('notes selected', `${selected.length} notes, fee=${fee}`);
 
-        const { ZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
-        const sendClient = new ZidecarClient(sendPayload.serverUrl);
+        const sendClient = await makeZcashClient(sendPayload.serverUrl);
         emitProgress('fetching chain tip');
         const sendTip = await sendClient.getTip();
         // Anchor a few blocks behind the tip (see ANCHOR_CONFIRMATIONS) so
@@ -2527,8 +2799,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const txHex = wasmModule.extract_signed_tx_from_pczt(completePayload.signedPcztHex);
         const txData = hexDecode(txHex);
 
-        const { ZidecarClient: ZC } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
-        const completeClient = new ZC(completePayload.serverUrl);
+        const completeClient = await makeZcashClient(completePayload.serverUrl);
         const result = await completeClient.sendTransaction(txData);
         if (result.errorCode !== 0) {
           throw new Error(`broadcast failed (${result.errorCode}): ${result.errorMessage}`);
@@ -2642,8 +2913,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           emitMultiProgress(`output ${outputIdx + 1}: notes selected`, `${selected.length} notes, fee=${fee}`);
 
           // build merkle witnesses
-          const { ZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
-          const multiClient = new ZidecarClient(multiPayload.serverUrl);
+          const multiClient = await makeZcashClient(multiPayload.serverUrl);
           const multiTip = await multiClient.getTip();
 
           emitMultiProgress(`output ${outputIdx + 1}: building witnesses`);
@@ -2692,7 +2962,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           // broadcast
           emitMultiProgress(`output ${outputIdx + 1}: broadcasting`);
           const txData = hexDecode(txHex);
-          const broadcastClient = new ZidecarClient(multiPayload.serverUrl);
+          const broadcastClient = await makeZcashClient(multiPayload.serverUrl);
           const broadcastResult = await broadcastClient.sendTransaction(txData);
           if (broadcastResult.errorCode !== 0) {
             throw new Error(`output ${outputIdx}: broadcast failed (${broadcastResult.errorCode}): ${broadcastResult.errorMessage}`);
@@ -2737,8 +3007,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           addressIndexMap?: Record<string, number>;
         };
 
-        const { ZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
-        const client = new ZidecarClient(serverUrl);
+        const client = await makeZcashClient(serverUrl);
         const tip = await client.getTip();
         const allUtxos = await client.getAddressUtxos(tAddresses);
         if (allUtxos.length === 0) throw new Error('no transparent UTXOs to shield');
@@ -2830,8 +3099,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           ufvk: string; addressIndexMap?: Record<string, number>;
         };
 
-        const { ZidecarClient: ZCShieldU } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
-        const shieldUClient = new ZCShieldU(shieldUnsignedPayload.serverUrl);
+        const shieldUClient = await makeZcashClient(shieldUnsignedPayload.serverUrl);
         const shieldUTip = await shieldUClient.getTip();
         const shieldUUtxos = await shieldUClient.getAddressUtxos(shieldUnsignedPayload.tAddresses);
         if (shieldUUtxos.length === 0) throw new Error('no transparent UTXOs to shield');
@@ -2911,8 +3179,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         );
         const shieldCompleteTxData = hexDecode(shieldCompleteTxHex);
 
-        const { ZidecarClient: ZCShieldC } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
-        const shieldCompleteClient = new ZCShieldC(shieldCompletePayload.serverUrl);
+        const shieldCompleteClient = await makeZcashClient(shieldCompletePayload.serverUrl);
         const shieldCompleteResult = await shieldCompleteClient.sendTransaction(shieldCompleteTxData);
         if (shieldCompleteResult.errorCode !== 0) {
           throw new Error(`broadcast failed (${shieldCompleteResult.errorCode}): ${shieldCompleteResult.errorMessage}`);

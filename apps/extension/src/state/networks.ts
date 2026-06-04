@@ -1,6 +1,7 @@
 import { AllSlices, SliceCreator } from '.';
 import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
+import { isZidecarEndpoint, type ZcashBackend } from './keyring/zcash-backend';
 
 /**
  * Supported network ecosystems.
@@ -39,6 +40,15 @@ export type NetworkId =
  */
 export type MemoSyncStrategy = 'private' | 'fast' | 'paranoid';
 
+/**
+ * Mempool-watch toggle. Off by default (per the hdevalence review): the
+ * feature has a real privacy cost — the indexer learns the wallet is online
+ * and polls on a regular cadence. Users opt in explicitly.
+ *
+ * See apps/extension/src/services/mempool-watch/README.md for the design.
+ */
+export type MempoolWatchSetting = 'off' | 'on';
+
 export interface NetworkConfig {
   id: NetworkId;
   name: string;
@@ -67,6 +77,21 @@ export interface NetworkConfig {
    * Zcash entry so it always persists.
    */
   memoSyncStrategy?: MemoSyncStrategy;
+  /**
+   * Mempool watch toggle for shielded networks. Off by default — opening
+   * a polling subscription reveals to the indexer that this wallet is
+   * online and continuously interested in mempool state. See README.
+   * Honored only when backend === 'zidecar' (lightwalletd has no
+   * compact-mempool RPC); UI must hide/disable the toggle otherwise.
+   */
+  mempoolWatch?: MempoolWatchSetting;
+  /**
+   * Sync backend. NOT auto-detected — declarative per endpoint. Probes
+   * leak "this is a zafu client" and are deliberately avoided.
+   *   'zidecar'      — trustless verification pipeline (Ligerito + NOMT)
+   *   'lightwalletd' — trusted public indexer (no verification)
+   */
+  backend?: ZcashBackend;
 }
 
 export interface NetworksSlice {
@@ -80,6 +105,10 @@ export interface NetworksSlice {
   setNetworkEndpoint: (id: NetworkId, endpoint: string) => Promise<void>;
   /** Update memo-sync strategy for a shielded network. */
   setMemoSyncStrategy: (id: NetworkId, strategy: MemoSyncStrategy) => Promise<void>;
+  /** Update mempool-watch toggle for a shielded network. */
+  setMempoolWatch: (id: NetworkId, setting: MempoolWatchSetting) => Promise<void>;
+  /** Manually override the Zcash sync backend (advanced settings). */
+  setZcashBackend: (backend: ZcashBackend) => Promise<void>;
   /** Get list of enabled networks */
   getEnabledNetworks: () => NetworkConfig[];
   /** Check if a network is enabled */
@@ -109,6 +138,8 @@ const DEFAULT_NETWORKS: Record<NetworkId, NetworkConfig> = {
     endpoint: 'https://zcash.rotko.net',
     syncDescription: 'Zidecar trustless sync — header chain proven via Ligerito polynomial commitments, nullifier set verified by NOMT merkle proofs. Compact blocks are trial-decrypted locally — keys never leave this device.',
     memoSyncStrategy: 'private',
+    mempoolWatch: 'off',
+    backend: 'zidecar',
   },
 
   // === IBC/Cosmos Chains (for Penumbra deposits/withdrawals) ===
@@ -184,8 +215,10 @@ export const createNetworksSlice =
       const enabledNetworks = await local.get('enabledNetworks');
       const networkEndpoints = await local.get('networkEndpoints');
       const memoSyncStrategies = await local.get('memoSyncStrategies');
+      const mempoolWatchSettings = await local.get('mempoolWatchSettings');
+      const zcashBackend = await local.get('zcashBackend');
 
-      if (enabledNetworks || networkEndpoints || memoSyncStrategies) {
+      if (enabledNetworks || networkEndpoints || memoSyncStrategies || mempoolWatchSettings || zcashBackend) {
         set(state => {
           // Apply enabled state from storage
           if (enabledNetworks) {
@@ -211,6 +244,20 @@ export const createNetworksSlice =
                 cfg.memoSyncStrategy = strategy as MemoSyncStrategy;
               }
             }
+          }
+          // Apply per-network mempool-watch settings (defensively: ignore
+          // values not in the known enum; guards against tampered storage).
+          if (mempoolWatchSettings) {
+            for (const [id, setting] of Object.entries(mempoolWatchSettings)) {
+              const cfg = state.networks.networks[id as NetworkId];
+              if (cfg && (setting === 'off' || setting === 'on')) {
+                cfg.mempoolWatch = setting;
+              }
+            }
+          }
+          // Apply persisted Zcash backend (defensive: only known enum values).
+          if (zcashBackend === 'zidecar' || zcashBackend === 'lightwalletd') {
+            state.networks.networks.zcash.backend = zcashBackend;
           }
         });
       }
@@ -273,6 +320,41 @@ export const createNetworksSlice =
           ...currentEndpoints,
           [id]: endpoint,
         });
+
+        // Declaratively classify the new Zcash endpoint. We deliberately
+        // do NOT probe a zidecar-only RPC here — every other Zcash light
+        // wallet that talks to public lightwalletd never hits those paths,
+        // so a probe uniquely fingerprints "this is a zafu client." Match
+        // a static known-zidecar list instead; users on custom endpoints
+        // can override via the backend picker.
+        if (id === 'zcash') {
+          const backend: ZcashBackend = isZidecarEndpoint(endpoint) ? 'zidecar' : 'lightwalletd';
+          set(state => {
+            state.networks.networks.zcash.backend = backend;
+            // Force-off mempool watch when moving to lightwalletd — the
+            // worker also enforces this, but flipping state here keeps
+            // the UI and any consumers consistent immediately.
+            if (backend === 'lightwalletd') {
+              state.networks.networks.zcash.mempoolWatch = 'off';
+            }
+          });
+          await local.set('zcashBackend', backend);
+        }
+      },
+
+      setZcashBackend: async (backend: ZcashBackend) => {
+        // explicit override path (advanced settings). same invariant as
+        // setNetworkEndpoint: lightwalletd ⇒ mempool watch off.
+        if (backend !== 'zidecar' && backend !== 'lightwalletd') {
+          throw new Error(`invalid zcash backend: ${String(backend)}`);
+        }
+        set(state => {
+          state.networks.networks.zcash.backend = backend;
+          if (backend === 'lightwalletd') {
+            state.networks.networks.zcash.mempoolWatch = 'off';
+          }
+        });
+        await local.set('zcashBackend', backend);
       },
 
       setMemoSyncStrategy: async (id: NetworkId, strategy: MemoSyncStrategy) => {
@@ -283,6 +365,27 @@ export const createNetworksSlice =
         await local.set('memoSyncStrategies', {
           ...current,
           [id]: strategy,
+        });
+      },
+
+      setMempoolWatch: async (id: NetworkId, setting: MempoolWatchSetting) => {
+        if (setting !== 'off' && setting !== 'on') {
+          throw new Error(`invalid mempool-watch setting: ${String(setting)}`);
+        }
+        // Enforce: mempool watch only makes sense on the zidecar backend.
+        // If the caller asks for 'on' but the network is on lightwalletd,
+        // silently coerce to 'off' — the worker won't run a watcher anyway,
+        // and we keep persisted state consistent with worker behavior.
+        const cfg = get().networks.networks[id];
+        const effective: MempoolWatchSetting =
+          setting === 'on' && cfg?.backend === 'lightwalletd' ? 'off' : setting;
+        set(state => {
+          state.networks.networks[id].mempoolWatch = effective;
+        });
+        const current = (await local.get('mempoolWatchSettings')) || {};
+        await local.set('mempoolWatchSettings', {
+          ...current,
+          [id]: effective,
         });
       },
 

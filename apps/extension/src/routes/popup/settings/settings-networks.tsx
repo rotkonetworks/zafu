@@ -6,7 +6,9 @@ import { useState } from 'react';
 import { useStore } from '../../../state';
 import { selectActiveNetwork, selectEnabledNetworks, selectSetActiveNetwork, type NetworkType } from '../../../state/keyring';
 import { isIbcNetwork } from '../../../state/keyring/network-types';
-import { networksSelector, type NetworkId, type MemoSyncStrategy } from '../../../state/networks';
+import { networksSelector, type NetworkId, type MemoSyncStrategy, type MempoolWatchSetting } from '../../../state/networks';
+import { backendTrustDescription, type ZcashBackend } from '../../../state/keyring/zcash-backend';
+import { isMempoolWatchEnabled } from '../../../services/mempool-watch/strategy';
 import { NETWORKS, LAUNCHED_NETWORKS } from '../../../config/networks';
 import { cn } from '@repo/ui/lib/utils';
 import { SettingsScreen } from './settings-screen';
@@ -36,7 +38,7 @@ export const SettingsNetworks = () => {
   const toggleNetwork = useStore(state => state.keyRing.toggleNetwork);
   const privacySetSetting = useStore(state => state.privacy.setSetting);
   const transparentEnabled = useStore(state => state.privacy.settings.enableTransparentBalances);
-  const { networks: networkState, setNetworkEndpoint, setMemoSyncStrategy } = useStore(networksSelector);
+  const { networks: networkState, setNetworkEndpoint, setMemoSyncStrategy, setMempoolWatch, setZcashBackend } = useStore(networksSelector);
 
   const [expandedNetwork, setExpandedNetwork] = useState<NetworkType | null>(null);
   const [editingEndpoint, setEditingEndpoint] = useState('');
@@ -168,12 +170,31 @@ export const SettingsNetworks = () => {
                     <p className='text-[10px] text-fg-muted mt-1.5'>{state.syncDescription}</p>
                   )}
 
-                  {networkId === 'zcash' && (
-                    <MemoSyncStrategyPicker
-                      value={(state as { memoSyncStrategy?: MemoSyncStrategy } | undefined)?.memoSyncStrategy ?? 'private'}
-                      onChange={(s) => void setMemoSyncStrategy('zcash', s)}
-                    />
-                  )}
+                  {networkId === 'zcash' && (() => {
+                    const zcashState = state as {
+                      memoSyncStrategy?: MemoSyncStrategy;
+                      mempoolWatch?: MempoolWatchSetting;
+                      backend?: ZcashBackend;
+                    } | undefined;
+                    const backend: ZcashBackend = zcashState?.backend ?? 'zidecar';
+                    return (
+                      <>
+                        <BackendTrustBadge
+                          backend={backend}
+                          onChange={(b) => void setZcashBackend(b)}
+                        />
+                        <MemoSyncStrategyPicker
+                          value={zcashState?.memoSyncStrategy ?? 'private'}
+                          onChange={(s) => void setMemoSyncStrategy('zcash', s)}
+                        />
+                        <MempoolWatchToggle
+                          value={zcashState?.mempoolWatch ?? 'off'}
+                          backend={backend}
+                          onChange={(s) => void setMempoolWatch('zcash', s)}
+                        />
+                      </>
+                    );
+                  })()}
                 </div>
               )}
             </div>
@@ -249,5 +270,104 @@ const MemoSyncStrategyPicker = ({ value, onChange }: MemoSyncStrategyPickerProps
     )}
   </div>
 );
+
+interface MempoolWatchToggleProps {
+  readonly value: MempoolWatchSetting;
+  readonly backend: ZcashBackend;
+  readonly onChange: (setting: MempoolWatchSetting) => void;
+}
+
+const MempoolWatchToggle = ({ value, backend, onChange }: MempoolWatchToggleProps) => {
+  // mempool watch requires zidecar's compact-action mempool stream.
+  // lightwalletd returns raw txs we can't trial-decrypt without a heavier
+  // parser, so the toggle is meaningless on that backend. show it as
+  // disabled with a clear hint instead of silently ignoring clicks.
+  // Same gate the worker + hook use. Centralized so UI can't drift.
+  const available = backend === 'zidecar';
+  const enabled = available && isMempoolWatchEnabled(value, backend);
+  return (
+    <div className='mt-3 pt-3 border-t border-border-soft'>
+      <button
+        type='button'
+        disabled={!available}
+        onClick={() => available && onChange(enabled ? 'off' : 'on')}
+        className={cn(
+          'flex items-start gap-2 w-full text-left',
+          !available && 'opacity-50 cursor-not-allowed',
+        )}
+      >
+        <div className={cn(
+          'mt-0.5 h-4 w-7 rounded-full border-2 flex-shrink-0 relative transition-colors',
+          enabled ? 'border-zigner-gold bg-zigner-gold/30' : 'border-muted-foreground/50',
+        )}>
+          <div className={cn(
+            'absolute top-0 h-3 w-3 rounded-full bg-zigner-gold transition-all',
+            enabled ? 'left-3' : 'left-0',
+          )} />
+        </div>
+        <div className='flex-1'>
+          <div className='text-xs font-medium leading-none mb-0.5'>
+            instant pending (mempool watch)
+          </div>
+          <div className='text-[10px] text-fg-muted leading-snug'>
+            {available
+              ? "your indexer learns when you're online."
+              : 'unavailable on lightwalletd backend — switch to a zidecar endpoint.'}
+          </div>
+        </div>
+      </button>
+      {enabled && (
+        <div className='mt-2 p-2 rounded border border-amber-500/30 bg-amber-500/5'>
+          <div className='text-[10px] text-amber-500 leading-snug'>
+            polling at ~10s ± jitter. server cannot see which mempool tx is yours
+            (trial-decrypt is local), but it sees a continuous "online" signal from
+            your wallet.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+interface BackendTrustBadgeProps {
+  readonly backend: ZcashBackend;
+  readonly onChange: (backend: ZcashBackend) => void;
+}
+
+/**
+ * Surfaces the trust delta between zidecar (trustless: Ligerito + NOMT
+ * proofs verified locally) and lightwalletd (trusted: takes the server's
+ * word). Without this, users on third-party endpoints get silently
+ * downgraded verification with no UI signal.
+ */
+const BackendTrustBadge = ({ backend, onChange }: BackendTrustBadgeProps) => {
+  const trust = backendTrustDescription(backend);
+  const isTrustless = backend === 'zidecar';
+  return (
+    <div className='mt-3 pt-3 border-t border-border-soft'>
+      <div className='flex items-start gap-2'>
+        <span className={cn(
+          'mt-0.5 inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium',
+          isTrustless ? 'bg-green-500/15 text-green-400' : 'bg-amber-500/15 text-amber-400',
+        )}>
+          {trust.label}
+        </span>
+        <div className='flex-1'>
+          <div className='text-xs font-medium leading-none mb-0.5'>
+            sync backend: {backend}
+          </div>
+          <div className='text-[10px] text-fg-muted leading-snug'>{trust.summary}</div>
+        </div>
+      </div>
+      <button
+        type='button'
+        onClick={() => onChange(isTrustless ? 'lightwalletd' : 'zidecar')}
+        className='mt-2 text-[10px] text-fg-muted hover:text-fg-high underline-offset-2 hover:underline'
+      >
+        switch to {isTrustless ? 'lightwalletd' : 'zidecar'} (advanced)
+      </button>
+    </div>
+  );
+};
 
 export default SettingsNetworks;

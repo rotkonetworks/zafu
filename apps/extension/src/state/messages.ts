@@ -11,6 +11,26 @@ import type { LocalStorageState } from '@repo/storage-chrome/local';
 
 export type MessageNetwork = 'penumbra' | 'zcash';
 
+/**
+ * Lifecycle of a sent message before the block scan can prove it:
+ *   submitting  → wallet is building / signing locally (no txid yet)
+ *   broadcasting → tx has a txid, RPC submit in flight
+ *   pending     → broadcast OK, awaiting block confirmation
+ *   confirmed   → block scan saw it (default for any persisted message)
+ *   failed      → build or broadcast errored
+ *
+ * Messages from inbound block scan have no status (treated as confirmed).
+ * Optimistic outgoing records progress submitting → broadcasting → pending,
+ * then get replaced by the real confirmed record when the block scan picks
+ * the tx up.
+ */
+export type MessageStatus =
+  | 'submitting'
+  | 'broadcasting'
+  | 'pending'
+  | 'confirmed'
+  | 'failed';
+
 export interface Message {
   id: string;
   network: MessageNetwork;
@@ -20,7 +40,7 @@ export interface Message {
   recipientAddress: string;
   /** the decrypted memo content */
   content: string;
-  /** transaction id/hash */
+  /** transaction id/hash (or a `temp:` placeholder pre-broadcast) */
   txId: string;
   /** block height */
   blockHeight: number;
@@ -34,6 +54,10 @@ export interface Message {
   amount?: string;
   /** asset/denom */
   asset?: string;
+  /** lifecycle (defaults to 'confirmed' for absent values) */
+  status?: MessageStatus;
+  /** reason captured when status === 'failed' */
+  failureReason?: string;
 }
 
 export interface MessagesSlice {
@@ -44,6 +68,35 @@ export interface MessagesSlice {
 
   /** add multiple messages (batch from sync) */
   addMessages: (messages: Omit<Message, 'id'>[]) => Promise<void>;
+
+  /**
+   * Optimistic outgoing pending entry — added the moment the user clicks
+   * send, before any RPC. Generates a `temp:<uuid>` placeholder txid that
+   * gets replaced via promoteOutgoing once the real txid is known.
+   */
+  addOutgoingPending: (input: {
+    network: MessageNetwork;
+    recipientAddress: string;
+    content: string;
+    amount?: string;
+    asset?: string;
+  }) => Promise<{ id: string; tempTxId: string }>;
+
+  /**
+   * Promote a submitting entry to a known real txid (post-build/sign,
+   * pre-broadcast). Status moves submitting → broadcasting.
+   */
+  promoteOutgoing: (tempTxId: string, realTxId: string) => Promise<void>;
+
+  /**
+   * Move a broadcast-completed entry to status='pending' (= in mempool,
+   * awaiting block confirmation). The block-scan flow will eventually
+   * replace this with a 'confirmed' message via dedup on txId.
+   */
+  markOutgoingBroadcast: (txId: string) => Promise<void>;
+
+  /** Mark an outgoing entry failed. Used by the send flow's catch block. */
+  markOutgoingFailed: (txIdOrTempId: string, reason: string) => Promise<void>;
 
   /** mark a message as read */
   markRead: (id: string) => Promise<void>;
@@ -85,14 +138,71 @@ export const createMessagesSlice =
     const m = get().messages.messages;
     return Array.isArray(m) ? m : [];
   };
+
+  /**
+   * Sweep stale optimistic-pending records on slice creation. The popup
+   * unmount handler in zcash-send.tsx marks them failed before navigating,
+   * but a forced close (extension reload, browser quit, crash) bypasses
+   * that path and leaves temp:* records persisted in 'submitting' or
+   * 'broadcasting'. There's no live send flow to drive them forward, so
+   * we mark them failed on startup. Real-txid records in 'pending' are
+   * left alone — the block scan will promote them when the tx mines.
+   */
+  void (async () => {
+    try {
+      const persisted = await local.get('messages' as keyof LocalStorageState) as Message[] | undefined;
+      if (!Array.isArray(persisted) || persisted.length === 0) return;
+      let touched = false;
+      for (const m of persisted) {
+        if (
+          m.txId.startsWith('temp:') &&
+          (m.status === 'submitting' || m.status === 'broadcasting')
+        ) {
+          m.status = 'failed';
+          m.failureReason = 'interrupted';
+          touched = true;
+        }
+      }
+      if (touched) {
+        await local.set('messages' as keyof LocalStorageState, persisted as never);
+      }
+    } catch (e) {
+      console.warn('[messages] hydration sweep failed:', e);
+    }
+  })();
+
   return {
     messages: [],
 
     addMessage: async (messageData) => {
-      // skip if we already have this tx
-      if (get().messages.hasMessage(messageData.txId)) {
-        const existing = safeMessages().find((m) => m.txId === messageData.txId);
-        return existing!;
+      // Dedup by (txId, direction). Self-pay (recipient is one of our own
+      // addresses) legitimately produces TWO messages for the same txid:
+      // one from OVK decoding (sent) and one from IVK decoding (received).
+      // The old hasMessage(txId) check collapsed them, hiding the received
+      // side from the inbox.
+      const existing = safeMessages().find(
+        (m) => m.txId === messageData.txId && m.direction === messageData.direction,
+      );
+      if (existing) {
+        // If we have an optimistic-pending record matching this (txid, direction),
+        // promote it to 'confirmed' using the authoritative block-scan data.
+        // Otherwise the second call is a no-op.
+        if (existing.status && existing.status !== 'confirmed') {
+          set((state) => {
+            const list = Array.isArray(state.messages.messages) ? state.messages.messages : [];
+            const m = list.find(
+              (x) => x.txId === messageData.txId && x.direction === messageData.direction,
+            );
+            if (m) {
+              m.blockHeight = messageData.blockHeight;
+              m.timestamp = messageData.timestamp;
+              m.status = 'confirmed';
+              m.failureReason = undefined;
+            }
+          });
+          await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
+        }
+        return existing;
       }
 
       const message: Message = {
@@ -122,6 +232,64 @@ export const createMessagesSlice =
         state.messages.messages.push(...newMessages);
       });
 
+      await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
+    },
+
+    addOutgoingPending: async ({ network, recipientAddress, content, amount, asset }) => {
+      const tempTxId = `temp:${generateId()}`;
+      const message: Message = {
+        id: generateId(),
+        network,
+        recipientAddress,
+        content,
+        txId: tempTxId,
+        blockHeight: 0,
+        timestamp: Date.now(),
+        direction: 'sent',
+        read: true,
+        amount,
+        asset,
+        status: 'submitting',
+      };
+
+      set((state) => {
+        if (!Array.isArray(state.messages.messages)) state.messages.messages = [];
+        state.messages.messages.push(message);
+      });
+      await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
+      return { id: message.id, tempTxId };
+    },
+
+    promoteOutgoing: async (tempTxId, realTxId) => {
+      set((state) => {
+        const list = Array.isArray(state.messages.messages) ? state.messages.messages : [];
+        const msg = list.find((m) => m.txId === tempTxId);
+        if (msg) {
+          msg.txId = realTxId;
+          msg.status = 'broadcasting';
+        }
+      });
+      await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
+    },
+
+    markOutgoingBroadcast: async (txId) => {
+      set((state) => {
+        const list = Array.isArray(state.messages.messages) ? state.messages.messages : [];
+        const msg = list.find((m) => m.txId === txId);
+        if (msg) msg.status = 'pending';
+      });
+      await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
+    },
+
+    markOutgoingFailed: async (txIdOrTempId, reason) => {
+      set((state) => {
+        const list = Array.isArray(state.messages.messages) ? state.messages.messages : [];
+        const msg = list.find((m) => m.txId === txIdOrTempId);
+        if (msg) {
+          msg.status = 'failed';
+          msg.failureReason = reason;
+        }
+      });
       await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
     },
 
