@@ -11,20 +11,31 @@ import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
 import { cn } from '@repo/ui/lib/utils';
 
 const openSidePanel = async () => {
+  // The onboarding tab is itself an extension page (page.html). After we
+  // open the side panel / popup, leaving this tab in place would leave the
+  // user staring at the success screen wondering whether the wallet
+  // actually opened. Close it once the new surface is up.
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tab?.windowId) {
       await chrome.sidePanel.open({ windowId: tab.windowId });
+      // small grace period so the panel has fully attached before we tear
+      // the tab down — without this, some Chrome builds race the panel's
+      // initial paint and the user sees a blink instead of the wallet.
+      setTimeout(() => window.close(), 250);
+      return;
     }
   } catch {
-    // side panel not supported or no active tab — fall back to popup
-    await chrome.windows.create({
-      url: chrome.runtime.getURL('popup.html'),
-      type: 'popup',
-      width: 400,
-      height: 628,
-    });
+    /* fall through to popup window fallback */
   }
+  // side panel not supported or no active tab — fall back to popup
+  await chrome.windows.create({
+    url: chrome.runtime.getURL('popup.html'),
+    type: 'popup',
+    width: 400,
+    height: 628,
+  });
+  setTimeout(() => window.close(), 250);
 };
 
 export const OnboardingSuccess = () => {

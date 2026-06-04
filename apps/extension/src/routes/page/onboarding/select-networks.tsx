@@ -9,6 +9,13 @@ import { useStore } from '../../../state';
 import { NetworkType } from '../../../state/keyring';
 import { getSeedPhraseOrigin } from './password/utils';
 import { SEED_PHRASE_ORIGIN } from './password/types';
+import {
+  ZCASH_MAINNET_ENDPOINTS,
+  defaultZcashEndpoint,
+  groupPresetsByRegion,
+  type RpcEndpointRegion,
+} from '../../../config/zcash-endpoints';
+import { networksSelector } from '../../../state/networks';
 import { NETWORKS, isLaunched, ZCASH_ORCHARD_ACTIVATION } from '../../../config/networks';
 
 interface NetworkOption {
@@ -39,6 +46,17 @@ const NETWORK_OPTIONS: NetworkOption[] = (Object.keys(NETWORKS) as NetworkType[]
 
 // only show launched networks — no "coming soon" clutter
 
+function regionLabel(region: RpcEndpointRegion): string {
+  switch (region) {
+    case 'default': return 'recommended';
+    case 'global': return 'global';
+    case 'americas': return 'americas';
+    case 'europe': return 'europe';
+    case 'asia-pacific': return 'asia pacific';
+    case 'community': return 'community';
+  }
+}
+
 /**
  * zcash block height <-> date estimation
  *
@@ -68,10 +86,15 @@ export const SelectNetworks = () => {
   const navigate = usePageNav();
   const location = useLocation();
   const { enabledNetworks, toggleNetwork, setActiveNetwork } = useStore(state => state.keyRing);
+  const { setNetworkEndpoint } = useStore(networksSelector);
   const [selected, setSelected] = useState<Set<NetworkType>>(new Set(enabledNetworks));
   const [zcashBirthday, setZcashBirthday] = useState('');
   const [zcashDate, setZcashDate] = useState('');
   const [inputMode, setInputMode] = useState<'date' | 'block'>('date');
+  // Default to rotko zidecar (trustless). User can pick a fallback from the
+  // dropdown; the choice is persisted to NetworkConfig.endpoint so subsequent
+  // sync calls hit the selected node.
+  const [zcashEndpointId, setZcashEndpointId] = useState<string>(defaultZcashEndpoint().id);
 
   // get origin from incoming state, default to NEWLY_GENERATED
   const origin = getSeedPhraseOrigin(location);
@@ -110,6 +133,17 @@ export const SelectNetworks = () => {
       if (!isNaN(num) && num >= ZCASH_ORCHARD_ACTIVATION) {
         const rounded = Math.floor(num / 10_000) * 10_000 - 10_000;
         sessionStorage.setItem('pendingZcashBirthday', String(Math.max(rounded, ZCASH_ORCHARD_ACTIVATION)));
+      }
+    }
+
+    // persist the user's chosen zcash node so sync uses it from the first
+    // request. setNetworkEndpoint also auto-classifies zidecar vs lightwalletd
+    // (see state/networks.ts) so the trust/mempool gates are applied
+    // consistently downstream.
+    if (selected.has('zcash')) {
+      const preset = ZCASH_MAINNET_ENDPOINTS.find(p => p.id === zcashEndpointId);
+      if (preset) {
+        await setNetworkEndpoint('zcash', preset.url);
       }
     }
 
@@ -191,6 +225,41 @@ export const SelectNetworks = () => {
               );
             })}
           </div>
+
+          {/* zcash node picker — shown on both create and import paths so
+              users on rotko-blocked networks have an obvious fallback.
+              Default is rotko zidecar (trustless). Public lightwalletd
+              endpoints are honest alternates. */}
+          {selected.has('zcash') && (
+            <div className='mt-4 rounded-lg border border-border-soft p-3'>
+              <div className='flex items-center justify-between mb-2'>
+                <span className='text-xs font-medium'>zcash node</span>
+                <span className='text-[10px] text-fg-muted'>
+                  fallback if your default is down
+                </span>
+              </div>
+              <select
+                value={zcashEndpointId}
+                onChange={e => setZcashEndpointId(e.target.value)}
+                className='w-full bg-input border border-border-soft px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-zigner-gold'
+              >
+                {groupPresetsByRegion(ZCASH_MAINNET_ENDPOINTS).map(group => (
+                  <optgroup key={group.region} label={regionLabel(group.region)}>
+                    {group.presets.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.label}{p.backend === 'zidecar' ? ' · trustless' : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              <p className='mt-1.5 text-[10px] text-fg-muted'>
+                trustless = wallet verifies the server's responses with
+                ligerito + nomt proofs. lightwalletd = trusted public node.
+                you can switch later in settings.
+              </p>
+            </div>
+          )}
 
           {/* zcash sync start — only relevant for *imported* wallets. A
               brand-new wallet has no prior history to scan, so the worker
