@@ -12,6 +12,7 @@ export const build_unsigned_transaction: (a: number, b: number, c: any, d: numbe
 export const build_witnesses_and_paths: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
 export const complete_shielding_transaction: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const complete_transaction: (a: number, b: number, c: any, d: any) => [number, number, number, number];
+export const compute_txid: (a: number, b: number) => [number, number, number, number];
 export const create_sign_request: (a: number, b: number, c: number, d: any, e: number, f: number) => [number, number, number, number];
 export const derive_transparent_privkey: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const encode_notes_bundle: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number, number];

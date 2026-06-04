@@ -240,6 +240,17 @@ export function complete_shielding_transaction(unsigned_tx_hex: string, signatur
 export function complete_transaction(unsigned_tx_hex: string, signatures_json: any, spend_indices_json: any): string;
 
 /**
+ * Canonical ZIP-244 txid for a raw signed v5 transaction.
+ *
+ * Public lightwalletd's `SendResponse` carries no txid, so the wallet derives
+ * it locally instead of trusting the server to echo it. This is the same value
+ * zidecar computes server-side and the same bytes that appear as
+ * `CompactTx.hash` during sync — returned as lowercase hex in internal/wire
+ * byte order so the outgoing record reconciles on the next scan.
+ */
+export function compute_txid(tx_hex: string): string;
+
+/**
  * Create a PCZT sign request from transaction parameters
  * This is called by the online wallet to create the data that will be
  * transferred to the cold wallet via QR code.
@@ -550,6 +561,7 @@ export interface InitOutput {
     readonly build_witnesses_and_paths: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
     readonly complete_shielding_transaction: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly complete_transaction: (a: number, b: number, c: any, d: any) => [number, number, number, number];
+    readonly compute_txid: (a: number, b: number) => [number, number, number, number];
     readonly create_sign_request: (a: number, b: number, c: number, d: any, e: number, f: number) => [number, number, number, number];
     readonly derive_transparent_privkey: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly encode_notes_bundle: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number, number];

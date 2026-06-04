@@ -153,6 +153,7 @@ interface WasmModule {
   // PCZT signing flow (replaces simple-format sighash+alphas QR for single-signer zigner)
   build_unsigned_pczt(ufvk_str: string, notes_json: unknown, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: unknown, target_height: number, mainnet: boolean, memo_hex?: string | null): unknown;
   extract_signed_tx_from_pczt(pczt_hex: string): string;
+  compute_txid(tx_hex: string): string;
   ur_decode_frames(parts_json: string, expected_type: string): string;
   build_unsigned_shielding_transaction(utxos_json: string, recipient: string, amount: bigint, fee: bigint, anchor_height: number, mainnet: boolean): string;
   complete_shielding_transaction(unsigned_tx_hex: string, signatures_json: string): string;
@@ -715,6 +716,28 @@ const initWasm = async (): Promise<void> => {
   wasm.init();
   wasmModule = wasm;
   console.log('[zcash-worker] wasm ready');
+};
+
+/**
+ * Resolve the txid of a just-broadcast transaction.
+ *
+ * zidecar echoes the txid in its SendResponse, so we trust it there. Public
+ * lightwalletd's standard SendResponse has no txid field, so we derive the
+ * canonical ZIP-244 txid locally from the signed tx bytes — the same value
+ * zidecar computes server-side and the same bytes that appear as
+ * `CompactTx.hash` during sync, so the optimistic outgoing record reconciles.
+ */
+const resolveBroadcastTxid = async (
+  result: { txid: Uint8Array },
+  txHex: string,
+  serverUrl: string,
+): Promise<string> => {
+  if (lookupBackend(serverUrl) === 'zidecar') {
+    return new TextDecoder().decode(result.txid);
+  }
+  await initWasm();
+  if (!wasmModule) throw new Error('wasm not initialized for txid computation');
+  return wasmModule.compute_txid(txHex);
 };
 
 // ── zync-core (verification) ──
@@ -2378,7 +2401,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             throw new Error(`broadcast failed (${result.errorCode}): ${result.errorMessage}`);
           }
 
-          const txid = new TextDecoder().decode(result.txid);
+          const txid = await resolveBroadcastTxid(result, txHex, sendPayload.serverUrl);
           const totalDuration = ((performance.now() - sendStart) / 1000).toFixed(1);
           emitProgress('complete', `txid=${txid}, total=${totalDuration}s`);
 
@@ -2474,7 +2497,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           throw new Error(`broadcast failed (${result.errorCode}): ${result.errorMessage}`);
         }
 
-        const txid = new TextDecoder().decode(result.txid);
+        const txid = await resolveBroadcastTxid(result, txHex, completePayload.serverUrl);
         workerSelf.postMessage({
           type: 'tx-result', id, network: 'zcash', walletId,
           payload: { txid },
@@ -2650,7 +2673,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           throw new Error(`broadcast failed (${result.errorCode}): ${result.errorMessage}`);
         }
 
-        const txid = new TextDecoder().decode(result.txid);
+        const txid = await resolveBroadcastTxid(result, txHex, completePayload.serverUrl);
         workerSelf.postMessage({
           type: 'tx-result', id, network: 'zcash', walletId,
           payload: { txid },
@@ -2919,7 +2942,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           const result = await client.sendTransaction(txData);
           if (result.errorCode !== 0) throw new Error(`broadcast failed (${result.errorCode}): ${result.errorMessage}`);
 
-          lastTxid = new TextDecoder().decode(result.txid);
+          lastTxid = await resolveBroadcastTxid(result, txHex, serverUrl);
           totalShielded += shieldAmount;
           totalFee += fee;
           totalUtxos += utxos.length;
