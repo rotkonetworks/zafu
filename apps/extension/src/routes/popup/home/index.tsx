@@ -778,7 +778,11 @@ const ZcashContent = ({
           {chainHeight <= 0
             ? 'connecting...'
             : allSynced
-              ? `block ${workerSyncHeight.toLocaleString()}`
+              // 'synced' is what the user actually cares about — the
+              // block number is meaningful only to power users. Put the
+              // word first so a glance answers "is my wallet caught up?";
+              // the block number sits in parens for verifiers.
+              ? `synced · block ${workerSyncHeight.toLocaleString()}`
               : `syncing · ${overallPct.toFixed(1)}%`}
         </div>
       </div>
