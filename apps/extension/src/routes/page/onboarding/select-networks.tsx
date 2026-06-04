@@ -8,6 +8,7 @@ import { PagePath } from '../paths';
 import { useStore } from '../../../state';
 import { NetworkType } from '../../../state/keyring';
 import { getSeedPhraseOrigin } from './password/utils';
+import { SEED_PHRASE_ORIGIN } from './password/types';
 import { NETWORKS, isLaunched, ZCASH_ORCHARD_ACTIVATION } from '../../../config/networks';
 
 interface NetworkOption {
@@ -191,8 +192,10 @@ export const SelectNetworks = () => {
             })}
           </div>
 
-          {/* zcash sync start - only shown when zcash is selected */}
-          {selected.has('zcash') && (
+          {/* zcash sync start — only relevant for *imported* wallets. A
+              brand-new wallet has no prior history to scan, so the worker
+              starts from chain tip and the birthday is irrelevant. */}
+          {selected.has('zcash') && origin === SEED_PHRASE_ORIGIN.IMPORTED && (
             <div className='mt-4 rounded-lg border border-border-soft p-3'>
               <div className='flex items-center justify-between mb-2'>
                 <span className='text-xs font-medium'>wallet birthday</span>
@@ -234,7 +237,7 @@ export const SelectNetworks = () => {
                       setZcashDate(formatDateInput(blockToDate(num)));
                     }
                   }}
-                  placeholder='leave blank for new wallets'
+                  placeholder='leave blank to sync from chain tip'
                   className='w-full bg-input border border-border-soft px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-zigner-gold'
                 />
               )}
@@ -246,8 +249,8 @@ export const SelectNetworks = () => {
                 </p>
               )}
               <p className='mt-1 text-[10px] text-fg-muted'>
-                for existing wallets, pick the approximate date you created the wallet.
-                leave blank for new wallets. rounded for privacy.
+                approximate date the wallet was first used. rounded for privacy.
+                skip this if you don't know — scanning starts from chain tip.
               </p>
             </div>
           )}
