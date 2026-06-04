@@ -634,13 +634,20 @@ function ReceiveTab({ address, loading, activeNetwork }: {
     await chrome.storage.local.set({ zcashShieldedIndex: next });
   }, []);
 
+  // shielded badge logic: zcash 'u'-prefixed unified addresses and
+  // penumbra default addresses are shielded by construction. Transparent
+  // zcash (t1/t3) and ephemeral penumbra addresses get different labels.
+  const isShielded =
+    (isZcash && !transparent && displayAddress?.startsWith('u')) ||
+    (isPenumbra && !ephemeral);
+
   return (
     <div className='flex flex-col items-center gap-4'>
       <div className='rounded-md border border-border-soft bg-white p-2'>
         {isLoading ? (
-          <div className='flex h-48 w-48 items-center justify-center'>
-            <span className='text-[10px] text-fg-dim lowercase tracking-[0.04em]'>loading...</span>
-          </div>
+          // Skeleton matches the QR's 192×192 footprint (canvas size).
+          // Pulses gently while the address derives.
+          <div className='h-48 w-48 animate-pulse bg-elev-2/40' />
         ) : displayAddress ? (
           <canvas ref={canvasRef} className='h-48 w-48' />
         ) : (
@@ -650,9 +657,29 @@ function ReceiveTab({ address, loading, activeNetwork }: {
         )}
       </div>
 
-      <span className='rounded-sm border border-network-accent/30 bg-network-accent/10 px-2.5 py-0.5 text-[10px] text-network-accent lowercase tracking-[0.08em]'>
-        {activeNetwork}
-      </span>
+      <div className='flex items-center gap-1.5'>
+        <span className='rounded-sm border border-network-accent/30 bg-network-accent/10 px-2.5 py-0.5 text-[10px] text-network-accent lowercase tracking-[0.08em]'>
+          {activeNetwork}
+        </span>
+        {isShielded && (
+          <span
+            className='inline-flex items-center gap-1 rounded-sm border border-zigner-gold/30 bg-zigner-gold/10 px-2 py-0.5 text-[10px] text-zigner-gold lowercase tracking-[0.05em]'
+            title='shielded — senders cannot see your other transactions'
+          >
+            <span className='i-lucide-shield-check h-2.5 w-2.5' />
+            shielded
+          </span>
+        )}
+        {isZcash && transparent && (
+          <span
+            className='inline-flex items-center gap-1 rounded-sm border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] text-red-400 lowercase tracking-[0.05em]'
+            title='transparent — balance and history publicly visible'
+          >
+            <span className='i-lucide-eye h-2.5 w-2.5' />
+            public
+          </span>
+        )}
+      </div>
 
       {isPenumbra && (
         <div className='flex w-full items-center justify-between'>
