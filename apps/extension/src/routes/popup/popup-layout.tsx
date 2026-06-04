@@ -14,24 +14,40 @@ import { hasFeature } from '../../config/networks';
 type FeatureKey = 'stake' | 'swap' | 'vote' | 'inbox';
 
 /**
- * Bottom-tabs are deliberately minimal — Home + Inbox only. Anything
- * else that used to live on the bottom rail (Stake, Swap, Vote,
- * Multisig) is now accessed from the menu drawer so the wallet's
- * primary surface stays focused on receiving + reading memos. The
- * less-used destinations are one tap further away, not in your face.
+ * Bottom-tabs are deliberately minimal — the four destinations users
+ * touch every session. Stake / Swap / Vote / Multisig were demoted
+ * to the menu drawer (one tap further away). The four kept here:
  *
- * Inbox is still feature-gated by network (e.g. transparent-only
- * networks don't have memos).
+ *   Home    — balance, recent activity
+ *   Receive — quick share of address (primary new-user task)
+ *   Send    — primary outgoing action
+ *   Inbox   — encrypted memos
+ *
+ * Inbox is feature-gated by network (transparent-only networks don't
+ * have memos and the tab disappears for them).
+ *
+ * Keplr's wallet uses a similar 3-4 tab pattern: balance + send +
+ * receive + history. We follow the convention; the user noted "more
+ * icons" → bottom-tabs already are icon + small label stacked, which
+ * is the most compact discoverable pattern.
  */
 const BOTTOM_TABS: ReadonlyArray<{ path: PopupPath; icon: JSX.Element; label: string; feature?: FeatureKey }> = [
-  { path: PopupPath.INDEX, icon: <span className='i-lucide-home h-5 w-5' />, label: 'Home' },
-  { path: PopupPath.INBOX, icon: <span className='i-lucide-mail h-5 w-5' />, label: 'Inbox', feature: 'inbox' },
+  { path: PopupPath.INDEX,   icon: <span className='i-lucide-home h-5 w-5' />,            label: 'home' },
+  { path: PopupPath.RECEIVE, icon: <span className='i-lucide-arrow-down h-5 w-5' />,      label: 'receive' },
+  { path: PopupPath.SEND,    icon: <span className='i-lucide-arrow-up h-5 w-5' />,        label: 'send' },
+  { path: PopupPath.INBOX,   icon: <span className='i-lucide-mail h-5 w-5' />,            label: 'inbox', feature: 'inbox' },
 ];
 
 const getTabsForNetwork = (network: NetworkType) =>
   BOTTOM_TABS.filter(tab => !tab.feature || hasFeature(network, tab.feature));
 
-/** routes where bottom tabs should NOT be shown */
+/**
+ * Routes where bottom-tabs should NOT be shown. SEND and RECEIVE used
+ * to live here (back when they weren't top-level tabs) — they're now
+ * primary destinations so the bar stays visible on them. The
+ * remaining hidden routes are auth / approval / multi-step flows
+ * where the user is in the middle of a one-shot interaction.
+ */
 const hiddenTabRoutes = [
   PopupPath.LOGIN,
   PopupPath.TRANSACTION_APPROVAL,
@@ -39,8 +55,6 @@ const hiddenTabRoutes = [
   PopupPath.SIGN_APPROVAL,
   PopupPath.CAPABILITY_APPROVAL,
   PopupPath.COSMOS_SIGN,
-  PopupPath.SEND,
-  PopupPath.RECEIVE,
   PopupPath.CONTACTS,
   PopupPath.MULTISIG_CREATE,
   PopupPath.MULTISIG_JOIN,

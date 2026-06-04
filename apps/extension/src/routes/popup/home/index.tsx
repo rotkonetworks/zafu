@@ -286,33 +286,29 @@ export const PopupIndex = () => {
             </div>
           </div>
 
-          <div className='flex gap-2'>
-            <button
+          {/* Keplr-style stacked action buttons — icon on top, tiny
+              label below. More discoverable than pure-icon for new
+              users while staying compact (each button is 56×56 vs the
+              previous 40×40 unlabeled). The send button keeps its
+              network-accent color treatment so the primary action
+              still stands out. */}
+          <div className='flex gap-1.5'>
+            <ActionButton
+              icon='i-lucide-arrow-down'
+              label='receive'
               onClick={() => navigate(PopupPath.RECEIVE)}
-              className='flex h-10 w-10 items-center justify-center bg-elev-2 transition-colors hover:bg-elev-1/80'
-              title='receive'
-            >
-              <span className='i-lucide-arrow-down h-5 w-5' />
-            </button>
-            <button
+            />
+            <ActionButton
+              icon='i-lucide-arrow-left-right'
+              label='swap'
               onClick={() => navigate(PopupPath.SWAP)}
-              className='flex h-10 w-10 items-center justify-center bg-elev-2 transition-colors hover:bg-elev-1/80'
-              title='swap'
-            >
-              <span className='i-lucide-arrow-left-right h-5 w-5' />
-            </button>
-            <button
+            />
+            <ActionButton
+              icon='i-lucide-arrow-up'
+              label='send'
               onClick={() => navigate(PopupPath.SEND)}
-              className={cn(
-                'flex h-10 w-10 items-center justify-center transition-colors',
-                activeNetwork === 'penumbra'
-                  ? 'bg-penumbra-purple text-white hover:bg-penumbra-purple-dark'
-                  : 'bg-zigner-gold text-zigner-dark hover:bg-primary/90',
-              )}
-              title='send'
-            >
-              <span className='i-lucide-arrow-up h-5 w-5' />
-            </button>
+              variant={activeNetwork === 'penumbra' ? 'penumbra' : 'zcash'}
+            />
           </div>
           </div>
         </div>
@@ -1053,6 +1049,44 @@ interface ParsedTransaction {
   /** penumbra account indices associated with this transaction (from visible actions) */
   accountIndices?: Set<number>;
 }
+
+/**
+ * Stacked action button — icon (top) + label (bottom). Used for the
+ * home action row (receive / swap / send). Keplr's pattern: compact
+ * enough for a narrow popup, but with the label visible so new users
+ * can read what each button does without hovering for a tooltip.
+ *
+ * Variants:
+ *   - default: subdued elev-2 background
+ *   - zcash:   zigner-gold (primary outgoing action)
+ *   - penumbra:penumbra-purple (primary outgoing action on penumbra)
+ */
+const ActionButton = ({
+  icon,
+  label,
+  onClick,
+  variant = 'default',
+}: {
+  icon: string;
+  label: string;
+  onClick: () => void;
+  variant?: 'default' | 'zcash' | 'penumbra';
+}) => (
+  <button
+    type='button'
+    onClick={onClick}
+    title={label}
+    className={cn(
+      'flex h-[52px] flex-1 flex-col items-center justify-center gap-1 transition-colors',
+      variant === 'default' && 'bg-elev-2 text-fg hover:bg-elev-1/80 hover:text-fg-high',
+      variant === 'zcash' && 'bg-zigner-gold text-zigner-dark hover:bg-primary/90',
+      variant === 'penumbra' && 'bg-penumbra-purple text-white hover:bg-penumbra-purple-dark',
+    )}
+  >
+    <span className={`${icon} h-4 w-4`} />
+    <span className='text-[9px] tracking-[0.05em] lowercase leading-none'>{label}</span>
+  </button>
+);
 
 /**
  * Empty-balance hint shown to a new user whose wallet is synced but
