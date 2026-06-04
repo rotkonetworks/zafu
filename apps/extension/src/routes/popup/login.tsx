@@ -65,6 +65,17 @@ export const Login = () => {
           <Button size='lg' variant='gradient' disabled={enteredIncorrect} type='submit'>
             unlock
           </Button>
+          {/* New users who hit a wrong password without a hint of
+              recourse assume their wallet is gone. The line only
+              surfaces after a failed attempt so we don't preemptively
+              teach the wrong mental model — but the moment anxiety
+              kicks in, the recovery path is visible. */}
+          {enteredIncorrect && (
+            <p className='text-center text-[11px] text-fg-muted lowercase'>
+              your funds aren't lost — you can restore from your seed phrase by
+              reinstalling zafu.
+            </p>
+          )}
         </form>
         <div className='flex flex-col gap-1'>
           <p className='text-center text-xs text-fg-muted lowercase'>
