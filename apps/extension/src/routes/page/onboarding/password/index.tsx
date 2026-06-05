@@ -30,11 +30,13 @@ export const SetPassword = () => {
   const location = useLocation();
   const origin = getSeedPhraseOrigin(location);
 
-  // 8 chars is the floor. Not strong, but enough to nudge users past
-  // 'pass' / 'abc'. We intentionally don't enforce uppercase/symbol
-  // rules — those create predictable mutations ('Password1!') and
-  // annoy users without adding real entropy. Length is what matters.
-  const MIN_PASSWORD_LENGTH = 8;
+  // Soft floor — currently 1 (only an empty password is rejected). The
+  // seed phrase is the real root of trust; the password just gates
+  // local-at-rest access to the encrypted vault. We don't want to
+  // paternalize the throwaway/test-wallet case or fight sophisticated
+  // users who know their threat model. Constant kept here so the
+  // floor is one number to change if that calculus shifts.
+  const MIN_PASSWORD_LENGTH = 1;
   const tooShort = password.length > 0 && password.length < MIN_PASSWORD_LENGTH;
   const canSubmit =
     password.length >= MIN_PASSWORD_LENGTH && password === confirmation && !loading;
