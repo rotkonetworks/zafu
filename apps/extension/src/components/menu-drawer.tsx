@@ -101,28 +101,38 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
     },
   ].filter(Boolean) as MenuItem[]);
 
-  const menuItems = [
-    ...networkDestinations,
+  // Grouped so the drawer reads top→bottom as:
+  //   network features → account/identity → app settings → session.
+  // A new user looking for 'lock' doesn't have to scan through stake
+  // and swap to find it; a returning user looking for 'stake' isn't
+  // looking past 'settings' to find it.
+  const accountItems: MenuItem[] = [
     {
       icon: 'i-lucide-fingerprint',
       label: 'identity & contacts',
       onClick: () => { navigate(PopupPath.IDENTITY); onClose(); },
     },
     {
-      icon: 'i-lucide-globe',
-      label: 'networks',
-      onClick: () => { navigate(PopupPath.SETTINGS_NETWORKS); onClose(); },
-    },
-    {
       icon: 'i-lucide-wallet',
       label: 'wallets',
       onClick: () => { navigate(PopupPath.SETTINGS_WALLETS); onClose(); },
+    },
+  ];
+
+  const appItems: MenuItem[] = [
+    {
+      icon: 'i-lucide-globe',
+      label: 'networks',
+      onClick: () => { navigate(PopupPath.SETTINGS_NETWORKS); onClose(); },
     },
     {
       icon: 'i-lucide-settings',
       label: 'settings',
       onClick: () => { navigate(PopupPath.SETTINGS); onClose(); },
     },
+  ];
+
+  const sessionItems: MenuItem[] = [
     ...(inSidePanel
       ? [{
           icon: 'i-lucide-panel-right',
@@ -137,6 +147,17 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
       className: 'text-destructive',
     },
   ];
+
+  // Each non-empty group is rendered separately with a thin top
+  // border (skipped for the first). Empty groups (e.g. networkDestinations
+  // when the current network has no extra features) collapse without
+  // leaving a dangling divider.
+  const menuGroups: MenuItem[][] = [
+    networkDestinations,
+    accountItems,
+    appItems,
+    sessionItems,
+  ].filter(g => g.length > 0);
 
   return (
     <>
@@ -174,20 +195,27 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
           </button>
         )}
 
-        {/* menu items */}
+        {/* menu items — grouped, with thin top border between groups */}
         <nav className='p-2'>
-          {menuItems.map((item, i) => (
-            <button
-              key={i}
-              onClick={item.onClick}
-              className={cn(
-                'flex w-full items-center gap-3 px-3 py-2.5 rounded-md text-[13px] text-fg hover:text-fg-high transition-colors hover:bg-elev-1',
-                item.className,
-              )}
+          {menuGroups.map((group, gi) => (
+            <div
+              key={gi}
+              className={cn(gi > 0 && 'mt-1 pt-1 border-t border-border-soft/40')}
             >
-              <span className={cn(item.icon, 'h-4 w-4')} />
-              <span>{item.label}</span>
-            </button>
+              {group.map((item, i) => (
+                <button
+                  key={i}
+                  onClick={item.onClick}
+                  className={cn(
+                    'flex w-full items-center gap-3 px-3 py-2.5 rounded-md text-[13px] text-fg hover:text-fg-high transition-colors hover:bg-elev-1',
+                    item.className,
+                  )}
+                >
+                  <span className={cn(item.icon, 'h-4 w-4')} />
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </div>
           ))}
         </nav>
 
