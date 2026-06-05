@@ -499,10 +499,16 @@ export const createKeyRingSlice = (
           );
       const vault = buildFrostVault(vaultId, params, encryptedData);
 
+      // hidden multisigs (poker tables) must not steal the active-wallet slot
+      const hidden = params.hidden === true;
+
       const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
       const newVaults = [vault, ...vaults];
       await local.set('vaults', newVaults);
-      await local.set('selectedVaultId', vaultId);
+      const prevSelectedVaultId = await local.get('selectedVaultId');
+      if (!hidden) {
+        await local.set('selectedVaultId', vaultId);
+      }
 
       let encKeyPackage: Awaited<ReturnType<typeof encryptFrostSecrets>>['encKeyPackage'] | undefined;
       let encEphemeralSeed: Awaited<ReturnType<typeof encryptFrostSecrets>>['encEphemeralSeed'] | undefined;
@@ -513,21 +519,25 @@ export const createKeyRingSlice = (
       }
       const zcashWallet = buildFrostZcashWallet(params, vaultId, encKeyPackage, encEphemeralSeed);
       const existingZcash = ((await local.get('zcashWallets')) ?? []) as ZcashWalletJson[];
-      await local.set('zcashWallets', [zcashWallet, ...existingZcash]);
-      await local.set('activeZcashIndex', 0);
+      const newZcashWallets = [zcashWallet, ...existingZcash];
+      await local.set('zcashWallets', newZcashWallets);
+      // hidden: hold the previous active wallet's slot (we prepended → bump by 1); visible: take 0
+      const prevActiveZcashIndex = (await local.get('activeZcashIndex')) ?? 0;
+      const newActiveZcashIndex = hidden ? prevActiveZcashIndex + 1 : 0;
+      await local.set('activeZcashIndex', newActiveZcashIndex);
 
       const newEnabledNetworks = mergeEnabledNetworks(
         (await local.get('enabledNetworks')) ?? [] as NetworkType[], ['zcash'],
       );
       await local.set('enabledNetworks', newEnabledNetworks);
 
-      const keyInfos = vaultsToKeyInfos(newVaults, vaultId);
+      const keyInfos = vaultsToKeyInfos(newVaults, hidden ? (prevSelectedVaultId as string | undefined) : vaultId);
       set(state => {
         state.keyRing.keyInfos = keyInfos;
         state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
         state.keyRing.enabledNetworks = newEnabledNetworks;
-        state.wallets.zcashWallets = [zcashWallet, ...existingZcash];
-        state.wallets.activeZcashIndex = 0;
+        state.wallets.zcashWallets = newZcashWallets;
+        state.wallets.activeZcashIndex = newActiveZcashIndex;
         if (vaults.length === 0) {
           state.keyRing.activeNetwork = 'zcash' as NetworkType;
         }

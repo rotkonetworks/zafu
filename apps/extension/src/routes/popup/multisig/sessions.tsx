@@ -11,7 +11,7 @@ import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../../state';
 import {
   selectZcashWallets,
-  selectMultisigWallets,
+  selectVisibleMultisigWallets,
   walletsSelector,
   type ZcashWalletJson,
 } from '../../../state/wallets';
@@ -126,7 +126,7 @@ export const MultisigPage = () => {
   const activeNetwork = useStore(selectActiveNetwork);
   const zcashWallets = useStore(selectZcashWallets);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
-  const multisigWallets = useStore(selectMultisigWallets);
+  const multisigWallets = useStore(selectVisibleMultisigWallets);
   const { setActiveZcashWallet } = useStore(walletsSelector);
   const { workerSyncHeight } = useZcashSyncStatus();
   const [balances, setBalances] = useState<Record<string, bigint>>({});

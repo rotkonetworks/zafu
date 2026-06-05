@@ -12,6 +12,17 @@
  * - { type: 'zafu_frost_create' } → create FROST DKG, returns approval popup
  * - { type: 'zafu_frost_join', roomCode } → join existing FROST DKG
  * - { type: 'zafu_frost_sign', roomCode, sighashHex, ... } → FROST signing session
+ * - { type: 'zafu_dkg_join', relayUrl, roomCode, threshold, maxSigners, labelPrefix? }
+ *     → join an existing DKG room with the current zafu protocol (R1:T:N:SK + FVK echo);
+ *       persists multisig labeled "<labelPrefix>-YYYY-MM-DD-HHMM" (defaults to origin host)
+ * - { type: 'zafu_frost_sign_orchard', relayUrl, roomCode, plan, feeZat, multisigLabel? }
+ *     → join an Orchard PCZT signing room as a peer (INIT-MULTI/COMMITS/SHARE wire tags);
+ *       popup shows the plan (outputs + fee), runs round-1/round-2 over the relay,
+ *       caller (host) aggregates + broadcasts.
+ * - { type: 'zafu_delete_multisig', multisigLabel, delayMs? }
+ *     → schedule (or immediately do) deletion of a multisig vault by name prefix.
+ *       used by app-driven multisigs (poker tables) to evaporate themselves after settlement.
+ *       no popup — silent operation. delayMs default 0 (immediate).
  */
 
 import { getOriginPermissions, grantCapability, denyCapability } from '@repo/storage-chrome/origin';
@@ -45,7 +56,20 @@ export const externalMessageListener = (
         sendResponse({ error: 'address required' });
         return true;
       }
-      const url = chrome.runtime.getURL(`popup.html#/send?to=${encodeURIComponent(address)}`);
+      const params = new URLSearchParams({ to: address });
+      // optional zatoshi amount — zafu's send popup converts to ZEC for display
+      const amountZat = Number(msg['amount_zat']);
+      if (Number.isFinite(amountZat) && amountZat > 0) {
+        params.set('amount_zat', String(Math.floor(amountZat)));
+      }
+      // optional memo. callers can drop `[primary]` (canonical) or `[self]` (alias) anywhere
+      // in the memo and the send popup substitutes the user's oldest non-multisig Zcash UA.
+      // Saves a separate "what's my address" round-trip; user can still edit before send.
+      const memo = msg['memo'];
+      if (typeof memo === 'string' && memo.length > 0 && memo.length <= 512) {
+        params.set('memo', memo);
+      }
+      const url = chrome.runtime.getURL(`popup.html#/send?${params.toString()}`);
       void chrome.windows.create({ url, type: 'popup', width: 400, height: 628 });
       sendResponse({ ok: true });
       return true;
@@ -152,6 +176,43 @@ export const externalMessageListener = (
       return true;
     }
 
+    case 'zafu_dkg_join': {
+      const roomCode = String(msg['roomCode'] || '');
+      if (!roomCode) {
+        sendResponse({ error: 'roomCode required' });
+        return true;
+      }
+      const threshold = Number(msg['threshold']) || 2;
+      const maxSigners = Number(msg['maxSigners']) || 3;
+      const relayUrl = String(msg['relayUrl'] || 'wss://zrelay.rotko.net');
+      const appOrigin = sender.origin || sender.url || 'unknown';
+      // sanitize the caller-supplied label prefix; default to the origin host.
+      // new URL() throws on non-URL strings (e.g. 'unknown'); fall back safely.
+      let originHost = 'multisig';
+      try { originHost = new URL(appOrigin).host || 'multisig'; } catch { /* keep default */ }
+      const rawPrefix = String(msg['labelPrefix'] || originHost);
+      const labelPrefix = rawPrefix.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 32) || 'multisig';
+      const requestId = crypto.randomUUID();
+
+      pendingPicks.set(requestId, sendResponse);
+
+      const hide = msg['hide'] === true;
+      const params = new URLSearchParams({
+        app: appOrigin,
+        action: 'dkg-join',
+        roomCode,
+        threshold: String(threshold),
+        maxSigners: String(maxSigners),
+        relayUrl,
+        labelPrefix,
+        requestId,
+      });
+      if (hide) params.set('hide', '1');
+      const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
+      void chrome.windows.create({ url, type: 'popup', width: 400, height: 520 });
+      return true;
+    }
+
     case 'zafu_frost_sign': {
       const roomCode = String(msg['roomCode'] || '');
       const sighashHex = String(msg['sighashHex'] || '');
@@ -175,6 +236,80 @@ export const externalMessageListener = (
       });
       const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
       void chrome.windows.create({ url, type: 'popup', width: 400, height: 520 });
+      return true;
+    }
+
+    case 'zafu_frost_sign_orchard': {
+      const roomCode = String(msg['roomCode'] || '');
+      if (!roomCode) {
+        sendResponse({ error: 'roomCode required' });
+        return true;
+      }
+      const plan = msg['plan'] as Array<{ address: string; amount_zat: number }> | undefined;
+      if (!plan || !Array.isArray(plan) || plan.length === 0) {
+        sendResponse({ error: 'plan array required' });
+        return true;
+      }
+      const relayUrl = String(msg['relayUrl'] || 'wss://zrelay.rotko.net');
+      const feeZat = Number(msg['feeZat']) || 10_000;
+      // Sanitize identically to labelPrefix above. Empty is allowed here
+      // because the popup falls back to the default multisigVault. The
+      // popup itself does the lookup via startsWith — same charset rules.
+      const rawLabel = typeof msg['multisigLabel'] === 'string' ? msg['multisigLabel'] : '';
+      const multisigLabel = rawLabel.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 64);
+      const appOrigin = sender.origin || sender.url || 'unknown';
+      const requestId = crypto.randomUUID();
+
+      pendingPicks.set(requestId, sendResponse);
+
+      const params = new URLSearchParams({
+        app: appOrigin,
+        action: 'poker-sign',
+        roomCode,
+        relayUrl,
+        feeZat: String(feeZat),
+        planJson: JSON.stringify(plan),
+        requestId,
+      });
+      if (multisigLabel) params.set('multisigLabel', multisigLabel);
+      const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
+      void chrome.windows.create({ url, type: 'popup', width: 400, height: 560 });
+      return true;
+    }
+
+    case 'zafu_delete_multisig': {
+      // Sanitize + require non-empty + minimum length to make prefix-match
+      // enumeration impractical. Architectural origin-binding (vault-level
+      // creatorOrigin enforced here) is the proper fix and is tracked
+      // separately; this is the mechanical hardening.
+      const rawLabel = typeof msg['multisigLabel'] === 'string' ? msg['multisigLabel'] : '';
+      const multisigLabel = rawLabel.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 64);
+      const MIN_DELETE_LABEL_LEN = 4;
+      if (multisigLabel.length < MIN_DELETE_LABEL_LEN) {
+        sendResponse({ error: `multisigLabel must be at least ${MIN_DELETE_LABEL_LEN} chars after sanitization` });
+        return true;
+      }
+      const delayMs = Math.max(0, Number(msg['delayMs']) || 0);
+      void (async () => {
+        try {
+          const { findVaultByLabelPrefix, scheduleMultisigDelete, purgeVault } =
+            await import('../../state/keyring/scheduled-deletes');
+          const vaultId = await findVaultByLabelPrefix(multisigLabel);
+          if (!vaultId) {
+            sendResponse({ success: false, error: 'no matching multisig found' });
+            return;
+          }
+          if (delayMs > 0) {
+            await scheduleMultisigDelete(vaultId, Date.now() + delayMs);
+            sendResponse({ success: true, scheduled: true, vaultId, deleteAt: Date.now() + delayMs });
+          } else {
+            await purgeVault(vaultId);
+            sendResponse({ success: true, scheduled: false, vaultId });
+          }
+        } catch (e) {
+          sendResponse({ success: false, error: e instanceof Error ? e.message : String(e) });
+        }
+      })();
       return true;
     }
 

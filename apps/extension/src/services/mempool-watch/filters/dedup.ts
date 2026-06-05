@@ -18,10 +18,22 @@
 
 import type { MempoolFetcher, MempoolFilter, MempoolSnapshot } from '../types';
 
+/**
+ * Filter-level `lastKey` lives in the filter closure, NOT inside the
+ * returned generator. The generator is re-invoked on every poll iteration
+ * (withPoll calls inner() fresh each cycle); putting `lastKey` inside the
+ * generator function would reset it every poll, defeating the entire
+ * point of dedup. With it at filter scope, dedup state persists across
+ * inner() reinvocations as long as the same composed fetcher is in use.
+ *
+ * Lifecycle invariant: a new strategy build (e.g. mempoolWatch off→on
+ * cycle) produces a fresh filter closure, so lastKey is naturally cleared
+ * on toggle. The worker does not reuse a stale composed fetcher.
+ */
 export const withDedup = (): MempoolFilter =>
-  (inner: MempoolFetcher): MempoolFetcher =>
-    async function* dedup(walletId, ctx) {
-      let lastKey: string | null = null;
+  (inner: MempoolFetcher): MempoolFetcher => {
+    let lastKey: string | null = null;
+    return async function* dedup(walletId, ctx) {
       for await (const snap of inner(walletId, ctx)) {
         const key = fingerprint(snap);
         if (key === lastKey) continue;
@@ -29,6 +41,7 @@ export const withDedup = (): MempoolFilter =>
         yield snap;
       }
     };
+  };
 
 function fingerprint(snap: MempoolSnapshot): string {
   const hexes = snap.entries.map(e => hexEncode(e.hash));

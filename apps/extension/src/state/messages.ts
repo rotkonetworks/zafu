@@ -138,19 +138,61 @@ export const createMessagesSlice =
     const m = get().messages.messages;
     return Array.isArray(m) ? m : [];
   };
+
+  /**
+   * Sweep stale optimistic-pending records on slice creation. The popup
+   * unmount handler in zcash-send.tsx marks them failed before navigating,
+   * but a forced close (extension reload, browser quit, crash) bypasses
+   * that path and leaves temp:* records persisted in 'submitting' or
+   * 'broadcasting'. There's no live send flow to drive them forward, so
+   * we mark them failed on startup. Real-txid records in 'pending' are
+   * left alone — the block scan will promote them when the tx mines.
+   */
+  void (async () => {
+    try {
+      const persisted = await local.get('messages' as keyof LocalStorageState) as Message[] | undefined;
+      if (!Array.isArray(persisted) || persisted.length === 0) return;
+      let touched = false;
+      for (const m of persisted) {
+        if (
+          m.txId.startsWith('temp:') &&
+          (m.status === 'submitting' || m.status === 'broadcasting')
+        ) {
+          m.status = 'failed';
+          m.failureReason = 'interrupted';
+          touched = true;
+        }
+      }
+      if (touched) {
+        await local.set('messages' as keyof LocalStorageState, persisted as never);
+      }
+    } catch (e) {
+      console.warn('[messages] hydration sweep failed:', e);
+    }
+  })();
+
   return {
     messages: [],
 
     addMessage: async (messageData) => {
-      // if we already have this tx, promote any optimistic outgoing record
-      // (status submitting/broadcasting/pending) to confirmed using the
-      // authoritative block-scan data. otherwise no-op.
-      if (get().messages.hasMessage(messageData.txId)) {
-        const existing = safeMessages().find((m) => m.txId === messageData.txId);
-        if (existing && existing.status && existing.status !== 'confirmed') {
+      // Dedup by (txId, direction). Self-pay (recipient is one of our own
+      // addresses) legitimately produces TWO messages for the same txid:
+      // one from OVK decoding (sent) and one from IVK decoding (received).
+      // The old hasMessage(txId) check collapsed them, hiding the received
+      // side from the inbox.
+      const existing = safeMessages().find(
+        (m) => m.txId === messageData.txId && m.direction === messageData.direction,
+      );
+      if (existing) {
+        // If we have an optimistic-pending record matching this (txid, direction),
+        // promote it to 'confirmed' using the authoritative block-scan data.
+        // Otherwise the second call is a no-op.
+        if (existing.status && existing.status !== 'confirmed') {
           set((state) => {
             const list = Array.isArray(state.messages.messages) ? state.messages.messages : [];
-            const m = list.find((x) => x.txId === messageData.txId);
+            const m = list.find(
+              (x) => x.txId === messageData.txId && x.direction === messageData.direction,
+            );
             if (m) {
               m.blockHeight = messageData.blockHeight;
               m.timestamp = messageData.timestamp;
@@ -160,7 +202,7 @@ export const createMessagesSlice =
           });
           await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
         }
-        return existing!;
+        return existing;
       }
 
       const message: Message = {

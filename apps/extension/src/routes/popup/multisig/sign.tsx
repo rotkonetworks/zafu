@@ -200,7 +200,7 @@ export const MultisigSign = () => {
         setProgress(`round 2: signing action ${i + 1}/${numActions}...`);
         const allCommitments = [round1s[i]!.commitments, ...peerPerAction[i]!];
         const share = await frostSpendSignInWorker(
-          secrets.keyPackage, round1s[i]!.nonces, sighash, alphas[i]!, allCommitments,
+          secrets.ephemeralSeed, secrets.keyPackage, round1s[i]!.nonces, sighash, alphas[i]!, allCommitments,
         );
         await relay.sendMessage(roomCode.trim(), participantId, new TextEncoder().encode(`S:${i}:${share}`));
       }

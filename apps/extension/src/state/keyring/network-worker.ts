@@ -126,6 +126,29 @@ const spawnNetworkWorkerInner = async (network: NetworkType): Promise<void> => {
     }
 
     if (msg.type === 'mempool-update') {
+      // CONTRACT for consumers (hdevalence audit):
+      //
+      // `zcash-mempool-update` fires only when the worker found at least
+      // one match (pendingIncoming or pendingSpends non-empty). That
+      // means the *receipt* of this event is itself the signal "this
+      // wallet matched something in mempool". Any handler whose
+      // observable behavior differs between "got the event with N
+      // matches" and "got the event with M matches" (or "got the event"
+      // vs "didn't get the event") leaks the trial-decryption result to
+      // any local code/page that can measure the side effect.
+      //
+      // Consumers MUST:
+      //   - never fire a network request as a consequence of receipt;
+      //   - never produce a visible UI change with timing distinguishable
+      //     from the no-match path (use a refresh that already runs on
+      //     other triggers, not one keyed to mempool events);
+      //   - never log/store in a way the page or another extension can
+      //     observe.
+      //
+      // If you find yourself wanting to react conditionally, audit
+      // against the threat model: a co-located content script can read
+      // CustomEvent dispatches in the same realm. There is currently
+      // no consumer; add one only after confirming this discipline.
       window.dispatchEvent(new CustomEvent('zcash-mempool-update', {
         detail: { network, walletId: msg.walletId, ...msg.payload as object }
       }));
@@ -239,10 +262,10 @@ export const startSyncInWorker = async (
   backend: 'zidecar' | 'lightwalletd' = 'zidecar',
   mempoolWatch: 'off' | 'on' = 'off',
 ): Promise<void> => {
-  // Defensive: mempool watch is meaningless on lightwalletd. Coerce
-  // here so the worker never sees the invalid combination, even if
-  // a caller forgets to enforce it upstream.
-  const effectiveMempoolWatch: 'off' | 'on' = backend === 'lightwalletd' ? 'off' : mempoolWatch;
+  // Defensive: mempool watch is meaningless on lightwalletd. Use the
+  // single-source-of-truth gate from the strategy module.
+  const { isMempoolWatchEnabled } = await import('../../services/mempool-watch/strategy');
+  const effectiveMempoolWatch: 'off' | 'on' = isMempoolWatchEnabled(mempoolWatch, backend) ? 'on' : 'off';
   return callWorker(
     network,
     'sync',
@@ -263,7 +286,8 @@ export const startWatchOnlySyncInWorker = async (
   backend: 'zidecar' | 'lightwalletd' = 'zidecar',
   mempoolWatch: 'off' | 'on' = 'off',
 ): Promise<void> => {
-  const effectiveMempoolWatch: 'off' | 'on' = backend === 'lightwalletd' ? 'off' : mempoolWatch;
+  const { isMempoolWatchEnabled } = await import('../../services/mempool-watch/strategy');
+  const effectiveMempoolWatch: 'off' | 'on' = isMempoolWatchEnabled(mempoolWatch, backend) ? 'on' : 'off';
   return callWorker(
     network,
     'sync',
@@ -727,8 +751,9 @@ export const frostSignRound1InWorker = async (
   return callWorker('zcash', 'frost-sign-round1', { ephemeralSeedHex, keyPackageHex });
 };
 
-/** spend-authorize round 2: produce FROST share for each action */
+/** signed FROST share — wrapping is required for cross-party aggregator (poker-escrow) to extract the signer identifier */
 export const frostSpendSignInWorker = async (
+  ephemeralSeedHex: string,
   keyPackageHex: string,
   noncesHex: string,
   sighashHex: string,
@@ -736,7 +761,7 @@ export const frostSpendSignInWorker = async (
   commitments: string[],
 ): Promise<string> => {
   return callWorker('zcash', 'frost-spend-sign', {
-    keyPackageHex, noncesHex, sighashHex, alphaHex,
+    ephemeralSeedHex, keyPackageHex, noncesHex, sighashHex, alphaHex,
     commitments: JSON.stringify(commitments),
   });
 };

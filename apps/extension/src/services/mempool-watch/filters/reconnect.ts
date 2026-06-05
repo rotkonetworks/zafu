@@ -22,7 +22,9 @@ export interface ReconnectOptions {
   readonly initialDelayMs?: number;
   /** max retry delay in ms. default 60_000. */
   readonly maxDelayMs?: number;
-  /** max consecutive attempts before giving up (0 = unlimited). default 0. */
+  /** max consecutive attempts before giving up (0 = unlimited). default 100 —
+   *  prevents an infinite reconnect loop against a permanently dead endpoint
+   *  silently never surfacing a hard error to the UI / backend selector. */
   readonly maxAttempts?: number;
   /** sleep slice for abort responsiveness. default 250ms. */
   readonly stepMs?: number;
@@ -31,7 +33,7 @@ export interface ReconnectOptions {
 export const withReconnect = (opts: ReconnectOptions = {}): MempoolFilter => {
   const initialDelayMs = Math.max(0, opts.initialDelayMs ?? 500);
   const maxDelayMs = Math.max(initialDelayMs, opts.maxDelayMs ?? 60_000);
-  const maxAttempts = Math.max(0, opts.maxAttempts ?? 0);
+  const maxAttempts = Math.max(0, opts.maxAttempts ?? 100);
   const stepMs = Math.max(50, opts.stepMs ?? 250);
 
   return (inner: MempoolFetcher): MempoolFetcher =>

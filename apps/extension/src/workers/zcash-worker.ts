@@ -137,6 +137,17 @@ interface WalletState {
   syncAbort: boolean;
   notes: DecryptedNote[];
   spentNullifiers: Set<string>;
+  /**
+   * Abort controller for the mempool watcher task, when one is running.
+   * Lifted out of runSync's scope so stop-sync / reset-sync can abort the
+   * watcher directly without waiting for runSync's backoff to drain.
+   */
+  mempoolAbort?: AbortController;
+  /**
+   * Promise of the watcher's IIFE. waitForSyncStop awaits this alongside
+   * `syncing` so a follow-up runSync can't race a still-alive watcher.
+   */
+  mempoolTask?: Promise<void>;
 }
 
 interface WasmModule {
@@ -179,6 +190,7 @@ interface WasmModule {
   frost_sample_fvk_sk(): string;
   frost_derive_ufvk(public_key_package_hex: string, sk_hex: string, mainnet: boolean): string;
   frost_spend_sign_round2(key_package_hex: string, nonces_hex: string, sighash_hex: string, alpha_hex: string, commitments_json: string): string;
+  frost_spend_sign_round2_signed(ephemeral_seed_hex: string, key_package_hex: string, nonces_hex: string, sighash_hex: string, alpha_hex: string, commitments_json: string): string;
   frost_spend_aggregate(public_key_package_hex: string, sighash_hex: string, alpha_hex: string, commitments_json: string, shares_json: string): string;
   frost_parse_tx_outputs(unsigned_tx_hex: string, orchard_fvk_uview: string): string;
 
@@ -248,17 +260,39 @@ const patchBranchId = (buf: Uint8Array): void => {
   }
 };
 
-/** Wait for sync loop to stop after setting syncAbort=true. Polls state.syncing with 50ms interval, max 2s. */
-const waitForSyncStop = (state: WalletState, timeoutMs = 2000): Promise<void> => {
-  if (!state.syncing) return Promise.resolve();
-  return new Promise(resolve => {
-    const start = Date.now();
-    const check = () => {
-      if (!state.syncing || Date.now() - start > timeoutMs) resolve();
-      else setTimeout(check, 50);
-    };
-    check();
-  });
+/**
+ * Wait for both the sync loop AND the mempool watcher to stop after the
+ * caller has set syncAbort=true (or otherwise signaled shutdown). Polls
+ * state.syncing every 50ms up to timeoutMs, then explicitly awaits the
+ * watcher task if one was running — this matters because a freshly-spawned
+ * runSync race can otherwise have two watchers contending against the same
+ * walletId.
+ */
+const waitForSyncStop = async (state: WalletState, timeoutMs = 2000): Promise<void> => {
+  // Abort the watcher (idempotent) so any in-flight fetch / sleep wakes up.
+  state.mempoolAbort?.abort();
+
+  if (state.syncing) {
+    await new Promise<void>(resolve => {
+      const start = Date.now();
+      const check = () => {
+        if (!state.syncing || Date.now() - start > timeoutMs) resolve();
+        else setTimeout(check, 50);
+      };
+      check();
+    });
+  }
+  // Wait for the watcher's promise to settle so we know the IIFE finished.
+  // Bounded by the same timeout — if the watcher is wedged inside a fetch
+  // that ignored the signal, we still return after timeoutMs.
+  if (state.mempoolTask) {
+    await Promise.race([
+      state.mempoolTask.catch(() => undefined),
+      new Promise(resolve => setTimeout(resolve, timeoutMs)),
+    ]);
+    state.mempoolTask = undefined;
+    state.mempoolAbort = undefined;
+  }
 };
 
 const getOrCreateWalletState = (walletId: string): WalletState => {
@@ -1137,6 +1171,30 @@ const deriveAddress = (mnemonic: string, accountIndex: number): string => {
  * Wire-compatible with the previous inline implementation so the UI doesn't
  * need to change.
  */
+/**
+ * Cap on the number of actions we'll ever pack into a single trial-decrypt
+ * call. A single mempool tx is bounded by the consensus action limit
+ * (≪ 1000 in practice); a whole mempool snapshot stays well under 100k
+ * unless the server is hostile. Mirrors the DoS-hardening cap added for
+ * ur_decode_frames (staging 686d174).
+ */
+const MAX_MEMPOOL_ACTIONS = 100_000;
+
+/** Per-action wire layout the WASM trial-decrypt expects. */
+const ACTION_NULLIFIER_LEN = 32;
+const ACTION_CMX_LEN = 32;
+const ACTION_EPHEMERAL_KEY_LEN = 32;
+/**
+ * 52 bytes = compact note plaintext (ZIP-225 / NU5 Orchard):
+ *   0x02 (version) || d (11) || v (8) || rseed (32)
+ * The version byte is checked below — only 0x02 is supported until the
+ * wallet learns about future variants (e.g. Orchard-ZSA at NU7).
+ */
+const ACTION_COMPACT_CT_LEN = 52;
+const ORCHARD_NOTE_VERSION = 0x02;
+const ACTION_SIZE =
+  ACTION_NULLIFIER_LEN + ACTION_CMX_LEN + ACTION_EPHEMERAL_KEY_LEN + ACTION_COMPACT_CT_LEN;
+
 function handleMempoolSnapshot(
   walletId: string,
   state: WalletState,
@@ -1146,31 +1204,86 @@ function handleMempoolSnapshot(
 ): void {
   if (!state.keys) return;
 
-  let totalActions = 0;
-  for (const e of snap.entries) totalActions += e.actions.length;
-  if (totalActions === 0) return;
+  // Defensive: walk entries once to (a) bound work, (b) reject malformed
+  // actions explicitly rather than silently zero-padding a slot (which the
+  // WASM parser would happily accept as a garbage action). A hostile
+  // server can't get us to mis-align the buffer or run a multi-GB alloc.
+  type ValidAction = {
+    nullifier: Uint8Array;
+    cmx: Uint8Array;
+    ephemeralKey: Uint8Array;
+    ciphertext: Uint8Array; // first ACTION_COMPACT_CT_LEN bytes
+    txidHex: string;
+  };
+  const valid: ValidAction[] = [];
+  let rejected = 0;
 
-  const ACTION_SIZE = 32 + 32 + 32 + 52;
-  const mbuf = new Uint8Array(4 + totalActions * ACTION_SIZE);
+  for (const entry of snap.entries) {
+    const txidHex = hexEncode(entry.hash);
+    for (const a of entry.actions) {
+      const ok =
+        a.nullifier.length === ACTION_NULLIFIER_LEN &&
+        a.cmx.length === ACTION_CMX_LEN &&
+        a.ephemeralKey.length === ACTION_EPHEMERAL_KEY_LEN &&
+        a.ciphertext.length >= ACTION_COMPACT_CT_LEN &&
+        // Orchard compact-note version byte — refuse forward-compat plaintexts
+        // (e.g. NU7/ZSA) until explicit support lands. Refusing is the safe
+        // default; misinterpreting a different format would silently produce
+        // bogus matches.
+        a.ciphertext[0] === ORCHARD_NOTE_VERSION;
+
+      if (!ok) {
+        rejected += 1;
+        continue;
+      }
+      if (valid.length >= MAX_MEMPOOL_ACTIONS) {
+        // Hard stop — log once per snapshot, don't continue inspecting.
+        console.warn(
+          `[zcash-worker] mempool snapshot exceeded ${MAX_MEMPOOL_ACTIONS} actions; truncating`,
+        );
+        break;
+      }
+      valid.push({
+        nullifier: a.nullifier,
+        cmx: a.cmx,
+        ephemeralKey: a.ephemeralKey,
+        ciphertext: a.ciphertext.subarray(0, ACTION_COMPACT_CT_LEN),
+        txidHex,
+      });
+    }
+    if (valid.length >= MAX_MEMPOOL_ACTIONS) break;
+  }
+
+  if (rejected > 0) {
+    console.warn(`[zcash-worker] mempool: rejected ${rejected} malformed action(s)`);
+  }
+  if (valid.length === 0) return;
+
+  // Pack the validated actions into the binary layout the WASM parser
+  // consumes. Every slice write is guaranteed-sized; the offset advances
+  // by a constant per action, so a corrupted snapshot can't desync the
+  // stream.
+  const mbuf = new Uint8Array(4 + valid.length * ACTION_SIZE);
   const mview = new DataView(mbuf.buffer);
-  mview.setUint32(0, totalActions, true);
+  mview.setUint32(0, valid.length, true);
   let moff = 4;
 
   // map from nullifier-hex back to the txid that contains it
   const mempoolNullifiers = new Map<string, string>();
 
-  for (const entry of snap.entries) {
-    const txidHex = hexEncode(entry.hash);
-    for (const a of entry.actions) {
-      if (a.nullifier.length === 32) mbuf.set(a.nullifier, moff); moff += 32;
-      if (a.cmx.length === 32) mbuf.set(a.cmx, moff); moff += 32;
-      if (a.ephemeralKey.length === 32) mbuf.set(a.ephemeralKey, moff); moff += 32;
-      if (a.ciphertext.length >= 52) mbuf.set(a.ciphertext.subarray(0, 52), moff); moff += 52;
-      mempoolNullifiers.set(hexEncode(a.nullifier), txidHex);
-    }
+  for (const v of valid) {
+    mbuf.set(v.nullifier, moff); moff += ACTION_NULLIFIER_LEN;
+    mbuf.set(v.cmx, moff); moff += ACTION_CMX_LEN;
+    mbuf.set(v.ephemeralKey, moff); moff += ACTION_EPHEMERAL_KEY_LEN;
+    mbuf.set(v.ciphertext, moff); moff += ACTION_COMPACT_CT_LEN;
+    mempoolNullifiers.set(hexEncode(v.nullifier), v.txidHex);
   }
 
-  const pendingIncoming: Array<{ value: string; txid: string; isChange: boolean }> = [];
+  // `txid` on pendingIncoming is misleading — pre-confirmation we only have
+  // the note's cmx. The field carries that until the block scan can replace
+  // it with a real txid. UI consumers must treat it as an opaque identifier,
+  // not a transaction hash.
+  const pendingIncoming: Array<{ value: string; cmx: string; isChange: boolean }> = [];
   const pendingSpends: Array<{ nullifier: string; txid: string }> = [];
 
   try {
@@ -1178,7 +1291,7 @@ function handleMempoolSnapshot(
     for (const note of found) {
       pendingIncoming.push({
         value: note.value,
-        txid: note.cmx, // use cmx as identifier since no confirmed txid yet
+        cmx: note.cmx,
         isChange: note.is_change ?? false,
       });
     }
@@ -1215,10 +1328,11 @@ const runSync = async (
   backend: ZcashBackend = 'zidecar',
   mempoolWatch: 'off' | 'on' = 'off',
 ): Promise<void> => {
-  // Defensive belt-and-suspenders: lightwalletd cannot serve compact mempool
-  // actions, so the watcher would be a no-op anyway. Force off here so a buggy
-  // caller can't spawn a zombie task.
-  const effectiveMempoolWatch: 'off' | 'on' = backend === 'zidecar' ? mempoolWatch : 'off';
+  // Single-source-of-truth gate (services/mempool-watch/strategy). Replaces
+  // the four scattered re-implementations of the same `setting === 'on' &&
+  // backend === 'zidecar'` check.
+  const { isMempoolWatchEnabled } = await import('../services/mempool-watch/strategy');
+  const watcherEnabled = isMempoolWatchEnabled(mempoolWatch, backend);
   if (!wasmModule) throw new Error('wasm not initialized');
 
   const state = getOrCreateWalletState(walletId);
@@ -1316,11 +1430,15 @@ const runSync = async (
 
   // mempool watcher: only spawned when explicitly opted in AND on a zidecar
   // endpoint (lightwalletd has no compact-action mempool RPC, so the watcher
-  // would yield nothing). runs as a long-running task alongside the sync
-  // loop, paced by the strategy's own jittered + phase-aligned poll. shut
-  // down via the abort controller when sync stops.
-  const mempoolAbort = new AbortController();
-  if (effectiveMempoolWatch === 'on' && backend === 'zidecar') {
+  // would yield nothing). Lifecycle is owned by `state.mempoolAbort`/
+  // `state.mempoolTask` so stop-sync / reset-sync can abort the watcher
+  // directly, and waitForSyncStop can await the task before declaring the
+  // wallet idle. This avoids a class of races where a fresh runSync raced
+  // a still-alive watcher attached to the previous client.
+  state.mempoolAbort?.abort();
+  state.mempoolAbort = undefined;
+  state.mempoolTask = undefined;
+  if (watcherEnabled) {
     const [{ ZidecarClient: MempoolZidecarClient }, mempoolMod, strategyMod] = await Promise.all([
       import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client'),
       import('../services/mempool-watch/zidecar-mempool-fetcher'),
@@ -1329,22 +1447,38 @@ const runSync = async (
     const mempoolClient = new MempoolZidecarClient(serverUrl);
     const base = mempoolMod.zidecarMempoolFetcher(mempoolClient);
     const fetcher = strategyMod.buildStrategy('on', { base });
+    const localAbort = new AbortController();
+    state.mempoolAbort = localAbort;
 
-    void (async () => {
+    state.mempoolTask = (async () => {
       try {
         for await (const snap of fetcher(walletId, {
-          signal: mempoolAbort.signal,
+          signal: localAbort.signal,
           onStatus: (st) => {
             workerSelf.postMessage({
               type: 'mempool-status', id: '', network: 'zcash', walletId, payload: st,
             });
           },
         })) {
-          if (mempoolAbort.signal.aborted || !state.keys) break;
+          // Recheck state.keys per-iteration: reset-sync can free keys
+          // while we're between yields. Without this, handleMempoolSnapshot
+          // would run scan_actions_parallel on a freed WASM object.
+          if (localAbort.signal.aborted || !state.keys) break;
           handleMempoolSnapshot(walletId, state, snap);
         }
       } catch (err) {
         console.warn('[zcash-worker] mempool watcher exited:', err);
+        // Surface terminal error to UI so the toggle/status badge stops
+        // claiming "connected" / "reconnecting" when the watcher is dead.
+        workerSelf.postMessage({
+          type: 'mempool-status', id: '', network: 'zcash', walletId,
+          payload: { kind: 'error', error: err instanceof Error ? err.message : String(err) },
+        });
+      } finally {
+        // Disconnect state on natural exit so a follow-up runSync starts clean.
+        if (state.mempoolAbort === localAbort) {
+          state.mempoolAbort = undefined;
+        }
       }
     })();
   }
@@ -1652,7 +1786,10 @@ const runSync = async (
   }
 
   state.syncing = false;
-  mempoolAbort.abort();
+  // mempool watcher lifecycle is owned by state.mempoolAbort; abort here
+  // so the watcher tears down even if the sync loop exits via a path that
+  // skips waitForSyncStop. Safe to call repeatedly.
+  state.mempoolAbort?.abort();
   console.log(`[zcash-worker] sync stopped wallet=${walletId}`);
 };
 
@@ -1699,13 +1836,24 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           backend?: ZcashBackend;
           mempoolWatch?: 'off' | 'on';
         };
-        // Defensive: validate enum values from cross-context payload. Defaults
-        // are conservative — unknown backend → 'zidecar' (the safe assumption
-        // for rotko-shipped endpoints), unknown mempoolWatch → 'off'.
-        const effectiveBackend: ZcashBackend =
-          backend === 'lightwalletd' ? 'lightwalletd' : 'zidecar';
+        // Defensive: validate enum values from cross-context payload.
+        // Silent coercion of an unknown backend to 'zidecar' is a privacy
+        // regression — a user configured to talk to a third-party
+        // lightwalletd would end up hitting the trustless code path (with
+        // its zidecar-only RPCs) and either fail loudly OR, worse, succeed
+        // against a server that happens to implement those endpoints with
+        // a different trust model. Reject unknown explicitly.
+        if (backend !== undefined && backend !== 'zidecar' && backend !== 'lightwalletd') {
+          throw new Error(`unknown zcash backend in sync payload: ${String(backend)}`);
+        }
+        if (mempoolWatch !== undefined && mempoolWatch !== 'off' && mempoolWatch !== 'on') {
+          throw new Error(`unknown mempoolWatch in sync payload: ${String(mempoolWatch)}`);
+        }
+        const effectiveBackend: ZcashBackend = backend ?? 'zidecar';
+        // Gate goes through the single helper so all layers see the same answer.
+        const { isMempoolWatchEnabled } = await import('../services/mempool-watch/strategy');
         const effectiveMempoolWatch: 'off' | 'on' =
-          mempoolWatch === 'on' && effectiveBackend === 'zidecar' ? 'on' : 'off';
+          isMempoolWatchEnabled(mempoolWatch, effectiveBackend) ? 'on' : 'off';
         // Seed the registry so subsequent operations (send, history, memo
         // fetch) construct the right client without re-receiving backend.
         registerBackend(serverUrl, effectiveBackend);
@@ -1720,7 +1868,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       case 'stop-sync': {
         if (!walletId) throw new Error('walletId required');
         const state = walletStates.get(walletId);
-        if (state) state.syncAbort = true;
+        if (state) {
+          state.syncAbort = true;
+          // Abort the mempool watcher directly. Without this, the watcher
+          // keeps polling for up to one full sync-loop backoff (≈30s) after
+          // stop-sync returns.
+          state.mempoolAbort?.abort();
+        }
         workerSelf.postMessage({ type: 'sync-stopped', id, network: 'zcash', walletId });
         return;
       }
@@ -1730,6 +1884,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const resetState = walletStates.get(walletId);
         if (resetState) {
           resetState.syncAbort = true;
+          resetState.mempoolAbort?.abort();
           if (resetState.keys) { resetState.keys.free(); resetState.keys = null; }
         }
         await waitForSyncStop(resetState ?? getOrCreateWalletState(walletId));
@@ -3133,10 +3288,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
       case 'frost-spend-sign': {
         await initWasm();
-        const { keyPackageHex, noncesHex, sighashHex, alphaHex, commitments } = payload as {
-          keyPackageHex: string; noncesHex: string; sighashHex: string; alphaHex: string; commitments: string;
+        const { ephemeralSeedHex, keyPackageHex, noncesHex, sighashHex, alphaHex, commitments } = payload as {
+          ephemeralSeedHex: string; keyPackageHex: string; noncesHex: string; sighashHex: string; alphaHex: string; commitments: string;
         };
-        const result = wasmModule!.frost_spend_sign_round2(keyPackageHex, noncesHex, sighashHex, alphaHex, commitments);
+        // signed variant — coordinator (zafu/poker-escrow) extracts signer identifier from VK
+        const result = wasmModule!.frost_spend_sign_round2_signed(
+          ephemeralSeedHex, keyPackageHex, noncesHex, sighashHex, alphaHex, commitments,
+        );
         workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: result });
         return;
       }

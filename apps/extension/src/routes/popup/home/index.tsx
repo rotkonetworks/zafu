@@ -68,7 +68,9 @@ const MultisigOverview = () => {
   const [balances, setBalances] = useState<Record<string, bigint>>({});
 
   const multisigWallets = useMemo(
-    () => zcashWallets.filter(w => w.multisig).map(w => ({ ...w, originalIndex: zcashWallets.indexOf(w) })),
+    () => zcashWallets
+      .filter(w => w.multisig && !w.multisig.hidden)
+      .map(w => ({ ...w, originalIndex: zcashWallets.indexOf(w) })),
     [zcashWallets],
   );
 
