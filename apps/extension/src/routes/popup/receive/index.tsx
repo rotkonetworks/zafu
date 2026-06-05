@@ -851,9 +851,17 @@ function ReceiveTab({ address, loading, activeNetwork }: {
           {displayAddress && (
             <button
               onClick={copyAddress}
-              className='shrink-0 text-fg-muted transition-colors hover:text-fg-high'
+              className='flex shrink-0 items-center gap-1 text-fg-muted transition-colors hover:text-fg-high'
+              title={copied ? 'copied to clipboard' : 'copy address'}
             >
-              {copied ? <span className='i-lucide-check h-4 w-4' /> : <span className='i-lucide-copy h-4 w-4' />}
+              {copied ? (
+                <>
+                  <span className='i-lucide-check h-4 w-4' />
+                  <span className='text-[10px] lowercase tracking-[0.04em]'>copied</span>
+                </>
+              ) : (
+                <span className='i-lucide-copy h-4 w-4' />
+              )}
             </button>
           )}
         </div>
