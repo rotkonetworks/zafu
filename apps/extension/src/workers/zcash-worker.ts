@@ -148,7 +148,7 @@ interface WasmModule {
   };
   build_shielding_transaction(utxos_json: string, privkey_hex: string, recipient: string, amount: bigint, fee: bigint, anchor_height: number, mainnet: boolean): string;
   build_unsigned_transaction(ufvk_str: string, notes_json: unknown, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: unknown, account_index: number, mainnet: boolean, memo_hex?: string | null): unknown;
-  build_signed_spend_transaction(seed_phrase: string, notes_json: unknown, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: unknown, account_index: number, mainnet: boolean): string;
+  build_signed_spend_transaction(seed_phrase: string, notes_json: unknown, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: unknown, account_index: number, mainnet: boolean, memo_hex?: string | null): string;
   complete_transaction(unsigned_tx_hex: string, signatures: unknown, spend_indices: unknown): string;
   // PCZT signing flow (replaces simple-format sighash+alphas QR for single-signer zigner)
   build_unsigned_pczt(ufvk_str: string, notes_json: unknown, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: unknown, target_height: number, mainnet: boolean, memo_hex?: string | null): unknown;
@@ -1402,6 +1402,21 @@ const runSync = async (
       console.log(`[zcash-worker] blocks ${currentHeight + 1}..${endHeight}`);
       const blocks = await client.getCompactBlocks(currentHeight + 1, endHeight);
 
+      // Guard: lightwalletd may race between getTip() and block indexing — if the
+      // server reported a height but returned zero blocks, don't advance currentHeight.
+      // The next iteration will retry once the server catches up.
+      if (blocks.length === 0) {
+        consecutiveErrors++;
+        console.warn(`[zcash-worker] getCompactBlocks(${currentHeight + 1}..${endHeight}) returned 0 blocks, retrying`);
+        const backoff = Math.min(30000, 1000 * Math.pow(2, consecutiveErrors - 1));
+        await new Promise(r => setTimeout(r, backoff));
+        if (consecutiveErrors >= 10) {
+          console.error('[zcash-worker] too many errors, stopping sync');
+          break;
+        }
+        continue;
+      }
+
       // single-pass: count actions, build lookups, pack binary buffer, and compute
       // actions commitment all in one iteration over blocks
       const cmxToTxid = new Map<string, string>();
@@ -1958,12 +1973,16 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         // build maps for sent amount calculation
         const histTxMap = new Map<string, { height: number; position: number; changeValue: bigint; receiveValue: bigint; isChange: boolean }>();
-        const histSpentByMap = new Map<string, bigint>();
+        // value + height (spent_at_height) so no-change sends still get a correct height
+        const histSpentByMap = new Map<string, { value: bigint; height: number }>();
 
         for (const note of histNotes) {
           if (note.spent && note.spent_by_txid) {
-            const prev = histSpentByMap.get(note.spent_by_txid) ?? 0n;
-            histSpentByMap.set(note.spent_by_txid, prev + BigInt(note.value));
+            const prev = histSpentByMap.get(note.spent_by_txid) ?? { value: 0n, height: 0 };
+            histSpentByMap.set(note.spent_by_txid, {
+              value: prev.value + BigInt(note.value),
+              height: Math.max(prev.height, note.spent_at_height ?? 0),
+            });
           }
 
           const existing = histTxMap.get(note.txid);
@@ -1992,7 +2011,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           const isSend = info.isChange;
           let amount: bigint;
           if (isSend) {
-            const inputTotal = histSpentByMap.get(txid) ?? 0n;
+            const spent = histSpentByMap.get(txid);
+            const inputTotal = spent?.value ?? 0n;
             if (inputTotal > 0n) {
               amount = inputTotal - info.changeValue;
             } else {
@@ -2008,6 +2028,20 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             amount: amount.toString(),
             asset: 'ZEC',
           });
+        }
+
+        // Sends with no change note (full-balance spends): histSpentByMap has an entry
+        // but histTxMap does not (no note was created for the sender). Emit them here.
+        for (const [txid, { value: inputTotal, height: spentHeight }] of histSpentByMap) {
+          if (!histTxMap.has(txid)) {
+            histTxs.push({
+              id: txid,
+              height: spentHeight,
+              type: 'send',
+              amount: inputTotal.toString(),
+              asset: 'ZEC',
+            });
+          }
         }
 
         // merge transparent history
