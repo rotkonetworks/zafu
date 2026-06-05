@@ -388,6 +388,7 @@ const NetworkContent = ({
 
 /** penumbra-specific content - balance card + sync bar + account picker + assets */
 const PenumbraContent = ({ account, onAccountChange }: { account: number; onAccountChange: (n: number) => void }) => {
+  const navigate = useNavigate();
   const { latestBlockHeight, fullSyncHeight, error } = useSyncProgress();
 
   const isSyncing = (latestBlockHeight ?? 0) - (fullSyncHeight ?? 0) > 10;
@@ -456,6 +457,14 @@ const PenumbraContent = ({ account, onAccountChange }: { account: number; onAcco
           percent={syncPct}
           label={syncLabel}
           error={error ? String(error) : undefined}
+          // Same recovery affordance as Zcash: a sync error gets a
+          // one-tap link to the network picker so a new user whose
+          // Penumbra grpc endpoint is unreachable doesn't have to
+          // hunt through settings to switch.
+          errorAction={error ? {
+            label: 'switch endpoint',
+            onClick: () => navigate(PopupPath.SETTINGS_NETWORKS),
+          } : undefined}
           barColor='bg-penumbra-purple'
           barDoneColor='bg-penumbra-teal'
         />
