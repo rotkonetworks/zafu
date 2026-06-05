@@ -937,6 +937,14 @@ const ZcashContent = ({
                       ? 'nomt verified'
                       : 'verifying nomt...'}
           error={syncError?.message}
+          // When the default node is unreachable, a new user sees only a
+          // red 'Failed to fetch' with no path forward. Giving them a
+          // one-tap link to the network picker (where the preset list of
+          // alternative LWDs lives) turns a dead-end into a recovery.
+          errorAction={syncError ? {
+            label: 'switch node',
+            onClick: () => navigate(PopupPath.SETTINGS_NETWORKS),
+          } : undefined}
           barColor={scanPct > 0 ? 'bg-zigner-gold' : ligeritoPct > 0 ? 'bg-zigner-gold' : 'bg-fg-muted/30'}
           barDoneColor='bg-zigner-gold'
           currentHeight={workerSyncHeight}
