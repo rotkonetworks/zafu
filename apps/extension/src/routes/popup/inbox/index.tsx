@@ -985,19 +985,27 @@ export function InboxPage() {
         </button>
       </div>
 
-      {/* search */}
-      <div className='px-4 py-3'>
-        <div className='relative'>
-          <span className='i-lucide-search absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-fg-muted' />
-          <input
-            type='text'
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder={tab === 'conversations' ? 'search conversations...' : 'search messages...'}
-            className='w-full rounded-lg border border-border-soft bg-input pl-9 pr-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
-          />
+      {/* search — hidden when the underlying collection is empty.
+          A new user with zero conversations shouldn't see a
+          'search conversations...' bar inviting them to search
+          across nothing. Once anything lands in the inbox, the
+          bar appears. */}
+      {(tab === 'conversations'
+          ? conversations.length > 0
+          : flatMessages.length > 0 || search.length > 0) && (
+        <div className='px-4 py-3'>
+          <div className='relative'>
+            <span className='i-lucide-search absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-fg-muted' />
+            <input
+              type='text'
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder={tab === 'conversations' ? 'search conversations...' : 'search messages...'}
+              className='w-full rounded-lg border border-border-soft bg-input pl-9 pr-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* content */}
       <div className='flex-1 overflow-y-auto px-4 pb-4'>
