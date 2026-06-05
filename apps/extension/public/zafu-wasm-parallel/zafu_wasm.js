@@ -726,6 +726,38 @@ export function complete_transaction(unsigned_tx_hex, signatures_json, spend_ind
 }
 
 /**
+ * Canonical ZIP-244 txid for a raw signed v5 transaction.
+ *
+ * Public lightwalletd's `SendResponse` carries no txid, so the wallet derives
+ * it locally instead of trusting the server to echo it. This is the same value
+ * zidecar computes server-side and the same bytes that appear as
+ * `CompactTx.hash` during sync — returned as lowercase hex in internal/wire
+ * byte order so the outgoing record reconciles on the next scan.
+ * @param {string} tx_hex
+ * @returns {string}
+ */
+export function compute_txid(tx_hex) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(tx_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.compute_txid(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
  * Create a PCZT sign request from transaction parameters
  * This is called by the online wallet to create the data that will be
  * transferred to the cold wallet via QR code.
