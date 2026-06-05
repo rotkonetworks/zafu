@@ -297,12 +297,8 @@ export const PopupIndex = () => {
             </div>
           </div>
 
-          {/* Keplr-style stacked action buttons — icon on top, tiny
-              label below. More discoverable than pure-icon for new
-              users while staying compact (each button is 56×56 vs the
-              previous 40×40 unlabeled). The send button keeps its
-              network-accent color treatment so the primary action
-              still stands out. */}
+          {/* Fixed 40×40 icon-only action buttons. Send keeps
+              network-accent so the primary action stands out. */}
           <div className='flex gap-1.5'>
             <ActionButton
               icon='i-lucide-arrow-down'
@@ -1109,7 +1105,7 @@ const ActionButton = ({
     onClick={onClick}
     title={label}
     className={cn(
-      'flex h-[52px] flex-1 flex-col items-center justify-center gap-1 transition-colors',
+      'flex h-[52px] w-14 flex-col items-center justify-center gap-1 transition-colors',
       variant === 'default' && 'bg-elev-2 text-fg hover:bg-elev-1/80 hover:text-fg-high',
       variant === 'zcash' && 'bg-zigner-gold text-zigner-dark hover:bg-primary/90',
       variant === 'penumbra' && 'bg-penumbra-purple text-white hover:bg-penumbra-purple-dark',
