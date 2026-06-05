@@ -375,14 +375,14 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
 
           {/* deposit address info */}
           <div className='mb-3'>
-            <div className='mb-1 flex items-center gap-1.5 text-xs text-fg-muted'>
+            <div className='mb-1 flex items-center gap-1.5 text-xs text-fg-muted lowercase'>
               <span>sending to</span>
-              <span className='font-medium text-fg'>{penumbraAccount === 0 ? 'Main Account' : `Sub-Account #${penumbraAccount}`}</span>
+              <span className='font-medium text-fg'>{penumbraAccount === 0 ? 'main account' : `sub-account #${penumbraAccount}`}</span>
               <span>(ephemeral)</span>
             </div>
-            <p className='text-xs text-fg-muted'>
-              The destination address is visible in plaintext on the source chain.
-              This ephemeral address is unlinkable to your main address — source chain observers cannot correlate your deposits.{' '}
+            <p className='text-xs text-fg-muted lowercase'>
+              the destination address is visible in plaintext on the source chain.
+              this ephemeral address is unlinkable to your main address — source chain observers cannot correlate your deposits.{' '}
               {depositAddress && (
                 <button
                   onClick={() => {
@@ -392,7 +392,7 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
                   }}
                   className='text-fg underline'
                 >
-                  {depositCopied ? 'copied!' : 'Copy address'}
+                  {depositCopied ? 'copied' : 'copy address'}
                 </button>
               )}
             </p>
@@ -401,7 +401,7 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
           {/* transaction status */}
           {txStatus === 'success' && (
             <div className='mb-3 rounded-lg border border-green-500/40 bg-green-500/10 p-3'>
-              <p className='text-sm text-green-400'>shielding transfer sent!</p>
+              <p className='text-sm text-green-400 lowercase'>shielding transfer sent</p>
               <p className='text-xs text-fg-muted mt-1 font-mono break-all'>{txHash}</p>
               <button onClick={handleReset} className='mt-2 text-xs text-green-400 underline'>
                 send another
@@ -424,9 +424,9 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
             <button
               onClick={handleShield}
               disabled={!canSubmit}
-              className='w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
+              className='w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark lowercase tracking-[0.02em] hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
             >
-              {txStatus === 'signing' ? 'shielding...' : 'Shield Assets'}
+              {txStatus === 'signing' ? 'shielding...' : 'shield assets'}
             </button>
           )}
         </>
