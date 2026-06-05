@@ -659,32 +659,30 @@ const getTreeFrontier = async (walletId: string): Promise<string | null> => {
   return r?.value ?? null;
 };
 
+/** height the cached frontier (and thus every stored note witness) is rooted at */
+const getTreeFrontierHeight = async (walletId: string): Promise<number> => {
+  const r = await idbGet<{ value: number }>('meta', [walletId, 'orchardTreeFrontierHeight']);
+  return r?.value ?? 0;
+};
+
+/**
+ * Orchard anchor height for a spend: the cached sync frontier height — the
+ * exact height our note witnesses are rooted at. The witness machinery only
+ * fast-forwards, never rewinds, so anchoring anywhere else (the live tip, or
+ * tip−N) leaves the witness root pinned at the frontier while the cross-check
+ * fetches the network root at the anchor, and the two disagree — the "tree
+ * root mismatch at height N" failure. A frontier we've synced past is a valid
+ * historical Orchard anchor regardless of how far behind the tip it sits.
+ * Falls back to the tip only for a fresh wallet with no cached frontier.
+ */
+const resolveAnchorHeight = async (walletId: string, tipHeight: number): Promise<number> => {
+  const frontierHeight = await getTreeFrontierHeight(walletId);
+  return frontierHeight > 0 ? frontierHeight : tipHeight;
+};
+
 /** periodic frontier snapshots for privacy-safe witness building.
  *  stored as array of {height, frontier} in IDB, one per SNAPSHOT_INTERVAL blocks. */
 const FRONTIER_SNAPSHOT_INTERVAL = 5_000;
-
-/**
- * Confirmation depth between the live chain tip and the Orchard anchor we
- * build witnesses against.
- *
- * Anchoring at the *live tip* was the root cause of the "tree root mismatch
- * at height N" merkle failures seen on hardware: the witness fast-forward
- * (`getCompactBlocks`), the anchor validation (`getTreeState`), and the
- * initial `getTip` are three unsynchronized RPCs to a zidecar that may be
- * load-balanced across replicas at slightly different sync heights, and the
- * tip is exactly the height where replicas diverge and where reorgs happen.
- * Pulling the anchor a few blocks back puts it in the region every replica
- * has agreed on and that is effectively final, so the cross-check at
- * `getTreeState(anchorHeight)` is stable. Orchard anchors are historical
- * roots with no max-age constraint, so a slightly-behind anchor is fully
- * valid - the spent note is confirmed long before the tip regardless.
- *
- * Note: this is the *anchor* depth only. The transaction `target_height`
- * (which drives consensus branch-id and expiry) stays at the live tip,
- * since the tx will be mined near the tip - those two heights are
- * deliberately decoupled.
- */
-const ANCHOR_CONFIRMATIONS = 3;
 
 interface FrontierSnapshot { height: number; frontier: string }
 
@@ -991,6 +989,19 @@ const backfillWitnesses = async (
   const checkpointSize = Number(wasmModule.frontier_tree_size(frontierHex));
   const endTreeSize = checkpointSize + totalActions;
 
+  // DEBUG (tree-root-mismatch investigation): does the replay reconstruct the
+  // same tree the network reports at anchorHeight? If replayRoot !== network,
+  // the snapshot-seed → compact-block replay is the culprit, not the anchor.
+  try {
+    const netRoot = wasmModule.tree_root_hex((await client.getTreeState(anchorHeight)).orchardTree);
+    const match = result.anchor_hex === netRoot ? 'OK' : 'MISMATCH';
+    console.log(
+      `[zcash-worker] backfill replay check [${match}]: seed=${frontierHeight}(size ${checkpointSize}) → anchor=${anchorHeight}(size ${endTreeSize}, +${totalActions} actions) replayRoot=${result.anchor_hex} network=${netRoot}`,
+    );
+  } catch (e) {
+    console.warn('[zcash-worker] backfill replay check skipped:', e);
+  }
+
   const byPosition = new Map(result.entries.map(e => [e.position, e]));
   const byNullifier = new Map<string, { witness_hex: string; tree_size: number }>();
   const updatedNotes: DecryptedNote[] = [];
@@ -1061,7 +1072,9 @@ const buildWitnesses = async (
   // size (i.e. frontierSize). If any lag, rebootstrap from network.
   const witnessTreeSize = notes[0]!.witness_tree_size ?? -1;
   const witnessesAligned = notes.every(n => n.witness_tree_size === witnessTreeSize);
+  let rebootstrapped = false;
   if (!runningFrontier || frontierSize !== witnessTreeSize || !witnessesAligned) {
+    rebootstrapped = true;
     console.log(
       `[zcash-worker] frontier mismatch (frontierSize=${frontierSize}, witnessTreeSize=${witnessTreeSize}, aligned=${witnessesAligned}); rebootstrapping via full backfill`,
     );
@@ -1140,7 +1153,8 @@ const buildWitnesses = async (
     };
     if (parsed.root_hex !== networkRoot) {
       console.error(
-        `[zcash-worker] witness root mismatch: note=${note.nullifier.slice(0, 8)} ours=${parsed.root_hex} network=${networkRoot}`,
+        `[zcash-worker] witness root mismatch: note=${note.nullifier.slice(0, 8)} ours=${parsed.root_hex} network=${networkRoot} ` +
+        `(anchor=${anchorHeight}, frontierHeight=${runningFrontierHeight}, rebootstrapped=${rebootstrapped})`,
       );
       throw new Error(`tree root mismatch at height ${anchorHeight}`);
     }
@@ -1951,7 +1965,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           return;
         }
 
-        const anchorHeight = Math.max(...unspent.map(n => n.height));
+        // anchor where the witnesses are rooted (cached frontier), not at the
+        // newest note's height — otherwise the cross-check root won't match.
+        const anchorHeight = await resolveAnchorHeight(walletId, Math.max(...unspent.map(n => n.height)));
 
         // build merkle witnesses
         const client = {
@@ -2517,11 +2533,12 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         emitProgress('fetching chain tip');
         const sendTip = await sendClient.getTip();
 
-        emitProgress('building merkle witnesses', `anchor=${sendTip.height}`);
+        const anchorHeight = await resolveAnchorHeight(walletId, sendTip.height);
+        emitProgress('building merkle witnesses', `anchor=${anchorHeight} (tip=${sendTip.height})`);
         const witnessStart = performance.now();
 
         const { anchorHex, paths } = await buildWitnesses(
-          sendClient, walletId, selected, sendTip.height,
+          sendClient, walletId, selected, anchorHeight,
         );
 
         const witnessDuration = ((performance.now() - witnessStart) / 1000).toFixed(1);
@@ -2764,11 +2781,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const sendClient = await makeZcashClient(sendPayload.serverUrl);
         emitProgress('fetching chain tip');
         const sendTip = await sendClient.getTip();
-        // Anchor a few blocks behind the tip (see ANCHOR_CONFIRMATIONS) so
-        // the witness/anchor cross-check is stable across zidecar replica
-        // skew and immune to tip reorgs. target_height stays at the live
-        // tip for branch_id/expiry correctness.
-        const anchorHeight = Math.max(1, sendTip.height - ANCHOR_CONFIRMATIONS);
+        // Anchor at the cached frontier height (where our witnesses are
+        // rooted); target_height stays at the live tip for branch_id/expiry.
+        const anchorHeight = await resolveAnchorHeight(walletId, sendTip.height);
         emitProgress('building merkle witnesses', `anchor=${anchorHeight} (tip=${sendTip.height})`);
         const { anchorHex, paths } = await buildWitnesses(sendClient, walletId, selected, anchorHeight);
 
@@ -2973,9 +2988,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           const multiClient = await makeZcashClient(multiPayload.serverUrl);
           const multiTip = await multiClient.getTip();
 
-          emitMultiProgress(`output ${outputIdx + 1}: building witnesses`);
+          const multiAnchorHeight = await resolveAnchorHeight(walletId, multiTip.height);
+          emitMultiProgress(`output ${outputIdx + 1}: building witnesses`, `anchor=${multiAnchorHeight} (tip=${multiTip.height})`);
           const { anchorHex: multiAnchor, paths: multiPaths } = await buildWitnesses(
-            multiClient, walletId, selected, multiTip.height,
+            multiClient, walletId, selected, multiAnchorHeight,
           );
 
           // build note data for WASM
