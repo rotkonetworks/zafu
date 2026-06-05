@@ -1331,7 +1331,7 @@ const runSync = async (
   // Single-source-of-truth gate (services/mempool-watch/strategy). Replaces
   // the four scattered re-implementations of the same `setting === 'on' &&
   // backend === 'zidecar'` check.
-  const { isMempoolWatchEnabled } = await import('../services/mempool-watch/strategy');
+  const { isMempoolWatchEnabled } = await import(/* webpackMode: "eager" */ '../services/mempool-watch/strategy');
   const watcherEnabled = isMempoolWatchEnabled(mempoolWatch, backend);
   if (!wasmModule) throw new Error('wasm not initialized');
 
@@ -1851,7 +1851,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         }
         const effectiveBackend: ZcashBackend = backend ?? 'zidecar';
         // Gate goes through the single helper so all layers see the same answer.
-        const { isMempoolWatchEnabled } = await import('../services/mempool-watch/strategy');
+        const { isMempoolWatchEnabled } = await import(/* webpackMode: "eager" */ '../services/mempool-watch/strategy');
         const effectiveMempoolWatch: 'off' | 'on' =
           isMempoolWatchEnabled(mempoolWatch, effectiveBackend) ? 'on' : 'off';
         // Seed the registry so subsequent operations (send, history, memo
