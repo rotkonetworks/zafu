@@ -1,12 +1,16 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { SettingsScreen } from './settings-screen';
 import { useStore } from '../../../state';
 import { networksSelector, type NetworkConfig, type NetworkId } from '../../../state/networks';
+import { CURATED_ZCASH_ENDPOINTS, type CuratedEndpoint } from '../../../state/keyring/endpoint-registry';
+import { measureCuratedLatencies, type EndpointLatency } from '../../../state/keyring/endpoint-latency';
 
 export const SettingsNetworkEndpoints = () => {
   const { networks, setNetworkEndpoint } = useStore(networksSelector);
   const [saving, setSaving] = useState<string | null>(null);
   const [editingEndpoints, setEditingEndpoints] = useState<Record<string, string>>({});
+  const [testing, setTesting] = useState(false);
+  const [latencies, setLatencies] = useState<EndpointLatency[] | null>(null);
 
   const handleSave = async (networkId: NetworkId) => {
     const newEndpoint = editingEndpoints[networkId];
@@ -15,7 +19,6 @@ export const SettingsNetworkEndpoints = () => {
     setSaving(networkId);
     try {
       await setNetworkEndpoint(networkId, newEndpoint);
-      // Clear editing state after save
       setEditingEndpoints(prev => {
         const next = { ...prev };
         delete next[networkId];
@@ -25,6 +28,35 @@ export const SettingsNetworkEndpoints = () => {
       setSaving(null);
     }
   };
+
+  const handleTestLatencies = async () => {
+    setTesting(true);
+    try {
+      const results = await measureCuratedLatencies();
+      setLatencies(results);
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const latencyByUrl = useMemo(() => {
+    const m = new Map<string, EndpointLatency>();
+    latencies?.forEach(l => m.set(l.url, l));
+    return m;
+  }, [latencies]);
+
+  // Sort curated by RTT once measured; default order otherwise.
+  const sortedCurated: ReadonlyArray<CuratedEndpoint> = useMemo(() => {
+    if (!latencies) return CURATED_ZCASH_ENDPOINTS;
+    return [...CURATED_ZCASH_ENDPOINTS].sort((a, b) => {
+      const la = latencyByUrl.get(a.url)?.rttMs;
+      const lb = latencyByUrl.get(b.url)?.rttMs;
+      if (la == null && lb == null) return 0;
+      if (la == null) return 1;
+      if (lb == null) return -1;
+      return la - lb;
+    });
+  }, [latencies, latencyByUrl]);
 
   const enabledNetworks: NetworkConfig[] = Object.values(networks).filter((n): n is NetworkConfig => n.enabled);
 
@@ -49,6 +81,51 @@ export const SettingsNetworkEndpoints = () => {
                 </label>
                 <span className="text-xs text-fg-muted">{network.symbol}</span>
               </div>
+
+              {network.id === 'zcash' && (
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-fg-muted">Curated endpoints</span>
+                    <button
+                      onClick={handleTestLatencies}
+                      disabled={testing}
+                      className="text-xs text-zigner-gold hover:underline disabled:opacity-50"
+                    >
+                      {testing ? 'testing...' : latencies ? 'retest' : 'test latencies'}
+                    </button>
+                  </div>
+                  {sortedCurated.map(ep => {
+                    const lat = latencyByUrl.get(ep.url);
+                    const isCurrent = (editingEndpoints[network.id] ?? network.endpoint) === ep.url;
+                    return (
+                      <button
+                        key={ep.url}
+                        type="button"
+                        onClick={() => setEditingEndpoints(prev => ({ ...prev, [network.id]: ep.url }))}
+                        className={`flex items-center justify-between text-left rounded-lg border bg-input px-3 py-2 text-sm transition-colors hover:border-zigner-gold ${
+                          isCurrent ? 'border-zigner-gold' : 'border-border-soft'
+                        }`}
+                      >
+                        <div className="flex flex-col">
+                          <span className="text-sm">{ep.label}</span>
+                          <span className="text-xs text-fg-muted">{ep.url}</span>
+                        </div>
+                        <div className="flex flex-col items-end gap-0.5">
+                          <span className={`text-xs ${ep.backend === 'zidecar' ? 'text-green-400' : 'text-amber-400'}`}>
+                            {ep.backend === 'zidecar' ? 'trustless' : 'trusted'}
+                          </span>
+                          {lat && (
+                            <span className={`text-xs ${lat.rttMs === null ? 'text-red-400' : 'text-fg-muted'}`}>
+                              {lat.rttMs === null ? 'unreachable' : `${lat.rttMs}ms`}
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -87,7 +164,6 @@ export const SettingsNetworkEndpoints = () => {
           <div className="mt-4 border-t border-border-soft pt-4">
             <h3 className="text-sm font-medium mb-2">Default Endpoints</h3>
             <div className="text-xs text-fg-muted space-y-1">
-              {networks.zcash?.enabled && <p><strong>Zcash:</strong> https://zcash.rotko.net (zidecar)</p>}
               {networks.penumbra?.enabled && <p><strong>Penumbra:</strong> https://penumbra.rotko.net</p>}
               {networks.polkadot?.enabled && <p><strong>Polkadot:</strong> wss://rpc.polkadot.io (light client)</p>}
               {networks.ethereum?.enabled && <p><strong>Ethereum:</strong> https://eth.llamarpc.com</p>}
