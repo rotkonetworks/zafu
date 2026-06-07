@@ -22,7 +22,12 @@ export const sendBackground = async (
       error instanceof TypeError
         ? PenumbraRequestFailure.BadResponse
         : PenumbraRequestFailure.NotHandled;
-    console.error(error, { fallback, request, error });
+    const isExpected =
+      error instanceof Error &&
+      /Could not establish connection|Receiving end does not exist/.test(error.message);
+    if (!isExpected) {
+      console.error(error, { fallback, request, error });
+    }
     return fallback;
   }
 };
