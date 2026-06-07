@@ -375,14 +375,14 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
 
           {/* deposit address info */}
           <div className='mb-3'>
-            <div className='mb-1 flex items-center gap-1.5 text-xs text-fg-muted'>
+            <div className='mb-1 flex items-center gap-1.5 text-xs text-fg-muted lowercase'>
               <span>sending to</span>
-              <span className='font-medium text-fg'>{penumbraAccount === 0 ? 'Main Account' : `Sub-Account #${penumbraAccount}`}</span>
+              <span className='font-medium text-fg'>{penumbraAccount === 0 ? 'main account' : `sub-account #${penumbraAccount}`}</span>
               <span>(ephemeral)</span>
             </div>
-            <p className='text-xs text-fg-muted'>
-              The destination address is visible in plaintext on the source chain.
-              This ephemeral address is unlinkable to your main address — source chain observers cannot correlate your deposits.{' '}
+            <p className='text-xs text-fg-muted lowercase'>
+              the destination address is visible in plaintext on the source chain.
+              this ephemeral address is unlinkable to your main address — source chain observers cannot correlate your deposits.{' '}
               {depositAddress && (
                 <button
                   onClick={() => {
@@ -392,7 +392,7 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
                   }}
                   className='text-fg underline'
                 >
-                  {depositCopied ? 'copied!' : 'Copy address'}
+                  {depositCopied ? 'copied' : 'copy address'}
                 </button>
               )}
             </p>
@@ -401,7 +401,7 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
           {/* transaction status */}
           {txStatus === 'success' && (
             <div className='mb-3 rounded-lg border border-green-500/40 bg-green-500/10 p-3'>
-              <p className='text-sm text-green-400'>shielding transfer sent!</p>
+              <p className='text-sm text-green-400 lowercase'>shielding transfer sent</p>
               <p className='text-xs text-fg-muted mt-1 font-mono break-all'>{txHash}</p>
               <button onClick={handleReset} className='mt-2 text-xs text-green-400 underline'>
                 send another
@@ -424,9 +424,9 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
             <button
               onClick={handleShield}
               disabled={!canSubmit}
-              className='w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
+              className='w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark lowercase tracking-[0.02em] hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
             >
-              {txStatus === 'signing' ? 'shielding...' : 'Shield Assets'}
+              {txStatus === 'signing' ? 'shielding...' : 'shield assets'}
             </button>
           )}
         </>
@@ -634,13 +634,20 @@ function ReceiveTab({ address, loading, activeNetwork }: {
     await chrome.storage.local.set({ zcashShieldedIndex: next });
   }, []);
 
+  // shielded badge logic: zcash 'u'-prefixed unified addresses and
+  // penumbra default addresses are shielded by construction. Transparent
+  // zcash (t1/t3) and ephemeral penumbra addresses get different labels.
+  const isShielded =
+    (isZcash && !transparent && displayAddress?.startsWith('u')) ||
+    (isPenumbra && !ephemeral);
+
   return (
     <div className='flex flex-col items-center gap-4'>
       <div className='rounded-md border border-border-soft bg-white p-2'>
         {isLoading ? (
-          <div className='flex h-48 w-48 items-center justify-center'>
-            <span className='text-[10px] text-fg-dim lowercase tracking-[0.04em]'>loading...</span>
-          </div>
+          // Skeleton matches the QR's 192×192 footprint (canvas size).
+          // Pulses gently while the address derives.
+          <div className='h-48 w-48 animate-pulse bg-elev-2/40' />
         ) : displayAddress ? (
           <canvas ref={canvasRef} className='h-48 w-48' />
         ) : (
@@ -650,9 +657,29 @@ function ReceiveTab({ address, loading, activeNetwork }: {
         )}
       </div>
 
-      <span className='rounded-sm border border-network-accent/30 bg-network-accent/10 px-2.5 py-0.5 text-[10px] text-network-accent lowercase tracking-[0.08em]'>
-        {activeNetwork}
-      </span>
+      <div className='flex items-center gap-1.5'>
+        <span className='rounded-sm border border-network-accent/30 bg-network-accent/10 px-2.5 py-0.5 text-[10px] text-network-accent lowercase tracking-[0.08em]'>
+          {activeNetwork}
+        </span>
+        {isShielded && (
+          <span
+            className='inline-flex items-center gap-1 rounded-sm border border-zigner-gold/30 bg-zigner-gold/10 px-2 py-0.5 text-[10px] text-zigner-gold lowercase tracking-[0.05em]'
+            title='shielded — senders cannot see your other transactions'
+          >
+            <span className='i-lucide-shield-check h-2.5 w-2.5' />
+            shielded
+          </span>
+        )}
+        {isZcash && transparent && (
+          <span
+            className='inline-flex items-center gap-1 rounded-sm border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] text-red-400 lowercase tracking-[0.05em]'
+            title='transparent — balance and history publicly visible'
+          >
+            <span className='i-lucide-eye h-2.5 w-2.5' />
+            public
+          </span>
+        )}
+      </div>
 
       {isPenumbra && (
         <div className='flex w-full items-center justify-between'>
@@ -824,20 +851,28 @@ function ReceiveTab({ address, loading, activeNetwork }: {
           {displayAddress && (
             <button
               onClick={copyAddress}
-              className='shrink-0 text-fg-muted transition-colors hover:text-fg-high'
+              className='flex shrink-0 items-center gap-1 text-fg-muted transition-colors hover:text-fg-high'
+              title={copied ? 'copied to clipboard' : 'copy address'}
             >
-              {copied ? <span className='i-lucide-check h-4 w-4' /> : <span className='i-lucide-copy h-4 w-4' />}
+              {copied ? (
+                <>
+                  <span className='i-lucide-check h-4 w-4' />
+                  <span className='text-[10px] lowercase tracking-[0.04em]'>copied</span>
+                </>
+              ) : (
+                <span className='i-lucide-copy h-4 w-4' />
+              )}
             </button>
           )}
         </div>
       </div>
 
-      <p className='text-center text-xs text-fg-muted'>
+      <p className='text-center text-xs text-fg-muted leading-snug lowercase'>
         {ephemeral && isPenumbra
-          ? 'Randomized address, unlinkable to your identity. Can be reused, but sharing with multiple parties lets them see they paid the same address.'
+          ? 'a fresh single-use address. share it with one party; reusing it across senders lets them link payments to each other.'
           : transparent && isZcash
-            ? 'Transparent address — balance and history are publicly visible. Use one index per exchange. Shield funds to orchard after receiving.'
-            : `Only send ${activeNetwork?.toUpperCase() ?? ''} assets to this address.`
+            ? 'transparent address — balance and history are publicly visible. use one index per exchange. shield to orchard after receiving for privacy.'
+            : `share with anyone who wants to send you ${activeNetwork?.toUpperCase() ?? ''}. shielded — senders don't see your other transactions.`
         }
       </p>
     </div>

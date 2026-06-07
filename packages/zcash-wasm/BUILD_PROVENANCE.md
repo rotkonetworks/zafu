@@ -3,16 +3,22 @@
 These vendored .wasm blobs are build artifacts. Do NOT hand-edit.
 Reproduce by checking out the zcli rev below and running the commands.
 
-- source repo: https://github.com/rotkonetworks/zcli (branch staging)
-- source rev:  686d174 + uncommitted security fixes (review pass: redactor output-side, ur_decode_frames cap reordered, compute_orchard_digest dedup)
-- source state: uncommitted on zcli staging working tree as of build time
-- built (UTC): 2026-06-05T08:00:00Z
+- source repo: https://github.com/rotkonetworks/zcli (branch feat/NU6.2-lightwallet-endpoint-support)
+- source rev:  eaa9878 (Merge branch 'staging' into feat/NU6.2-lightwallet-endpoint-support)
+- source state: clean working tree
+- built (UTC): 2026-06-05T15:28:00Z
 
 ## single-thread  (packages/zcash-wasm/zafu_wasm_bg.wasm; duplicated as zcash_wasm_bg.wasm)
     cd crates/zcash-wasm
-    RUSTFLAGS='-C target-feature=+simd128' \
-      wasm-pack build --release --target web --out-dir pkg --no-default-features
-    sha256(zafu_wasm_bg.wasm) = 1d423c74fc6ec1ab22f61b890579ebabe901dc715a1cdae9f192280349a0877c
+    unset RUSTFLAGS
+    RUSTUP_TOOLCHAIN=nightly cargo wasm-single
+    wasm-bindgen ../../target/wasm32-unknown-unknown/release/zafu_wasm.wasm \
+      --out-dir pkg --target web
+    wasm-opt -Oz \
+      --enable-simd --enable-bulk-memory --enable-mutable-globals \
+      --enable-nontrapping-float-to-int \
+      pkg/zafu_wasm_bg.wasm -o pkg/zafu_wasm_bg.wasm
+    sha256(zafu_wasm_bg.wasm) = 84955a3ff9d002a9a079aca0470e5999aece2ef6814459a0fbcc0108c6616a95
 
 ## parallel / rayon  (apps/extension/public/zafu-wasm-parallel/zafu_wasm_bg.wasm)
     # DO NOT set RUSTFLAGS — env var overrides crates/zcash-wasm/.cargo/config.toml
@@ -29,16 +35,15 @@ Reproduce by checking out the zcli rev below and running the commands.
     wasm-opt -Oz --enable-threads --enable-bulk-memory --enable-simd \
       --enable-mutable-globals --enable-nontrapping-float-to-int \
       pkg-parallel/zafu_wasm_bg.wasm -o pkg-parallel/zafu_wasm_bg.wasm
-    sha256(zafu_wasm_bg.wasm) = dd474f001dc5050be96f35567546c87c75d51ca24679de45ddfcc88f6359257b
+    sha256(zafu_wasm_bg.wasm) = c6485874b15c56e30f4a95e48731a63f4b73210a7a3b8fd9b051617d43e7bc68
 
     Verify the rebuilt blob has shared imported memory before shipping:
-      `'env'.'memory' flags=0x03 shared=True` in the raw output;
-      `'./zafu_wasm_bg.js'.'memory' flags=0x03 shared=True` post-bindgen.
+      `(import "./zafu_wasm_bg.js" "memory" (memory ... shared))` post-bindgen.
 
     After copying pkg-parallel/* into apps/extension/public/zafu-wasm-parallel/,
     re-apply the LOCAL PATCH to snippets/wasm-bindgen-rayon-*/src/workerHelpers.js
     (stock `await import('../../..')` is a directory import that Chrome
     extensions reject; replace with the concrete `zafu_wasm.js` URL).
 
-Verify: rebuild from the rev (+ this PR's crate diff), sha256sum the outputs,
+Verify: rebuild from the rev, sha256sum the outputs,
 diff against the values above. A mismatch means the vendored blob is stale.

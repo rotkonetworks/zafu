@@ -9,6 +9,12 @@ import { isIbcNetwork } from '../../../state/keyring/network-types';
 import { networksSelector, type NetworkId, type MemoSyncStrategy, type MempoolWatchSetting } from '../../../state/networks';
 import { backendTrustDescription, type ZcashBackend } from '../../../state/keyring/zcash-backend';
 import { isMempoolWatchEnabled } from '../../../services/mempool-watch/strategy';
+import {
+  ZCASH_MAINNET_ENDPOINTS,
+  findPresetByUrl,
+  groupPresetsByRegion,
+  type RpcEndpointRegion,
+} from '../../../config/zcash-endpoints';
 import { NETWORKS, LAUNCHED_NETWORKS } from '../../../config/networks';
 import { cn } from '@repo/ui/lib/utils';
 import { SettingsScreen } from './settings-screen';
@@ -149,7 +155,33 @@ export const SettingsNetworks = () => {
               {/* endpoint config — expanded */}
               {isExpanded && isEnabled && (
                 <div className='border-t border-border-soft p-3 bg-elev-2/10'>
-                  <div className='text-[10px] text-fg-muted mb-1'>endpoint</div>
+                  {/* zcash-specific preset picker — surfaces the same set the
+                      user saw at onboarding so they don't have to type a URL
+                      to switch to a known-good fallback. Free-text input
+                      stays below for custom endpoints. */}
+                  {networkId === 'zcash' && (
+                    <ZcashEndpointPicker
+                      currentUrl={editingEndpoint}
+                      onPick={async (url) => {
+                        // Persist directly via the store action, bypassing
+                        // the editingEndpoint useState (which is async). Then
+                        // reflect into the input so the user sees the
+                        // selection committed. Close the expanded panel as
+                        // confirmation, same as the manual save path.
+                        setSaving(true);
+                        try {
+                          await setNetworkEndpoint('zcash', url);
+                          setEditingEndpoint(url);
+                          setExpandedNetwork(null);
+                        } finally {
+                          setSaving(false);
+                        }
+                      }}
+                    />
+                  )}
+                  <div className='text-[10px] text-fg-muted mb-1'>
+                    {networkId === 'zcash' ? 'or custom endpoint' : 'endpoint'}
+                  </div>
                   <div className='flex gap-2'>
                     <input
                       type='text'
@@ -366,6 +398,59 @@ const BackendTrustBadge = ({ backend, onChange }: BackendTrustBadgeProps) => {
       >
         switch to {isTrustless ? 'lightwalletd' : 'zidecar'} (advanced)
       </button>
+    </div>
+  );
+};
+
+/**
+ * Compact preset dropdown for the settings endpoint screen. Mirrors the
+ * onboarding picker so users don't have to remember a known-good URL
+ * when their default goes down — pick a fallback, hit save, done.
+ *
+ * Custom endpoint string stays the source of truth on the
+ * `networkState.endpoint` field; the picker just sets it. If the
+ * user's current endpoint matches a preset, the picker pre-selects it.
+ */
+interface ZcashEndpointPickerProps {
+  readonly currentUrl: string;
+  readonly onPick: (url: string) => void;
+}
+
+const regionLabel = (region: RpcEndpointRegion): string => {
+  switch (region) {
+    case 'default': return 'recommended';
+    case 'global': return 'global';
+    case 'americas': return 'americas';
+    case 'europe': return 'europe';
+    case 'asia-pacific': return 'asia pacific';
+    case 'community': return 'community';
+  }
+};
+
+const ZcashEndpointPicker = ({ currentUrl, onPick }: ZcashEndpointPickerProps) => {
+  const matched = findPresetByUrl(currentUrl);
+  return (
+    <div className='mb-3'>
+      <div className='text-[10px] text-fg-muted mb-1'>preset</div>
+      <select
+        value={matched?.id ?? ''}
+        onChange={e => {
+          const preset = ZCASH_MAINNET_ENDPOINTS.find(p => p.id === e.target.value);
+          if (preset) onPick(preset.url);
+        }}
+        className='w-full bg-input border border-border-soft px-2 py-1.5 text-xs focus:border-primary/50 focus:outline-none'
+      >
+        <option value='' disabled>{matched ? matched.label : 'custom — see below'}</option>
+        {groupPresetsByRegion(ZCASH_MAINNET_ENDPOINTS).map(group => (
+          <optgroup key={group.region} label={regionLabel(group.region)}>
+            {group.presets.map(p => (
+              <option key={p.id} value={p.id}>
+                {p.label}{p.backend === 'zidecar' ? ' · trustless' : ''}
+              </option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
     </div>
   );
 };

@@ -242,11 +242,26 @@ export const PopupIndex = () => {
 {/* account picker moved into PenumbraContent below sync bar */}
           <div className='flex items-center justify-between'>
           <div>
+            <div className='mb-0.5 flex items-center gap-1.5'>
+              <span className='text-[10px] text-fg-dim lowercase tracking-[0.05em]'>
+                your address
+              </span>
+              {/* tiny shielded indicator — new users may not realize their
+                  unified/orchard address is privacy-preserving. The shield
+                  icon is universally understood; one icon, no extra text. */}
+              {address && address.startsWith('u') && (
+                <span
+                  className='i-lucide-shield-check h-3 w-3 text-zigner-gold/70'
+                  title='shielded address — senders cannot see your other transactions'
+                />
+              )}
+            </div>
             <div className='flex items-center gap-1'>
               <button
                 onClick={copyAddress}
                 disabled={!address}
-                className='flex items-center gap-1 text-xs text-fg-muted transition-colors duration-100 hover:text-fg-high disabled:opacity-50 disabled:cursor-not-allowed'
+                title={address ? (copied ? 'copied!' : 'click to copy') : undefined}
+                className='flex items-center gap-1.5 text-xs text-fg transition-colors duration-100 hover:text-fg-high disabled:opacity-50 disabled:cursor-not-allowed'
               >
                 {isMultisig && (
                   <span className='rounded-sm bg-zigner-gold/15 px-1.5 py-0.5 text-[9px] text-zigner-gold tabular leading-none'>
@@ -254,7 +269,16 @@ export const PopupIndex = () => {
                   </span>
                 )}
                 <span className='tabular'>{displayAddress}</span>
-                {address && (copied ? <span className='i-lucide-check h-3 w-3' /> : <span className='i-lucide-copy h-3 w-3' />)}
+                {address && (
+                  copied ? (
+                    <span className='inline-flex items-center gap-0.5 text-zigner-gold'>
+                      <span className='i-lucide-check h-3 w-3' />
+                      <span className='text-[10px] lowercase'>copied</span>
+                    </span>
+                  ) : (
+                    <span className='i-lucide-copy h-3 w-3' />
+                  )
+                )}
               </button>
               {address && activeNetwork === 'zcash' && (
                 <button
@@ -273,33 +297,25 @@ export const PopupIndex = () => {
             </div>
           </div>
 
-          <div className='flex gap-2'>
-            <button
+          {/* Fixed 40×40 icon-only action buttons. Send keeps
+              network-accent so the primary action stands out. */}
+          <div className='flex gap-1.5'>
+            <ActionButton
+              icon='i-lucide-arrow-down'
+              label='receive'
               onClick={() => navigate(PopupPath.RECEIVE)}
-              className='flex h-10 w-10 items-center justify-center bg-elev-2 transition-colors hover:bg-elev-1/80'
-              title='receive'
-            >
-              <span className='i-lucide-arrow-down h-5 w-5' />
-            </button>
-            <button
+            />
+            <ActionButton
+              icon='i-lucide-arrow-left-right'
+              label='swap'
               onClick={() => navigate(PopupPath.SWAP)}
-              className='flex h-10 w-10 items-center justify-center bg-elev-2 transition-colors hover:bg-elev-1/80'
-              title='swap'
-            >
-              <span className='i-lucide-arrow-left-right h-5 w-5' />
-            </button>
-            <button
+            />
+            <ActionButton
+              icon='i-lucide-arrow-up'
+              label='send'
               onClick={() => navigate(PopupPath.SEND)}
-              className={cn(
-                'flex h-10 w-10 items-center justify-center transition-colors',
-                activeNetwork === 'penumbra'
-                  ? 'bg-penumbra-purple text-white hover:bg-penumbra-purple-dark'
-                  : 'bg-zigner-gold text-zigner-dark hover:bg-primary/90',
-              )}
-              title='send'
-            >
-              <span className='i-lucide-arrow-up h-5 w-5' />
-            </button>
+              variant={activeNetwork === 'penumbra' ? 'penumbra' : 'zcash'}
+            />
           </div>
           </div>
         </div>
@@ -368,6 +384,7 @@ const NetworkContent = ({
 
 /** penumbra-specific content - balance card + sync bar + account picker + assets */
 const PenumbraContent = ({ account, onAccountChange }: { account: number; onAccountChange: (n: number) => void }) => {
+  const navigate = useNavigate();
   const { latestBlockHeight, fullSyncHeight, error } = useSyncProgress();
 
   const isSyncing = (latestBlockHeight ?? 0) - (fullSyncHeight ?? 0) > 10;
@@ -436,6 +453,14 @@ const PenumbraContent = ({ account, onAccountChange }: { account: number; onAcco
           percent={syncPct}
           label={syncLabel}
           error={error ? String(error) : undefined}
+          // Same recovery affordance as Zcash: a sync error gets a
+          // one-tap link to the network picker so a new user whose
+          // Penumbra grpc endpoint is unreachable doesn't have to
+          // hunt through settings to switch.
+          errorAction={error ? {
+            label: 'switch endpoint',
+            onClick: () => navigate(PopupPath.SETTINGS_NETWORKS),
+          } : undefined}
           barColor='bg-penumbra-purple'
           barDoneColor='bg-penumbra-teal'
         />
@@ -473,6 +498,7 @@ const ZcashContent = ({
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const zcashBackend = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';
   const { syncStatus, chainTip, workerSyncHeight, error: syncError } = useZcashSyncStatus();
+  const navigate = useNavigate();
 
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const keyRing = useStore(keyRingSelector);
@@ -757,10 +783,46 @@ const ZcashContent = ({
           {chainHeight <= 0
             ? 'connecting...'
             : allSynced
-              ? `block ${workerSyncHeight.toLocaleString()}`
+              // 'synced' is what the user actually cares about — the
+              // block number is meaningful only to power users. Put the
+              // word first so a glance answers "is my wallet caught up?";
+              // the block number sits in parens for verifiers.
+              ? `synced · block ${workerSyncHeight.toLocaleString()}`
               : `syncing · ${overallPct.toFixed(1)}%`}
         </div>
       </div>
+
+      {/* first-sync reassurance — only when actively syncing with no
+          balance yet (the canonical new-user state). Sets expectations so
+          the user doesn't think the wallet is broken. Disappears once
+          either sync completes or any balance shows up. */}
+      {!allSynced && totalZat === 0n && chainHeight > 0 && (
+        <div className='rounded-md border border-border-soft bg-elev-1 p-3'>
+          <div className='flex items-start gap-2'>
+            <span className='i-lucide-info mt-0.5 h-3.5 w-3.5 shrink-0 text-fg-muted' />
+            <div className='flex-1'>
+              <div className='text-xs text-fg-high lowercase'>scanning for your notes</div>
+              <p className='mt-0.5 text-[10px] text-fg-muted leading-snug'>
+                first sync can take a few minutes. you can leave this open
+                or come back later — the worker keeps running in the
+                background.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* empty-state hint for new users — only shown when the wallet is
+          synced AND the balance is zero. Disappears the moment any ZEC
+          lands. The hint surfaces concrete next steps (receive address,
+          exchanges, swap from another asset) instead of leaving the new
+          user staring at a 0.00 ZEC card wondering what to do next. */}
+      {allSynced && totalZat === 0n && (
+        <GetZecHint
+          onReceive={() => navigate(PopupPath.RECEIVE)}
+          onSwap={() => navigate(PopupPath.SWAP)}
+        />
+      )}
 
       {/* transparent pool detail — only shown when transparent > 0 */}
       {transparentZat > 0n && (
@@ -880,6 +942,14 @@ const ZcashContent = ({
                       ? 'nomt verified'
                       : 'verifying nomt...'}
           error={syncError?.message}
+          // When the default node is unreachable, a new user sees only a
+          // red 'Failed to fetch' with no path forward. Giving them a
+          // one-tap link to the network picker (where the preset list of
+          // alternative LWDs lives) turns a dead-end into a recovery.
+          errorAction={syncError ? {
+            label: 'switch node',
+            onClick: () => navigate(PopupPath.SETTINGS_NETWORKS),
+          } : undefined}
           barColor={scanPct > 0 ? 'bg-zigner-gold' : ligeritoPct > 0 ? 'bg-zigner-gold' : 'bg-fg-muted/30'}
           barDoneColor='bg-zigner-gold'
           currentHeight={workerSyncHeight}
@@ -1007,6 +1077,128 @@ interface ParsedTransaction {
   /** penumbra account indices associated with this transaction (from visible actions) */
   accountIndices?: Set<number>;
 }
+
+/**
+ * Stacked action button — icon (top) + label (bottom). Used for the
+ * home action row (receive / swap / send). Keplr's pattern: compact
+ * enough for a narrow popup, but with the label visible so new users
+ * can read what each button does without hovering for a tooltip.
+ *
+ * Variants:
+ *   - default: subdued elev-2 background
+ *   - zcash:   zigner-gold (primary outgoing action)
+ *   - penumbra:penumbra-purple (primary outgoing action on penumbra)
+ */
+const ActionButton = ({
+  icon,
+  label,
+  onClick,
+  variant = 'default',
+}: {
+  icon: string;
+  label: string;
+  onClick: () => void;
+  variant?: 'default' | 'zcash' | 'penumbra';
+}) => (
+  <button
+    type='button'
+    onClick={onClick}
+    title={label}
+    className={cn(
+      'flex h-[52px] w-14 flex-col items-center justify-center gap-1 transition-colors',
+      variant === 'default' && 'bg-elev-2 text-fg hover:bg-elev-1/80 hover:text-fg-high',
+      variant === 'zcash' && 'bg-zigner-gold text-zigner-dark hover:bg-primary/90',
+      variant === 'penumbra' && 'bg-penumbra-purple text-white hover:bg-penumbra-purple-dark',
+    )}
+  >
+    <span className={`${icon} h-4 w-4`} />
+    <span className='text-[9px] tracking-[0.05em] lowercase leading-none'>{label}</span>
+  </button>
+);
+
+/**
+ * Empty-balance hint shown to a new user whose wallet is synced but
+ * holds zero ZEC. Three concrete next steps so the wallet doesn't feel
+ * like a dead end: receive (here's your address), exchanges (where to
+ * buy), swap (already-funded other assets → ZEC via Penumbra DEX).
+ *
+ * Dismissable in the sense that any inbound ZEC makes the panel
+ * disappear naturally — there is no manual hide because the panel is
+ * informational and we want to nudge action.
+ */
+const GetZecHint = ({
+  onReceive,
+  onSwap,
+}: {
+  onReceive: () => void;
+  onSwap: () => void;
+}) => (
+  <div className='rounded-md border border-network-accent/15 bg-elev-1 p-4'>
+    <div className='mb-3 flex items-center gap-2'>
+      <span className='i-lucide-sparkles h-3.5 w-3.5 text-network-accent' />
+      <span className='text-xs font-medium text-fg-high'>get your first zec</span>
+    </div>
+
+    <div className='flex flex-col gap-2'>
+      <HintRow
+        icon='i-lucide-arrow-down-to-line'
+        title='receive from someone'
+        hint='share your shielded address — works for any zec sender'
+        onClick={onReceive}
+      />
+      <HintRow
+        icon='i-lucide-arrow-left-right'
+        title='swap from another asset'
+        hint='trade um or other tokens for zec via penumbra dex'
+        onClick={onSwap}
+      />
+      <a
+        href='https://z.cash/get-started/'
+        target='_blank'
+        rel='noopener noreferrer'
+        className='group flex items-start gap-3 rounded-sm bg-elev-2/40 p-2.5 text-left transition-colors hover:bg-elev-2/60'
+      >
+        <span className='mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center bg-network-accent/10 text-network-accent'>
+          <span className='i-lucide-shopping-bag h-3.5 w-3.5' />
+        </span>
+        <span className='flex flex-1 flex-col'>
+          <span className='text-xs lowercase text-fg-high'>buy at an exchange</span>
+          <span className='mt-0.5 text-[10px] text-fg-muted lowercase'>
+            z.cash list of supported exchanges
+          </span>
+        </span>
+        <span className='i-lucide-external-link mt-1 h-3 w-3 shrink-0 text-fg-muted transition-colors group-hover:text-fg-high' />
+      </a>
+    </div>
+  </div>
+);
+
+const HintRow = ({
+  icon,
+  title,
+  hint,
+  onClick,
+}: {
+  icon: string;
+  title: string;
+  hint: string;
+  onClick: () => void;
+}) => (
+  <button
+    type='button'
+    onClick={onClick}
+    className='group flex items-start gap-3 bg-elev-2/40 p-2.5 text-left transition-colors hover:bg-elev-2/60'
+  >
+    <span className='mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center bg-network-accent/10 text-network-accent'>
+      <span className={`${icon} h-3.5 w-3.5`} />
+    </span>
+    <span className='flex flex-1 flex-col'>
+      <span className='text-xs lowercase text-fg-high'>{title}</span>
+      <span className='mt-0.5 text-[10px] text-fg-muted lowercase'>{hint}</span>
+    </span>
+    <span className='i-lucide-arrow-right mt-1 h-3 w-3 shrink-0 text-fg-muted transition-transform duration-200 group-hover:translate-x-0.5' />
+  </button>
+);
 
 /** extract account index from a visible note's decoded address view */
 function noteAccountIndex(note: unknown): number | undefined {

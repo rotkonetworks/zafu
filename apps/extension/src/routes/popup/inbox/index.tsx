@@ -8,6 +8,7 @@
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '../../../state';
 import {
   inboxSelector,
@@ -812,7 +813,15 @@ function ComposeMessage({
 // ---- main inbox page ----
 
 export function InboxPage() {
-  const conversations = useStore(selectConversations);
+  const navigate = useNavigate();
+  // perf: selectConversations() runs Array.from + sort, returning a fresh
+  // array reference every read. Without shallow equality, Zustand re-runs
+  // the InboxPage render tree on every state tick (sync progress, memo
+  // store writes, etc.) even when the conversation list is unchanged.
+  // useShallow compares element-by-element; reference-stable conversation
+  // objects mean the page only re-renders when conversations actually
+  // change. Cascading down: ConversationRow + FlatMessageRow stay stable.
+  const conversations = useStore(useShallow(selectConversations));
   const unreadCount = useStore(selectUnreadCount);
   const messages = useStore(messagesSelector);
   const contacts = useStore(contactsSelector);
@@ -941,20 +950,23 @@ export function InboxPage() {
         </div>
       </div>
 
-      {/* tabs */}
+      {/* tabs — icon + label so the discriminator is glanceable. unread
+          badge anchors to conversations since that's where the user lives
+          most of the time. */}
       <div className='flex border-b border-border-soft'>
         <button
           onClick={() => setTab('conversations')}
           className={cn(
-            'flex-1 py-2.5 text-sm font-medium border-b-2 transition-colors',
+            'flex flex-1 items-center justify-center gap-1.5 py-2.5 text-sm font-medium border-b-2 transition-colors',
             tab === 'conversations'
               ? 'border-zigner-gold text-fg'
               : 'border-transparent text-fg-muted hover:text-fg-high',
           )}
         >
+          <span className='i-lucide-messages-square h-4 w-4' />
           conversations
           {unreadCount > 0 && (
-            <span className='ml-1.5 rounded-full bg-zigner-gold px-1.5 py-0.5 text-[10px] text-zigner-dark'>
+            <span className='ml-0.5 rounded-full bg-zigner-gold px-1.5 py-0.5 text-[10px] text-zigner-dark'>
               {unreadCount}
             </span>
           )}
@@ -962,35 +974,52 @@ export function InboxPage() {
         <button
           onClick={() => setTab('all')}
           className={cn(
-            'flex-1 py-2.5 text-sm font-medium border-b-2 transition-colors',
+            'flex flex-1 items-center justify-center gap-1.5 py-2.5 text-sm font-medium border-b-2 transition-colors',
             tab === 'all'
               ? 'border-zigner-gold text-fg'
               : 'border-transparent text-fg-muted hover:text-fg-high',
           )}
         >
+          <span className='i-lucide-list h-4 w-4' />
           all messages
         </button>
       </div>
 
-      {/* search */}
-      <div className='px-4 py-3'>
-        <div className='relative'>
-          <span className='i-lucide-search absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-fg-muted' />
-          <input
-            type='text'
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder={tab === 'conversations' ? 'search conversations...' : 'search messages...'}
-            className='w-full rounded-lg border border-border-soft bg-input pl-9 pr-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
-          />
+      {/* search — hidden when the underlying collection is empty.
+          A new user with zero conversations shouldn't see a
+          'search conversations...' bar inviting them to search
+          across nothing. Once anything lands in the inbox, the
+          bar appears. */}
+      {(tab === 'conversations'
+          ? conversations.length > 0
+          : flatMessages.length > 0 || search.length > 0) && (
+        <div className='px-4 py-3'>
+          <div className='relative'>
+            <span className='i-lucide-search absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-fg-muted' />
+            <input
+              type='text'
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder={tab === 'conversations' ? 'search conversations...' : 'search messages...'}
+              className='w-full rounded-lg border border-border-soft bg-input pl-9 pr-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* content */}
       <div className='flex-1 overflow-y-auto px-4 pb-4'>
         {tab === 'conversations' ? (
           filteredConversations.length === 0 ? (
-            <EmptyState text='no conversations' subtitle={`encrypted ${activeNetwork} conversations will appear here`} />
+            <EmptyState
+              text='no conversations yet'
+              subtitle={`encrypted ${activeNetwork} conversations show up here. share your address so someone can write to you.`}
+              action={{
+                label: 'show my address',
+                icon: 'i-lucide-arrow-down-to-line',
+                onClick: () => navigate(PopupPath.RECEIVE),
+              }}
+            />
           ) : (
             <div className='space-y-2'>
               {filteredConversations.map(convo => (
@@ -1009,7 +1038,15 @@ export function InboxPage() {
           )
         ) : (
           flatMessages.length === 0 ? (
-            <EmptyState text='no messages' subtitle={`${activeNetwork} messages will appear here`} />
+            <EmptyState
+              text='no memos yet'
+              subtitle={`messages travel inside ${activeNetwork} transactions. once someone sends with a memo, it shows up here.`}
+              action={{
+                label: 'show my address',
+                icon: 'i-lucide-arrow-down-to-line',
+                onClick: () => navigate(PopupPath.RECEIVE),
+              }}
+            />
           ) : (
             <div className='space-y-2'>
               {flatMessages.map(msg => (
@@ -1124,16 +1161,34 @@ function OutgoingStatusBadge({
   );
 }
 
-function EmptyState({ text, subtitle }: { text: string; subtitle: string }) {
+function EmptyState({
+  text,
+  subtitle,
+  action,
+}: {
+  text: string;
+  subtitle: string;
+  action?: { label: string; icon?: string; onClick: () => void };
+}) {
   return (
     <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
       <div className='rounded-lg bg-zigner-gold/10 p-4'>
         <span className='i-lucide-mail h-8 w-8 text-zigner-gold' />
       </div>
-      <div>
+      <div className='flex flex-col gap-1'>
         <p className='text-sm font-medium'>{text}</p>
-        <p className='text-xs text-fg-muted'>{subtitle}</p>
+        <p className='max-w-xs text-xs text-fg-muted leading-snug'>{subtitle}</p>
       </div>
+      {action && (
+        <button
+          type='button'
+          onClick={action.onClick}
+          className='mt-1 inline-flex items-center gap-1.5 bg-zigner-gold/10 px-3 py-1.5 text-xs text-zigner-gold transition-colors hover:bg-zigner-gold/15'
+        >
+          {action.icon && <span className={`${action.icon} h-3.5 w-3.5`} />}
+          {action.label}
+        </button>
+      )}
     </div>
   );
 }

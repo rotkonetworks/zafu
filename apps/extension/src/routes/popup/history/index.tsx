@@ -289,9 +289,20 @@ export const HistoryPage = () => {
       {/* content */}
       <div className='flex-1 overflow-y-auto p-4'>
         {isLoading && filteredTransactions.length === 0 ? (
-          <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
-            <span className='i-lucide-refresh-cw h-6 w-6 animate-spin text-fg-muted' />
-            <p className='text-sm text-fg-muted'>Loading transactions...</p>
+          // Skeleton of plausible tx-row geometry — same vertical rhythm as
+          // a real list of transactions, no spinner. Disappears once the
+          // first transactions resolve.
+          <div className='flex flex-col gap-2 animate-pulse'>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className='flex items-start gap-3 rounded-md bg-elev-1 p-3'>
+                <div className='h-8 w-8 shrink-0 rounded-full bg-elev-2/60' />
+                <div className='flex-1 space-y-1.5'>
+                  <div className='h-3 w-2/3 rounded-sm bg-elev-2/60' />
+                  <div className='h-2 w-1/3 rounded-sm bg-elev-2/40' />
+                </div>
+                <div className='h-3 w-16 rounded-sm bg-elev-2/40' />
+              </div>
+            ))}
           </div>
         ) : error ? (
           <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>

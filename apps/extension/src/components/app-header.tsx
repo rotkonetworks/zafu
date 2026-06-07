@@ -5,6 +5,7 @@
  */
 
 import { useNavigate } from 'react-router-dom';
+import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '../state';
 import { PopupPath } from '../routes/popup/paths';
 import {
@@ -30,7 +31,9 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
   const setActiveNetwork = useStore(selectSetActiveNetwork);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const activeZcashWallet = useStore(selectActiveZcashWallet);
-  const keyInfos = useStore(selectKeyInfosForActiveNetwork);
+  // perf: selectKeyInfosForActiveNetwork .filter()s a new array every read.
+  // Without shallow equality the AppHeader re-renders on every state tick.
+  const keyInfos = useStore(useShallow(selectKeyInfosForActiveNetwork));
   const selectKeyRing = useStore(selectSelectKeyRing);
 
   const networkInfo = getNetwork(activeNetwork);

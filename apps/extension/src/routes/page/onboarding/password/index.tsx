@@ -1,20 +1,23 @@
+/**
+ * Set-password — last user-input step before the wallet is sealed. Lives
+ * inside OnboardingShell now, so this screen only renders the form +
+ * primary action. The shell provides the rounded pane, brand rail and
+ * stepper.
+ *
+ * For new users the password is the *only* thing standing between a
+ * compromised local context and their seed phrase, so the copy is
+ * deliberately honest — not "secure your wallet" boilerplate but the
+ * actual concrete thing the password does.
+ */
+
 import { useState } from 'react';
-import { BackIcon } from '@repo/ui/components/ui/icons/back-icon';
-import { Button } from '@repo/ui/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@repo/ui/components/ui/card';
+import { useLocation } from 'react-router-dom';
 import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
-import { LineWave } from 'react-loader-spinner';
+import { cn } from '@repo/ui/lib/utils';
 import { usePageNav } from '../../../../utils/navigate';
 import { PasswordInput } from '../../../../shared/components/password-input';
 import { useFinalizeOnboarding } from './hooks';
 import { PagePath } from '../../paths';
-import { useLocation } from 'react-router-dom';
 import { SEED_PHRASE_ORIGIN } from './types';
 import { getSeedPhraseOrigin } from './utils';
 
@@ -27,66 +30,99 @@ export const SetPassword = () => {
   const location = useLocation();
   const origin = getSeedPhraseOrigin(location);
 
+  // Soft floor — currently 1 (only an empty password is rejected). The
+  // seed phrase is the real root of trust; the password just gates
+  // local-at-rest access to the encrypted vault. We don't want to
+  // paternalize the throwaway/test-wallet case or fight sophisticated
+  // users who know their threat model. Constant kept here so the
+  // floor is one number to change if that calculus shifts.
+  const MIN_PASSWORD_LENGTH = 1;
+  const tooShort = password.length > 0 && password.length < MIN_PASSWORD_LENGTH;
+  const canSubmit =
+    password.length >= MIN_PASSWORD_LENGTH && password === confirmation && !loading;
+  const onBack = () => {
+    if (origin === SEED_PHRASE_ORIGIN.NEWLY_GENERATED) {
+      navigate(PagePath.WELCOME);
+    } else {
+      navigate(-1);
+    }
+  };
+
   return (
     <FadeTransition>
-      <BackIcon
-        className='float-left mb-4'
-        onClick={() => {
-          if (origin === SEED_PHRASE_ORIGIN.NEWLY_GENERATED) {
-            navigate(PagePath.WELCOME);
-          } else {
-            navigate(-1);
-          }
-        }}
-      />
-      <Card className='flex w-[400px] flex-col gap-6' gradient>
-        <CardHeader className='items-center'>
-          <CardTitle>Create Password</CardTitle>
-          <CardDescription className='text-center'>
-            Your password secures your encrypted data and is needed to unlock your wallet.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form className='flex flex-col gap-4' onSubmit={e => void handleSubmit(e, password)}>
-            <PasswordInput
-              passwordValue={password}
-              label='New password'
-              onChange={({ target: { value } }) => setPassword(value)}
-            />
-            <PasswordInput
-              passwordValue={confirmation}
-              label='Confirm password'
-              onChange={({ target: { value } }) => setConfirmation(value)}
-              validations={[
-                {
-                  type: 'warn',
-                  issue: "passwords don't match",
-                  checkFn: (txt: string) => password !== txt,
-                },
-              ]}
-            />
-            <Button
-              variant='gradient'
-              className='mt-2'
-              disabled={password !== confirmation || loading}
-              type='submit'
-            >
-              {loading ? (
-                <LineWave
-                  visible={true}
-                  height='60'
-                  width='60'
-                  color='#FFFFFF'
-                  wrapperClass='mt-[-17.5px] mr-[-21px]'
-                />
-              ) : (
-                'Next'
-              )}
-            </Button>
-            {error && <div className='text-red-400'>{error}</div>}
-          </form>
-        </CardContent>
-      </Card>
+      <div className='flex h-full flex-col gap-6'>
+        <header className='flex flex-col gap-1'>
+          <button
+            type='button'
+            onClick={onBack}
+            className='mb-2 inline-flex items-center gap-1.5 self-start text-[11px] text-fg-muted transition-colors hover:text-fg-high lowercase tracking-[0.02em]'
+          >
+            <span className='i-lucide-arrow-left h-3 w-3' />
+            back
+          </button>
+          <h2 className='text-2xl lowercase tracking-[-0.01em] text-fg-high'>
+            set a password
+          </h2>
+          <p className='text-xs text-fg-muted lowercase tracking-[0.02em] leading-snug'>
+            encrypts your seed phrase on this device. you'll enter it
+            again every time the wallet locks. there's no way to recover
+            it — pick something you'll remember.
+          </p>
+        </header>
+
+        <form
+          onSubmit={e => void handleSubmit(e, password)}
+          className='flex flex-col gap-3'
+        >
+          <PasswordInput
+            passwordValue={password}
+            label='new password'
+            onChange={({ target: { value } }) => setPassword(value)}
+            validations={[
+              {
+                type: 'warn',
+                issue: `at least ${MIN_PASSWORD_LENGTH} characters`,
+                checkFn: () => tooShort,
+              },
+            ]}
+          />
+          <PasswordInput
+            passwordValue={confirmation}
+            label='confirm password'
+            onChange={({ target: { value } }) => setConfirmation(value)}
+            validations={[
+              {
+                type: 'warn',
+                issue: "passwords don't match",
+                checkFn: (txt: string) => password !== txt,
+              },
+            ]}
+          />
+
+          <button
+            type='submit'
+            disabled={!canSubmit}
+            className={cn(
+              'group mt-2 inline-flex items-center justify-center gap-2 px-5 py-3 text-sm lowercase tracking-[0.01em]',
+              '[border-radius:14px] border transition-[transform,opacity,background-color,border-color] duration-200',
+              canSubmit
+                ? 'border-zigner-gold/30 bg-zigner-gold/10 text-zigner-gold hover:-translate-y-[1px] hover:bg-zigner-gold/15'
+                : 'cursor-not-allowed border-border-soft/60 bg-elev-2/30 text-fg-muted',
+            )}
+          >
+            {loading ? 'sealing wallet…' : 'continue'}
+            {canSubmit && !loading && (
+              <span className='i-lucide-arrow-right h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5' />
+            )}
+          </button>
+
+          {error && (
+            <div className='rounded-md border border-red-500/30 bg-red-500/5 p-2 text-xs text-red-400 lowercase'>
+              {error}
+            </div>
+          )}
+        </form>
+      </div>
     </FadeTransition>
   );
 };

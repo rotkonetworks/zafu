@@ -1,14 +1,6 @@
 import { useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { BackIcon } from '@repo/ui/components/ui/icons/back-icon';
 import { Button } from '@repo/ui/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@repo/ui/components/ui/card';
 import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
 import { cn } from '@repo/ui/lib/utils';
 import { usePageNav } from '../../../utils/navigate';
@@ -16,6 +8,14 @@ import { PagePath } from '../paths';
 import { useStore } from '../../../state';
 import { NetworkType } from '../../../state/keyring';
 import { getSeedPhraseOrigin } from './password/utils';
+import { SEED_PHRASE_ORIGIN } from './password/types';
+import {
+  ZCASH_MAINNET_ENDPOINTS,
+  defaultZcashEndpoint,
+  groupPresetsByRegion,
+  type RpcEndpointRegion,
+} from '../../../config/zcash-endpoints';
+import { networksSelector } from '../../../state/networks';
 import { NETWORKS, isLaunched, ZCASH_ORCHARD_ACTIVATION } from '../../../config/networks';
 
 interface NetworkOption {
@@ -46,6 +46,17 @@ const NETWORK_OPTIONS: NetworkOption[] = (Object.keys(NETWORKS) as NetworkType[]
 
 // only show launched networks — no "coming soon" clutter
 
+function regionLabel(region: RpcEndpointRegion): string {
+  switch (region) {
+    case 'default': return 'recommended';
+    case 'global': return 'global';
+    case 'americas': return 'americas';
+    case 'europe': return 'europe';
+    case 'asia-pacific': return 'asia pacific';
+    case 'community': return 'community';
+  }
+}
+
 /**
  * zcash block height <-> date estimation
  *
@@ -75,10 +86,15 @@ export const SelectNetworks = () => {
   const navigate = usePageNav();
   const location = useLocation();
   const { enabledNetworks, toggleNetwork, setActiveNetwork } = useStore(state => state.keyRing);
+  const { setNetworkEndpoint } = useStore(networksSelector);
   const [selected, setSelected] = useState<Set<NetworkType>>(new Set(enabledNetworks));
   const [zcashBirthday, setZcashBirthday] = useState('');
   const [zcashDate, setZcashDate] = useState('');
   const [inputMode, setInputMode] = useState<'date' | 'block'>('date');
+  // Default to rotko zidecar (trustless). User can pick a fallback from the
+  // dropdown; the choice is persisted to NetworkConfig.endpoint so subsequent
+  // sync calls hit the selected node.
+  const [zcashEndpointId, setZcashEndpointId] = useState<string>(defaultZcashEndpoint().id);
 
   // get origin from incoming state, default to NEWLY_GENERATED
   const origin = getSeedPhraseOrigin(location);
@@ -120,6 +136,17 @@ export const SelectNetworks = () => {
       }
     }
 
+    // persist the user's chosen zcash node so sync uses it from the first
+    // request. setNetworkEndpoint also auto-classifies zidecar vs lightwalletd
+    // (see state/networks.ts) so the trust/mempool gates are applied
+    // consistently downstream.
+    if (selected.has('zcash')) {
+      const preset = ZCASH_MAINNET_ENDPOINTS.find(p => p.id === zcashEndpointId);
+      if (preset) {
+        await setNetworkEndpoint('zcash', preset.url);
+      }
+    }
+
     navigate(PagePath.SET_PASSWORD, { state: { origin } });
   };
 
@@ -127,17 +154,25 @@ export const SelectNetworks = () => {
 
   return (
     <FadeTransition>
-      <BackIcon className='float-left mb-4' onClick={() => navigate(PagePath.WELCOME)} />
-      <Card className={cn('p-6', 'w-[500px]')} gradient>
-        <CardHeader className='items-center'>
-          <CardTitle className='font-medium'>Select Networks</CardTitle>
-          <CardDescription className='text-center'>
-            Choose which networks you want to use with this wallet.
-            You can change this later in settings.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className='flex flex-col gap-3'>
+      <div className='flex h-full flex-col gap-6'>
+        <header className='flex flex-col gap-1'>
+          <button
+            type='button'
+            onClick={() => navigate(PagePath.WELCOME)}
+            className='mb-2 inline-flex items-center gap-1.5 self-start text-[11px] text-fg-muted transition-colors hover:text-fg-high lowercase tracking-[0.02em]'
+          >
+            <span className='i-lucide-arrow-left h-3 w-3' />
+            back
+          </button>
+          <h2 className='text-2xl lowercase tracking-[-0.01em] text-fg-high'>
+            select networks
+          </h2>
+          <p className='text-xs text-fg-muted lowercase tracking-[0.02em]'>
+            choose which networks to enable. you can change this later in settings.
+          </p>
+        </header>
+
+        <div className='flex flex-col gap-3'>
             {NETWORK_OPTIONS.map(network => {
               const isSelected = selected.has(network.id);
 
@@ -191,8 +226,45 @@ export const SelectNetworks = () => {
             })}
           </div>
 
-          {/* zcash sync start - only shown when zcash is selected */}
+          {/* zcash node picker — shown on both create and import paths so
+              users on rotko-blocked networks have an obvious fallback.
+              Default is rotko zidecar (trustless). Public lightwalletd
+              endpoints are honest alternates. */}
           {selected.has('zcash') && (
+            <div className='mt-4 rounded-lg border border-border-soft p-3'>
+              <div className='flex items-center justify-between mb-2'>
+                <span className='text-xs font-medium'>zcash node</span>
+                <span className='text-[10px] text-fg-muted'>
+                  fallback if your default is down
+                </span>
+              </div>
+              <select
+                value={zcashEndpointId}
+                onChange={e => setZcashEndpointId(e.target.value)}
+                className='w-full bg-input border border-border-soft px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-zigner-gold'
+              >
+                {groupPresetsByRegion(ZCASH_MAINNET_ENDPOINTS).map(group => (
+                  <optgroup key={group.region} label={regionLabel(group.region)}>
+                    {group.presets.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.label}{p.backend === 'zidecar' ? ' · trustless' : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              <p className='mt-1.5 text-[10px] text-fg-muted'>
+                trustless = wallet verifies the server's responses with
+                ligerito + nomt proofs. lightwalletd = trusted public node.
+                you can switch later in settings.
+              </p>
+            </div>
+          )}
+
+          {/* zcash sync start — only relevant for *imported* wallets. A
+              brand-new wallet has no prior history to scan, so the worker
+              starts from chain tip and the birthday is irrelevant. */}
+          {selected.has('zcash') && origin === SEED_PHRASE_ORIGIN.IMPORTED && (
             <div className='mt-4 rounded-lg border border-border-soft p-3'>
               <div className='flex items-center justify-between mb-2'>
                 <span className='text-xs font-medium'>wallet birthday</span>
@@ -234,7 +306,7 @@ export const SelectNetworks = () => {
                       setZcashDate(formatDateInput(blockToDate(num)));
                     }
                   }}
-                  placeholder='leave blank for new wallets'
+                  placeholder='leave blank to sync from chain tip'
                   className='w-full bg-input border border-border-soft px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-zigner-gold'
                 />
               )}
@@ -246,8 +318,8 @@ export const SelectNetworks = () => {
                 </p>
               )}
               <p className='mt-1 text-[10px] text-fg-muted'>
-                for existing wallets, pick the approximate date you created the wallet.
-                leave blank for new wallets. rounded for privacy.
+                approximate date the wallet was first used. rounded for privacy.
+                skip this if you don't know — scanning starts from chain tip.
               </p>
             </div>
           )}
@@ -260,8 +332,7 @@ export const SelectNetworks = () => {
           >
             continue with {availableCount} network{availableCount !== 1 ? 's' : ''}
           </Button>
-        </CardContent>
-      </Card>
+      </div>
     </FadeTransition>
   );
 };

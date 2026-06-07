@@ -17,6 +17,14 @@ interface SyncProgressBarProps {
   startBlock?: number;
   /** called when user submits a new start block for rescan */
   onRescan?: (height: number) => void;
+  /**
+   * Optional recovery affordance shown next to the error message.
+   * When set, the error row gets a clickable action — e.g. on Zcash
+   * pointing at the network picker so a new user whose default node
+   * is unreachable can switch to a different LWD without first
+   * figuring out the settings tree.
+   */
+  errorAction?: { label: string; onClick: () => void };
 }
 
 export const SyncProgressBar = ({
@@ -30,6 +38,7 @@ export const SyncProgressBar = ({
   targetHeight,
   startBlock,
   onRescan,
+  errorAction,
 }: SyncProgressBarProps) => {
   const [editing, setEditing] = useState(false);
   const [input, setInput] = useState('');
@@ -51,7 +60,18 @@ export const SyncProgressBar = ({
   return (
     <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
       {error && (
-        <div className='text-xs text-red-400 mb-2'>{error}</div>
+        <div className='mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-red-400'>
+          <span className='break-words'>{error}</span>
+          {errorAction && (
+            <button
+              type='button'
+              onClick={errorAction.onClick}
+              className='text-zigner-gold underline-offset-2 hover:underline lowercase tracking-[0.02em]'
+            >
+              {errorAction.label}
+            </button>
+          )}
+        </div>
       )}
 
       <div className='h-2 w-full overflow-hidden rounded-full bg-elev-2'>

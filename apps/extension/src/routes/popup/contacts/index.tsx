@@ -745,12 +745,27 @@ export function ContactsPage() {
             <div className='rounded-full bg-primary/10 p-4'>
               <span className='i-lucide-user h-8 w-8 text-zigner-gold' />
             </div>
-            <div>
-              <p className='text-sm font-medium'>no contacts</p>
-              <p className='text-xs text-fg-muted'>
-                {search ? 'no contacts match your search' : 'add your first contact to get started'}
+            <div className='flex flex-col gap-1'>
+              <p className='text-sm font-medium'>no contacts yet</p>
+              <p className='max-w-xs text-xs text-fg-muted leading-snug'>
+                {search
+                  ? 'no contacts match your search'
+                  : 'save addresses you send to often so you never have to paste again.'}
               </p>
             </div>
+            {!search && (
+              <button
+                type='button'
+                onClick={() => {
+                  setEditingContact(undefined);
+                  setShowContactModal(true);
+                }}
+                className='mt-1 inline-flex items-center gap-1.5 bg-zigner-gold/10 px-3 py-1.5 text-xs text-zigner-gold transition-colors hover:bg-zigner-gold/15'
+              >
+                <span className='i-lucide-plus h-3.5 w-3.5' />
+                add your first contact
+              </button>
+            )}
           </div>
         ) : (
           <div className='space-y-2'>

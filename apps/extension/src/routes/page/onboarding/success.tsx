@@ -1,78 +1,77 @@
+/**
+ * Onboarding completion — final step of the shell stepper.
+ *
+ * Removed the dense link-grid (poker / chat / dex / docs) that competed
+ * for attention with the actual primary action ("open zafu"). A user
+ * who just finished onboarding wants the single confidence: it worked,
+ * here is the wallet. Discovery happens later from inside the wallet.
+ */
+
 import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
+import { cn } from '@repo/ui/lib/utils';
 
 const openSidePanel = async () => {
+  // The onboarding tab is itself an extension page (page.html). After we
+  // open the side panel / popup, leaving this tab in place would leave the
+  // user staring at the success screen wondering whether the wallet
+  // actually opened. Close it once the new surface is up.
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tab?.windowId) {
       await chrome.sidePanel.open({ windowId: tab.windowId });
+      // small grace period so the panel has fully attached before we tear
+      // the tab down — without this, some Chrome builds race the panel's
+      // initial paint and the user sees a blink instead of the wallet.
+      setTimeout(() => window.close(), 250);
+      return;
     }
   } catch {
-    // side panel not supported or no active tab - fall back to popup
-    await chrome.windows.create({
-      url: chrome.runtime.getURL('popup.html'),
-      type: 'popup',
-      width: 400,
-      height: 628,
-    });
+    /* fall through to popup window fallback */
   }
+  // side panel not supported or no active tab — fall back to popup
+  await chrome.windows.create({
+    url: chrome.runtime.getURL('popup.html'),
+    type: 'popup',
+    width: 400,
+    height: 628,
+  });
+  setTimeout(() => window.close(), 250);
 };
 
 export const OnboardingSuccess = () => {
   return (
     <FadeTransition>
-      <div className='flex flex-col items-center gap-6 max-w-lg mx-auto pt-12'>
-        <span className='i-lucide-check-circle h-16 w-16 text-green-500' />
-        <h1 className='text-2xl font-medium'>wallet ready</h1>
+      <div className='flex h-full flex-col items-center justify-center gap-7 py-6 text-center'>
+        {/* tiny checkmark in a soft round badge — restrained */}
+        <span className='inline-flex h-12 w-12 items-center justify-center rounded-full bg-zigner-gold/15'>
+          <span className='i-lucide-check h-5 w-5 text-zigner-gold' />
+        </span>
 
-        {/* primary action */}
+        <header className='flex flex-col gap-1'>
+          <h2 className='text-2xl lowercase tracking-[-0.01em] text-fg-high'>wallet ready</h2>
+          <p className='text-xs text-fg-muted lowercase tracking-[0.02em]'>
+            shielded signing, on your terms.
+          </p>
+        </header>
+
         <button
+          type='button'
           onClick={() => void openSidePanel()}
-          className='w-full max-w-xs flex items-center justify-center gap-2 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark hover:bg-primary/90 transition-colors'
+          className={cn(
+            'group inline-flex items-center justify-center gap-2 px-6 py-3 text-sm lowercase tracking-[0.01em]',
+            '[border-radius:14px] border border-zigner-gold/30 bg-zigner-gold/10 text-zigner-gold',
+            'transition-[transform,background-color] duration-200',
+            'hover:-translate-y-[1px] hover:bg-zigner-gold/15',
+          )}
         >
           <span className='i-lucide-panel-right h-4 w-4' />
           open zafu
+          <span className='i-lucide-arrow-right h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5' />
         </button>
 
-        {/* links */}
-        <div className='grid grid-cols-2 gap-3 w-full mt-2'>
-          <a
-            href='https://poker.zk.bot'
-            target='_blank'
-            rel='noopener noreferrer'
-            className='flex flex-col items-center gap-2 rounded-lg border border-border-soft bg-elev-1 p-4 hover:bg-elev-1 transition-colors'
-          >
-            <span className='i-lucide-spade h-5 w-5 text-fg-muted' />
-            <span className='text-xs'>play poker</span>
-          </a>
-          <a
-            href={chrome.runtime.getURL('zitadel.html')}
-            className='flex flex-col items-center gap-2 rounded-lg border border-border-soft bg-elev-1 p-4 hover:bg-elev-1 transition-colors'
-          >
-            <span className='i-lucide-message-circle h-5 w-5 text-fg-muted' />
-            <span className='text-xs'>chat</span>
-          </a>
-          <a
-            href='https://dex.penumbra.zone'
-            target='_blank'
-            rel='noopener noreferrer'
-            className='flex flex-col items-center gap-2 rounded-lg border border-border-soft bg-elev-1 p-4 hover:bg-elev-1 transition-colors'
-          >
-            <span className='i-lucide-arrow-left-right h-5 w-5 text-fg-muted' />
-            <span className='text-xs'>trade with penumbra dex</span>
-          </a>
-          <a
-            href={chrome.runtime.getURL('docs/index.html')}
-            className='flex flex-col items-center gap-2 rounded-lg border border-border-soft bg-elev-1 p-4 hover:bg-elev-1 transition-colors'
-          >
-            <span className='i-lucide-book-open h-5 w-5 text-fg-muted' />
-            <span className='text-xs'>docs</span>
-          </a>
-        </div>
-
-        <div className='flex items-center gap-4 text-[10px] text-fg-muted'>
-          <a href='https://rotko.net' target='_blank' rel='noopener noreferrer' className='hover:text-fg-high'>rotko.net</a>
-          <a href='https://zigner.rotko.net' target='_blank' rel='noopener noreferrer' className='hover:text-fg-high'>zigner</a>
-        </div>
+        <p className='mt-2 max-w-xs text-[11px] text-fg-muted lowercase tracking-[0.02em]'>
+          discover dapps and tools from inside the wallet once you're in.
+        </p>
       </div>
     </FadeTransition>
   );

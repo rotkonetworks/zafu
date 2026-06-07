@@ -38,9 +38,9 @@ export const Login = () => {
 
   return (
     <FadeTransition className='flex flex-col items-stretch justify-start'>
-      <div className='flex h-screen flex-col justify-between p-[30px] pt-10 '>
+      <div className='flex h-screen flex-col justify-between p-[30px] pt-10'>
         <div className='mx-auto my-0 flex flex-col items-center gap-1'>
-          <span className='kicker'>privacy wallet</span>
+          <span className='text-[10px] tracking-[0.18em] text-fg-muted lowercase'>shielded signing</span>
           <h1 className='text-[32px] text-zigner-gold lowercase tracking-[-0.01em] leading-none'>
             zafu
           </h1>
@@ -63,22 +63,33 @@ export const Login = () => {
             ]}
           />
           <Button size='lg' variant='gradient' disabled={enteredIncorrect} type='submit'>
-            Unlock
+            unlock
           </Button>
+          {/* New users who hit a wrong password without a hint of
+              recourse assume their wallet is gone. The line only
+              surfaces after a failed attempt so we don't preemptively
+              teach the wrong mental model — but the moment anxiety
+              kicks in, the recovery path is visible. */}
+          {enteredIncorrect && (
+            <p className='text-center text-[11px] text-fg-muted lowercase'>
+              your funds aren't lost — you can restore from your seed phrase by
+              reinstalling zafu.
+            </p>
+          )}
         </form>
         <div className='flex flex-col gap-1'>
-          <p className='text-center text-fg-muted'>
-            Need help?{' '}
+          <p className='text-center text-xs text-fg-muted lowercase'>
+            need help?{' '}
             <a
               className='cursor-pointer text-teal hover:underline transition-colors'
               href={chrome.runtime.getURL('zitadel.html?room=support')}
               target='_blank'
               rel='noreferrer'
             >
-              Chat with us
+              chat with us
             </a>
           </p>
-          <p className='text-center text-xs text-fg-muted/50'>
+          <p className='text-center text-[10px] text-fg-muted/50 tabular'>
             {BUILD_COMMIT}-{BUILD_DATE}
           </p>
         </div>
