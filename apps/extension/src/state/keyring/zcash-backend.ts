@@ -8,6 +8,7 @@ import type {
   SyncStatus,
   Utxo,
 } from './zidecar-client';
+import { findCuratedEndpoint } from './endpoint-registry';
 
 export type ZcashBackend = 'zidecar' | 'lightwalletd';
 
@@ -65,6 +66,12 @@ const KNOWN_ZIDECAR_HOST_SUFFIXES: ReadonlyArray<string> = [
 ];
 
 export function isZidecarEndpoint(serverUrl: string): boolean {
+  // First: exact-URL match against the curated registry. zidecar entries
+  // there are the exception; anything not in the registry falls through
+  // to the hostname-suffix check.
+  const curated = findCuratedEndpoint(serverUrl);
+  if (curated) return curated.backend === 'zidecar';
+
   // Defensive parse — never throw on garbage URLs; treat unparseable
   // input as lightwalletd (the safer default since it doesn't assume
   // zidecar-only RPCs are available).
@@ -96,7 +103,8 @@ export function backendTrustDescription(backend: ZcashBackend): {
   return {
     label: 'trusted',
     summary:
-      'No verification pipeline available on this endpoint. The wallet ' +
-      'trusts whatever the indexer returns. Use only servers you trust.',
+      'Server can lie about chain state (heights, transaction inclusion, ' +
+      'nullifier set). Memos and keys stay local so privacy is intact, but ' +
+      'use a server you trust for chain-state integrity.',
   };
 }
