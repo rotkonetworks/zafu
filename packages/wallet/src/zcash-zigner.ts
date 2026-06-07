@@ -55,6 +55,13 @@ export interface ZcashFvkExportData {
   ufvk?: string;
   /** ZID pubkey (hex) - canonical device identity, if present (bit 4 flag) */
   zidPublicKey?: string;
+  /**
+   * Cold signer kind. Optional; defaults to `'zigner'` when omitted, which
+   * preserves backwards compat for every existing import path. Set to
+   * `'keystone'` when the FVK came from a Keystone hardware wallet via
+   * multipart `ur:zcash-accounts`.
+   */
+  coldSignerType?: 'zigner' | 'keystone';
 }
 
 /**
@@ -75,6 +82,8 @@ export interface ZcashWalletImport {
   ufvk?: string;
   /** ZID pubkey (hex) - canonical device identity for zigner dedup */
   zidPublicKey?: string;
+  /** Cold signer kind. Defaults to `'zigner'` when omitted. */
+  coldSignerType?: 'zigner' | 'keystone';
 }
 
 // ============================================================================
@@ -220,6 +229,7 @@ export function createZcashWalletImport(
     address: exportData.address,
     ufvk: exportData.ufvk,
     zidPublicKey: exportData.zidPublicKey,
+    coldSignerType: exportData.coldSignerType,
   };
 }
 

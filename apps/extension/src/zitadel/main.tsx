@@ -521,7 +521,7 @@ function boot() {
   // two parallel sendDm calls for the same peer (e.g. paste + Enter
   // twice within the handshake window) would each see dmChannels
   // empty and start a separate handshake, leaking the loser.
-  const dmChannelPending = new Map<string, Promise<ZidChannel | null>>();
+  const dmChannelPending = new Map<string, Promise<ZidChannel | undefined>>();
   // nick -> pubkey mapping from relay user list
   const nickToPubkey = new Map<string, string>();
   // pubkey -> nick (reverse)
@@ -591,13 +591,6 @@ function boot() {
 
   function roomMessages(): Msg[] {
     const key = activeDm ? (DM_PREFIX + activeDm) : (currentRoom || initialRoom);
-    let arr = messagesPerRoom.get(key);
-    if (!arr) { arr = []; messagesPerRoom.set(key, arr); }
-    return arr;
-  }
-
-  function dmMessages(pubkey: string): Msg[] {
-    const key = DM_PREFIX + pubkey;
     let arr = messagesPerRoom.get(key);
     if (!arr) { arr = []; messagesPerRoom.set(key, arr); }
     return arr;
@@ -822,7 +815,7 @@ function boot() {
 
   // -- DM channel management --
 
-  async function openDmChannel(peerPubkey: string): Promise<ZidChannel | null> {
+  async function openDmChannel(peerPubkey: string): Promise<ZidChannel | undefined> {
     // reuse existing channel
     const existing = dmChannels.get(peerPubkey);
     if (existing) return existing;
@@ -832,10 +825,10 @@ function boot() {
 
     if (!zidPubkey || !zidPrivkey) {
       addMsg('zitadel', 'cannot open DM - wallet not unlocked. unlock zafu for e2ee.', true);
-      return null;
+      return undefined;
     }
 
-    const promise = (async (): Promise<ZidChannel | null> => {
+    const promise = (async (): Promise<ZidChannel | undefined> => {
       const session: SessionKey = {
         pubkey: zidPubkey!,
         privkey: zidPrivkey!,
@@ -864,7 +857,7 @@ function boot() {
         return ch;
       } catch (e) {
         addMsg('zitadel', `failed to open DM channel: ${e}`, true, DM_PREFIX + peerPubkey);
-        return null;
+        return undefined;
       }
     })();
 

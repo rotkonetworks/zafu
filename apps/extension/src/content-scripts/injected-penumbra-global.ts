@@ -42,11 +42,21 @@ const prerenderComplete = new Promise<void>(resolve =>
 // (injected-session.ts, listed first in the manifest) writes our extension
 // id to a DOM dataset attribute before this script runs. Reading it here
 // keeps the build agnostic to the install method (unpacked vs Web Store).
+//
+// We also reject the literal 'invalid' Chrome returns from
+// chrome.runtime.id when the script is orphaned (extension reloaded
+// in another tab). Without this guard, an orphaned ISOLATED script
+// would bridge 'invalid' through and we'd inject
+// chrome-extension://invalid/manifest.json into PenumbraSymbol.
 const extensionId = document.documentElement.dataset['zafuExtensionId'] ?? '';
-const extensionOrigin = extensionId ? `chrome-extension://${extensionId}` : '';
+const extensionOrigin =
+  extensionId && extensionId !== 'invalid'
+    ? `chrome-extension://${extensionId}`
+    : '';
 
-// bail if the bridge wasn't populated — page reloaded with no zafu, or we
-// raced the ISOLATED script (shouldn't happen given manifest order)
+// bail if the bridge wasn't populated — page reloaded with no zafu, we
+// raced the ISOLATED script (shouldn't happen given manifest order),
+// or the ISOLATED script saw an orphaned chrome.runtime.id.
 if (!extensionOrigin) {
   // eslint-disable-next-line no-console
   console.debug('[zafu] skipping penumbra provider injection: extension origin unavailable');

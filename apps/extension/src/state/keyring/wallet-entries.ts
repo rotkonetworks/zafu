@@ -86,6 +86,31 @@ export async function createZignerWalletEntries(
   }
 
   if (data.viewingKey) {
+    // Cryptographic UFVK gate at the persistence boundary. The pure
+    // `@repo/wallet` parser only does structural pre-screening (HRP /
+    // charset / length) to stay wasm-free; this is where we run the
+    // authoritative `zcash_keys::UnifiedFullViewingKey::decode` (same
+    // decoder the signing path uses) before a wallet record touches
+    // encrypted storage. Only applies to unified strings (`uview1...` from
+    // UR imports); the legacy binary zigner path supplies a raw base64
+    // orchard FVK, which is not a unified string and must skip this.
+    if (data.viewingKey.startsWith('uview')) {
+      const zwasm = (await import('@repo/zcash-wasm')) as unknown as {
+        default?: (opts?: { module_or_path?: string }) => Promise<unknown>;
+        validate_ufvk: (s: string) => boolean;
+      };
+      if (typeof zwasm.default === 'function') await zwasm.default();
+      if (!zwasm.validate_ufvk(data.viewingKey)) {
+        // Throw, don't swallow: a bogus UFVK must fail the import here,
+        // loudly, not get silently dropped and rediscovered at first send
+        // (and not poison FVK-equality dedup with garbage).
+        throw new Error(
+          'UFVK failed cryptographic validation — refusing to import. ' +
+            'The scanned viewing key is structurally plausible but does not ' +
+            'decode as a valid Zcash Unified FVK.',
+        );
+      }
+    }
     try {
       const existingZcashWallets = (await local.get('zcashWallets')) ?? [];
       const zcashWallet = {
@@ -96,6 +121,10 @@ export async function createZignerWalletEntries(
         accountIndex: data.accountIndex,
         mainnet: !data.viewingKey.startsWith('uviewtest'),
         vaultId,
+        // Defaults to 'zigner' when omitted on the import side. Keystone
+        // imports flow through the same path and set this explicitly so the
+        // signing UI can hide Penumbra/FROST/ZID affordances.
+        coldSignerType: data.coldSignerType ?? 'zigner',
       };
       await local.set('zcashWallets', [zcashWallet, ...existingZcashWallets]);
       await local.set('activeZcashIndex', 0);

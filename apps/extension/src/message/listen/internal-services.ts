@@ -31,42 +31,30 @@ async function clearPenumbraCache(walletServices: Promise<Services>): Promise<vo
   await localExtStorage.set('clearingCache', true);
 
   broadcastProgress('stopping', completed, steps.length);
-  // stop block processor and CLOSE the IndexedDB connection so deleteDatabase works
+  // stop the block processor so it doesn't keep writing while we tear down
   try {
-    const { blockProcessor, indexedDb } = await walletServices.then(ws =>
-      ws.getWalletServices(),
-    );
+    const { blockProcessor } = await walletServices.then(ws => ws.getWalletServices());
     blockProcessor.stop('clearCache');
-    // close the IDB connection — without this, deleteDatabase is blocked
-    (indexedDb as unknown as { db: { close(): void } }).db?.close?.();
   } catch {
     // services may not have initialized
   }
   completed++;
 
+  // mark IDB clear as pending; the actual delete runs at next startup, before
+  // any wallet services reopen connections (avoids onblocked silent failure)
   broadcastProgress('clearing-params', completed, steps.length);
-  await localExtStorage.remove('params');
-  completed++;
-
-  broadcastProgress('clearing-database', completed, steps.length);
-  // delete ALL penumbra viewdata IndexedDBs
-  try {
-    const dbs = await indexedDB.databases();
-    const deletes = dbs
-      .filter(db => db.name?.startsWith('viewdata/penumbra'))
-      .map(db => new Promise<void>((resolve, reject) => {
-        const req = indexedDB.deleteDatabase(db.name!);
-        req.onsuccess = () => { console.log('[clear] deleted:', db.name); resolve(); };
-        req.onerror = () => { console.warn('[clear] delete failed:', db.name); reject(req.error); };
-        req.onblocked = () => { console.warn('[clear] delete blocked:', db.name); resolve(); };
-      }));
-    await Promise.all(deletes);
-  } catch (e) {
-    console.warn('[clear] database cleanup error:', e);
+  const existing = (await localExtStorage.get('pendingClearCache')) ?? [];
+  if (!existing.includes('penumbra')) {
+    await localExtStorage.set('pendingClearCache', [...existing, 'penumbra']);
   }
   completed++;
 
+  broadcastProgress('clearing-database', completed, steps.length);
+  completed++;
+
   broadcastProgress('clearing-sync-state', completed, steps.length);
+  // wipe local-storage sync markers so the UI shows 0% during the brief window
+  // between "reloading" and the startup delete
   await Promise.all([
     localExtStorage.remove('fullSyncHeight'),
     localExtStorage.remove('compactFrontierBlockHeight'),

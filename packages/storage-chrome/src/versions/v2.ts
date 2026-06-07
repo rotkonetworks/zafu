@@ -46,6 +46,12 @@ type LOCAL = {
   zignerCameraEnabled?: boolean;
   /** Flag indicating cache clearing is in progress (survives extension restart) */
   clearingCache?: boolean;
+  /**
+   * Networks with IDB deletion pending until next service worker startup.
+   * Deferred so deletion happens before any wallet services open connections,
+   * which would otherwise cause `deleteDatabase` to fire `onblocked`.
+   */
+  pendingClearCache?: ('penumbra' | 'zcash')[];
   /** Active network type for multi-network wallet */
   activeNetwork?: 'penumbra' | 'zcash' | 'polkadot' | 'kusama' | 'noble' | 'cosmoshub' | 'ethereum' | 'bitcoin';
   /** Zcash-specific wallets */
@@ -57,6 +63,18 @@ type LOCAL = {
     accountIndex: number;
     mainnet: boolean;
     vaultId?: string;
+    /**
+     * Cold signer device that owns this wallet's seed.
+     *
+     * - `'zigner'` (default for legacy/missing): Rotko's own air-gapped Android
+     *   signer. Supports Penumbra, Zcash, FROST multisig, ZID identity, and
+     *   per-tx anchor attestation against a known verifier key.
+     * - `'keystone'`: A Keystone hardware wallet acting as zcash-only cold
+     *   signer. PCZT-only, no Penumbra/FROST/ZID integration.
+     *
+     * Optional for backwards compat — undefined = treat as `'zigner'`.
+     */
+    coldSignerType?: 'zigner' | 'keystone';
   }[];
   /** Active zcash wallet index */
   activeZcashIndex?: number;
@@ -111,6 +129,34 @@ type LOCAL = {
     ethereum?: string;
     bitcoin?: string;
   };
+  /**
+   * Per-network memo-fetch strategy. Currently only Zcash uses this.
+   * Default 'private' is applied at runtime in NetworkConfig if missing.
+   */
+  memoSyncStrategies?: {
+    zcash?: 'private' | 'fast' | 'paranoid';
+  };
+  /**
+   * Per-network mempool watch toggle. Currently only Zcash uses this.
+   * Default 'off' is applied at runtime in NetworkConfig if missing.
+   * Mempool watch is meaningless on the 'lightwalletd' backend (no
+   * compact-action mempool RPC); the worker treats it as a no-op when
+   * the backend is anything but 'zidecar'.
+   */
+  mempoolWatchSettings?: {
+    zcash?: 'off' | 'on';
+  };
+  /**
+   * Zcash sync backend.
+   *   'zidecar'      — trustless: Ligerito header proofs + NOMT nullifier
+   *                    proofs verified locally.
+   *   'lightwalletd' — trusted public indexer (e.g. zec.rocks). No
+   *                    verification pipeline; the wallet trusts what the
+   *                    server returns.
+   * NOT auto-detected at runtime: declarative, set per endpoint. Probes
+   * are a fingerprint vector (only zafu clients hit zidecar-only RPCs).
+   */
+  zcashBackend?: 'zidecar' | 'lightwalletd';
 
   /** keyring vaults (keplr-style multi-account) */
   vaults?: {

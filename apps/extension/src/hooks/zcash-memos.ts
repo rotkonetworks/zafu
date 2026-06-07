@@ -14,6 +14,7 @@ import {
   syncMemosInWorker,
   decryptMemosInWorker,
   type FoundNoteWithMemo,
+  type MemoSyncStrategy,
 } from '../state/keyring/network-worker';
 import {
   isStructuredMemo,
@@ -55,6 +56,8 @@ interface MemoSyncResult {
  */
 export function useZcashMemos(walletId: string, zidecarUrl: string = DEFAULT_ZIDECAR_URL) {
   const messages = useStore(messagesSelector);
+  const strategy: MemoSyncStrategy =
+    useStore(s => s.networks.networks.zcash.memoSyncStrategy) ?? 'private';
   const [syncProgress, setSyncProgress] = useState<{ current: number; total: number } | null>(null);
 
   // listen for progress events from worker
@@ -94,7 +97,14 @@ export function useZcashMemos(walletId: string, zidecarUrl: string = DEFAULT_ZID
 
       setSyncProgress({ current: 0, total: 1 });
 
-      const results = await syncMemosInWorker('zcash', walletId, zidecarUrl, existingTxIds, forceResync);
+      const results = await syncMemosInWorker(
+        'zcash',
+        walletId,
+        zidecarUrl,
+        existingTxIds,
+        forceResync,
+        strategy,
+      );
 
       // insert returned memos into zustand store
       for (const memo of results) {

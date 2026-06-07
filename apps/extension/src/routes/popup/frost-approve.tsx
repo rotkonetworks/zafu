@@ -15,10 +15,18 @@ import {
   frostDkgPart2InWorker,
   frostDkgPart3InWorker,
   frostDeriveAddressInWorker,
+  frostDeriveAddressFromSkInWorker,
+  frostDeriveUfvkInWorker,
   frostSignRound1InWorker,
   frostSpendSignInWorker,
 } from '../../state/keyring/network-worker';
+
+interface PokerPayoutOutput { address: string; amount_zat: number }
+import { encodeOrchardUnifiedAddress } from '@repo/wallet/networks/zcash/unified-address';
+import { hexToBytes } from '@repo/wallet/networks';
 import { FrostRelayClient } from '../../state/keyring/frost-relay-client';
+import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../state/frost-session';
+import { usePasswordGate } from '../../hooks/password-gate';
 
 type Phase = 'confirm' | 'running' | 'complete' | 'error';
 
@@ -52,7 +60,15 @@ export const FrostApprove = () => {
   const relayUrl = params.get('relayUrl') || 'wss://zrelay.rotko.net';
   const roomCode = params.get('roomCode') || '';
   const sighashHex = params.get('sighashHex') || '';
+  const labelPrefix = params.get('labelPrefix') || 'multisig';
   const requestId = params.get('requestId') || '';
+  const planJson = params.get('planJson') || '';
+  const feeZat = Number(params.get('feeZat')) || 0;
+  const multisigLabel = params.get('multisigLabel') || '';
+  const hide = params.get('hide') === '1';
+  const plan: PokerPayoutOutput[] = planJson ? (() => {
+    try { return JSON.parse(planJson) as PokerPayoutOutput[]; } catch { return []; }
+  })() : [];
 
   const [phase, setPhase] = useState<Phase>('confirm');
   const [status, setStatus] = useState('');
@@ -64,6 +80,9 @@ export const FrostApprove = () => {
   const keyInfos = useStore(s => s.keyRing.keyInfos);
   // find active multisig vault for signing
   const multisigVault = keyInfos.find(k => k.type === 'frost-multisig');
+
+  // explicit password prompt before runPokerSign decrypts the FROST share
+  const { requestAuth, PasswordModal } = usePasswordGate();
 
   const deny = () => {
     sendResult(requestId, { error: 'user denied' });
@@ -77,8 +96,12 @@ export const FrostApprove = () => {
         await runDkgCreate();
       } else if (action === 'frost-join') {
         await runDkgJoin();
+      } else if (action === 'dkg-join') {
+        await runDkgJoinV2();
       } else if (action === 'frost-sign') {
         await runSign();
+      } else if (action === 'poker-sign') {
+        await runPokerSign();
       } else {
         throw new Error(`unknown action: ${action}`);
       }
@@ -224,8 +247,120 @@ export const FrostApprove = () => {
     sendResult(requestId, res);
   };
 
+  // generic DKG joiner — mirrors multisig/join.tsx's R1:T:N:SK / R2 / FVK-echo flow
+  const runDkgJoinV2 = async () => {
+    const abort = new AbortController();
+    const sessionDeadline = Date.now() + FROST_SESSION_TIMEOUT_MS;
+    const relay = new FrostRelayClient(relayUrl);
+    const pid = new Uint8Array(32);
+    crypto.getRandomValues(pid);
+
+    let parsedThreshold = 0;
+    let parsedMaxSigners = 0;
+    let fvkSk = '';
+    const peerBroadcasts: string[] = [];
+    const peerRound2: string[] = [];
+    const peerFvks: string[] = [];
+
+    setStatus('joining room...');
+    void relay.joinRoom(roomCode, pid, (event) => {
+      if (event.type === 'message') {
+        const text = new TextDecoder().decode(event.message.payload);
+        const r1 = text.match(/^R1:(?:(\d+):(\d+):SK:([0-9a-fA-F]{64}):)?([\s\S]*)$/);
+        if (r1) {
+          if (r1[1] && r1[2] && r1[3]) {
+            parsedThreshold = Number(r1[1]);
+            parsedMaxSigners = Number(r1[2]);
+            fvkSk = r1[3];
+          }
+          peerBroadcasts.push(r1[4]!);
+          return;
+        }
+        const r2 = text.match(/^R2:([\s\S]*)$/);
+        if (r2) { peerRound2.push(r2[1]!); return; }
+        const fvk = text.match(/^FVK:([\s\S]*)$/);
+        if (fvk) { peerFvks.push(fvk[1]!); return; }
+      }
+    }, abort.signal);
+
+    setStatus('waiting for host...');
+    await waitForUntil(
+      () => parsedThreshold > 0 && parsedMaxSigners > 0 && fvkSk.length === 64,
+      sessionDeadline,
+    );
+
+    setStatus('round 1: generating commitment...');
+    const round1 = await frostDkgPart1InWorker(parsedMaxSigners, parsedThreshold);
+    await relay.sendMessage(roomCode, pid, new TextEncoder().encode(`R1:${round1.broadcast}`));
+
+    setStatus(`round 1: waiting for ${parsedMaxSigners - 1} participant(s)...`);
+    await waitForUntil(() => peerBroadcasts.length >= parsedMaxSigners - 1, sessionDeadline);
+
+    setStatus('round 2: exchanging key shares...');
+    const round2 = await frostDkgPart2InWorker(round1.secret, peerBroadcasts);
+    for (const pkg of round2.peer_packages) {
+      await relay.sendMessage(roomCode, pid, new TextEncoder().encode(`R2:${pkg}`));
+    }
+
+    const expectedR2 = (parsedMaxSigners - 1) ** 2;
+    setStatus(`round 2: waiting for ${expectedR2} peer package(s)...`);
+    await waitForUntil(() => peerRound2.length >= expectedR2, sessionDeadline);
+
+    setStatus('round 3: finalizing...');
+    const round3 = await frostDkgPart3InWorker(round2.secret, peerBroadcasts, peerRound2);
+
+    // mainnet=true matches multisig/join.tsx; param-ize when callers need testnet/regtest
+    const addrRaw = await frostDeriveAddressFromSkInWorker(round3.public_key_package, fvkSk, 0);
+    const addr = encodeOrchardUnifiedAddress(hexToBytes(addrRaw), true);
+    const orchardFvk = await frostDeriveUfvkInWorker(round3.public_key_package, fvkSk, true);
+
+    setStatus('verifying viewing key agreement...');
+    await relay.sendMessage(roomCode, pid, new TextEncoder().encode(`FVK:${orchardFvk}`));
+    await waitForUntil(() => peerFvks.length >= parsedMaxSigners - 1, sessionDeadline);
+    for (const peerFvk of peerFvks) {
+      if (peerFvk !== orchardFvk) {
+        throw new Error(
+          `FVK mismatch: peer saw a different viewing key — ours ends …${orchardFvk.slice(-8)}, theirs ends …${peerFvk.slice(-8)}`,
+        );
+      }
+    }
+
+    const ts = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 16);
+    const label = `${labelPrefix}-${ts}`;
+    await newFrostMultisigKey({
+      label,
+      address: addr,
+      orchardFvk,
+      keyPackage: round3.key_package,
+      publicKeyPackage: round3.public_key_package,
+      ephemeralSeed: round3.ephemeral_seed,
+      threshold: parsedThreshold,
+      maxSigners: parsedMaxSigners,
+      relayUrl,
+      hidden: hide,
+    });
+
+    abort.abort();
+    const res = { success: true, address: addr, orchardFvk, roomCode };
+    setResult(res);
+    setPhase('complete');
+    sendResult(requestId, res);
+  };
+
   const runSign = async () => {
     if (!multisigVault) throw new Error('no multisig wallet found');
+
+    // wallet-password gate before unsealing the FROST share. Mirrors
+    // runPokerSign — session-unlock alone is not enough to release the
+    // share for a sighash whose semantics the user can't independently
+    // verify.
+    setStatus('awaiting wallet password...');
+    const authorized = await requestAuth();
+    if (!authorized) {
+      sendResult(requestId, { error: 'user denied (password)' });
+      window.close();
+      return;
+    }
 
     const abort = new AbortController();
     const relay = new FrostRelayClient(relayUrl);
@@ -273,7 +408,7 @@ export const FrostApprove = () => {
     const allCommitments = [round1.commitments, ...peerCommitments];
     for (const alpha of alphas) {
       const share = await frostSpendSignInWorker(
-        secrets.keyPackage, round1.nonces, sighashHex, alpha, allCommitments,
+        secrets.ephemeralSeed, secrets.keyPackage, round1.nonces, sighashHex, alpha, allCommitments,
       );
       await relay.sendMessage(roomCode, pid, new TextEncoder().encode(`S:${share}`));
     }
@@ -285,9 +420,101 @@ export const FrostApprove = () => {
     sendResult(requestId, res);
   };
 
+  // joiner-side PCZT signing — host (poker-escrow) drives SIGN/C/S wire same as multisig/sign.tsx
+  const runPokerSign = async () => {
+    // Re-sanitize the URL param defensively (external-easteregg already does
+    // this on the message-listener boundary, but the popup is its own trust
+    // boundary). Same charset as the listener side.
+    const sanitizedLabel = multisigLabel.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 64);
+    const vault = sanitizedLabel
+      ? keyInfos.find(k => k.type === 'frost-multisig' && k.name?.startsWith(sanitizedLabel))
+      : multisigVault;
+    if (!vault) throw new Error('no matching multisig wallet found');
+
+    // wallet-password gate before unsealing the FROST share
+    setStatus('awaiting wallet password...');
+    const authorized = await requestAuth();
+    if (!authorized) {
+      sendResult(requestId, { error: 'user denied (password)' });
+      window.close();
+      return;
+    }
+
+    const abort = new AbortController();
+    const relay = new FrostRelayClient(relayUrl);
+    const secrets = await getMultisigSecrets(vault.id);
+    if (!secrets) throw new Error('failed to decrypt multisig secrets');
+
+    setStatus(`joining payout room ${roomCode}...`);
+    const pid = new Uint8Array(32);
+    crypto.getRandomValues(pid);
+
+    let initSighash = '';
+    let initAlphas: string[] = [];
+    const peerCommits: string[] = [];
+    const peerShares: Record<number, string> = {};
+
+    void relay.joinRoom(roomCode, pid, (event) => {
+      if (event.type !== 'message') return;
+      const text = new TextDecoder().decode(event.message.payload);
+      const sg = text.match(/^SIGN:([0-9a-fA-F]+):([^:]+):([^:]+):(\d+):(\d+)(?::([0-9a-fA-F]+))?$/);
+      if (sg) {
+        initSighash = sg[1]!;
+        initAlphas = sg[2]!.split(',');
+        return;
+      }
+      const cm = text.match(/^C:([\s\S]*)$/);
+      if (cm) {
+        peerCommits.push(cm[1]!);
+        return;
+      }
+      const sm = text.match(/^S:(\d+):(.+)$/);
+      if (sm) {
+        peerShares[Number(sm[1])] = sm[2]!;
+      }
+    }, abort.signal);
+
+    setStatus('waiting for host SIGN...');
+    await waitFor(() => initAlphas.length > 0, 120_000);
+
+    const n = initAlphas.length;
+    setStatus(`round 1: generating ${n} commitment(s)...`);
+    const round1s: { nonces: string; commitments: string }[] = [];
+    for (let i = 0; i < n; i++) {
+      round1s.push(await frostSignRound1InWorker(secrets.ephemeralSeed, secrets.keyPackage));
+    }
+    const commitsCsv = round1s.map(r => r.commitments).join('|');
+    await relay.sendMessage(roomCode, pid, new TextEncoder().encode(`C:${commitsCsv}`));
+
+    setStatus('round 1: waiting for host commitments...');
+    await waitFor(() => peerCommits.length >= 1, 120_000);
+    const hostCommits = peerCommits[0]!.split('|');
+    if (hostCommits.length !== n) {
+      throw new Error(`host sent ${hostCommits.length} commits, expected ${n}`);
+    }
+
+    for (let i = 0; i < n; i++) {
+      setStatus(`round 2: signing action ${i + 1}/${n}...`);
+      const allCommits = [round1s[i]!.commitments, hostCommits[i]!];
+      const share = await frostSpendSignInWorker(
+        secrets.ephemeralSeed, secrets.keyPackage, round1s[i]!.nonces, initSighash, initAlphas[i]!, allCommits,
+      );
+      await relay.sendMessage(roomCode, pid, new TextEncoder().encode(`S:${i}:${share}`));
+    }
+
+    setStatus('done — host will broadcast the transaction');
+    abort.abort();
+    const res = { success: true, signed: true, actions: n };
+    setResult(res);
+    setPhase('complete');
+    sendResult(requestId, res);
+  };
+
   const actionLabel = action === 'frost-create' ? 'Create Multisig'
     : action === 'frost-join' ? 'Join Multisig'
+    : action === 'dkg-join' ? 'Join Multisig'
     : action === 'frost-sign' ? 'Sign Transaction'
+    : action === 'poker-sign' ? 'Approve Payout'
     : action;
 
   return (
@@ -313,10 +540,32 @@ export const FrostApprove = () => {
                 <p className='text-fg-muted'>You will participate in key generation to create a shared multisig wallet.</p>
               </>
             )}
+            {action === 'dkg-join' && (
+              <>
+                <p>Join <span className='tabular text-zigner-gold'>{threshold}-of-{maxSigners}</span> multisig DKG</p>
+                <p className='text-fg-muted tabular'>label: {labelPrefix}-…</p>
+                <p className='text-fg-muted'>Your share stays on this device.</p>
+              </>
+            )}
             {action === 'frost-sign' && (
               <>
                 <p>Co-sign a transaction with your FROST key share.</p>
                 <p className='text-fg-muted tabular break-all'>sighash: {sighashHex.slice(0, 16)}...{sighashHex.slice(-16)}</p>
+              </>
+            )}
+            {action === 'poker-sign' && (
+              <>
+                <p>Approve payout from poker escrow.</p>
+                <div className='mt-1 space-y-1'>
+                  {plan.map((o, i) => (
+                    <p key={i} className='text-fg-muted tabular break-all'>
+                      → {o.address.slice(0, 14)}…{o.address.slice(-8)}
+                      <span className='text-zigner-gold'> {(o.amount_zat / 1e8).toFixed(8)} ZEC</span>
+                    </p>
+                  ))}
+                  <p className='text-fg-dim tabular'>fee {(feeZat / 1e8).toFixed(8)} ZEC</p>
+                </div>
+                <p className='text-fg-muted'>Your FROST share co-signs; escrow finalizes + broadcasts.</p>
               </>
             )}
             <p className='text-fg-dim tabular'>relay: {relayUrl}</p>
@@ -356,6 +605,8 @@ export const FrostApprove = () => {
           <Button variant='secondary' onClick={() => window.close()}>close</Button>
         </div>
       )}
+
+      {PasswordModal}
     </div>
   );
 };

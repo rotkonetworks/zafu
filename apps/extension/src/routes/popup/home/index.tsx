@@ -51,6 +51,12 @@ import type { TransactionInfo } from '@penumbra-zone/protobuf/penumbra/view/v1/v
 /** lazy load network-specific content - only load when needed */
 const AssetsTable = lazy(() => import('./assets-table').then(m => ({ default: m.AssetsTable })));
 const PolkadotAssets = lazy(() => import('./polkadot-assets').then(m => ({ default: m.PolkadotAssets })));
+// Cosmos sub-wallets render under the Penumbra view to surface
+// unshielded balances the user can shield. Lazy so non-Penumbra views
+// don't pay the chunk.
+const CosmosSubwallets = lazy(() =>
+  import('./cosmos-subwallets').then(m => ({ default: m.CosmosSubwallets })),
+);
 
 /** shows all multisig wallets with balances at a glance */
 const MultisigOverview = () => {
@@ -62,7 +68,9 @@ const MultisigOverview = () => {
   const [balances, setBalances] = useState<Record<string, bigint>>({});
 
   const multisigWallets = useMemo(
-    () => zcashWallets.filter(w => w.multisig).map(w => ({ ...w, originalIndex: zcashWallets.indexOf(w) })),
+    () => zcashWallets
+      .filter(w => w.multisig && !w.multisig.hidden)
+      .map(w => ({ ...w, originalIndex: zcashWallets.indexOf(w) })),
     [zcashWallets],
   );
 
@@ -440,6 +448,14 @@ const PenumbraContent = ({ account, onAccountChange }: { account: number; onAcco
       <Suspense fallback={<AssetListSkeleton rows={4} />}>
         <AssetsTable account={account} />
       </Suspense>
+
+      {/* Unshielded Cosmos balances tied to the same key as the Penumbra
+          wallet. Renders nothing when the user has no Cosmos holdings.
+          Account index 0 — the cosmos-balance hooks don't yet split by
+          Penumbra account; v1 uses the wallet's primary derivation. */}
+      <Suspense fallback={null}>
+        <CosmosSubwallets />
+      </Suspense>
     </div>
   );
 };
@@ -455,6 +471,7 @@ const ZcashContent = ({
   const hasWallet = !!(hasMnemonic || watchOnly);
   const isMainnet = watchOnly?.mainnet ?? true;
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
+  const zcashBackend = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';
   const { syncStatus, chainTip, workerSyncHeight, error: syncError } = useZcashSyncStatus();
 
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
@@ -708,7 +725,10 @@ const ZcashContent = ({
     ? Math.min(100, Math.round((scanProgress / scanRange) * 100))
     : 0;
 
-  const allSynced = scanPct >= 100 && ligeritoPct >= 100;
+  // lightwalletd has no verification pipeline — synced once the scan catches up
+  const allSynced = zcashBackend === 'lightwalletd'
+    ? scanPct >= 100
+    : scanPct >= 100 && ligeritoPct >= 100;
 
   // overall sync percentage (0-100) with 1 decimal — zashi style
   const overallPct = scanPct > 0
@@ -850,13 +870,15 @@ const ZcashContent = ({
             ? 'connecting...'
             : scanPct > 0
               ? `scanning · ${overallPct.toFixed(1)}%`
-              : gigaproofStatus >= 2
-                ? `ligerito · ${blocksUntilReady <= 0 ? 'verified' : `${blocksUntilReady} blocks`}`
-                : gigaproofStatus === 1
-                  ? 'ligerito proving...'
-                  : nomtPct >= 100
-                    ? 'nomt verified'
-                    : 'verifying nomt...'}
+              : zcashBackend === 'lightwalletd'
+                ? 'starting scan...'
+                : gigaproofStatus >= 2
+                  ? `ligerito · ${blocksUntilReady <= 0 ? 'verified' : `${blocksUntilReady} blocks`}`
+                  : gigaproofStatus === 1
+                    ? 'ligerito proving...'
+                    : nomtPct >= 100
+                      ? 'nomt verified'
+                      : 'verifying nomt...'}
           error={syncError?.message}
           barColor={scanPct > 0 ? 'bg-zigner-gold' : ligeritoPct > 0 ? 'bg-zigner-gold' : 'bg-fg-muted/30'}
           barDoneColor='bg-zigner-gold'

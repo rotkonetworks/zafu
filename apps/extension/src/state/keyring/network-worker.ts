@@ -17,7 +17,7 @@
 import type { NetworkType } from './types';
 
 export interface NetworkWorkerMessage {
-  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-multi' | 'send-tx-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'note-sync-encode' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos' | 'frost-dkg-part1' | 'frost-dkg-part2' | 'frost-dkg-part3' | 'frost-sign-round1' | 'frost-spend-sign' | 'frost-spend-aggregate' | 'frost-derive-address' | 'frost-derive-address-from-sk' | 'frost-sample-fvk-sk' | 'frost-derive-ufvk' | 'frost-parse-tx-outputs';
+  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-multi' | 'send-tx-complete' | 'send-tx-pczt' | 'send-tx-pczt-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'note-sync-encode' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos' | 'frost-dkg-part1' | 'frost-dkg-part2' | 'frost-dkg-part3' | 'frost-sign-round1' | 'frost-spend-sign' | 'frost-spend-aggregate' | 'frost-derive-address' | 'frost-derive-address-from-sk' | 'frost-sample-fvk-sk' | 'frost-derive-ufvk' | 'frost-parse-tx-outputs';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -25,7 +25,7 @@ export interface NetworkWorkerMessage {
 }
 
 export interface NetworkWorkerResponse {
-  type: 'ready' | 'address' | 'sync-progress' | 'send-progress' | 'sync-started' | 'sync-stopped' | 'sync-reset' | 'balance' | 'tx-result' | 'tx-multi-result' | 'send-tx-unsigned' | 'shield-result' | 'shield-unsigned-result' | 'wallets' | 'wallet-deleted' | 'notes' | 'note-sync-encoded' | 'memos' | 'transparent-history' | 'history' | 'memos-result' | 'sync-memos-progress' | 'mempool-update' | 'prove-request' | 'frost-result' | 'error';
+  type: 'ready' | 'address' | 'sync-progress' | 'send-progress' | 'sync-started' | 'sync-stopped' | 'sync-reset' | 'balance' | 'tx-result' | 'tx-multi-result' | 'send-tx-unsigned' | 'send-tx-pczt-unsigned' | 'shield-result' | 'shield-unsigned-result' | 'wallets' | 'wallet-deleted' | 'notes' | 'note-sync-encoded' | 'memos' | 'transparent-history' | 'history' | 'memos-result' | 'sync-memos-progress' | 'mempool-update' | 'prove-request' | 'frost-result' | 'error';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -126,6 +126,29 @@ const spawnNetworkWorkerInner = async (network: NetworkType): Promise<void> => {
     }
 
     if (msg.type === 'mempool-update') {
+      // CONTRACT for consumers (hdevalence audit):
+      //
+      // `zcash-mempool-update` fires only when the worker found at least
+      // one match (pendingIncoming or pendingSpends non-empty). That
+      // means the *receipt* of this event is itself the signal "this
+      // wallet matched something in mempool". Any handler whose
+      // observable behavior differs between "got the event with N
+      // matches" and "got the event with M matches" (or "got the event"
+      // vs "didn't get the event") leaks the trial-decryption result to
+      // any local code/page that can measure the side effect.
+      //
+      // Consumers MUST:
+      //   - never fire a network request as a consequence of receipt;
+      //   - never produce a visible UI change with timing distinguishable
+      //     from the no-match path (use a refresh that already runs on
+      //     other triggers, not one keyed to mempool events);
+      //   - never log/store in a way the page or another extension can
+      //     observe.
+      //
+      // If you find yourself wanting to react conditionally, audit
+      // against the threat model: a co-located content script can read
+      // CustomEvent dispatches in the same realm. There is currently
+      // no consumer; add one only after confirming this discipline.
       window.dispatchEvent(new CustomEvent('zcash-mempool-update', {
         detail: { network, walletId: msg.walletId, ...msg.payload as object }
       }));
@@ -236,8 +259,19 @@ export const startSyncInWorker = async (
   mnemonic: string,
   serverUrl: string,
   startHeight?: number,
+  backend: 'zidecar' | 'lightwalletd' = 'zidecar',
+  mempoolWatch: 'off' | 'on' = 'off',
 ): Promise<void> => {
-  return callWorker(network, 'sync', { mnemonic, serverUrl, startHeight }, walletId);
+  // Defensive: mempool watch is meaningless on lightwalletd. Use the
+  // single-source-of-truth gate from the strategy module.
+  const { isMempoolWatchEnabled } = await import('../../services/mempool-watch/strategy');
+  const effectiveMempoolWatch: 'off' | 'on' = isMempoolWatchEnabled(mempoolWatch, backend) ? 'on' : 'off';
+  return callWorker(
+    network,
+    'sync',
+    { mnemonic, serverUrl, startHeight, backend, mempoolWatch: effectiveMempoolWatch },
+    walletId,
+  );
 };
 
 /**
@@ -249,8 +283,17 @@ export const startWatchOnlySyncInWorker = async (
   ufvk: string,
   serverUrl: string,
   startHeight?: number,
+  backend: 'zidecar' | 'lightwalletd' = 'zidecar',
+  mempoolWatch: 'off' | 'on' = 'off',
 ): Promise<void> => {
-  return callWorker(network, 'sync', { mnemonic: '', serverUrl, startHeight, ufvk }, walletId);
+  const { isMempoolWatchEnabled } = await import('../../services/mempool-watch/strategy');
+  const effectiveMempoolWatch: 'off' | 'on' = isMempoolWatchEnabled(mempoolWatch, backend) ? 'on' : 'off';
+  return callWorker(
+    network,
+    'sync',
+    { mnemonic: '', serverUrl, startHeight, ufvk, backend, mempoolWatch: effectiveMempoolWatch },
+    walletId,
+  );
 };
 
 /**
@@ -401,7 +444,18 @@ export interface MemoSyncEntry {
 }
 
 /**
- * sync memos in worker (bucket fetch + noise + decrypt — no round-trips)
+ * Memo-fetch strategy chosen by the user per-server. See
+ * services/memo-sync/README.md for what each value means.
+ */
+export type MemoSyncStrategy = 'private' | 'fast' | 'paranoid';
+
+/**
+ * sync memos in worker (bucket fetch + decoys + decrypt — no per-tx round-trips)
+ *
+ * `strategy` selects the filter stack inside the worker. Default 'private'
+ * (2x decoys, shuffle, cache, concurrency 4). 'fast' drops decoys + shuffle;
+ * 'paranoid' raises the decoy ratio. The leaky per-txid path is not reachable
+ * from any strategy.
  */
 export const syncMemosInWorker = async (
   network: NetworkType,
@@ -409,8 +463,14 @@ export const syncMemosInWorker = async (
   serverUrl: string,
   existingTxIds: string[],
   forceResync: boolean,
+  strategy: MemoSyncStrategy = 'private',
 ): Promise<MemoSyncEntry[]> => {
-  return callWorker(network, 'sync-memos', { serverUrl, existingTxIds, forceResync }, walletId);
+  return callWorker(
+    network,
+    'sync-memos',
+    { serverUrl, existingTxIds, forceResync, strategy },
+    walletId,
+  );
 };
 
 export interface ShieldResult {
@@ -502,6 +562,61 @@ export const completeSendTxInWorker = async (
   spendIndices: number[],
 ): Promise<{ txid: string }> => {
   return callWorker(network, 'send-tx-complete', { serverUrl, unsignedTx, signatures, spendIndices }, walletId);
+};
+
+/**
+ * Result of building a PCZT for single-signer cold signing.
+ *
+ * The worker has already CBOR-wrapped the PCZT and UR-fragmented it into
+ * animated-QR frames; the caller just hands `urFrames` to AnimatedQrDisplay.
+ * `pcztHex` is kept around mostly for debug / round-trip verification.
+ */
+export interface SendTxPcztUnsignedResult {
+  pcztHex: string;
+  summary: string;
+  actionCount: number;
+  fee: string;
+  urFrames: string[];
+  cborBytes: number;
+}
+
+/**
+ * Build a PCZT for cold signing via QR. Replaces the legacy simple-format
+ * (sighash + alphas + summary string) for the single-signer zigner path.
+ *
+ * Caller must provide ufvk and target_height (any height ≥ NU6.1 activation
+ * works for current mainnet).
+ *
+ * `fragmentSize` defaults to 400 (~v25 QR density). Drop to 200 for older /
+ * cheaper Keystone-class cameras if frames don't lock.
+ */
+export const buildSendTxPcztInWorker = async (
+  network: NetworkType,
+  walletId: string,
+  serverUrl: string,
+  recipient: string,
+  amount: string,
+  memo: string,
+  targetHeight: number,
+  mainnet: boolean,
+  ufvk: string,
+  fragmentSize = 400,
+): Promise<SendTxPcztUnsignedResult> => {
+  return callWorker(network, 'send-tx-pczt', { serverUrl, recipient, amount, memo, targetHeight, mainnet, ufvk, fragmentSize }, walletId);
+};
+
+/**
+ * Extract a broadcast-ready v5 tx from a signed PCZT returned by zigner and
+ * broadcast it. The caller has already reassembled the multi-frame UR scan
+ * into raw PCZT bytes (hex) via wasm `ur_decode_frames`.
+ */
+export const completeSendTxPcztInWorker = async (
+  network: NetworkType,
+  walletId: string,
+  serverUrl: string,
+  signedPcztHex: string,
+): Promise<{ txid: string }> => {
+  return callWorker(network, 'send-tx-pczt-complete', { serverUrl, signedPcztHex }, walletId);
 };
 
 /** result of building an unsigned shielding transaction */
@@ -636,8 +751,9 @@ export const frostSignRound1InWorker = async (
   return callWorker('zcash', 'frost-sign-round1', { ephemeralSeedHex, keyPackageHex });
 };
 
-/** spend-authorize round 2: produce FROST share for each action */
+/** signed FROST share — wrapping is required for cross-party aggregator (poker-escrow) to extract the signer identifier */
 export const frostSpendSignInWorker = async (
+  ephemeralSeedHex: string,
   keyPackageHex: string,
   noncesHex: string,
   sighashHex: string,
@@ -645,7 +761,7 @@ export const frostSpendSignInWorker = async (
   commitments: string[],
 ): Promise<string> => {
   return callWorker('zcash', 'frost-spend-sign', {
-    keyPackageHex, noncesHex, sighashHex, alphaHex,
+    ephemeralSeedHex, keyPackageHex, noncesHex, sighashHex, alphaHex,
     commitments: JSON.stringify(commitments),
   });
 };
