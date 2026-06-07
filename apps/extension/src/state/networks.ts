@@ -126,7 +126,7 @@ const DEFAULT_NETWORKS: Record<NetworkId, NetworkConfig> = {
     enabled: false,
     endpoint: 'https://penumbra.rotko.net',
     chainId: 'penumbra-1',
-    syncDescription: 'Compact blocks verified by state commitment tree. Trial-decrypted locally — keys never leave this device.',
+    syncDescription: 'Compact blocks verified by state commitment tree. Trial-decrypted locally - keys never leave this device.',
     bech32Prefix: 'penumbra',
   },
   zcash: {
@@ -136,7 +136,7 @@ const DEFAULT_NETWORKS: Record<NetworkId, NetworkConfig> = {
     decimals: 8,
     enabled: false,
     endpoint: 'https://zcash.rotko.net',
-    syncDescription: 'Zidecar trustless sync — header chain proven via Ligerito polynomial commitments, nullifier set verified by NOMT merkle proofs. Compact blocks are trial-decrypted locally — keys never leave this device.',
+    syncDescription: 'Zidecar trustless sync - header chain proven via Ligerito polynomial commitments, nullifier set verified by NOMT merkle proofs. Compact blocks are trial-decrypted locally - keys never leave this device.',
     memoSyncStrategy: 'private',
     mempoolWatch: 'off',
     backend: 'zidecar',

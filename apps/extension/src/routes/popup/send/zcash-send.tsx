@@ -302,7 +302,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         if (!authorized) { setStep('review'); return; }
         const ms = activeZcashWallet.multisig;
         const secrets = await useStore.getState().keyRing.getMultisigSecrets(activeZcashWallet.vaultId);
-        if (!secrets) throw new Error('failed to decrypt multisig keys — unlock wallet first');
+        if (!secrets) throw new Error('failed to decrypt multisig keys - unlock wallet first');
         const result = await buildSendTxInWorker(
           'zcash', walletId, zidecarUrl, recipient.trim(), amountZat, memo, accountIndex, mainnet,
           undefined, ufvk,

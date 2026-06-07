@@ -96,18 +96,34 @@ export const SettingsNetworkEndpoints = () => {
                   </div>
                   {sortedCurated.map(ep => {
                     const lat = latencyByUrl.get(ep.url);
-                    const isCurrent = (editingEndpoints[network.id] ?? network.endpoint) === ep.url;
+                    const isCurrent = network.endpoint === ep.url;
+                    const isSaving = saving === network.id && editingEndpoints[network.id] === ep.url;
                     return (
                       <button
                         key={ep.url}
                         type="button"
-                        onClick={() => setEditingEndpoints(prev => ({ ...prev, [network.id]: ep.url }))}
-                        className={`flex items-center justify-between text-left rounded-lg border bg-input px-3 py-2 text-sm transition-colors hover:border-zigner-gold ${
+                        disabled={isCurrent || isSaving}
+                        onClick={async () => {
+                          // immediate save - skip the input edit + Save dance
+                          setSaving(network.id);
+                          setEditingEndpoints(prev => ({ ...prev, [network.id]: ep.url }));
+                          try {
+                            await setNetworkEndpoint(network.id, ep.url);
+                            setEditingEndpoints(prev => {
+                              const next = { ...prev };
+                              delete next[network.id];
+                              return next;
+                            });
+                          } finally {
+                            setSaving(null);
+                          }
+                        }}
+                        className={`flex items-center justify-between text-left rounded-lg border bg-input px-3 py-2 text-sm transition-colors hover:border-zigner-gold disabled:opacity-100 ${
                           isCurrent ? 'border-zigner-gold' : 'border-border-soft'
-                        }`}
+                        } ${isSaving ? 'opacity-60' : ''}`}
                       >
                         <div className="flex flex-col">
-                          <span className="text-sm">{ep.label}</span>
+                          <span className="text-sm">{ep.label}{isCurrent && <span className="ml-2 text-xs text-zigner-gold">active</span>}</span>
                           <span className="text-xs text-fg-muted">{ep.url}</span>
                         </div>
                         <div className="flex flex-col items-end gap-0.5">

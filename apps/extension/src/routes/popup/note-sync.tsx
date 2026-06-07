@@ -90,14 +90,14 @@ export const NoteSyncPage = () => {
             urFrames={encoded.frames}
             totalBytes={encoded.cborBytes}
             title='point zigner camera at this QR'
-            description='the QR code cycles through multiple frames — hold the camera steady until zigner shows the balance'
+            description='the QR code cycles through multiple frames - hold the camera steady until zigner shows the balance'
           />
         </div>
       )}
 
       {step === 'display' && encoded && encoded.noteCount === 0 && (
         <div className='rounded-lg border border-border-soft bg-elev-1 p-3 text-xs text-fg-muted'>
-          no spendable notes — sync the wallet first
+          no spendable notes - sync the wallet first
         </div>
       )}
 
