@@ -4,9 +4,8 @@
  * the underlying server has limits; flooding it with parallel requests hurts
  * latency for everyone and can trigger rate limiting. higher concurrency =
  * faster sync up to the server's saturation point. configurable per strategy:
- *   - 'private'  → 4   (safe default)
- *   - 'fast'     → 8   (acceptable when you trust the server / self-hosted)
- *   - 'paranoid' → 2   (slower, blends into background traffic better)
+ *   - 'private'  -> 4   (safe default)
+ *   - 'fast'     -> 8   (acceptable when you trust the server / self-hosted)
  *
  * implementation note: the inner fetcher receives the FULL bucket set at once
  * and decides per-bucket concurrency internally. this filter doesn't split

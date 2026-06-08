@@ -66,7 +66,7 @@ export type MemoFetcher = (
 export type MemoFilter = (inner: MemoFetcher) => MemoFetcher;
 
 /** named strategy = closed enum of pre-composed filter stacks. */
-export type MemoSyncStrategy = 'private' | 'fast' | 'paranoid';
+export type MemoSyncStrategy = 'private' | 'fast';
 
 /** standard bucket size (100 blocks). matches the existing zafu deployment. */
 export const BUCKET_SIZE = 100;

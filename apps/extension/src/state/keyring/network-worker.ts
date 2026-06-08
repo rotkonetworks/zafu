@@ -447,15 +447,14 @@ export interface MemoSyncEntry {
  * Memo-fetch strategy chosen by the user per-server. See
  * services/memo-sync/README.md for what each value means.
  */
-export type MemoSyncStrategy = 'private' | 'fast' | 'paranoid';
+export type MemoSyncStrategy = 'private' | 'fast';
 
 /**
- * sync memos in worker (bucket fetch + decoys + decrypt — no per-tx round-trips)
+ * sync memos in worker (bucket fetch + decoys + decrypt - no per-tx round-trips)
  *
  * `strategy` selects the filter stack inside the worker. Default 'private'
- * (2x decoys, shuffle, cache, concurrency 4). 'fast' drops decoys + shuffle;
- * 'paranoid' raises the decoy ratio. The leaky per-txid path is not reachable
- * from any strategy.
+ * (2x decoys, shuffle, cache, concurrency 4). 'fast' drops decoys + shuffle.
+ * The leaky per-txid path is not reachable from any strategy.
  */
 export const syncMemosInWorker = async (
   network: NetworkType,

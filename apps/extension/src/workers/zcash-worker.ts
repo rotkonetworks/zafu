@@ -2356,9 +2356,12 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const estimateBlockTimeMs = (h: number): number =>
           tipTimeMs + (h - currentTip) * 75000;
 
+        // Any non-'fast' value (including legacy 'paranoid' from older
+        // storage) falls back to 'private'. 'paranoid' was removed for
+        // decision-surface simplification; users get the strong default.
         const rawStrategy = (payload as { strategy?: string }).strategy;
         const strategyName: MemoSyncStrategy =
-          rawStrategy === 'fast' || rawStrategy === 'paranoid' ? rawStrategy : 'private';
+          rawStrategy === 'fast' ? 'fast' : 'private';
         const base = blockRangeFetcher(memoClient, {
           maxHeight: currentTip,
           bucketSize: MEMO_BUCKET_SIZE,

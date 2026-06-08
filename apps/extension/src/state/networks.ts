@@ -38,7 +38,7 @@ export type NetworkId =
  * does. No strategy ever exposes per-txid lookups; the leaky path is
  * deliberately not reachable from the UI.
  */
-export type MemoSyncStrategy = 'private' | 'fast' | 'paranoid';
+export type MemoSyncStrategy = 'private' | 'fast';
 
 /**
  * Mempool-watch toggle. Off by default (per the hdevalence review): the

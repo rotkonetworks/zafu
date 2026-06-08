@@ -256,12 +256,7 @@ const STRATEGY_OPTIONS: ReadonlyArray<{
   {
     id: 'fast',
     label: 'fast',
-    hint: 'bucket only, no decoys. faster sync but server can correlate buckets ↔ wallet.',
-  },
-  {
-    id: 'paranoid',
-    label: 'paranoid',
-    hint: 'bucket + 5× decoy + shuffle. slower; strongest decoy ratio.',
+    hint: 'bucket only, no decoys. faster sync but server can correlate buckets to wallet.',
   },
 ];
 

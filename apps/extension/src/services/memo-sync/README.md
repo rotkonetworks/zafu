@@ -10,7 +10,7 @@ are pre-composed filter stacks chosen by config.
 ```
 types.ts                     // MemoFetcher, MemoEvent, BucketRange, MemoSyncStrategy
 block-range-fetcher.ts       // concrete fetcher: GetBlockTransactions per bucket
-strategy.ts                  // buildStrategy('private' | 'fast' | 'paranoid', params)
+strategy.ts                  // buildStrategy('private' | 'fast', params)
 filters/
   shuffle.ts                 // randomize bucket fetch order
   decoy.ts                   // mix in N× random decoy buckets
@@ -43,9 +43,8 @@ for await (const { bucketStart, blocks } of fetch(walletId, ownedBuckets, {
 
 | Strategy | Decoys | Shuffle | Concurrency | Server visibility |
 |---|---|---|---|---|
-| `private` (default) | 2× | yes | 4 | 3N random 100-block windows |
+| `private` (default) | 2x | yes | 4 | 3N random 100-block windows |
 | `fast` | 0 | no | 8 | N exact 100-block windows |
-| `paranoid` | 5× | yes | 2 | 6N random 100-block windows |
 
 No strategy ever calls `GetTransaction(txid)`. There is no filter that can
 recover privacy after a leaked txid lookup, so the per-tx leaky path is

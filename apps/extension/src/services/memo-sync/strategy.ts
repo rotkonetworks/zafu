@@ -1,17 +1,16 @@
 /**
- * named strategies — closed enum of pre-composed filter stacks.
+ * named strategies - closed enum of pre-composed filter stacks.
  *
  * the UI exposes only this enum, never the raw filters. this is deliberate:
- *   - users can pick "private / fast / paranoid" without having to reason
- *     about decoy ratios, shuffle, or concurrency interactions
+ *   - users can pick "private / fast" without having to reason about decoy
+ *     ratios, shuffle, or concurrency interactions
  *   - we can change the internal composition without breaking the public API
  *   - a dev or test can construct a custom stack by calling the filters
  *     directly, bypassing this module
  *
  * privacy summary:
- *   - 'private'  → 2× decoy, shuffle, cache, concurrency 4 (default)
- *   - 'fast'     → no decoys, cache, concurrency 8 (visible buckets, no leak of txids)
- *   - 'paranoid' → 5× decoy, shuffle, cache, concurrency 2
+ *   - 'private'  -> 2x decoy, shuffle, cache, concurrency 4 (default)
+ *   - 'fast'     -> no decoys, cache, concurrency 8 (visible buckets, no leak of txids)
  *
  * NOTE: even 'fast' fetches by block-range, never per-txid. there's no mode
  * that ever calls GetTransaction(txid), because there's no filter that can
@@ -58,13 +57,6 @@ export function buildStrategy(
     case 'fast':
       return compose(base, [
         withConcurrency(8),
-        cache,
-      ]);
-    case 'paranoid':
-      return compose(base, [
-        withConcurrency(2),
-        withShuffle(rng),
-        withDecoyBuckets({ ratio: 5, rng, excludeStore: store }),
         cache,
       ]);
     case 'private':
