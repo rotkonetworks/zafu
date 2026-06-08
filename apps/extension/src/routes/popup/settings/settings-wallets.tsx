@@ -571,19 +571,13 @@ const VaultRow = ({ vault, networks, multisigWallet, onRemove, onRename, disable
       {multisigWallet && (
         <div className='flex items-center gap-2 mt-2'>
           <span className='text-[10px] text-fg-muted'>
-            {String(vault.insensitive['threshold'])}/{String(vault.insensitive['maxSigners'])}
+            {String(vault.insensitive['threshold'])}/{String(vault.insensitive['maxSigners'])} multisig
           </span>
           <button
-            onClick={() => navigate(`${PopupPath.SETTINGS_MULTISIG}?id=${multisigWallet.id}` as PopupPath)}
-            className='text-[10px] text-fg-muted hover:text-fg-high'
+            onClick={() => navigate(PopupPath.MULTISIG)}
+            className='text-[10px] text-zigner-gold hover:underline'
           >
-            edit
-          </button>
-          <button
-            onClick={() => navigate(PopupPath.MULTISIG_SIGN)}
-            className='text-[10px] text-zigner-gold'
-          >
-            co-sign
+            manage in multisig tab →
           </button>
         </div>
       )}
