@@ -13,6 +13,7 @@ import { selectEffectiveKeyInfo, selectKeyInfos } from '../../../state/keyring';
 import { allContactsSelector } from '../../../state/contacts';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import type { ZidSitePreference, ZidShareRecord } from '../../../state/identity';
+import { ZID_INDEX_STORAGE_KEY, getZidIndex, rotateZidIndex } from '../../../state/identity';
 import { getOriginPermissions, grantCapability, denyCapability } from '@repo/storage-chrome/origin';
 import { revokeOrigin as revokeOriginFull } from '../../../senders/revoke';
 import { CAPABILITY_META, type Capability, type OriginPermissions } from '@repo/storage-chrome/capabilities';
@@ -105,7 +106,28 @@ export const IdentityPage = () => {
   const [showQr, setShowQr] = useState(false);
   const [showFullKey, setShowFullKey] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [zidIndex, setZidIndexState] = useState(0);
+  const [confirmingRotate, setConfirmingRotate] = useState(false);
   const reloadSites = useCallback(() => setReloadKey(k => k + 1), []);
+
+  // load + subscribe to global zidIndex (chrome.storage.local)
+  useEffect(() => {
+    void getZidIndex().then(setZidIndexState);
+    const listener = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
+      if (area === 'local' && changes[ZID_INDEX_STORAGE_KEY]) {
+        const v = changes[ZID_INDEX_STORAGE_KEY].newValue;
+        if (typeof v === 'number') setZidIndexState(v);
+      }
+    };
+    chrome.storage.onChanged.addListener(listener);
+    return () => chrome.storage.onChanged.removeListener(listener);
+  }, []);
+
+  const handleRotateZid = useCallback(async () => {
+    await rotateZidIndex();
+    setConfirmingRotate(false);
+    reloadSites();
+  }, [reloadSites]);
 
   // try active keyinfo first, then any keyinfo with a zid (mnemonic wallets)
   const zidPubkey = (keyInfo?.insensitive?.['zid'] ?? allKeyInfos.find(k => k.insensitive?.['zid'])?.insensitive?.['zid']) as string | undefined;
@@ -247,8 +269,8 @@ export const IdentityPage = () => {
                 }`} />
               </button>
 
-              {/* vault name + plan badge */}
-              <div className='flex items-center gap-2 mt-1'>
+              {/* vault name + plan badge + rotation index */}
+              <div className='flex items-center gap-2 mt-1 flex-wrap'>
                 {keyInfo && (
                   <span className='text-[10px] text-fg-muted font-mono'>{keyInfo.name}</span>
                 )}
@@ -259,6 +281,41 @@ export const IdentityPage = () => {
                 }`}>
                   {plan}{pro && days > 0 ? ` - ${days}d` : ''}
                 </span>
+                {zidIndex > 0 && (
+                  <span
+                    className='text-[9px] font-mono px-1.5 py-0 rounded bg-elev-2 text-fg-muted/70 border border-border-soft'
+                    title='global zid rotation index. all sites + cross-site keys derive under this generation.'
+                  >
+                    gen {zidIndex}
+                  </span>
+                )}
+                {confirmingRotate ? (
+                  <span className='flex items-center gap-1'>
+                    <button
+                      type='button'
+                      onClick={() => void handleRotateZid()}
+                      className='text-[9px] font-mono px-1.5 py-0 rounded border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 transition-colors'
+                    >
+                      confirm rotate
+                    </button>
+                    <button
+                      type='button'
+                      onClick={() => setConfirmingRotate(false)}
+                      className='text-[9px] font-mono px-1.5 py-0 rounded border border-border-soft text-fg-muted hover:bg-elev-2 transition-colors'
+                    >
+                      cancel
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    type='button'
+                    onClick={() => setConfirmingRotate(true)}
+                    className='text-[9px] font-mono px-1.5 py-0 rounded border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 transition-colors'
+                    title='rotate zid - all sites + cross-site keys get fresh derivations. ring vrf seed (pro) is preserved.'
+                  >
+                    rotate zid
+                  </button>
+                )}
               </div>
             </div>
           </div>

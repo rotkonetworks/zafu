@@ -395,11 +395,57 @@ export const deriveZidForContact = (mnemonic: string, identity: string, contactI
   });
 
 /**
+ * Global ZID rotation index. Mirrors the zcashShieldedIndex pattern -
+ * a chrome.storage.local counter that lets the user rotate their entire
+ * ZID universe at once ("burn this identity, start over"). Per-site
+ * rotation in ZidSitePreference still works on top of this global salt.
+ *
+ * Ring VRF seed (deriveRingVrfSeed) is intentionally NOT folded into
+ * this rotation - the comment above explains why (subscriptions must
+ * survive rotation).
+ */
+export const ZID_INDEX_STORAGE_KEY = 'zidIndex';
+
+export async function getZidIndex(): Promise<number> {
+  const r = await chrome.storage.local.get(ZID_INDEX_STORAGE_KEY);
+  const v = r[ZID_INDEX_STORAGE_KEY];
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0;
+}
+
+export async function setZidIndex(value: number): Promise<void> {
+  await chrome.storage.local.set({ [ZID_INDEX_STORAGE_KEY]: value });
+}
+
+export async function rotateZidIndex(): Promise<number> {
+  const current = await getZidIndex();
+  const next = current + 1;
+  await setZidIndex(next);
+  return next;
+}
+
+/**
+ * Apply the global rotation index to an identity name. At index 0 the
+ * original identity is returned unchanged (so existing keys stay stable
+ * before any rotation). At index > 0 a suffix is appended so the
+ * downstream HKDF derives a fresh root.
+ */
+export function rotatedIdentity(baseIdentity: string, zidIndex: number): string {
+  return zidIndex > 0 ? `${baseIdentity}-v${zidIndex}` : baseIdentity;
+}
+
+/**
  * resolve which zid to use for a given origin based on preference.
  * default: site-specific for the "default" identity.
+ *
+ * Pass `zidIndex` from getZidIndex() to apply global rotation.
  */
-export const resolveZid = (mnemonic: string, origin: string, pref?: ZidSitePreference): Zid => {
-  const identity = pref?.identity ?? DEFAULT_IDENTITY;
+export const resolveZid = (
+  mnemonic: string,
+  origin: string,
+  pref?: ZidSitePreference,
+  zidIndex = 0,
+): Zid => {
+  const identity = rotatedIdentity(pref?.identity ?? DEFAULT_IDENTITY, zidIndex);
   if (pref?.mode === 'cross-site') return deriveZidCrossSite(mnemonic, identity);
   return deriveZidForSite(mnemonic, identity, origin, pref?.rotation ?? 0);
 };
@@ -412,8 +458,9 @@ export const signZid = (
   origin: string,
   challenge: Uint8Array,
   pref?: ZidSitePreference,
+  zidIndex = 0,
 ): { signature: string; publicKey: string } => {
-  const identityName = pref?.identity ?? DEFAULT_IDENTITY;
+  const identityName = rotatedIdentity(pref?.identity ?? DEFAULT_IDENTITY, zidIndex);
   const root = deriveRoot(mnemonic);
   const identity = deriveIdentity(root, identityName);
   root.fill(0);

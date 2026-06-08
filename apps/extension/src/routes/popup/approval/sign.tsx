@@ -5,7 +5,7 @@ import { signApprovalSelector } from '../../../state/sign-approval';
 import { ApproveDeny } from './approve-deny';
 import { DisplayOriginURL } from '../../../shared/components/display-origin-url';
 import { UserChoice } from '@repo/storage-chrome/records';
-import { signZid, signP256, resolveZid, type ZidSitePreference } from '../../../state/identity';
+import { signZid, signP256, resolveZid, getZidIndex, type ZidSitePreference } from '../../../state/identity';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { hexToBytes } from '@noble/hashes/utils';
 import { localExtStorage } from '@repo/storage-chrome/local';
@@ -61,10 +61,11 @@ export const SignApproval = () => {
       if (!keyInfo) return;
       try {
         const mnemonic = await getMnemonic(keyInfo.id);
-        const zid = resolveZid(mnemonic, origin, resolved);
+        const zidIndex = await getZidIndex();
+        const zid = resolveZid(mnemonic, origin, resolved, zidIndex);
         setPreviewAddress(zid.address);
       } catch {
-        // mnemonic not available yet — will derive after password
+        // mnemonic not available yet - will derive after password
       }
     })();
   }, [keyInfo, origin, isAirgap, zidPubkey]);
@@ -77,9 +78,10 @@ export const SignApproval = () => {
     try {
       const mnemonic = await getMnemonic(keyInfo.id);
       const challenge = hexToBytes(challengeHex);
+      const zidIndex = await getZidIndex();
       const result = algorithm === 'es256'
         ? signP256(mnemonic, origin, challenge, pref)
-        : signZid(mnemonic, origin, challenge, pref);
+        : signZid(mnemonic, origin, challenge, pref, zidIndex);
 
       // share log is written by the service worker (sign-request.ts) after popup closes
       setChoice(UserChoice.Approved);
