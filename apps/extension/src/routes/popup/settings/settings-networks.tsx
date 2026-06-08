@@ -15,6 +15,7 @@ import {
   groupPresetsByRegion,
   type RpcEndpointRegion,
 } from '../../../config/zcash-endpoints';
+import { measurePresetLatencies, type EndpointLatency } from '../../../state/keyring/endpoint-latency';
 import { NETWORKS, LAUNCHED_NETWORKS } from '../../../config/networks';
 import { cn } from '@repo/ui/lib/utils';
 import { SettingsScreen } from './settings-screen';
@@ -429,9 +430,38 @@ const regionLabel = (region: RpcEndpointRegion): string => {
 
 const ZcashEndpointPicker = ({ currentUrl, onPick }: ZcashEndpointPickerProps) => {
   const matched = findPresetByUrl(currentUrl);
+  const [testing, setTesting] = useState(false);
+  const [latencies, setLatencies] = useState<Map<string, EndpointLatency> | null>(null);
+
+  const handleTest = async () => {
+    setTesting(true);
+    try {
+      setLatencies(await measurePresetLatencies());
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const rttSuffix = (url: string): string => {
+    const lat = latencies?.get(url);
+    if (!lat) return '';
+    if (lat.rttMs === null) return ' · unreachable';
+    return ` · ${lat.rttMs}ms`;
+  };
+
   return (
     <div className='mb-3'>
-      <div className='text-[10px] text-fg-muted mb-1'>preset</div>
+      <div className='flex items-center justify-between mb-1'>
+        <span className='text-[10px] text-fg-muted'>preset</span>
+        <button
+          type='button'
+          onClick={handleTest}
+          disabled={testing}
+          className='text-[10px] text-zigner-gold hover:underline disabled:opacity-50'
+        >
+          {testing ? 'testing...' : latencies ? 'retest' : 'test latencies'}
+        </button>
+      </div>
       <select
         value={matched?.id ?? ''}
         onChange={e => {
@@ -440,12 +470,12 @@ const ZcashEndpointPicker = ({ currentUrl, onPick }: ZcashEndpointPickerProps) =
         }}
         className='w-full bg-input border border-border-soft px-2 py-1.5 text-xs focus:border-primary/50 focus:outline-none'
       >
-        <option value='' disabled>{matched ? matched.label : 'custom — see below'}</option>
+        <option value='' disabled>{matched ? matched.label : 'custom - see below'}</option>
         {groupPresetsByRegion(ZCASH_MAINNET_ENDPOINTS).map(group => (
           <optgroup key={group.region} label={regionLabel(group.region)}>
             {group.presets.map(p => (
               <option key={p.id} value={p.id}>
-                {p.label}{p.backend === 'zidecar' ? ' · trustless' : ''}
+                {p.label}{p.backend === 'zidecar' ? ' · trustless' : ''}{rttSuffix(p.url)}
               </option>
             ))}
           </optgroup>

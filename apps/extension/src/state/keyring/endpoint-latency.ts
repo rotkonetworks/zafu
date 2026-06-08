@@ -5,12 +5,12 @@
  * lightwalletd implement. Avoids the fingerprinting beacon problem
  * of probing zidecar-only RPCs against arbitrary endpoints.
  *
- * Manual trigger only: settings UI calls measureCuratedLatencies()
+ * Manual trigger only: settings UI calls measurePresetLatencies()
  * on user click; no background polling, no probe on settings entry.
  */
 
 import { zcashClientFor, isZidecarEndpoint } from './zcash-backend';
-import { CURATED_ZCASH_ENDPOINTS } from './endpoint-registry';
+import { ZCASH_MAINNET_ENDPOINTS } from '../../config/zcash-endpoints';
 
 export interface EndpointLatency {
   readonly url: string;
@@ -46,17 +46,14 @@ export async function measureEndpointLatency(url: string): Promise<EndpointLaten
 }
 
 /**
- * Measure all curated endpoints in parallel, return sorted by RTT.
- * Unreachable endpoints (rttMs === null) sort to the end.
+ * Measure all mainnet presets in parallel, return as a Map keyed by URL.
+ * Unreachable endpoints have rttMs === null.
  */
-export async function measureCuratedLatencies(): Promise<EndpointLatency[]> {
+export async function measurePresetLatencies(): Promise<Map<string, EndpointLatency>> {
   const results = await Promise.all(
-    CURATED_ZCASH_ENDPOINTS.map(e => measureEndpointLatency(e.url)),
+    ZCASH_MAINNET_ENDPOINTS.map(p => measureEndpointLatency(p.url)),
   );
-  return results.sort((a, b) => {
-    if (a.rttMs === null && b.rttMs === null) return 0;
-    if (a.rttMs === null) return 1;
-    if (b.rttMs === null) return -1;
-    return a.rttMs - b.rttMs;
-  });
+  const m = new Map<string, EndpointLatency>();
+  results.forEach(r => m.set(r.url, r));
+  return m;
 }

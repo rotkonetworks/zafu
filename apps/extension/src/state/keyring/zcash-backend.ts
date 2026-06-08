@@ -8,7 +8,7 @@ import type {
   SyncStatus,
   Utxo,
 } from './zidecar-client';
-import { findCuratedEndpoint } from './endpoint-registry';
+import { findPresetByUrl } from '../../config/zcash-endpoints';
 
 export type ZcashBackend = 'zidecar' | 'lightwalletd';
 
@@ -66,13 +66,13 @@ const KNOWN_ZIDECAR_HOST_SUFFIXES: ReadonlyArray<string> = [
 ];
 
 export function isZidecarEndpoint(serverUrl: string): boolean {
-  // First: exact-URL match against the curated registry. zidecar entries
-  // there are the exception; anything not in the registry falls through
+  // First: exact-URL match against the curated preset list. zidecar
+  // presets are the exception; anything not in the list falls through
   // to the hostname-suffix check.
-  const curated = findCuratedEndpoint(serverUrl);
-  if (curated) return curated.backend === 'zidecar';
+  const preset = findPresetByUrl(serverUrl);
+  if (preset) return preset.backend === 'zidecar';
 
-  // Defensive parse — never throw on garbage URLs; treat unparseable
+  // Defensive parse - never throw on garbage URLs; treat unparseable
   // input as lightwalletd (the safer default since it doesn't assume
   // zidecar-only RPCs are available).
   let host: string;
