@@ -40,6 +40,50 @@ const ENABLE_FROST_SIGN_ORCHARD = false;
 // pending pick requests: requestId → sendResponse callback
 const pendingPicks = new Map<string, (r: unknown) => void>();
 
+/**
+ * Uniform capability gate for high-risk external entry points.
+ *
+ * Any rejection — missing origin, missing perms, missing capability,
+ * lookup error — returns the same error shape after a constant minimum
+ * latency. Differentiating rejection causes (which the older
+ * zafu_passkey_* pattern does) gives a local attacker a fingerprint of
+ * which capabilities a user has granted; uniform rejection collapses
+ * those distinguishable paths.
+ *
+ * Callers receive either:
+ *   { ok: true, origin: <validated origin> }  — proceed
+ *   null                                       — sendResponse has been
+ *                                                 called with the denied
+ *                                                 shape; caller MUST
+ *                                                 early-return.
+ */
+const REJECT_FLOOR_MS = 30;
+async function requireCapability(
+  sender: chrome.runtime.MessageSender,
+  cap: Capability,
+  sendResponse: (r: unknown) => void,
+): Promise<{ ok: true; origin: string } | null> {
+  const start = performance.now();
+  const reject = async () => {
+    const elapsed = performance.now() - start;
+    if (elapsed < REJECT_FLOOR_MS) {
+      await new Promise<void>(r => setTimeout(r, REJECT_FLOOR_MS - elapsed));
+    }
+    sendResponse({ success: false, error: 'denied' });
+    return null;
+  };
+
+  const origin = sender.origin || sender.url || '';
+  if (!origin) return reject();
+  try {
+    const perms = await getOriginPermissions(origin);
+    if (!hasCapability(perms, cap)) return reject();
+  } catch {
+    return reject();
+  }
+  return { ok: true, origin };
+}
+
 export const externalMessageListener = (
   req: unknown,
   sender: chrome.runtime.MessageSender,
@@ -129,9 +173,11 @@ export const externalMessageListener = (
       // signing (zafu_frost_sign) remain available to free users so they
       // can participate in vaults / poker games hosted by Pro creators.
       void (async () => {
+        const gate = await requireCapability(sender, 'frost', sendResponse);
+        if (!gate) return;
         const { useStore } = await import('../../state');
         if (!useStore.getState().license.license || !isPro(useStore.getState())) {
-          sendResponse({ error: 'pro subscription required to create multisig vaults / games' });
+          sendResponse({ success: false, error: 'denied' });
           return;
         }
         const threshold = Number(msg['threshold']) || 2;
@@ -157,30 +203,33 @@ export const externalMessageListener = (
     }
 
     case 'zafu_frost_join': {
-      const roomCode = String(msg['roomCode'] || '');
-      if (!roomCode) {
-        sendResponse({ error: 'roomCode required' });
-        return true;
-      }
-      const threshold = Number(msg['threshold']) || 2;
-      const maxSigners = Number(msg['maxSigners']) || 3;
-      const relayUrl = String(msg['relayUrl'] || 'https://poker.zk.bot');
-      const appOrigin = sender.origin || sender.url || 'unknown';
-      const requestId = crypto.randomUUID();
+      void (async () => {
+        const gate = await requireCapability(sender, 'frost', sendResponse);
+        if (!gate) return;
+        const roomCode = String(msg['roomCode'] || '');
+        if (!roomCode) {
+          sendResponse({ success: false, error: 'denied' });
+          return;
+        }
+        const threshold = Number(msg['threshold']) || 2;
+        const maxSigners = Number(msg['maxSigners']) || 3;
+        const relayUrl = String(msg['relayUrl'] || 'https://poker.zk.bot');
+        const requestId = crypto.randomUUID();
 
-      pendingPicks.set(requestId, sendResponse);
+        pendingPicks.set(requestId, sendResponse);
 
-      const params = new URLSearchParams({
-        app: appOrigin,
-        action: 'frost-join',
-        roomCode,
-        threshold: String(threshold),
-        maxSigners: String(maxSigners),
-        relayUrl,
-        requestId,
-      });
-      const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
-      void chrome.windows.create({ url, type: 'popup', width: 400, height: 520 });
+        const params = new URLSearchParams({
+          app: gate.origin,
+          action: 'frost-join',
+          roomCode,
+          threshold: String(threshold),
+          maxSigners: String(maxSigners),
+          relayUrl,
+          requestId,
+        });
+        const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
+        void chrome.windows.create({ url, type: 'popup', width: 400, height: 520 });
+      })();
       return true;
     }
 
@@ -202,48 +251,52 @@ export const externalMessageListener = (
       const labelPrefix = rawPrefix.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 32) || 'multisig';
       const requestId = crypto.randomUUID();
 
-      pendingPicks.set(requestId, sendResponse);
+        pendingPicks.set(requestId, sendResponse);
 
-      const hide = msg['hide'] === true;
-      const params = new URLSearchParams({
-        app: appOrigin,
-        action: 'dkg-join',
-        roomCode,
-        threshold: String(threshold),
-        maxSigners: String(maxSigners),
-        relayUrl,
-        labelPrefix,
-        requestId,
-      });
-      if (hide) params.set('hide', '1');
-      const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
-      void chrome.windows.create({ url, type: 'popup', width: 400, height: 520 });
+        const hide = msg['hide'] === true;
+        const params = new URLSearchParams({
+          app: gate.origin,
+          action: 'dkg-join',
+          roomCode,
+          threshold: String(threshold),
+          maxSigners: String(maxSigners),
+          relayUrl,
+          labelPrefix,
+          requestId,
+        });
+        if (hide) params.set('hide', '1');
+        const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
+        void chrome.windows.create({ url, type: 'popup', width: 400, height: 520 });
+      })();
       return true;
     }
 
     case 'zafu_frost_sign': {
-      const roomCode = String(msg['roomCode'] || '');
-      const sighashHex = String(msg['sighashHex'] || '');
-      if (!roomCode || !sighashHex) {
-        sendResponse({ error: 'roomCode and sighashHex required' });
-        return true;
-      }
-      const relayUrl = String(msg['relayUrl'] || 'https://poker.zk.bot');
-      const appOrigin = sender.origin || sender.url || 'unknown';
-      const requestId = crypto.randomUUID();
+      void (async () => {
+        const gate = await requireCapability(sender, 'frost', sendResponse);
+        if (!gate) return;
+        const roomCode = String(msg['roomCode'] || '');
+        const sighashHex = String(msg['sighashHex'] || '');
+        if (!roomCode || !sighashHex) {
+          sendResponse({ success: false, error: 'denied' });
+          return;
+        }
+        const relayUrl = String(msg['relayUrl'] || 'https://poker.zk.bot');
+        const requestId = crypto.randomUUID();
 
-      pendingPicks.set(requestId, sendResponse);
+        pendingPicks.set(requestId, sendResponse);
 
-      const params = new URLSearchParams({
-        app: appOrigin,
-        action: 'frost-sign',
-        roomCode,
-        sighashHex,
-        relayUrl,
-        requestId,
-      });
-      const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
-      void chrome.windows.create({ url, type: 'popup', width: 400, height: 520 });
+        const params = new URLSearchParams({
+          app: gate.origin,
+          action: 'frost-sign',
+          roomCode,
+          sighashHex,
+          relayUrl,
+          requestId,
+        });
+        const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
+        void chrome.windows.create({ url, type: 'popup', width: 400, height: 520 });
+      })();
       return true;
     }
 
@@ -272,20 +325,21 @@ export const externalMessageListener = (
       const appOrigin = sender.origin || sender.url || 'unknown';
       const requestId = crypto.randomUUID();
 
-      pendingPicks.set(requestId, sendResponse);
+        pendingPicks.set(requestId, sendResponse);
 
-      const params = new URLSearchParams({
-        app: appOrigin,
-        action: 'poker-sign',
-        roomCode,
-        relayUrl,
-        feeZat: String(feeZat),
-        planJson: JSON.stringify(plan),
-        requestId,
-      });
-      if (multisigLabel) params.set('multisigLabel', multisigLabel);
-      const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
-      void chrome.windows.create({ url, type: 'popup', width: 400, height: 560 });
+        const params = new URLSearchParams({
+          app: gate.origin,
+          action: 'poker-sign',
+          roomCode,
+          relayUrl,
+          feeZat: String(feeZat),
+          planJson: JSON.stringify(plan),
+          requestId,
+        });
+        if (multisigLabel) params.set('multisigLabel', multisigLabel);
+        const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
+        void chrome.windows.create({ url, type: 'popup', width: 400, height: 560 });
+      })();
       return true;
     }
 
@@ -303,12 +357,21 @@ export const externalMessageListener = (
       }
       const delayMs = Math.max(0, Number(msg['delayMs']) || 0);
       void (async () => {
+        const gate = await requireCapability(sender, 'frost', sendResponse);
+        if (!gate) return;
+        const multisigLabel = String(msg['multisigLabel'] || '');
+        if (!multisigLabel) {
+          sendResponse({ success: false, error: 'denied' });
+          return;
+        }
+        const delayMs = Math.max(0, Number(msg['delayMs']) || 0);
         try {
           const { findVaultByLabelPrefix, scheduleMultisigDelete, purgeVault } =
             await import('../../state/keyring/scheduled-deletes');
-          const vaultId = await findVaultByLabelPrefix(multisigLabel);
+          // origin-scoped lookup — refuses cross-origin label collisions.
+          const vaultId = await findVaultByLabelPrefix(multisigLabel, gate.origin);
           if (!vaultId) {
-            sendResponse({ success: false, error: 'no matching multisig found' });
+            sendResponse({ success: false, error: 'denied' });
             return;
           }
           if (delayMs > 0) {
@@ -318,8 +381,8 @@ export const externalMessageListener = (
             await purgeVault(vaultId);
             sendResponse({ success: true, scheduled: false, vaultId });
           }
-        } catch (e) {
-          sendResponse({ success: false, error: e instanceof Error ? e.message : String(e) });
+        } catch {
+          sendResponse({ success: false, error: 'denied' });
         }
       })();
       return true;
