@@ -247,7 +247,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
             <a href='https://github.com/rotkonetworks/zafu' target='_blank' rel='noopener noreferrer' className='hover:text-fg-high'>github</a>
             <a href='https://zigner.rotko.net' target='_blank' rel='noopener noreferrer' className='hover:text-fg-high'>zigner</a>
           </div>
-          <p className='text-[9px] text-fg-dim mt-1 tabular'>GPL-3.0</p>
+          <p className='text-[9px] text-fg-dim mt-1 tabular'>MIT</p>
         </div>
       </div>
     </>

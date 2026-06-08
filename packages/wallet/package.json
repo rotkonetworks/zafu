@@ -2,7 +2,7 @@
   "name": "@repo/wallet",
   "version": "0.0.1",
   "private": true,
-  "license": "(MIT OR Apache-2.0)",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "lint": "eslint \"**/*.ts*\"",
