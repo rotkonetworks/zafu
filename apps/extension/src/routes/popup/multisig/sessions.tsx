@@ -191,8 +191,15 @@ export const MultisigPage = () => {
   const useAirgap =
     activeMs?.multisig?.custody === 'airgapSigner'
     || selectedKeyInfo?.type === 'zigner-zafu';
-  const createPath = useAirgap ? PopupPath.MULTISIG_CREATE_ZIGNER : PopupPath.MULTISIG_CREATE;
-  const joinPath = useAirgap ? PopupPath.MULTISIG_JOIN_ZIGNER : PopupPath.MULTISIG_JOIN;
+  // Route surface is unified: one /multisig/create and one /multisig/join.
+  // The flow dispatches internally on `?mode=zigner` OR on the active
+  // wallet being zigner-imported.
+  const createPath = useAirgap
+    ? `${PopupPath.MULTISIG_CREATE}?mode=zigner` as PopupPath
+    : PopupPath.MULTISIG_CREATE;
+  const joinPath = useAirgap
+    ? `${PopupPath.MULTISIG_JOIN}?mode=zigner` as PopupPath
+    : PopupPath.MULTISIG_JOIN;
 
   if (!isZcash) {
     return <NetworkUnavailable feature='multisig' iconClass='i-lucide-shield' />;
