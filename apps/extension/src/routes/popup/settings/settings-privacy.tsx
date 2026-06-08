@@ -17,10 +17,16 @@ interface PrivacyRow {
 
 const PRIVACY_ROWS: readonly PrivacyRow[] = [
   {
+    key: 'enableIdentity',
+    label: 'zid identity',
+    onLabel: 'zid surface visible - sites can derive per-site identities',
+    offLabel: 'identity feature off - menu, sign approvals, e2ee disabled',
+  },
+  {
     key: 'enableTransparentBalances',
     label: 'cosmos balances',
     onLabel: 'querying rpc nodes for balances',
-    offLabel: 'balances hidden — no rpc queries',
+    offLabel: 'balances hidden - no rpc queries',
     visible: n => isIbcNetwork(n) || n === 'penumbra',
   },
   {

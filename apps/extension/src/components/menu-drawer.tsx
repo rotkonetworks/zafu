@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { useStore } from '../state';
 import { selectLock, selectActiveNetwork, selectEffectiveKeyInfo, selectKeyInfos } from '../state/keyring';
 import { isPro } from '../state/license';
+import { isIdentityEnabled } from '../state/privacy';
 import { PopupPath } from '../routes/popup/paths';
 import { cn } from '@repo/ui/lib/utils';
 import { isSidePanel } from '../utils/popup-detection';
@@ -33,6 +34,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
   const keyInfo = useStore(selectEffectiveKeyInfo);
   const allKeyInfos = useStore(selectKeyInfos);
   const pro = useStore(isPro);
+  const identityEnabled = useStore(isIdentityEnabled);
   const inSidePanel = isSidePanel();
   const [zidCopied, setZidCopied] = useState(false);
 
@@ -106,8 +108,8 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
   // A new user looking for 'lock' doesn't have to scan through stake
   // and swap to find it; a returning user looking for 'stake' isn't
   // looking past 'settings' to find it.
-  const accountItems: MenuItem[] = [
-    {
+  const accountItems: MenuItem[] = ([
+    identityEnabled && {
       icon: 'i-lucide-fingerprint',
       label: 'identity & contacts',
       onClick: () => { navigate(PopupPath.IDENTITY); onClose(); },
@@ -117,7 +119,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
       label: 'wallets',
       onClick: () => { navigate(PopupPath.SETTINGS_WALLETS); onClose(); },
     },
-  ];
+  ].filter(Boolean) as MenuItem[]);
 
   const appItems: MenuItem[] = [
     {
@@ -177,8 +179,8 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
           </button>
         </div>
 
-        {/* zid */}
-        {zidAddress && (
+        {/* zid - hidden when identity feature is disabled */}
+        {zidAddress && identityEnabled && (
           <button
             onClick={() => {
               void navigator.clipboard.writeText(zidPubkey!);

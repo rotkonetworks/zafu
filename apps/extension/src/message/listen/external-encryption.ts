@@ -264,6 +264,13 @@ const handleDecrypt = async (
   msg: DecryptRequest,
   origin: string,
 ): Promise<unknown> => {
+  // identity feature gate: if the user has disabled the zid layer,
+  // decryption is unavailable (it'd derive their site-keypair which
+  // is exactly the surface they turned off).
+  const { isIdentityEnabledFromStorage } = await import('../../state/privacy');
+  if (!(await isIdentityEnabledFromStorage())) {
+    return { error: 'identity disabled in zafu settings' };
+  }
   // validate inputs
   if (!isValidHexPubkey(msg.ephemeral_pubkey, 32)) {
     return { error: 'invalid ephemeral_pubkey: expected 64 hex chars (32-byte x25519 pubkey)' };
@@ -314,6 +321,10 @@ const handleDecrypt = async (
 
 const handleZidPubkey = async (origin: string): Promise<unknown> => {
   try {
+    const { isIdentityEnabledFromStorage } = await import('../../state/privacy');
+    if (!(await isIdentityEnabledFromStorage())) {
+      return { error: 'identity disabled in zafu settings' };
+    }
     const { useStore } = await import('../../state');
     const keyInfo = useStore.getState().keyRing.selectedKeyInfo;
     if (!keyInfo) return { error: 'wallet locked' };

@@ -64,6 +64,12 @@ export const internalZidListener = (
 
   void (async () => {
     try {
+      // gate 0: identity feature must be enabled in zafu privacy settings
+      const { isIdentityEnabledFromStorage } = await import('../../state/privacy');
+      if (!(await isIdentityEnabledFromStorage())) {
+        sendResponse({ error: 'identity disabled in zafu settings' });
+        return;
+      }
       // gate 3: wallet must be unlocked
       const { useStore } = await import('../../state');
       const keyInfo = useStore.getState().keyRing.selectedKeyInfo;

@@ -103,6 +103,23 @@ export interface PrivacySettings {
    * hides IP from all servers. uses chrome.proxy API.
    */
   proxy: ProxyConfig;
+
+  /**
+   * enable the zid identity feature.
+   *
+   * when true (default): zid display in menu, sign approvals work, sites
+   * can derive per-site identities, e2ee messaging works.
+   * when false: identity surface hidden in UI, external API requests
+   * involving zid return "identity disabled" errors.
+   *
+   * for users who don't want the identity layer (wallet-only use). does
+   * NOT affect the underlying mnemonic/seed - only the zid layer derived
+   * from it. user can re-enable at any time and the same zids re-derive.
+   *
+   * read as `settings.enableIdentity !== false` so legacy stored state
+   * (no field) defaults to enabled, matching the default-true intent.
+   */
+  enableIdentity: boolean;
 }
 
 export interface PrivacySlice {
@@ -135,6 +152,7 @@ const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = {
   enableBackgroundSync: false,
   enablePriceFetching: false,
   proxy: { enabled: false, host: '', port: 1080 },
+  enableIdentity: true,
 };
 
 // ============================================================================
@@ -263,3 +281,27 @@ export const canBackgroundSyncForNetwork = (state: AllSlices, network: NetworkTy
 
 export const canFetchPrices = (state: AllSlices) =>
   state.privacy.settings.enablePriceFetching;
+
+/**
+ * zid identity surface enabled? legacy stored state (no field) treats
+ * undefined as enabled, matching the default-true intent.
+ */
+export const isIdentityEnabled = (state: AllSlices) =>
+  state.privacy.settings.enableIdentity !== false;
+
+/**
+ * Read identity-enabled state from chrome.storage.local directly.
+ * For service-worker / non-React code that can't use the Zustand
+ * selector. Same default-true semantics: legacy stored state without
+ * the field reads as enabled.
+ */
+export async function isIdentityEnabledFromStorage(): Promise<boolean> {
+  try {
+    const r = await chrome.storage.local.get('privacySettings');
+    const s = r['privacySettings'] as PrivacySettings | undefined;
+    return s?.enableIdentity !== false;
+  } catch {
+    // storage unavailable - fail open (default enabled)
+    return true;
+  }
+}
