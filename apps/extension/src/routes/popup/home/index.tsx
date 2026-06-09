@@ -2,9 +2,9 @@ import { lazy, Suspense, useState, useCallback, useEffect, useMemo, useRef } fro
 import { useNavigate } from 'react-router-dom';
 
 import { useStore } from '../../../state';
-import { selectActiveNetwork, selectEffectiveKeyInfo, selectPenumbraAccount, selectSetPenumbraAccount, keyRingSelector, type NetworkType } from '../../../state/keyring';
+import { selectActiveNetwork, selectEffectiveKeyInfo, selectPenumbraAccount, selectSetPenumbraAccount, selectSelectKeyRing, keyRingSelector, type NetworkType } from '../../../state/keyring';
 import { PenumbraAccountPicker } from '../../../components/penumbra-account-picker';
-import { selectActiveZcashWallet, selectZcashWallets, selectActiveZcashIndex, walletsSelector } from '../../../state/wallets';
+import { selectActiveZcashWallet, selectZcashWallets, selectActiveZcashIndex } from '../../../state/wallets';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { needsLogin, needsOnboard } from '../popup-needs';
 import { PopupPath } from '../paths';
@@ -62,7 +62,7 @@ const CosmosSubwallets = lazy(() =>
 const MultisigOverview = () => {
   const zcashWallets = useStore(selectZcashWallets);
   const activeIdx = useStore(selectActiveZcashIndex);
-  const { setActiveZcashWallet } = useStore(walletsSelector);
+  const selectKeyRing = useStore(selectSelectKeyRing);
   const { workerSyncHeight } = useZcashSyncStatus();
   const [expanded, setExpanded] = useState(false);
   const [balances, setBalances] = useState<Record<string, bigint>>({});
@@ -145,7 +145,7 @@ const MultisigOverview = () => {
               <button
                 key={w.id}
                 onClick={() => {
-                  void setActiveZcashWallet(w.originalIndex);
+                  void selectKeyRing(w.vaultId);
                 }}
                 className={cn(
                   'flex items-center justify-between w-full rounded-sm px-3 py-2 text-left transition-colors',

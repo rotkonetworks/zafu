@@ -8,8 +8,7 @@ import { AppHeader } from '../../components/app-header';
 import { MenuDrawer } from '../../components/menu-drawer';
 import { PopupPath } from './paths';
 import { useStore } from '../../state';
-import { selectActiveNetwork, selectPenumbraAccount, type NetworkType } from '../../state/keyring';
-import { selectActiveZcashWallet } from '../../state/wallets';
+import { selectActiveNetwork, selectEffectiveKeyInfo, selectPenumbraAccount, type NetworkType } from '../../state/keyring';
 import { hasFeature } from '../../config/networks';
 
 type FeatureKey = 'stake' | 'swap' | 'vote' | 'inbox';
@@ -88,13 +87,13 @@ export const PopupLayout = () => {
   const location = useLocation();
   const activeNetwork = useStore(selectActiveNetwork);
   const penumbraAccount = useStore(selectPenumbraAccount);
-  const activeZcashWallet = useStore(selectActiveZcashWallet);
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const onLoginPage = location.pathname === '/login';
   usePenumbraSwapClaim(activeNetwork, onLoginPage, penumbraAccount);
   const [menuOpen, setMenuOpen] = useState(false);
 
   const networkTabs = getTabsForNetwork(activeNetwork);
-  const tabs = activeNetwork === 'zcash' && activeZcashWallet?.multisig
+  const tabs = selectedKeyInfo?.type === 'frost-multisig'
     ? [...networkTabs, MULTISIG_TAB]
     : networkTabs;
   const showChrome = !matchesRoute(location.pathname, hiddenHeaderRoutes);
