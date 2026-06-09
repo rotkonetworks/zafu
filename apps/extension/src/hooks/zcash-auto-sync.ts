@@ -171,30 +171,31 @@ export function useZcashAutoSync() {
     }
 
     let cancelled = false;
-    // no timer delay — worker is already pre-spawned by the eager effect above,
-    // and this effect only fires once zcashWallets has hydrated, so start immediately
-    (async () => {
-      try {
-        await spawnNetworkWorker('zcash');
-        if (cancelled) return;
-        // if a stop is in flight (quick network switch back), wait for it to land
-        if (stopPromiseRef.current) {
-          await stopPromiseRef.current;
-          stopPromiseRef.current = null;
+    const timer = setTimeout(() => {
+      (async () => {
+        try {
+          await spawnNetworkWorker('zcash');
           if (cancelled) return;
+          // if a stop is in flight (quick network switch back), wait for it to land
+          if (stopPromiseRef.current) {
+            await stopPromiseRef.current;
+            stopPromiseRef.current = null;
+            if (cancelled) return;
+          }
+          const startHeight = await resolveBirthday(walletId, zidecarUrl, zcashBackend);
+          if (cancelled) return;
+          syncingWalletRef.current = walletId;
+          console.log('[zcash-sync] starting watch-only sync for', walletId);
+          await startWatchOnlySyncInWorker('zcash', walletId, ufvkStr, zidecarUrl, startHeight, zcashBackend, mempoolWatch);
+        } catch (err) {
+          console.error('[zcash-sync] watch-only auto-sync failed:', err);
         }
-        const startHeight = await resolveBirthday(walletId, zidecarUrl, zcashBackend);
-        if (cancelled) return;
-        syncingWalletRef.current = walletId;
-        console.log('[zcash-sync] starting watch-only sync for', walletId);
-        await startWatchOnlySyncInWorker('zcash', walletId, ufvkStr, zidecarUrl, startHeight, zcashBackend, mempoolWatch);
-      } catch (err) {
-        console.error('[zcash-sync] watch-only auto-sync failed:', err);
-      }
-    })();
+      })();
+    }, 2000);
 
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   }, [activeNetwork, onLoginPage, hasMnemonic, watchOnly?.id, watchOnly?.ufvk, watchOnly?.orchardFvk, walletId, zidecarUrl, zcashBackend, mempoolWatch]);
 
