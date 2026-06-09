@@ -823,17 +823,20 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
       case 'scan':
         return pcztUnsignedRef.current ? (
-          <AnimatedQrScanner
-            onComplete={(bytes) => { void handlePcztSignatureScanned(bytes); }}
-            onError={(err) => {
-              setError(err);
-              setStep('error');
-            }}
-            onClose={() => setStep('sign')}
-            title="scan signed PCZT"
-            description="hold camera steady on the animated QR"
-            urTypeFilter="zcash-pczt"
-          />
+          <div className="p-4">
+            <AnimatedQrScanner
+              inline
+              onComplete={(bytes) => { void handlePcztSignatureScanned(bytes); }}
+              onError={(err) => {
+                setError(err);
+                setStep('error');
+              }}
+              onClose={() => setStep('sign')}
+              title="scan signed PCZT"
+              description="hold camera steady on the animated QR"
+              urTypeFilter="zcash-pczt"
+            />
+          </div>
         ) : (
           <QrScanner
             onScan={handleSignatureScanned}
