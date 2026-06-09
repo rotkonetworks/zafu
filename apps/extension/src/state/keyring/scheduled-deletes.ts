@@ -53,7 +53,7 @@ export async function purgeVault(vaultId: string): Promise<void> {
 
   for (const id of removedIds) {
     try {
-      const { deleteWalletInWorker } = await import('./network-worker');
+      const { deleteWalletInWorker } = await import(/* webpackMode: "eager" */ './network-worker');
       await deleteWalletInWorker('zcash', id);
     } catch { /* worker may not be running */ }
   }

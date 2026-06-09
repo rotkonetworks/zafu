@@ -234,22 +234,24 @@ export const externalMessageListener = (
     }
 
     case 'zafu_dkg_join': {
-      const roomCode = String(msg['roomCode'] || '');
-      if (!roomCode) {
-        sendResponse({ error: 'roomCode required' });
-        return true;
-      }
-      const threshold = Number(msg['threshold']) || 2;
-      const maxSigners = Number(msg['maxSigners']) || 3;
-      const relayUrl = String(msg['relayUrl'] || 'wss://zrelay.rotko.net');
-      const appOrigin = sender.origin || sender.url || 'unknown';
-      // sanitize the caller-supplied label prefix; default to the origin host.
-      // new URL() throws on non-URL strings (e.g. 'unknown'); fall back safely.
-      let originHost = 'multisig';
-      try { originHost = new URL(appOrigin).host || 'multisig'; } catch { /* keep default */ }
-      const rawPrefix = String(msg['labelPrefix'] || originHost);
-      const labelPrefix = rawPrefix.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 32) || 'multisig';
-      const requestId = crypto.randomUUID();
+      void (async () => {
+        const gate = await requireCapability(sender, 'frost', sendResponse);
+        if (!gate) return;
+        const roomCode = String(msg['roomCode'] || '');
+        if (!roomCode) {
+          sendResponse({ error: 'roomCode required' });
+          return;
+        }
+        const threshold = Number(msg['threshold']) || 2;
+        const maxSigners = Number(msg['maxSigners']) || 3;
+        const relayUrl = String(msg['relayUrl'] || 'wss://zrelay.rotko.net');
+        const appOrigin = sender.origin || sender.url || 'unknown';
+        // new URL() throws on non-URL strings (e.g. 'unknown'); fall back safely.
+        let originHost = 'multisig';
+        try { originHost = new URL(appOrigin).host || 'multisig'; } catch { /* keep default */ }
+        const rawPrefix = String(msg['labelPrefix'] || originHost);
+        const labelPrefix = rawPrefix.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 32) || 'multisig';
+        const requestId = crypto.randomUUID();
 
         pendingPicks.set(requestId, sendResponse);
 
@@ -305,25 +307,26 @@ export const externalMessageListener = (
         sendResponse({ error: 'zafu_frost_sign_orchard is disabled in this build (display↔sighash binding pending)' });
         return true;
       }
-      const roomCode = String(msg['roomCode'] || '');
-      if (!roomCode) {
-        sendResponse({ error: 'roomCode required' });
-        return true;
-      }
-      const plan = msg['plan'] as Array<{ address: string; amount_zat: number }> | undefined;
-      if (!plan || !Array.isArray(plan) || plan.length === 0) {
-        sendResponse({ error: 'plan array required' });
-        return true;
-      }
-      const relayUrl = String(msg['relayUrl'] || 'wss://zrelay.rotko.net');
-      const feeZat = Number(msg['feeZat']) || 10_000;
-      // Sanitize identically to labelPrefix above. Empty is allowed here
-      // because the popup falls back to the default multisigVault. The
-      // popup itself does the lookup via startsWith — same charset rules.
-      const rawLabel = typeof msg['multisigLabel'] === 'string' ? msg['multisigLabel'] : '';
-      const multisigLabel = rawLabel.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 64);
-      const appOrigin = sender.origin || sender.url || 'unknown';
-      const requestId = crypto.randomUUID();
+      void (async () => {
+        const gate = await requireCapability(sender, 'frost', sendResponse);
+        if (!gate) return;
+        const roomCode = String(msg['roomCode'] || '');
+        if (!roomCode) {
+          sendResponse({ error: 'roomCode required' });
+          return;
+        }
+        const plan = msg['plan'] as Array<{ address: string; amount_zat: number }> | undefined;
+        if (!plan || !Array.isArray(plan) || plan.length === 0) {
+          sendResponse({ error: 'plan array required' });
+          return;
+        }
+        const relayUrl = String(msg['relayUrl'] || 'wss://zrelay.rotko.net');
+        const feeZat = Number(msg['feeZat']) || 10_000;
+        // Empty is allowed here because the popup falls back to the default
+        // multisigVault; the popup looks up via startsWith — same charset rules.
+        const rawLabel = typeof msg['multisigLabel'] === 'string' ? msg['multisigLabel'] : '';
+        const multisigLabel = rawLabel.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 64);
+        const requestId = crypto.randomUUID();
 
         pendingPicks.set(requestId, sendResponse);
 
