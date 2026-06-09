@@ -69,6 +69,8 @@ export function useZcashAutoSync() {
 
   // track which walletId we started sync for, to avoid double-start
   const syncingWalletRef = useRef<string | null>(null);
+  // track in-flight stop promise so the start effect can await it on quick network switches
+  const stopPromiseRef = useRef<Promise<void> | null>(null);
 
   // eagerly pre-spawn zcash worker when on zcash network
   // decouples WASM loading from wallet data hydration so the worker
@@ -93,7 +95,8 @@ export function useZcashAutoSync() {
       syncingWalletRef.current = null;
     }
 
-    if (isWalletSyncing('zcash', walletId)) {
+    // only bail if truly syncing with no pending stop (i.e. we started it, it's healthy)
+    if (isWalletSyncing('zcash', walletId) && !stopPromiseRef.current) {
       syncingWalletRef.current = walletId;
       return;
     }
@@ -104,6 +107,12 @@ export function useZcashAutoSync() {
         try {
           await spawnNetworkWorker('zcash');
           if (cancelled) return;
+          // if a stop is in flight (quick network switch back), wait for it to land
+          if (stopPromiseRef.current) {
+            await stopPromiseRef.current;
+            stopPromiseRef.current = null;
+            if (cancelled) return;
+          }
           const mnemonic = await getMnemonic(walletId);
           if (cancelled) return;
           const startHeight = await resolveBirthday(walletId, zidecarUrl, zcashBackend);
@@ -155,7 +164,8 @@ export function useZcashAutoSync() {
       syncingWalletRef.current = null;
     }
 
-    if (isWalletSyncing('zcash', walletId)) {
+    // only bail if truly syncing with no pending stop
+    if (isWalletSyncing('zcash', walletId) && !stopPromiseRef.current) {
       syncingWalletRef.current = walletId;
       return;
     }
@@ -167,6 +177,12 @@ export function useZcashAutoSync() {
       try {
         await spawnNetworkWorker('zcash');
         if (cancelled) return;
+        // if a stop is in flight (quick network switch back), wait for it to land
+        if (stopPromiseRef.current) {
+          await stopPromiseRef.current;
+          stopPromiseRef.current = null;
+          if (cancelled) return;
+        }
         const startHeight = await resolveBirthday(walletId, zidecarUrl, zcashBackend);
         if (cancelled) return;
         syncingWalletRef.current = walletId;
@@ -188,7 +204,7 @@ export function useZcashAutoSync() {
     const syncedWallet = syncingWalletRef.current;
     if (syncedWallet && isWalletSyncing('zcash', syncedWallet)) {
       console.log('[zcash-sync] stopping sync (switched away from zcash)');
-      void stopSyncInWorker('zcash', syncedWallet).catch(() => {});
+      stopPromiseRef.current = stopSyncInWorker('zcash', syncedWallet).catch(() => {});
       syncingWalletRef.current = null;
     }
   }, [activeNetwork]);
