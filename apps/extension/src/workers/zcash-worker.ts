@@ -874,22 +874,25 @@ const fetchCompactBlocksRange = async (
   start: number,
   end: number,
 ): Promise<{ blocks: Array<{ height: number; actions: Array<{ cmx_hex: string }> }>; actions: number }> => {
-  const blocks: Array<{ height: number; actions: Array<{ cmx_hex: string }> }> = [];
-  let actions = 0;
-  if (start > end) return { blocks, actions };
-  let current = start;
-  while (current <= end) {
-    const e = Math.min(current + WITNESS_BATCH_SIZE - 1, end);
-    const fetched = await client.getCompactBlocks(current, e);
-    for (const block of fetched) {
-      actions += block.actions.length;
-      blocks.push({
-        height: block.height,
-        actions: block.actions.map(a => ({ cmx_hex: hexEncode(a.cmx) })),
-      });
-    }
-    current = e + 1;
+  if (start > end) return { blocks: [], actions: 0 };
+
+  // build all batch ranges then fire them all in parallel.
+  // gRPC/HTTP2 multiplexes over a single connection so there's no
+  // connection-count concern.
+  const ranges: Array<[number, number]> = [];
+  for (let s = start; s <= end; s += WITNESS_BATCH_SIZE) {
+    ranges.push([s, Math.min(s + WITNESS_BATCH_SIZE - 1, end)]);
   }
+
+  const fetched = await Promise.all(ranges.map(([s, e]) =>
+    client.getCompactBlocks(s, e).then(bs => bs.map(b => ({
+      height: b.height,
+      actions: b.actions.map(a => ({ cmx_hex: hexEncode(a.cmx) })),
+    }))),
+  ));
+
+  const blocks = fetched.flat();
+  const actions = blocks.reduce((sum, b) => sum + b.actions.length, 0);
   return { blocks, actions };
 };
 
@@ -903,6 +906,7 @@ const backfillWitnesses = async (
   walletId: string,
   notes: DecryptedNote[],
   anchorHeight: number,
+  onProgress?: (step: string, detail?: string) => void,
 ): Promise<{ byNullifier: Map<string, { witness_hex: string; tree_size: number }>; endFrontier: string }> => {
   if (!wasmModule) throw new Error('wasm not initialized');
   if (notes.length === 0) return { byNullifier: new Map(), endFrontier: '' };
@@ -939,21 +943,31 @@ const backfillWitnesses = async (
     await saveFrontierSnapshot(walletId, roundedHeight, frontierHex);
   }
 
+  const fetchStart = performance.now();
+  console.log(`[zcash-worker] backfill: fetching ${Math.ceil((anchorHeight - frontierHeight) / WITNESS_BATCH_SIZE)} batches in parallel (${frontierHeight + 1}..${anchorHeight})`);
   const { blocks: compactBlocks, actions: totalActions } = await fetchCompactBlocksRange(
     client,
     frontierHeight + 1,
     anchorHeight,
   );
+  const fetchSecs = ((performance.now() - fetchStart) / 1000).toFixed(1);
   console.log(
-    `[zcash-worker] backfill: replay ${compactBlocks.length} blocks, ${totalActions} actions (${frontierHeight + 1}..${anchorHeight})`,
+    `[zcash-worker] backfill: fetch done in ${fetchSecs}s — ${compactBlocks.length} blocks, ${totalActions} actions`,
   );
+  onProgress?.('backfill: blocks downloaded', `${compactBlocks.length} blocks in ${fetchSecs}s`);
 
   const positions = notes.map(n => n.position);
+  console.log(`[zcash-worker] backfill: wasm replay starting (${totalActions} actions, ${positions.length} notes)`);
+  onProgress?.('backfill: replaying tree', `${totalActions} actions`);
+  const wasmStart = performance.now();
   const raw = wasmModule.build_witnesses_and_paths(
     frontierHex,
     JSON.stringify(compactBlocks),
     JSON.stringify(positions),
   );
+  const wasmSecs = ((performance.now() - wasmStart) / 1000).toFixed(1);
+  console.log(`[zcash-worker] backfill: wasm done in ${wasmSecs}s`);
+  onProgress?.('backfill: witness rebuilt', `took ${wasmSecs}s`);
   const result = JSON.parse(raw as string) as {
     anchor_hex: string;
     end_frontier_hex: string;
@@ -966,16 +980,6 @@ const backfillWitnesses = async (
   // DEBUG (tree-root-mismatch investigation): does the replay reconstruct the
   // same tree the network reports at anchorHeight? If replayRoot !== network,
   // the snapshot-seed → compact-block replay is the culprit, not the anchor.
-  try {
-    const netRoot = wasmModule.tree_root_hex((await client.getTreeState(anchorHeight)).orchardTree);
-    const match = result.anchor_hex === netRoot ? 'OK' : 'MISMATCH';
-    console.log(
-      `[zcash-worker] backfill replay check [${match}]: seed=${frontierHeight}(size ${checkpointSize}) → anchor=${anchorHeight}(size ${endTreeSize}, +${totalActions} actions) replayRoot=${result.anchor_hex} network=${netRoot}`,
-    );
-  } catch (e) {
-    console.warn('[zcash-worker] backfill replay check skipped:', e);
-  }
-
   const byPosition = new Map(result.entries.map(e => [e.position, e]));
   const byNullifier = new Map<string, { witness_hex: string; tree_size: number }>();
   const updatedNotes: DecryptedNote[] = [];
@@ -991,10 +995,21 @@ const backfillWitnesses = async (
     updatedNotes.push(note);
   }
 
-  // Persist backfilled witnesses + the end frontier for future incremental updates.
+  // saveBatch before any further await: the sync loop can run at the next yield and update
+  // witness_tree_size to a higher value; saveBatch after that would stomp it back down.
   if (updatedNotes.length > 0) {
     await saveBatch(walletId, [], [], anchorHeight, endTreeSize, updatedNotes, result.end_frontier_hex, anchorHeight);
     console.log(`[zcash-worker] backfill: cached witnesses for ${updatedNotes.length} notes`);
+  }
+
+  try {
+    const netRoot = wasmModule.tree_root_hex((await client.getTreeState(anchorHeight)).orchardTree);
+    const match = result.anchor_hex === netRoot ? 'OK' : 'MISMATCH';
+    console.log(
+      `[zcash-worker] backfill replay check [${match}]: seed=${frontierHeight}(size ${checkpointSize}) → anchor=${anchorHeight}(size ${endTreeSize}, +${totalActions} actions) replayRoot=${result.anchor_hex} network=${netRoot}`,
+    );
+  } catch (e) {
+    console.warn('[zcash-worker] backfill replay check skipped:', e);
   }
 
   return { byNullifier, endFrontier: result.end_frontier_hex };
@@ -1014,6 +1029,7 @@ const buildWitnesses = async (
   walletId: string,
   notes: DecryptedNote[],
   anchorHeight: number,
+  onProgress?: (step: string, detail?: string) => void,
 ): Promise<{ anchorHex: string; paths: unknown[] }> => {
   if (!wasmModule) throw new Error('wasm not initialized');
   if (notes.length === 0) throw new Error('buildWitnesses called with no notes');
@@ -1028,7 +1044,7 @@ const buildWitnesses = async (
   // updating the in-memory notes in place.
   const missing = notes.filter(n => !n.witness_hex);
   if (missing.length > 0) {
-    await backfillWitnesses(client, walletId, missing, anchorHeight);
+    await backfillWitnesses(client, walletId, missing, anchorHeight, onProgress);
   }
 
   // Step 2: gather all note witnesses (now all populated). Use the running
@@ -1057,7 +1073,7 @@ const buildWitnesses = async (
       n.witness_hex = undefined;
       n.witness_tree_size = undefined;
     }
-    await backfillWitnesses(client, walletId, notes, anchorHeight);
+    await backfillWitnesses(client, walletId, notes, anchorHeight, onProgress);
     runningFrontier = (await getTreeFrontier(walletId)) ?? '';
     runningFrontierHeight =
       (await idbGet<{ value: number }>('meta', [walletId, 'orchardTreeFrontierHeight']))?.value ?? 0;
@@ -1114,25 +1130,55 @@ const buildWitnesses = async (
   }
 
   // Step 4: extract paths; cross-check witness root against network anchor.
+  // Snapshot witness bytes BEFORE the network call — the sync loop can advance note.witness_hex
+  // past anchorHeight during any await, yielding a root that mismatches the historical anchor.
+  const witnessSnap = new Map(notes.map(n => [n.nullifier, n.witness_hex]));
   const anchorTs = await client.getTreeState(anchorHeight);
   const networkRoot = wasmModule.tree_root_hex(anchorTs.orchardTree);
 
-  const paths: Array<{ position: number; path: Array<{ hash: string }> }> = [];
-  for (const note of notes) {
-    const rawPath = wasmModule.witness_extract_path(note.witness_hex!);
-    const parsed = JSON.parse(rawPath as string) as {
-      position: number;
-      root_hex: string;
-      path: Array<{ hash: string }>;
-    };
-    if (parsed.root_hex !== networkRoot) {
-      console.error(
-        `[zcash-worker] witness root mismatch: note=${note.nullifier.slice(0, 8)} ours=${parsed.root_hex} network=${networkRoot} ` +
-        `(anchor=${anchorHeight}, frontierHeight=${runningFrontierHeight}, rebootstrapped=${rebootstrapped})`,
-      );
-      throw new Error(`tree root mismatch at height ${anchorHeight}`);
+  type ExtractedPath = { position: number; path: Array<{ hash: string }> };
+  const extractFrom = (
+    snap: Map<string, string | undefined>,
+  ): { paths: ExtractedPath[]; mismatchNote: string | null } => {
+    const paths: ExtractedPath[] = [];
+    for (const note of notes) {
+      const witnessHex = snap.get(note.nullifier);
+      if (!witnessHex) return { paths: [], mismatchNote: note.nullifier };
+      const rawPath = wasmModule!.witness_extract_path(witnessHex);
+      const parsed = JSON.parse(rawPath as string) as {
+        position: number;
+        root_hex: string;
+        path: Array<{ hash: string }>;
+      };
+      if (parsed.root_hex !== networkRoot) return { paths: [], mismatchNote: note.nullifier };
+      paths.push({ position: parsed.position, path: parsed.path });
     }
-    paths.push({ position: parsed.position, path: parsed.path });
+    return { paths, mismatchNote: null };
+  };
+
+  let { paths, mismatchNote } = extractFrom(witnessSnap);
+
+  if (mismatchNote !== null) {
+    console.warn(
+      `[zcash-worker] witness root mismatch (recovering via backfill): note=${mismatchNote.slice(0, 8)} ` +
+      `(anchor=${anchorHeight}, frontierHeight=${runningFrontierHeight}, rebootstrapped=${rebootstrapped})`,
+    );
+    onProgress?.('witness corrupt — rebuilding', 'this takes ~3 min');
+    for (const n of notes) { n.witness_hex = undefined; n.witness_tree_size = undefined; }
+    // Persist the wipe before backfill so a reload mid-backfill doesn't re-expose the corrupt witness.
+    await saveBatch(walletId, [], [], await getSyncHeight(walletId), undefined, notes);
+    const { byNullifier } = await backfillWitnesses(client, walletId, notes, anchorHeight, onProgress);
+    // Use byNullifier (set from WASM result before any await inside backfillWitnesses) — note.witness_hex
+    // may have been fast-forwarded past anchorHeight by the sync loop by the time backfill returns.
+    const backfillSnap = new Map([...byNullifier.entries()].map(([nf, e]) => [nf, e.witness_hex] as [string, string | undefined]));
+    ({ paths, mismatchNote } = extractFrom(backfillSnap));
+    if (mismatchNote !== null) {
+      console.error(
+        `[zcash-worker] witness root mismatch after backfill: note=${mismatchNote.slice(0, 8)} ` +
+        `(anchor=${anchorHeight})`,
+      );
+      throw new Error(`tree root mismatch after backfill at height ${anchorHeight}`);
+    }
   }
 
   console.log(`[zcash-worker] paths extracted for ${paths.length} notes, anchor=${networkRoot}`);
@@ -1477,9 +1523,38 @@ const runSync = async (
       const chainHeight = tip.height;
 
       if (currentHeight >= chainHeight) {
-        // caught up: cache the tree frontier at sync height for fast witness building
+        // caught up: cache the tree frontier at sync height for fast witness building.
+        // Also cross-check local frontier vs network to detect reorg-induced corruption.
         try {
           const syncTs = await client.getTreeState(currentHeight);
+
+          if (wasmModule && runningFrontier) {
+            const localRoot = wasmModule.tree_root_hex(runningFrontier);
+            const netRoot = wasmModule.tree_root_hex(syncTs.orchardTree);
+            if (localRoot !== netRoot) {
+              console.warn(
+                `[zcash-worker] local frontier diverged from network at catch-up ${currentHeight} ` +
+                `(local=${localRoot.slice(0, 16)} net=${netRoot.slice(0, 16)}) — wiping witnesses`,
+              );
+              runningFrontier = syncTs.orchardTree;
+              runningFrontierHeight = currentHeight;
+              const wipeState = await loadState(walletId);
+              for (const note of wipeState.notes) {
+                note.witness_hex = undefined;
+                note.witness_tree_size = undefined;
+              }
+              for (const note of state.notes) {
+                note.witness_hex = undefined;
+                note.witness_tree_size = undefined;
+              }
+              const wipeDb = await getDb();
+              const wipeTx = wipeDb.transaction('notes', 'readwrite');
+              const notesStore = wipeTx.objectStore('notes');
+              for (const note of wipeState.notes) notesStore.put({ ...note, walletId });
+              await txComplete(wipeTx);
+            }
+          }
+
           const db = await getDb();
           const metaTx = db.transaction('meta', 'readwrite');
           metaTx.objectStore('meta').put({ walletId, key: 'orchardTreeFrontier', value: syncTs.orchardTree });
@@ -1739,11 +1814,39 @@ const runSync = async (
         runningFrontier ? runningFrontierHeight : undefined,
       );
 
-      // periodic frontier snapshot for privacy-safe witness building
+      // periodic frontier snapshot for privacy-safe witness building.
+      // Also cross-check local frontier vs network to detect reorg-induced corruption.
       if (currentHeight % FRONTIER_SNAPSHOT_INTERVAL < batchSize) {
         try {
           const snapshotTs = await client.getTreeState(currentHeight);
           await saveFrontierSnapshot(walletId, currentHeight, snapshotTs.orchardTree);
+
+          if (wasmModule && runningFrontier) {
+            const localRoot = wasmModule.tree_root_hex(runningFrontier);
+            const netRoot = wasmModule.tree_root_hex(snapshotTs.orchardTree);
+            if (localRoot !== netRoot) {
+              console.warn(
+                `[zcash-worker] local frontier diverged from network at snapshot ${currentHeight} ` +
+                `(local=${localRoot.slice(0, 16)} net=${netRoot.slice(0, 16)}) — likely reorg; resetting witnesses`,
+              );
+              runningFrontier = snapshotTs.orchardTree;
+              runningFrontierHeight = currentHeight;
+              const wipeState = await loadState(walletId);
+              for (const note of wipeState.notes) {
+                note.witness_hex = undefined;
+                note.witness_tree_size = undefined;
+              }
+              for (const note of state.notes) {
+                note.witness_hex = undefined;
+                note.witness_tree_size = undefined;
+              }
+              const wipeDb = await getDb();
+              const wipeTx = wipeDb.transaction('notes', 'readwrite');
+              const notesStore = wipeTx.objectStore('notes');
+              for (const note of wipeState.notes) notesStore.put({ ...note, walletId });
+              await txComplete(wipeTx);
+            }
+          }
         } catch { /* best-effort */ }
       }
 
@@ -2515,7 +2618,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const witnessStart = performance.now();
 
         const { anchorHex, paths } = await buildWitnesses(
-          sendClient, walletId, selected, anchorHeight,
+          sendClient, walletId, selected, anchorHeight, emitProgress,
         );
 
         const witnessDuration = ((performance.now() - witnessStart) / 1000).toFixed(1);
@@ -2762,7 +2865,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // rooted); target_height stays at the live tip for branch_id/expiry.
         const anchorHeight = await resolveAnchorHeight(walletId, sendTip.height);
         emitProgress('building merkle witnesses', `anchor=${anchorHeight} (tip=${sendTip.height})`);
-        const { anchorHex, paths } = await buildWitnesses(sendClient, walletId, selected, anchorHeight);
+        const { anchorHex, paths } = await buildWitnesses(sendClient, walletId, selected, anchorHeight, emitProgress);
 
         const notesForWasm = selected.map(n => ({
           value: Number(n.value),
@@ -2968,7 +3071,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           const multiAnchorHeight = await resolveAnchorHeight(walletId, multiTip.height);
           emitMultiProgress(`output ${outputIdx + 1}: building witnesses`, `anchor=${multiAnchorHeight} (tip=${multiTip.height})`);
           const { anchorHex: multiAnchor, paths: multiPaths } = await buildWitnesses(
-            multiClient, walletId, selected, multiAnchorHeight,
+            multiClient, walletId, selected, multiAnchorHeight, emitMultiProgress,
           );
 
           // build note data for WASM
