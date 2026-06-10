@@ -859,7 +859,6 @@ const ZcashContent = ({
       {allSynced && totalZat === 0n && (
         <GetZecHint
           onReceive={() => navigate(PopupPath.RECEIVE)}
-          onSwap={() => navigate(PopupPath.SWAP)}
         />
       )}
 
@@ -1157,9 +1156,11 @@ const ActionButton = ({
 
 /**
  * Empty-balance hint shown to a new user whose wallet is synced but
- * holds zero ZEC. Three concrete next steps so the wallet doesn't feel
- * like a dead end: receive (here's your address), exchanges (where to
- * buy), swap (already-funded other assets → ZEC via Penumbra DEX).
+ * holds zero ZEC. Two concrete next steps so the wallet doesn't feel
+ * like a dead end: receive (here's your address) and exchanges (where
+ * to buy). A swap path was removed — the swap button sits directly
+ * above this panel, and Penumbra DEX has no ZEC liquidity yet so the
+ * old copy over-promised.
  *
  * Dismissable in the sense that any inbound ZEC makes the panel
  * disappear naturally — there is no manual hide because the panel is
@@ -1167,10 +1168,8 @@ const ActionButton = ({
  */
 const GetZecHint = ({
   onReceive,
-  onSwap,
 }: {
   onReceive: () => void;
-  onSwap: () => void;
 }) => (
   <div className='rounded-md border border-network-accent/15 bg-elev-1 p-4'>
     <div className='mb-3 flex items-center gap-2'>
@@ -1184,12 +1183,6 @@ const GetZecHint = ({
         title='receive from someone'
         hint='share your shielded address — works for any zec sender'
         onClick={onReceive}
-      />
-      <HintRow
-        icon='i-lucide-arrow-left-right'
-        title='swap from another asset'
-        hint='trade um or other tokens for zec via penumbra dex'
-        onClick={onSwap}
       />
       <a
         href='https://z.cash/get-started/'
@@ -1489,22 +1482,15 @@ const HistoryContent = ({ network, penumbraAccount }: { network: NetworkType; pe
 
   if (!historyEnabled) {
     return (
-      <div className='px-4 py-6 text-center'>
-        <p className='text-xs text-fg-muted/50'>
-          transaction history is off
-        </p>
+      <div className='flex items-center justify-center gap-2 px-4 py-4 text-label lowercase'>
+        <span className='text-fg-muted/50'>history off</span>
+        <span className='text-fg-muted/30'>·</span>
         <button
           onClick={() => void setSetting('enableTransactionHistory', true)}
-          className='mt-3 text-xs text-zigner-gold/70 hover:text-zigner-gold transition-colors'
+          className='text-zigner-gold/70 transition-colors hover:text-zigner-gold'
         >
-          enable transaction history
+          enable
         </button>
-        <a
-          href={`#${PopupPath.SETTINGS_PRIVACY}`}
-          className='text-label text-fg-muted/30 hover:text-zigner-gold mt-2 inline-block'
-        >
-          privacy settings
-        </a>
       </div>
     );
   }

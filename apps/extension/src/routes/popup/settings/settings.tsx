@@ -16,16 +16,20 @@ interface SettingsLink {
   networks?: string[];
 }
 
+// Order: what protects funds first (backups), then preferences, then
+// upsell, then the destructive thing last where muscle memory can't
+// hit it by accident.
 const links: SettingsLink[] = [
-  {
-    title: 'pro subscription',
-    icon: 'i-lucide-zap',
-    href: PopupPath.SUBSCRIBE,
-  },
   {
     title: 'recovery passphrase',
     icon: 'i-lucide-file-text',
     href: PopupPath.SETTINGS_RECOVERY_PASSPHRASE,
+  },
+  {
+    title: 'multisig backup',
+    icon: 'i-lucide-shield',
+    href: PopupPath.SETTINGS_MULTISIG_BACKUP,
+    networks: ['zcash'],
   },
   {
     title: 'privacy',
@@ -33,10 +37,9 @@ const links: SettingsLink[] = [
     href: PopupPath.SETTINGS_PRIVACY,
   },
   {
-    title: 'multisig backup',
-    icon: 'i-lucide-shield',
-    href: PopupPath.SETTINGS_MULTISIG_BACKUP,
-    networks: ['zcash'],
+    title: 'pro subscription',
+    icon: 'i-lucide-zap',
+    href: PopupPath.SUBSCRIBE,
   },
   {
     title: 'clear cache',
