@@ -91,11 +91,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
       label: 'swap',
       onClick: () => { navigate(PopupPath.SWAP); onClose(); },
     },
-    hasFeature(activeNetwork, 'vote') && {
-      icon: 'i-lucide-vote',
-      label: 'vote',
-      onClick: () => { navigate(PopupPath.VOTE); onClose(); },
-    },
+    // vote lives in the bottom tabs (feature-gated) — no drawer duplicate
     showMultisig && {
       icon: 'i-lucide-shield',
       label: 'multisig',

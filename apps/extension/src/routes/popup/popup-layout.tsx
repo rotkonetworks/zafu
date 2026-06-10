@@ -35,6 +35,7 @@ const BOTTOM_TABS: ReadonlyArray<{ path: PopupPath; icon: JSX.Element; label: st
   { path: PopupPath.INDEX,   icon: <span className='i-lucide-home h-5 w-5' />,            label: 'home' },
   { path: PopupPath.RECEIVE, icon: <span className='i-lucide-arrow-down h-5 w-5' />,      label: 'receive' },
   { path: PopupPath.SEND,    icon: <span className='i-lucide-arrow-up h-5 w-5' />,        label: 'send' },
+  { path: PopupPath.VOTE,    icon: <span className='i-lucide-vote h-5 w-5' />,            label: 'vote', feature: 'vote' },
   { path: PopupPath.INBOX,   icon: <span className='i-lucide-mail h-5 w-5' />,            label: 'inbox', feature: 'inbox' },
 ];
 
