@@ -225,7 +225,7 @@ const MultisigJoinZafu = () => {
       {(step === 'joining' || step === 'dkg' || step === 'fvk-echo') && (
         <div className='flex flex-col items-center gap-4'>
           {thresholdInfo && (
-            <span className='rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-zigner-gold'>
+            <span className='rounded-md bg-primary/10 px-2 py-0.5 text-label font-medium text-zigner-gold'>
               {thresholdInfo}
             </span>
           )}
@@ -254,7 +254,7 @@ const MultisigJoinZafu = () => {
             joined multisig wallet
           </div>
           <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
-            <p className='text-[10px] text-fg-muted'>address</p>
+            <p className='text-label text-fg-muted'>address</p>
             <p className='mt-1 break-all font-mono text-xs'>{address}</p>
           </div>
         </div>
@@ -563,7 +563,7 @@ const MultisigJoinZigner = () => {
     <SettingsScreen title='join multisig (zigner)' backPath={PopupPath.MULTISIG}>
       {step === 'input' && (
         <div className='flex flex-col gap-4'>
-          <div className='rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-2.5 text-[10px] text-yellow-400'>
+          <div className='rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-2.5 text-label text-yellow-400'>
             cold-multisig: the FROST share will be generated and stored on
             zigner only. zafu keeps only the public key package + UFVK.
           </div>
@@ -601,11 +601,11 @@ const MultisigJoinZigner = () => {
           <p className='text-xs text-fg-muted'>waiting for host's round 1 broadcast...</p>
           <span className='i-lucide-loader-2 size-4 animate-spin text-fg-muted' />
           {participantCount > 0 && (
-            <p className='text-[10px] text-fg-muted'>
+            <p className='text-label text-fg-muted'>
               {participantCount} participant(s) joined
             </p>
           )}
-          <span className='text-[10px] text-fg-muted tabular-nums'>{countdown}s</span>
+          <span className='text-label text-fg-muted tabular-nums'>{countdown}s</span>
         </div>
       )}
 
@@ -683,7 +683,7 @@ const MultisigJoinZigner = () => {
         <div className='flex flex-col items-center gap-3'>
           <p className='text-xs text-fg-muted'>verifying viewing key agreement...</p>
           <span className='i-lucide-loader-2 size-4 animate-spin text-fg-muted' />
-          <p className='text-[10px] text-fg-muted tabular-nums'>{countdown}s</p>
+          <p className='text-label text-fg-muted tabular-nums'>{countdown}s</p>
         </div>
       )}
 
@@ -693,10 +693,10 @@ const MultisigJoinZigner = () => {
             multisig wallet saved - share lives on zigner only
           </div>
           <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
-            <p className='text-[10px] text-fg-muted'>address</p>
+            <p className='text-label text-fg-muted'>address</p>
             <p className='mt-1 break-all font-mono text-xs'>{address}</p>
           </div>
-          <p className='text-[10px] text-fg-muted'>
+          <p className='text-label text-fg-muted'>
             zigner wallet_id: <span className='font-mono'>{walletId}</span>
           </p>
         </div>
@@ -738,7 +738,7 @@ const ScreenWithTriggerQr = ({ headline, body, triggerJson, nextLabel, onNext }:
   return (
     <div className='flex flex-col items-center gap-3'>
       <p className='text-xs text-fg-muted'>{headline}</p>
-      <p className='text-[10px] text-fg-muted text-center max-w-xs'>{body}</p>
+      <p className='text-label text-fg-muted text-center max-w-xs'>{body}</p>
       <AnimatedQrDisplay data={bytes} urType={TRIGGER_UR_TYPE} size={200} />
       <button
         className='rounded-lg border border-primary/40 bg-primary/5 px-3 py-1.5 text-xs text-zigner-gold'
@@ -768,10 +768,10 @@ const ScanZignerResponse = ({ title, onScan, onCancel }: ScanProps) => (
 const WaitingForRelay = ({ headline, body, countdown }: { headline: string; body: string; countdown: number | null }) => (
   <div className='flex flex-col items-center gap-3'>
     <p className='text-xs text-fg-muted'>{headline}</p>
-    <p className='text-[10px] text-fg-muted text-center'>{body}</p>
+    <p className='text-label text-fg-muted text-center'>{body}</p>
     <span className='i-lucide-loader-2 size-4 animate-spin text-fg-muted' />
     {countdown != null && (
-      <span className='text-[10px] text-fg-muted tabular-nums'>{countdown}s</span>
+      <span className='text-label text-fg-muted tabular-nums'>{countdown}s</span>
     )}
   </div>
 );

@@ -133,7 +133,7 @@ export function RecipientPicker({ network, onSelect, show }: RecipientPickerProp
                 {showHeader && (
                   <div className='flex items-center gap-1.5 px-3 pt-2 pb-1'>
                     <span className={cn(categoryIcon[entry.category], 'h-3 w-3 text-fg-muted')} />
-                    <span className='text-[10px] text-fg-muted uppercase tracking-wider'>
+                    <span className='text-label text-fg-muted uppercase tracking-wider'>
                       {entry.category === 'wallet' ? 'my wallets' : entry.category}
                     </span>
                   </div>
@@ -143,7 +143,7 @@ export function RecipientPicker({ network, onSelect, show }: RecipientPickerProp
                   className='flex w-full flex-col px-3 py-1.5 text-left hover:bg-elev-1 transition-colors'
                 >
                   <span className='text-xs truncate'>{entry.label}</span>
-                  <span className='text-[10px] font-mono text-fg-muted truncate'>
+                  <span className='text-label font-mono text-fg-muted truncate'>
                     {entry.address.slice(0, 16)}...{entry.address.slice(-8)}
                   </span>
                 </button>

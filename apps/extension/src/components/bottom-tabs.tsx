@@ -32,7 +32,7 @@ const TabButton = memo(({
     )}
   >
     {isActive && tab.activeIcon ? tab.activeIcon : tab.icon}
-    <span className='text-[10px] lowercase tracking-[0.04em]'>{tab.label}</span>
+    <span className='text-label lowercase'>{tab.label}</span>
   </button>
 ));
 TabButton.displayName = 'TabButton';

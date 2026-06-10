@@ -56,11 +56,11 @@ export const BackupModal = ({ open, title, walletLabel, batch = false, onConfirm
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
       <div className="w-full max-w-sm rounded-lg border border-border-soft bg-elev-1 p-4">
         <h2 className="text-base font-medium">{title}</h2>
-        <p className="mt-1 text-[10px] text-fg-muted">
+        <p className="mt-1 text-label text-fg-muted">
           {batch ? `Exporting ${walletLabel}.` : `Exporting "${walletLabel}".`}
         </p>
 
-        <div className="mt-3 rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-[10px] text-amber-300">
+        <div className="mt-3 rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-label text-amber-300">
           <span className="i-lucide-alert-triangle mr-1 inline-block size-3 align-text-bottom" />
           This file contains the FROST share. Anyone with the file AND the
           passphrase can sign as this signer. The passphrase cannot be reset
@@ -92,13 +92,13 @@ export const BackupModal = ({ open, title, walletLabel, batch = false, onConfirm
         </label>
 
         {confirm.length > 0 && passphrase !== confirm && (
-          <p className="mt-1 text-[10px] text-red-400">passphrases don't match</p>
+          <p className="mt-1 text-label text-red-400">passphrases don't match</p>
         )}
         {passphrase.length > 0 && passphrase.length < 8 && (
-          <p className="mt-1 text-[10px] text-amber-400">at least 8 characters</p>
+          <p className="mt-1 text-label text-amber-400">at least 8 characters</p>
         )}
         {error && (
-          <p className="mt-2 rounded-md border border-red-500/40 bg-red-500/5 p-2 text-[11px] text-red-400">
+          <p className="mt-2 rounded-md border border-red-500/40 bg-red-500/5 p-2 text-body text-red-400">
             {error}
           </p>
         )}

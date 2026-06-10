@@ -4,6 +4,7 @@ import { PasswordInput } from '../../../shared/components/password-input';
 import { useStore } from '../../../state';
 import { passwordSelector } from '../../../state/password';
 import { walletsSelector } from '../../../state/wallets';
+import { localExtStorage } from '@repo/storage-chrome/local';
 import { SettingsScreen } from './settings-screen';
 import { PopupPath } from '../paths';
 
@@ -25,6 +26,8 @@ export const SettingsPassphrase = () => {
         if (await isPassword(password)) {
           setPassword('');
           setPhrase(await getSeedPhrase());
+          // revealing the phrase counts as possessing it — clear the home nudge
+          void localExtStorage.set('seedPhraseBackedUp', true);
         } else {
           setEnteredIncorrect(true);
         }
@@ -75,7 +78,7 @@ export const SettingsPassphrase = () => {
           </form>
         ) : (
           <div className='flex flex-col gap-3'>
-            <div className='flex items-center gap-2 text-[10px] text-fg-dim font-mono'>
+            <div className='flex items-center gap-2 text-label text-fg-dim font-mono'>
               <span className='h-2 w-2 rounded-full bg-yellow-400' />
               hot wallet — seed is in browser memory
             </div>
@@ -93,7 +96,7 @@ export const SettingsPassphrase = () => {
 
             {/* backup to zigner */}
             <div className='border-t border-border-soft pt-3 mt-1'>
-              <p className='text-[10px] text-fg-dim font-mono mb-2'>
+              <p className='text-label text-fg-dim font-mono mb-2'>
                 scan with zigner to back up this seed on your air-gapped device.
                 the seed goes INTO the air gap — never out.
               </p>
@@ -145,13 +148,13 @@ const QrSeedDisplay = ({ phrase }: { phrase: string }) => {
       <div className='bg-white p-2 rounded'>
         <canvas ref={ref} />
       </div>
-      <p className='text-[9px] text-fg-muted/50 font-mono text-center'>
+      <p className='text-label text-fg-muted/50 font-mono text-center'>
         scan with zigner camera to import seed.
         close this screen when done.
       </p>
       <button
         onClick={() => setShow(false)}
-        className='text-[10px] font-mono text-fg-muted hover:text-fg-high'
+        className='text-label font-mono text-fg-muted hover:text-fg-high'
       >
         hide QR
       </button>

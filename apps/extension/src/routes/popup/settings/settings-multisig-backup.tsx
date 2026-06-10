@@ -88,7 +88,7 @@ export const SettingsMultisigBackup = () => {
         {/* batch export */}
         <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
           <p className='text-sm font-medium'>Batch backup</p>
-          <p className='mt-1 text-[11px] text-fg-muted'>
+          <p className='mt-1 text-body text-fg-muted'>
             One encrypted file containing every self-custody multisig
             wallet. Single passphrase. Restore on any zafu install.
           </p>
@@ -112,7 +112,7 @@ export const SettingsMultisigBackup = () => {
         {/* per-wallet list */}
         {selfCustody.length > 0 && (
           <div>
-            <p className='mb-2 text-[10px] uppercase tracking-wide text-fg-muted'>
+            <p className='mb-2 text-label uppercase tracking-wide text-fg-muted'>
               Or export individually
             </p>
             <div className='flex flex-col gap-1.5'>
@@ -123,7 +123,7 @@ export const SettingsMultisigBackup = () => {
                 >
                   <div className='flex flex-col min-w-0'>
                     <span className='text-sm font-medium truncate'>{w.label}</span>
-                    <span className='text-[10px] text-fg-muted'>
+                    <span className='text-label text-fg-muted'>
                       {w.multisig!.threshold}-of-{w.multisig!.maxSigners} · self-custody
                     </span>
                   </div>
@@ -131,7 +131,7 @@ export const SettingsMultisigBackup = () => {
                     onClick={async () => {
                       if (await requestAuth()) setSingleTarget(w);
                     }}
-                    className='rounded-md border border-border-soft px-2 py-1 text-[11px] text-fg-muted hover:text-zigner-gold hover:bg-elev-2 transition-colors'
+                    className='rounded-md border border-border-soft px-2 py-1 text-body text-fg-muted hover:text-zigner-gold hover:bg-elev-2 transition-colors'
                   >
                     export
                   </button>
@@ -144,13 +144,13 @@ export const SettingsMultisigBackup = () => {
         {/* airgap notice */}
         {airgap.length > 0 && (
           <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
-            <p className='text-[11px] text-fg-muted'>
+            <p className='text-body text-fg-muted'>
               <span className='font-medium text-fg'>{airgap.length} airgap wallet
               {airgap.length === 1 ? '' : 's'}</span>{' '}
               not included — those shares live on zigner. Export each
               from the zigner FROST wallet list.
             </p>
-            <ul className='mt-2 flex flex-col gap-0.5 text-[10px] text-fg-muted'>
+            <ul className='mt-2 flex flex-col gap-0.5 text-label text-fg-muted'>
               {airgap.map(w => (
                 <li key={w.id} className='font-mono'>
                   · {w.label} ({w.multisig!.threshold}-of-{w.multisig!.maxSigners})
@@ -163,7 +163,7 @@ export const SettingsMultisigBackup = () => {
         {/* restore */}
         <div className='border-t border-border-soft pt-4 flex flex-col gap-2'>
           <p className='text-sm font-medium'>Restore</p>
-          <p className='text-[11px] text-fg-muted'>
+          <p className='text-body text-fg-muted'>
             Import an encrypted backup file (self-custody share material), or
             scan an airgap QR from a zigner to re-add airgap multisig wallets.
             Already-known wallets are skipped, not overwritten.

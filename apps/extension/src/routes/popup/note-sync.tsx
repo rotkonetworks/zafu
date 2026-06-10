@@ -75,13 +75,13 @@ export const NoteSyncPage = () => {
       {step === 'display' && encoded && encoded.noteCount > 0 && activeWallet && (
         <div className='flex flex-col gap-4'>
           <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
-            <p className='text-[10px] text-fg-muted'>wallet</p>
+            <p className='text-label text-fg-muted'>wallet</p>
             <p className='text-sm font-medium truncate'>{activeWallet.label}</p>
             <div className='mt-1 flex items-center gap-2'>
               <span className='text-lg font-mono font-medium'>{balanceDisplay}</span>
               <span className='text-xs text-fg-muted'>ZEC</span>
             </div>
-            <p className='text-[10px] text-fg-muted mt-1'>
+            <p className='text-label text-fg-muted mt-1'>
               {encoded.noteCount} spendable note{encoded.noteCount !== 1 ? 's' : ''} · {encoded.cborBytes.toLocaleString()} bytes
             </p>
           </div>

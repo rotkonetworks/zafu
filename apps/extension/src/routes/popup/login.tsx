@@ -17,16 +17,25 @@ export const Login = () => {
   const { isPassword, setSessionPassword } = useStore(passwordSelector);
   const [input, setInputValue] = useState('');
   const [enteredIncorrect, setEnteredIncorrect] = useState(false);
+  // Key derivation (PBKDF2, 210k rounds) takes a visible beat on slower
+  // machines. Without feedback the button reads as dead and users mash it.
+  const [unlocking, setUnlocking] = useState(false);
 
   const handleUnlock = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (unlocking) return;
+    setUnlocking(true);
 
     void (async function () {
-      if (await isPassword(input)) {
-        await setSessionPassword(input); // saves to session state
-        navigate(PopupPath.INDEX);
-      } else {
-        setEnteredIncorrect(true);
+      try {
+        if (await isPassword(input)) {
+          await setSessionPassword(input); // saves to session state
+          navigate(PopupPath.INDEX);
+        } else {
+          setEnteredIncorrect(true);
+        }
+      } finally {
+        setUnlocking(false);
       }
     })();
   };
@@ -40,16 +49,18 @@ export const Login = () => {
     <FadeTransition className='flex flex-col items-stretch justify-start'>
       <div className='flex h-screen flex-col justify-between p-[30px] pt-10'>
         <div className='mx-auto my-0 flex flex-col items-center gap-1'>
-          <span className='text-[10px] tracking-[0.18em] text-fg-muted lowercase'>shielded signing</span>
-          <h1 className='text-[32px] text-zigner-gold lowercase tracking-[-0.01em] leading-none'>
+          <span className='text-label tracking-[0.18em] text-fg-muted lowercase'>shielded signing</span>
+          <h1 className='text-display text-zigner-gold lowercase tracking-[-0.01em] leading-none'>
             zafu
           </h1>
         </div>
         <form onSubmit={handleUnlock} className='grid gap-4'>
           <PasswordInput
+            autoFocus
+            name='password'
             passwordValue={input}
             label={
-              <p className='text-[18px] text-fg-high lowercase tracking-[-0.01em]'>
+              <p className='text-title text-fg-high lowercase tracking-[-0.01em]'>
                 enter password
               </p>
             }
@@ -62,8 +73,8 @@ export const Login = () => {
               },
             ]}
           />
-          <Button size='lg' variant='gradient' disabled={enteredIncorrect} type='submit'>
-            unlock
+          <Button size='lg' variant='gradient' disabled={enteredIncorrect || unlocking} type='submit'>
+            {unlocking ? 'unlocking\u2026' : 'unlock'}
           </Button>
           {/* New users who hit a wrong password without a hint of
               recourse assume their wallet is gone. The line only
@@ -71,7 +82,7 @@ export const Login = () => {
               teach the wrong mental model — but the moment anxiety
               kicks in, the recovery path is visible. */}
           {enteredIncorrect && (
-            <p className='text-center text-[11px] text-fg-muted lowercase'>
+            <p className='text-center text-body text-fg-muted lowercase'>
               your funds aren't lost — you can restore from your seed phrase by
               reinstalling zafu.
             </p>
@@ -89,7 +100,7 @@ export const Login = () => {
               chat with us
             </a>
           </p>
-          <p className='text-center text-[10px] text-fg-muted/50 tabular'>
+          <p className='text-center text-label text-fg-muted/50 tabular'>
             {BUILD_COMMIT}-{BUILD_DATE}
           </p>
         </div>

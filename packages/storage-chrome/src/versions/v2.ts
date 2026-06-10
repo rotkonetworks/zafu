@@ -28,6 +28,12 @@ type LOCAL = {
   /** Index of the active wallet (default 0) */
   activeWalletIndex?: number;
   backupReminderSeen?: boolean;
+  /** True once the user has confirmed possession of their recovery phrase:
+   *  checked the onboarding backup box, imported (typed it from backup),
+   *  revealed it in settings, or dismissed the home nudge. Distinct from
+   *  backupReminderSeen, whose values were poisoned by a self-dismissing
+   *  effect that never rendered a reminder. */
+  seedPhraseBackedUp?: boolean;
   /** integer */
   compactFrontierBlockHeight?: number;
   /** url string */

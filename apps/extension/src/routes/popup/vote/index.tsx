@@ -230,9 +230,9 @@ export function VotePage() {
               >
                 <div className='flex-1 min-w-0'>
                   <div className='flex items-center gap-2'>
-                    <span className='text-[10px] font-mono text-fg-muted'>#{String(p.id)}</span>
-                    <span className={`text-[10px] ${stateColor(p.state)}`}>{p.state}</span>
-                    <span className='text-[10px] text-fg-muted'>{p.kind}</span>
+                    <span className='text-label font-mono text-fg-muted'>#{String(p.id)}</span>
+                    <span className={`text-label ${stateColor(p.state)}`}>{p.state}</span>
+                    <span className='text-label text-fg-muted'>{p.kind}</span>
                   </div>
                   <p className='text-sm mt-0.5 truncate'>{p.title}</p>
                 </div>
@@ -246,7 +246,7 @@ export function VotePage() {
                     {p.description || 'no description'}
                   </p>
 
-                  <div className='flex items-center gap-3 mt-2 text-[10px] text-fg-muted'>
+                  <div className='flex items-center gap-3 mt-2 text-label text-fg-muted'>
                     <span>start: {p.startBlock.toLocaleString()}</span>
                     <span>end: {p.endBlock.toLocaleString()}</span>
                   </div>

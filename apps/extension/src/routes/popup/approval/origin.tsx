@@ -47,7 +47,7 @@ const CapabilityItem = ({ cap }: { cap: Capability }) => {
       <div className='flex items-center gap-2'>
         <span className={cn('text-sm font-medium', style.text)}>{meta.label}</span>
         <span className={cn(
-          'rounded px-1.5 py-0.5 text-[10px] uppercase',
+          'rounded px-1.5 py-0.5 text-label uppercase',
           meta.risk === 'low' && 'bg-elev-2 text-fg-muted',
           meta.risk === 'medium' && 'bg-yellow-500/10 text-yellow-400',
           meta.risk === 'high' && 'bg-orange-500/10 text-orange-400',
@@ -99,7 +99,7 @@ export const OriginApproval = () => {
       <div className='flex min-h-screen w-screen flex-col gap-6'>
         <header className='flex h-[70px] flex-col items-center justify-center border-b border-border-soft'>
           <span className='kicker mb-1'>permission request</span>
-          <h1 className='text-[18px] text-fg-high lowercase tracking-[-0.01em]'>connect</h1>
+          <h1 className='text-title text-fg-high lowercase tracking-[-0.01em]'>connect</h1>
         </header>
         <div className='mx-auto size-20'>
           <LinkGradientIcon />
@@ -135,7 +135,7 @@ export const OriginApproval = () => {
                       />
                     </div>
                   )}
-                  <div className='-ml-3 w-full truncate p-2 pl-6 text-[15px] text-fg-high tracking-[-0.005em]'>
+                  <div className='-ml-3 w-full truncate p-2 pl-6 text-title text-fg-high tracking-[-0.005em]'>
                     {title ? (
                       <span className='text-zigner-dark'>{title}</span>
                     ) : (

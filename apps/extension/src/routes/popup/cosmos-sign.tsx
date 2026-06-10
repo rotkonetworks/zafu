@@ -170,7 +170,7 @@ export const CosmosSign = () => {
       <div className='flex h-screen flex-col bg-canvas'>
         <header className='border-b border-border-soft p-4'>
           <span className='kicker'>ibc / cosmos transaction</span>
-          <h1 className='mt-1 text-[18px] text-fg-high lowercase tracking-[-0.01em]'>sign with zigner</h1>
+          <h1 className='mt-1 text-title text-fg-high lowercase tracking-[-0.01em]'>sign with zigner</h1>
         </header>
 
         <div className='grow overflow-auto p-4 flex flex-col gap-4'>
@@ -246,7 +246,7 @@ export const CosmosSign = () => {
     return (
       <div className='flex h-screen flex-col items-center justify-center bg-canvas gap-4'>
         <div className='animate-spin rounded-full h-6 w-6 border-2 border-zigner-gold border-t-transparent' />
-        <p className='text-[13px] text-fg lowercase tracking-[0.02em]'>broadcasting transaction...</p>
+        <p className='text-data text-fg lowercase'>broadcasting transaction...</p>
       </div>
     );
   }
@@ -260,10 +260,10 @@ export const CosmosSign = () => {
         </div>
         <div className='flex flex-col items-center gap-1'>
           <span className='kicker'>broadcast complete</span>
-          <h2 className='text-[18px] text-fg-high lowercase tracking-[-0.01em]'>transaction sent</h2>
+          <h2 className='text-title text-fg-high lowercase tracking-[-0.01em]'>transaction sent</h2>
         </div>
         {txHash && (
-          <p className='text-[10px] text-fg-muted tabular break-all text-center'>
+          <p className='text-label text-fg-muted tabular break-all text-center'>
             {txHash}
           </p>
         )}

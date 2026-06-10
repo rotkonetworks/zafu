@@ -8,7 +8,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useBackNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { useStore } from '../../../state';
 import { selectActiveNetwork, selectEffectiveKeyInfo, selectPenumbraAccount, keyRingSelector } from '../../../state/keyring';
@@ -424,7 +424,7 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
             <button
               onClick={handleShield}
               disabled={!canSubmit}
-              className='w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark lowercase tracking-[0.02em] hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
+              className='w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark lowercase hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
             >
               {txStatus === 'signing' ? 'shielding...' : 'shield assets'}
             </button>
@@ -652,18 +652,18 @@ function ReceiveTab({ address, loading, activeNetwork }: {
           <canvas ref={canvasRef} className='h-48 w-48' />
         ) : (
           <div className='flex h-48 w-48 items-center justify-center'>
-            <span className='text-[10px] text-fg-dim lowercase tracking-[0.04em]'>no wallet</span>
+            <span className='text-label text-fg-dim lowercase'>no wallet</span>
           </div>
         )}
       </div>
 
       <div className='flex items-center gap-1.5'>
-        <span className='rounded-sm border border-network-accent/30 bg-network-accent/10 px-2.5 py-0.5 text-[10px] text-network-accent lowercase tracking-[0.08em]'>
+        <span className='rounded-sm border border-network-accent/30 bg-network-accent/10 px-2.5 py-0.5 text-label text-network-accent lowercase tracking-[0.08em]'>
           {activeNetwork}
         </span>
         {isShielded && (
           <span
-            className='inline-flex items-center gap-1 rounded-sm border border-zigner-gold/30 bg-zigner-gold/10 px-2 py-0.5 text-[10px] text-zigner-gold lowercase tracking-[0.05em]'
+            className='inline-flex items-center gap-1 rounded-sm border border-zigner-gold/30 bg-zigner-gold/10 px-2 py-0.5 text-label text-zigner-gold lowercase tracking-[0.05em]'
             title='shielded — senders cannot see your other transactions'
           >
             <span className='i-lucide-shield-check h-2.5 w-2.5' />
@@ -672,7 +672,7 @@ function ReceiveTab({ address, loading, activeNetwork }: {
         )}
         {isZcash && transparent && (
           <span
-            className='inline-flex items-center gap-1 rounded-sm border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] text-red-400 lowercase tracking-[0.05em]'
+            className='inline-flex items-center gap-1 rounded-sm border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-label text-red-400 lowercase tracking-[0.05em]'
             title='transparent — balance and history publicly visible'
           >
             <span className='i-lucide-eye h-2.5 w-2.5' />
@@ -831,7 +831,7 @@ function ReceiveTab({ address, loading, activeNetwork }: {
           {ephemeral && isPenumbra
             ? 'ephemeral address'
             : transparent && isZcash
-              ? <span className='flex items-center gap-1.5'>transparent address #{transparentIndex} <span className='text-[10px] px-1.5 py-0.5 rounded-md bg-red-500/15 text-red-500 font-medium leading-none'>public</span></span>
+              ? <span className='flex items-center gap-1.5'>transparent address #{transparentIndex} <span className='text-label px-1.5 py-0.5 rounded-md bg-red-500/15 text-red-500 font-medium leading-none'>public</span></span>
               : isZcash
                 ? `shielded address #${shieldedIndex}`
                 : 'address'}
@@ -857,7 +857,7 @@ function ReceiveTab({ address, loading, activeNetwork }: {
               {copied ? (
                 <>
                   <span className='i-lucide-check h-4 w-4' />
-                  <span className='text-[10px] lowercase tracking-[0.04em]'>copied</span>
+                  <span className='text-label lowercase'>copied</span>
                 </>
               ) : (
                 <span className='i-lucide-copy h-4 w-4' />
@@ -882,7 +882,6 @@ function ReceiveTab({ address, loading, activeNetwork }: {
 type ReceiveMode = 'receive' | 'shield';
 
 export function ReceivePage() {
-  const navigate = useNavigate();
   const activeNetwork = useStore(selectActiveNetwork);
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const keyRing = useStore(keyRingSelector);
@@ -891,12 +890,13 @@ export function ReceivePage() {
   const { address, loading } = useActiveAddress();
   const isPenumbra = activeNetwork === 'penumbra';
   const [mode, setMode] = useState<ReceiveMode>('receive');
+  const goBack = useBackNav(PopupPath.INDEX);
 
   return (
     <div className='flex h-full flex-col'>
       <div className='flex shrink-0 items-center gap-3 border-b border-border-soft px-4 py-3'>
         <button
-          onClick={() => navigate(PopupPath.INDEX)}
+          onClick={goBack}
           className='text-fg-muted transition-colors hover:text-fg-high'
         >
           <span className='i-lucide-arrow-left h-5 w-5' />

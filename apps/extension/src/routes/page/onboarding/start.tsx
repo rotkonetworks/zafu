@@ -67,7 +67,7 @@ export const OnboardingStart = () => {
           <h2 className='text-2xl lowercase tracking-[-0.01em] text-fg-high'>
             how would you like to begin?
           </h2>
-          <p className='text-xs text-fg-muted lowercase tracking-[0.02em]'>
+          <p className='text-xs text-fg-muted lowercase'>
             your keys stay on this device. always.
           </p>
         </header>
@@ -80,7 +80,7 @@ export const OnboardingStart = () => {
           ))}
         </ul>
 
-        <footer className='mt-auto flex items-center gap-4 pt-6 text-[10px] tracking-[0.05em] text-fg-muted lowercase'>
+        <footer className='mt-auto flex items-center gap-4 pt-6 text-label tracking-[0.05em] text-fg-muted lowercase'>
           <a
             href='https://rotko.net'
             target='_blank'
@@ -99,7 +99,7 @@ export const OnboardingStart = () => {
             source
           </a>
           <span className='text-fg-muted/40'>·</span>
-          <span className='text-fg-muted/60'>gpl-3.0</span>
+          <span className='text-fg-muted/60'>mit</span>
         </footer>
       </div>
     </FadeTransition>
@@ -139,8 +139,8 @@ const PathCard = ({ option, onClick }: PathCardProps) => {
         <span className={cn(option.icon, 'h-4 w-4')} />
       </span>
       <span className='flex flex-1 flex-col'>
-        <span className='text-sm lowercase tracking-[0.01em] text-fg-high'>{option.label}</span>
-        <span className='mt-0.5 text-[11px] text-fg-muted lowercase tracking-[0.02em]'>
+        <span className='text-sm lowercase text-fg-high'>{option.label}</span>
+        <span className='mt-0.5 text-body text-fg-muted lowercase'>
           {option.hint}
         </span>
       </span>

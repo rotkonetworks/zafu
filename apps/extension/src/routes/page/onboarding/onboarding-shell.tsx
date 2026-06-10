@@ -146,7 +146,7 @@ export function OnboardingShell({ children, title, subtitle }: OnboardingShellPr
                   <h1 className='text-2xl tracking-[-0.01em] text-fg-high lowercase'>{title}</h1>
                 )}
                 {subtitle && (
-                  <p className='text-xs text-fg-muted tracking-[0.02em]'>{subtitle}</p>
+                  <p className='text-xs text-fg-muted'>{subtitle}</p>
                 )}
               </header>
             )}
@@ -164,7 +164,7 @@ function BrandLockup() {
       <span className='text-3xl font-medium text-zigner-gold lowercase tracking-[-0.02em] leading-none'>
         zafu
       </span>
-      <span className='mt-1 text-[11px] text-fg-muted tracking-[0.02em] lowercase'>
+      <span className='mt-1 text-body text-fg-muted lowercase'>
         shielded signing
       </span>
     </div>
@@ -186,7 +186,7 @@ function Stepper({
           <li
             key={s.id}
             className={cn(
-              'flex items-center gap-2.5 text-xs lowercase tracking-[0.02em] transition-opacity duration-200',
+              'flex items-center gap-2.5 text-xs lowercase transition-opacity duration-200',
               state === 'pending' && 'opacity-40',
             )}
           >

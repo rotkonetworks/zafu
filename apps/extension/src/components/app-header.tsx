@@ -85,7 +85,7 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
             />
           ))}
         </div>
-        <span className='text-[13px] text-fg-high'>{networkInfo.name}</span>
+        <span className='text-data text-fg-high'>{networkInfo.name}</span>
       </button>
 
       {/* wallet name — tap to cycle identity, shows dot per vault */}
@@ -109,7 +109,7 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
             ))}
           </div>
         )}
-        <span className='text-[13px] text-fg-high truncate max-w-[120px]'>{walletName}</span>
+        <span className='text-data text-fg-high truncate max-w-[120px]'>{walletName}</span>
       </button>
 
       {/* menu */}

@@ -1,4 +1,4 @@
-import { NavigateOptions, useNavigate } from 'react-router-dom';
+import { NavigateOptions, useLocation, useNavigate } from 'react-router-dom';
 import { PagePath } from '../routes/page/paths';
 import { PopupPath } from '../routes/popup/paths';
 
@@ -16,6 +16,28 @@ export const useTypesafeNav = <T extends string>() => {
 
 export const usePageNav = useTypesafeNav<PagePath>;
 export const usePopupNav = useTypesafeNav<PopupPath>;
+
+/**
+ * Back navigation that respects where the user actually came from.
+ *
+ * Hardcoded back targets teleport: drawer → networks → back used to land
+ * on /settings (never visited), identity → contacts → back landed on home.
+ * History-back fixes the common case; `fallback` covers direct entry —
+ * deep links (`?network=zcash`), dedicated approval windows, and popup
+ * re-opens that start the session directly on a sub-screen and so have
+ * no in-app history (React Router marks that first entry key 'default').
+ */
+export const useBackNav = (fallback: PopupPath = PopupPath.INDEX) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  return (): void => {
+    if (location.key !== 'default') {
+      navigate(-1);
+    } else {
+      navigate(fallback);
+    }
+  };
+};
 
 /**
  * Open a popup path in a dedicated window.

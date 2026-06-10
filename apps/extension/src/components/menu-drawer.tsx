@@ -173,7 +173,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
       <div className='fixed right-0 top-0 bottom-0 z-50 w-64 bg-canvas border-l border-border-soft shadow-xl flex flex-col'>
         {/* header */}
         <div className='flex items-center justify-between px-4 py-3 border-b border-border-soft'>
-          <span className='text-[13px] text-fg-high'>zafu</span>
+          <span className='text-data text-fg-high'>zafu</span>
           <button onClick={onClose} className='p-1 rounded-md text-fg-muted hover:text-fg-high hover:bg-elev-1 transition-colors'>
             <span className='i-lucide-x h-4 w-4' />
           </button>
@@ -191,7 +191,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
           >
             <span className='i-lucide-fingerprint h-3.5 w-3.5 text-fg-dim' />
             <span className='text-xs tabular text-fg-muted truncate'>{zidAddress}</span>
-            <span className='text-[10px] text-fg-dim ml-auto lowercase tracking-[0.04em]'>
+            <span className='text-label text-fg-dim ml-auto lowercase'>
               {zidCopied ? 'copied' : 'zid'}
             </span>
           </button>
@@ -209,7 +209,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
                   key={i}
                   onClick={item.onClick}
                   className={cn(
-                    'flex w-full items-center gap-3 px-3 py-2.5 rounded-md text-[13px] text-fg hover:text-fg-high transition-colors hover:bg-elev-1',
+                    'flex w-full items-center gap-3 px-3 py-2.5 rounded-md text-data text-fg hover:text-fg-high transition-colors hover:bg-elev-1',
                     item.className,
                   )}
                 >
@@ -226,7 +226,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
           {!pro && (
             <button
               onClick={() => { navigate(PopupPath.SUBSCRIBE); onClose(); }}
-              className='flex w-full items-center justify-center gap-2 px-3 py-2 rounded-md bg-zigner-gold text-zigner-dark hover:bg-zigner-gold-light transition-colors text-[13px] lowercase tracking-[0.04em]'
+              className='flex w-full items-center justify-center gap-2 px-3 py-2 rounded-md bg-zigner-gold text-zigner-dark hover:bg-zigner-gold-light transition-colors text-data lowercase'
             >
               <span className='i-lucide-zap h-3.5 w-3.5' />
               <span>upgrade to pro</span>
@@ -235,19 +235,19 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
           {donation && (
             <button
               onClick={handleDonate}
-              className='flex w-full items-center justify-center gap-2 px-3 py-2 rounded-md border border-border-soft text-[13px] text-fg-muted hover:text-fg-high hover:bg-elev-1 transition-colors'
+              className='flex w-full items-center justify-center gap-2 px-3 py-2 rounded-md border border-border-soft text-data text-fg-muted hover:text-fg-high hover:bg-elev-1 transition-colors'
             >
               <span className='i-lucide-heart h-3.5 w-3.5' />
               <span>donate {activeNetwork}</span>
             </button>
           )}
 
-          <div className='mt-1 flex items-center gap-3 text-[10px] text-fg-dim lowercase tracking-[0.04em]'>
+          <div className='mt-1 flex items-center gap-3 text-label text-fg-dim lowercase'>
             <a href='https://rotko.net' target='_blank' rel='noopener noreferrer' className='hover:text-fg-high'>rotko.net</a>
             <a href='https://github.com/rotkonetworks/zafu' target='_blank' rel='noopener noreferrer' className='hover:text-fg-high'>github</a>
             <a href='https://zigner.rotko.net' target='_blank' rel='noopener noreferrer' className='hover:text-fg-high'>zigner</a>
           </div>
-          <p className='text-[9px] text-fg-dim mt-1 tabular'>MIT</p>
+          <p className='text-label text-fg-dim mt-1 tabular'>MIT</p>
         </div>
       </div>
     </>

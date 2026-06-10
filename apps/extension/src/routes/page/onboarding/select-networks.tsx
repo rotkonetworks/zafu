@@ -159,7 +159,7 @@ export const SelectNetworks = () => {
           <button
             type='button'
             onClick={() => navigate(PagePath.WELCOME)}
-            className='mb-2 inline-flex items-center gap-1.5 self-start text-[11px] text-fg-muted transition-colors hover:text-fg-high lowercase tracking-[0.02em]'
+            className='mb-2 inline-flex items-center gap-1.5 self-start text-body text-fg-muted transition-colors hover:text-fg-high lowercase'
           >
             <span className='i-lucide-arrow-left h-3 w-3' />
             back
@@ -167,7 +167,7 @@ export const SelectNetworks = () => {
           <h2 className='text-2xl lowercase tracking-[-0.01em] text-fg-high'>
             select networks
           </h2>
-          <p className='text-xs text-fg-muted lowercase tracking-[0.02em]'>
+          <p className='text-xs text-fg-muted lowercase'>
             choose which networks to enable. you can change this later in settings.
           </p>
         </header>
@@ -202,7 +202,7 @@ export const SelectNetworks = () => {
                     <div className='font-medium flex items-center gap-2'>
                       {network.name}
                       {NETWORKS[network.id]?.transparent && (
-                        <span className='text-[10px] px-1.5 py-0.5 rounded-md bg-red-500/15 text-red-500 font-medium leading-none'>
+                        <span className='text-label px-1.5 py-0.5 rounded-md bg-red-500/15 text-red-500 font-medium leading-none'>
                           public
                         </span>
                       )}
@@ -234,7 +234,7 @@ export const SelectNetworks = () => {
             <div className='mt-4 rounded-lg border border-border-soft p-3'>
               <div className='flex items-center justify-between mb-2'>
                 <span className='text-xs font-medium'>zcash node</span>
-                <span className='text-[10px] text-fg-muted'>
+                <span className='text-label text-fg-muted'>
                   fallback if your default is down
                 </span>
               </div>
@@ -253,7 +253,7 @@ export const SelectNetworks = () => {
                   </optgroup>
                 ))}
               </select>
-              <p className='mt-1.5 text-[10px] text-fg-muted'>
+              <p className='mt-1.5 text-label text-fg-muted'>
                 trustless = wallet verifies the server's responses with
                 ligerito + nomt proofs. lightwalletd = trusted public node.
                 you can switch later in settings.
@@ -271,7 +271,7 @@ export const SelectNetworks = () => {
                 <button
                   type='button'
                   onClick={() => setInputMode(inputMode === 'date' ? 'block' : 'date')}
-                  className='text-[10px] text-fg-muted hover:text-fg-high transition-colors'
+                  className='text-label text-fg-muted hover:text-fg-high transition-colors'
                 >
                   {inputMode === 'date' ? 'enter block instead' : 'enter date instead'}
                 </button>
@@ -312,12 +312,12 @@ export const SelectNetworks = () => {
               )}
 
               {zcashBirthday && (
-                <p className='mt-1.5 text-[10px] text-fg-muted'>
+                <p className='mt-1.5 text-label text-fg-muted'>
                   ~block {Number(zcashBirthday).toLocaleString()}
                   {zcashDate && ` (~${zcashDate})`}
                 </p>
               )}
-              <p className='mt-1 text-[10px] text-fg-muted'>
+              <p className='mt-1 text-label text-fg-muted'>
                 approximate date the wallet was first used. rounded for privacy.
                 skip this if you don't know — scanning starts from chain tip.
               </p>

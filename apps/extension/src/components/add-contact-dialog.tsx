@@ -86,7 +86,7 @@ export function AddContactDialog({
             <div className='text-xs text-fg-muted mb-1'>address</div>
             <div className='text-sm font-mono break-all'>{address}</div>
             <div className='mt-1'>
-              <span className='rounded-md bg-elev-2 px-1.5 py-0.5 text-[10px] text-fg-muted'>
+              <span className='rounded-md bg-elev-2 px-1.5 py-0.5 text-label text-fg-muted'>
                 {network}
               </span>
             </div>

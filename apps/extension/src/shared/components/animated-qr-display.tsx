@@ -134,14 +134,14 @@ export function AnimatedQrDisplay({
       <div className='relative rounded-lg bg-white p-3'>
         <canvas ref={canvasRef} />
         {frames.length > 1 && (
-          <div className='absolute bottom-1 right-1 rounded bg-black/60 px-1.5 py-0.5 text-[9px] text-white font-mono'>
+          <div className='absolute bottom-1 right-1 rounded bg-black/60 px-1.5 py-0.5 text-label text-white font-mono'>
             {currentFrame}/{frames.length}
           </div>
         )}
       </div>
 
       {frames.length > 1 && (
-        <div className='flex items-center gap-2 text-[10px] text-fg-muted'>
+        <div className='flex items-center gap-2 text-label text-fg-muted'>
           <span className='i-lucide-loader-2 size-3 animate-spin' />
           scanning — hold camera steady
         </div>
@@ -151,7 +151,7 @@ export function AnimatedQrDisplay({
         <p className='text-xs text-fg-muted text-center max-w-xs'>{description}</p>
       )}
 
-      <p className='text-[10px] text-fg-muted'>
+      <p className='text-label text-fg-muted'>
         {(totalBytes ?? data?.length ?? 0).toLocaleString()} bytes · {frames.length} frame{frames.length !== 1 ? 's' : ''}
       </p>
     </div>

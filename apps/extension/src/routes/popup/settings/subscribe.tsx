@@ -351,7 +351,7 @@ export const SubscribePage = () => {
         )}
 
         {/* features list */}
-        <div className='text-[10px] font-mono text-fg-dim'>
+        <div className='text-label font-mono text-fg-dim'>
           <p className='mb-2'>free for everyone:</p>
           <ul className='flex flex-col gap-0.5 pl-2 mb-3'>
             {FREE_FEATURES.map(f => (
@@ -383,7 +383,7 @@ export const SubscribePage = () => {
                 payment detected - {(pending.pendingZat / 1e8).toFixed(4)} ZEC
               </span>
             </div>
-            <div className='text-[9px] font-mono text-fg-dim mt-1'>
+            <div className='text-label font-mono text-fg-dim mt-1'>
               {pending.requiredConfs === 0
                 ? 'crediting...'
                 : `${pending.pendingConfs}/${pending.requiredConfs} confirmations`}
@@ -455,14 +455,14 @@ export const SubscribePage = () => {
                 </div>
                 <div className='flex justify-between items-start text-xs font-mono gap-2'>
                   <span className='text-fg-muted shrink-0'>to</span>
-                  <span className='text-fg text-right break-all text-[10px]'>{ROTKO_LICENSE_ADDRESS.slice(0, 20)}...{ROTKO_LICENSE_ADDRESS.slice(-8)}</span>
+                  <span className='text-fg text-right break-all text-label'>{ROTKO_LICENSE_ADDRESS.slice(0, 20)}...{ROTKO_LICENSE_ADDRESS.slice(-8)}</span>
                 </div>
                 <div className='flex justify-between items-start text-xs font-mono gap-2'>
                   <span className='text-fg-muted shrink-0'>memo</span>
-                  <span className='text-fg text-right break-all text-[10px]'>{memo.slice(0, 12)}...{memo.slice(-8)}</span>
+                  <span className='text-fg text-right break-all text-label'>{memo.slice(0, 12)}...{memo.slice(-8)}</span>
                 </div>
                 {isZignerWallet && (
-                  <p className='text-[10px] font-mono text-fg-muted mt-1'>
+                  <p className='text-label font-mono text-fg-muted mt-1'>
                     next: build an unsigned tx, scan the QR with your zigner device, then scan its signature back.
                   </p>
                 )}
@@ -491,7 +491,7 @@ export const SubscribePage = () => {
               <div className='rounded border border-primary/40 bg-primary/5 p-3 flex flex-col gap-3 items-center'>
                 <p className='text-xs font-mono text-fg-muted'>sign with zafu zigner</p>
                 <QrDisplay data={signRequestQr} size={220} />
-                <div className='text-[10px] font-mono text-fg-muted text-center leading-relaxed'>
+                <div className='text-label font-mono text-fg-muted text-center leading-relaxed'>
                   1. open zafu zigner on your phone<br />
                   2. scan this qr<br />
                   3. review & approve the transaction<br />
@@ -543,7 +543,7 @@ export const SubscribePage = () => {
                       const prevMs = i > 0 ? sendSteps[i - 1]!.elapsedMs : 0;
                       const dur = ((s.elapsedMs - prevMs) / 1000).toFixed(1);
                       return (
-                        <div key={i} className={`flex items-start gap-2 text-[10px] font-mono ${isLast ? 'text-fg' : 'text-fg-muted'}`}>
+                        <div key={i} className={`flex items-start gap-2 text-label font-mono ${isLast ? 'text-fg' : 'text-fg-muted'}`}>
                           <span className='w-10 text-right shrink-0 tabular-nums'>{(s.elapsedMs / 1000).toFixed(1)}s</span>
                           <span>
                             {s.step}
@@ -557,7 +557,7 @@ export const SubscribePage = () => {
                     })}
                   </div>
                 ) : (
-                  <span className='text-[10px] font-mono text-fg-muted animate-pulse'>preparing...</span>
+                  <span className='text-label font-mono text-fg-muted animate-pulse'>preparing...</span>
                 )}
               </div>
             )}
@@ -572,7 +572,7 @@ export const SubscribePage = () => {
                   </span>
                 </div>
                 {txid && (
-                  <div className='text-[9px] font-mono text-fg-muted/50 mt-1 break-all'>
+                  <div className='text-label font-mono text-fg-muted/50 mt-1 break-all'>
                     txid: {txid}
                   </div>
                 )}
@@ -594,7 +594,7 @@ export const SubscribePage = () => {
                   payment sent - may need a few more confirmations
                 </p>
                 {txid && (
-                  <div className='text-[9px] font-mono text-fg-muted/50 mt-1 break-all'>
+                  <div className='text-label font-mono text-fg-muted/50 mt-1 break-all'>
                     txid: {txid}
                   </div>
                 )}
@@ -607,7 +607,7 @@ export const SubscribePage = () => {
                 <p className='text-xs font-mono text-red-400'>{error}</p>
                 <button
                   onClick={() => { setPayState('idle'); setError(null); }}
-                  className='text-[10px] font-mono text-fg-muted hover:text-fg-high mt-2'
+                  className='text-label font-mono text-fg-muted hover:text-fg-high mt-2'
                 >
                   try again
                 </button>
@@ -618,24 +618,24 @@ export const SubscribePage = () => {
                  (e.g. zcash not enabled, or user wants to pay from external wallet) */}
             {isZignerWallet && (
               <div className='rounded border border-border-soft p-3'>
-                <p className='text-[10px] font-mono text-fg-muted mb-2'>
+                <p className='text-label font-mono text-fg-muted mb-2'>
                   or pay from an external wallet
                 </p>
                 <button
                   onClick={() => copy(ROTKO_LICENSE_ADDRESS, 'address')}
                   className='w-full text-left mb-2'
                 >
-                  <span className='text-[9px] font-mono text-fg-muted/50'>
+                  <span className='text-label font-mono text-fg-muted/50'>
                     {copied === 'address' ? 'copied' : 'tap to copy address'}
                   </span>
-                  <p className='font-mono text-[10px] break-all'>{ROTKO_LICENSE_ADDRESS}</p>
+                  <p className='font-mono text-label break-all'>{ROTKO_LICENSE_ADDRESS}</p>
                 </button>
                 {memo && (
                   <button onClick={() => copy(memo, 'memo')} className='w-full text-left'>
-                    <span className='text-[9px] font-mono text-fg-muted/50'>
+                    <span className='text-label font-mono text-fg-muted/50'>
                       {copied === 'memo' ? 'copied' : 'tap to copy memo'}
                     </span>
-                    <p className='font-mono text-[10px] break-all'>{memo}</p>
+                    <p className='font-mono text-label break-all'>{memo}</p>
                   </button>
                 )}
               </div>

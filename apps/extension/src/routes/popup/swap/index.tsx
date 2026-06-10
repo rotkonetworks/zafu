@@ -708,7 +708,7 @@ const ZcashCrosschainSwap = () => {
             get quote
           </button>
 
-          <p className='text-center text-[10px] text-fg-dim'>
+          <p className='text-center text-label text-fg-dim'>
             via NEAR 1Click — swap details shared with third-party API
           </p>
         </>

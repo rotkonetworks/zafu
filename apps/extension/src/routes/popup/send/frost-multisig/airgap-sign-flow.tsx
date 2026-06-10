@@ -210,7 +210,7 @@ export function FrostAirgapSignFlow({ ms, unsigned, recipient, amount, fee, onCo
           <p className="text-sm text-fg-high">show this QR to zigner</p>
           {trigger1 && <AnimatedQrDisplay data={trigger1} urType="zafu-frost-sign" size={220} />}
           {sessionRef.current && <RoomCodeChip code={sessionRef.current.roomCode} />}
-          <div className="w-full rounded bg-elev-2 p-2 text-[11px] text-fg-muted space-y-0.5">
+          <div className="w-full rounded bg-elev-2 p-2 text-body text-fg-muted space-y-0.5">
             <p>{ms.threshold}-of-{ms.maxSigners} threshold</p>
             <p>send {amount} ZEC to {recipient.slice(0, 16)}…{recipient.slice(-8)}</p>
             <p>fee: {fee} ZEC</p>
@@ -219,7 +219,7 @@ export function FrostAirgapSignFlow({ ms, unsigned, recipient, amount, fee, onCo
             scan qr from zigner
           </Button>
           <Button variant="secondary" onClick={cancel} className="w-full">cancel</Button>
-          <p className="text-[10px] text-fg-muted/70 leading-snug pt-1">
+          <p className="text-label text-fg-muted/70 leading-snug pt-1">
             sighash + per-action alphas + room code. zigner generates fresh round-1 nonces locally and shows commitments back.
           </p>
         </div>
@@ -237,7 +237,7 @@ export function FrostAirgapSignFlow({ ms, unsigned, recipient, amount, fee, onCo
             onComplete={(data) => void handleR1Response(new TextDecoder().decode(data))}
             onClose={() => setStep('r1-out')}
           />
-          <p className="text-[10px] text-fg-muted/70 leading-snug pt-1">
+          <p className="text-label text-fg-muted/70 leading-snug pt-1">
             public part of zigner's nonces. zafu publishes to the relay so co-signers compute the same challenge — no secret leaves zigner.
           </p>
         </div>
@@ -261,7 +261,7 @@ export function FrostAirgapSignFlow({ ms, unsigned, recipient, amount, fee, onCo
             </span>
           </div>
           <Button variant="secondary" onClick={cancel} className="w-full mt-2">cancel</Button>
-          <p className="text-[10px] text-fg-muted/70 leading-snug pt-1 text-center">
+          <p className="text-label text-fg-muted/70 leading-snug pt-1 text-center">
             zigner's commitments are on the relay. waiting on peer commitment bundle(s).
           </p>
         </div>
@@ -278,7 +278,7 @@ export function FrostAirgapSignFlow({ ms, unsigned, recipient, amount, fee, onCo
             scan qr from zigner
           </Button>
           <Button variant="secondary" onClick={cancel} className="w-full">cancel</Button>
-          <p className="text-[10px] text-fg-muted/70 leading-snug pt-1">
+          <p className="text-label text-fg-muted/70 leading-snug pt-1">
             all co-signers' round-1 commitments grouped per action. zigner derives ρ and computes its share — nonces stay on zigner.
           </p>
         </div>
@@ -296,7 +296,7 @@ export function FrostAirgapSignFlow({ ms, unsigned, recipient, amount, fee, onCo
             onComplete={(data) => void handleR2Response(new TextDecoder().decode(data))}
             onClose={() => setStep('r2-out')}
           />
-          <p className="text-[10px] text-fg-muted/70 leading-snug pt-1">
+          <p className="text-label text-fg-muted/70 leading-snug pt-1">
             one share per action. zafu collects peer shares, aggregates into orchard signatures, then broadcasts.
           </p>
         </div>
@@ -312,7 +312,7 @@ export function FrostAirgapSignFlow({ ms, unsigned, recipient, amount, fee, onCo
             {progress || 'finalizing...'}
           </div>
           {sessionRef.current && <RoomCodeChip code={sessionRef.current.roomCode} />}
-          <p className="text-[10px] text-fg-muted/70 leading-snug pt-1 text-center">
+          <p className="text-label text-fg-muted/70 leading-snug pt-1 text-center">
             publishing shares, waiting on peer shares, aggregating signatures, broadcasting tx.
           </p>
         </div>

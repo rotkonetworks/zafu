@@ -257,12 +257,12 @@ export const MultisigSign = () => {
     <SettingsScreen title='co-sign' backPath={PopupPath.MULTISIG}>
       {PasswordModal}
       <div className='mb-4 rounded-lg border border-border-soft bg-elev-1 p-3'>
-        <p className='text-[10px] text-fg-muted'>signing as</p>
+        <p className='text-label text-fg-muted'>signing as</p>
         <p className='mt-0.5 text-sm font-medium truncate'>{activeWallet!.label}</p>
-        <p className='text-[10px] font-mono text-fg-muted truncate'>
+        <p className='text-label font-mono text-fg-muted truncate'>
           {activeWallet!.address.slice(0, 16)}...{activeWallet!.address.slice(-8)}
         </p>
-        <span className='mt-1 inline-block rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-zigner-gold'>
+        <span className='mt-1 inline-block rounded-md bg-primary/10 px-2 py-0.5 text-label font-medium text-zigner-gold'>
           {ms.threshold}/{ms.maxSigners}
         </span>
       </div>
@@ -300,42 +300,42 @@ export const MultisigSign = () => {
       {step === 'review' && (
         <div className='flex flex-col gap-3'>
           <div className='rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-3'>
-            <p className='text-[10px] uppercase tracking-wider text-yellow-400'>review transaction</p>
+            <p className='text-label uppercase tracking-wider text-yellow-400'>review transaction</p>
           </div>
 
           <div className='rounded-lg border border-border-soft bg-elev-1 p-3 flex flex-col gap-2.5'>
             <div>
-              <p className='text-[10px] uppercase tracking-wider text-fg-muted'>from</p>
+              <p className='text-label uppercase tracking-wider text-fg-muted'>from</p>
               <p className='mt-0.5 text-xs font-medium'>{activeWallet!.label}</p>
-              <p className='mt-0.5 break-all font-mono text-[10px] text-fg-muted'>
+              <p className='mt-0.5 break-all font-mono text-label text-fg-muted'>
                 {activeWallet!.address}
               </p>
             </div>
             <div className='border-t border-border-soft' />
             <div>
-              <p className='text-[10px] uppercase tracking-wider text-fg-muted'>to</p>
-              <p className='mt-0.5 break-all font-mono text-[10px]'>{recipient}</p>
+              <p className='text-label uppercase tracking-wider text-fg-muted'>to</p>
+              <p className='mt-0.5 break-all font-mono text-label'>{recipient}</p>
             </div>
             <div className='border-t border-border-soft' />
             <div className='flex items-baseline justify-between'>
-              <span className='text-[10px] uppercase tracking-wider text-fg-muted'>amount</span>
+              <span className='text-label uppercase tracking-wider text-fg-muted'>amount</span>
               <span className='tabular text-sm font-medium'>{formatZec(amountZat)} ZEC</span>
             </div>
             <div className='flex items-baseline justify-between'>
-              <span className='text-[10px] uppercase tracking-wider text-fg-muted'>fee</span>
+              <span className='text-label uppercase tracking-wider text-fg-muted'>fee</span>
               <span className='tabular text-xs text-fg-muted'>{formatZec(feeZat)} ZEC</span>
             </div>
           </div>
 
           {/* verifier verdict */}
           {verdict.kind === 'pending' && (
-            <div className='rounded-lg border border-border-soft bg-elev-1 p-2.5 text-[10px] text-fg-muted flex items-center gap-2'>
+            <div className='rounded-lg border border-border-soft bg-elev-1 p-2.5 text-label text-fg-muted flex items-center gap-2'>
               <span className='i-lucide-loader-2 size-3 animate-spin' />
               verifying tx bytes match host claim…
             </div>
           )}
           {verdict.kind === 'match' && (
-            <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-2.5 text-[10px] text-green-400 flex items-start gap-2'>
+            <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-2.5 text-label text-green-400 flex items-start gap-2'>
               <span className='i-lucide-shield-check size-3.5 mt-0.5 shrink-0' />
               <span>
                 bytes verified — derived recipient + amount match host claim
@@ -346,23 +346,23 @@ export const MultisigSign = () => {
             </div>
           )}
           {verdict.kind === 'unverified' && (
-            <div className='rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-2.5 text-[10px] text-yellow-400 flex items-start gap-2'>
+            <div className='rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-2.5 text-label text-yellow-400 flex items-start gap-2'>
               <span className='i-lucide-alert-triangle size-3.5 mt-0.5 shrink-0' />
               <span>host claim shown without verification — {verdict.reason}</span>
             </div>
           )}
           {verdict.kind === 'mismatch' && (
             <div className='rounded-lg border border-red-500/60 bg-red-500/10 p-3 flex flex-col gap-2'>
-              <div className='flex items-center gap-2 text-[11px] font-medium text-red-400'>
+              <div className='flex items-center gap-2 text-body font-medium text-red-400'>
                 <span className='i-lucide-shield-x size-4' />
                 mismatch — host claim disagrees with tx bytes
               </div>
-              <ul className='text-[10px] text-red-300/90 list-disc pl-4 space-y-0.5'>
+              <ul className='text-label text-red-300/90 list-disc pl-4 space-y-0.5'>
                 {verdict.reasons.map((r, i) => (<li key={i}>{r}</li>))}
               </ul>
               {parsed && parsed.actions.some(a => a.decrypted && !a.is_change) && (
-                <div className='rounded border border-red-500/30 bg-red-500/5 p-2 text-[10px] font-mono text-red-300/80'>
-                  <p className='text-[9px] uppercase tracking-wider text-red-400/80 mb-1'>derived outputs</p>
+                <div className='rounded border border-red-500/30 bg-red-500/5 p-2 text-label font-mono text-red-300/80'>
+                  <p className='text-label uppercase tracking-wider text-red-400/80 mb-1'>derived outputs</p>
                   {parsed.actions
                     .filter(a => a.decrypted && !a.is_change)
                     .map((a) => (
@@ -375,7 +375,7 @@ export const MultisigSign = () => {
                     ))}
                 </div>
               )}
-              <label className='flex items-start gap-2 text-[10px] text-red-300/90 cursor-pointer mt-1'>
+              <label className='flex items-start gap-2 text-label text-red-300/90 cursor-pointer mt-1'>
                 <input
                   type='checkbox'
                   checked={acknowledged}
@@ -389,7 +389,7 @@ export const MultisigSign = () => {
             </div>
           )}
 
-          <p className='text-[10px] text-fg-muted'>
+          <p className='text-label text-fg-muted'>
             approving signs with this wallet's share. coordinator aggregates and broadcasts.
           </p>
 
@@ -415,10 +415,10 @@ export const MultisigSign = () => {
         <div className='flex flex-col items-center gap-4'>
           {recipient && (
             <div className='w-full rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-3'>
-              <p className='text-[10px] uppercase tracking-wider text-yellow-400'>signing</p>
+              <p className='text-label uppercase tracking-wider text-yellow-400'>signing</p>
               <p className='mt-0.5 text-sm font-medium text-yellow-300'>
                 {formatZec(amountZat)} ZEC →{' '}
-                <span className='font-mono text-[10px]'>{recipient.slice(0, 16)}…{recipient.slice(-6)}</span>
+                <span className='font-mono text-label'>{recipient.slice(0, 16)}…{recipient.slice(-6)}</span>
               </p>
             </div>
           )}
@@ -474,12 +474,12 @@ const AirgapJoinerWrapper = ({
 
   const WalletCard = () => (
     <div className='mb-4 rounded-lg border border-border-soft bg-elev-1 p-3'>
-      <p className='text-[10px] text-fg-muted'>signing as</p>
+      <p className='text-label text-fg-muted'>signing as</p>
       <p className='mt-0.5 text-sm font-medium truncate'>{walletLabel}</p>
-      <p className='text-[10px] font-mono text-fg-muted truncate'>
+      <p className='text-label font-mono text-fg-muted truncate'>
         {walletAddress.slice(0, 16)}...{walletAddress.slice(-8)}
       </p>
-      <span className='mt-1 inline-block rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-zigner-gold'>
+      <span className='mt-1 inline-block rounded-md bg-primary/10 px-2 py-0.5 text-label font-medium text-zigner-gold'>
         {ms.threshold}/{ms.maxSigners} · airgap
       </span>
     </div>

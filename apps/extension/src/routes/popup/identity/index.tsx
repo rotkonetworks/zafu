@@ -272,9 +272,9 @@ export const IdentityPage = () => {
               {/* vault name + plan badge + rotation index */}
               <div className='flex items-center gap-2 mt-1 flex-wrap'>
                 {keyInfo && (
-                  <span className='text-[10px] text-fg-muted font-mono'>{keyInfo.name}</span>
+                  <span className='text-label text-fg-muted font-mono'>{keyInfo.name}</span>
                 )}
-                <span className={`text-[9px] font-mono px-1.5 py-0 rounded ${
+                <span className={`text-label font-mono px-1.5 py-0 rounded ${
                   pro
                     ? 'bg-green-500/15 text-green-400 border border-green-500/20'
                     : 'bg-elev-2 text-fg-muted/70 border border-border-soft'
@@ -283,7 +283,7 @@ export const IdentityPage = () => {
                 </span>
                 {zidIndex > 0 && (
                   <span
-                    className='text-[9px] font-mono px-1.5 py-0 rounded bg-elev-2 text-fg-muted/70 border border-border-soft'
+                    className='text-label font-mono px-1.5 py-0 rounded bg-elev-2 text-fg-muted/70 border border-border-soft'
                     title='global zid rotation index. all sites + cross-site keys derive under this generation.'
                   >
                     gen {zidIndex}
@@ -294,14 +294,14 @@ export const IdentityPage = () => {
                     <button
                       type='button'
                       onClick={() => void handleRotateZid()}
-                      className='text-[9px] font-mono px-1.5 py-0 rounded border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 transition-colors'
+                      className='text-label font-mono px-1.5 py-0 rounded border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 transition-colors'
                     >
                       confirm rotate
                     </button>
                     <button
                       type='button'
                       onClick={() => setConfirmingRotate(false)}
-                      className='text-[9px] font-mono px-1.5 py-0 rounded border border-border-soft text-fg-muted hover:bg-elev-2 transition-colors'
+                      className='text-label font-mono px-1.5 py-0 rounded border border-border-soft text-fg-muted hover:bg-elev-2 transition-colors'
                     >
                       cancel
                     </button>
@@ -310,7 +310,7 @@ export const IdentityPage = () => {
                   <button
                     type='button'
                     onClick={() => setConfirmingRotate(true)}
-                    className='text-[9px] font-mono px-1.5 py-0 rounded border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 transition-colors'
+                    className='text-label font-mono px-1.5 py-0 rounded border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 transition-colors'
                     title='rotate zid - all sites + cross-site keys get fresh derivations. ring vrf seed (pro) is preserved.'
                   >
                     rotate zid
@@ -324,7 +324,7 @@ export const IdentityPage = () => {
           <div className='mt-3'>
             <button
               onClick={() => setShowFullKey(!showFullKey)}
-              className='flex items-center gap-1 text-[10px] text-fg hover:text-fg-high font-mono'
+              className='flex items-center gap-1 text-label text-fg hover:text-fg-high font-mono'
             >
               <span className={`size-3 transition-transform ${showFullKey ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'}`} />
               public key
@@ -334,7 +334,7 @@ export const IdentityPage = () => {
                 onClick={() => copy(zidPubkey, 'zid')}
                 className='mt-1 pl-4 text-left'
               >
-                <div className='font-mono text-[9px] text-fg-muted break-all leading-relaxed'>
+                <div className='font-mono text-label text-fg-muted break-all leading-relaxed'>
                   {zidPubkey}
                 </div>
               </button>
@@ -352,16 +352,16 @@ export const IdentityPage = () => {
           <div className='flex items-center gap-3 mt-3 pt-2 border-t border-border-soft'>
             <button
               onClick={() => setShowQr(!showQr)}
-              className='flex items-center gap-1 text-[10px] text-fg-muted/70 hover:text-fg-muted font-mono'
+              className='flex items-center gap-1 text-label text-fg-muted/70 hover:text-fg-muted font-mono'
             >
               <span className={`size-3 ${showQr ? 'i-lucide-eye-off' : 'i-lucide-qr-code'}`} />
               {showQr ? 'hide qr' : 'qr code'}
             </button>
             <span className='text-border/40'>|</span>
-            <span className='text-[10px] text-fg-muted font-mono'>{sites.length} sites</span>
-            <span className='text-[10px] text-fg-muted font-mono'>{contactCount} contacts</span>
+            <span className='text-label text-fg-muted font-mono'>{sites.length} sites</span>
+            <span className='text-label text-fg-muted font-mono'>{contactCount} contacts</span>
             {crossSiteCount > 0 && (
-              <span className='text-[10px] text-yellow-500/60 font-mono'>{crossSiteCount} linkable</span>
+              <span className='text-label text-yellow-500/60 font-mono'>{crossSiteCount} linkable</span>
             )}
           </div>
         </section>
@@ -370,9 +370,9 @@ export const IdentityPage = () => {
         <section className='rounded border border-border-soft p-3'>
           <div className='flex items-center gap-1.5 mb-2'>
             <span className='i-lucide-info size-3 text-fg-muted' />
-            <span className='text-[10px] font-mono text-fg-muted'>how zid works</span>
+            <span className='text-label font-mono text-fg-muted'>how zid works</span>
           </div>
-          <div className='text-[10px] font-mono text-fg-muted/70 flex flex-col gap-1'>
+          <div className='text-label font-mono text-fg-muted/70 flex flex-col gap-1'>
             <p>each site gets a unique key derived from your seed.</p>
             <p>sites cannot link your identities across origins.</p>
             <p>rotating a key gives you a fresh identity for one site.</p>
@@ -404,7 +404,7 @@ export const IdentityPage = () => {
               <div className='flex flex-col items-center py-6 text-fg-muted'>
                 <span className='i-lucide-globe size-6 mb-2' />
                 <p className='text-xs font-mono'>no sites yet.</p>
-                <p className='text-[10px] font-mono mt-1'>sites appear here after you authenticate.</p>
+                <p className='text-label font-mono mt-1'>sites appear here after you authenticate.</p>
               </div>
             ) : (
               sites.map(site => (
@@ -447,10 +447,10 @@ export const IdentityPage = () => {
                   onClick={() => copy(record.publicKey, `log-${i}`)}
                   className='flex items-baseline justify-between gap-2 py-1.5 text-left border-b border-border-hard/50 last:border-0'
                 >
-                  <span className='text-[10px] font-mono truncate'>
+                  <span className='text-label font-mono truncate'>
                     {displayOrigin(record.sharedWith)}
                   </span>
-                  <span className='text-[9px] text-fg-muted shrink-0 font-mono'>
+                  <span className='text-label text-fg-muted shrink-0 font-mono'>
                     {copied === `log-${i}` ? 'copied' : shortDate(record.sharedAt)}
                   </span>
                 </button>
@@ -581,11 +581,11 @@ const SiteRow = ({
             </span>
           )}
           {!isSiteMode && (
-            <span className='text-[8px] text-yellow-400 font-mono px-1 border border-yellow-500/40 rounded'>cross</span>
+            <span className='text-label text-yellow-400 font-mono px-1 border border-yellow-500/40 rounded'>cross</span>
           )}
         </div>
         <div className='flex items-center gap-2 shrink-0'>
-          <span className='text-[9px] font-mono'>
+          <span className='text-label font-mono'>
             {site.perms ? `${site.perms.granted.length} caps` : ''}
             {isSiteMode && rotation > 0 ? ` #${rotation}` : ''}
           </span>
@@ -595,7 +595,7 @@ const SiteRow = ({
 
       {/* expanded */}
       {expanded && (
-        <div className='pb-3 pl-7 flex flex-col gap-2.5 text-[11px] font-mono text-white'>
+        <div className='pb-3 pl-7 flex flex-col gap-2.5 text-body font-mono text-white'>
           {/* last shared key */}
           {site.lastShared && (
             <button onClick={() => onCopy(site.lastShared!.publicKey, site.origin)} className='flex items-center gap-1 text-left hover:text-fg-high'>
@@ -610,7 +610,7 @@ const SiteRow = ({
             <div className='flex items-center gap-0'>
               <button
                 onClick={() => !isSiteMode ? void onUpdatePref(site.origin, undefined) : undefined}
-                className={`flex items-center gap-1 px-2 py-0.5 rounded-l border text-[10px] transition-colors ${
+                className={`flex items-center gap-1 px-2 py-0.5 rounded-l border text-label transition-colors ${
                   isSiteMode
                     ? 'bg-green-500/15 border-green-500/30 text-green-400'
                     : 'border-border-soft hover:text-fg-high'
@@ -621,7 +621,7 @@ const SiteRow = ({
               </button>
               <button
                 onClick={() => isSiteMode ? onConfirm('cross-site') : undefined}
-                className={`flex items-center gap-1 px-2 py-0.5 rounded-r border border-l-0 text-[10px] transition-colors ${
+                className={`flex items-center gap-1 px-2 py-0.5 rounded-r border border-l-0 text-label transition-colors ${
                   !isSiteMode
                     ? 'bg-yellow-500/15 border-yellow-500/30 text-yellow-400'
                     : 'border-border-soft hover:text-fg-high'
@@ -659,7 +659,7 @@ const SiteRow = ({
                     const v = Math.max(0, parseInt(e.target.value, 10) || 0);
                     void onUpdatePref(site.origin, { ...site.pref, rotation: v });
                   }}
-                  className='w-8 bg-transparent border border-border-soft rounded text-center text-[10px] font-mono py-0.5 outline-none'
+                  className='w-8 bg-transparent border border-border-soft rounded text-center text-label font-mono py-0.5 outline-none'
                 />
                 <button
                   onClick={() => onConfirm('rotate')}

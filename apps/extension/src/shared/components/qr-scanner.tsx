@@ -251,7 +251,7 @@ export const QrScanner = ({
           {cameraView}
         </div>
         {description && (
-          <p className='text-[10px] text-fg-muted text-center'>{description}</p>
+          <p className='text-label text-fg-muted text-center'>{description}</p>
         )}
         <style>{`
           @keyframes scan {
