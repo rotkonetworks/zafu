@@ -348,7 +348,9 @@ export const IdentityPage = () => {
             </div>
           )}
 
-          {/* action bar */}
+          {/* action bar — qr toggle; counts live on the tabs below, not
+              repeated here. the linkable warning stays: it's a signal, not
+              a stat. */}
           <div className='flex items-center gap-3 mt-3 pt-2 border-t border-border-soft'>
             <button
               onClick={() => setShowQr(!showQr)}
@@ -357,25 +359,9 @@ export const IdentityPage = () => {
               <span className={`size-3 ${showQr ? 'i-lucide-eye-off' : 'i-lucide-qr-code'}`} />
               {showQr ? 'hide qr' : 'qr code'}
             </button>
-            <span className='text-border/40'>|</span>
-            <span className='text-label text-fg-muted font-mono'>{sites.length} sites</span>
-            <span className='text-label text-fg-muted font-mono'>{contactCount} contacts</span>
             {crossSiteCount > 0 && (
               <span className='text-label text-yellow-500/60 font-mono'>{crossSiteCount} linkable</span>
             )}
-          </div>
-        </section>
-
-        {/* -- derivation info -- */}
-        <section className='rounded border border-border-soft p-3'>
-          <div className='flex items-center gap-1.5 mb-2'>
-            <span className='i-lucide-info size-3 text-fg-muted' />
-            <span className='text-label font-mono text-fg-muted'>how zid works</span>
-          </div>
-          <div className='text-label font-mono text-fg-muted/70 flex flex-col gap-1'>
-            <p>each site gets a unique key derived from your seed.</p>
-            <p>sites cannot link your identities across origins.</p>
-            <p>rotating a key gives you a fresh identity for one site.</p>
           </div>
         </section>
 
@@ -401,10 +387,13 @@ export const IdentityPage = () => {
         {activeTab === 'sites' && (
           <section className='flex flex-col gap-1'>
             {sites.length === 0 ? (
-              <div className='flex flex-col items-center py-6 text-fg-muted'>
+              <div className='flex flex-col items-center py-6 text-center text-fg-muted'>
                 <span className='i-lucide-globe size-6 mb-2' />
                 <p className='text-xs font-mono'>no sites yet.</p>
-                <p className='text-label font-mono mt-1'>sites appear here after you authenticate.</p>
+                <p className='text-label font-mono mt-1 max-w-[260px]'>
+                  each site you sign into gets its own key, derived from your
+                  seed — sites can't link you across origins.
+                </p>
               </div>
             ) : (
               sites.map(site => (
@@ -461,18 +450,10 @@ export const IdentityPage = () => {
 
         <hr className='border-border-soft' />
 
-        {/* -- links -- */}
+        {/* -- links — passwords is the only destination that lives nowhere
+            else. contacts has its own drawer entry; the pro upsell lives in
+            the drawer footer + settings. */}
         <div className='flex flex-col gap-2'>
-          <button
-            onClick={() => navigate(PopupPath.CONTACTS)}
-            className='flex items-center justify-between text-xs font-mono text-fg hover:text-fg-high'
-          >
-            <span className='flex items-center gap-1.5'>
-              <span className='i-lucide-users size-3.5' />
-              contacts
-            </span>
-            <span className='text-fg-muted'>{contactCount}</span>
-          </button>
           <button
             onClick={() => navigate(PopupPath.PASSWORDS)}
             className='flex items-center justify-between text-xs font-mono text-fg hover:text-fg-high'
@@ -483,18 +464,6 @@ export const IdentityPage = () => {
             </span>
             <span className='i-lucide-chevron-right size-3 text-fg-muted' />
           </button>
-          {!pro && (
-            <button
-              onClick={() => navigate(PopupPath.SUBSCRIBE)}
-              className='flex items-center justify-between text-xs font-mono text-fg hover:text-fg-high'
-            >
-              <span className='flex items-center gap-1.5'>
-                <span className='i-lucide-sparkles size-3.5' />
-                upgrade to pro
-              </span>
-              <span className='i-lucide-chevron-right size-3 text-fg-muted' />
-            </button>
-          )}
         </div>
       </div>
     </SettingsScreen>

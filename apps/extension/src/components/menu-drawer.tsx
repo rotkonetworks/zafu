@@ -111,8 +111,16 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
   const accountItems: MenuItem[] = ([
     identityEnabled && {
       icon: 'i-lucide-fingerprint',
-      label: 'identity & contacts',
+      label: 'identity',
       onClick: () => { navigate(PopupPath.IDENTITY); onClose(); },
+    },
+    // contacts gets its own row — it's a daily-use destination (pick a
+    // recipient, share a card), not an identity sub-setting; burying it
+    // behind the identity page made it two taps and undiscoverable.
+    identityEnabled && {
+      icon: 'i-lucide-users',
+      label: 'contacts',
+      onClick: () => { navigate(PopupPath.CONTACTS); onClose(); },
     },
     {
       icon: 'i-lucide-wallet',
