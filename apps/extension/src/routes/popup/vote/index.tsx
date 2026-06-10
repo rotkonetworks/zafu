@@ -13,6 +13,7 @@ import { viewClient } from '../../../clients';
 import { useStore } from '../../../state';
 import { selectActiveNetwork } from '../../../state/keyring';
 import { NetworkUnavailable } from '../../../shared/components/network-unavailable';
+import { ZcashVotePage } from './zcash-vote';
 
 type ProposalEntry = {
   id: bigint;
@@ -155,6 +156,9 @@ export function VotePage() {
 
   // placeholder for other networks. Placed after every hook call so the
   // count stays stable across switches.
+  if (activeNetwork === 'zcash') {
+    return <ZcashVotePage />;
+  }
   if (!isPenumbra) {
     return <NetworkUnavailable feature='governance' iconClass='i-lucide-vote' />;
   }
