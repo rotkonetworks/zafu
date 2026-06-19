@@ -857,6 +857,14 @@ const selectNotes = (notes: DecryptedNote[], spentNullifiers: Set<string>, targe
 
 const WITNESS_BATCH_SIZE = 1000;
 
+// Cap concurrent compact-block fetches. A from-corruption witness rebuild can
+// span ~150k blocks (150 batches); firing them all at once spikes worker memory
+// (every decoded payload held until .flat()) and can trip server stream limits —
+// and this runs on the witness-recovery path *during a send*, where a thrown
+// fetch leaves the user unable to broadcast. Bounded fan-out keeps the speed win
+// without the failure mode.
+const WITNESS_FETCH_CONCURRENCY = 12;
+
 interface WitnessClient {
   getTreeState(h: number): Promise<{ height: number; orchardTree: string }>;
   getCompactBlocks(
@@ -876,22 +884,37 @@ const fetchCompactBlocksRange = async (
 ): Promise<{ blocks: Array<{ height: number; actions: Array<{ cmx_hex: string }> }>; actions: number }> => {
   if (start > end) return { blocks: [], actions: 0 };
 
-  // build all batch ranges then fire them all in parallel.
-  // gRPC/HTTP2 multiplexes over a single connection so there's no
-  // connection-count concern.
+  // build all batch ranges, then fetch them through a bounded pool.
+  // gRPC/HTTP2 multiplexes over a single connection, but a deep rebuild can
+  // produce ~150 batches — capping in-flight requests keeps peak memory and
+  // server-side stream count in check.
   const ranges: Array<[number, number]> = [];
   for (let s = start; s <= end; s += WITNESS_BATCH_SIZE) {
     ranges.push([s, Math.min(s + WITNESS_BATCH_SIZE - 1, end)]);
   }
 
-  const fetched = await Promise.all(ranges.map(([s, e]) =>
-    client.getCompactBlocks(s, e).then(bs => bs.map(b => ({
-      height: b.height,
-      actions: b.actions.map(a => ({ cmx_hex: hexEncode(a.cmx) })),
-    }))),
-  ));
+  // write results by index to preserve ascending-height order for the WASM replay
+  const results: Array<Array<{ height: number; actions: Array<{ cmx_hex: string }> }>> =
+    new Array(ranges.length);
+  let next = 0;
+  const worker = async () => {
+    while (true) {
+      const i = next++;
+      const range = ranges[i];
+      if (!range) return;
+      const [s, e] = range;
+      const bs = await client.getCompactBlocks(s, e);
+      results[i] = bs.map(b => ({
+        height: b.height,
+        actions: b.actions.map(a => ({ cmx_hex: hexEncode(a.cmx) })),
+      }));
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(WITNESS_FETCH_CONCURRENCY, ranges.length) }, worker),
+  );
 
-  const blocks = fetched.flat();
+  const blocks = results.flat();
   const actions = blocks.reduce((sum, b) => sum + b.actions.length, 0);
   return { blocks, actions };
 };
