@@ -2,9 +2,9 @@ import { lazy, Suspense, useState, useCallback, useEffect, useMemo, useRef } fro
 import { useNavigate } from 'react-router-dom';
 
 import { useStore } from '../../../state';
-import { selectActiveNetwork, selectEffectiveKeyInfo, selectPenumbraAccount, selectSetPenumbraAccount, keyRingSelector, type NetworkType } from '../../../state/keyring';
+import { selectActiveNetwork, selectEffectiveKeyInfo, selectPenumbraAccount, selectSetPenumbraAccount, selectSelectKeyRing, keyRingSelector, type NetworkType } from '../../../state/keyring';
 import { PenumbraAccountPicker } from '../../../components/penumbra-account-picker';
-import { selectActiveZcashWallet, selectZcashWallets, selectActiveZcashIndex, walletsSelector } from '../../../state/wallets';
+import { selectActiveZcashWallet, selectZcashWallets, selectActiveZcashIndex } from '../../../state/wallets';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { needsLogin, needsOnboard } from '../popup-needs';
 import { PopupPath } from '../paths';
@@ -62,7 +62,7 @@ const CosmosSubwallets = lazy(() =>
 const MultisigOverview = () => {
   const zcashWallets = useStore(selectZcashWallets);
   const activeIdx = useStore(selectActiveZcashIndex);
-  const { setActiveZcashWallet } = useStore(walletsSelector);
+  const selectKeyRing = useStore(selectSelectKeyRing);
   const { workerSyncHeight } = useZcashSyncStatus();
   const [expanded, setExpanded] = useState(false);
   const [balances, setBalances] = useState<Record<string, bigint>>({});
@@ -145,7 +145,7 @@ const MultisigOverview = () => {
               <button
                 key={w.id}
                 onClick={() => {
-                  void setActiveZcashWallet(w.originalIndex);
+                  void selectKeyRing(w.vaultId);
                 }}
                 className={cn(
                   'flex items-center justify-between w-full rounded-sm px-3 py-2 text-left transition-colors',
@@ -553,6 +553,9 @@ const ZcashContent = ({
   const [shieldTxid, setShieldTxid] = useState<string | null>(null);
   const [shieldError, setShieldError] = useState<string | null>(null);
 
+  // toggle to show sync detail panel when wallet is fully synced
+  const [showSyncDetail, setShowSyncDetail] = useState(false);
+
   // zigner shielding state
   const [zignerShieldStep, setZignerShieldStep] = useState<
     'idle' | 'building' | 'show_qr' | 'scanning' | 'broadcasting' | 'complete' | 'error'
@@ -783,11 +786,15 @@ const ZcashContent = ({
           {chainHeight <= 0
             ? 'connecting...'
             : allSynced
-              // 'synced' is what the user actually cares about — the
-              // block number is meaningful only to power users. Put the
-              // word first so a glance answers "is my wallet caught up?";
-              // the block number sits in parens for verifiers.
-              ? `synced · block ${workerSyncHeight.toLocaleString()}`
+              ? (
+                <button
+                  onClick={() => setShowSyncDetail(v => !v)}
+                  className='hover:text-fg-muted transition-colors'
+                  title='rescan options'
+                >
+                  {`synced · block ${workerSyncHeight.toLocaleString()}`}
+                </button>
+              )
               : `syncing · ${overallPct.toFixed(1)}%`}
         </div>
       </div>
@@ -924,23 +931,25 @@ const ZcashContent = ({
         </div>
       )}
 
-      {/* sync pipeline — hidden when fully synced */}
-      {!allSynced && (
+      {/* sync pipeline — hidden when fully synced, unless user taps the synced label */}
+      {(!allSynced || showSyncDetail) && (
         <SyncProgressBar
-          percent={Math.max(overallPct, 2)}
-          label={chainHeight <= 0
-            ? 'connecting...'
-            : scanPct > 0
-              ? `scanning · ${overallPct.toFixed(1)}%`
-              : zcashBackend === 'lightwalletd'
-                ? 'starting scan...'
-                : gigaproofStatus >= 2
-                  ? `ligerito · ${blocksUntilReady <= 0 ? 'verified' : `${blocksUntilReady} blocks`}`
-                  : gigaproofStatus === 1
-                    ? 'ligerito proving...'
-                    : nomtPct >= 100
-                      ? 'nomt verified'
-                      : 'verifying nomt...'}
+          percent={allSynced ? 100 : Math.max(overallPct, 2)}
+          label={allSynced
+            ? `synced · block ${workerSyncHeight.toLocaleString()}`
+            : chainHeight <= 0
+              ? 'connecting...'
+              : scanPct > 0
+                ? `scanning · ${overallPct.toFixed(1)}%`
+                : zcashBackend === 'lightwalletd'
+                  ? 'starting scan...'
+                  : gigaproofStatus >= 2
+                    ? `ligerito · ${blocksUntilReady <= 0 ? 'verified' : `${blocksUntilReady} blocks`}`
+                    : gigaproofStatus === 1
+                      ? 'ligerito proving...'
+                      : nomtPct >= 100
+                        ? 'nomt verified'
+                        : 'verifying nomt...'}
           error={syncError?.message}
           // When the default node is unreachable, a new user sees only a
           // red 'Failed to fetch' with no path forward. Giving them a
@@ -950,12 +959,15 @@ const ZcashContent = ({
             label: 'switch node',
             onClick: () => navigate(PopupPath.SETTINGS_NETWORKS),
           } : undefined}
-          barColor={scanPct > 0 ? 'bg-zigner-gold' : ligeritoPct > 0 ? 'bg-zigner-gold' : 'bg-fg-muted/30'}
+          barColor={allSynced ? 'bg-zigner-gold' : scanPct > 0 ? 'bg-zigner-gold' : ligeritoPct > 0 ? 'bg-zigner-gold' : 'bg-fg-muted/30'}
           barDoneColor='bg-zigner-gold'
           currentHeight={workerSyncHeight}
           targetHeight={chainHeight}
           startBlock={walletBirthday}
-          onRescan={(h) => window.dispatchEvent(new CustomEvent('zcash-rescan', { detail: h }))}
+          onRescan={(h) => {
+            setShowSyncDetail(false);
+            window.dispatchEvent(new CustomEvent('zcash-rescan', { detail: h }));
+          }}
         />
       )}
 

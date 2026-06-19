@@ -32,6 +32,7 @@ import { QrScanner } from '../../../shared/components/qr-scanner';
 import { AnimatedQrDisplay } from '../../../shared/components/animated-qr-display';
 import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanner';
 import { FrostAirgapSignFlow, runMnemonicFrostSign } from './frost-multisig';
+import { DontQuitIcon } from './frost-multisig/helpers';
 import { RecipientPicker } from '../../../components/recipient-picker';
 import { SaveContactModal } from '../../../components/save-contact-modal';
 import { usePasswordGate } from '../../../hooks/password-gate';
@@ -773,67 +774,120 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           </div>
         );
 
-      case 'sign':
+      case 'sign': {
+        const truncAddr = (a: string) => a.length > 22 ? `${a.slice(0, 10)}…${a.slice(-8)}` : a;
         return (
-          <div className="flex flex-col gap-4 p-4">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col h-full">
+            {/* header */}
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-border-soft">
               <button onClick={handleBack} className="text-fg-muted hover:text-fg-high transition-colors">
-                <span className="i-lucide-arrow-left w-5 h-5" />
+                <span className="i-lucide-arrow-left w-4 h-4" />
               </button>
-<h2 className="text-lg font-medium">sign with zafu zigner</h2>
-            </div>
-
-            <div className="flex flex-col items-center gap-4 py-4">
-              {pcztSignFrames && pcztSignFrames.length > 0 ? (
-                <AnimatedQrDisplay
-                  urFrames={pcztSignFrames}
-                  totalBytes={pcztUnsignedRef.current?.cborBytes}
-                  size={220}
-                  frameInterval={200}
-                  title="scan with zafu zigner"
-                  description="hold zigner camera steady; multi-frame transfer"
-                />
-              ) : signRequestQr ? (
-                <QrDisplay
-                  data={signRequestQr}
-                  size={220}
-                  title="scan with zafu zigner"
-                  description="open zafu zigner camera and scan this qr code to sign the transaction"
-                />
-              ) : null}
-
-              <div className="text-center">
-                <p className="text-sm text-fg-muted">
-                  1. open zafu zigner app on your phone
-                </p>
-                <p className="text-sm text-fg-muted">
-                  2. scan this qr code
-                </p>
-                <p className="text-sm text-fg-muted">
-                  3. review and approve the transaction
-                </p>
+              <span className="flex-1 text-sm font-medium">sign with zigner</span>
+              <div className="flex items-center gap-1.5">
+                <div className="h-1 w-5 rounded-full bg-zigner-gold" />
+                <div className="h-1 w-5 rounded-full bg-elev-2" />
               </div>
+              <DontQuitIcon />
             </div>
 
-            <Button variant="gradient" onClick={handleScanSignature} className="w-full">
-              scan signature from zafu zigner
-            </Button>
+            <div className="flex flex-col gap-4 p-4 flex-1 overflow-y-auto">
+              {/* QR */}
+              <div className="flex justify-center">
+                {pcztSignFrames && pcztSignFrames.length > 0 ? (
+                  <AnimatedQrDisplay
+                    urFrames={pcztSignFrames}
+                    totalBytes={pcztUnsignedRef.current?.cborBytes}
+                    size={210}
+                    frameInterval={200}
+                    title="scan with zafu zigner"
+                    description="hold zigner camera steady; multi-frame transfer"
+                  />
+                ) : signRequestQr ? (
+                  <QrDisplay
+                    data={signRequestQr}
+                    size={210}
+                    title="scan with zafu zigner"
+                    description="open zafu zigner and scan this qr"
+                  />
+                ) : null}
+              </div>
+
+              {/* tx summary */}
+              <div className="rounded-md border border-border-soft bg-elev-1 divide-y divide-border-soft text-xs">
+                <div className="flex items-center justify-between px-3 py-2">
+                  <span className="text-fg-muted">to</span>
+                  <span className="font-mono text-fg-high">{truncAddr(recipient)}</span>
+                </div>
+                <div className="flex items-center justify-between px-3 py-2">
+                  <span className="text-fg-muted">amount</span>
+                  <span className="tabular text-fg-high">{amount} ZEC</span>
+                </div>
+                <div className="flex items-center justify-between px-3 py-2">
+                  <span className="text-fg-muted">fee</span>
+                  <span className="tabular text-fg-dim">{fee} ZEC</span>
+                </div>
+                {memo && (
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="text-fg-muted">memo</span>
+                    <span className="text-fg-high truncate max-w-[60%]">{memo}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* steps */}
+              <ol className="space-y-2">
+                {(['open zafu zigner on your phone', 'scan this QR code', 'review and approve'] as const).map((label, i) => (
+                  <li key={i} className="flex items-center gap-2.5 text-xs text-fg-muted">
+                    <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-zigner-gold/15 text-[9px] text-zigner-gold">
+                      {i + 1}
+                    </span>
+                    {label}
+                  </li>
+                ))}
+              </ol>
+            </div>
+
+            <div className="px-4 py-3 border-t border-border-soft">
+              <Button variant="gradient" onClick={handleScanSignature} className="w-full">
+                scan signature from zigner
+              </Button>
+            </div>
           </div>
         );
+      }
 
       case 'scan':
         return pcztUnsignedRef.current ? (
-          <AnimatedQrScanner
-            onComplete={(bytes) => { void handlePcztSignatureScanned(bytes); }}
-            onError={(err) => {
-              setError(err);
-              setStep('error');
-            }}
-            onClose={() => setStep('sign')}
-            title="scan signed PCZT"
-            description="hold camera steady on the animated QR"
-            urTypeFilter="zcash-pczt"
-          />
+          <div className="flex flex-col h-full">
+            {/* header */}
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-border-soft">
+              <button onClick={() => setStep('sign')} className="text-fg-muted hover:text-fg-high transition-colors">
+                <span className="i-lucide-arrow-left w-4 h-4" />
+              </button>
+              <span className="flex-1 text-sm font-medium">scan signature</span>
+              <div className="flex items-center gap-1.5">
+                <div className="h-1 w-5 rounded-full bg-elev-2" />
+                <div className="h-1 w-5 rounded-full bg-zigner-gold" />
+              </div>
+              <DontQuitIcon />
+            </div>
+
+            <div className="flex flex-col gap-3 p-4 flex-1">
+              <p className="text-xs text-fg-muted">
+                point camera at the animated QR shown on your zigner device
+              </p>
+              <AnimatedQrScanner
+                inline
+                onComplete={(bytes) => { void handlePcztSignatureScanned(bytes); }}
+                onError={(err) => { setError(err); setStep('error'); }}
+                onClose={() => setStep('sign')}
+                title="scan signed PCZT"
+                description="hold camera steady on the animated QR"
+                urTypeFilter="zcash-pczt"
+              />
+            </div>
+          </div>
         ) : (
           <QrScanner
             onScan={handleSignatureScanned}
