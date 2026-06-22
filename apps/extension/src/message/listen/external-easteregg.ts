@@ -28,6 +28,24 @@
 import { getOriginPermissions, grantCapability, denyCapability } from '@repo/storage-chrome/origin';
 import { hasCapability, isDenied, type Capability, CAPABILITY_META } from '@repo/storage-chrome/capabilities';
 import { isPro } from '../../state/license';
+import { isValidExternalSender } from '../../senders/external';
+
+/**
+ * WebAuthn rpId must be the caller origin's host or a registrable domain
+ * suffix of it (the spec's "registrable domain suffix" rule, minus the
+ * public-suffix-list check). Without this, a connected origin could request
+ * an assertion for any other RP. `origin` is the browser-attested
+ * `sender.origin`, never a caller-supplied field.
+ */
+const rpIdMatchesOrigin = (rpId: string, origin: string): boolean => {
+  if (!rpId) return false;
+  try {
+    const host = new URL(origin).hostname;
+    return host === rpId || host.endsWith('.' + rpId);
+  } catch {
+    return false;
+  }
+};
 
 // Gates the zafu_frost_sign_orchard external entry while the popup
 // display ↔ relay-supplied sighash binding is pending. The popup currently
@@ -528,11 +546,22 @@ export const externalMessageListener = (
     // ── passkey / WebAuthn ──
 
     case 'zafu_passkey_create': {
-      const { rpId, origin: reqOrigin } = msg as { rpId: string; origin: string };
+      const { rpId } = msg as { rpId: string };
+      // origin is the browser-attested sender, never a caller-supplied field —
+      // otherwise any site could spoof a connected origin and mint credentials.
+      if (!isValidExternalSender(sender)) {
+        sendResponse({ success: false, error: 'not connected' });
+        return true;
+      }
+      const reqOrigin = sender.origin;
       // TODO: show approval popup before creating credential
       // for now, auto-approve if origin has 'connect' capability
       void (async () => {
         try {
+          if (!rpIdMatchesOrigin(rpId, reqOrigin)) {
+            sendResponse({ success: false, error: 'rpId does not match origin' });
+            return;
+          }
           const perms = await getOriginPermissions(reqOrigin);
           if (!hasCapability(perms, 'connect')) {
             sendResponse({ success: false, error: 'not connected' });
@@ -561,14 +590,25 @@ export const externalMessageListener = (
     }
 
     case 'zafu_passkey_get': {
-      const { rpId, clientDataHash: clientDataHashHex, prfSalts, origin: getOrigin } = msg as {
+      const { rpId, clientDataHash: clientDataHashHex, prfSalts } = msg as {
         rpId: string;
         clientDataHash: string;
         prfSalts?: { first: string; second?: string };
-        origin: string;
       };
+      // origin is the browser-attested sender, never a caller-supplied field —
+      // otherwise any site could spoof a connected origin and forge assertions
+      // for an arbitrary rpId (account takeover at the relying party).
+      if (!isValidExternalSender(sender)) {
+        sendResponse({ success: false, error: 'not connected' });
+        return true;
+      }
+      const getOrigin = sender.origin;
       void (async () => {
         try {
+          if (!rpIdMatchesOrigin(rpId, getOrigin)) {
+            sendResponse({ success: false, error: 'rpId does not match origin' });
+            return;
+          }
           const perms = await getOriginPermissions(getOrigin);
           if (!hasCapability(perms, 'connect')) {
             sendResponse({ success: false, error: 'not connected' });
