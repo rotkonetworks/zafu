@@ -3492,14 +3492,25 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       }
 
       case 'complete-orchard-pczt': {
+        if (!walletId) throw new Error('walletId required');
         await initWasm();
-        const { pcztHex, orchardSigs, spendIndices } = payload as {
+        if (!wasmModule) throw new Error('wasm not initialized');
+        const { serverUrl, pcztHex, orchardSigs, spendIndices } = payload as {
+          serverUrl: string;
           pcztHex: string;
           orchardSigs: string[];
           spendIndices: number[];
         };
-        const txHex = wasmModule!.complete_orchard_pczt(pcztHex, orchardSigs, spendIndices);
-        workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: txHex });
+        // inject the aggregated FROST SpendAuth sigs → extract v5 tx → broadcast
+        const cTxHex = wasmModule.complete_orchard_pczt(pcztHex, orchardSigs, spendIndices);
+        const cTxData = hexDecode(cTxHex);
+        const cClient = await makeZcashClient(serverUrl);
+        const cResult = await cClient.sendTransaction(cTxData);
+        if (cResult.errorCode !== 0) {
+          throw new Error(`broadcast failed (${cResult.errorCode}): ${cResult.errorMessage}`);
+        }
+        const cTxid = await resolveBroadcastTxid(cResult, cTxHex, serverUrl);
+        workerSelf.postMessage({ type: 'tx-result', id, network: 'zcash', walletId, payload: { txid: cTxid } });
         return;
       }
 

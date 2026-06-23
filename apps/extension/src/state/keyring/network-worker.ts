@@ -577,6 +577,12 @@ export interface SendTxPcztUnsignedResult {
   fee: string;
   urFrames: string[];
   cborBytes: number;
+  /** FROST multisig fields (gh #17): the canonical sighash + per-real-spend
+   * alphas the host/joiner sign over, and the action indices those sigs map to.
+   * Unused by the single-signer zigner cold-sign path. */
+  sighash: string;
+  alphas: string[];
+  spendIndices: number[];
 }
 
 /**
@@ -885,14 +891,15 @@ export const frostInspectPcztOutputsInWorker = async (
  * broadcast-ready v5 tx hex. Mnemonic/zigner host + escrow all finish here. */
 export const completeOrchardPcztInWorker = async (
   walletId: string,
+  serverUrl: string,
   pcztHex: string,
   orchardSigs: string[],
   spendIndices: number[],
-): Promise<string> => {
-  return callWorker<string>(
+): Promise<{ txid: string }> => {
+  return callWorker<{ txid: string }>(
     'zcash',
     'complete-orchard-pczt',
-    { pcztHex, orchardSigs, spendIndices },
+    { serverUrl, pcztHex, orchardSigs, spendIndices },
     walletId,
   );
 };

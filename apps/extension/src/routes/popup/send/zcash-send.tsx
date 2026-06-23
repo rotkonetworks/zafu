@@ -21,6 +21,7 @@ import {
   buildSendTxInWorker,
   buildSendTxPcztInWorker,
   completeSendTxInWorker,
+  completeOrchardPcztInWorker,
   completeSendTxPcztInWorker,
   getBalanceInWorker,
   type SendTxUnsignedResult,
@@ -151,6 +152,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const [, setShowContacts] = useState(false);
   const [showQrScanner, setShowQrScanner] = useState(false);
   const unsignedTxRef = useRef<SendTxUnsignedResult | null>(null);
+  // airgap FROST multisig now builds a PCZT (gh #17) — separate from the legacy
+  // v5 unsignedTxRef so the cold-sign scan fallback path stays untouched.
+  const pcztMultisigRef = useRef<SendTxPcztUnsignedResult | null>(null);
   const [sendSteps, setSendSteps] = useState<Array<{ step: string; detail?: string; elapsedMs: number }>>([]);
   const [totalElapsedSec, setTotalElapsedSec] = useState<number | null>(null);
   const buildStartRef = useRef<number>(0);
@@ -287,29 +291,28 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           }
         }
       } else if (activeZcashWallet?.multisig?.custody === 'airgapSigner') {
-        // airgap multisig: build unsigned tx then hand off to FrostAirgapSignFlow.
-        const result = await buildSendTxInWorker(
-          'zcash', walletId, zidecarUrl, recipient.trim(), amountZat, memo, accountIndex, mainnet,
-          undefined, ufvk,
+        // airgap multisig: build a PCZT (gh #17) then hand off to FrostAirgapSignFlow.
+        if (!ufvk) throw new Error('UFVK required for airgap multisig PCZT build');
+        const result = await buildSendTxPcztInWorker(
+          'zcash', walletId, zidecarUrl, recipient.trim(), amountZat, memo, 0, mainnet, ufvk,
         );
-        if (!('sighash' in result)) throw new Error('unexpected result from unsigned tx build');
-        unsignedTxRef.current = result;
+        pcztMultisigRef.current = result;
         setFee((Number(result.fee) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, ''));
         setStep('airgap-flow');
       } else if (activeZcashWallet?.multisig) {
         // self-custody multisig: zafu has the encrypted FROST share locally.
+        // PCZT-native (gh #17): build a standard pczt::Pczt so co-signers can
+        // inspect + sighash-verify the spend before signing.
         const authorized = await requestAuth();
         if (!authorized) { setStep('review'); return; }
         const ms = activeZcashWallet.multisig;
         const secrets = await useStore.getState().keyRing.getMultisigSecrets(activeZcashWallet.vaultId);
         if (!secrets) throw new Error('failed to decrypt multisig keys - unlock wallet first');
-        const result = await buildSendTxInWorker(
-          'zcash', walletId, zidecarUrl, recipient.trim(), amountZat, memo, accountIndex, mainnet,
-          undefined, ufvk,
+        if (!ufvk) throw new Error('UFVK required for multisig PCZT build');
+        const result = await buildSendTxPcztInWorker(
+          'zcash', walletId, zidecarUrl, recipient.trim(), amountZat, memo, 0, mainnet, ufvk,
         );
-        if (!('sighash' in result)) throw new Error('unexpected result from unsigned tx build');
 
-        unsignedTxRef.current = result;
         setFee((Number(result.fee) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, ''));
 
         setStep('frost-room');
@@ -327,9 +330,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
           setStep('broadcast');
           setFrostProgress('broadcasting...');
-          const finalResult = await completeSendTxInWorker(
-            'zcash', walletId, zidecarUrl, result.unsignedTx,
-            { orchardSigs, transparentSigs: [] }, result.spendIndices,
+          const finalResult = await completeOrchardPcztInWorker(
+            walletId, zidecarUrl, result.pcztHex, orchardSigs, result.spendIndices,
           );
           void promoteToBroadcasted(finalResult.txid);
           complete(finalResult.txid);
@@ -528,10 +530,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const handleAirgapComplete = async (orchardSigs: string[]) => {
     setStep('broadcast');
     try {
-      const result = unsignedTxRef.current!;
-      const finalResult = await completeSendTxInWorker(
-        'zcash', selectedKeyInfo!.id, zidecarUrl,
-        result.unsignedTx, { orchardSigs, transparentSigs: [] }, result.spendIndices,
+      const result = pcztMultisigRef.current!;
+      const finalResult = await completeOrchardPcztInWorker(
+        selectedKeyInfo!.id, zidecarUrl, result.pcztHex, orchardSigs, result.spendIndices,
       );
       void promoteToBroadcasted(finalResult.txid);
       complete(finalResult.txid);
@@ -1007,11 +1008,11 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         );
 
       case 'airgap-flow':
-        if (!unsignedTxRef.current || !activeZcashWallet?.multisig) return null;
+        if (!pcztMultisigRef.current || !activeZcashWallet?.multisig) return null;
         return (
           <FrostAirgapSignFlow
             ms={activeZcashWallet.multisig}
-            unsigned={unsignedTxRef.current}
+            unsigned={pcztMultisigRef.current}
             recipient={recipient.trim()}
             amount={amount}
             fee={fee}

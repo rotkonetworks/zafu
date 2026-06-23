@@ -214,6 +214,15 @@ export function build_unsigned_transaction(ufvk_str: string, notes_json: any, re
 export function build_witnesses_and_paths(tree_state_hex: string, compact_blocks_json: string, note_positions_json: string): any;
 
 /**
+ * Complete an orchard-only FROST multisig PCZT: inject the externally-aggregated
+ * SpendAuth signatures (one per real spend, in `spend_indices` order, matching
+ * what `build_unsigned_pczt` returned) into the PCZT, then extract the
+ * broadcast-ready v5 tx. The mnemonic/zigner host and the poker escrow all
+ * finish a FROST signing round this way (gh #17 PCZT migration).
+ */
+export function complete_orchard_pczt(pczt_hex: string, orchard_sigs_json: any, spend_indices_json: any): string;
+
+/**
  * Complete an unsigned shielding transaction by patching in transparent signatures.
  *
  * Takes the unsigned tx hex (with empty scriptSigs) and an array of `{sig_hex, pubkey_hex}`
@@ -366,6 +375,17 @@ export function frost_dkg_part3(secret_hex: string, round1_broadcasts_json: stri
  * coordinator: generate signed randomizer
  */
 export function frost_generate_randomizer(ephemeral_seed_hex: string, message_hex: string, commitments_json: string): string;
+
+/**
+ * Inspect a PCZT's orchard outputs + recompute its canonical ZIP-244 sighash,
+ * for the FROST joiner's display↔sighash binding (gh #17). Returns the same
+ * JSON shape as `frost_parse_tx_outputs`, but sources both the bundle and the
+ * sighash from the PCZT itself via `Pczt::into_effects()` → `v5_signature_hash`.
+ * So the value the joiner checks is the canonical message its signature will
+ * commit to — never a host-supplied claim. The host publishes the (proven,
+ * io-finalized, redacted) PCZT; `into_effects` needs neither proof nor sigs.
+ */
+export function frost_inspect_pczt_outputs(pczt_hex: string, orchard_fvk_uview: string): string;
 
 /**
  * Parse the unsigned v5 transaction and recover what each Orchard action
@@ -572,6 +592,7 @@ export interface InitOutput {
     readonly build_unsigned_shielding_transaction: (a: number, b: number, c: number, d: number, e: bigint, f: bigint, g: number, h: number) => [number, number, number, number];
     readonly build_unsigned_transaction: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number) => [number, number, number];
     readonly build_witnesses_and_paths: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
+    readonly complete_orchard_pczt: (a: number, b: number, c: any, d: any) => [number, number, number, number];
     readonly complete_shielding_transaction: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly complete_transaction: (a: number, b: number, c: any, d: any) => [number, number, number, number];
     readonly compute_txid: (a: number, b: number) => [number, number, number, number];
@@ -627,6 +648,7 @@ export interface InitOutput {
     readonly frost_dkg_part2: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly frost_dkg_part3: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly frost_generate_randomizer: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly frost_inspect_pczt_outputs: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly frost_parse_tx_outputs: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly frost_sample_fvk_sk: () => [number, number];
     readonly frost_sign_round1: (a: number, b: number, c: number, d: number) => [number, number, number, number];
