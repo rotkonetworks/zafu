@@ -17,7 +17,7 @@
 import type { NetworkType } from './types';
 
 export interface NetworkWorkerMessage {
-  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-multi' | 'send-tx-complete' | 'send-tx-pczt' | 'send-tx-pczt-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'note-sync-encode' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos' | 'frost-dkg-part1' | 'frost-dkg-part2' | 'frost-dkg-part3' | 'frost-sign-round1' | 'frost-spend-sign' | 'frost-spend-aggregate' | 'frost-derive-address' | 'frost-derive-address-from-sk' | 'frost-sample-fvk-sk' | 'frost-derive-ufvk' | 'frost-parse-tx-outputs';
+  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-multi' | 'send-tx-complete' | 'send-tx-pczt' | 'send-tx-pczt-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'note-sync-encode' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos' | 'frost-dkg-part1' | 'frost-dkg-part2' | 'frost-dkg-part3' | 'frost-sign-round1' | 'frost-spend-sign' | 'frost-spend-aggregate' | 'frost-derive-address' | 'frost-derive-address-from-sk' | 'frost-sample-fvk-sk' | 'frost-derive-ufvk' | 'frost-parse-tx-outputs' | 'frost-inspect-pczt-outputs' | 'complete-orchard-pczt';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -862,6 +862,39 @@ export const frostParseTxOutputsInWorker = async (
     { unsignedTxHex, orchardFvkUview },
   );
   return JSON.parse(json) as FrostParsedTx;
+};
+
+/** PCZT-native variant: inspect a standard pczt::Pczt (the migration target —
+ * mnemonic/zigner hosts + the escrow all publish a PCZT). Recomputes the
+ * canonical sighash from the PCZT itself; same FrostParsedTx contract as the
+ * v5-tx parser so computeVerdict is unchanged. */
+export const frostInspectPcztOutputsInWorker = async (
+  pcztHex: string,
+  orchardFvkUview: string,
+): Promise<FrostParsedTx> => {
+  const json = await callWorker<string>(
+    'zcash',
+    'frost-inspect-pczt-outputs',
+    { pcztHex, orchardFvkUview },
+  );
+  return JSON.parse(json) as FrostParsedTx;
+};
+
+/** Complete a FROST multisig PCZT: inject the aggregated orchard SpendAuth sigs
+ * (one per real spend, in `spendIndices` order from the build) and extract the
+ * broadcast-ready v5 tx hex. Mnemonic/zigner host + escrow all finish here. */
+export const completeOrchardPcztInWorker = async (
+  walletId: string,
+  pcztHex: string,
+  orchardSigs: string[],
+  spendIndices: number[],
+): Promise<string> => {
+  return callWorker<string>(
+    'zcash',
+    'complete-orchard-pczt',
+    { pcztHex, orchardSigs, spendIndices },
+    walletId,
+  );
 };
 
 // worker URLs per network

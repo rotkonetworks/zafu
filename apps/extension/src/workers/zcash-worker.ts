@@ -71,7 +71,7 @@ const makeZcashClient = async (serverUrl: string, backend?: ZcashBackend): Promi
 };
 
 interface WorkerMessage {
-  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-multi' | 'send-tx-complete' | 'send-tx-pczt' | 'send-tx-pczt-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'note-sync-encode' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos' | 'frost-dkg-part1' | 'frost-dkg-part2' | 'frost-dkg-part3' | 'frost-sign-round1' | 'frost-spend-sign' | 'frost-spend-aggregate' | 'frost-derive-address' | 'frost-derive-address-from-sk' | 'frost-sample-fvk-sk' | 'frost-derive-ufvk' | 'frost-parse-tx-outputs';
+  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-multi' | 'send-tx-complete' | 'send-tx-pczt' | 'send-tx-pczt-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'note-sync-encode' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos' | 'frost-dkg-part1' | 'frost-dkg-part2' | 'frost-dkg-part3' | 'frost-sign-round1' | 'frost-spend-sign' | 'frost-spend-aggregate' | 'frost-derive-address' | 'frost-derive-address-from-sk' | 'frost-sample-fvk-sk' | 'frost-derive-ufvk' | 'frost-parse-tx-outputs' | 'frost-inspect-pczt-outputs' | 'complete-orchard-pczt';
   id: string;
   network: 'zcash';
   walletId?: string;
@@ -164,6 +164,7 @@ interface WasmModule {
   // PCZT signing flow (replaces simple-format sighash+alphas QR for single-signer zigner)
   build_unsigned_pczt(ufvk_str: string, notes_json: unknown, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: unknown, target_height: number, mainnet: boolean, memo_hex?: string | null): unknown;
   extract_signed_tx_from_pczt(pczt_hex: string): string;
+  complete_orchard_pczt(pczt_hex: string, orchard_sigs_json: unknown, spend_indices_json: unknown): string;
   compute_txid(tx_hex: string): string;
   ur_decode_frames(parts_json: string, expected_type: string): string;
   build_unsigned_shielding_transaction(utxos_json: string, recipient: string, amount: bigint, fee: bigint, anchor_height: number, mainnet: boolean): string;
@@ -193,6 +194,7 @@ interface WasmModule {
   frost_spend_sign_round2_signed(ephemeral_seed_hex: string, key_package_hex: string, nonces_hex: string, sighash_hex: string, alpha_hex: string, commitments_json: string): string;
   frost_spend_aggregate(public_key_package_hex: string, sighash_hex: string, alpha_hex: string, commitments_json: string, shares_json: string): string;
   frost_parse_tx_outputs(unsigned_tx_hex: string, orchard_fvk_uview: string): string;
+  frost_inspect_pczt_outputs(pczt_hex: string, orchard_fvk_uview: string): string;
 
   // note sync encoding (CBOR + UR/ZT)
   encode_notes_bundle(notes_json: string, merkle_result_json: string, anchor_height: number, mainnet: boolean, attestation_hex?: string | null): Uint8Array;
@@ -2928,6 +2930,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           pczt_hex: string;
           summary: string;
           action_count: number;
+          // FROST multisig fields (additive — zigner cold-sign ignores them)
+          sighash: string;
+          alphas: string[];
+          spend_indices: number[];
         };
 
         const proveDuration = ((performance.now() - proveStart) / 1000).toFixed(1);
@@ -2955,6 +2961,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             fee: fee.toString(),
             urFrames,
             cborBytes: cbor.length,
+            // FROST host needs these to drive the relay signing rounds (gh #17)
+            sighash: parsed.sighash,
+            alphas: parsed.alphas,
+            spendIndices: parsed.spend_indices,
           },
         });
         return;
@@ -3467,6 +3477,29 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         };
         const json = wasmModule!.frost_parse_tx_outputs(unsignedTxHex, orchardFvkUview);
         workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: json });
+        return;
+      }
+
+      case 'frost-inspect-pczt-outputs': {
+        await initWasm();
+        const { pcztHex, orchardFvkUview } = payload as {
+          pcztHex: string;
+          orchardFvkUview: string;
+        };
+        const json = wasmModule!.frost_inspect_pczt_outputs(pcztHex, orchardFvkUview);
+        workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: json });
+        return;
+      }
+
+      case 'complete-orchard-pczt': {
+        await initWasm();
+        const { pcztHex, orchardSigs, spendIndices } = payload as {
+          pcztHex: string;
+          orchardSigs: string[];
+          spendIndices: number[];
+        };
+        const txHex = wasmModule!.complete_orchard_pczt(pcztHex, orchardSigs, spendIndices);
+        workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: txHex });
         return;
       }
 
