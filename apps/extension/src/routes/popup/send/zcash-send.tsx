@@ -296,6 +296,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         const result = await buildSendTxPcztInWorker(
           'zcash', walletId, zidecarUrl, recipient.trim(), amountZat, memo, 0, mainnet, ufvk,
         );
+        if (!result.pcztHex) throw new Error('PCZT build succeeded but pcztHex is empty — reload the extension');
         pcztMultisigRef.current = result;
         setFee((Number(result.fee) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, ''));
         setStep('airgap-flow');

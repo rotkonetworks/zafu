@@ -47,13 +47,11 @@ const rpIdMatchesOrigin = (rpId: string, origin: string): boolean => {
   }
 };
 
-// Gates the zafu_frost_sign_orchard external entry while the popup
-// display ↔ relay-supplied sighash binding is pending. The popup currently
-// shows a URL-supplied `plan` while signing a relay-supplied `initSighash`
-// — the two are not cross-checked, so a hostile relay can drain a vault.
-// Flip to true only once the popup cross-validates the sighash against the
-// displayed plan. See frost-approve.tsx:424-510 for the binding gap.
-const ENABLE_FROST_SIGN_ORCHARD = false;
+// Gates the zafu_frost_sign_orchard external entry. The joiner now receives
+// a full PCZT from the host and verifies sighash + OVK-decrypted outputs
+// on zigner before signing (gh #17), so the display↔sighash binding gap
+// is closed. Enabled.
+const ENABLE_FROST_SIGN_ORCHARD = true;
 
 // pending pick requests: requestId → sendResponse callback
 const pendingPicks = new Map<string, (r: unknown) => void>();

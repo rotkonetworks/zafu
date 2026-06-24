@@ -225,7 +225,7 @@ export function FrostAirgapSignFlow({ ms, unsigned, recipient, amount, fee, onCo
           </Button>
           <Button variant="secondary" onClick={cancel} className="w-full">cancel</Button>
           <p className="text-[10px] text-fg-muted/70 leading-snug pt-1">
-            sighash + per-action alphas + room code. zigner generates fresh round-1 nonces locally and shows commitments back.
+            includes PCZT so zigner can verify recipient + amount on-device before signing. hold camera steady until all frames scan.
           </p>
         </div>
       );
