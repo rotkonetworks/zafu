@@ -125,3 +125,65 @@ export function computeVerdict(args: {
   }
   return { kind: 'match', sendZat, changeZat };
 }
+
+export type EscrowVerdict =
+  | { kind: 'ok'; outputs: { recipientUa: string; amountZat: bigint }[]; sendZat: bigint; changeZat: bigint }
+  | { kind: 'refuse'; reasons: string[] };
+
+/**
+ * Verdict for an escrow-driven payout (poker, and future escrow multisig).
+ * Unlike computeVerdict the dapp's claimed plan is NOT trusted: the escrow
+ * builds the PCZT, so the PCZT is the only truth. Bind the sighash we're about
+ * to sign to the one recomputed from the PCZT (mandatory — escrow payouts are
+ * orchard-only so a null sighash means we can't verify), then return the
+ * OVK-decoded outputs for the user to approve. Output-side parity with
+ * computeVerdict; value-conservation against inputs needs data the parser
+ * doesn't expose yet, same residual as the send-flow verifier (gh #17 follow-up).
+ */
+export function computeEscrowVerdict(args: {
+  parsed: FrostParsedTx;
+  claimedSighashHex: string;
+  mainnet: boolean;
+}): EscrowVerdict {
+  const { parsed, claimedSighashHex, mainnet } = args;
+
+  if (!parsed.computed_sighash_hex) {
+    return { kind: 'refuse', reasons: ['PCZT sighash could not be recomputed — refusing to sign an unverifiable payout'] };
+  }
+  const expected = parsed.computed_sighash_hex.toLowerCase();
+  const claimed = claimedSighashHex.toLowerCase();
+  if (expected !== claimed) {
+    return {
+      kind: 'refuse',
+      reasons: [
+        'escrow asked you to sign a different tx than the PCZT shown',
+        `signing ${claimed.slice(0, 12)}…, PCZT hashes to ${expected.slice(0, 12)}…`,
+      ],
+    };
+  }
+
+  const externals = parsed.actions.filter(a => a.decrypted && !a.is_change);
+  const changes = parsed.actions.filter(a => a.decrypted && a.is_change);
+  if (externals.length === 0) {
+    return { kind: 'refuse', reasons: ['PCZT has no decodable recipient output'] };
+  }
+
+  const outputs: { recipientUa: string; amountZat: bigint }[] = [];
+  for (const a of externals) {
+    if (!a.recipient_raw_hex) {
+      return { kind: 'refuse', reasons: ['a recipient output could not be decoded — refusing'] };
+    }
+    try {
+      outputs.push({
+        recipientUa: encodeOrchardUnifiedAddress(hexToBytes(a.recipient_raw_hex), mainnet),
+        amountZat: BigInt(a.amount_zat),
+      });
+    } catch {
+      return { kind: 'refuse', reasons: ['a recipient output could not be decoded — refusing'] };
+    }
+  }
+
+  const sendZat = outputs.reduce((acc, o) => acc + o.amountZat, 0n);
+  const changeZat = changes.reduce((acc, a) => acc + BigInt(a.amount_zat), 0n);
+  return { kind: 'ok', outputs, sendZat, changeZat };
+}

@@ -6,7 +6,7 @@ import {
   frostSignRound1InWorker,
   frostSpendSignInWorker,
   frostSpendAggregateInWorker,
-  type SendTxUnsignedResult,
+  type SendTxPcztUnsignedResult,
 } from '../../../../state/keyring/network-worker';
 import {
   openRelayRoom,
@@ -32,7 +32,7 @@ export interface MnemonicFrostMultisig {
 export interface RunMnemonicFrostSignArgs {
   ms: MnemonicFrostMultisig;
   secrets: MnemonicFrostSecrets;
-  unsigned: SendTxUnsignedResult;
+  unsigned: SendTxPcztUnsignedResult;
   recipient: string;
   amountZat: string;
   /** registers the abort controller so the caller can cancel via UI. */
@@ -79,7 +79,7 @@ export async function runMnemonicFrostSign({
     recipient,
     amountZat,
     unsigned.fee,
-    unsigned.unsignedTx,
+    unsigned.pcztHex,
   );
   await sendCommitments(session, round1s.map(r => r.commitments));
 

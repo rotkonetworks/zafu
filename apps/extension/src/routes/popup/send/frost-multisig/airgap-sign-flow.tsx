@@ -8,7 +8,7 @@ import { AnimatedQrDisplay } from '../../../../shared/components/animated-qr-dis
 import { AnimatedQrScanner } from '../../../../shared/components/animated-qr-scanner';
 import {
   frostSpendAggregateInWorker,
-  type SendTxUnsignedResult,
+  type SendTxPcztUnsignedResult,
 } from '../../../../state/keyring/network-worker';
 import {
   openRelayRoom,
@@ -31,7 +31,7 @@ export interface AirgapMultisig {
 
 interface Props {
   ms: AirgapMultisig;
-  unsigned: SendTxUnsignedResult;
+  unsigned: SendTxPcztUnsignedResult;
   recipient: string;
   amount: string;
   fee: string;
@@ -75,6 +75,11 @@ export function FrostAirgapSignFlow({ ms, unsigned, recipient, amount, fee, onCo
           ...(ms.zignerWalletId ? { walletId: ms.zignerWalletId } : {}),
           sighash: unsigned.sighash,
           alphas: unsigned.alphas,
+          // PCZT for on-device verification (gh #17): zigner recomputes the
+          // sighash + OVK-decodes outputs and refuses if they disagree with the
+          // sighash/summary it's being asked to sign. Without it the device
+          // signs sighash+alphas blind.
+          pczt: unsigned.pcztHex,
           summary: {
             recipient, amountZat, feeZat: unsigned.fee,
             threshold: ms.threshold, maxSigners: ms.maxSigners,
@@ -121,7 +126,7 @@ export function FrostAirgapSignFlow({ ms, unsigned, recipient, amount, fee, onCo
         recipient,
         amountZat,
         unsigned.fee,
-        unsigned.unsignedTx,
+        unsigned.pcztHex,
       );
       await sendCommitments(s, zignerCommitsRef.current!);
 
@@ -220,7 +225,7 @@ export function FrostAirgapSignFlow({ ms, unsigned, recipient, amount, fee, onCo
           </Button>
           <Button variant="secondary" onClick={cancel} className="w-full">cancel</Button>
           <p className="text-[10px] text-fg-muted/70 leading-snug pt-1">
-            sighash + per-action alphas + room code. zigner generates fresh round-1 nonces locally and shows commitments back.
+            includes PCZT so zigner can verify recipient + amount on-device before signing. hold camera steady until all frames scan.
           </p>
         </div>
       );
