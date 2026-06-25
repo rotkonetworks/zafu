@@ -479,7 +479,7 @@ export const FrostApprove = () => {
     const secrets = await getMultisigSecrets(vault.id);
     if (!secrets) throw new Error('failed to decrypt multisig secrets');
 
-    setStatus(`joining payout room ${roomCode}...`);
+    setStatus(`joining signing room ${roomCode}...`);
     const pid = new Uint8Array(32);
     crypto.getRandomValues(pid);
 
@@ -522,9 +522,9 @@ export const FrostApprove = () => {
     }
     const zw = zcashWallets.find(w => w.vaultId === vault.id);
     if (!zw?.orchardFvk) {
-      throw new Error('multisig wallet has no viewing key on file — cannot verify payout');
+      throw new Error('multisig wallet has no viewing key on file — cannot verify request');
     }
-    setStatus('verifying payout against escrow PCZT...');
+    setStatus('verifying request against escrow PCZT...');
     const parsed = await frostInspectPcztOutputsInWorker(initPcztHex, zw.orchardFvk);
     const verdict = computeEscrowVerdict({ parsed, claimedSighashHex: initSighash, mainnet: zw.mainnet });
     if (verdict.kind !== 'ok') {
@@ -535,7 +535,7 @@ export const FrostApprove = () => {
     const confirmed = await awaitReview(verdict, parsed.computed_sighash_hex ?? initSighash);
     if (!confirmed) {
       abort.abort();
-      sendResult(requestId, { error: 'user denied payout after review' });
+      sendResult(requestId, { error: 'user denied after review' });
       window.close();
       return;
     }
@@ -578,7 +578,7 @@ export const FrostApprove = () => {
     : action === 'frost-join' ? 'Join Multisig'
     : action === 'dkg-join' ? 'Join Multisig'
     : action === 'frost-sign' ? 'Sign Transaction'
-    : action === 'poker-sign' ? 'Approve Payout'
+    : action === 'poker-sign' ? 'Approve Signing'
     : action;
 
   return (
@@ -619,7 +619,7 @@ export const FrostApprove = () => {
             )}
             {action === 'poker-sign' && (
               <>
-                <p>Approve payout from poker escrow.</p>
+                <p>Co-sign a transaction requested by an escrow.</p>
                 <div className='mt-1 space-y-1'>
                   {plan.map((o, i) => (
                     <p key={i} className='text-fg-muted tabular break-all'>
