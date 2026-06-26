@@ -56,6 +56,49 @@ const ENABLE_FROST_SIGN_ORCHARD = true;
 // pending pick requests: requestId → sendResponse callback
 const pendingPicks = new Map<string, (r: unknown) => void>();
 
+// Origins that currently have an approval popup open. A second high-risk
+// request from the same origin is dropped while one is pending so a site
+// can't stack approval popups to fatigue the user into approving (gh #19).
+// Reserved synchronously at open time; released when the popup window closes.
+const originsWithOpenPopup = new Set<string>();
+const popupWindowToOrigin = new Map<number, string>();
+
+// optional-chained: chrome.windows is absent in unit-test mocks, and this
+// runs at module load, so guard it rather than crash the import.
+chrome.windows?.onRemoved?.addListener(windowId => {
+  const origin = popupWindowToOrigin.get(windowId);
+  if (origin !== undefined) {
+    popupWindowToOrigin.delete(windowId);
+    originsWithOpenPopup.delete(origin);
+  }
+});
+
+/**
+ * Open an approval popup bound to `origin`, dropping the request if that
+ * origin already has one open. Returns false (caller must reject) when a
+ * popup is already pending for the origin; true once the window has been
+ * created. Released on window close via the onRemoved listener above.
+ */
+async function openApprovalPopup(
+  origin: string,
+  url: string,
+  size: { width: number; height: number },
+): Promise<boolean> {
+  if (originsWithOpenPopup.has(origin)) return false;
+  originsWithOpenPopup.add(origin);
+  try {
+    const win = await chrome.windows.create({ url, type: 'popup', ...size });
+    if (win?.id !== undefined) {
+      popupWindowToOrigin.set(win.id, origin);
+    } else {
+      originsWithOpenPopup.delete(origin);
+    }
+  } catch {
+    originsWithOpenPopup.delete(origin);
+  }
+  return true;
+}
+
 /**
  * Uniform capability gate for high-risk external entry points.
  *
@@ -202,8 +245,6 @@ export const externalMessageListener = (
         const appOrigin = sender.origin || sender.url || 'unknown';
         const requestId = crypto.randomUUID();
 
-        pendingPicks.set(requestId, sendResponse);
-
         const params = new URLSearchParams({
           app: appOrigin,
           action: 'frost-create',
@@ -213,7 +254,11 @@ export const externalMessageListener = (
           requestId,
         });
         const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
-        void chrome.windows.create({ url, type: 'popup', width: 400, height: 520 });
+        if (!(await openApprovalPopup(gate.origin, url, { width: 400, height: 520 }))) {
+          sendResponse({ success: false, error: 'denied' });
+          return;
+        }
+        pendingPicks.set(requestId, sendResponse);
       })();
       return true;
     }
@@ -232,8 +277,6 @@ export const externalMessageListener = (
         const relayUrl = String(msg['relayUrl'] || 'https://poker.zk.bot');
         const requestId = crypto.randomUUID();
 
-        pendingPicks.set(requestId, sendResponse);
-
         const params = new URLSearchParams({
           app: gate.origin,
           action: 'frost-join',
@@ -244,7 +287,11 @@ export const externalMessageListener = (
           requestId,
         });
         const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
-        void chrome.windows.create({ url, type: 'popup', width: 400, height: 520 });
+        if (!(await openApprovalPopup(gate.origin, url, { width: 400, height: 520 }))) {
+          sendResponse({ success: false, error: 'denied' });
+          return;
+        }
+        pendingPicks.set(requestId, sendResponse);
       })();
       return true;
     }
@@ -269,8 +316,6 @@ export const externalMessageListener = (
         const labelPrefix = rawPrefix.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 32) || 'multisig';
         const requestId = crypto.randomUUID();
 
-        pendingPicks.set(requestId, sendResponse);
-
         const hide = msg['hide'] === true;
         const params = new URLSearchParams({
           app: gate.origin,
@@ -284,7 +329,11 @@ export const externalMessageListener = (
         });
         if (hide) params.set('hide', '1');
         const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
-        void chrome.windows.create({ url, type: 'popup', width: 400, height: 520 });
+        if (!(await openApprovalPopup(gate.origin, url, { width: 400, height: 520 }))) {
+          sendResponse({ error: 'denied' });
+          return;
+        }
+        pendingPicks.set(requestId, sendResponse);
       })();
       return true;
     }
@@ -302,8 +351,6 @@ export const externalMessageListener = (
         const relayUrl = String(msg['relayUrl'] || 'https://poker.zk.bot');
         const requestId = crypto.randomUUID();
 
-        pendingPicks.set(requestId, sendResponse);
-
         const params = new URLSearchParams({
           app: gate.origin,
           action: 'frost-sign',
@@ -313,7 +360,11 @@ export const externalMessageListener = (
           requestId,
         });
         const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
-        void chrome.windows.create({ url, type: 'popup', width: 400, height: 520 });
+        if (!(await openApprovalPopup(gate.origin, url, { width: 400, height: 520 }))) {
+          sendResponse({ success: false, error: 'denied' });
+          return;
+        }
+        pendingPicks.set(requestId, sendResponse);
       })();
       return true;
     }
@@ -344,8 +395,6 @@ export const externalMessageListener = (
         const multisigLabel = rawLabel.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 64);
         const requestId = crypto.randomUUID();
 
-        pendingPicks.set(requestId, sendResponse);
-
         const params = new URLSearchParams({
           app: gate.origin,
           action: 'poker-sign',
@@ -357,29 +406,29 @@ export const externalMessageListener = (
         });
         if (multisigLabel) params.set('multisigLabel', multisigLabel);
         const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
-        void chrome.windows.create({ url, type: 'popup', width: 400, height: 560 });
+        if (!(await openApprovalPopup(gate.origin, url, { width: 400, height: 560 }))) {
+          sendResponse({ error: 'denied' });
+          return;
+        }
+        pendingPicks.set(requestId, sendResponse);
       })();
       return true;
     }
 
     case 'zafu_delete_multisig': {
-      // Sanitize + require non-empty + minimum length to make prefix-match
-      // enumeration impractical. Architectural origin-binding (vault-level
-      // creatorOrigin enforced here) is the proper fix and is tracked
-      // separately; this is the mechanical hardening.
-      const rawLabel = typeof msg['multisigLabel'] === 'string' ? msg['multisigLabel'] : '';
-      const multisigLabel = rawLabel.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 64);
-      const MIN_DELETE_LABEL_LEN = 4;
-      if (multisigLabel.length < MIN_DELETE_LABEL_LEN) {
-        sendResponse({ error: `multisigLabel must be at least ${MIN_DELETE_LABEL_LEN} chars after sanitization` });
-        return true;
-      }
-      const delayMs = Math.max(0, Number(msg['delayMs']) || 0);
       void (async () => {
         const gate = await requireCapability(sender, 'frost', sendResponse);
         if (!gate) return;
-        const multisigLabel = String(msg['multisigLabel'] || '');
-        if (!multisigLabel) {
+        // Sanitize charset + cap length, and require a minimum so a label
+        // prefix can't be enumerated. Origin-binding in findVaultByLabelPrefix
+        // is the real guard; this is defense in depth. All rejections are the
+        // uniform 'denied' shape (and only after the capability gate) so a
+        // caller can't distinguish rejection causes — same contract as
+        // requireCapability.
+        const rawLabel = typeof msg['multisigLabel'] === 'string' ? msg['multisigLabel'] : '';
+        const multisigLabel = rawLabel.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 64);
+        const MIN_DELETE_LABEL_LEN = 4;
+        if (multisigLabel.length < MIN_DELETE_LABEL_LEN) {
           sendResponse({ success: false, error: 'denied' });
           return;
         }
