@@ -2093,13 +2093,38 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           paths: witnessResult.paths,
         });
 
+        // fetch an ed25519 anchor attestation from zidecar's verifier so a
+        // FROST cold device (which requires attested anchors) accepts the
+        // bundle. Best-effort: on lightwalletd, server error, or signing
+        // disabled we emit an unattested bundle (still imports on non-FROST
+        // devices). The anchor was already cross-checked against zidecar's
+        // tree-state during witness building, so it isn't arbitrary.
+        let attestationHex: string | null = null;
+        if (lookupBackend(syncServerUrl) === 'zidecar') {
+          try {
+            const { ZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
+            const att = await new ZidecarClient(syncServerUrl).signAnchor(
+              hexDecode(witnessResult.anchorHex),
+              anchorHeight,
+              isMainnet,
+            );
+            if (att.available && att.signatureHex.length === 128) {
+              attestationHex = att.signatureHex;
+            } else {
+              console.warn('[zcash-worker] anchor attestation unavailable (signing disabled); emitting unattested bundle');
+            }
+          } catch (e) {
+            console.warn('[zcash-worker] anchor attestation failed; emitting unattested bundle:', e);
+          }
+        }
+
         // encode to CBOR via WASM
         const cborBytes = wasmModule.encode_notes_bundle(
           notesJson,
           merkleJson,
           anchorHeight,
           isMainnet,
-          null, // no attestation (TODO: FROST attestation)
+          attestationHex,
         );
 
         // encode to QR frames via zoda transport (verified erasure coding).
