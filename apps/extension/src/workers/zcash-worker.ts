@@ -200,6 +200,7 @@ interface WasmModule {
   encode_notes_bundle(notes_json: string, merkle_result_json: string, anchor_height: number, mainnet: boolean, attestation_hex?: string | null): Uint8Array;
   ur_encode_frames(cbor_data: Uint8Array, ur_type: string, fragment_size: number): string;
   zt_encode_frames(cbor_data: Uint8Array, zt_type: string, k: number, n: number): string;
+  zt_encode_frames_auto(cbor_data: Uint8Array, zt_type: string, max_qr_bytes: number, redundancy_pct: number): string;
 
   // attestation
   frost_attestation_digest(public_key_package_hex: string, anchor_hex: string, anchor_height: number, mainnet: boolean): string;
@@ -2071,19 +2072,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // newest note's height — otherwise the cross-check root won't match.
         const anchorHeight = await resolveAnchorHeight(walletId, Math.max(...unspent.map(n => n.height)));
 
-        // build merkle witnesses
-        const client = {
-          getTreeState: async (h: number) => {
-            const resp = await fetch(`${syncServerUrl}/tree-state/${h}`);
-            if (!resp.ok) throw new Error(`tree-state ${h}: ${resp.status}`);
-            return resp.json() as Promise<{ height: number; orchardTree: string }>;
-          },
-          getCompactBlocks: async (start: number, end: number) => {
-            const resp = await fetch(`${syncServerUrl}/compact-blocks/${start}/${end}`);
-            if (!resp.ok) throw new Error(`compact-blocks ${start}-${end}: ${resp.status}`);
-            return resp.json() as Promise<Array<{ height: number; actions: Array<{ cmx: Uint8Array }> }>>;
-          },
-        };
+        // build merkle witnesses — use the backend-aware client (zidecar/
+        // lightwalletd) instead of a hardcoded zidecar REST shape, so export
+        // works on any backend the wallet synced against.
+        const client = await makeZcashClient(syncServerUrl);
         const witnessResult = await buildWitnesses(client, walletId, unspent, anchorHeight);
 
         // prepare notes JSON for WASM encoder
@@ -2110,9 +2102,14 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           null, // no attestation (TODO: FROST attestation)
         );
 
-        // encode to QR frames via WASM
-        // use zoda transport (verified erasure coding) — 12-of-16 for redundancy
-        const framesJson = wasmModule.zt_encode_frames(cborBytes, 'zcash-notes', 12, 16);
+        // encode to QR frames via zoda transport (verified erasure coding).
+        // auto-size k/n to the payload so each hex-encoded `zt:` frame fits a
+        // scannable QR — a fixed 12-of-16 overflows the QR for large note sets
+        // (each shard ~payload/k, hex-doubled). 300 raw bytes/frame ≈ 0.6KB QR
+        // string (~v15 at ECC-L) keeps each frame light enough to lock fast on
+        // the zigner camera (denser frames scan slowly); 30% parity so the
+        // scanner can miss frames in the cycling display.
+        const framesJson = wasmModule.zt_encode_frames_auto(cborBytes, 'zcash-notes', 300, 30);
         const urFrames = JSON.parse(framesJson) as string[];
 
         // compute balance

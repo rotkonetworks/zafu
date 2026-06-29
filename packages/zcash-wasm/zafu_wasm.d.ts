@@ -566,6 +566,19 @@ export function witness_sync_update(start_frontier_hex: string, compact_blocks_j
  */
 export function zt_encode_frames(cbor_data: Uint8Array, zt_type: string, k: number, n: number): string;
 
+/**
+ * Encode CBOR bytes as zoda transport QR frames, auto-sizing `k`/`n` so each
+ * hex-encoded `zt:` frame fits a scannable QR regardless of payload size.
+ * Returns JSON array of `zt:type/hex` strings.
+ *
+ * - `max_qr_bytes`: max *raw* frame bytes before hex encoding. The QR string
+ *   is `len("zt:type/") + 2 * frame_bytes`, so pick this from the target QR
+ *   capacity: roughly `qr_byte_capacity / 2 - prefix`. ~600 gives a ~1.2 KB
+ *   QR string (≈ v24 at ECC-L), comfortable for handheld scanning.
+ * - `redundancy_pct`: extra parity frames as a percentage of `k` (e.g. 30).
+ */
+export function zt_encode_frames_auto(cbor_data: Uint8Array, zt_type: string, max_qr_bytes: number, redundancy_pct: number): string;
+
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
@@ -623,6 +636,7 @@ export interface InitOutput {
     readonly witness_extract_path: (a: number, b: number) => [number, number, number];
     readonly witness_sync_update: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number];
     readonly zt_encode_frames: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly zt_encode_frames_auto: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly init: () => void;
     readonly frost_aggregate_shares: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number, number];
     readonly frost_attestation_digest: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
