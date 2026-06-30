@@ -561,10 +561,13 @@ const VaultRow = ({ vault, networks, multisigWallet, onRemove, onRename, disable
       {vault.type === 'zigner-zafu' && hasZcash && (
         <button
           onClick={() => navigate(PopupPath.NOTE_SYNC)}
-          className='flex items-center gap-1.5 mt-2 text-[10px] text-fg-muted hover:text-fg-high'
+          className='flex items-start gap-2 mt-2 w-full rounded-md border border-border-soft px-3 py-2 text-left hover:border-fg-muted'
         >
-          <span className='i-lucide-qr-code size-3' />
-          sync balance to zigner
+          <span className='i-lucide-qr-code size-4 text-fg-high shrink-0 mt-0.5' />
+          <span className='flex flex-col'>
+            <span className='text-xs font-medium text-fg-high'>sync balance to zigner</span>
+            <span className='text-[10px] text-fg-muted'>scan it on zigner to verify your notes — re-sync after you send</span>
+          </span>
         </button>
       )}
 
