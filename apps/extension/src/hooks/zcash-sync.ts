@@ -82,7 +82,7 @@ export function useZcashSyncStatus(): ZcashSyncState {
     isLoading: syncLoading,
     error: syncError,
   } = useQuery({
-    queryKey: ['zcashSyncStatus', backend],
+    queryKey: ['zcashSyncStatus', backend, zidecarUrl],
     // GetSyncStatus is a zidecar-only RPC; public lightwalletd endpoints lack it
     enabled: backend === 'zidecar',
     queryFn: () => client().getSyncStatus(),
@@ -96,7 +96,10 @@ export function useZcashSyncStatus(): ZcashSyncState {
     isLoading: tipLoading,
     error: tipError,
   } = useQuery({
-    queryKey: ['zcashChainTip'],
+    // key on backend + endpoint so switching networks immediately refetches
+    // with the right client instead of serving a stale one (zidecar GetTip
+    // against a lightwalletd endpoint → "tip error" until extension reload).
+    queryKey: ['zcashChainTip', backend, zidecarUrl],
     queryFn: () => client().getTip(),
     staleTime: POLL_INTERVAL,
     refetchInterval: POLL_INTERVAL,
