@@ -13,10 +13,8 @@ import { MockStorageArea } from '@repo/mock-chrome/mocks/storage-area';
 import { VERSION_FIELD } from '../version-field';
 
 const bech32Fvk =
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- const is meaningful
   'penumbrafullviewingkey1vzfytwlvq067g2kz095vn7sgcft47hga40atrg5zu2crskm6tyyjysm28qg5nth2fqmdf5n0q530jreumjlsrcxjwtfv6zdmfpe5kqsa5lg09' as const;
 const bech32WalletId =
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- const is meaningful
   'penumbrawalletid15r7q7qsf3hhsgj0g530n7ng9acdacmmx9ajknjz38dyt90u9gcgsmjre75' as const;
 
 const storageArea = new MockStorageArea();

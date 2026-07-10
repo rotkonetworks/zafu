@@ -46,7 +46,9 @@ export const BottomTabs = memo(({ tabs }: BottomTabsProps) => {
   const handleNavigate = useCallback(
     (path: string) => {
       // don't navigate if already there
-      if (location.pathname === path) return;
+      if (location.pathname === path) {
+        return;
+      }
       navigate(path);
     },
     [navigate, location.pathname],

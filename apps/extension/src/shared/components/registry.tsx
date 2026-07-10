@@ -18,8 +18,12 @@ const prefetchRegistryIcons = (
     const urls = new Set<string>();
     for (const item of [...rpcs, ...frontends]) {
       for (const img of item.images ?? []) {
-        if (img.png) urls.add(img.png);
-        if (img.svg) urls.add(img.svg);
+        if (img.png) {
+          urls.add(img.png);
+        }
+        if (img.svg) {
+          urls.add(img.svg);
+        }
       }
     }
     // fire-and-forget prefetch into browser http cache

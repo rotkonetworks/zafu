@@ -11,7 +11,6 @@
  * We patch the global Worker constructor to fix the URLs before init.
  */
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type WasmModule = Record<string, any>;
 
 let wasmModule: WasmModule | null = null;
@@ -20,7 +19,9 @@ let initPromise: Promise<void> | null = null;
 const WASM_BASE = '/zafu-wasm-parallel';
 
 const initParallelWasm = async (): Promise<WasmModule> => {
-  if (wasmModule) return wasmModule;
+  if (wasmModule) {
+    return wasmModule;
+  }
   if (initPromise) {
     await initPromise;
     return wasmModule!;

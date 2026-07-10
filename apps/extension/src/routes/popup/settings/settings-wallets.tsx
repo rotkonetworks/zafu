@@ -64,7 +64,7 @@ export const SettingsWallets = () => {
 
   // -- removal state --
   const [removingId, setRemovingId] = useState<string | null>(null);
-  const [removingType, setRemovingType] = useState<string>('mnemonic');
+  const [removingType, setRemovingType] = useState('mnemonic');
   const [step, setStep] = useState<RemovalStep>('idle');
   const [password, setPassword] = useState('');
   const [passwordError, setPasswordError] = useState(false);
@@ -94,7 +94,7 @@ export const SettingsWallets = () => {
     if (autoScan && !scanning && scanState === 'idle') {
       setScanning(true);
     }
-  }, [autoScan]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [autoScan]);
 
   // -- removal logic --
   const resetRemoval = () => {
@@ -117,7 +117,9 @@ export const SettingsWallets = () => {
 
   const verifyPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!removingId) return;
+    if (!removingId) {
+      return;
+    }
     const ok = await isPassword(password);
     if (!ok) {
       setPasswordError(true);
@@ -133,15 +135,21 @@ export const SettingsWallets = () => {
   };
 
   const executeRemoval = async () => {
-    if (!removingId) return;
+    if (!removingId) {
+      return;
+    }
     setDeleting(true);
     setStateError(null);
     try {
       const isLast = keyInfos.length <= 1;
       await deleteKeyRing(removingId);
-      if (isLast) terminateNetworkWorker('zcash');
+      if (isLast) {
+        terminateNetworkWorker('zcash');
+      }
       resetRemoval();
-      if (isLast) window.close();
+      if (isLast) {
+        window.close();
+      }
     } catch (err) {
       setStateError(err instanceof Error ? err.message : String(err));
       setDeleting(false);
@@ -150,7 +158,9 @@ export const SettingsWallets = () => {
 
   const handleRename = async (id: string, name: string) => {
     const trimmed = name.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      return;
+    }
     await renameKeyRing(id, trimmed).catch(() => {});
     // for multisig vaults, also update the linked zcashWallet.label so the
     // multisig tab + overview show the same name.
@@ -171,7 +181,9 @@ export const SettingsWallets = () => {
 
   const handleSecretTap = () => {
     clickCountRef.current += 1;
-    if (clickTimeoutRef.current) clearTimeout(clickTimeoutRef.current);
+    if (clickTimeoutRef.current) {
+      clearTimeout(clickTimeoutRef.current);
+    }
     clickTimeoutRef.current = setTimeout(() => {
       clickCountRef.current = 0;
     }, 3000);
@@ -282,16 +294,26 @@ export const SettingsWallets = () => {
             <div className='flex flex-col divide-y divide-border/40 rounded-lg border border-border-soft bg-elev-1'>
               {keyInfos.map(v => {
                 const networks: string[] = [];
-                if (penumbraWallets.some(w => w.vaultId === v.id)) networks.push('penumbra');
-                if (zcashWallets.some(w => w.vaultId === v.id)) networks.push('zcash');
-                if (v.insensitive['cosmosAddresses'] && isLaunched('noble'))
+                if (penumbraWallets.some(w => w.vaultId === v.id)) {
+                  networks.push('penumbra');
+                }
+                if (zcashWallets.some(w => w.vaultId === v.id)) {
+                  networks.push('zcash');
+                }
+                if (v.insensitive['cosmosAddresses'] && isLaunched('noble')) {
                   networks.push('cosmos');
-                if (v.insensitive['polkadotSs58'] && isLaunched('polkadot'))
+                }
+                if (v.insensitive['polkadotSs58'] && isLaunched('polkadot')) {
                   networks.push('polkadot');
+                }
                 // seed wallets derive keys for all networks
                 if (v.type === 'mnemonic') {
-                  if (!networks.includes('zcash')) networks.push('zcash');
-                  if (!networks.includes('penumbra')) networks.push('penumbra');
+                  if (!networks.includes('zcash')) {
+                    networks.push('zcash');
+                  }
+                  if (!networks.includes('penumbra')) {
+                    networks.push('penumbra');
+                  }
                 }
                 // frost-multisig vaults support zcash
                 if (v.type === 'frost-multisig' && !networks.includes('zcash')) {
@@ -478,7 +500,9 @@ export const SettingsWallets = () => {
                 <Input
                   placeholder='paste QR code hex (530301...)'
                   onChange={e => {
-                    if (e.target.value.trim()) processQrData(e.target.value);
+                    if (e.target.value.trim()) {
+                      processQrData(e.target.value);
+                    }
                   }}
                   className='font-mono text-xs'
                 />
@@ -567,14 +591,18 @@ const VaultRow = ({
   const hasZcash = networks.includes('zcash');
 
   // zcash birthday height per wallet
-  const [birthday, setBirthday] = useState<string>('');
+  const [birthday, setBirthday] = useState('');
   const birthdayKey = `zcashBirthday_${vault.id}`;
 
   useEffect(() => {
-    if (!hasZcash) return;
+    if (!hasZcash) {
+      return;
+    }
     chrome.storage.local.get(birthdayKey).then(r => {
       const v = r[birthdayKey];
-      if (v !== undefined) setBirthday(String(v));
+      if (v !== undefined) {
+        setBirthday(String(v));
+      }
     });
   }, [hasZcash, birthdayKey]);
 
@@ -592,18 +620,25 @@ const VaultRow = ({
   };
 
   useEffect(() => {
-    if (editing) ref.current?.select();
+    if (editing) {
+      ref.current?.select();
+    }
   }, [editing]);
 
   const commit = () => {
     setEditing(false);
     const t = draft.trim();
-    if (t && t !== vault.name) onRename(t);
-    else setDraft(vault.name);
+    if (t && t !== vault.name) {
+      onRename(t);
+    } else {
+      setDraft(vault.name);
+    }
   };
 
   const onKey = (e: KeyboardEvent) => {
-    if (e.key === 'Enter') commit();
+    if (e.key === 'Enter') {
+      commit();
+    }
     if (e.key === 'Escape') {
       setDraft(vault.name);
       setEditing(false);

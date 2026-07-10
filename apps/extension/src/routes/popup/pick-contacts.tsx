@@ -24,7 +24,9 @@ async function computeHandle(pubkey: string, appOrigin: string): Promise<string>
 /** get the "best" pubkey for a contact (first address, or contact id) */
 function contactPubkey(contact: Contact): string {
   // use first address as the pubkey identifier
-  if (contact.addresses.length > 0) return contact.addresses[0]!.address;
+  if (contact.addresses.length > 0) {
+    return contact.addresses[0]!.address;
+  }
   return contact.id;
 }
 
@@ -41,11 +43,13 @@ export function ContactPicker() {
   }, []);
 
   const { contacts } = useStore(contactsSelector);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState(new Set());
   const [search, setSearch] = useState('');
 
   const filtered = useMemo(() => {
-    if (!search) return contacts;
+    if (!search) {
+      return contacts;
+    }
     const q = search.toLowerCase();
     return contacts.filter(
       c =>
@@ -67,9 +71,11 @@ export function ContactPicker() {
   };
 
   const handleConfirm = async () => {
-    const results: Array<{ handle: string; displayName: string }> = [];
+    const results: { handle: string; displayName: string }[] = [];
     for (const contact of contacts) {
-      if (!selected.has(contact.id)) continue;
+      if (!selected.has(contact.id)) {
+        continue;
+      }
       const pubkey = contactPubkey(contact);
       const handle = await computeHandle(pubkey, params.app);
       results.push({ handle, displayName: contact.name });

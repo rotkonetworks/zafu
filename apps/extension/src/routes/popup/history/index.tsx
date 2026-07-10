@@ -29,7 +29,9 @@ function noteAccountIndex(note: unknown): number | undefined {
   const n = note as
     | { address?: { addressView?: { case?: string; value?: { index?: { account?: number } } } } }
     | undefined;
-  if (!n?.address?.addressView) return undefined;
+  if (!n?.address?.addressView) {
+    return undefined;
+  }
   const av = n.address.addressView;
   if (av.case === 'decoded' && av.value?.index != null) {
     return av.value.index.account;
@@ -59,14 +61,18 @@ function parseTransaction(txInfo: TransactionInfo): ParsedTransaction {
       if (action.actionView.value.spendView?.case === 'visible') {
         hasVisibleSpend = true;
         const idx = noteAccountIndex(action.actionView.value.spendView.value?.note);
-        if (idx != null) accountIndices.add(idx);
+        if (idx != null) {
+          accountIndices.add(idx);
+        }
       }
     } else if (actionCase === 'output') {
       hasOutput = true;
       const ov = action.actionView.value.outputView;
       if (ov?.case === 'visible') {
         const idx = noteAccountIndex(ov.value?.note);
-        if (idx != null) accountIndices.add(idx);
+        if (idx != null) {
+          accountIndices.add(idx);
+        }
       }
     } else if (actionCase === 'swap') {
       type = 'swap';
@@ -102,7 +108,9 @@ function zatoshiToZec(zatoshis: bigint | string): string {
 }
 
 function formatTimestamp(ts: number | null): string {
-  if (ts === null) return '...';
+  if (ts === null) {
+    return '...';
+  }
   const date = new Date(ts);
   const now = new Date();
 
@@ -112,8 +120,12 @@ function formatTimestamp(ts: number | null): string {
 
   const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-  if (diffDays === 0) return `Today ${time}`;
-  if (diffDays === 1) return `Yesterday ${time}`;
+  if (diffDays === 0) {
+    return `Today ${time}`;
+  }
+  if (diffDays === 1) {
+    return `Yesterday ${time}`;
+  }
   if (diffDays < 7) {
     const weekday = date.toLocaleDateString([], { weekday: 'short' });
     return `${weekday} ${time}`;
@@ -177,23 +189,6 @@ export const HistoryPage = () => {
   const historyEnabled = useStore(s => s.privacy.settings.enableTransactionHistory);
   const [transactions, setTransactions] = useState<ParsedTransaction[]>([]);
 
-  if (!historyEnabled) {
-    return (
-      <div className='flex flex-col h-full'>
-        <div className='flex items-center px-4 py-3 border-b border-border-soft'>
-          <h1 className='text-lg font-medium'>History</h1>
-        </div>
-        <div className='flex-1 flex flex-col items-center justify-center gap-3 p-8 text-center'>
-          <span className='i-lucide-eye-off h-8 w-8 text-fg-muted/30' />
-          <p className='text-sm text-fg-muted'>transaction history is disabled</p>
-          <p className='text-xs text-fg-muted/50'>
-            enable in settings &rarr; privacy to see past transactions
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   const walletId = selectedKeyInfo?.id;
   const isMainnet = !zidecarUrl.includes('testnet');
   const { tAddresses } = useTransparentAddresses(isMainnet);
@@ -201,7 +196,7 @@ export const HistoryPage = () => {
   // penumbra history
   const penumbraQuery = useQuery({
     queryKey: ['transactionHistory', 'penumbra'],
-    enabled: activeNetwork === 'penumbra',
+    enabled: historyEnabled && activeNetwork === 'penumbra',
     staleTime: 30_000,
     queryFn: async () => {
       const txs: ParsedTransaction[] = [];
@@ -241,10 +236,12 @@ export const HistoryPage = () => {
   // zcash history (shielded + transparent)
   const zcashQuery = useQuery({
     queryKey: ['transactionHistory', 'zcash', walletId, tAddresses.length],
-    enabled: activeNetwork === 'zcash' && !!walletId,
+    enabled: historyEnabled && activeNetwork === 'zcash' && !!walletId,
     staleTime: 0,
     queryFn: async () => {
-      if (!walletId) return [];
+      if (!walletId) {
+        return [];
+      }
       console.log('[history] fetching zcash history for wallet', walletId);
 
       const entries = await getHistoryInWorker('zcash', walletId, zidecarUrl, tAddresses);
@@ -267,7 +264,9 @@ export const HistoryPage = () => {
   // for penumbra, filter by the selected account index - a tx belongs to an
   // account if any of its visible spend or output notes reference that index
   const filteredTransactions = useMemo(() => {
-    if (activeNetwork !== 'penumbra') return transactions;
+    if (activeNetwork !== 'penumbra') {
+      return transactions;
+    }
     return transactions.filter(
       tx =>
         !tx.accountIndices ||
@@ -283,6 +282,25 @@ export const HistoryPage = () => {
   useEffect(() => {
     void refetch();
   }, [activeNetwork, walletId, refetch]);
+
+  // NOTE: keep this below every hook - an early return above a hook crashes
+  // the component when the setting changes mid-session (hook-order violation)
+  if (!historyEnabled) {
+    return (
+      <div className='flex flex-col h-full'>
+        <div className='flex items-center px-4 py-3 border-b border-border-soft'>
+          <h1 className='text-lg font-medium'>History</h1>
+        </div>
+        <div className='flex-1 flex flex-col items-center justify-center gap-3 p-8 text-center'>
+          <span className='i-lucide-eye-off h-8 w-8 text-fg-muted/30' />
+          <p className='text-sm text-fg-muted'>transaction history is disabled</p>
+          <p className='text-xs text-fg-muted/50'>
+            enable in settings &rarr; privacy to see past transactions
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className='flex flex-col h-full'>

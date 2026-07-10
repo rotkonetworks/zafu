@@ -145,7 +145,9 @@ export const createFrostSessionSlice = (): SliceCreator<FrostSessionSlice> => (s
 
   handleDkgEvent: event => {
     const { dkg } = get().frostSession;
-    if (!dkg) return;
+    if (!dkg) {
+      return;
+    }
 
     if (event.type === 'joined') {
       set(state => {
@@ -238,7 +240,9 @@ export const createFrostSessionSlice = (): SliceCreator<FrostSessionSlice> => (s
 
   handleSigningEvent: event => {
     const { signing } = get().frostSession;
-    if (!signing) return;
+    if (!signing) {
+      return;
+    }
 
     if (event.type === 'message') {
       const hex = bytesToHex(event.message.payload);

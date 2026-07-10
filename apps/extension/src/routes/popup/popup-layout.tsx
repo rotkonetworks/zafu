@@ -31,12 +31,12 @@ type FeatureKey = 'stake' | 'swap' | 'vote' | 'inbox';
  * icons" → bottom-tabs already are icon + small label stacked, which
  * is the most compact discoverable pattern.
  */
-const BOTTOM_TABS: ReadonlyArray<{
+const BOTTOM_TABS: readonly {
   path: PopupPath;
   icon: JSX.Element;
   label: string;
   feature?: FeatureKey;
-}> = [
+}[] = [
   { path: PopupPath.INDEX, icon: <span className='i-lucide-home h-5 w-5' />, label: 'home' },
   {
     path: PopupPath.RECEIVE,

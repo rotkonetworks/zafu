@@ -99,10 +99,18 @@ export const createTradingModeSlice =
 
     canAutoSign: (origin?: string) => {
       const { autoSign, allowedOrigins, expiresAt } = get().tradingMode.settings;
-      if (!autoSign) return false;
-      if (allowedOrigins.length === 0) return false;
-      if (expiresAt <= Date.now()) return false;
-      if (origin && !allowedOrigins.includes(origin)) return false;
+      if (!autoSign) {
+        return false;
+      }
+      if (allowedOrigins.length === 0) {
+        return false;
+      }
+      if (expiresAt <= Date.now()) {
+        return false;
+      }
+      if (origin && !allowedOrigins.includes(origin)) {
+        return false;
+      }
       return true;
     },
   });

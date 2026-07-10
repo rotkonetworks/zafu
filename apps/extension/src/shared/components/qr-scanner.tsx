@@ -15,7 +15,9 @@ interface QrScannerProps {
 
 /** Convert ZXing result text to hex — handles binary QR (Latin-1) and plain hex */
 function resultToHex(text: string): string {
-  if (/^[0-9a-fA-F]+$/.test(text) && text.length % 2 === 0) return text;
+  if (/^[0-9a-fA-F]+$/.test(text) && text.length % 2 === 0) {
+    return text;
+  }
 
   const hasBinary = Array.from(text).some(c => {
     const code = c.charCodeAt(0);
@@ -61,11 +63,15 @@ export const QrScanner = ({
       (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
       videoRef.current.srcObject = null;
     }
-    if (mountedRef.current) setIsScanning(false);
+    if (mountedRef.current) {
+      setIsScanning(false);
+    }
   }, []);
 
   const startScanning = useCallback(async () => {
-    if (!videoRef.current || startingRef.current) return;
+    if (!videoRef.current || startingRef.current) {
+      return;
+    }
     startingRef.current = true;
 
     try {
@@ -88,7 +94,9 @@ export const QrScanner = ({
       const camera =
         devices.find((d: MediaDeviceInfo) => /back|rear|environment/i.test(d.label)) || devices[0];
 
-      if (!camera) throw new Error('No camera found');
+      if (!camera) {
+        throw new Error('No camera found');
+      }
 
       // request higher resolution + continuous autofocus for sharper QR capture
       const videoConstraints: MediaTrackConstraints = {
@@ -117,7 +125,9 @@ export const QrScanner = ({
 
       controlsRef.current = controls;
       startingRef.current = false;
-      if (mountedRef.current) setIsScanning(true);
+      if (mountedRef.current) {
+        setIsScanning(true);
+      }
     } catch (err) {
       startingRef.current = false;
       const msg = err instanceof Error ? err.message : 'Failed to start camera';

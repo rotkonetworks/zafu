@@ -64,7 +64,9 @@ let wasmInitialized = false;
  * must be called before any other zcash functions
  */
 export const initZcashWasm = async (): Promise<void> => {
-  if (wasmInitialized) return;
+  if (wasmInitialized) {
+    return;
+  }
 
   try {
     // dynamic import zafu-wasm from bundled location

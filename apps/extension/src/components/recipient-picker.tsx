@@ -47,7 +47,9 @@ export function RecipientPicker({ network, onSelect, show }: RecipientPickerProp
     // own wallets (other vaults)
     if (network === 'zcash') {
       for (const w of zcashWallets) {
-        if (!w.address || w.vaultId === selectedKeyInfo?.id) continue;
+        if (!w.address || w.vaultId === selectedKeyInfo?.id) {
+          continue;
+        }
         const vault = keyInfos.find(k => k.id === w.vaultId);
         entries.push({ label: vault?.name ?? w.label, address: w.address, category: 'wallet' });
       }
@@ -56,7 +58,9 @@ export function RecipientPicker({ network, onSelect, show }: RecipientPickerProp
     // recent addresses
     const recent = getRecent(network, 10);
     for (const r of recent) {
-      if (entries.some(e => e.address === r.address)) continue;
+      if (entries.some(e => e.address === r.address)) {
+        continue;
+      }
       const contact = findByAddress(r.address);
       entries.push({
         label: contact
@@ -70,8 +74,12 @@ export function RecipientPicker({ network, onSelect, show }: RecipientPickerProp
     // contacts
     for (const c of contacts) {
       for (const addr of c.addresses) {
-        if (addr.network !== network) continue;
-        if (entries.some(e => e.address === addr.address)) continue;
+        if (addr.network !== network) {
+          continue;
+        }
+        if (entries.some(e => e.address === addr.address)) {
+          continue;
+        }
         entries.push({ label: c.name, address: addr.address, category: 'contact' });
       }
     }
@@ -81,7 +89,9 @@ export function RecipientPicker({ network, onSelect, show }: RecipientPickerProp
 
   // filter by query
   const filtered = useMemo(() => {
-    if (!query.trim()) return allEntries.slice(0, MAX_RESULTS);
+    if (!query.trim()) {
+      return allEntries.slice(0, MAX_RESULTS);
+    }
     const q = query.toLowerCase();
     return allEntries
       .filter(e => e.label.toLowerCase().includes(q) || e.address.toLowerCase().includes(q))
@@ -99,7 +109,9 @@ export function RecipientPicker({ network, onSelect, show }: RecipientPickerProp
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  if (!show || allEntries.length === 0) return null;
+  if (!show || allEntries.length === 0) {
+    return null;
+  }
 
   const categoryIcon: Record<string, string> = {
     wallet: 'i-lucide-wallet',

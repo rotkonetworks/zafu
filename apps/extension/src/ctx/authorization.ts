@@ -99,7 +99,9 @@ const openWallet = async () => {
     .then(passKeyJson => Key.fromJson(passKeyJson!));
 
   const wallet = getWalletFromStorage().then(w => {
-    if (!w) throw new Error('no wallet available');
+    if (!w) {
+      throw new Error('no wallet available');
+    }
     return Wallet.fromJson(w);
   });
 

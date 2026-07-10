@@ -49,14 +49,14 @@ export const AnimatedQrScanner = ({
   const completedRef = useRef(false);
 
   // collected frames: index -> base64 chunk (legacy P-format)
-  const framesRef = useRef<Map<number, string>>(new Map());
+  const framesRef = useRef(new Map());
   const totalRef = useRef(0);
   const urTypeRef = useRef('');
 
   // BC-UR fountain mode state. Distinct set from legacy P-frames because
   // UR fountain parts don't have a fixed total — we keep accumulating until
   // ur_decode_frames returns a complete payload.
-  const urPartsRef = useRef<Set<string>>(new Set());
+  const urPartsRef = useRef(new Set());
   // 'p' = legacy P-format, 'ur' = BC-UR fountain, '' = undecided
   const modeRef = useRef<'' | 'p' | 'ur'>('');
   // wasm module loaded lazily on first UR frame
@@ -98,11 +98,15 @@ export const AnimatedQrScanner = ({
       (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
       videoRef.current.srcObject = null;
     }
-    if (mountedRef.current) setIsScanning(false);
+    if (mountedRef.current) {
+      setIsScanning(false);
+    }
   }, []);
 
   const startScanning = useCallback(async () => {
-    if (!videoRef.current) return;
+    if (!videoRef.current) {
+      return;
+    }
 
     try {
       setError(null);
@@ -125,7 +129,9 @@ export const AnimatedQrScanner = ({
       const camera =
         devices.find((d: MediaDeviceInfo) => /back|rear|environment/i.test(d.label)) || devices[0];
 
-      if (!camera) throw new Error('no camera found');
+      if (!camera) {
+        throw new Error('no camera found');
+      }
 
       const videoConstraints: MediaTrackConstraints = {
         deviceId: camera.deviceId,
@@ -139,7 +145,9 @@ export const AnimatedQrScanner = ({
       await videoRef.current.play();
 
       const controls = await reader.decodeFromVideoDevice(undefined, videoRef.current, result => {
-        if (!result || completedRef.current) return;
+        if (!result || completedRef.current) {
+          return;
+        }
 
         const text = result.getText();
 
@@ -150,18 +158,29 @@ export const AnimatedQrScanner = ({
         // fountain reconstruction.
         const lower = text.toLowerCase();
         if (lower.startsWith('ur:')) {
-          if (modeRef.current === '') modeRef.current = 'ur';
-          if (modeRef.current !== 'ur') return;
+          if (modeRef.current === '') {
+            modeRef.current = 'ur';
+          }
+          if (modeRef.current !== 'ur') {
+            return;
+          }
 
           // type filter — defends against unrelated QR contaminating the stream
           const slashIdx = text.indexOf('/');
           const urType = slashIdx > 3 ? text.slice(3, slashIdx) : '';
-          if (urTypeFilter && urType.toLowerCase() !== urTypeFilter.toLowerCase()) return;
-          if (urTypeRef.current === '') urTypeRef.current = urType;
-          else if (urTypeRef.current !== urType) return; // type drift, reject
+          if (urTypeFilter && urType.toLowerCase() !== urTypeFilter.toLowerCase()) {
+            return;
+          }
+          if (urTypeRef.current === '') {
+            urTypeRef.current = urType;
+          } else if (urTypeRef.current !== urType) {
+            return;
+          } // type drift, reject
 
           // Reject oversized single frames.
-          if (text.length > MAX_UR_PART_BYTES) return;
+          if (text.length > MAX_UR_PART_BYTES) {
+            return;
+          }
 
           const before = urPartsRef.current.size;
           // Cap the accumulator. Hitting the cap means either a hostile
@@ -178,7 +197,9 @@ export const AnimatedQrScanner = ({
             return;
           }
           urPartsRef.current.add(text);
-          if (urPartsRef.current.size === before) return; // duplicate
+          if (urPartsRef.current.size === before) {
+            return;
+          } // duplicate
 
           // a genuinely new unique part — reset the stall clock
           lastNewPartAtRef.current = Date.now();
@@ -186,8 +207,10 @@ export const AnimatedQrScanner = ({
 
           // seqLen drives honest progress; without it we'd pin at 99%.
           if (urSeqLenRef.current === 0) {
-            const seqMatch = lower.match(/^ur:[^/]+\/(\d+)-(\d+)\//);
-            if (seqMatch) urSeqLenRef.current = Number(seqMatch[2]);
+            const seqMatch = /^ur:[^/]+\/(\d+)-(\d+)\//.exec(lower);
+            if (seqMatch) {
+              urSeqLenRef.current = Number(seqMatch[2]);
+            }
           }
 
           // `default()` must be awaited — without it the bindgen glue's
@@ -210,7 +233,9 @@ export const AnimatedQrScanner = ({
               });
           }
           const wasm = wasmRef.current;
-          if (!wasm) return; // not loaded yet; keep accumulating
+          if (!wasm) {
+            return;
+          } // not loaded yet; keep accumulating
 
           try {
             const partsJson = JSON.stringify([...urPartsRef.current]);
@@ -242,11 +267,17 @@ export const AnimatedQrScanner = ({
         }
 
         // ── legacy P-format mode ──
-        if (modeRef.current === '') modeRef.current = 'p';
-        if (modeRef.current !== 'p') return;
+        if (modeRef.current === '') {
+          modeRef.current = 'p';
+        }
+        if (modeRef.current !== 'p') {
+          return;
+        }
 
-        const match = text.match(/^P(\d+)\/(\d+)\/([^/]+)\/(.+)$/);
-        if (!match) return;
+        const match = /^P(\d+)\/(\d+)\/([^/]+)\/(.+)$/.exec(text);
+        if (!match) {
+          return;
+        }
 
         const idx = Number(match[1]);
         const total = Number(match[2]);
@@ -290,7 +321,9 @@ export const AnimatedQrScanner = ({
       });
 
       controlsRef.current = controls;
-      if (mountedRef.current) setIsScanning(true);
+      if (mountedRef.current) {
+        setIsScanning(true);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'failed to start camera';
       if (/Permission|NotAllowed/.test(msg)) {
@@ -318,7 +351,9 @@ export const AnimatedQrScanner = ({
             ur_decode_frames: (parts: string, type: string) => string;
           };
           await m.default();
-          if (mountedRef.current) wasmRef.current = m;
+          if (mountedRef.current) {
+            wasmRef.current = m;
+          }
         })
         .catch(err => {
           console.warn('[ur-scanner] wasm preload failed:', err);
@@ -332,16 +367,24 @@ export const AnimatedQrScanner = ({
     // Legacy P-format has a known total so it doesn't need this; the guard
     // on urPartsRef.size keeps it inert for that path.
     const stallTimer = setInterval(() => {
-      if (completedRef.current) return;
-      if (urPartsRef.current.size === 0) return; // not accumulating yet
-      if (Date.now() - lastNewPartAtRef.current < STALL_MS) return;
+      if (completedRef.current) {
+        return;
+      }
+      if (urPartsRef.current.size === 0) {
+        return;
+      } // not accumulating yet
+      if (Date.now() - lastNewPartAtRef.current < STALL_MS) {
+        return;
+      }
       completedRef.current = true; // latch so we report once
       stopScanning();
       const msg =
         `scan stalled — no new QR frames for ${Math.round(STALL_MS / 1000)}s ` +
         `(${urPartsRef.current.size} parts received). The signer may have ` +
         `closed, or the stream is corrupt. Restart the signing flow.`;
-      if (mountedRef.current) setError(msg);
+      if (mountedRef.current) {
+        setError(msg);
+      }
       onErrorRef.current?.(msg);
     }, 2_000);
 

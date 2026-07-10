@@ -52,7 +52,9 @@ const isRateLimited = (origin: string): boolean => {
   const recent = calls.filter(t => now - t < RATE_LIMIT_WINDOW_MS);
   callLog.set(origin, recent);
 
-  if (recent.length >= RATE_LIMIT_MAX) return true;
+  if (recent.length >= RATE_LIMIT_MAX) {
+    return true;
+  }
 
   recent.push(now);
   return false;
@@ -75,7 +77,9 @@ const ensureApproved = async (
   sender: chrome.runtime.MessageSender,
 ): Promise<boolean> => {
   // already approved this session
-  if (approvedOrigins.has(origin)) return true;
+  if (approvedOrigins.has(origin)) {
+    return true;
+  }
 
   // check persistent capability
   const perms = await getOriginPermissions(origin);
@@ -83,7 +87,9 @@ const ensureApproved = async (
     approvedOrigins.add(origin);
     return true;
   }
-  if (isDenied(perms, 'encrypt')) return false;
+  if (isDenied(perms, 'encrypt')) {
+    return false;
+  }
 
   // open approval popup
   const requestId = crypto.randomUUID();
@@ -120,7 +126,9 @@ const isValidHexPubkey = (hex: unknown, expectedBytes: number): hex is string =>
   typeof hex === 'string' && hex.length === expectedBytes * 2 && HEX_RE.test(hex);
 
 const isValidBase64 = (s: unknown): s is string => {
-  if (typeof s !== 'string' || s.length === 0) return false;
+  if (typeof s !== 'string' || s.length === 0) {
+    return false;
+  }
   try {
     // round-trip check: decode then re-encode must match
     const decoded = Uint8Array.from(atob(s), c => c.charCodeAt(0));
@@ -280,7 +288,9 @@ const handleDecrypt = async (msg: DecryptRequest, origin: string): Promise<unkno
     // get user's ed25519 keypair for this origin
     const { useStore } = await import('../../state');
     const keyInfo = useStore.getState().keyRing.selectedKeyInfo;
-    if (!keyInfo) return { error: 'wallet locked' };
+    if (!keyInfo) {
+      return { error: 'wallet locked' };
+    }
 
     const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
 
@@ -325,7 +335,9 @@ const handleZidPubkey = async (origin: string): Promise<unknown> => {
     }
     const { useStore } = await import('../../state');
     const keyInfo = useStore.getState().keyRing.selectedKeyInfo;
-    if (!keyInfo) return { error: 'wallet locked' };
+    if (!keyInfo) {
+      return { error: 'wallet locked' };
+    }
 
     const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
 
@@ -352,12 +364,16 @@ export const encryptionMessageListener = (
   sender: chrome.runtime.MessageSender,
   sendResponse: (r: unknown) => void,
 ): boolean => {
-  if (typeof req !== 'object' || req === null || !('type' in req)) return false;
+  if (typeof req !== 'object' || req === null || !('type' in req)) {
+    return false;
+  }
 
   const msg = req as Record<string, unknown>;
   const type = msg['type'] as string;
 
-  if (!ENCRYPTION_TYPES.has(type)) return false;
+  if (!ENCRYPTION_TYPES.has(type)) {
+    return false;
+  }
 
   // handle approval result from popup (internal message routed externally)
   if (type === 'zafu_encryption_approval_result') {

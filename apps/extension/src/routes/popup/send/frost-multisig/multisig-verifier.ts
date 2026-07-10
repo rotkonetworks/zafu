@@ -21,7 +21,9 @@ export type Verdict =
 
 const hexToBytes = (h: string): Uint8Array => {
   const out = new Uint8Array(h.length / 2);
-  for (let i = 0; i < out.length; i++) out[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16);
+  }
   return out;
 };
 
@@ -110,7 +112,9 @@ export function computeVerdict(args: {
   const matched =
     externals.length === 1 &&
     externals.every(a => {
-      if (!a.recipient_raw_hex) return false;
+      if (!a.recipient_raw_hex) {
+        return false;
+      }
       try {
         const ua = encodeOrchardUnifiedAddress(hexToBytes(a.recipient_raw_hex), mainnet);
         return normaliseAddr(ua) === claimedNorm;

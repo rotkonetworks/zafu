@@ -45,7 +45,9 @@ export const internalZidListener = (
   sender: chrome.runtime.MessageSender,
   sendResponse: (r: unknown) => void,
 ): boolean => {
-  if (!isZidKeypairRequest(req)) return false;
+  if (!isZidKeypairRequest(req)) {
+    return false;
+  }
 
   // gate 1: must come from this extension, not an external page or dapp
   if (sender.id !== chrome.runtime.id) {

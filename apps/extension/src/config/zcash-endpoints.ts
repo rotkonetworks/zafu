@@ -52,7 +52,7 @@ export interface ZcashEndpointPreset {
  * end-to-end. Anyone who can't reach it has the public lightwalletd
  * fallbacks one tap away.
  */
-export const ZCASH_MAINNET_ENDPOINTS: ReadonlyArray<ZcashEndpointPreset> = [
+export const ZCASH_MAINNET_ENDPOINTS: readonly ZcashEndpointPreset[] = [
   // ── default (trustless) ──
   {
     id: 'rotko-zidecar',
@@ -156,8 +156,8 @@ export function defaultZcashEndpoint(): ZcashEndpointPreset {
 
 /** Group presets by region for the dropdown UI. */
 export function groupPresetsByRegion(
-  presets: ReadonlyArray<ZcashEndpointPreset> = ZCASH_MAINNET_ENDPOINTS,
-): ReadonlyArray<{ region: RpcEndpointRegion; presets: ZcashEndpointPreset[] }> {
+  presets: readonly ZcashEndpointPreset[] = ZCASH_MAINNET_ENDPOINTS,
+): readonly { region: RpcEndpointRegion; presets: ZcashEndpointPreset[] }[] {
   const order: RpcEndpointRegion[] = [
     'default',
     'global',
@@ -168,7 +168,9 @@ export function groupPresetsByRegion(
   ];
   const groups = new Map<RpcEndpointRegion, ZcashEndpointPreset[]>();
   for (const p of presets) {
-    if (!groups.has(p.region)) groups.set(p.region, []);
+    if (!groups.has(p.region)) {
+      groups.set(p.region, []);
+    }
     groups.get(p.region)!.push(p);
   }
   return order.filter(r => groups.has(r)).map(r => ({ region: r, presets: groups.get(r)! }));

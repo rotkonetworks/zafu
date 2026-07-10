@@ -35,7 +35,9 @@ export function AddContactDialog({ address, network, onClose, onSuccess }: AddCo
   }, [existingEntry, onClose]);
 
   const handleSubmit = async () => {
-    if (isSubmitting) return;
+    if (isSubmitting) {
+      return;
+    }
     setIsSubmitting(true);
 
     try {

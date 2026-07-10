@@ -144,9 +144,13 @@ function getZignerCosmosAddress(
   const addrs = keyInfo.insensitive['cosmosAddresses'] as
     | { chainId: string; address: string; prefix: string }[]
     | undefined;
-  if (!addrs) return null;
+  if (!addrs) {
+    return null;
+  }
   const match = addrs.find(a => a.chainId === chainId);
-  if (match) return match.address;
+  if (match) {
+    return match.address;
+  }
   // try to derive from any stored address using bech32 prefix swap
   if (addrs.length > 0) {
     try {
@@ -166,15 +170,24 @@ function findCosmosCapableKey(
 ): { id: string; type: string; insensitive: Record<string, unknown> } | null {
   // try effective first
   if (effective) {
-    if (effective.type === 'mnemonic') return effective;
-    if (effective.type === 'zigner-zafu' && getZignerCosmosAddress(effective, chainId))
+    if (effective.type === 'mnemonic') {
       return effective;
+    }
+    if (effective.type === 'zigner-zafu' && getZignerCosmosAddress(effective, chainId)) {
+      return effective;
+    }
   }
   // fallback: search all keyInfos for one with cosmos capability
   for (const ki of keyInfos) {
-    if (ki === effective) continue;
-    if (ki.type === 'mnemonic') return ki;
-    if (ki.type === 'zigner-zafu' && getZignerCosmosAddress(ki, chainId)) return ki;
+    if (ki === effective) {
+      continue;
+    }
+    if (ki.type === 'mnemonic') {
+      return ki;
+    }
+    if (ki.type === 'zigner-zafu' && getZignerCosmosAddress(ki, chainId)) {
+      return ki;
+    }
   }
   return null;
 }
@@ -191,13 +204,17 @@ export const useCosmosAssets = (chainId: CosmosChainId, accountIndex = 0) => {
   return useQuery({
     queryKey: ['cosmosAssets', chainId, cosmosKey?.id ?? null, accountIndex],
     queryFn: async () => {
-      if (!cosmosKey) return null;
+      if (!cosmosKey) {
+        return null;
+      }
 
       let address: string;
 
       if (cosmosKey.type === 'zigner-zafu') {
         const storedAddr = getZignerCosmosAddress(cosmosKey, chainId);
-        if (!storedAddr) return null;
+        if (!storedAddr) {
+          return null;
+        }
         address = storedAddr;
       } else if (cosmosKey.type === 'mnemonic') {
         const mnemonic = await getMnemonic(cosmosKey.id);
@@ -226,8 +243,12 @@ export const useCosmosAssets = (chainId: CosmosChainId, accountIndex = 0) => {
           };
         })
         .sort((a, b) => {
-          if (a.isNative && !b.isNative) return -1;
-          if (!a.isNative && b.isNative) return 1;
+          if (a.isNative && !b.isNative) {
+            return -1;
+          }
+          if (!a.isNative && b.isNative) {
+            return 1;
+          }
           return Number(b.amount - a.amount);
         });
 

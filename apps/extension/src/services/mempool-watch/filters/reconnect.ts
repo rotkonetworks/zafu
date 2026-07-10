@@ -42,7 +42,9 @@ export const withReconnect = (opts: ReconnectOptions = {}): MempoolFilter => {
       while (!ctx.signal.aborted) {
         try {
           for await (const snap of inner(walletId, ctx)) {
-            if (ctx.signal.aborted) return;
+            if (ctx.signal.aborted) {
+              return;
+            }
             // any successful event resets the backoff counter
             attempt = 0;
             yield snap;
@@ -50,7 +52,9 @@ export const withReconnect = (opts: ReconnectOptions = {}): MempoolFilter => {
           // inner completed cleanly — let the outer (poll) loop drive the next call
           return;
         } catch (err) {
-          if (ctx.signal.aborted) return;
+          if (ctx.signal.aborted) {
+            return;
+          }
           attempt += 1;
           if (maxAttempts > 0 && attempt > maxAttempts) {
             const status: MempoolStreamStatus = {

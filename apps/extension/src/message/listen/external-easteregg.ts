@@ -224,7 +224,9 @@ export const externalMessageListener = (
         labelPrefix,
         requestId,
       });
-      if (hide) params.set('hide', '1');
+      if (hide) {
+        params.set('hide', '1');
+      }
       const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
       void chrome.windows.create({ url, type: 'popup', width: 400, height: 520 });
       return true;
@@ -269,7 +271,7 @@ export const externalMessageListener = (
         sendResponse({ error: 'roomCode required' });
         return true;
       }
-      const plan = msg['plan'] as Array<{ address: string; amount_zat: number }> | undefined;
+      const plan = msg['plan'] as { address: string; amount_zat: number }[] | undefined;
       if (!plan || !Array.isArray(plan) || plan.length === 0) {
         sendResponse({ error: 'plan array required' });
         return true;
@@ -295,7 +297,9 @@ export const externalMessageListener = (
         planJson: JSON.stringify(plan),
         requestId,
       });
-      if (multisigLabel) params.set('multisigLabel', multisigLabel);
+      if (multisigLabel) {
+        params.set('multisigLabel', multisigLabel);
+      }
       const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
       void chrome.windows.create({ url, type: 'popup', width: 400, height: 560 });
       return true;
@@ -435,7 +439,7 @@ export const externalMessageListener = (
       // msg.fee?: number (default 10000 = 0.0001 ZEC)
       //
       // Opens approval popup showing all outputs for user confirmation
-      const outputs = msg['outputs'] as Array<{ address: string; amount: number; memo?: string }>;
+      const outputs = msg['outputs'] as { address: string; amount: number; memo?: string }[];
       if (!outputs || !Array.isArray(outputs) || outputs.length === 0) {
         sendResponse({ success: false, error: 'outputs array required' });
         return true;

@@ -237,7 +237,7 @@ function initiatorHandshake(
     const respCt = resp.slice(33);
 
     let rh = mixHash(savedH, re);
-    let rck = savedCk;
+    let rck: Uint8Array = savedCk;
 
     // <- ee: DH(e, re)
     [rck] = mixKey(rck, dh(savedEPriv, re));

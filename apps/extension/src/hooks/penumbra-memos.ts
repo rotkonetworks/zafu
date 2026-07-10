@@ -171,7 +171,9 @@ export function usePenumbraMemos() {
 
       // stream all transactions
       for await (const response of viewClient.transactionInfo({})) {
-        if (!response.txInfo) continue;
+        if (!response.txInfo) {
+          continue;
+        }
 
         count++;
         setSyncProgress({ current: count, total: count }); // we don't know total upfront

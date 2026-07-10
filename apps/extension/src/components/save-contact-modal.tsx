@@ -27,7 +27,9 @@ export function SaveContactModal({ address, network, onDone, onCancel }: SaveCon
   const safeContacts = Array.isArray(contacts) ? contacts : [];
 
   const handleSaveExisting = async () => {
-    if (!selectedContactId) return;
+    if (!selectedContactId) {
+      return;
+    }
     setSaving(true);
     await addAddress(selectedContactId, { network, address });
     setSaving(false);
@@ -35,7 +37,9 @@ export function SaveContactModal({ address, network, onDone, onCancel }: SaveCon
   };
 
   const handleSaveNew = async () => {
-    if (!newName.trim()) return;
+    if (!newName.trim()) {
+      return;
+    }
     setSaving(true);
     const contact = await addContact({ name: newName.trim() });
     await addAddress(contact.id, { network, address });

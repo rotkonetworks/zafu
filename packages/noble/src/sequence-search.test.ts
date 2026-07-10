@@ -16,7 +16,7 @@ class MockNobleClient implements NobleClientInterface {
   }
 
   private hash({ sequence, accountIndex }: { sequence: number; accountIndex?: number }): string {
-    return `${sequence}-${accountIndex ? accountIndex : 0}`;
+    return `${sequence}-${accountIndex ?? 0}`;
   }
 
   setResponse({

@@ -125,7 +125,7 @@ export function decodeNoiseInitMemo(memoBytes: Uint8Array): NoiseInitPayload | n
   const ephemeralX25519Pub = trimmed.slice(offset, offset + 32);
   offset += 32;
 
-  const urlLen = (trimmed[offset] << 8) | trimmed[offset + 1];
+  const urlLen = ((trimmed[offset] ?? 0) << 8) | (trimmed[offset + 1] ?? 0);
   offset += 2;
 
   // validate relay URL length

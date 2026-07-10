@@ -93,14 +93,14 @@ export const SelectNetworks = () => {
   const location = useLocation();
   const { enabledNetworks, toggleNetwork, setActiveNetwork } = useStore(state => state.keyRing);
   const { setNetworkEndpoint } = useStore(networksSelector);
-  const [selected, setSelected] = useState<Set<NetworkType>>(new Set(enabledNetworks));
+  const [selected, setSelected] = useState(new Set(enabledNetworks));
   const [zcashBirthday, setZcashBirthday] = useState('');
   const [zcashDate, setZcashDate] = useState('');
   const [inputMode, setInputMode] = useState<'date' | 'block'>('date');
   // Default to rotko zidecar (trustless). User can pick a fallback from the
   // dropdown; the choice is persisted to NetworkConfig.endpoint so subsequent
   // sync calls hit the selected node.
-  const [zcashEndpointId, setZcashEndpointId] = useState<string>(defaultZcashEndpoint().id);
+  const [zcashEndpointId, setZcashEndpointId] = useState(defaultZcashEndpoint().id);
 
   // get origin from incoming state, default to NEWLY_GENERATED
   const origin = getSeedPhraseOrigin(location);

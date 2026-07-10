@@ -28,7 +28,7 @@ export const SettingsTradingMode = () => {
   const approvedSites = knownSites.filter((s: OriginRecord) => s.choice === 'Approved');
 
   const [saving, setSaving] = useState(false);
-  const [timeRemaining, setTimeRemaining] = useState<string>('');
+  const [timeRemaining, setTimeRemaining] = useState('');
 
   useEffect(() => {
     const updateTimer = () => {

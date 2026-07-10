@@ -44,7 +44,7 @@ interface OnboardingStep {
   readonly id: OnboardingStepId;
   readonly label: string;
   /** Routes (PagePath values) that count as "this step" for stepper highlighting. */
-  readonly matches: ReadonlyArray<string>;
+  readonly matches: readonly string[];
 }
 
 /**
@@ -53,7 +53,7 @@ interface OnboardingStep {
  * traverses one of them, so the stepper shows one path-specific step
  * dynamically (see resolveActiveStep).
  */
-const STEPS_CREATE: ReadonlyArray<OnboardingStep> = [
+const STEPS_CREATE: readonly OnboardingStep[] = [
   { id: 'welcome', label: 'welcome', matches: [PagePath.WELCOME] },
   { id: 'generate', label: 'secret phrase', matches: [PagePath.GENERATE_SEED_PHRASE] },
   { id: 'set-password', label: 'password', matches: [PagePath.SET_PASSWORD] },
@@ -61,7 +61,7 @@ const STEPS_CREATE: ReadonlyArray<OnboardingStep> = [
   { id: 'success', label: 'done', matches: [PagePath.ONBOARDING_SUCCESS] },
 ];
 
-const STEPS_IMPORT: ReadonlyArray<OnboardingStep> = [
+const STEPS_IMPORT: readonly OnboardingStep[] = [
   { id: 'welcome', label: 'welcome', matches: [PagePath.WELCOME] },
   { id: 'import', label: 'recovery phrase', matches: [PagePath.IMPORT_SEED_PHRASE] },
   { id: 'set-password', label: 'password', matches: [PagePath.SET_PASSWORD] },
@@ -69,7 +69,7 @@ const STEPS_IMPORT: ReadonlyArray<OnboardingStep> = [
   { id: 'success', label: 'done', matches: [PagePath.ONBOARDING_SUCCESS] },
 ];
 
-const STEPS_ZIGNER: ReadonlyArray<OnboardingStep> = [
+const STEPS_ZIGNER: readonly OnboardingStep[] = [
   { id: 'welcome', label: 'welcome', matches: [PagePath.WELCOME] },
   { id: 'import-zigner', label: 'connect zigner', matches: [PagePath.IMPORT_ZIGNER] },
   { id: 'set-password', label: 'password', matches: [PagePath.SET_PASSWORD] },
@@ -77,16 +77,20 @@ const STEPS_ZIGNER: ReadonlyArray<OnboardingStep> = [
   { id: 'success', label: 'done', matches: [PagePath.ONBOARDING_SUCCESS] },
 ];
 
-function resolveSteps(pathname: string): ReadonlyArray<OnboardingStep> {
-  if (pathname.startsWith(PagePath.IMPORT_ZIGNER)) return STEPS_ZIGNER;
-  if (pathname.startsWith(PagePath.IMPORT_SEED_PHRASE)) return STEPS_IMPORT;
+function resolveSteps(pathname: string): readonly OnboardingStep[] {
+  if (pathname.startsWith(PagePath.IMPORT_ZIGNER)) {
+    return STEPS_ZIGNER;
+  }
+  if (pathname.startsWith(PagePath.IMPORT_SEED_PHRASE)) {
+    return STEPS_IMPORT;
+  }
   // default to create — the welcome/password/networks/success steps are
   // identical, so users who haven't chosen a path yet still see a sensible
   // stepper.
   return STEPS_CREATE;
 }
 
-function resolveActiveStepIndex(steps: ReadonlyArray<OnboardingStep>, pathname: string): number {
+function resolveActiveStepIndex(steps: readonly OnboardingStep[], pathname: string): number {
   const idx = steps.findIndex(s => s.matches.some(m => pathname === m));
   return idx >= 0 ? idx : 0;
 }
@@ -170,7 +174,7 @@ function Stepper({
   steps,
   activeIdx,
 }: {
-  readonly steps: ReadonlyArray<OnboardingStep>;
+  readonly steps: readonly OnboardingStep[];
   readonly activeIdx: number;
 }) {
   return (

@@ -63,7 +63,9 @@ export const withDecoyBuckets = (opts: DecoyOptions): MemoFilter => {
       const exclude = (b: BucketStart) => userExclude(b) || (seen?.has(b) ?? false);
       const decoys = pickDecoys(ownedBuckets, ratio, exclude, rng, ctx);
       const merged = new Set<BucketStart>(ownedBuckets);
-      for (const d of decoys) merged.add(d);
+      for (const d of decoys) {
+        merged.add(d);
+      }
       yield* inner(walletId, merged, ctx);
     };
 };
@@ -80,7 +82,9 @@ function pickDecoys(
   const maxBucket = snapBucket(ctx.tip);
   const range = (maxBucket - minBucket) / BUCKET_SIZE + 1;
   // need at least 2x target slots otherwise we waste cycles on collisions
-  if (range < target * 2) return new Set();
+  if (range < target * 2) {
+    return new Set();
+  }
 
   const decoys = new Set<BucketStart>();
   // oversample to absorb collisions with real/exclude/each-other
@@ -90,9 +94,15 @@ function pickDecoys(
   for (let i = 0; i < draws.length && decoys.size < target; i++) {
     const offset = draws[i]! % range;
     const candidate = minBucket + offset * BUCKET_SIZE;
-    if (real.has(candidate)) continue;
-    if (decoys.has(candidate)) continue;
-    if (exclude(candidate)) continue;
+    if (real.has(candidate)) {
+      continue;
+    }
+    if (decoys.has(candidate)) {
+      continue;
+    }
+    if (exclude(candidate)) {
+      continue;
+    }
     decoys.add(candidate);
   }
   return decoys;

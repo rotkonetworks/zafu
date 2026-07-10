@@ -21,7 +21,9 @@ function extractPrfSalts(
   const prf = (extensions as Record<string, unknown>)?.['prf'] as
     | { eval?: { first: BufferSource; second?: BufferSource } }
     | undefined;
-  if (!prf?.eval?.first) return undefined;
+  if (!prf?.eval?.first) {
+    return undefined;
+  }
   return {
     first: bufToHex(prf.eval.first),
     second: prf.eval.second ? bufToHex(prf.eval.second) : undefined,
@@ -38,7 +40,9 @@ function bufToHex(buf: BufferSource): string {
 
 function hexToBuf(hex: string): ArrayBuffer {
   const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
+  }
   return bytes.buffer;
 }
 
@@ -49,7 +53,9 @@ navigator.credentials.create = async function (
   options?: CredentialCreationOptions,
 ): Promise<Credential | null> {
   const pk = options?.publicKey;
-  if (!pk) return originalCreate(options);
+  if (!pk) {
+    return originalCreate(options);
+  }
 
   // check if zafu should handle this
   const rpId = pk.rp?.id ?? window.location.hostname;
@@ -109,7 +115,9 @@ navigator.credentials.create = async function (
       authenticatorAttachment: 'platform',
       getClientExtensionResults: () => {
         const results: Record<string, unknown> = {};
-        if (response.prfEnabled) results['prf'] = { enabled: true };
+        if (response.prfEnabled) {
+          results['prf'] = { enabled: true };
+        }
         return results;
       },
     } as unknown as PublicKeyCredential;
@@ -125,7 +133,9 @@ navigator.credentials.get = async function (
   options?: CredentialRequestOptions,
 ): Promise<Credential | null> {
   const pk = options?.publicKey;
-  if (!pk) return originalGet(options);
+  if (!pk) {
+    return originalGet(options);
+  }
 
   const rpId = pk.rpId ?? window.location.hostname;
   const challenge = bufToHex(pk.challenge);

@@ -326,7 +326,9 @@ void chrome.alarms.create('idleCheck', {
 chrome.alarms.onAlarm.addListener(async alarm => {
   if (alarm.name === 'idleCheck') {
     const minutes = (await localExtStorage.get('autoLockMinutes')) ?? 15;
-    if (minutes <= 0) return; // disabled
+    if (minutes <= 0) {
+      return;
+    } // disabled
     const idleMs = Date.now() - lastActivityMs;
     if (idleMs >= minutes * 60_000) {
       // check if actually unlocked before locking
@@ -374,7 +376,9 @@ chrome.alarms.onAlarm.addListener(async alarm => {
 const OFFSCREEN_PATH = '/offscreen.html';
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg?.type !== 'ZCASH_ENSURE_OFFSCREEN') return false;
+  if (msg?.type !== 'ZCASH_ENSURE_OFFSCREEN') {
+    return false;
+  }
   void (async () => {
     try {
       const contexts = await chrome.runtime.getContexts({

@@ -58,8 +58,12 @@ let wasmInitPromise: Promise<void> | null = null;
  * Must be called before building transactions.
  */
 const initParallelWasm = async () => {
-  if (wasmInitialized) return;
-  if (wasmInitPromise) return wasmInitPromise;
+  if (wasmInitialized) {
+    return;
+  }
+  if (wasmInitPromise) {
+    return wasmInitPromise;
+  }
 
   wasmInitPromise = (async () => {
     try {
@@ -93,7 +97,9 @@ const loadProvingKeyIfNeeded = async (
   actionType: string,
   loadKey: (key: Uint8Array, type: string) => void,
 ): Promise<void> => {
-  if (loadedProvingKeys.has(actionType)) return;
+  if (loadedProvingKeys.has(actionType)) {
+    return;
+  }
 
   const keyFile = ACTION_KEY_FILES[actionType];
   if (!keyFile) {
@@ -126,7 +132,9 @@ const getRequiredProvingKeys = (txPlan: TransactionPlan): Set<string> => {
 
   for (const actionPlan of txPlan.actions) {
     const actionCase = actionPlan.action.case;
-    if (!actionCase) continue;
+    if (!actionCase) {
+      continue;
+    }
 
     switch (actionCase) {
       case 'spend':

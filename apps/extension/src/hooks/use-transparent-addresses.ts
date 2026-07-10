@@ -70,14 +70,18 @@ export function useTransparentAddresses(isMainnet: boolean) {
             watchOnly.ufvk ??
             (watchOnly.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
           if (!ufvk) {
-            if (!cancelled) setIsLoading(false);
+            if (!cancelled) {
+              setIsLoading(false);
+            }
             return;
           }
           try {
             addrs = await Promise.all(indices.map(i => deriveZcashTransparentFromUfvk(ufvk, i)));
           } catch {
             // UFVK may lack transparent component
-            if (!cancelled) setIsLoading(false);
+            if (!cancelled) {
+              setIsLoading(false);
+            }
             return;
           }
         }
@@ -90,7 +94,9 @@ export function useTransparentAddresses(isMainnet: boolean) {
       } catch (err) {
         console.error('[use-transparent-addresses] derivation failed:', err);
       }
-      if (!cancelled) setIsLoading(false);
+      if (!cancelled) {
+        setIsLoading(false);
+      }
     })();
 
     return () => {

@@ -28,13 +28,11 @@ export class Services implements ServicesInterface {
   // wait for the same promise rather than each starting their own
   // initialization process.
   public async getWalletServices(): Promise<WalletServices> {
-    if (!this.walletServicesPromise) {
-      this.walletServicesPromise = this.initializeWalletServices().catch((e: unknown) => {
-        // If promise rejected, reset promise to `undefined` so next caller can try again.
-        this.walletServicesPromise = undefined;
-        throw e;
-      });
-    }
+    this.walletServicesPromise ??= this.initializeWalletServices().catch((e: unknown) => {
+      // If promise rejected, reset promise to `undefined` so next caller can try again.
+      this.walletServicesPromise = undefined;
+      throw e;
+    });
 
     void this.walletServicesPromise.then(({ blockProcessor }) => blockProcessor.sync());
     return this.walletServicesPromise;
@@ -105,6 +103,8 @@ export class Services implements ServicesInterface {
         viewServer = await ViewServer.initialize_from_snapshot({
           fullViewingKey,
           getStoredTree: () => indexedDb.getStateCommitmentTree(),
+
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- indexedDb.constants() resolves as error-typed under eslint's project service; tsc accepts it
           idbConstants: indexedDb.constants(),
           compact_frontier,
         });
@@ -113,6 +113,8 @@ export class Services implements ServicesInterface {
         viewServer = await ViewServer.initialize({
           fullViewingKey,
           getStoredTree: () => indexedDb.getStateCommitmentTree(),
+
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- indexedDb.constants() resolves as error-typed under eslint's project service; tsc accepts it
           idbConstants: indexedDb.constants(),
         });
       }
@@ -121,6 +123,7 @@ export class Services implements ServicesInterface {
       viewServer = await ViewServer.initialize({
         fullViewingKey,
         getStoredTree: () => indexedDb.getStateCommitmentTree(),
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- indexedDb.constants() resolves as error-typed under eslint's project service; tsc accepts it
         idbConstants: indexedDb.constants(),
       });
     }

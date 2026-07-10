@@ -22,7 +22,9 @@ export const PasswordsPage = () => {
   const [generating, setGenerating] = useState(false);
 
   const generate = useCallback(async () => {
-    if (!origin.trim() || !keyInfo) return;
+    if (!origin.trim() || !keyInfo) {
+      return;
+    }
     setGenerating(true);
     try {
       const mnemonic = await getMnemonic(keyInfo.id);
@@ -42,7 +44,9 @@ export const PasswordsPage = () => {
   }, [origin, username, length, keyInfo, getMnemonic]);
 
   const copy = () => {
-    if (!password) return;
+    if (!password) {
+      return;
+    }
     void navigator.clipboard.writeText(password);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);

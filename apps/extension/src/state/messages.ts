@@ -148,7 +148,9 @@ export const createMessagesSlice =
         const persisted = (await local.get('messages' as keyof LocalStorageState)) as
           | Message[]
           | undefined;
-        if (!Array.isArray(persisted) || persisted.length === 0) return;
+        if (!Array.isArray(persisted) || persisted.length === 0) {
+          return;
+        }
         let touched = false;
         for (const m of persisted) {
           if (
@@ -208,7 +210,9 @@ export const createMessagesSlice =
         };
 
         set(state => {
-          if (!Array.isArray(state.messages.messages)) state.messages.messages = [];
+          if (!Array.isArray(state.messages.messages)) {
+            state.messages.messages = [];
+          }
           state.messages.messages.push(message);
         });
 
@@ -222,10 +226,14 @@ export const createMessagesSlice =
           .filter(m => !existingTxIds.has(m.txId))
           .map(m => ({ ...m, id: generateId() }));
 
-        if (newMessages.length === 0) return;
+        if (newMessages.length === 0) {
+          return;
+        }
 
         set(state => {
-          if (!Array.isArray(state.messages.messages)) state.messages.messages = [];
+          if (!Array.isArray(state.messages.messages)) {
+            state.messages.messages = [];
+          }
           state.messages.messages.push(...newMessages);
         });
 
@@ -250,7 +258,9 @@ export const createMessagesSlice =
         };
 
         set(state => {
-          if (!Array.isArray(state.messages.messages)) state.messages.messages = [];
+          if (!Array.isArray(state.messages.messages)) {
+            state.messages.messages = [];
+          }
           state.messages.messages.push(message);
         });
         await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
@@ -273,7 +283,9 @@ export const createMessagesSlice =
         set(state => {
           const list = Array.isArray(state.messages.messages) ? state.messages.messages : [];
           const msg = list.find(m => m.txId === txId);
-          if (msg) msg.status = 'pending';
+          if (msg) {
+            msg.status = 'pending';
+          }
         });
         await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
       },

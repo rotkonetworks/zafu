@@ -222,11 +222,8 @@ describe('identifyTransactions', () => {
     const spentNullifiers = new Map<Nullifier, SpendableNoteRecord | SwapRecord>();
     const commitmentRecords = new Map<StateCommitment, SpendableNoteRecord | SwapRecord>();
 
-    const result = await identifyTransactions(
-      spentNullifiers,
-      commitmentRecords,
-      blockTx,
-      async () => false,
+    const result = await identifyTransactions(spentNullifiers, commitmentRecords, blockTx, () =>
+      Promise.resolve(false),
     );
 
     expect(result.relevantTxs).toEqual([]);
@@ -288,7 +285,7 @@ describe('identifyTransactions', () => {
         tx1, // relevant
         tx2, // irrelevant
       ],
-      async () => false,
+      () => Promise.resolve(false),
     );
 
     expect(result.relevantTxs.length).toBe(1);
@@ -358,7 +355,7 @@ describe('identifyTransactions', () => {
         tx1, // relevant
         tx2, // not
       ],
-      async () => false,
+      () => Promise.resolve(false),
     );
 
     expect(result.relevantTxs.length).toBe(1);
@@ -379,8 +376,8 @@ describe('identifyTransactions', () => {
       'penumbra1e8k5cyds484dxvapeamwveh5khqv4jsvyvaf5wwxaaccgfghm229qw03pcar3ryy8smptevstycch0qk3uu0rgkvtjpxy3cu3rjd0agawqtlz6erev28a6sg69u7cxy0t02nd4';
     const unknownAddr =
       'penumbracompat1147mfall0zr6am5r45qkwht7xqqrdsp50czde7empv7yq2nk3z8yyfh9k9520ddgswkmzar22vhz9dwtuem7uxw0qytfpv7lk3q9dp8ccaw2fn5c838rfackazmgf3ahhwqq0da';
-    const isControlledByAddress = async (addr: Address) =>
-      addr.equals(new Address(addressFromBech32m(knownAddr)));
+    const isControlledByAddress = (addr: Address) =>
+      Promise.resolve(addr.equals(new Address(addressFromBech32m(knownAddr))));
 
     test('identifies relevant MsgRecvPacket', async () => {
       const txA = new Transaction({

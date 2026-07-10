@@ -37,7 +37,9 @@ export const withDedup =
     return async function* dedup(walletId, ctx) {
       for await (const snap of inner(walletId, ctx)) {
         const key = fingerprint(snap);
-        if (key === lastKey) continue;
+        if (key === lastKey) {
+          continue;
+        }
         lastKey = key;
         yield snap;
       }

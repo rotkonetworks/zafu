@@ -15,9 +15,15 @@
  * without pulling in a generic CBOR decoder.
  */
 export function unwrapCborSinglePczt(cbor: Uint8Array): Uint8Array {
-  if (cbor.length < 3) throw new Error('CBOR PCZT envelope too short');
-  if (cbor[0] !== 0xa1) throw new Error('expected CBOR map(1) at offset 0');
-  if (cbor[1] !== 0x01) throw new Error('expected CBOR key 1 at offset 1');
+  if (cbor.length < 3) {
+    throw new Error('CBOR PCZT envelope too short');
+  }
+  if (cbor[0] !== 0xa1) {
+    throw new Error('expected CBOR map(1) at offset 0');
+  }
+  if (cbor[1] !== 0x01) {
+    throw new Error('expected CBOR key 1 at offset 1');
+  }
   let pos = 2;
   const tag = cbor[pos++]!;
 
@@ -34,7 +40,9 @@ export function unwrapCborSinglePczt(cbor: Uint8Array): Uint8Array {
       throw new Error(`CBOR length header truncated (need ${nBytes} bytes)`);
     }
     let v = 0;
-    for (let i = 0; i < nBytes; i++) v = v * 256 + cbor[pos++]!;
+    for (let i = 0; i < nBytes; i++) {
+      v = v * 256 + cbor[pos++]!;
+    }
     return v;
   };
 

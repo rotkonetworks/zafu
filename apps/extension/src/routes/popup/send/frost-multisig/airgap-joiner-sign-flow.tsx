@@ -88,10 +88,12 @@ export function FrostAirgapJoinerSignFlow({
         s.roomCode,
         s.participantId,
         event => {
-          if (event.type !== 'message') return;
+          if (event.type !== 'message') {
+            return;
+          }
           const text = new TextDecoder().decode(event.message.payload);
-          const sg = text.match(
-            /^SIGN:([0-9a-fA-F]+):([^:]+):([^:]+):(\d+):(\d+)(?::([0-9a-fA-F]+))?$/,
+          const sg = /^SIGN:([0-9a-fA-F]+):([^:]+):([^:]+):(\d+):(\d+)(?::([0-9a-fA-F]+))?$/.exec(
+            text,
           );
           if (sg && !signSeen) {
             signSeen = true;
@@ -144,7 +146,7 @@ export function FrostAirgapJoinerSignFlow({
             }
             return;
           }
-          const cm = text.match(/^C:([\s\S]*)$/);
+          const cm = /^C:([\s\S]*)$/.exec(text);
           if (cm) {
             peerCommitsRawRef.current.push(cm[1]!);
             setPeersReady(peerCommitsRawRef.current.length);
@@ -161,18 +163,21 @@ export function FrostAirgapJoinerSignFlow({
       sessionRef.current?.abort.abort();
       sessionRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const session = () => {
     const s = sessionRef.current;
-    if (!s) throw new Error('relay session lost');
+    if (!s) {
+      throw new Error('relay session lost');
+    }
     return s;
   };
 
   // user approved review → build trigger1 and show to zigner.
   const approve = () => {
-    if (!tx) return;
+    if (!tx) {
+      return;
+    }
     const trigger = JSON.stringify({
       frost: 'sign1',
       publicKeyPackage: ms.publicKeyPackage,
@@ -196,7 +201,9 @@ export function FrostAirgapJoinerSignFlow({
   // C: bundles, then bundle per-action and build trigger2.
   const handleR1Response = async (raw: string) => {
     try {
-      if (!tx) throw new Error('no tx context');
+      if (!tx) {
+        throw new Error('no tx context');
+      }
       const json = JSON.parse(raw);
       if (json.frost !== 'sign1-resp' || !Array.isArray(json.commitments)) {
         throw new Error('unexpected zigner response — expected sign1-resp');
@@ -205,7 +212,7 @@ export function FrostAirgapJoinerSignFlow({
       setStep('r1-relay');
 
       const s = session();
-      await sendCommitments(s, zignerCommitsRef.current!);
+      await sendCommitments(s, zignerCommitsRef.current);
 
       // wait for threshold-1 peer commitment bundles (host + any other joiners).
       await waitFor(() => peerCommitsRawRef.current.length >= ms.threshold - 1, 300_000);
@@ -242,7 +249,9 @@ export function FrostAirgapJoinerSignFlow({
   // zigner returned shares → publish each via S:i:share, hand off to wrapper.
   const handleR2Response = async (raw: string) => {
     try {
-      if (!tx) throw new Error('no tx context');
+      if (!tx) {
+        throw new Error('no tx context');
+      }
       const json = JSON.parse(raw);
       if (json.frost !== 'sign2-resp' || !Array.isArray(json.shares)) {
         throw new Error('unexpected zigner response — expected sign2-resp');

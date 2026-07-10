@@ -38,12 +38,14 @@ export const SignApproval = () => {
   const [password, setPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [previewAddress, setPreviewAddress] = useState<string | null>(null);
-  const [signingMode, setSigningMode] = useState<string>('site #0');
+  const [signingMode, setSigningMode] = useState('site #0');
   const [pref, setPref] = useState<ZidSitePreference | undefined>();
 
   // resolve preview address and signing preference
   useEffect(() => {
-    if (!origin) return;
+    if (!origin) {
+      return;
+    }
     void (async () => {
       const prefs = await localExtStorage.get('zidPreferences');
       const raw = prefs?.[origin] as Partial<ZidSitePreference> | undefined;
@@ -60,8 +62,11 @@ export const SignApproval = () => {
 
       // zigner wallet: use stored pubkey for preview
       if (isAirgap) {
-        if (zidPubkey) setPreviewAddress('zid' + zidPubkey.slice(0, 16));
-        else setPreviewAddress(null);
+        if (zidPubkey) {
+          setPreviewAddress('zid' + zidPubkey.slice(0, 16));
+        } else {
+          setPreviewAddress(null);
+        }
         return;
       }
 
@@ -74,7 +79,9 @@ export const SignApproval = () => {
         return;
       }
 
-      if (!keyInfo) return;
+      if (!keyInfo) {
+        return;
+      }
       try {
         const mnemonic = await getMnemonic(keyInfo.id);
         const zidIndex = await getZidIndex();
@@ -88,7 +95,9 @@ export const SignApproval = () => {
 
   // mnemonic: sign after password verification
   const signWithMnemonic = useCallback(async () => {
-    if (!keyInfo || !challengeHex || !origin) return;
+    if (!keyInfo || !challengeHex || !origin) {
+      return;
+    }
     setStep('signing');
 
     try {
@@ -155,7 +164,9 @@ export const SignApproval = () => {
     window.close();
   };
 
-  if (!origin) return null;
+  if (!origin) {
+    return null;
+  }
 
   // build challenge QR data for zigner
   const challengeQr = isAirgap
@@ -245,7 +256,9 @@ export const SignApproval = () => {
               value={password}
               onChange={e => setPassword(e.target.value)}
               onKeyDown={e => {
-                if (e.key === 'Enter') void handlePasswordSubmit();
+                if (e.key === 'Enter') {
+                  void handlePasswordSubmit();
+                }
               }}
               className='w-full rounded-lg border border-border-soft bg-elev-2 p-3 text-sm outline-none focus:border-foreground/40'
               placeholder='password'
@@ -328,7 +341,9 @@ export const SignApproval = () => {
 /* ── QR canvas for challenge display ── */
 const QrCanvas = ({ data, size }: { data: string; size: number }) => {
   const ref = (canvas: HTMLCanvasElement | null) => {
-    if (!canvas || !data) return;
+    if (!canvas || !data) {
+      return;
+    }
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const QRCode = require('qrcode');

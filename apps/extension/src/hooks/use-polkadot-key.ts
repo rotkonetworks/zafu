@@ -13,7 +13,7 @@ import { selectEffectiveKeyInfo } from '../state/keyring';
 export function usePolkadotPublicKey() {
   // Use effective key info for current network (will be polkadot zigner when viewing polkadot)
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
-  const [publicKey, setPublicKey] = useState<string>('');
+  const [publicKey, setPublicKey] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -46,8 +46,12 @@ export function usePolkadotPublicKey() {
               // Note: For watch-only display, we can store the ss58 address in insensitive
               const ss58Address = vault.insensitive?.['polkadotSs58'] as string | undefined;
               if (ss58Address) {
-                if (!cancelled) setPublicKey(ss58Address);
-                if (!cancelled) setLoading(false);
+                if (!cancelled) {
+                  setPublicKey(ss58Address);
+                }
+                if (!cancelled) {
+                  setLoading(false);
+                }
                 return;
               }
             }
@@ -59,7 +63,9 @@ export function usePolkadotPublicKey() {
           | string
           | undefined;
         if (polkadotKey) {
-          if (!cancelled) setPublicKey(polkadotKey);
+          if (!cancelled) {
+            setPublicKey(polkadotKey);
+          }
         } else {
           // fallback: check vault storage directly
           const vaults = await localExtStorage.get('vaults');
@@ -67,14 +73,20 @@ export function usePolkadotPublicKey() {
           const storedKey = vault?.insensitive?.['polkadotPublicKey'] as string | undefined;
           const storedSs58 = vault?.insensitive?.['polkadotSs58'] as string | undefined;
 
-          if (!cancelled) setPublicKey(storedKey ?? storedSs58 ?? '');
+          if (!cancelled) {
+            setPublicKey(storedKey ?? storedSs58 ?? '');
+          }
         }
       } catch (err) {
         console.error('failed to load polkadot key:', err);
-        if (!cancelled) setPublicKey('');
+        if (!cancelled) {
+          setPublicKey('');
+        }
       }
 
-      if (!cancelled) setLoading(false);
+      if (!cancelled) {
+        setLoading(false);
+      }
     };
 
     void loadPublicKey();

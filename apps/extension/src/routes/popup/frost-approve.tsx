@@ -20,23 +20,26 @@ import {
   frostSignRound1InWorker,
   frostSpendSignInWorker,
 } from '../../state/keyring/network-worker';
-
-interface PokerPayoutOutput {
-  address: string;
-  amount_zat: number;
-}
 import { encodeOrchardUnifiedAddress } from '@repo/wallet/networks/zcash/unified-address';
 import { hexToBytes } from '@repo/wallet/networks';
 import { FrostRelayClient } from '../../state/keyring/frost-relay-client';
 import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../state/frost-session';
 import { usePasswordGate } from '../../hooks/password-gate';
 
+interface PokerPayoutOutput {
+  address: string;
+  amount_zat: number;
+}
+
 type Phase = 'confirm' | 'running' | 'complete' | 'error';
 
 /** wait for condition with timeout */
 function waitFor(check: () => boolean, timeoutMs: number): Promise<void> {
   return new Promise((resolve, reject) => {
-    if (check()) return resolve();
+    if (check()) {
+      resolve();
+      return;
+    }
     const start = Date.now();
     const iv = setInterval(() => {
       if (check()) {
@@ -153,8 +156,11 @@ export const FrostApprove = () => {
       event => {
         if (event.type === 'message') {
           const text = new TextDecoder().decode(event.message.payload);
-          if (dkgPhase === 'round1') peerBroadcasts.push(text);
-          else if (dkgPhase === 'round2') peerRound2.push(text);
+          if (dkgPhase === 'round1') {
+            peerBroadcasts.push(text);
+          } else if (dkgPhase === 'round2') {
+            peerRound2.push(text);
+          }
         }
       },
       abort.signal,
@@ -179,6 +185,9 @@ export const FrostApprove = () => {
     await newFrostMultisigKey({
       label: `${threshold}-of-${maxSigners} (${app})`,
       address: addr,
+      // dapp-initiated ceremonies predate the sk-broadcast/FVK-echo protocol,
+      // so no group viewing key is available to store here
+      orchardFvk: '',
       keyPackage: round3.key_package,
       publicKeyPackage: round3.public_key_package,
       ephemeralSeed: round3.ephemeral_seed,
@@ -221,11 +230,13 @@ export const FrostApprove = () => {
         if (event.type === 'message') {
           const text = new TextDecoder().decode(event.message.payload);
           // coordinator's first message has DKG params prefix
-          const match = text.match(/^DKG:(\d+):(\d+):([\s\S]*)$/);
+          const match = /^DKG:(\d+):(\d+):([\s\S]*)$/.exec(text);
           if (match) {
             parsedThreshold = Number(match[1]);
             parsedMaxSigners = Number(match[2]);
-            if (dkgPhase === 'round1') peerBroadcasts.push(match[3]!);
+            if (dkgPhase === 'round1') {
+              peerBroadcasts.push(match[3]!);
+            }
           } else if (dkgPhase === 'round1') {
             peerBroadcasts.push(text);
           } else if (dkgPhase === 'round2') {
@@ -261,6 +272,9 @@ export const FrostApprove = () => {
     await newFrostMultisigKey({
       label: `${parsedThreshold}-of-${parsedMaxSigners} (${app})`,
       address: addr,
+      // dapp-initiated ceremonies predate the sk-broadcast/FVK-echo protocol,
+      // so no group viewing key is available to store here
+      orchardFvk: '',
       keyPackage: round3.key_package,
       publicKeyPackage: round3.public_key_package,
       ephemeralSeed: round3.ephemeral_seed,
@@ -298,7 +312,7 @@ export const FrostApprove = () => {
       event => {
         if (event.type === 'message') {
           const text = new TextDecoder().decode(event.message.payload);
-          const r1 = text.match(/^R1:(?:(\d+):(\d+):SK:([0-9a-fA-F]{64}):)?([\s\S]*)$/);
+          const r1 = /^R1:(?:(\d+):(\d+):SK:([0-9a-fA-F]{64}):)?([\s\S]*)$/.exec(text);
           if (r1) {
             if (r1[1] && r1[2] && r1[3]) {
               parsedThreshold = Number(r1[1]);
@@ -308,12 +322,12 @@ export const FrostApprove = () => {
             peerBroadcasts.push(r1[4]!);
             return;
           }
-          const r2 = text.match(/^R2:([\s\S]*)$/);
+          const r2 = /^R2:([\s\S]*)$/.exec(text);
           if (r2) {
             peerRound2.push(r2[1]!);
             return;
           }
-          const fvk = text.match(/^FVK:([\s\S]*)$/);
+          const fvk = /^FVK:([\s\S]*)$/.exec(text);
           if (fvk) {
             peerFvks.push(fvk[1]!);
             return;
@@ -388,7 +402,9 @@ export const FrostApprove = () => {
   };
 
   const runSign = async () => {
-    if (!multisigVault) throw new Error('no multisig wallet found');
+    if (!multisigVault) {
+      throw new Error('no multisig wallet found');
+    }
 
     // wallet-password gate before unsealing the FROST share. Mirrors
     // runPokerSign — session-unlock alone is not enough to release the
@@ -405,7 +421,9 @@ export const FrostApprove = () => {
     const abort = new AbortController();
     const relay = new FrostRelayClient(relayUrl);
     const secrets = await getMultisigSecrets(multisigVault.id);
-    if (!secrets) throw new Error('failed to decrypt multisig secrets');
+    if (!secrets) {
+      throw new Error('failed to decrypt multisig secrets');
+    }
 
     setStatus('joining signing session...');
 
@@ -479,7 +497,9 @@ export const FrostApprove = () => {
     const vault = sanitizedLabel
       ? keyInfos.find(k => k.type === 'frost-multisig' && k.name?.startsWith(sanitizedLabel))
       : multisigVault;
-    if (!vault) throw new Error('no matching multisig wallet found');
+    if (!vault) {
+      throw new Error('no matching multisig wallet found');
+    }
 
     // wallet-password gate before unsealing the FROST share
     setStatus('awaiting wallet password...');
@@ -493,7 +513,9 @@ export const FrostApprove = () => {
     const abort = new AbortController();
     const relay = new FrostRelayClient(relayUrl);
     const secrets = await getMultisigSecrets(vault.id);
-    if (!secrets) throw new Error('failed to decrypt multisig secrets');
+    if (!secrets) {
+      throw new Error('failed to decrypt multisig secrets');
+    }
 
     setStatus(`joining payout room ${roomCode}...`);
     const pid = new Uint8Array(32);
@@ -508,22 +530,24 @@ export const FrostApprove = () => {
       roomCode,
       pid,
       event => {
-        if (event.type !== 'message') return;
+        if (event.type !== 'message') {
+          return;
+        }
         const text = new TextDecoder().decode(event.message.payload);
-        const sg = text.match(
-          /^SIGN:([0-9a-fA-F]+):([^:]+):([^:]+):(\d+):(\d+)(?::([0-9a-fA-F]+))?$/,
+        const sg = /^SIGN:([0-9a-fA-F]+):([^:]+):([^:]+):(\d+):(\d+)(?::([0-9a-fA-F]+))?$/.exec(
+          text,
         );
         if (sg) {
           initSighash = sg[1]!;
           initAlphas = sg[2]!.split(',');
           return;
         }
-        const cm = text.match(/^C:([\s\S]*)$/);
+        const cm = /^C:([\s\S]*)$/.exec(text);
         if (cm) {
           peerCommits.push(cm[1]!);
           return;
         }
-        const sm = text.match(/^S:(\d+):(.+)$/);
+        const sm = /^S:(\d+):(.+)$/.exec(text);
         if (sm) {
           peerShares[Number(sm[1])] = sm[2]!;
         }

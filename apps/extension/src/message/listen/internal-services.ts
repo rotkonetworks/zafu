@@ -110,7 +110,9 @@ export const internalServiceListener = (
     })()
       .then(() => respond())
       .finally(() => {
-        if (!soft) chrome.runtime.reload();
+        if (!soft) {
+          chrome.runtime.reload();
+        }
       });
     return true;
   }

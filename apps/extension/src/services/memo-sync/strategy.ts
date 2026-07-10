@@ -83,7 +83,7 @@ export function buildStrategy(name: MemoSyncStrategy, params: StrategyParams): M
  */
 function compose(
   base: MemoFetcher,
-  filters: ReadonlyArray<(f: MemoFetcher) => MemoFetcher>,
+  filters: readonly ((f: MemoFetcher) => MemoFetcher)[],
 ): MemoFetcher {
   return filters.reduce((acc, filter) => filter(acc), base);
 }

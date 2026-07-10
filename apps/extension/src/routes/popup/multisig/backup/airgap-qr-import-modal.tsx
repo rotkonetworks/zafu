@@ -50,7 +50,9 @@ export const AirgapQrImportModal = ({ open, onClose, onImported }: Props) => {
     }
   }, [open]);
 
-  if (!open) return null;
+  if (!open) {
+    return null;
+  }
 
   const handleScan = (data: Uint8Array) => {
     try {
@@ -76,7 +78,9 @@ export const AirgapQrImportModal = ({ open, onClose, onImported }: Props) => {
   };
 
   const handleConfirm = async () => {
-    if (!payload) return;
+    if (!payload) {
+      return;
+    }
     setError(null);
     setWorking(true);
     try {

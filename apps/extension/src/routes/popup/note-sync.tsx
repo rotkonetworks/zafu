@@ -96,7 +96,7 @@ export const NoteSyncPage = () => {
         </div>
       )}
 
-      {step === 'display' && encoded && encoded.noteCount === 0 && (
+      {step === 'display' && encoded?.noteCount === 0 && (
         <div className='rounded-lg border border-border-soft bg-elev-1 p-3 text-xs text-fg-muted'>
           no spendable notes - sync the wallet first
         </div>

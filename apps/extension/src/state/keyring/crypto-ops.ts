@@ -20,7 +20,9 @@ export interface CryptoCtx {
 /** get the current encryption key from session, or throw */
 export const requireKey = async (ctx: CryptoCtx): Promise<Key> => {
   const keyJson = await ctx.session.get('passwordKey');
-  if (!keyJson) throw new Error('keyring locked');
+  if (!keyJson) {
+    throw new Error('keyring locked');
+  }
   return Key.fromJson(keyJson);
 };
 
@@ -36,7 +38,9 @@ export const decryptVault = async (ctx: CryptoCtx, vault: EncryptedVault): Promi
   const key = await requireKey(ctx);
   const box = Box.fromJson(JSON.parse(vault.encryptedData));
   const decrypted = await key.unseal(box);
-  if (!decrypted) throw new Error('failed to decrypt vault');
+  if (!decrypted) {
+    throw new Error('failed to decrypt vault');
+  }
   return decrypted;
 };
 
@@ -50,7 +54,9 @@ export const createMasterKey = async (password: string) => {
 /** recreate master key from password + keyprint. returns null on wrong password */
 export const recreateMasterKey = async (password: string, keyPrintJson: KeyPrintJson) => {
   const key = await Key.recreate(password, KeyPrint.fromJson(keyPrintJson));
-  if (!key) return null;
+  if (!key) {
+    return null;
+  }
   const keyJson = await key.toJson();
   return { key, keyJson };
 };
@@ -63,7 +69,9 @@ export const reencryptVault = async (
 ): Promise<EncryptedVault> => {
   const oldBox = Box.fromJson(JSON.parse(vault.encryptedData));
   const decrypted = await oldKey.unseal(oldBox);
-  if (!decrypted) throw new Error(`failed to decrypt vault ${vault.id}`);
+  if (!decrypted) {
+    throw new Error(`failed to decrypt vault ${vault.id}`);
+  }
 
   const newBox = await newKey.seal(decrypted);
   const newInsensitive = { ...vault.insensitive };
@@ -87,8 +95,8 @@ export const decryptMultisigSecrets = async (
   }
   const key = await requireKey(ctx);
   return {
-    keyPackage: (await key.unseal(Box.fromJson(keyPackage as BoxJson))) as string,
-    ephemeralSeed: (await key.unseal(Box.fromJson(ephemeralSeed as BoxJson))) as string,
+    keyPackage: (await key.unseal(Box.fromJson(keyPackage as BoxJson)))!,
+    ephemeralSeed: (await key.unseal(Box.fromJson(ephemeralSeed as BoxJson)))!,
   };
 };
 

@@ -36,7 +36,9 @@ export function QrDisplay({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!canvasRef.current || !data) return;
+    if (!canvasRef.current || !data) {
+      return;
+    }
 
     // Convert hex string to binary bytes for more efficient QR encoding.
     // Binary mode fits ~2900 bytes per QR vs ~1800 for alphanumeric text.

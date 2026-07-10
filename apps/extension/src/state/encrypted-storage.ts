@@ -24,7 +24,9 @@ export const isEncryptedWrapper = (v: unknown): v is EncryptedWrapper =>
 
 async function getKey(session: ExtensionStorage<SessionStorageState>): Promise<Key | null> {
   const keyJson = await session.get('passwordKey');
-  if (!keyJson) return null;
+  if (!keyJson) {
+    return null;
+  }
   return Key.fromJson(keyJson);
 }
 
@@ -49,7 +51,9 @@ export function markHydrated(): void {
 
 /** wait until hydration is complete before allowing writes */
 function waitForHydration(): Promise<void> {
-  if (hydratedKeys.has('*')) return Promise.resolve();
+  if (hydratedKeys.has('*')) {
+    return Promise.resolve();
+  }
   if (!hydratePromise) {
     hydratePromise = new Promise(r => {
       hydrateResolve = r;
@@ -65,14 +69,22 @@ export async function readEncrypted<T>(
   storageKey: keyof LocalStorageState,
 ): Promise<T | null> {
   const raw = await local.get(storageKey);
-  if (!raw) return null;
+  if (!raw) {
+    return null;
+  }
 
-  if (!isEncryptedWrapper(raw)) return null; // not encrypted  - ignore stale data
+  if (!isEncryptedWrapper(raw)) {
+    return null;
+  } // not encrypted  - ignore stale data
 
   const key = await getKey(session);
-  if (!key) return null; // locked  - can't decrypt
+  if (!key) {
+    return null;
+  } // locked  - can't decrypt
   const plaintext = await key.unseal(Box.fromJson(raw.encrypted));
-  if (!plaintext) return null;
+  if (!plaintext) {
+    return null;
+  }
   return JSON.parse(plaintext) as T;
 }
 
@@ -129,7 +141,7 @@ export function createEncryptedLocal(
     get: async <K extends keyof LocalStorageState>(key: K) => {
       if (isEncryptedKey(key as string)) {
         const result = await readEncrypted<LocalStorageState[K]>(local, session, key);
-        return result as LocalStorageState[K];
+        return result!;
       }
       return local.get(key);
     },

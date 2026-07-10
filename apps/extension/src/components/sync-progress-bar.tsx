@@ -43,7 +43,9 @@ export const SyncProgressBar = ({
   const [editing, setEditing] = useState(false);
   const [input, setInput] = useState('');
 
-  if (done) return null;
+  if (done) {
+    return null;
+  }
 
   const submitRescan = () => {
     const h = parseInt(input, 10);
@@ -114,8 +116,9 @@ export const SyncProgressBar = ({
                   className='w-20 bg-elev-2 px-1.5 py-0.5 text-[10px] font-mono text-fg placeholder:text-fg-muted outline-none'
                   autoFocus
                   onKeyDown={e => {
-                    if (e.key === 'Enter') submitRescan();
-                    else if (e.key === 'Escape') {
+                    if (e.key === 'Enter') {
+                      submitRescan();
+                    } else if (e.key === 'Escape') {
                       setEditing(false);
                       setInput('');
                     }

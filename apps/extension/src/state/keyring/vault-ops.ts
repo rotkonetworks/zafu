@@ -41,9 +41,15 @@ export const buildMnemonicVault = (
 
 export const zignerSupportedNetworks = (data: ZignerZafuImport): string[] => {
   const networks: string[] = [];
-  if (data.fullViewingKey) networks.push('penumbra');
-  if (data.viewingKey) networks.push('zcash');
-  if (data.polkadotSs58) networks.push('polkadot');
+  if (data.fullViewingKey) {
+    networks.push('penumbra');
+  }
+  if (data.viewingKey) {
+    networks.push('zcash');
+  }
+  if (data.polkadotSs58) {
+    networks.push('polkadot');
+  }
   if (data.cosmosAddresses?.length) {
     for (const addr of data.cosmosAddresses) {
       if (!networks.includes(addr.chainId)) {
@@ -161,7 +167,9 @@ export const buildFrostZcashWallet = (
 
 export const mergeEnabledNetworks = (current: NetworkType[], toAdd: string[]): NetworkType[] => {
   const set = new Set<string>(current);
-  for (const n of toAdd) set.add(n);
+  for (const n of toAdd) {
+    set.add(n);
+  }
   return [...set] as NetworkType[];
 };
 
@@ -170,14 +178,20 @@ export const selectionAfterDelete = (
   deletedId: string,
   currentSelectedId: string | undefined,
 ): string | undefined => {
-  if (currentSelectedId !== deletedId) return currentSelectedId;
+  if (currentSelectedId !== deletedId) {
+    return currentSelectedId;
+  }
   return remainingVaults[0]?.id;
 };
 
 export const keyInfoSupportsNetwork = (k: KeyInfo, network: NetworkType): boolean => {
-  if (k.type === 'mnemonic') return true;
+  if (k.type === 'mnemonic') {
+    return true;
+  }
   const supported = k.insensitive['supportedNetworks'] as string[] | undefined;
-  if (!supported) return true;
+  if (!supported) {
+    return true;
+  }
   return supported.includes(network);
 };
 

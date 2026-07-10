@@ -56,7 +56,6 @@ const extensionOrigin =
 // raced the ISOLATED script (shouldn't happen given manifest order),
 // or the ISOLATED script saw an orphaned chrome.runtime.id.
 if (!extensionOrigin) {
-  // eslint-disable-next-line no-console
   console.debug('[zafu] skipping penumbra provider injection: extension origin unavailable');
 } else {
   class ZafuInjection {

@@ -62,9 +62,8 @@ import { shouldSkipTrialDecrypt } from './helpers/skip-trial-decrypt';
 import { assetIdFromBaseDenom } from '@rotko/penumbra-wasm/asset';
 
 declare global {
-  // eslint-disable-next-line no-var -- expected globals
   var __DEV__: boolean | undefined;
-  // eslint-disable-next-line no-var -- expected globals
+
   var __ASSERT_ROOT__: boolean | undefined;
 }
 
@@ -252,6 +251,8 @@ export class BlockProcessor implements BlockProcessorInterface {
         }
       }
 
+      /* eslint-disable @typescript-eslint/no-deprecated -- fixedFmdParams is
+         deprecated upstream but still what the node serves */
       if (appParams.shieldedPoolParams?.fixedFmdParams) {
         await this.indexedDb.saveFmdParams(
           new FmdParameters({
@@ -260,6 +261,7 @@ export class BlockProcessor implements BlockProcessorInterface {
           }),
         );
       }
+      /* eslint-enable @typescript-eslint/no-deprecated -- end of fixedFmdParams block */
 
       // Finally, persist the frontier to IndexedDB.
       const flush = this.viewServer.flushUpdates();
@@ -522,7 +524,7 @@ export class BlockProcessor implements BlockProcessorInterface {
     // We do not store historical prices,
     // so there is no point in saving prices that would already be considered obsolete at the time of saving
     const blockInPriceRelevanceThreshold =
-      compactBlock.height >= latestKnownBlockHeight - BigInt(PRICE_RELEVANCE_THRESHOLDS.default);
+      compactBlock.height >= latestKnownBlockHeight - PRICE_RELEVANCE_THRESHOLDS.default;
 
     // we can't use third-party price oracles for privacy reasons,
     // so we have to get asset prices from swap results during block scans

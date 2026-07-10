@@ -38,7 +38,7 @@ export const NewFrontendInput = forwardRef<HTMLInputElement, NewFrontendInputPro
     const inputRef = useRef<HTMLInputElement | null>(null);
     const customValue = defaultFrontend && selected ? defaultFrontend : '';
 
-    const [customFrontend, setCustomFrontend] = useState<string>(customValue);
+    const [customFrontend, setCustomFrontend] = useState(customValue);
     const isError = !isValidAndNotInitial(customFrontend, defaultFrontend);
 
     const onBlur: FocusEventHandler<HTMLInputElement> = () => {

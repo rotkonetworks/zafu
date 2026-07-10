@@ -28,7 +28,7 @@ import type { BucketStart, FetchContext, MemoEvent, MemoFetcher } from './types'
 export interface BlockRangeClient {
   getBlockTransactions(height: number): Promise<{
     height: number;
-    txs: Array<{ data: Uint8Array; height: number }>;
+    txs: { data: Uint8Array; height: number }[];
   }>;
 }
 
@@ -52,14 +52,18 @@ export function blockRangeFetcher(
 
   return async function* (_walletId, ownedBuckets, ctx) {
     const buckets = [...ownedBuckets];
-    if (buckets.length === 0) return;
+    if (buckets.length === 0) {
+      return;
+    }
 
     const concurrency = Math.max(1, ctx.concurrency ?? DEFAULT_CONCURRENCY);
     const maxHeight = opts.maxHeight ?? ctx.tip;
     let completed = 0;
 
     for (let i = 0; i < buckets.length; i += concurrency) {
-      if (ctx.signal.aborted) return;
+      if (ctx.signal.aborted) {
+        return;
+      }
       const batch = buckets.slice(i, i + concurrency);
       const results = await Promise.all(
         batch.map(bucket => fetchOne(client, bucket, bucketSize, maxHeight, ctx, onError)),
@@ -67,7 +71,9 @@ export function blockRangeFetcher(
       for (const ev of results) {
         completed += 1;
         ctx.onProgress?.(completed, buckets.length);
-        if (ev) yield ev;
+        if (ev) {
+          yield ev;
+        }
       }
     }
   };
@@ -86,7 +92,9 @@ async function fetchOne(
   const blocks: { height: number; txs: { data: Uint8Array }[] }[] = [];
 
   for (let h = start; h <= end; h++) {
-    if (ctx.signal.aborted) return null;
+    if (ctx.signal.aborted) {
+      return null;
+    }
     try {
       const { txs } = await client.getBlockTransactions(h);
       blocks.push({ height: h, txs: txs.map(({ data }) => ({ data })) });
@@ -104,6 +112,5 @@ async function fetchOne(
 }
 
 function defaultOnError(bucket: BucketStart, height: number, err: unknown) {
-  // eslint-disable-next-line no-console
   console.error(`[memo-sync] bucket ${bucket} block ${height}:`, err);
 }

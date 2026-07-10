@@ -32,7 +32,9 @@ export async function scheduleMultisigDelete(vaultId: string, deleteAt: number):
 export async function cancelScheduledDelete(vaultId: string): Promise<void> {
   const list = await getList();
   const filtered = list.filter(e => e.vaultId !== vaultId);
-  if (filtered.length !== list.length) await setList(filtered);
+  if (filtered.length !== list.length) {
+    await setList(filtered);
+  }
 }
 
 /** storage-only vault+wallet purge. mirrors deleteKeyRing's storage half without the zustand mutation */
@@ -69,7 +71,9 @@ export async function purgeVault(vaultId: string): Promise<void> {
 
 /** Resolve a multisig wallet by name prefix; picks the most recent if multiple match. */
 export async function findVaultByLabelPrefix(labelPrefix: string): Promise<string | null> {
-  if (!labelPrefix) return null;
+  if (!labelPrefix) {
+    return null;
+  }
   const vaults = ((await localExtStorage.get('vaults')) ?? []) as EncryptedVault[];
   const matches = vaults
     .filter(
@@ -83,10 +87,14 @@ export async function findVaultByLabelPrefix(labelPrefix: string): Promise<strin
 /** Scan scheduled-deletes and purge anything past its deleteAt. Safe to call from anywhere. */
 export async function sweepScheduledDeletes(): Promise<void> {
   const list = await getList();
-  if (list.length === 0) return;
+  if (list.length === 0) {
+    return;
+  }
   const now = Date.now();
   const expired = list.filter(e => e.deleteAt <= now);
-  if (expired.length === 0) return;
+  if (expired.length === 0) {
+    return;
+  }
   const remaining = list.filter(e => e.deleteAt > now);
   await setList(remaining);
   for (const e of expired) {

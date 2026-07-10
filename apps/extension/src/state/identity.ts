@@ -459,7 +459,9 @@ export const resolveZid = (
   zidIndex = 0,
 ): Zid => {
   const identity = rotatedIdentity(pref?.identity ?? DEFAULT_IDENTITY, zidIndex);
-  if (pref?.mode === 'cross-site') return deriveZidCrossSite(mnemonic, identity);
+  if (pref?.mode === 'cross-site') {
+    return deriveZidCrossSite(mnemonic, identity);
+  }
   return deriveZidForSite(mnemonic, identity, origin, pref?.rotation ?? 0);
 };
 

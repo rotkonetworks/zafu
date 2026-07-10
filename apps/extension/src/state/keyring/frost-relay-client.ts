@@ -41,7 +41,7 @@ export class FrostRelayClient {
   private onEvent: ((event: RoomEvent) => void) | null = null;
   private pendingEvents: RoomEvent[] = [];
   /** one-shot waiters consumed by createRoom/joinRoom handshakes */
-  private waiters: Array<(msg: Record<string, unknown>) => boolean> = [];
+  private waiters: ((msg: Record<string, unknown>) => boolean)[] = [];
 
   constructor(serverUrl: string) {
     // accept either https:// or wss:// — normalize to wss
@@ -57,7 +57,9 @@ export class FrostRelayClient {
 
   /** open WebSocket if not already connected */
   private connect(): Promise<void> {
-    if (this.ws?.readyState === WebSocket.OPEN) return Promise.resolve();
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      return Promise.resolve();
+    }
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(this.wsUrl);
       ws.onopen = () => {
@@ -77,7 +79,9 @@ export class FrostRelayClient {
           // resolving a waiter, which swallowed the joiner's own `joined`
           // event and left participantCount stuck at 0 in the UI.
           for (let i = this.waiters.length - 1; i >= 0; i--) {
-            if (this.waiters[i]!(msg)) this.waiters.splice(i, 1);
+            if (this.waiters[i]!(msg)) {
+              this.waiters.splice(i, 1);
+            }
           }
           this.dispatch(msg);
         } catch {
@@ -100,12 +104,15 @@ export class FrostRelayClient {
           sequence: 0,
         },
       };
-      if (this.onEvent) this.onEvent(event);
-      else this.pendingEvents.push(event);
+      if (this.onEvent) {
+        this.onEvent(event);
+      } else {
+        this.pendingEvents.push(event);
+      }
     } else if (t === 'joined') {
       // structured join event from the relay (sent both to the joiner and as
       // `system` text to existing participants).
-      const count = typeof msg['count'] === 'number' ? (msg['count'] as number) : 0;
+      const count = typeof msg['count'] === 'number' ? msg['count'] : 0;
       const event: RoomEvent = {
         type: 'joined',
         participant: {
@@ -114,14 +121,17 @@ export class FrostRelayClient {
           maxSigners: 0,
         },
       };
-      if (this.onEvent) this.onEvent(event);
-      else this.pendingEvents.push(event);
+      if (this.onEvent) {
+        this.onEvent(event);
+      } else {
+        this.pendingEvents.push(event);
+      }
     } else if (t === 'system') {
       // existing participants receive a system text "abc1... joined (N)"
       // when a peer joins. parse N out of the trailing parenthesized count.
       const text = (msg['text'] as string) || '';
       if (text.includes('joined')) {
-        const match = text.match(/\((\d+)\)/);
+        const match = /\((\d+)\)/.exec(text);
         const event: RoomEvent = {
           type: 'joined',
           participant: {
@@ -130,21 +140,30 @@ export class FrostRelayClient {
             maxSigners: 0,
           },
         };
-        if (this.onEvent) this.onEvent(event);
-        else this.pendingEvents.push(event);
+        if (this.onEvent) {
+          this.onEvent(event);
+        } else {
+          this.pendingEvents.push(event);
+        }
       } else if (
         text.includes('left') ||
         text.includes('disconnected') ||
         text.includes('closed')
       ) {
         const event: RoomEvent = { type: 'closed', reason: text };
-        if (this.onEvent) this.onEvent(event);
-        else this.pendingEvents.push(event);
+        if (this.onEvent) {
+          this.onEvent(event);
+        } else {
+          this.pendingEvents.push(event);
+        }
       }
     } else if (t === 'error') {
       const event: RoomEvent = { type: 'closed', reason: (msg['msg'] as string) || 'relay error' };
-      if (this.onEvent) this.onEvent(event);
-      else this.pendingEvents.push(event);
+      if (this.onEvent) {
+        this.onEvent(event);
+      } else {
+        this.pendingEvents.push(event);
+      }
     }
   }
 
@@ -154,7 +173,7 @@ export class FrostRelayClient {
       this.waiters.push(msg => {
         const result = predicate(msg);
         if (result !== false) {
-          resolve(result as T);
+          resolve(result);
           return true;
         }
         return false;
@@ -199,7 +218,9 @@ export class FrostRelayClient {
     this.onEvent = onEvent;
 
     // flush buffered events
-    for (const ev of this.pendingEvents) onEvent(ev);
+    for (const ev of this.pendingEvents) {
+      onEvent(ev);
+    }
     this.pendingEvents = [];
 
     if (this.joined && this.room === roomCode) {
@@ -240,7 +261,7 @@ export class FrostRelayClient {
     _senderId: Uint8Array,
     payload: Uint8Array,
   ): Promise<number> {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+    if (this.ws?.readyState !== WebSocket.OPEN) {
       throw new Error('frost relay: not connected');
     }
     const text = new TextDecoder().decode(payload);

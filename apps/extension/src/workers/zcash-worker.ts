@@ -17,9 +17,8 @@ import { buildStrategy } from '../services/memo-sync/strategy';
 import { idbBucketStore } from '../services/memo-sync/filters/cache';
 import { bucketOf, BUCKET_SIZE as MEMO_BUCKET_SIZE } from '../services/memo-sync/types';
 import type { BucketStart as MemoBucketStart, MemoSyncStrategy } from '../services/memo-sync/types';
-import { type ZcashBackend, type ZcashClient } from '../state/keyring/zcash-backend';
+import type { ZcashBackend, ZcashClient } from '../state/keyring/zcash-backend';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const workerSelf = globalThis as any as DedicatedWorkerGlobalScope;
 
 /**
@@ -370,13 +369,17 @@ const walletStates = new Map<string, WalletState>();
 
 const hexEncode = (b: Uint8Array): string => {
   let s = '';
-  for (let i = 0; i < b.length; i++) s += b[i]!.toString(16).padStart(2, '0');
+  for (let i = 0; i < b.length; i++) {
+    s += b[i]!.toString(16).padStart(2, '0');
+  }
   return s;
 };
 
 const hexDecode = (hex: string): Uint8Array => {
   const out = new Uint8Array(hex.length >> 1);
-  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
+  }
   return out;
 };
 
@@ -437,8 +440,11 @@ const waitForSyncStop = async (state: WalletState, timeoutMs = 2000): Promise<vo
     await new Promise<void>(resolve => {
       const start = Date.now();
       const check = () => {
-        if (!state.syncing || Date.now() - start > timeoutMs) resolve();
-        else setTimeout(check, 50);
+        if (!state.syncing || Date.now() - start > timeoutMs) {
+          resolve();
+        } else {
+          setTimeout(check, 50);
+        }
       };
       check();
     });
@@ -473,7 +479,9 @@ const base58checkDecode = (addr: string): Uint8Array | null => {
   let num = 0n;
   for (const c of addr) {
     const idx = BASE58_ALPHABET.indexOf(c);
-    if (idx < 0) return null;
+    if (idx < 0) {
+      return null;
+    }
     num = num * 58n + BigInt(idx);
   }
   // zcash t-addresses: 2-byte version + 20-byte hash + 4-byte checksum = 26 bytes
@@ -491,7 +499,9 @@ const base58checkDecode = (addr: string): Uint8Array | null => {
 /** read a compactSize uint from buf at offset, returns [value, newOffset] */
 const readCompactSize = (buf: Uint8Array, off: number): [number, number] => {
   const first = buf[off]!;
-  if (first < 0xfd) return [first, off + 1];
+  if (first < 0xfd) {
+    return [first, off + 1];
+  }
   if (first === 0xfd) {
     return [buf[off + 1]! | (buf[off + 2]! << 8), off + 3];
   }
@@ -508,7 +518,9 @@ const readCompactSize = (buf: Uint8Array, off: number): [number, number] => {
 /** read little-endian u64 as bigint */
 const readU64LE = (buf: Uint8Array, off: number): bigint => {
   let v = 0n;
-  for (let i = 0; i < 8; i++) v |= BigInt(buf[off + i]!) << BigInt(i * 8);
+  for (let i = 0; i < 8; i++) {
+    v |= BigInt(buf[off + i]!) << BigInt(i * 8);
+  }
   return v;
 };
 
@@ -576,7 +588,9 @@ const DB_VERSION = 3;
 let sharedDb: IDBDatabase | null = null;
 
 const getDb = (): Promise<IDBDatabase> => {
-  if (sharedDb) return Promise.resolve(sharedDb);
+  if (sharedDb) {
+    return Promise.resolve(sharedDb);
+  }
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onerror = () => reject(req.error);
@@ -588,7 +602,9 @@ const getDb = (): Promise<IDBDatabase> => {
       const db = req.result;
       const old = event.oldVersion;
       for (const name of ['notes', 'spent', 'meta'] as const) {
-        if (db.objectStoreNames.contains(name) && old < 2) db.deleteObjectStore(name);
+        if (db.objectStoreNames.contains(name) && old < 2) {
+          db.deleteObjectStore(name);
+        }
         if (!db.objectStoreNames.contains(name)) {
           const keyPath = name === 'meta' ? ['walletId', 'key'] : ['walletId', 'nullifier'];
           const store = db.createObjectStore(name, { keyPath });
@@ -675,7 +691,9 @@ const deleteWallet = async (walletId: string): Promise<void> => {
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => reject(req.error);
       });
-      for (const key of keys) store.delete(key);
+      for (const key of keys) {
+        store.delete(key);
+      }
     }
     await txComplete(tx);
   }
@@ -722,7 +740,9 @@ const verifySyncProofs = async (
   state: WalletState,
   actionsCommitment: string,
 ): Promise<void> => {
-  if (!zyncModule) return;
+  if (!zyncModule) {
+    return;
+  }
   console.log(`[zcash-worker] verifying proofs: ${pendingCmxs.length} notes`);
   const t0 = performance.now();
 
@@ -884,7 +904,9 @@ const saveFrontierSnapshot = async (
 ): Promise<void> => {
   const existing = await getFrontierSnapshots(walletId);
   // avoid duplicates, keep sorted
-  if (existing.some(s => s.height === height)) return;
+  if (existing.some(s => s.height === height)) {
+    return;
+  }
   existing.push({ height, frontier });
   existing.sort((a, b) => a.height - b.height);
   const db = await getDb();
@@ -909,12 +931,18 @@ const saveBatch = async (
   const notesStore = tx.objectStore('notes');
   const spentStore = tx.objectStore('spent');
   const metaStore = tx.objectStore('meta');
-  for (const note of notes) notesStore.put({ ...note, walletId });
+  for (const note of notes) {
+    notesStore.put({ ...note, walletId });
+  }
   // re-save notes that were updated (e.g. spent_by_txid added, witness advanced)
   if (updatedNotes) {
-    for (const note of updatedNotes) notesStore.put({ ...note, walletId });
+    for (const note of updatedNotes) {
+      notesStore.put({ ...note, walletId });
+    }
   }
-  for (const nf of spent) spentStore.put({ walletId, nullifier: nf });
+  for (const nf of spent) {
+    spentStore.put({ walletId, nullifier: nf });
+  }
   metaStore.put({ walletId, key: 'syncHeight', value: syncHeight });
   if (orchardTreeSize !== undefined) {
     metaStore.put({ walletId, key: 'orchardTreeSize', value: orchardTreeSize });
@@ -931,7 +959,9 @@ const saveBatch = async (
 // ── wasm ──
 
 const initWasm = async (): Promise<void> => {
-  if (wasmModule) return;
+  if (wasmModule) {
+    return;
+  }
   // @ts-expect-error — dynamic import in worker
   const wasm = await import(/* webpackIgnore: true */ '/zafu-wasm/zafu_wasm.js');
   await wasm.default({ module_or_path: '/zafu-wasm/zafu_wasm_bg.wasm' });
@@ -958,17 +988,20 @@ const resolveBroadcastTxid = async (
     return new TextDecoder().decode(result.txid);
   }
   await initWasm();
-  if (!wasmModule) throw new Error('wasm not initialized for txid computation');
+  if (!wasmModule) {
+    throw new Error('wasm not initialized for txid computation');
+  }
   return wasmModule.compute_txid(txHex);
 };
 
 // ── zync-core (verification) ──
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let zyncModule: Record<string, any> | null = null;
 
 const initZync = async (): Promise<void> => {
-  if (zyncModule) return;
+  if (zyncModule) {
+    return;
+  }
   // @ts-expect-error dynamic import in worker
   const zync = await import(/* webpackIgnore: true */ '/zync-core/zync_core.js');
   await zync.default({ module_or_path: '/zync-core/zync_core_bg.wasm' });
@@ -989,7 +1022,9 @@ const verifyHeaderProof = async (
   tip: number,
   mainnet: boolean,
 ): Promise<ProvenRoots> => {
-  if (!zyncModule) throw new Error('zync-core not initialized');
+  if (!zyncModule) {
+    throw new Error('zync-core not initialized');
+  }
   const { proofBytes } = await client.getHeaderProof();
   const json = zyncModule['verify_header_proof'](proofBytes, tip, mainnet) as string;
   return JSON.parse(json) as ProvenRoots;
@@ -1081,7 +1116,9 @@ const selectNotes = (
   for (const note of unspent) {
     total += BigInt(note.value);
     selected.push(note);
-    if (total >= target) return selected;
+    if (total >= target) {
+      return selected;
+    }
   }
   throw new Error(`insufficient funds: have ${total} zat, need ${target} zat`);
 };
@@ -1095,7 +1132,7 @@ interface WitnessClient {
   getCompactBlocks(
     start: number,
     end: number,
-  ): Promise<Array<{ height: number; actions: Array<{ cmx: Uint8Array }> }>>;
+  ): Promise<{ height: number; actions: { cmx: Uint8Array }[] }[]>;
 }
 
 /**
@@ -1107,12 +1144,14 @@ const fetchCompactBlocksRange = async (
   start: number,
   end: number,
 ): Promise<{
-  blocks: Array<{ height: number; actions: Array<{ cmx_hex: string }> }>;
+  blocks: { height: number; actions: { cmx_hex: string }[] }[];
   actions: number;
 }> => {
-  const blocks: Array<{ height: number; actions: Array<{ cmx_hex: string }> }> = [];
+  const blocks: { height: number; actions: { cmx_hex: string }[] }[] = [];
   let actions = 0;
-  if (start > end) return { blocks, actions };
+  if (start > end) {
+    return { blocks, actions };
+  }
   let current = start;
   while (current <= end) {
     const e = Math.min(current + WITNESS_BATCH_SIZE - 1, end);
@@ -1143,8 +1182,12 @@ const backfillWitnesses = async (
   byNullifier: Map<string, { witness_hex: string; tree_size: number }>;
   endFrontier: string;
 }> => {
-  if (!wasmModule) throw new Error('wasm not initialized');
-  if (notes.length === 0) return { byNullifier: new Map(), endFrontier: '' };
+  if (!wasmModule) {
+    throw new Error('wasm not initialized');
+  }
+  if (notes.length === 0) {
+    return { byNullifier: new Map(), endFrontier: '' };
+  }
 
   const earliestNoteHeight = Math.min(...notes.map(n => n.height));
   const earliestPosition = Math.min(...notes.map(n => n.position));
@@ -1157,7 +1200,9 @@ const backfillWitnesses = async (
   const snapshots = await getFrontierSnapshots(walletId);
   for (let i = snapshots.length - 1; i >= 0; i--) {
     const snap = snapshots[i]!;
-    if (snap.height >= earliestNoteHeight) continue;
+    if (snap.height >= earliestNoteHeight) {
+      continue;
+    }
     const snapSize = Number(wasmModule.frontier_tree_size(snap.frontier));
     if (snapSize <= earliestPosition) {
       frontierHex = snap.frontier;
@@ -1197,7 +1242,7 @@ const backfillWitnesses = async (
   const result = JSON.parse(raw as string) as {
     anchor_hex: string;
     end_frontier_hex: string;
-    entries: Array<{ position: number; witness_hex: string; path: Array<{ hash: string }> }>;
+    entries: { position: number; witness_hex: string; path: { hash: string }[] }[];
   };
 
   const checkpointSize = Number(wasmModule.frontier_tree_size(frontierHex));
@@ -1221,7 +1266,9 @@ const backfillWitnesses = async (
   const updatedNotes: DecryptedNote[] = [];
   for (const note of notes) {
     const entry = byPosition.get(note.position);
-    if (!entry) continue;
+    if (!entry) {
+      continue;
+    }
     byNullifier.set(note.nullifier, {
       witness_hex: entry.witness_hex,
       tree_size: endTreeSize,
@@ -1264,8 +1311,12 @@ const buildWitnesses = async (
   notes: DecryptedNote[],
   anchorHeight: number,
 ): Promise<{ anchorHex: string; paths: unknown[] }> => {
-  if (!wasmModule) throw new Error('wasm not initialized');
-  if (notes.length === 0) throw new Error('buildWitnesses called with no notes');
+  if (!wasmModule) {
+    throw new Error('wasm not initialized');
+  }
+  if (notes.length === 0) {
+    throw new Error('buildWitnesses called with no notes');
+  }
 
   const positions = notes.map(n => n.position);
   console.log(
@@ -1334,7 +1385,7 @@ const buildWitnesses = async (
     const result = JSON.parse(raw as string) as {
       end_frontier_hex: string;
       anchor_hex: string;
-      witnesses: Array<{ id: string; position: number; witness_hex: string }>;
+      witnesses: { id: string; position: number; witness_hex: string }[];
     };
 
     const byId = new Map(result.witnesses.map(w => [w.id, w]));
@@ -1342,7 +1393,9 @@ const buildWitnesses = async (
     const updated: DecryptedNote[] = [];
     for (const note of notes) {
       const upd = byId.get(note.nullifier);
-      if (!upd) throw new Error(`witness update missing note ${note.nullifier}`);
+      if (!upd) {
+        throw new Error(`witness update missing note ${note.nullifier}`);
+      }
       note.witness_hex = upd.witness_hex;
       note.witness_tree_size = newTreeSize;
       updated.push(note);
@@ -1366,13 +1419,13 @@ const buildWitnesses = async (
   const anchorTs = await client.getTreeState(anchorHeight);
   const networkRoot = wasmModule.tree_root_hex(anchorTs.orchardTree);
 
-  const paths: Array<{ position: number; path: Array<{ hash: string }> }> = [];
+  const paths: { position: number; path: { hash: string }[] }[] = [];
   for (const note of notes) {
     const rawPath = wasmModule.witness_extract_path(note.witness_hex!);
     const parsed = JSON.parse(rawPath as string) as {
       position: number;
       root_hex: string;
-      path: Array<{ hash: string }>;
+      path: { hash: string }[];
     };
     if (parsed.root_hex !== networkRoot) {
       console.error(
@@ -1389,7 +1442,9 @@ const buildWitnesses = async (
 };
 
 const deriveAddress = (mnemonic: string, accountIndex: number): string => {
-  if (!wasmModule) throw new Error('wasm not initialized');
+  if (!wasmModule) {
+    throw new Error('wasm not initialized');
+  }
   const keys = new wasmModule.WalletKeys(mnemonic);
   try {
     const raw = keys.get_receiving_address_at(accountIndex, true);
@@ -1437,30 +1492,32 @@ function handleMempoolSnapshot(
   walletId: string,
   state: WalletState,
   snap: {
-    entries: ReadonlyArray<{
+    entries: readonly {
       hash: Uint8Array;
-      actions: ReadonlyArray<{
+      actions: readonly {
         nullifier: Uint8Array;
         cmx: Uint8Array;
         ephemeralKey: Uint8Array;
         ciphertext: Uint8Array;
-      }>;
-    }>;
+      }[];
+    }[];
   },
 ): void {
-  if (!state.keys) return;
+  if (!state.keys) {
+    return;
+  }
 
   // Defensive: walk entries once to (a) bound work, (b) reject malformed
   // actions explicitly rather than silently zero-padding a slot (which the
   // WASM parser would happily accept as a garbage action). A hostile
   // server can't get us to mis-align the buffer or run a multi-GB alloc.
-  type ValidAction = {
+  interface ValidAction {
     nullifier: Uint8Array;
     cmx: Uint8Array;
     ephemeralKey: Uint8Array;
     ciphertext: Uint8Array; // first ACTION_COMPACT_CT_LEN bytes
     txidHex: string;
-  };
+  }
   const valid: ValidAction[] = [];
   let rejected = 0;
 
@@ -1497,13 +1554,17 @@ function handleMempoolSnapshot(
         txidHex,
       });
     }
-    if (valid.length >= MAX_MEMPOOL_ACTIONS) break;
+    if (valid.length >= MAX_MEMPOOL_ACTIONS) {
+      break;
+    }
   }
 
   if (rejected > 0) {
     console.warn(`[zcash-worker] mempool: rejected ${rejected} malformed action(s)`);
   }
-  if (valid.length === 0) return;
+  if (valid.length === 0) {
+    return;
+  }
 
   // Pack the validated actions into the binary layout the WASM parser
   // consumes. Every slice write is guaranteed-sized; the offset advances
@@ -1533,8 +1594,8 @@ function handleMempoolSnapshot(
   // the note's cmx. The field carries that until the block scan can replace
   // it with a real txid. UI consumers must treat it as an opaque identifier,
   // not a transaction hash.
-  const pendingIncoming: Array<{ value: string; cmx: string; isChange: boolean }> = [];
-  const pendingSpends: Array<{ nullifier: string; txid: string }> = [];
+  const pendingIncoming: { value: string; cmx: string; isChange: boolean }[] = [];
+  const pendingSpends: { nullifier: string; txid: string }[] = [];
 
   try {
     const found = state.keys.scan_actions_parallel(mbuf);
@@ -1590,7 +1651,9 @@ const runSync = async (
     /* webpackMode: "eager" */ '../services/mempool-watch/strategy'
   );
   const watcherEnabled = isMempoolWatchEnabled(mempoolWatch, backend);
-  if (!wasmModule) throw new Error('wasm not initialized');
+  if (!wasmModule) {
+    throw new Error('wasm not initialized');
+  }
 
   const state = getOrCreateWalletState(walletId);
 
@@ -1636,9 +1699,7 @@ const runSync = async (
     (await idbGet<{ value: number }>('meta', [walletId, 'orchardTreeFrontierHeight']))?.value ?? 0;
 
   // Bootstrap / repair the frontier if missing or stale relative to orchardTreeSize/currentHeight.
-  const frontierSize = runningFrontier
-    ? Number(wasmModule!.frontier_tree_size(runningFrontier))
-    : 0;
+  const frontierSize = runningFrontier ? Number(wasmModule.frontier_tree_size(runningFrontier)) : 0;
   const frontierValid =
     !!runningFrontier &&
     frontierSize === orchardTreeSize &&
@@ -1648,7 +1709,7 @@ const runSync = async (
       const ts = await client.getTreeState(currentHeight);
       runningFrontier = ts.orchardTree;
       runningFrontierHeight = currentHeight;
-      orchardTreeSize = Number(wasmModule!.frontier_tree_size(runningFrontier));
+      orchardTreeSize = Number(wasmModule.frontier_tree_size(runningFrontier));
       // frontier refetched => any in-memory witness may be stale relative
       // to the new tree size. Drop witnesses so spend time triggers a clean
       // backfill rather than silently advancing a gapped witness.
@@ -1738,7 +1799,9 @@ const runSync = async (
           // Recheck state.keys per-iteration: reset-sync can free keys
           // while we're between yields. Without this, handleMempoolSnapshot
           // would run scan_actions_parallel on a freed WASM object.
-          if (localAbort.signal.aborted || !state.keys) break;
+          if (localAbort.signal.aborted || !state.keys) {
+            break;
+          }
           handleMempoolSnapshot(walletId, state, snap);
         }
       } catch (err) {
@@ -1854,7 +1917,9 @@ const runSync = async (
       const nfToHeight = new Map<string, number>();
       const actionNullifiers = new Set<string>();
       let actionCount = 0;
-      for (const block of blocks) actionCount += block.actions.length;
+      for (const block of blocks) {
+        actionCount += block.actions.length;
+      }
 
       const ACTION_SIZE = 32 + 32 + 32 + 52;
       const newNotes: DecryptedNote[] = [];
@@ -1910,13 +1975,21 @@ const runSync = async (
 
           for (const a of block.actions) {
             // pack binary for WASM scan
-            if (a.nullifier.length === 32) buf.set(a.nullifier, off);
+            if (a.nullifier.length === 32) {
+              buf.set(a.nullifier, off);
+            }
             off += 32;
-            if (a.cmx.length === 32) buf.set(a.cmx, off);
+            if (a.cmx.length === 32) {
+              buf.set(a.cmx, off);
+            }
             off += 32;
-            if (a.ephemeralKey.length === 32) buf.set(a.ephemeralKey, off);
+            if (a.ephemeralKey.length === 32) {
+              buf.set(a.ephemeralKey, off);
+            }
             off += 32;
-            if (a.ciphertext.length >= 52) buf.set(a.ciphertext.subarray(0, 52), off);
+            if (a.ciphertext.length >= 52) {
+              buf.set(a.ciphertext.subarray(0, 52), off);
+            }
             off += 52;
             // build lookups (single pass with binary packing)
             const cmxHex = hexEncode(a.cmx);
@@ -1986,7 +2059,7 @@ const runSync = async (
       // runningFrontier unchanged, forcing rebootstrap next batch.
       const witnessUpdatedNotes = new Map<string, DecryptedNote>();
       if (wasmModule && runningFrontier && actionCount > 0) {
-        const compact: Array<{ height: number; actions: Array<{ cmx_hex: string }> }> = [];
+        const compact: { height: number; actions: { cmx_hex: string }[] }[] = [];
         for (const block of blocks) {
           compact.push({
             height: block.height,
@@ -1995,11 +2068,17 @@ const runSync = async (
         }
 
         const newNullifiers = new Set(newNotes.map(n => n.nullifier));
-        const existingInput: Array<{ id: string; witness_hex: string }> = [];
+        const existingInput: { id: string; witness_hex: string }[] = [];
         for (const note of state.notes) {
-          if (state.spentNullifiers.has(note.nullifier)) continue;
-          if (newNullifiers.has(note.nullifier)) continue;
-          if (!note.witness_hex) continue;
+          if (state.spentNullifiers.has(note.nullifier)) {
+            continue;
+          }
+          if (newNullifiers.has(note.nullifier)) {
+            continue;
+          }
+          if (!note.witness_hex) {
+            continue;
+          }
           existingInput.push({ id: note.nullifier, witness_hex: note.witness_hex });
         }
         const seedInput = newNotes.map(n => ({ id: n.nullifier, position: n.position }));
@@ -2014,15 +2093,19 @@ const runSync = async (
           const result = JSON.parse(raw as string) as {
             end_frontier_hex: string;
             anchor_hex: string;
-            witnesses: Array<{ id: string; position: number; witness_hex: string }>;
+            witnesses: { id: string; position: number; witness_hex: string }[];
           };
 
           const witnessById = new Map(result.witnesses.map(w => [w.id, w]));
           const newTreeSize = orchardTreeSize + actionCount;
           for (const note of state.notes) {
-            if (state.spentNullifiers.has(note.nullifier)) continue;
+            if (state.spentNullifiers.has(note.nullifier)) {
+              continue;
+            }
             const upd = witnessById.get(note.nullifier);
-            if (!upd) continue;
+            if (!upd) {
+              continue;
+            }
             note.witness_hex = upd.witness_hex;
             note.witness_tree_size = newTreeSize;
             if (!newNullifiers.has(note.nullifier)) {
@@ -2051,8 +2134,14 @@ const runSync = async (
 
       // merge witness-updated notes with spent-updated notes (dedupe by nullifier)
       const updatedDedup = new Map<string, DecryptedNote>();
-      for (const n of spentUpdatedNotes) updatedDedup.set(n.nullifier, n);
-      for (const [k, n] of witnessUpdatedNotes) if (!updatedDedup.has(k)) updatedDedup.set(k, n);
+      for (const n of spentUpdatedNotes) {
+        updatedDedup.set(n.nullifier, n);
+      }
+      for (const [k, n] of witnessUpdatedNotes) {
+        if (!updatedDedup.has(k)) {
+          updatedDedup.set(k, n);
+        }
+      }
       const combinedUpdated = Array.from(updatedDedup.values());
 
       // single batched db write for entire batch
@@ -2158,7 +2247,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       }
 
       case 'sync': {
-        if (!walletId) throw new Error('walletId required');
+        if (!walletId) {
+          throw new Error('walletId required');
+        }
         await initWasm();
         const { mnemonic, serverUrl, startHeight, ufvk, backend, mempoolWatch } = payload as {
           mnemonic: string;
@@ -2209,7 +2300,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       }
 
       case 'stop-sync': {
-        if (!walletId) throw new Error('walletId required');
+        if (!walletId) {
+          throw new Error('walletId required');
+        }
         const state = walletStates.get(walletId);
         if (state) {
           state.syncAbort = true;
@@ -2223,7 +2316,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       }
 
       case 'reset-sync': {
-        if (!walletId) throw new Error('walletId required');
+        if (!walletId) {
+          throw new Error('walletId required');
+        }
         const resetState = walletStates.get(walletId);
         if (resetState) {
           resetState.syncAbort = true;
@@ -2249,7 +2344,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       }
 
       case 'get-balance': {
-        if (!walletId) throw new Error('walletId required');
+        if (!walletId) {
+          throw new Error('walletId required');
+        }
         const balance = await getBalance(walletId);
         workerSelf.postMessage({
           type: 'balance',
@@ -2268,7 +2365,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       }
 
       case 'delete-wallet': {
-        if (!walletId) throw new Error('walletId required');
+        if (!walletId) {
+          throw new Error('walletId required');
+        }
         const state = walletStates.get(walletId);
         if (state?.syncing) {
           state.syncAbort = true;
@@ -2284,7 +2383,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       }
 
       case 'get-notes': {
-        if (!walletId) throw new Error('walletId required');
+        if (!walletId) {
+          throw new Error('walletId required');
+        }
         const noteState = await loadState(walletId);
         const notesWithSpent = noteState.notes.map(n => ({
           ...n,
@@ -2302,8 +2403,12 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
       case 'note-sync-encode': {
         // Build CBOR notes bundle with merkle paths, encode as UR frames
-        if (!walletId) throw new Error('walletId required');
-        if (!wasmModule) throw new Error('wasm not initialized');
+        if (!walletId) {
+          throw new Error('walletId required');
+        }
+        if (!wasmModule) {
+          throw new Error('wasm not initialized');
+        }
         const { mainnet: isMainnet, serverUrl: syncServerUrl } = payload as {
           mainnet: boolean;
           serverUrl: string;
@@ -2332,15 +2437,17 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const client = {
           getTreeState: async (h: number) => {
             const resp = await fetch(`${syncServerUrl}/tree-state/${h}`);
-            if (!resp.ok) throw new Error(`tree-state ${h}: ${resp.status}`);
+            if (!resp.ok) {
+              throw new Error(`tree-state ${h}: ${resp.status}`);
+            }
             return resp.json() as Promise<{ height: number; orchardTree: string }>;
           },
           getCompactBlocks: async (start: number, end: number) => {
             const resp = await fetch(`${syncServerUrl}/compact-blocks/${start}/${end}`);
-            if (!resp.ok) throw new Error(`compact-blocks ${start}-${end}: ${resp.status}`);
-            return resp.json() as Promise<
-              Array<{ height: number; actions: Array<{ cmx: Uint8Array }> }>
-            >;
+            if (!resp.ok) {
+              throw new Error(`compact-blocks ${start}-${end}: ${resp.status}`);
+            }
+            return resp.json() as Promise<{ height: number; actions: { cmx: Uint8Array }[] }[]>;
           },
         };
         const witnessResult = await buildWitnesses(client, walletId, unspent, anchorHeight);
@@ -2378,7 +2485,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         // compute balance
         let balance = 0n;
-        for (const n of unspent) balance += BigInt(n.value);
+        for (const n of unspent) {
+          balance += BigInt(n.value);
+        }
 
         workerSelf.postMessage({
           type: 'note-sync-encoded',
@@ -2396,9 +2505,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       }
 
       case 'decrypt-memos': {
-        if (!walletId) throw new Error('walletId required');
+        if (!walletId) {
+          throw new Error('walletId required');
+        }
         const memoState = walletStates.get(walletId);
-        if (!memoState?.keys) throw new Error('wallet keys not loaded');
+        if (!memoState?.keys) {
+          throw new Error('wallet keys not loaded');
+        }
         const { txBytes } = payload as { txBytes: number[] };
         const txBuf = new Uint8Array(txBytes);
         // patch consensus branch ID to NU5 (0xC2D6D0B4) so older zcash_primitives can parse it
@@ -2437,7 +2550,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         // fetch raw txs in parallel (concurrency-limited to avoid overwhelming server)
         const CONCURRENCY = 5;
-        const history: Array<{ txid: string; height: number; received: string }> = [];
+        const history: { txid: string; height: number; received: string }[] = [];
 
         for (let i = 0; i < txids.length; i += CONCURRENCY) {
           const batch = txids.slice(i, i + CONCURRENCY);
@@ -2453,7 +2566,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             }),
           );
           for (const r of results) {
-            if (r.status === 'fulfilled') history.push(r.value);
+            if (r.status === 'fulfilled') {
+              history.push(r.value);
+            }
           }
         }
 
@@ -2467,7 +2582,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       }
 
       case 'get-history': {
-        if (!walletId) throw new Error('walletId required');
+        if (!walletId) {
+          throw new Error('walletId required');
+        }
         const { serverUrl: histServerUrl, tAddresses: histTAddresses } = payload as {
           serverUrl: string;
           tAddresses: string[];
@@ -2481,7 +2598,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         }));
 
         // fetch transparent history
-        const tHistory: Array<{ txid: string; height: number; received: string }> = [];
+        const tHistory: { txid: string; height: number; received: string }[] = [];
         if (histTAddresses?.length) {
           try {
             const tClient = await makeZcashClient(histServerUrl);
@@ -2510,7 +2627,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 }),
               );
               for (const r of results) {
-                if (r.status === 'fulfilled') tHistory.push(r.value);
+                if (r.status === 'fulfilled') {
+                  tHistory.push(r.value);
+                }
               }
             }
           } catch (e) {
@@ -2562,13 +2681,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         }
 
         // build result array (amounts as zatoshi strings)
-        const histTxs: Array<{
+        const histTxs: {
           id: string;
           height: number;
           type: string;
           amount: string;
           asset: string;
-        }> = [];
+        }[] = [];
         for (const [txid, info] of histTxMap) {
           const isSend = info.isChange;
           let amount: bigint;
@@ -2640,7 +2759,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       }
 
       case 'sync-memos': {
-        if (!walletId) throw new Error('walletId required');
+        if (!walletId) {
+          throw new Error('walletId required');
+        }
         const {
           serverUrl: memoServerUrl,
           existingTxIds,
@@ -2653,7 +2774,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         const memoState = await loadState(walletId);
         const memoKeys = walletStates.get(walletId)?.keys;
-        if (!memoKeys) throw new Error('wallet keys not loaded');
+        if (!memoKeys) {
+          throw new Error('wallet keys not loaded');
+        }
 
         const memoNotes = memoState.notes.map(n => ({
           ...n,
@@ -2711,13 +2834,17 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // build txid→height map from all notes (change notes share txid with spending tx)
         const txidToHeight = new Map<string, number>();
         for (const note of memoNotes) {
-          if (note.txid) txidToHeight.set(note.txid, note.height);
+          if (note.txid) {
+            txidToHeight.set(note.txid, note.height);
+          }
         }
 
         const spentHeights = new Set<number>();
         const spentTxIds = new Map<number, Set<string>>(); // height → spent_by_txids
         for (const note of memoNotes) {
-          if (!note.spent_by_txid || processedTxids.has(note.spent_by_txid)) continue;
+          if (!note.spent_by_txid || processedTxids.has(note.spent_by_txid)) {
+            continue;
+          }
           const h = note.spent_at_height || txidToHeight.get(note.spent_by_txid);
           if (h) {
             spentHeights.add(h);
@@ -2756,7 +2883,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                   cursor.delete();
                 }
                 cursor.continue();
-              } else resolve();
+              } else {
+                resolve();
+              }
             };
             req.onerror = () => reject(req.error);
           });
@@ -2766,7 +2895,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // spent buckets must always be fetched (OVK path), so we pass that
         // info to the cache filter via alwaysFetch.
         const spentBuckets = new Set<MemoBucketStart>();
-        for (const h of spentHeights) spentBuckets.add(bucketOf(h));
+        for (const h of spentHeights) {
+          spentBuckets.add(bucketOf(h));
+        }
 
         const memoClient = await makeZcashClient(memoServerUrl);
         const { height: currentTip } = await memoClient.getTip();
@@ -2795,7 +2926,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // progress: the base fetcher knows the post-cache, post-decoy total and
         // calls ctx.onProgress with accurate (completed, total) — we just
         // forward those values to the UI.
-        const results: Array<{
+        const results: {
           txId: string;
           blockHeight: number;
           timestamp: number;
@@ -2804,7 +2935,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           amount: string;
           memoBytes?: string;
           diversifierIndex?: number;
-        }> = [];
+        }[] = [];
         const abortCtrl = new AbortController();
 
         for await (const { blocks } of fetcher(walletId, ownedBucketSet, {
@@ -2824,12 +2955,16 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           for (const { height, txs } of blocks) {
             const heightNotes = notesByHeight.get(height);
             const isSpentHeight = spentHeights.has(height);
-            if ((!heightNotes || heightNotes.length === 0) && !isSpentHeight) continue;
+            if ((!heightNotes || heightNotes.length === 0) && !isSpentHeight) {
+              continue;
+            }
 
             const cmxSet = new Set(heightNotes?.map(n => n.cmx) ?? []);
 
             for (const { data: txBytes } of txs) {
-              if (txBytes.length < 200) continue;
+              if (txBytes.length < 200) {
+                continue;
+              }
 
               const txBuf = new Uint8Array(txBytes);
               patchBranchId(txBuf);
@@ -2840,7 +2975,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 // check if this is a zafu structured binary memo (0xFF 0x5A magic)
                 const memoRawHex = memo.memo_bytes || '';
                 const isStructured = memoRawHex.length === 1024 && memoRawHex.startsWith('ff5a');
-                if (!isStructured && (!memo.memo_is_text || !memo.memo.trim())) continue;
+                if (!isStructured && (!memo.memo_is_text || !memo.memo.trim())) {
+                  continue;
+                }
 
                 if (memo.is_outgoing) {
                   const heightTxIds = spentTxIds.get(height);
@@ -2861,10 +2998,16 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                     }
                   }
                 } else {
-                  if (!cmxSet.has(memo.cmx)) continue;
+                  if (!cmxSet.has(memo.cmx)) {
+                    continue;
+                  }
                   const matchingNote = heightNotes?.find(n => n.cmx === memo.cmx);
-                  if (!matchingNote) continue;
-                  if (processedTxids.has(matchingNote.txid)) continue;
+                  if (!matchingNote) {
+                    continue;
+                  }
+                  if (processedTxids.has(matchingNote.txid)) {
+                    continue;
+                  }
 
                   results.push({
                     txId: matchingNote.txid,
@@ -2884,8 +3027,16 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         // persist all scanned note txids + spent_by_txids so we don't re-scan next time
         const allScanned = new Set(scannedTxids);
-        for (const n of notesToProcess) if (n.txid) allScanned.add(n.txid);
-        for (const n of memoNotes) if (n.spent_by_txid) allScanned.add(n.spent_by_txid);
+        for (const n of notesToProcess) {
+          if (n.txid) {
+            allScanned.add(n.txid);
+          }
+        }
+        for (const n of memoNotes) {
+          if (n.spent_by_txid) {
+            allScanned.add(n.spent_by_txid);
+          }
+        }
         await new Promise<void>((resolve, reject) => {
           const tx = db.transaction('memo-cache', 'readwrite');
           const req = tx.objectStore('memo-cache').put([...allScanned], scannedKey);
@@ -2904,9 +3055,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       }
 
       case 'send-tx': {
-        if (!walletId) throw new Error('walletId required');
+        if (!walletId) {
+          throw new Error('walletId required');
+        }
         await initWasm();
-        if (!wasmModule) throw new Error('wasm not initialized');
+        if (!wasmModule) {
+          throw new Error('wasm not initialized');
+        }
 
         const sendPayload = payload as {
           serverUrl: string;
@@ -3014,7 +3169,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           }));
 
           // parse merkle paths result for WASM
-          const pathsResult = paths as Array<{ position: number; path: Array<{ hash: string }> }>;
+          const pathsResult = paths as { position: number; path: { hash: string }[] }[];
           const merklePathsForWasm = pathsResult.map(p => ({
             path: p.path.map(e => e.hash),
             position: p.position,
@@ -3109,9 +3264,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           recipient_hex: n.recipient ?? '',
         }));
 
-        const pathsForWasm = (
-          paths as Array<{ position: number; path: Array<{ hash: string }> }>
-        ).map(p => ({
+        const pathsForWasm = (paths as { position: number; path: { hash: string }[] }[]).map(p => ({
           path: p.path.map(e => e.hash),
           position: p.position,
         }));
@@ -3136,7 +3289,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const proveDurationZ = ((performance.now() - proveStartZ) / 1000).toFixed(1);
         emitProgress('unsigned transaction proved', `${proveDurationZ}s`);
 
-        const parsed = unsignedResult as unknown as {
+        const parsed = unsignedResult as {
           sighash: string;
           alphas: string[];
           unsigned_tx: string;
@@ -3165,9 +3318,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       }
 
       case 'send-tx-complete': {
-        if (!walletId) throw new Error('walletId required');
+        if (!walletId) {
+          throw new Error('walletId required');
+        }
         await initWasm();
-        if (!wasmModule) throw new Error('wasm not initialized');
+        if (!wasmModule) {
+          throw new Error('wasm not initialized');
+        }
 
         const completePayload = payload as {
           serverUrl: string;
@@ -3208,9 +3365,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       // signing, and recomputes the sighash from the PCZT contents — so
       // display and signed bytes are bound by construction.
       case 'send-tx-pczt': {
-        if (!walletId) throw new Error('walletId required');
+        if (!walletId) {
+          throw new Error('walletId required');
+        }
         await initWasm();
-        if (!wasmModule) throw new Error('wasm not initialized');
+        if (!wasmModule) {
+          throw new Error('wasm not initialized');
+        }
 
         const sendPayload = payload as {
           serverUrl: string;
@@ -3223,7 +3384,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           /** UR fragment-size override; falls back to 200 for back-compat */
           fragmentSize?: number;
         };
-        if (!sendPayload.ufvk) throw new Error('UFVK required for PCZT build');
+        if (!sendPayload.ufvk) {
+          throw new Error('UFVK required for PCZT build');
+        }
 
         // Mirror send-tx note selection / witness build. Inlined rather than
         // factored out because send-tx's variant has interleaved emitProgress
@@ -3304,9 +3467,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           rho_hex: n.rho ?? '',
           recipient_hex: n.recipient ?? '',
         }));
-        const pathsForWasm = (
-          paths as Array<{ position: number; path: Array<{ hash: string }> }>
-        ).map(p => ({
+        const pathsForWasm = (paths as { position: number; path: { hash: string }[] }[]).map(p => ({
           path: p.path.map(e => e.hash),
           position: p.position,
         }));
@@ -3337,7 +3498,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           ],
         });
 
-        const parsed = built as unknown as {
+        const parsed = built as {
           pczt_hex: string;
           summary: string;
           action_count: number;
@@ -3376,9 +3537,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       }
 
       case 'send-tx-pczt-complete': {
-        if (!walletId) throw new Error('walletId required');
+        if (!walletId) {
+          throw new Error('walletId required');
+        }
         await initWasm();
-        if (!wasmModule) throw new Error('wasm not initialized');
+        if (!wasmModule) {
+          throw new Error('wasm not initialized');
+        }
 
         const completePayload = payload as { serverUrl: string; signedPcztHex: string };
 
@@ -3411,13 +3576,17 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       // Each output gets its own note selection, witness build, prove, and broadcast cycle.
       // If any tx fails mid-way, previously broadcast txs are NOT rolled back.
       case 'send-tx-multi': {
-        if (!walletId) throw new Error('walletId required');
+        if (!walletId) {
+          throw new Error('walletId required');
+        }
         await initWasm();
-        if (!wasmModule) throw new Error('wasm not initialized');
+        if (!wasmModule) {
+          throw new Error('wasm not initialized');
+        }
 
         const multiPayload = payload as {
           serverUrl: string;
-          outputs: Array<{ address: string; amount: string; memo?: string }>;
+          outputs: { address: string; amount: string; memo?: string }[];
           accountIndex: number;
           mainnet: boolean;
           mnemonic: string;
@@ -3552,10 +3721,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             rho_hex: n.rho ?? '',
             recipient_hex: n.recipient ?? '',
           }));
-          const pathsResult = multiPaths as Array<{
+          const pathsResult = multiPaths as {
             position: number;
-            path: Array<{ hash: string }>;
-          }>;
+            path: { hash: string }[];
+          }[];
           const merklePathsForWasm = pathsResult.map(p => ({
             path: p.path.map(e => e.hash),
             position: p.position,
@@ -3636,9 +3805,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       }
 
       case 'shield': {
-        if (!walletId) throw new Error('walletId required');
+        if (!walletId) {
+          throw new Error('walletId required');
+        }
         await initWasm();
-        if (!wasmModule) throw new Error('wasm not initialized');
+        if (!wasmModule) {
+          throw new Error('wasm not initialized');
+        }
 
         const { mnemonic, serverUrl, tAddresses, mainnet, addressIndexMap } = payload as {
           mnemonic: string;
@@ -3651,7 +3824,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const client = await makeZcashClient(serverUrl);
         const tip = await client.getTip();
         const allUtxos = await client.getAddressUtxos(tAddresses);
-        if (allUtxos.length === 0) throw new Error('no transparent UTXOs to shield');
+        if (allUtxos.length === 0) {
+          throw new Error('no transparent UTXOs to shield');
+        }
 
         // build address → derivation index lookup
         const addrToIndex = new Map<string, number>();
@@ -3660,7 +3835,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             addrToIndex.set(addr, idx);
           }
         } else {
-          for (const addr of tAddresses) addrToIndex.set(addr, 0);
+          for (const addr of tAddresses) {
+            addrToIndex.set(addr, 0);
+          }
         }
 
         // group UTXOs by derivation index (WASM signs all inputs with one key)
@@ -3728,8 +3905,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           })) as string;
           const txData = hexDecode(txHex);
           const result = await client.sendTransaction(txData);
-          if (result.errorCode !== 0)
+          if (result.errorCode !== 0) {
             throw new Error(`broadcast failed (${result.errorCode}): ${result.errorMessage}`);
+          }
 
           lastTxid = await resolveBroadcastTxid(result, txHex, serverUrl);
           totalShielded += shieldAmount;
@@ -3737,7 +3915,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           totalUtxos += utxos.length;
         }
 
-        if (totalUtxos === 0) throw new Error('all UTXO groups too small to cover fees');
+        if (totalUtxos === 0) {
+          throw new Error('all UTXO groups too small to cover fees');
+        }
 
         workerSelf.postMessage({
           type: 'shield-result',
@@ -3755,9 +3935,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       }
 
       case 'shield-unsigned': {
-        if (!walletId) throw new Error('walletId required');
+        if (!walletId) {
+          throw new Error('walletId required');
+        }
         await initWasm();
-        if (!wasmModule) throw new Error('wasm not initialized');
+        if (!wasmModule) {
+          throw new Error('wasm not initialized');
+        }
 
         const shieldUnsignedPayload = payload as {
           serverUrl: string;
@@ -3770,7 +3954,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const shieldUClient = await makeZcashClient(shieldUnsignedPayload.serverUrl);
         const shieldUTip = await shieldUClient.getTip();
         const shieldUUtxos = await shieldUClient.getAddressUtxos(shieldUnsignedPayload.tAddresses);
-        if (shieldUUtxos.length === 0) throw new Error('no transparent UTXOs to shield');
+        if (shieldUUtxos.length === 0) {
+          throw new Error('no transparent UTXOs to shield');
+        }
 
         // build address → derivation index lookup
         const shieldUAddrToIndex = new Map<string, number>();
@@ -3779,7 +3965,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             shieldUAddrToIndex.set(addr, idx);
           }
         } else {
-          for (const addr of shieldUnsignedPayload.tAddresses) shieldUAddrToIndex.set(addr, 0);
+          for (const addr of shieldUnsignedPayload.tAddresses) {
+            shieldUAddrToIndex.set(addr, 0);
+          }
         }
 
         // orchard recipient from watch-only wallet
@@ -3796,7 +3984,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const shieldUTotal = shieldUUtxos.reduce((sum, u) => sum + u.valueZat, 0n);
         const shieldULogicalActions = 2 + shieldUUtxos.length;
         const shieldUFee = BigInt(5000 * Math.max(shieldULogicalActions, 2));
-        if (shieldUTotal <= shieldUFee) throw new Error('UTXOs too small to cover fee');
+        if (shieldUTotal <= shieldUFee) {
+          throw new Error('UTXOs too small to cover fee');
+        }
         const shieldUAmount = shieldUTotal - shieldUFee;
 
         // collect address indices in UTXO order
@@ -3846,9 +4036,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       }
 
       case 'shield-complete': {
-        if (!walletId) throw new Error('walletId required');
+        if (!walletId) {
+          throw new Error('walletId required');
+        }
         await initWasm();
-        if (!wasmModule) throw new Error('wasm not initialized');
+        if (!wasmModule) {
+          throw new Error('wasm not initialized');
+        }
 
         const shieldCompletePayload = payload as {
           serverUrl: string;

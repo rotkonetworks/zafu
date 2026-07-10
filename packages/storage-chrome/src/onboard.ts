@@ -30,10 +30,16 @@ export const onboardGrpcEndpoint = async (): Promise<string> => {
 
 /** decrypt wallets from encrypted storage */
 const decryptWallets = async (raw: unknown): Promise<WalletJson[]> => {
-  if (!raw) return [];
-  if (typeof raw !== 'object' || !('encrypted' in (raw as Record<string, unknown>))) return [];
+  if (!raw) {
+    return [];
+  }
+  if (typeof raw !== 'object' || !('encrypted' in (raw as Record<string, unknown>))) {
+    return [];
+  }
   const keyJson = await sessionExtStorage.get('passwordKey');
-  if (!keyJson) return []; // locked — no session key
+  if (!keyJson) {
+    return [];
+  } // locked — no session key
   try {
     const key = await Key.fromJson(keyJson);
     const plaintext = await key.unseal(Box.fromJson((raw as { encrypted: BoxJson }).encrypted));
@@ -59,15 +65,19 @@ export const onboardWallet = async (): Promise<WalletJson> => {
   }
 
   return new Promise(resolve => {
-    const storageListener: ChromeStorageListener<LocalStorageState> = async changes => {
-      if (!changes.penumbraWallets?.newValue) return;
-      // wallets may be encrypted — decrypt before reading
-      const wallets = await decryptWallets(changes.penumbraWallets.newValue);
-      const initialWallet = wallets[0];
-      if (initialWallet) {
-        resolve({ ...initialWallet, vaultId: initialWallet.vaultId ?? '' } as WalletJson);
-        localExtStorage.removeListener(storageListener);
+    const storageListener: ChromeStorageListener<LocalStorageState> = changes => {
+      const newValue = changes.penumbraWallets?.newValue;
+      if (!newValue) {
+        return;
       }
+      // wallets may be encrypted — decrypt before reading
+      void decryptWallets(newValue).then(wallets => {
+        const initialWallet = wallets[0];
+        if (initialWallet) {
+          resolve({ ...initialWallet, vaultId: initialWallet.vaultId } as WalletJson);
+          localExtStorage.removeListener(storageListener);
+        }
+      });
     };
     localExtStorage.addListener(storageListener);
   });

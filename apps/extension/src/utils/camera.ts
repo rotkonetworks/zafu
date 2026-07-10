@@ -86,9 +86,9 @@ export function onCameraPermissionChange(
  * Get instructions for enabling camera in browser settings
  */
 export function getCameraSettingsInstructions(): string {
-  const isChrome = /Chrome/.test(navigator.userAgent) && !/Edge/.test(navigator.userAgent);
-  const isFirefox = /Firefox/.test(navigator.userAgent);
-  const isEdge = /Edge/.test(navigator.userAgent);
+  const isChrome = navigator.userAgent.includes('Chrome') && !navigator.userAgent.includes('Edge');
+  const isFirefox = navigator.userAgent.includes('Firefox');
+  const isEdge = navigator.userAgent.includes('Edge');
 
   if (isChrome) {
     return 'Click the lock/tune icon in the address bar → Site settings → Camera → Allow';

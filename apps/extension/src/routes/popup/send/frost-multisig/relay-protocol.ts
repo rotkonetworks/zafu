@@ -66,26 +66,30 @@ export function subscribePeers(
     s.roomCode,
     s.participantId,
     event => {
-      if (event.type !== 'message') return;
+      if (event.type !== 'message') {
+        return;
+      }
       const text = new TextDecoder().decode(event.message.payload);
-      const sg = text.match(
-        /^SIGN:([0-9a-fA-F]+):([^:]+):([^:]+):(\d+):(\d+)(?::([0-9a-fA-F]+))?$/,
-      );
+      const sg = /^SIGN:([0-9a-fA-F]+):([^:]+):([^:]+):(\d+):(\d+)(?::([0-9a-fA-F]+))?$/.exec(text);
       if (sg) {
         onSign?.(sg[1]!, sg[2]!.split(','), sg[3]!, sg[4]!, sg[5]!, sg[6]);
         return;
       }
-      const cm = text.match(/^C:([\s\S]*)$/);
+      const cm = /^C:([\s\S]*)$/.exec(text);
       if (cm) {
         const parts = cm[1]!.split('|');
-        for (let i = 0; i < parts.length && i < numActions; i++) peerCommits[i]!.push(parts[i]!);
+        for (let i = 0; i < parts.length && i < numActions; i++) {
+          peerCommits[i]!.push(parts[i]!);
+        }
         onCommitsCount?.(peerCommits[0]!.length);
         return;
       }
-      const sm = text.match(/^S:(\d+):(.+)$/);
+      const sm = /^S:(\d+):(.+)$/.exec(text);
       if (sm) {
         const idx = Number(sm[1]);
-        if (idx >= 0 && idx < numActions) peerShares[idx]!.push(sm[2]!);
+        if (idx >= 0 && idx < numActions) {
+          peerShares[idx]!.push(sm[2]!);
+        }
       }
     },
     s.abort.signal,

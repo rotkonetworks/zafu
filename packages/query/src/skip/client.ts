@@ -26,13 +26,13 @@ const toSnake = (obj: unknown): unknown => {
     return obj.map(toSnake);
   }
   if (obj !== null && typeof obj === 'object') {
-    return Object.entries(obj as Record<string, unknown>).reduce(
+    return Object.entries(obj as Record<string, unknown>).reduce<Record<string, unknown>>(
       (acc, [key, value]) => {
         const snakeKey = key.replace(/([A-Z])/g, '_$1').toLowerCase();
         acc[snakeKey] = toSnake(value);
         return acc;
       },
-      {} as Record<string, unknown>,
+      {},
     );
   }
   return obj;
@@ -44,17 +44,23 @@ const toCamel = (obj: unknown): unknown => {
     return obj.map(toCamel);
   }
   if (obj !== null && typeof obj === 'object') {
-    return Object.entries(obj as Record<string, unknown>).reduce(
+    return Object.entries(obj as Record<string, unknown>).reduce<Record<string, unknown>>(
       (acc, [key, value]) => {
-        const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+        const camelKey = key.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
         acc[camelKey] = toCamel(value);
         return acc;
       },
-      {} as Record<string, unknown>,
+      {},
     );
   }
   return obj;
 };
+
+/** best-effort extraction of an error message from an unknown response body */
+const errorMessage = (body: unknown): string | undefined =>
+  typeof body === 'object' && body !== null && 'message' in body && typeof body.message === 'string'
+    ? body.message
+    : undefined;
 
 export interface SkipClientOptions {
   apiUrl?: string;
@@ -89,11 +95,11 @@ export class SkipClient {
     });
 
     if (!response.ok) {
-      const errorBody = await response.json().catch(() => ({}));
-      throw new Error(errorBody.message ?? `skip api error: ${response.status}`);
+      const errorBody: unknown = await response.json().catch(() => ({}));
+      throw new Error(errorMessage(errorBody) ?? `skip api error: ${response.status}`);
     }
 
-    const data = await response.json();
+    const data: unknown = await response.json();
     return toCamel(data) as T;
   }
 
@@ -104,7 +110,7 @@ export class SkipClient {
         const snakeKey = key.replace(/([A-Z])/g, '_$1').toLowerCase();
         if (Array.isArray(value)) {
           value.forEach(v => url.searchParams.append(snakeKey, v));
-        } else if (value !== undefined) {
+        } else {
           url.searchParams.set(snakeKey, value);
         }
       });
@@ -116,11 +122,11 @@ export class SkipClient {
     });
 
     if (!response.ok) {
-      const errorBody = await response.json().catch(() => ({}));
-      throw new Error(errorBody.message ?? `skip api error: ${response.status}`);
+      const errorBody: unknown = await response.json().catch(() => ({}));
+      throw new Error(errorMessage(errorBody) ?? `skip api error: ${response.status}`);
     }
 
-    const data = await response.json();
+    const data: unknown = await response.json();
     return toCamel(data) as T;
   }
 
@@ -205,7 +211,9 @@ export class SkipClient {
         return status;
       }
 
-      await new Promise(resolve => setTimeout(resolve, intervalMs));
+      await new Promise(resolve => {
+        setTimeout(resolve, intervalMs);
+      });
     }
 
     throw new Error('transaction status polling timed out');
@@ -216,9 +224,7 @@ export class SkipClient {
 let defaultClient: SkipClient | undefined;
 
 export const getSkipClient = (options?: SkipClientOptions): SkipClient => {
-  if (!defaultClient) {
-    defaultClient = new SkipClient(options);
-  }
+  defaultClient ??= new SkipClient(options);
   return defaultClient;
 };
 

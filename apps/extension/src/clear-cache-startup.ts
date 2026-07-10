@@ -28,7 +28,9 @@ const deleteDb = (name: string): Promise<void> =>
  */
 export const performPendingClears = async (): Promise<void> => {
   const pending = await localExtStorage.get('pendingClearCache');
-  if (!pending || pending.length === 0) return;
+  if (!pending || pending.length === 0) {
+    return;
+  }
 
   console.log('[clear-startup] performing pending clears:', pending);
 

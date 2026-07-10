@@ -32,12 +32,12 @@ export interface BucketRange {
 export interface MemoEvent {
   readonly bucketStart: BucketStart;
   /** every block in the bucket (height-ordered), with raw orchard tx bytes. */
-  readonly blocks: ReadonlyArray<BucketBlock>;
+  readonly blocks: readonly BucketBlock[];
 }
 
 export interface BucketBlock {
   readonly height: number;
-  readonly txs: ReadonlyArray<{ readonly data: Uint8Array }>;
+  readonly txs: readonly { readonly data: Uint8Array }[];
 }
 
 /** context threaded through every fetch. */

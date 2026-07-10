@@ -118,11 +118,15 @@ const nextId = () => `msg_${++messageId}`;
  * concurrent callers share the same spawn promise (no race condition)
  */
 export const spawnNetworkWorker = async (network: NetworkType): Promise<void> => {
-  if (workers.get(network)?.ready) return;
+  if (workers.get(network)?.ready) {
+    return;
+  }
 
   // deduplicate concurrent spawn calls
   const existing = spawnPromises.get(network);
-  if (existing) return existing;
+  if (existing) {
+    return existing;
+  }
 
   const promise = spawnNetworkWorkerInner(network);
   spawnPromises.set(network, promise);
@@ -159,9 +163,8 @@ const spawnNetworkWorkerInner = async (network: NetworkType): Promise<void> => {
     }
 
     // relay prove requests from zcash-worker to offscreen via service worker
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     if (msg.type === 'prove-request' && (msg as any).id && (msg as any).request) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       void relayProveRequest(worker, (msg as any).id, (msg as any).request);
       return;
     }
@@ -635,7 +638,7 @@ export const buildMultiSendTxInWorker = async (
   network: NetworkType,
   walletId: string,
   serverUrl: string,
-  outputs: Array<{ address: string; amount: string; memo?: string }>,
+  outputs: { address: string; amount: string; memo?: string }[],
   accountIndex: number,
   mainnet: boolean,
   mnemonic: string,
@@ -781,7 +784,9 @@ export const isWalletSyncing = (network: NetworkType, walletId: string): boolean
  */
 export const markWalletSyncing = (network: NetworkType, walletId: string): void => {
   const state = workers.get(network);
-  if (state) state.syncingWallets.add(walletId);
+  if (state) {
+    state.syncingWallets.add(walletId);
+  }
 };
 
 /**

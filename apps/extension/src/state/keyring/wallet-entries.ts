@@ -97,7 +97,9 @@ export async function createZignerWalletEntries(
         default?: (opts?: { module_or_path?: string }) => Promise<unknown>;
         validate_ufvk: (s: string) => boolean;
       };
-      if (typeof zwasm.default === 'function') await zwasm.default();
+      if (typeof zwasm.default === 'function') {
+        await zwasm.default();
+      }
       if (!zwasm.validate_ufvk(data.viewingKey)) {
         // Throw, don't swallow: a bogus UFVK must fail the import here,
         // loudly, not get silently dropped and rediscovered at first send

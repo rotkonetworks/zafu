@@ -37,7 +37,7 @@ async function resolveBirthday(
   const stored = await chrome.storage.local.get(birthdayKey);
   // per-wallet birthday takes priority (user-set or auto-detected)
   if (stored[birthdayKey] && typeof stored[birthdayKey] === 'number') {
-    return Math.max(ZCASH_ORCHARD_ACTIVATION, stored[birthdayKey] as number);
+    return Math.max(ZCASH_ORCHARD_ACTIVATION, stored[birthdayKey]);
   }
   // no birthday set — default to near chain tip (new wallet = recent)
   try {
@@ -83,16 +83,26 @@ export function useZcashAutoSync() {
   // decouples WASM loading from wallet data hydration so the worker
   // is ready by the time mnemonic or watch-only sync needs it
   useEffect(() => {
-    if (activeNetwork !== 'zcash') return;
-    if (onLoginPage) return;
+    if (activeNetwork !== 'zcash') {
+      return;
+    }
+    if (onLoginPage) {
+      return;
+    }
     void spawnNetworkWorker('zcash').catch(() => {});
   }, [activeNetwork, onLoginPage]);
 
   // mnemonic wallet sync
   useEffect(() => {
-    if (activeNetwork !== 'zcash') return;
-    if (onLoginPage) return; // keyring not yet unlocked
-    if (!hasMnemonic || !walletId) return;
+    if (activeNetwork !== 'zcash') {
+      return;
+    }
+    if (onLoginPage) {
+      return;
+    } // keyring not yet unlocked
+    if (!hasMnemonic || !walletId) {
+      return;
+    }
 
     // stop previous wallet's sync if switching to a different wallet
     const prevWallet = syncingWalletRef.current;
@@ -112,11 +122,17 @@ export function useZcashAutoSync() {
       (async () => {
         try {
           await spawnNetworkWorker('zcash');
-          if (cancelled) return;
+          if (cancelled) {
+            return;
+          }
           const mnemonic = await getMnemonic(walletId);
-          if (cancelled) return;
+          if (cancelled) {
+            return;
+          }
           const startHeight = await resolveBirthday(walletId, zidecarUrl, zcashBackend);
-          if (cancelled) return;
+          if (cancelled) {
+            return;
+          }
           // generate ring VRF session proof for pro priority sync
           if (isPro(useStore.getState())) {
             try {
@@ -168,14 +184,24 @@ export function useZcashAutoSync() {
 
   // watch-only wallet sync
   useEffect(() => {
-    if (activeNetwork !== 'zcash') return;
-    if (onLoginPage) return;
-    if (hasMnemonic) return;
-    if (!watchOnly) return;
+    if (activeNetwork !== 'zcash') {
+      return;
+    }
+    if (onLoginPage) {
+      return;
+    }
+    if (hasMnemonic) {
+      return;
+    }
+    if (!watchOnly) {
+      return;
+    }
     const ufvkStr =
       watchOnly.ufvk ??
       (watchOnly.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
-    if (!ufvkStr || !walletId) return;
+    if (!ufvkStr || !walletId) {
+      return;
+    }
 
     // stop previous wallet's sync if switching
     const prevWallet = syncingWalletRef.current;
@@ -196,9 +222,13 @@ export function useZcashAutoSync() {
     (async () => {
       try {
         await spawnNetworkWorker('zcash');
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         const startHeight = await resolveBirthday(walletId, zidecarUrl, zcashBackend);
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         syncingWalletRef.current = walletId;
         console.log('[zcash-sync] starting watch-only sync for', walletId);
         await startWatchOnlySyncInWorker(
@@ -233,7 +263,9 @@ export function useZcashAutoSync() {
 
   // stop sync when switching away from zcash network
   useEffect(() => {
-    if (activeNetwork === 'zcash') return;
+    if (activeNetwork === 'zcash') {
+      return;
+    }
     const syncedWallet = syncingWalletRef.current;
     if (syncedWallet && isWalletSyncing('zcash', syncedWallet)) {
       console.log('[zcash-sync] stopping sync (switched away from zcash)');

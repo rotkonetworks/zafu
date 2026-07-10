@@ -50,7 +50,9 @@ export interface StrategyParams {
 }
 
 export function buildStrategy(name: MempoolWatchStrategy, params: StrategyParams): MempoolFetcher {
-  if (name === 'off') return offFetcher;
+  if (name === 'off') {
+    return offFetcher;
+  }
 
   const { base, pollIntervalMs = 10_000 } = params;
   return compose(base, [
@@ -67,7 +69,7 @@ const offFetcher: MempoolFetcher = async function* () {
 
 function compose(
   base: MempoolFetcher,
-  filters: ReadonlyArray<(f: MempoolFetcher) => MempoolFetcher>,
+  filters: readonly ((f: MempoolFetcher) => MempoolFetcher)[],
 ): MempoolFetcher {
   return filters.reduce((acc, filter) => filter(acc), base);
 }

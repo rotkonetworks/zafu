@@ -15,7 +15,7 @@ export interface IbcChain {
   counterpartyChannelId: string;
   /** bech32 address prefix (e.g., 'osmo', 'noble') */
   addressPrefix: string;
-  images: Array<{ svg?: string; png?: string }>;
+  images: { svg?: string; png?: string }[];
 }
 
 const registryClient = new ChainRegistryClient();
@@ -26,7 +26,9 @@ export const useIbcChains = () => {
   return useQuery({
     queryKey: ['ibcChains', chainId],
     queryFn: async (): Promise<IbcChain[]> => {
-      if (!chainId) return [];
+      if (!chainId) {
+        return [];
+      }
       const registry = await registryClient.remote.get(chainId);
       return registry.ibcConnections.map(chain => ({
         displayName: chain.displayName,
@@ -44,7 +46,9 @@ export const useIbcChains = () => {
 
 /** validate destination address for a chain */
 export const isValidIbcAddress = (chain: IbcChain | undefined, address: string): boolean => {
-  if (!chain || !address) return false;
+  if (!chain || !address) {
+    return false;
+  }
   // simple prefix check - full bech32 validation happens on submit
   return address.startsWith(`${chain.addressPrefix}1`);
 };

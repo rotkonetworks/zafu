@@ -47,9 +47,13 @@ export const withBucketCache =
       const fresh = new Set<BucketStart>();
       const alwaysFetch = opts.alwaysFetch;
       for (const b of ownedBuckets) {
-        if (alwaysFetch?.(b) || !seen.has(b)) fresh.add(b);
+        if (alwaysFetch?.(b) || !seen.has(b)) {
+          fresh.add(b);
+        }
       }
-      if (fresh.size === 0) return;
+      if (fresh.size === 0) {
+        return;
+      }
 
       // we record only buckets we actually saw a successful event for AND that
       // were in our own input set (= real-only when cache is outermost). this
@@ -61,12 +65,16 @@ export const withBucketCache =
       //     instead of monotonically shrinking
       const succeeded = new Set<BucketStart>();
       for await (const event of inner(walletId, fresh, ctx)) {
-        if (fresh.has(event.bucketStart)) succeeded.add(event.bucketStart);
+        if (fresh.has(event.bucketStart)) {
+          succeeded.add(event.bucketStart);
+        }
         yield event;
       }
 
       const tasks: Promise<void>[] = [];
-      for (const b of succeeded) tasks.push(store.put(walletId, b));
+      for (const b of succeeded) {
+        tasks.push(store.put(walletId, b));
+      }
       await Promise.all(tasks);
     };
 
@@ -118,7 +126,9 @@ export function idbBucketStore(provider: IDBProvider, storeName = 'memo-cache'):
           if (key.startsWith(prefix)) {
             const suffix = key.slice(prefix.length);
             const n = Number(suffix);
-            if (!Number.isNaN(n)) out.add(n);
+            if (!Number.isNaN(n)) {
+              out.add(n);
+            }
           }
           cursor.continue();
         };

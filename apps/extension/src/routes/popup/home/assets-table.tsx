@@ -82,7 +82,9 @@ AssetRow.displayName = 'AssetRow';
 const filterBalances = (balances: BalancesResponse[]): BalancesResponse[] =>
   balances.filter(balance => {
     const metadata = getMetadataFromBalancesResponse.optional(balance);
-    if (!metadata?.base || typeof metadata.base !== 'string') return true;
+    if (!metadata?.base || typeof metadata.base !== 'string') {
+      return true;
+    }
 
     return !(
       assetPatterns.auctionNft.matches(metadata.base) ||
@@ -107,9 +109,13 @@ export interface AssetsTableProps {
 /** parse unbonding token info from balance */
 const getUnbondingInfo = (balance: BalancesResponse) => {
   const metadata = getMetadataFromBalancesResponse.optional(balance);
-  if (!metadata?.display) return undefined;
+  if (!metadata?.display) {
+    return undefined;
+  }
   const captured = assetPatterns.unbondingToken.capture(metadata.display);
-  if (!captured) return undefined;
+  if (!captured) {
+    return undefined;
+  }
   return { idKey: captured.idKey, startAt: parseInt(captured.startAt, 10) };
 };
 
@@ -141,7 +147,9 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
       const map = new Map<string, string>();
       try {
         for await (const v of stakeClient.validatorInfo({})) {
-          if (!v.validatorInfo?.validator?.identityKey?.ik) continue;
+          if (!v.validatorInfo?.validator?.identityKey?.ik) {
+            continue;
+          }
           const name = v.validatorInfo.validator.name || 'Unknown';
           const bech32 = bech32mIdentityKey({ ik: v.validatorInfo.validator.identityKey.ik });
           map.set(bech32, name);
@@ -180,15 +188,21 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
 
   // memoize expensive filter + sort operations
   const balances = useMemo(() => {
-    if (!rawBalances?.length) return [];
+    if (!rawBalances?.length) {
+      return [];
+    }
     return sortBalances(filterBalances(rawBalances));
   }, [rawBalances]);
 
   // check for pending claim from popup → side panel handoff
   useEffect(() => {
-    if (!balances.length) return;
+    if (!balances.length) {
+      return;
+    }
     void chrome.storage.local.get('pendingClaim').then(({ pendingClaim }) => {
-      if (!pendingClaim) return;
+      if (!pendingClaim) {
+        return;
+      }
       void chrome.storage.local.remove('pendingClaim');
       const matching = balances.find(b => {
         const info = getUnbondingInfo(b);
@@ -210,7 +224,9 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
     } else {
       // store claim info, open side panel, and close the popup
       const info = getUnbondingInfo(balance);
-      if (!info) return;
+      if (!info) {
+        return;
+      }
       void chrome.storage.local.set({
         pendingClaim: { validatorId: info.idKey, startAt: info.startAt },
       });
@@ -226,10 +242,14 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
   }, []);
 
   const handleClaim = useCallback(async () => {
-    if (!claimBalance) return;
+    if (!claimBalance) {
+      return;
+    }
 
     const info = getUnbondingInfo(claimBalance);
-    if (!info) return;
+    if (!info) {
+      return;
+    }
 
     setClaimStatus('planning');
     setClaimError(undefined);
@@ -245,7 +265,9 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
       } else if (valueView?.valueView.case === 'unknownAssetId') {
         amount = valueView.valueView.value.amount;
       }
-      if (!amount) throw new Error('could not extract unbonding amount');
+      if (!amount) {
+        throw new Error('could not extract unbonding amount');
+      }
 
       // query epochs to look up the correct penalty from the chain
       const [startEpochRes, currentEpochRes] = await Promise.all([

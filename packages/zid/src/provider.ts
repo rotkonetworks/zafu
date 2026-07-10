@@ -14,14 +14,16 @@ export async function createSessionKey() {
     pubkey,
     keyPair,
     sign: async (data: Uint8Array): Promise<string> => {
-      const sig = new Uint8Array(await crypto.subtle.sign('Ed25519', keyPair.privateKey, data));
+      const sig = new Uint8Array(
+        await crypto.subtle.sign('Ed25519', keyPair.privateKey, data as BufferSource),
+      );
       return hex(sig);
     },
     verify: async (data: Uint8Array, sigHex: string, pubkeyHex: string): Promise<boolean> => {
       const sigBytes = unhex(sigHex);
       const pubBytes = unhex(pubkeyHex);
       const key = await crypto.subtle.importKey('raw', pubBytes, 'Ed25519', false, ['verify']);
-      return crypto.subtle.verify('Ed25519', key, sigBytes, data);
+      return crypto.subtle.verify('Ed25519', key, sigBytes, data as BufferSource);
     },
   };
 }
@@ -198,7 +200,7 @@ function hex(bytes: Uint8Array): string {
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
 }
-function unhex(h: string): Uint8Array {
+function unhex(h: string): Uint8Array<ArrayBuffer> {
   const bytes = new Uint8Array(h.length / 2);
   for (let i = 0; i < h.length; i += 2) bytes[i / 2] = parseInt(h.slice(i, i + 2), 16);
   return bytes;

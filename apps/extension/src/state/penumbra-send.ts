@@ -79,9 +79,15 @@ export const createPenumbraSendSlice: SliceCreator<PenumbraSendSlice> = (set, ge
     const { recipient, amount, memo } = get().penumbraSend;
     const account = get().keyRing.penumbraAccount;
 
-    if (!recipient) throw new Error('no recipient address');
-    if (!amount || amount === '0') throw new Error('no amount specified');
-    if (!selectedAsset) throw new Error('no asset selected');
+    if (!recipient) {
+      throw new Error('no recipient address');
+    }
+    if (!amount || amount === '0') {
+      throw new Error('no amount specified');
+    }
+    if (!selectedAsset) {
+      throw new Error('no asset selected');
+    }
 
     // validate penumbra address format
     if (!recipient.startsWith('penumbra1')) {

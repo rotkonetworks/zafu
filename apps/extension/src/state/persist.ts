@@ -79,9 +79,13 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
               const granted = r['granted'] as string[];
               const denied = r['denied'] as string[];
               let choice: UserChoice;
-              if (granted.includes('connect')) choice = UserChoice.Approved;
-              else if (denied.includes('connect')) choice = UserChoice.Denied;
-              else choice = UserChoice.Ignored;
+              if (granted.includes('connect')) {
+                choice = UserChoice.Approved;
+              } else if (denied.includes('connect')) {
+                choice = UserChoice.Denied;
+              } else {
+                choice = UserChoice.Ignored;
+              }
               return {
                 origin: r['origin'] as string,
                 choice,
@@ -94,27 +98,37 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
       const decryptedAny = !!(wallets || zcashWallets || contacts || recentAddresses || messages);
       set(
         produce((state: AllSlices) => {
-          if (Array.isArray(wallets))
+          if (Array.isArray(wallets)) {
             state.wallets.all = wallets.map(w => ({
               ...w,
               vaultId: w.vaultId ?? '',
             })) as typeof state.wallets.all;
-          if (Array.isArray(zcashWallets))
+          }
+          if (Array.isArray(zcashWallets)) {
             state.wallets.zcashWallets = zcashWallets.map(w => ({
               ...w,
               vaultId: w.vaultId ?? '',
             })) as typeof state.wallets.zcashWallets;
-          if (Array.isArray(contacts)) state.contacts.contacts = contacts;
-          if (Array.isArray(recentAddresses))
+          }
+          if (Array.isArray(contacts)) {
+            state.contacts.contacts = contacts;
+          }
+          if (Array.isArray(recentAddresses)) {
             state.recentAddresses.recentAddresses = recentAddresses;
-          if (Array.isArray(knownSites)) state.connectedSites.knownSites = knownSites;
-          if (Array.isArray(messages))
+          }
+          if (Array.isArray(knownSites)) {
+            state.connectedSites.knownSites = knownSites;
+          }
+          if (Array.isArray(messages)) {
             state.messages.messages = messages as typeof state.messages.messages;
+          }
         }),
       );
       // only unblock writes if we actually decrypted data — if locked (all null),
       // keep blocking so persist() can't wipe storage with empty arrays
-      if (decryptedAny) markHydrated();
+      if (decryptedAny) {
+        markHydrated();
+      }
     };
 
     // Initialize keyring from storage (loads vaults, selected key, networks)
@@ -154,9 +168,13 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
               const granted = r['granted'] as string[];
               const denied = r['denied'] as string[];
               let choice: UserChoice;
-              if (granted.includes('connect')) choice = UserChoice.Approved;
-              else if (denied.includes('connect')) choice = UserChoice.Denied;
-              else choice = UserChoice.Ignored;
+              if (granted.includes('connect')) {
+                choice = UserChoice.Approved;
+              } else if (denied.includes('connect')) {
+                choice = UserChoice.Denied;
+              } else {
+                choice = UserChoice.Ignored;
+              }
               return {
                 origin: r['origin'] as string,
                 choice,

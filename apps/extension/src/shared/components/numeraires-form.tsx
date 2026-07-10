@@ -51,7 +51,7 @@ export const NumeraireForm = ({
         <SelectList>
           {numeraires.map(metadata => {
             // Image default is "" and thus cannot do nullish-coalescing
-            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+
             const icon = metadata.images[0]?.png || metadata.images[0]?.svg;
             return (
               <SelectList.Option

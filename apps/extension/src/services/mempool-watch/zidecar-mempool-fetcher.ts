@@ -23,28 +23,32 @@ import type { MempoolEntry, MempoolFetcher } from './types';
  */
 export interface MempoolStreamClient {
   getMempoolStream(signal?: AbortSignal): Promise<
-    ReadonlyArray<{
+    readonly {
       readonly hash: Uint8Array;
-      readonly actions: ReadonlyArray<{
+      readonly actions: readonly {
         readonly nullifier: Uint8Array;
         readonly cmx: Uint8Array;
         readonly ephemeralKey: Uint8Array;
         readonly ciphertext: Uint8Array;
-      }>;
-    }>
+      }[];
+    }[]
   >;
 }
 
 export function zidecarMempoolFetcher(client: MempoolStreamClient): MempoolFetcher {
   return async function* (_walletId, ctx) {
-    if (ctx.signal.aborted) return;
+    if (ctx.signal.aborted) {
+      return;
+    }
     ctx.onStatus?.({ kind: 'connecting' });
     try {
       // Plumb the abort signal through. If the caller aborts during the
       // round-trip, the fetch promise rejects with AbortError and we treat
       // it as a clean exit (no error status fired).
       const blocks = await client.getMempoolStream(ctx.signal);
-      if (ctx.signal.aborted) return;
+      if (ctx.signal.aborted) {
+        return;
+      }
       ctx.onStatus?.({ kind: 'connected' });
       const entries: MempoolEntry[] = blocks.map(b => ({
         hash: b.hash,
@@ -59,7 +63,9 @@ export function zidecarMempoolFetcher(client: MempoolStreamClient): MempoolFetch
     } catch (err) {
       // Abort during the network call surfaces as DOMException 'AbortError'.
       // It's not a watcher error — the caller asked us to stop.
-      if (ctx.signal.aborted) return;
+      if (ctx.signal.aborted) {
+        return;
+      }
       ctx.onStatus?.({ kind: 'error', error: err instanceof Error ? err.message : String(err) });
       throw err;
     }

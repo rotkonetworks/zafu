@@ -34,14 +34,18 @@ const getCounterpartyHeight = async (
   }
 
   const res = await fetch(`${restEndpoint}/cosmos/base/tendermint/v1beta1/blocks/latest`);
-  if (!res.ok) throw new Error(`failed to query ${chainId} latest block: ${res.status}`);
+  if (!res.ok) {
+    throw new Error(`failed to query ${chainId} latest block: ${res.status}`);
+  }
 
   const data = await res.json();
   const latestHeight = BigInt(data.block?.header?.height ?? data.sdk_block?.header?.height ?? '0');
-  if (latestHeight === 0n) throw new Error(`could not parse latest height for ${chainId}`);
+  if (latestHeight === 0n) {
+    throw new Error(`could not parse latest height for ${chainId}`);
+  }
 
   // revision number from chain ID (e.g. "noble-1" -> 1, "osmosis-1" -> 1)
-  const revMatch = chainId.match(/-(\d+)$/);
+  const revMatch = /-(\d+)$/.exec(chainId);
   const revisionNumber = revMatch?.[1] ? BigInt(revMatch[1]) : 0n;
 
   return { height: latestHeight, revisionNumber };
@@ -122,10 +126,18 @@ export const createIbcWithdrawSlice: SliceCreator<IbcWithdrawSlice> = (set, get)
     const { chain, destinationAddress, amount, denom } = get().ibcWithdraw;
     const sourceIndex = get().keyRing.penumbraAccount;
 
-    if (!chain) throw new Error('no chain selected');
-    if (!destinationAddress) throw new Error('no destination address');
-    if (!amount || amount === '0') throw new Error('no amount specified');
-    if (!denom) throw new Error('no denom specified');
+    if (!chain) {
+      throw new Error('no chain selected');
+    }
+    if (!destinationAddress) {
+      throw new Error('no destination address');
+    }
+    if (!amount || amount === '0') {
+      throw new Error('no amount specified');
+    }
+    if (!denom) {
+      throw new Error('no denom specified');
+    }
 
     set(state => {
       state.ibcWithdraw.loading = true;

@@ -73,12 +73,16 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
   const donation = activeNetwork ? DONATE[activeNetwork] : undefined;
 
   const handleDonate = useCallback(() => {
-    if (!donation) return;
+    if (!donation) {
+      return;
+    }
     onClose();
     navigate(PopupPath.SEND, { state: { prefillRecipient: donation.address } });
   }, [donation, navigate, onClose]);
 
-  if (!open) return null;
+  if (!open) {
+    return null;
+  }
 
   // Destinations demoted from the bottom-tabs rail (which now shows
   // only Home + Inbox). Each is gated by the active network's feature
@@ -86,7 +90,12 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
   const onMultisigWallet = keyInfo?.type === 'frost-multisig';
   const showMultisig = activeNetwork === 'zcash' && (onMultisigWallet || pro);
 
-  type MenuItem = { icon: string; label: string; onClick: () => void; className?: string };
+  interface MenuItem {
+    icon: string;
+    label: string;
+    onClick: () => void;
+    className?: string;
+  }
   const networkDestinations: MenuItem[] = [
     hasFeature(activeNetwork, 'stake') && {
       icon: 'i-lucide-layers',

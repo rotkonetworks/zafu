@@ -15,7 +15,7 @@ import {
   selectGetMnemonic,
 } from '../state/keyring';
 import { getActiveWalletJson, selectActiveZcashWallet } from '../state/wallets';
-import { NETWORK_CONFIGS, type IbcNetwork, isIbcNetwork } from '../state/keyring/network-types';
+import { NETWORK_CONFIGS, isIbcNetwork } from '../state/keyring/network-types';
 import type { CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { spawnNetworkWorker, deriveAddressInWorker } from '../state/keyring/network-worker';
 import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
@@ -87,7 +87,9 @@ export async function deriveZcashTransparent(
 /** load zcash wasm module from extension root (cached after first init) */
 let zcashWasmCache: unknown;
 async function loadZcashWasm() {
-  if (zcashWasmCache) return zcashWasmCache;
+  if (zcashWasmCache) {
+    return zcashWasmCache;
+  }
   const wasmJsUrl = chrome.runtime.getURL('zafu-wasm/zafu_wasm.js');
   const wasmBinaryUrl = chrome.runtime.getURL('zafu-wasm/zafu_wasm_bg.wasm');
   const zcashWasm = await import(/* webpackIgnore: true */ wasmJsUrl);
@@ -102,7 +104,7 @@ async function loadZcashWasm() {
 
 /** derive zcash address from UFVK string (for watch-only wallets) */
 async function deriveZcashAddressFromUfvk(ufvk: string, diversifierIndex = 0): Promise<string> {
-  const zcashWasm = (await loadZcashWasm()) as any;
+  const zcashWasm = await loadZcashWasm();
   // WatchOnlyWallet expects raw FVK bytes, but if we have a ufvk string
   // we need to use address_from_ufvk if it exists, otherwise fall back
   if (typeof zcashWasm.address_from_ufvk === 'function') {
@@ -123,8 +125,7 @@ export async function deriveZcashTransparentFromUfvk(
   ufvk: string,
   addressIndex = 0,
 ): Promise<string> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const zcashWasm = (await loadZcashWasm()) as any;
+  const zcashWasm = await loadZcashWasm();
   return zcashWasm.transparent_address_from_ufvk(ufvk, addressIndex) as string;
 }
 
@@ -136,13 +137,15 @@ export function useActiveAddress() {
   const penumbraWallet = useStore(getActiveWalletJson);
   const zcashWallet = useStore(selectActiveZcashWallet);
 
-  const [address, setAddress] = useState<string>('');
+  const [address, setAddress] = useState('');
   const [loading, setLoading] = useState(true);
   const [shieldedIndex, setShieldedIndex] = useState(0);
 
   // read stored shielded diversifier index
   useEffect(() => {
-    if (activeNetwork !== 'zcash') return;
+    if (activeNetwork !== 'zcash') {
+      return;
+    }
     chrome.storage.local.get('zcashShieldedIndex').then(r => {
       setShieldedIndex(r['zcashShieldedIndex'] ?? 0);
     });
@@ -150,7 +153,9 @@ export function useActiveAddress() {
 
   // listen for storage changes so receive page bumps propagate here
   useEffect(() => {
-    if (activeNetwork !== 'zcash') return;
+    if (activeNetwork !== 'zcash') {
+      return;
+    }
     const listener = (changes: Record<string, chrome.storage.StorageChange>) => {
       if (changes['zcashShieldedIndex']?.newValue !== undefined) {
         setShieldedIndex(changes['zcashShieldedIndex'].newValue);
@@ -175,8 +180,12 @@ export function useActiveAddress() {
             // penumbra - derive from seed
             if (activeNetwork === 'penumbra') {
               const addr = await derivePenumbraAddress(mnemonic, penumbraAccount);
-              if (!cancelled) setAddress(addr);
-              if (!cancelled) setLoading(false);
+              if (!cancelled) {
+                setAddress(addr);
+              }
+              if (!cancelled) {
+                setLoading(false);
+              }
               return;
             }
 
@@ -188,46 +197,70 @@ export function useActiveAddress() {
                   await spawnNetworkWorker('zcash');
                   const rawAddr = await deriveAddressInWorker('zcash', mnemonic, shieldedIndex);
                   const addr = fixOrchardAddress(rawAddr, true);
-                  if (!cancelled) setAddress(addr);
-                  if (!cancelled) setLoading(false);
+                  if (!cancelled) {
+                    setAddress(addr);
+                  }
+                  if (!cancelled) {
+                    setLoading(false);
+                  }
                   return;
                 } catch {
-                  if (attempt < 2) await new Promise(r => setTimeout(r, 1000));
+                  if (attempt < 2) {
+                    await new Promise(r => setTimeout(r, 1000));
+                  }
                 }
               }
               // all retries failed — don't fall through to zigner wallet
-              if (!cancelled) setLoading(false);
+              if (!cancelled) {
+                setLoading(false);
+              }
               return;
             }
 
             // cosmos/ibc chains
             if (isIbcNetwork(activeNetwork)) {
-              const config = NETWORK_CONFIGS[activeNetwork as IbcNetwork];
+              const config = NETWORK_CONFIGS[activeNetwork];
               const addr = await deriveCosmosAddress(mnemonic, config.bech32Prefix!);
-              if (!cancelled) setAddress(addr);
-              if (!cancelled) setLoading(false);
+              if (!cancelled) {
+                setAddress(addr);
+              }
+              if (!cancelled) {
+                setLoading(false);
+              }
               return;
             }
 
             // polkadot/kusama - use ed25519 derivation (ledger compatible)
             if (activeNetwork === 'polkadot' || activeNetwork === 'kusama') {
               const addr = await derivePolkadotAddress(mnemonic, activeNetwork);
-              if (!cancelled) setAddress(addr);
-              if (!cancelled) setLoading(false);
+              if (!cancelled) {
+                setAddress(addr);
+              }
+              if (!cancelled) {
+                setLoading(false);
+              }
               return;
             }
 
             // ethereum - need ethers or viem (not available)
             if (activeNetwork === 'ethereum') {
-              if (!cancelled) setAddress('');
-              if (!cancelled) setLoading(false);
+              if (!cancelled) {
+                setAddress('');
+              }
+              if (!cancelled) {
+                setLoading(false);
+              }
               return;
             }
 
             // bitcoin - need bitcoinjs-lib (not available)
             if (activeNetwork === 'bitcoin') {
-              if (!cancelled) setAddress('');
-              if (!cancelled) setLoading(false);
+              if (!cancelled) {
+                setAddress('');
+              }
+              if (!cancelled) {
+                setLoading(false);
+              }
               return;
             }
           } catch (err) {
@@ -246,8 +279,12 @@ export function useActiveAddress() {
           const fvk = FullViewingKey.fromJsonString(penumbraWallet.fullViewingKey);
           const address = await getAddressByIndex(fvk, penumbraAccount);
           const addr = bech32mAddress(address);
-          if (!cancelled) setAddress(addr);
-          if (!cancelled) setLoading(false);
+          if (!cancelled) {
+            setAddress(addr);
+          }
+          if (!cancelled) {
+            setLoading(false);
+          }
           return;
         }
 
@@ -260,8 +297,12 @@ export function useActiveAddress() {
           if (ufvkStr) {
             try {
               const addr = await deriveZcashAddressFromUfvk(ufvkStr, shieldedIndex);
-              if (!cancelled) setAddress(addr);
-              if (!cancelled) setLoading(false);
+              if (!cancelled) {
+                setAddress(addr);
+              }
+              if (!cancelled) {
+                setLoading(false);
+              }
               return;
             } catch (err) {
               console.error('failed to derive address from ufvk:', err);
@@ -270,7 +311,7 @@ export function useActiveAddress() {
           // orchardFvk is base64 FVK bytes (from zigner QR binary) — derive via WatchOnlyWallet
           if (zcashWallet.orchardFvk && !zcashWallet.orchardFvk.startsWith('uview')) {
             try {
-              const zcashWasm = (await loadZcashWasm()) as any;
+              const zcashWasm = await loadZcashWasm();
               const fvkBytes = Uint8Array.from(atob(zcashWallet.orchardFvk), c => c.charCodeAt(0));
               const wallet = new zcashWasm.WatchOnlyWallet(
                 fvkBytes,
@@ -279,8 +320,12 @@ export function useActiveAddress() {
               );
               try {
                 const raw = wallet.get_address_at(shieldedIndex);
-                if (!cancelled) setAddress(fixOrchardAddress(raw, mainnet));
-                if (!cancelled) setLoading(false);
+                if (!cancelled) {
+                  setAddress(fixOrchardAddress(raw, mainnet));
+                }
+                if (!cancelled) {
+                  setLoading(false);
+                }
               } finally {
                 wallet.free();
               }
@@ -291,8 +336,12 @@ export function useActiveAddress() {
           }
           // fallback: use stored address if available
           if (zcashWallet.address) {
-            if (!cancelled) setAddress(fixOrchardAddress(zcashWallet.address, mainnet));
-            if (!cancelled) setLoading(false);
+            if (!cancelled) {
+              setAddress(fixOrchardAddress(zcashWallet.address, mainnet));
+            }
+            if (!cancelled) {
+              setLoading(false);
+            }
             return;
           }
         }
@@ -309,8 +358,12 @@ export function useActiveAddress() {
             if (addrs) {
               const match = addrs.find(a => a.chainId === activeNetwork);
               if (match) {
-                if (!cancelled) setAddress(match.address);
-                if (!cancelled) setLoading(false);
+                if (!cancelled) {
+                  setAddress(match.address);
+                }
+                if (!cancelled) {
+                  setLoading(false);
+                }
                 return;
               }
               // derive from any stored address using bech32 prefix conversion
@@ -322,8 +375,12 @@ export function useActiveAddress() {
                     addrs[0]!.address,
                     activeNetwork as CosmosChainId,
                   );
-                  if (!cancelled) setAddress(addr);
-                  if (!cancelled) setLoading(false);
+                  if (!cancelled) {
+                    setAddress(addr);
+                  }
+                  if (!cancelled) {
+                    setLoading(false);
+                  }
                   return;
                 } catch (err) {
                   console.error('failed to derive cosmos address:', err);
@@ -337,20 +394,30 @@ export function useActiveAddress() {
             (activeNetwork === 'polkadot' || activeNetwork === 'kusama') &&
             insensitive['polkadotSs58']
           ) {
-            if (!cancelled) setAddress(insensitive['polkadotSs58'] as string);
-            if (!cancelled) setLoading(false);
+            if (!cancelled) {
+              setAddress(insensitive['polkadotSs58'] as string);
+            }
+            if (!cancelled) {
+              setLoading(false);
+            }
             return;
           }
         }
 
         // fallback - no address available
-        if (!cancelled) setAddress('');
+        if (!cancelled) {
+          setAddress('');
+        }
       } catch (err) {
         console.error('failed to derive address:', err);
-        if (!cancelled) setAddress('');
+        if (!cancelled) {
+          setAddress('');
+        }
       }
 
-      if (!cancelled) setLoading(false);
+      if (!cancelled) {
+        setLoading(false);
+      }
     };
 
     void deriveAddress();

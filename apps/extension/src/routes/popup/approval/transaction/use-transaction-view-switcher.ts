@@ -11,8 +11,9 @@ export const useTransactionViewSwitcher = (): {
 } => {
   const { asSender, asReceiver, asPublic } = useStore(txApprovalSelector);
 
-  const [selectedTransactionViewName, setSelectedTransactionViewName] =
-    useState<TransactionViewTab>(TransactionViewTab.SENDER);
+  const [selectedTransactionViewName, setSelectedTransactionViewName] = useState(
+    TransactionViewTab.SENDER,
+  );
 
   const deserializedTransactionViews = useMemo(() => {
     if (!asSender || !asReceiver || !asPublic) {

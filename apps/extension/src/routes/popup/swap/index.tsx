@@ -85,8 +85,12 @@ interface OutputAsset {
 export const SwapPage = () => {
   const activeNetwork = useStore(selectActiveNetwork);
 
-  if (activeNetwork === 'zcash') return <ZcashCrosschainSwap />;
-  if (activeNetwork === 'penumbra') return <PenumbraSwap />;
+  if (activeNetwork === 'zcash') {
+    return <ZcashCrosschainSwap />;
+  }
+  if (activeNetwork === 'penumbra') {
+    return <PenumbraSwap />;
+  }
 
   return (
     <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
@@ -119,7 +123,9 @@ function LiveTimer({ startMs }: { startMs: number }) {
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
-    if (!startMs) return;
+    if (!startMs) {
+      return;
+    }
     const tick = () => setElapsed(Math.round((Date.now() - startMs) / 1000));
     tick();
     const id = setInterval(tick, 1000);
@@ -144,7 +150,6 @@ const ZcashCrosschainSwap = () => {
   const [quote, setQuote] = useState<SwapQuoteResponse | undefined>();
   const [swapStatus, setSwapStatus] = useState<SwapStatus | null>(null);
   const [error, setError] = useState<string | undefined>();
-  const [copied, setCopied] = useState(false);
   const [balanceZec, setBalanceZec] = useState<string | undefined>();
   const getMnemonic = useStore(selectGetMnemonic);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
@@ -152,9 +157,9 @@ const ZcashCrosschainSwap = () => {
   const [signRequestQr, setSignRequestQr] = useState<string | null>(null);
   const unsignedTxRef = useRef<any | null>(null);
   const [sendSteps, setSendSteps] = useState<
-    Array<{ step: string; detail?: string; elapsedMs: number }>
+    { step: string; detail?: string; elapsedMs: number }[]
   >([]);
-  const buildStartRef = useRef<number>(0);
+  const buildStartRef = useRef(0);
   const activeZcashWallet = useStore(selectActiveZcashWallet);
   const ufvk =
     activeZcashWallet?.ufvk ??
@@ -164,7 +169,9 @@ const ZcashCrosschainSwap = () => {
 
   //zcash-send-progress
   useEffect(() => {
-    if (step !== 'sending') return;
+    if (step !== 'sending') {
+      return;
+    }
 
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail as {
@@ -182,7 +189,9 @@ const ZcashCrosschainSwap = () => {
   // fetch ZEC balance
   const walletId = selectedKeyInfo?.id;
   useEffect(() => {
-    if (!walletId) return;
+    if (!walletId) {
+      return;
+    }
     getBalanceInWorker('zcash', walletId)
       .then(b => {
         const zec = (Number(b) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
@@ -209,22 +218,32 @@ const ZcashCrosschainSwap = () => {
     return [...tokens].sort((a, b) => {
       const ai = popular.indexOf(a.symbol);
       const bi = popular.indexOf(b.symbol);
-      if (ai >= 0 && bi >= 0) return ai - bi;
-      if (ai >= 0) return -1;
-      if (bi >= 0) return 1;
+      if (ai >= 0 && bi >= 0) {
+        return ai - bi;
+      }
+      if (ai >= 0) {
+        return -1;
+      }
+      if (bi >= 0) {
+        return 1;
+      }
       return a.symbol.localeCompare(b.symbol);
     });
   }, [tokens]);
 
   // map selected token's blockchain to contact network for address book
   const destContactNetwork = useMemo(() => {
-    if (!selectedToken) return undefined;
+    if (!selectedToken) {
+      return undefined;
+    }
     return blockchainToContactNetwork(selectedToken.blockchain) as ContactNetwork | undefined;
   }, [selectedToken]);
 
   // get contacts for the destination network
   const destContacts = useMemo(() => {
-    if (!destContactNetwork) return [];
+    if (!destContactNetwork) {
+      return [];
+    }
     return contacts
       .filter(c => c.addresses.some(a => a.network === destContactNetwork))
       .flatMap(c =>
@@ -235,7 +254,9 @@ const ZcashCrosschainSwap = () => {
   }, [contacts, destContactNetwork]);
 
   const handleFlipDirection = useCallback(() => {
-    if (step !== 'input') return;
+    if (step !== 'input') {
+      return;
+    }
     setDirection(d => (d === 'from_zec' ? 'into_zec' : 'from_zec'));
     setAmountIn('');
     setDestinationAddress('');
@@ -301,7 +322,9 @@ const ZcashCrosschainSwap = () => {
   }, [selectedToken, amountIn, zcashAddress, zecAssetId, destinationAddress, isFromZec]);
 
   const handleConfirmSwap = useCallback(async () => {
-    if (!quote || !selectedKeyInfo) return;
+    if (!quote || !selectedKeyInfo) {
+      return;
+    }
 
     setError(undefined);
 
@@ -440,7 +463,9 @@ const ZcashCrosschainSwap = () => {
 
   // poll swap status when in deposit/polling step
   useEffect(() => {
-    if ((step !== 'deposit' && step !== 'polling') || !quote) return;
+    if ((step !== 'deposit' && step !== 'polling') || !quote) {
+      return;
+    }
 
     const interval = setInterval(async () => {
       try {
@@ -479,13 +504,6 @@ const ZcashCrosschainSwap = () => {
 
     return () => clearInterval(interval);
   }, [step, quote]);
-  const handleCopyDeposit = useCallback(() => {
-    if (!quote) return;
-    void navigator.clipboard.writeText(quote.quote.depositAddress);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  }, [quote]);
-
   const handleReset = useCallback(() => {
     setStep('input');
     setQuote(undefined);
@@ -966,7 +984,9 @@ const PenumbraSwap = () => {
         return raw
           .filter(b => {
             const meta = getMetadataFromBalancesResponse.optional(b);
-            if (!meta?.base || typeof meta.base !== 'string') return true;
+            if (!meta?.base || typeof meta.base !== 'string') {
+              return true;
+            }
             return !(
               assetPatterns.auctionNft.matches(meta.base) ||
               assetPatterns.lpNft.matches(meta.base) ||
@@ -996,7 +1016,9 @@ const PenumbraSwap = () => {
         return raw
           .filter(resp => {
             const meta = resp.denomMetadata;
-            if (!meta?.base || typeof meta.base !== 'string') return true;
+            if (!meta?.base || typeof meta.base !== 'string') {
+              return true;
+            }
             return !(
               assetPatterns.auctionNft.matches(meta.base) ||
               assetPatterns.lpNft.matches(meta.base) ||
@@ -1053,7 +1075,9 @@ const PenumbraSwap = () => {
     enabled: !!selectedIn && !!selectedOut && parseFloat(amountIn) > 0,
     staleTime: 10_000,
     queryFn: async () => {
-      if (!selectedIn || !selectedOut || !amountIn || parseFloat(amountIn) <= 0) return null;
+      if (!selectedIn || !selectedOut || !amountIn || parseFloat(amountIn) <= 0) {
+        return null;
+      }
 
       const multiplier = 10 ** selectedIn.exponent;
       const baseAmount = BigInt(Math.floor(parseFloat(amountIn) * multiplier));
@@ -1069,7 +1093,9 @@ const PenumbraSwap = () => {
       });
 
       const execution = result.output;
-      if (!execution) return null;
+      if (!execution) {
+        return null;
+      }
 
       let totalOutput = 0n;
       for (const trace of execution.traces ?? []) {
@@ -1089,7 +1115,9 @@ const PenumbraSwap = () => {
   });
 
   const handleMax = useCallback(() => {
-    if (selectedIn) setAmountIn(selectedIn.amount);
+    if (selectedIn) {
+      setAmountIn(selectedIn.amount);
+    }
   }, [selectedIn]);
 
   const handleFlip = useCallback(() => {
@@ -1097,16 +1125,14 @@ const PenumbraSwap = () => {
       const newIn = inputAssets.find(
         a =>
           a.assetId &&
-          selectedOut.assetId &&
-          a.assetId.length === selectedOut.assetId.length &&
+          a.assetId.length === selectedOut.assetId?.length &&
           a.assetId.every((v, i) => v === selectedOut.assetId![i]),
       );
       if (newIn) {
         const newOut = outputAssets.find(
           a =>
             a.assetId &&
-            selectedIn.assetId &&
-            a.assetId.length === selectedIn.assetId.length &&
+            a.assetId.length === selectedIn.assetId?.length &&
             a.assetId.every((v, i) => v === selectedIn.assetId![i]),
         );
         if (newOut) {
@@ -1122,7 +1148,9 @@ const PenumbraSwap = () => {
     selectedIn && selectedOut && parseFloat(amountIn) > 0 && simulation && txStatus === 'idle';
 
   const handleSubmit = useCallback(async () => {
-    if (!canSubmit || !selectedIn || !selectedOut) return;
+    if (!canSubmit || !selectedIn || !selectedOut) {
+      return;
+    }
 
     setTxStatus('planning');
     setTxError(undefined);
@@ -1304,8 +1332,12 @@ const PenumbraSwap = () => {
             <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border-soft bg-canvas shadow-lg'>
               {outputAssets
                 .filter(a => {
-                  if (!selectedIn?.assetId || !a.assetId) return true;
-                  if (selectedIn.assetId.length !== a.assetId.length) return true;
+                  if (!selectedIn?.assetId || !a.assetId) {
+                    return true;
+                  }
+                  if (selectedIn.assetId.length !== a.assetId.length) {
+                    return true;
+                  }
                   return !selectedIn.assetId.every((v, i) => v === a.assetId![i]);
                 })
                 .map((item, i) => (
@@ -1338,9 +1370,7 @@ const PenumbraSwap = () => {
       )}
 
       {simError && (
-        <p className='text-xs text-red-400'>
-          {(simError as Error).message || 'failed to simulate swap'}
-        </p>
+        <p className='text-xs text-red-400'>{simError.message || 'failed to simulate swap'}</p>
       )}
 
       {txStatus === 'success' && txHash && (
@@ -1362,8 +1392,11 @@ const PenumbraSwap = () => {
 
       <button
         onClick={() => {
-          if (txStatus === 'success' || txStatus === 'error') handleReset();
-          else void handleSubmit();
+          if (txStatus === 'success' || txStatus === 'error') {
+            handleReset();
+          } else {
+            void handleSubmit();
+          }
         }}
         disabled={
           (txStatus === 'idle' && !canSubmit) ||

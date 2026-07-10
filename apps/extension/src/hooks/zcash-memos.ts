@@ -35,7 +35,7 @@ const DEFAULT_ZIDECAR_URL = 'https://zcash.rotko.net';
 function parseReturnAddress(raw: string): { content: string; returnAddress?: string } {
   const lines = raw.trimEnd().split('\n');
   const last = lines[lines.length - 1]?.trim() ?? '';
-  const match = last.match(/^reply:(u1[a-z0-9]+|zs1[a-z0-9]+)$/i);
+  const match = /^reply:(u1[a-z0-9]+|zs1[a-z0-9]+)$/i.exec(last);
   if (match) {
     return {
       content: lines.slice(0, -1).join('\n').trimEnd(),
@@ -158,13 +158,19 @@ export function useZcashMemos(walletId: string, zidecarUrl: string = DEFAULT_ZID
         // surface contact cards as messages so they appear in the inbox UI
         for (const note of structuredNotes) {
           const parsed = decodeMemo(note.memo);
-          if (!parsed || parsed.type !== MemoType.ContactCard) continue;
+          if (parsed?.type !== MemoType.ContactCard) {
+            continue;
+          }
 
           const card = decodeContactCard(parsed.payload);
-          if (!card) continue;
+          if (!card) {
+            continue;
+          }
 
           const m = results.find(r => r.txId === note.txid);
-          if (!m) continue;
+          if (!m) {
+            continue;
+          }
 
           // store as a message with a recognizable prefix for the UI to detect
           await messages.addMessage({

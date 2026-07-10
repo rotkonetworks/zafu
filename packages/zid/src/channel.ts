@@ -122,7 +122,8 @@ export async function createChannel(
 
     send: async (data: string | Uint8Array) => {
       if (!sharedKey || !ws) return;
-      const plain = typeof data === 'string' ? new TextEncoder().encode(data) : data;
+      const plain =
+        typeof data === 'string' ? new TextEncoder().encode(data) : new Uint8Array(data);
       const iv = crypto.getRandomValues(new Uint8Array(12));
       const ct = new Uint8Array(
         await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, sharedKey, plain),
@@ -155,7 +156,7 @@ function hex(bytes: Uint8Array): string {
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
 }
-function unhex(h: string): Uint8Array {
+function unhex(h: string): Uint8Array<ArrayBuffer> {
   const bytes = new Uint8Array(h.length / 2);
   for (let i = 0; i < h.length; i += 2) bytes[i / 2] = parseInt(h.slice(i, i + 2), 16);
   return bytes;

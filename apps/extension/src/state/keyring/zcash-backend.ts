@@ -38,7 +38,7 @@ export interface ZcashClient {
   getBlockTransactions(height: number): Promise<{
     height: number;
     hash: Uint8Array;
-    txs: Array<{ data: Uint8Array; height: number }>;
+    txs: { data: Uint8Array; height: number }[];
   }>;
   getBlockTime(height: number): Promise<number>;
   sendTransaction(
@@ -77,14 +77,16 @@ export interface ZcashClient {
  * The static list is intentionally narrow. Add to it only after we've
  * shipped a zidecar at the deployment in question.
  */
-const KNOWN_ZIDECAR_HOST_SUFFIXES: ReadonlyArray<string> = ['rotko.net'];
+const KNOWN_ZIDECAR_HOST_SUFFIXES: readonly string[] = ['rotko.net'];
 
 export function isZidecarEndpoint(serverUrl: string): boolean {
   // First: exact-URL match against the curated preset list. zidecar
   // presets are the exception; anything not in the list falls through
   // to the hostname-suffix check.
   const preset = findPresetByUrl(serverUrl);
-  if (preset) return preset.backend === 'zidecar';
+  if (preset) {
+    return preset.backend === 'zidecar';
+  }
 
   // Defensive parse - never throw on garbage URLs; treat unparseable
   // input as lightwalletd (the safer default since it doesn't assume
@@ -95,7 +97,9 @@ export function isZidecarEndpoint(serverUrl: string): boolean {
   } catch {
     return false;
   }
-  if (host.length === 0) return false;
+  if (host.length === 0) {
+    return false;
+  }
   return KNOWN_ZIDECAR_HOST_SUFFIXES.some(suffix => host === suffix || host.endsWith(`.${suffix}`));
 }
 

@@ -22,7 +22,9 @@ import { useLatestBlockHeight } from './latest-block-height';
  * to surface it as an error.
  */
 function isTransientPortClosure(err: unknown): boolean {
-  if (!err || typeof err !== 'object') return false;
+  if (!err || typeof err !== 'object') {
+    return false;
+  }
   const msg = String((err as { message?: unknown }).message ?? '');
   return (
     msg.includes('[unavailable]') ||
@@ -35,12 +37,16 @@ function isTransientPortClosure(err: unknown): boolean {
 /** claim all unclaimed swaps, one at a time */
 async function claimUnclaimedSwaps(account: number): Promise<number> {
   const unclaimed = await Array.fromAsync(viewClient.unclaimedSwaps({}));
-  if (!unclaimed.length) return 0;
+  if (!unclaimed.length) {
+    return 0;
+  }
 
   let claimed = 0;
   for (const resp of unclaimed) {
     const swap = resp.swap;
-    if (!swap?.swapCommitment) continue;
+    if (!swap?.swapCommitment) {
+      continue;
+    }
 
     try {
       // 1. plan the claim — source account from the swap's claim address
@@ -49,7 +55,9 @@ async function claimUnclaimedSwaps(account: number): Promise<number> {
         source: { account },
       });
       const { plan } = await viewClient.transactionPlanner(planRequest);
-      if (!plan) continue;
+      if (!plan) {
+        continue;
+      }
 
       // 2. build
       let transaction;
@@ -59,7 +67,9 @@ async function claimUnclaimedSwaps(account: number): Promise<number> {
           break;
         }
       }
-      if (!transaction) continue;
+      if (!transaction) {
+        continue;
+      }
 
       // 3. broadcast (don't await detection — fire and forget)
       for await (const msg of await viewClient.broadcastTransaction({
@@ -101,8 +111,12 @@ export function usePenumbraSwapClaim(
   syncRef.current = { fullSyncHeight, latestBlockHeight };
 
   useEffect(() => {
-    if (activeNetwork !== 'penumbra') return;
-    if (onLoginPage) return;
+    if (activeNetwork !== 'penumbra') {
+      return;
+    }
+    if (onLoginPage) {
+      return;
+    }
 
     const isSynced = () => {
       const { fullSyncHeight: fsh, latestBlockHeight: lbh } = syncRef.current;
@@ -110,13 +124,19 @@ export function usePenumbraSwapClaim(
     };
 
     const tryClaimOnce = () => {
-      if (claimingRef.current) return;
-      if (!isSynced()) return;
+      if (claimingRef.current) {
+        return;
+      }
+      if (!isSynced()) {
+        return;
+      }
       claimingRef.current = true;
 
       claimUnclaimedSwaps(penumbraAccount)
         .then(n => {
-          if (n > 0) console.log(`[swap-claim] claimed ${n} swap(s)`);
+          if (n > 0) {
+            console.log(`[swap-claim] claimed ${n} swap(s)`);
+          }
         })
         .catch(err => {
           if (isTransientPortClosure(err)) {

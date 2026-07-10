@@ -68,9 +68,13 @@ export function AnimatedQrDisplay({
 
   const frames = useMemo(() => {
     // prefer pre-built UR frames if provided
-    if (urFrames && urFrames.length > 0) return urFrames;
+    if (urFrames && urFrames.length > 0) {
+      return urFrames;
+    }
     // fall back to legacy P-frame format
-    if (!data || !urType) return [];
+    if (!data || !urType) {
+      return [];
+    }
     try {
       return buildFrames(data, urType, chunkSize);
     } catch (e) {
@@ -81,7 +85,9 @@ export function AnimatedQrDisplay({
 
   const renderFrame = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas || frames.length === 0) return;
+    if (!canvas || frames.length === 0) {
+      return;
+    }
 
     const idx = frameIndexRef.current % frames.length;
     frameIndexRef.current = idx + 1;
@@ -97,13 +103,17 @@ export function AnimatedQrDisplay({
         errorCorrectionLevel: 'L',
       },
       (err: Error | null) => {
-        if (err) console.error('[animated-qr] frame error:', err);
+        if (err) {
+          console.error('[animated-qr] frame error:', err);
+        }
       },
     );
   }, [frames, size]);
 
   useEffect(() => {
-    if (frames.length === 0) return;
+    if (frames.length === 0) {
+      return;
+    }
 
     renderFrame();
 

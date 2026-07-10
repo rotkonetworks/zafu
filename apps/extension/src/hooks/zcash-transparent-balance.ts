@@ -6,7 +6,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { type Utxo } from '../state/keyring/zidecar-client';
+import type { Utxo } from '../state/keyring/zidecar-client';
 import { zcashClientFor } from '../state/keyring/zcash-backend';
 import { useStore } from '../state';
 
@@ -25,7 +25,9 @@ export function useTransparentBalance(addresses: string[]): TransparentBalance {
   const { data, isLoading, error } = useQuery({
     queryKey: ['zcashTransparentUtxos', zidecarUrl, backend, ...addresses],
     queryFn: async () => {
-      if (addresses.length === 0) return { totalZat: 0n, utxos: [] as Utxo[] };
+      if (addresses.length === 0) {
+        return { totalZat: 0n, utxos: [] as Utxo[] };
+      }
       const client = await zcashClientFor(zidecarUrl, backend);
       const utxos = await client.getAddressUtxos(addresses);
       const totalZat = utxos.reduce((sum, u) => sum + u.valueZat, 0n);
@@ -43,6 +45,6 @@ export function useTransparentBalance(addresses: string[]): TransparentBalance {
     totalZat: data?.totalZat ?? 0n,
     utxos: data?.utxos ?? [],
     isLoading,
-    error: error as Error | null,
+    error: error,
   };
 }

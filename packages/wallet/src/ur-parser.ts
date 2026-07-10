@@ -1042,12 +1042,13 @@ export function parseZcashAccountsCbor(cbor: Uint8Array): ZcashUrExport {
   if (!ufvk) {
     throw new Error('zcash-accounts: missing ufvk');
   }
+  // read these before the guard: in its false branch `ufvk` narrows to never
+  const ufvkLength = ufvk.length;
+  const ufvkPrefix = ufvk.slice(0, 12);
   if (!isStructurallyValidUfvk(ufvk)) {
     // We don't include the bad value in the error message — could be partly
     // valid bech32m and we don't want to spray fragments into logs.
-    throw new Error(
-      `zcash-accounts: malformed ufvk (length=${ufvk.length}, prefix=${ufvk.slice(0, 12)}…)`,
-    );
+    throw new Error(`zcash-accounts: malformed ufvk (length=${ufvkLength}, prefix=${ufvkPrefix}…)`);
   }
 
   return { ufvk, accountIndex, label, zidPublicKey };

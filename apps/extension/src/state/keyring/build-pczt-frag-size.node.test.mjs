@@ -5,7 +5,7 @@
 // worker payload and falls back to a sensible default when omitted. If the
 // shape of the call changes (e.g. someone hardcodes 200 again), this fails.
 
-import test from 'node:test';
+import test from 'vitest';
 import assert from 'node:assert/strict';
 
 // We don't import the real wrapper because it pulls chrome APIs. We re-test

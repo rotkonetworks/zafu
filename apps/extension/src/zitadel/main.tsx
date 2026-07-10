@@ -10,8 +10,11 @@
 // encrypted between two ZID keypairs.
 
 import { ed25519 } from '@noble/curves/ed25519';
+// eslint-disable-next-line import/no-relative-packages -- @zafu/zid publishes no subpath exports for these; the suggested specifiers do not resolve
 import { createNoiseChannel, type ZidChannel } from '../../../../packages/zid/src';
+// eslint-disable-next-line import/no-relative-packages -- see above
 import type { SessionKey } from '../../../../packages/zid/src/noise-channel';
+// eslint-disable-next-line import/no-relative-packages -- see above
 import { isLicenseValid, type License } from '../../../../packages/wallet/src/license';
 
 // ─── zid-auth-v1: signed nick claims ────────────────────────────────────
@@ -166,22 +169,44 @@ function signMsg(
 // peer instead of dropping into the void.
 
 function verifyMsg(a: unknown, expectedServer: string): MsgProof | null {
-  if (!a || typeof a !== 'object') return null;
+  if (!a || typeof a !== 'object') {
+    return null;
+  }
   const o = a as Record<string, unknown>;
-  if (o['v'] !== ZID_MSG_VERSION) return null;
-  if (typeof o['text'] !== 'string') return null;
-  if (typeof o['pubkey'] !== 'string' || !isHexPubkey(o['pubkey'])) return null;
-  if (typeof o['nick'] !== 'string' || !o['nick']) return null;
-  if (typeof o['room'] !== 'string') return null;
-  if (typeof o['ts'] !== 'number' || !Number.isFinite(o['ts'])) return null;
-  if (typeof o['sig'] !== 'string' || !/^[0-9a-f]{128}$/i.test(o['sig'])) return null;
+  if (o['v'] !== ZID_MSG_VERSION) {
+    return null;
+  }
+  if (typeof o['text'] !== 'string') {
+    return null;
+  }
+  if (typeof o['pubkey'] !== 'string' || !isHexPubkey(o['pubkey'])) {
+    return null;
+  }
+  if (typeof o['nick'] !== 'string' || !o['nick']) {
+    return null;
+  }
+  if (typeof o['room'] !== 'string') {
+    return null;
+  }
+  if (typeof o['ts'] !== 'number' || !Number.isFinite(o['ts'])) {
+    return null;
+  }
+  if (typeof o['sig'] !== 'string' || !/^[0-9a-f]{128}$/i.test(o['sig'])) {
+    return null;
+  }
   // The canonical payload joins all fields with NUL. If any field
   // (text, nick, room) contains NUL, the parse is ambiguous - two
   // different field tuples can serialize to identical bytes.
   // Reject on any embedded NUL to keep the encoding injective.
-  if ((o['text'] as string).indexOf('\0') !== -1) return null;
-  if ((o['nick'] as string).indexOf('\0') !== -1) return null;
-  if ((o['room'] as string).indexOf('\0') !== -1) return null;
+  if (o['text'].includes('\0')) {
+    return null;
+  }
+  if (o['nick'].includes('\0')) {
+    return null;
+  }
+  if (o['room'].includes('\0')) {
+    return null;
+  }
   try {
     const payload = zidMsgPayload(
       expectedServer,
@@ -191,7 +216,9 @@ function verifyMsg(a: unknown, expectedServer: string): MsgProof | null {
       o['ts'],
       o['text'],
     );
-    if (!ed25519.verify(unhex(o['sig']), payload, unhex(o['pubkey']))) return null;
+    if (!ed25519.verify(unhex(o['sig']), payload, unhex(o['pubkey']))) {
+      return null;
+    }
   } catch {
     return null;
   }
@@ -208,22 +235,42 @@ function msgSkewMs(proof: MsgProof): number {
 }
 
 function verifyAnnounce(a: unknown, expectedServer: string): AnnounceProof | null {
-  if (!a || typeof a !== 'object') return null;
+  if (!a || typeof a !== 'object') {
+    return null;
+  }
   const o = a as Record<string, unknown>;
-  if (o['v'] !== ZID_AUTH_VERSION) return null;
-  if (typeof o['server'] !== 'string' || o['server'] !== expectedServer) return null;
-  if (typeof o['pubkey'] !== 'string' || !isHexPubkey(o['pubkey'])) return null;
-  if (typeof o['nick'] !== 'string' || !o['nick']) return null;
-  if (typeof o['ts'] !== 'number' || !Number.isFinite(o['ts'])) return null;
-  if (typeof o['sig'] !== 'string' || !/^[0-9a-f]{128}$/i.test(o['sig'])) return null;
+  if (o['v'] !== ZID_AUTH_VERSION) {
+    return null;
+  }
+  if (typeof o['server'] !== 'string' || o['server'] !== expectedServer) {
+    return null;
+  }
+  if (typeof o['pubkey'] !== 'string' || !isHexPubkey(o['pubkey'])) {
+    return null;
+  }
+  if (typeof o['nick'] !== 'string' || !o['nick']) {
+    return null;
+  }
+  if (typeof o['ts'] !== 'number' || !Number.isFinite(o['ts'])) {
+    return null;
+  }
+  if (typeof o['sig'] !== 'string' || !/^[0-9a-f]{128}$/i.test(o['sig'])) {
+    return null;
+  }
   // Same NUL-injection defense as verifyMsg: the canonical payload
   // joins fields with NUL, so any embedded NUL in nick or server
   // breaks injective serialization.
-  if ((o['nick'] as string).indexOf('\0') !== -1) return null;
-  if ((o['server'] as string).indexOf('\0') !== -1) return null;
+  if (o['nick'].includes('\0')) {
+    return null;
+  }
+  if (o['server'].includes('\0')) {
+    return null;
+  }
   try {
     const payload = zidAuthPayload(o['server'], o['nick'], o['pubkey'], o['ts']);
-    if (!ed25519.verify(unhex(o['sig']), payload, unhex(o['pubkey']))) return null;
+    if (!ed25519.verify(unhex(o['sig']), payload, unhex(o['pubkey']))) {
+      return null;
+    }
   } catch {
     return null;
   }
@@ -244,7 +291,9 @@ async function isProUser(): Promise<boolean> {
   try {
     const r = await chrome.storage.local.get('proLicense');
     const raw = r['proLicense'];
-    if (typeof raw !== 'string' || !raw) return false;
+    if (typeof raw !== 'string' || !raw) {
+      return false;
+    }
     const license: License = JSON.parse(raw);
     return isLicenseValid(license);
   } catch {
@@ -374,7 +423,9 @@ const NICK_COLORS = [
 ];
 function nickColor(n: string) {
   let h = 0;
-  for (let i = 0; i < n.length; i++) h = n.charCodeAt(i) + ((h << 5) - h);
+  for (let i = 0; i < n.length; i++) {
+    h = n.charCodeAt(i) + ((h << 5) - h);
+  }
   return NICK_COLORS[Math.abs(h) % NICK_COLORS.length];
 }
 
@@ -385,7 +436,9 @@ function hex(bytes: Uint8Array): string {
 }
 function unhex(h: string): Uint8Array {
   const bytes = new Uint8Array(h.length / 2);
-  for (let i = 0; i < h.length; i += 2) bytes[i / 2] = parseInt(h.slice(i, i + 2), 16);
+  for (let i = 0; i < h.length; i += 2) {
+    bytes[i / 2] = parseInt(h.slice(i, i + 2), 16);
+  }
   return bytes;
 }
 function isHexPubkey(s: string): boolean {
@@ -408,17 +461,21 @@ interface ZidInfo {
 
 /** Read ZID pubkey from vault insensitive data (no password needed). */
 async function getZidPubkey(): Promise<string | undefined> {
-  if (!localStore) return undefined;
+  if (!localStore) {
+    return undefined;
+  }
   try {
     const result: Record<string, unknown> = await new Promise(r => localStore.get('vaults', r));
-    const vaults = result?.['vaults'] as
-      | Array<{ insensitive?: Record<string, unknown> }>
-      | undefined;
-    if (!vaults?.length) return undefined;
+    const vaults = result?.['vaults'] as { insensitive?: Record<string, unknown> }[] | undefined;
+    if (!vaults?.length) {
+      return undefined;
+    }
     // use the first vault's ZID pubkey
     for (const vault of vaults) {
       const zid = vault.insensitive?.['zid'] as string | undefined;
-      if (zid) return zid;
+      if (zid) {
+        return zid;
+      }
     }
   } catch {
     /* not in extension context */
@@ -428,7 +485,9 @@ async function getZidPubkey(): Promise<string | undefined> {
 
 /** Check if wallet is unlocked via session storage. */
 async function isWalletUnlocked(): Promise<boolean> {
-  if (!sessionStore) return false;
+  if (!sessionStore) {
+    return false;
+  }
   try {
     const result: Record<string, unknown> = await new Promise(r =>
       sessionStore.get('passwordKey', r),
@@ -444,15 +503,17 @@ async function resolveZidIdentity(): Promise<ZidInfo> {
   const pubkey = await getZidPubkey();
   const unlocked = await isWalletUnlocked();
 
-  if (!pubkey) return { loggedIn: false };
+  if (!pubkey) {
+    return { loggedIn: false };
+  }
 
   if (unlocked) {
     // Request ed25519 keypair from service worker for Noise channel DH
     try {
-      const resp = (await chrome.runtime.sendMessage({
+      const resp = await chrome.runtime.sendMessage({
         type: 'zafu_zid_keypair',
         origin: 'zitadel',
-      })) as { pubkey?: string; privkey?: string; error?: string } | undefined;
+      });
       if (resp?.privkey) {
         return {
           loggedIn: true,
@@ -500,15 +561,17 @@ function linkify(text: string, linkColor: string): string {
   let result = '';
   let lastIdx = 0;
   for (const m of text.matchAll(urlRe)) {
-    const idx = m.index!;
+    const idx = m.index;
     const raw = m[1]!;
-    const trailMatch = raw.match(URL_TRAILING_PUNCT);
+    const trailMatch = URL_TRAILING_PUNCT.exec(raw);
     const trailing = trailMatch ? trailMatch[0] : '';
     const url = trailing ? raw.slice(0, raw.length - trailing.length) : raw;
     result += esc(text.slice(lastIdx, idx));
     const eu = esc(url);
     result += `<a href="${eu}" target="_blank" rel="noopener noreferrer" style="color:${linkColor};text-decoration:underline">${eu}</a>`;
-    if (trailing) result += esc(trailing);
+    if (trailing) {
+      result += esc(trailing);
+    }
     lastIdx = idx + raw.length;
   }
   result += esc(text.slice(lastIdx));
@@ -538,7 +601,9 @@ function fullTime(ts: number): string {
 
 function boot() {
   const root = document.getElementById('zitadel-root');
-  if (!root) return;
+  if (!root) {
+    return;
+  }
   document.body.style.cssText = 'margin:0;padding:0;';
   const font = document.createElement('link');
   font.rel = 'stylesheet';
@@ -642,7 +707,9 @@ function boot() {
   let notifyEnabled = false;
   function warnCollision(claimedNick: string, attemptedPubkey: string, source: 'announce' | 'msg') {
     const key = `${claimedNick}\0${attemptedPubkey}`;
-    if (collisionWarned.has(key)) return;
+    if (collisionWarned.has(key)) {
+      return;
+    }
     collisionWarned.add(key);
     const existing = nickToPubkey.get(claimedNick);
     addMsg(
@@ -657,7 +724,9 @@ function boot() {
   // signed message from a fast-clock peer would print a fresh line.
   const skewWarned = new Set<string>();
   function warnSkew(nick: string, pubkey: string, skewMs: number, _side: 'fast') {
-    if (skewWarned.has(pubkey)) return;
+    if (skewWarned.has(pubkey)) {
+      return;
+    }
     skewWarned.add(pubkey);
     const sec = Math.round(skewMs / 1000);
     addMsg(
@@ -760,7 +829,9 @@ function boot() {
     const NEAR_BOTTOM_PX = 80;
     const atBottom =
       msgArea.scrollHeight - msgArea.scrollTop - msgArea.clientHeight < NEAR_BOTTOM_PX;
-    if (atBottom) resetPill();
+    if (atBottom) {
+      resetPill();
+    }
   });
 
   // global Alt+1..9 / Alt+0 jumps to the Nth view in the sidebar
@@ -768,8 +839,12 @@ function boot() {
   // for fast keyboard navigation. preventDefault stops Chrome's
   // built-in Alt+number tab-switch on extension pages.
   document.addEventListener('keydown', e => {
-    if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
-    if (!/^[0-9]$/.test(e.key)) return;
+    if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) {
+      return;
+    }
+    if (!/^[0-9]$/.test(e.key)) {
+      return;
+    }
     e.preventDefault();
     const idx = e.key === '0' ? 9 : parseInt(e.key, 10) - 1;
     const channels = [...new Set([...DEFAULT_CHANNELS, ...joinedRooms])];
@@ -778,7 +853,9 @@ function boot() {
       switchRoom(channels[idx]!);
     } else {
       const dmIdx = idx - channels.length;
-      if (dmIdx < dmPeers.length) switchToDm(dmPeers[dmIdx]!);
+      if (dmIdx < dmPeers.length) {
+        switchToDm(dmPeers[dmIdx]!);
+      }
     }
   });
 
@@ -787,9 +864,13 @@ function boot() {
   // approach IRC GUIs use to make scrollback feel alive.
   msgArea.addEventListener('click', ev => {
     const t = ev.target as HTMLElement | null;
-    if (!t || !t.classList.contains('nick-click')) return;
+    if (!t?.classList.contains('nick-click')) {
+      return;
+    }
     const peerNick = t.dataset['nick'];
-    if (!peerNick) return;
+    if (!peerNick) {
+      return;
+    }
     const pub = nickToPubkey.get(peerNick);
     if (!pub) {
       addMsg(
@@ -817,7 +898,9 @@ function boot() {
    * that are part of a longer identifier so "alicia" doesn't trigger
    * highlight for a user nicked "alic". */
   function mentionsMe(text: string, fromNick: string): boolean {
-    if (!nick || nick === '...' || fromNick === nick) return false;
+    if (!nick || nick === '...' || fromNick === nick) {
+      return false;
+    }
     const escaped = nick.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const re = new RegExp(`(?:^|[^A-Za-z0-9_])${escaped}(?:[^A-Za-z0-9_]|$)`, 'i');
     return re.test(text);
@@ -829,10 +912,18 @@ function boot() {
    * focused (the in-page nick highlight is already enough). Click on
    * the notification focuses the chat tab. */
   function maybeNotify(viewKey: string, fromNick: string, text: string, dm: boolean) {
-    if (!notifyEnabled) return;
-    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
-    if (!document.hidden) return;
-    if (!dm && !mentionsMe(text, fromNick)) return;
+    if (!notifyEnabled) {
+      return;
+    }
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
+      return;
+    }
+    if (!document.hidden) {
+      return;
+    }
+    if (!dm && !mentionsMe(text, fromNick)) {
+      return;
+    }
     const title = dm ? `DM from ${fromNick}` : `${fromNick} mentioned you`;
     const body = text.length > 140 ? text.slice(0, 137) + '...' : text;
     try {
@@ -857,10 +948,16 @@ function boot() {
     system: boolean,
     dm: boolean,
   ) {
-    if (system || fromNick === nick) return;
-    if (viewKey === currentViewKey()) return;
+    if (system || fromNick === nick) {
+      return;
+    }
+    if (viewKey === currentViewKey()) {
+      return;
+    }
     unreadCount.set(viewKey, (unreadCount.get(viewKey) ?? 0) + 1);
-    if (dm || mentionsMe(text, fromNick)) mentioned.add(viewKey);
+    if (dm || mentionsMe(text, fromNick)) {
+      mentioned.add(viewKey);
+    }
     maybeNotify(viewKey, fromNick, text, dm);
   }
 
@@ -913,7 +1010,9 @@ function boot() {
       verified: true,
       color: outgoing ? C.gold : C.dm,
     });
-    if (!outgoing) trackUnread(key, fromNick, text, false, true);
+    if (!outgoing) {
+      trackUnread(key, fromNick, text, false, true);
+    }
     render();
   }
 
@@ -929,7 +1028,9 @@ function boot() {
    * away. Skipped when there's no unread - no divider to show. */
   function captureDivider(viewKey: string) {
     const unread = unreadCount.get(viewKey) ?? 0;
-    if (unread <= 0) return;
+    if (unread <= 0) {
+      return;
+    }
     const arr = messagesPerRoom.get(viewKey);
     const len = arr?.length ?? 0;
     const idx = Math.max(0, len - unread);
@@ -944,7 +1045,9 @@ function boot() {
       render();
       return;
     }
-    if (currentRoom) wsSend({ t: 'part' });
+    if (currentRoom) {
+      wsSend({ t: 'part' });
+    }
     pendingJoinRoom = room;
     joinRetried = false;
     wsSend({ t: 'join', room, nick });
@@ -955,7 +1058,9 @@ function boot() {
     // IK channel would loop back through the relay to ourselves and
     // produce echo-only behavior. defense in depth; the slash
     // commands also reject earlier with a friendlier message.
-    if (zidPubkey && pubkey.toLowerCase() === zidPubkey.toLowerCase()) return;
+    if (pubkey.toLowerCase() === zidPubkey?.toLowerCase()) {
+      return;
+    }
     activeDm = pubkey;
     captureDivider(DM_PREFIX + pubkey);
     markRead(DM_PREFIX + pubkey);
@@ -987,10 +1092,14 @@ function boot() {
   async function openDmChannel(peerPubkey: string): Promise<ZidChannel | undefined> {
     // reuse existing channel
     const existing = dmChannels.get(peerPubkey);
-    if (existing) return existing;
+    if (existing) {
+      return existing;
+    }
     // coalesce concurrent opens for the same peer onto one promise.
     const inFlight = dmChannelPending.get(peerPubkey);
-    if (inFlight) return inFlight;
+    if (inFlight) {
+      return inFlight;
+    }
 
     if (!zidPubkey || !zidPrivkey) {
       addMsg('zitadel', 'cannot open DM - wallet not unlocked. unlock zafu for e2ee.', true);
@@ -999,8 +1108,8 @@ function boot() {
 
     const promise = (async (): Promise<ZidChannel | undefined> => {
       const session: SessionKey = {
-        pubkey: zidPubkey!,
-        privkey: zidPrivkey!,
+        pubkey: zidPubkey,
+        privkey: zidPrivkey,
         sign: async (data: Uint8Array) => {
           const { ed25519 } = await import('@noble/curves/ed25519');
           const sig = ed25519.sign(data, zidPrivkey!);
@@ -1063,7 +1172,9 @@ function boot() {
     let ch = dmChannels.get(peerPubkey);
     if (!ch) {
       ch = await openDmChannel(peerPubkey);
-      if (!ch) return;
+      if (!ch) {
+        return;
+      }
     }
 
     try {
@@ -1089,7 +1200,9 @@ function boot() {
 
   function closeDmChannel(peerPubkey: string) {
     const ch = dmChannels.get(peerPubkey);
-    if (!ch) return;
+    if (!ch) {
+      return;
+    }
     ch.close();
     dmChannels.delete(peerPubkey);
     // wipe all view state for this DM so reopening starts clean -
@@ -1101,7 +1214,9 @@ function boot() {
     mentioned.delete(key);
     renderedCount.delete(key);
     firstNewIdx.delete(key);
-    if (renderedView === key) renderedView = null;
+    if (renderedView === key) {
+      renderedView = null;
+    }
     if (activeDm === peerPubkey) {
       activeDm = null;
       encState = 'public';
@@ -1113,13 +1228,19 @@ function boot() {
 
   /** Resolve a nick or pubkey target to a pubkey. */
   function resolveTarget(target: string): string | null {
-    if (isHexPubkey(target)) return target;
+    if (isHexPubkey(target)) {
+      return target;
+    }
     // look up by nick
     const pub = nickToPubkey.get(target);
-    if (pub) return pub;
+    if (pub) {
+      return pub;
+    }
     // try as partial zid prefix
     for (const [pub, n] of pubkeyToNick.entries()) {
-      if (n === target || shortPub(pub) === target) return pub;
+      if (n === target || shortPub(pub) === target) {
+        return pub;
+      }
     }
     return null;
   }
@@ -1199,14 +1320,18 @@ function boot() {
           return;
         }
         const r = (el as HTMLElement).dataset['room'];
-        if (r) switchRoom(r);
+        if (r) {
+          switchRoom(r);
+        }
       });
       el.addEventListener('mouseenter', () => {
         (el as HTMLElement).style.background = C.border;
       });
       el.addEventListener('mouseleave', () => {
         const r = (el as HTMLElement).dataset['room'];
-        if (!activeDm && r === (currentRoom || initialRoom)) return;
+        if (!activeDm && r === (currentRoom || initialRoom)) {
+          return;
+        }
         (el as HTMLElement).style.background = 'transparent';
       });
     });
@@ -1214,25 +1339,32 @@ function boot() {
     sidebar.querySelectorAll('.dm-ch').forEach(el => {
       el.addEventListener('click', () => {
         const pub = (el as HTMLElement).dataset['pubkey'];
-        if (pub) switchToDm(pub);
+        if (pub) {
+          switchToDm(pub);
+        }
       });
       el.addEventListener('mouseenter', () => {
         (el as HTMLElement).style.background = C.border;
       });
       el.addEventListener('mouseleave', () => {
         const pub = (el as HTMLElement).dataset['pubkey'];
-        if (activeDm !== pub) (el as HTMLElement).style.background = 'transparent';
+        if (activeDm !== pub) {
+          (el as HTMLElement).style.background = 'transparent';
+        }
       });
     });
 
     // identity chip in the footer: click runs /login if locked, or
     // self-/whois if already unlocked. surfaces the most useful action
     // for the current state without making the user remember a verb.
-    const meChip = sidebar.querySelector('.me-chip') as HTMLElement | null;
+    const meChip = sidebar.querySelector<HTMLElement>('.me-chip');
     if (meChip) {
       meChip.addEventListener('click', () => {
-        if (zidPubkey && !zidPrivkey) void runLogin();
-        else runSelfWhois();
+        if (zidPubkey && !zidPrivkey) {
+          void runLogin();
+        } else {
+          runSelfWhois();
+        }
       });
       meChip.addEventListener('mouseenter', () => {
         meChip.style.background = C.border;
@@ -1369,7 +1501,9 @@ function boot() {
         const m = msgs[i]!;
         if (m.tsMs) {
           const d = localDateKey(new Date(m.tsMs));
-          if (lastDate && d !== lastDate) html += dayDividerHTML(d);
+          if (lastDate && d !== lastDate) {
+            html += dayDividerHTML(d);
+          }
           lastDate = d;
         }
         html += renderMsgLineHTML(m);
@@ -1396,7 +1530,9 @@ function boot() {
           const m = msgs[i]!;
           if (m.tsMs) {
             const d = localDateKey(new Date(m.tsMs));
-            if (prevDate && d !== prevDate) fragment += dayDividerHTML(d);
+            if (prevDate && d !== prevDate) {
+              fragment += dayDividerHTML(d);
+            }
             prevDate = d;
           }
           fragment += renderMsgLineHTML(m);
@@ -1442,7 +1578,9 @@ function boot() {
     // copy). without this guard, every incoming message would clobber
     // their selection by stealing focus to the input.
     const sel = window.getSelection();
-    if (!sel || sel.isCollapsed) inp.focus();
+    if (!sel || sel.isCollapsed) {
+      inp.focus();
+    }
     renderSidebar();
     updateDocumentTitle();
   }
@@ -1454,7 +1592,9 @@ function boot() {
    * is *not* watching - exactly what a tab-list nudge should do. */
   function updateDocumentTitle() {
     let totalUnread = 0;
-    for (const n of unreadCount.values()) totalUnread += n;
+    for (const n of unreadCount.values()) {
+      totalUnread += n;
+    }
     const viewName = activeDm
       ? pubkeyToNick.get(activeDm) || shortPub(activeDm)
       : `#${currentRoom || initialRoom}`;
@@ -1486,7 +1626,9 @@ function boot() {
       ws.onclose = null;
       ws.onerror = null;
       ws.onmessage = null;
-      if (ws.readyState !== WebSocket.CLOSED) ws.close();
+      if (ws.readyState !== WebSocket.CLOSED) {
+        ws.close();
+      }
     }
     if (retryTimer) {
       clearTimeout(retryTimer);
@@ -1509,7 +1651,9 @@ function boot() {
       `reconnecting in ${Math.round(delayMs / 1000)}s (attempt ${reconnectAttempts})`,
       true,
     );
-    if (retryTimer) clearTimeout(retryTimer);
+    if (retryTimer) {
+      clearTimeout(retryTimer);
+    }
     retryTimer = setTimeout(() => {
       retryTimer = null;
       connectRelay();
@@ -1542,7 +1686,9 @@ function boot() {
       // residential ISPs, the relay itself) close idle WebSockets after
       // ~60s. without a heartbeat the connection drops every time the
       // user goes idle, forcing reconnect + history replay.
-      if (pingTimer) clearInterval(pingTimer);
+      if (pingTimer) {
+        clearInterval(pingTimer);
+      }
       pingTimer = setInterval(() => {
         if (ws?.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ t: 'ping' }));
@@ -1555,7 +1701,9 @@ function boot() {
         const msg = JSON.parse(ev.data);
         switch (msg.t) {
           case 'msg': {
-            if (msg.nick === nick) break;
+            if (msg.nick === nick) {
+              break;
+            }
             // nick -> pubkey bindings are intentionally NOT taken from
             // unverified relay-side fields. they come only from
             // verified zid-auth-v1 announces or zid-msg-v1 envelopes
@@ -1584,9 +1732,9 @@ function boot() {
             if (typeof msg.text === 'string' && msg.text.startsWith('{')) {
               try {
                 const obj = JSON.parse(msg.text);
-                if (obj && obj.v === ZID_MSG_VERSION) {
+                if (obj?.v === ZID_MSG_VERSION) {
                   const proof = verifyMsg(obj, relayHost(relayUrl));
-                  if (!proof || proof.room !== currentRoom) {
+                  if (proof?.room !== currentRoom) {
                     console.debug('[zitadel] zid-msg verify failed, dropping', {
                       nick: msg.nick,
                       room: obj.room,
@@ -1632,7 +1780,9 @@ function boot() {
             // set, drop silently. nick lookup is allowed because nick
             // bindings come only from verified paths (iter 31).
             const senderPub = senderPubkey || nickToPubkey.get(msg.nick);
-            if (senderPub && ignoredPubkeys.has(senderPub.toLowerCase())) break;
+            if (senderPub && ignoredPubkeys.has(senderPub.toLowerCase())) {
+              break;
+            }
             // detect IRC-style /me action via CTCP marker. for signed
             // messages, the marker travels inside the signature so it
             // can't be added or stripped without invalidating the proof.
@@ -1655,7 +1805,9 @@ function boot() {
             joinedRooms.add(msg.room);
             joinRetried = false;
             addMsg('zitadel', `joined #${msg.room} (${msg.count} users)`, true);
-            if (!activeDm) encState = 'public';
+            if (!activeDm) {
+              encState = 'public';
+            }
             // announce our ZID identity to the room - only when we
             // can actually sign. an unsigned announce was wire-noise:
             // receivers run verifyAnnounce which rejects anything
@@ -1696,7 +1848,9 @@ function boot() {
             // pubkey-based ignore applies to announces too: don't even
             // bind a nick for this identity, otherwise the join/verify
             // chrome would still surface them.
-            if (ignoredPubkeys.has(proof.pubkey.toLowerCase())) break;
+            if (ignoredPubkeys.has(proof.pubkey.toLowerCase())) {
+              break;
+            }
             const existing = nickToPubkey.get(proof.nick);
             if (existing && existing !== proof.pubkey) {
               console.debug('[zitadel] announce nick collision, keeping first binding', {
@@ -1818,7 +1972,9 @@ function boot() {
     }
     try {
       const action = (chrome as unknown as { action?: { openPopup?: () => Promise<void> } }).action;
-      if (action?.openPopup) await action.openPopup();
+      if (action?.openPopup) {
+        await action.openPopup();
+      }
     } catch {
       /* popup may be unavailable or already open */
     }
@@ -1867,7 +2023,7 @@ function boot() {
       addMsg('zitadel', 'not in a channel. type /j <room>', true);
       return;
     }
-    if (text.indexOf('\0') !== -1) {
+    if (text.includes('\0')) {
       // NUL is used as the field separator in the zid-msg-v1
       // canonical payload; sending it would break injective
       // serialization. peers reject too, but it's friendlier to fail
@@ -2010,24 +2166,32 @@ function boot() {
         const cursor = inp.selectionStart ?? value.length;
         const upToCursor = value.slice(0, cursor);
         // last whitespace-separated token
-        const m = upToCursor.match(/(?:^|\s)([^\s]*)$/);
+        const m = /(?:^|\s)([^\s]*)$/.exec(upToCursor);
         const prefix = m?.[1] ?? '';
-        if (!prefix) return; // nothing to complete
+        if (!prefix) {
+          return;
+        } // nothing to complete
         const before = upToCursor.slice(0, upToCursor.length - prefix.length);
         const after = value.slice(cursor);
         const candidates: string[] = [];
         const isCmd = prefix.startsWith('/') && before === '';
         if (isCmd) {
           for (const c of Object.keys(CMDS)) {
-            if (c.toLowerCase().startsWith(prefix.toLowerCase())) candidates.push(c);
+            if (c.toLowerCase().startsWith(prefix.toLowerCase())) {
+              candidates.push(c);
+            }
           }
         } else {
           for (const n of nickToPubkey.keys()) {
-            if (n.toLowerCase().startsWith(prefix.toLowerCase()) && n !== nick) candidates.push(n);
+            if (n.toLowerCase().startsWith(prefix.toLowerCase()) && n !== nick) {
+              candidates.push(n);
+            }
           }
         }
         candidates.sort();
-        if (!candidates.length) return;
+        if (!candidates.length) {
+          return;
+        }
         tabState = { prefix, before, after, matches: candidates, idx: 0 };
       } else {
         tabState.idx = (tabState.idx + 1) % tabState.matches.length;
@@ -2047,10 +2211,14 @@ function boot() {
     }
     // any other key resets the tab cycle
     tabState = null;
-    if (e.key !== 'Enter') return;
+    if (e.key !== 'Enter') {
+      return;
+    }
     e.preventDefault();
     const text = inp.value.trim();
-    if (!text) return;
+    if (!text) {
+      return;
+    }
     inp.value = '';
     history.unshift(text);
     histIdx = -1;
@@ -2130,7 +2298,9 @@ function boot() {
         case 'join':
           if (args[0]) {
             switchRoom(args[0]);
-          } else addMsg('zitadel', 'usage: /j <room>', true);
+          } else {
+            addMsg('zitadel', 'usage: /j <room>', true);
+          }
           break;
 
         case 'server':
@@ -2183,7 +2353,9 @@ function boot() {
           collisionWarned.clear();
           joinedRooms.clear();
           currentRoom = null;
-          for (const ch of dmChannels.values()) ch.close();
+          for (const ch of dmChannels.values()) {
+            ch.close();
+          }
           dmChannels.clear();
           if (activeDm) {
             activeDm = null;
@@ -2230,7 +2402,7 @@ function boot() {
             );
             break;
           }
-          if (zidPubkey && target.toLowerCase() === zidPubkey.toLowerCase()) {
+          if (target.toLowerCase() === zidPubkey?.toLowerCase()) {
             addMsg('zitadel', `can't DM yourself.`, true);
             break;
           }
@@ -2365,18 +2537,23 @@ function boot() {
             break;
           }
           let pub: string | undefined;
-          if (isHexPubkey(target)) pub = target.toLowerCase();
-          else pub = nickToPubkey.get(target);
+          if (isHexPubkey(target)) {
+            pub = target.toLowerCase();
+          } else {
+            pub = nickToPubkey.get(target);
+          }
           if (!pub) {
             addMsg('zitadel', `no pubkey known for ${target}. they must announce first.`, true);
             break;
           }
-          if (zidPubkey && pub === zidPubkey.toLowerCase()) {
+          if (pub === zidPubkey?.toLowerCase()) {
             addMsg('zitadel', 'refusing to ignore your own ZID.', true);
             break;
           }
           ignoredPubkeys.add(pub);
-          if (localStore) void localStore.set({ [ZID_IGNORE_KEY]: Array.from(ignoredPubkeys) });
+          if (localStore) {
+            void localStore.set({ [ZID_IGNORE_KEY]: Array.from(ignoredPubkeys) });
+          }
           addMsg(
             'zitadel',
             `ignoring ${pubkeyToNick.get(pub) ?? shortPub(pub)} (${pub.slice(0, 16)}...)`,
@@ -2392,14 +2569,19 @@ function boot() {
             break;
           }
           let pub: string | undefined;
-          if (isHexPubkey(target)) pub = target.toLowerCase();
-          else pub = nickToPubkey.get(target);
+          if (isHexPubkey(target)) {
+            pub = target.toLowerCase();
+          } else {
+            pub = nickToPubkey.get(target);
+          }
           if (!pub || !ignoredPubkeys.has(pub)) {
             addMsg('zitadel', `${target} is not in the ignore list.`, true);
             break;
           }
           ignoredPubkeys.delete(pub);
-          if (localStore) void localStore.set({ [ZID_IGNORE_KEY]: Array.from(ignoredPubkeys) });
+          if (localStore) {
+            void localStore.set({ [ZID_IGNORE_KEY]: Array.from(ignoredPubkeys) });
+          }
           addMsg('zitadel', `no longer ignoring ${pubkeyToNick.get(pub) ?? shortPub(pub)}.`, true);
           break;
         }
@@ -2437,7 +2619,9 @@ function boot() {
           // full cleanup (channel close, message log, unread badge,
           // mentioned tag, render-cache reset, activeDm reset).
           // snapshot the keys so we don't iterate while mutating.
-          for (const peer of Array.from(dmChannels.keys())) closeDmChannel(peer);
+          for (const peer of Array.from(dmChannels.keys())) {
+            closeDmChannel(peer);
+          }
           // drop self from verifiedNicks under the old nick - we're
           // about to be a different identity.
           verifiedNicks.delete(nick);
@@ -2474,7 +2658,9 @@ function boot() {
           }
           if (arg === 'off') {
             notifyEnabled = false;
-            if (localStore) void localStore.remove(ZID_NOTIFY_KEY);
+            if (localStore) {
+              void localStore.remove(ZID_NOTIFY_KEY);
+            }
             addMsg('zitadel', 'desktop notifications: off', true);
             break;
           }
@@ -2498,7 +2684,9 @@ function boot() {
             }
           }
           notifyEnabled = true;
-          if (localStore) void localStore.set({ [ZID_NOTIFY_KEY]: '1' });
+          if (localStore) {
+            void localStore.set({ [ZID_NOTIFY_KEY]: '1' });
+          }
           addMsg(
             'zitadel',
             'desktop notifications: on - alerts on mention or DM while tab is hidden. /notify off to stop.',
@@ -2558,9 +2746,13 @@ function boot() {
   // user was trying to avoid by locking.
   try {
     chrome?.storage?.onChanged?.addListener((changes, areaName) => {
-      if (areaName !== 'session') return;
+      if (areaName !== 'session') {
+        return;
+      }
       const change = changes['passwordKey'];
-      if (!change) return;
+      if (!change) {
+        return;
+      }
       // newValue absent => key was removed => wallet was just locked.
       // skip when we're on an ephemeral /rotate identity: the key
       // isn't from the wallet, so the wallet's lock doesn't apply.
@@ -2639,8 +2831,11 @@ function boot() {
         );
         const stored = r?.[ZID_IGNORE_KEY];
         if (Array.isArray(stored)) {
-          for (const p of stored)
-            if (typeof p === 'string' && isHexPubkey(p)) ignoredPubkeys.add(p.toLowerCase());
+          for (const p of stored) {
+            if (typeof p === 'string' && isHexPubkey(p)) {
+              ignoredPubkeys.add(p.toLowerCase());
+            }
+          }
         }
       } catch {
         /* not in extension context */

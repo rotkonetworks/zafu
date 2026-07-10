@@ -114,10 +114,14 @@ export const createInboxSlice = (): SliceCreator<InboxSlice> => (set, get) => ({
     const newMessages: { diversifierIndex: number; message: InboxMessage }[] = [];
 
     for (const raw of memos) {
-      if (!isStructuredMemo(raw.memo)) continue;
+      if (!isStructuredMemo(raw.memo)) {
+        continue;
+      }
 
       const parsed = decodeMemo(raw.memo);
-      if (!parsed) continue;
+      if (!parsed) {
+        continue;
+      }
 
       if (parsed.total === 1) {
         // standalone message
@@ -186,7 +190,9 @@ export const createInboxSlice = (): SliceCreator<InboxSlice> => (set, get) => ({
       }
     }
 
-    if (newMessages.length === 0) return;
+    if (newMessages.length === 0) {
+      return;
+    }
 
     set(state => {
       for (const { diversifierIndex, message } of newMessages) {
@@ -202,7 +208,9 @@ export const createInboxSlice = (): SliceCreator<InboxSlice> => (set, get) => ({
         }
 
         // dedupe by message ID
-        if (convo.messages.some(m => m.id === message.id)) continue;
+        if (convo.messages.some(m => m.id === message.id)) {
+          continue;
+        }
 
         convo.messages.push(message);
         convo.messages.sort((a, b) => a.height - b.height);
@@ -218,7 +226,9 @@ export const createInboxSlice = (): SliceCreator<InboxSlice> => (set, get) => ({
   markRead: (diversifierIndex: number) => {
     set(state => {
       const convo = state.inbox.conversations.get(diversifierIndex);
-      if (!convo) return;
+      if (!convo) {
+        return;
+      }
 
       for (const msg of convo.messages) {
         if (msg.direction === 'incoming') {
@@ -236,13 +246,17 @@ export const createInboxSlice = (): SliceCreator<InboxSlice> => (set, get) => ({
   setConversationLabel: (diversifierIndex: number, label: string) => {
     set(state => {
       const convo = state.inbox.conversations.get(diversifierIndex);
-      if (convo) convo.label = label;
+      if (convo) {
+        convo.label = label;
+      }
     });
 
     // persist labels
     const labels: Record<number, string> = {};
     for (const [idx, convo] of get().inbox.conversations) {
-      if (convo.label) labels[idx] = convo.label;
+      if (convo.label) {
+        labels[idx] = convo.label;
+      }
     }
     void chrome.storage.local.set({ inboxLabels: labels });
   },

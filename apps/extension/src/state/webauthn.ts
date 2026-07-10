@@ -44,7 +44,9 @@ export function buildCredentialId(rpId: string): Uint8Array {
 
 /** check if a credential ID belongs to zafu */
 export function isZafuCredential(credentialId: Uint8Array): boolean {
-  if (credentialId.length < 5) return false;
+  if (credentialId.length < 5) {
+    return false;
+  }
   const prefix = enc.encode('zafu:');
   return credentialId.slice(0, 5).every((b, i) => b === prefix[i]);
 }

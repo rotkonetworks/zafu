@@ -240,7 +240,7 @@ export const createNetworksSlice =
           if (networkEndpoints) {
             for (const [id, endpoint] of Object.entries(networkEndpoints)) {
               if (state.networks.networks[id as NetworkId]) {
-                state.networks.networks[id as NetworkId].endpoint = endpoint as string;
+                state.networks.networks[id as NetworkId].endpoint = endpoint;
               }
             }
           }

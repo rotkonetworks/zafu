@@ -74,9 +74,13 @@ function getZignerAddress(
   const addrs = insensitive['cosmosAddresses'] as
     | { chainId: string; address: string; prefix: string }[]
     | undefined;
-  if (!addrs?.length) return null;
+  if (!addrs?.length) {
+    return null;
+  }
   const match = addrs.find(a => a.chainId === chainId);
-  if (match) return match.address;
+  if (match) {
+    return match.address;
+  }
   // derive from any stored address using bech32 prefix conversion
   try {
     return deriveChainAddress(addrs[0]!.address, chainId);
@@ -88,7 +92,9 @@ function getZignerAddress(
 /** get cosmos pubkey from zigner insensitive data (hex-encoded compressed secp256k1) */
 function getZignerPubkey(insensitive: Record<string, unknown>): Uint8Array | null {
   const hex = insensitive['cosmosPublicKey'] as string | undefined;
-  if (!hex || hex.length % 2 !== 0 || !/^[0-9a-fA-F]+$/.test(hex)) return null;
+  if (!hex || hex.length % 2 !== 0 || !/^[0-9a-fA-F]+$/.test(hex)) {
+    return null;
+  }
   const bytes = new Uint8Array(hex.length / 2);
   for (let i = 0; i < bytes.length; i++) {
     bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
@@ -103,14 +109,26 @@ function findCosmosKey(
   chainId: CosmosChainId,
 ) {
   if (effective) {
-    if (effective.type === 'mnemonic') return effective;
-    if (effective.type === 'zigner-zafu' && getZignerAddress(effective.insensitive ?? {}, chainId))
+    if (effective.type === 'mnemonic') {
       return effective;
+    }
+    if (
+      effective.type === 'zigner-zafu' &&
+      getZignerAddress(effective.insensitive ?? {}, chainId)
+    ) {
+      return effective;
+    }
   }
   for (const ki of keyInfos) {
-    if (ki === effective) continue;
-    if (ki.type === 'mnemonic') return ki;
-    if (ki.type === 'zigner-zafu' && getZignerAddress(ki.insensitive ?? {}, chainId)) return ki;
+    if (ki === effective) {
+      continue;
+    }
+    if (ki.type === 'mnemonic') {
+      return ki;
+    }
+    if (ki.type === 'zigner-zafu' && getZignerAddress(ki.insensitive ?? {}, chainId)) {
+      return ki;
+    }
   }
   return null;
 }
@@ -131,7 +149,9 @@ export const useCosmosSend = () => {
       const amountInBase = parseAmountToBaseUnits(params.amount, config.decimals);
 
       const key = findCosmosKey(allKeyInfos, selectedKeyInfo, params.chainId);
-      if (!key) throw new Error('no cosmos-capable wallet found');
+      if (!key) {
+        throw new Error('no cosmos-capable wallet found');
+      }
 
       if (key.type === 'mnemonic') {
         // mnemonic path: direct sign+broadcast
@@ -175,10 +195,14 @@ export const useCosmosSend = () => {
         // zigner path: build sign request for QR
         const insensitive = key.insensitive ?? {};
         const fromAddress = getZignerAddress(insensitive, params.chainId);
-        if (!fromAddress) throw new Error('no cosmos address found for zigner wallet');
+        if (!fromAddress) {
+          throw new Error('no cosmos address found for zigner wallet');
+        }
 
         const pubkey = getZignerPubkey(insensitive);
-        if (!pubkey) throw new Error('no cosmos public key found — reimport wallet from zigner');
+        if (!pubkey) {
+          throw new Error('no cosmos public key found — reimport wallet from zigner');
+        }
 
         const messages: EncodeObject[] = [
           buildMsgSend({
@@ -236,7 +260,9 @@ export const useCosmosIbcTransfer = () => {
       const timeoutTimestamp = BigInt(Date.now() + 10 * 60 * 1000) * 1_000_000n;
 
       const key = findCosmosKey(allKeyInfos, selectedKeyInfo, params.sourceChainId);
-      if (!key) throw new Error('no cosmos-capable wallet found');
+      if (!key) {
+        throw new Error('no cosmos-capable wallet found');
+      }
 
       if (key.type === 'mnemonic') {
         // mnemonic path: direct sign+broadcast
@@ -282,10 +308,14 @@ export const useCosmosIbcTransfer = () => {
         // zigner path: build sign request for QR
         const insensitive = key.insensitive ?? {};
         const fromAddress = getZignerAddress(insensitive, params.sourceChainId);
-        if (!fromAddress) throw new Error('no cosmos address found for zigner wallet');
+        if (!fromAddress) {
+          throw new Error('no cosmos address found for zigner wallet');
+        }
 
         const pubkey = getZignerPubkey(insensitive);
-        if (!pubkey) throw new Error('no cosmos public key found — reimport wallet from zigner');
+        if (!pubkey) {
+          throw new Error('no cosmos public key found — reimport wallet from zigner');
+        }
 
         const messages: EncodeObject[] = [
           buildMsgTransfer({

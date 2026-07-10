@@ -27,7 +27,9 @@ export const ImportSeedPhrase = () => {
 
   const handleSubmit = (event: MouseEvent | FormEvent) => {
     event.preventDefault();
-    if (!valid) return;
+    if (!valid) {
+      return;
+    }
     navigateToNetworkSelection(navigate, SEED_PHRASE_ORIGIN.IMPORTED);
   };
 

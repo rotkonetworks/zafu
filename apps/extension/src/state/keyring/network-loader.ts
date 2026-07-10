@@ -8,12 +8,12 @@
 import type { NetworkType, NetworkActivation, DerivedKey } from './types';
 import { getNetworkActivation, NETWORK_CONFIGS, isPrivacyNetwork } from './types';
 
-type NetworkFeatures = {
+interface NetworkFeatures {
   /** is the wasm loaded */
   wasmLoaded: boolean;
   /** network-specific providers */
   providers: Record<string, unknown>;
-};
+}
 
 const loadedNetworks = new Map<NetworkType, NetworkFeatures>();
 
@@ -29,7 +29,9 @@ export const getNetworkFeatures = (network: NetworkType): NetworkFeatures | unde
 
 /** load features for a specific network */
 export const loadNetworkFeatures = async (network: NetworkType): Promise<void> => {
-  if (loadedNetworks.has(network)) return;
+  if (loadedNetworks.has(network)) {
+    return;
+  }
 
   // privacy networks need special wasm loading
   if (isPrivacyNetwork(network)) {

@@ -124,8 +124,11 @@ export const SettingsNetworks = () => {
                 {/* name — click to set active (if enabled) */}
                 <button
                   onClick={() => {
-                    if (isEnabled) void setActiveNetwork(networkId);
-                    else void handleToggle(networkId);
+                    if (isEnabled) {
+                      void setActiveNetwork(networkId);
+                    } else {
+                      void handleToggle(networkId);
+                    }
                   }}
                   className='flex flex-1 items-center gap-3'
                 >
@@ -274,11 +277,11 @@ interface MemoSyncStrategyPickerProps {
   readonly onChange: (strategy: MemoSyncStrategy) => void;
 }
 
-const STRATEGY_OPTIONS: ReadonlyArray<{
+const STRATEGY_OPTIONS: readonly {
   id: MemoSyncStrategy;
   label: string;
   hint: string;
-}> = [
+}[] = [
   {
     id: 'private',
     label: 'private',
@@ -483,8 +486,12 @@ const ZcashEndpointPicker = ({ currentUrl, onPick }: ZcashEndpointPickerProps) =
 
   const rttSuffix = (url: string): string => {
     const lat = latencies?.get(url);
-    if (!lat) return '';
-    if (lat.rttMs === null) return ' · unreachable';
+    if (!lat) {
+      return '';
+    }
+    if (lat.rttMs === null) {
+      return ' · unreachable';
+    }
     return ` · ${lat.rttMs}ms`;
   };
 
@@ -505,7 +512,9 @@ const ZcashEndpointPicker = ({ currentUrl, onPick }: ZcashEndpointPickerProps) =
         value={matched?.id ?? ''}
         onChange={e => {
           const preset = ZCASH_MAINNET_ENDPOINTS.find(p => p.id === e.target.value);
-          if (preset) onPick(preset.url);
+          if (preset) {
+            onPick(preset.url);
+          }
         }}
         className='w-full bg-input border border-border-soft px-2 py-1.5 text-xs focus:border-primary/50 focus:outline-none'
       >

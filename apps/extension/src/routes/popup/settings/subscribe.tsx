@@ -49,7 +49,9 @@ type PayState =
 function LiveTimer({ startMs }: { startMs: number }) {
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
-    if (!startMs) return;
+    if (!startMs) {
+      return;
+    }
     const tick = () => setElapsed(Math.round((Date.now() - startMs) / 1000));
     tick();
     const id = setInterval(tick, 1000);
@@ -84,21 +86,23 @@ export const SubscribePage = () => {
   const [zidPubkey, setZidPubkey] = useState<string | null>(null);
   const [ringPubkeyBytes, setRingPubkeyBytes] = useState<Uint8Array | null>(null);
   const [sendSteps, setSendSteps] = useState<
-    Array<{ step: string; detail?: string; elapsedMs: number }>
+    { step: string; detail?: string; elapsedMs: number }[]
   >([]);
   // zigner signing flow: unsigned tx produced at build, QR shown to user, signature scanned back
   const [signRequestQr, setSignRequestQr] = useState<string | null>(null);
   const unsignedTxRef = useRef<SendTxUnsignedResult | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const buildStartRef = useRef<number>(0);
+  const buildStartRef = useRef(0);
   // baseline `expires` captured before a new payment starts; polling waits
   // for the server's reported expires to INCREASE past this, so existing pro
   // licenses don't trigger an instant false "pro activated" after extension.
-  const baselineExpiresRef = useRef<number>(0);
+  const baselineExpiresRef = useRef(0);
 
   // listen for send progress events from worker
   useEffect(() => {
-    if (payState !== 'building' && payState !== 'broadcasting') return;
+    if (payState !== 'building' && payState !== 'broadcasting') {
+      return;
+    }
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail as {
         step: string;
@@ -113,13 +117,17 @@ export const SubscribePage = () => {
 
   // derive ZID pubkey for payment memo + ring VRF pubkey for registration
   useEffect(() => {
-    if (!keyInfo?.id) return;
+    if (!keyInfo?.id) {
+      return;
+    }
 
     // zigner wallets: no mnemonic in zafu. use THIS wallet's ZID if imported
     // (via identity page QR scan). if missing, user needs to import it first.
     if (isZignerWallet) {
       const storedZid = keyInfo.insensitive?.['zid'] as string | undefined;
-      if (storedZid) setZidPubkey(storedZid);
+      if (storedZid) {
+        setZidPubkey(storedZid);
+      }
       return;
     }
 
@@ -151,7 +159,9 @@ export const SubscribePage = () => {
   // cleanup poll on unmount
   useEffect(
     () => () => {
-      if (pollRef.current) clearInterval(pollRef.current);
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+      }
     },
     [],
   );
@@ -167,10 +177,14 @@ export const SubscribePage = () => {
   // baseline is 0, so any pro license flips it; for extensions, we wait until
   // the new on-chain payment actually credits.
   const checkLicense = useCallback(async () => {
-    if (!zidPubkey) return false;
+    if (!zidPubkey) {
+      return false;
+    }
     try {
       const license = await fetchLicense(zidPubkey, ringPubkeyBytes ?? undefined);
-      if (!license) return false;
+      if (!license) {
+        return false;
+      }
       return license.expires > baselineExpiresRef.current;
     } catch {
       return false;
@@ -189,17 +203,23 @@ export const SubscribePage = () => {
   // start polling after payment sent
   const startPolling = useCallback(() => {
     setPayState('polling');
-    if (pollRef.current) clearInterval(pollRef.current);
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+    }
     let attempts = 0;
     pollRef.current = setInterval(() => {
       attempts++;
       void checkLicense().then(ok => {
         if (ok) {
-          if (pollRef.current) clearInterval(pollRef.current);
+          if (pollRef.current) {
+            clearInterval(pollRef.current);
+          }
           setPayState('activated');
         } else if (attempts >= 20) {
           // stop after ~5 min, user can manually check
-          if (pollRef.current) clearInterval(pollRef.current);
+          if (pollRef.current) {
+            clearInterval(pollRef.current);
+          }
           setPayState('sent');
         }
       });
@@ -229,7 +249,9 @@ export const SubscribePage = () => {
 
   // step 2: confirm + password + broadcast
   const handleConfirm = useCallback(async () => {
-    if (!keyInfo?.id) return;
+    if (!keyInfo?.id) {
+      return;
+    }
     const authorized = await requestAuth();
     if (!authorized) {
       setPayState('review');
@@ -289,7 +311,9 @@ export const SubscribePage = () => {
 
   // zigner variant: build unsigned tx, show sign-request QR, wait for signature scan.
   const handleZignerBuild = useCallback(async () => {
-    if (!keyInfo?.id || !memo) return;
+    if (!keyInfo?.id || !memo) {
+      return;
+    }
     if (!activeZcashWallet) {
       setError('no zcash wallet record found for this wallet');
       setPayState('error');
@@ -549,8 +573,11 @@ export const SubscribePage = () => {
                 </button>
                 <button
                   onClick={() => {
-                    if (isZignerWallet) void handleZignerBuild();
-                    else void handleConfirm();
+                    if (isZignerWallet) {
+                      void handleZignerBuild();
+                    } else {
+                      void handleConfirm();
+                    }
                   }}
                   className='flex-1 rounded border border-primary/40 bg-primary/10 py-2 text-xs font-mono text-zigner-gold hover:bg-primary/20'
                 >

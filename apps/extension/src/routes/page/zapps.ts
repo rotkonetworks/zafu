@@ -190,8 +190,14 @@ export const DEFAULT_ZAPPS: Zapp[] = [
 
 /** resolve special URLs to actual chrome-extension:// URLs */
 export const resolveZappUrl = (url: string): string | null => {
-  if (url === '__sidepanel__') return null; // handled specially
-  if (url === '__zitadel__') return chrome.runtime.getURL('zitadel.html');
-  if (url === '__docs__') return chrome.runtime.getURL('docs/index.html');
+  if (url === '__sidepanel__') {
+    return null;
+  } // handled specially
+  if (url === '__zitadel__') {
+    return chrome.runtime.getURL('zitadel.html');
+  }
+  if (url === '__docs__') {
+    return chrome.runtime.getURL('docs/index.html');
+  }
   return url;
 };

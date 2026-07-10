@@ -14,7 +14,7 @@ import { useStore } from '../../../state';
 import { selectActiveNetwork } from '../../../state/keyring';
 import { NetworkUnavailable } from '../../../shared/components/network-unavailable';
 
-type ProposalEntry = {
+interface ProposalEntry {
   id: bigint;
   title: string;
   description: string;
@@ -22,10 +22,12 @@ type ProposalEntry = {
   state: string;
   startBlock: bigint;
   endBlock: bigint;
-};
+}
 
 function parseProposalKind(proposal: ProposalListResponse['proposal']): string {
-  if (!proposal) return 'unknown';
+  if (!proposal) {
+    return 'unknown';
+  }
   switch (proposal.payload.case) {
     case 'signaling':
       return 'signaling';
@@ -47,7 +49,9 @@ function parseProposalKind(proposal: ProposalListResponse['proposal']): string {
 }
 
 function parseState(state: ProposalListResponse['state']): string {
-  if (!state) return 'unknown';
+  if (!state) {
+    return 'unknown';
+  }
   switch (state.state.case) {
     case 'voting':
       return 'voting';
@@ -156,7 +160,9 @@ export function VotePage() {
         ],
       });
 
-      if (!plan.plan) throw new Error('failed to create vote plan');
+      if (!plan.plan) {
+        throw new Error('failed to create vote plan');
+      }
 
       // authorize and build
       const buildResponse = await viewClient.authorizeAndBuild({ transactionPlan: plan.plan });
@@ -167,7 +173,9 @@ export function VotePage() {
           break;
         }
       }
-      if (!transaction) throw new Error('failed to build vote transaction');
+      if (!transaction) {
+        throw new Error('failed to build vote transaction');
+      }
 
       await viewClient.broadcastTransaction({ transaction, awaitDetection: true });
       void proposalsQuery.refetch();

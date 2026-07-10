@@ -5,7 +5,7 @@ import type { KeyJson } from '@repo/encryption/key';
 export type SessionStorageState = { passwordKey?: KeyJson };
 
 // Meant to be used for short-term persisted data. Holds data in memory for the duration of a browser session.
-export const sessionExtStorage = new ExtensionStorage<SessionStorageState, undefined>(
+export const sessionExtStorage = new ExtensionStorage<SessionStorageState>(
   chrome.storage.session,
   {}, // no defaults
   undefined,

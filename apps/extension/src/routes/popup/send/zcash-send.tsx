@@ -35,7 +35,9 @@ import { FrostAirgapSignFlow, runMnemonicFrostSign } from './frost-multisig';
 import { RecipientPicker } from '../../../components/recipient-picker';
 import { SaveContactModal } from '../../../components/save-contact-modal';
 import { usePasswordGate } from '../../../hooks/password-gate';
-import { isZcashSignatureQR, parseZcashSignatureResponse, bytesToHex } from '@repo/wallet/networks';
+import { isZcashSignatureQR, parseZcashSignatureResponse, bytesToHex } from '@repo/wallet/networks'; // self-contained 4-step zigner-mediated multisig sign
+
+import { unwrapCborSinglePczt } from './zcash-send-cbor-helpers';
 
 interface ZcashSendProps {
   onClose: () => void;
@@ -60,15 +62,15 @@ type SendStep =
   | 'error'
   | 'frost-room'
   | 'frost-signing'
-  | 'airgap-flow'; // self-contained 4-step zigner-mediated multisig sign
-
-import { unwrapCborSinglePczt } from './zcash-send-cbor-helpers';
+  | 'airgap-flow';
 
 /** live elapsed timer — ticks every second so the build screen never looks frozen */
 function LiveTimer({ startMs }: { startMs: number }) {
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
-    if (!startMs) return;
+    if (!startMs) {
+      return;
+    }
     const tick = () => setElapsed(Math.round((Date.now() - startMs) / 1000));
     tick();
     const id = setInterval(tick, 1000);
@@ -122,7 +124,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const markPendingFailed = useCallback(
     async (reason: string) => {
       const tempId = pendingTempTxIdRef.current;
-      if (!tempId) return;
+      if (!tempId) {
+        return;
+      }
       try {
         await messages.markOutgoingFailed(tempId, reason);
       } catch (e) {
@@ -169,10 +173,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const [showQrScanner, setShowQrScanner] = useState(false);
   const unsignedTxRef = useRef<SendTxUnsignedResult | null>(null);
   const [sendSteps, setSendSteps] = useState<
-    Array<{ step: string; detail?: string; elapsedMs: number }>
+    { step: string; detail?: string; elapsedMs: number }[]
   >([]);
   const [totalElapsedSec, setTotalElapsedSec] = useState<number | null>(null);
-  const buildStartRef = useRef<number>(0);
+  const buildStartRef = useRef(0);
 
   // self-custody multisig (mnemonic FROST) state
   const [frostRoomCode, setFrostRoomCode] = useState('');
@@ -192,7 +196,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   // fetch spendable balance on mount
   const [balanceZat, setBalanceZat] = useState<bigint | null>(null);
   useEffect(() => {
-    if (!selectedKeyInfo) return;
+    if (!selectedKeyInfo) {
+      return;
+    }
     getBalanceInWorker('zcash', selectedKeyInfo.id)
       .then(bal => setBalanceZat(BigInt(bal)))
       .catch(() => {}); // worker not ready
@@ -205,7 +211,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
   // listen for send progress events from worker
   useEffect(() => {
-    if (step !== 'building' && step !== 'broadcast') return;
+    if (step !== 'building' && step !== 'broadcast') {
+      return;
+    }
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail as {
         step: string;
@@ -339,7 +347,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           undefined,
           ufvk,
         );
-        if (!('sighash' in result)) throw new Error('unexpected result from unsigned tx build');
+        if (!('sighash' in result)) {
+          throw new Error('unexpected result from unsigned tx build');
+        }
         unsignedTxRef.current = result;
         setFee((Number(result.fee) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, ''));
         setStep('airgap-flow');
@@ -354,7 +364,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         const secrets = await useStore
           .getState()
           .keyRing.getMultisigSecrets(activeZcashWallet.vaultId);
-        if (!secrets) throw new Error('failed to decrypt multisig keys - unlock wallet first');
+        if (!secrets) {
+          throw new Error('failed to decrypt multisig keys - unlock wallet first');
+        }
         const result = await buildSendTxInWorker(
           'zcash',
           walletId,
@@ -367,7 +379,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           undefined,
           ufvk,
         );
-        if (!('sighash' in result)) throw new Error('unexpected result from unsigned tx build');
+        if (!('sighash' in result)) {
+          throw new Error('unexpected result from unsigned tx build');
+        }
 
         unsignedTxRef.current = result;
         setFee((Number(result.fee) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, ''));
@@ -405,7 +419,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           setTotalElapsedSec(Math.round((Date.now() - buildStartRef.current) / 1000));
           setStep('complete');
           void recordUsage(recipient, 'zcash');
-          if (shouldSuggestSave(recipient)) setShowSavePrompt(true);
+          if (shouldSuggestSave(recipient)) {
+            setShowSavePrompt(true);
+          }
         } finally {
           frostAbortRef.current = null;
         }
@@ -414,7 +430,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         // Replaces the legacy [sighash][alphas][summary] simple format. The
         // PCZT round-trip ties zigner's display to the signed bytes so a
         // compromised hot wallet can't decouple them.
-        if (!ufvk) throw new Error('UFVK required for zigner signing');
+        if (!ufvk) {
+          throw new Error('UFVK required for zigner signing');
+        }
         // The worker overrides this with the live chain tip; we pass 0 as
         // a "no hint" sentinel that the worker treats as "use the tip you
         // just fetched for the merkle anchor". Hardcoding a stale block
@@ -548,7 +566,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     async (cborBytes: Uint8Array) => {
       try {
         setStep('broadcast');
-        if (!selectedKeyInfo) throw new Error('no wallet selected');
+        if (!selectedKeyInfo) {
+          throw new Error('no wallet selected');
+        }
 
         // Unwrap CBOR `{1: bytes}` → raw PCZT bytes. The envelope shape is
         // fixed by zigner (matches the wasm `cborWrapPczt` we use on emit).
@@ -569,7 +589,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         complete(result.txid);
         setStep('complete');
         void recordUsage(recipient, 'zcash');
-        if (shouldSuggestSave(recipient)) setShowSavePrompt(true);
+        if (shouldSuggestSave(recipient)) {
+          setShowSavePrompt(true);
+        }
       } catch (err) {
         pcztUnsignedRef.current = null;
         const reason = err instanceof Error ? err.message : 'failed to extract / broadcast PCZT';
@@ -645,7 +667,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       setTotalElapsedSec(Math.round((Date.now() - buildStartRef.current) / 1000));
       setStep('complete');
       void recordUsage(recipient, 'zcash');
-      if (shouldSuggestSave(recipient)) setShowSavePrompt(true);
+      if (shouldSuggestSave(recipient)) {
+        setShowSavePrompt(true);
+      }
     } catch (err) {
       const reason = err instanceof Error ? err.message : 'broadcast failed';
       void markPendingFailed(reason);
@@ -1074,7 +1098,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         );
 
       case 'airgap-flow':
-        if (!unsignedTxRef.current || !activeZcashWallet?.multisig) return null;
+        if (!unsignedTxRef.current || !activeZcashWallet?.multisig) {
+          return null;
+        }
         return (
           <FrostAirgapSignFlow
             ms={activeZcashWallet.multisig}

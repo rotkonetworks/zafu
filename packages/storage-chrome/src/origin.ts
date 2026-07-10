@@ -7,7 +7,9 @@ import { Capability, OriginPermissions } from './capabilities';
 
 const getPermissionsArray = async (): Promise<OriginPermissions[]> => {
   const raw = await localExtStorage.get('knownSites');
-  if (!Array.isArray(raw)) return [];
+  if (!Array.isArray(raw)) {
+    return [];
+  }
   // migrate old OriginRecord[] to OriginPermissions[] on read
   return (raw as unknown[]).map(entry => {
     const r = entry as Record<string, unknown>;
@@ -33,7 +35,9 @@ const savePermissions = async (perms: OriginPermissions[]): Promise<void> => {
 export const getOriginPermissions = async (
   origin?: string,
 ): Promise<OriginPermissions | undefined> => {
-  if (!origin) return undefined;
+  if (!origin) {
+    return undefined;
+  }
   const all = await getPermissionsArray();
   return all.find(p => p.origin === origin);
 };
@@ -112,9 +116,13 @@ export const setIdentity = async (origin: string, identity: string): Promise<voi
 // --- Legacy API (kept for backward compat during migration) ---
 
 export const getOriginRecord = async (getOrigin?: string): Promise<OriginRecord | undefined> => {
-  if (!getOrigin) return undefined;
+  if (!getOrigin) {
+    return undefined;
+  }
   const perms = await getOriginPermissions(getOrigin);
-  if (!perms) return undefined;
+  if (!perms) {
+    return undefined;
+  }
   // map OriginPermissions → OriginRecord for legacy callers
   let choice: UserChoice;
   if (perms.granted.includes('connect')) {

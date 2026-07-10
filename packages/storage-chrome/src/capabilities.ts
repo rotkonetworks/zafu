@@ -77,11 +77,15 @@ export interface OriginPermissions {
 }
 
 export function hasCapability(perms: OriginPermissions | undefined, cap: Capability): boolean {
-  if (!perms) return false;
+  if (!perms) {
+    return false;
+  }
   return perms.granted.includes(cap);
 }
 
 export function isDenied(perms: OriginPermissions | undefined, cap: Capability): boolean {
-  if (!perms) return false;
+  if (!perms) {
+    return false;
+  }
   return perms.denied.includes(cap);
 }

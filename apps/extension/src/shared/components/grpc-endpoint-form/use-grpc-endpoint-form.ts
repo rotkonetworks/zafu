@@ -43,7 +43,7 @@ export const useGrpcEndpointForm = (isOnboarding: boolean) => {
   } = useStoreShallow(useSaveGrpcEndpointSelector);
 
   const [originalChainId, setOriginalChainId] = useState<string | undefined>();
-  const [grpcEndpointInput, setGrpcEndpointInput] = useState<string>('');
+  const [grpcEndpointInput, setGrpcEndpointInput] = useState('');
   const [rpcError, setRpcError] = useState<string>();
   const [isSubmitButtonEnabled, setIsSubmitButtonEnabled] = useState(false);
   const [isValidationLoading, setIsValidationLoading] = useState(false);

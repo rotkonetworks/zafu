@@ -284,8 +284,7 @@ export const canFetchPrices = (state: AllSlices) => state.privacy.settings.enabl
  * zid identity surface enabled? legacy stored state (no field) treats
  * undefined as enabled, matching the default-true intent.
  */
-export const isIdentityEnabled = (state: AllSlices) =>
-  state.privacy.settings.enableIdentity !== false;
+export const isIdentityEnabled = (state: AllSlices) => state.privacy.settings.enableIdentity;
 
 /**
  * Read identity-enabled state from chrome.storage.local directly.

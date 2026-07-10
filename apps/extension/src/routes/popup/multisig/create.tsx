@@ -93,7 +93,9 @@ const MultisigCreateZafu = () => {
       // reuse the relay client startDkg already created (opening a second
       // FrostRelayClient would double-subscribe and break part2 parsing).
       const relay = useStore.getState().frostSession.relay;
-      if (!relay) throw new Error('frost relay missing - startDkg did not initialize it');
+      if (!relay) {
+        throw new Error('frost relay missing - startDkg did not initialize it');
+      }
 
       setStep('dkg-round1');
       const round1 = await frostDkgPart1InWorker(maxSigners, threshold);
@@ -120,17 +122,17 @@ const MultisigCreateZafu = () => {
             setParticipantCount(event.participant.participantCount);
           } else if (event.type === 'message') {
             const text = new TextDecoder().decode(event.message.payload);
-            const r1 = text.match(/^R1:(?:(\d+):(\d+):SK:([0-9a-fA-F]{64}):)?([\s\S]*)$/);
+            const r1 = /^R1:(?:(\d+):(\d+):SK:([0-9a-fA-F]{64}):)?([\s\S]*)$/.exec(text);
             if (r1) {
               peerBroadcasts.push(r1[4]!);
               return;
             }
-            const r2 = text.match(/^R2:([\s\S]*)$/);
+            const r2 = /^R2:([\s\S]*)$/.exec(text);
             if (r2) {
               peerRound2.push(r2[1]!);
               return;
             }
-            const fvk = text.match(/^FVK:([\s\S]*)$/);
+            const fvk = /^FVK:([\s\S]*)$/.exec(text);
             if (fvk) {
               peerFvks.push(fvk[1]!);
               return;
@@ -499,7 +501,9 @@ const MultisigCreateZigner = () => {
       setRoomCode(code);
 
       const relay = useStore.getState().frostSession.relay;
-      if (!relay) throw new Error('frost relay missing - startDkg did not initialize it');
+      if (!relay) {
+        throw new Error('frost relay missing - startDkg did not initialize it');
+      }
 
       const pid = new Uint8Array(32);
       crypto.getRandomValues(pid);
@@ -515,17 +519,17 @@ const MultisigCreateZigner = () => {
             setParticipantCount(event.participant.participantCount);
           } else if (event.type === 'message') {
             const text = new TextDecoder().decode(event.message.payload);
-            const r1 = text.match(/^R1:(?:(\d+):(\d+):SK:([0-9a-fA-F]{64}):)?([\s\S]*)$/);
+            const r1 = /^R1:(?:(\d+):(\d+):SK:([0-9a-fA-F]{64}):)?([\s\S]*)$/.exec(text);
             if (r1) {
               peerR1Ref.current.push(r1[4]!);
               return;
             }
-            const r2 = text.match(/^R2:([\s\S]*)$/);
+            const r2 = /^R2:([\s\S]*)$/.exec(text);
             if (r2) {
               peerR2Ref.current.push(r2[1]!);
               return;
             }
-            const fvk = text.match(/^FVK:([\s\S]*)$/);
+            const fvk = /^FVK:([\s\S]*)$/.exec(text);
             if (fvk) {
               peerFvksRef.current.push(fvk[1]!);
               return;
@@ -547,7 +551,9 @@ const MultisigCreateZigner = () => {
 
   const onZignerR1 = async (raw: string) => {
     try {
-      if (raw.length === 0) throw new Error('empty r1 ack');
+      if (raw.length === 0) {
+        throw new Error('empty r1 ack');
+      }
       const broadcastHex =
         /^[0-9a-fA-F]+$/.test(raw) && raw.length % 2 === 0
           ? raw
@@ -555,7 +561,9 @@ const MultisigCreateZigner = () => {
               .map(b => b.toString(16).padStart(2, '0'))
               .join('');
       const relay = useStore.getState().frostSession.relay;
-      if (!relay || !participantIdRef.current) throw new Error('relay not initialized');
+      if (!relay || !participantIdRef.current) {
+        throw new Error('relay not initialized');
+      }
       const prefixed = `R1:${threshold}:${maxSigners}:SK:${fvkSkRef.current}:${broadcastHex}`;
       await relay.sendMessage(
         roomCode,
@@ -576,7 +584,9 @@ const MultisigCreateZigner = () => {
         throw new Error('expected JSON string array');
       }
       const relay = useStore.getState().frostSession.relay;
-      if (!relay || !participantIdRef.current) throw new Error('relay not initialized');
+      if (!relay || !participantIdRef.current) {
+        throw new Error('relay not initialized');
+      }
       for (const pkg of packages) {
         await relay.sendMessage(
           roomCode,
@@ -606,8 +616,12 @@ const MultisigCreateZigner = () => {
       }
       setPublicKeyPackage(parsed.public_key_package);
       setWalletId(parsed.wallet_id);
-      if (parsed.orchard_fvk_uview) zignerDerivedUfvkRef.current = parsed.orchard_fvk_uview;
-      if (parsed.address) zignerDerivedAddrRef.current = parsed.address;
+      if (parsed.orchard_fvk_uview) {
+        zignerDerivedUfvkRef.current = parsed.orchard_fvk_uview;
+      }
+      if (parsed.address) {
+        zignerDerivedAddrRef.current = parsed.address;
+      }
       setStep('fvk-echo');
     } catch (e) {
       setError(`r3 scan: ${e instanceof Error ? e.message : String(e)}`);
@@ -622,14 +636,20 @@ const MultisigCreateZigner = () => {
   }, [step, participantCount, maxSigners]);
 
   useEffect(() => {
-    if (step !== 'waiting-r1' || !deadline) return;
+    if (step !== 'waiting-r1' || !deadline) {
+      return;
+    }
     let cancelled = false;
     void waitForUntil(() => peerR1Ref.current.length >= maxSigners - 1, deadline)
       .then(() => {
-        if (!cancelled) setStep('dkg2-show');
+        if (!cancelled) {
+          setStep('dkg2-show');
+        }
       })
       .catch(e => {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         setError(e instanceof Error ? e.message : String(e));
         setStep('error');
       });
@@ -639,14 +659,20 @@ const MultisigCreateZigner = () => {
   }, [step, maxSigners, deadline]);
 
   useEffect(() => {
-    if (step !== 'waiting-r2' || !deadline) return;
+    if (step !== 'waiting-r2' || !deadline) {
+      return;
+    }
     let cancelled = false;
     void waitForUntil(() => peerR2Ref.current.length >= (maxSigners - 1) ** 2, deadline)
       .then(() => {
-        if (!cancelled) setStep('dkg3-show');
+        if (!cancelled) {
+          setStep('dkg3-show');
+        }
       })
       .catch(e => {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         setError(e instanceof Error ? e.message : String(e));
         setStep('error');
       });
@@ -656,7 +682,9 @@ const MultisigCreateZigner = () => {
   }, [step, maxSigners, deadline]);
 
   useEffect(() => {
-    if (step !== 'fvk-echo' || !deadline || !publicKeyPackage) return;
+    if (step !== 'fvk-echo' || !deadline || !publicKeyPackage) {
+      return;
+    }
     let cancelled = false;
     void (async () => {
       try {
@@ -666,10 +694,14 @@ const MultisigCreateZigner = () => {
         const addr =
           zignerDerivedAddrRef.current ||
           (await frostDeriveAddressFromSkInWorker(publicKeyPackage, fvkSkRef.current, 0));
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
 
         const relay = useStore.getState().frostSession.relay;
-        if (!relay || !participantIdRef.current) throw new Error('relay not initialized');
+        if (!relay || !participantIdRef.current) {
+          throw new Error('relay not initialized');
+        }
         await relay.sendMessage(
           roomCode,
           participantIdRef.current,
@@ -685,7 +717,9 @@ const MultisigCreateZigner = () => {
           }
         }
 
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         await newFrostMultisigKey({
           label: `${threshold}-of-${maxSigners} multisig`,
           address: addr,
@@ -702,7 +736,9 @@ const MultisigCreateZigner = () => {
         setAddress(addr);
         setStep('complete');
       } catch (e) {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         setError(e instanceof Error ? e.message : String(e));
         setStep('error');
       }

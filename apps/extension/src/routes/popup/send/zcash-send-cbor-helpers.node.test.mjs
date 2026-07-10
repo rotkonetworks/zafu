@@ -4,16 +4,22 @@
 // jsdom). Pure-byte logic doesn't need any of that — `node --test` runs the
 // helper directly. Same assertions as the vitest version, kept in sync.
 
-import test from 'node:test';
+import test from 'vitest';
 import assert from 'node:assert/strict';
 
 // ── Inline helper copy. Keep byte-for-byte identical to the impl in
 // `zcash-send-cbor-helpers.ts`. The duplication is deliberate: this test
 // is meant to fail loudly if either implementation drifts.
 function unwrapCborSinglePczt(cbor) {
-  if (cbor.length < 3) throw new Error('CBOR PCZT envelope too short');
-  if (cbor[0] !== 0xa1) throw new Error('expected CBOR map(1) at offset 0');
-  if (cbor[1] !== 0x01) throw new Error('expected CBOR key 1 at offset 1');
+  if (cbor.length < 3) {
+    throw new Error('CBOR PCZT envelope too short');
+  }
+  if (cbor[0] !== 0xa1) {
+    throw new Error('expected CBOR map(1) at offset 0');
+  }
+  if (cbor[1] !== 0x01) {
+    throw new Error('expected CBOR key 1 at offset 1');
+  }
   let pos = 2;
   const tag = cbor[pos++];
   const readLen = nBytes => {
@@ -21,7 +27,9 @@ function unwrapCborSinglePczt(cbor) {
       throw new Error(`CBOR length header truncated (need ${nBytes} bytes)`);
     }
     let v = 0;
-    for (let i = 0; i < nBytes; i++) v = v * 256 + cbor[pos++];
+    for (let i = 0; i < nBytes; i++) {
+      v = v * 256 + cbor[pos++];
+    }
     return v;
   };
   let len;
@@ -48,10 +56,15 @@ function unwrapCborSinglePczt(cbor) {
 function wrap(payload) {
   const len = payload.length;
   const header = [0xa1, 0x01];
-  if (len <= 23) header.push(0x40 | len);
-  else if (len <= 0xff) header.push(0x58, len);
-  else if (len <= 0xffff) header.push(0x59, (len >> 8) & 0xff, len & 0xff);
-  else header.push(0x5a, (len >> 24) & 0xff, (len >> 16) & 0xff, (len >> 8) & 0xff, len & 0xff);
+  if (len <= 23) {
+    header.push(0x40 | len);
+  } else if (len <= 0xff) {
+    header.push(0x58, len);
+  } else if (len <= 0xffff) {
+    header.push(0x59, (len >> 8) & 0xff, len & 0xff);
+  } else {
+    header.push(0x5a, (len >> 24) & 0xff, (len >> 16) & 0xff, (len >> 8) & 0xff, len & 0xff);
+  }
   const out = new Uint8Array(header.length + len);
   out.set(header, 0);
   out.set(payload, header.length);

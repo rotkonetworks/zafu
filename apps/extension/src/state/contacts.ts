@@ -100,13 +100,13 @@ export interface ContactsSlice {
   /** get all addresses for a specific network */
   getAddressesByNetwork: (
     network: ContactNetwork,
-  ) => Array<{ contact: Contact; address: ContactAddress }>;
+  ) => { contact: Contact; address: ContactAddress }[];
 
   /** get favorite contacts */
   getFavorites: () => Contact[];
 
   /** get recently used addresses */
-  getRecentAddresses: (limit?: number) => Array<{ contact: Contact; address: ContactAddress }>;
+  getRecentAddresses: (limit?: number) => { contact: Contact; address: ContactAddress }[];
 
   /** search contacts by name or address */
   search: (query: string) => Contact[];
@@ -130,7 +130,7 @@ const generateId = () => crypto.randomUUID();
 export const createContactsSlice =
   (
     local: ExtensionStorage<LocalStorageState>,
-    session: ExtensionStorage<SessionStorageState>,
+    _session: ExtensionStorage<SessionStorageState>,
   ): SliceCreator<ContactsSlice> =>
   (set, get) => {
     /** safely get contacts array - guards against non-iterable state from stale/corrupt storage */
@@ -155,7 +155,9 @@ export const createContactsSlice =
         };
 
         set(state => {
-          if (!Array.isArray(state.contacts.contacts)) state.contacts.contacts = [];
+          if (!Array.isArray(state.contacts.contacts)) {
+            state.contacts.contacts = [];
+          }
           state.contacts.contacts.push(contact);
         });
 
@@ -169,8 +171,12 @@ export const createContactsSlice =
             Array.isArray(state.contacts.contacts) ? state.contacts.contacts : []
           ).find(c => c.id === id);
           if (contact) {
-            if (updates.name !== undefined) contact.name = updates.name.trim();
-            if (updates.notes !== undefined) contact.notes = updates.notes.trim() || undefined;
+            if (updates.name !== undefined) {
+              contact.name = updates.name.trim();
+            }
+            if (updates.notes !== undefined) {
+              contact.notes = updates.notes.trim() || undefined;
+            }
           }
         });
 
@@ -230,10 +236,18 @@ export const createContactsSlice =
           if (contact) {
             const addr = contact.addresses.find(a => a.id === addressId);
             if (addr) {
-              if (updates.network !== undefined) addr.network = updates.network;
-              if (updates.address !== undefined) addr.address = updates.address.trim();
-              if (updates.chainId !== undefined) addr.chainId = updates.chainId.trim() || undefined;
-              if (updates.notes !== undefined) addr.notes = updates.notes.trim() || undefined;
+              if (updates.network !== undefined) {
+                addr.network = updates.network;
+              }
+              if (updates.address !== undefined) {
+                addr.address = updates.address.trim();
+              }
+              if (updates.chainId !== undefined) {
+                addr.chainId = updates.chainId.trim() || undefined;
+              }
+              if (updates.notes !== undefined) {
+                addr.notes = updates.notes.trim() || undefined;
+              }
             }
           }
         });
@@ -282,7 +296,7 @@ export const createContactsSlice =
       },
 
       getAddressesByNetwork: network => {
-        const results: Array<{ contact: Contact; address: ContactAddress }> = [];
+        const results: { contact: Contact; address: ContactAddress }[] = [];
         for (const contact of safeContacts()) {
           for (const addr of contact.addresses) {
             if (addr.network === network) {
@@ -298,7 +312,7 @@ export const createContactsSlice =
       },
 
       getRecentAddresses: (limit = 5) => {
-        const results: Array<{ contact: Contact; address: ContactAddress; lastUsed: number }> = [];
+        const results: { contact: Contact; address: ContactAddress; lastUsed: number }[] = [];
         for (const contact of safeContacts()) {
           for (const addr of contact.addresses) {
             if (addr.lastUsedAt) {
@@ -358,22 +372,26 @@ export const createContactsSlice =
 
         const { KeyPrint: KP } = await import('@repo/encryption/key-print');
         const key = await Key.recreate(password, KP.fromJson(data.keyPrint));
-        if (!key) throw new Error('wrong password');
+        if (!key) {
+          throw new Error('wrong password');
+        }
 
         const plaintext = await key.unseal(Box.fromJson(data.data));
-        if (!plaintext) throw new Error('failed to decrypt contacts');
+        if (!plaintext) {
+          throw new Error('failed to decrypt contacts');
+        }
 
-        const imported = JSON.parse(plaintext) as Array<{
+        const imported = JSON.parse(plaintext) as {
           name: string;
           notes?: string;
           favorite?: boolean;
-          addresses: Array<{
+          addresses: {
             network: ContactNetwork;
             address: string;
             chainId?: string;
             notes?: string;
-          }>;
-        }>;
+          }[];
+        }[];
 
         const existingNames = new Set(safeContacts().map(c => c.name.toLowerCase()));
 
@@ -398,7 +416,9 @@ export const createContactsSlice =
           if (mode === 'replace') {
             state.contacts.contacts = newContacts;
           } else {
-            if (!Array.isArray(state.contacts.contacts)) state.contacts.contacts = [];
+            if (!Array.isArray(state.contacts.contacts)) {
+              state.contacts.contacts = [];
+            }
             state.contacts.contacts.push(...newContacts);
           }
         });

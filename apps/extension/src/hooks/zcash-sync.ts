@@ -47,9 +47,13 @@ export function useZcashSyncStatus(): ZcashSyncState {
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
-      if (detail?.network !== 'zcash') return;
+      if (detail?.network !== 'zcash') {
+        return;
+      }
       // only accept events for the currently active wallet
-      if (activeWalletId && detail.walletId && detail.walletId !== activeWalletId) return;
+      if (activeWalletId && detail.walletId && detail.walletId !== activeWalletId) {
+        return;
+      }
       if (typeof detail.currentHeight === 'number') {
         setWorkerSyncHeight(detail.currentHeight);
       }
@@ -111,6 +115,6 @@ export function useZcashSyncStatus(): ZcashSyncState {
     workerSyncHeight,
     workerChainHeight,
     isLoading: syncLoading || tipLoading,
-    error: (syncError ?? tipError) as Error | null,
+    error: syncError ?? tipError,
   };
 }

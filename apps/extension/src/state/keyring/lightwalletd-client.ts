@@ -45,7 +45,9 @@ async function readBoundedBody(resp: Response, method: string): Promise<Uint8Arr
   let total = 0;
   while (true) {
     const { value, done } = await reader.read();
-    if (done) break;
+    if (done) {
+      break;
+    }
     if (value) {
       total += value.length;
       if (total > cap) {
@@ -81,8 +83,11 @@ export class LightwalletdClient implements ZcashClient {
     let height = 0;
     let hash: Uint8Array = new Uint8Array(0);
     this.eachField(resp, (field, wire, val) => {
-      if (wire === 0 && field === 1) height = Number(val as bigint);
-      else if (wire === 2 && field === 2) hash = val as Uint8Array;
+      if (wire === 0 && field === 1) {
+        height = Number(val as bigint);
+      } else if (wire === 2 && field === 2) {
+        hash = val as Uint8Array;
+      }
     });
     return { height, hash };
   }
@@ -98,9 +103,13 @@ export class LightwalletdClient implements ZcashClient {
     let orchardTree = '';
     const decoder = new TextDecoder();
     this.eachField(resp, (field, wire, val) => {
-      if (wire === 0 && field === 2) h = Number(val as bigint);
-      else if (wire === 0 && field === 4) time = Number(val as bigint);
-      else if (wire === 2 && field === 6) orchardTree = decoder.decode(val as Uint8Array);
+      if (wire === 0 && field === 2) {
+        h = Number(val as bigint);
+      } else if (wire === 0 && field === 4) {
+        time = Number(val as bigint);
+      } else if (wire === 2 && field === 6) {
+        orchardTree = decoder.decode(val as Uint8Array);
+      }
     });
     return { height: h, orchardTree, time };
   }
@@ -128,15 +137,23 @@ export class LightwalletdClient implements ZcashClient {
     // GetAddressUtxos(GetAddressUtxosArg{ addresses=1, startHeight=2, maxEntries=3 })
     const parts: number[] = [];
     const encoder = new TextEncoder();
-    for (const addr of addresses) parts.push(0x0a, ...this.lengthDelimited(encoder.encode(addr)));
-    if (startHeight > 0) parts.push(0x10, ...this.varint(startHeight));
-    if (maxEntries > 0) parts.push(0x18, ...this.varint(maxEntries));
+    for (const addr of addresses) {
+      parts.push(0x0a, ...this.lengthDelimited(encoder.encode(addr)));
+    }
+    if (startHeight > 0) {
+      parts.push(0x10, ...this.varint(startHeight));
+    }
+    if (maxEntries > 0) {
+      parts.push(0x18, ...this.varint(maxEntries));
+    }
     const resp = await this.grpcCall('GetAddressUtxos', new Uint8Array(parts));
 
     // GetAddressUtxosReplyList { addressUtxos=1 repeated GetAddressUtxosReply }
     const utxos: Utxo[] = [];
     this.eachField(resp, (field, wire, val) => {
-      if (wire === 2 && field === 1) utxos.push(this.parseUtxo(val as Uint8Array));
+      if (wire === 2 && field === 1) {
+        utxos.push(this.parseUtxo(val as Uint8Array));
+      }
     });
     return utxos;
   }
@@ -154,7 +171,9 @@ export class LightwalletdClient implements ZcashClient {
     const resp = await this.grpcCall('GetBlock', req);
     let time = 0;
     this.eachField(resp, (field, wire, val) => {
-      if (wire === 0 && field === 5) time = Number(val as bigint);
+      if (wire === 0 && field === 5) {
+        time = Number(val as bigint);
+      }
     });
     return time;
   }
@@ -169,8 +188,11 @@ export class LightwalletdClient implements ZcashClient {
     let errorMessage = '';
     const decoder = new TextDecoder();
     this.eachField(resp, (field, wire, val) => {
-      if (wire === 0 && field === 1) errorCode = Number(val as bigint);
-      else if (wire === 2 && field === 2) errorMessage = decoder.decode(val as Uint8Array);
+      if (wire === 0 && field === 1) {
+        errorCode = Number(val as bigint);
+      } else if (wire === 2 && field === 2) {
+        errorMessage = decoder.decode(val as Uint8Array);
+      }
     });
     return { txid: new Uint8Array(0), errorCode, errorMessage };
   }
@@ -184,7 +206,7 @@ export class LightwalletdClient implements ZcashClient {
   async getBlockTransactions(height: number): Promise<{
     height: number;
     hash: Uint8Array;
-    txs: Array<{ data: Uint8Array; height: number }>;
+    txs: { data: Uint8Array; height: number }[];
   }> {
     return { height, hash: new Uint8Array(0), txs: [] };
   }
@@ -229,9 +251,9 @@ export class LightwalletdClient implements ZcashClient {
     if (flags & 0x80) {
       const trailerLen = (buf[1]! << 24) | (buf[2]! << 16) | (buf[3]! << 8) | buf[4]!;
       const trailer = new TextDecoder().decode(buf.subarray(5, 5 + trailerLen));
-      const status = trailer.match(/grpc-status:\s*(\d+)/)?.[1] ?? '0';
+      const status = /grpc-status:\s*(\d+)/.exec(trailer)?.[1] ?? '0';
       if (status !== '0') {
-        const m = trailer.match(/grpc-message:\s*(.+)/)?.[1]?.trim();
+        const m = /grpc-message:\s*(.+)/.exec(trailer)?.[1]?.trim();
         throw new Error(`gRPC ${method}: ${decodeURIComponent(m ?? `status ${status}`)}`);
       }
       return new Uint8Array(0);
@@ -261,7 +283,9 @@ export class LightwalletdClient implements ZcashClient {
       headers: { 'Content-Type': 'application/grpc' },
       body,
     });
-    if (!resp.ok) throw new Error(`gRPC ${method}: HTTP ${resp.status}`);
+    if (!resp.ok) {
+      throw new Error(`gRPC ${method}: HTTP ${resp.status}`);
+    }
     return resp;
   }
 
@@ -295,7 +319,9 @@ export class LightwalletdClient implements ZcashClient {
         while (pos < buf.length) {
           const b = buf[pos++]!;
           v |= BigInt(b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7n;
         }
         fn(field, wire, v);
@@ -305,7 +331,9 @@ export class LightwalletdClient implements ZcashClient {
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
         fn(field, wire, buf.subarray(pos, pos + len));
@@ -314,7 +342,9 @@ export class LightwalletdClient implements ZcashClient {
         pos += 4;
       } else if (wire === 1) {
         pos += 8;
-      } else break;
+      } else {
+        break;
+      }
     }
   }
 
@@ -322,12 +352,18 @@ export class LightwalletdClient implements ZcashClient {
     const blocks: CompactBlock[] = [];
     let pos = 0;
     while (pos < buf.length) {
-      if (pos + 5 > buf.length) break;
-      if (buf[pos]! & 0x80) break; // trailer frame
+      if (pos + 5 > buf.length) {
+        break;
+      }
+      if (buf[pos]! & 0x80) {
+        break;
+      } // trailer frame
       const len =
         (buf[pos + 1]! << 24) | (buf[pos + 2]! << 16) | (buf[pos + 3]! << 8) | buf[pos + 4]!;
       pos += 5;
-      if (pos + len > buf.length) break;
+      if (pos + len > buf.length) {
+        break;
+      }
       blocks.push(this.parseBlock(buf.subarray(pos, pos + len)));
       pos += len;
     }
@@ -338,10 +374,14 @@ export class LightwalletdClient implements ZcashClient {
   private parseBlock(buf: Uint8Array): CompactBlock {
     const block: CompactBlock = { height: 0, hash: new Uint8Array(0), actions: [] };
     this.eachField(buf, (field, wire, val) => {
-      if (wire === 0 && field === 2) block.height = Number(val as bigint);
-      else if (wire === 2 && field === 3) block.hash = val as Uint8Array;
-      else if (wire === 2 && field === 7) {
-        for (const a of this.parseCompactTx(val as Uint8Array)) block.actions.push(a);
+      if (wire === 0 && field === 2) {
+        block.height = Number(val as bigint);
+      } else if (wire === 2 && field === 3) {
+        block.hash = val as Uint8Array;
+      } else if (wire === 2 && field === 7) {
+        for (const a of this.parseCompactTx(val as Uint8Array)) {
+          block.actions.push(a);
+        }
       }
     });
     return block;
@@ -352,8 +392,11 @@ export class LightwalletdClient implements ZcashClient {
     let txid: Uint8Array = new Uint8Array(0);
     const rawActions: Uint8Array[] = [];
     this.eachField(buf, (field, wire, val) => {
-      if (wire === 2 && field === 2) txid = val as Uint8Array;
-      else if (wire === 2 && field === 6) rawActions.push(val as Uint8Array);
+      if (wire === 2 && field === 2) {
+        txid = val as Uint8Array;
+      } else if (wire === 2 && field === 6) {
+        rawActions.push(val as Uint8Array);
+      }
     });
     return rawActions.map(raw => {
       const a = this.parseAction(raw);
@@ -372,12 +415,19 @@ export class LightwalletdClient implements ZcashClient {
       txid: new Uint8Array(0),
     };
     this.eachField(buf, (field, wire, val) => {
-      if (wire !== 2) return;
+      if (wire !== 2) {
+        return;
+      }
       const data = val as Uint8Array;
-      if (field === 1) a.nullifier = data;
-      else if (field === 2) a.cmx = data;
-      else if (field === 3) a.ephemeralKey = data;
-      else if (field === 4) a.ciphertext = data;
+      if (field === 1) {
+        a.nullifier = data;
+      } else if (field === 2) {
+        a.cmx = data;
+      } else if (field === 3) {
+        a.ephemeralKey = data;
+      } else if (field === 4) {
+        a.ciphertext = data;
+      }
     });
     return a;
   }
@@ -396,14 +446,22 @@ export class LightwalletdClient implements ZcashClient {
     this.eachField(buf, (field, wire, val) => {
       if (wire === 0) {
         const v = val as bigint;
-        if (field === 2) utxo.outputIndex = Number(v);
-        else if (field === 4) utxo.valueZat = v;
-        else if (field === 5) utxo.height = Number(v);
+        if (field === 2) {
+          utxo.outputIndex = Number(v);
+        } else if (field === 4) {
+          utxo.valueZat = v;
+        } else if (field === 5) {
+          utxo.height = Number(v);
+        }
       } else if (wire === 2) {
         const data = val as Uint8Array;
-        if (field === 1) utxo.txid = data;
-        else if (field === 3) utxo.script = data;
-        else if (field === 6) utxo.address = decoder.decode(data);
+        if (field === 1) {
+          utxo.txid = data;
+        } else if (field === 3) {
+          utxo.script = data;
+        } else if (field === 6) {
+          utxo.address = decoder.decode(data);
+        }
       }
     });
     return utxo;
@@ -414,8 +472,11 @@ export class LightwalletdClient implements ZcashClient {
     let data: Uint8Array = new Uint8Array(0);
     let height = 0;
     this.eachField(buf, (field, wire, val) => {
-      if (wire === 2 && field === 1) data = val as Uint8Array;
-      else if (wire === 0 && field === 2) height = Number(val as bigint);
+      if (wire === 2 && field === 1) {
+        data = val as Uint8Array;
+      } else if (wire === 0 && field === 2) {
+        height = Number(val as bigint);
+      }
     });
     return { data, height };
   }

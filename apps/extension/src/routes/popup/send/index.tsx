@@ -171,7 +171,7 @@ function CosmosChainSelector({
   currentChainId,
   autoLabel,
 }: {
-  chains: Array<{ chainId: string; chainName: string; bech32Prefix?: string; logoUri?: string }>;
+  chains: { chainId: string; chainName: string; bech32Prefix?: string; logoUri?: string }[];
   selected: string | undefined;
   onSelect: (chainId: string) => void;
   currentChainId: string;
@@ -339,7 +339,9 @@ function CosmosSend({ sourceChainId }: { sourceChainId: CosmosChainId }) {
 
   // convert amount to base units (integer math, no float precision loss)
   const amountInBase = useMemo(() => {
-    if (!amount || isNaN(parseFloat(amount)) || !selectedAsset) return '0';
+    if (!amount || isNaN(parseFloat(amount)) || !selectedAsset) {
+      return '0';
+    }
     return parseAmountToBaseUnits(amount, selectedAsset.decimals);
   }, [amount, selectedAsset]);
 
@@ -363,16 +365,22 @@ function CosmosSend({ sourceChainId }: { sourceChainId: CosmosChainId }) {
 
   // auto-detect destination chain from address
   const detectedChain = useMemo(() => {
-    if (!recipient) return undefined;
+    if (!recipient) {
+      return undefined;
+    }
     return getChainFromAddress(recipient);
   }, [recipient]);
 
   // validate recipient
   const recipientValid = useMemo(() => {
-    if (!recipient) return false;
+    if (!recipient) {
+      return false;
+    }
     if (destChainId) {
       const destPrefix = skipChains.find(c => c.chainId === destChainId)?.bech32Prefix;
-      if (destPrefix) return recipient.startsWith(`${destPrefix}1`);
+      if (destPrefix) {
+        return recipient.startsWith(`${destPrefix}1`);
+      }
     }
     return isValidCosmosAddress(recipient);
   }, [recipient, destChainId, skipChains]);
@@ -385,7 +393,7 @@ function CosmosSend({ sourceChainId }: { sourceChainId: CosmosChainId }) {
 
   // Listen for cosmos sign result from dedicated window
   useEffect(() => {
-    const listener = (changes: { [key: string]: chrome.storage.StorageChange }) => {
+    const listener = (changes: Record<string, chrome.storage.StorageChange>) => {
       if (changes['cosmosSignResult']?.newValue) {
         const result = changes['cosmosSignResult'].newValue as { txHash: string; code: number };
         setTxStatus('success');
@@ -405,7 +413,9 @@ function CosmosSend({ sourceChainId }: { sourceChainId: CosmosChainId }) {
 
   // show confirmation screen with tx preview
   const handleReview = useCallback(() => {
-    if (!canSubmit || !selectedAsset) return;
+    if (!canSubmit || !selectedAsset) {
+      return;
+    }
     setTxError(undefined);
     setShowRawJson(false);
 
@@ -450,7 +460,9 @@ function CosmosSend({ sourceChainId }: { sourceChainId: CosmosChainId }) {
 
   // confirmed — ask password then sign+broadcast
   const handleConfirm = useCallback(async () => {
-    if (!selectedAsset) return;
+    if (!selectedAsset) {
+      return;
+    }
 
     const authorized = await requestAuth();
     if (!authorized) {
@@ -669,7 +681,7 @@ function CosmosSend({ sourceChainId }: { sourceChainId: CosmosChainId }) {
           )}
         </div>
       )}
-      {routeError && <p className='text-xs text-red-400'>{(routeError as Error).message}</p>}
+      {routeError && <p className='text-xs text-red-400'>{routeError.message}</p>}
 
       {/* transaction status */}
       {txStatus === 'success' && txHash && (
@@ -932,7 +944,9 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
         return raw
           .filter(b => {
             const meta = getMetadataFromBalancesResponse.optional(b);
-            if (!meta?.base || typeof meta.base !== 'string') return true;
+            if (!meta?.base || typeof meta.base !== 'string') {
+              return true;
+            }
             return !(
               assetPatterns.auctionNft.matches(meta.base) ||
               assetPatterns.lpNft.matches(meta.base) ||
@@ -971,12 +985,16 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
 
   // get display info for selected asset
   const selectedSymbol = useMemo(() => {
-    if (!selectedAsset?.balanceView) return 'asset';
+    if (!selectedAsset?.balanceView) {
+      return 'asset';
+    }
     return getDisplayDenomFromView(selectedAsset.balanceView) || 'asset';
   }, [selectedAsset]);
 
   const selectedBalance = useMemo(() => {
-    if (!selectedAsset?.balanceView) return '0';
+    if (!selectedAsset?.balanceView) {
+      return '0';
+    }
     const val = fromValueView(selectedAsset.balanceView);
     return typeof val === 'string' ? val : val.toString();
   }, [selectedAsset]);
@@ -994,7 +1012,9 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
     txStatus === 'idle';
 
   const handleSubmit = useCallback(async () => {
-    if (!canSubmit || !selectedAsset) return;
+    if (!canSubmit || !selectedAsset) {
+      return;
+    }
 
     setTxStatus('planning');
     setTxError(undefined);
@@ -1054,7 +1074,9 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
           {assetOpen && (
             <div className='absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-border-soft bg-canvas shadow-lg'>
               {balances.map((balance, i) => {
-                if (!balance.balanceView) return null;
+                if (!balance.balanceView) {
+                  return null;
+                }
                 const symbol = getDisplayDenomFromView(balance.balanceView) || 'Unknown';
                 const amt = fromValueView(balance.balanceView);
                 const amountStr = typeof amt === 'string' ? amt : amt.toString();
@@ -1229,17 +1251,18 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
 
 /** Penumbra IBC send form */
 /** filter balances to assets withdrawable through a given IBC channel */
-const filterWithdrawableAssets = (
-  balances: Array<{ balanceView?: { valueView?: { value?: { metadata?: { base?: string } } } } }>,
-  channelId: string | undefined,
-) => {
-  if (!channelId) return balances;
+const filterWithdrawableAssets = <T,>(balances: T[], channelId: string | undefined): T[] => {
+  if (!channelId) {
+    return balances;
+  }
   const prefix = `transfer/${channelId}/`;
   return balances.filter(b => {
     const base =
       (b as any)?.balanceView?.valueView?.value?.metadata?.base ??
       getMetadataFromBalancesResponse.optional(b as any)?.base;
-    if (!base) return false;
+    if (!base) {
+      return false;
+    }
     // show assets that came through this channel (can unwind back)
     // plus native UM (can always send cross-chain)
     return base.startsWith(prefix) || base === 'upenumbra';
@@ -1275,7 +1298,9 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
         );
         return raw.filter(b => {
           const meta = getMetadataFromBalancesResponse.optional(b);
-          if (!meta?.base || typeof meta.base !== 'string') return false;
+          if (!meta?.base || typeof meta.base !== 'string') {
+            return false;
+          }
           return !(
             assetPatterns.auctionNft.matches(meta.base) ||
             assetPatterns.lpNft.matches(meta.base) ||
@@ -1300,14 +1325,15 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
   // auto-select first withdrawable asset when chain changes
   useEffect(() => {
     if (withdrawableAssets.length > 0) {
-      const meta = getMetadataFromBalancesResponse.optional(withdrawableAssets[0]!);
+      const meta = getMetadataFromBalancesResponse.optional(withdrawableAssets[0]);
       setSelectedAsset(withdrawableAssets[0]);
-      if (meta?.base) ibcState.setDenom(meta.base);
+      if (meta?.base) {
+        ibcState.setDenom(meta.base);
+      }
     } else {
       setSelectedAsset(undefined);
       ibcState.setDenom('');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ibcState.chain?.channelId, withdrawableAssets.length]);
 
   // recent addresses and contacts
@@ -1327,7 +1353,9 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
     txStatus === 'idle';
 
   const handleSubmit = useCallback(async () => {
-    if (!canSubmit) return;
+    if (!canSubmit) {
+      return;
+    }
 
     setTxStatus('planning');
     setTxError(undefined);
@@ -1444,13 +1472,15 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
                   {withdrawableAssets.map((b, i) => {
                     const meta = getMetadataFromBalancesResponse.optional(b);
                     const display = meta?.symbol ?? meta?.display ?? meta?.base ?? 'unknown';
-                    const amount = getDisplayDenomFromView(b.balanceView!);
+                    const amount = getDisplayDenomFromView(b.balanceView);
                     return (
                       <button
                         key={i}
                         onClick={() => {
                           setSelectedAsset(b);
-                          if (meta?.base) ibcState.setDenom(meta.base);
+                          if (meta?.base) {
+                            ibcState.setDenom(meta.base);
+                          }
                           setAssetOpen(false);
                         }}
                         className='w-full px-3 py-2 text-left text-sm hover:bg-elev-1 flex justify-between items-center'
@@ -1628,9 +1658,15 @@ export function SendPage() {
   // we show a brief loading state instead of leaking the literal token into the form.
   const waitingForWallets = memoHasToken && !primaryAddr && allZcashWallets.length === 0;
   const externalMemo = (() => {
-    if (!rawMemo) return undefined;
-    if (!memoHasToken) return rawMemo;
-    if (!primaryAddr) return rawMemo;
+    if (!rawMemo) {
+      return undefined;
+    }
+    if (!memoHasToken) {
+      return rawMemo;
+    }
+    if (!primaryAddr) {
+      return rawMemo;
+    }
     return rawMemo.replaceAll('[primary]', primaryAddr).replaceAll('[self]', primaryAddr);
   })();
   const prefill = locationState?.prefillRecipient
@@ -1646,9 +1682,13 @@ export function SendPage() {
           // ZcashSend expects a decimal ZEC string so we convert (1 ZEC = 1e8 zat).
           amount: (() => {
             const zat = searchParams.get('amount_zat');
-            if (!zat) return undefined;
+            if (!zat) {
+              return undefined;
+            }
             const n = Number(zat);
-            if (!Number.isFinite(n) || n <= 0) return undefined;
+            if (!Number.isFinite(n) || n <= 0) {
+              return undefined;
+            }
             return (n / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
           })(),
           memo: externalMemo,
@@ -1661,9 +1701,15 @@ export function SendPage() {
   const isZcash = activeNetwork === 'zcash';
 
   const getTitle = () => {
-    if (isPenumbra) return 'send penumbra';
-    if (isCosmos) return 'send';
-    if (isZcash) return 'send zcash';
+    if (isPenumbra) {
+      return 'send penumbra';
+    }
+    if (isCosmos) {
+      return 'send';
+    }
+    if (isZcash) {
+      return 'send zcash';
+    }
     return `send ${activeNetwork}`;
   };
 

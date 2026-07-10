@@ -15,7 +15,6 @@ export type PopupRequest<M extends PopupType> = { id: string } & Record<M, Popup
 
 export type PopupResponse<M extends PopupType> = Record<M, PopupResponseMap[M]>;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- doesn't narrow the parameter
 export const isPopupRequest = (id: string, req: unknown): req is PopupRequest<any> =>
   typeof req === 'object' &&
   req !== null &&

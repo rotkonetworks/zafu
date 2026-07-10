@@ -57,10 +57,14 @@ export const withPoll = (opts: PollOptions): MempoolFilter => {
     async function* polling(walletId, ctx) {
       while (!ctx.signal.aborted) {
         for await (const snap of inner(walletId, ctx)) {
-          if (ctx.signal.aborted) return;
+          if (ctx.signal.aborted) {
+            return;
+          }
           yield snap;
         }
-        if (intervalMs === 0) continue;
+        if (intervalMs === 0) {
+          continue;
+        }
         const sleepFor = nextDelay(intervalMs, jitterMs, phaseAlign, rng, Date.now());
         await sleepAbortable(sleepFor, stepMs, ctx.signal);
       }

@@ -53,7 +53,9 @@ export const createPasswordSlice =
           try {
             const keyInfo = get().keyRing.selectedKeyInfo;
             const zidPubkey = keyInfo?.insensitive?.['zid'] as string | undefined;
-            if (zidPubkey) await get().license.fetchLicense(zidPubkey);
+            if (zidPubkey) {
+              await get().license.fetchLicense(zidPubkey);
+            }
           } catch {
             /* server unreachable — treat as free */
           }

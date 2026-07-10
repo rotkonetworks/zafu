@@ -10,7 +10,9 @@ const prefetchAssetIcons = (registry: {
     for (const asset of registry.getAllAssets()) {
       for (const img of asset.images ?? []) {
         const url = img.png || img.svg;
-        if (url) void fetch(url, { mode: 'no-cors', cache: 'force-cache' }).catch(() => {});
+        if (url) {
+          void fetch(url, { mode: 'no-cors', cache: 'force-cache' }).catch(() => {});
+        }
       }
     }
   } catch {

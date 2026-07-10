@@ -150,7 +150,9 @@ function IbcDepositSection({
 
   // generate ephemeral deposit address when chain is selected
   useEffect(() => {
-    if (!selectedIbcChain) return;
+    if (!selectedIbcChain) {
+      return;
+    }
 
     let cancelled = false;
     setDepositAddress('');
@@ -181,7 +183,6 @@ function IbcDepositSection({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedIbcChain, penumbraAccount]);
 
   // reset asset when chain changes
@@ -203,10 +204,14 @@ function IbcDepositSection({
     txStatus === 'idle';
 
   const handleShield = useCallback(async () => {
-    if (!canSubmit || !selectedIbcChain || !selectedAsset || !cosmosChainId) return;
+    if (!canSubmit || !selectedIbcChain || !selectedAsset || !cosmosChainId) {
+      return;
+    }
 
     const authorized = await requestAuth();
-    if (!authorized) return;
+    if (!authorized) {
+      return;
+    }
 
     setTxStatus('signing');
     setTxError('');
@@ -286,7 +291,7 @@ function IbcDepositSection({
         {showChainDropdown &&
           chainBtnRef.current &&
           (() => {
-            const rect = chainBtnRef.current!.getBoundingClientRect();
+            const rect = chainBtnRef.current.getBoundingClientRect();
             return (
               <div
                 className='fixed z-50 rounded-lg border border-border-soft bg-canvas shadow-lg'
@@ -387,7 +392,7 @@ function IbcDepositSection({
                   assetsData?.assets &&
                   assetBtnRef.current &&
                   (() => {
-                    const rect = assetBtnRef.current!.getBoundingClientRect();
+                    const rect = assetBtnRef.current.getBoundingClientRect();
                     return (
                       <div
                         className='fixed z-50 rounded-lg border border-border-soft bg-canvas shadow-lg'
@@ -500,7 +505,7 @@ function ReceiveTab({
 }) {
   const [copied, setCopied] = useState(false);
   const [ephemeral, setEphemeral] = useState(false);
-  const [ephemeralAddress, setEphemeralAddress] = useState<string>('');
+  const [ephemeralAddress, setEphemeralAddress] = useState('');
   const [ephemeralLoading, setEphemeralLoading] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -524,7 +529,9 @@ function ReceiveTab({
   // zcash shielded diversifier index (synced with chrome.storage)
   const [shieldedIndex, setShieldedIndex] = useState(0);
   useEffect(() => {
-    if (!isZcash) return;
+    if (!isZcash) {
+      return;
+    }
     chrome.storage.local.get('zcashShieldedIndex').then(r => {
       setShieldedIndex(r['zcashShieldedIndex'] ?? 0);
     });
@@ -547,7 +554,9 @@ function ReceiveTab({
 
   // auto-rotate zcash addresses on mount: bump both indices
   useEffect(() => {
-    if (!isZcash || !canTransparent) return;
+    if (!isZcash || !canTransparent) {
+      return;
+    }
 
     (async () => {
       const r = await chrome.storage.local.get(['zcashShieldedIndex', 'zcashTransparentIndex']);
@@ -559,7 +568,6 @@ function ReceiveTab({
       });
       setTransparentIndex(nextTransparent);
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isZcash, canTransparent]);
 
   const displayAddress =
@@ -582,7 +590,9 @@ function ReceiveTab({
   }, [displayAddress]);
 
   useEffect(() => {
-    if (!ephemeral || !isPenumbra) return;
+    if (!ephemeral || !isPenumbra) {
+      return;
+    }
 
     let cancelled = false;
     setEphemeralLoading(true);
@@ -607,7 +617,9 @@ function ReceiveTab({
         }
       } catch (err) {
         console.error('failed to generate ephemeral address:', err);
-        if (!cancelled) setEphemeralLoading(false);
+        if (!cancelled) {
+          setEphemeralLoading(false);
+        }
       }
     };
 
@@ -615,12 +627,13 @@ function ReceiveTab({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ephemeral, penumbraAccount]);
 
   // derive zcash transparent address when toggled on or index changes
   useEffect(() => {
-    if (!transparent || !isZcash || !canTransparent) return;
+    if (!transparent || !isZcash || !canTransparent) {
+      return;
+    }
 
     let cancelled = false;
     setTransparentLoading(true);
@@ -667,11 +680,12 @@ function ReceiveTab({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transparent, transparentIndex, isZcash, canTransparent, isMnemonic, zcashUfvk]);
 
   const copyAddress = useCallback(async () => {
-    if (!displayAddress) return;
+    if (!displayAddress) {
+      return;
+    }
     await navigator.clipboard.writeText(displayAddress);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
@@ -679,7 +693,9 @@ function ReceiveTab({
 
   const handleToggle = useCallback(() => {
     setEphemeral(prev => {
-      if (prev) setEphemeralAddress('');
+      if (prev) {
+        setEphemeralAddress('');
+      }
       return !prev;
     });
     setCopied(false);
@@ -687,7 +703,9 @@ function ReceiveTab({
 
   const handleTransparentToggle = useCallback(() => {
     setTransparent(prev => {
-      if (prev) setTransparentAddress('');
+      if (prev) {
+        setTransparentAddress('');
+      }
       return !prev;
     });
     setCopied(false);

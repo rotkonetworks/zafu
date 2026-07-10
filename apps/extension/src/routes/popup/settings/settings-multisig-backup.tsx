@@ -100,7 +100,9 @@ export const SettingsMultisigBackup = () => {
           ) : (
             <button
               onClick={async () => {
-                if (await requestAuth()) setBatchOpen(true);
+                if (await requestAuth()) {
+                  setBatchOpen(true);
+                }
               }}
               className='mt-3 w-full flex items-center justify-center gap-1.5 rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-xs text-zigner-gold hover:bg-primary/10 transition-colors'
             >
@@ -130,7 +132,9 @@ export const SettingsMultisigBackup = () => {
                   </div>
                   <button
                     onClick={async () => {
-                      if (await requestAuth()) setSingleTarget(w);
+                      if (await requestAuth()) {
+                        setSingleTarget(w);
+                      }
                     }}
                     className='rounded-md border border-border-soft px-2 py-1 text-[11px] text-fg-muted hover:text-zigner-gold hover:bg-elev-2 transition-colors'
                   >
@@ -174,7 +178,9 @@ export const SettingsMultisigBackup = () => {
           <div className='flex gap-2'>
             <button
               onClick={async () => {
-                if (await requestAuth()) setRestoreOpen(true);
+                if (await requestAuth()) {
+                  setRestoreOpen(true);
+                }
               }}
               className='flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-border-soft py-2.5 text-xs hover:bg-elev-2 transition-colors'
             >
@@ -183,7 +189,9 @@ export const SettingsMultisigBackup = () => {
             </button>
             <button
               onClick={async () => {
-                if (await requestAuth()) setAirgapQrOpen(true);
+                if (await requestAuth()) {
+                  setAirgapQrOpen(true);
+                }
               }}
               className='flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-border-soft py-2.5 text-xs hover:bg-elev-2 transition-colors'
             >

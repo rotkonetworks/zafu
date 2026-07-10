@@ -33,8 +33,7 @@ export const mockLocks: Pick<LockManager, 'request'> = {
   }) as LockManager['request'],
 };
 
-/** Installs the stub as `navigator.locks` (creating `navigator` if absent). */
+/** Installs the stub as `navigator.locks`. */
 export const installMockLocks = () => {
-  const nav: Partial<Navigator> = (globalThis.navigator ??= {} as Navigator);
-  Object.defineProperty(nav, 'locks', { value: mockLocks, configurable: true });
+  Object.defineProperty(globalThis.navigator, 'locks', { value: mockLocks, configurable: true });
 };

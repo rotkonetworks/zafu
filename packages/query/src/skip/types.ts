@@ -62,11 +62,11 @@ export interface TransferOperation {
 export interface SwapOperation {
   swapIn: {
     swapVenue: { name: string; chainId: string };
-    swapOperations: Array<{
+    swapOperations: {
       pool: string;
       denomIn: string;
       denomOut: string;
-    }>;
+    }[];
   };
   estimatedAffiliateFee?: string;
 }
@@ -88,7 +88,7 @@ export interface RouteResponse {
   usdAmountIn?: string;
   usdAmountOut?: string;
   swapPriceImpactPercent?: string;
-  estimatedFees: Array<{
+  estimatedFees: {
     feeType: string;
     bridgeId?: string;
     amount: string;
@@ -96,7 +96,7 @@ export interface RouteResponse {
     originAsset: SkipAsset;
     chainId: string;
     txIndex: number;
-  }>;
+  }[];
   warning?: {
     type: string;
     message: string;
@@ -138,7 +138,7 @@ export interface CosmosTransaction {
 }
 
 export interface MessagesResponse {
-  msgs: Array<{
+  msgs: {
     multiChainMsg?: {
       chainId: string;
       path: string;
@@ -147,7 +147,7 @@ export interface MessagesResponse {
     };
     evmTx?: unknown;
     svmTx?: unknown;
-  }>;
+  }[];
   txs: CosmosTransaction[];
 }
 
@@ -172,7 +172,7 @@ export interface TransactionStatusResponse {
     | 'STATE_PENDING'
     | 'STATE_COMPLETED'
     | 'STATE_FAILED';
-  transferSequence: Array<{
+  transferSequence: {
     ibcTransfer?: {
       fromChainId: string;
       toChainId: string;
@@ -190,7 +190,7 @@ export interface TransactionStatusResponse {
     cctpTransfer?: unknown;
     hyperlaneTransfer?: unknown;
     opInitTransfer?: unknown;
-  }>;
+  }[];
   nextBlockingTransfer?: {
     transferSequenceIndex: number;
   };

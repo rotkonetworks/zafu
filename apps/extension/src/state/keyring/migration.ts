@@ -9,7 +9,6 @@ import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
 import { Key, type KeyJson } from '@repo/encryption/key';
 import { Box } from '@repo/encryption/box';
-import type { BoxJson } from '@repo/encryption/box';
 import type { EncryptedVault } from './types';
 import type { ZcashWalletJson } from '../wallets';
 
@@ -21,7 +20,9 @@ export async function migrateOrphanedMultisigs(
   local: ExtensionStorage<LocalStorageState>,
 ): Promise<{ vaults: EncryptedVault[]; zcashWallets: ZcashWalletJson[] }> {
   const orphans = zcashWallets.filter(w => w.multisig && !w.vaultId);
-  if (orphans.length === 0) return { vaults, zcashWallets };
+  if (orphans.length === 0) {
+    return { vaults, zcashWallets };
+  }
 
   const newVaults = [...vaults];
   const newZcash = [...zcashWallets];
@@ -36,11 +37,11 @@ export async function migrateOrphanedMultisigs(
       const rawKp =
         typeof ms.keyPackage === 'string'
           ? ms.keyPackage
-          : ((await key.unseal(Box.fromJson(ms.keyPackage as BoxJson))) ?? '');
+          : ((await key.unseal(Box.fromJson(ms.keyPackage!))) ?? '');
       const rawEs =
         typeof ms.ephemeralSeed === 'string'
           ? ms.ephemeralSeed
-          : ((await key.unseal(Box.fromJson(ms.ephemeralSeed as BoxJson))) ?? '');
+          : ((await key.unseal(Box.fromJson(ms.ephemeralSeed!))) ?? '');
       const box = await key.seal(JSON.stringify({ keyPackage: rawKp, ephemeralSeed: rawEs }));
       encData = JSON.stringify(box.toJson());
     } else {
@@ -70,7 +71,9 @@ export async function migrateOrphanedMultisigs(
     newVaults.push(vault);
 
     const idx = newZcash.findIndex(w => w.id === orphan.id);
-    if (idx >= 0) newZcash[idx] = { ...newZcash[idx]!, vaultId: newVaultId };
+    if (idx >= 0) {
+      newZcash[idx] = { ...newZcash[idx]!, vaultId: newVaultId };
+    }
   }
 
   await local.set('vaults', newVaults);

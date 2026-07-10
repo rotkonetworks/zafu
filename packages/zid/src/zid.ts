@@ -13,7 +13,6 @@ import type {
   ZidOptions,
   PickContactsOptions,
   InvitePayload,
-  InviteResult,
   IncomingInvite,
 } from './types';
 import {
@@ -113,7 +112,7 @@ export const zid = {
       sign: session.sign,
       verify: session.verify,
       channel: (peer: string) => createChannel(session, peer, opts.relayUrl),
-      pickContacts: async (pickOpts?: PickContactsOptions) => {
+      pickContacts: async (_pickOpts?: PickContactsOptions) => {
         return getContactRefs(appOrigin);
       },
       invite: async (handle: string, payload: InvitePayload) => {

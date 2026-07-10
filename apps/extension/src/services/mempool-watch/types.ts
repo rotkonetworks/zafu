@@ -40,7 +40,7 @@ export interface MempoolAction {
  */
 export interface MempoolEntry {
   readonly hash: Uint8Array;
-  readonly actions: ReadonlyArray<MempoolAction>;
+  readonly actions: readonly MempoolAction[];
 }
 
 /**
@@ -50,7 +50,7 @@ export interface MempoolEntry {
  * the server already attributes to this wallet).
  */
 export interface MempoolSnapshot {
-  readonly entries: ReadonlyArray<MempoolEntry>;
+  readonly entries: readonly MempoolEntry[];
   /** wall-clock time the snapshot was observed (millis). */
   readonly observedAtMs: number;
 }

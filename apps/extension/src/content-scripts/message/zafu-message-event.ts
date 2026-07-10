@@ -29,5 +29,5 @@ export const unwrapZafuMessageEvent = <T>(ev: ZafuMessageEvent<T>): T => {
     throw new TypeError('Not a valid ZafuMessageEvent', { cause: ev });
   }
   // nullish values excluded by guard
-  return ev.data[ZAFU_MSG_NS]!;
+  return ev.data[ZAFU_MSG_NS];
 };

@@ -180,7 +180,9 @@ export async function initializeEnabledNetworks(): Promise<void> {
             ?.supportedNetworks ?? [];
         // mnemonic vaults support both penumbra and zcash by default
         const vaultType = (v as { type?: string }).type;
-        if (vaultType === 'mnemonic') return ['penumbra', 'zcash', ...nets] as NetworkId[];
+        if (vaultType === 'mnemonic') {
+          return ['penumbra', 'zcash', ...nets] as NetworkId[];
+        }
         return nets as NetworkId[];
       })
       .filter((n, i, arr) => arr.indexOf(n) === i);

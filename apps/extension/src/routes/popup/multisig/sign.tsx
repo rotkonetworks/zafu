@@ -24,7 +24,7 @@ import { useDeadlineCountdown } from '../../../hooks/use-deadline-countdown';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { SettingsScreen } from '../settings/settings-screen';
 import { PopupPath } from '../paths';
-import { FrostAirgapJoinerSignFlow } from '../../popup/send/frost-multisig';
+import { FrostAirgapJoinerSignFlow } from '../send/frost-multisig';
 
 type Step = 'input' | 'joining' | 'review' | 'signing' | 'complete' | 'error';
 
@@ -70,7 +70,9 @@ export const MultisigSign = () => {
   };
 
   const handleJoin = async () => {
-    if (!roomCode.trim() || !ms) return;
+    if (!roomCode.trim() || !ms) {
+      return;
+    }
 
     const sessionDeadline = Date.now() + FROST_SESSION_TIMEOUT_MS;
     setDeadline(sessionDeadline);
@@ -92,12 +94,13 @@ export const MultisigSign = () => {
         roomCode.trim(),
         participantId,
         event => {
-          if (event.type !== 'message') return;
+          if (event.type !== 'message') {
+            return;
+          }
           const text = new TextDecoder().decode(event.message.payload);
           // SIGN:<sighash>:<alphas>:<recipient>:<amountZat>:<feeZat>[:<unsignedTxHex>]
-          const signMatch = text.match(
-            /^SIGN:([0-9a-fA-F]+):([^:]+):([^:]+):(\d+):(\d+)(?::([0-9a-fA-F]+))?$/,
-          );
+          const signMatch =
+            /^SIGN:([0-9a-fA-F]+):([^:]+):([^:]+):(\d+):(\d+)(?::([0-9a-fA-F]+))?$/.exec(text);
           if (signMatch) {
             sighashRef.current = signMatch[1]!;
             alphasRef.current = signMatch[2]!.split(',');
@@ -126,7 +129,7 @@ export const MultisigSign = () => {
               });
             } else {
               const ufvk = ufvkForVerify;
-              const isMain = activeWallet!.mainnet;
+              const isMain = activeWallet.mainnet;
               void (async () => {
                 try {
                   const p = await frostParseTxOutputsInWorker(unsignedTxHex, ufvk);
@@ -151,7 +154,7 @@ export const MultisigSign = () => {
             return;
           }
           // collect ALL peer C: bundles — t≥3 needs threshold-1 of them, not just 1.
-          const commitMatch = text.match(/^C:([\s\S]*)$/);
+          const commitMatch = /^C:([\s\S]*)$/.exec(text);
           if (commitMatch) {
             peerCommitsRawRef.current.push(commitMatch[1]!);
           }
@@ -170,10 +173,14 @@ export const MultisigSign = () => {
   };
 
   const handleApprove = async () => {
-    if (!ms || !relayRef.current || !participantIdRef.current) return;
+    if (!ms || !relayRef.current || !participantIdRef.current) {
+      return;
+    }
 
     const authorized = await requestAuth();
-    if (!authorized) return;
+    if (!authorized) {
+      return;
+    }
 
     setStep('signing');
     setProgress('decrypting keys...');
@@ -183,8 +190,10 @@ export const MultisigSign = () => {
     const sessionDeadline = deadline ?? Date.now() + FROST_SESSION_TIMEOUT_MS;
 
     try {
-      const secrets = await useStore.getState().keyRing.getMultisigSecrets(activeWallet!.vaultId);
-      if (!secrets) throw new Error('failed to decrypt multisig keys');
+      const secrets = await useStore.getState().keyRing.getMultisigSecrets(activeWallet.vaultId);
+      if (!secrets) {
+        throw new Error('failed to decrypt multisig keys');
+      }
 
       const sighash = sighashRef.current;
       const alphas = alphasRef.current;
@@ -216,7 +225,9 @@ export const MultisigSign = () => {
         if (parts.length < numActions) {
           throw new Error(`peer sent ${parts.length} commitments but ${numActions} actions needed`);
         }
-        for (let i = 0; i < numActions; i++) peerPerAction[i]!.push(parts[i]!);
+        for (let i = 0; i < numActions; i++) {
+          peerPerAction[i]!.push(parts[i]!);
+        }
       }
 
       for (let i = 0; i < numActions; i++) {
@@ -256,7 +267,9 @@ export const MultisigSign = () => {
   };
 
   const formatZec = (zat: string): string => {
-    if (!zat) return '0';
+    if (!zat) {
+      return '0';
+    }
     return (Number(zat) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
   };
 
@@ -277,10 +290,10 @@ export const MultisigSign = () => {
     return (
       <AirgapJoinerWrapper
         ms={ms}
-        walletLabel={activeWallet!.label}
-        walletAddress={activeWallet!.address}
-        orchardFvkUview={activeWallet!.orchardFvk}
-        mainnet={activeWallet!.mainnet}
+        walletLabel={activeWallet.label}
+        walletAddress={activeWallet.address}
+        orchardFvkUview={activeWallet.orchardFvk}
+        mainnet={activeWallet.mainnet}
       />
     );
   }
@@ -290,9 +303,9 @@ export const MultisigSign = () => {
       {PasswordModal}
       <div className='mb-4 rounded-lg border border-border-soft bg-elev-1 p-3'>
         <p className='text-[10px] text-fg-muted'>signing as</p>
-        <p className='mt-0.5 text-sm font-medium truncate'>{activeWallet!.label}</p>
+        <p className='mt-0.5 text-sm font-medium truncate'>{activeWallet.label}</p>
         <p className='text-[10px] font-mono text-fg-muted truncate'>
-          {activeWallet!.address.slice(0, 16)}...{activeWallet!.address.slice(-8)}
+          {activeWallet.address.slice(0, 16)}...{activeWallet.address.slice(-8)}
         </p>
         <span className='mt-1 inline-block rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-zigner-gold'>
           {ms.threshold}/{ms.maxSigners}
@@ -340,9 +353,9 @@ export const MultisigSign = () => {
           <div className='rounded-lg border border-border-soft bg-elev-1 p-3 flex flex-col gap-2.5'>
             <div>
               <p className='text-[10px] uppercase tracking-wider text-fg-muted'>from</p>
-              <p className='mt-0.5 text-xs font-medium'>{activeWallet!.label}</p>
+              <p className='mt-0.5 text-xs font-medium'>{activeWallet.label}</p>
               <p className='mt-0.5 break-all font-mono text-[10px] text-fg-muted'>
-                {activeWallet!.address}
+                {activeWallet.address}
               </p>
             </div>
             <div className='border-t border-border-soft' />

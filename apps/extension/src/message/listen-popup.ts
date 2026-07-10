@@ -11,7 +11,7 @@ export const listenPopup =
   (
     message: unknown,
     sender: chrome.runtime.MessageSender,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     sendResponse: (response: PopupResponse<any> | PopupError) => void,
   ): boolean => {
     if (!isValidInternalSender(sender) || !isPopupRequest(popupId, message)) {

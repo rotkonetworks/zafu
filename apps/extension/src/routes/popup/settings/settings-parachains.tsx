@@ -27,7 +27,7 @@ export const SettingsParachains = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<RelayNetwork | 'custom'>('polkadot');
   const [parachains, setParachains] = useState<ParachainInfo[]>([]);
-  const [enabledIds, setEnabledIds] = useState<Set<string>>(new Set());
+  const [enabledIds, setEnabledIds] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [customChains, setCustomChains] = useState<CustomChainspec[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -62,7 +62,9 @@ export const SettingsParachains = () => {
   }, [activeTab]);
 
   const handleToggle = async (chainId: string) => {
-    if (activeTab === 'custom') return;
+    if (activeTab === 'custom') {
+      return;
+    }
     const newEnabled = new Set(enabledIds);
     if (newEnabled.has(chainId)) {
       newEnabled.delete(chainId);
@@ -82,7 +84,9 @@ export const SettingsParachains = () => {
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) return;
+    if (!file) {
+      return;
+    }
 
     try {
       const text = await file.text();
@@ -127,7 +131,9 @@ export const SettingsParachains = () => {
       await localExtStorage.set('customChainspecs', updated);
 
       // reset file input
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     } catch (err) {
       console.error('failed to parse chainspec:', err);
       alert('invalid chainspec JSON file');

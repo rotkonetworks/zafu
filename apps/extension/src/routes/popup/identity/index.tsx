@@ -40,9 +40,12 @@ type ActiveTab = 'sites' | 'log';
 const shortDate = (ms: number): string => {
   const d = new Date(ms);
   const diff = Date.now() - ms;
-  if (diff < 86400000)
+  if (diff < 86400000) {
     return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-  if (diff < 604800000) return d.toLocaleDateString(undefined, { weekday: 'short' });
+  }
+  if (diff < 604800000) {
+    return d.toLocaleDateString(undefined, { weekday: 'short' });
+  }
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 };
 
@@ -129,7 +132,9 @@ export const IdentityPage = () => {
     const listener = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
       if (area === 'local' && changes[ZID_INDEX_STORAGE_KEY]) {
         const v = changes[ZID_INDEX_STORAGE_KEY].newValue;
-        if (typeof v === 'number') setZidIndexState(v);
+        if (typeof v === 'number') {
+          setZidIndexState(v);
+        }
       }
     };
     chrome.storage.onChanged.addListener(listener);
@@ -154,7 +159,7 @@ export const IdentityPage = () => {
           Record<string, ZidSitePreference> | undefined
         >,
         localExtStorage.get('zidShareLog') as Promise<ZidShareRecord[] | undefined>,
-        localExtStorage.get('zidSiteLabels') as Promise<Record<string, string> | undefined>,
+        localExtStorage.get('zidSiteLabels'),
         localExtStorage.get('knownSites') as Promise<
           { origin: string; choice: string }[] | undefined
         >,
@@ -166,13 +171,19 @@ export const IdentityPage = () => {
       const approvedOrigins = new Set<string>();
       if (Array.isArray(knownSitesRaw)) {
         for (const s of knownSitesRaw) {
-          if (s.choice === 'Approved') approvedOrigins.add(s.origin);
+          if (s.choice === 'Approved') {
+            approvedOrigins.add(s.origin);
+          }
         }
       }
 
       const allOrigins = new Set<string>();
-      if (prefs) Object.keys(prefs).forEach(o => allOrigins.add(o));
-      if (log) log.forEach(r => allOrigins.add(r.sharedWith));
+      if (prefs) {
+        Object.keys(prefs).forEach(o => allOrigins.add(o));
+      }
+      if (log) {
+        log.forEach(r => allOrigins.add(r.sharedWith));
+      }
 
       const siteList: SiteIdentity[] = [];
       for (const origin of allOrigins) {
@@ -193,7 +204,9 @@ export const IdentityPage = () => {
       }
 
       siteList.sort((a, b) => {
-        if (a.connected !== b.connected) return a.connected ? -1 : 1;
+        if (a.connected !== b.connected) {
+          return a.connected ? -1 : 1;
+        }
         return (b.lastShared?.sharedAt ?? 0) - (a.lastShared?.sharedAt ?? 0);
       });
 
@@ -208,7 +221,7 @@ export const IdentityPage = () => {
   }, []);
 
   const saveLabel = useCallback(async (origin: string, label: string) => {
-    const labels = ((await localExtStorage.get('zidSiteLabels')) as Record<string, string>) ?? {};
+    const labels = (await localExtStorage.get('zidSiteLabels'))! ?? {};
     if (label.trim()) {
       labels[origin] = label.trim();
     } else {
@@ -558,7 +571,9 @@ export const IdentityPage = () => {
 const QrCanvas = ({ data, size }: { data: string; size: number }) => {
   const ref = useCallback(
     (canvas: HTMLCanvasElement | null) => {
-      if (!canvas || !data) return;
+      if (!canvas || !data) {
+        return;
+      }
       try {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         const QRCode = require('qrcode');
@@ -629,8 +644,11 @@ const SiteRow = ({
   const [capsOpen, setCapsOpen] = useState(false);
 
   const handleCapToggle = async (cap: Capability, enabled: boolean) => {
-    if (enabled) await grantCapability(site.origin, cap);
-    else await denyCapability(site.origin, cap);
+    if (enabled) {
+      await grantCapability(site.origin, cap);
+    } else {
+      await denyCapability(site.origin, cap);
+    }
     onSitesChanged();
   };
 
@@ -662,8 +680,12 @@ const SiteRow = ({
               onBlur={() => void saveLabel(site.origin, labelInput)}
               onClick={e => e.stopPropagation()}
               onKeyDown={e => {
-                if (e.key === 'Enter') void saveLabel(site.origin, labelInput);
-                if (e.key === 'Escape') setEditingLabel(null);
+                if (e.key === 'Enter') {
+                  void saveLabel(site.origin, labelInput);
+                }
+                if (e.key === 'Escape') {
+                  setEditingLabel(null);
+                }
               }}
               className='text-xs font-mono bg-transparent border-b border-foreground/40 outline-none'
               placeholder='label...'
@@ -801,7 +823,7 @@ const SiteRow = ({
               </button>
             )}
             <button
-              onClick={() => void handleRevoke()}
+              onClick={() => handleRevoke()}
               className='flex items-center gap-1 text-red-400 hover:text-red-300'
             >
               <span className='i-lucide-x size-3' />

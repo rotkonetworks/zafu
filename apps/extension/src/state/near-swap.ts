@@ -46,7 +46,7 @@ export interface SwapQuoteRequest {
   recipientType: 'DESTINATION_CHAIN';
   deadline: string; // ISO 8601
   quoteWaitingTimeMs?: number;
-  appFees: Array<{ recipient: string; fee: number }>;
+  appFees: { recipient: string; fee: number }[];
   referral?: string;
 }
 
@@ -106,7 +106,9 @@ async function nearFetch<T>(path: string, init?: RequestInit): Promise<T> {
     let msg = `NEAR API ${resp.status}`;
     try {
       const err = JSON.parse(body);
-      if (err.message) msg = err.message;
+      if (err.message) {
+        msg = err.message;
+      }
     } catch {
       /* use default */
     }
@@ -188,14 +190,18 @@ export function filterSwappableTokens(tokens: NearToken[]): NearToken[] {
 /** Format amount from base units to display (e.g. zatoshis → ZEC). */
 export function formatAmount(baseUnits: string, decimals: number): string {
   const n = Number(baseUnits);
-  if (isNaN(n)) return '0';
+  if (isNaN(n)) {
+    return '0';
+  }
   return (n / 10 ** decimals).toFixed(Math.min(decimals, 8));
 }
 
 /** Convert display amount to base units string. */
 export function toBaseUnits(displayAmount: string, decimals: number): string {
   const n = parseFloat(displayAmount);
-  if (isNaN(n) || n <= 0) return '0';
+  if (isNaN(n) || n <= 0) {
+    return '0';
+  }
   return Math.floor(n * 10 ** decimals).toString();
 }
 

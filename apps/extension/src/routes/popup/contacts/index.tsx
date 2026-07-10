@@ -72,7 +72,9 @@ function ContactModal({
   const canSave = name.trim().length > 0;
 
   const handleSave = () => {
-    if (!canSave) return;
+    if (!canSave) {
+      return;
+    }
     onSave({ name: name.trim(), notes: notes.trim() || undefined });
     onClose();
   };
@@ -145,7 +147,9 @@ function AddressModal({
   const canSave = address.trim().length > 0;
 
   const handleSave = () => {
-    if (!canSave) return;
+    if (!canSave) {
+      return;
+    }
     onSave({
       network,
       address: address.trim(),
@@ -425,7 +429,9 @@ export function ContactsPage() {
 
   /** share a contact card with per-contact diversified address + zid */
   const shareContactCard = async (contact: Contact, recipientZcashAddr: string) => {
-    if (!keyInfo) return;
+    if (!keyInfo) {
+      return;
+    }
 
     // derive per-contact diversified address (unique receiving address for this contact)
     let myAddress = recipientZcashAddr; // fallback to recipient's address if no zcash wallet
@@ -433,7 +439,7 @@ export function ContactsPage() {
     if (ufvk && typeof ufvk === 'string' && ufvk.startsWith('uview')) {
       try {
         const divIndex = await contactDiversifierIndex(contact.id);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
         const wasm: any = await import('@repo/zcash-wasm');
         // wasm-bindgen glue: the module-level `wasm` binding stays undefined
         // until the default export (`__wbg_init`) fetches+instantiates the
@@ -442,7 +448,9 @@ export function ContactsPage() {
         // worker's, so it is generally uninitialized here. Without this
         // await, the call below silently throws and we fall back to a
         // non-diversified address (privacy degradation), not a crash.
-        if (typeof wasm.default === 'function') await wasm.default();
+        if (typeof wasm.default === 'function') {
+          await wasm.default();
+        }
         const rawAddr: string = wasm.address_from_ufvk(ufvk, divIndex);
         // fixOrchardAddress would be needed here for proper bech32m encoding
         // for now use the raw address - the codec handles it
@@ -506,7 +514,9 @@ export function ContactsPage() {
   // export contacts as encrypted JSON file download
   const handleExport = useCallback(async () => {
     const password = window.prompt('enter password to encrypt export');
-    if (!password) return;
+    if (!password) {
+      return;
+    }
     try {
       const data = await contacts.exportContacts(password);
       const json = JSON.stringify(data, null, 2);
@@ -533,13 +543,17 @@ export function ContactsPage() {
   const handleImportFile = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
-      if (!file) return;
+      if (!file) {
+        return;
+      }
 
       try {
         const text = await file.text();
         const data = JSON.parse(text) as ContactsExport;
         const password = window.prompt('enter password to decrypt contacts');
-        if (!password) return;
+        if (!password) {
+          return;
+        }
         const count = await contacts.importContacts(data, password, 'merge');
         setImportStatus({ type: 'success', message: `imported ${count} contacts` });
         setTimeout(() => setImportStatus(null), 3000);
@@ -572,8 +586,12 @@ export function ContactsPage() {
 
     // sort: favorites first, then by name
     return [...result].sort((a, b) => {
-      if (a.favorite && !b.favorite) return -1;
-      if (!a.favorite && b.favorite) return 1;
+      if (a.favorite && !b.favorite) {
+        return -1;
+      }
+      if (!a.favorite && b.favorite) {
+        return 1;
+      }
       return a.name.localeCompare(b.name);
     });
   }, [contacts, search, filter]);
@@ -603,7 +621,9 @@ export function ContactsPage() {
   // address handlers
   const handleSaveAddress = useCallback(
     async (data: Omit<ContactAddress, 'id'>) => {
-      if (!editingAddress) return;
+      if (!editingAddress) {
+        return;
+      }
 
       if (editingAddress.address) {
         // editing existing address
@@ -793,7 +813,9 @@ export function ContactsPage() {
                 onDeleteAddress={addrId => void handleDeleteAddress(contact.id, addrId)}
                 onShareCard={(() => {
                   const zcashAddr = contact.addresses.find(a => a.network === 'zcash');
-                  if (!zcashAddr) return undefined;
+                  if (!zcashAddr) {
+                    return undefined;
+                  }
                   return () => void shareContactCard(contact, zcashAddr.address);
                 })()}
               />

@@ -72,12 +72,14 @@ export function ZcashSendApproval() {
 
   // listen for send progress from worker
   useEffect(() => {
-    if (status !== 'signing') return;
+    if (status !== 'signing') {
+      return;
+    }
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail as { step: string; detail?: string };
       setProgressText(`${detail.step}${detail.detail ? ' - ' + detail.detail : ''}`);
       // track completed outputs from progress messages
-      const match = detail.step.match(/output (\d+).*complete/i);
+      const match = /output (\d+).*complete/i.exec(detail.step);
       if (match) {
         setCompletedOutputs(Number(match[1]));
       }
@@ -94,7 +96,9 @@ export function ZcashSendApproval() {
   const shortAddr = (a: string) => (a.length > 24 ? `${a.slice(0, 12)}...${a.slice(-8)}` : a);
 
   const sendResult = (result: unknown) => {
-    if (resultSentRef.current) return;
+    if (resultSentRef.current) {
+      return;
+    }
     resultSentRef.current = true;
     void chrome.runtime.sendMessage({
       type: 'zafu_zcash_send_result',

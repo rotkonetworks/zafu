@@ -28,10 +28,14 @@ export const ImportModal = ({ open, onClose, onImported }: Props) => {
     }
   }, [open]);
 
-  if (!open) return null;
+  if (!open) {
+    return null;
+  }
 
   const handleFile = async (file: File | undefined) => {
-    if (!file) return;
+    if (!file) {
+      return;
+    }
     setError(null);
     setWorking(true);
     try {
@@ -45,7 +49,9 @@ export const ImportModal = ({ open, onClose, onImported }: Props) => {
   };
 
   const handleImport = async () => {
-    if (!envelope || passphrase.length === 0 || working) return;
+    if (!envelope || passphrase.length === 0 || working) {
+      return;
+    }
     setError(null);
     setWorking(true);
     try {

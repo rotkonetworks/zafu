@@ -59,8 +59,12 @@ function formatTimestamp(ts: number): string {
   const diffDays = Math.floor((today.getTime() - dateDay.getTime()) / 86_400_000);
   const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-  if (diffDays === 0) return time;
-  if (diffDays === 1) return `Yesterday ${time}`;
+  if (diffDays === 0) {
+    return time;
+  }
+  if (diffDays === 1) {
+    return `Yesterday ${time}`;
+  }
   if (diffDays < 7) {
     return `${date.toLocaleDateString([], { weekday: 'short' })} ${time}`;
   }
@@ -68,7 +72,9 @@ function formatTimestamp(ts: number): string {
 }
 
 function truncateAddress(addr: string, len = 8): string {
-  if (addr.length <= len * 2 + 3) return addr;
+  if (addr.length <= len * 2 + 3) {
+    return addr;
+  }
   return `${addr.slice(0, len)}...${addr.slice(-6)}`;
 }
 
@@ -318,7 +324,9 @@ function ContactCardBubble({ card }: { card?: ContactCard }) {
     }
   }, [card, findByAddress]);
 
-  if (!card) return <p className='text-xs text-fg-muted'>malformed contact card</p>;
+  if (!card) {
+    return <p className='text-xs text-fg-muted'>malformed contact card</p>;
+  }
 
   const handleSave = async () => {
     const contact = await addContact({ name: card.name || 'unnamed' });
@@ -594,7 +602,9 @@ function ConversationCompose({ diversifierIndex }: { diversifierIndex: number })
   const [message, setMessage] = useState('');
 
   const handleSend = () => {
-    if (!message.trim()) return;
+    if (!message.trim()) {
+      return;
+    }
 
     const memoWithReply = ownAddress ? `${message}\nreply:${ownAddress}` : message;
 
@@ -663,7 +673,9 @@ function ComposeMessage({
   const canSend = recipient.trim() && message.trim() && txStatus === 'idle';
 
   const handleSendPenumbra = useCallback(async () => {
-    if (!recipient.trim() || !message.trim()) return;
+    if (!recipient.trim() || !message.trim()) {
+      return;
+    }
 
     setTxStatus('sending');
     setTxError(undefined);
@@ -672,7 +684,9 @@ function ComposeMessage({
       const addressResponse = await viewClient.addressByIndex({
         addressIndex: { account: penumbraAccount },
       });
-      if (!addressResponse.address) throw new Error('failed to get address');
+      if (!addressResponse.address) {
+        throw new Error('failed to get address');
+      }
 
       const amountValue = amount ? parseFloat(amount) : 0.000001;
       const amountInMicroUM = BigInt(Math.floor(amountValue * 1_000_000));
@@ -720,7 +734,9 @@ function ComposeMessage({
   }, [navigate, message, recipient, amount, ownAddress, onClose]);
 
   const handleSend = () => {
-    if (!canSend) return;
+    if (!canSend) {
+      return;
+    }
     if (network === 'penumbra') {
       void handleSendPenumbra();
     } else {
@@ -803,8 +819,11 @@ function ComposeMessage({
       <div className='p-4 border-t border-border-soft'>
         <button
           onClick={() => {
-            if (txStatus === 'success' || txStatus === 'error') onClose();
-            else handleSend();
+            if (txStatus === 'success' || txStatus === 'error') {
+              onClose();
+            } else {
+              handleSend();
+            }
           }}
           disabled={(txStatus === 'idle' && !canSend) || txStatus === 'sending'}
           className='w-full flex items-center justify-center gap-2 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
@@ -881,8 +900,11 @@ export function InboxPage() {
 
   // auto-sync on mount
   useEffect(() => {
-    if (activeNetwork === 'penumbra') syncPenumbraMemos();
-    else if (activeNetwork === 'zcash' && walletId) syncZcashMemos();
+    if (activeNetwork === 'penumbra') {
+      syncPenumbraMemos();
+    } else if (activeNetwork === 'zcash' && walletId) {
+      syncZcashMemos();
+    }
   }, [activeNetwork, walletId, syncPenumbraMemos, syncZcashMemos]);
 
   // diversified address records for referral tracking
@@ -893,7 +915,9 @@ export function InboxPage() {
 
   // filter conversations by search
   const filteredConversations = useMemo(() => {
-    if (!search) return conversations;
+    if (!search) {
+      return conversations;
+    }
     const q = search.toLowerCase();
     return conversations.filter(
       c =>
@@ -906,7 +930,9 @@ export function InboxPage() {
   const flatMessages = useMemo(() => {
     const all = tab === 'all' ? messages.getInbox().filter(m => m.network === activeNetwork) : [];
 
-    if (!search) return all;
+    if (!search) {
+      return all;
+    }
     const q = search.toLowerCase();
     return all.filter(
       m => m.content.toLowerCase().includes(q) || m.senderAddress?.toLowerCase().includes(q),
@@ -915,7 +941,9 @@ export function InboxPage() {
 
   const getContactName = useCallback(
     (address: string | undefined) => {
-      if (!address) return undefined;
+      if (!address) {
+        return undefined;
+      }
       return contacts.findByAddress(address)?.contact.name;
     },
     [contacts],
@@ -923,7 +951,9 @@ export function InboxPage() {
 
   // referral for selected conversation
   const selectedReferral = useMemo(() => {
-    if (!selectedConvo || addressRecords.length === 0) return undefined;
+    if (!selectedConvo || addressRecords.length === 0) {
+      return undefined;
+    }
     return traceAddressReferral(addressRecords, selectedConvo.diversifierIndex);
   }, [selectedConvo, addressRecords]);
 
@@ -965,8 +995,11 @@ export function InboxPage() {
         <div className='flex items-center gap-2'>
           <button
             onClick={() => {
-              if (activeNetwork === 'zcash' && walletId) syncZcashMemos();
-              else syncPenumbraMemos();
+              if (activeNetwork === 'zcash' && walletId) {
+                syncZcashMemos();
+              } else {
+                syncPenumbraMemos();
+              }
             }}
             disabled={isSyncing}
             className='rounded-lg p-1.5 hover:bg-elev-1 transition-colors disabled:opacity-50'
@@ -1094,7 +1127,9 @@ export function InboxPage() {
                   const convo = conversations.find(c =>
                     c.messages.some(m => m.txids.includes(msg.txId)),
                   );
-                  if (convo) setSelectedConvo(convo);
+                  if (convo) {
+                    setSelectedConvo(convo);
+                  }
                 }}
               />
             ))}

@@ -91,7 +91,7 @@ export class ZidecarClient {
     // LicenseRequest: field 1 = zid_pubkey (string), field 9 = ring_pubkey (bytes)
     const zidBytes = new TextEncoder().encode(zid);
     const parts: number[] = [0x0a, ...this.lengthDelimited(zidBytes)];
-    if (ringPubkey && ringPubkey.length === 32) {
+    if (ringPubkey?.length === 32) {
       // field 9, wire type 2 (length-delimited): tag = (9 << 3) | 2 = 0x4a
       parts.push(0x4a, ...this.lengthDelimited(ringPubkey));
     }
@@ -170,24 +170,35 @@ export class ZidecarClient {
         while (pos < resp.length) {
           const b = resp[pos++]!;
           v |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
-        if (field === 2) errorCode = v;
+        if (field === 2) {
+          errorCode = v;
+        }
       } else if (wire === 2) {
         let len = 0,
           s = 0;
         while (pos < resp.length) {
           const b = resp[pos++]!;
           len |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
         const data = resp.slice(pos, pos + len);
-        if (field === 1) txid = data;
-        else if (field === 3) errorMessage = new TextDecoder().decode(data);
+        if (field === 1) {
+          txid = data;
+        } else if (field === 3) {
+          errorMessage = new TextDecoder().decode(data);
+        }
         pos += len;
-      } else break;
+      } else {
+        break;
+      }
     }
 
     return { txid, errorCode, errorMessage };
@@ -249,13 +260,21 @@ export class ZidecarClient {
 
     let off = 4;
     for (const a of actions) {
-      if (a.nullifier.length === 32) buf.set(a.nullifier, off);
+      if (a.nullifier.length === 32) {
+        buf.set(a.nullifier, off);
+      }
       off += 32;
-      if (a.cmx.length === 32) buf.set(a.cmx, off);
+      if (a.cmx.length === 32) {
+        buf.set(a.cmx, off);
+      }
       off += 32;
-      if (a.ephemeralKey.length === 32) buf.set(a.ephemeralKey, off);
+      if (a.ephemeralKey.length === 32) {
+        buf.set(a.ephemeralKey, off);
+      }
       off += 32;
-      if (a.ciphertext.length >= 52) buf.set(a.ciphertext.subarray(0, 52), off);
+      if (a.ciphertext.length >= 52) {
+        buf.set(a.ciphertext.subarray(0, 52), off);
+      }
       off += 52;
     }
 
@@ -285,7 +304,9 @@ export class ZidecarClient {
 
     const resp = await fetch(path, { method: 'POST', headers, body });
 
-    if (!resp.ok) throw new Error(`gRPC ${method}: HTTP ${resp.status}`);
+    if (!resp.ok) {
+      throw new Error(`gRPC ${method}: HTTP ${resp.status}`);
+    }
 
     const buf = new Uint8Array(await resp.arrayBuffer());
 
@@ -307,8 +328,8 @@ export class ZidecarClient {
     if (flags & 0x80) {
       const trailerLen = (buf[1]! << 24) | (buf[2]! << 16) | (buf[3]! << 8) | buf[4]!;
       const trailerText = new TextDecoder().decode(buf.subarray(5, 5 + trailerLen));
-      const statusMatch = trailerText.match(/grpc-status:\s*(\d+)/);
-      const messageMatch = trailerText.match(/grpc-message:\s*(.+)/);
+      const statusMatch = /grpc-status:\s*(\d+)/.exec(trailerText);
+      const messageMatch = /grpc-message:\s*(.+)/.exec(trailerText);
       const status = statusMatch?.[1] ?? '0';
       if (status !== '0') {
         const msg = messageMatch?.[1]?.trim();
@@ -348,7 +369,9 @@ export class ZidecarClient {
 
     const resp = await fetch(path, { method: 'POST', headers, body, signal });
 
-    if (!resp.ok) throw new Error(`gRPC HTTP ${resp.status}`);
+    if (!resp.ok) {
+      throw new Error(`gRPC HTTP ${resp.status}`);
+    }
     return new Uint8Array(await resp.arrayBuffer());
   }
 
@@ -382,22 +405,32 @@ export class ZidecarClient {
         while (pos < buf.length) {
           const b = buf[pos++]!;
           v |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
-        if (field === 1) height = v;
+        if (field === 1) {
+          height = v;
+        }
       } else if (wire === 2) {
         let len = 0,
           s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
-        if (field === 2) hash = buf.slice(pos, pos + len);
+        if (field === 2) {
+          hash = buf.slice(pos, pos + len);
+        }
         pos += len;
-      } else break;
+      } else {
+        break;
+      }
     }
 
     return { height, hash };
@@ -418,24 +451,36 @@ export class ZidecarClient {
     while (pos < buf.length) {
       const tag = buf[pos++]!;
       const field = tag >> 3;
-      if ((tag & 0x7) !== 0) break;
+      if ((tag & 0x7) !== 0) {
+        break;
+      }
 
       let v = 0,
         s = 0;
       while (pos < buf.length) {
         const b = buf[pos++]!;
         v |= (b & 0x7f) << s;
-        if (!(b & 0x80)) break;
+        if (!(b & 0x80)) {
+          break;
+        }
         s += 7;
       }
 
-      if (field === 1) r.currentHeight = v;
-      else if (field === 2) r.currentEpoch = v;
-      else if (field === 3) r.blocksInEpoch = v;
-      else if (field === 4) r.completeEpochs = v;
-      else if (field === 5) r.gigaproofStatus = v;
-      else if (field === 6) r.lastGigaproofHeight = v;
-      else if (field === 7) r.blocksUntilReady = v;
+      if (field === 1) {
+        r.currentHeight = v;
+      } else if (field === 2) {
+        r.currentEpoch = v;
+      } else if (field === 3) {
+        r.blocksInEpoch = v;
+      } else if (field === 4) {
+        r.completeEpochs = v;
+      } else if (field === 5) {
+        r.gigaproofStatus = v;
+      } else if (field === 6) {
+        r.lastGigaproofHeight = v;
+      } else if (field === 7) {
+        r.blocksUntilReady = v;
+      }
     }
 
     return r;
@@ -446,13 +491,19 @@ export class ZidecarClient {
     let pos = 0;
 
     while (pos < buf.length) {
-      if (pos + 5 > buf.length) break;
-      if (buf[pos] === 0x80) break; // trailer
+      if (pos + 5 > buf.length) {
+        break;
+      }
+      if (buf[pos] === 0x80) {
+        break;
+      } // trailer
 
       const len =
         (buf[pos + 1]! << 24) | (buf[pos + 2]! << 16) | (buf[pos + 3]! << 8) | buf[pos + 4]!;
       pos += 5;
-      if (pos + len > buf.length) break;
+      if (pos + len > buf.length) {
+        break;
+      }
 
       blocks.push(this.parseBlock(buf.subarray(pos, pos + len)));
       pos += len;
@@ -476,25 +527,37 @@ export class ZidecarClient {
         while (pos < buf.length) {
           const b = buf[pos++]!;
           v |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
-        if (field === 1) block.height = v;
+        if (field === 1) {
+          block.height = v;
+        }
       } else if (wire === 2) {
         let len = 0,
           s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
         const data = buf.subarray(pos, pos + len);
-        if (field === 2) block.hash = data;
-        else if (field === 3) block.actions.push(this.parseAction(data));
-        else if (field === 4) block.actionsRoot = buf.slice(pos, pos + len);
+        if (field === 2) {
+          block.hash = data;
+        } else if (field === 3) {
+          block.actions.push(this.parseAction(data));
+        } else if (field === 4) {
+          block.actionsRoot = buf.slice(pos, pos + len);
+        }
         pos += len;
-      } else break;
+      } else {
+        break;
+      }
     }
 
     return block;
@@ -521,17 +584,27 @@ export class ZidecarClient {
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
         const data = buf.subarray(pos, pos + len);
-        if (field === 1) a.cmx = data;
-        else if (field === 2) a.ephemeralKey = data;
-        else if (field === 3) a.ciphertext = data;
-        else if (field === 4) a.nullifier = data;
-        else if (field === 5) a.txid = data;
+        if (field === 1) {
+          a.cmx = data;
+        } else if (field === 2) {
+          a.ephemeralKey = data;
+        } else if (field === 3) {
+          a.ciphertext = data;
+        } else if (field === 4) {
+          a.nullifier = data;
+        } else if (field === 5) {
+          a.txid = data;
+        }
         pos += len;
-      } else break;
+      } else {
+        break;
+      }
     }
 
     return a;
@@ -563,21 +636,29 @@ export class ZidecarClient {
         while (pos < resp.length) {
           const b = resp[pos++]!;
           v |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
-        if (field === 5) return v;
+        if (field === 5) {
+          return v;
+        }
       } else if (wire === 2) {
         let len = 0,
           s = 0;
         while (pos < resp.length) {
           const b = resp[pos++]!;
           len |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
         pos += len;
-      } else break;
+      } else {
+        break;
+      }
     }
     return 0;
   }
@@ -637,7 +718,7 @@ export class ZidecarClient {
   async getBlockTransactions(height: number): Promise<{
     height: number;
     hash: Uint8Array;
-    txs: Array<{ data: Uint8Array; height: number }>;
+    txs: { data: Uint8Array; height: number }[];
   }> {
     // encode BlockId proto: field 1 = height (uint32)
     const parts: number[] = [0x08, ...this.varint(height)];
@@ -648,11 +729,11 @@ export class ZidecarClient {
   private parseBlockTransactions(buf: Uint8Array): {
     height: number;
     hash: Uint8Array;
-    txs: Array<{ data: Uint8Array; height: number }>;
+    txs: { data: Uint8Array; height: number }[];
   } {
     let height = 0;
     let hash = new Uint8Array(0);
-    const txs: Array<{ data: Uint8Array; height: number }> = [];
+    const txs: { data: Uint8Array; height: number }[] = [];
     let pos = 0;
 
     while (pos < buf.length) {
@@ -666,24 +747,35 @@ export class ZidecarClient {
         while (pos < buf.length) {
           const b = buf[pos++]!;
           v |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
-        if (field === 1) height = v;
+        if (field === 1) {
+          height = v;
+        }
       } else if (wire === 2) {
         let len = 0,
           s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
         const data = buf.slice(pos, pos + len);
-        if (field === 2) hash = data;
-        else if (field === 3) txs.push(this.parseRawTransaction(data));
+        if (field === 2) {
+          hash = data;
+        } else if (field === 3) {
+          txs.push(this.parseRawTransaction(data));
+        }
         pos += len;
-      } else break;
+      } else {
+        break;
+      }
     }
 
     return { height, hash, txs };
@@ -705,22 +797,32 @@ export class ZidecarClient {
         while (pos < buf.length) {
           const b = buf[pos++]!;
           v |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
-        if (field === 2) height = v;
+        if (field === 2) {
+          height = v;
+        }
       } else if (wire === 2) {
         let len = 0,
           s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
-        if (field === 1) data = buf.slice(pos, pos + len);
+        if (field === 1) {
+          data = buf.slice(pos, pos + len);
+        }
         pos += len;
-      } else break;
+      } else {
+        break;
+      }
     }
 
     return { data, height };
@@ -742,7 +844,9 @@ export class ZidecarClient {
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
         if (field === 1) {
@@ -754,7 +858,9 @@ export class ZidecarClient {
         while (pos < buf.length && buf[pos++]! & 0x80) {
           /* skip */
         }
-      } else break;
+      } else {
+        break;
+      }
     }
 
     return utxos;
@@ -791,27 +897,41 @@ export class ZidecarClient {
         while (pos < buf.length) {
           const b = buf[pos++]!;
           v |= BigInt(b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7n;
         }
-        if (field === 3) utxo.outputIndex = Number(v);
-        else if (field === 5) utxo.valueZat = v;
-        else if (field === 6) utxo.height = Number(v);
+        if (field === 3) {
+          utxo.outputIndex = Number(v);
+        } else if (field === 5) {
+          utxo.valueZat = v;
+        } else if (field === 6) {
+          utxo.height = Number(v);
+        }
       } else if (wire === 2) {
         let len = 0,
           s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
         const data = buf.subarray(pos, pos + len);
-        if (field === 1) utxo.address = decoder.decode(data);
-        else if (field === 2) utxo.txid = data;
-        else if (field === 4) utxo.script = data;
+        if (field === 1) {
+          utxo.address = decoder.decode(data);
+        } else if (field === 2) {
+          utxo.txid = data;
+        } else if (field === 4) {
+          utxo.script = data;
+        }
         pos += len;
-      } else break;
+      } else {
+        break;
+      }
     }
 
     return utxo;
@@ -841,24 +961,36 @@ export class ZidecarClient {
         while (pos < buf.length) {
           const b = buf[pos++]!;
           v |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
-        if (field === 1) height = v;
-        if (field === 3) time = v;
+        if (field === 1) {
+          height = v;
+        }
+        if (field === 3) {
+          time = v;
+        }
       } else if (wire === 2) {
         let len = 0,
           s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
         const data = buf.subarray(pos, pos + len);
-        if (field === 5) orchardTree = decoder.decode(data);
+        if (field === 5) {
+          orchardTree = decoder.decode(data);
+        }
         pos += len;
-      } else break;
+      } else {
+        break;
+      }
     }
 
     return { height, orchardTree, time };
@@ -885,23 +1017,34 @@ export class ZidecarClient {
         while (pos < buf.length) {
           const b = buf[pos++]!;
           v |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
-        if (field === 2) fromHeight = v;
-        else if (field === 3) toHeight = v;
+        if (field === 2) {
+          fromHeight = v;
+        } else if (field === 3) {
+          toHeight = v;
+        }
       } else if (wire === 2) {
         let len = 0,
           s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
-        if (field === 1) proofBytes = buf.slice(pos, pos + len);
+        if (field === 1) {
+          proofBytes = buf.slice(pos, pos + len);
+        }
         pos += len;
-      } else break;
+      } else {
+        break;
+      }
     }
 
     return { proofBytes, fromHeight, toHeight };
@@ -928,26 +1071,39 @@ export class ZidecarClient {
         while (pos < buf.length) {
           const b = buf[pos++]!;
           v |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
-        if (field === 7) proof.exists = v !== 0;
+        if (field === 7) {
+          proof.exists = v !== 0;
+        }
       } else if (wire === 2) {
         let len = 0,
           s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
         const data = buf.slice(pos, pos + len);
-        if (field === 1) proof.cmx = data;
-        else if (field === 3) proof.treeRoot = data;
-        else if (field === 8) proof.pathProofRaw = data;
-        else if (field === 9) proof.valueHash = data;
+        if (field === 1) {
+          proof.cmx = data;
+        } else if (field === 3) {
+          proof.treeRoot = data;
+        } else if (field === 8) {
+          proof.pathProofRaw = data;
+        } else if (field === 9) {
+          proof.valueHash = data;
+        }
         pos += len;
-      } else break;
+      } else {
+        break;
+      }
     }
 
     return proof;
@@ -972,14 +1128,21 @@ export class ZidecarClient {
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
         const data = buf.subarray(pos, pos + len);
-        if (field === 1) proofs.push(this.parseCommitmentProof(data));
-        else if (field === 2) treeRoot = buf.slice(pos, pos + len);
+        if (field === 1) {
+          proofs.push(this.parseCommitmentProof(data));
+        } else if (field === 2) {
+          treeRoot = buf.slice(pos, pos + len);
+        }
         pos += len;
-      } else break;
+      } else {
+        break;
+      }
     }
 
     return { proofs, treeRoot };
@@ -1006,26 +1169,39 @@ export class ZidecarClient {
         while (pos < buf.length) {
           const b = buf[pos++]!;
           v |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
-        if (field === 6) proof.isSpent = v !== 0;
+        if (field === 6) {
+          proof.isSpent = v !== 0;
+        }
       } else if (wire === 2) {
         let len = 0,
           s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
         const data = buf.slice(pos, pos + len);
-        if (field === 1) proof.nullifier = data;
-        else if (field === 2) proof.nullifierRoot = data;
-        else if (field === 7) proof.pathProofRaw = data;
-        else if (field === 8) proof.valueHash = data;
+        if (field === 1) {
+          proof.nullifier = data;
+        } else if (field === 2) {
+          proof.nullifierRoot = data;
+        } else if (field === 7) {
+          proof.pathProofRaw = data;
+        } else if (field === 8) {
+          proof.valueHash = data;
+        }
         pos += len;
-      } else break;
+      } else {
+        break;
+      }
     }
 
     return proof;
@@ -1050,14 +1226,21 @@ export class ZidecarClient {
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
         const data = buf.subarray(pos, pos + len);
-        if (field === 1) proofs.push(this.parseNullifierProof(data));
-        else if (field === 2) nullifierRoot = buf.slice(pos, pos + len);
+        if (field === 1) {
+          proofs.push(this.parseNullifierProof(data));
+        } else if (field === 2) {
+          nullifierRoot = buf.slice(pos, pos + len);
+        }
         pos += len;
-      } else break;
+      } else {
+        break;
+      }
     }
 
     return { proofs, nullifierRoot };
@@ -1079,7 +1262,9 @@ export class ZidecarClient {
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
         if (field === 1) {
@@ -1090,7 +1275,9 @@ export class ZidecarClient {
         while (pos < buf.length && buf[pos++]! & 0x80) {
           /* skip varint */
         }
-      } else break;
+      } else {
+        break;
+      }
     }
 
     return txids;
@@ -1115,17 +1302,23 @@ export class ZidecarClient {
         while (pos < buf.length) {
           const b = buf[pos++]!;
           v |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
-        if (field === 5) ringSize = v;
+        if (field === 5) {
+          ringSize = v;
+        }
       } else if (wire === 2) {
         let len = 0,
           s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
         const data = buf.subarray(pos, pos + len);
@@ -1140,7 +1333,9 @@ export class ZidecarClient {
           context = new TextDecoder().decode(data);
         }
         pos += len;
-      } else break;
+      } else {
+        break;
+      }
     }
 
     return { ringKeys, commitment, epoch, context, ringSize };
@@ -1165,28 +1360,41 @@ export class ZidecarClient {
         while (pos < buf.length) {
           const b = buf[pos++]!;
           v |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
-        if (field === 3) expires = v;
-        if (field === 5) totalPaidZat = v;
+        if (field === 3) {
+          expires = v;
+        }
+        if (field === 5) {
+          totalPaidZat = v;
+        }
       } else if (wire === 2) {
         let len = 0,
           s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
-        if (field === 1) zid = new TextDecoder().decode(buf.subarray(pos, pos + len));
-        else if (field === 2) plan = new TextDecoder().decode(buf.subarray(pos, pos + len));
-        else if (field === 4)
+        if (field === 1) {
+          zid = new TextDecoder().decode(buf.subarray(pos, pos + len));
+        } else if (field === 2) {
+          plan = new TextDecoder().decode(buf.subarray(pos, pos + len));
+        } else if (field === 4) {
           signature = Array.from(buf.subarray(pos, pos + len), b =>
             b.toString(16).padStart(2, '0'),
           ).join('');
+        }
         pos += len;
-      } else break;
+      } else {
+        break;
+      }
     }
 
     return { zid, plan, expires, signature, totalPaidZat };

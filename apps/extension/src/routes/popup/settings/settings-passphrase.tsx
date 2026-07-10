@@ -108,7 +108,9 @@ const QrSeedDisplay = ({ phrase }: { phrase: string }) => {
 
   const ref = useCallback(
     (canvas: HTMLCanvasElement | null) => {
-      if (!canvas || !phrase) return;
+      if (!canvas || !phrase) {
+        return;
+      }
       try {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         const QRCode = require('qrcode');

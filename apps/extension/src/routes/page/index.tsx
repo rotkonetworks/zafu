@@ -14,7 +14,7 @@ import {
 
 export const pageIndexLoader = async () => {
   const vaults = await localExtStorage.get('vaults');
-  if (!vaults || !vaults.length) {
+  if (!vaults?.length) {
     return redirect(PagePath.WELCOME);
   }
   return null;
@@ -46,7 +46,9 @@ export const PageIndex = () => {
   // load custom zapps from storage
   useEffect(() => {
     chrome.storage.local.get(STORAGE_KEY, r => {
-      if (Array.isArray(r[STORAGE_KEY])) setCustomZapps(r[STORAGE_KEY]);
+      if (Array.isArray(r[STORAGE_KEY])) {
+        setCustomZapps(r[STORAGE_KEY]);
+      }
     });
   }, []);
 
@@ -63,7 +65,9 @@ export const PageIndex = () => {
   }, [allZapps]);
 
   const handleAdd = () => {
-    if (!draft.name || !draft.url) return;
+    if (!draft.name || !draft.url) {
+      return;
+    }
     const zapp: Zapp = {
       id: `custom-${Date.now()}`,
       name: draft.name,

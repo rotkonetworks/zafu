@@ -69,7 +69,7 @@ export interface RecentAddressesSlice {
 export const createRecentAddressesSlice =
   (
     local: ExtensionStorage<LocalStorageState>,
-    session: ExtensionStorage<SessionStorageState>,
+    _session: ExtensionStorage<SessionStorageState>,
   ): SliceCreator<RecentAddressesSlice> =>
   (set, get) => ({
     recentAddresses: [],
@@ -79,8 +79,9 @@ export const createRecentAddressesSlice =
       const normalized = address.toLowerCase();
 
       set(state => {
-        if (!Array.isArray(state.recentAddresses.recentAddresses))
+        if (!Array.isArray(state.recentAddresses.recentAddresses)) {
           state.recentAddresses.recentAddresses = [];
+        }
         const existing = state.recentAddresses.recentAddresses.find(
           r => r.address.toLowerCase() === normalized,
         );
@@ -88,7 +89,9 @@ export const createRecentAddressesSlice =
         if (existing) {
           existing.useCount += 1;
           existing.lastUsedAt = Date.now();
-          if (chainId) existing.chainId = chainId;
+          if (chainId) {
+            existing.chainId = chainId;
+          }
         } else {
           state.recentAddresses.recentAddresses.push({
             address,
@@ -109,7 +112,9 @@ export const createRecentAddressesSlice =
 
     getRecent: (network, limit = 5) => {
       const arr = get().recentAddresses.recentAddresses;
-      if (!Array.isArray(arr)) return [];
+      if (!Array.isArray(arr)) {
+        return [];
+      }
       return [...arr]
         .filter(r => r.network === network)
         .sort((a, b) => b.lastUsedAt - a.lastUsedAt)
@@ -118,7 +123,9 @@ export const createRecentAddressesSlice =
 
     getFrequent: network => {
       let addresses = get().recentAddresses.recentAddresses;
-      if (!Array.isArray(addresses)) return [];
+      if (!Array.isArray(addresses)) {
+        return [];
+      }
       if (network) {
         addresses = addresses.filter(r => r.network === network);
       }
@@ -129,7 +136,9 @@ export const createRecentAddressesSlice =
 
     getSuggestionsForContacts: () => {
       const { recentAddresses, dismissedSuggestions } = get().recentAddresses;
-      if (!Array.isArray(recentAddresses)) return [];
+      if (!Array.isArray(recentAddresses)) {
+        return [];
+      }
       const contacts = Array.isArray(get().contacts.contacts) ? get().contacts.contacts : [];
 
       // get addresses used multiple times that aren't saved as contacts
@@ -159,7 +168,9 @@ export const createRecentAddressesSlice =
     shouldSuggestSave: address => {
       const normalized = address.toLowerCase();
       const { recentAddresses, dismissedSuggestions } = get().recentAddresses;
-      if (!Array.isArray(recentAddresses)) return false;
+      if (!Array.isArray(recentAddresses)) {
+        return false;
+      }
       const contacts = Array.isArray(get().contacts.contacts) ? get().contacts.contacts : [];
 
       // already a contact?

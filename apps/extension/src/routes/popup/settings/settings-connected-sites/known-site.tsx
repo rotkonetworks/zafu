@@ -59,7 +59,9 @@ const useSharedZid = (origin: string) => {
 
   useEffect(() => {
     void localExtStorage.get('zidShareLog').then(log => {
-      if (!log) return;
+      if (!log) {
+        return;
+      }
       // find most recent share with this origin
       const entries = log.filter(r => r.sharedWith === origin);
       const latest = entries[entries.length - 1];
@@ -155,7 +157,9 @@ export const KnownSite = ({
   const zcashAddr = zcashWallets[zcashIdx]?.address;
 
   const copyZid = () => {
-    if (!zidPubkey) return;
+    if (!zidPubkey) {
+      return;
+    }
     void navigator.clipboard.writeText(zidPubkey);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);

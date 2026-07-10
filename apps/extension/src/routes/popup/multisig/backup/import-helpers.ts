@@ -54,7 +54,9 @@ export const readFileAsText = (file: File): Promise<string> =>
 export const readEnvelopeFromFile = async (file: File): Promise<FrostBackupEnvelope> => {
   const text = await readFileAsText(file);
   const env = parseEnvelopeJson(text);
-  if (!env) throw new Error('not a valid FROST backup file');
+  if (!env) {
+    throw new Error('not a valid FROST backup file');
+  }
   return env;
 };
 
@@ -64,7 +66,9 @@ export const importBackup = async (
   passphrase: string,
 ): Promise<ImportSummary> => {
   const payload: FrostBackupPayload | null = await openBackup(envelope, passphrase);
-  if (!payload) throw new Error('wrong passphrase or corrupted backup');
+  if (!payload) {
+    throw new Error('wrong passphrase or corrupted backup');
+  }
 
   const shares =
     payload.type === 'frost-share'
@@ -89,8 +93,11 @@ export const importBackup = async (
   let skipped = 0;
   for (const share of shares) {
     const r = await importOneShare(share);
-    if (r === 'imported') imported++;
-    else skipped++;
+    if (r === 'imported') {
+      imported++;
+    } else {
+      skipped++;
+    }
   }
   return { imported, skipped, total: shares.length };
 };

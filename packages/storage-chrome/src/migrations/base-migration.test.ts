@@ -57,7 +57,7 @@ const mockV0toV1Migration: Migration<0, MockV0State, 1, MockV1State> = {
       viewKey: 'v3-view-key-abc',
       spendKey: 'v3-view-key-xyz',
     })),
-    frontend: !prev.frontend ? 'https://pfrontend.void' : prev.frontend,
+    frontend: prev.frontend ?? 'https://pfrontend.void',
     grpcUrl: { url: prev.grpcUrl ?? '' },
     fullSyncHeight: prev.fullSyncHeight ?? 0,
     temporaryField: 'migrated value',

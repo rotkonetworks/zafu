@@ -43,7 +43,9 @@ const SessionBadge = () => {
   const dkg = useStore(frostDkgSelector);
   const signing = useStore(frostSigningSelector);
 
-  if (!dkg && !signing) return null;
+  if (!dkg && !signing) {
+    return null;
+  }
 
   const label = dkg ? `DKG round ${dkg.round}` : `signing - ${signing!.step}`;
 
@@ -155,10 +157,14 @@ export const MultisigPage = () => {
   // in step with the home-page balance. skip entirely when off zcash —
   // gate inside the effect, not around it (Rules of Hooks).
   useEffect(() => {
-    if (!isZcash) return;
+    if (!isZcash) {
+      return;
+    }
     const fetchAll = () => {
       for (const w of walletsWithIndex) {
-        if (!w.vaultId) continue;
+        if (!w.vaultId) {
+          continue;
+        }
         const vaultId = w.vaultId;
         const rowId = w.id;
         getBalanceInWorker('zcash', vaultId)
@@ -168,7 +174,9 @@ export const MultisigPage = () => {
     };
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
-      if (detail?.network !== 'zcash') return;
+      if (detail?.network !== 'zcash') {
+        return;
+      }
       fetchAll();
     };
     window.addEventListener('network-sync-progress', handler);
@@ -213,7 +221,9 @@ export const MultisigPage = () => {
         title={backupTarget ? `Export "${backupTarget.label}"` : ''}
         walletLabel={backupTarget?.label ?? ''}
         onConfirm={async passphrase => {
-          if (backupTarget) await exportSingleBackup(backupTarget, passphrase);
+          if (backupTarget) {
+            await exportSingleBackup(backupTarget, passphrase);
+          }
         }}
         onClose={() => setBackupTarget(null)}
       />
@@ -255,7 +265,9 @@ export const MultisigPage = () => {
               activeMs.multisig?.custody === 'airgapSigner'
                 ? undefined
                 : async () => {
-                    if (await requestAuth()) setBackupTarget(activeMs);
+                    if (await requestAuth()) {
+                      setBackupTarget(activeMs);
+                    }
                   }
             }
           />
@@ -296,7 +308,9 @@ export const MultisigPage = () => {
                     w.multisig?.custody === 'airgapSigner'
                       ? undefined
                       : async () => {
-                          if (await requestAuth()) setBackupTarget(w);
+                          if (await requestAuth()) {
+                            setBackupTarget(w);
+                          }
                         }
                   }
                 />

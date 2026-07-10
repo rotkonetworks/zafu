@@ -66,7 +66,7 @@ export const TransactionApproval = () => {
     useTransactionViewSwitcher();
 
   const [airgapStep, setAirgapStep] = useState<AirgapStep>('review');
-  const [qrHex, setQrHex] = useState<string>('');
+  const [qrHex, setQrHex] = useState('');
   const [scanError, setScanError] = useState<string | null>(null);
   const [showPasswordGate, setShowPasswordGate] = useState(false);
 

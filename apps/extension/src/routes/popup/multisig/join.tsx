@@ -61,7 +61,9 @@ const MultisigJoinZafu = () => {
   );
 
   const handleJoin = async () => {
-    if (!roomCode.trim()) return;
+    if (!roomCode.trim()) {
+      return;
+    }
 
     const abortController = new AbortController();
     const sessionDeadline = Date.now() + FROST_SESSION_TIMEOUT_MS;
@@ -92,7 +94,7 @@ const MultisigJoinZafu = () => {
             setParticipantCount(event.participant.participantCount);
           } else if (event.type === 'message') {
             const text = new TextDecoder().decode(event.message.payload);
-            const r1 = text.match(/^R1:(?:(\d+):(\d+):SK:([0-9a-fA-F]{64}):)?([\s\S]*)$/);
+            const r1 = /^R1:(?:(\d+):(\d+):SK:([0-9a-fA-F]{64}):)?([\s\S]*)$/.exec(text);
             if (r1) {
               if (r1[1] && r1[2] && r1[3]) {
                 threshold = Number(r1[1]);
@@ -104,12 +106,12 @@ const MultisigJoinZafu = () => {
               peerBroadcasts.push(r1[4]!);
               return;
             }
-            const r2 = text.match(/^R2:([\s\S]*)$/);
+            const r2 = /^R2:([\s\S]*)$/.exec(text);
             if (r2) {
               peerRound2.push(r2[1]!);
               return;
             }
-            const fvk = text.match(/^FVK:([\s\S]*)$/);
+            const fvk = /^FVK:([\s\S]*)$/.exec(text);
             if (fvk) {
               peerFvks.push(fvk[1]!);
               return;
@@ -376,7 +378,9 @@ const MultisigJoinZigner = () => {
   });
 
   const handleJoin = async () => {
-    if (!roomCode.trim()) return;
+    if (!roomCode.trim()) {
+      return;
+    }
     try {
       const url = relayUrl || 'wss://zrelay.rotko.net';
       const sessionDeadline = Date.now() + FROST_SESSION_TIMEOUT_MS;
@@ -399,7 +403,7 @@ const MultisigJoinZigner = () => {
             setParticipantCount(event.participant.participantCount);
           } else if (event.type === 'message') {
             const text = new TextDecoder().decode(event.message.payload);
-            const r1 = text.match(/^R1:(?:(\d+):(\d+):SK:([0-9a-fA-F]{64}):)?([\s\S]*)$/);
+            const r1 = /^R1:(?:(\d+):(\d+):SK:([0-9a-fA-F]{64}):)?([\s\S]*)$/.exec(text);
             if (r1) {
               if (r1[1] && r1[2] && r1[3] && fvkSkRef.current === '') {
                 setThreshold(Number(r1[1]));
@@ -409,12 +413,12 @@ const MultisigJoinZigner = () => {
               peerR1Ref.current.push(r1[4]!);
               return;
             }
-            const r2 = text.match(/^R2:([\s\S]*)$/);
+            const r2 = /^R2:([\s\S]*)$/.exec(text);
             if (r2) {
               peerR2Ref.current.push(r2[1]!);
               return;
             }
-            const fvk = text.match(/^FVK:([\s\S]*)$/);
+            const fvk = /^FVK:([\s\S]*)$/.exec(text);
             if (fvk) {
               peerFvksRef.current.push(fvk[1]!);
               return;
@@ -436,7 +440,9 @@ const MultisigJoinZigner = () => {
 
   const onZignerR1 = async (raw: string) => {
     try {
-      if (raw.length === 0) throw new Error('empty r1 ack');
+      if (raw.length === 0) {
+        throw new Error('empty r1 ack');
+      }
       const broadcastHex =
         /^[0-9a-fA-F]+$/.test(raw) && raw.length % 2 === 0
           ? raw
@@ -444,7 +450,9 @@ const MultisigJoinZigner = () => {
               .map(b => b.toString(16).padStart(2, '0'))
               .join('');
       const relay = relayRef.current;
-      if (!relay || !participantIdRef.current) throw new Error('relay not initialized');
+      if (!relay || !participantIdRef.current) {
+        throw new Error('relay not initialized');
+      }
       await relay.sendMessage(
         roomCode.trim(),
         participantIdRef.current,
@@ -464,7 +472,9 @@ const MultisigJoinZigner = () => {
         throw new Error('expected JSON string array');
       }
       const relay = relayRef.current;
-      if (!relay || !participantIdRef.current) throw new Error('relay not initialized');
+      if (!relay || !participantIdRef.current) {
+        throw new Error('relay not initialized');
+      }
       for (const pkg of packages) {
         await relay.sendMessage(
           roomCode.trim(),
@@ -494,8 +504,12 @@ const MultisigJoinZigner = () => {
       }
       setPublicKeyPackage(parsed.public_key_package);
       setWalletId(parsed.wallet_id);
-      if (parsed.orchard_fvk_uview) zignerDerivedUfvkRef.current = parsed.orchard_fvk_uview;
-      if (parsed.address) zignerDerivedAddrRef.current = parsed.address;
+      if (parsed.orchard_fvk_uview) {
+        zignerDerivedUfvkRef.current = parsed.orchard_fvk_uview;
+      }
+      if (parsed.address) {
+        zignerDerivedAddrRef.current = parsed.address;
+      }
       setStep('fvk-echo');
     } catch (e) {
       setError(`r3 scan: ${e instanceof Error ? e.message : String(e)}`);
@@ -504,17 +518,23 @@ const MultisigJoinZigner = () => {
   };
 
   useEffect(() => {
-    if (step !== 'waiting-host-r1' || !deadline) return;
+    if (step !== 'waiting-host-r1' || !deadline) {
+      return;
+    }
     let cancelled = false;
     void waitForUntil(
       () => threshold > 0 && maxSigners > 0 && fvkSkRef.current.length === 64,
       deadline,
     )
       .then(() => {
-        if (!cancelled) setStep('dkg1-show');
+        if (!cancelled) {
+          setStep('dkg1-show');
+        }
       })
       .catch(e => {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         setError(e instanceof Error ? e.message : String(e));
         setStep('error');
       });
@@ -524,14 +544,20 @@ const MultisigJoinZigner = () => {
   }, [step, threshold, maxSigners, deadline]);
 
   useEffect(() => {
-    if (step !== 'waiting-r1' || !deadline) return;
+    if (step !== 'waiting-r1' || !deadline) {
+      return;
+    }
     let cancelled = false;
     void waitForUntil(() => peerR1Ref.current.length >= maxSigners - 1, deadline)
       .then(() => {
-        if (!cancelled) setStep('dkg2-show');
+        if (!cancelled) {
+          setStep('dkg2-show');
+        }
       })
       .catch(e => {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         setError(e instanceof Error ? e.message : String(e));
         setStep('error');
       });
@@ -541,14 +567,20 @@ const MultisigJoinZigner = () => {
   }, [step, maxSigners, deadline]);
 
   useEffect(() => {
-    if (step !== 'waiting-r2' || !deadline) return;
+    if (step !== 'waiting-r2' || !deadline) {
+      return;
+    }
     let cancelled = false;
     void waitForUntil(() => peerR2Ref.current.length >= (maxSigners - 1) ** 2, deadline)
       .then(() => {
-        if (!cancelled) setStep('dkg3-show');
+        if (!cancelled) {
+          setStep('dkg3-show');
+        }
       })
       .catch(e => {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         setError(e instanceof Error ? e.message : String(e));
         setStep('error');
       });
@@ -558,7 +590,9 @@ const MultisigJoinZigner = () => {
   }, [step, maxSigners, deadline]);
 
   useEffect(() => {
-    if (step !== 'fvk-echo' || !deadline || !publicKeyPackage) return;
+    if (step !== 'fvk-echo' || !deadline || !publicKeyPackage) {
+      return;
+    }
     let cancelled = false;
     void (async () => {
       try {
@@ -568,10 +602,14 @@ const MultisigJoinZigner = () => {
         const addr =
           zignerDerivedAddrRef.current ||
           (await frostDeriveAddressFromSkInWorker(publicKeyPackage, fvkSkRef.current, 0));
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
 
         const relay = relayRef.current;
-        if (!relay || !participantIdRef.current) throw new Error('relay not initialized');
+        if (!relay || !participantIdRef.current) {
+          throw new Error('relay not initialized');
+        }
         await relay.sendMessage(
           roomCode.trim(),
           participantIdRef.current,
@@ -587,7 +625,9 @@ const MultisigJoinZigner = () => {
           }
         }
 
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         await newFrostMultisigKey({
           label: `${threshold}-of-${maxSigners} multisig`,
           address: addr,
@@ -604,7 +644,9 @@ const MultisigJoinZigner = () => {
         setAddress(addr);
         setStep('complete');
       } catch (e) {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         setError(e instanceof Error ? e.message : String(e));
         setStep('error');
       }

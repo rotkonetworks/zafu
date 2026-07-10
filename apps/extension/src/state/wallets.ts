@@ -102,7 +102,9 @@ export const createWalletsSlice =
         });
 
         set(state => {
-          if (!Array.isArray(state.wallets.all)) state.wallets.all = [];
+          if (!Array.isArray(state.wallets.all)) {
+            state.wallets.all = [];
+          }
           state.wallets.all.unshift(newWallet.toJson());
         });
 
@@ -122,8 +124,12 @@ export const createWalletsSlice =
 
         set(state => {
           const w = state.wallets.zcashWallets[idx]!;
-          if (updates.label !== undefined) w.label = updates.label;
-          if (updates.relayUrl !== undefined && w.multisig) w.multisig.relayUrl = updates.relayUrl;
+          if (updates.label !== undefined) {
+            w.label = updates.label;
+          }
+          if (updates.relayUrl !== undefined && w.multisig) {
+            w.multisig.relayUrl = updates.relayUrl;
+          }
         });
 
         await local.set('zcashWallets', get().wallets.zcashWallets);

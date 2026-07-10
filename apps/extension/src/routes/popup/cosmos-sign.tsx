@@ -116,7 +116,9 @@ export const CosmosSign = () => {
   }, []);
 
   const txSummary = useMemo(() => {
-    if (!signData?.signRequest?.signDoc) return null;
+    if (!signData?.signRequest?.signDoc) {
+      return null;
+    }
     try {
       return parseTxSummary(signData.signRequest.signDoc as unknown as SignDocLike);
     } catch {

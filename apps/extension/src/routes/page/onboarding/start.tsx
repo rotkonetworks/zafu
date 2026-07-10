@@ -32,7 +32,7 @@ interface PathOption {
   readonly accent: 'gold' | 'blue';
 }
 
-const OPTIONS: ReadonlyArray<PathOption> = [
+const OPTIONS: readonly PathOption[] = [
   {
     icon: 'i-lucide-sparkles',
     label: 'create a new wallet',

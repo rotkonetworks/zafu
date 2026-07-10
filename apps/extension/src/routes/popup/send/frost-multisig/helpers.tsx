@@ -64,9 +64,14 @@ export const waitFor = (cond: () => boolean, timeoutMs: number): Promise<void> =
   new Promise((resolve, reject) => {
     const start = Date.now();
     const tick = () => {
-      if (cond()) return resolve();
-      if (Date.now() - start > timeoutMs)
-        return reject(new Error('timeout waiting for co-signers'));
+      if (cond()) {
+        resolve();
+        return;
+      }
+      if (Date.now() - start > timeoutMs) {
+        reject(new Error('timeout waiting for co-signers'));
+        return;
+      }
       setTimeout(tick, 500);
     };
     tick();

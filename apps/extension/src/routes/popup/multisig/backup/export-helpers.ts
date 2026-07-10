@@ -28,7 +28,9 @@ const downloadJson = (filename: string, jsonText: string) => {
 const buildSharePayload = async (
   wallet: ZcashWalletJson,
 ): Promise<Omit<FrostSharePayload, 'version' | 'type'>> => {
-  if (!wallet.multisig) throw new Error(`wallet ${wallet.id} has no multisig data`);
+  if (!wallet.multisig) {
+    throw new Error(`wallet ${wallet.id} has no multisig data`);
+  }
   if (wallet.multisig.custody === 'airgapSigner') {
     throw new Error(
       `"${wallet.label}" is an airgap wallet — its share lives on zigner. Export from the zigner device.`,

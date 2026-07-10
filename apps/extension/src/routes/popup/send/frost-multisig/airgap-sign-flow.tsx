@@ -99,7 +99,9 @@ export function FrostAirgapSignFlow({
         });
         setTrigger1(new TextEncoder().encode(trigger));
       } catch (err) {
-        if (!cancelled) onError(err instanceof Error ? err.message : 'failed to open relay room');
+        if (!cancelled) {
+          onError(err instanceof Error ? err.message : 'failed to open relay room');
+        }
       }
     })();
     return () => {
@@ -107,12 +109,13 @@ export function FrostAirgapSignFlow({
       sessionRef.current?.abort.abort();
       sessionRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const session = () => {
     const s = sessionRef.current;
-    if (!s) throw new Error('relay session lost');
+    if (!s) {
+      throw new Error('relay session lost');
+    }
     return s;
   };
 
@@ -139,7 +142,7 @@ export function FrostAirgapSignFlow({
         unsigned.fee,
         unsigned.unsignedTx,
       );
-      await sendCommitments(s, zignerCommitsRef.current!);
+      await sendCommitments(s, zignerCommitsRef.current);
 
       await waitFor(() => buckets.peerCommits[0]!.length >= ms.threshold - 1, 300_000);
 

@@ -71,8 +71,12 @@ export const useSkipMessages = (options: UseSkipMessagesOptions) => {
   return useQuery({
     queryKey: ['skipMessages', route?.operations, addresses],
     queryFn: async (): Promise<MessagesResponse> => {
-      if (!route) throw new Error('route required');
-      if (addresses.length === 0) throw new Error('addresses required');
+      if (!route) {
+        throw new Error('route required');
+      }
+      if (addresses.length === 0) {
+        throw new Error('addresses required');
+      }
 
       return skipClient.messages({
         sourceAssetDenom: route.sourceAssetDenom,
@@ -99,13 +103,17 @@ export const useSkipTransactionStatus = (
   return useQuery({
     queryKey: ['skipTxStatus', chainId, txHash],
     queryFn: async () => {
-      if (!chainId || !txHash) throw new Error('chainId and txHash required');
+      if (!chainId || !txHash) {
+        throw new Error('chainId and txHash required');
+      }
       return skipClient.transactionStatus({ chainId, txHash });
     },
     enabled: !!chainId && !!txHash,
     refetchInterval: query => {
       const data = query.state.data;
-      if (!data) return 3000;
+      if (!data) {
+        return 3000;
+      }
       // stop polling when completed
       if (
         data.state === 'STATE_COMPLETED_SUCCESS' ||
@@ -150,7 +158,9 @@ export const useSkipAssets = (chainId: string | undefined) => {
   return useQuery({
     queryKey: ['skipAssets', chainId],
     queryFn: () => {
-      if (!chainId) throw new Error('chainId required');
+      if (!chainId) {
+        throw new Error('chainId required');
+      }
       return skipClient.assets(chainId);
     },
     enabled: !!chainId,

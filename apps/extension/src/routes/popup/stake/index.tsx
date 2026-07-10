@@ -65,7 +65,9 @@ const getValidatorState = (info: ValidatorInfo): string => {
 
 /** check if a balance is a delegation token */
 const isDelegationToken = (meta: { base?: string; symbol?: string } | undefined): boolean => {
-  if (!meta) return false;
+  if (!meta) {
+    return false;
+  }
   // check base denom pattern - can be "delegation_" or "udelegation_" (micro-unit prefix)
   if (
     meta.base &&
@@ -75,7 +77,7 @@ const isDelegationToken = (meta: { base?: string; symbol?: string } | undefined)
     return true;
   }
   // fallback: check symbol
-  if (meta.symbol && meta.symbol.includes('delegation_penumbravalid1')) {
+  if (meta.symbol?.includes('delegation_penumbravalid1')) {
     return true;
   }
   return false;
@@ -85,10 +87,12 @@ const isDelegationToken = (meta: { base?: string; symbol?: string } | undefined)
 const getValidatorBech32FromDelegation = (
   meta: { base?: string } | undefined,
 ): string | undefined => {
-  if (!meta?.base) return undefined;
+  if (!meta?.base) {
+    return undefined;
+  }
   // base denom can be "delegation_penumbravalid1..." or "udelegation_penumbravalid1..." (with micro-unit prefix)
   // extract the bech32 part (penumbravalid1...)
-  const match = meta.base.match(/u?delegation_(penumbravalid1[a-z0-9]+)/);
+  const match = /u?delegation_(penumbravalid1[a-z0-9]+)/.exec(meta.base);
   return match?.[1];
 };
 
@@ -98,10 +102,14 @@ const findValidatorForDelegation = (
   validators: ValidatorRow[],
 ): ValidatorRow | undefined => {
   const delegationBech32 = getValidatorBech32FromDelegation(meta);
-  if (!delegationBech32) return undefined;
+  if (!delegationBech32) {
+    return undefined;
+  }
 
   return validators.find(v => {
-    if (!v.info.validator?.identityKey?.ik) return false;
+    if (!v.info.validator?.identityKey?.ik) {
+      return false;
+    }
     try {
       // convert validator identity key to bech32 and compare
       const validatorBech32 = bech32mIdentityKey({ ik: v.info.validator.identityKey.ik });
@@ -145,7 +153,9 @@ export const StakePage = () => {
       const result: ValidatorRow[] = [];
       try {
         for await (const v of stakeClient.validatorInfo({})) {
-          if (!v.validatorInfo) continue;
+          if (!v.validatorInfo) {
+            continue;
+          }
           const info = v.validatorInfo;
           const name = info.validator?.name || 'Unknown';
           const identity = info.validator?.identityKey?.ik
@@ -165,7 +175,9 @@ export const StakePage = () => {
         result.sort((a, b) => {
           const aRotko = a.name.toLowerCase().includes('rotko') ? 1 : 0;
           const bRotko = b.name.toLowerCase().includes('rotko') ? 1 : 0;
-          if (aRotko !== bRotko) return bRotko - aRotko;
+          if (aRotko !== bRotko) {
+            return bRotko - aRotko;
+          }
           return b.votingPower - a.votingPower;
         });
       } catch (err) {
@@ -214,7 +226,9 @@ export const StakePage = () => {
         })) {
           const meta = getMetadataFromBalancesResponse.optional(b);
           if (meta?.symbol === STAKING_TOKEN) {
-            if (!b.balanceView) return '0';
+            if (!b.balanceView) {
+              return '0';
+            }
             const val = fromValueView(b.balanceView);
             return typeof val === 'string' ? val : val.toString();
           }
@@ -233,7 +247,9 @@ export const StakePage = () => {
 
   // handle delegate
   const handleDelegate = useCallback(async () => {
-    if (!selectedValidator || !amount || parseFloat(amount) <= 0) return;
+    if (!selectedValidator || !amount || parseFloat(amount) <= 0) {
+      return;
+    }
 
     setTxStatus('planning');
     setTxError(undefined);
@@ -274,8 +290,12 @@ export const StakePage = () => {
 
   // handle undelegate
   const handleUndelegate = useCallback(async () => {
-    if (!selectedDelegation || !amount || parseFloat(amount) <= 0) return;
-    if (!selectedDelegation.balanceView) return;
+    if (!selectedDelegation || !amount || parseFloat(amount) <= 0) {
+      return;
+    }
+    if (!selectedDelegation.balanceView) {
+      return;
+    }
 
     setTxStatus('planning');
     setTxError(undefined);

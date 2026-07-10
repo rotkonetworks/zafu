@@ -85,7 +85,9 @@ export const startWalletServices = async (
       };
       const listener = (changes: Record<string, unknown>) => {
         // wallet writes (encrypted blob) or vault creation
-        if ('penumbraWallets' in changes || 'vaults' in changes) void check();
+        if ('penumbraWallets' in changes || 'vaults' in changes) {
+          void check();
+        }
       };
       localExtStorage.addListener(listener as never);
       // also check when session key appears (user unlocked)
@@ -173,7 +175,9 @@ const syncLastBlockToStorage = async (
   console.log('[sync] subscribing to FULL_SYNC_HEIGHT updates...');
   const sub = indexedDb.subscribe('FULL_SYNC_HEIGHT');
   for await (const { value } of sub) {
-    if (signal?.aborted) break;
+    if (signal?.aborted) {
+      break;
+    }
     if (value !== SENTINEL_U64_MAX) {
       await localExtStorage.set('fullSyncHeight', Number(value));
       console.log('[sync] fullSyncHeight updated:', Number(value));

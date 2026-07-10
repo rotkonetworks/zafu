@@ -32,7 +32,9 @@ export const withShuffle =
 
 /** Fisher-Yates shuffle. */
 function shuffle(arr: BucketStart[], rng: RandomU32): BucketStart[] {
-  if (arr.length <= 1) return arr;
+  if (arr.length <= 1) {
+    return arr;
+  }
   const rnd = new Uint32Array(arr.length);
   rng(rnd);
   for (let i = arr.length - 1; i > 0; i--) {

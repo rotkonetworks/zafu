@@ -318,7 +318,9 @@ export async function evaluatePrf(
     },
   })) as PublicKeyCredential | null;
 
-  if (!assertion) return null;
+  if (!assertion) {
+    return null;
+  }
 
   const results = (assertion.getClientExtensionResults() as Record<string, unknown>)?.['prf'] as
     | { results?: { first?: ArrayBuffer; second?: ArrayBuffer } }
@@ -380,7 +382,9 @@ export async function createPrfCredential(
     },
   })) as PublicKeyCredential | null;
 
-  if (!credential) return null;
+  if (!credential) {
+    return null;
+  }
 
   const credentialId = bytesToBase64url(new Uint8Array(credential.rawId));
   const extensionResults = credential.getClientExtensionResults() as Record<string, unknown>;
@@ -403,7 +407,7 @@ export async function enrollPrf(label: string): Promise<{
 } | null> {
   // step 1: create credential
   const created = await createPrfCredential(label);
-  if (!created || !created.prfSupported) {
+  if (!created?.prfSupported) {
     return null;
   }
 
@@ -433,7 +437,9 @@ export async function enrollPrf(label: string): Promise<{
 
 function bytesToBase64url(bytes: Uint8Array): string {
   let binary = '';
-  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]!);
+  }
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
@@ -441,6 +447,8 @@ function base64urlToBytes(b64: string): Uint8Array {
   const padded = b64.replace(/-/g, '+').replace(/_/g, '/');
   const binary = atob(padded);
   const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
   return bytes;
 }

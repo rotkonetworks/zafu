@@ -54,7 +54,9 @@ export const SettingsMultisig = () => {
   };
 
   const handleDelete = async () => {
-    if (!wallet.vaultId) return;
+    if (!wallet.vaultId) {
+      return;
+    }
     await deleteKeyRing(wallet.vaultId);
     navigate(PopupPath.SETTINGS_WALLETS);
   };
@@ -128,7 +130,9 @@ export const SettingsMultisig = () => {
             <button
               onClick={async () => {
                 const ok = await requestAuth();
-                if (ok) setBackupOpen(true);
+                if (ok) {
+                  setBackupOpen(true);
+                }
               }}
               className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-xs text-zigner-gold hover:bg-primary/10 transition-colors'
             >

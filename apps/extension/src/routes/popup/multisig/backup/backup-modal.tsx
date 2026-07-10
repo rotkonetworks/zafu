@@ -41,12 +41,16 @@ export const BackupModal = ({
     }
   }, [open]);
 
-  if (!open) return null;
+  if (!open) {
+    return null;
+  }
 
   const canConfirm = passphrase.length >= 8 && passphrase === confirm && !working;
 
   const handleConfirm = async () => {
-    if (!canConfirm) return;
+    if (!canConfirm) {
+      return;
+    }
     setError(null);
     setWorking(true);
     try {

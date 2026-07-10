@@ -15,7 +15,7 @@
 import { getOriginPermissions, grantCapability } from '@repo/storage-chrome/origin';
 import { hasCapability } from '@repo/storage-chrome/capabilities';
 import { UserChoice } from '@repo/storage-chrome/records';
-import { PopupType } from '../../message/popup';
+import { PopupType } from '../popup';
 import { popup } from '../../popup';
 import { isValidExternalSender } from '../../senders/external';
 import { localExtStorage } from '@repo/storage-chrome/local';
@@ -89,7 +89,7 @@ const handleSignRequest = async (
       zidPubkey,
     });
 
-    if (!popupResponse || popupResponse.choice !== UserChoice.Approved) {
+    if (popupResponse?.choice !== UserChoice.Approved) {
       return { success: false, error: 'user denied' };
     }
 

@@ -76,7 +76,9 @@ export const CosmosSubwallets = () => {
   // no Cosmos holdings.
   if (data) {
     const anyNonZero = entries.some(([, e]) => e && e.balance > 0n);
-    if (!anyNonZero) return null;
+    if (!anyNonZero) {
+      return null;
+    }
   }
 
   return (
