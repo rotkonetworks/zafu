@@ -53,8 +53,11 @@ let wasmModule: RingVrfWasm | null = null;
 async function loadWasm(): Promise<RingVrfWasm> {
   if (wasmModule) return wasmModule;
   try {
+    // literal specifiers into /public break vitest's vite transform, so the
+    // path lives in a variable - both bundlers then defer to runtime
+    const wasmPath = '/ring-vrf-wasm/ring_vrf_wasm.js';
     // @ts-expect-error dynamic WASM import resolved at runtime
-    const wasm = await import(/* webpackIgnore: true */ '/ring-vrf-wasm/ring_vrf_wasm.js');
+    const wasm = await import(/* webpackIgnore: true */ /* @vite-ignore */ wasmPath);
     await wasm.default({ module_or_path: '/ring-vrf-wasm/ring_vrf_wasm_bg.wasm' });
     wasmModule = wasm as unknown as RingVrfWasm;
     return wasmModule;

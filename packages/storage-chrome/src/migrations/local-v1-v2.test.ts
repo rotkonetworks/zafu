@@ -1,6 +1,6 @@
 import { AppParameters } from '@penumbra-zone/protobuf/penumbra/core/app/v1/app_pb';
 import { AssetId } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
-import { Wallet } from '_penumbra_zone_types_36/wallet';
+import { Wallet } from '@rotko/penumbra-types/wallet';
 import { Wallet as RepoWallet } from '@repo/wallet';
 import { generateSpendKey, getFullViewingKey, getWalletId } from '@rotko/penumbra-wasm/keys';
 import { Key } from '@repo/encryption/key';
@@ -17,15 +17,15 @@ import local_v1_v2 from './local-v1-v2';
 const testPassword = 'test-password-12345';
 const testSeedPhrase =
   'comfort ten front cycle churn burger oak absent rice ice urge result art couple benefit cabbage frequent obscure hurry trick segment cool job debate';
-const testFvk = getFullViewingKey(generateSpendKey(testSeedPhrase));
-const testId = getWalletId(testFvk);
+const testFvk = await getFullViewingKey(await generateSpendKey(testSeedPhrase));
+const testId = await getWalletId(testFvk);
 const testKey = await Key.create(testPassword);
 const testWallet = new Wallet('Test Wallet', testId.toJsonString(), testFvk.toJsonString(), {
   encryptedSeedPhrase: await testKey.key.seal(testSeedPhrase),
 });
 
-const defaultData: ExtensionStorageDefaults<Storage_V1.LOCAL> = {
-  wallets: [],
+const defaultData: ExtensionStorageDefaults<Storage_V2.LOCAL> = {
+  penumbraWallets: [],
   knownSites: [],
   numeraires: [],
 };
@@ -85,7 +85,7 @@ describe('local-v1-v2 migration', () => {
         ...validRequiredData,
       });
 
-      const wallets = await v2ExtStorage.get('wallets');
+      const wallets = await v2ExtStorage.get('penumbraWallets');
       expect(wallets).toEqual(validRequiredData.wallets);
 
       const knownSites = await v2ExtStorage.get('knownSites');
@@ -107,7 +107,7 @@ describe('local-v1-v2 migration', () => {
         ...corruptedRequiredData,
       });
 
-      const wallets = await v2ExtStorage.get('wallets');
+      const wallets = await v2ExtStorage.get('penumbraWallets');
       expect(wallets).toStrictEqual(corruptedRequiredData.wallets);
 
       const knownSites = await v2ExtStorage.get('knownSites');
@@ -125,7 +125,7 @@ describe('local-v1-v2 migration', () => {
         numeraires: 'not-a-numeraire',
       });
 
-      const wallets = await v2ExtStorage.get('wallets');
+      const wallets = await v2ExtStorage.get('penumbraWallets');
       expect(wallets).toBe('not-a-wallet');
 
       const knownSites = await v2ExtStorage.get('knownSites');
@@ -219,7 +219,7 @@ describe('local-v1-v2 migration', () => {
         ...onboardedData,
       });
 
-      const wallets = await v2ExtStorage.get('wallets');
+      const wallets = await v2ExtStorage.get('penumbraWallets');
       const passwordKeyPrint = await v2ExtStorage.get('passwordKeyPrint');
 
       const migratedKeyPrint = KeyPrint.fromJson(passwordKeyPrint!);
@@ -250,7 +250,7 @@ describe('local-v1-v2 migration', () => {
         passwordKeyPrint: asLegacyItem(onboardedData.passwordKeyPrint),
       });
 
-      const wallets = await v2ExtStorage.get('wallets');
+      const wallets = await v2ExtStorage.get('penumbraWallets');
       const passwordKeyPrint = await v2ExtStorage.get('passwordKeyPrint');
 
       const migratedKeyPrint = KeyPrint.fromJson(passwordKeyPrint!);
@@ -298,7 +298,7 @@ describe('local-v1-v2 migration', () => {
         await import('./test-data/local-v1-v2/onboard-v0-pregenesis.json');
       await storageArea.set(onboardV0PregenesisSnapshot);
 
-      const wallets = await v2ExtStorage.get('wallets');
+      const wallets = await v2ExtStorage.get('penumbraWallets');
       expect(wallets).toEqual(onboardV0PregenesisSnapshot.wallets.value);
 
       const passwordKeyPrint = await v2ExtStorage.get('passwordKeyPrint');
@@ -339,7 +339,7 @@ describe('local-v1-v2 migration', () => {
         await import('./test-data/local-v1-v2/onboard-v0-postgenesis.json');
       await storageArea.set(onboardV0PostgenesisSnapshot);
 
-      const wallets = await v2ExtStorage.get('wallets');
+      const wallets = await v2ExtStorage.get('penumbraWallets');
       expect(wallets).toEqual(onboardV0PostgenesisSnapshot.wallets.value);
 
       const passwordKeyPrint = await v2ExtStorage.get('passwordKeyPrint');
@@ -383,7 +383,7 @@ describe('local-v1-v2 migration', () => {
         await import('./test-data/local-v1-v2/onboard-v0-pregenesis-v1-corrupt.json');
       await storageArea.set(onboardV0PregenesisV1CorruptSnapshot);
 
-      const wallets = await v2ExtStorage.get('wallets');
+      const wallets = await v2ExtStorage.get('penumbraWallets');
       expect(wallets).toEqual(onboardV0PregenesisV1CorruptSnapshot.wallets);
 
       const passwordKeyPrint = await v2ExtStorage.get('passwordKeyPrint');

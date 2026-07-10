@@ -3,6 +3,11 @@ import { AllSlices, initializeStore, TestStore } from '.';
 import { beforeEach, describe, expect, test } from 'vitest';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
+import { createEncryptedLocal } from './encrypted-storage';
+
+// penumbraWallets is encrypted at rest - read through the same wrapper the
+// slices write through
+const encryptedLocal = createEncryptedLocal(localExtStorage, sessionExtStorage);
 
 const seedPhrase1 = [
   'road',
@@ -70,7 +75,7 @@ describe('Accounts Slice', () => {
       expect(useStore.getState().wallets.all.at(0)!.label).toBe(accountA.label);
 
       // Test in long term storage
-      const accountsPt1 = await localExtStorage.get('wallets');
+      const accountsPt1 = await encryptedLocal.get('penumbraWallets');
       expect(accountsPt1.length).toBe(1);
       expect(accountsPt1.at(0)!.label).toBe(accountA.label);
 
@@ -84,7 +89,7 @@ describe('Accounts Slice', () => {
       expect(useStore.getState().wallets.all.at(1)!.label).toBe(accountA.label);
 
       // Test in long term storage
-      const accountsPt2 = await localExtStorage.get('wallets');
+      const accountsPt2 = await encryptedLocal.get('penumbraWallets');
       expect(accountsPt2.length).toBe(2);
       expect(accountsPt2.at(0)!.label).toBe(accountB.label);
       expect(accountsPt2.at(1)!.label).toBe(accountA.label);

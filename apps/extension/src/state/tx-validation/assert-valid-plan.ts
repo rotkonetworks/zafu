@@ -94,10 +94,10 @@ export async function assertValidActionPlan(
         const { isControlledAddress } = await import('@rotko/penumbra-wasm/address');
 
         if (
-          !isControlledAddress(
+          !(await isControlledAddress(
             new FullViewingKey(fvk),
             new Address(action.value.swapPlaintext.claimAddress),
-          )
+          ))
         ) {
           throw new Error(`Swap action has uncontrolled claim address ${bech32mClaimAddress}`, {
             cause: action,

@@ -16,6 +16,11 @@ import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { beforeEach, describe, expect, MockedFunction, test, vi } from 'vitest';
 import { create } from 'zustand';
 import { AllSlices, initializeStore, TestStore } from '.';
+import { createEncryptedLocal } from './encrypted-storage';
+
+// penumbraWallets is encrypted at rest - seed through the same wrapper the
+// slices read through
+const encryptedLocal = createEncryptedLocal(localExtStorage, sessionExtStorage);
 import { PopupRequest, PopupType } from '../message/popup';
 
 const localMock = (chrome.storage.local as unknown as { mock: Map<string, unknown> }).mock;
@@ -100,8 +105,8 @@ describe('Transaction Approval Slice', () => {
   beforeEach(async () => {
     localMock.clear();
     sessionMock.clear();
-    await localExtStorage.set('wallets', [wallet0]);
     await sessionExtStorage.set('passwordKey', pw);
+    await encryptedLocal.set('penumbraWallets', [wallet0]);
     useStore = create<AllSlices>()(initializeStore(sessionExtStorage, localExtStorage));
     vi.clearAllMocks();
   });
@@ -116,7 +121,7 @@ describe('Transaction Approval Slice', () => {
 
   describe('acceptRequest()', () => {
     test('throws if no wallet', async () => {
-      await localExtStorage.set('wallets', []);
+      await encryptedLocal.set('penumbraWallets', []);
 
       await expect(() =>
         useStore.getState().txApproval.acceptRequest(txApprovalRequest),
