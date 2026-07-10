@@ -16,7 +16,11 @@ import { ChainRegistryClient } from '@penumbra-labs/registry';
 import { viewClient } from '../../../../clients';
 import { TransactionView } from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
 import { ConnectError } from '@connectrpc/connect';
-import { encodePlanToQR, parseAuthorizationQR, validateAuthorization } from '@repo/wallet/airgap-signer';
+import {
+  encodePlanToQR,
+  parseAuthorizationQR,
+  validateAuthorization,
+} from '@repo/wallet/airgap-signer';
 import { QrDisplay } from '../../../../shared/components/qr-display';
 import { QrScanner } from '../../../../shared/components/qr-scanner';
 import { Button } from '@repo/ui/components/ui/button';
@@ -124,7 +128,9 @@ export const TransactionApproval = () => {
       <div className='flex h-screen flex-col'>
         <header className='border-b border-border-soft p-4'>
           <span className='kicker'>transaction</span>
-          <h1 className='mt-1 text-[18px] text-fg-high lowercase tracking-[-0.01em]'>sign with zigner</h1>
+          <h1 className='mt-1 text-[18px] text-fg-high lowercase tracking-[-0.01em]'>
+            sign with zigner
+          </h1>
         </header>
 
         <div className='grow overflow-auto p-4 flex flex-col items-center justify-center'>
@@ -192,7 +198,9 @@ export const TransactionApproval = () => {
     <div className='flex h-screen flex-col'>
       <header className='border-b border-border-soft p-4'>
         <span className='kicker'>transaction</span>
-        <h1 className='mt-1 text-[18px] text-fg-high lowercase tracking-[-0.01em]'>confirm transaction</h1>
+        <h1 className='mt-1 text-[18px] text-fg-high lowercase tracking-[-0.01em]'>
+          confirm transaction
+        </h1>
       </header>
 
       <div className='grow overflow-auto p-4'>
@@ -244,9 +252,7 @@ export const TransactionApproval = () => {
       </div>
       <div className='border-t border-border-soft p-0'>
         {isAirgap ? (
-          <div
-            className='flex flex-row justify-between gap-4 rounded-lg bg-elev-1 px-4 py-7 shadow-lg'
-          >
+          <div className='flex flex-row justify-between gap-4 rounded-lg bg-elev-1 px-4 py-7 shadow-lg'>
             <Button
               variant='gradient'
               className='w-1/2 py-3.5 text-base'
@@ -269,7 +275,10 @@ export const TransactionApproval = () => {
           <>
             <PasswordGateModal
               open={showPasswordGate}
-              onConfirm={() => { setShowPasswordGate(false); approve(); }}
+              onConfirm={() => {
+                setShowPasswordGate(false);
+                approve();
+              }}
               onCancel={() => setShowPasswordGate(false)}
             />
             <ApproveDeny

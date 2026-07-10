@@ -87,8 +87,8 @@ export const decryptMultisigSecrets = async (
   }
   const key = await requireKey(ctx);
   return {
-    keyPackage: await key.unseal(Box.fromJson(keyPackage as BoxJson)) as string,
-    ephemeralSeed: await key.unseal(Box.fromJson(ephemeralSeed as BoxJson)) as string,
+    keyPackage: (await key.unseal(Box.fromJson(keyPackage as BoxJson))) as string,
+    ephemeralSeed: (await key.unseal(Box.fromJson(ephemeralSeed as BoxJson))) as string,
   };
 };
 

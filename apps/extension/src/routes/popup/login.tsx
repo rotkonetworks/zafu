@@ -40,7 +40,9 @@ export const Login = () => {
     <FadeTransition className='flex flex-col items-stretch justify-start'>
       <div className='flex h-screen flex-col justify-between p-[30px] pt-10'>
         <div className='mx-auto my-0 flex flex-col items-center gap-1'>
-          <span className='text-[10px] tracking-[0.18em] text-fg-muted lowercase'>shielded signing</span>
+          <span className='text-[10px] tracking-[0.18em] text-fg-muted lowercase'>
+            shielded signing
+          </span>
           <h1 className='text-[32px] text-zigner-gold lowercase tracking-[-0.01em] leading-none'>
             zafu
           </h1>
@@ -72,8 +74,7 @@ export const Login = () => {
               kicks in, the recovery path is visible. */}
           {enteredIncorrect && (
             <p className='text-center text-[11px] text-fg-muted lowercase'>
-              your funds aren't lost — you can restore from your seed phrase by
-              reinstalling zafu.
+              your funds aren't lost — you can restore from your seed phrase by reinstalling zafu.
             </p>
           )}
         </form>

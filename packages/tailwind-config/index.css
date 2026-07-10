@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 /* Make sure Tailwind's content scan reaches every directory that
    references design-system utilities. Without this, classes only used
@@ -9,9 +9,9 @@
 
 /* Zafu terminal theme - CSS-first config (Tailwind v4) */
 @theme {
-  --font-body: "Iosevka Term", "Courier New", Courier, monospace;
-  --font-headline: "Iosevka Term", "Courier New", Courier, monospace;
-  --font-mono: "Iosevka Term", "Courier New", Courier, monospace;
+  --font-body: 'Iosevka Term', 'Courier New', Courier, monospace;
+  --font-headline: 'Iosevka Term', 'Courier New', Courier, monospace;
+  --font-mono: 'Iosevka Term', 'Courier New', Courier, monospace;
 
   --radius-sm: 0;
   --radius-md: 0;
@@ -29,22 +29,22 @@
    * ============================================================== */
 
   /* ink */
-  --color-fg:       var(--fg);
-  --color-fg-high:  var(--fg-high);
+  --color-fg: var(--fg);
+  --color-fg-high: var(--fg-high);
   --color-fg-muted: var(--fg-muted);
-  --color-fg-dim:   var(--fg-dim);
+  --color-fg-dim: var(--fg-dim);
 
   /* surfaces */
-  --color-canvas:      var(--surface-canvas);
-  --color-elev-1:      var(--surface-elev-1);
-  --color-elev-2:      var(--surface-elev-2);
+  --color-canvas: var(--surface-canvas);
+  --color-elev-1: var(--surface-elev-1);
+  --color-elev-2: var(--surface-elev-2);
   --color-border-soft: var(--surface-border-soft);
   --color-border-hard: var(--surface-border);
 
   /* zafu-blue triplet (sibling of zigner-gold below) */
-  --color-zafu-blue:       var(--zafu-blue);
+  --color-zafu-blue: var(--zafu-blue);
   --color-zafu-blue-light: var(--zafu-blue-light);
-  --color-zafu-blue-dark:  var(--zafu-blue-dark);
+  --color-zafu-blue-dark: var(--zafu-blue-dark);
 
   /* legacy shadcn-style tokens — kept as aliases onto the same hex
      values. Existing components using hsl(var(--foreground)) etc. still
@@ -121,24 +121,43 @@
   --animate-gradient-x: gradient-x 1s ease-out;
 
   @keyframes accordion-down {
-    from { height: 0; }
-    to { height: var(--radix-accordion-content-height); }
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--radix-accordion-content-height);
+    }
   }
   @keyframes accordion-up {
-    from { height: var(--radix-accordion-content-height); }
-    to { height: 0; }
+    from {
+      height: var(--radix-accordion-content-height);
+    }
+    to {
+      height: 0;
+    }
   }
   @keyframes gradient-x {
-    0%, 100% { background-size: 200% 200%; background-position: left center; }
-    50% { background-size: 200% 200%; background-position: right center; }
+    0%,
+    100% {
+      background-size: 200% 200%;
+      background-position: left center;
+    }
+    50% {
+      background-size: 200% 200%;
+      background-position: right center;
+    }
   }
 }
 
 /* custom utilities */
 @utility grid-std-spacing {
   gap: 1.5rem;
-  @media (min-width: 768px) { gap: 1rem; }
-  @media (min-width: 1280px) { gap: 1.25rem; }
+  @media (min-width: 768px) {
+    gap: 1rem;
+  }
+  @media (min-width: 1280px) {
+    gap: 1.25rem;
+  }
 }
 
 @utility background-size-200 {
@@ -146,19 +165,37 @@
 }
 
 @utility border-mask {
-  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
   mask-composite: xor;
   mask-composite: exclude;
 }
 
-@utility contain-none { contain: none; }
-@utility contain-strict { contain: strict; }
-@utility contain-content { contain: content; }
-@utility contain-size { contain: size; }
-@utility contain-layout { contain: layout; }
-@utility contain-style { contain: style; }
-@utility contain-paint { contain: paint; }
-@utility transform-gpu { transform: translateZ(0); }
+@utility contain-none {
+  contain: none;
+}
+@utility contain-strict {
+  contain: strict;
+}
+@utility contain-content {
+  contain: content;
+}
+@utility contain-size {
+  contain: size;
+}
+@utility contain-layout {
+  contain: layout;
+}
+@utility contain-style {
+  contain: style;
+}
+@utility contain-paint {
+  contain: paint;
+}
+@utility transform-gpu {
+  transform: translateZ(0);
+}
 
 /* ==============================================================
  * v2 design-system editorial shortcuts.

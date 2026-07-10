@@ -11,7 +11,9 @@
 import type { WalletJson } from '@repo/wallet';
 
 let resolve: (w: WalletJson) => void;
-let walletReady = new Promise<WalletJson>(r => { resolve = r; });
+let walletReady = new Promise<WalletJson>(r => {
+  resolve = r;
+});
 
 /** Set the cached wallet  - unblocks all waiting RPC context getters. */
 export const setCachedWallet = (wallet: WalletJson) => {
@@ -20,7 +22,9 @@ export const setCachedWallet = (wallet: WalletJson) => {
 
 /** Reset the cache (wallet switch / reinit). New RPC calls block until setCachedWallet. */
 export const resetWalletCache = () => {
-  walletReady = new Promise<WalletJson>(r => { resolve = r; });
+  walletReady = new Promise<WalletJson>(r => {
+    resolve = r;
+  });
 };
 
 /** Await the decrypted wallet. Used by context getters. */

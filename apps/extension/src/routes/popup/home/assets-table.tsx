@@ -31,7 +31,7 @@ const UNBONDING_DELAY_BLOCKS = 120_960;
 const EquivalentValues = memo(({ valueView }: { valueView?: ValueView }) => {
   const equivalentValuesAsValueViews = useMemo(
     () => (getEquivalentValues.optional(valueView) ?? []).map(asValueView),
-    [valueView]
+    [valueView],
   );
 
   return (
@@ -49,31 +49,33 @@ const EquivalentValues = memo(({ valueView }: { valueView?: ValueView }) => {
 EquivalentValues.displayName = 'EquivalentValues';
 
 /** memoized row component */
-const AssetRow = memo(({
-  balance,
-  currentBlockHeight,
-  validatorName,
-  onClaim,
-}: {
-  balance: BalancesResponse;
-  currentBlockHeight?: number;
-  validatorName?: string;
-  onClaim?: () => void;
-}) => (
-  <TableRow className='group'>
-    <TableCell>
-      <ValueViewComponent
-        view={balance.balanceView}
-        currentBlockHeight={currentBlockHeight}
-        validatorName={validatorName}
-        onClaim={onClaim}
-      />
-    </TableCell>
-    <TableCell>
-      <EquivalentValues valueView={balance.balanceView} />
-    </TableCell>
-  </TableRow>
-));
+const AssetRow = memo(
+  ({
+    balance,
+    currentBlockHeight,
+    validatorName,
+    onClaim,
+  }: {
+    balance: BalancesResponse;
+    currentBlockHeight?: number;
+    validatorName?: string;
+    onClaim?: () => void;
+  }) => (
+    <TableRow className='group'>
+      <TableCell>
+        <ValueViewComponent
+          view={balance.balanceView}
+          currentBlockHeight={currentBlockHeight}
+          validatorName={validatorName}
+          onClaim={onClaim}
+        />
+      </TableCell>
+      <TableCell>
+        <EquivalentValues valueView={balance.balanceView} />
+      </TableCell>
+    </TableRow>
+  ),
+);
 AssetRow.displayName = 'AssetRow';
 
 /** filter out non-displayable assets */
@@ -111,7 +113,14 @@ const getUnbondingInfo = (balance: BalancesResponse) => {
   return { idKey: captured.idKey, startAt: parseInt(captured.startAt, 10) };
 };
 
-type ClaimStatus = 'idle' | 'confirm' | 'planning' | 'signing' | 'broadcasting' | 'success' | 'error';
+type ClaimStatus =
+  | 'idle'
+  | 'confirm'
+  | 'planning'
+  | 'signing'
+  | 'broadcasting'
+  | 'success'
+  | 'error';
 
 export const AssetsTable = ({ account }: AssetsTableProps) => {
   const { latestBlockHeight } = useSyncProgress();
@@ -144,7 +153,11 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
     },
   });
 
-  const { data: rawBalances, isLoading, error } = useQuery({
+  const {
+    data: rawBalances,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ['balances', account],
     staleTime: 5_000,
     queryFn: async () => {
@@ -179,7 +192,9 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
       void chrome.storage.local.remove('pendingClaim');
       const matching = balances.find(b => {
         const info = getUnbondingInfo(b);
-        return info && info.idKey === pendingClaim.validatorId && info.startAt === pendingClaim.startAt;
+        return (
+          info && info.idKey === pendingClaim.validatorId && info.startAt === pendingClaim.startAt
+        );
       });
       if (matching) {
         setClaimBalance(matching);
@@ -196,7 +211,9 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
       // store claim info, open side panel, and close the popup
       const info = getUnbondingInfo(balance);
       if (!info) return;
-      void chrome.storage.local.set({ pendingClaim: { validatorId: info.idKey, startAt: info.startAt } });
+      void chrome.storage.local.set({
+        pendingClaim: { validatorId: info.idKey, startAt: info.startAt },
+      });
       void openInSidePanel(PopupPath.INDEX).then(() => window.close());
     }
   }, []);
@@ -247,12 +264,14 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
       });
 
       const planRequest = new TransactionPlannerRequest({
-        undelegationClaims: [{
-          validatorIdentity: identityKey,
-          unbondingStartHeight: BigInt(info.startAt),
-          unbondingAmount: amount,
-          penalty: penaltyRes.penalty,
-        }],
+        undelegationClaims: [
+          {
+            validatorIdentity: identityKey,
+            unbondingStartHeight: BigInt(info.startAt),
+            unbondingAmount: amount,
+            penalty: penaltyRes.penalty,
+          },
+        ],
         source: { account },
       });
 
@@ -272,9 +291,7 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
 
   if (isLoading) {
     return (
-      <div className='flex items-center justify-center py-12 text-sm text-fg-muted'>
-        loading...
-      </div>
+      <div className='flex items-center justify-center py-12 text-sm text-fg-muted'>loading...</div>
     );
   }
 
@@ -282,16 +299,16 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
     return (
       <div className='flex flex-col items-center justify-center py-12 text-center'>
         <span className='text-sm text-fg-muted'>No assets yet</span>
-        <span className='text-xs text-fg-muted/70'>
-          Receive funds to get started
-        </span>
+        <span className='text-xs text-fg-muted/70'>Receive funds to get started</span>
       </div>
     );
   }
 
   // extract claim modal info
   const claimInfo = claimBalance ? getUnbondingInfo(claimBalance) : undefined;
-  const claimDisplayAmount = claimBalance?.balanceView ? fromValueView(claimBalance.balanceView).toFixed(6) : '0';
+  const claimDisplayAmount = claimBalance?.balanceView
+    ? fromValueView(claimBalance.balanceView).toFixed(6)
+    : '0';
   const claimValidatorName = claimInfo?.idKey ? validatorNames?.get(claimInfo.idKey) : undefined;
 
   return (
@@ -310,8 +327,10 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
               const validatorName = info?.idKey ? validatorNames?.get(info.idKey) : undefined;
 
               // determine if this unbonding token is ready to claim
-              const isReady = info && latestBlockHeight !== undefined
-                && latestBlockHeight >= info.startAt + UNBONDING_DELAY_BLOCKS;
+              const isReady =
+                info &&
+                latestBlockHeight !== undefined &&
+                latestBlockHeight >= info.startAt + UNBONDING_DELAY_BLOCKS;
 
               return (
                 <AssetRow
@@ -333,8 +352,13 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
           <div className='mx-4 w-full max-w-sm rounded-lg border border-border-soft bg-canvas p-5 shadow-xl'>
             <div className='flex items-center justify-between mb-4'>
               <h2 className='text-lg font-medium'>Claim Unbonding Tokens</h2>
-              {(claimStatus === 'confirm' || claimStatus === 'success' || claimStatus === 'error') && (
-                <button onClick={closeClaim} className='text-fg-muted hover:text-fg-high transition-colors'>
+              {(claimStatus === 'confirm' ||
+                claimStatus === 'success' ||
+                claimStatus === 'error') && (
+                <button
+                  onClick={closeClaim}
+                  className='text-fg-muted hover:text-fg-high transition-colors'
+                >
                   <span className='i-lucide-x h-4 w-4' />
                 </button>
               )}
@@ -350,7 +374,9 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
                 <div className='text-sm'>
                   <div className='flex justify-between py-1'>
                     <span className='text-fg-muted'>Validator</span>
-                    <span className='text-right font-medium'>{claimValidatorName ?? 'Unknown'}</span>
+                    <span className='text-right font-medium'>
+                      {claimValidatorName ?? 'Unknown'}
+                    </span>
                   </div>
                   <div className='flex justify-between py-1'>
                     <span className='text-fg-muted'>Unbonding start</span>
@@ -379,7 +405,9 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
               </div>
             )}
 
-            {(claimStatus === 'planning' || claimStatus === 'signing' || claimStatus === 'broadcasting') && (
+            {(claimStatus === 'planning' ||
+              claimStatus === 'signing' ||
+              claimStatus === 'broadcasting') && (
               <div className='flex flex-col items-center gap-3 py-12'>
                 <div className='h-6 w-6 animate-spin rounded-full border-2 border-zigner-gold border-t-transparent' />
                 <p className='text-sm text-fg-muted'>
@@ -394,9 +422,7 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
               <div className='flex flex-col gap-3'>
                 <p className='text-sm text-green-400'>Claim successful!</p>
                 {claimTxHash && (
-                  <p className='text-xs text-fg-muted font-mono break-all'>
-                    tx: {claimTxHash}
-                  </p>
+                  <p className='text-xs text-fg-muted font-mono break-all'>tx: {claimTxHash}</p>
                 )}
                 <button
                   onClick={closeClaim}
@@ -418,7 +444,10 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
                     Close
                   </button>
                   <button
-                    onClick={() => { setClaimStatus('confirm'); setClaimError(undefined); }}
+                    onClick={() => {
+                      setClaimStatus('confirm');
+                      setClaimError(undefined);
+                    }}
                     className='flex-1 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors'
                   >
                     Retry

@@ -19,11 +19,13 @@ function resultToHex(text: string): string {
 
   const hasBinary = Array.from(text).some(c => {
     const code = c.charCodeAt(0);
-    return code < 0x20 || code > 0x7E;
+    return code < 0x20 || code > 0x7e;
   });
 
   if (hasBinary) {
-    return Array.from(text).map(c => c.charCodeAt(0).toString(16).padStart(2, '0')).join('');
+    return Array.from(text)
+      .map(c => c.charCodeAt(0).toString(16).padStart(2, '0'))
+      .join('');
   }
   return text;
 }
@@ -83,9 +85,8 @@ export const QrScanner = ({
       initialStream.getTracks().forEach(t => t.stop()); // release, we just needed the permission
 
       const devices = await BrowserQRCodeReader.listVideoInputDevices();
-      const camera = devices.find((d: MediaDeviceInfo) =>
-        /back|rear|environment/i.test(d.label),
-      ) || devices[0];
+      const camera =
+        devices.find((d: MediaDeviceInfo) => /back|rear|environment/i.test(d.label)) || devices[0];
 
       if (!camera) throw new Error('No camera found');
 
@@ -105,7 +106,7 @@ export const QrScanner = ({
       const controls = await reader.decodeFromVideoDevice(
         undefined, // use the stream already attached to the video element
         videoRef.current,
-        (result) => {
+        result => {
           if (result && !scannedRef.current) {
             scannedRef.current = true;
             stopScanning();
@@ -187,10 +188,18 @@ export const QrScanner = ({
       {isScanning && (
         <div className='absolute inset-0 pointer-events-none flex items-center justify-center'>
           <div className={`relative ${inline ? 'w-44 h-44' : 'w-64 h-64'}`}>
-            <div className={`absolute top-0 left-0 w-6 h-6 border-t-[3px] border-l-[3px] ${cornerColor} rounded-tl-lg`} />
-            <div className={`absolute top-0 right-0 w-6 h-6 border-t-[3px] border-r-[3px] ${cornerColor} rounded-tr-lg`} />
-            <div className={`absolute bottom-0 left-0 w-6 h-6 border-b-[3px] border-l-[3px] ${cornerColor} rounded-bl-lg`} />
-            <div className={`absolute bottom-0 right-0 w-6 h-6 border-b-[3px] border-r-[3px] ${cornerColor} rounded-br-lg`} />
+            <div
+              className={`absolute top-0 left-0 w-6 h-6 border-t-[3px] border-l-[3px] ${cornerColor} rounded-tl-lg`}
+            />
+            <div
+              className={`absolute top-0 right-0 w-6 h-6 border-t-[3px] border-r-[3px] ${cornerColor} rounded-tr-lg`}
+            />
+            <div
+              className={`absolute bottom-0 left-0 w-6 h-6 border-b-[3px] border-l-[3px] ${cornerColor} rounded-bl-lg`}
+            />
+            <div
+              className={`absolute bottom-0 right-0 w-6 h-6 border-b-[3px] border-r-[3px] ${cornerColor} rounded-br-lg`}
+            />
             <div className={`absolute inset-x-0 top-0 h-0.5 ${scanLineColor} animate-scan`} />
           </div>
         </div>
@@ -215,16 +224,36 @@ export const QrScanner = ({
               <>
                 <p className='text-xs text-red-400'>camera access is required to scan QR codes</p>
                 <div className='flex gap-2'>
-                  <Button variant='secondary' size='sm' onClick={handleClose}>cancel</Button>
-                  <Button size='sm' onClick={() => { setError(null); void startScanning(); }}>grant access</Button>
+                  <Button variant='secondary' size='sm' onClick={handleClose}>
+                    cancel
+                  </Button>
+                  <Button
+                    size='sm'
+                    onClick={() => {
+                      setError(null);
+                      void startScanning();
+                    }}
+                  >
+                    grant access
+                  </Button>
                 </div>
               </>
             ) : (
               <>
                 <p className='text-xs text-red-400'>{error}</p>
                 <div className='flex gap-2'>
-                  <Button variant='secondary' size='sm' onClick={handleClose}>cancel</Button>
-                  <Button size='sm' onClick={() => { setError(null); void startScanning(); }}>retry</Button>
+                  <Button variant='secondary' size='sm' onClick={handleClose}>
+                    cancel
+                  </Button>
+                  <Button
+                    size='sm'
+                    onClick={() => {
+                      setError(null);
+                      void startScanning();
+                    }}
+                  >
+                    retry
+                  </Button>
                 </div>
               </>
             )}
@@ -250,9 +279,7 @@ export const QrScanner = ({
         <div className='relative aspect-square w-full overflow-hidden rounded-lg border border-yellow-500/40 bg-black'>
           {cameraView}
         </div>
-        {description && (
-          <p className='text-[10px] text-fg-muted text-center'>{description}</p>
-        )}
+        {description && <p className='text-[10px] text-fg-muted text-center'>{description}</p>}
         <style>{`
           @keyframes scan {
             0%, 100% { transform: translateY(0); }
@@ -280,9 +307,7 @@ export const QrScanner = ({
         </button>
       </div>
 
-      <div className='flex-1 relative min-h-0 overflow-hidden'>
-        {cameraView}
-      </div>
+      <div className='flex-1 relative min-h-0 overflow-hidden'>{cameraView}</div>
 
       {isScanning && (
         <div className='flex-none p-4 bg-black text-center'>

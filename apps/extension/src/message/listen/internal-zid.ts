@@ -22,9 +22,7 @@
  * extension package and run under the same CSP.
  */
 
-const ALLOWED_INTERNAL_PAGES = (): Set<string> => new Set([
-  chrome.runtime.getURL('zitadel.html'),
-]);
+const ALLOWED_INTERNAL_PAGES = (): Set<string> => new Set([chrome.runtime.getURL('zitadel.html')]);
 
 interface ZidKeypairRequest {
   type: 'zafu_zid_keypair';
@@ -38,7 +36,9 @@ const isZidKeypairRequest = (req: unknown): req is ZidKeypairRequest =>
   typeof (req as Record<string, unknown>)['origin'] === 'string';
 
 const bytesToHex = (b: Uint8Array): string =>
-  Array.from(b).map(x => x.toString(16).padStart(2, '0')).join('');
+  Array.from(b)
+    .map(x => x.toString(16).padStart(2, '0'))
+    .join('');
 
 export const internalZidListener = (
   req: unknown,
@@ -81,7 +81,9 @@ export const internalZidListener = (
       const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
       const { deriveZidKeypairForSite, DEFAULT_IDENTITY } = await import('../../state/identity');
       const { privateKey, publicKey } = deriveZidKeypairForSite(
-        mnemonic, DEFAULT_IDENTITY, req.origin,
+        mnemonic,
+        DEFAULT_IDENTITY,
+        req.origin,
       );
 
       const pubHex = bytesToHex(publicKey);

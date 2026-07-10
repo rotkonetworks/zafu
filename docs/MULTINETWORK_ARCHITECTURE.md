@@ -27,18 +27,19 @@ Zafu (Watch-Only)          Zigner (Cold Signer)
 
 ## Supported Networks
 
-| Network | Chain ID | Zigner Module | Status |
-|---------|----------|---------------|--------|
-| Penumbra | 0x03 | penumbra | ✅ Working |
-| Zcash | 0x04 | zcash | ✅ Ready |
-| Polkadot | 0x00 | substrate | 🔧 Planned |
-| Cosmos | TBD | cosmos | 🔧 Planned |
-| Bitcoin | TBD | bitcoin | 🔧 Planned |
-| Nostr | TBD | nostr | 🔧 Planned |
+| Network  | Chain ID | Zigner Module | Status     |
+| -------- | -------- | ------------- | ---------- |
+| Penumbra | 0x03     | penumbra      | ✅ Working |
+| Zcash    | 0x04     | zcash         | ✅ Ready   |
+| Polkadot | 0x00     | substrate     | 🔧 Planned |
+| Cosmos   | TBD      | cosmos        | 🔧 Planned |
+| Bitcoin  | TBD      | bitcoin       | 🔧 Planned |
+| Nostr    | TBD      | nostr         | 🔧 Planned |
 
 ## QR Protocol
 
 All QR codes use the format:
+
 ```
 [0x53][chain_id][tx_type][payload...]
 
@@ -121,6 +122,7 @@ interface WalletState {
 ## UI Components
 
 ### Network Selector
+
 ```
 ┌─────────────────────────────────┐
 │ [🔴 Penumbra ▾]                 │
@@ -135,6 +137,7 @@ interface WalletState {
 ```
 
 ### Send Transaction Flow
+
 ```
 1. Select recipient
 2. Enter amount
@@ -145,6 +148,7 @@ interface WalletState {
 ```
 
 ### Home Screen Layout
+
 ```
 ┌─────────────────────────────────┐
 │ [🔴 Network ▾] [👤 Account ▾]   │
@@ -168,23 +172,27 @@ interface WalletState {
 ## Implementation Phases
 
 ### Phase 1: Multi-Network Foundation
+
 - [ ] Create network abstraction layer
 - [ ] Add network selector to UI
 - [ ] Refactor state for multi-network
 
 ### Phase 2: Zcash Integration
+
 - [ ] Complete Zcash wallet implementation
 - [ ] Add Zcash send UI
 - [ ] Integrate with zafu-wasm for tx building
 - [ ] Test full Zigner signing flow
 
 ### Phase 3: Polkadot Integration
+
 - [ ] Add Polkadot wallet implementation
 - [ ] Add Polkadot send UI
 - [ ] Use @polkadot/api for tx building
 - [ ] Test Zigner signing flow
 
 ### Phase 4: Cosmos Integration
+
 - [ ] Add Cosmos wallet implementation
 - [ ] Add Cosmos send UI
 - [ ] Use cosmjs for tx building
@@ -193,24 +201,28 @@ interface WalletState {
 ## Network-Specific Notes
 
 ### Zcash
+
 - Uses ZIP-32 for key derivation
 - Orchard shielded pool (RedPallas signatures)
 - FVK = 96 bytes
 - Unified addresses
 
 ### Polkadot
+
 - Uses SLIP-10/BIP32-Ed25519
 - Sr25519 or Ed25519 signatures
 - Metadata portals for tx decoding
 - Multi-chain (relay + parachains)
 
 ### Cosmos
+
 - Uses SLIP-10/BIP44
 - Secp256k1 signatures
 - IBC for cross-chain
 - Multi-chain (zones)
 
 ### Penumbra
+
 - Uses custom ZK key derivation
 - decaf377 signatures
 - Shielded by default

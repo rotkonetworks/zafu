@@ -97,17 +97,25 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
 
 /** derive display info - computed once, no runtime overhead */
 export const getNetwork = (network: NetworkType): NetworkConfig =>
-  NETWORKS[network] ?? { name: network, color: 'bg-gray-500', focusColor: 'focus:border-primary/50', transparent: true, launched: false, features: { stake: false, swap: false, vote: false, inbox: false } };
+  NETWORKS[network] ?? {
+    name: network,
+    color: 'bg-gray-500',
+    focusColor: 'focus:border-primary/50',
+    transparent: true,
+    launched: false,
+    features: { stake: false, swap: false, vote: false, inbox: false },
+  };
 
 /** check feature support */
-export const hasFeature = (network: NetworkType, feature: keyof NetworkConfig['features']): boolean =>
-  getNetwork(network).features[feature];
+export const hasFeature = (
+  network: NetworkType,
+  feature: keyof NetworkConfig['features'],
+): boolean => getNetwork(network).features[feature];
 
 /** check if network is available for selection */
-export const isLaunched = (network: NetworkType): boolean =>
-  getNetwork(network).launched;
+export const isLaunched = (network: NetworkType): boolean => getNetwork(network).launched;
 
 /** only launched networks — used for network selector UI */
 export const LAUNCHED_NETWORKS = (Object.keys(NETWORKS) as NetworkType[]).filter(
-  id => NETWORKS[id].launched
+  id => NETWORKS[id].launched,
 );

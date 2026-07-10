@@ -62,27 +62,34 @@ export function subscribePeers(
 ): PeerBuckets {
   const peerCommits: string[][] = Array.from({ length: numActions }, () => []);
   const peerShares: string[][] = Array.from({ length: numActions }, () => []);
-  void s.relay.joinRoom(s.roomCode, s.participantId, (event) => {
-    if (event.type !== 'message') return;
-    const text = new TextDecoder().decode(event.message.payload);
-    const sg = text.match(/^SIGN:([0-9a-fA-F]+):([^:]+):([^:]+):(\d+):(\d+)(?::([0-9a-fA-F]+))?$/);
-    if (sg) {
-      onSign?.(sg[1]!, sg[2]!.split(','), sg[3]!, sg[4]!, sg[5]!, sg[6]);
-      return;
-    }
-    const cm = text.match(/^C:([\s\S]*)$/);
-    if (cm) {
-      const parts = cm[1]!.split('|');
-      for (let i = 0; i < parts.length && i < numActions; i++) peerCommits[i]!.push(parts[i]!);
-      onCommitsCount?.(peerCommits[0]!.length);
-      return;
-    }
-    const sm = text.match(/^S:(\d+):(.+)$/);
-    if (sm) {
-      const idx = Number(sm[1]);
-      if (idx >= 0 && idx < numActions) peerShares[idx]!.push(sm[2]!);
-    }
-  }, s.abort.signal);
+  void s.relay.joinRoom(
+    s.roomCode,
+    s.participantId,
+    event => {
+      if (event.type !== 'message') return;
+      const text = new TextDecoder().decode(event.message.payload);
+      const sg = text.match(
+        /^SIGN:([0-9a-fA-F]+):([^:]+):([^:]+):(\d+):(\d+)(?::([0-9a-fA-F]+))?$/,
+      );
+      if (sg) {
+        onSign?.(sg[1]!, sg[2]!.split(','), sg[3]!, sg[4]!, sg[5]!, sg[6]);
+        return;
+      }
+      const cm = text.match(/^C:([\s\S]*)$/);
+      if (cm) {
+        const parts = cm[1]!.split('|');
+        for (let i = 0; i < parts.length && i < numActions; i++) peerCommits[i]!.push(parts[i]!);
+        onCommitsCount?.(peerCommits[0]!.length);
+        return;
+      }
+      const sm = text.match(/^S:(\d+):(.+)$/);
+      if (sm) {
+        const idx = Number(sm[1]);
+        if (idx >= 0 && idx < numActions) peerShares[idx]!.push(sm[2]!);
+      }
+    },
+    s.abort.signal,
+  );
   return { peerCommits, peerShares };
 }
 

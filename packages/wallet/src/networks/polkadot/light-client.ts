@@ -78,14 +78,14 @@ export type SystemParachain =
 
 /** ecosystem parachains (chain specs fetched at runtime) */
 export type EcosystemParachain =
-  | 'hydration'      // hydradx - defi/liquidity
-  | 'moonbeam'       // evm compatible
-  | 'moonriver'      // kusama evm
-  | 'bifrost'        // liquid staking
-  | 'acala'          // defi hub
-  | 'astar'          // smart contracts
-  | 'phala'          // confidential computing
-  | 'centrifuge';    // real world assets
+  | 'hydration' // hydradx - defi/liquidity
+  | 'moonbeam' // evm compatible
+  | 'moonriver' // kusama evm
+  | 'bifrost' // liquid staking
+  | 'acala' // defi hub
+  | 'astar' // smart contracts
+  | 'phala' // confidential computing
+  | 'centrifuge'; // real world assets
 
 /** all supported chains (internal use) */
 export type SupportedChain = RelayChain | SystemParachain | EcosystemParachain;
@@ -112,21 +112,81 @@ export const CHAIN_INFO: Record<SupportedChain, ChainInfo> = {
   paseo: { name: 'Relay Chain', decimals: 10, symbol: 'PAS', ss58Prefix: 0 },
 
   // polkadot system parachains
-  polkadot_asset_hub: { name: 'Asset Hub', relay: 'polkadot', decimals: 10, symbol: 'DOT', ss58Prefix: 0 },
-  polkadot_bridge_hub: { name: 'Bridge Hub', relay: 'polkadot', decimals: 10, symbol: 'DOT', ss58Prefix: 0 },
-  polkadot_collectives: { name: 'Collectives', relay: 'polkadot', decimals: 10, symbol: 'DOT', ss58Prefix: 0 },
-  polkadot_coretime: { name: 'Coretime', relay: 'polkadot', decimals: 10, symbol: 'DOT', ss58Prefix: 0 },
-  polkadot_people: { name: 'People', relay: 'polkadot', decimals: 10, symbol: 'DOT', ss58Prefix: 0 },
+  polkadot_asset_hub: {
+    name: 'Asset Hub',
+    relay: 'polkadot',
+    decimals: 10,
+    symbol: 'DOT',
+    ss58Prefix: 0,
+  },
+  polkadot_bridge_hub: {
+    name: 'Bridge Hub',
+    relay: 'polkadot',
+    decimals: 10,
+    symbol: 'DOT',
+    ss58Prefix: 0,
+  },
+  polkadot_collectives: {
+    name: 'Collectives',
+    relay: 'polkadot',
+    decimals: 10,
+    symbol: 'DOT',
+    ss58Prefix: 0,
+  },
+  polkadot_coretime: {
+    name: 'Coretime',
+    relay: 'polkadot',
+    decimals: 10,
+    symbol: 'DOT',
+    ss58Prefix: 0,
+  },
+  polkadot_people: {
+    name: 'People',
+    relay: 'polkadot',
+    decimals: 10,
+    symbol: 'DOT',
+    ss58Prefix: 0,
+  },
 
   // kusama system parachains (ksmcc3 = kusama)
-  ksmcc3_asset_hub: { name: 'Asset Hub', relay: 'kusama', decimals: 12, symbol: 'KSM', ss58Prefix: 2 },
-  ksmcc3_bridge_hub: { name: 'Bridge Hub', relay: 'kusama', decimals: 12, symbol: 'KSM', ss58Prefix: 2 },
-  ksmcc3_coretime: { name: 'Coretime', relay: 'kusama', decimals: 12, symbol: 'KSM', ss58Prefix: 2 },
-  ksmcc3_encointer: { name: 'Encointer', relay: 'kusama', decimals: 12, symbol: 'KSM', ss58Prefix: 2 },
+  ksmcc3_asset_hub: {
+    name: 'Asset Hub',
+    relay: 'kusama',
+    decimals: 12,
+    symbol: 'KSM',
+    ss58Prefix: 2,
+  },
+  ksmcc3_bridge_hub: {
+    name: 'Bridge Hub',
+    relay: 'kusama',
+    decimals: 12,
+    symbol: 'KSM',
+    ss58Prefix: 2,
+  },
+  ksmcc3_coretime: {
+    name: 'Coretime',
+    relay: 'kusama',
+    decimals: 12,
+    symbol: 'KSM',
+    ss58Prefix: 2,
+  },
+  ksmcc3_encointer: {
+    name: 'Encointer',
+    relay: 'kusama',
+    decimals: 12,
+    symbol: 'KSM',
+    ss58Prefix: 2,
+  },
   ksmcc3_people: { name: 'People', relay: 'kusama', decimals: 12, symbol: 'KSM', ss58Prefix: 2 },
 
   // paseo system parachains (testnet)
-  paseo_asset_hub: { name: 'Asset Hub', relay: 'paseo', decimals: 10, symbol: 'PAS', ss58Prefix: 0 },
+  paseo_asset_hub: {
+    name: 'Asset Hub',
+    relay: 'paseo',
+    decimals: 10,
+    symbol: 'PAS',
+    ss58Prefix: 0,
+  },
   paseo_coretime: { name: 'Coretime', relay: 'paseo', decimals: 10, symbol: 'PAS', ss58Prefix: 0 },
   paseo_people: { name: 'People', relay: 'paseo', decimals: 10, symbol: 'PAS', ss58Prefix: 0 },
 
@@ -137,7 +197,13 @@ export const CHAIN_INFO: Record<SupportedChain, ChainInfo> = {
   acala: { name: 'Acala', relay: 'polkadot', decimals: 12, symbol: 'ACA', ss58Prefix: 10 },
   astar: { name: 'Astar', relay: 'polkadot', decimals: 18, symbol: 'ASTR', ss58Prefix: 5 },
   phala: { name: 'Phala', relay: 'polkadot', decimals: 12, symbol: 'PHA', ss58Prefix: 30 },
-  centrifuge: { name: 'Centrifuge', relay: 'polkadot', decimals: 18, symbol: 'CFG', ss58Prefix: 36 },
+  centrifuge: {
+    name: 'Centrifuge',
+    relay: 'polkadot',
+    decimals: 18,
+    symbol: 'CFG',
+    ss58Prefix: 36,
+  },
 
   // kusama ecosystem parachains
   moonriver: { name: 'Moonriver', relay: 'kusama', decimals: 18, symbol: 'MOVR', ss58Prefix: 1285 },
@@ -285,20 +351,26 @@ const CHAINSPEC_SOURCES: Record<SupportedChain, ChainSpecSource> = {
   acala: { type: 'url', path: 'https://paritytech.github.io/chainspecs/polkadot/acala.json' },
   astar: { type: 'url', path: 'https://paritytech.github.io/chainspecs/polkadot/astar.json' },
   phala: { type: 'url', path: 'https://paritytech.github.io/chainspecs/polkadot/phala.json' },
-  centrifuge: { type: 'url', path: 'https://paritytech.github.io/chainspecs/polkadot/centrifuge.json' },
+  centrifuge: {
+    type: 'url',
+    path: 'https://paritytech.github.io/chainspecs/polkadot/centrifuge.json',
+  },
 };
 
 /** cache for fetched chain specs */
 const chainSpecCache: Map<string, string> = new Map();
 
 /** custom chainspecs registered by user (from storage) */
-const customChainSpecs: Map<string, {
-  chainspec: string;
-  relay: RelayChain | 'standalone';
-  name: string;
-  symbol?: string;
-  decimals?: number;
-}> = new Map();
+const customChainSpecs: Map<
+  string,
+  {
+    chainspec: string;
+    relay: RelayChain | 'standalone';
+    name: string;
+    symbol?: string;
+    decimals?: number;
+  }
+> = new Map();
 
 /**
  * register a custom chainspec from user upload
@@ -312,7 +384,7 @@ export function registerCustomChainspec(
   relay: RelayChain | 'standalone',
   name: string,
   symbol?: string,
-  decimals?: number
+  decimals?: number,
 ): void {
   customChainSpecs.set(id, { chainspec, relay, name, symbol, decimals });
   // also cache the raw chainspec
@@ -409,12 +481,7 @@ async function loadChainSpec(chain: string): Promise<string> {
 }
 
 /** light client connection state */
-export type ConnectionState =
-  | 'disconnected'
-  | 'connecting'
-  | 'syncing'
-  | 'ready'
-  | 'error';
+export type ConnectionState = 'disconnected' | 'connecting' | 'syncing' | 'ready' | 'error';
 
 export interface LightClientState {
   chain: SupportedChain;
@@ -472,7 +539,7 @@ export class PolkadotLightClient {
 
   private updateState(partial: Partial<LightClientState>) {
     this._state = { ...this._state, ...partial };
-    this.stateListeners.forEach((l) => l(this._state));
+    this.stateListeners.forEach(l => l(this._state));
   }
 
   /** connect to chain via light client */
@@ -510,7 +577,7 @@ export class PolkadotLightClient {
       // subscribe to new blocks for sync progress
       // light client syncs headers, not full blocks
       const subscription = this.chainClient.bestBlocks$.subscribe({
-        next: (blocks) => {
+        next: blocks => {
           if (blocks.length > 0) {
             const best = blocks[0]!;
             this.updateState({
@@ -561,9 +628,7 @@ export class PolkadotLightClient {
     const api = this.getApi();
 
     // access via bracket notation for unsafe API
-    const accountInfo = await (api.query['System']!['Account'] as any).getValue(
-      keys.publicKey
-    );
+    const accountInfo = await (api.query['System']!['Account'] as any).getValue(keys.publicKey);
 
     return accountInfo.data.free;
   }
@@ -575,19 +640,13 @@ export class PolkadotLightClient {
     }
 
     const api = this.getApi();
-    const accountInfo = await (api.query['System']!['Account'] as any).getValue(
-      keys.publicKey
-    );
+    const accountInfo = await (api.query['System']!['Account'] as any).getValue(keys.publicKey);
 
     return accountInfo.nonce;
   }
 
   /** build unsigned transaction call data for zigner signing */
-  async buildTransfer(
-    _from: PolkadotNetworkKeys,
-    to: string,
-    amount: bigint
-  ): Promise<Uint8Array> {
+  async buildTransfer(_from: PolkadotNetworkKeys, to: string, amount: bigint): Promise<Uint8Array> {
     if (!this.chainClient || this._state.state !== 'ready') {
       throw new Error('light client not ready');
     }
@@ -722,7 +781,7 @@ export async function connectCustomChain(
   relay?: RelayChain | 'standalone',
   name?: string,
   symbol?: string,
-  decimals?: number
+  decimals?: number,
 ): Promise<PolkadotLightClient> {
   // register if provided
   if (chainspec && relay && name) {
@@ -786,7 +845,7 @@ export async function getUnifiedBalance(
 
   // fetch balances in parallel with error tolerance
   const fetchResults = await Promise.allSettled(
-    parachains.map(async (chain) => {
+    parachains.map(async chain => {
       const info = CHAIN_INFO[chain];
       const client = getLightClient(chain);
 
@@ -815,7 +874,7 @@ export async function getUnifiedBalance(
           balance: 0n,
         };
       }
-    })
+    }),
   );
 
   // collect successful results

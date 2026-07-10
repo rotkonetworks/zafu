@@ -43,7 +43,7 @@ export interface CosmosWallet {
 export async function deriveCosmosWallet(
   mnemonic: string,
   accountIndex = 0,
-  prefix = 'osmo'
+  prefix = 'osmo',
 ): Promise<CosmosWallet> {
   const signer = await Secp256k1HdWallet.fromMnemonic(mnemonic, {
     prefix,
@@ -87,7 +87,7 @@ const signingClients: Map<string, SigningStargateClient> = new Map();
 /** get or create signing client for chain */
 export async function getSigningClient(
   chainId: CosmosChainId,
-  signer: Secp256k1HdWallet
+  signer: Secp256k1HdWallet,
 ): Promise<SigningStargateClient> {
   const cacheKey = `${chainId}-${(await signer.getAccounts())[0]?.address}`;
   let client = signingClients.get(cacheKey);
@@ -114,7 +114,7 @@ export function disconnectSigningClients(): void {
 export async function createSigningClient(
   chainId: CosmosChainId,
   mnemonic: string,
-  accountIndex = 0
+  accountIndex = 0,
 ): Promise<{ client: SigningStargateClient; address: string }> {
   const config = COSMOS_CHAINS[chainId];
 
@@ -142,7 +142,7 @@ export async function signAndBroadcast(
   messages: EncodeObject[],
   fee: StdFee | 'auto',
   memo = '',
-  accountIndex = 0
+  accountIndex = 0,
 ): Promise<DeliverTxResponse> {
   const { client, address } = await createSigningClient(chainId, mnemonic, accountIndex);
 
@@ -227,7 +227,7 @@ export function estimateGas(
   _chainId: CosmosChainId,
   _address: string,
   messages: EncodeObject[],
-  _memo = ''
+  _memo = '',
 ): number {
   // simple estimation based on message type
   // real estimation would need simulation

@@ -33,40 +33,57 @@ export const SettingsClearCache = () => {
   const [clearingKey, setClearingKey] = useState<string | null>(null);
 
   const [clearingState, setClearingState] = useState<ClearingState>({
-    inProgress: false, step: 'stopping', completed: 0, total: 0,
+    inProgress: false,
+    step: 'stopping',
+    completed: 0,
+    total: 0,
   });
 
   // listen for progress from service worker
   useEffect(() => {
     const handler = (message: unknown) => {
       if (
-        typeof message === 'object' && message !== null &&
-        'type' in message && (message as { type: string }).type === 'ClearCacheProgress'
+        typeof message === 'object' &&
+        message !== null &&
+        'type' in message &&
+        (message as { type: string }).type === 'ClearCacheProgress'
       ) {
         const p = message as ClearCacheProgress;
-        setClearingState({ inProgress: true, step: p.step, completed: p.completed, total: p.total });
+        setClearingState({
+          inProgress: true,
+          step: p.step,
+          completed: p.completed,
+          total: p.total,
+        });
       }
     };
     chrome.runtime.onMessage.addListener(handler);
     return () => chrome.runtime.onMessage.removeListener(handler);
   }, []);
 
-  const progressPercent = clearingState.total > 0
-    ? Math.round((clearingState.completed / clearingState.total) * 100)
-    : 0;
+  const progressPercent =
+    clearingState.total > 0 ? Math.round((clearingState.completed / clearingState.total) * 100) : 0;
 
   const handleClearZcash = async (_vault: KeyInfo) => {
     setClearingKey(`${_vault.id}:zcash`);
     try {
       // terminate worker so in-memory commitment tree is dropped
-      try { terminateNetworkWorker('zcash'); } catch {}
+      try {
+        terminateNetworkWorker('zcash');
+      } catch {}
       // delete IndexedDB databases (zcash sync data + memo cache)
-      try { indexedDB.deleteDatabase('zafu-zcash'); } catch {}
-      try { indexedDB.deleteDatabase('zafu-memo-cache'); } catch {}
+      try {
+        indexedDB.deleteDatabase('zafu-zcash');
+      } catch {}
+      try {
+        indexedDB.deleteDatabase('zafu-memo-cache');
+      } catch {}
       // small delay for IDB deletion to settle
       await new Promise(r => setTimeout(r, 500));
       // respawn worker fresh — sync will restart from birthday
-      try { await spawnNetworkWorker('zcash'); } catch {}
+      try {
+        await spawnNetworkWorker('zcash');
+      } catch {}
     } finally {
       setClearingKey(null);
     }
@@ -80,13 +97,11 @@ export const SettingsClearCache = () => {
     });
   };
 
-  const grouped = TYPE_ORDER
-    .map(type => ({
-      type,
-      label: TYPE_LABELS[type] ?? type,
-      vaults: keyInfos.filter(k => k.type === type),
-    }))
-    .filter(g => g.vaults.length > 0);
+  const grouped = TYPE_ORDER.map(type => ({
+    type,
+    label: TYPE_LABELS[type] ?? type,
+    vaults: keyInfos.filter(k => k.type === type),
+  })).filter(g => g.vaults.length > 0);
 
   return (
     <SettingsScreen title='clear cache'>
@@ -103,9 +118,7 @@ export const SettingsClearCache = () => {
               <span>{getClearCacheStepLabel(clearingState.step)}</span>
               <span>{progressPercent}%</span>
             </div>
-            <p className='text-[10px] text-fg-muted'>
-              do not close the extension.
-            </p>
+            <p className='text-[10px] text-fg-muted'>do not close the extension.</p>
           </div>
         ) : (
           <>
@@ -121,11 +134,15 @@ export const SettingsClearCache = () => {
 
             {grouped.map(g => (
               <div key={g.type}>
-                <p className='mb-2 text-xs font-medium text-fg-muted uppercase tracking-wider'>{g.label}</p>
+                <p className='mb-2 text-xs font-medium text-fg-muted uppercase tracking-wider'>
+                  {g.label}
+                </p>
                 <div className='flex flex-col divide-y divide-border/40 rounded-lg border border-border-soft bg-elev-1'>
                   {g.vaults.map(v => {
-                    const hasZcash = zcashWallets.some(w => w.vaultId === v.id) || v.type === 'mnemonic';
-                    const hasPenumbra = penumbraWallets.some(w => w.vaultId === v.id) || v.type === 'mnemonic';
+                    const hasZcash =
+                      zcashWallets.some(w => w.vaultId === v.id) || v.type === 'mnemonic';
+                    const hasPenumbra =
+                      penumbraWallets.some(w => w.vaultId === v.id) || v.type === 'mnemonic';
 
                     return (
                       <div key={v.id} className='px-3 py-2.5'>
@@ -146,7 +163,9 @@ export const SettingsClearCache = () => {
                               onClick={() => void handleClearPenumbra(v)}
                               className='rounded border border-red-500/25 bg-red-500/5 px-2 py-0.5 text-[10px] text-red-400 hover:bg-red-500/15 transition-colors disabled:opacity-50'
                             >
-                              {clearingKey === `${v.id}:penumbra` ? 'clearing...' : 'clear penumbra'}
+                              {clearingKey === `${v.id}:penumbra`
+                                ? 'clearing...'
+                                : 'clear penumbra'}
                             </button>
                           )}
                         </div>

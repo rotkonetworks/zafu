@@ -12,9 +12,7 @@
  * all use same key derivation (m/44'/118'/0'/0/0) with different bech32 prefix
  */
 
-export type CosmosChainId =
-  | 'noble'
-  | 'cosmoshub';
+export type CosmosChainId = 'noble' | 'cosmoshub';
 
 export interface CosmosChainConfig {
   id: CosmosChainId;
@@ -84,14 +82,10 @@ export function getAllCosmosChainIds(): CosmosChainId[] {
 
 /** validate bech32 address for any supported chain */
 export function isValidCosmosAddress(address: string): boolean {
-  return Object.values(COSMOS_CHAINS).some(
-    chain => address.startsWith(`${chain.bech32Prefix}1`)
-  );
+  return Object.values(COSMOS_CHAINS).some(chain => address.startsWith(`${chain.bech32Prefix}1`));
 }
 
 /** get chain from address prefix */
 export function getChainFromAddress(address: string): CosmosChainConfig | undefined {
-  return Object.values(COSMOS_CHAINS).find(
-    chain => address.startsWith(`${chain.bech32Prefix}1`)
-  );
+  return Object.values(COSMOS_CHAINS).find(chain => address.startsWith(`${chain.bech32Prefix}1`));
 }

@@ -121,15 +121,17 @@ export const createInboxSlice = (): SliceCreator<InboxSlice> => (set, get) => ({
 
       if (parsed.total === 1) {
         // standalone message
-        const body = parsed.type === MemoType.Text
-          ? decodeText(parsed.payload)
-          : parsed.type === MemoType.ContactCard
-            ? '' // body unused for contact cards, data lives in contactCard field
-            : bytesToHex(parsed.payload);
+        const body =
+          parsed.type === MemoType.Text
+            ? decodeText(parsed.payload)
+            : parsed.type === MemoType.ContactCard
+              ? '' // body unused for contact cards, data lives in contactCard field
+              : bytesToHex(parsed.payload);
 
-        const contactCard = parsed.type === MemoType.ContactCard
-          ? decodeContactCard(parsed.payload) ?? undefined
-          : undefined;
+        const contactCard =
+          parsed.type === MemoType.ContactCard
+            ? (decodeContactCard(parsed.payload) ?? undefined)
+            : undefined;
 
         newMessages.push({
           diversifierIndex: raw.diversifierIndex,
@@ -164,9 +166,7 @@ export const createInboxSlice = (): SliceCreator<InboxSlice> => (set, get) => ({
         const payload = reassemble(buffer.map(f => f.parsed));
         if (payload) {
           fragmentBuffer.delete(msgIdHex);
-          const body = parsed.type === MemoType.Text
-            ? decodeText(payload)
-            : bytesToHex(payload);
+          const body = parsed.type === MemoType.Text ? decodeText(payload) : bytesToHex(payload);
 
           newMessages.push({
             diversifierIndex: raw.diversifierIndex,

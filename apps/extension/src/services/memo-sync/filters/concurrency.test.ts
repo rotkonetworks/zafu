@@ -51,5 +51,7 @@ describe('withConcurrency', () => {
 });
 
 async function drain<T>(iter: AsyncIterable<T>) {
-  for await (const _ of iter) { /* */ }
+  for await (const _ of iter) {
+    /* */
+  }
 }

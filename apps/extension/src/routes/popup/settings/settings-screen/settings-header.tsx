@@ -1,13 +1,7 @@
 import { usePopupNav } from '../../../../utils/navigate';
 import { PopupPath } from '../../paths';
 
-export const SettingsHeader = ({
-  title,
-  backPath,
-}: {
-  title: string;
-  backPath?: PopupPath;
-}) => {
+export const SettingsHeader = ({ title, backPath }: { title: string; backPath?: PopupPath }) => {
   const navigate = usePopupNav();
   const target = backPath ?? PopupPath.SETTINGS;
 

@@ -17,7 +17,9 @@ interface EncryptedWrapper {
 }
 
 export const isEncryptedWrapper = (v: unknown): v is EncryptedWrapper =>
-  typeof v === 'object' && v !== null && 'encrypted' in v &&
+  typeof v === 'object' &&
+  v !== null &&
+  'encrypted' in v &&
   typeof (v as EncryptedWrapper).encrypted === 'object';
 
 async function getKey(session: ExtensionStorage<SessionStorageState>): Promise<Key | null> {
@@ -38,14 +40,20 @@ let hydrateResolve: (() => void) | null = null;
 /** mark that encrypted data has been hydrated (called by persist.ts after hydrateEncryptedData) */
 export function markHydrated(): void {
   hydratedKeys.add('*');
-  if (hydrateResolve) { hydrateResolve(); hydrateResolve = null; hydratePromise = null; }
+  if (hydrateResolve) {
+    hydrateResolve();
+    hydrateResolve = null;
+    hydratePromise = null;
+  }
 }
 
 /** wait until hydration is complete before allowing writes */
 function waitForHydration(): Promise<void> {
   if (hydratedKeys.has('*')) return Promise.resolve();
   if (!hydratePromise) {
-    hydratePromise = new Promise(r => { hydrateResolve = r; });
+    hydratePromise = new Promise(r => {
+      hydrateResolve = r;
+    });
   }
   return hydratePromise;
 }
@@ -132,8 +140,8 @@ export function createEncryptedLocal(
       }
       await local.set(key, value);
     },
-    remove: (key) => local.remove(key),
-    addListener: (listener) => local.addListener(listener),
-    removeListener: (listener) => local.removeListener(listener),
+    remove: key => local.remove(key),
+    addListener: listener => local.addListener(listener),
+    removeListener: listener => local.removeListener(listener),
   } as ExtensionStorage<LocalStorageState>;
 }

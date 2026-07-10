@@ -68,11 +68,7 @@ export const withReconnect = (opts: ReconnectOptions = {}): MempoolFilter => {
     };
 };
 
-async function sleepAbortable(
-  totalMs: number,
-  stepMs: number,
-  signal: AbortSignal,
-): Promise<void> {
+async function sleepAbortable(totalMs: number, stepMs: number, signal: AbortSignal): Promise<void> {
   let remaining = totalMs;
   while (remaining > 0 && !signal.aborted) {
     const slice = Math.min(stepMs, remaining);

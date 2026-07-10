@@ -2,11 +2,7 @@
 
 import { describe, expect, test } from 'vitest';
 import { nextDelay, withPoll } from './poll';
-import type {
-  MempoolFetchContext,
-  MempoolFetcher,
-  MempoolSnapshot,
-} from '../types';
+import type { MempoolFetchContext, MempoolFetcher, MempoolSnapshot } from '../types';
 
 const ctx = (signal: AbortSignal): MempoolFetchContext => ({ signal });
 
@@ -46,7 +42,9 @@ describe('withPoll', () => {
     const ctrl = new AbortController();
     ctrl.abort();
     const wrapped = withPoll({ intervalMs: 5 })(inner);
-    for await (const _ of wrapped('w', ctx(ctrl.signal))) { /* */ }
+    for await (const _ of wrapped('w', ctx(ctrl.signal))) {
+      /* */
+    }
     expect(calls).toBe(0);
   });
 
@@ -76,7 +74,9 @@ describe('withPoll', () => {
     const wrapped = withPoll({ intervalMs: 5 })(inner);
     const iter = wrapped('alice', ctx(ctrl.signal));
     let n = 0;
-    for await (const _ of iter) { if (++n >= 2) ctrl.abort(); }
+    for await (const _ of iter) {
+      if (++n >= 2) ctrl.abort();
+    }
     expect(seen).toEqual(['alice', 'alice']);
   });
 
@@ -122,10 +122,12 @@ describe('withPoll', () => {
 
   test('snapshot from inner reaches caller verbatim', async () => {
     const ctrl = new AbortController();
-    const wrapped = withPoll({ intervalMs: 0 })(once({
-      entries: [{ hash: new Uint8Array([1, 2, 3]), actions: [] }],
-      observedAtMs: 42,
-    }));
+    const wrapped = withPoll({ intervalMs: 0 })(
+      once({
+        entries: [{ hash: new Uint8Array([1, 2, 3]), actions: [] }],
+        observedAtMs: 42,
+      }),
+    );
     let got: MempoolSnapshot | null = null;
     for await (const s of wrapped('w', ctx(ctrl.signal))) {
       got = s;

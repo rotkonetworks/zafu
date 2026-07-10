@@ -10,12 +10,7 @@
  * same key derivation (m/44'/118'/0'/0/0) with different bech32 prefix
  */
 
-import type {
-  NetworkAdapter,
-  NetworkBalance,
-  NetworkTransaction,
-  SendParams,
-} from '../adapter';
+import type { NetworkAdapter, NetworkBalance, NetworkTransaction, SendParams } from '../adapter';
 import { bytesToHex } from '../common/qr';
 import type { ZignerWallet, PendingTransaction } from '../common/types';
 import {
@@ -107,7 +102,10 @@ export class CosmosAdapter implements NetworkAdapter {
     await Promise.all(
       Object.entries(COSMOS_CHAINS).map(async ([chainId, config]) => {
         try {
-          const balance = await getBalance(chainId as CosmosChainId, addresses[chainId as CosmosChainId]!);
+          const balance = await getBalance(
+            chainId as CosmosChainId,
+            addresses[chainId as CosmosChainId]!,
+          );
           balances[chainId] = {
             total: balance.amount,
             available: balance.amount,
@@ -125,7 +123,7 @@ export class CosmosAdapter implements NetworkAdapter {
             decimals: config.decimals,
           };
         }
-      })
+      }),
     );
 
     return balances as Record<CosmosChainId, NetworkBalance>;
@@ -134,7 +132,7 @@ export class CosmosAdapter implements NetworkAdapter {
   async getTransactions(
     _wallet: ZignerWallet,
     _limit = 50,
-    _offset = 0
+    _offset = 0,
   ): Promise<NetworkTransaction[]> {
     // cosmos RPC doesn't support tx history queries well
     // would need an indexer (mintscan, etc)
@@ -143,7 +141,7 @@ export class CosmosAdapter implements NetworkAdapter {
 
   async buildSendTransaction(
     wallet: ZignerWallet,
-    params: SendParams
+    params: SendParams,
   ): Promise<PendingTransaction> {
     const cosmosKeys = wallet.networks.cosmos;
     if (!cosmosKeys) {
@@ -166,7 +164,7 @@ export class CosmosAdapter implements NetworkAdapter {
       fromAddress,
       params.recipient,
       params.amount,
-      params.memo
+      params.memo,
     );
 
     // encode for signing (amino JSON)
@@ -176,7 +174,7 @@ export class CosmosAdapter implements NetworkAdapter {
     const amountDisplay = this.formatAmountWithDecimals(
       params.amount,
       targetChain.decimals,
-      targetChain.symbol
+      targetChain.symbol,
     );
 
     return {
@@ -192,7 +190,7 @@ export class CosmosAdapter implements NetworkAdapter {
 
   async completeSendTransaction(
     _pendingTx: PendingTransaction,
-    _signatureQrHex: string
+    _signatureQrHex: string,
   ): Promise<string> {
     // TODO: Apply signature and broadcast
     // 1. decode signature from zigner QR
@@ -228,10 +226,7 @@ export class CosmosAdapter implements NetworkAdapter {
     return BigInt(Math.round(value * 10 ** config.decimals));
   }
 
-  async sync(
-    wallet: ZignerWallet,
-    onProgress?: (percent: number) => void
-  ): Promise<void> {
+  async sync(wallet: ZignerWallet, onProgress?: (percent: number) => void): Promise<void> {
     const cosmosKeys = wallet.networks.cosmos;
     if (!cosmosKeys) {
       throw new Error('Wallet has no Cosmos keys');

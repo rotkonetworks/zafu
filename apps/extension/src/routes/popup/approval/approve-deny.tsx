@@ -14,9 +14,7 @@ export const ApproveDeny = ({
   const count = useWindowCountdown();
 
   return (
-    <div
-      className='flex flex-row justify-between gap-4 rounded-lg bg-elev-1 px-4 py-7 shadow-lg'
-    >
+    <div className='flex flex-row justify-between gap-4 rounded-lg bg-elev-1 px-4 py-7 shadow-lg'>
       <Button
         variant='gradient'
         className='w-1/2 py-3.5 text-base'

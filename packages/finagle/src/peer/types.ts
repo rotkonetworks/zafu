@@ -68,14 +68,14 @@ export interface PeerMessage {
 
 /** Known peer message types. */
 export type PeerMessageType =
-  | 'file-offer'     // { name, size, mimeType }
-  | 'file-accept'    // {}
-  | 'file-chunk'     // { index, data (base64) }
-  | 'file-complete'  // { hash }
-  | 'frost-keygen'   // FROST DKG round messages
-  | 'frost-sign'     // FROST signing round messages
+  | 'file-offer' // { name, size, mimeType }
+  | 'file-accept' // {}
+  | 'file-chunk' // { index, data (base64) }
+  | 'file-complete' // { hash }
+  | 'frost-keygen' // FROST DKG round messages
+  | 'frost-sign' // FROST signing round messages
   | 'auth-challenge' // session authentication
-  | 'auth-response'  // session authentication
+  | 'auth-response' // session authentication
   | 'ping'
   | 'pong';
 
@@ -106,10 +106,10 @@ export interface FrostSignMessage {
 /** Connection state. */
 export type PeerState =
   | 'idle'
-  | 'signaling'      // offer/answer exchange via memos
-  | 'connecting'      // ICE negotiation
-  | 'authenticating'  // verifying ephemeral key ownership
-  | 'connected'       // DataChannel open + authenticated
+  | 'signaling' // offer/answer exchange via memos
+  | 'connecting' // ICE negotiation
+  | 'authenticating' // verifying ephemeral key ownership
+  | 'connected' // DataChannel open + authenticated
   | 'disconnected'
   | 'failed';
 

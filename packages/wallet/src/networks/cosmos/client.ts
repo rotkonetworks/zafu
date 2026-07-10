@@ -41,10 +41,7 @@ export interface CosmosBalance {
 }
 
 /** get native balance for address */
-export async function getBalance(
-  chainId: CosmosChainId,
-  address: string
-): Promise<CosmosBalance> {
+export async function getBalance(chainId: CosmosChainId, address: string): Promise<CosmosBalance> {
   const client = await getClient(chainId);
   const config = COSMOS_CHAINS[chainId];
 
@@ -59,7 +56,7 @@ export async function getBalance(
 /** get all balances for address */
 export async function getAllBalances(
   chainId: CosmosChainId,
-  address: string
+  address: string,
 ): Promise<CosmosBalance[]> {
   const client = await getClient(chainId);
   const balances = await client.getAllBalances(address);
@@ -73,7 +70,7 @@ export async function getAllBalances(
 /** get account info (for nonce/sequence) */
 export async function getAccount(
   chainId: CosmosChainId,
-  address: string
+  address: string,
 ): Promise<{ accountNumber: number; sequence: number } | null> {
   const client = await getClient(chainId);
   const account = await client.getAccount(address);
@@ -93,19 +90,14 @@ export async function getHeight(chainId: CosmosChainId): Promise<number> {
 }
 
 /** convert address between chains (same pubkey, different prefix) */
-export function convertAddress(
-  address: string,
-  targetChain: CosmosChainId
-): string {
+export function convertAddress(address: string, targetChain: CosmosChainId): string {
   const { data } = fromBech32(address);
   const targetPrefix = COSMOS_CHAINS[targetChain].bech32Prefix;
   return toBech32(targetPrefix, data);
 }
 
 /** derive addresses for all chains from one address */
-export function deriveAllAddresses(
-  sourceAddress: string
-): Record<CosmosChainId, string> {
+export function deriveAllAddresses(sourceAddress: string): Record<CosmosChainId, string> {
   const { data } = fromBech32(sourceAddress);
 
   const addresses: Record<string, string> = {};
@@ -141,7 +133,7 @@ export async function buildUnsignedSend(
   fromAddress: string,
   toAddress: string,
   amount: bigint,
-  memo = ''
+  memo = '',
 ): Promise<UnsignedSend> {
   const config = COSMOS_CHAINS[chainId];
   const account = await getAccount(chainId, fromAddress);

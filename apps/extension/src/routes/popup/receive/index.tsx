@@ -11,7 +11,12 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PopupPath } from '../paths';
 import { useStore } from '../../../state';
-import { selectActiveNetwork, selectEffectiveKeyInfo, selectPenumbraAccount, keyRingSelector } from '../../../state/keyring';
+import {
+  selectActiveNetwork,
+  selectEffectiveKeyInfo,
+  selectPenumbraAccount,
+  keyRingSelector,
+} from '../../../state/keyring';
 import { getActiveWalletJson, selectActiveZcashWallet } from '../../../state/wallets';
 import { useActiveAddress } from '../../../hooks/use-address';
 import {
@@ -41,7 +46,11 @@ function CopyButton({ text, className }: { text: string; className?: string }) {
       onClick={copy}
       className={className ?? 'shrink-0 text-fg-muted transition-colors hover:text-fg-high'}
     >
-      {copied ? <span className='i-lucide-check h-4 w-4' /> : <span className='i-lucide-copy h-4 w-4' />}
+      {copied ? (
+        <span className='i-lucide-check h-4 w-4' />
+      ) : (
+        <span className='i-lucide-copy h-4 w-4' />
+      )}
     </button>
   );
 }
@@ -103,7 +112,11 @@ function mergeIbcChains(registryChains: IbcChain[]): IbcChain[] {
 }
 
 /** IBC deposit section - shield assets from cosmos into penumbra */
-function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
+function IbcDepositSection({
+  selectedKeyInfo,
+  keyRing,
+  penumbraWallet,
+}: {
   selectedKeyInfo: { type: string; id: string } | undefined;
   keyRing: { getMnemonic: (id: string) => Promise<string> };
   penumbraWallet: { fullViewingKey?: string } | undefined;
@@ -149,7 +162,10 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
           const mnemonic = await keyRing.getMnemonic(selectedKeyInfo.id);
           addr = await derivePenumbraEphemeralFromMnemonic(mnemonic, penumbraAccount);
         } else if (penumbraWallet?.fullViewingKey) {
-          addr = await derivePenumbraEphemeralFromFvk(penumbraWallet.fullViewingKey, penumbraAccount);
+          addr = await derivePenumbraEphemeralFromFvk(
+            penumbraWallet.fullViewingKey,
+            penumbraAccount,
+          );
         } else {
           return;
         }
@@ -162,7 +178,9 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
     };
 
     void generate();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedIbcChain, penumbraAccount]);
 
@@ -175,8 +193,14 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
     setTxError('');
   }, [selectedIbcChain]);
 
-  const canSubmit = selectedIbcChain && selectedAsset && amount && parseFloat(amount) > 0
-    && depositAddress && cosmosChainId && txStatus === 'idle';
+  const canSubmit =
+    selectedIbcChain &&
+    selectedAsset &&
+    amount &&
+    parseFloat(amount) > 0 &&
+    depositAddress &&
+    cosmosChainId &&
+    txStatus === 'idle';
 
   const handleShield = useCallback(async () => {
     if (!canSubmit || !selectedIbcChain || !selectedAsset || !cosmosChainId) return;
@@ -219,7 +243,16 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
       setTxStatus('error');
       setTxError(err instanceof Error ? err.message : 'transaction failed');
     }
-  }, [canSubmit, selectedIbcChain, selectedAsset, cosmosChainId, depositAddress, amount, cosmosIbc, requestAuth]);
+  }, [
+    canSubmit,
+    selectedIbcChain,
+    selectedAsset,
+    cosmosChainId,
+    depositAddress,
+    amount,
+    cosmosIbc,
+    requestAuth,
+  ]);
 
   const handleReset = useCallback(() => {
     setTxStatus('idle');
@@ -231,7 +264,9 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
   return (
     <div className='w-full border-t border-border-soft pt-4'>
       {PasswordModal}
-      <div className='mb-3 text-xs font-medium uppercase tracking-wider text-fg-muted'>Shield Assets via IBC</div>
+      <div className='mb-3 text-xs font-medium uppercase tracking-wider text-fg-muted'>
+        Shield Assets via IBC
+      </div>
 
       {/* source chain selector */}
       <div className='mb-3'>
@@ -242,36 +277,45 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
           disabled={chainsLoading}
           className='flex w-full items-center justify-between rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg transition-colors duration-100 hover:border-zigner-gold disabled:opacity-50'
         >
-          <span>{selectedIbcChain?.displayName ?? (chainsLoading ? 'loading...' : 'select source chain')}</span>
+          <span>
+            {selectedIbcChain?.displayName ??
+              (chainsLoading ? 'loading...' : 'select source chain')}
+          </span>
           <span className='i-lucide-chevron-down h-4 w-4 text-fg-muted' />
         </button>
-        {showChainDropdown && chainBtnRef.current && (() => {
-          const rect = chainBtnRef.current!.getBoundingClientRect();
-          return (
-            <div
-              className='fixed z-50 rounded-lg border border-border-soft bg-canvas shadow-lg'
-              style={{ top: rect.bottom + 4, left: rect.left, width: rect.width }}
-            >
-              {ibcChains.map(chain => (
-                <button
-                  key={chain.chainId}
-                  onClick={() => {
-                    setSelectedIbcChain(chain);
-                    setShowChainDropdown(false);
-                  }}
-                  className='flex w-full items-center gap-2 px-3 py-2 text-sm text-fg hover:bg-elev-1 first:rounded-t-lg last:rounded-b-lg'
-                >
-                  {chain.images[0]?.svg || chain.images[0]?.png ? (
-                    <img src={chain.images[0].svg ?? chain.images[0].png} className='h-4 w-4' alt='' />
-                  ) : (
-                    <span className='h-4 w-4 rounded-full bg-elev-2' />
-                  )}
-                  {chain.displayName}
-                </button>
-              ))}
-            </div>
-          );
-        })()}
+        {showChainDropdown &&
+          chainBtnRef.current &&
+          (() => {
+            const rect = chainBtnRef.current!.getBoundingClientRect();
+            return (
+              <div
+                className='fixed z-50 rounded-lg border border-border-soft bg-canvas shadow-lg'
+                style={{ top: rect.bottom + 4, left: rect.left, width: rect.width }}
+              >
+                {ibcChains.map(chain => (
+                  <button
+                    key={chain.chainId}
+                    onClick={() => {
+                      setSelectedIbcChain(chain);
+                      setShowChainDropdown(false);
+                    }}
+                    className='flex w-full items-center gap-2 px-3 py-2 text-sm text-fg hover:bg-elev-1 first:rounded-t-lg last:rounded-b-lg'
+                  >
+                    {chain.images[0]?.svg || chain.images[0]?.png ? (
+                      <img
+                        src={chain.images[0].svg ?? chain.images[0].png}
+                        className='h-4 w-4'
+                        alt=''
+                      />
+                    ) : (
+                      <span className='h-4 w-4 rounded-full bg-elev-2' />
+                    )}
+                    {chain.displayName}
+                  </button>
+                ))}
+              </div>
+            );
+          })()}
       </div>
 
       {/* wallet info + balances when chain is selected */}
@@ -284,7 +328,7 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
             </div>
             <div className='flex items-center gap-2 rounded-lg border border-border-soft bg-elev-2 p-3'>
               <code className='flex-1 break-all text-xs'>
-                {assetsLoading ? 'loading...' : assetsData?.address ?? 'no cosmos wallet found'}
+                {assetsLoading ? 'loading...' : (assetsData?.address ?? 'no cosmos wallet found')}
               </code>
               {assetsData?.address && <CopyButton text={assetsData.address} />}
             </div>
@@ -301,7 +345,9 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
               </div>
             ) : !assetsData ? (
               <div className='rounded-lg border border-border-soft bg-elev-2 p-3'>
-                <span className='text-xs text-fg-muted'>no cosmos wallet found — import from Zigner</span>
+                <span className='text-xs text-fg-muted'>
+                  no cosmos wallet found — import from Zigner
+                </span>
               </div>
             ) : assetsData.assets.length === 0 ? (
               <div className='rounded-lg border border-border-soft bg-elev-2 p-3'>
@@ -310,10 +356,11 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
             ) : (
               <div className='rounded-lg border border-border-soft bg-elev-2/10'>
                 {assetsData?.assets.map(asset => (
-                  <div key={asset.denom} className='flex items-center justify-between px-3 py-2 text-xs border-b border-border-soft last:border-0'>
-                    <span className='text-fg-muted truncate max-w-[60%]'>
-                      {asset.symbol}
-                    </span>
+                  <div
+                    key={asset.denom}
+                    className='flex items-center justify-between px-3 py-2 text-xs border-b border-border-soft last:border-0'
+                  >
+                    <span className='text-fg-muted truncate max-w-[60%]'>{asset.symbol}</span>
                     <span className='font-mono'>{asset.formatted}</span>
                   </div>
                 ))}
@@ -336,29 +383,32 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
                   <span>{selectedAsset?.symbol ?? 'select asset'}</span>
                   <span className='i-lucide-chevron-down h-3 w-3 text-fg-muted' />
                 </button>
-                {showAssetDropdown && assetsData?.assets && assetBtnRef.current && (() => {
-                  const rect = assetBtnRef.current!.getBoundingClientRect();
-                  return (
-                    <div
-                      className='fixed z-50 rounded-lg border border-border-soft bg-canvas shadow-lg'
-                      style={{ top: rect.bottom + 4, left: rect.left, width: rect.width }}
-                    >
-                      {assetsData.assets.map(asset => (
-                        <button
-                          key={asset.denom}
-                          onClick={() => {
-                            setSelectedAsset(asset);
-                            setShowAssetDropdown(false);
-                          }}
-                          className='flex w-full items-center justify-between px-3 py-2 text-xs hover:bg-elev-1 first:rounded-t-lg last:rounded-b-lg'
-                        >
-                          <span>{asset.symbol}</span>
-                          <span className='text-fg-muted'>{asset.formatted}</span>
-                        </button>
-                      ))}
-                    </div>
-                  );
-                })()}
+                {showAssetDropdown &&
+                  assetsData?.assets &&
+                  assetBtnRef.current &&
+                  (() => {
+                    const rect = assetBtnRef.current!.getBoundingClientRect();
+                    return (
+                      <div
+                        className='fixed z-50 rounded-lg border border-border-soft bg-canvas shadow-lg'
+                        style={{ top: rect.bottom + 4, left: rect.left, width: rect.width }}
+                      >
+                        {assetsData.assets.map(asset => (
+                          <button
+                            key={asset.denom}
+                            onClick={() => {
+                              setSelectedAsset(asset);
+                              setShowAssetDropdown(false);
+                            }}
+                            className='flex w-full items-center justify-between px-3 py-2 text-xs hover:bg-elev-1 first:rounded-t-lg last:rounded-b-lg'
+                          >
+                            <span>{asset.symbol}</span>
+                            <span className='text-fg-muted'>{asset.formatted}</span>
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })()}
               </div>
 
               {/* amount input */}
@@ -377,12 +427,15 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
           <div className='mb-3'>
             <div className='mb-1 flex items-center gap-1.5 text-xs text-fg-muted lowercase'>
               <span>sending to</span>
-              <span className='font-medium text-fg'>{penumbraAccount === 0 ? 'main account' : `sub-account #${penumbraAccount}`}</span>
+              <span className='font-medium text-fg'>
+                {penumbraAccount === 0 ? 'main account' : `sub-account #${penumbraAccount}`}
+              </span>
               <span>(ephemeral)</span>
             </div>
             <p className='text-xs text-fg-muted lowercase'>
-              the destination address is visible in plaintext on the source chain.
-              this ephemeral address is unlinkable to your main address — source chain observers cannot correlate your deposits.{' '}
+              the destination address is visible in plaintext on the source chain. this ephemeral
+              address is unlinkable to your main address — source chain observers cannot correlate
+              your deposits.{' '}
               {depositAddress && (
                 <button
                   onClick={() => {
@@ -436,7 +489,11 @@ function IbcDepositSection({ selectedKeyInfo, keyRing, penumbraWallet }: {
 }
 
 /** receive tab - QR code + address display */
-function ReceiveTab({ address, loading, activeNetwork }: {
+function ReceiveTab({
+  address,
+  loading,
+  activeNetwork,
+}: {
   address: string;
   loading: boolean;
   activeNetwork: string;
@@ -458,7 +515,9 @@ function ReceiveTab({ address, loading, activeNetwork }: {
   const isZcash = activeNetwork === 'zcash';
   const isMnemonic = selectedKeyInfo?.type === 'mnemonic';
   const isMultisig = selectedKeyInfo?.type === 'frost-multisig';
-  const zcashUfvk = zcashWallet?.ufvk ?? (zcashWallet?.orchardFvk?.startsWith('uview') ? zcashWallet.orchardFvk : undefined);
+  const zcashUfvk =
+    zcashWallet?.ufvk ??
+    (zcashWallet?.orchardFvk?.startsWith('uview') ? zcashWallet.orchardFvk : undefined);
   // multisig UFVKs are orchard-only, no transparent component to derive.
   const canTransparent = (isMnemonic || !!zcashUfvk) && !isMultisig;
 
@@ -503,16 +562,14 @@ function ReceiveTab({ address, loading, activeNetwork }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isZcash, canTransparent]);
 
-  const displayAddress = transparent && isZcash && transparentAddress
-    ? transparentAddress
-    : ephemeral && ephemeralAddress
-      ? ephemeralAddress
-      : address;
-  const isLoading = transparent && isZcash
-    ? transparentLoading
-    : ephemeral
-      ? ephemeralLoading
-      : loading;
+  const displayAddress =
+    transparent && isZcash && transparentAddress
+      ? transparentAddress
+      : ephemeral && ephemeralAddress
+        ? ephemeralAddress
+        : address;
+  const isLoading =
+    transparent && isZcash ? transparentLoading : ephemeral ? ephemeralLoading : loading;
 
   useEffect(() => {
     if (canvasRef.current && displayAddress) {
@@ -537,7 +594,10 @@ function ReceiveTab({ address, loading, activeNetwork }: {
           const mnemonic = await keyRing.getMnemonic(selectedKeyInfo.id);
           addr = await derivePenumbraEphemeralFromMnemonic(mnemonic, penumbraAccount);
         } else if (penumbraWallet?.fullViewingKey) {
-          addr = await derivePenumbraEphemeralFromFvk(penumbraWallet.fullViewingKey, penumbraAccount);
+          addr = await derivePenumbraEphemeralFromFvk(
+            penumbraWallet.fullViewingKey,
+            penumbraAccount,
+          );
         } else {
           return;
         }
@@ -552,7 +612,9 @@ function ReceiveTab({ address, loading, activeNetwork }: {
     };
 
     void generate();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ephemeral, penumbraAccount]);
 
@@ -589,7 +651,9 @@ function ReceiveTab({ address, loading, activeNetwork }: {
         if (!cancelled) {
           const msg = err instanceof Error ? err.message : String(err);
           if (msg.includes('no transparent component')) {
-            setTransparentError('this wallet key does not include a transparent key — re-import from an updated zigner to enable transparent addresses');
+            setTransparentError(
+              'this wallet key does not include a transparent key — re-import from an updated zigner to enable transparent addresses',
+            );
           } else {
             setTransparentError(msg);
           }
@@ -600,7 +664,9 @@ function ReceiveTab({ address, loading, activeNetwork }: {
     };
 
     void derive();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transparent, transparentIndex, isZcash, canTransparent, isMnemonic, zcashUfvk]);
 
@@ -638,8 +704,7 @@ function ReceiveTab({ address, loading, activeNetwork }: {
   // penumbra default addresses are shielded by construction. Transparent
   // zcash (t1/t3) and ephemeral penumbra addresses get different labels.
   const isShielded =
-    (isZcash && !transparent && displayAddress?.startsWith('u')) ||
-    (isPenumbra && !ephemeral);
+    (isZcash && !transparent && displayAddress?.startsWith('u')) || (isPenumbra && !ephemeral);
 
   return (
     <div className='flex flex-col items-center gap-4'>
@@ -696,12 +761,16 @@ function ReceiveTab({ address, loading, activeNetwork }: {
                 <div className='absolute left-1/2 top-6 z-50 w-72 -translate-x-1/2 rounded-lg border border-border-soft bg-canvas p-3 text-xs text-fg shadow-lg'>
                   <p className='mb-1.5 font-medium'>Your main address is stable.</p>
                   <p className='mb-1.5 text-fg-muted'>
-                    Anyone you share it with can recognize future payments to the same address.
-                    On IBC source chains (Osmosis, Noble, etc.) the destination address is posted in plaintext — visible to all chain observers.
+                    Anyone you share it with can recognize future payments to the same address. On
+                    IBC source chains (Osmosis, Noble, etc.) the destination address is posted in
+                    plaintext — visible to all chain observers.
                   </p>
-                  <p className='mb-1.5 font-medium'>Ephemeral addresses are randomized and unlinkable.</p>
+                  <p className='mb-1.5 font-medium'>
+                    Ephemeral addresses are randomized and unlinkable.
+                  </p>
                   <p className='text-fg-muted'>
-                    Only your full viewing key can detect incoming funds. Counterparties and chain observers cannot link them to your main address or to each other.
+                    Only your full viewing key can detect incoming funds. Counterparties and chain
+                    observers cannot link them to your main address or to each other.
                   </p>
                 </div>
               )}
@@ -760,15 +829,17 @@ function ReceiveTab({ address, loading, activeNetwork }: {
                 </button>
                 {showTransparentTooltip && (
                   <div className='absolute left-1/2 top-6 z-50 w-72 -translate-x-1/2 rounded-lg border border-border-soft bg-canvas p-3 text-xs text-fg shadow-lg'>
-                    <p className='mb-1.5 font-medium'>Transparent addresses are fully visible on-chain.</p>
+                    <p className='mb-1.5 font-medium'>
+                      Transparent addresses are fully visible on-chain.
+                    </p>
                     <p className='mb-1.5 text-fg-muted'>
-                      Anyone can see your balance and transaction history.
-                      Use them only when required (e.g. exchange withdrawals).
+                      Anyone can see your balance and transaction history. Use them only when
+                      required (e.g. exchange withdrawals).
                     </p>
                     <p className='mb-1.5 font-medium'>Each index gives a unique address.</p>
                     <p className='text-fg-muted'>
-                      Use one per exchange to track where funds come from.
-                      After receiving, shield to your main (orchard) address for privacy.
+                      Use one per exchange to track where funds come from. After receiving, shield
+                      to your main (orchard) address for privacy.
                     </p>
                   </div>
                 )}
@@ -828,24 +899,39 @@ function ReceiveTab({ address, loading, activeNetwork }: {
 
       <div className='w-full'>
         <div className='mb-1 text-xs text-fg-muted'>
-          {ephemeral && isPenumbra
-            ? 'ephemeral address'
-            : transparent && isZcash
-              ? <span className='flex items-center gap-1.5'>transparent address #{transparentIndex} <span className='text-[10px] px-1.5 py-0.5 rounded-md bg-red-500/15 text-red-500 font-medium leading-none'>public</span></span>
-              : isZcash
-                ? `shielded address #${shieldedIndex}`
-                : 'address'}
+          {ephemeral && isPenumbra ? (
+            'ephemeral address'
+          ) : transparent && isZcash ? (
+            <span className='flex items-center gap-1.5'>
+              transparent address #{transparentIndex}{' '}
+              <span className='text-[10px] px-1.5 py-0.5 rounded-md bg-red-500/15 text-red-500 font-medium leading-none'>
+                public
+              </span>
+            </span>
+          ) : isZcash ? (
+            `shielded address #${shieldedIndex}`
+          ) : (
+            'address'
+          )}
         </div>
-        <div className={`flex items-center gap-2 rounded-lg border p-3 ${
-          ephemeral && isPenumbra
-            ? 'border-green-500/40 bg-green-500/5'
-            : transparent && isZcash
-              ? 'border-red-500/40 bg-red-500/5'
-              : 'border-border-soft bg-elev-2'
-        }`}>
-          <code className={`flex-1 break-all text-xs ${
-            ephemeral && isPenumbra ? 'text-green-400' : transparent && isZcash ? 'text-red-400' : ''
-          }`}>
+        <div
+          className={`flex items-center gap-2 rounded-lg border p-3 ${
+            ephemeral && isPenumbra
+              ? 'border-green-500/40 bg-green-500/5'
+              : transparent && isZcash
+                ? 'border-red-500/40 bg-red-500/5'
+                : 'border-border-soft bg-elev-2'
+          }`}
+        >
+          <code
+            className={`flex-1 break-all text-xs ${
+              ephemeral && isPenumbra
+                ? 'text-green-400'
+                : transparent && isZcash
+                  ? 'text-red-400'
+                  : ''
+            }`}
+          >
             {isLoading ? 'generating...' : displayAddress || 'no wallet selected'}
           </code>
           {displayAddress && (
@@ -872,8 +958,7 @@ function ReceiveTab({ address, loading, activeNetwork }: {
           ? 'a fresh single-use address. share it with one party; reusing it across senders lets them link payments to each other.'
           : transparent && isZcash
             ? 'transparent address — balance and history are publicly visible. use one index per exchange. shield to orchard after receiving for privacy.'
-            : `share with anyone who wants to send you ${activeNetwork?.toUpperCase() ?? ''}. shielded — senders don't see your other transactions.`
-        }
+            : `share with anyone who wants to send you ${activeNetwork?.toUpperCase() ?? ''}. shielded — senders don't see your other transactions.`}
       </p>
     </div>
   );

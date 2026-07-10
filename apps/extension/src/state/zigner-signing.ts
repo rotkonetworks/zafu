@@ -122,15 +122,15 @@ export interface ZignerSigningSlice {
 // slice creator
 // ============================================================================
 
-export const createZignerSigningSlice: SliceCreator<ZignerSigningSlice> = (set) => ({
+export const createZignerSigningSlice: SliceCreator<ZignerSigningSlice> = set => ({
   step: 'idle',
   transaction: null,
   signatureQr: null,
   txHash: null,
   error: null,
 
-  startSigning: (tx) => {
-    set((state) => {
+  startSigning: tx => {
+    set(state => {
       state.zignerSigning.step = 'building';
       state.zignerSigning.transaction = tx;
       state.zignerSigning.signatureQr = null;
@@ -140,46 +140,46 @@ export const createZignerSigningSlice: SliceCreator<ZignerSigningSlice> = (set) 
   },
 
   showSignRequest: () => {
-    set((state) => {
+    set(state => {
       state.zignerSigning.step = 'show_qr';
     });
   },
 
   startScanning: () => {
-    set((state) => {
+    set(state => {
       state.zignerSigning.step = 'scanning';
     });
   },
 
-  processSignature: (signatureHex) => {
-    set((state) => {
+  processSignature: signatureHex => {
+    set(state => {
       state.zignerSigning.signatureQr = signatureHex;
       state.zignerSigning.step = 'broadcasting';
     });
   },
 
   startBroadcast: () => {
-    set((state) => {
+    set(state => {
       state.zignerSigning.step = 'broadcasting';
     });
   },
 
-  complete: (txHash) => {
-    set((state) => {
+  complete: txHash => {
+    set(state => {
       state.zignerSigning.txHash = txHash;
       state.zignerSigning.step = 'complete';
     });
   },
 
-  setError: (error) => {
-    set((state) => {
+  setError: error => {
+    set(state => {
       state.zignerSigning.error = error;
       state.zignerSigning.step = 'error';
     });
   },
 
   reset: () => {
-    set((state) => {
+    set(state => {
       state.zignerSigning.step = 'idle';
       state.zignerSigning.transaction = null;
       state.zignerSigning.signatureQr = null;

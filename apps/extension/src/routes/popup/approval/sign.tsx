@@ -5,7 +5,13 @@ import { signApprovalSelector } from '../../../state/sign-approval';
 import { ApproveDeny } from './approve-deny';
 import { DisplayOriginURL } from '../../../shared/components/display-origin-url';
 import { UserChoice } from '@repo/storage-chrome/records';
-import { signZid, signP256, resolveZid, getZidIndex, type ZidSitePreference } from '../../../state/identity';
+import {
+  signZid,
+  signP256,
+  resolveZid,
+  getZidIndex,
+  type ZidSitePreference,
+} from '../../../state/identity';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { hexToBytes } from '@noble/hashes/utils';
 import { localExtStorage } from '@repo/storage-chrome/local';
@@ -14,8 +20,16 @@ import { QrScanner } from '../../../shared/components/qr-scanner';
 type SignStep = 'review' | 'password' | 'show-qr' | 'scan-qr' | 'signing';
 
 export const SignApproval = () => {
-  const { origin, challengeHex, statement, algorithm, isAirgap, zidPubkey, setChoice, sendResponse } =
-    useStore(signApprovalSelector);
+  const {
+    origin,
+    challengeHex,
+    statement,
+    algorithm,
+    isAirgap,
+    zidPubkey,
+    setChoice,
+    sendResponse,
+  } = useStore(signApprovalSelector);
   const keyInfo = useStore(selectEffectiveKeyInfo);
   const getMnemonic = useStore(s => s.keyRing.getMnemonic);
   const checkPassword = useStore(s => s.keyRing.checkPassword);
@@ -33,11 +47,13 @@ export const SignApproval = () => {
     void (async () => {
       const prefs = await localExtStorage.get('zidPreferences');
       const raw = prefs?.[origin] as Partial<ZidSitePreference> | undefined;
-      const resolved: ZidSitePreference | undefined = raw ? {
-        mode: raw.mode === 'cross-site' ? 'cross-site' : 'site',
-        rotation: raw.rotation ?? 0,
-        identity: raw.identity ?? 'default',
-      } : undefined;
+      const resolved: ZidSitePreference | undefined = raw
+        ? {
+            mode: raw.mode === 'cross-site' ? 'cross-site' : 'site',
+            rotation: raw.rotation ?? 0,
+            identity: raw.identity ?? 'default',
+          }
+        : undefined;
       setPref(resolved);
       const isSite = !resolved || resolved.mode === 'site';
       setSigningMode(isSite ? `site #${resolved?.rotation ?? 0}` : 'cross-site');
@@ -79,9 +95,10 @@ export const SignApproval = () => {
       const mnemonic = await getMnemonic(keyInfo.id);
       const challenge = hexToBytes(challengeHex);
       const zidIndex = await getZidIndex();
-      const result = algorithm === 'es256'
-        ? signP256(mnemonic, origin, challenge, pref)
-        : signZid(mnemonic, origin, challenge, pref, zidIndex);
+      const result =
+        algorithm === 'es256'
+          ? signP256(mnemonic, origin, challenge, pref)
+          : signZid(mnemonic, origin, challenge, pref, zidIndex);
 
       // share log is written by the service worker (sign-request.ts) after popup closes
       setChoice(UserChoice.Approved);
@@ -105,21 +122,24 @@ export const SignApproval = () => {
   }, [password, checkPassword, signWithMnemonic]);
 
   // zigner: handle scanned QR response
-  const handleZidResponse = useCallback((raw: string) => {
-    try {
-      const resp = JSON.parse(raw);
-      if (resp.type !== 'zid-resp' || !resp.signature || !resp.publicKey) {
-        throw new Error('invalid response format');
-      }
+  const handleZidResponse = useCallback(
+    (raw: string) => {
+      try {
+        const resp = JSON.parse(raw);
+        if (resp.type !== 'zid-resp' || !resp.signature || !resp.publicKey) {
+          throw new Error('invalid response format');
+        }
 
-      // share log is written by the service worker (sign-request.ts) after popup closes
-      setChoice(UserChoice.Approved);
-      sendResponse({ signature: resp.signature, publicKey: resp.publicKey });
-      window.close();
-    } catch {
-      // invalid QR, keep scanning
-    }
-  }, [setChoice, sendResponse]);
+        // share log is written by the service worker (sign-request.ts) after popup closes
+        setChoice(UserChoice.Approved);
+        sendResponse({ signature: resp.signature, publicKey: resp.publicKey });
+        window.close();
+      } catch {
+        // invalid QR, keep scanning
+      }
+    },
+    [setChoice, sendResponse],
+  );
 
   const approve = () => {
     if (isAirgap) {
@@ -138,17 +158,19 @@ export const SignApproval = () => {
   if (!origin) return null;
 
   // build challenge QR data for zigner
-  const challengeQr = isAirgap ? JSON.stringify({
-    type: 'zid-sign',
-    v: 1,
-    challenge: challengeHex,
-    identity: pref?.identity ?? 'default',
-    mode: pref?.mode ?? 'site',
-    origin,
-    rotation: pref?.rotation ?? 0,
-    algorithm: algorithm ?? 'ed25519',
-    statement: statement ?? '',
-  }) : '';
+  const challengeQr = isAirgap
+    ? JSON.stringify({
+        type: 'zid-sign',
+        v: 1,
+        challenge: challengeHex,
+        identity: pref?.identity ?? 'default',
+        mode: pref?.mode ?? 'site',
+        origin,
+        rotation: pref?.rotation ?? 0,
+        algorithm: algorithm ?? 'ed25519',
+        statement: statement ?? '',
+      })
+    : '';
 
   return (
     <FadeTransition>
@@ -156,7 +178,11 @@ export const SignApproval = () => {
         <header className='flex h-[70px] flex-col items-center justify-center border-b border-border-soft'>
           <span className='kicker mb-1'>signature request</span>
           <h1 className='text-[18px] text-fg-high lowercase tracking-[-0.01em]'>
-            {step === 'show-qr' ? 'sign with zigner' : step === 'scan-qr' ? 'scan response' : 'sign message'}
+            {step === 'show-qr'
+              ? 'sign with zigner'
+              : step === 'scan-qr'
+                ? 'scan response'
+                : 'sign message'}
           </h1>
         </header>
 
@@ -195,8 +221,8 @@ export const SignApproval = () => {
                   </div>
                 )}
                 <p className='text-xs text-fg-muted'>
-                  this site is requesting a signature from your identity key.
-                  this will not authorize any transactions.
+                  this site is requesting a signature from your identity key. this will not
+                  authorize any transactions.
                 </p>
               </div>
             </div>
@@ -218,16 +244,20 @@ export const SignApproval = () => {
               autoFocus
               value={password}
               onChange={e => setPassword(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') void handlePasswordSubmit(); }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') void handlePasswordSubmit();
+              }}
               className='w-full rounded-lg border border-border-soft bg-elev-2 p-3 text-sm outline-none focus:border-foreground/40'
               placeholder='password'
             />
-            {passwordError && (
-              <p className='text-xs text-red-400 text-center'>{passwordError}</p>
-            )}
+            {passwordError && <p className='text-xs text-red-400 text-center'>{passwordError}</p>}
             <div className='flex gap-3 mt-2'>
               <button
-                onClick={() => { setStep('review'); setPassword(''); setPasswordError(''); }}
+                onClick={() => {
+                  setStep('review');
+                  setPassword('');
+                  setPasswordError('');
+                }}
                 className='flex-1 rounded-md border border-border-soft p-3 text-xs text-fg-muted hover:text-fg-high hover:bg-elev-1 lowercase tracking-[0.04em]'
               >
                 back
@@ -302,8 +332,15 @@ const QrCanvas = ({ data, size }: { data: string; size: number }) => {
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const QRCode = require('qrcode');
-      QRCode.toCanvas(canvas, data, { width: size, margin: 1, color: { dark: '#000', light: '#fff' }, errorCorrectionLevel: 'L' });
-    } catch { /* */ }
+      QRCode.toCanvas(canvas, data, {
+        width: size,
+        margin: 1,
+        color: { dark: '#000', light: '#fff' },
+        errorCorrectionLevel: 'L',
+      });
+    } catch {
+      /* */
+    }
   };
   return <canvas ref={ref} />;
 };

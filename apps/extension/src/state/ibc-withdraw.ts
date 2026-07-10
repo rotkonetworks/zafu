@@ -25,7 +25,9 @@ const CHAIN_REST_ENDPOINTS: Record<string, string> = {
 };
 
 /** query the latest block height on a counterparty cosmos chain */
-const getCounterpartyHeight = async (chainId: string): Promise<{ height: bigint; revisionNumber: bigint }> => {
+const getCounterpartyHeight = async (
+  chainId: string,
+): Promise<{ height: bigint; revisionNumber: bigint }> => {
   const restEndpoint = CHAIN_REST_ENDPOINTS[chainId];
   if (!restEndpoint) {
     throw new Error(`no REST endpoint for chain ${chainId}`);
@@ -89,19 +91,32 @@ const initialState = {
 export const createIbcWithdrawSlice: SliceCreator<IbcWithdrawSlice> = (set, get) => ({
   ...initialState,
 
-  setChain: (chain) => set(state => { state.ibcWithdraw.chain = chain; }),
-  setDestinationAddress: (address) => set(state => { state.ibcWithdraw.destinationAddress = address; }),
-  setAmount: (amount) => set(state => { state.ibcWithdraw.amount = amount; }),
-  setDenom: (denom) => set(state => { state.ibcWithdraw.denom = denom; }),
+  setChain: chain =>
+    set(state => {
+      state.ibcWithdraw.chain = chain;
+    }),
+  setDestinationAddress: address =>
+    set(state => {
+      state.ibcWithdraw.destinationAddress = address;
+    }),
+  setAmount: amount =>
+    set(state => {
+      state.ibcWithdraw.amount = amount;
+    }),
+  setDenom: denom =>
+    set(state => {
+      state.ibcWithdraw.denom = denom;
+    }),
 
-  reset: () => set(state => {
-    state.ibcWithdraw.chain = initialState.chain;
-    state.ibcWithdraw.destinationAddress = initialState.destinationAddress;
-    state.ibcWithdraw.amount = initialState.amount;
-    state.ibcWithdraw.denom = initialState.denom;
-    state.ibcWithdraw.loading = initialState.loading;
-    state.ibcWithdraw.error = initialState.error;
-  }),
+  reset: () =>
+    set(state => {
+      state.ibcWithdraw.chain = initialState.chain;
+      state.ibcWithdraw.destinationAddress = initialState.destinationAddress;
+      state.ibcWithdraw.amount = initialState.amount;
+      state.ibcWithdraw.denom = initialState.denom;
+      state.ibcWithdraw.loading = initialState.loading;
+      state.ibcWithdraw.error = initialState.error;
+    }),
 
   buildPlanRequest: async () => {
     const { chain, destinationAddress, amount, denom } = get().ibcWithdraw;
@@ -112,7 +127,10 @@ export const createIbcWithdrawSlice: SliceCreator<IbcWithdrawSlice> = (set, get)
     if (!amount || amount === '0') throw new Error('no amount specified');
     if (!denom) throw new Error('no denom specified');
 
-    set(state => { state.ibcWithdraw.loading = true; state.ibcWithdraw.error = undefined; });
+    set(state => {
+      state.ibcWithdraw.loading = true;
+      state.ibcWithdraw.error = undefined;
+    });
 
     try {
       // parse amount (assuming 6 decimals for now - should come from asset metadata)
@@ -136,23 +154,30 @@ export const createIbcWithdrawSlice: SliceCreator<IbcWithdrawSlice> = (set, get)
       }
 
       const planRequest = new TransactionPlannerRequest({
-        ics20Withdrawals: [{
-          amount: new Amount({ lo: amountBigInt, hi: 0n }),
-          denom: { denom },
-          destinationChainAddress: destinationAddress,
-          returnAddress: ephemeralResponse.address,
-          timeoutHeight,
-          timeoutTime,
-          sourceChannel: chain.channelId,
-        }],
+        ics20Withdrawals: [
+          {
+            amount: new Amount({ lo: amountBigInt, hi: 0n }),
+            denom: { denom },
+            destinationChainAddress: destinationAddress,
+            returnAddress: ephemeralResponse.address,
+            timeoutHeight,
+            timeoutTime,
+            sourceChannel: chain.channelId,
+          },
+        ],
         source: addressIndex,
       });
 
-      set(state => { state.ibcWithdraw.loading = false; });
+      set(state => {
+        state.ibcWithdraw.loading = false;
+      });
       return planRequest;
     } catch (err) {
       const error = err instanceof Error ? err.message : 'unknown error';
-      set(state => { state.ibcWithdraw.loading = false; state.ibcWithdraw.error = error; });
+      set(state => {
+        state.ibcWithdraw.loading = false;
+        state.ibcWithdraw.error = error;
+      });
       throw err;
     }
   },

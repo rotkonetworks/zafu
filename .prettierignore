@@ -5,3 +5,9 @@ packages/wasm/crate
 packages/wasm/wasm
 *_pk.bin
 vitest.config.ts.timestamp-*-*.mjs
+# generated wasm bundles
+apps/extension/public/ring-vrf-wasm/
+apps/extension/public/zafu-wasm/
+apps/extension/public/zafu-wasm-parallel/
+apps/extension/public/zync-core/
+docs/book/

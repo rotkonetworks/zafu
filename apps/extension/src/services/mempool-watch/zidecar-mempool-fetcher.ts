@@ -10,10 +10,7 @@
  * keeping it narrow lets tests inject a fake `MempoolStreamClient`.
  */
 
-import type {
-  MempoolEntry,
-  MempoolFetcher,
-} from './types';
+import type { MempoolEntry, MempoolFetcher } from './types';
 
 /**
  * Minimal client interface — exact shape of the relevant ZidecarClient
@@ -25,15 +22,17 @@ import type {
  * watcher could observe the abort and return.
  */
 export interface MempoolStreamClient {
-  getMempoolStream(signal?: AbortSignal): Promise<ReadonlyArray<{
-    readonly hash: Uint8Array;
-    readonly actions: ReadonlyArray<{
-      readonly nullifier: Uint8Array;
-      readonly cmx: Uint8Array;
-      readonly ephemeralKey: Uint8Array;
-      readonly ciphertext: Uint8Array;
-    }>;
-  }>>;
+  getMempoolStream(signal?: AbortSignal): Promise<
+    ReadonlyArray<{
+      readonly hash: Uint8Array;
+      readonly actions: ReadonlyArray<{
+        readonly nullifier: Uint8Array;
+        readonly cmx: Uint8Array;
+        readonly ephemeralKey: Uint8Array;
+        readonly ciphertext: Uint8Array;
+      }>;
+    }>
+  >;
 }
 
 export function zidecarMempoolFetcher(client: MempoolStreamClient): MempoolFetcher {

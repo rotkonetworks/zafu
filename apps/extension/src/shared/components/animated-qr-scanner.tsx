@@ -60,7 +60,9 @@ export const AnimatedQrScanner = ({
   // 'p' = legacy P-format, 'ur' = BC-UR fountain, '' = undecided
   const modeRef = useRef<'' | 'p' | 'ur'>('');
   // wasm module loaded lazily on first UR frame
-  const wasmRef = useRef<{ ur_decode_frames: (parts: string, type: string) => string } | null>(null);
+  const wasmRef = useRef<{ ur_decode_frames: (parts: string, type: string) => string } | null>(
+    null,
+  );
   const wasmInitInFlightRef = useRef(false);
   // seqLen from UR header — drives honest progress vs the emitter's cycle
   const urSeqLenRef = useRef(0);
@@ -120,9 +122,8 @@ export const AnimatedQrScanner = ({
       initialStream.getTracks().forEach(t => t.stop());
 
       const devices = await BrowserQRCodeReader.listVideoInputDevices();
-      const camera = devices.find((d: MediaDeviceInfo) =>
-        /back|rear|environment/i.test(d.label),
-      ) || devices[0];
+      const camera =
+        devices.find((d: MediaDeviceInfo) => /back|rear|environment/i.test(d.label)) || devices[0];
 
       if (!camera) throw new Error('no camera found');
 
@@ -137,159 +138,156 @@ export const AnimatedQrScanner = ({
       videoRef.current.srcObject = stream;
       await videoRef.current.play();
 
-      const controls = await reader.decodeFromVideoDevice(
-        undefined,
-        videoRef.current,
-        (result) => {
-          if (!result || completedRef.current) return;
+      const controls = await reader.decodeFromVideoDevice(undefined, videoRef.current, result => {
+        if (!result || completedRef.current) return;
 
-          const text = result.getText();
+        const text = result.getText();
 
-          // ── BC-UR fountain mode ──
-          // ur:<type>/<seqNum>-<seqLen>/<bytewords> for multipart, or
-          // ur:<type>/<bytewords> for single-part. Either way, accumulate the
-          // raw frame string and let `ur_decode_frames` (wasm) handle dedup +
-          // fountain reconstruction.
-          const lower = text.toLowerCase();
-          if (lower.startsWith('ur:')) {
-            if (modeRef.current === '') modeRef.current = 'ur';
-            if (modeRef.current !== 'ur') return;
+        // ── BC-UR fountain mode ──
+        // ur:<type>/<seqNum>-<seqLen>/<bytewords> for multipart, or
+        // ur:<type>/<bytewords> for single-part. Either way, accumulate the
+        // raw frame string and let `ur_decode_frames` (wasm) handle dedup +
+        // fountain reconstruction.
+        const lower = text.toLowerCase();
+        if (lower.startsWith('ur:')) {
+          if (modeRef.current === '') modeRef.current = 'ur';
+          if (modeRef.current !== 'ur') return;
 
-            // type filter — defends against unrelated QR contaminating the stream
-            const slashIdx = text.indexOf('/');
-            const urType = slashIdx > 3 ? text.slice(3, slashIdx) : '';
-            if (urTypeFilter && urType.toLowerCase() !== urTypeFilter.toLowerCase()) return;
-            if (urTypeRef.current === '') urTypeRef.current = urType;
-            else if (urTypeRef.current !== urType) return; // type drift, reject
+          // type filter — defends against unrelated QR contaminating the stream
+          const slashIdx = text.indexOf('/');
+          const urType = slashIdx > 3 ? text.slice(3, slashIdx) : '';
+          if (urTypeFilter && urType.toLowerCase() !== urTypeFilter.toLowerCase()) return;
+          if (urTypeRef.current === '') urTypeRef.current = urType;
+          else if (urTypeRef.current !== urType) return; // type drift, reject
 
-            // Reject oversized single frames.
-            if (text.length > MAX_UR_PART_BYTES) return;
+          // Reject oversized single frames.
+          if (text.length > MAX_UR_PART_BYTES) return;
 
-            const before = urPartsRef.current.size;
-            // Cap the accumulator. Hitting the cap means either a hostile
-            // source or a degenerate (never-completing) fountain — abort
-            // the scanner the same way the stall watchdog does, otherwise
-            // the camera + ZXing pipeline keep running and every new
-            // unique frame re-enters this branch.
-            if (before >= MAX_UR_PARTS) {
-              const msg = `UR fountain exceeded ${MAX_UR_PARTS} unique frames without completing — aborting scan.`;
-              completedRef.current = true; // latch — report once
-              stopScanning();
-              setError(msg);
-              onErrorRef.current?.(msg);
-              return;
-            }
-            urPartsRef.current.add(text);
-            if (urPartsRef.current.size === before) return; // duplicate
-
-            // a genuinely new unique part — reset the stall clock
-            lastNewPartAtRef.current = Date.now();
-            setPartsReceived(urPartsRef.current.size);
-
-            // seqLen drives honest progress; without it we'd pin at 99%.
-            if (urSeqLenRef.current === 0) {
-              const seqMatch = lower.match(/^ur:[^/]+\/(\d+)-(\d+)\//);
-              if (seqMatch) urSeqLenRef.current = Number(seqMatch[2]);
-            }
-
-            // `default()` must be awaited — without it the bindgen glue's
-            // `wasm` is undefined and exported calls die on `__wbindgen_*`.
-            if (!wasmRef.current && !wasmInitInFlightRef.current) {
-              wasmInitInFlightRef.current = true;
-              import(/* webpackMode: "eager" */ '@repo/zcash-wasm')
-                .then(async (mod: unknown) => {
-                  // bindgen's default export fetches+instantiates the .wasm
-                  const m = mod as {
-                    default: (opts?: { module_or_path?: string }) => Promise<unknown>;
-                    ur_decode_frames: (parts: string, type: string) => string;
-                  };
-                  await m.default();
-                  wasmRef.current = m;
-                })
-                .catch(err => {
-                  console.warn('[ur-scanner] wasm init failed:', err);
-                  wasmInitInFlightRef.current = false; // allow retry on next frame
-                });
-            }
-            const wasm = wasmRef.current;
-            if (!wasm) return; // not loaded yet; keep accumulating
-
-            try {
-              const partsJson = JSON.stringify([...urPartsRef.current]);
-              const hex = wasm.ur_decode_frames(partsJson, urType);
-              // success → reconstructed
-              completedRef.current = true;
-              stopScanning();
-              const bytes = new Uint8Array(hex.length >> 1);
-              for (let i = 0; i < bytes.length; i++) {
-                bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
-              }
-              setProgress(100);
-              onCompleteRef.current(bytes, urType);
-            } catch (e) {
-              // sample errors so a real decode bug surfaces without spam
-              if (urPartsRef.current.size % 8 === 0) {
-                console.warn(
-                  `[ur-scanner] decode failed at ${urPartsRef.current.size} parts (${urType}): ${e instanceof Error ? e.message : String(e)}`,
-                );
-              }
-              const seqLen = urSeqLenRef.current;
-              const pct = seqLen > 0
-                ? Math.min(99, Math.round((urPartsRef.current.size / seqLen) * 100))
-                : Math.min(99, urPartsRef.current.size * 10);
-              setProgress(pct);
-            }
+          const before = urPartsRef.current.size;
+          // Cap the accumulator. Hitting the cap means either a hostile
+          // source or a degenerate (never-completing) fountain — abort
+          // the scanner the same way the stall watchdog does, otherwise
+          // the camera + ZXing pipeline keep running and every new
+          // unique frame re-enters this branch.
+          if (before >= MAX_UR_PARTS) {
+            const msg = `UR fountain exceeded ${MAX_UR_PARTS} unique frames without completing — aborting scan.`;
+            completedRef.current = true; // latch — report once
+            stopScanning();
+            setError(msg);
+            onErrorRef.current?.(msg);
             return;
           }
+          urPartsRef.current.add(text);
+          if (urPartsRef.current.size === before) return; // duplicate
 
-          // ── legacy P-format mode ──
-          if (modeRef.current === '') modeRef.current = 'p';
-          if (modeRef.current !== 'p') return;
+          // a genuinely new unique part — reset the stall clock
+          lastNewPartAtRef.current = Date.now();
+          setPartsReceived(urPartsRef.current.size);
 
-          const match = text.match(/^P(\d+)\/(\d+)\/([^/]+)\/(.+)$/);
-          if (!match) return;
-
-          const idx = Number(match[1]);
-          const total = Number(match[2]);
-          const type = match[3]!;
-          const chunk = match[4]!;
-
-          if (totalRef.current === 0) {
-            totalRef.current = total;
-            urTypeRef.current = type;
+          // seqLen drives honest progress; without it we'd pin at 99%.
+          if (urSeqLenRef.current === 0) {
+            const seqMatch = lower.match(/^ur:[^/]+\/(\d+)-(\d+)\//);
+            if (seqMatch) urSeqLenRef.current = Number(seqMatch[2]);
           }
 
-          if (!framesRef.current.has(idx)) {
-            framesRef.current.set(idx, chunk);
-            setPartsReceived(framesRef.current.size);
-            setProgress(Math.round((framesRef.current.size / total) * 100));
+          // `default()` must be awaited — without it the bindgen glue's
+          // `wasm` is undefined and exported calls die on `__wbindgen_*`.
+          if (!wasmRef.current && !wasmInitInFlightRef.current) {
+            wasmInitInFlightRef.current = true;
+            import(/* webpackMode: "eager" */ '@repo/zcash-wasm')
+              .then(async (mod: unknown) => {
+                // bindgen's default export fetches+instantiates the .wasm
+                const m = mod as {
+                  default: (opts?: { module_or_path?: string }) => Promise<unknown>;
+                  ur_decode_frames: (parts: string, type: string) => string;
+                };
+                await m.default();
+                wasmRef.current = m;
+              })
+              .catch(err => {
+                console.warn('[ur-scanner] wasm init failed:', err);
+                wasmInitInFlightRef.current = false; // allow retry on next frame
+              });
           }
+          const wasm = wasmRef.current;
+          if (!wasm) return; // not loaded yet; keep accumulating
 
-          // check if complete
-          if (framesRef.current.size >= total) {
+          try {
+            const partsJson = JSON.stringify([...urPartsRef.current]);
+            const hex = wasm.ur_decode_frames(partsJson, urType);
+            // success → reconstructed
             completedRef.current = true;
             stopScanning();
-
-            try {
-              // reassemble in order
-              let b64 = '';
-              for (let i = 1; i <= total; i++) {
-                b64 += framesRef.current.get(i) || '';
-              }
-              const binary = atob(b64);
-              const bytes = new Uint8Array(binary.length);
-              for (let i = 0; i < binary.length; i++) {
-                bytes[i] = binary.charCodeAt(i);
-              }
-              onCompleteRef.current(bytes, urTypeRef.current);
-            } catch (e) {
-              const msg = e instanceof Error ? e.message : 'failed to decode';
-              setError(msg);
-              onErrorRef.current?.(msg);
+            const bytes = new Uint8Array(hex.length >> 1);
+            for (let i = 0; i < bytes.length; i++) {
+              bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
             }
+            setProgress(100);
+            onCompleteRef.current(bytes, urType);
+          } catch (e) {
+            // sample errors so a real decode bug surfaces without spam
+            if (urPartsRef.current.size % 8 === 0) {
+              console.warn(
+                `[ur-scanner] decode failed at ${urPartsRef.current.size} parts (${urType}): ${e instanceof Error ? e.message : String(e)}`,
+              );
+            }
+            const seqLen = urSeqLenRef.current;
+            const pct =
+              seqLen > 0
+                ? Math.min(99, Math.round((urPartsRef.current.size / seqLen) * 100))
+                : Math.min(99, urPartsRef.current.size * 10);
+            setProgress(pct);
           }
-        },
-      );
+          return;
+        }
+
+        // ── legacy P-format mode ──
+        if (modeRef.current === '') modeRef.current = 'p';
+        if (modeRef.current !== 'p') return;
+
+        const match = text.match(/^P(\d+)\/(\d+)\/([^/]+)\/(.+)$/);
+        if (!match) return;
+
+        const idx = Number(match[1]);
+        const total = Number(match[2]);
+        const type = match[3]!;
+        const chunk = match[4]!;
+
+        if (totalRef.current === 0) {
+          totalRef.current = total;
+          urTypeRef.current = type;
+        }
+
+        if (!framesRef.current.has(idx)) {
+          framesRef.current.set(idx, chunk);
+          setPartsReceived(framesRef.current.size);
+          setProgress(Math.round((framesRef.current.size / total) * 100));
+        }
+
+        // check if complete
+        if (framesRef.current.size >= total) {
+          completedRef.current = true;
+          stopScanning();
+
+          try {
+            // reassemble in order
+            let b64 = '';
+            for (let i = 1; i <= total; i++) {
+              b64 += framesRef.current.get(i) || '';
+            }
+            const binary = atob(b64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) {
+              bytes[i] = binary.charCodeAt(i);
+            }
+            onCompleteRef.current(bytes, urTypeRef.current);
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : 'failed to decode';
+            setError(msg);
+            onErrorRef.current?.(msg);
+          }
+        }
+      });
 
       controlsRef.current = controls;
       if (mountedRef.current) setIsScanning(true);
@@ -374,10 +372,18 @@ export const AnimatedQrScanner = ({
       {isScanning && (
         <div className='absolute inset-0 pointer-events-none flex items-center justify-center'>
           <div className={`relative ${inline ? 'w-44 h-44' : 'w-64 h-64'}`}>
-            <div className={`absolute top-0 left-0 w-6 h-6 border-t-[3px] border-l-[3px] ${cornerColor} rounded-tl-lg`} />
-            <div className={`absolute top-0 right-0 w-6 h-6 border-t-[3px] border-r-[3px] ${cornerColor} rounded-tr-lg`} />
-            <div className={`absolute bottom-0 left-0 w-6 h-6 border-b-[3px] border-l-[3px] ${cornerColor} rounded-bl-lg`} />
-            <div className={`absolute bottom-0 right-0 w-6 h-6 border-b-[3px] border-r-[3px] ${cornerColor} rounded-br-lg`} />
+            <div
+              className={`absolute top-0 left-0 w-6 h-6 border-t-[3px] border-l-[3px] ${cornerColor} rounded-tl-lg`}
+            />
+            <div
+              className={`absolute top-0 right-0 w-6 h-6 border-t-[3px] border-r-[3px] ${cornerColor} rounded-tr-lg`}
+            />
+            <div
+              className={`absolute bottom-0 left-0 w-6 h-6 border-b-[3px] border-l-[3px] ${cornerColor} rounded-bl-lg`}
+            />
+            <div
+              className={`absolute bottom-0 right-0 w-6 h-6 border-b-[3px] border-r-[3px] ${cornerColor} rounded-br-lg`}
+            />
           </div>
         </div>
       )}
@@ -399,8 +405,12 @@ export const AnimatedQrScanner = ({
             </div>
             <p className='text-xs text-red-400'>{error}</p>
             <div className='flex gap-2'>
-              <Button variant='secondary' size='sm' onClick={handleClose}>cancel</Button>
-              <Button size='sm' onClick={startScanning}>retry</Button>
+              <Button variant='secondary' size='sm' onClick={handleClose}>
+                cancel
+              </Button>
+              <Button size='sm' onClick={startScanning}>
+                retry
+              </Button>
             </div>
           </div>
         </div>
@@ -411,18 +421,23 @@ export const AnimatedQrScanner = ({
   const progressBar = (
     <>
       <div className='flex items-center gap-3'>
-        <div className={`flex-1 ${inline ? 'h-1' : 'h-1.5'} rounded-full bg-white/10 overflow-hidden`}>
+        <div
+          className={`flex-1 ${inline ? 'h-1' : 'h-1.5'} rounded-full bg-white/10 overflow-hidden`}
+        >
           <div
             className={`h-full rounded-full ${progressColor} transition-all duration-300`}
             style={{ width: `${progress}%` }}
           />
         </div>
-        <span className={`${inline ? 'text-[10px]' : 'text-xs'} font-mono text-white/80 w-12 text-right`}>
+        <span
+          className={`${inline ? 'text-[10px]' : 'text-xs'} font-mono text-white/80 w-12 text-right`}
+        >
           {progress}%
         </span>
       </div>
       <p className={`mt-1.5 ${inline ? 'text-[9px]' : 'text-[10px]'} text-white/40 text-center`}>
-        {partsReceived} part{partsReceived !== 1 ? 's' : ''} received — hold camera steady over animated QR
+        {partsReceived} part{partsReceived !== 1 ? 's' : ''} received — hold camera steady over
+        animated QR
       </p>
     </>
   );
@@ -442,9 +457,7 @@ export const AnimatedQrScanner = ({
         <div className='relative aspect-square w-full overflow-hidden rounded-lg border border-yellow-500/40 bg-black'>
           {cameraView}
         </div>
-        {description && (
-          <p className='text-[10px] text-fg-muted text-center'>{description}</p>
-        )}
+        {description && <p className='text-[10px] text-fg-muted text-center'>{description}</p>}
         <div className='rounded-md bg-black/60 p-2'>{progressBar}</div>
       </div>
     );

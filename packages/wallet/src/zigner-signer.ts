@@ -25,10 +25,7 @@
  * and public keys.
  */
 
-import {
-  FullViewingKey,
-  WalletId,
-} from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
+import { FullViewingKey, WalletId } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
 import {
   AuthorizationData,
   TransactionPlan,
@@ -117,10 +114,14 @@ export function parseZignerFvkQR(hex: string): ZignerFvkExportData {
     throw new Error(`Invalid Zigner QR: expected 0x53, got 0x${data[0]?.toString(16)}`);
   }
   if (data[1] !== PENUMBRA_CHAIN_ID) {
-    throw new Error(`Invalid Zigner QR: expected Penumbra chain 0x03, got 0x${data[1]?.toString(16)}`);
+    throw new Error(
+      `Invalid Zigner QR: expected Penumbra chain 0x03, got 0x${data[1]?.toString(16)}`,
+    );
   }
   if (data[2] !== QR_TYPE_FVK_EXPORT) {
-    throw new Error(`Invalid Zigner QR: expected FVK export type 0x01, got 0x${data[2]?.toString(16)}`);
+    throw new Error(
+      `Invalid Zigner QR: expected FVK export type 0x01, got 0x${data[2]?.toString(16)}`,
+    );
   }
 
   let offset = 3;
@@ -160,7 +161,9 @@ export function parseZignerFvkQR(hex: string): ZignerFvkExportData {
   let zidPublicKey: string | undefined;
   if (offset < data.length && data[offset] === 0x01 && offset + 1 + 32 <= data.length) {
     const zidBytes = data.subarray(offset + 1, offset + 1 + 32);
-    zidPublicKey = Array.from(zidBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+    zidPublicKey = Array.from(zidBytes)
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
   }
 
   return {
@@ -274,9 +277,10 @@ function hexToBytes(hex: string): Uint8Array {
  */
 function readUint32LE(data: Uint8Array, offset: number): number {
   return (
-    (data[offset]!) |
-    (data[offset + 1]! << 8) |
-    (data[offset + 2]! << 16) |
-    (data[offset + 3]! << 24)
-  ) >>> 0;
+    (data[offset]! |
+      (data[offset + 1]! << 8) |
+      (data[offset + 2]! << 16) |
+      (data[offset + 3]! << 24)) >>>
+    0
+  );
 }

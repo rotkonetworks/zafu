@@ -41,10 +41,10 @@ for await (const { bucketStart, blocks } of fetch(walletId, ownedBuckets, {
 
 ## Strategies
 
-| Strategy | Decoys | Shuffle | Concurrency | Server visibility |
-|---|---|---|---|---|
-| `private` (default) | 2x | yes | 4 | 3N random 100-block windows |
-| `fast` | 0 | no | 8 | N exact 100-block windows |
+| Strategy            | Decoys | Shuffle | Concurrency | Server visibility           |
+| ------------------- | ------ | ------- | ----------- | --------------------------- |
+| `private` (default) | 2x     | yes     | 4           | 3N random 100-block windows |
+| `fast`              | 0      | no      | 8           | N exact 100-block windows   |
 
 No strategy ever calls `GetTransaction(txid)`. There is no filter that can
 recover privacy after a leaked txid lookup, so the per-tx leaky path is
@@ -74,7 +74,7 @@ breaking the public API.
   (innermost). Read the array as "innermost first."
 - **Cache vs decoy ordering**: `[cache, decoy, shuffle, concurrency]`
   means at call-time the call goes `concurrency → shuffle → decoy →
-  cache → base`. Decoy adds random buckets, cache strips known ones
+cache → base`. Decoy adds random buckets, cache strips known ones
   (real or decoy that collided with cached real). Collisions degrade the
   3N count slightly but never re-fetch a bucket the server has already
   seen.

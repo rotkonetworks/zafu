@@ -73,8 +73,7 @@ export function createServer(port: MessagePort): WorkerServer {
       const reply: ReplyEnvelope = { __finagle: true, callId, result };
       port.postMessage(reply);
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : String(err);
+      const message = err instanceof Error ? err.message : String(err);
       const reply: ReplyEnvelope = {
         __finagle: true,
         callId,

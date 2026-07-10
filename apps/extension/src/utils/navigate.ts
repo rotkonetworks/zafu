@@ -24,7 +24,7 @@ export const usePopupNav = useTypesafeNav<PopupPath>;
  */
 export const openInDedicatedWindow = async (
   path: PopupPath,
-  options?: { width?: number; height?: number }
+  options?: { width?: number; height?: number },
 ): Promise<chrome.windows.Window | undefined> => {
   const { width = 400, height = 600 } = options ?? {};
 

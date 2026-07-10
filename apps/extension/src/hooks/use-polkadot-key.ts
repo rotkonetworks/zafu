@@ -33,7 +33,9 @@ export function usePolkadotPublicKey() {
       try {
         // For zigner-zafu wallets, get the polkadotSs58 address from encrypted data
         if (selectedKeyInfo.type === 'zigner-zafu') {
-          const supportedNetworks = selectedKeyInfo.insensitive?.['supportedNetworks'] as string[] | undefined;
+          const supportedNetworks = selectedKeyInfo.insensitive?.['supportedNetworks'] as
+            | string[]
+            | undefined;
           if (supportedNetworks?.includes('polkadot')) {
             // This is a polkadot zigner wallet - need to get the address from vault data
             const vaults = await localExtStorage.get('vaults');
@@ -53,7 +55,9 @@ export function usePolkadotPublicKey() {
         }
 
         // check insensitive data for polkadot public key (mnemonic wallets)
-        const polkadotKey = selectedKeyInfo.insensitive?.['polkadotPublicKey'] as string | undefined;
+        const polkadotKey = selectedKeyInfo.insensitive?.['polkadotPublicKey'] as
+          | string
+          | undefined;
         if (polkadotKey) {
           if (!cancelled) setPublicKey(polkadotKey);
         } else {
@@ -74,7 +78,9 @@ export function usePolkadotPublicKey() {
     };
 
     void loadPublicKey();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [selectedKeyInfo?.id, selectedKeyInfo?.type]);
 
   return { publicKey, loading };

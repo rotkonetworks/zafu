@@ -2,9 +2,21 @@ import { lazy, Suspense, useState, useCallback, useEffect, useMemo, useRef } fro
 import { useNavigate } from 'react-router-dom';
 
 import { useStore } from '../../../state';
-import { selectActiveNetwork, selectEffectiveKeyInfo, selectPenumbraAccount, selectSetPenumbraAccount, keyRingSelector, type NetworkType } from '../../../state/keyring';
+import {
+  selectActiveNetwork,
+  selectEffectiveKeyInfo,
+  selectPenumbraAccount,
+  selectSetPenumbraAccount,
+  keyRingSelector,
+  type NetworkType,
+} from '../../../state/keyring';
 import { PenumbraAccountPicker } from '../../../components/penumbra-account-picker';
-import { selectActiveZcashWallet, selectZcashWallets, selectActiveZcashIndex, walletsSelector } from '../../../state/wallets';
+import {
+  selectActiveZcashWallet,
+  selectZcashWallets,
+  selectActiveZcashIndex,
+  walletsSelector,
+} from '../../../state/wallets';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { needsLogin, needsOnboard } from '../popup-needs';
 import { PopupPath } from '../paths';
@@ -50,7 +62,9 @@ import type { TransactionInfo } from '@penumbra-zone/protobuf/penumbra/view/v1/v
 
 /** lazy load network-specific content - only load when needed */
 const AssetsTable = lazy(() => import('./assets-table').then(m => ({ default: m.AssetsTable })));
-const PolkadotAssets = lazy(() => import('./polkadot-assets').then(m => ({ default: m.PolkadotAssets })));
+const PolkadotAssets = lazy(() =>
+  import('./polkadot-assets').then(m => ({ default: m.PolkadotAssets })),
+);
 // Cosmos sub-wallets render under the Penumbra view to surface
 // unshielded balances the user can shield. Lazy so non-Penumbra views
 // don't pay the chunk.
@@ -68,9 +82,10 @@ const MultisigOverview = () => {
   const [balances, setBalances] = useState<Record<string, bigint>>({});
 
   const multisigWallets = useMemo(
-    () => zcashWallets
-      .filter(w => w.multisig && !w.multisig.hidden)
-      .map(w => ({ ...w, originalIndex: zcashWallets.indexOf(w) })),
+    () =>
+      zcashWallets
+        .filter(w => w.multisig && !w.multisig.hidden)
+        .map(w => ({ ...w, originalIndex: zcashWallets.indexOf(w) })),
     [zcashWallets],
   );
 
@@ -126,13 +141,13 @@ const MultisigOverview = () => {
           </span>
         </div>
         <div className='flex items-center gap-2'>
-          <span className='text-[13px] tabular text-fg-muted'>
-            {formatZec(totalZat)} ZEC
-          </span>
-          <span className={cn(
-            'h-4 w-4 text-fg-dim transition-transform',
-            expanded ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down',
-          )} />
+          <span className='text-[13px] tabular text-fg-muted'>{formatZec(totalZat)} ZEC</span>
+          <span
+            className={cn(
+              'h-4 w-4 text-fg-dim transition-transform',
+              expanded ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down',
+            )}
+          />
         </div>
       </button>
 
@@ -161,9 +176,7 @@ const MultisigOverview = () => {
                     <span className='i-lucide-check h-3 w-3 text-zigner-gold shrink-0' />
                   )}
                 </div>
-                <span className='text-[13px] tabular text-fg-muted shrink-0'>
-                  {formatZec(bal)}
-                </span>
+                <span className='text-[13px] tabular text-fg-muted shrink-0'>{formatZec(bal)}</span>
               </button>
             );
           })}
@@ -202,7 +215,6 @@ export const PopupIndex = () => {
   // preload balances in background for instant display
   usePreloadBalances(penumbraAccount);
 
-
   // dismiss backup reminder on first load
   useEffect(() => {
     void localExtStorage.get('backupReminderSeen').then(seen => {
@@ -218,105 +230,105 @@ export const PopupIndex = () => {
   }, [address]);
 
   // mnemonic vaults derive zcash keys directly — no zcash wallet record
-  const walletName = activeNetwork === 'zcash' && selectedKeyInfo?.type !== 'mnemonic'
-    ? activeZcashWallet?.label ?? selectedKeyInfo?.name ?? 'no wallet'
-    : selectedKeyInfo?.name ?? 'no wallet';
+  const walletName =
+    activeNetwork === 'zcash' && selectedKeyInfo?.type !== 'mnemonic'
+      ? (activeZcashWallet?.label ?? selectedKeyInfo?.name ?? 'no wallet')
+      : (selectedKeyInfo?.name ?? 'no wallet');
 
   // gate on the selected vault, not activeZcashIndex — the index lags on
   // vault switches to mnemonic (which has no zcash wallet record).
-  const selectedMultisigWallet = selectedKeyInfo?.type === 'frost-multisig'
-    ? zcashWallets.find(w => w.vaultId === selectedKeyInfo.id && w.multisig)
-    : undefined;
+  const selectedMultisigWallet =
+    selectedKeyInfo?.type === 'frost-multisig'
+      ? zcashWallets.find(w => w.vaultId === selectedKeyInfo.id && w.multisig)
+      : undefined;
   const isMultisig = !!selectedMultisigWallet;
 
   // truncate address for display
-  const displayAddress = address
-    ? `${address.slice(0, 12)}...${address.slice(-8)}`
-    : walletName;
+  const displayAddress = address ? `${address.slice(0, 12)}...${address.slice(-8)}` : walletName;
 
   return (
     <div className='flex min-h-full flex-col'>
       <div className='flex flex-col gap-3 p-4'>
         {/* address + actions row */}
         <div className='rounded-lg border border-border-soft bg-elev-1 p-4'>
-{/* account picker moved into PenumbraContent below sync bar */}
+          {/* account picker moved into PenumbraContent below sync bar */}
           <div className='flex items-center justify-between'>
-          <div>
-            <div className='mb-0.5 flex items-center gap-1.5'>
-              <span className='text-[10px] text-fg-dim lowercase tracking-[0.05em]'>
-                your address
-              </span>
-              {/* tiny shielded indicator — new users may not realize their
+            <div>
+              <div className='mb-0.5 flex items-center gap-1.5'>
+                <span className='text-[10px] text-fg-dim lowercase tracking-[0.05em]'>
+                  your address
+                </span>
+                {/* tiny shielded indicator — new users may not realize their
                   unified/orchard address is privacy-preserving. The shield
                   icon is universally understood; one icon, no extra text. */}
-              {address && address.startsWith('u') && (
-                <span
-                  className='i-lucide-shield-check h-3 w-3 text-zigner-gold/70'
-                  title='shielded address — senders cannot see your other transactions'
-                />
-              )}
-            </div>
-            <div className='flex items-center gap-1'>
-              <button
-                onClick={copyAddress}
-                disabled={!address}
-                title={address ? (copied ? 'copied!' : 'click to copy') : undefined}
-                className='flex items-center gap-1.5 text-xs text-fg transition-colors duration-100 hover:text-fg-high disabled:opacity-50 disabled:cursor-not-allowed'
-              >
-                {isMultisig && (
-                  <span className='rounded-sm bg-zigner-gold/15 px-1.5 py-0.5 text-[9px] text-zigner-gold tabular leading-none'>
-                    {selectedMultisigWallet!.multisig!.threshold}/{selectedMultisigWallet!.multisig!.maxSigners}
-                  </span>
+                {address && address.startsWith('u') && (
+                  <span
+                    className='i-lucide-shield-check h-3 w-3 text-zigner-gold/70'
+                    title='shielded address — senders cannot see your other transactions'
+                  />
                 )}
-                <span className='tabular'>{displayAddress}</span>
-                {address && (
-                  copied ? (
-                    <span className='inline-flex items-center gap-0.5 text-zigner-gold'>
-                      <span className='i-lucide-check h-3 w-3' />
-                      <span className='text-[10px] lowercase'>copied</span>
-                    </span>
-                  ) : (
-                    <span className='i-lucide-copy h-3 w-3' />
-                  )
-                )}
-              </button>
-              {address && activeNetwork === 'zcash' && (
+              </div>
+              <div className='flex items-center gap-1'>
                 <button
-                  onClick={() => {
-                    chrome.storage.local.get('zcashShieldedIndex', r => {
-                      const next = ((r['zcashShieldedIndex'] as number) ?? 0) + 1;
-                      void chrome.storage.local.set({ zcashShieldedIndex: next });
-                    });
-                  }}
-                  className='p-0.5 text-fg-muted transition-colors hover:text-fg-high'
-                  title='rotate address'
+                  onClick={copyAddress}
+                  disabled={!address}
+                  title={address ? (copied ? 'copied!' : 'click to copy') : undefined}
+                  className='flex items-center gap-1.5 text-xs text-fg transition-colors duration-100 hover:text-fg-high disabled:opacity-50 disabled:cursor-not-allowed'
                 >
-                  <span className='i-lucide-refresh-cw h-3 w-3' />
+                  {isMultisig && (
+                    <span className='rounded-sm bg-zigner-gold/15 px-1.5 py-0.5 text-[9px] text-zigner-gold tabular leading-none'>
+                      {selectedMultisigWallet!.multisig!.threshold}/
+                      {selectedMultisigWallet!.multisig!.maxSigners}
+                    </span>
+                  )}
+                  <span className='tabular'>{displayAddress}</span>
+                  {address &&
+                    (copied ? (
+                      <span className='inline-flex items-center gap-0.5 text-zigner-gold'>
+                        <span className='i-lucide-check h-3 w-3' />
+                        <span className='text-[10px] lowercase'>copied</span>
+                      </span>
+                    ) : (
+                      <span className='i-lucide-copy h-3 w-3' />
+                    ))}
                 </button>
-              )}
+                {address && activeNetwork === 'zcash' && (
+                  <button
+                    onClick={() => {
+                      chrome.storage.local.get('zcashShieldedIndex', r => {
+                        const next = ((r['zcashShieldedIndex'] as number) ?? 0) + 1;
+                        void chrome.storage.local.set({ zcashShieldedIndex: next });
+                      });
+                    }}
+                    className='p-0.5 text-fg-muted transition-colors hover:text-fg-high'
+                    title='rotate address'
+                  >
+                    <span className='i-lucide-refresh-cw h-3 w-3' />
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
 
-          {/* Fixed 40×40 icon-only action buttons. Send keeps
+            {/* Fixed 40×40 icon-only action buttons. Send keeps
               network-accent so the primary action stands out. */}
-          <div className='flex gap-1.5'>
-            <ActionButton
-              icon='i-lucide-arrow-down'
-              label='receive'
-              onClick={() => navigate(PopupPath.RECEIVE)}
-            />
-            <ActionButton
-              icon='i-lucide-arrow-left-right'
-              label='swap'
-              onClick={() => navigate(PopupPath.SWAP)}
-            />
-            <ActionButton
-              icon='i-lucide-arrow-up'
-              label='send'
-              onClick={() => navigate(PopupPath.SEND)}
-              variant={activeNetwork === 'penumbra' ? 'penumbra' : 'zcash'}
-            />
-          </div>
+            <div className='flex gap-1.5'>
+              <ActionButton
+                icon='i-lucide-arrow-down'
+                label='receive'
+                onClick={() => navigate(PopupPath.RECEIVE)}
+              />
+              <ActionButton
+                icon='i-lucide-arrow-left-right'
+                label='swap'
+                onClick={() => navigate(PopupPath.SWAP)}
+              />
+              <ActionButton
+                icon='i-lucide-arrow-up'
+                label='send'
+                onClick={() => navigate(PopupPath.SEND)}
+                variant={activeNetwork === 'penumbra' ? 'penumbra' : 'zcash'}
+              />
+            </div>
           </div>
         </div>
 
@@ -356,7 +368,13 @@ const NetworkContent = ({
   network: NetworkType;
   penumbraAccount: number;
   setPenumbraAccount: (n: number) => void;
-  zcashWallet?: { label: string; mainnet: boolean; orchardFvk?: string; ufvk?: string; id?: string };
+  zcashWallet?: {
+    label: string;
+    mainnet: boolean;
+    orchardFvk?: string;
+    ufvk?: string;
+    id?: string;
+  };
   polkadotPublicKey?: string;
   hasMnemonic?: boolean;
 }) => {
@@ -383,14 +401,21 @@ const NetworkContent = ({
 };
 
 /** penumbra-specific content - balance card + sync bar + account picker + assets */
-const PenumbraContent = ({ account, onAccountChange }: { account: number; onAccountChange: (n: number) => void }) => {
+const PenumbraContent = ({
+  account,
+  onAccountChange,
+}: {
+  account: number;
+  onAccountChange: (n: number) => void;
+}) => {
   const navigate = useNavigate();
   const { latestBlockHeight, fullSyncHeight, error } = useSyncProgress();
 
   const isSyncing = (latestBlockHeight ?? 0) - (fullSyncHeight ?? 0) > 10;
-  const syncPct = latestBlockHeight && fullSyncHeight
-    ? Math.min(100, Math.round((Number(fullSyncHeight) / Number(latestBlockHeight)) * 100))
-    : 0;
+  const syncPct =
+    latestBlockHeight && fullSyncHeight
+      ? Math.min(100, Math.round((Number(fullSyncHeight) / Number(latestBlockHeight)) * 100))
+      : 0;
 
   const syncLabel = !latestBlockHeight
     ? 'connecting...'
@@ -404,9 +429,7 @@ const PenumbraContent = ({ account, onAccountChange }: { account: number; onAcco
     staleTime: 5_000,
     queryFn: async () => {
       try {
-        const balances = await Array.fromAsync(
-          viewClient.balances({ accountFilter: { account } }),
-        );
+        const balances = await Array.fromAsync(viewClient.balances({ accountFilter: { account } }));
         let total = 0;
         for (const b of balances) {
           if (!b.balanceView) continue;
@@ -432,9 +455,12 @@ const PenumbraContent = ({ account, onAccountChange }: { account: number; onAcco
     }
   }, [fullSyncHeight, account, queryClient]);
 
-  const balanceDisplay = umBalance != null && umBalance > 0
-    ? `${umBalance.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} UM`
-    : isSyncing ? 'syncing...' : '0 UM';
+  const balanceDisplay =
+    umBalance != null && umBalance > 0
+      ? `${umBalance.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} UM`
+      : isSyncing
+        ? 'syncing...'
+        : '0 UM';
 
   return (
     <div className='flex-1 flex flex-col gap-3'>
@@ -457,10 +483,14 @@ const PenumbraContent = ({ account, onAccountChange }: { account: number; onAcco
           // one-tap link to the network picker so a new user whose
           // Penumbra grpc endpoint is unreachable doesn't have to
           // hunt through settings to switch.
-          errorAction={error ? {
-            label: 'switch endpoint',
-            onClick: () => navigate(PopupPath.SETTINGS_NETWORKS),
-          } : undefined}
+          errorAction={
+            error
+              ? {
+                  label: 'switch endpoint',
+                  onClick: () => navigate(PopupPath.SETTINGS_NETWORKS),
+                }
+              : undefined
+          }
           barColor='bg-penumbra-purple'
           barDoneColor='bg-penumbra-teal'
         />
@@ -564,7 +594,9 @@ const ZcashContent = ({
 
   const handleZignerShield = useCallback(async () => {
     if (!watchOnly || !selectedKeyInfo) return;
-    const ufvk = watchOnly.ufvk ?? (watchOnly.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
+    const ufvk =
+      watchOnly.ufvk ??
+      (watchOnly.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
     if (!ufvk) return;
 
     setZignerShieldStep('building');
@@ -574,11 +606,18 @@ const ZcashContent = ({
     try {
       await spawnNetworkWorker('zcash');
       const addressIndexMap: Record<string, number> = {};
-      tAddresses.forEach((addr, i) => { addressIndexMap[addr] = i; });
+      tAddresses.forEach((addr, i) => {
+        addressIndexMap[addr] = i;
+      });
 
       const result = await buildUnsignedShieldInWorker(
-        'zcash', selectedKeyInfo.id, zidecarUrl,
-        tAddresses, isMainnet, ufvk, addressIndexMap,
+        'zcash',
+        selectedKeyInfo.id,
+        zidecarUrl,
+        tAddresses,
+        isMainnet,
+        ufvk,
+        addressIndexMap,
       );
       setShieldUnsignedData(result);
 
@@ -605,50 +644,65 @@ const ZcashContent = ({
     }
   }, [watchOnly, selectedKeyInfo, tAddresses, isMainnet, zidecarUrl]);
 
-  const handleZignerShieldSigScanned = useCallback(async (data: string) => {
-    if (!isZcashSignatureQR(data)) {
-      setZignerShieldError('invalid signature QR code');
-      setZignerShieldStep('error');
-      return;
-    }
-
-    try {
-      const sigResponse = parseZcashSignatureResponse(data);
-
-      if (!shieldUnsignedData || !selectedKeyInfo) {
-        throw new Error('missing unsigned transaction data');
+  const handleZignerShieldSigScanned = useCallback(
+    async (data: string) => {
+      if (!isZcashSignatureQR(data)) {
+        setZignerShieldError('invalid signature QR code');
+        setZignerShieldStep('error');
+        return;
       }
 
-      // verify the returned sighash matches what we sent
-      const toHex = (b: Uint8Array) => Array.from(b).map(x => x.toString(16).padStart(2, '0')).join('');
-      const responseSighash = toHex(sigResponse.sighash);
-      if (shieldUnsignedData.sighashes.length > 0 && responseSighash !== shieldUnsignedData.sighashes[0]) {
-        throw new Error('sighash mismatch — signature is for a different transaction');
+      try {
+        const sigResponse = parseZcashSignatureResponse(data);
+
+        if (!shieldUnsignedData || !selectedKeyInfo) {
+          throw new Error('missing unsigned transaction data');
+        }
+
+        // verify the returned sighash matches what we sent
+        const toHex = (b: Uint8Array) =>
+          Array.from(b)
+            .map(x => x.toString(16).padStart(2, '0'))
+            .join('');
+        const responseSighash = toHex(sigResponse.sighash);
+        if (
+          shieldUnsignedData.sighashes.length > 0 &&
+          responseSighash !== shieldUnsignedData.sighashes[0]
+        ) {
+          throw new Error('sighash mismatch — signature is for a different transaction');
+        }
+
+        setZignerShieldStep('broadcasting');
+
+        // zigner returns each transparent sig as: DER_sig + 0x01(hashtype) + compressed_pubkey(33 bytes)
+        // split into sig (with hashtype) and pubkey
+        const signatures = sigResponse.transparentSigs.map(combined => {
+          const pubkey = combined.slice(-33);
+          const sig = combined.slice(0, -33);
+          const toHex = (b: Uint8Array) =>
+            Array.from(b)
+              .map(x => x.toString(16).padStart(2, '0'))
+              .join('');
+          return { sig_hex: toHex(sig), pubkey_hex: toHex(pubkey) };
+        });
+
+        const result = await completeShieldInWorker(
+          'zcash',
+          selectedKeyInfo.id,
+          zidecarUrl,
+          shieldUnsignedData.unsignedTxHex,
+          signatures,
+        );
+
+        setZignerShieldTxid(result.txid);
+        setZignerShieldStep('complete');
+      } catch (err) {
+        setZignerShieldError(err instanceof Error ? err.message : String(err));
+        setZignerShieldStep('error');
       }
-
-      setZignerShieldStep('broadcasting');
-
-      // zigner returns each transparent sig as: DER_sig + 0x01(hashtype) + compressed_pubkey(33 bytes)
-      // split into sig (with hashtype) and pubkey
-      const signatures = sigResponse.transparentSigs.map(combined => {
-        const pubkey = combined.slice(-33);
-        const sig = combined.slice(0, -33);
-        const toHex = (b: Uint8Array) => Array.from(b).map(x => x.toString(16).padStart(2, '0')).join('');
-        return { sig_hex: toHex(sig), pubkey_hex: toHex(pubkey) };
-      });
-
-      const result = await completeShieldInWorker(
-        'zcash', selectedKeyInfo.id, zidecarUrl,
-        shieldUnsignedData.unsignedTxHex, signatures,
-      );
-
-      setZignerShieldTxid(result.txid);
-      setZignerShieldStep('complete');
-    } catch (err) {
-      setZignerShieldError(err instanceof Error ? err.message : String(err));
-      setZignerShieldStep('error');
-    }
-  }, [shieldUnsignedData, selectedKeyInfo, watchOnly, zidecarUrl]);
+    },
+    [shieldUnsignedData, selectedKeyInfo, watchOnly, zidecarUrl],
+  );
 
   // rescan via custom event — terminate worker, clear IDB, let auto-sync restart
   useEffect(() => {
@@ -662,10 +716,16 @@ const ZcashContent = ({
         const birthdayKey = `zcashBirthday_${walletId}`;
 
         // terminate worker so in-memory commitment tree is dropped
-        try { terminateNetworkWorker('zcash'); } catch {}
+        try {
+          terminateNetworkWorker('zcash');
+        } catch {}
         // delete IndexedDB to clear stale commitment tree
-        try { indexedDB.deleteDatabase('zafu-zcash'); } catch {}
-        try { indexedDB.deleteDatabase('zafu-memo-cache'); } catch {}
+        try {
+          indexedDB.deleteDatabase('zafu-zcash');
+        } catch {}
+        try {
+          indexedDB.deleteDatabase('zafu-memo-cache');
+        } catch {}
         // update birthday and clear persisted sync height
         await chrome.storage.local.set({ [birthdayKey]: height });
         await chrome.storage.local.remove('zcashSyncHeight');
@@ -682,7 +742,9 @@ const ZcashContent = ({
           const mnemonic = await keyRing.getMnemonic(walletId);
           await startSyncInWorker('zcash', walletId, mnemonic, zidecarUrl, height);
         } else if (watchOnly) {
-          const ufvkStr = watchOnly.ufvk ?? (watchOnly.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
+          const ufvkStr =
+            watchOnly.ufvk ??
+            (watchOnly.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
           if (ufvkStr) {
             await startWatchOnlySyncInWorker('zcash', walletId, ufvkStr, zidecarUrl, height);
           }
@@ -711,10 +773,17 @@ const ZcashContent = ({
       const walletId = selectedKeyInfo.id;
       // map each address to its BIP44 derivation index so the worker signs with the correct key
       const addressIndexMap: Record<string, number> = {};
-      tAddresses.forEach((addr, i) => { addressIndexMap[addr] = i; });
+      tAddresses.forEach((addr, i) => {
+        addressIndexMap[addr] = i;
+      });
       const result = await shieldInWorker(
-        'zcash', walletId, mnemonic,
-        zidecarUrl, tAddresses, isMainnet, addressIndexMap,
+        'zcash',
+        walletId,
+        mnemonic,
+        zidecarUrl,
+        tAddresses,
+        isMainnet,
+        addressIndexMap,
       );
       setShieldTxid(result.txid);
     } catch (err) {
@@ -742,26 +811,34 @@ const ZcashContent = ({
   const blocksUntilReady = syncStatus?.blocksUntilReady ?? 1;
 
   const nomtPct = gigaproofStatus >= 1 ? 100 : 0;
-  const ligeritoPct = gigaproofStatus >= 2
-    ? (blocksUntilReady <= 0 ? 100 : Math.min(100, Math.round((1 - (chainHeight - lastGigaproofHeight) / Math.max(blocksUntilReady, 1)) * 100)))
-    : gigaproofStatus === 1 ? 50 : 0;
+  const ligeritoPct =
+    gigaproofStatus >= 2
+      ? blocksUntilReady <= 0
+        ? 100
+        : Math.min(
+            100,
+            Math.round(
+              (1 - (chainHeight - lastGigaproofHeight) / Math.max(blocksUntilReady, 1)) * 100,
+            ),
+          )
+      : gigaproofStatus === 1
+        ? 50
+        : 0;
   const scanRange = Math.max(1, chainHeight - walletBirthday);
   const scanProgress = Math.max(0, workerSyncHeight - walletBirthday);
-  const scanPct = chainHeight > 0
-    ? Math.min(100, Math.round((scanProgress / scanRange) * 100))
-    : 0;
+  const scanPct = chainHeight > 0 ? Math.min(100, Math.round((scanProgress / scanRange) * 100)) : 0;
 
   // lightwalletd has no verification pipeline — synced once the scan catches up
-  const allSynced = zcashBackend === 'lightwalletd'
-    ? scanPct >= 100
-    : scanPct >= 100 && ligeritoPct >= 100;
+  const allSynced =
+    zcashBackend === 'lightwalletd' ? scanPct >= 100 : scanPct >= 100 && ligeritoPct >= 100;
 
   // overall sync percentage (0-100) with 1 decimal — zashi style
-  const overallPct = scanPct > 0
-    ? Math.min(100, (scanProgress / scanRange) * 100)
-    : ligeritoPct > 0
-      ? Math.min(100, ligeritoPct)
-      : nomtPct;
+  const overallPct =
+    scanPct > 0
+      ? Math.min(100, (scanProgress / scanRange) * 100)
+      : ligeritoPct > 0
+        ? Math.min(100, ligeritoPct)
+        : nomtPct;
 
   // combined balance
   const totalZat = orchardZat + transparentZat;
@@ -775,19 +852,17 @@ const ZcashContent = ({
       <div className='rounded-md border border-network-accent/20 bg-elev-1 p-4'>
         <span className='kicker'>balance</span>
         <div className='mt-1 text-[32px] leading-none text-network-accent tabular'>
-          {workerSyncHeight > 0 || totalZat > 0n
-            ? `${fmtZec(totalZec)} ZEC`
-            : '— ZEC'}
+          {workerSyncHeight > 0 || totalZat > 0n ? `${fmtZec(totalZec)} ZEC` : '— ZEC'}
         </div>
         <div className='mt-1 text-[10px] text-fg-dim tabular'>
           {chainHeight <= 0
             ? 'connecting...'
             : allSynced
-              // 'synced' is what the user actually cares about — the
-              // block number is meaningful only to power users. Put the
-              // word first so a glance answers "is my wallet caught up?";
-              // the block number sits in parens for verifiers.
-              ? `synced · block ${workerSyncHeight.toLocaleString()}`
+              ? // 'synced' is what the user actually cares about — the
+                // block number is meaningful only to power users. Put the
+                // word first so a glance answers "is my wallet caught up?";
+                // the block number sits in parens for verifiers.
+                `synced · block ${workerSyncHeight.toLocaleString()}`
               : `syncing · ${overallPct.toFixed(1)}%`}
         </div>
       </div>
@@ -803,9 +878,8 @@ const ZcashContent = ({
             <div className='flex-1'>
               <div className='text-xs text-fg-high lowercase'>scanning for your notes</div>
               <p className='mt-0.5 text-[10px] text-fg-muted leading-snug'>
-                first sync can take a few minutes. you can leave this open
-                or come back later — the worker keeps running in the
-                background.
+                first sync can take a few minutes. you can leave this open or come back later — the
+                worker keeps running in the background.
               </p>
             </div>
           </div>
@@ -830,7 +904,9 @@ const ZcashContent = ({
           <div className='flex items-center justify-between'>
             <div className='flex items-center gap-2'>
               <span className='text-xs text-red-400'>transparent</span>
-              <span className='text-[10px] px-1.5 py-0.5 rounded-md bg-red-500/15 text-red-500 font-medium leading-none'>public</span>
+              <span className='text-[10px] px-1.5 py-0.5 rounded-md bg-red-500/15 text-red-500 font-medium leading-none'>
+                public
+              </span>
               <span className='text-xs font-medium tabular-nums'>
                 {utxoLoading ? '...' : `${fmtZec(tZec)} ZEC`}
               </span>
@@ -846,12 +922,20 @@ const ZcashContent = ({
             ) : (
               <button
                 onClick={() => void handleZignerShield()}
-                disabled={zignerShieldStep !== 'idle' && zignerShieldStep !== 'error' && zignerShieldStep !== 'complete'}
+                disabled={
+                  zignerShieldStep !== 'idle' &&
+                  zignerShieldStep !== 'error' &&
+                  zignerShieldStep !== 'complete'
+                }
                 className='text-xs font-medium text-red-400 hover:text-red-300 transition-colors disabled:opacity-50'
               >
-                {zignerShieldStep === 'building' ? 'building...' :
-                 zignerShieldStep === 'broadcasting' ? 'broadcasting...' :
-                 zignerShieldStep === 'complete' ? 'pending...' : 'shield via zigner'}
+                {zignerShieldStep === 'building'
+                  ? 'building...'
+                  : zignerShieldStep === 'broadcasting'
+                    ? 'broadcasting...'
+                    : zignerShieldStep === 'complete'
+                      ? 'pending...'
+                      : 'shield via zigner'}
               </button>
             )}
           </div>
@@ -860,9 +944,7 @@ const ZcashContent = ({
               shielded: {shieldTxid.slice(0, 16)}... (wait for confirmation)
             </div>
           )}
-          {shieldError && (
-            <div className='text-[10px] text-red-400 mt-1.5'>{shieldError}</div>
-          )}
+          {shieldError && <div className='text-[10px] text-red-400 mt-1.5'>{shieldError}</div>}
 
           {/* zigner shielding QR flow */}
           {zignerShieldStep === 'show_qr' && shieldSignRequestQr && (
@@ -881,7 +963,10 @@ const ZcashContent = ({
                   scan signature
                 </button>
                 <button
-                  onClick={() => { setZignerShieldStep('idle'); setShieldSignRequestQr(null); }}
+                  onClick={() => {
+                    setZignerShieldStep('idle');
+                    setShieldSignRequestQr(null);
+                  }}
                   className='text-xs text-fg-muted hover:text-fg-high px-2 transition-colors'
                 >
                   cancel
@@ -893,8 +978,8 @@ const ZcashContent = ({
           {zignerShieldStep === 'scanning' && (
             <div className='mt-3'>
               <QrScanner
-                onScan={(data) => void handleZignerShieldSigScanned(data)}
-                onError={(err) => {
+                onScan={data => void handleZignerShieldSigScanned(data)}
+                onError={err => {
                   setZignerShieldError(err);
                   setZignerShieldStep('error');
                 }}
@@ -914,7 +999,10 @@ const ZcashContent = ({
             <div className='text-[10px] text-red-400 mt-1.5'>
               {zignerShieldError}
               <button
-                onClick={() => { setZignerShieldStep('idle'); setZignerShieldError(null); }}
+                onClick={() => {
+                  setZignerShieldStep('idle');
+                  setZignerShieldError(null);
+                }}
                 className='ml-2 underline'
               >
                 dismiss
@@ -928,34 +1016,42 @@ const ZcashContent = ({
       {!allSynced && (
         <SyncProgressBar
           percent={Math.max(overallPct, 2)}
-          label={chainHeight <= 0
-            ? 'connecting...'
-            : scanPct > 0
-              ? `scanning · ${overallPct.toFixed(1)}%`
-              : zcashBackend === 'lightwalletd'
-                ? 'starting scan...'
-                : gigaproofStatus >= 2
-                  ? `ligerito · ${blocksUntilReady <= 0 ? 'verified' : `${blocksUntilReady} blocks`}`
-                  : gigaproofStatus === 1
-                    ? 'ligerito proving...'
-                    : nomtPct >= 100
-                      ? 'nomt verified'
-                      : 'verifying nomt...'}
+          label={
+            chainHeight <= 0
+              ? 'connecting...'
+              : scanPct > 0
+                ? `scanning · ${overallPct.toFixed(1)}%`
+                : zcashBackend === 'lightwalletd'
+                  ? 'starting scan...'
+                  : gigaproofStatus >= 2
+                    ? `ligerito · ${blocksUntilReady <= 0 ? 'verified' : `${blocksUntilReady} blocks`}`
+                    : gigaproofStatus === 1
+                      ? 'ligerito proving...'
+                      : nomtPct >= 100
+                        ? 'nomt verified'
+                        : 'verifying nomt...'
+          }
           error={syncError?.message}
           // When the default node is unreachable, a new user sees only a
           // red 'Failed to fetch' with no path forward. Giving them a
           // one-tap link to the network picker (where the preset list of
           // alternative LWDs lives) turns a dead-end into a recovery.
-          errorAction={syncError ? {
-            label: 'switch node',
-            onClick: () => navigate(PopupPath.SETTINGS_NETWORKS),
-          } : undefined}
-          barColor={scanPct > 0 ? 'bg-zigner-gold' : ligeritoPct > 0 ? 'bg-zigner-gold' : 'bg-fg-muted/30'}
+          errorAction={
+            syncError
+              ? {
+                  label: 'switch node',
+                  onClick: () => navigate(PopupPath.SETTINGS_NETWORKS),
+                }
+              : undefined
+          }
+          barColor={
+            scanPct > 0 ? 'bg-zigner-gold' : ligeritoPct > 0 ? 'bg-zigner-gold' : 'bg-fg-muted/30'
+          }
           barDoneColor='bg-zigner-gold'
           currentHeight={workerSyncHeight}
           targetHeight={chainHeight}
           startBlock={walletBirthday}
-          onRescan={(h) => window.dispatchEvent(new CustomEvent('zcash-rescan', { detail: h }))}
+          onRescan={h => window.dispatchEvent(new CustomEvent('zcash-rescan', { detail: h }))}
         />
       )}
 
@@ -976,9 +1072,7 @@ const PolkadotContent = ({
     return (
       <div className='flex flex-col items-center justify-center py-12 text-center'>
         <div className='text-sm text-fg-muted'>no {relay} wallet</div>
-        <div className='text-xs text-fg-muted mt-1'>
-          import a polkadot account to get started
-        </div>
+        <div className='text-xs text-fg-muted mt-1'>import a polkadot account to get started</div>
       </div>
     );
   }
@@ -1002,7 +1096,9 @@ const CosmosContent = ({ chainId }: { chainId: CosmosChainId }) => {
     return (
       <div className='flex flex-col items-center justify-center py-12 text-center'>
         <div className='text-sm text-fg-muted'>failed to load balances</div>
-        <div className='text-xs text-fg-muted mt-1'>{error instanceof Error ? error.message : 'unknown error'}</div>
+        <div className='text-xs text-fg-muted mt-1'>
+          {error instanceof Error ? error.message : 'unknown error'}
+        </div>
       </div>
     );
   }
@@ -1010,7 +1106,9 @@ const CosmosContent = ({ chainId }: { chainId: CosmosChainId }) => {
   if (!assetsData && !isLoading) {
     return (
       <div className='flex flex-col items-center justify-center py-12 text-center'>
-        <div className='text-sm text-fg-muted'>enable transparent balance fetching in privacy settings to view {config.name} balances</div>
+        <div className='text-sm text-fg-muted'>
+          enable transparent balance fetching in privacy settings to view {config.name} balances
+        </div>
       </div>
     );
   }
@@ -1048,7 +1146,9 @@ const CosmosContent = ({ chainId }: { chainId: CosmosChainId }) => {
                   </div>
                   <div>
                     <div className='text-sm font-medium'>{asset.symbol}</div>
-                    <div className='text-xs text-fg-muted truncate max-w-[120px]'>{asset.denom}</div>
+                    <div className='text-xs text-fg-muted truncate max-w-[120px]'>
+                      {asset.denom}
+                    </div>
                   </div>
                 </div>
                 <div className='text-right'>
@@ -1126,13 +1226,7 @@ const ActionButton = ({
  * disappear naturally — there is no manual hide because the panel is
  * informational and we want to nudge action.
  */
-const GetZecHint = ({
-  onReceive,
-  onSwap,
-}: {
-  onReceive: () => void;
-  onSwap: () => void;
-}) => (
+const GetZecHint = ({ onReceive, onSwap }: { onReceive: () => void; onSwap: () => void }) => (
   <div className='rounded-md border border-network-accent/15 bg-elev-1 p-4'>
     <div className='mb-3 flex items-center gap-2'>
       <span className='i-lucide-sparkles h-3.5 w-3.5 text-network-accent' />
@@ -1202,7 +1296,9 @@ const HintRow = ({
 
 /** extract account index from a visible note's decoded address view */
 function noteAccountIndex(note: unknown): number | undefined {
-  const n = note as { address?: { addressView?: { case?: string; value?: { index?: { account?: number } } } } } | undefined;
+  const n = note as
+    | { address?: { addressView?: { case?: string; value?: { index?: { account?: number } } } } }
+    | undefined;
   if (!n?.address?.addressView) return undefined;
   const av = n.address.addressView;
   if (av.case === 'decoded' && av.value?.index != null) {
@@ -1213,7 +1309,9 @@ function noteAccountIndex(note: unknown): number | undefined {
 
 function parsePenumbraTx(txInfo: TransactionInfo): ParsedTransaction {
   const id = txInfo.id?.inner
-    ? Array.from(txInfo.id.inner).map(b => b.toString(16).padStart(2, '0')).join('')
+    ? Array.from(txInfo.id.inner)
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('')
     : '';
   const height = Number(txInfo.height ?? 0);
   let type: ParsedTransaction['type'] = 'unknown';
@@ -1236,7 +1334,8 @@ function parsePenumbraTx(txInfo: TransactionInfo): ParsedTransaction {
         if (idx != null) accountIndices.add(idx);
       }
     } else if (c === 'swap') {
-      type = 'swap'; description = 'Swap';
+      type = 'swap';
+      description = 'Swap';
       // extract account from swap output notes (populated after claim)
       const sv = action.actionView.value.swapView;
       if (sv?.case === 'visible') {
@@ -1247,7 +1346,8 @@ function parsePenumbraTx(txInfo: TransactionInfo): ParsedTransaction {
         }
       }
     } else if (c === 'swapClaim') {
-      type = 'swap'; description = 'Swap Claim';
+      type = 'swap';
+      description = 'Swap Claim';
       // swap claims are separate txs with no spend/output actions - extract
       // account from the claim's output notes
       const scv = action.actionView.value.swapClaimView;
@@ -1258,12 +1358,22 @@ function parsePenumbraTx(txInfo: TransactionInfo): ParsedTransaction {
           if (idx != null) accountIndices.add(idx);
         }
       }
-    } else if (c === 'delegate') { type = 'delegate'; description = 'Delegate'; }
-    else if (c === 'undelegate') { type = 'undelegate'; description = 'Undelegate'; }
+    } else if (c === 'delegate') {
+      type = 'delegate';
+      description = 'Delegate';
+    } else if (c === 'undelegate') {
+      type = 'undelegate';
+      description = 'Undelegate';
+    }
   }
   if (type === 'unknown') {
-    if (hasVisibleSpend) { type = 'send'; description = 'Send'; }
-    else if (hasOutput) { type = 'receive'; description = 'Receive'; }
+    if (hasVisibleSpend) {
+      type = 'send';
+      description = 'Send';
+    } else if (hasOutput) {
+      type = 'receive';
+      description = 'Receive';
+    }
   }
 
   // extract memo text if visible
@@ -1299,8 +1409,11 @@ function fmtTime(ts: number | null): string {
   if (ts === null) return '...';
   const d = new Date(ts);
   const now = new Date();
-  const diff = Math.floor((new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
-    - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / 86400000);
+  const diff = Math.floor(
+    (new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() -
+      new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) /
+      86400000,
+  );
   const t = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   if (diff === 0) return `Today ${t}`;
   if (diff === 1) return `Yesterday ${t}`;
@@ -1323,35 +1436,49 @@ function TxRow({ tx }: { tx: ParsedTransaction }) {
       onClick={hasMemo ? () => setExpanded(e => !e) : undefined}
     >
       <div className='flex items-center gap-3'>
-        <div className={cn(
-          'flex h-8 w-8 items-center justify-center rounded-full',
-          isSh ? 'bg-blue-500/10' : isIn ? 'bg-green-500/10' : 'bg-elev-2',
-        )}>
-          {isSh ? <span className='i-lucide-move-horizontal h-4 w-4 text-blue-500' />
-            : isIn ? <span className='i-lucide-arrow-down h-4 w-4 text-green-400' />
-            : <span className='i-lucide-arrow-up h-4 w-4 text-fg-muted' />}
+        <div
+          className={cn(
+            'flex h-8 w-8 items-center justify-center rounded-full',
+            isSh ? 'bg-blue-500/10' : isIn ? 'bg-green-500/10' : 'bg-elev-2',
+          )}
+        >
+          {isSh ? (
+            <span className='i-lucide-move-horizontal h-4 w-4 text-blue-500' />
+          ) : isIn ? (
+            <span className='i-lucide-arrow-down h-4 w-4 text-green-400' />
+          ) : (
+            <span className='i-lucide-arrow-up h-4 w-4 text-fg-muted' />
+          )}
         </div>
         <div className='flex-1 min-w-0'>
           <div className='flex items-center justify-between gap-2'>
             <span className='text-xs font-medium'>{tx.description}</span>
             <div className='flex items-center gap-1'>
               {tx.amount && (
-                <span className={cn('text-xs font-mono',
-                  isSh ? 'text-blue-500' : isIn ? 'text-green-400' : 'text-fg-muted',
-                )}>
-                  {isIn ? '+' : ''}{tx.amount} {tx.asset ?? ''}
+                <span
+                  className={cn(
+                    'text-xs font-mono',
+                    isSh ? 'text-blue-500' : isIn ? 'text-green-400' : 'text-fg-muted',
+                  )}
+                >
+                  {isIn ? '+' : ''}
+                  {tx.amount} {tx.asset ?? ''}
                 </span>
               )}
               {hasMemo && (
-                <span className={cn(
-                  'i-lucide-chevron-down h-3 w-3 text-fg-muted transition-transform',
-                  expanded && 'rotate-180',
-                )} />
+                <span
+                  className={cn(
+                    'i-lucide-chevron-down h-3 w-3 text-fg-muted transition-transform',
+                    expanded && 'rotate-180',
+                  )}
+                />
               )}
             </div>
           </div>
           <div className='flex items-center justify-between gap-2 mt-0.5'>
-            <span className='text-[10px] text-fg-muted font-mono truncate'>{tx.id.slice(0, 16)}...</span>
+            <span className='text-[10px] text-fg-muted font-mono truncate'>
+              {tx.id.slice(0, 16)}...
+            </span>
             <span className='text-[10px] text-fg-muted whitespace-nowrap'>
               {tx.height > 0 ? `#${tx.height}` : fmtTime(tx.timestamp)}
             </span>
@@ -1367,7 +1494,13 @@ function TxRow({ tx }: { tx: ParsedTransaction }) {
   );
 }
 
-const HistoryContent = ({ network, penumbraAccount }: { network: NetworkType; penumbraAccount: number }) => {
+const HistoryContent = ({
+  network,
+  penumbraAccount,
+}: {
+  network: NetworkType;
+  penumbraAccount: number;
+}) => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const historyEnabled = useStore(s => s.privacy.settings.enableTransactionHistory);
@@ -1402,12 +1535,16 @@ const HistoryContent = ({ network, penumbraAccount }: { network: NetworkType; pe
       }
       const heights = [...new Set(txs.map(t => t.height))];
       const tsMap = new Map<number, number>();
-      await Promise.all(heights.map(async h => {
-        try {
-          const { timestamp } = await sctClient.timestampByHeight({ height: BigInt(h) });
-          if (timestamp) tsMap.set(h, timestamp.toDate().getTime());
-        } catch { /* */ }
-      }));
+      await Promise.all(
+        heights.map(async h => {
+          try {
+            const { timestamp } = await sctClient.timestampByHeight({ height: BigInt(h) });
+            if (timestamp) tsMap.set(h, timestamp.toDate().getTime());
+          } catch {
+            /* */
+          }
+        }),
+      );
       for (const t of txs) t.timestamp = tsMap.get(t.height) ?? null;
       txs.sort((a, b) => b.height - a.height);
       return txs;
@@ -1438,7 +1575,11 @@ const HistoryContent = ({ network, penumbraAccount }: { network: NetworkType; pe
   const prevPenumbraHeight = useRef(latestBlockHeight);
   const prevZcashHeight = useRef(workerSyncHeight);
   useEffect(() => {
-    if (network === 'penumbra' && latestBlockHeight && latestBlockHeight !== prevPenumbraHeight.current) {
+    if (
+      network === 'penumbra' &&
+      latestBlockHeight &&
+      latestBlockHeight !== prevPenumbraHeight.current
+    ) {
       prevPenumbraHeight.current = latestBlockHeight;
       void queryClient.invalidateQueries({ queryKey: ['homeHistory', 'penumbra'] });
     }
@@ -1451,9 +1592,7 @@ const HistoryContent = ({ network, penumbraAccount }: { network: NetworkType; pe
   if (!historyEnabled) {
     return (
       <div className='px-4 py-6 text-center'>
-        <p className='text-xs text-fg-muted/50'>
-          transaction history is off
-        </p>
+        <p className='text-xs text-fg-muted/50'>transaction history is off</p>
         <button
           onClick={() => void setSetting('enableTransactionHistory', true)}
           className='mt-3 text-xs text-zigner-gold/70 hover:text-zigner-gold transition-colors'
@@ -1474,11 +1613,15 @@ const HistoryContent = ({ network, penumbraAccount }: { network: NetworkType; pe
   // for penumbra, filter by the selected account index - a tx belongs to an
   // account if any of its visible spend or output notes reference that index
   const allTxs = (q.data ?? []) as ParsedTransaction[];
-  const txs = network === 'penumbra'
-    ? allTxs.filter(tx =>
-        !tx.accountIndices || tx.accountIndices.size === 0 || tx.accountIndices.has(penumbraAccount),
-      )
-    : allTxs;
+  const txs =
+    network === 'penumbra'
+      ? allTxs.filter(
+          tx =>
+            !tx.accountIndices ||
+            tx.accountIndices.size === 0 ||
+            tx.accountIndices.has(penumbraAccount),
+        )
+      : allTxs;
 
   if (q.isLoading && txs.length === 0) {
     return (
@@ -1493,7 +1636,12 @@ const HistoryContent = ({ network, penumbraAccount }: { network: NetworkType; pe
     return (
       <div className='flex flex-col items-center justify-center gap-3 py-12'>
         <span className='text-xs text-red-400'>failed to load</span>
-        <button onClick={() => void q.refetch()} className='text-xs text-zigner-gold hover:underline'>retry</button>
+        <button
+          onClick={() => void q.refetch()}
+          className='text-xs text-zigner-gold hover:underline'
+        >
+          retry
+        </button>
       </div>
     );
   }
@@ -1512,9 +1660,13 @@ const HistoryContent = ({ network, penumbraAccount }: { network: NetworkType; pe
   return (
     <div className='flex flex-col gap-1'>
       <div className='mb-1'>
-        <span className='text-xs font-medium uppercase tracking-wider text-fg-muted'>recent activity</span>
+        <span className='text-xs font-medium uppercase tracking-wider text-fg-muted'>
+          recent activity
+        </span>
       </div>
-      {recent.map(tx => <TxRow key={tx.id} tx={tx} />)}
+      {recent.map(tx => (
+        <TxRow key={tx.id} tx={tx} />
+      ))}
       {txs.length > 20 && (
         <div className='py-2 text-center text-xs text-fg-muted'>
           {txs.length - 20} more transactions

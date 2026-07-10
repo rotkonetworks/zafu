@@ -16,7 +16,7 @@ function recorder(): { fetcher: MemoFetcher; calls: Set<BucketStart>[] } {
 
 const seededRng = (seed: number): RandomU32 => {
   let s = seed >>> 0;
-  return (out) => {
+  return out => {
     for (let i = 0; i < out.length; i++) {
       s = (s * 1664525 + 1013904223) >>> 0;
       out[i] = s;
@@ -53,7 +53,7 @@ describe('withDecoyBuckets', () => {
     const { fetcher, calls } = recorder();
     const owned = new Set([100, 200, 300]);
     await drain(withDecoyBuckets({ ratio: 2, rng: seededRng(1) })(fetcher)('w', owned, ctx()));
-    const decoys = [...calls[0]!].filter((b) => !owned.has(b));
+    const decoys = [...calls[0]!].filter(b => !owned.has(b));
     for (const d of decoys) expect(owned.has(d)).toBe(false);
   });
 
@@ -65,7 +65,7 @@ describe('withDecoyBuckets', () => {
       withDecoyBuckets({
         ratio: 5,
         rng: seededRng(1),
-        exclude: (b) => forbidden.has(b),
+        exclude: b => forbidden.has(b),
       })(fetcher)('w', owned, ctx()),
     );
     for (const b of forbidden) expect(calls[0]!.has(b)).toBe(false);
@@ -76,7 +76,7 @@ describe('withDecoyBuckets', () => {
     const owned = new Set([1_700_000]);
     const c = ctx({ tip: 1_800_000, activation: 1_687_104 });
     await drain(withDecoyBuckets({ ratio: 5, rng: seededRng(7) })(fetcher)('w', owned, c));
-    const decoys = [...calls[0]!].filter((b) => !owned.has(b));
+    const decoys = [...calls[0]!].filter(b => !owned.has(b));
     const minBucket = Math.floor(c.activation / BUCKET_SIZE) * BUCKET_SIZE;
     const maxBucket = Math.floor(c.tip / BUCKET_SIZE) * BUCKET_SIZE;
     for (const d of decoys) {
@@ -104,5 +104,7 @@ describe('withDecoyBuckets', () => {
 });
 
 async function drain<T>(iter: AsyncIterable<T>) {
-  for await (const _ of iter) { /* */ }
+  for await (const _ of iter) {
+    /* */
+  }
 }

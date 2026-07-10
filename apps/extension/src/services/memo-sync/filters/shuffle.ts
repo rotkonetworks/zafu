@@ -19,9 +19,10 @@ import type { BucketStart, MemoFetcher, MemoFilter } from '../types';
 /** RNG signature: fills the provided buffer with uniform u32 values. */
 export type RandomU32 = (out: Uint32Array) => void;
 
-const defaultRng: RandomU32 = (out) => crypto.getRandomValues(out);
+const defaultRng: RandomU32 = out => crypto.getRandomValues(out);
 
-export const withShuffle = (rng: RandomU32 = defaultRng): MemoFilter =>
+export const withShuffle =
+  (rng: RandomU32 = defaultRng): MemoFilter =>
   (inner: MemoFetcher): MemoFetcher =>
     async function* shuffled(walletId, ownedBuckets, ctx) {
       const arr = shuffle([...ownedBuckets], rng);

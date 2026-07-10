@@ -21,10 +21,10 @@ or full-page tab.
 two content scripts are declared, both injected at `document_start` on all https
 pages and localhost:
 
-| script                       | world    | purpose                              |
-|------------------------------|----------|--------------------------------------|
-| `injected-session.js`        | ISOLATED | relay messages between page and sw   |
-| `injected-penumbra-global.js`| MAIN     | inject `PenumbraSymbol` provider     |
+| script                        | world    | purpose                            |
+| ----------------------------- | -------- | ---------------------------------- |
+| `injected-session.js`         | ISOLATED | relay messages between page and sw |
+| `injected-penumbra-global.js` | MAIN     | inject `PenumbraSymbol` provider   |
 
 ## service worker lifecycle
 
@@ -53,7 +53,9 @@ a deferred handler pattern queues rpc requests until wallet services are ready:
 
 ```typescript
 let resolveHandler: (h: HandlerFn) => void;
-const handlerReady = new Promise<HandlerFn>(r => { resolveHandler = r; });
+const handlerReady = new Promise<HandlerFn>(r => {
+  resolveHandler = r;
+});
 
 const deferredHandler: HandlerFn = (request, signal, timeoutMs) =>
   handlerReady.then(h => h(request, signal, timeoutMs));

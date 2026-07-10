@@ -78,20 +78,19 @@ const WalletRow = ({
       isActive ? 'bg-primary/10 ring-1 ring-primary/20' : 'hover:bg-elev-1',
     )}
   >
-    <button onClick={onSelect} className='flex flex-1 items-center justify-between min-w-0 text-left'>
+    <button
+      onClick={onSelect}
+      className='flex flex-1 items-center justify-between min-w-0 text-left'
+    >
       <div className='flex flex-col gap-1 min-w-0'>
         <div className='flex items-center gap-2'>
           <span className='rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-zigner-gold leading-none shrink-0'>
             {wallet.multisig!.threshold}-of-{wallet.multisig!.maxSigners}
           </span>
           <span className='text-sm font-medium truncate'>{wallet.label}</span>
-          {isActive && (
-            <span className='i-lucide-check h-3 w-3 text-zigner-gold shrink-0' />
-          )}
+          {isActive && <span className='i-lucide-check h-3 w-3 text-zigner-gold shrink-0' />}
         </div>
-        <span className='text-[11px] text-fg-muted font-mono'>
-          {truncateAddr(wallet.address)}
-        </span>
+        <span className='text-[11px] text-fg-muted font-mono'>{truncateAddr(wallet.address)}</span>
         {wallet.multisig?.zignerWalletId && (
           <span className='text-[10px] text-fg-dim font-mono'>
             zigner: {wallet.multisig.zignerWalletId}
@@ -141,10 +140,11 @@ export const MultisigPage = () => {
   const isZcash = activeNetwork === 'zcash';
 
   const walletsWithIndex = useMemo(
-    () => multisigWallets.map(w => ({
-      ...w,
-      originalIndex: zcashWallets.indexOf(w),
-    })),
+    () =>
+      multisigWallets.map(w => ({
+        ...w,
+        originalIndex: zcashWallets.indexOf(w),
+      })),
     [multisigWallets, zcashWallets],
   );
 
@@ -182,23 +182,23 @@ export const MultisigPage = () => {
   // index lags on switches to mnemonic (which has no zcash wallet record),
   // so the index can still point at a multisig vault while the user is on
   // a mnemonic. selectedKeyInfo.type is the source of truth.
-  const activeMs = selectedKeyInfo?.type === 'frost-multisig'
-    ? walletsWithIndex.find(w => w.vaultId === selectedKeyInfo.id)
-    : undefined;
+  const activeMs =
+    selectedKeyInfo?.type === 'frost-multisig'
+      ? walletsWithIndex.find(w => w.vaultId === selectedKeyInfo.id)
+      : undefined;
 
   // route to zigner-airgap flows when the user is signing through a zigner —
   // either the active multisig is airgap, or the active single-sig is zigner-imported.
   const useAirgap =
-    activeMs?.multisig?.custody === 'airgapSigner'
-    || selectedKeyInfo?.type === 'zigner-zafu';
+    activeMs?.multisig?.custody === 'airgapSigner' || selectedKeyInfo?.type === 'zigner-zafu';
   // Route surface is unified: one /multisig/create and one /multisig/join.
   // The flow dispatches internally on `?mode=zigner` OR on the active
   // wallet being zigner-imported.
   const createPath = useAirgap
-    ? `${PopupPath.MULTISIG_CREATE}?mode=zigner` as PopupPath
+    ? (`${PopupPath.MULTISIG_CREATE}?mode=zigner` as PopupPath)
     : PopupPath.MULTISIG_CREATE;
   const joinPath = useAirgap
-    ? `${PopupPath.MULTISIG_JOIN}?mode=zigner` as PopupPath
+    ? (`${PopupPath.MULTISIG_JOIN}?mode=zigner` as PopupPath)
     : PopupPath.MULTISIG_JOIN;
 
   if (!isZcash) {
@@ -212,7 +212,7 @@ export const MultisigPage = () => {
         open={backupTarget !== null}
         title={backupTarget ? `Export "${backupTarget.label}"` : ''}
         walletLabel={backupTarget?.label ?? ''}
-        onConfirm={async (passphrase) => {
+        onConfirm={async passphrase => {
           if (backupTarget) await exportSingleBackup(backupTarget, passphrase);
         }}
         onClose={() => setBackupTarget(null)}
@@ -224,9 +224,7 @@ export const MultisigPage = () => {
           <h2 className='text-base font-semibold'>Multisig</h2>
         </div>
         {walletsWithIndex.length > 0 && (
-          <span className='text-sm font-mono text-fg-muted'>
-            {formatZec(totalZat)} ZEC
-          </span>
+          <span className='text-sm font-mono text-fg-muted'>{formatZec(totalZat)} ZEC</span>
         )}
       </div>
 

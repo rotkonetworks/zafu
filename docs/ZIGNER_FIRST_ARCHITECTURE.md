@@ -8,13 +8,13 @@ Unlike Keplr which stores keys in the browser, Zafu is purely a **watch-only com
 
 ## Key Differences from Keplr
 
-| Aspect | Keplr | Zafu |
-|--------|-------|------|
-| Key Storage | Browser extension | Never - Zigner only |
-| Wallet Creation | In extension | In Zigner, import via QR |
-| Signing | In extension | QR to Zigner, scan signature back |
-| Security Model | Hot wallet | Cold wallet (air-gapped) |
-| Network Support | Cosmos ecosystem | Multi-chain (Zcash, Penumbra, Polkadot, Cosmos) |
+| Aspect          | Keplr             | Zafu                                            |
+| --------------- | ----------------- | ----------------------------------------------- |
+| Key Storage     | Browser extension | Never - Zigner only                             |
+| Wallet Creation | In extension      | In Zigner, import via QR                        |
+| Signing         | In extension      | QR to Zigner, scan signature back               |
+| Security Model  | Hot wallet        | Cold wallet (air-gapped)                        |
+| Network Support | Cosmos ecosystem  | Multi-chain (Zcash, Penumbra, Polkadot, Cosmos) |
 
 ## Data Model
 
@@ -23,33 +23,33 @@ Unlike Keplr which stores keys in the browser, Zafu is purely a **watch-only com
 ```typescript
 interface ZignerWallet {
   // Identity
-  id: string;                    // Unique ID
-  label: string;                 // User-defined name
+  id: string; // Unique ID
+  label: string; // User-defined name
 
   // Zigner origin
-  zignerAccountIndex: number;    // Account index on Zigner device
-  importedAt: number;            // When imported from Zigner
+  zignerAccountIndex: number; // Account index on Zigner device
+  importedAt: number; // When imported from Zigner
 
   // Network-specific viewing keys (all watch-only)
   networks: {
     penumbra?: {
-      fullViewingKey: string;    // bech32m FVK
-      address: string;           // Default address
+      fullViewingKey: string; // bech32m FVK
+      address: string; // Default address
     };
     zcash?: {
-      orchardFvk: string;        // 96 bytes hex
-      unifiedAddress: string;    // u1...
+      orchardFvk: string; // 96 bytes hex
+      unifiedAddress: string; // u1...
       mainnet: boolean;
     };
     polkadot?: {
-      publicKey: string;         // 32 bytes hex
-      ss58Address: string;       // SS58 encoded
+      publicKey: string; // 32 bytes hex
+      ss58Address: string; // SS58 encoded
       scheme: 'sr25519' | 'ed25519';
     };
     cosmos?: {
-      publicKey: string;         // secp256k1 pubkey
-      address: string;           // bech32
-      chains: string[];          // enabled chain IDs
+      publicKey: string; // secp256k1 pubkey
+      address: string; // bech32
+      chains: string[]; // enabled chain IDs
     };
   };
 }
@@ -77,6 +77,7 @@ interface ZignerWallet {
 ## UI Structure
 
 ### Home Screen
+
 ```
 ┌─────────────────────────────────────┐
 │ [Wallet 0 ▾]              [⚙️]      │
@@ -102,6 +103,7 @@ interface ZignerWallet {
 ```
 
 ### Wallet Switcher
+
 ```
 ┌─────────────────────────────────────┐
 │ Select Wallet                       │
@@ -120,6 +122,7 @@ interface ZignerWallet {
 ```
 
 ### Add Network to Wallet
+
 ```
 ┌─────────────────────────────────────┐
 │ Add Network to "Main Zigner"        │
@@ -143,6 +146,7 @@ interface ZignerWallet {
 ```
 
 ### Send Flow (Zigner-Centric)
+
 ```
 Step 1: Build Transaction
 ┌─────────────────────────────────────┐
@@ -239,12 +243,12 @@ interface PendingTransaction {
   id: string;
   network: NetworkType;
   walletId: string;
-  signRequest: string;        // QR hex to show
-  summary: string;            // Human readable
+  signRequest: string; // QR hex to show
+  summary: string; // Human readable
   createdAt: number;
   status: 'awaiting_signature' | 'signed' | 'broadcasting' | 'confirmed' | 'failed';
-  signature?: string;         // Filled after scanning
-  txHash?: string;            // Filled after broadcast
+  signature?: string; // Filled after scanning
+  txHash?: string; // Filled after broadcast
 }
 ```
 
@@ -252,12 +256,12 @@ interface PendingTransaction {
 
 All QR codes use: `[0x53][chain_id][op_type][payload]`
 
-| Network | Chain ID | FVK Export | Sign Request | Signature |
-|---------|----------|------------|--------------|-----------|
-| Polkadot Sr25519 | 0x00 | 530001 | 530002 | 530003 |
-| Polkadot Ed25519 | 0x01 | 530101 | 530102 | 530103 |
-| Penumbra | 0x03 | 530301 | 530302 | 530303 |
-| Zcash | 0x04 | 530401 | 530402 | 530403 |
+| Network          | Chain ID | FVK Export | Sign Request | Signature |
+| ---------------- | -------- | ---------- | ------------ | --------- |
+| Polkadot Sr25519 | 0x00     | 530001     | 530002       | 530003    |
+| Polkadot Ed25519 | 0x01     | 530101     | 530102       | 530103    |
+| Penumbra         | 0x03     | 530301     | 530302       | 530303    |
+| Zcash            | 0x04     | 530401     | 530402       | 530403    |
 
 ## Implementation Priority
 

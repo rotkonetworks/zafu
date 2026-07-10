@@ -41,14 +41,14 @@ held on the host browser.
 
 ## privacy properties
 
-| property                          | preserved |
-|-----------------------------------|-----------|
-| sender / receiver / amount        | yes (chain-level) |
-| cross-tx linkability              | yes (chain-level) |
-| view-only delegation              | yes (Zigner pairing) |
-| forward secrecy on key leak       | no - chain history is permanent |
-| metadata vs query backend         | no - run your own Zidecar / pd |
-| host-process compromise           | depends on custody mode |
+| property                    | preserved                       |
+| --------------------------- | ------------------------------- |
+| sender / receiver / amount  | yes (chain-level)               |
+| cross-tx linkability        | yes (chain-level)               |
+| view-only delegation        | yes (Zigner pairing)            |
+| forward secrecy on key leak | no - chain history is permanent |
+| metadata vs query backend   | no - run your own Zidecar / pd  |
+| host-process compromise     | depends on custody mode         |
 
 Full threat model: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md). For the
 broader doc index, see [docs/README.md](docs/README.md).

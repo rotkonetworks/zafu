@@ -34,9 +34,7 @@ export const Masthead = ({ kicker, title, meta, className }: MastheadProps) => (
       {kicker && <div className='kicker'>{kicker}</div>}
       <h1 className='text-[36px] text-fg-high leading-none tracking-[-0.01em]'>{title}</h1>
     </div>
-    {meta && (
-      <div className='tabular text-[10px] text-fg-dim leading-[1.7] text-right'>{meta}</div>
-    )}
+    {meta && <div className='tabular text-[10px] text-fg-dim leading-[1.7] text-right'>{meta}</div>}
   </header>
 );
 

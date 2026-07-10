@@ -48,7 +48,9 @@ const getPenumbraEndpoint = async (): Promise<string> => {
   return DEFAULT_PENUMBRA_ENDPOINT;
 };
 
-export const startWalletServices = async (signal?: AbortSignal): Promise<{ services: Services; wallet: WalletJson }> => {
+export const startWalletServices = async (
+  signal?: AbortSignal,
+): Promise<{ services: Services; wallet: WalletJson }> => {
   // privacy gate: check if penumbra is enabled before making network connections
   const enabled = await isPenumbraEnabled();
   console.log('[sync] isPenumbraEnabled:', enabled);

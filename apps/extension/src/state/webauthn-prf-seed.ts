@@ -301,7 +301,7 @@ export async function evaluatePrf(
   // decode base64url credential ID
   const rawId = base64urlToBytes(credentialId);
 
-  const assertion = await navigator.credentials.get({
+  const assertion = (await navigator.credentials.get({
     publicKey: {
       rpId,
       challenge: crypto.getRandomValues(new Uint8Array(32)),
@@ -316,12 +316,13 @@ export async function evaluatePrf(
         },
       } as AuthenticationExtensionsClientInputs,
     },
-  }) as PublicKeyCredential | null;
+  })) as PublicKeyCredential | null;
 
   if (!assertion) return null;
 
-  const results = (assertion.getClientExtensionResults() as Record<string, unknown>)
-    ?.['prf'] as { results?: { first?: ArrayBuffer; second?: ArrayBuffer } } | undefined;
+  const results = (assertion.getClientExtensionResults() as Record<string, unknown>)?.['prf'] as
+    | { results?: { first?: ArrayBuffer; second?: ArrayBuffer } }
+    | undefined;
 
   if (!results?.results?.first) {
     // authenticator does not support PRF
@@ -354,7 +355,7 @@ export async function createPrfCredential(
   const rpId = getExtensionRpId();
   const userId = crypto.getRandomValues(new Uint8Array(16));
 
-  const credential = await navigator.credentials.create({
+  const credential = (await navigator.credentials.create({
     publicKey: {
       rp: { id: rpId, name: 'Zafu Wallet' },
       user: {
@@ -364,8 +365,8 @@ export async function createPrfCredential(
       },
       challenge: crypto.getRandomValues(new Uint8Array(32)),
       pubKeyCredParams: [
-        { alg: -7, type: 'public-key' },   // ES256 (P-256)
-        { alg: -257, type: 'public-key' },  // RS256 (RSA) fallback
+        { alg: -7, type: 'public-key' }, // ES256 (P-256)
+        { alg: -257, type: 'public-key' }, // RS256 (RSA) fallback
       ],
       authenticatorSelection: {
         // prefer hardware-bound credentials for PRF reliability
@@ -377,7 +378,7 @@ export async function createPrfCredential(
         prf: {},
       } as AuthenticationExtensionsClientInputs,
     },
-  }) as PublicKeyCredential | null;
+  })) as PublicKeyCredential | null;
 
   if (!credential) return null;
 
@@ -396,9 +397,7 @@ export async function createPrfCredential(
  *
  * The caller must then re-encrypt the vault with deriveVaultKeyWithPrf().
  */
-export async function enrollPrf(
-  label: string,
-): Promise<{
+export async function enrollPrf(label: string): Promise<{
   enrollment: PrfEnrollment;
   prfPrimary: Uint8Array;
 } | null> {

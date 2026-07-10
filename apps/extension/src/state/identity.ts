@@ -161,8 +161,8 @@ const ZID_INFO = 'identity-root';
 const enc = new TextEncoder();
 
 export interface Zid {
-  publicKey: string;  // hex-encoded 32 bytes
-  address: string;    // display: "zid" + first 16 hex chars of pubkey
+  publicKey: string; // hex-encoded 32 bytes
+  address: string; // display: "zid" + first 16 hex chars of pubkey
 }
 
 /** a named identity persona */
@@ -216,9 +216,8 @@ const deriveSeed = (identity: Uint8Array, tag: Uint8Array): Uint8Array =>
 
 /** derive per-site seed. */
 const deriveSeedForSite = (identity: Uint8Array, origin: string, rotation: number): Uint8Array => {
-  const tag = rotation === 0
-    ? enc.encode('site:' + origin)
-    : enc.encode('site:' + origin + ':' + rotation);
+  const tag =
+    rotation === 0 ? enc.encode('site:' + origin) : enc.encode('site:' + origin + ':' + rotation);
   return deriveSeed(identity, tag);
 };
 
@@ -281,7 +280,9 @@ const keypairFromSeed = (seed: Uint8Array): { privateKey: Uint8Array; publicKey:
 };
 
 /** extract P-256 keypair from seed (for WebAuthn/passkey compat). zeroizes the seed. */
-const p256KeypairFromSeed = (seed: Uint8Array): { privateKey: Uint8Array; publicKey: Uint8Array } => {
+const p256KeypairFromSeed = (
+  seed: Uint8Array,
+): { privateKey: Uint8Array; publicKey: Uint8Array } => {
   // domain-separate from ed25519: HMAC to get a valid P-256 scalar
   const derived = hmac(sha256, enc.encode('zid-p256'), seed.slice(0, 32));
   seed.fill(0);
@@ -291,7 +292,11 @@ const p256KeypairFromSeed = (seed: Uint8Array): { privateKey: Uint8Array; public
 };
 
 /** helper: derive named identity, run fn, zeroize. */
-const withIdentity = <T>(mnemonic: string, identityName: string, fn: (identity: Uint8Array) => T): T => {
+const withIdentity = <T>(
+  mnemonic: string,
+  identityName: string,
+  fn: (identity: Uint8Array) => T,
+): T => {
   const root = deriveRoot(mnemonic);
   const identity = deriveIdentity(root, identityName);
   root.fill(0);
@@ -309,8 +314,13 @@ export const DEFAULT_IDENTITY = 'default';
  * derive a site-specific zid for an origin under a named identity.
  * this is the DEFAULT mode — each site sees a unique key.
  */
-export const deriveZidForSite = (mnemonic: string, identity: string, origin: string, rotation = 0): Zid =>
-  withIdentity(mnemonic, identity, (id) => {
+export const deriveZidForSite = (
+  mnemonic: string,
+  identity: string,
+  origin: string,
+  rotation = 0,
+): Zid =>
+  withIdentity(mnemonic, identity, id => {
     const { publicKey } = keypairFromSeed(deriveSeedForSite(id, origin, rotation));
     const hex = bytesToHex(publicKey);
     return { publicKey: hex, address: formatZid(hex) };
@@ -326,7 +336,7 @@ export const deriveZidForSite = (mnemonic: string, identity: string, origin: str
  * never display by default. buried in settings > identity > advanced.
  */
 export const deriveZidCrossSite = (mnemonic: string, identity: string): Zid =>
-  withIdentity(mnemonic, identity, (id) => {
+  withIdentity(mnemonic, identity, id => {
     const { publicKey } = keypairFromSeed(deriveSeedCrossSite(id));
     const hex = bytesToHex(publicKey);
     return { publicKey: hex, address: formatZid(hex) };
@@ -346,7 +356,7 @@ export const deriveZidCrossSite = (mnemonic: string, identity: string): Zid =>
  * independent of ZID rotation so subscriptions survive key rotation.
  */
 export const deriveRingVrfSeed = (mnemonic: string, identity = DEFAULT_IDENTITY): Uint8Array =>
-  withIdentity(mnemonic, identity, (id) => {
+  withIdentity(mnemonic, identity, id => {
     const seed = deriveSeedForRingVrf(id);
     return seed.slice(0, 32);
   });
@@ -364,8 +374,11 @@ export const deriveRingVrfSeed = (mnemonic: string, identity = DEFAULT_IDENTITY)
  *
  * derivation: HMAC-SHA512(identity, "hot-wallet-v1") -> 16 bytes -> BIP39 12 words
  */
-export const deriveHotWalletMnemonic = async (mnemonic: string, identity = DEFAULT_IDENTITY): Promise<string> => {
-  const entropy = withIdentity(mnemonic, identity, (id) => {
+export const deriveHotWalletMnemonic = async (
+  mnemonic: string,
+  identity = DEFAULT_IDENTITY,
+): Promise<string> => {
+  const entropy = withIdentity(mnemonic, identity, id => {
     const seed = deriveSeedForHotWallet(id);
     // 16 bytes = 128 bits = 12-word mnemonic
     const ent = seed.slice(0, 16);
@@ -388,7 +401,7 @@ export const deriveHotWalletMnemonic = async (mnemonic: string, identity = DEFAU
  * contactId must be STABLE for the lifetime of the relationship.
  */
 export const deriveZidForContact = (mnemonic: string, identity: string, contactId: string): Zid =>
-  withIdentity(mnemonic, identity, (id) => {
+  withIdentity(mnemonic, identity, id => {
     const { publicKey } = keypairFromSeed(deriveSeedForContact(id, contactId));
     const hex = bytesToHex(publicKey);
     return { publicKey: hex, address: formatZid(hex) };
@@ -465,9 +478,10 @@ export const signZid = (
   const identity = deriveIdentity(root, identityName);
   root.fill(0);
 
-  const seed = (pref?.mode === 'cross-site')
-    ? deriveSeedCrossSite(identity)
-    : deriveSeedForSite(identity, origin, pref?.rotation ?? 0);
+  const seed =
+    pref?.mode === 'cross-site'
+      ? deriveSeedCrossSite(identity)
+      : deriveSeedForSite(identity, origin, pref?.rotation ?? 0);
   identity.fill(0);
 
   const { privateKey, publicKey } = keypairFromSeed(seed);
@@ -488,8 +502,13 @@ export const signZid = (
  * same origin scoping as ed25519 ZID — same rotation, same identity.
  * returns uncompressed public key (65 bytes: 0x04 || x || y).
  */
-export const deriveP256ForSite = (mnemonic: string, identity: string, origin: string, rotation = 0): { publicKey: string } =>
-  withIdentity(mnemonic, identity, (id) => {
+export const deriveP256ForSite = (
+  mnemonic: string,
+  identity: string,
+  origin: string,
+  rotation = 0,
+): { publicKey: string } =>
+  withIdentity(mnemonic, identity, id => {
     const { publicKey } = p256KeypairFromSeed(deriveSeedForSite(id, origin, rotation));
     return { publicKey: bytesToHex(publicKey) };
   });
@@ -510,9 +529,10 @@ export const signP256 = (
   const identity = deriveIdentity(root, identityName);
   root.fill(0);
 
-  const seed = (pref?.mode === 'cross-site')
-    ? deriveSeedCrossSite(identity)
-    : deriveSeedForSite(identity, origin, pref?.rotation ?? 0);
+  const seed =
+    pref?.mode === 'cross-site'
+      ? deriveSeedCrossSite(identity)
+      : deriveSeedForSite(identity, origin, pref?.rotation ?? 0);
   identity.fill(0);
 
   const { privateKey, publicKey } = p256KeypairFromSeed(seed);
@@ -554,8 +574,12 @@ const deriveSeedForPasskey = (identity: Uint8Array, rpId: string): Uint8Array =>
 /**
  * derive a P-256 keypair for a passkey (non-rotating).
  */
-export const derivePasskeyForSite = (mnemonic: string, identity: string, rpId: string): { publicKey: string } =>
-  withIdentity(mnemonic, identity, (id) => {
+export const derivePasskeyForSite = (
+  mnemonic: string,
+  identity: string,
+  rpId: string,
+): { publicKey: string } =>
+  withIdentity(mnemonic, identity, id => {
     const { publicKey } = p256KeypairFromSeed(deriveSeedForPasskey(id, rpId));
     return { publicKey: bytesToHex(publicKey) };
   });
@@ -570,7 +594,7 @@ export const signPasskey = (
   message: Uint8Array,
   identity = DEFAULT_IDENTITY,
 ): { signature: Uint8Array; publicKey: string } =>
-  withIdentity(mnemonic, identity, (id) => {
+  withIdentity(mnemonic, identity, id => {
     const seed = deriveSeedForPasskey(id, rpId);
     const { privateKey, publicKey } = p256KeypairFromSeed(seed);
     const sig = p256.sign(message, privateKey, { lowS: true });
@@ -598,7 +622,7 @@ export const derivePrf = (
   rpId: string,
   saltHex: string,
 ): Uint8Array =>
-  withIdentity(mnemonic, identity, (id) => {
+  withIdentity(mnemonic, identity, id => {
     // PRF is bound to the passkey (non-rotating), not the ZID rotation
     const passkeySeed = deriveSeedForPasskey(id, rpId);
     const prfTag = enc.encode('prf:' + saltHex);
@@ -639,7 +663,7 @@ export const derivePassword = (
   /** rotation index — increment when site requires password change */
   index = 0,
 ): string =>
-  withIdentity(mnemonic, identity, (id) => {
+  withIdentity(mnemonic, identity, id => {
     const normalized = normalizeOrigin(origin);
     const suffix = index > 0 ? '\0' + index : '';
     const tag = enc.encode('password:' + normalized + '\0' + username + suffix);
@@ -669,8 +693,7 @@ export const derivePassword = (
  * derive the display zid (default identity, cross-site key).
  * @deprecated use deriveZidForSite with explicit identity name.
  */
-export const deriveZid = (mnemonic: string): Zid =>
-  deriveZidCrossSite(mnemonic, DEFAULT_IDENTITY);
+export const deriveZid = (mnemonic: string): Zid => deriveZidCrossSite(mnemonic, DEFAULT_IDENTITY);
 
 // -- share log --
 
@@ -690,8 +713,7 @@ export interface ZidShareRecord {
 export const lookupSharedZid = (
   log: ZidShareRecord[],
   origin: string,
-): ZidShareRecord | undefined =>
-  log.filter(r => r.sharedWith === origin).pop();
+): ZidShareRecord | undefined => log.filter(r => r.sharedWith === origin).pop();
 
 /**
  * derive the full ed25519 keypair for a site-specific zid.
@@ -705,7 +727,7 @@ export const deriveZidKeypairForSite = (
   origin: string,
   rotation = 0,
 ): { privateKey: Uint8Array; publicKey: Uint8Array } =>
-  withIdentity(mnemonic, identity, (id) => {
+  withIdentity(mnemonic, identity, id => {
     const seed = deriveSeedForSite(id, origin, rotation);
     return keypairFromSeed(seed);
   });

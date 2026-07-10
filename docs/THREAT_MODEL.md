@@ -41,12 +41,14 @@ therefore in their threat model.
 ## Defended against
 
 ### Passive network observers
+
 All on-wire formats - PCZT for Zcash, Penumbra `TransactionPlan` and
 `AuthorizationData`, FROST DKG and signing messages - are designed for a
 public broadcaster. An observer of the wire learns no more than what the
 chain protocol already reveals.
 
 ### Compromised Zigner
+
 If the air-gapped phone is lost or compromised, the spending keys are gone,
 but Zafu's viewing keys remain on the host. Historical transaction privacy
 is intact: the attacker who has the spending key can spend remaining funds
@@ -54,8 +56,10 @@ but cannot retroactively unmask shielded history any more than the
 chain-level cryptography already permits.
 
 ### Malicious multisig coordinator
+
 A FROST aggregator cannot produce a valid signature with fewer than `t`
 valid shares. A coordinator that drives a signing session therefore cannot:
+
 - forge signatures (a valid signature requires `t` real shares from real
   signers; the coordinator holds none on its own behalf)
 - replay a participant's nonce commitment across sessions (sessions are
@@ -71,6 +75,7 @@ equivocate (forward different messages to different participants). These
 are liveness, not safety, failures.
 
 ### Address reuse on Zcash
+
 The Zcash receive screen automatically bumps both the shielded diversifier
 index and the transparent index every time it is opened. Both indices are
 persisted in `chrome.storage.local`, so a user who opens Receive once a
@@ -81,6 +86,7 @@ is also exposed as a button. See
 ## Not defended against
 
 ### Compromised host browser (standalone mode)
+
 Standalone mode encrypts spending keys at rest, but they are decrypted into
 renderer memory at sign time. A compromised browser process - via a
 malicious extension, a Chromium 0-day, or a process-injection attack - can
@@ -88,20 +94,22 @@ read the keys at that moment. Pair with Zigner if this is in your threat
 model.
 
 ### Active network adversary with compromised TLS trust
+
 TLS to the query backends (Zidecar, pd, RPC nodes) is sufficient against
-passive observers and untrusted networks. It is *not* sufficient against
+passive observers and untrusted networks. It is _not_ sufficient against
 an attacker who can issue or substitute trusted root certificates - for
 example, a corporate transparent proxy with a CA in the user's OS trust
 store, or a state-level CA-issuance attack. Such an attacker can both
 read and modify queries.
 
 Cryptographic proof verification (Zidecar header proofs, Penumbra block
-processor) protects against the *modify* side - fabricated chain state
-will not validate. It does not protect against the *read* side - the
+processor) protects against the _modify_ side - fabricated chain state
+will not validate. It does not protect against the _read_ side - the
 attacker still learns query metadata. Users in this threat environment
 should self-host both Zidecar and pd and reach them through a VPN or Tor.
 
 ### Viewing key compromise
+
 For privacy wallets the viewing key is as sensitive as the spending key,
 in a different way. A leaked spending key lets an attacker spend
 remaining funds. A leaked **viewing key** (Zcash UFVK or Penumbra
@@ -115,6 +123,7 @@ sensitive should treat viewing keys as secrets, not as "watch-only"
 credentials.
 
 ### Network metadata leaks
+
 For Zcash, Zafu queries a [Zidecar](https://github.com/rotkonetworks/zidecar)
 gRPC endpoint for note commitment trail, header proofs, commitment proofs,
 and nullifier proofs. For Penumbra, it queries a pd / RPC endpoint for chain
@@ -127,24 +136,28 @@ network. If metadata privacy against the query backend is in your threat
 model, run your own Zidecar and pd.
 
 ### Address-substitution before the QR is displayed
+
 Zigner displays the destination address; the user is expected to verify it
 matches what they intended to send to. Zafu cannot detect a host-side
 malware swap of the recipient address before the QR is generated. The Zigner
 display is the last trustworthy reference.
 
 ### Compromised Zigner phone
+
 "Air-gapped phone in airplane mode" is operational user discipline, not
 something Zafu or Zigner can enforce. Airplane mode disables radios, not
 USB, accelerometer, microphone, or camera side channels. A truly hostile
 environment requires more than an off switch.
 
 ### Rollback or equivocation by the chain query backend
+
 Zafu verifies cryptographic proofs against returned state. A malicious or
 broken backend can refuse to serve recent blocks, serve stale state, or
 selectively withhold information. Run your own backend if liveness against
 this attacker is required.
 
 ### Side-channel observation of the host
+
 Compiler-side, OS-side, hypervisor-side, and physical-side channels (timing,
 EM, acoustic, screen-reflection) are out of scope. Zafu makes no
 constant-time guarantees beyond what its underlying crypto libraries
@@ -152,17 +165,17 @@ provide.
 
 ## Privacy properties summary
 
-| property                          | preserved |
-|-----------------------------------|-----------|
-| sender / receiver / amount        | yes (chain-level) |
-| cross-tx linkability              | yes (chain-level, modulo voting linkability per Penumbra spec) |
-| address reuse on Zcash            | yes - auto-rotated on every Receive screen open |
-| view-only delegation              | yes (Zigner pairing) |
-| forward secrecy on spending-key leak | no - chain history is permanent |
-| forward secrecy on viewing-key leak  | no - all shielded receipts past and future become readable |
-| metadata vs query backend         | no - run your own |
-| TLS trust against active adversary | partial - proofs catch tampering, queries still leak |
-| host-process compromise (standalone) | no - pair with Zigner |
+| property                                | preserved                                                       |
+| --------------------------------------- | --------------------------------------------------------------- |
+| sender / receiver / amount              | yes (chain-level)                                               |
+| cross-tx linkability                    | yes (chain-level, modulo voting linkability per Penumbra spec)  |
+| address reuse on Zcash                  | yes - auto-rotated on every Receive screen open                 |
+| view-only delegation                    | yes (Zigner pairing)                                            |
+| forward secrecy on spending-key leak    | no - chain history is permanent                                 |
+| forward secrecy on viewing-key leak     | no - all shielded receipts past and future become readable      |
+| metadata vs query backend               | no - run your own                                               |
+| TLS trust against active adversary      | partial - proofs catch tampering, queries still leak            |
+| host-process compromise (standalone)    | no - pair with Zigner                                           |
 | host-process compromise (Zigner-paired) | spending: yes, viewing: no (see "Viewing key compromise" above) |
 
 ## A note on Penumbra voting
@@ -172,8 +185,8 @@ votes on the same proposal. This means a single note used to vote multiple
 times produces linkable Vote descriptions on chain, and a subsequent spend
 of that note is linkable to the prior votes.
 
-The mitigation, recommended by the Penumbra spec, is to *roll the note
-over*: when casting a vote, bundle a `Spend` and `Output` of the same note
+The mitigation, recommended by the Penumbra spec, is to _roll the note
+over_: when casting a vote, bundle a `Spend` and `Output` of the same note
 into the same transaction so the value moves to a fresh note. Future votes
 and spends use the fresh note, isolating the original nullifier.
 

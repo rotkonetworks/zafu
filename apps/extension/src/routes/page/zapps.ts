@@ -3,10 +3,10 @@ export interface Zapp {
   id: string;
   name: string;
   description: string;
-  icon: string;         // lucide icon class name
-  url: string;          // external URL or chrome-extension:// for local pages
+  icon: string; // lucide icon class name
+  url: string; // external URL or chrome-extension:// for local pages
   category: ZappCategory;
-  builtin?: boolean;    // cannot be removed
+  builtin?: boolean; // cannot be removed
 }
 
 export type ZappCategory = 'finance' | 'social' | 'tools' | 'games' | 'learn';

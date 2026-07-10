@@ -19,11 +19,11 @@ installing Keplr or Leap.
 
 ## Today's state
 
-| Layer | Penumbra | Cosmos |
-|---|---|---|
-| Key derivation | full FVK + spend key flow | already exists in `state/keyring/`, used internally for `cosmos-sign.tsx` |
-| Web injection | `window[Symbol.for('penumbra')]` via two content scripts (ISOLATED + MAIN) | none — pages can't see Zafu as a Cosmos wallet |
-| Balance display | Penumbra view-server sync; balances in popup | not surfaced under Penumbra wallet view; only seen during a Cosmos send/sign flow |
+| Layer           | Penumbra                                                                   | Cosmos                                                                            |
+| --------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Key derivation  | full FVK + spend key flow                                                  | already exists in `state/keyring/`, used internally for `cosmos-sign.tsx`         |
+| Web injection   | `window[Symbol.for('penumbra')]` via two content scripts (ISOLATED + MAIN) | none — pages can't see Zafu as a Cosmos wallet                                    |
+| Balance display | Penumbra view-server sync; balances in popup                               | not surfaced under Penumbra wallet view; only seen during a Cosmos send/sign flow |
 
 ## Target
 

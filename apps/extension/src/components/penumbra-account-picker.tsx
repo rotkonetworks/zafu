@@ -1,4 +1,3 @@
-
 const MAX_ACCOUNT = 2 ** 24;
 
 function accountLabel(index: number): string {

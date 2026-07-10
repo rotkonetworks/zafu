@@ -122,7 +122,7 @@ equal to 0x00 (part=0, total=0).
 
 Maximum fragments: 15
 Maximum payload per fragment: 512 - 20 = 492 bytes
-Maximum total payload: 15 * 492 = 7,380 bytes
+Maximum total payload: 15 \* 492 = 7,380 bytes
 
 ### 5.1. Message ID
 
@@ -146,7 +146,7 @@ incomplete groups.
 ### 5.3. Transport
 
 Each fragment is carried in a separate Zcash shielded output note
-within the same transaction. This ensures atomic delivery  - either
+within the same transaction. This ensures atomic delivery - either
 all fragments confirm or none. Each fragment output carries a dust
 amount (minimum 1 zatoshi).
 
@@ -392,7 +392,7 @@ for sender authentication and viewing-key resistance. The inner
 plaintext of an EncryptedMessage has byte 0 = inner MemoType,
 which can be 0x07 (Data).
 
-## 9. Encrypted Messages (Type 0x06)  - Future
+## 9. Encrypted Messages (Type 0x06) - Future
 
 ### 8.1. Motivation
 
@@ -451,7 +451,7 @@ Any message type can be encrypted, including ContactCard and Text.
 
 Encrypted messaging is available when both parties have exchanged
 contact cards containing tag 0x01 (zid public key). No explicit
-capability negotiation is needed  - the presence of the key IS the
+capability negotiation is needed - the presence of the key IS the
 capability signal.
 
 When sending to a contact with a known zid, wallets SHOULD default
@@ -474,7 +474,7 @@ reveal the sender's zid public key to the recipient (intentional
 for authentication). The sender's zid is NOT visible to network
 observers (it's inside the encrypted note).
 
-### 10.3. Forward Secrecy  - Limitations
+### 10.3. Forward Secrecy - Limitations
 
 EncryptedMessage uses an ephemeral x25519 key per message. This
 provides forward secrecy against SENDER key compromise only:
@@ -508,7 +508,7 @@ fragment. Tampering with any fragment invalidates its note.
 Per-contact zids prevent cross-contact linkability. However, if
 an attacker obtains two contact cards from the same sender (e.g.,
 the card sent to Alice and the card sent to Bob), the attacker
-cannot determine they come from the same wallet  - the per-contact
+cannot determine they come from the same wallet - the per-contact
 zids are cryptographically independent (derived via HMAC with
 different inputs).
 

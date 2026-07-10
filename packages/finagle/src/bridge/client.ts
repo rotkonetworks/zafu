@@ -11,10 +11,7 @@ const callId = () => `f_${++nextId}_${Date.now().toString(36)}`;
  * Calls are fully async — the returned promise resolves when the worker
  * replies with a matching `callId`, or rejects on error/timeout.
  */
-export function createClient<Req, Rep>(
-  port: MessagePort,
-  serviceName: string,
-): Service<Req, Rep> {
+export function createClient<Req, Rep>(port: MessagePort, serviceName: string): Service<Req, Rep> {
   return (req: Req) =>
     new Promise<Rep>((resolve, reject) => {
       const id = callId();
@@ -56,12 +53,7 @@ export function createStreamingClient<Req, Progress, Rep>(
 
       const handler = (e: MessageEvent) => {
         const msg = e.data;
-        if (
-          typeof msg !== 'object' ||
-          msg === null ||
-          !('__finagle' in msg) ||
-          msg.callId !== id
-        )
+        if (typeof msg !== 'object' || msg === null || !('__finagle' in msg) || msg.callId !== id)
           return;
 
         if (isProgressEnvelope(msg)) {

@@ -42,9 +42,7 @@ const ChainRow = memo(({ balance }: { balance: ChainBalance }) => (
       <div className='text-sm font-medium tabular-nums'>
         {formatBalance(balance.balance, balance.decimals, 4)} {balance.symbol}
       </div>
-      {balance.cached && (
-        <div className='text-xs text-fg-muted/70'>cached</div>
-      )}
+      {balance.cached && <div className='text-xs text-fg-muted/70'>cached</div>}
     </div>
   </div>
 ));
@@ -61,11 +59,16 @@ export const PolkadotAssets = ({ publicKey, relay = 'polkadot' }: PolkadotAssets
       setLoading(true);
       try {
         // load enabled parachains from storage
-        const stored = await localExtStorage.get('enabledParachains') as Record<string, string[]> | undefined;
+        const stored = (await localExtStorage.get('enabledParachains')) as
+          | Record<string, string[]>
+          | undefined;
         const enabledIds = stored?.[relay] ?? [];
 
         // always include the relay chain itself (e.g., polkadot, kusama)
-        const chains: SupportedChain[] = [relay as SupportedChain, ...(enabledIds as SupportedChain[])];
+        const chains: SupportedChain[] = [
+          relay as SupportedChain,
+          ...(enabledIds as SupportedChain[]),
+        ];
         setEnabledChains(chains);
 
         // fetch balances (uses cache when available)
@@ -84,9 +87,14 @@ export const PolkadotAssets = ({ publicKey, relay = 'polkadot' }: PolkadotAssets
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      const stored = await localExtStorage.get('enabledParachains') as Record<string, string[]> | undefined;
+      const stored = (await localExtStorage.get('enabledParachains')) as
+        | Record<string, string[]>
+        | undefined;
       const enabledIds = stored?.[relay] ?? [];
-      const chains: SupportedChain[] = [relay as SupportedChain, ...(enabledIds as SupportedChain[])];
+      const chains: SupportedChain[] = [
+        relay as SupportedChain,
+        ...(enabledIds as SupportedChain[]),
+      ];
 
       const result = await refreshChains(publicKey, chains);
       setBalances(result);
@@ -115,11 +123,7 @@ export const PolkadotAssets = ({ publicKey, relay = 'polkadot' }: PolkadotAssets
           disabled={refreshing}
           className='text-xs text-fg-muted hover:text-fg-high transition-colors disabled:opacity-50'
         >
-          {refreshing ? (
-            <span className='i-lucide-refresh-cw h-3 w-3 animate-spin' />
-          ) : (
-            'refresh'
-          )}
+          {refreshing ? <span className='i-lucide-refresh-cw h-3 w-3 animate-spin' /> : 'refresh'}
         </button>
       </div>
 
@@ -127,14 +131,10 @@ export const PolkadotAssets = ({ publicKey, relay = 'polkadot' }: PolkadotAssets
         {balances.length === 0 ? (
           <div className='flex flex-col items-center justify-center py-12 text-center'>
             <span className='text-sm text-fg-muted'>no balances</span>
-            <span className='text-xs text-fg-muted/70 mt-1'>
-              enable parachains in settings
-            </span>
+            <span className='text-xs text-fg-muted/70 mt-1'>enable parachains in settings</span>
           </div>
         ) : (
-          balances.map(balance => (
-            <ChainRow key={balance.chain} balance={balance} />
-          ))
+          balances.map(balance => <ChainRow key={balance.chain} balance={balance} />)
         )}
       </div>
     </div>

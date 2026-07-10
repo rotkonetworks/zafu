@@ -16,10 +16,7 @@ import { blockRangeFetcher } from '../services/memo-sync/block-range-fetcher';
 import { buildStrategy } from '../services/memo-sync/strategy';
 import { idbBucketStore } from '../services/memo-sync/filters/cache';
 import { bucketOf, BUCKET_SIZE as MEMO_BUCKET_SIZE } from '../services/memo-sync/types';
-import type {
-  BucketStart as MemoBucketStart,
-  MemoSyncStrategy,
-} from '../services/memo-sync/types';
+import type { BucketStart as MemoBucketStart, MemoSyncStrategy } from '../services/memo-sync/types';
 import { type ZcashBackend, type ZcashClient } from '../state/keyring/zcash-backend';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -60,18 +57,55 @@ function lookupBackend(serverUrl: string): ZcashBackend {
 const makeZcashClient = async (serverUrl: string, backend?: ZcashBackend): Promise<ZcashClient> => {
   const effective = backend ?? lookupBackend(serverUrl);
   if (effective === 'lightwalletd') {
-    const { LightwalletdClient } = await import(/* webpackMode: "eager" */ '../state/keyring/lightwalletd-client');
+    const { LightwalletdClient } = await import(
+      /* webpackMode: "eager" */ '../state/keyring/lightwalletd-client'
+    );
     return new LightwalletdClient(serverUrl);
   }
   if (effective === 'zidecar') {
-    const { ZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
+    const { ZidecarClient } = await import(
+      /* webpackMode: "eager" */ '../state/keyring/zidecar-client'
+    );
     return new ZidecarClient(serverUrl);
   }
   throw new Error(`unknown zcash backend: ${String(effective)}`);
 };
 
 interface WorkerMessage {
-  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-multi' | 'send-tx-complete' | 'send-tx-pczt' | 'send-tx-pczt-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'note-sync-encode' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos' | 'frost-dkg-part1' | 'frost-dkg-part2' | 'frost-dkg-part3' | 'frost-sign-round1' | 'frost-spend-sign' | 'frost-spend-aggregate' | 'frost-derive-address' | 'frost-derive-address-from-sk' | 'frost-sample-fvk-sk' | 'frost-derive-ufvk' | 'frost-parse-tx-outputs';
+  type:
+    | 'init'
+    | 'derive-address'
+    | 'sync'
+    | 'stop-sync'
+    | 'reset-sync'
+    | 'get-balance'
+    | 'send-tx'
+    | 'send-tx-multi'
+    | 'send-tx-complete'
+    | 'send-tx-pczt'
+    | 'send-tx-pczt-complete'
+    | 'shield'
+    | 'shield-unsigned'
+    | 'shield-complete'
+    | 'list-wallets'
+    | 'delete-wallet'
+    | 'get-notes'
+    | 'note-sync-encode'
+    | 'decrypt-memos'
+    | 'get-transparent-history'
+    | 'get-history'
+    | 'sync-memos'
+    | 'frost-dkg-part1'
+    | 'frost-dkg-part2'
+    | 'frost-dkg-part3'
+    | 'frost-sign-round1'
+    | 'frost-spend-sign'
+    | 'frost-spend-aggregate'
+    | 'frost-derive-address'
+    | 'frost-derive-address-from-sk'
+    | 'frost-sample-fvk-sk'
+    | 'frost-derive-ufvk'
+    | 'frost-parse-tx-outputs';
   id: string;
   network: 'zcash';
   walletId?: string;
@@ -157,21 +191,87 @@ interface WasmModule {
     from_qr_hex(qrHex: string): WatchOnlyWallet;
     new (fvkBytes: Uint8Array, accountIndex: number, mainnet: boolean): WatchOnlyWallet;
   };
-  build_shielding_transaction(utxos_json: string, privkey_hex: string, recipient: string, amount: bigint, fee: bigint, anchor_height: number, mainnet: boolean): string;
-  build_unsigned_transaction(ufvk_str: string, notes_json: unknown, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: unknown, account_index: number, mainnet: boolean, memo_hex?: string | null): unknown;
-  build_signed_spend_transaction(seed_phrase: string, notes_json: unknown, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: unknown, account_index: number, mainnet: boolean, memo_hex?: string | null): string;
-  complete_transaction(unsigned_tx_hex: string, signatures: unknown, spend_indices: unknown): string;
+  build_shielding_transaction(
+    utxos_json: string,
+    privkey_hex: string,
+    recipient: string,
+    amount: bigint,
+    fee: bigint,
+    anchor_height: number,
+    mainnet: boolean,
+  ): string;
+  build_unsigned_transaction(
+    ufvk_str: string,
+    notes_json: unknown,
+    recipient: string,
+    amount: bigint,
+    fee: bigint,
+    anchor_hex: string,
+    merkle_paths_json: unknown,
+    account_index: number,
+    mainnet: boolean,
+    memo_hex?: string | null,
+  ): unknown;
+  build_signed_spend_transaction(
+    seed_phrase: string,
+    notes_json: unknown,
+    recipient: string,
+    amount: bigint,
+    fee: bigint,
+    anchor_hex: string,
+    merkle_paths_json: unknown,
+    account_index: number,
+    mainnet: boolean,
+    memo_hex?: string | null,
+  ): string;
+  complete_transaction(
+    unsigned_tx_hex: string,
+    signatures: unknown,
+    spend_indices: unknown,
+  ): string;
   // PCZT signing flow (replaces simple-format sighash+alphas QR for single-signer zigner)
-  build_unsigned_pczt(ufvk_str: string, notes_json: unknown, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: unknown, target_height: number, mainnet: boolean, memo_hex?: string | null): unknown;
+  build_unsigned_pczt(
+    ufvk_str: string,
+    notes_json: unknown,
+    recipient: string,
+    amount: bigint,
+    fee: bigint,
+    anchor_hex: string,
+    merkle_paths_json: unknown,
+    target_height: number,
+    mainnet: boolean,
+    memo_hex?: string | null,
+  ): unknown;
   extract_signed_tx_from_pczt(pczt_hex: string): string;
   compute_txid(tx_hex: string): string;
   ur_decode_frames(parts_json: string, expected_type: string): string;
-  build_unsigned_shielding_transaction(utxos_json: string, recipient: string, amount: bigint, fee: bigint, anchor_height: number, mainnet: boolean): string;
+  build_unsigned_shielding_transaction(
+    utxos_json: string,
+    recipient: string,
+    amount: bigint,
+    fee: bigint,
+    anchor_height: number,
+    mainnet: boolean,
+  ): string;
   complete_shielding_transaction(unsigned_tx_hex: string, signatures_json: string): string;
   derive_transparent_privkey(seed_phrase: string, account: number, index: number): string;
-  build_merkle_paths(tree_state_hex: string, compact_blocks_json: string, note_positions_json: string, anchor_height: number): unknown;
-  build_witnesses_and_paths(tree_state_hex: string, compact_blocks_json: string, note_positions_json: string): unknown;
-  witness_sync_update(start_frontier_hex: string, compact_blocks_json: string, existing_witnesses_json: string, new_notes_json: string): unknown;
+  build_merkle_paths(
+    tree_state_hex: string,
+    compact_blocks_json: string,
+    note_positions_json: string,
+    anchor_height: number,
+  ): unknown;
+  build_witnesses_and_paths(
+    tree_state_hex: string,
+    compact_blocks_json: string,
+    note_positions_json: string,
+  ): unknown;
+  witness_sync_update(
+    start_frontier_hex: string,
+    compact_blocks_json: string,
+    existing_witnesses_json: string,
+    new_notes_json: string,
+  ): unknown;
   witness_extract_path(witness_hex: string): unknown;
   frontier_tree_size(tree_state_hex: string): bigint;
   tree_root_hex(tree_state_hex: string): string;
@@ -180,28 +280,89 @@ interface WasmModule {
   frost_dealer_keygen(min_signers: number, max_signers: number): string;
   frost_dkg_part1(max_signers: number, min_signers: number): string;
   frost_dkg_part2(secret_hex: string, peer_broadcasts_json: string): string;
-  frost_dkg_part3(secret_hex: string, round1_broadcasts_json: string, round2_packages_json: string): string;
+  frost_dkg_part3(
+    secret_hex: string,
+    round1_broadcasts_json: string,
+    round2_packages_json: string,
+  ): string;
   frost_sign_round1(ephemeral_seed_hex: string, key_package_hex: string): string;
-  frost_generate_randomizer(ephemeral_seed_hex: string, message_hex: string, commitments_json: string): string;
-  frost_sign_round2(ephemeral_seed_hex: string, key_package_hex: string, nonces_hex: string, message_hex: string, commitments_json: string, randomizer_hex: string): string;
-  frost_aggregate_shares(public_key_package_hex: string, message_hex: string, commitments_json: string, shares_json: string, randomizer_hex: string): string;
+  frost_generate_randomizer(
+    ephemeral_seed_hex: string,
+    message_hex: string,
+    commitments_json: string,
+  ): string;
+  frost_sign_round2(
+    ephemeral_seed_hex: string,
+    key_package_hex: string,
+    nonces_hex: string,
+    message_hex: string,
+    commitments_json: string,
+    randomizer_hex: string,
+  ): string;
+  frost_aggregate_shares(
+    public_key_package_hex: string,
+    message_hex: string,
+    commitments_json: string,
+    shares_json: string,
+    randomizer_hex: string,
+  ): string;
   frost_derive_address_raw(public_key_package_hex: string, diversifier_index: number): string;
-  frost_derive_address_from_sk(public_key_package_hex: string, sk_hex: string, diversifier_index: number): string;
+  frost_derive_address_from_sk(
+    public_key_package_hex: string,
+    sk_hex: string,
+    diversifier_index: number,
+  ): string;
   frost_sample_fvk_sk(): string;
   frost_derive_ufvk(public_key_package_hex: string, sk_hex: string, mainnet: boolean): string;
-  frost_spend_sign_round2(key_package_hex: string, nonces_hex: string, sighash_hex: string, alpha_hex: string, commitments_json: string): string;
-  frost_spend_sign_round2_signed(ephemeral_seed_hex: string, key_package_hex: string, nonces_hex: string, sighash_hex: string, alpha_hex: string, commitments_json: string): string;
-  frost_spend_aggregate(public_key_package_hex: string, sighash_hex: string, alpha_hex: string, commitments_json: string, shares_json: string): string;
+  frost_spend_sign_round2(
+    key_package_hex: string,
+    nonces_hex: string,
+    sighash_hex: string,
+    alpha_hex: string,
+    commitments_json: string,
+  ): string;
+  frost_spend_sign_round2_signed(
+    ephemeral_seed_hex: string,
+    key_package_hex: string,
+    nonces_hex: string,
+    sighash_hex: string,
+    alpha_hex: string,
+    commitments_json: string,
+  ): string;
+  frost_spend_aggregate(
+    public_key_package_hex: string,
+    sighash_hex: string,
+    alpha_hex: string,
+    commitments_json: string,
+    shares_json: string,
+  ): string;
   frost_parse_tx_outputs(unsigned_tx_hex: string, orchard_fvk_uview: string): string;
 
   // note sync encoding (CBOR + UR/ZT)
-  encode_notes_bundle(notes_json: string, merkle_result_json: string, anchor_height: number, mainnet: boolean, attestation_hex?: string | null): Uint8Array;
+  encode_notes_bundle(
+    notes_json: string,
+    merkle_result_json: string,
+    anchor_height: number,
+    mainnet: boolean,
+    attestation_hex?: string | null,
+  ): Uint8Array;
   ur_encode_frames(cbor_data: Uint8Array, ur_type: string, fragment_size: number): string;
   zt_encode_frames(cbor_data: Uint8Array, zt_type: string, k: number, n: number): string;
 
   // attestation
-  frost_attestation_digest(public_key_package_hex: string, anchor_hex: string, anchor_height: number, mainnet: boolean): string;
-  frost_attestation_verify(attestation_hex: string, public_key_package_hex: string, anchor_hex: string, anchor_height: number, mainnet: boolean): boolean;
+  frost_attestation_digest(
+    public_key_package_hex: string,
+    anchor_hex: string,
+    anchor_height: number,
+    mainnet: boolean,
+  ): string;
+  frost_attestation_verify(
+    attestation_hex: string,
+    public_key_package_hex: string,
+    anchor_hex: string,
+    anchor_height: number,
+    mainnet: boolean,
+  ): boolean;
 }
 
 let wasmModule: WasmModule | null = null;
@@ -335,7 +496,10 @@ const readCompactSize = (buf: Uint8Array, off: number): [number, number] => {
     return [buf[off + 1]! | (buf[off + 2]! << 8), off + 3];
   }
   if (first === 0xfe) {
-    return [buf[off + 1]! | (buf[off + 2]! << 8) | (buf[off + 3]! << 16) | (buf[off + 4]! << 24), off + 5];
+    return [
+      buf[off + 1]! | (buf[off + 2]! << 8) | (buf[off + 3]! << 16) | (buf[off + 4]! << 24),
+      off + 5,
+    ];
   }
   // 0xff — 8 byte, unlikely for tx counts
   return [0, off + 9];
@@ -354,10 +518,7 @@ const readU64LE = (buf: Uint8Array, off: number): bigint => {
  *
  * returns total zatoshis received by our addresses
  */
-const parseTransparentTx = (
-  data: Uint8Array,
-  ourScripts: Set<string>,
-): bigint => {
+const parseTransparentTx = (data: Uint8Array, ourScripts: Set<string>): bigint => {
   let received = 0n;
   let off = 0;
 
@@ -419,8 +580,11 @@ const getDb = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onerror = () => reject(req.error);
-    req.onsuccess = () => { sharedDb = req.result; resolve(sharedDb); };
-    req.onupgradeneeded = (event) => {
+    req.onsuccess = () => {
+      sharedDb = req.result;
+      resolve(sharedDb);
+    };
+    req.onupgradeneeded = event => {
       const db = req.result;
       const old = event.oldVersion;
       for (const name of ['notes', 'spent', 'meta'] as const) {
@@ -443,7 +607,10 @@ const getDb = (): Promise<IDBDatabase> => {
 
 /** close shared db connection — called when worker is idle */
 export const closeDb = () => {
-  if (sharedDb) { sharedDb.close(); sharedDb = null; }
+  if (sharedDb) {
+    sharedDb.close();
+    sharedDb = null;
+  }
 };
 
 const txComplete = (tx: IDBTransaction): Promise<void> =>
@@ -462,7 +629,11 @@ const idbGet = async <T>(store: string, key: IDBValidKey): Promise<T | undefined
   });
 };
 
-const idbGetAllByIndex = async <T>(store: string, indexName: string, key: IDBValidKey): Promise<T[]> => {
+const idbGetAllByIndex = async <T>(
+  store: string,
+  indexName: string,
+  key: IDBValidKey,
+): Promise<T[]> => {
   const db = await getDb();
   const tx = db.transaction(store, 'readonly');
   return new Promise((resolve, reject) => {
@@ -567,11 +738,17 @@ const verifySyncProofs = async (
     // and back off so the server has a chance to settle on a block.
     let currentProven = proven;
     let currentTip = tip;
-    let commitmentProofs: Awaited<ReturnType<typeof client.getCommitmentProofs>>['proofs'] | undefined;
+    let commitmentProofs:
+      | Awaited<ReturnType<typeof client.getCommitmentProofs>>['proofs']
+      | undefined;
     const MAX_RETRIES = 6;
 
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      const { proofs: p, treeRoot } = await client.getCommitmentProofs(pendingCmxs, pendingPositions, currentTip);
+      const { proofs: p, treeRoot } = await client.getCommitmentProofs(
+        pendingCmxs,
+        pendingPositions,
+        currentTip,
+      );
       const treeRootHex = hexEncode(treeRoot);
 
       if (treeRootHex === currentProven.tree_root) {
@@ -589,7 +766,9 @@ const verifySyncProofs = async (
         // update proven for downstream nullifier checks
         Object.assign(proven, currentProven);
       } else {
-        throw new Error(`commitment tree root mismatch after ${MAX_RETRIES} attempts: server=${treeRootHex.slice(0, 16)} proven=${currentProven.tree_root.slice(0, 16)}`);
+        throw new Error(
+          `commitment tree root mismatch after ${MAX_RETRIES} attempts: server=${treeRootHex.slice(0, 16)} proven=${currentProven.tree_root.slice(0, 16)}`,
+        );
       }
     }
 
@@ -618,7 +797,9 @@ const verifySyncProofs = async (
     const nfRootHex = hexEncode(nullifierRoot);
 
     if (nfRootHex !== proven.nullifier_root) {
-      throw new Error(`nullifier root mismatch: server=${nfRootHex.slice(0, 16)} proven=${proven.nullifier_root.slice(0, 16)}`);
+      throw new Error(
+        `nullifier root mismatch: server=${nfRootHex.slice(0, 16)} proven=${proven.nullifier_root.slice(0, 16)}`,
+      );
     }
 
     let newlySpent = 0;
@@ -641,7 +822,9 @@ const verifySyncProofs = async (
         }
       }
     }
-    console.log(`[zcash-worker] ${nfProofs.length} nullifier proofs verified (${newlySpent} newly spent)`);
+    console.log(
+      `[zcash-worker] ${nfProofs.length} nullifier proofs verified (${newlySpent} newly spent)`,
+    );
   }
 
   // 4. verify actions commitment chain
@@ -684,14 +867,21 @@ const resolveAnchorHeight = async (walletId: string, tipHeight: number): Promise
  *  stored as array of {height, frontier} in IDB, one per SNAPSHOT_INTERVAL blocks. */
 const FRONTIER_SNAPSHOT_INTERVAL = 5_000;
 
-interface FrontierSnapshot { height: number; frontier: string }
+interface FrontierSnapshot {
+  height: number;
+  frontier: string;
+}
 
 const getFrontierSnapshots = async (walletId: string): Promise<FrontierSnapshot[]> => {
   const r = await idbGet<{ value: FrontierSnapshot[] }>('meta', [walletId, 'frontierSnapshots']);
   return r?.value ?? [];
 };
 
-const saveFrontierSnapshot = async (walletId: string, height: number, frontier: string): Promise<void> => {
+const saveFrontierSnapshot = async (
+  walletId: string,
+  height: number,
+  frontier: string,
+): Promise<void> => {
   const existing = await getFrontierSnapshots(walletId);
   // avoid duplicates, keep sorted
   if (existing.some(s => s.height === height)) return;
@@ -811,12 +1001,20 @@ const verifyHeaderProof = async (
 // runs in parallel across all cores. The offscreen survives popup close.
 
 interface ZcashBuildRequest {
-  fn: 'build_signed_spend' | 'build_unsigned' | 'build_unsigned_pczt' | 'build_shielding' | 'build_unsigned_shielding';
+  fn:
+    | 'build_signed_spend'
+    | 'build_unsigned'
+    | 'build_unsigned_pczt'
+    | 'build_shielding'
+    | 'build_unsigned_shielding';
   args: unknown[];
 }
 
 // pending prove requests waiting for parent (network-worker) to relay response
-const pendingProveRequests = new Map<string, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
+const pendingProveRequests = new Map<
+  string,
+  { resolve: (v: unknown) => void; reject: (e: Error) => void }
+>();
 let proveRequestCounter = 0;
 
 const proveViaOffscreen = async (req: ZcashBuildRequest): Promise<unknown> => {
@@ -857,7 +1055,12 @@ const MARGINAL_FEE = 5000n;
 const GRACE_ACTIONS = 2;
 const MIN_ORCHARD_ACTIONS = 2;
 
-const computeFee = (nSpends: number, nZOutputs: number, nTOutputs: number, hasChange: boolean): bigint => {
+const computeFee = (
+  nSpends: number,
+  nZOutputs: number,
+  nTOutputs: number,
+  hasChange: boolean,
+): bigint => {
   const nOrchardOutputs = nZOutputs + (hasChange ? 1 : 0);
   const nOrchardActions = Math.max(nSpends, nOrchardOutputs, MIN_ORCHARD_ACTIONS);
   const logicalActions = nOrchardActions + nTOutputs;
@@ -866,7 +1069,11 @@ const computeFee = (nSpends: number, nZOutputs: number, nTOutputs: number, hasCh
 
 // ── note selection (largest first) ──
 
-const selectNotes = (notes: DecryptedNote[], spentNullifiers: Set<string>, target: bigint): DecryptedNote[] => {
+const selectNotes = (
+  notes: DecryptedNote[],
+  spentNullifiers: Set<string>,
+  target: bigint,
+): DecryptedNote[] => {
   const unspent = notes.filter(n => !spentNullifiers.has(n.nullifier));
   unspent.sort((a, b) => Number(BigInt(b.value) - BigInt(a.value)));
   const selected: DecryptedNote[] = [];
@@ -899,7 +1106,10 @@ const fetchCompactBlocksRange = async (
   client: WitnessClient,
   start: number,
   end: number,
-): Promise<{ blocks: Array<{ height: number; actions: Array<{ cmx_hex: string }> }>; actions: number }> => {
+): Promise<{
+  blocks: Array<{ height: number; actions: Array<{ cmx_hex: string }> }>;
+  actions: number;
+}> => {
   const blocks: Array<{ height: number; actions: Array<{ cmx_hex: string }> }> = [];
   let actions = 0;
   if (start > end) return { blocks, actions };
@@ -929,7 +1139,10 @@ const backfillWitnesses = async (
   walletId: string,
   notes: DecryptedNote[],
   anchorHeight: number,
-): Promise<{ byNullifier: Map<string, { witness_hex: string; tree_size: number }>; endFrontier: string }> => {
+): Promise<{
+  byNullifier: Map<string, { witness_hex: string; tree_size: number }>;
+  endFrontier: string;
+}> => {
   if (!wasmModule) throw new Error('wasm not initialized');
   if (notes.length === 0) return { byNullifier: new Map(), endFrontier: '' };
 
@@ -956,7 +1169,8 @@ const backfillWitnesses = async (
   if (!frontierHex) {
     const roundedHeight = Math.max(
       1,
-      Math.floor((earliestNoteHeight - 1) / FRONTIER_SNAPSHOT_INTERVAL) * FRONTIER_SNAPSHOT_INTERVAL,
+      Math.floor((earliestNoteHeight - 1) / FRONTIER_SNAPSHOT_INTERVAL) *
+        FRONTIER_SNAPSHOT_INTERVAL,
     );
     console.log(`[zcash-worker] backfill: fetching frontier at rounded height ${roundedHeight}`);
     const ts = await client.getTreeState(roundedHeight);
@@ -1019,7 +1233,16 @@ const backfillWitnesses = async (
 
   // Persist backfilled witnesses + the end frontier for future incremental updates.
   if (updatedNotes.length > 0) {
-    await saveBatch(walletId, [], [], anchorHeight, endTreeSize, updatedNotes, result.end_frontier_hex, anchorHeight);
+    await saveBatch(
+      walletId,
+      [],
+      [],
+      anchorHeight,
+      endTreeSize,
+      updatedNotes,
+      result.end_frontier_hex,
+      anchorHeight,
+    );
     console.log(`[zcash-worker] backfill: cached witnesses for ${updatedNotes.length} notes`);
   }
 
@@ -1086,7 +1309,8 @@ const buildWitnesses = async (
     await backfillWitnesses(client, walletId, notes, anchorHeight);
     runningFrontier = (await getTreeFrontier(walletId)) ?? '';
     runningFrontierHeight =
-      (await idbGet<{ value: number }>('meta', [walletId, 'orchardTreeFrontierHeight']))?.value ?? 0;
+      (await idbGet<{ value: number }>('meta', [walletId, 'orchardTreeFrontierHeight']))?.value ??
+      0;
   }
 
   // Step 3: fast-forward witnesses over (runningFrontierHeight, anchorHeight].
@@ -1114,8 +1338,7 @@ const buildWitnesses = async (
     };
 
     const byId = new Map(result.witnesses.map(w => [w.id, w]));
-    const newTreeSize =
-      Number(wasmModule.frontier_tree_size(result.end_frontier_hex));
+    const newTreeSize = Number(wasmModule.frontier_tree_size(result.end_frontier_hex));
     const updated: DecryptedNote[] = [];
     for (const note of notes) {
       const upd = byId.get(note.nullifier);
@@ -1154,7 +1377,7 @@ const buildWitnesses = async (
     if (parsed.root_hex !== networkRoot) {
       console.error(
         `[zcash-worker] witness root mismatch: note=${note.nullifier.slice(0, 8)} ours=${parsed.root_hex} network=${networkRoot} ` +
-        `(anchor=${anchorHeight}, frontierHeight=${runningFrontierHeight}, rebootstrapped=${rebootstrapped})`,
+          `(anchor=${anchorHeight}, frontierHeight=${runningFrontierHeight}, rebootstrapped=${rebootstrapped})`,
       );
       throw new Error(`tree root mismatch at height ${anchorHeight}`);
     }
@@ -1171,8 +1394,9 @@ const deriveAddress = (mnemonic: string, accountIndex: number): string => {
   try {
     const raw = keys.get_receiving_address_at(accountIndex, true);
     return fixOrchardAddress(raw, true);
+  } finally {
+    keys.free();
   }
-  finally { keys.free(); }
 };
 
 // ── mempool snapshot decode (shared between watcher task and any future caller) ──
@@ -1212,9 +1436,17 @@ const ACTION_SIZE =
 function handleMempoolSnapshot(
   walletId: string,
   state: WalletState,
-  snap: { entries: ReadonlyArray<{ hash: Uint8Array; actions: ReadonlyArray<{
-    nullifier: Uint8Array; cmx: Uint8Array; ephemeralKey: Uint8Array; ciphertext: Uint8Array;
-  }> }> },
+  snap: {
+    entries: ReadonlyArray<{
+      hash: Uint8Array;
+      actions: ReadonlyArray<{
+        nullifier: Uint8Array;
+        cmx: Uint8Array;
+        ephemeralKey: Uint8Array;
+        ciphertext: Uint8Array;
+      }>;
+    }>;
+  },
 ): void {
   if (!state.keys) return;
 
@@ -1286,10 +1518,14 @@ function handleMempoolSnapshot(
   const mempoolNullifiers = new Map<string, string>();
 
   for (const v of valid) {
-    mbuf.set(v.nullifier, moff); moff += ACTION_NULLIFIER_LEN;
-    mbuf.set(v.cmx, moff); moff += ACTION_CMX_LEN;
-    mbuf.set(v.ephemeralKey, moff); moff += ACTION_EPHEMERAL_KEY_LEN;
-    mbuf.set(v.ciphertext, moff); moff += ACTION_COMPACT_CT_LEN;
+    mbuf.set(v.nullifier, moff);
+    moff += ACTION_NULLIFIER_LEN;
+    mbuf.set(v.cmx, moff);
+    moff += ACTION_CMX_LEN;
+    mbuf.set(v.ephemeralKey, moff);
+    moff += ACTION_EPHEMERAL_KEY_LEN;
+    mbuf.set(v.ciphertext, moff);
+    moff += ACTION_COMPACT_CT_LEN;
     mempoolNullifiers.set(hexEncode(v.nullifier), v.txidHex);
   }
 
@@ -1323,9 +1559,14 @@ function handleMempoolSnapshot(
   }
 
   if (pendingIncoming.length > 0 || pendingSpends.length > 0) {
-    console.log(`[zcash-worker] mempool: ${pendingIncoming.length} incoming, ${pendingSpends.length} pending spends`);
+    console.log(
+      `[zcash-worker] mempool: ${pendingIncoming.length} incoming, ${pendingSpends.length} pending spends`,
+    );
     workerSelf.postMessage({
-      type: 'mempool-update', id: '', network: 'zcash', walletId,
+      type: 'mempool-update',
+      id: '',
+      network: 'zcash',
+      walletId,
       payload: { pendingIncoming, pendingSpends },
     });
   }
@@ -1345,7 +1586,9 @@ const runSync = async (
   // Single-source-of-truth gate (services/mempool-watch/strategy). Replaces
   // the four scattered re-implementations of the same `setting === 'on' &&
   // backend === 'zidecar'` check.
-  const { isMempoolWatchEnabled } = await import(/* webpackMode: "eager" */ '../services/mempool-watch/strategy');
+  const { isMempoolWatchEnabled } = await import(
+    /* webpackMode: "eager" */ '../services/mempool-watch/strategy'
+  );
   const watcherEnabled = isMempoolWatchEnabled(mempoolWatch, backend);
   if (!wasmModule) throw new Error('wasm not initialized');
 
@@ -1358,7 +1601,10 @@ const runSync = async (
   }
 
   // free old keys if re-syncing
-  if (state.keys) { state.keys.free(); state.keys = null; }
+  if (state.keys) {
+    state.keys.free();
+    state.keys = null;
+  }
 
   await registerWallet(walletId);
   // use WatchOnlyWallet for UFVK (zigner), WalletKeys for mnemonic
@@ -1393,9 +1639,10 @@ const runSync = async (
   const frontierSize = runningFrontier
     ? Number(wasmModule!.frontier_tree_size(runningFrontier))
     : 0;
-  const frontierValid = !!runningFrontier
-    && frontierSize === orchardTreeSize
-    && runningFrontierHeight === currentHeight;
+  const frontierValid =
+    !!runningFrontier &&
+    frontierSize === orchardTreeSize &&
+    runningFrontierHeight === currentHeight;
   if (!frontierValid && currentHeight > 0) {
     try {
       const ts = await client.getTreeState(currentHeight);
@@ -1417,7 +1664,9 @@ const runSync = async (
     }
   }
 
-  console.log(`[zcash-worker] sync start wallet=${walletId} height=${currentHeight} treeSize=${orchardTreeSize} (idb=${syncedHeight}, requested=${startHeight ?? 'none'})`);
+  console.log(
+    `[zcash-worker] sync start wallet=${walletId} height=${currentHeight} treeSize=${orchardTreeSize} (idb=${syncedHeight}, requested=${startHeight ?? 'none'})`,
+  );
 
   // initialize zync-core for verification
   try {
@@ -1428,8 +1677,16 @@ const runSync = async (
 
   // emit initial sync-progress so UI gets persisted height + can fetch balance immediately
   workerSelf.postMessage({
-    type: 'sync-progress', id: '', network: 'zcash', walletId,
-    payload: { currentHeight, chainHeight: currentHeight, notesFound: state.notes.length, blocksScanned: 0 },
+    type: 'sync-progress',
+    id: '',
+    network: 'zcash',
+    walletId,
+    payload: {
+      currentHeight,
+      chainHeight: currentHeight,
+      notesFound: state.notes.length,
+      blocksScanned: 0,
+    },
   });
 
   state.syncing = true;
@@ -1468,9 +1725,13 @@ const runSync = async (
       try {
         for await (const snap of fetcher(walletId, {
           signal: localAbort.signal,
-          onStatus: (st) => {
+          onStatus: st => {
             workerSelf.postMessage({
-              type: 'mempool-status', id: '', network: 'zcash', walletId, payload: st,
+              type: 'mempool-status',
+              id: '',
+              network: 'zcash',
+              walletId,
+              payload: st,
             });
           },
         })) {
@@ -1485,7 +1746,10 @@ const runSync = async (
         // Surface terminal error to UI so the toggle/status badge stops
         // claiming "connected" / "reconnecting" when the watcher is dead.
         workerSelf.postMessage({
-          type: 'mempool-status', id: '', network: 'zcash', walletId,
+          type: 'mempool-status',
+          id: '',
+          network: 'zcash',
+          walletId,
           payload: { kind: 'error', error: err instanceof Error ? err.message : String(err) },
         });
       } finally {
@@ -1508,8 +1772,12 @@ const runSync = async (
           const syncTs = await client.getTreeState(currentHeight);
           const db = await getDb();
           const metaTx = db.transaction('meta', 'readwrite');
-          metaTx.objectStore('meta').put({ walletId, key: 'orchardTreeFrontier', value: syncTs.orchardTree });
-          metaTx.objectStore('meta').put({ walletId, key: 'orchardTreeFrontierHeight', value: currentHeight });
+          metaTx
+            .objectStore('meta')
+            .put({ walletId, key: 'orchardTreeFrontier', value: syncTs.orchardTree });
+          metaTx
+            .objectStore('meta')
+            .put({ walletId, key: 'orchardTreeFrontierHeight', value: currentHeight });
           await txComplete(metaTx);
           console.log(`[zcash-worker] cached tree frontier at height ${currentHeight}`);
         } catch (e) {
@@ -1519,7 +1787,15 @@ const runSync = async (
         // verify proofs if we have pending notes and zync-core (zidecar only)
         if (trustless && zyncModule && pendingCmxs.length > 0) {
           try {
-            await verifySyncProofs(client, tip.height, true, pendingCmxs, pendingPositions, state, actionsCommitment);
+            await verifySyncProofs(
+              client,
+              tip.height,
+              true,
+              pendingCmxs,
+              pendingPositions,
+              state,
+              actionsCommitment,
+            );
           } catch (e) {
             // Proof verification is a belt-and-suspenders integrity check on
             // top of Zidecar header proofs. Dropping the pending buffer lets
@@ -1535,7 +1811,10 @@ const runSync = async (
         // when mempoolWatch === 'on'. when off (default), no mempool calls.
 
         workerSelf.postMessage({
-          type: 'sync-progress', id: '', network: 'zcash', walletId,
+          type: 'sync-progress',
+          id: '',
+          network: 'zcash',
+          walletId,
           payload: { currentHeight, chainHeight, notesFound: state.notes.length, blocksScanned: 0 },
         });
         await new Promise(r => setTimeout(r, 10000));
@@ -1555,7 +1834,9 @@ const runSync = async (
       // The next iteration will retry once the server catches up.
       if (blocks.length === 0) {
         consecutiveErrors++;
-        console.warn(`[zcash-worker] getCompactBlocks(${currentHeight + 1}..${endHeight}) returned 0 blocks, retrying`);
+        console.warn(
+          `[zcash-worker] getCompactBlocks(${currentHeight + 1}..${endHeight}) returned 0 blocks, retrying`,
+        );
         const backoff = Math.min(30000, 1000 * Math.pow(2, consecutiveErrors - 1));
         await new Promise(r => setTimeout(r, backoff));
         if (consecutiveErrors >= 10) {
@@ -1603,27 +1884,40 @@ const runSync = async (
               commitView!.setUint32(0, block.actions.length, true);
               let aoff = 4;
               for (const a of block.actions) {
-                commitBuf.set(a.cmx, aoff); aoff += 32;
-                commitBuf.set(a.nullifier, aoff); aoff += 32;
-                commitBuf.set(a.ephemeralKey, aoff); aoff += 32;
+                commitBuf.set(a.cmx, aoff);
+                aoff += 32;
+                commitBuf.set(a.nullifier, aoff);
+                aoff += 32;
+                commitBuf.set(a.ephemeralKey, aoff);
+                aoff += 32;
               }
-              const actionsRoot = zyncModule['compute_actions_root'](commitBuf.subarray(0, needed)) as string;
+              const actionsRoot = zyncModule['compute_actions_root'](
+                commitBuf.subarray(0, needed),
+              ) as string;
               actionsCommitment = zyncModule['update_actions_commitment'](
-                actionsCommitment, actionsRoot, block.height,
+                actionsCommitment,
+                actionsRoot,
+                block.height,
               ) as string;
             } else {
               actionsCommitment = zyncModule['update_actions_commitment'](
-                actionsCommitment, '0'.repeat(64), block.height,
+                actionsCommitment,
+                '0'.repeat(64),
+                block.height,
               ) as string;
             }
           }
 
           for (const a of block.actions) {
             // pack binary for WASM scan
-            if (a.nullifier.length === 32) buf.set(a.nullifier, off); off += 32;
-            if (a.cmx.length === 32) buf.set(a.cmx, off); off += 32;
-            if (a.ephemeralKey.length === 32) buf.set(a.ephemeralKey, off); off += 32;
-            if (a.ciphertext.length >= 52) buf.set(a.ciphertext.subarray(0, 52), off); off += 52;
+            if (a.nullifier.length === 32) buf.set(a.nullifier, off);
+            off += 32;
+            if (a.cmx.length === 32) buf.set(a.cmx, off);
+            off += 32;
+            if (a.ephemeralKey.length === 32) buf.set(a.ephemeralKey, off);
+            off += 32;
+            if (a.ciphertext.length >= 52) buf.set(a.ciphertext.subarray(0, 52), off);
+            off += 52;
             // build lookups (single pass with binary packing)
             const cmxHex = hexEncode(a.cmx);
             const nfHex = hexEncode(a.nullifier);
@@ -1648,13 +1942,22 @@ const runSync = async (
           continue;
         }
 
-        console.log(`[zcash-worker] scanned in ${(performance.now() - t0).toFixed(0)}ms, found ${foundNotes.length}`);
+        console.log(
+          `[zcash-worker] scanned in ${(performance.now() - t0).toFixed(0)}ms, found ${foundNotes.length}`,
+        );
 
         for (const note of foundNotes) {
           // compute absolute tree position: batch start + index within batch
           const position = orchardTreeSize + (note as unknown as { index: number }).index;
-          const full: DecryptedNote = { ...note, position, txid: cmxToTxid.get(note.cmx) ?? '', height: cmxToHeight.get(note.cmx) ?? 0 };
-          console.log(`[zcash-worker] found note: value=${note.value}, pos=${position}, hasRseed=${!!note.rseed}, hasRho=${!!note.rho}, hasRecipient=${!!(note as unknown as { recipient?: string }).recipient}`);
+          const full: DecryptedNote = {
+            ...note,
+            position,
+            txid: cmxToTxid.get(note.cmx) ?? '',
+            height: cmxToHeight.get(note.cmx) ?? 0,
+          };
+          console.log(
+            `[zcash-worker] found note: value=${note.value}, pos=${position}, hasRseed=${!!note.rseed}, hasRho=${!!note.rho}, hasRecipient=${!!(note as unknown as { recipient?: string }).recipient}`,
+          );
           newNotes.push(full);
           state.notes.push(full);
 
@@ -1770,7 +2073,9 @@ const runSync = async (
         try {
           const snapshotTs = await client.getTreeState(currentHeight);
           await saveFrontierSnapshot(walletId, currentHeight, snapshotTs.orchardTree);
-        } catch { /* best-effort */ }
+        } catch {
+          /* best-effort */
+        }
       }
 
       // persist actions commitment
@@ -1779,12 +2084,19 @@ const runSync = async (
       }
 
       workerSelf.postMessage({
-        type: 'sync-progress', id: '', network: 'zcash', walletId,
-        payload: { currentHeight, chainHeight, notesFound: state.notes.length, blocksScanned: blocks.length },
+        type: 'sync-progress',
+        id: '',
+        network: 'zcash',
+        walletId,
+        payload: {
+          currentHeight,
+          chainHeight,
+          notesFound: state.notes.length,
+          blocksScanned: blocks.length,
+        },
       });
 
       consecutiveErrors = 0;
-
     } catch (err) {
       consecutiveErrors++;
       console.error(`[zcash-worker] sync error (${consecutiveErrors}):`, err);
@@ -1835,7 +2147,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         await initWasm();
         const { mnemonic, accountIndex } = payload as { mnemonic: string; accountIndex: number };
         const address = deriveAddress(mnemonic, accountIndex);
-        workerSelf.postMessage({ type: 'address', id, network: 'zcash', walletId, payload: address });
+        workerSelf.postMessage({
+          type: 'address',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: address,
+        });
         return;
       }
 
@@ -1865,15 +2183,26 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         }
         const effectiveBackend: ZcashBackend = backend ?? 'zidecar';
         // Gate goes through the single helper so all layers see the same answer.
-        const { isMempoolWatchEnabled } = await import(/* webpackMode: "eager" */ '../services/mempool-watch/strategy');
-        const effectiveMempoolWatch: 'off' | 'on' =
-          isMempoolWatchEnabled(mempoolWatch, effectiveBackend) ? 'on' : 'off';
+        const { isMempoolWatchEnabled } = await import(
+          /* webpackMode: "eager" */ '../services/mempool-watch/strategy'
+        );
+        const effectiveMempoolWatch: 'off' | 'on' = isMempoolWatchEnabled(
+          mempoolWatch,
+          effectiveBackend,
+        )
+          ? 'on'
+          : 'off';
         // Seed the registry so subsequent operations (send, history, memo
         // fetch) construct the right client without re-receiving backend.
         registerBackend(serverUrl, effectiveBackend);
         runSync(
-          walletId, mnemonic, serverUrl, startHeight, ufvk,
-          effectiveBackend, effectiveMempoolWatch,
+          walletId,
+          mnemonic,
+          serverUrl,
+          startHeight,
+          ufvk,
+          effectiveBackend,
+          effectiveMempoolWatch,
         ).catch(err => console.error('[zcash-worker] runSync fatal:', err));
         workerSelf.postMessage({ type: 'sync-started', id, network: 'zcash', walletId });
         return;
@@ -1899,7 +2228,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (resetState) {
           resetState.syncAbort = true;
           resetState.mempoolAbort?.abort();
-          if (resetState.keys) { resetState.keys.free(); resetState.keys = null; }
+          if (resetState.keys) {
+            resetState.keys.free();
+            resetState.keys = null;
+          }
         }
         await waitForSyncStop(resetState ?? getOrCreateWalletState(walletId));
         // clear IDB data for this wallet
@@ -1919,7 +2251,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       case 'get-balance': {
         if (!walletId) throw new Error('walletId required');
         const balance = await getBalance(walletId);
-        workerSelf.postMessage({ type: 'balance', id, network: 'zcash', walletId, payload: balance.toString() });
+        workerSelf.postMessage({
+          type: 'balance',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: balance.toString(),
+        });
         return;
       }
 
@@ -1936,7 +2274,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           state.syncAbort = true;
           await waitForSyncStop(state);
         }
-        if (state?.keys) { state.keys.free(); state.keys = null; }
+        if (state?.keys) {
+          state.keys.free();
+          state.keys = null;
+        }
         await deleteWallet(walletId);
         workerSelf.postMessage({ type: 'wallet-deleted', id, network: 'zcash', walletId });
         return;
@@ -1949,7 +2290,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           ...n,
           spent: noteState.spentNullifiers.has(n.nullifier),
         }));
-        workerSelf.postMessage({ type: 'notes', id, network: 'zcash', walletId, payload: notesWithSpent });
+        workerSelf.postMessage({
+          type: 'notes',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: notesWithSpent,
+        });
         return;
       }
 
@@ -1957,17 +2304,29 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // Build CBOR notes bundle with merkle paths, encode as UR frames
         if (!walletId) throw new Error('walletId required');
         if (!wasmModule) throw new Error('wasm not initialized');
-        const { mainnet: isMainnet, serverUrl: syncServerUrl } = payload as { mainnet: boolean; serverUrl: string };
+        const { mainnet: isMainnet, serverUrl: syncServerUrl } = payload as {
+          mainnet: boolean;
+          serverUrl: string;
+        };
         const syncState = await loadState(walletId);
         const unspent = syncState.notes.filter(n => !syncState.spentNullifiers.has(n.nullifier));
         if (unspent.length === 0) {
-          workerSelf.postMessage({ type: 'note-sync-encoded', id, network: 'zcash', walletId, payload: { frames: [], noteCount: 0, balance: '0', cborBytes: 0 } });
+          workerSelf.postMessage({
+            type: 'note-sync-encoded',
+            id,
+            network: 'zcash',
+            walletId,
+            payload: { frames: [], noteCount: 0, balance: '0', cborBytes: 0 },
+          });
           return;
         }
 
         // anchor where the witnesses are rooted (cached frontier), not at the
         // newest note's height — otherwise the cross-check root won't match.
-        const anchorHeight = await resolveAnchorHeight(walletId, Math.max(...unspent.map(n => n.height)));
+        const anchorHeight = await resolveAnchorHeight(
+          walletId,
+          Math.max(...unspent.map(n => n.height)),
+        );
 
         // build merkle witnesses
         const client = {
@@ -1979,19 +2338,23 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           getCompactBlocks: async (start: number, end: number) => {
             const resp = await fetch(`${syncServerUrl}/compact-blocks/${start}/${end}`);
             if (!resp.ok) throw new Error(`compact-blocks ${start}-${end}: ${resp.status}`);
-            return resp.json() as Promise<Array<{ height: number; actions: Array<{ cmx: Uint8Array }> }>>;
+            return resp.json() as Promise<
+              Array<{ height: number; actions: Array<{ cmx: Uint8Array }> }>
+            >;
           },
         };
         const witnessResult = await buildWitnesses(client, walletId, unspent, anchorHeight);
 
         // prepare notes JSON for WASM encoder
-        const notesJson = JSON.stringify(unspent.map(n => ({
-          value: Number(n.value),
-          nullifier: n.nullifier,
-          cmx: n.cmx,
-          position: n.position,
-          block_height: n.height,
-        })));
+        const notesJson = JSON.stringify(
+          unspent.map(n => ({
+            value: Number(n.value),
+            nullifier: n.nullifier,
+            cmx: n.cmx,
+            position: n.position,
+            block_height: n.height,
+          })),
+        );
 
         // buildWitnesses returns { anchorHex, paths } but WASM expects { anchor_hex, paths }
         const merkleJson = JSON.stringify({
@@ -2050,7 +2413,12 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       case 'get-transparent-history': {
         const { serverUrl, tAddresses } = payload as { serverUrl: string; tAddresses: string[] };
         if (!tAddresses?.length) {
-          workerSelf.postMessage({ type: 'transparent-history', id, network: 'zcash', payload: [] });
+          workerSelf.postMessage({
+            type: 'transparent-history',
+            id,
+            network: 'zcash',
+            payload: [],
+          });
           return;
         }
 
@@ -2074,7 +2442,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         for (let i = 0; i < txids.length; i += CONCURRENCY) {
           const batch = txids.slice(i, i + CONCURRENCY);
           const results = await Promise.allSettled(
-            batch.map(async (txidBytes) => {
+            batch.map(async txidBytes => {
               const rawTx = await tClient.getTransaction(txidBytes);
               const parsed = parseTransparentTx(rawTx.data, ourScripts);
               return {
@@ -2089,13 +2457,21 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           }
         }
 
-        workerSelf.postMessage({ type: 'transparent-history', id, network: 'zcash', payload: history });
+        workerSelf.postMessage({
+          type: 'transparent-history',
+          id,
+          network: 'zcash',
+          payload: history,
+        });
         return;
       }
 
       case 'get-history': {
         if (!walletId) throw new Error('walletId required');
-        const { serverUrl: histServerUrl, tAddresses: histTAddresses } = payload as { serverUrl: string; tAddresses: string[] };
+        const { serverUrl: histServerUrl, tAddresses: histTAddresses } = payload as {
+          serverUrl: string;
+          tAddresses: string[];
+        };
 
         // load shielded notes from IDB
         const histState = await loadState(walletId);
@@ -2123,7 +2499,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             for (let i = 0; i < txids.length; i += CONCURRENCY) {
               const batch = txids.slice(i, i + CONCURRENCY);
               const results = await Promise.allSettled(
-                batch.map(async (txidBytes) => {
+                batch.map(async txidBytes => {
                   const rawTx = await tClient.getTransaction(txidBytes);
                   const parsed = parseTransparentTx(rawTx.data, ourScripts);
                   return {
@@ -2143,7 +2519,16 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         }
 
         // build maps for sent amount calculation
-        const histTxMap = new Map<string, { height: number; position: number; changeValue: bigint; receiveValue: bigint; isChange: boolean }>();
+        const histTxMap = new Map<
+          string,
+          {
+            height: number;
+            position: number;
+            changeValue: bigint;
+            receiveValue: bigint;
+            isChange: boolean;
+          }
+        >();
         // value + height (spent_at_height) so no-change sends still get a correct height
         const histSpentByMap = new Map<string, { value: bigint; height: number }>();
 
@@ -2177,7 +2562,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         }
 
         // build result array (amounts as zatoshi strings)
-        const histTxs: Array<{ id: string; height: number; type: string; amount: string; asset: string }> = [];
+        const histTxs: Array<{
+          id: string;
+          height: number;
+          type: string;
+          amount: string;
+          asset: string;
+        }> = [];
         for (const [txid, info] of histTxMap) {
           const isSend = info.isChange;
           let amount: bigint;
@@ -2238,14 +2629,26 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // sort by height descending (newest first)
         histTxs.sort((a, b) => b.height - a.height);
 
-        workerSelf.postMessage({ type: 'history', id, network: 'zcash', walletId, payload: histTxs });
+        workerSelf.postMessage({
+          type: 'history',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: histTxs,
+        });
         return;
       }
 
       case 'sync-memos': {
         if (!walletId) throw new Error('walletId required');
-        const { serverUrl: memoServerUrl, existingTxIds, forceResync } = payload as {
-          serverUrl: string; existingTxIds: string[]; forceResync: boolean;
+        const {
+          serverUrl: memoServerUrl,
+          existingTxIds,
+          forceResync,
+        } = payload as {
+          serverUrl: string;
+          existingTxIds: string[];
+          forceResync: boolean;
         };
 
         const memoState = await loadState(walletId);
@@ -2258,7 +2661,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         }));
 
         if (memoNotes.length === 0) {
-          workerSelf.postMessage({ type: 'memos-result', id, network: 'zcash', walletId, payload: [] });
+          workerSelf.postMessage({
+            type: 'memos-result',
+            id,
+            network: 'zcash',
+            walletId,
+            payload: [],
+          });
           return;
         }
 
@@ -2268,7 +2677,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const scannedTxids: Set<string> = await new Promise(resolve => {
           const tx = db.transaction('memo-cache', 'readonly');
           const req = tx.objectStore('memo-cache').get(scannedKey);
-          req.onsuccess = () => resolve(new Set(req.result as string[] ?? []));
+          req.onsuccess = () => resolve(new Set((req.result as string[]) ?? []));
           req.onerror = () => resolve(new Set());
         });
 
@@ -2276,9 +2685,17 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const processedTxids = new Set([...existingTxIds, ...scannedTxids]);
         const notesToProcess = memoNotes.filter(n => n.txid && !processedTxids.has(n.txid));
         // also check spent_by_txids that haven't been processed
-        const unprocessedSpent = memoNotes.some(n => n.spent_by_txid && !processedTxids.has(n.spent_by_txid));
+        const unprocessedSpent = memoNotes.some(
+          n => n.spent_by_txid && !processedTxids.has(n.spent_by_txid),
+        );
         if (notesToProcess.length === 0 && !unprocessedSpent) {
-          workerSelf.postMessage({ type: 'memos-result', id, network: 'zcash', walletId, payload: [] });
+          workerSelf.postMessage({
+            type: 'memos-result',
+            id,
+            network: 'zcash',
+            walletId,
+            payload: [],
+          });
           return;
         }
 
@@ -2305,7 +2722,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           if (h) {
             spentHeights.add(h);
             let set = spentTxIds.get(h);
-            if (!set) { set = new Set(); spentTxIds.set(h, set); }
+            if (!set) {
+              set = new Set();
+              spentTxIds.set(h, set);
+            }
             set.add(note.spent_by_txid);
           }
         }
@@ -2353,15 +2773,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         // estimate block time from tip (no per-height GetBlock calls — preserves bucket privacy)
         const tipTimeMs = Date.now();
-        const estimateBlockTimeMs = (h: number): number =>
-          tipTimeMs + (h - currentTip) * 75000;
+        const estimateBlockTimeMs = (h: number): number => tipTimeMs + (h - currentTip) * 75000;
 
         // Any non-'fast' value (including legacy 'paranoid' from older
         // storage) falls back to 'private'. 'paranoid' was removed for
         // decision-surface simplification; users get the strong default.
         const rawStrategy = (payload as { strategy?: string }).strategy;
-        const strategyName: MemoSyncStrategy =
-          rawStrategy === 'fast' ? 'fast' : 'private';
+        const strategyName: MemoSyncStrategy = rawStrategy === 'fast' ? 'fast' : 'private';
         const base = blockRangeFetcher(memoClient, {
           maxHeight: currentTip,
           bucketSize: MEMO_BUCKET_SIZE,
@@ -2370,14 +2788,23 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const fetcher = buildStrategy(strategyName, {
           base,
           store: bucketStore,
-          alwaysFetch: (b) => spentBuckets.has(b),
+          alwaysFetch: b => spentBuckets.has(b),
         });
 
         // ── consume the async iterable; decode memos from each yielded bucket ──
         // progress: the base fetcher knows the post-cache, post-decoy total and
         // calls ctx.onProgress with accurate (completed, total) — we just
         // forward those values to the UI.
-        const results: Array<{ txId: string; blockHeight: number; timestamp: number; content: string; direction: string; amount: string; memoBytes?: string; diversifierIndex?: number }> = [];
+        const results: Array<{
+          txId: string;
+          blockHeight: number;
+          timestamp: number;
+          content: string;
+          direction: string;
+          amount: string;
+          memoBytes?: string;
+          diversifierIndex?: number;
+        }> = [];
         const abortCtrl = new AbortController();
 
         for await (const { blocks } of fetcher(walletId, ownedBucketSet, {
@@ -2386,7 +2813,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           activation: ORCHARD_ACTIVATION_HEIGHT,
           onProgress: (current, total) => {
             workerSelf.postMessage({
-              type: 'sync-memos-progress', id: '', network: 'zcash', walletId,
+              type: 'sync-memos-progress',
+              id: '',
+              network: 'zcash',
+              walletId,
               payload: { current, total },
             });
           },
@@ -2450,7 +2880,6 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               }
             }
           }
-
         }
 
         // persist all scanned note txids + spent_by_txids so we don't re-scan next time
@@ -2464,7 +2893,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           req.onerror = () => reject(req.error);
         });
 
-        workerSelf.postMessage({ type: 'memos-result', id, network: 'zcash', walletId, payload: results });
+        workerSelf.postMessage({
+          type: 'memos-result',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: results,
+        });
         return;
       }
 
@@ -2474,9 +2909,14 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (!wasmModule) throw new Error('wasm not initialized');
 
         const sendPayload = payload as {
-          serverUrl: string; recipient: string; amount: string; memo: string;
-          accountIndex: number; mainnet: boolean;
-          mnemonic?: string; ufvk?: string;
+          serverUrl: string;
+          recipient: string;
+          amount: string;
+          memo: string;
+          accountIndex: number;
+          mainnet: boolean;
+          mnemonic?: string;
+          ufvk?: string;
         };
 
         // encode memo to hex for WASM:
@@ -2489,7 +2929,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             memoHex = sendPayload.memo;
           } else {
             const bytes = new TextEncoder().encode(sendPayload.memo);
-            memoHex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+            memoHex = Array.from(bytes)
+              .map(b => b.toString(16).padStart(2, '0'))
+              .join('');
           }
         }
 
@@ -2498,7 +2940,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           const elapsed = ((performance.now() - sendStart) / 1000).toFixed(1);
           console.log(`[zcash-worker] send [${elapsed}s] ${step}${detail ? ': ' + detail : ''}`);
           workerSelf.postMessage({
-            type: 'send-progress', id: '', network: 'zcash', walletId,
+            type: 'send-progress',
+            id: '',
+            network: 'zcash',
+            walletId,
             payload: { step, detail, elapsedMs: Math.round(performance.now() - sendStart) },
           });
         };
@@ -2510,7 +2955,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const amountZat = BigInt(sendPayload.amount);
 
         // determine recipient type for fee calc
-        const isTransparent = sendPayload.recipient.startsWith('t1') || sendPayload.recipient.startsWith('tm');
+        const isTransparent =
+          sendPayload.recipient.startsWith('t1') || sendPayload.recipient.startsWith('tm');
         const nZOutputs = isTransparent ? 0 : 1;
         const nTOutputs = isTransparent ? 1 : 0;
 
@@ -2518,11 +2964,16 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         // estimate fee and select notes
         const estFee = computeFee(1, nZOutputs, nTOutputs, true);
-        const selected = selectNotes(sendState.notes, sendState.spentNullifiers, amountZat + estFee);
+        const selected = selectNotes(
+          sendState.notes,
+          sendState.spentNullifiers,
+          amountZat + estFee,
+        );
 
         // compute exact fee
         const totalIn = selected.reduce((sum, n) => sum + BigInt(n.value), 0n);
-        const hasChange = totalIn > amountZat + computeFee(selected.length, nZOutputs, nTOutputs, true);
+        const hasChange =
+          totalIn > amountZat + computeFee(selected.length, nZOutputs, nTOutputs, true);
         const fee = computeFee(selected.length, nZOutputs, nTOutputs, hasChange);
         if (totalIn < amountZat + fee) {
           throw new Error(`insufficient funds: have ${totalIn} zat, need ${amountZat + fee} zat`);
@@ -2541,7 +2992,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const witnessStart = performance.now();
 
         const { anchorHex, paths } = await buildWitnesses(
-          sendClient, walletId, selected, anchorHeight,
+          sendClient,
+          walletId,
+          selected,
+          anchorHeight,
         );
 
         const witnessDuration = ((performance.now() - witnessStart) / 1000).toFixed(1);
@@ -2566,7 +3020,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             position: p.position,
           }));
 
-          emitProgress('building & proving transaction (halo2, parallel)', `${selected.length} spends`);
+          emitProgress(
+            'building & proving transaction (halo2, parallel)',
+            `${selected.length} spends`,
+          );
           const proveStart = performance.now();
           // keep the clock ticking during proving so the UI doesn't look frozen
           const provingTicker = setInterval(() => {
@@ -2576,15 +3033,21 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
           let txHex: string;
           try {
-            txHex = await proveViaOffscreen({
+            txHex = (await proveViaOffscreen({
               fn: 'build_signed_spend',
               args: [
-                sendPayload.mnemonic, notesJson, sendPayload.recipient,
-                amountZat.toString(), fee.toString(), anchorHex,
-                merklePathsForWasm, sendPayload.accountIndex, sendPayload.mainnet,
+                sendPayload.mnemonic,
+                notesJson,
+                sendPayload.recipient,
+                amountZat.toString(),
+                fee.toString(),
+                anchorHex,
+                merklePathsForWasm,
+                sendPayload.accountIndex,
+                sendPayload.mainnet,
                 memoHex,
               ],
-            }) as string;
+            })) as string;
           } catch (e) {
             console.error('[zcash-worker] build_signed_spend_transaction failed:', e);
             throw e;
@@ -2615,7 +3078,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           emitProgress('complete', `txid=${txid}, total=${totalDuration}s`);
 
           workerSelf.postMessage({
-            type: 'tx-result', id, network: 'zcash', walletId,
+            type: 'tx-result',
+            id,
+            network: 'zcash',
+            walletId,
             payload: { txid, fee: fee.toString() },
           });
           return;
@@ -2626,7 +3092,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           throw new Error('UFVK required for zigner wallet send');
         }
 
-        emitProgress('building & proving unsigned transaction (halo2)', `${selected.length} spends`);
+        emitProgress(
+          'building & proving unsigned transaction (halo2)',
+          `${selected.length} spends`,
+        );
         const proveStartZ = performance.now();
 
         // pass full note data (with rseed, rho, recipient) for real Orchard bundle construction
@@ -2640,7 +3109,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           recipient_hex: n.recipient ?? '',
         }));
 
-        const pathsForWasm = (paths as Array<{ position: number; path: Array<{ hash: string }> }>).map(p => ({
+        const pathsForWasm = (
+          paths as Array<{ position: number; path: Array<{ hash: string }> }>
+        ).map(p => ({
           path: p.path.map(e => e.hash),
           position: p.position,
         }));
@@ -2649,9 +3120,15 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const unsignedResult = await proveViaOffscreen({
           fn: 'build_unsigned',
           args: [
-            sendPayload.ufvk, notesForWasm, sendPayload.recipient,
-            amountZat.toString(), fee.toString(), anchorHex,
-            pathsForWasm, sendPayload.accountIndex, sendPayload.mainnet,
+            sendPayload.ufvk,
+            notesForWasm,
+            sendPayload.recipient,
+            amountZat.toString(),
+            fee.toString(),
+            anchorHex,
+            pathsForWasm,
+            sendPayload.accountIndex,
+            sendPayload.mainnet,
             memoHex,
           ],
         });
@@ -2660,15 +3137,21 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         emitProgress('unsigned transaction proved', `${proveDurationZ}s`);
 
         const parsed = unsignedResult as unknown as {
-          sighash: string; alphas: string[]; unsigned_tx: string;
-          spend_indices: number[]; summary: string;
+          sighash: string;
+          alphas: string[];
+          unsigned_tx: string;
+          spend_indices: number[];
+          summary: string;
         };
 
         const totalDuration = ((performance.now() - sendStart) / 1000).toFixed(1);
         emitProgress('unsigned tx ready', `total=${totalDuration}s`);
 
         workerSelf.postMessage({
-          type: 'send-tx-unsigned', id, network: 'zcash', walletId,
+          type: 'send-tx-unsigned',
+          id,
+          network: 'zcash',
+          walletId,
           payload: {
             sighash: parsed.sighash,
             alphas: parsed.alphas,
@@ -2687,7 +3170,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (!wasmModule) throw new Error('wasm not initialized');
 
         const completePayload = payload as {
-          serverUrl: string; unsignedTx: string;
+          serverUrl: string;
+          unsignedTx: string;
           signatures: { orchardSigs: string[]; transparentSigs: string[] };
           spendIndices: number[];
         };
@@ -2708,7 +3192,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         const txid = await resolveBroadcastTxid(result, txHex, completePayload.serverUrl);
         workerSelf.postMessage({
-          type: 'tx-result', id, network: 'zcash', walletId,
+          type: 'tx-result',
+          id,
+          network: 'zcash',
+          walletId,
           payload: { txid },
         });
         return;
@@ -2749,15 +3236,22 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             memoHex = sendPayload.memo;
           } else {
             const bytes = new TextEncoder().encode(sendPayload.memo);
-            memoHex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+            memoHex = Array.from(bytes)
+              .map(b => b.toString(16).padStart(2, '0'))
+              .join('');
           }
         }
 
         const sendStart = performance.now();
         const emitProgress = (step: string, detail?: string) => {
-          console.log(`[zcash-worker] send-pczt [${((performance.now() - sendStart) / 1000).toFixed(1)}s] ${step}${detail ? ': ' + detail : ''}`);
+          console.log(
+            `[zcash-worker] send-pczt [${((performance.now() - sendStart) / 1000).toFixed(1)}s] ${step}${detail ? ': ' + detail : ''}`,
+          );
           workerSelf.postMessage({
-            type: 'send-progress', id: '', network: 'zcash', walletId,
+            type: 'send-progress',
+            id: '',
+            network: 'zcash',
+            walletId,
             payload: { step, detail, elapsedMs: Math.round(performance.now() - sendStart) },
           });
         };
@@ -2766,15 +3260,21 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const sendState = await loadState(walletId);
         const amountZat = BigInt(sendPayload.amount);
 
-        const isTransparent = sendPayload.recipient.startsWith('t1') || sendPayload.recipient.startsWith('tm');
+        const isTransparent =
+          sendPayload.recipient.startsWith('t1') || sendPayload.recipient.startsWith('tm');
         const nZOutputs = isTransparent ? 0 : 1;
         const nTOutputs = isTransparent ? 1 : 0;
 
         emitProgress('selecting notes', `${sendState.notes.length} notes available`);
         const estFee = computeFee(1, nZOutputs, nTOutputs, true);
-        const selected = selectNotes(sendState.notes, sendState.spentNullifiers, amountZat + estFee);
+        const selected = selectNotes(
+          sendState.notes,
+          sendState.spentNullifiers,
+          amountZat + estFee,
+        );
         const totalIn = selected.reduce((sum, n) => sum + BigInt(n.value), 0n);
-        const hasChange = totalIn > amountZat + computeFee(selected.length, nZOutputs, nTOutputs, true);
+        const hasChange =
+          totalIn > amountZat + computeFee(selected.length, nZOutputs, nTOutputs, true);
         const fee = computeFee(selected.length, nZOutputs, nTOutputs, hasChange);
         if (totalIn < amountZat + fee) {
           throw new Error(`insufficient funds: have ${totalIn} zat, need ${amountZat + fee} zat`);
@@ -2788,7 +3288,12 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // rooted); target_height stays at the live tip for branch_id/expiry.
         const anchorHeight = await resolveAnchorHeight(walletId, sendTip.height);
         emitProgress('building merkle witnesses', `anchor=${anchorHeight} (tip=${sendTip.height})`);
-        const { anchorHex, paths } = await buildWitnesses(sendClient, walletId, selected, anchorHeight);
+        const { anchorHex, paths } = await buildWitnesses(
+          sendClient,
+          walletId,
+          selected,
+          anchorHeight,
+        );
 
         const notesForWasm = selected.map(n => ({
           value: Number(n.value),
@@ -2799,7 +3304,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           rho_hex: n.rho ?? '',
           recipient_hex: n.recipient ?? '',
         }));
-        const pathsForWasm = (paths as Array<{ position: number; path: Array<{ hash: string }> }>).map(p => ({
+        const pathsForWasm = (
+          paths as Array<{ position: number; path: Array<{ hash: string }> }>
+        ).map(p => ({
           path: p.path.map(e => e.hash),
           position: p.position,
         }));
@@ -2817,9 +3324,15 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const built = await proveViaOffscreen({
           fn: 'build_unsigned_pczt',
           args: [
-            sendPayload.ufvk, notesForWasm, sendPayload.recipient,
-            amountZat.toString(), fee.toString(), anchorHex,
-            pathsForWasm, targetHeight, sendPayload.mainnet,
+            sendPayload.ufvk,
+            notesForWasm,
+            sendPayload.recipient,
+            amountZat.toString(),
+            fee.toString(),
+            anchorHex,
+            pathsForWasm,
+            targetHeight,
+            sendPayload.mainnet,
             memoHex,
           ],
         });
@@ -2837,9 +3350,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // CBOR-wrap the PCZT for the standard zashi/keystone-sdk envelope.
         const pcztBytes = hexDecode(parsed.pczt_hex);
         const cbor = cborWrapPczt(pcztBytes);
-        const fragSize = sendPayload.fragmentSize && sendPayload.fragmentSize > 0
-          ? sendPayload.fragmentSize
-          : 200;
+        const fragSize =
+          sendPayload.fragmentSize && sendPayload.fragmentSize > 0 ? sendPayload.fragmentSize : 200;
         const framesJson = wasmModule.ur_encode_frames(cbor, 'zcash-pczt', fragSize);
         const urFrames = JSON.parse(framesJson) as string[];
 
@@ -2847,7 +3359,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         emitProgress('PCZT QR ready', `${urFrames.length} frames, total=${totalDuration}s`);
 
         workerSelf.postMessage({
-          type: 'send-tx-pczt-unsigned', id, network: 'zcash', walletId,
+          type: 'send-tx-pczt-unsigned',
+          id,
+          network: 'zcash',
+          walletId,
           payload: {
             pcztHex: parsed.pczt_hex,
             summary: parsed.summary,
@@ -2882,7 +3397,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         const txid = await resolveBroadcastTxid(result, txHex, completePayload.serverUrl);
         workerSelf.postMessage({
-          type: 'tx-result', id, network: 'zcash', walletId,
+          type: 'tx-result',
+          id,
+          network: 'zcash',
+          walletId,
           payload: { txid },
         });
         return;
@@ -2924,8 +3442,12 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           }
           // validate address prefix
           const addr = out.address.trim();
-          const validPrefix = addr.startsWith('u1') || addr.startsWith('utest1')
-            || addr.startsWith('zs') || addr.startsWith('t1') || addr.startsWith('tm');
+          const validPrefix =
+            addr.startsWith('u1') ||
+            addr.startsWith('utest1') ||
+            addr.startsWith('zs') ||
+            addr.startsWith('t1') ||
+            addr.startsWith('tm');
           if (!validPrefix) {
             throw new Error(`output ${i}: invalid zcash address prefix`);
           }
@@ -2934,9 +3456,14 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const multiStart = performance.now();
         const emitMultiProgress = (step: string, detail?: string) => {
           const elapsed = ((performance.now() - multiStart) / 1000).toFixed(1);
-          console.log(`[zcash-worker] multi-send [${elapsed}s] ${step}${detail ? ': ' + detail : ''}`);
+          console.log(
+            `[zcash-worker] multi-send [${elapsed}s] ${step}${detail ? ': ' + detail : ''}`,
+          );
           workerSelf.postMessage({
-            type: 'send-progress', id: '', network: 'zcash', walletId,
+            type: 'send-progress',
+            id: '',
+            network: 'zcash',
+            walletId,
             payload: { step, detail, elapsedMs: Math.round(performance.now() - multiStart) },
           });
         };
@@ -2961,7 +3488,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               memoHex = out.memo;
             } else {
               const bytes = new TextEncoder().encode(out.memo);
-              memoHex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+              memoHex = Array.from(bytes)
+                .map(b => b.toString(16).padStart(2, '0'))
+                .join('');
             }
           }
 
@@ -2975,26 +3504,42 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
           // estimate fee and select notes
           const estFee = computeFee(1, nZOutputs, nTOutputs, true);
-          const selected = selectNotes(multiState.notes, multiState.spentNullifiers, amountZat + estFee);
+          const selected = selectNotes(
+            multiState.notes,
+            multiState.spentNullifiers,
+            amountZat + estFee,
+          );
 
           // compute exact fee
           const totalIn = selected.reduce((sum, n) => sum + BigInt(n.value), 0n);
-          const hasChange = totalIn > amountZat + computeFee(selected.length, nZOutputs, nTOutputs, true);
+          const hasChange =
+            totalIn > amountZat + computeFee(selected.length, nZOutputs, nTOutputs, true);
           const fee = computeFee(selected.length, nZOutputs, nTOutputs, hasChange);
           if (totalIn < amountZat + fee) {
-            throw new Error(`output ${outputIdx}: insufficient funds: have ${totalIn} zat, need ${amountZat + fee} zat`);
+            throw new Error(
+              `output ${outputIdx}: insufficient funds: have ${totalIn} zat, need ${amountZat + fee} zat`,
+            );
           }
 
-          emitMultiProgress(`output ${outputIdx + 1}: notes selected`, `${selected.length} notes, fee=${fee}`);
+          emitMultiProgress(
+            `output ${outputIdx + 1}: notes selected`,
+            `${selected.length} notes, fee=${fee}`,
+          );
 
           // build merkle witnesses
           const multiClient = await makeZcashClient(multiPayload.serverUrl);
           const multiTip = await multiClient.getTip();
 
           const multiAnchorHeight = await resolveAnchorHeight(walletId, multiTip.height);
-          emitMultiProgress(`output ${outputIdx + 1}: building witnesses`, `anchor=${multiAnchorHeight} (tip=${multiTip.height})`);
+          emitMultiProgress(
+            `output ${outputIdx + 1}: building witnesses`,
+            `anchor=${multiAnchorHeight} (tip=${multiTip.height})`,
+          );
           const { anchorHex: multiAnchor, paths: multiPaths } = await buildWitnesses(
-            multiClient, walletId, selected, multiAnchorHeight,
+            multiClient,
+            walletId,
+            selected,
+            multiAnchorHeight,
           );
 
           // build note data for WASM
@@ -3007,13 +3552,19 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             rho_hex: n.rho ?? '',
             recipient_hex: n.recipient ?? '',
           }));
-          const pathsResult = multiPaths as Array<{ position: number; path: Array<{ hash: string }> }>;
+          const pathsResult = multiPaths as Array<{
+            position: number;
+            path: Array<{ hash: string }>;
+          }>;
           const merklePathsForWasm = pathsResult.map(p => ({
             path: p.path.map(e => e.hash),
             position: p.position,
           }));
 
-          emitMultiProgress(`output ${outputIdx + 1}: proving (halo2)`, `${selected.length} spends`);
+          emitMultiProgress(
+            `output ${outputIdx + 1}: proving (halo2)`,
+            `${selected.length} spends`,
+          );
           const proveStart = performance.now();
           const provingTicker = setInterval(() => {
             const elapsed = ((performance.now() - proveStart) / 1000).toFixed(0);
@@ -3022,15 +3573,21 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
           let txHex: string;
           try {
-            txHex = await proveViaOffscreen({
+            txHex = (await proveViaOffscreen({
               fn: 'build_signed_spend',
               args: [
-                multiPayload.mnemonic, notesJson, recipient,
-                amountZat.toString(), fee.toString(), multiAnchor,
-                merklePathsForWasm, multiPayload.accountIndex, multiPayload.mainnet,
+                multiPayload.mnemonic,
+                notesJson,
+                recipient,
+                amountZat.toString(),
+                fee.toString(),
+                multiAnchor,
+                merklePathsForWasm,
+                multiPayload.accountIndex,
+                multiPayload.mainnet,
                 memoHex,
               ],
-            }) as string;
+            })) as string;
           } finally {
             clearInterval(provingTicker);
           }
@@ -3041,7 +3598,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           const broadcastClient = await makeZcashClient(multiPayload.serverUrl);
           const broadcastResult = await broadcastClient.sendTransaction(txData);
           if (broadcastResult.errorCode !== 0) {
-            throw new Error(`output ${outputIdx}: broadcast failed (${broadcastResult.errorCode}): ${broadcastResult.errorMessage}`);
+            throw new Error(
+              `output ${outputIdx}: broadcast failed (${broadcastResult.errorCode}): ${broadcastResult.errorMessage}`,
+            );
           }
 
           const outputTxid = new TextDecoder().decode(broadcastResult.txid);
@@ -3067,7 +3626,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         emitMultiProgress('all outputs complete', `${txids.length} txs, total=${totalDuration}s`);
 
         workerSelf.postMessage({
-          type: 'tx-multi-result', id, network: 'zcash', walletId,
+          type: 'tx-multi-result',
+          id,
+          network: 'zcash',
+          walletId,
           payload: { txids, fees },
         });
         return;
@@ -3079,7 +3641,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (!wasmModule) throw new Error('wasm not initialized');
 
         const { mnemonic, serverUrl, tAddresses, mainnet, addressIndexMap } = payload as {
-          mnemonic: string; serverUrl: string; tAddresses: string[]; mainnet: boolean;
+          mnemonic: string;
+          serverUrl: string;
+          tAddresses: string[];
+          mainnet: boolean;
           addressIndexMap?: Record<string, number>;
         };
 
@@ -3103,7 +3668,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         for (const utxo of allUtxos) {
           const idx = addrToIndex.get(utxo.address) ?? 0;
           let group = byIndex.get(idx);
-          if (!group) { group = []; byIndex.set(idx, group); }
+          if (!group) {
+            group = [];
+            byIndex.set(idx, group);
+          }
           group.push(utxo);
         }
 
@@ -3128,27 +3696,40 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           const logicalActions = 2 + utxos.length;
           const fee = BigInt(5000 * Math.max(logicalActions, 2));
           if (groupZat <= fee) {
-            console.warn(`[zcash-worker] skipping index ${addrIndex}: ${groupZat} zat <= ${fee} fee`);
+            console.warn(
+              `[zcash-worker] skipping index ${addrIndex}: ${groupZat} zat <= ${fee} fee`,
+            );
             continue;
           }
 
           const shieldAmount = groupZat - fee;
           const privkeyHex = wasmModule.derive_transparent_privkey(mnemonic, 0, addrIndex);
 
-          const utxosJson = JSON.stringify(utxos.map(u => ({
-            txid: hexEncode(u.txid),
-            vout: u.outputIndex,
-            value: Number(u.valueZat),
-            script: hexEncode(u.script),
-          })));
+          const utxosJson = JSON.stringify(
+            utxos.map(u => ({
+              txid: hexEncode(u.txid),
+              vout: u.outputIndex,
+              value: Number(u.valueZat),
+              script: hexEncode(u.script),
+            })),
+          );
 
-          const txHex = await proveViaOffscreen({
+          const txHex = (await proveViaOffscreen({
             fn: 'build_shielding',
-            args: [utxosJson, privkeyHex, recipient, shieldAmount.toString(), fee.toString(), tip.height, mainnet],
-          }) as string;
+            args: [
+              utxosJson,
+              privkeyHex,
+              recipient,
+              shieldAmount.toString(),
+              fee.toString(),
+              tip.height,
+              mainnet,
+            ],
+          })) as string;
           const txData = hexDecode(txHex);
           const result = await client.sendTransaction(txData);
-          if (result.errorCode !== 0) throw new Error(`broadcast failed (${result.errorCode}): ${result.errorMessage}`);
+          if (result.errorCode !== 0)
+            throw new Error(`broadcast failed (${result.errorCode}): ${result.errorMessage}`);
 
           lastTxid = await resolveBroadcastTxid(result, txHex, serverUrl);
           totalShielded += shieldAmount;
@@ -3159,8 +3740,16 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (totalUtxos === 0) throw new Error('all UTXO groups too small to cover fees');
 
         workerSelf.postMessage({
-          type: 'shield-result', id, network: 'zcash', walletId,
-          payload: { txid: lastTxid, shieldedZat: totalShielded.toString(), feeZat: totalFee.toString(), utxoCount: totalUtxos },
+          type: 'shield-result',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: {
+            txid: lastTxid,
+            shieldedZat: totalShielded.toString(),
+            feeZat: totalFee.toString(),
+            utxoCount: totalUtxos,
+          },
         });
         return;
       }
@@ -3171,8 +3760,11 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (!wasmModule) throw new Error('wasm not initialized');
 
         const shieldUnsignedPayload = payload as {
-          serverUrl: string; tAddresses: string[]; mainnet: boolean;
-          ufvk: string; addressIndexMap?: Record<string, number>;
+          serverUrl: string;
+          tAddresses: string[];
+          mainnet: boolean;
+          ufvk: string;
+          addressIndexMap?: Record<string, number>;
         };
 
         const shieldUClient = await makeZcashClient(shieldUnsignedPayload.serverUrl);
@@ -3210,24 +3802,38 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // collect address indices in UTXO order
         const shieldUAddrIndices = shieldUUtxos.map(u => shieldUAddrToIndex.get(u.address) ?? 0);
 
-        const shieldUUtxosJson = JSON.stringify(shieldUUtxos.map(u => ({
-          txid: hexEncode(u.txid),
-          vout: u.outputIndex,
-          value: Number(u.valueZat),
-          script: hexEncode(u.script),
-        })));
+        const shieldUUtxosJson = JSON.stringify(
+          shieldUUtxos.map(u => ({
+            txid: hexEncode(u.txid),
+            vout: u.outputIndex,
+            value: Number(u.valueZat),
+            script: hexEncode(u.script),
+          })),
+        );
 
-        const shieldUResult = await proveViaOffscreen({
+        const shieldUResult = (await proveViaOffscreen({
           fn: 'build_unsigned_shielding',
-          args: [shieldUUtxosJson, shieldURecipient, shieldUAmount.toString(), shieldUFee.toString(), shieldUTip.height, shieldUnsignedPayload.mainnet],
-        }) as string;
+          args: [
+            shieldUUtxosJson,
+            shieldURecipient,
+            shieldUAmount.toString(),
+            shieldUFee.toString(),
+            shieldUTip.height,
+            shieldUnsignedPayload.mainnet,
+          ],
+        })) as string;
 
         const shieldUParsed = JSON.parse(shieldUResult) as {
-          sighashes: string[]; unsigned_tx_hex: string; summary: string;
+          sighashes: string[];
+          unsigned_tx_hex: string;
+          summary: string;
         };
 
         workerSelf.postMessage({
-          type: 'shield-unsigned-result', id, network: 'zcash', walletId,
+          type: 'shield-unsigned-result',
+          id,
+          network: 'zcash',
+          walletId,
           payload: {
             sighashes: shieldUParsed.sighashes,
             unsignedTxHex: shieldUParsed.unsigned_tx_hex,
@@ -3245,25 +3851,33 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (!wasmModule) throw new Error('wasm not initialized');
 
         const shieldCompletePayload = payload as {
-          serverUrl: string; unsignedTxHex: string;
+          serverUrl: string;
+          unsignedTxHex: string;
           signatures: { sig_hex: string; pubkey_hex: string }[];
         };
 
         const signaturesJson = JSON.stringify(shieldCompletePayload.signatures);
         const shieldCompleteTxHex = wasmModule.complete_shielding_transaction(
-          shieldCompletePayload.unsignedTxHex, signaturesJson,
+          shieldCompletePayload.unsignedTxHex,
+          signaturesJson,
         );
         const shieldCompleteTxData = hexDecode(shieldCompleteTxHex);
 
         const shieldCompleteClient = await makeZcashClient(shieldCompletePayload.serverUrl);
-        const shieldCompleteResult = await shieldCompleteClient.sendTransaction(shieldCompleteTxData);
+        const shieldCompleteResult =
+          await shieldCompleteClient.sendTransaction(shieldCompleteTxData);
         if (shieldCompleteResult.errorCode !== 0) {
-          throw new Error(`broadcast failed (${shieldCompleteResult.errorCode}): ${shieldCompleteResult.errorMessage}`);
+          throw new Error(
+            `broadcast failed (${shieldCompleteResult.errorCode}): ${shieldCompleteResult.errorMessage}`,
+          );
         }
 
         const shieldCompleteTxid = new TextDecoder().decode(shieldCompleteResult.txid);
         workerSelf.postMessage({
-          type: 'tx-result', id, network: 'zcash', walletId,
+          type: 'tx-result',
+          id,
+          network: 'zcash',
+          walletId,
           payload: { txid: shieldCompleteTxid },
         });
         return;
@@ -3281,7 +3895,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
       case 'frost-dkg-part2': {
         await initWasm();
-        const { secretHex, peerBroadcasts } = payload as { secretHex: string; peerBroadcasts: string };
+        const { secretHex, peerBroadcasts } = payload as {
+          secretHex: string;
+          peerBroadcasts: string;
+        };
         const result = JSON.parse(wasmModule!.frost_dkg_part2(secretHex, peerBroadcasts));
         workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: result });
         return;
@@ -3290,16 +3907,23 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       case 'frost-dkg-part3': {
         await initWasm();
         const { secretHex, round1Broadcasts, round2Packages } = payload as {
-          secretHex: string; round1Broadcasts: string; round2Packages: string;
+          secretHex: string;
+          round1Broadcasts: string;
+          round2Packages: string;
         };
-        const result = JSON.parse(wasmModule!.frost_dkg_part3(secretHex, round1Broadcasts, round2Packages));
+        const result = JSON.parse(
+          wasmModule!.frost_dkg_part3(secretHex, round1Broadcasts, round2Packages),
+        );
         workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: result });
         return;
       }
 
       case 'frost-sign-round1': {
         await initWasm();
-        const { ephemeralSeedHex, keyPackageHex } = payload as { ephemeralSeedHex: string; keyPackageHex: string };
+        const { ephemeralSeedHex, keyPackageHex } = payload as {
+          ephemeralSeedHex: string;
+          keyPackageHex: string;
+        };
         const result = JSON.parse(wasmModule!.frost_sign_round1(ephemeralSeedHex, keyPackageHex));
         workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: result });
         return;
@@ -3307,12 +3931,23 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
       case 'frost-spend-sign': {
         await initWasm();
-        const { ephemeralSeedHex, keyPackageHex, noncesHex, sighashHex, alphaHex, commitments } = payload as {
-          ephemeralSeedHex: string; keyPackageHex: string; noncesHex: string; sighashHex: string; alphaHex: string; commitments: string;
-        };
+        const { ephemeralSeedHex, keyPackageHex, noncesHex, sighashHex, alphaHex, commitments } =
+          payload as {
+            ephemeralSeedHex: string;
+            keyPackageHex: string;
+            noncesHex: string;
+            sighashHex: string;
+            alphaHex: string;
+            commitments: string;
+          };
         // signed variant — coordinator (zafu/poker-escrow) extracts signer identifier from VK
         const result = wasmModule!.frost_spend_sign_round2_signed(
-          ephemeralSeedHex, keyPackageHex, noncesHex, sighashHex, alphaHex, commitments,
+          ephemeralSeedHex,
+          keyPackageHex,
+          noncesHex,
+          sighashHex,
+          alphaHex,
+          commitments,
         );
         workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: result });
         return;
@@ -3321,16 +3956,29 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       case 'frost-spend-aggregate': {
         await initWasm();
         const { publicKeyPackageHex, sighashHex, alphaHex, commitments, shares } = payload as {
-          publicKeyPackageHex: string; sighashHex: string; alphaHex: string; commitments: string; shares: string;
+          publicKeyPackageHex: string;
+          sighashHex: string;
+          alphaHex: string;
+          commitments: string;
+          shares: string;
         };
-        const result = wasmModule!.frost_spend_aggregate(publicKeyPackageHex, sighashHex, alphaHex, commitments, shares);
+        const result = wasmModule!.frost_spend_aggregate(
+          publicKeyPackageHex,
+          sighashHex,
+          alphaHex,
+          commitments,
+          shares,
+        );
         workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: result });
         return;
       }
 
       case 'frost-derive-address': {
         await initWasm();
-        const { publicKeyPackageHex, diversifierIndex } = payload as { publicKeyPackageHex: string; diversifierIndex: number };
+        const { publicKeyPackageHex, diversifierIndex } = payload as {
+          publicKeyPackageHex: string;
+          diversifierIndex: number;
+        };
         const rawHex = wasmModule!.frost_derive_address_raw(publicKeyPackageHex, diversifierIndex);
         workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: rawHex });
         return;
@@ -3338,8 +3986,16 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
       case 'frost-derive-address-from-sk': {
         await initWasm();
-        const { publicKeyPackageHex, skHex, diversifierIndex } = payload as { publicKeyPackageHex: string; skHex: string; diversifierIndex: number };
-        const rawHex = wasmModule!.frost_derive_address_from_sk(publicKeyPackageHex, skHex, diversifierIndex);
+        const { publicKeyPackageHex, skHex, diversifierIndex } = payload as {
+          publicKeyPackageHex: string;
+          skHex: string;
+          diversifierIndex: number;
+        };
+        const rawHex = wasmModule!.frost_derive_address_from_sk(
+          publicKeyPackageHex,
+          skHex,
+          diversifierIndex,
+        );
         workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: rawHex });
         return;
       }
@@ -3353,7 +4009,11 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
       case 'frost-derive-ufvk': {
         await initWasm();
-        const { publicKeyPackageHex, skHex, mainnet } = payload as { publicKeyPackageHex: string; skHex: string; mainnet: boolean };
+        const { publicKeyPackageHex, skHex, mainnet } = payload as {
+          publicKeyPackageHex: string;
+          skHex: string;
+          mainnet: boolean;
+        };
         const ufvk = wasmModule!.frost_derive_ufvk(publicKeyPackageHex, skHex, mainnet);
         workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: ufvk });
         return;
@@ -3375,14 +4035,19 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
     }
   } catch (err) {
     workerSelf.postMessage({
-      type: 'error', id, network: 'zcash', walletId,
+      type: 'error',
+      id,
+      network: 'zcash',
+      walletId,
       error: err instanceof Error ? err.message : String(err),
     });
   }
 };
 
-initWasm().then(() => {
-  workerSelf.postMessage({ type: 'ready', id: '', network: 'zcash' });
-}).catch(err => {
-  console.error('[zcash-worker] wasm init failed:', err);
-});
+initWasm()
+  .then(() => {
+    workerSelf.postMessage({ type: 'ready', id: '', network: 'zcash' });
+  })
+  .catch(err => {
+    console.error('[zcash-worker] wasm init failed:', err);
+  });

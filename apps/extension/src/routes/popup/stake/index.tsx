@@ -14,11 +14,18 @@ import { NetworkUnavailable } from '../../../shared/components/network-unavailab
 import { TransactionPlannerRequest } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
 import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances-response';
-import { getDisplayDenomFromView, getAssetIdFromValueView, getDisplayDenomExponentFromValueView } from '@penumbra-zone/getters/value-view';
+import {
+  getDisplayDenomFromView,
+  getAssetIdFromValueView,
+  getDisplayDenomExponentFromValueView,
+} from '@penumbra-zone/getters/value-view';
 import { fromValueView } from '@rotko/penumbra-types/amount';
 import { assetPatterns } from '@rotko/penumbra-types/assets';
 import { cn } from '@repo/ui/lib/utils';
-import { ValidatorState_ValidatorStateEnum, type ValidatorInfo } from '@penumbra-zone/protobuf/penumbra/core/component/stake/v1/stake_pb';
+import {
+  ValidatorState_ValidatorStateEnum,
+  type ValidatorInfo,
+} from '@penumbra-zone/protobuf/penumbra/core/component/stake/v1/stake_pb';
 import type { BalancesResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { bech32mIdentityKey } from '@penumbra-zone/bech32m/penumbravalid';
 
@@ -41,12 +48,18 @@ interface ValidatorRow {
 const getValidatorState = (info: ValidatorInfo): string => {
   const state = info.status?.state?.state;
   switch (state) {
-    case ValidatorState_ValidatorStateEnum.ACTIVE: return 'active';
-    case ValidatorState_ValidatorStateEnum.INACTIVE: return 'inactive';
-    case ValidatorState_ValidatorStateEnum.JAILED: return 'jailed';
-    case ValidatorState_ValidatorStateEnum.TOMBSTONED: return 'tombstoned';
-    case ValidatorState_ValidatorStateEnum.DISABLED: return 'disabled';
-    default: return 'unknown';
+    case ValidatorState_ValidatorStateEnum.ACTIVE:
+      return 'active';
+    case ValidatorState_ValidatorStateEnum.INACTIVE:
+      return 'inactive';
+    case ValidatorState_ValidatorStateEnum.JAILED:
+      return 'jailed';
+    case ValidatorState_ValidatorStateEnum.TOMBSTONED:
+      return 'tombstoned';
+    case ValidatorState_ValidatorStateEnum.DISABLED:
+      return 'disabled';
+    default:
+      return 'unknown';
   }
 };
 
@@ -54,10 +67,11 @@ const getValidatorState = (info: ValidatorInfo): string => {
 const isDelegationToken = (meta: { base?: string; symbol?: string } | undefined): boolean => {
   if (!meta) return false;
   // check base denom pattern - can be "delegation_" or "udelegation_" (micro-unit prefix)
-  if (meta.base && (
-    assetPatterns.delegationToken.matches(meta.base) ||
-    meta.base.includes('delegation_penumbravalid1')
-  )) {
+  if (
+    meta.base &&
+    (assetPatterns.delegationToken.matches(meta.base) ||
+      meta.base.includes('delegation_penumbravalid1'))
+  ) {
     return true;
   }
   // fallback: check symbol
@@ -68,7 +82,9 @@ const isDelegationToken = (meta: { base?: string; symbol?: string } | undefined)
 };
 
 /** extract validator bech32 identity from delegation token base denom */
-const getValidatorBech32FromDelegation = (meta: { base?: string } | undefined): string | undefined => {
+const getValidatorBech32FromDelegation = (
+  meta: { base?: string } | undefined,
+): string | undefined => {
   if (!meta?.base) return undefined;
   // base denom can be "delegation_penumbravalid1..." or "udelegation_penumbravalid1..." (with micro-unit prefix)
   // extract the bech32 part (penumbravalid1...)
@@ -79,7 +95,7 @@ const getValidatorBech32FromDelegation = (meta: { base?: string } | undefined): 
 /** find validator by matching delegation token to validator identity */
 const findValidatorForDelegation = (
   meta: { base?: string } | undefined,
-  validators: ValidatorRow[]
+  validators: ValidatorRow[],
 ): ValidatorRow | undefined => {
   const delegationBech32 = getValidatorBech32FromDelegation(meta);
   if (!delegationBech32) return undefined;
@@ -104,7 +120,9 @@ export const StakePage = () => {
   const [amount, setAmount] = useState('');
   const [selectedValidator, setSelectedValidator] = useState<ValidatorRow | undefined>();
   const [selectedDelegation, setSelectedDelegation] = useState<BalancesResponse | undefined>();
-  const [txStatus, setTxStatus] = useState<'idle' | 'planning' | 'signing' | 'broadcasting' | 'success' | 'error'>('idle');
+  const [txStatus, setTxStatus] = useState<
+    'idle' | 'planning' | 'signing' | 'broadcasting' | 'success' | 'error'
+  >('idle');
   const [txHash, setTxHash] = useState<string | undefined>();
   const [txError, setTxError] = useState<string | undefined>();
 
@@ -115,7 +133,11 @@ export const StakePage = () => {
   const isPenumbra = activeNetwork === 'penumbra';
 
   // fetch validators
-  const { data: validators = [], isLoading: validatorsLoading, refetch: refetchValidators } = useQuery({
+  const {
+    data: validators = [],
+    isLoading: validatorsLoading,
+    refetch: refetchValidators,
+  } = useQuery({
     queryKey: ['validators'],
     enabled: isPenumbra,
     staleTime: 60_000,
@@ -132,9 +154,10 @@ export const StakePage = () => {
           const votingPower = Number(info.status?.votingPower ?? 0n);
           // funding streams use a recipient oneof - get rate from recipient if available
           const fundingStream = info.validator?.fundingStreams?.[0];
-          const commission = fundingStream?.recipient?.case === 'toAddress'
-            ? Number(fundingStream.recipient.value.rateBps ?? 0) / 100
-            : 0;
+          const commission =
+            fundingStream?.recipient?.case === 'toAddress'
+              ? Number(fundingStream.recipient.value.rateBps ?? 0) / 100
+              : 0;
           const state = getValidatorState(info);
           result.push({ info, name, identity, votingPower, commission, state });
         }
@@ -153,14 +176,20 @@ export const StakePage = () => {
   });
 
   // fetch user balances to find delegations
-  const { data: delegations = [], isLoading: delegationsLoading, refetch: refetchDelegations } = useQuery({
+  const {
+    data: delegations = [],
+    isLoading: delegationsLoading,
+    refetch: refetchDelegations,
+  } = useQuery({
     queryKey: ['delegations', penumbraAccount],
     enabled: isPenumbra,
     staleTime: 30_000,
     queryFn: async () => {
       const result: BalancesResponse[] = [];
       try {
-        for await (const b of viewClient.balances({ accountFilter: { account: penumbraAccount } })) {
+        for await (const b of viewClient.balances({
+          accountFilter: { account: penumbraAccount },
+        })) {
           const meta = getMetadataFromBalancesResponse.optional(b);
           if (isDelegationToken(meta)) {
             result.push(b);
@@ -180,7 +209,9 @@ export const StakePage = () => {
     staleTime: 30_000,
     queryFn: async () => {
       try {
-        for await (const b of viewClient.balances({ accountFilter: { account: penumbraAccount } })) {
+        for await (const b of viewClient.balances({
+          accountFilter: { account: penumbraAccount },
+        })) {
           const meta = getMetadataFromBalancesResponse.optional(b);
           if (meta?.symbol === STAKING_TOKEN) {
             if (!b.balanceView) return '0';
@@ -212,10 +243,12 @@ export const StakePage = () => {
       const baseAmount = BigInt(Math.floor(parseFloat(amount) * Math.pow(10, STAKING_EXPONENT)));
 
       const planRequest = new TransactionPlannerRequest({
-        delegations: [{
-          amount: new Amount({ lo: baseAmount, hi: 0n }),
-          rateData: selectedValidator.info.rateData,
-        }],
+        delegations: [
+          {
+            amount: new Amount({ lo: baseAmount, hi: 0n }),
+            rateData: selectedValidator.info.rateData,
+          },
+        ],
         source: { account: penumbraAccount },
       });
 
@@ -261,13 +294,15 @@ export const StakePage = () => {
       }
 
       const planRequest = new TransactionPlannerRequest({
-        undelegations: [{
-          rateData: validator.info.rateData,
-          value: {
-            amount: new Amount({ lo: baseAmount, hi: 0n }),
-            assetId,
+        undelegations: [
+          {
+            rateData: validator.info.rateData,
+            value: {
+              amount: new Amount({ lo: baseAmount, hi: 0n }),
+              assetId,
+            },
           },
-        }],
+        ],
         source: { account: penumbraAccount },
       });
 
@@ -318,9 +353,9 @@ export const StakePage = () => {
       ? stakingBalance || '0'
       : selectedDelegation?.balanceView
         ? (() => {
-          const val = fromValueView(selectedDelegation.balanceView);
-          return typeof val === 'string' ? val : val.toString();
-        })()
+            const val = fromValueView(selectedDelegation.balanceView);
+            return typeof val === 'string' ? val : val.toString();
+          })()
         : '0';
 
     return (
@@ -328,7 +363,10 @@ export const StakePage = () => {
         {/* header */}
         <div className='flex items-center justify-between'>
           <h2 className='text-lg font-medium'>{isDelegate ? 'delegate' : 'undelegate'}</h2>
-          <button onClick={closeForm} className='text-fg-muted hover:text-fg-high transition-colors'>
+          <button
+            onClick={closeForm}
+            className='text-fg-muted hover:text-fg-high transition-colors'
+          >
             <span className='i-lucide-x h-5 w-5' />
           </button>
         </div>
@@ -343,11 +381,13 @@ export const StakePage = () => {
               className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg'
             >
               <option value=''>select validator...</option>
-              {validators.filter(v => v.state === 'active').map((v, i) => (
-                <option key={i} value={i}>
-                  {v.name} ({(v.votingPower / totalVotingPower * 100).toFixed(2)}%)
-                </option>
-              ))}
+              {validators
+                .filter(v => v.state === 'active')
+                .map((v, i) => (
+                  <option key={i} value={i}>
+                    {v.name} ({((v.votingPower / totalVotingPower) * 100).toFixed(2)}%)
+                  </option>
+                ))}
             </select>
           </div>
         ) : (
@@ -396,7 +436,9 @@ export const StakePage = () => {
         {/* tx status */}
         {txStatus === 'success' && txHash && (
           <div className='rounded-lg border border-green-500/40 bg-green-500/10 p-3'>
-            <p className='text-sm text-green-400'>{isDelegate ? 'delegation' : 'undelegation'} successful!</p>
+            <p className='text-sm text-green-400'>
+              {isDelegate ? 'delegation' : 'undelegation'} successful!
+            </p>
             <p className='text-xs text-fg-muted mt-1 font-mono break-all'>{txHash}</p>
           </div>
         )}
@@ -427,7 +469,7 @@ export const StakePage = () => {
           }
           className={cn(
             'w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark',
-            'transition-colors hover:bg-zigner-gold-light disabled:opacity-50 disabled:cursor-not-allowed'
+            'transition-colors hover:bg-zigner-gold-light disabled:opacity-50 disabled:cursor-not-allowed',
           )}
         >
           {txStatus === 'planning' && 'building plan...'}
@@ -446,7 +488,10 @@ export const StakePage = () => {
       <div className='flex items-center justify-between'>
         <h2 className='text-lg font-medium'>staking</h2>
         <button
-          onClick={() => { void refetchValidators(); void refetchDelegations(); }}
+          onClick={() => {
+            void refetchValidators();
+            void refetchDelegations();
+          }}
           className='text-fg-muted hover:text-fg-high transition-colors'
         >
           <span className='i-lucide-refresh-cw h-4 w-4' />
@@ -456,7 +501,9 @@ export const StakePage = () => {
       {/* staking balance */}
       <div className='rounded-lg border border-border-soft bg-elev-2/20 p-4'>
         <p className='text-xs text-fg-muted'>available to stake</p>
-        <p className='text-xl font-medium'>{stakingBalance || '0'} {STAKING_TOKEN}</p>
+        <p className='text-xl font-medium'>
+          {stakingBalance || '0'} {STAKING_TOKEN}
+        </p>
         <button
           onClick={() => setAction('delegate')}
           className='mt-2 w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
@@ -467,7 +514,9 @@ export const StakePage = () => {
 
       {/* user delegations */}
       <div>
-        <h3 className='mb-2 text-xs font-medium uppercase tracking-wider text-fg-muted'>your delegations</h3>
+        <h3 className='mb-2 text-xs font-medium uppercase tracking-wider text-fg-muted'>
+          your delegations
+        </h3>
         {delegationsLoading ? (
           <div className='flex items-center gap-2 py-12 text-sm text-fg-muted'>
             <span className='i-lucide-refresh-cw h-4 w-4 animate-spin' />
@@ -496,9 +545,7 @@ export const StakePage = () => {
                 >
                   <div className='min-w-0 flex-1'>
                     <p className='text-sm font-medium truncate'>{displayName}</p>
-                    <p className='text-xs text-fg-muted'>
-                      {balStr} staked
-                    </p>
+                    <p className='text-xs text-fg-muted'>{balStr} staked</p>
                   </div>
                   <button
                     onClick={() => {
@@ -528,27 +575,30 @@ export const StakePage = () => {
           </div>
         ) : (
           <div className='flex flex-col gap-1 max-h-64 overflow-y-auto'>
-            {validators.filter(v => v.state === 'active').slice(0, 20).map((v, i) => {
-              const pct = totalVotingPower > 0 ? (v.votingPower / totalVotingPower * 100) : 0;
-              return (
-                <button
-                  key={i}
-                  onClick={() => {
-                    setSelectedValidator(v);
-                    setAction('delegate');
-                  }}
-                  className='flex items-center justify-between rounded-lg border border-border-soft bg-elev-2/10 p-2 text-left hover:bg-elev-1 transition-colors'
-                >
-                  <div className='flex-1 min-w-0'>
-                    <p className='text-sm font-medium truncate'>{v.name}</p>
-                    <p className='text-xs text-fg-muted'>
-                      {pct.toFixed(2)}% · {v.commission}% fee
-                    </p>
-                  </div>
-                  <span className='i-lucide-chevron-down h-4 w-4 text-fg-muted rotate-[-90deg]' />
-                </button>
-              );
-            })}
+            {validators
+              .filter(v => v.state === 'active')
+              .slice(0, 20)
+              .map((v, i) => {
+                const pct = totalVotingPower > 0 ? (v.votingPower / totalVotingPower) * 100 : 0;
+                return (
+                  <button
+                    key={i}
+                    onClick={() => {
+                      setSelectedValidator(v);
+                      setAction('delegate');
+                    }}
+                    className='flex items-center justify-between rounded-lg border border-border-soft bg-elev-2/10 p-2 text-left hover:bg-elev-1 transition-colors'
+                  >
+                    <div className='flex-1 min-w-0'>
+                      <p className='text-sm font-medium truncate'>{v.name}</p>
+                      <p className='text-xs text-fg-muted'>
+                        {pct.toFixed(2)}% · {v.commission}% fee
+                      </p>
+                    </div>
+                    <span className='i-lucide-chevron-down h-4 w-4 text-fg-muted rotate-[-90deg]' />
+                  </button>
+                );
+              })}
           </div>
         )}
       </div>

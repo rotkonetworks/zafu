@@ -9,10 +9,10 @@
 // DMs use Noise IK over a separate WebSocket. they are end-to-end
 // encrypted between two ZID keypairs.
 
-import { ed25519 } from '@noble/curves/ed25519'
-import { createNoiseChannel, type ZidChannel } from '../../../../packages/zid/src'
-import type { SessionKey } from '../../../../packages/zid/src/noise-channel'
-import { isLicenseValid, type License } from '../../../../packages/wallet/src/license'
+import { ed25519 } from '@noble/curves/ed25519';
+import { createNoiseChannel, type ZidChannel } from '../../../../packages/zid/src';
+import type { SessionKey } from '../../../../packages/zid/src/noise-channel';
+import { isLicenseValid, type License } from '../../../../packages/wallet/src/license';
 
 // ─── zid-auth-v1: signed nick claims ────────────────────────────────────
 //
@@ -40,13 +40,15 @@ const ZID_AUTH_FRESHNESS_MS = 60_000;
  * still sign/verify announces consistently with their peers on the
  * same relay. */
 function relayHost(wsUrl: string): string {
-  try { return new URL(wsUrl).host; } catch { return wsUrl; }
+  try {
+    return new URL(wsUrl).host;
+  } catch {
+    return wsUrl;
+  }
 }
 
 function zidAuthPayload(server: string, nick: string, pubkey: string, ts: number): Uint8Array {
-  return new TextEncoder().encode(
-    [ZID_AUTH_DOMAIN, server, nick, pubkey, String(ts)].join('\0'),
-  );
+  return new TextEncoder().encode([ZID_AUTH_DOMAIN, server, nick, pubkey, String(ts)].join('\0'));
 }
 
 interface AnnounceProof {
@@ -58,7 +60,12 @@ interface AnnounceProof {
   sig: string;
 }
 
-function signAnnounce(priv: Uint8Array, pubkey: string, nick: string, server: string): AnnounceProof {
+function signAnnounce(
+  priv: Uint8Array,
+  pubkey: string,
+  nick: string,
+  server: string,
+): AnnounceProof {
   const ts = Date.now();
   const payload = zidAuthPayload(server, nick, pubkey, ts);
   const sig = ed25519.sign(payload, priv);
@@ -120,13 +127,27 @@ interface MsgProof {
   sig: string;
 }
 
-function zidMsgPayload(server: string, room: string, nick: string, pubkey: string, ts: number, text: string): Uint8Array {
+function zidMsgPayload(
+  server: string,
+  room: string,
+  nick: string,
+  pubkey: string,
+  ts: number,
+  text: string,
+): Uint8Array {
   return new TextEncoder().encode(
     [ZID_MSG_DOMAIN, server, room, nick, pubkey, String(ts), text].join('\0'),
   );
 }
 
-function signMsg(priv: Uint8Array, pubkey: string, nick: string, room: string, server: string, text: string): MsgProof {
+function signMsg(
+  priv: Uint8Array,
+  pubkey: string,
+  nick: string,
+  room: string,
+  server: string,
+  text: string,
+): MsgProof {
   const ts = Date.now();
   const payload = zidMsgPayload(server, room, nick, pubkey, ts, text);
   const sig = ed25519.sign(payload, priv);
@@ -162,9 +183,18 @@ function verifyMsg(a: unknown, expectedServer: string): MsgProof | null {
   if ((o['nick'] as string).indexOf('\0') !== -1) return null;
   if ((o['room'] as string).indexOf('\0') !== -1) return null;
   try {
-    const payload = zidMsgPayload(expectedServer, o['room'], o['nick'], o['pubkey'], o['ts'], o['text']);
+    const payload = zidMsgPayload(
+      expectedServer,
+      o['room'],
+      o['nick'],
+      o['pubkey'],
+      o['ts'],
+      o['text'],
+    );
     if (!ed25519.verify(unhex(o['sig']), payload, unhex(o['pubkey']))) return null;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
   const proof = o as unknown as MsgProof;
   proof.pubkey = proof.pubkey.toLowerCase();
   return proof;
@@ -173,7 +203,9 @@ function verifyMsg(a: unknown, expectedServer: string): MsgProof | null {
 /** Returns absolute clock skew in ms between this client's wall
  * clock and the proof's ts. Caller decides whether the value
  * exceeds the freshness window. */
-function msgSkewMs(proof: MsgProof): number { return Math.abs(Date.now() - proof.ts); }
+function msgSkewMs(proof: MsgProof): number {
+  return Math.abs(Date.now() - proof.ts);
+}
 
 function verifyAnnounce(a: unknown, expectedServer: string): AnnounceProof | null {
   if (!a || typeof a !== 'object') return null;
@@ -200,7 +232,9 @@ function verifyAnnounce(a: unknown, expectedServer: string): AnnounceProof | nul
   return proof;
 }
 
-function authSkewMs(proof: AnnounceProof): number { return Math.abs(Date.now() - proof.ts); }
+function authSkewMs(proof: AnnounceProof): number {
+  return Math.abs(Date.now() - proof.ts);
+}
 
 /** Read the persisted license blob from chrome.storage.local and check
  * that it's currently valid. Channel creation is gated on Pro because
@@ -222,7 +256,7 @@ async function isProUser(): Promise<boolean> {
  * chrome.storage.local under RELAY_URL_KEY). The DM transport is
  * derived by appending `/zid` to the chat URL's path - relays that
  * implement zitadel are expected to expose both at adjacent paths. */
-export const DEFAULT_RELAY_WS = "wss://relay.zk.bot/ws";
+export const DEFAULT_RELAY_WS = 'wss://relay.zk.bot/ws';
 const RELAY_URL_KEY = 'zitadelRelayUrl';
 /** Per-ZID persisted nickname. Stored under `zidNick:<pubkey>` in
  * chrome.storage.local so the same identity gets the same nick across
@@ -253,7 +287,9 @@ function isValidRelayUrl(s: string): boolean {
   try {
     const u = new URL(s);
     return u.protocol === 'wss:' || u.protocol === 'ws:';
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }
 
 /** Derive the DM (zid) WebSocket URL from the chat URL by appending
@@ -261,9 +297,11 @@ function isValidRelayUrl(s: string): boolean {
 function deriveZidWsUrl(chatUrl: string): string {
   try {
     const u = new URL(chatUrl);
-    u.pathname = (u.pathname.replace(/\/+$/, '')) + '/zid';
+    u.pathname = u.pathname.replace(/\/+$/, '') + '/zid';
     return u.toString();
-  } catch { return chatUrl + '/zid'; }
+  } catch {
+    return chatUrl + '/zid';
+  }
 }
 
 /** Back-compat re-export so other code paths that still import RELAY_WS
@@ -272,19 +310,33 @@ function deriveZidWsUrl(chatUrl: string): string {
 export const RELAY_WS = DEFAULT_RELAY_WS;
 
 const C = {
-  bg: "#0F0F1A", panel: "#16162A", border: "#2A2A4A",
-  gold: "#F4B728", amber: "#D4991A", muted: "#6B6B8D",
-  text: "#C8C8E0", bright: "#E8E8FF", green: "#4ADE80", red: "#F87171",
-  cyan: "#22D3EE", purple: "#A78BFA", dm: "#FF79C6",
+  bg: '#0F0F1A',
+  panel: '#16162A',
+  border: '#2A2A4A',
+  gold: '#F4B728',
+  amber: '#D4991A',
+  muted: '#6B6B8D',
+  text: '#C8C8E0',
+  bright: '#E8E8FF',
+  green: '#4ADE80',
+  red: '#F87171',
+  cyan: '#22D3EE',
+  purple: '#A78BFA',
+  dm: '#FF79C6',
 };
 
 interface Msg {
-  nick: string; text: string; time: string;
+  nick: string;
+  text: string;
+  time: string;
   /** absolute receive time in ms; used for the tooltip date and the
    * day-divider in scrollback. distinct from `time` (HH:MM) so we
    * don't reformat strings to find the date. */
   tsMs: number;
-  system?: boolean; color?: string; dm?: boolean; action?: boolean;
+  system?: boolean;
+  color?: string;
+  dm?: boolean;
+  action?: boolean;
   /** This specific message was cryptographically verified - either
    * via a zid-msg-v1 envelope that passed verification, or because
    * it arrived over an authenticated DM channel. The verified `+`
@@ -308,19 +360,40 @@ function stripAction(s: string): string {
   return s.slice(ACTION_PREFIX.length, s.length - ACTION_SUFFIX.length);
 }
 
-const NICK_COLORS = [C.gold, C.cyan, C.green, C.purple, C.red, "#60A5FA", "#FB923C", "#E879F9", "#FBBF24", "#34D399"];
-function nickColor(n: string) { let h = 0; for (let i = 0; i < n.length; i++) h = n.charCodeAt(i) + ((h << 5) - h); return NICK_COLORS[Math.abs(h) % NICK_COLORS.length]; }
+const NICK_COLORS = [
+  C.gold,
+  C.cyan,
+  C.green,
+  C.purple,
+  C.red,
+  '#60A5FA',
+  '#FB923C',
+  '#E879F9',
+  '#FBBF24',
+  '#34D399',
+];
+function nickColor(n: string) {
+  let h = 0;
+  for (let i = 0; i < n.length; i++) h = n.charCodeAt(i) + ((h << 5) - h);
+  return NICK_COLORS[Math.abs(h) % NICK_COLORS.length];
+}
 
 function hex(bytes: Uint8Array): string {
-  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  return Array.from(bytes)
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 function unhex(h: string): Uint8Array {
   const bytes = new Uint8Array(h.length / 2);
   for (let i = 0; i < h.length; i += 2) bytes[i / 2] = parseInt(h.slice(i, i + 2), 16);
   return bytes;
 }
-function isHexPubkey(s: string): boolean { return /^[0-9a-f]{64}$/i.test(s); }
-function shortPub(pub: string): string { return 'zid' + pub.slice(0, 6); }
+function isHexPubkey(s: string): boolean {
+  return /^[0-9a-f]{64}$/i.test(s);
+}
+function shortPub(pub: string): string {
+  return 'zid' + pub.slice(0, 6);
+}
 
 const localStore = typeof chrome !== 'undefined' ? chrome?.storage?.local : undefined;
 const sessionStore = typeof chrome !== 'undefined' ? chrome?.storage?.session : undefined;
@@ -329,8 +402,8 @@ const sessionStore = typeof chrome !== 'undefined' ? chrome?.storage?.session : 
 
 interface ZidInfo {
   loggedIn: boolean;
-  pubkey?: string;       // full 64-char hex ed25519 pubkey
-  privkey?: Uint8Array;  // ed25519 seed (32 bytes) - only available when unlocked
+  pubkey?: string; // full 64-char hex ed25519 pubkey
+  privkey?: Uint8Array; // ed25519 seed (32 bytes) - only available when unlocked
 }
 
 /** Read ZID pubkey from vault insensitive data (no password needed). */
@@ -338,14 +411,18 @@ async function getZidPubkey(): Promise<string | undefined> {
   if (!localStore) return undefined;
   try {
     const result: Record<string, unknown> = await new Promise(r => localStore.get('vaults', r));
-    const vaults = result?.['vaults'] as Array<{ insensitive?: Record<string, unknown> }> | undefined;
+    const vaults = result?.['vaults'] as
+      | Array<{ insensitive?: Record<string, unknown> }>
+      | undefined;
     if (!vaults?.length) return undefined;
     // use the first vault's ZID pubkey
     for (const vault of vaults) {
       const zid = vault.insensitive?.['zid'] as string | undefined;
       if (zid) return zid;
     }
-  } catch { /* not in extension context */ }
+  } catch {
+    /* not in extension context */
+  }
   return undefined;
 }
 
@@ -353,9 +430,13 @@ async function getZidPubkey(): Promise<string | undefined> {
 async function isWalletUnlocked(): Promise<boolean> {
   if (!sessionStore) return false;
   try {
-    const result: Record<string, unknown> = await new Promise(r => sessionStore.get('passwordKey', r));
+    const result: Record<string, unknown> = await new Promise(r =>
+      sessionStore.get('passwordKey', r),
+    );
     return !!result?.['passwordKey'];
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }
 
 /** Resolve ZID identity - pubkey from local storage, privkey from service worker. */
@@ -368,10 +449,10 @@ async function resolveZidIdentity(): Promise<ZidInfo> {
   if (unlocked) {
     // Request ed25519 keypair from service worker for Noise channel DH
     try {
-      const resp = await chrome.runtime.sendMessage({
+      const resp = (await chrome.runtime.sendMessage({
         type: 'zafu_zid_keypair',
         origin: 'zitadel',
-      }) as { pubkey?: string; privkey?: string; error?: string } | undefined;
+      })) as { pubkey?: string; privkey?: string; error?: string } | undefined;
       if (resp?.privkey) {
         return {
           loggedIn: true,
@@ -379,7 +460,9 @@ async function resolveZidIdentity(): Promise<ZidInfo> {
           privkey: unhex(resp.privkey),
         };
       }
-    } catch { /* service worker may not support this yet */ }
+    } catch {
+      /* service worker may not support this yet */
+    }
   }
 
   // pubkey-only mode - can identify but cannot initiate Noise channels
@@ -393,7 +476,9 @@ async function resolveZidIdentity(): Promise<ZidInfo> {
 
 type EncState = 'e2ee' | 'public';
 
-function esc(s: string) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function esc(s: string) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 
 /** Render text with http/https URLs as clickable links. Restricted to
  * http(s) so a malicious peer can't sneak in javascript:, data:, or
@@ -432,7 +517,10 @@ function linkify(text: string, linkColor: string): string {
   // (poker bots, FROST tooling) can emit \n; render them honestly.
   return result.replace(/\n/g, '<br>');
 }
-function now() { const d = new Date(); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
+function now() {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
 /** YYYY-MM-DD in local time. used to detect date-boundary crossings
  * for the irssi-style day separator. */
 function localDateKey(d: Date): string {
@@ -514,7 +602,13 @@ function boot() {
   const unreadCount = new Map<string, number>();
   const mentioned = new Set<string>();
   // tab-completion cycle state. null when no completion is in progress.
-  let tabState: { prefix: string; before: string; after: string; matches: string[]; idx: number } | null = null;
+  let tabState: {
+    prefix: string;
+    before: string;
+    after: string;
+    matches: string[];
+    idx: number;
+  } | null = null;
   // DM channels: pubkey -> ZidChannel
   const dmChannels = new Map<string, ZidChannel>();
   // in-flight Noise IK handshakes per peer pubkey. without this,
@@ -551,9 +645,11 @@ function boot() {
     if (collisionWarned.has(key)) return;
     collisionWarned.add(key);
     const existing = nickToPubkey.get(claimedNick);
-    addMsg('zitadel',
+    addMsg(
+      'zitadel',
       `!! nick collision on ${claimedNick}: ${shortPub(attemptedPubkey)} tried to claim it via ${source}, but it's bound to ${existing ? shortPub(existing) : '?'}. attempt dropped. /ignore ${attemptedPubkey} to silence.`,
-      true);
+      true,
+    );
   }
   // dedupe clock-skew warnings per pubkey. only future-skew is
   // surfaced (past-skew is treated as legitimate history replay),
@@ -564,9 +660,11 @@ function boot() {
     if (skewWarned.has(pubkey)) return;
     skewWarned.add(pubkey);
     const sec = Math.round(skewMs / 1000);
-    addMsg('zitadel',
+    addMsg(
+      'zitadel',
       `!! ${nick}'s clock looks ahead by ~${sec}s - their messages are dropping the freshness check. ${shortPub(pubkey)}. (or yours might be off; check system time.)`,
-      true);
+      true,
+    );
   }
   /** Bind a (nick, pubkey) pair after a successful verification.
    * Cleans up stale forward entries when the same pubkey re-announces
@@ -590,26 +688,48 @@ function boot() {
   let activeDm: string | null = null;
 
   function roomMessages(): Msg[] {
-    const key = activeDm ? (DM_PREFIX + activeDm) : (currentRoom || initialRoom);
+    const key = activeDm ? DM_PREFIX + activeDm : currentRoom || initialRoom;
     let arr = messagesPerRoom.get(key);
-    if (!arr) { arr = []; messagesPerRoom.set(key, arr); }
+    if (!arr) {
+      arr = [];
+      messagesPerRoom.set(key, arr);
+    }
     return arr;
   }
 
   // DOM - sidebar + main layout
   root.style.cssText = `background:${C.bg};color:${C.text};font-family:'IBM Plex Mono',monospace;font-size:14px;height:100vh;display:flex;`;
-  const sidebar = mkEl('div', `width:180px;min-width:180px;background:${C.panel};border-right:1px solid ${C.border};display:flex;flex-direction:column;overflow-y:auto;`);
-  const main = mkEl('div', `flex:1;display:flex;flex-direction:column;min-width:0;position:relative;`);
-  const topbar = mkEl('div', `background:${C.panel};border-bottom:1px solid ${C.border};padding:6px 12px;display:flex;align-items:center;gap:8px;`);
+  const sidebar = mkEl(
+    'div',
+    `width:180px;min-width:180px;background:${C.panel};border-right:1px solid ${C.border};display:flex;flex-direction:column;overflow-y:auto;`,
+  );
+  const main = mkEl(
+    'div',
+    `flex:1;display:flex;flex-direction:column;min-width:0;position:relative;`,
+  );
+  const topbar = mkEl(
+    'div',
+    `background:${C.panel};border-bottom:1px solid ${C.border};padding:6px 12px;display:flex;align-items:center;gap:8px;`,
+  );
   const msgArea = mkEl('div', `flex:1;overflow-y:auto;padding:8px 12px;`);
-  const statusEl = mkEl('div', `background:${C.panel};border-top:1px solid ${C.border};padding:4px 12px;font-size:11px;color:${C.muted};display:flex;gap:16px;`);
-  const bar = mkEl('div', `background:${C.bg};border-top:1px solid ${C.border};padding:8px 12px;display:flex;align-items:center;gap:8px;`);
+  const statusEl = mkEl(
+    'div',
+    `background:${C.panel};border-top:1px solid ${C.border};padding:4px 12px;font-size:11px;color:${C.muted};display:flex;gap:16px;`,
+  );
+  const bar = mkEl(
+    'div',
+    `background:${C.bg};border-top:1px solid ${C.border};padding:8px 12px;display:flex;align-items:center;gap:8px;`,
+  );
   // floating "↓ N new" pill - hidden by default, surfaced when the user
   // is scrolled up and new messages have arrived. position is anchored
   // to the relatively-positioned `main` above the status bar.
-  const scrollPill = mkEl('div', `position:absolute;right:16px;bottom:64px;background:${C.gold};color:${C.bg};padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;cursor:pointer;display:none;box-shadow:0 2px 6px rgba(0,0,0,0.4);z-index:10;`);
+  const scrollPill = mkEl(
+    'div',
+    `position:absolute;right:16px;bottom:64px;background:${C.gold};color:${C.bg};padding:4px 10px;border-radius:12px;font-size:12px;font-weight:600;cursor:pointer;display:none;box-shadow:0 2px 6px rgba(0,0,0,0.4);z-index:10;`,
+  );
   const inp = document.createElement('input');
-  inp.type = 'text'; inp.autofocus = true;
+  inp.type = 'text';
+  inp.autofocus = true;
   inp.placeholder = 'type a message... (/ for commands)';
   inp.style.cssText = `flex:1;background:transparent;border:none;outline:none;color:${C.bright};font-family:inherit;font-size:inherit;caret-color:${C.gold};`;
   bar.appendChild(inp);
@@ -621,7 +741,10 @@ function boot() {
   // already visible from the top of the rebuild).
   let unseenScrolled = 0;
   function showPill() {
-    if (unseenScrolled <= 0) { scrollPill.style.display = 'none'; return; }
+    if (unseenScrolled <= 0) {
+      scrollPill.style.display = 'none';
+      return;
+    }
     scrollPill.textContent = `↓ ${unseenScrolled} new`;
     scrollPill.style.display = 'block';
   }
@@ -644,7 +767,7 @@ function boot() {
   // (channels first, then DMs in display order). irssi convention
   // for fast keyboard navigation. preventDefault stops Chrome's
   // built-in Alt+number tab-switch on extension pages.
-  document.addEventListener('keydown', (e) => {
+  document.addEventListener('keydown', e => {
     if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
     if (!/^[0-9]$/.test(e.key)) return;
     e.preventDefault();
@@ -662,24 +785,32 @@ function boot() {
   // delegated click on peer nicks in the message stream: opens a DM
   // view. avoids re-binding handlers on every render churn. the same
   // approach IRC GUIs use to make scrollback feel alive.
-  msgArea.addEventListener('click', (ev) => {
+  msgArea.addEventListener('click', ev => {
     const t = ev.target as HTMLElement | null;
     if (!t || !t.classList.contains('nick-click')) return;
     const peerNick = t.dataset['nick'];
     if (!peerNick) return;
     const pub = nickToPubkey.get(peerNick);
     if (!pub) {
-      addMsg('zitadel', `no pubkey for ${peerNick} yet - they haven't announced under zid-auth-v1.`, true);
+      addMsg(
+        'zitadel',
+        `no pubkey for ${peerNick} yet - they haven't announced under zid-auth-v1.`,
+        true,
+      );
       return;
     }
     switchToDm(pub);
   });
 
-  function mkEl(tag: string, css: string) { const e = document.createElement(tag); e.style.cssText = css; return e; }
+  function mkEl(tag: string, css: string) {
+    const e = document.createElement(tag);
+    e.style.cssText = css;
+    return e;
+  }
 
   /** Current view key (room name or `dm:<pubkey>`). */
   function currentViewKey(): string {
-    return activeDm ? (DM_PREFIX + activeDm) : (currentRoom || initialRoom);
+    return activeDm ? DM_PREFIX + activeDm : currentRoom || initialRoom;
   }
 
   /** Word-boundary, case-insensitive own-nick match. Skips matches
@@ -706,15 +837,26 @@ function boot() {
     const body = text.length > 140 ? text.slice(0, 137) + '...' : text;
     try {
       const n = new Notification(title, { body, tag: viewKey });
-      n.onclick = () => { window.focus(); n.close(); };
-    } catch { /* notification API may be restricted in some contexts */ }
+      n.onclick = () => {
+        window.focus();
+        n.close();
+      };
+    } catch {
+      /* notification API may be restricted in some contexts */
+    }
   }
 
   /** Bookkeeping for unread + mention markers. Increments only when the
    * message is for a view the user isn't currently looking at, isn't
    * from the user themselves, and isn't a system line. DMs always count
    * (they're inherently directed). */
-  function trackUnread(viewKey: string, fromNick: string, text: string, system: boolean, dm: boolean) {
+  function trackUnread(
+    viewKey: string,
+    fromNick: string,
+    text: string,
+    system: boolean,
+    dm: boolean,
+  ) {
     if (system || fromNick === nick) return;
     if (viewKey === currentViewKey()) return;
     unreadCount.set(viewKey, (unreadCount.get(viewKey) ?? 0) + 1);
@@ -722,11 +864,32 @@ function boot() {
     maybeNotify(viewKey, fromNick, text, dm);
   }
 
-  function addMsg(n: string, text: string, system = false, room?: string, dm = false, action = false, verified = false) {
-    const key = room || (activeDm ? (DM_PREFIX + activeDm) : (currentRoom || initialRoom));
+  function addMsg(
+    n: string,
+    text: string,
+    system = false,
+    room?: string,
+    dm = false,
+    action = false,
+    verified = false,
+  ) {
+    const key = room || (activeDm ? DM_PREFIX + activeDm : currentRoom || initialRoom);
     let arr = messagesPerRoom.get(key);
-    if (!arr) { arr = []; messagesPerRoom.set(key, arr); }
-    arr.push({ nick: n, text, time: now(), tsMs: Date.now(), system, color: system ? undefined : nickColor(n), dm, action, verified });
+    if (!arr) {
+      arr = [];
+      messagesPerRoom.set(key, arr);
+    }
+    arr.push({
+      nick: n,
+      text,
+      time: now(),
+      tsMs: Date.now(),
+      system,
+      color: system ? undefined : nickColor(n),
+      dm,
+      action,
+      verified,
+    });
     trackUnread(key, n, text, system, dm);
     render();
   }
@@ -734,7 +897,10 @@ function boot() {
   function addDmMsg(peerPubkey: string, fromNick: string, text: string, outgoing: boolean) {
     const key = DM_PREFIX + peerPubkey;
     let arr = messagesPerRoom.get(key);
-    if (!arr) { arr = []; messagesPerRoom.set(key, arr); }
+    if (!arr) {
+      arr = [];
+      messagesPerRoom.set(key, arr);
+    }
     arr.push({
       nick: fromNick,
       text,
@@ -774,7 +940,10 @@ function boot() {
     activeDm = null;
     captureDivider(room);
     markRead(room);
-    if (room === currentRoom) { render(); return; }
+    if (room === currentRoom) {
+      render();
+      return;
+    }
     if (currentRoom) wsSend({ t: 'part' });
     pendingJoinRoom = room;
     joinRetried = false;
@@ -839,7 +1008,12 @@ function boot() {
         },
       };
 
-      addMsg('zitadel', `opening e2ee channel to ${shortPub(peerPubkey)}...`, true, DM_PREFIX + peerPubkey);
+      addMsg(
+        'zitadel',
+        `opening e2ee channel to ${shortPub(peerPubkey)}...`,
+        true,
+        DM_PREFIX + peerPubkey,
+      );
 
       try {
         const ch = await createNoiseChannel(session, peerPubkey, deriveZidWsUrl(relayUrl));
@@ -849,11 +1023,18 @@ function boot() {
             const text = new TextDecoder().decode(data);
             const peerNick = pubkeyToNick.get(peerPubkey) || shortPub(peerPubkey);
             addDmMsg(peerPubkey, peerNick, text, false);
-          } catch { /* ignore malformed */ }
+          } catch {
+            /* ignore malformed */
+          }
         });
 
         dmChannels.set(peerPubkey, ch);
-        addMsg('zitadel', `[e2ee] channel established with ${shortPub(peerPubkey)}`, true, DM_PREFIX + peerPubkey);
+        addMsg(
+          'zitadel',
+          `[e2ee] channel established with ${shortPub(peerPubkey)}`,
+          true,
+          DM_PREFIX + peerPubkey,
+        );
         return ch;
       } catch (e) {
         addMsg('zitadel', `failed to open DM channel: ${e}`, true, DM_PREFIX + peerPubkey);
@@ -872,9 +1053,11 @@ function boot() {
   async function sendDm(peerPubkey: string, text: string) {
     const byteLen = new TextEncoder().encode(text).byteLength;
     if (byteLen > MAX_MESSAGE_BYTES) {
-      addMsg('zitadel',
+      addMsg(
+        'zitadel',
         `DM too long: ${byteLen} bytes, max ${MAX_MESSAGE_BYTES}. break it up.`,
-        true);
+        true,
+      );
       return;
     }
     let ch = dmChannels.get(peerPubkey);
@@ -895,9 +1078,12 @@ function boot() {
       // fresh handshake via openDmChannel rather than failing
       // identically forever.
       dmChannels.delete(peerPubkey);
-      addMsg('zitadel',
+      addMsg(
+        'zitadel',
         `DM send failed: ${e}. channel reset, retry to reopen.`,
-        true, DM_PREFIX + peerPubkey);
+        true,
+        DM_PREFIX + peerPubkey,
+      );
     }
   }
 
@@ -949,51 +1135,61 @@ function boot() {
       <div style="padding:10px 12px;border-bottom:1px solid ${C.border};">
         <b style="color:${C.bright};font-size:13px;">channels</b>
       </div>
-      ${allRooms.map(r => {
-        const active = !activeDm && r === room;
-        const bg = active ? C.border : 'transparent';
-        const unread = unreadCount.get(r) ?? 0;
-        const isHighlight = mentioned.has(r);
-        // priority: active > highlighted > unread > idle
-        const col = active ? C.bright : (isHighlight ? C.gold : (unread ? C.text : C.muted));
-        const fontWeight = (isHighlight || unread) && !active ? '600' : '400';
-        const badge = unread > 0 && !active
-          ? ` <span style="color:${isHighlight ? C.gold : C.muted};font-weight:600">(${unread > 99 ? '99+' : unread})</span>`
-          : '';
-        // close affordance: × shown only on the active channel so we
-        // don't clutter idle rows with controls. clicking parts the
-        // current view (same path as /part).
-        const closeBtn = active
-          ? ` <span class="ch-close" title="leave channel" style="color:${C.muted};margin-left:auto;padding:0 4px;cursor:pointer">×</span>`
-          : '';
-        return `<div class="ch" data-room="${esc(r)}" style="padding:5px 12px;cursor:pointer;background:${bg};color:${col};font-size:13px;font-weight:${fontWeight};transition:background 0.1s;display:flex;align-items:center;gap:4px;">#${esc(r)}${badge}${closeBtn}</div>`;
-      }).join('')}
-      ${dmPeers.length ? `<div style="padding:10px 12px;border-top:1px solid ${C.border};border-bottom:1px solid ${C.border};margin-top:4px;">
+      ${allRooms
+        .map(r => {
+          const active = !activeDm && r === room;
+          const bg = active ? C.border : 'transparent';
+          const unread = unreadCount.get(r) ?? 0;
+          const isHighlight = mentioned.has(r);
+          // priority: active > highlighted > unread > idle
+          const col = active ? C.bright : isHighlight ? C.gold : unread ? C.text : C.muted;
+          const fontWeight = (isHighlight || unread) && !active ? '600' : '400';
+          const badge =
+            unread > 0 && !active
+              ? ` <span style="color:${isHighlight ? C.gold : C.muted};font-weight:600">(${unread > 99 ? '99+' : unread})</span>`
+              : '';
+          // close affordance: × shown only on the active channel so we
+          // don't clutter idle rows with controls. clicking parts the
+          // current view (same path as /part).
+          const closeBtn = active
+            ? ` <span class="ch-close" title="leave channel" style="color:${C.muted};margin-left:auto;padding:0 4px;cursor:pointer">×</span>`
+            : '';
+          return `<div class="ch" data-room="${esc(r)}" style="padding:5px 12px;cursor:pointer;background:${bg};color:${col};font-size:13px;font-weight:${fontWeight};transition:background 0.1s;display:flex;align-items:center;gap:4px;">#${esc(r)}${badge}${closeBtn}</div>`;
+        })
+        .join('')}
+      ${
+        dmPeers.length
+          ? `<div style="padding:10px 12px;border-top:1px solid ${C.border};border-bottom:1px solid ${C.border};margin-top:4px;">
         <b style="color:${C.bright};font-size:13px;" title="DM peers - traffic is end-to-end encrypted via Noise IK">DMs</b>
-      </div>` : ''}
-      ${dmPeers.map(pub => {
-        const active = activeDm === pub;
-        const bg = active ? C.border : 'transparent';
-        const dmKey = DM_PREFIX + pub;
-        const unread = unreadCount.get(dmKey) ?? 0;
-        // DMs are inherently personal so any unread DM is rendered as
-        // a highlight - same color as a mention in a public room.
-        const col = active ? C.dm : (unread > 0 ? C.dm : C.muted);
-        const fontWeight = unread > 0 && !active ? '600' : '400';
-        const label = pubkeyToNick.get(pub) || shortPub(pub);
-        const badge = unread > 0 && !active
-          ? ` <span style="color:${C.dm};font-weight:600">(${unread > 99 ? '99+' : unread})</span>`
-          : '';
-        return `<div class="dm-ch" data-pubkey="${esc(pub)}" title="end-to-end encrypted DM" style="padding:5px 12px;cursor:pointer;background:${bg};color:${col};font-size:12px;font-weight:${fontWeight};transition:background 0.1s;">${esc(label)}${badge}</div>`;
-      }).join('')}
-      <div class="me-chip" style="padding:8px 12px;margin-top:auto;border-top:1px solid ${C.border};cursor:pointer;transition:background 0.1s;" title="${zidPrivkey ? 'click for /whois (your identity)' : (zidPubkey ? 'click to /login' : 'no zafu identity - install zafu first')}">
+      </div>`
+          : ''
+      }
+      ${dmPeers
+        .map(pub => {
+          const active = activeDm === pub;
+          const bg = active ? C.border : 'transparent';
+          const dmKey = DM_PREFIX + pub;
+          const unread = unreadCount.get(dmKey) ?? 0;
+          // DMs are inherently personal so any unread DM is rendered as
+          // a highlight - same color as a mention in a public room.
+          const col = active ? C.dm : unread > 0 ? C.dm : C.muted;
+          const fontWeight = unread > 0 && !active ? '600' : '400';
+          const label = pubkeyToNick.get(pub) || shortPub(pub);
+          const badge =
+            unread > 0 && !active
+              ? ` <span style="color:${C.dm};font-weight:600">(${unread > 99 ? '99+' : unread})</span>`
+              : '';
+          return `<div class="dm-ch" data-pubkey="${esc(pub)}" title="end-to-end encrypted DM" style="padding:5px 12px;cursor:pointer;background:${bg};color:${col};font-size:12px;font-weight:${fontWeight};transition:background 0.1s;">${esc(label)}${badge}</div>`;
+        })
+        .join('')}
+      <div class="me-chip" style="padding:8px 12px;margin-top:auto;border-top:1px solid ${C.border};cursor:pointer;transition:background 0.1s;" title="${zidPrivkey ? 'click for /whois (your identity)' : zidPubkey ? 'click to /login' : 'no zafu identity - install zafu first'}">
         <div style="color:${C.muted};font-size:11px;">${zidPrivkey ? `<span style="color:${C.green}" title="logged in - your messages are signed under zid-msg-v1">+</span>` : ''}${esc(nick)}</div>
         <div style="color:${zidPrivkey ? C.green : C.muted};font-size:10px;">${zidPubkey ? shortPub(zidPubkey) : 'anon · click to login'}</div>
       </div>
     `;
 
     sidebar.querySelectorAll('.ch').forEach(el => {
-      el.addEventListener('click', (ev) => {
+      el.addEventListener('click', ev => {
         // × inside the row parts the channel; stopPropagation prevents
         // the parent row from also firing switchRoom.
         const target = ev.target as HTMLElement | null;
@@ -1005,7 +1201,9 @@ function boot() {
         const r = (el as HTMLElement).dataset['room'];
         if (r) switchRoom(r);
       });
-      el.addEventListener('mouseenter', () => { (el as HTMLElement).style.background = C.border; });
+      el.addEventListener('mouseenter', () => {
+        (el as HTMLElement).style.background = C.border;
+      });
       el.addEventListener('mouseleave', () => {
         const r = (el as HTMLElement).dataset['room'];
         if (!activeDm && r === (currentRoom || initialRoom)) return;
@@ -1018,7 +1216,9 @@ function boot() {
         const pub = (el as HTMLElement).dataset['pubkey'];
         if (pub) switchToDm(pub);
       });
-      el.addEventListener('mouseenter', () => { (el as HTMLElement).style.background = C.border; });
+      el.addEventListener('mouseenter', () => {
+        (el as HTMLElement).style.background = C.border;
+      });
       el.addEventListener('mouseleave', () => {
         const pub = (el as HTMLElement).dataset['pubkey'];
         if (activeDm !== pub) (el as HTMLElement).style.background = 'transparent';
@@ -1034,8 +1234,12 @@ function boot() {
         if (zidPubkey && !zidPrivkey) void runLogin();
         else runSelfWhois();
       });
-      meChip.addEventListener('mouseenter', () => { meChip.style.background = C.border; });
-      meChip.addEventListener('mouseleave', () => { meChip.style.background = 'transparent'; });
+      meChip.addEventListener('mouseenter', () => {
+        meChip.style.background = C.border;
+      });
+      meChip.addEventListener('mouseleave', () => {
+        meChip.style.background = 'transparent';
+      });
     }
   }
 
@@ -1130,7 +1334,9 @@ function boot() {
       encState = 'public';
     }
 
-    const relayStatus = connected ? `<span style="color:${C.green}">ok</span>` : `<span style="color:${C.red}">--</span>`;
+    const relayStatus = connected
+      ? `<span style="color:${C.green}">ok</span>`
+      : `<span style="color:${C.red}">--</span>`;
 
     if (activeDm) {
       const peerLabel = pubkeyToNick.get(activeDm) || shortPub(activeDm);
@@ -1140,7 +1346,7 @@ function boot() {
     }
 
     // current view key (room or DM). used to decide rebuild vs append.
-    const viewKey = activeDm ? (DM_PREFIX + activeDm) : (currentRoom || initialRoom);
+    const viewKey = activeDm ? DM_PREFIX + activeDm : currentRoom || initialRoom;
     // preserve scroll position: only auto-scroll to bottom if the user
     // is already near the bottom. if they've scrolled up to read
     // history, leave them where they are.
@@ -1220,9 +1426,10 @@ function boot() {
     // lose the privkey - we can't sign, so the + should disappear,
     // matching the per-message render and the chip primary line.
     const myMark = zidPrivkey ? `<span style="color:${C.green}">+</span>` : '';
-    const transport = encState === 'e2ee'
-      ? `<span style="color:${C.dm}">e2ee</span>`
-      : `<span style="color:${C.muted}">public</span>`;
+    const transport =
+      encState === 'e2ee'
+        ? `<span style="color:${C.dm}">e2ee</span>`
+        : `<span style="color:${C.muted}">public</span>`;
     const viewLabel = activeDm
       ? `<span style="color:${C.dm}">${esc(pubkeyToNick.get(activeDm) || shortPub(activeDm))}</span>`
       : `<span style="color:${C.amber}">#${esc(room)}</span>`;
@@ -1249,11 +1456,12 @@ function boot() {
     let totalUnread = 0;
     for (const n of unreadCount.values()) totalUnread += n;
     const viewName = activeDm
-      ? (pubkeyToNick.get(activeDm) || shortPub(activeDm))
+      ? pubkeyToNick.get(activeDm) || shortPub(activeDm)
       : `#${currentRoom || initialRoom}`;
-    document.title = totalUnread > 0
-      ? `(${totalUnread > 99 ? '99+' : totalUnread}) ${viewName} - zitadel`
-      : `${viewName} - zitadel`;
+    document.title =
+      totalUnread > 0
+        ? `(${totalUnread > 99 ? '99+' : totalUnread}) ${viewName} - zitadel`
+        : `${viewName} - zitadel`;
   }
 
   // WebSocket
@@ -1280,8 +1488,14 @@ function boot() {
       ws.onmessage = null;
       if (ws.readyState !== WebSocket.CLOSED) ws.close();
     }
-    if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
-    if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
+    if (retryTimer) {
+      clearTimeout(retryTimer);
+      retryTimer = null;
+    }
+    if (pingTimer) {
+      clearInterval(pingTimer);
+      pingTimer = null;
+    }
     connected = false;
   }
 
@@ -1290,11 +1504,16 @@ function boot() {
     const jitterMs = Math.floor(Math.random() * 1000);
     const delayMs = baseMs + jitterMs;
     reconnectAttempts += 1;
-    addMsg('zitadel',
+    addMsg(
+      'zitadel',
       `reconnecting in ${Math.round(delayMs / 1000)}s (attempt ${reconnectAttempts})`,
-      true);
+      true,
+    );
     if (retryTimer) clearTimeout(retryTimer);
-    retryTimer = setTimeout(() => { retryTimer = null; connectRelay(); }, delayMs);
+    retryTimer = setTimeout(() => {
+      retryTimer = null;
+      connectRelay();
+    }, delayMs);
   }
 
   function connectRelay() {
@@ -1331,7 +1550,7 @@ function boot() {
       }, 30000);
     };
 
-    ws.onmessage = async (ev) => {
+    ws.onmessage = async ev => {
       try {
         const msg = JSON.parse(ev.data);
         switch (msg.t) {
@@ -1349,8 +1568,10 @@ function boot() {
             // would render as raw {"ct":"...","iv":"..."} envelopes if
             // shown verbatim, so suppress them silently.
             if (msg.enc) {
-              console.debug('[zitadel] dropping legacy enc=true message',
-                `(room=${msg.room ?? currentRoom ?? '?'})`);
+              console.debug(
+                '[zitadel] dropping legacy enc=true message',
+                `(room=${msg.room ?? currentRoom ?? '?'})`,
+              );
               break;
             }
             // zid-msg-v1: if text parses as a signed envelope, verify
@@ -1366,8 +1587,10 @@ function boot() {
                 if (obj && obj.v === ZID_MSG_VERSION) {
                   const proof = verifyMsg(obj, relayHost(relayUrl));
                   if (!proof || proof.room !== currentRoom) {
-                    console.debug('[zitadel] zid-msg verify failed, dropping',
-                      { nick: msg.nick, room: obj.room });
+                    console.debug('[zitadel] zid-msg verify failed, dropping', {
+                      nick: msg.nick,
+                      room: obj.room,
+                    });
                     break;
                   }
                   // Freshness check post-verify, but asymmetric:
@@ -1386,9 +1609,11 @@ function boot() {
                   }
                   const existing = nickToPubkey.get(proof.nick);
                   if (existing && existing !== proof.pubkey) {
-                    console.debug('[zitadel] zid-msg nick collision, dropping',
-                      { nick: proof.nick, existing: existing.slice(0, 16),
-                        new: proof.pubkey.slice(0, 16) });
+                    console.debug('[zitadel] zid-msg nick collision, dropping', {
+                      nick: proof.nick,
+                      existing: existing.slice(0, 16),
+                      new: proof.pubkey.slice(0, 16),
+                    });
                     warnCollision(proof.nick, proof.pubkey, 'msg');
                     break;
                   }
@@ -1397,7 +1622,9 @@ function boot() {
                   senderPubkey = proof.pubkey;
                   msgVerified = true;
                 }
-              } catch { /* not JSON, treat as legacy cleartext */ }
+              } catch {
+                /* not JSON, treat as legacy cleartext */
+              }
             }
             // pubkey-based ignore: if we resolved a pubkey for this
             // sender via the verified envelope, or from a previously
@@ -1411,7 +1638,15 @@ function boot() {
             // can't be added or stripped without invalidating the proof.
             const isAction = isActionText(visibleText);
             const renderText = isAction ? stripAction(visibleText) : visibleText;
-            addMsg(msg.nick, renderText, false, msg.room || currentRoom || undefined, false, isAction, msgVerified);
+            addMsg(
+              msg.nick,
+              renderText,
+              false,
+              msg.room || currentRoom || undefined,
+              false,
+              isAction,
+              msgVerified,
+            );
             break;
           }
           case 'joined':
@@ -1443,8 +1678,10 @@ function boot() {
             // new one (logged for visibility).
             const proof = verifyAnnounce(msg, relayHost(relayUrl));
             if (!proof) {
-              console.debug('[zitadel] announce failed verification, ignoring',
-                { nick: msg.nick, pubkey: msg.pubkey?.slice(0, 16) });
+              console.debug('[zitadel] announce failed verification, ignoring', {
+                nick: msg.nick,
+                pubkey: msg.pubkey?.slice(0, 16),
+              });
               break;
             }
             // Same asymmetric freshness as the message path:
@@ -1462,8 +1699,11 @@ function boot() {
             if (ignoredPubkeys.has(proof.pubkey.toLowerCase())) break;
             const existing = nickToPubkey.get(proof.nick);
             if (existing && existing !== proof.pubkey) {
-              console.debug('[zitadel] announce nick collision, keeping first binding',
-                { nick: proof.nick, existing: existing.slice(0, 16), new: proof.pubkey.slice(0, 16) });
+              console.debug('[zitadel] announce nick collision, keeping first binding', {
+                nick: proof.nick,
+                existing: existing.slice(0, 16),
+                new: proof.pubkey.slice(0, 16),
+              });
               warnCollision(proof.nick, proof.pubkey, 'announce');
               break;
             }
@@ -1506,14 +1746,20 @@ function boot() {
                 addMsg('zitadel', `room ${roomToCreate} not found, creating...`, true);
                 wsSend({ t: 'create', nick, room: roomToCreate });
               } else {
-                addMsg('zitadel', `room ${roomToCreate} not found. creating channels requires zafu pro.`, true);
+                addMsg(
+                  'zitadel',
+                  `room ${roomToCreate} not found. creating channels requires zafu pro.`,
+                  true,
+                );
               }
             } else {
               addMsg('zitadel', `error: ${msg.msg}`, true);
             }
             break;
         }
-      } catch { /* ignore malformed */ }
+      } catch {
+        /* ignore malformed */
+      }
     };
 
     ws.onclose = () => {
@@ -1553,7 +1799,11 @@ function boot() {
       addMsg('zitadel', `Noise capable: ${zidPrivkey ? 'yes' : 'no (wallet locked)'}`, true);
       addMsg('zitadel', `relay: ${connected ? 'ok' : 'disconnected'}`, true);
     } else {
-      addMsg('zitadel', `you are ${nick} | ephemeral session | room: ${currentRoom || 'none'} | relay: ${connected ? 'ok' : 'disconnected'}`, true);
+      addMsg(
+        'zitadel',
+        `you are ${nick} | ephemeral session | room: ${currentRoom || 'none'} | relay: ${connected ? 'ok' : 'disconnected'}`,
+        true,
+      );
       addMsg('zitadel', `connect zafu for ZID identity and e2ee DMs.`, true);
     }
   }
@@ -1569,7 +1819,9 @@ function boot() {
     try {
       const action = (chrome as unknown as { action?: { openPopup?: () => Promise<void> } }).action;
       if (action?.openPopup) await action.openPopup();
-    } catch { /* popup may be unavailable or already open */ }
+    } catch {
+      /* popup may be unavailable or already open */
+    }
     addMsg('zitadel', 'resolving identity...', true);
     const zid = await resolveZidIdentity();
     zidPubkey = zid.pubkey;
@@ -1579,14 +1831,22 @@ function boot() {
       return;
     }
     if (!zid.privkey) {
-      addMsg('zitadel', 'wallet still locked. click the zafu icon in the toolbar to unlock, then try again.', true);
+      addMsg(
+        'zitadel',
+        'wallet still locked. click the zafu icon in the toolbar to unlock, then try again.',
+        true,
+      );
       return;
     }
     // /login restored a wallet-derived identity; clear the ephemeral
     // flag so the wallet-lock listener will react if the wallet later
     // locks (the key really is from the wallet now).
     ephemeralIdentity = false;
-    addMsg('zitadel', `logged in. zid: ${shortPub(zid.pubkey)} - messages will now carry zid-msg-v1 signatures.`, true);
+    addMsg(
+      'zitadel',
+      `logged in. zid: ${shortPub(zid.pubkey)} - messages will now carry zid-msg-v1 signatures.`,
+      true,
+    );
     if (currentRoom) {
       const proof = signAnnounce(zid.privkey, zid.pubkey, nick, relayHost(relayUrl));
       wsSend({ t: 'announce', ...proof });
@@ -1599,8 +1859,14 @@ function boot() {
    * zid-msg-v1 when the wallet is unlocked - the action marker is
    * inside the signed payload so it's bound to the proof. */
   function sendRoomMessage(text: string, action = false) {
-    if (!connected) { addMsg('zitadel', 'not connected. type /connect', true); return; }
-    if (!currentRoom) { addMsg('zitadel', 'not in a channel. type /j <room>', true); return; }
+    if (!connected) {
+      addMsg('zitadel', 'not connected. type /connect', true);
+      return;
+    }
+    if (!currentRoom) {
+      addMsg('zitadel', 'not in a channel. type /j <room>', true);
+      return;
+    }
     if (text.indexOf('\0') !== -1) {
       // NUL is used as the field separator in the zid-msg-v1
       // canonical payload; sending it would break injective
@@ -1612,15 +1878,24 @@ function boot() {
     }
     const byteLen = new TextEncoder().encode(text).byteLength;
     if (byteLen > MAX_MESSAGE_BYTES) {
-      addMsg('zitadel',
+      addMsg(
+        'zitadel',
         `message too long: ${byteLen} bytes, max ${MAX_MESSAGE_BYTES}. break it up.`,
-        true);
+        true,
+      );
       return;
     }
     const wireText = action ? `${ACTION_PREFIX}${text}${ACTION_SUFFIX}` : text;
     const signed = !!(zidPrivkey && zidPubkey);
     if (signed) {
-      const proof = signMsg(zidPrivkey!, zidPubkey!, nick, currentRoom, relayHost(relayUrl), wireText);
+      const proof = signMsg(
+        zidPrivkey!,
+        zidPubkey!,
+        nick,
+        currentRoom,
+        relayHost(relayUrl),
+        wireText,
+      );
       wsSend({ t: 'msg', text: JSON.stringify(proof) });
     } else {
       wsSend({ t: 'msg', text: wireText });
@@ -1633,28 +1908,31 @@ function boot() {
 
   // command hints
   const CMDS: Record<string, string> = {
-    '/nick':     '/nick <name>        change your nickname',
-    '/me':       '/me <action>        send an IRC action ("* nick ...")',
-    '/j':        '/j <room>           join or create a channel',
-    '/part':     '/part               leave current channel',
-    '/msg':      '/msg <target> <text>  DM (nick or pubkey)',
+    '/nick': '/nick <name>        change your nickname',
+    '/me': '/me <action>        send an IRC action ("* nick ...")',
+    '/j': '/j <room>           join or create a channel',
+    '/part': '/part               leave current channel',
+    '/msg': '/msg <target> <text>  DM (nick or pubkey)',
     '/channels': '/channels           list open DM channels',
-    '/close':    '/close [pubkey]     close a DM channel',
-    '/whois':    '/whois              show ZID identity + status',
-    '/share':    '/share [nick|pub]   copy a zid pubkey to clipboard',
-    '/ignore':   '/ignore <nick|pub>  silence a pubkey (persists)',
+    '/close': '/close [pubkey]     close a DM channel',
+    '/whois': '/whois              show ZID identity + status',
+    '/share': '/share [nick|pub]   copy a zid pubkey to clipboard',
+    '/ignore': '/ignore <nick|pub>  silence a pubkey (persists)',
     '/unignore': '/unignore <nick|pub> remove from ignore list',
-    '/ignored':  '/ignored            list ignored pubkeys',
-    '/login':    '/login              unlock zafu and sign messages',
-    '/rotate':   '/rotate             ephemeral fresh identity (this session)',
-    '/notify':   '/notify [on|off]    desktop alerts on mention/DM',
-    '/clear':    '/clear              clear messages',
-    '/connect':  '/connect            reconnect to relay',
-    '/server':   '/server <url|reset> change relay (wss://...)',
-    '/help':     '/help               show all commands',
+    '/ignored': '/ignored            list ignored pubkeys',
+    '/login': '/login              unlock zafu and sign messages',
+    '/rotate': '/rotate             ephemeral fresh identity (this session)',
+    '/notify': '/notify [on|off]    desktop alerts on mention/DM',
+    '/clear': '/clear              clear messages',
+    '/connect': '/connect            reconnect to relay',
+    '/server': '/server <url|reset> change relay (wss://...)',
+    '/help': '/help               show all commands',
   };
 
-  const hint = mkEl('div', `position:absolute;bottom:100%;left:0;right:0;background:${C.panel};border:1px solid ${C.border};padding:4px 12px;font-size:12px;display:none;max-height:200px;overflow-y:auto;`);
+  const hint = mkEl(
+    'div',
+    `position:absolute;bottom:100%;left:0;right:0;background:${C.panel};border:1px solid ${C.border};padding:4px 12px;font-size:12px;display:none;max-height:200px;overflow-y:auto;`,
+  );
   bar.style.position = 'relative';
   bar.appendChild(hint);
 
@@ -1662,13 +1940,17 @@ function boot() {
     const v = inp.value;
     if (v === '/' || v === '?') {
       hint.style.display = 'block';
-      hint.innerHTML = Object.values(CMDS).map(c => `<div style="color:${C.muted};line-height:1.6">${esc(c)}</div>`).join('');
+      hint.innerHTML = Object.values(CMDS)
+        .map(c => `<div style="color:${C.muted};line-height:1.6">${esc(c)}</div>`)
+        .join('');
     } else if (v.startsWith('/') && v.length > 1) {
       const prefix = v.split(/\s/)[0]?.toLowerCase() ?? '';
       const matches = Object.entries(CMDS).filter(([k]) => k.startsWith(prefix));
       if (matches.length > 0 && matches.length < Object.keys(CMDS).length) {
         hint.style.display = 'block';
-        hint.innerHTML = matches.map(([, c]) => `<div style="color:${C.muted};line-height:1.6">${esc(c)}</div>`).join('');
+        hint.innerHTML = matches
+          .map(([, c]) => `<div style="color:${C.muted};line-height:1.6">${esc(c)}</div>`)
+          .join('');
       } else {
         hint.style.display = 'none';
       }
@@ -1680,7 +1962,9 @@ function boot() {
   // hide the slash-command hint when focus leaves the input. without
   // this, typing `/` then clicking somewhere else (a sidebar channel,
   // a peer nick) leaves the dropdown floating over the bar.
-  inp.addEventListener('blur', () => { hint.style.display = 'none'; });
+  inp.addEventListener('blur', () => {
+    hint.style.display = 'none';
+  });
 
   // input handler
   inp.addEventListener('keydown', async (e: KeyboardEvent) => {
@@ -1696,8 +1980,23 @@ function boot() {
       tabState = null;
       return;
     }
-    if (e.key === 'ArrowUp') { if (histIdx < history.length - 1) { histIdx++; inp.value = history[histIdx] ?? ''; } return; }
-    if (e.key === 'ArrowDown') { if (histIdx > 0) { histIdx--; inp.value = history[histIdx] ?? ''; } else { histIdx = -1; inp.value = ''; } return; }
+    if (e.key === 'ArrowUp') {
+      if (histIdx < history.length - 1) {
+        histIdx++;
+        inp.value = history[histIdx] ?? '';
+      }
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      if (histIdx > 0) {
+        histIdx--;
+        inp.value = history[histIdx] ?? '';
+      } else {
+        histIdx = -1;
+        inp.value = '';
+      }
+      return;
+    }
     if (e.key === 'Tab') {
       e.preventDefault();
       // Tab completion. cycles through matches on repeated Tab. two
@@ -1739,9 +2038,7 @@ function boot() {
       //   - nick at start of line: ": " (IRC convention - addressing).
       //   - nick mid-message: " " (just a separator).
       const isCmdCompletion = completion.startsWith('/');
-      const suffix = isCmdCompletion
-        ? ' '
-        : (tabState.before === '' ? ': ' : ' ');
+      const suffix = isCmdCompletion ? ' ' : tabState.before === '' ? ': ' : ' ';
       const next = tabState.before + completion + suffix + tabState.after;
       inp.value = next;
       const newCursor = tabState.before.length + completion.length + suffix.length;
@@ -1766,7 +2063,11 @@ function boot() {
           addMsg('zitadel', '  channels:  /j /part /channels /clear', true);
           addMsg('zitadel', '  messages:  /me <text>   (action)', true);
           addMsg('zitadel', '  DMs:       /msg <nick|pub> <text>   /close', true);
-          addMsg('zitadel', '  identity:  /login   /rotate   /nick <name>   /whois [nick|pub]   /share [nick|pub]', true);
+          addMsg(
+            'zitadel',
+            '  identity:  /login   /rotate   /nick <name>   /whois [nick|pub]   /share [nick|pub]',
+            true,
+          );
           addMsg('zitadel', '  safety:    /ignore /unignore /ignored', true);
           addMsg('zitadel', '  config:    /server <url|reset>   /notify [on|off]   /connect', true);
           addMsg('zitadel', '── keyboard ─────────────────────────', true);
@@ -1778,9 +2079,13 @@ function boot() {
           addMsg('zitadel', '  Public messages: signed per-line (zid-msg-v1, ed25519).', true);
           addMsg('zitadel', '  Verified peers show a green + on their nick.', true);
           addMsg('zitadel', '  Caveat: signed messages give the relay operator a transcript', true);
-          addMsg('zitadel', '  proving you said them. /server <url> to use a different relay.', true);
+          addMsg(
+            'zitadel',
+            '  proving you said them. /server <url> to use a different relay.',
+            true,
+          );
           addMsg('zitadel', '  DMs: Noise IK end-to-end encrypted (topbar shows [e2ee]).', true);
-          addMsg('zitadel', '  Click a peer\'s nick in chat to start a DM.', true);
+          addMsg('zitadel', "  Click a peer's nick in chat to start a DM.", true);
           break;
 
         case 'nick':
@@ -1813,14 +2118,19 @@ function boot() {
         case 'me': {
           // /me <action> - IRC convention. renders as "* nick text".
           const actionText = args.join(' ').trim();
-          if (!actionText) { addMsg('zitadel', 'usage: /me <action>', true); break; }
+          if (!actionText) {
+            addMsg('zitadel', 'usage: /me <action>', true);
+            break;
+          }
           sendRoomMessage(actionText, true);
           break;
         }
 
-        case 'j': case 'join':
-          if (args[0]) { switchRoom(args[0]); }
-          else addMsg('zitadel', 'usage: /j <room>', true);
+        case 'j':
+        case 'join':
+          if (args[0]) {
+            switchRoom(args[0]);
+          } else addMsg('zitadel', 'usage: /j <room>', true);
           break;
 
         case 'server':
@@ -1834,7 +2144,11 @@ function boot() {
             void localStore?.remove(RELAY_URL_KEY);
             addMsg('zitadel', `relay reset to ${relayUrl}, reconnecting...`, true);
           } else if (!isValidRelayUrl(args[0])) {
-            addMsg('zitadel', `invalid relay url: ${args[0]} (expected wss://... or ws://...)`, true);
+            addMsg(
+              'zitadel',
+              `invalid relay url: ${args[0]} (expected wss://... or ws://...)`,
+              true,
+            );
             break;
           } else {
             relayUrl = args[0];
@@ -1871,7 +2185,10 @@ function boot() {
           currentRoom = null;
           for (const ch of dmChannels.values()) ch.close();
           dmChannels.clear();
-          if (activeDm) { activeDm = null; encState = 'public'; }
+          if (activeDm) {
+            activeDm = null;
+            encState = 'public';
+          }
           // wipe local scrollback too. messages from the old relay's
           // rooms aren't going to be relevant on the new relay, even
           // if the user happens to /j a channel with the same name.
@@ -1906,7 +2223,11 @@ function boot() {
           }
           const target = resolveTarget(args[0]);
           if (!target) {
-            addMsg('zitadel', `unknown target: ${args[0]}. use a nick or 64-char hex pubkey.`, true);
+            addMsg(
+              'zitadel',
+              `unknown target: ${args[0]}. use a nick or 64-char hex pubkey.`,
+              true,
+            );
             break;
           }
           if (zidPubkey && target.toLowerCase() === zidPubkey.toLowerCase()) {
@@ -1922,7 +2243,11 @@ function boot() {
         case 'channels': {
           const chans = [...dmChannels.keys()];
           if (chans.length === 0) {
-            addMsg('zitadel', 'no open DM channels. use /msg <nick|pubkey> <text> to start one.', true);
+            addMsg(
+              'zitadel',
+              'no open DM channels. use /msg <nick|pubkey> <text> to start one.',
+              true,
+            );
           } else {
             addMsg('zitadel', `open DM channels (${chans.length}):`, true);
             for (const pub of chans) {
@@ -1970,14 +2295,22 @@ function boot() {
               peerPubkey = nickToPubkey.get(target);
             }
             if (!peerPubkey) {
-              addMsg('zitadel', `whois: no binding for ${target}. they may not have announced under zid-auth-v1.`, true);
+              addMsg(
+                'zitadel',
+                `whois: no binding for ${target}. they may not have announced under zid-auth-v1.`,
+                true,
+              );
             } else {
               const verified = peerNick && verifiedNicks.has(peerNick);
               addMsg('zitadel', `--- whois ${peerNick ?? '(no nick)'} ---`, true);
               addMsg('zitadel', `nick: ${peerNick ?? '(unbound)'}`, true);
               addMsg('zitadel', `pubkey: ${peerPubkey}`, true);
               addMsg('zitadel', `zid: ${shortPub(peerPubkey)}`, true);
-              addMsg('zitadel', `verified: ${verified ? 'yes (zid-auth-v1)' : 'no - nick claim is unsigned'}`, true);
+              addMsg(
+                'zitadel',
+                `verified: ${verified ? 'yes (zid-auth-v1)' : 'no - nick claim is unsigned'}`,
+                true,
+              );
             }
           }
           break;
@@ -1991,7 +2324,10 @@ function boot() {
           let pub: string | undefined;
           let label: string;
           if (!args[0]) {
-            if (!zidPubkey) { addMsg('zitadel', 'no zafu identity to share. /login first.', true); break; }
+            if (!zidPubkey) {
+              addMsg('zitadel', 'no zafu identity to share. /login first.', true);
+              break;
+            }
             pub = zidPubkey;
             label = 'your zid';
           } else if (isHexPubkey(args[0])) {
@@ -1999,14 +2335,21 @@ function boot() {
             label = pubkeyToNick.get(pub) ?? shortPub(pub);
           } else {
             pub = nickToPubkey.get(args[0]);
-            if (!pub) { addMsg('zitadel', `no pubkey known for ${args[0]}. they must announce first.`, true); break; }
+            if (!pub) {
+              addMsg('zitadel', `no pubkey known for ${args[0]}. they must announce first.`, true);
+              break;
+            }
             label = args[0];
           }
           try {
             await navigator.clipboard.writeText(pub);
             addMsg('zitadel', `copied ${label} pubkey to clipboard: ${pub}`, true);
           } catch (e) {
-            addMsg('zitadel', `clipboard failed: ${e instanceof Error ? e.message : String(e)}. pubkey: ${pub}`, true);
+            addMsg(
+              'zitadel',
+              `clipboard failed: ${e instanceof Error ? e.message : String(e)}. pubkey: ${pub}`,
+              true,
+            );
           }
           break;
         }
@@ -2017,24 +2360,37 @@ function boot() {
           // stays silenced. unbound nicks are an error - we have no
           // pubkey to record.
           const target = args[0];
-          if (!target) { addMsg('zitadel', 'usage: /ignore <nick|pubkey>', true); break; }
+          if (!target) {
+            addMsg('zitadel', 'usage: /ignore <nick|pubkey>', true);
+            break;
+          }
           let pub: string | undefined;
           if (isHexPubkey(target)) pub = target.toLowerCase();
           else pub = nickToPubkey.get(target);
-          if (!pub) { addMsg('zitadel', `no pubkey known for ${target}. they must announce first.`, true); break; }
+          if (!pub) {
+            addMsg('zitadel', `no pubkey known for ${target}. they must announce first.`, true);
+            break;
+          }
           if (zidPubkey && pub === zidPubkey.toLowerCase()) {
             addMsg('zitadel', 'refusing to ignore your own ZID.', true);
             break;
           }
           ignoredPubkeys.add(pub);
           if (localStore) void localStore.set({ [ZID_IGNORE_KEY]: Array.from(ignoredPubkeys) });
-          addMsg('zitadel', `ignoring ${pubkeyToNick.get(pub) ?? shortPub(pub)} (${pub.slice(0, 16)}...)`, true);
+          addMsg(
+            'zitadel',
+            `ignoring ${pubkeyToNick.get(pub) ?? shortPub(pub)} (${pub.slice(0, 16)}...)`,
+            true,
+          );
           break;
         }
 
         case 'unignore': {
           const target = args[0];
-          if (!target) { addMsg('zitadel', 'usage: /unignore <nick|pubkey>', true); break; }
+          if (!target) {
+            addMsg('zitadel', 'usage: /unignore <nick|pubkey>', true);
+            break;
+          }
           let pub: string | undefined;
           if (isHexPubkey(target)) pub = target.toLowerCase();
           else pub = nickToPubkey.get(target);
@@ -2089,9 +2445,11 @@ function boot() {
           zidPrivkey = newPriv;
           ephemeralIdentity = true;
           nick = shortPub(newPub);
-          addMsg('zitadel',
+          addMsg(
+            'zitadel',
             `rotated. ${oldNick} → ${nick} (ephemeral, this session only). /login to restore your zafu identity.`,
-            true);
+            true,
+          );
           // re-announce in current room under new identity. peers will
           // bind nick→newPub via verifyAnnounce; the rebindIdentity
           // helper they run will quietly drop the old nick→oldPub
@@ -2125,7 +2483,11 @@ function boot() {
           // the Enter keypress so we have a user gesture - the
           // permission prompt will actually appear.
           if (Notification.permission === 'denied') {
-            addMsg('zitadel', 'browser blocked notifications. allow them in site settings, then /notify again.', true);
+            addMsg(
+              'zitadel',
+              'browser blocked notifications. allow them in site settings, then /notify again.',
+              true,
+            );
             break;
           }
           if (Notification.permission === 'default') {
@@ -2137,12 +2499,19 @@ function boot() {
           }
           notifyEnabled = true;
           if (localStore) void localStore.set({ [ZID_NOTIFY_KEY]: '1' });
-          addMsg('zitadel', 'desktop notifications: on - alerts on mention or DM while tab is hidden. /notify off to stop.', true);
+          addMsg(
+            'zitadel',
+            'desktop notifications: on - alerts on mention or DM while tab is hidden. /notify off to stop.',
+            true,
+          );
           break;
         }
 
         case 'connect':
-          if (connected) { addMsg('zitadel', 'already connected', true); break; }
+          if (connected) {
+            addMsg('zitadel', 'already connected', true);
+            break;
+          }
           // /connect = "retry now". cancel any pending backoff and
           // dispose any half-open ws so its onopen can't fire after
           // we've already created a fresh one.
@@ -2197,16 +2566,20 @@ function boot() {
       // isn't from the wallet, so the wallet's lock doesn't apply.
       if (change.newValue === undefined && zidPrivkey && !ephemeralIdentity) {
         zidPrivkey = undefined;
-        addMsg('zitadel',
+        addMsg(
+          'zitadel',
           'wallet locked - new messages will be unsigned. /login to re-enable signing.',
-          true);
+          true,
+        );
         render();
       }
     });
-  } catch { /* not in extension context */ }
+  } catch {
+    /* not in extension context */
+  }
 
   // init
-  resolveZidIdentity().then(async (zid) => {
+  resolveZidIdentity().then(async zid => {
     zidPubkey = zid.pubkey;
     zidPrivkey = zid.privkey;
 
@@ -2222,14 +2595,20 @@ function boot() {
           if (typeof stored === 'string' && isValidNick(stored)) {
             nick = stored;
           }
-        } catch { /* not in extension context */ }
+        } catch {
+          /* not in extension context */
+        }
       }
     } else {
       nick = 'anon' + String((Math.random() * 100000) | 0).padStart(5, '0');
     }
 
     if (zid.loggedIn) {
-      addMsg('zitadel', `logged in via zafu - zid: ${zid.pubkey ? shortPub(zid.pubkey) : 'unknown'}`, true);
+      addMsg(
+        'zitadel',
+        `logged in via zafu - zid: ${zid.pubkey ? shortPub(zid.pubkey) : 'unknown'}`,
+        true,
+      );
       if (zid.privkey) {
         addMsg('zitadel', 'Noise IK e2ee available for DMs.', true);
       } else {
@@ -2242,30 +2621,47 @@ function boot() {
     // load persisted relay choice (if any) before opening the socket
     if (localStore) {
       try {
-        const saved = await new Promise<Record<string, unknown>>(r => localStore.get(RELAY_URL_KEY, r));
+        const saved = await new Promise<Record<string, unknown>>(r =>
+          localStore.get(RELAY_URL_KEY, r),
+        );
         const candidate = saved?.[RELAY_URL_KEY];
         if (typeof candidate === 'string' && isValidRelayUrl(candidate)) {
           relayUrl = candidate;
         }
-      } catch { /* not in extension context */ }
+      } catch {
+        /* not in extension context */
+      }
       // load persisted ignore list - pubkeys are kept across sessions so
       // a peer you silenced in one session stays silent in the next.
       try {
-        const r = await new Promise<Record<string, unknown>>(res => localStore.get(ZID_IGNORE_KEY, res));
+        const r = await new Promise<Record<string, unknown>>(res =>
+          localStore.get(ZID_IGNORE_KEY, res),
+        );
         const stored = r?.[ZID_IGNORE_KEY];
         if (Array.isArray(stored)) {
-          for (const p of stored) if (typeof p === 'string' && isHexPubkey(p)) ignoredPubkeys.add(p.toLowerCase());
+          for (const p of stored)
+            if (typeof p === 'string' && isHexPubkey(p)) ignoredPubkeys.add(p.toLowerCase());
         }
-      } catch { /* not in extension context */ }
+      } catch {
+        /* not in extension context */
+      }
       // load notification opt-in. only honor it if the browser has
       // already granted permission - otherwise the user has to /notify
       // again to re-prompt (cleaner than silently noop'ing forever).
       try {
-        const r = await new Promise<Record<string, unknown>>(res => localStore.get(ZID_NOTIFY_KEY, res));
-        if (r?.[ZID_NOTIFY_KEY] === '1' && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        const r = await new Promise<Record<string, unknown>>(res =>
+          localStore.get(ZID_NOTIFY_KEY, res),
+        );
+        if (
+          r?.[ZID_NOTIFY_KEY] === '1' &&
+          typeof Notification !== 'undefined' &&
+          Notification.permission === 'granted'
+        ) {
           notifyEnabled = true;
         }
-      } catch { /* not in extension context */ }
+      } catch {
+        /* not in extension context */
+      }
     }
     addMsg('zitadel', `relay: ${relayUrl}`, true);
     render();

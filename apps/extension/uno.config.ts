@@ -9,10 +9,7 @@ import presetIcons from '@unocss/preset-icons';
  */
 export default defineConfig({
   content: {
-    filesystem: [
-      'src/**/*.{ts,tsx}',
-      '../../packages/ui/**/*.{ts,tsx}',
-    ],
+    filesystem: ['src/**/*.{ts,tsx}', '../../packages/ui/**/*.{ts,tsx}'],
   },
   presets: [
     presetIcons({

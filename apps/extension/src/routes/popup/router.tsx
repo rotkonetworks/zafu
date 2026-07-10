@@ -14,9 +14,7 @@ const TransactionApproval = lazy(() =>
 const OriginApproval = lazy(() =>
   import('./approval/origin').then(m => ({ default: m.OriginApproval })),
 );
-const SignApproval = lazy(() =>
-  import('./approval/sign').then(m => ({ default: m.SignApproval })),
-);
+const SignApproval = lazy(() => import('./approval/sign').then(m => ({ default: m.SignApproval })));
 const CapabilityApproval = lazy(() =>
   import('./approval/capability').then(m => ({ default: m.CapabilityApproval })),
 );
@@ -30,14 +28,22 @@ const ContactsPage = lazy(() => import('./contacts').then(m => ({ default: m.Con
 const SendPage = lazy(() => import('./send').then(m => ({ default: m.SendPage })));
 const ReceivePage = lazy(() => import('./receive').then(m => ({ default: m.ReceivePage })));
 const CosmosSign = lazy(() => import('./cosmos-sign').then(m => ({ default: m.CosmosSign })));
-const MultisigSessions = lazy(() => import('./multisig/sessions').then(m => ({ default: m.MultisigPage })));
-const MultisigCreate = lazy(() => import('./multisig/create').then(m => ({ default: m.MultisigCreate })));
+const MultisigSessions = lazy(() =>
+  import('./multisig/sessions').then(m => ({ default: m.MultisigPage })),
+);
+const MultisigCreate = lazy(() =>
+  import('./multisig/create').then(m => ({ default: m.MultisigCreate })),
+);
 const MultisigJoin = lazy(() => import('./multisig/join').then(m => ({ default: m.MultisigJoin })));
 const MultisigSign = lazy(() => import('./multisig/sign').then(m => ({ default: m.MultisigSign })));
 const NoteSyncPage = lazy(() => import('./note-sync').then(m => ({ default: m.NoteSyncPage })));
 const IdentityPage = lazy(() => import('./identity').then(m => ({ default: m.IdentityPage })));
-const PasswordsPage = lazy(() => import('./identity/passwords').then(m => ({ default: m.PasswordsPage })));
-const ContactPicker = lazy(() => import('./pick-contacts').then(m => ({ default: m.ContactPicker })));
+const PasswordsPage = lazy(() =>
+  import('./identity/passwords').then(m => ({ default: m.PasswordsPage })),
+);
+const ContactPicker = lazy(() =>
+  import('./pick-contacts').then(m => ({ default: m.ContactPicker })),
+);
 const FrostApprove = lazy(() => import('./frost-approve').then(m => ({ default: m.FrostApprove })));
 const ZcashSendApproval = lazy(() =>
   import('./approval/zcash-send').then(m => ({ default: m.ZcashSendApproval })),

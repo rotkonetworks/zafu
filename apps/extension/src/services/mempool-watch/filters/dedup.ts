@@ -30,7 +30,8 @@ import type { MempoolFetcher, MempoolFilter, MempoolSnapshot } from '../types';
  * cycle) produces a fresh filter closure, so lastKey is naturally cleared
  * on toggle. The worker does not reuse a stale composed fetcher.
  */
-export const withDedup = (): MempoolFilter =>
+export const withDedup =
+  (): MempoolFilter =>
   (inner: MempoolFetcher): MempoolFetcher => {
     let lastKey: string | null = null;
     return async function* dedup(walletId, ctx) {

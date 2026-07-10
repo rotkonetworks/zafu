@@ -16,7 +16,7 @@ function unwrapCborSinglePczt(cbor) {
   if (cbor[1] !== 0x01) throw new Error('expected CBOR key 1 at offset 1');
   let pos = 2;
   const tag = cbor[pos++];
-  const readLen = (nBytes) => {
+  const readLen = nBytes => {
     if (pos + nBytes > cbor.length) {
       throw new Error(`CBOR length header truncated (need ${nBytes} bytes)`);
     }

@@ -19,99 +19,111 @@ export const useFinalizeOnboarding = () => {
   const [loading, setLoading] = useState(false);
   const location = useLocation();
   const { setPassword, newZignerZafuKey } = useStore(keyRingSelector);
-  const { walletImport, zcashWalletImport, parsedPolkadotExport, parsedCosmosExport, walletLabel, clearZignerState } = useStore(zignerConnectSelector);
+  const {
+    walletImport,
+    zcashWalletImport,
+    parsedPolkadotExport,
+    parsedCosmosExport,
+    walletLabel,
+    clearZignerState,
+  } = useStore(zignerConnectSelector);
 
-  const handleSubmit = useCallback(async (event: FormEvent, password: string) => {
-    event.preventDefault();
-    try {
-      setLoading(true);
-      setError(undefined);
-      const origin = getSeedPhraseOrigin(location);
+  const handleSubmit = useCallback(
+    async (event: FormEvent, password: string) => {
+      event.preventDefault();
+      try {
+        setLoading(true);
+        setError(undefined);
+        const origin = getSeedPhraseOrigin(location);
 
-      if (origin === SEED_PHRASE_ORIGIN.ZIGNER) {
-        // zigner flow: set password then import watch-only wallet
-        await setPassword(password);
+        if (origin === SEED_PHRASE_ORIGIN.ZIGNER) {
+          // zigner flow: set password then import watch-only wallet
+          await setPassword(password);
 
-        if (walletImport) {
-          // penumbra zigner import - convert protobuf to base64 strings
-          const fvkInner = walletImport.fullViewingKey.inner;
-          const walletIdInner = walletImport.walletId.inner;
-          const legacyDeviceId = walletIdInner
-            ? btoa(String.fromCharCode(...walletIdInner))
-            : `penumbra-${Date.now()}`;
-          const zignerData: ZignerZafuImport = {
-            fullViewingKey: fvkInner ? btoa(String.fromCharCode(...fvkInner)) : undefined,
-            accountIndex: walletImport.accountIndex,
-            deviceId: walletImport.zidPublicKey ?? legacyDeviceId,
-            zidPublicKey: walletImport.zidPublicKey,
-          };
-          await newZignerZafuKey(zignerData, walletLabel || 'zigner penumbra');
-        } else if (zcashWalletImport) {
-          // zcash zigner import — use ZID as canonical deviceId for dedup
-          const zignerData: ZignerZafuImport = {
-            viewingKey: zcashWalletImport.orchardFvk
-              ? btoa(String.fromCharCode(...zcashWalletImport.orchardFvk))
-              : zcashWalletImport.ufvk ?? undefined,
-            accountIndex: zcashWalletImport.accountIndex,
-            deviceId: zcashWalletImport.zidPublicKey ?? `zcash-${Date.now()}`,
-            zidPublicKey: zcashWalletImport.zidPublicKey,
-          };
-          await newZignerZafuKey(zignerData, walletLabel || 'zigner zcash');
-        } else if (parsedCosmosExport) {
-          // cosmos zigner import
-          const zignerData: ZignerZafuImport = {
-            cosmosAddresses: parsedCosmosExport.addresses,
-            publicKey: parsedCosmosExport.publicKey || undefined,
-            accountIndex: parsedCosmosExport.accountIndex,
-            deviceId: `cosmos-${Date.now()}`,
-          };
-          await newZignerZafuKey(zignerData, walletLabel || 'zigner cosmos');
-        } else if (parsedPolkadotExport) {
-          // polkadot zigner import
-          const zignerData: ZignerZafuImport = {
-            polkadotSs58: parsedPolkadotExport.address,
-            polkadotGenesisHash: parsedPolkadotExport.genesisHash,
-            accountIndex: 0,
-            deviceId: `polkadot-${Date.now()}`,
-          };
-          await newZignerZafuKey(zignerData, walletLabel || 'zigner polkadot');
+          if (walletImport) {
+            // penumbra zigner import - convert protobuf to base64 strings
+            const fvkInner = walletImport.fullViewingKey.inner;
+            const walletIdInner = walletImport.walletId.inner;
+            const legacyDeviceId = walletIdInner
+              ? btoa(String.fromCharCode(...walletIdInner))
+              : `penumbra-${Date.now()}`;
+            const zignerData: ZignerZafuImport = {
+              fullViewingKey: fvkInner ? btoa(String.fromCharCode(...fvkInner)) : undefined,
+              accountIndex: walletImport.accountIndex,
+              deviceId: walletImport.zidPublicKey ?? legacyDeviceId,
+              zidPublicKey: walletImport.zidPublicKey,
+            };
+            await newZignerZafuKey(zignerData, walletLabel || 'zigner penumbra');
+          } else if (zcashWalletImport) {
+            // zcash zigner import — use ZID as canonical deviceId for dedup
+            const zignerData: ZignerZafuImport = {
+              viewingKey: zcashWalletImport.orchardFvk
+                ? btoa(String.fromCharCode(...zcashWalletImport.orchardFvk))
+                : (zcashWalletImport.ufvk ?? undefined),
+              accountIndex: zcashWalletImport.accountIndex,
+              deviceId: zcashWalletImport.zidPublicKey ?? `zcash-${Date.now()}`,
+              zidPublicKey: zcashWalletImport.zidPublicKey,
+            };
+            await newZignerZafuKey(zignerData, walletLabel || 'zigner zcash');
+          } else if (parsedCosmosExport) {
+            // cosmos zigner import
+            const zignerData: ZignerZafuImport = {
+              cosmosAddresses: parsedCosmosExport.addresses,
+              publicKey: parsedCosmosExport.publicKey || undefined,
+              accountIndex: parsedCosmosExport.accountIndex,
+              deviceId: `cosmos-${Date.now()}`,
+            };
+            await newZignerZafuKey(zignerData, walletLabel || 'zigner cosmos');
+          } else if (parsedPolkadotExport) {
+            // polkadot zigner import
+            const zignerData: ZignerZafuImport = {
+              polkadotSs58: parsedPolkadotExport.address,
+              polkadotGenesisHash: parsedPolkadotExport.genesisHash,
+              accountIndex: 0,
+              deviceId: `polkadot-${Date.now()}`,
+            };
+            await newZignerZafuKey(zignerData, walletLabel || 'zigner polkadot');
+          } else {
+            throw new Error('no zigner wallet data found');
+          }
+
+          clearZignerState();
         } else {
-          throw new Error('no zigner wallet data found');
+          // standard mnemonic flow
+          // For fresh wallets, set block heights BEFORE creating wallet to avoid race condition
+          if (origin === SEED_PHRASE_ORIGIN.NEWLY_GENERATED) {
+            await setFreshWalletBlockHeights();
+          }
+          await addWallet(password);
         }
 
-        clearZignerState();
-      } else {
-        // standard mnemonic flow
-        // For fresh wallets, set block heights BEFORE creating wallet to avoid race condition
-        if (origin === SEED_PHRASE_ORIGIN.NEWLY_GENERATED) {
-          await setFreshWalletBlockHeights();
+        await setOnboardingValuesInStorage(origin);
+
+        // apply zcash birthday from onboarding (stored in sessionStorage)
+        const pendingBirthday = sessionStorage.getItem('pendingZcashBirthday');
+        if (pendingBirthday) {
+          const vaults = (await localExtStorage.get('vaults')) as { id: string }[] | null;
+          const vaultId = vaults?.[0]?.id;
+          if (vaultId) {
+            await chrome.storage.local.set({
+              [`zcashBirthday_${vaultId}`]: parseInt(pendingBirthday, 10),
+            });
+          }
+          sessionStorage.removeItem('pendingZcashBirthday');
         }
-        await addWallet(password);
+
+        navigate(PagePath.ONBOARDING_SUCCESS);
+      } catch (e) {
+        setError(String(e));
+        // roll back on failure
+        await localExtStorage.remove('penumbraWallets');
+        await localExtStorage.remove('vaults');
+      } finally {
+        setLoading(false);
       }
-
-      await setOnboardingValuesInStorage(origin);
-
-      // apply zcash birthday from onboarding (stored in sessionStorage)
-      const pendingBirthday = sessionStorage.getItem('pendingZcashBirthday');
-      if (pendingBirthday) {
-        const vaults = await localExtStorage.get('vaults') as { id: string }[] | null;
-        const vaultId = vaults?.[0]?.id;
-        if (vaultId) {
-          await chrome.storage.local.set({ [`zcashBirthday_${vaultId}`]: parseInt(pendingBirthday, 10) });
-        }
-        sessionStorage.removeItem('pendingZcashBirthday');
-      }
-
-      navigate(PagePath.ONBOARDING_SUCCESS);
-    } catch (e) {
-      setError(String(e));
-      // roll back on failure
-      await localExtStorage.remove('penumbraWallets');
-      await localExtStorage.remove('vaults');
-    } finally {
-      setLoading(false);
-    }
-  }, [walletImport, zcashWalletImport, parsedPolkadotExport, parsedCosmosExport, walletLabel]);
+    },
+    [walletImport, zcashWalletImport, parsedPolkadotExport, parsedCosmosExport, walletLabel],
+  );
 
   return { handleSubmit, error, loading };
 };

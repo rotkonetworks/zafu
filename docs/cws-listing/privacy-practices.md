@@ -15,31 +15,37 @@ zafu is a self-custodial privacy wallet that lets users send, receive, sign, and
 ## Permission justifications
 
 ### `storage`
+
 ```
 Persists the encrypted wallet vault (mnemonic + derived keys), the locally-cached Zcash note set with per-note witnesses, the Penumbra view state, wallet preferences, and session metadata. All persisted data is scoped to the extension's origin and never transmitted.
 ```
 
 ### `unlimitedStorage`
+
 ```
 Zcash note witness state and Penumbra view state grow with chain history (hundreds of MB for active users). The default 5 MB storage quota is not sufficient for a light-client that verifies the chain end-to-end; unlimitedStorage is required to keep proofs and witnesses accessible offline without relying on a server.
 ```
 
 ### `offscreen`
+
 ```
 Manifest V3 service workers cannot hold WebAssembly instances across events. The wallet's WASM provers (Zcash orchard, Penumbra halo2) run in an offscreen document which keeps the prover alive during the 5–15 seconds a shielded spend proof takes to generate. Without `offscreen`, proving would have to restart on every network event and would not be feasible in MV3.
 ```
 
 ### `alarms`
+
 ```
 Schedules periodic background sync of Zcash compact blocks and Penumbra view state while the extension is installed, so balances are current when the user opens the popup. Uses the Chrome alarms API instead of setInterval because MV3 service workers are killed between events.
 ```
 
 ### `sidePanel`
+
 ```
 Enables the wallet UI to open in Chrome's side panel in addition to the popup, so users can keep the wallet visible alongside a dApp they are signing transactions for. Required to register `sidePanel.setOptions` and toggle panel visibility.
 ```
 
 ### `contextMenus`
+
 ```
 Adds a single right-click action on selected text: "Send ZEC/Penumbra to this address" which opens the send flow pre-filled with the selected address. Does not inject any UI into the page itself.
 ```
@@ -49,6 +55,7 @@ Adds a single right-click action on selected text: "Send ZEC/Penumbra to this ad
 ## Host permission justifications
 
 ### `host_permissions: ["<all_urls>"]`
+
 ```
 zafu is a multichain self-custodial wallet (Zcash + Penumbra + Cosmos + Bitcoin + EVM + Polkadot ecosystem) that implements the standard web3 wallet provider pattern. Two independent reasons require broad host access:
 
@@ -73,6 +80,7 @@ The extension does not make arbitrary HTTP requests beyond this set and the user
 ```
 
 ### `content_scripts` (ISOLATED + MAIN world)
+
 ```
 Two lightweight scripts:
 
@@ -82,6 +90,7 @@ Two lightweight scripts:
 ```
 
 ### `externally_connectable: { matches: ["<all_urls>"] }`
+
 ```
 Same as host_permissions — the extension listens for connection requests from dApps across any origin. The extension validates the origin on every message and only shows a connection approval prompt for explicitly user-initiated requests.
 ```
@@ -100,17 +109,17 @@ No remote code execution. All JavaScript and WebAssembly in the bundle is shippe
 
 Mark each of the CWS data use categories as follows:
 
-| Category | Collected? | Notes |
-|---|---|---|
-| Personally identifiable information (PII) | **No** | — |
-| Health information | **No** | — |
-| Financial & payment info | **No** | The extension manages the user's own wallet keys locally; no payment info is collected by us |
-| Authentication info | **Yes, but stored locally only** | Mnemonic seed / passkey enters the user's own encrypted vault in local storage. Never transmitted. |
-| Personal communications | **No** | — |
-| Location | **No** | — |
-| Web history | **No** | — |
-| User activity | **No** | No analytics. No telemetry. |
-| Website content | **No** | — |
+| Category                                  | Collected?                       | Notes                                                                                              |
+| ----------------------------------------- | -------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Personally identifiable information (PII) | **No**                           | —                                                                                                  |
+| Health information                        | **No**                           | —                                                                                                  |
+| Financial & payment info                  | **No**                           | The extension manages the user's own wallet keys locally; no payment info is collected by us       |
+| Authentication info                       | **Yes, but stored locally only** | Mnemonic seed / passkey enters the user's own encrypted vault in local storage. Never transmitted. |
+| Personal communications                   | **No**                           | —                                                                                                  |
+| Location                                  | **No**                           | —                                                                                                  |
+| Web history                               | **No**                           | —                                                                                                  |
+| User activity                             | **No**                           | No analytics. No telemetry.                                                                        |
+| Website content                           | **No**                           | —                                                                                                  |
 
 ### Three required certifications (check all three)
 

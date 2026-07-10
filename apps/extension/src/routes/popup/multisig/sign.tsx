@@ -78,7 +78,8 @@ export const MultisigSign = () => {
     setProgress('connecting to signing session...');
 
     try {
-      const relayUrl = (typeof ms.relayUrl === 'string' ? ms.relayUrl : '') || 'wss://zrelay.rotko.net';
+      const relayUrl =
+        (typeof ms.relayUrl === 'string' ? ms.relayUrl : '') || 'wss://zrelay.rotko.net';
       const relay = new FrostRelayClient(relayUrl);
       const participantId = new Uint8Array(32);
       crypto.getRandomValues(participantId);
@@ -87,61 +88,76 @@ export const MultisigSign = () => {
       participantIdRef.current = participantId;
       abortRef.current = abortController;
 
-      void relay.joinRoom(roomCode.trim(), participantId, (event) => {
-        if (event.type !== 'message') return;
-        const text = new TextDecoder().decode(event.message.payload);
-        // SIGN:<sighash>:<alphas>:<recipient>:<amountZat>:<feeZat>[:<unsignedTxHex>]
-        const signMatch = text.match(/^SIGN:([0-9a-fA-F]+):([^:]+):([^:]+):(\d+):(\d+)(?::([0-9a-fA-F]+))?$/);
-        if (signMatch) {
-          sighashRef.current = signMatch[1]!;
-          alphasRef.current = signMatch[2]!.split(',');
-          const claimedRecipient = signMatch[3]!;
-          const claimedAmount = signMatch[4]!;
-          const unsignedTxHex = signMatch[6];
-          setRecipient(claimedRecipient);
-          setAmountZat(claimedAmount);
-          setFeeZat(signMatch[5]!);
+      void relay.joinRoom(
+        roomCode.trim(),
+        participantId,
+        event => {
+          if (event.type !== 'message') return;
+          const text = new TextDecoder().decode(event.message.payload);
+          // SIGN:<sighash>:<alphas>:<recipient>:<amountZat>:<feeZat>[:<unsignedTxHex>]
+          const signMatch = text.match(
+            /^SIGN:([0-9a-fA-F]+):([^:]+):([^:]+):(\d+):(\d+)(?::([0-9a-fA-F]+))?$/,
+          );
+          if (signMatch) {
+            sighashRef.current = signMatch[1]!;
+            alphasRef.current = signMatch[2]!.split(',');
+            const claimedRecipient = signMatch[3]!;
+            const claimedAmount = signMatch[4]!;
+            const unsignedTxHex = signMatch[6];
+            setRecipient(claimedRecipient);
+            setAmountZat(claimedAmount);
+            setFeeZat(signMatch[5]!);
 
-          // Verifier: derive output truth from tx bytes; mismatch hard-blocks approve.
-          // FROST multisig wallets store the `uview1…` string in `orchardFvk`
-          // (DKG flows save it there); single-key wallets store it in `ufvk`.
-          const ufvkForVerify = activeWallet?.multisig
-            ? activeWallet.orchardFvk
-            : activeWallet?.ufvk;
-          if (!unsignedTxHex) {
-            setVerdict({ kind: 'unverified', reason: 'host did not publish unsigned tx bytes (older client?)' });
-          } else if (!ufvkForVerify) {
-            setVerdict({ kind: 'unverified', reason: 'wallet has no UFVK on file — cannot verify' });
-          } else {
-            const ufvk = ufvkForVerify;
-            const isMain = activeWallet!.mainnet;
-            void (async () => {
-              try {
-                const p = await frostParseTxOutputsInWorker(unsignedTxHex, ufvk);
-                setParsed(p);
-                setVerdict(computeVerdict({
-                  parsed: p,
-                  claimedRecipient,
-                  claimedAmountZat: claimedAmount,
-                  claimedSighashHex: signMatch[1]!,
-                  mainnet: isMain,
-                }));
-              } catch (err) {
-                setVerdict({
-                  kind: 'unverified',
-                  reason: err instanceof Error ? err.message : 'parse failed',
-                });
-              }
-            })();
+            // Verifier: derive output truth from tx bytes; mismatch hard-blocks approve.
+            // FROST multisig wallets store the `uview1…` string in `orchardFvk`
+            // (DKG flows save it there); single-key wallets store it in `ufvk`.
+            const ufvkForVerify = activeWallet?.multisig
+              ? activeWallet.orchardFvk
+              : activeWallet?.ufvk;
+            if (!unsignedTxHex) {
+              setVerdict({
+                kind: 'unverified',
+                reason: 'host did not publish unsigned tx bytes (older client?)',
+              });
+            } else if (!ufvkForVerify) {
+              setVerdict({
+                kind: 'unverified',
+                reason: 'wallet has no UFVK on file — cannot verify',
+              });
+            } else {
+              const ufvk = ufvkForVerify;
+              const isMain = activeWallet!.mainnet;
+              void (async () => {
+                try {
+                  const p = await frostParseTxOutputsInWorker(unsignedTxHex, ufvk);
+                  setParsed(p);
+                  setVerdict(
+                    computeVerdict({
+                      parsed: p,
+                      claimedRecipient,
+                      claimedAmountZat: claimedAmount,
+                      claimedSighashHex: signMatch[1]!,
+                      mainnet: isMain,
+                    }),
+                  );
+                } catch (err) {
+                  setVerdict({
+                    kind: 'unverified',
+                    reason: err instanceof Error ? err.message : 'parse failed',
+                  });
+                }
+              })();
+            }
+            return;
           }
-          return;
-        }
-        // collect ALL peer C: bundles — t≥3 needs threshold-1 of them, not just 1.
-        const commitMatch = text.match(/^C:([\s\S]*)$/);
-        if (commitMatch) {
-          peerCommitsRawRef.current.push(commitMatch[1]!);
-        }
-      }, abortController.signal);
+          // collect ALL peer C: bundles — t≥3 needs threshold-1 of them, not just 1.
+          const commitMatch = text.match(/^C:([\s\S]*)$/);
+          if (commitMatch) {
+            peerCommitsRawRef.current.push(commitMatch[1]!);
+          }
+        },
+        abortController.signal,
+      );
 
       setProgress('waiting for transaction data...');
       await waitForUntil(() => sighashRef.current.length > 0, sessionDeadline);
@@ -181,10 +197,17 @@ export const MultisigSign = () => {
       }
 
       const ourCommitments = round1s.map(r => r.commitments).join('|');
-      await relay.sendMessage(roomCode.trim(), participantId, new TextEncoder().encode(`C:${ourCommitments}`));
+      await relay.sendMessage(
+        roomCode.trim(),
+        participantId,
+        new TextEncoder().encode(`C:${ourCommitments}`),
+      );
 
       setProgress(`round 1: waiting for ${ms.threshold - 1} co-signer(s)...`);
-      await waitForUntil(() => peerCommitsRawRef.current.length >= ms.threshold - 1, sessionDeadline);
+      await waitForUntil(
+        () => peerCommitsRawRef.current.length >= ms.threshold - 1,
+        sessionDeadline,
+      );
 
       // split each peer's "c0|c1|..." into per-action lists.
       const peerPerAction: string[][] = Array.from({ length: numActions }, () => []);
@@ -200,9 +223,18 @@ export const MultisigSign = () => {
         setProgress(`round 2: signing action ${i + 1}/${numActions}...`);
         const allCommitments = [round1s[i]!.commitments, ...peerPerAction[i]!];
         const share = await frostSpendSignInWorker(
-          secrets.ephemeralSeed, secrets.keyPackage, round1s[i]!.nonces, sighash, alphas[i]!, allCommitments,
+          secrets.ephemeralSeed,
+          secrets.keyPackage,
+          round1s[i]!.nonces,
+          sighash,
+          alphas[i]!,
+          allCommitments,
         );
-        await relay.sendMessage(roomCode.trim(), participantId, new TextEncoder().encode(`S:${i}:${share}`));
+        await relay.sendMessage(
+          roomCode.trim(),
+          participantId,
+          new TextEncoder().encode(`S:${i}:${share}`),
+        );
       }
 
       setStep('complete');
@@ -300,7 +332,9 @@ export const MultisigSign = () => {
       {step === 'review' && (
         <div className='flex flex-col gap-3'>
           <div className='rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-3'>
-            <p className='text-[10px] uppercase tracking-wider text-yellow-400'>review transaction</p>
+            <p className='text-[10px] uppercase tracking-wider text-yellow-400'>
+              review transaction
+            </p>
           </div>
 
           <div className='rounded-lg border border-border-soft bg-elev-1 p-3 flex flex-col gap-2.5'>
@@ -358,19 +392,21 @@ export const MultisigSign = () => {
                 mismatch — host claim disagrees with tx bytes
               </div>
               <ul className='text-[10px] text-red-300/90 list-disc pl-4 space-y-0.5'>
-                {verdict.reasons.map((r, i) => (<li key={i}>{r}</li>))}
+                {verdict.reasons.map((r, i) => (
+                  <li key={i}>{r}</li>
+                ))}
               </ul>
               {parsed && parsed.actions.some(a => a.decrypted && !a.is_change) && (
                 <div className='rounded border border-red-500/30 bg-red-500/5 p-2 text-[10px] font-mono text-red-300/80'>
-                  <p className='text-[9px] uppercase tracking-wider text-red-400/80 mb-1'>derived outputs</p>
+                  <p className='text-[9px] uppercase tracking-wider text-red-400/80 mb-1'>
+                    derived outputs
+                  </p>
                   {parsed.actions
                     .filter(a => a.decrypted && !a.is_change)
-                    .map((a) => (
+                    .map(a => (
                       <div key={a.index} className='break-all'>
                         action {a.index}: {formatZec(String(a.amount_zat))} ZEC →{' '}
-                        {a.recipient_raw_hex
-                          ? `${a.recipient_raw_hex.slice(0, 16)}…`
-                          : 'unknown'}
+                        {a.recipient_raw_hex ? `${a.recipient_raw_hex.slice(0, 16)}…` : 'unknown'}
                       </div>
                     ))}
                 </div>
@@ -382,9 +418,7 @@ export const MultisigSign = () => {
                   onChange={e => setAcknowledged(e.target.checked)}
                   className='mt-0.5'
                 />
-                <span>
-                  I see the mismatch. Override and sign at my own risk.
-                </span>
+                <span>I see the mismatch. Override and sign at my own risk.</span>
               </label>
             </div>
           )}
@@ -402,7 +436,9 @@ export const MultisigSign = () => {
             </button>
             <button
               onClick={() => void handleApprove()}
-              disabled={verdict.kind === 'pending' || (verdict.kind === 'mismatch' && !acknowledged)}
+              disabled={
+                verdict.kind === 'pending' || (verdict.kind === 'mismatch' && !acknowledged)
+              }
               className='rounded-lg border border-primary/40 bg-primary/5 py-2 text-xs text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
             >
               {verdict.kind === 'mismatch' ? 'approve anyway' : 'approve & sign'}
@@ -418,7 +454,9 @@ export const MultisigSign = () => {
               <p className='text-[10px] uppercase tracking-wider text-yellow-400'>signing</p>
               <p className='mt-0.5 text-sm font-medium text-yellow-300'>
                 {formatZec(amountZat)} ZEC →{' '}
-                <span className='font-mono text-[10px]'>{recipient.slice(0, 16)}…{recipient.slice(-6)}</span>
+                <span className='font-mono text-[10px]'>
+                  {recipient.slice(0, 16)}…{recipient.slice(-6)}
+                </span>
               </p>
             </div>
           )}
@@ -442,7 +480,11 @@ export const MultisigSign = () => {
             {error}
           </div>
           <button
-            onClick={() => { teardown(); setStep('input'); setError(''); }}
+            onClick={() => {
+              teardown();
+              setStep('input');
+              setError('');
+            }}
             className='rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
           >
             try again
@@ -458,9 +500,19 @@ type WrapperPhase = 'input' | 'active' | 'done';
 // airgap joiner: paste room code → delegate to FrostAirgapJoinerSignFlow,
 // then land on a green "shares sent" confirmation (matches mnemonic joiner).
 const AirgapJoinerWrapper = ({
-  ms, walletLabel, walletAddress, orchardFvkUview, mainnet,
+  ms,
+  walletLabel,
+  walletAddress,
+  orchardFvkUview,
+  mainnet,
 }: {
-  ms: { publicKeyPackage: string; threshold: number; maxSigners: number; relayUrl?: string; zignerWalletId?: string };
+  ms: {
+    publicKeyPackage: string;
+    threshold: number;
+    maxSigners: number;
+    relayUrl?: string;
+    zignerWalletId?: string;
+  };
   walletLabel: string;
   walletAddress: string;
   orchardFvkUview?: string;
@@ -470,7 +522,11 @@ const AirgapJoinerWrapper = ({
   const [phase, setPhase] = useState<WrapperPhase>('input');
   const [error, setError] = useState('');
 
-  const reset = () => { setPhase('input'); setRoom(''); setError(''); };
+  const reset = () => {
+    setPhase('input');
+    setRoom('');
+    setError('');
+  };
 
   const WalletCard = () => (
     <div className='mb-4 rounded-lg border border-border-soft bg-elev-1 p-3'>
@@ -490,7 +546,9 @@ const AirgapJoinerWrapper = ({
       return (
         <SettingsScreen title='co-sign' backPath={PopupPath.MULTISIG}>
           <div className='flex flex-col gap-3'>
-            <div className='rounded-lg border border-red-500/40 bg-red-500/5 p-3 text-xs text-red-400'>{error}</div>
+            <div className='rounded-lg border border-red-500/40 bg-red-500/5 p-3 text-xs text-red-400'>
+              {error}
+            </div>
             <button
               onClick={reset}
               className='rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'

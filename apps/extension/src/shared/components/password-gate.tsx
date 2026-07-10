@@ -141,9 +141,7 @@ export const PasswordGateModal = ({
               </button>
             </div>
 
-            {error && (
-              <p className='mb-3 text-xs text-red-400'>{error}</p>
-            )}
+            {error && <p className='mb-3 text-xs text-red-400'>{error}</p>}
 
             <div className='flex gap-2'>
               <button

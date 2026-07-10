@@ -16,7 +16,11 @@ import type { ZidSitePreference, ZidShareRecord } from '../../../state/identity'
 import { ZID_INDEX_STORAGE_KEY, getZidIndex, rotateZidIndex } from '../../../state/identity';
 import { getOriginPermissions, grantCapability, denyCapability } from '@repo/storage-chrome/origin';
 import { revokeOrigin as revokeOriginFull } from '../../../senders/revoke';
-import { CAPABILITY_META, type Capability, type OriginPermissions } from '@repo/storage-chrome/capabilities';
+import {
+  CAPABILITY_META,
+  type Capability,
+  type OriginPermissions,
+} from '@repo/storage-chrome/capabilities';
 import { isPro, selectDaysRemaining, selectPlan } from '../../../state/license';
 import { SettingsScreen } from '../settings/settings-screen';
 import { PopupPath } from '../paths';
@@ -36,7 +40,8 @@ type ActiveTab = 'sites' | 'log';
 const shortDate = (ms: number): string => {
   const d = new Date(ms);
   const diff = Date.now() - ms;
-  if (diff < 86400000) return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  if (diff < 86400000)
+    return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
   if (diff < 604800000) return d.toLocaleDateString(undefined, { weekday: 'short' });
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 };
@@ -77,7 +82,12 @@ const ZidFingerprint = ({ pubkeyHex, size = 40 }: { pubkeyHex: string; size?: nu
   return (
     <div
       className='rounded overflow-hidden shrink-0'
-      style={{ width: size, height: size, display: 'grid', gridTemplateColumns: `repeat(5, ${cellSize}px)` }}
+      style={{
+        width: size,
+        height: size,
+        display: 'grid',
+        gridTemplateColumns: `repeat(5, ${cellSize}px)`,
+      }}
     >
       {cells.map((color, i) => (
         <div key={i} style={{ width: cellSize, height: cellSize, backgroundColor: color }} />
@@ -102,7 +112,10 @@ export const IdentityPage = () => {
   const [labelInput, setLabelInput] = useState('');
   const [activeTab, setActiveTab] = useState<ActiveTab>('sites');
   const [expandedSite, setExpandedSite] = useState<string | null>(null);
-  const [confirming, setConfirming] = useState<{ origin: string; action: 'cross-site' | 'rotate' } | null>(null);
+  const [confirming, setConfirming] = useState<{
+    origin: string;
+    action: 'cross-site' | 'rotate';
+  } | null>(null);
   const [showQr, setShowQr] = useState(false);
   const [showFullKey, setShowFullKey] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -130,16 +143,21 @@ export const IdentityPage = () => {
   }, [reloadSites]);
 
   // try active keyinfo first, then any keyinfo with a zid (mnemonic wallets)
-  const zidPubkey = (keyInfo?.insensitive?.['zid'] ?? allKeyInfos.find(k => k.insensitive?.['zid'])?.insensitive?.['zid']) as string | undefined;
+  const zidPubkey = (keyInfo?.insensitive?.['zid'] ??
+    allKeyInfos.find(k => k.insensitive?.['zid'])?.insensitive?.['zid']) as string | undefined;
   const zidAddress = zidPubkey ? 'zid' + zidPubkey.slice(0, 16) : undefined;
 
   useEffect(() => {
     void (async () => {
       const [prefs, log, labels, knownSitesRaw] = await Promise.all([
-        localExtStorage.get('zidPreferences') as Promise<Record<string, ZidSitePreference> | undefined>,
+        localExtStorage.get('zidPreferences') as Promise<
+          Record<string, ZidSitePreference> | undefined
+        >,
         localExtStorage.get('zidShareLog') as Promise<ZidShareRecord[] | undefined>,
         localExtStorage.get('zidSiteLabels') as Promise<Record<string, string> | undefined>,
-        localExtStorage.get('knownSites') as Promise<{ origin: string; choice: string }[] | undefined>,
+        localExtStorage.get('knownSites') as Promise<
+          { origin: string; choice: string }[] | undefined
+        >,
       ]);
 
       setSiteLabels(labels ?? {});
@@ -163,7 +181,15 @@ export const IdentityPage = () => {
         const lastShared = shares[shares.length - 1];
         const connected = approvedOrigins.has(origin);
         const perms = await getOriginPermissions(origin);
-        siteList.push({ origin, pref, shares, lastShared, label: labels?.[origin], connected, perms });
+        siteList.push({
+          origin,
+          pref,
+          shares,
+          lastShared,
+          label: labels?.[origin],
+          connected,
+          perms,
+        });
       }
 
       siteList.sort((a, b) => {
@@ -182,24 +208,40 @@ export const IdentityPage = () => {
   }, []);
 
   const saveLabel = useCallback(async (origin: string, label: string) => {
-    const labels = (await localExtStorage.get('zidSiteLabels') as Record<string, string>) ?? {};
-    if (label.trim()) { labels[origin] = label.trim(); } else { delete labels[origin]; }
+    const labels = ((await localExtStorage.get('zidSiteLabels')) as Record<string, string>) ?? {};
+    if (label.trim()) {
+      labels[origin] = label.trim();
+    } else {
+      delete labels[origin];
+    }
     await localExtStorage.set('zidSiteLabels', labels);
     setSiteLabels(labels);
     setEditingLabel(null);
   }, []);
 
   const updatePref = useCallback(async (origin: string, next: ZidSitePreference | undefined) => {
-    const prefs = (await localExtStorage.get('zidPreferences') as Record<string, ZidSitePreference>) ?? {};
-    if (next) { prefs[origin] = next; } else { delete prefs[origin]; }
+    const prefs =
+      ((await localExtStorage.get('zidPreferences')) as Record<string, ZidSitePreference>) ?? {};
+    if (next) {
+      prefs[origin] = next;
+    } else {
+      delete prefs[origin];
+    }
     await localExtStorage.set('zidPreferences', prefs);
-    setSites(prev => prev.map(s =>
-      s.origin === origin ? { ...s, pref: next ?? { mode: 'site', rotation: 0, identity: 'default' } } : s
-    ));
+    setSites(prev =>
+      prev.map(s =>
+        s.origin === origin
+          ? { ...s, pref: next ?? { mode: 'site', rotation: 0, identity: 'default' } }
+          : s,
+      ),
+    );
     setConfirming(null);
   }, []);
 
-  const crossSiteCount = useMemo(() => sites.filter(s => s.pref.mode === 'cross-site').length, [sites]);
+  const crossSiteCount = useMemo(
+    () => sites.filter(s => s.pref.mode === 'cross-site').length,
+    [sites],
+  );
   const contactCount = contacts?.length ?? 0;
 
   if (!zidPubkey) {
@@ -250,7 +292,6 @@ export const IdentityPage = () => {
   return (
     <SettingsScreen title='identity' backPath={PopupPath.INDEX}>
       <div className='flex flex-col gap-5'>
-
         {/* -- identity card -- */}
         <section className='rounded border border-border-soft p-3'>
           <div className='flex items-start gap-3'>
@@ -262,11 +303,13 @@ export const IdentityPage = () => {
                 className='flex items-center gap-1.5 group'
               >
                 <span className='font-mono text-sm text-fg'>{zidAddress}</span>
-                <span className={`size-3.5 transition-colors ${
-                  copied === 'zid'
-                    ? 'i-lucide-check text-green-400'
-                    : 'i-lucide-copy text-fg-muted/70 group-hover:text-fg-muted'
-                }`} />
+                <span
+                  className={`size-3.5 transition-colors ${
+                    copied === 'zid'
+                      ? 'i-lucide-check text-green-400'
+                      : 'i-lucide-copy text-fg-muted/70 group-hover:text-fg-muted'
+                  }`}
+                />
               </button>
 
               {/* vault name + plan badge + rotation index */}
@@ -274,12 +317,15 @@ export const IdentityPage = () => {
                 {keyInfo && (
                   <span className='text-[10px] text-fg-muted font-mono'>{keyInfo.name}</span>
                 )}
-                <span className={`text-[9px] font-mono px-1.5 py-0 rounded ${
-                  pro
-                    ? 'bg-green-500/15 text-green-400 border border-green-500/20'
-                    : 'bg-elev-2 text-fg-muted/70 border border-border-soft'
-                }`}>
-                  {plan}{pro && days > 0 ? ` - ${days}d` : ''}
+                <span
+                  className={`text-[9px] font-mono px-1.5 py-0 rounded ${
+                    pro
+                      ? 'bg-green-500/15 text-green-400 border border-green-500/20'
+                      : 'bg-elev-2 text-fg-muted/70 border border-border-soft'
+                  }`}
+                >
+                  {plan}
+                  {pro && days > 0 ? ` - ${days}d` : ''}
                 </span>
                 {zidIndex > 0 && (
                   <span
@@ -326,14 +372,13 @@ export const IdentityPage = () => {
               onClick={() => setShowFullKey(!showFullKey)}
               className='flex items-center gap-1 text-[10px] text-fg hover:text-fg-high font-mono'
             >
-              <span className={`size-3 transition-transform ${showFullKey ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'}`} />
+              <span
+                className={`size-3 transition-transform ${showFullKey ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'}`}
+              />
               public key
             </button>
             {showFullKey && (
-              <button
-                onClick={() => copy(zidPubkey, 'zid')}
-                className='mt-1 pl-4 text-left'
-              >
+              <button onClick={() => copy(zidPubkey, 'zid')} className='mt-1 pl-4 text-left'>
                 <div className='font-mono text-[9px] text-fg-muted break-all leading-relaxed'>
                   {zidPubkey}
                 </div>
@@ -344,7 +389,9 @@ export const IdentityPage = () => {
           {/* qr toggle */}
           {showQr && (
             <div className='mt-3 flex justify-center'>
-              <div className='bg-white p-2 rounded'><QrCanvas data={zidPubkey} size={140} /></div>
+              <div className='bg-white p-2 rounded'>
+                <QrCanvas data={zidPubkey} size={140} />
+              </div>
             </div>
           )}
 
@@ -361,7 +408,9 @@ export const IdentityPage = () => {
             <span className='text-[10px] text-fg-muted font-mono'>{sites.length} sites</span>
             <span className='text-[10px] text-fg-muted font-mono'>{contactCount} contacts</span>
             {crossSiteCount > 0 && (
-              <span className='text-[10px] text-yellow-500/60 font-mono'>{crossSiteCount} linkable</span>
+              <span className='text-[10px] text-yellow-500/60 font-mono'>
+                {crossSiteCount} linkable
+              </span>
             )}
           </div>
         </section>
@@ -404,7 +453,9 @@ export const IdentityPage = () => {
               <div className='flex flex-col items-center py-6 text-fg-muted'>
                 <span className='i-lucide-globe size-6 mb-2' />
                 <p className='text-xs font-mono'>no sites yet.</p>
-                <p className='text-[10px] font-mono mt-1'>sites appear here after you authenticate.</p>
+                <p className='text-[10px] font-mono mt-1'>
+                  sites appear here after you authenticate.
+                </p>
               </div>
             ) : (
               sites.map(site => (
@@ -418,9 +469,11 @@ export const IdentityPage = () => {
                   setLabelInput={setLabelInput}
                   saveLabel={saveLabel}
                   expanded={expandedSite === site.origin}
-                  onToggleExpand={() => setExpandedSite(expandedSite === site.origin ? null : site.origin)}
+                  onToggleExpand={() =>
+                    setExpandedSite(expandedSite === site.origin ? null : site.origin)
+                  }
                   confirming={confirming?.origin === site.origin ? confirming.action : null}
-                  onConfirm={(action) => setConfirming({ origin: site.origin, action })}
+                  onConfirm={action => setConfirming({ origin: site.origin, action })}
                   onCancelConfirm={() => setConfirming(null)}
                   onUpdatePref={updatePref}
                   onSitesChanged={reloadSites}
@@ -503,26 +556,56 @@ export const IdentityPage = () => {
 
 /* -- qr -- */
 const QrCanvas = ({ data, size }: { data: string; size: number }) => {
-  const ref = useCallback((canvas: HTMLCanvasElement | null) => {
-    if (!canvas || !data) return;
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const QRCode = require('qrcode');
-      QRCode.toCanvas(canvas, data, { width: size, margin: 1, color: { dark: '#000', light: '#fff' }, errorCorrectionLevel: 'L' });
-    } catch { /* */ }
-  }, [data, size]);
+  const ref = useCallback(
+    (canvas: HTMLCanvasElement | null) => {
+      if (!canvas || !data) return;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const QRCode = require('qrcode');
+        QRCode.toCanvas(canvas, data, {
+          width: size,
+          margin: 1,
+          color: { dark: '#000', light: '#fff' },
+          errorCorrectionLevel: 'L',
+        });
+      } catch {
+        /* */
+      }
+    },
+    [data, size],
+  );
   return <canvas ref={ref} />;
 };
 
 /* -- site row -- */
-const ALL_CAPS: Capability[] = ['connect', 'sign_identity', 'send_tx', 'export_fvk', 'view_contacts', 'view_history', 'frost', 'auto_sign'];
+const ALL_CAPS: Capability[] = [
+  'connect',
+  'sign_identity',
+  'send_tx',
+  'export_fvk',
+  'view_contacts',
+  'view_history',
+  'frost',
+  'auto_sign',
+];
 
 const SiteRow = ({
-  site, siteLabels, editingLabel, labelInput,
-  setEditingLabel, setLabelInput, saveLabel,
-  expanded, onToggleExpand,
-  confirming, onConfirm, onCancelConfirm, onUpdatePref, onSitesChanged,
-  copied, onCopy,
+  site,
+  siteLabels,
+  editingLabel,
+  labelInput,
+  setEditingLabel,
+  setLabelInput,
+  saveLabel,
+  expanded,
+  onToggleExpand,
+  confirming,
+  onConfirm,
+  onCancelConfirm,
+  onUpdatePref,
+  onSitesChanged,
+  copied,
+  onCopy,
 }: {
   site: SiteIdentity;
   siteLabels: Record<string, string>;
@@ -557,13 +640,20 @@ const SiteRow = ({
   };
 
   return (
-    <div className={`border-b border-border-hard/50 last:border-0 text-white ${!site.connected ? 'opacity-40' : ''}`}>
+    <div
+      className={`border-b border-border-hard/50 last:border-0 text-white ${!site.connected ? 'opacity-40' : ''}`}
+    >
       {/* header */}
-      <button onClick={onToggleExpand} className='w-full flex items-center justify-between py-2 text-left'>
+      <button
+        onClick={onToggleExpand}
+        className='w-full flex items-center justify-between py-2 text-left'
+      >
         <div className='flex items-center gap-2 min-w-0'>
-          <span className={`size-3 shrink-0 ${
-            site.connected ? 'i-lucide-link text-green-400' : 'i-lucide-unlink'
-          }`} />
+          <span
+            className={`size-3 shrink-0 ${
+              site.connected ? 'i-lucide-link text-green-400' : 'i-lucide-unlink'
+            }`}
+          />
           {editingLabel === site.origin ? (
             <input
               autoFocus
@@ -571,7 +661,10 @@ const SiteRow = ({
               onChange={e => setLabelInput(e.target.value)}
               onBlur={() => void saveLabel(site.origin, labelInput)}
               onClick={e => e.stopPropagation()}
-              onKeyDown={e => { if (e.key === 'Enter') void saveLabel(site.origin, labelInput); if (e.key === 'Escape') setEditingLabel(null); }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') void saveLabel(site.origin, labelInput);
+                if (e.key === 'Escape') setEditingLabel(null);
+              }}
               className='text-xs font-mono bg-transparent border-b border-foreground/40 outline-none'
               placeholder='label...'
             />
@@ -581,7 +674,9 @@ const SiteRow = ({
             </span>
           )}
           {!isSiteMode && (
-            <span className='text-[8px] text-yellow-400 font-mono px-1 border border-yellow-500/40 rounded'>cross</span>
+            <span className='text-[8px] text-yellow-400 font-mono px-1 border border-yellow-500/40 rounded'>
+              cross
+            </span>
           )}
         </div>
         <div className='flex items-center gap-2 shrink-0'>
@@ -589,7 +684,9 @@ const SiteRow = ({
             {site.perms ? `${site.perms.granted.length} caps` : ''}
             {isSiteMode && rotation > 0 ? ` #${rotation}` : ''}
           </span>
-          <span className={`size-3 transition-transform ${expanded ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'}`} />
+          <span
+            className={`size-3 transition-transform ${expanded ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'}`}
+          />
         </div>
       </button>
 
@@ -598,8 +695,13 @@ const SiteRow = ({
         <div className='pb-3 pl-7 flex flex-col gap-2.5 text-[11px] font-mono text-white'>
           {/* last shared key */}
           {site.lastShared && (
-            <button onClick={() => onCopy(site.lastShared!.publicKey, site.origin)} className='flex items-center gap-1 text-left hover:text-fg-high'>
-              <span className={`size-3 ${copied === site.origin ? 'i-lucide-check text-green-400' : 'i-lucide-copy'}`} />
+            <button
+              onClick={() => onCopy(site.lastShared!.publicKey, site.origin)}
+              className='flex items-center gap-1 text-left hover:text-fg-high'
+            >
+              <span
+                className={`size-3 ${copied === site.origin ? 'i-lucide-check text-green-400' : 'i-lucide-copy'}`}
+              />
               <span className='truncate'>{site.lastShared.publicKey.slice(0, 36)}...</span>
             </button>
           )}
@@ -609,7 +711,9 @@ const SiteRow = ({
             <span>identity mode</span>
             <div className='flex items-center gap-0'>
               <button
-                onClick={() => !isSiteMode ? void onUpdatePref(site.origin, undefined) : undefined}
+                onClick={() =>
+                  !isSiteMode ? void onUpdatePref(site.origin, undefined) : undefined
+                }
                 className={`flex items-center gap-1 px-2 py-0.5 rounded-l border text-[10px] transition-colors ${
                   isSiteMode
                     ? 'bg-green-500/15 border-green-500/30 text-green-400'
@@ -620,7 +724,7 @@ const SiteRow = ({
                 unique
               </button>
               <button
-                onClick={() => isSiteMode ? onConfirm('cross-site') : undefined}
+                onClick={() => (isSiteMode ? onConfirm('cross-site') : undefined)}
                 className={`flex items-center gap-1 px-2 py-0.5 rounded-r border border-l-0 text-[10px] transition-colors ${
                   !isSiteMode
                     ? 'bg-yellow-500/15 border-yellow-500/30 text-yellow-400'
@@ -645,7 +749,11 @@ const SiteRow = ({
               <span>key rotation</span>
               <div className='flex items-center gap-1.5'>
                 <button
-                  onClick={() => rotation > 0 ? void onUpdatePref(site.origin, { ...site.pref, rotation: rotation - 1 }) : undefined}
+                  onClick={() =>
+                    rotation > 0
+                      ? void onUpdatePref(site.origin, { ...site.pref, rotation: rotation - 1 })
+                      : undefined
+                  }
                   disabled={rotation === 0}
                   className='hover:text-fg-high disabled:opacity-20'
                 >
@@ -661,10 +769,7 @@ const SiteRow = ({
                   }}
                   className='w-8 bg-transparent border border-border-soft rounded text-center text-[10px] font-mono py-0.5 outline-none'
                 />
-                <button
-                  onClick={() => onConfirm('rotate')}
-                  className='hover:text-fg-high'
-                >
+                <button onClick={() => onConfirm('rotate')} className='hover:text-fg-high'>
                   <span className='i-lucide-plus size-3' />
                 </button>
                 <span className='ml-1'>
@@ -677,19 +782,28 @@ const SiteRow = ({
           {/* quick actions */}
           <div className='flex items-center gap-3 pt-1'>
             <button
-              onClick={() => { setEditingLabel(site.origin); setLabelInput(siteLabels[site.origin] ?? ''); }}
+              onClick={() => {
+                setEditingLabel(site.origin);
+                setLabelInput(siteLabels[site.origin] ?? '');
+              }}
               className='flex items-center gap-1 hover:text-fg-high'
             >
               <span className='i-lucide-tag size-3' />
               label
             </button>
             {site.perms && (
-              <button onClick={() => setCapsOpen(!capsOpen)} className='flex items-center gap-1 hover:text-fg-high'>
+              <button
+                onClick={() => setCapsOpen(!capsOpen)}
+                className='flex items-center gap-1 hover:text-fg-high'
+              >
                 <span className='i-lucide-shield size-3' />
                 {capsOpen ? 'hide' : 'permissions'}
               </button>
             )}
-            <button onClick={() => void handleRevoke()} className='flex items-center gap-1 text-red-400 hover:text-red-300'>
+            <button
+              onClick={() => void handleRevoke()}
+              className='flex items-center gap-1 text-red-400 hover:text-red-300'
+            >
               <span className='i-lucide-x size-3' />
               revoke
             </button>
@@ -715,27 +829,50 @@ const SiteRow = ({
           {/* confirmations */}
           {confirming === 'cross-site' && (
             <div className='pl-2 border-l-2 border-yellow-500/30'>
-              <p className='text-yellow-400 mb-1.5'>same key across all origins. sites can link your sessions.</p>
+              <p className='text-yellow-400 mb-1.5'>
+                same key across all origins. sites can link your sessions.
+              </p>
               <div className='flex gap-2'>
-                <button onClick={onCancelConfirm} className='hover:text-fg-high'>cancel</button>
+                <button onClick={onCancelConfirm} className='hover:text-fg-high'>
+                  cancel
+                </button>
                 <button
-                  onClick={() => void onUpdatePref(site.origin, { mode: 'cross-site', rotation: 0, identity: site.pref.identity })}
+                  onClick={() =>
+                    void onUpdatePref(site.origin, {
+                      mode: 'cross-site',
+                      rotation: 0,
+                      identity: site.pref.identity,
+                    })
+                  }
                   className='text-yellow-400 hover:text-yellow-300'
-                >confirm</button>
+                >
+                  confirm
+                </button>
               </div>
             </div>
           )}
           {confirming === 'rotate' && (
             <div className='pl-2 border-l-2 border-border-soft'>
               <p className='mb-1.5'>
-                new key #{rotation + 1}. old key #{rotation} is abandoned - site keeps whatever key it had.
+                new key #{rotation + 1}. old key #{rotation} is abandoned - site keeps whatever key
+                it had.
               </p>
               <div className='flex gap-2'>
-                <button onClick={onCancelConfirm} className='hover:text-fg-high'>cancel</button>
+                <button onClick={onCancelConfirm} className='hover:text-fg-high'>
+                  cancel
+                </button>
                 <button
-                  onClick={() => void onUpdatePref(site.origin, { mode: 'site', rotation: rotation + 1, identity: site.pref.identity })}
+                  onClick={() =>
+                    void onUpdatePref(site.origin, {
+                      mode: 'site',
+                      rotation: rotation + 1,
+                      identity: site.pref.identity,
+                    })
+                  }
                   className='text-fg hover:text-fg-high'
-                >rotate</button>
+                >
+                  rotate
+                </button>
               </div>
             </div>
           )}

@@ -16,7 +16,7 @@ function recorder(): { fetcher: MemoFetcher; calls: BucketStart[][] } {
 const seededRng = (seed: number): RandomU32 => {
   // simple linear congruential generator — deterministic across runs.
   let state = seed >>> 0;
-  return (out) => {
+  return out => {
     for (let i = 0; i < out.length; i++) {
       state = (state * 1664525 + 1013904223) >>> 0;
       out[i] = state;
@@ -35,7 +35,9 @@ describe('withShuffle', () => {
     const { fetcher, calls } = recorder();
     const wrapped = withShuffle(seededRng(1))(fetcher);
     const owned = new Set([100, 200, 300, 400, 500]);
-    for await (const _ of wrapped('w', owned, ctx())) { /* drain */ }
+    for await (const _ of wrapped('w', owned, ctx())) {
+      /* drain */
+    }
     expect(calls).toHaveLength(1);
     expect(new Set(calls[0])).toEqual(owned);
   });
@@ -72,5 +74,7 @@ describe('withShuffle', () => {
 });
 
 async function drain<T>(iter: AsyncIterable<T>) {
-  for await (const _ of iter) { /* */ }
+  for await (const _ of iter) {
+    /* */
+  }
 }

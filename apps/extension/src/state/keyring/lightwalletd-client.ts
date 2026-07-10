@@ -8,17 +8,18 @@ import type { ZcashClient } from './zcash-backend';
 
 const SERVICE = 'cash.z.wallet.sdk.rpc.CompactTxStreamer';
 
-const UNSUPPORTED = (m: string) => new Error(`${m} not available on a public lightwalletd endpoint`);
+const UNSUPPORTED = (m: string) =>
+  new Error(`${m} not available on a public lightwalletd endpoint`);
 
 // Per-method response-size caps. A hostile endpoint can otherwise ship
 // arbitrarily large bytes via Response.arrayBuffer() and OOM the worker.
 // Sized for the maximum legitimate response on each method.
 const MAX_RESP_BYTES: Record<string, number> = {
-  GetLatestBlock: 1 << 12,    // 4 KiB — BlockID is tiny
-  GetTreeState: 1 << 17,      // 128 KiB — orchard tree state is hex-encoded
-  GetBlockRange: 64 << 20,    // 64 MiB — block stream (legitimate range can be large)
-  GetTransaction: 1 << 20,    // 1 MiB — single tx
-  GetMempoolTx: 16 << 20,     // 16 MiB — mempool stream
+  GetLatestBlock: 1 << 12, // 4 KiB — BlockID is tiny
+  GetTreeState: 1 << 17, // 128 KiB — orchard tree state is hex-encoded
+  GetBlockRange: 64 << 20, // 64 MiB — block stream (legitimate range can be large)
+  GetTransaction: 1 << 20, // 1 MiB — single tx
+  GetMempoolTx: 16 << 20, // 16 MiB — mempool stream
   GetLatestTreeState: 1 << 17,
 };
 const DEFAULT_MAX_RESP_BYTES = 1 << 20; // 1 MiB
@@ -48,7 +49,11 @@ async function readBoundedBody(resp: Response, method: string): Promise<Uint8Arr
     if (value) {
       total += value.length;
       if (total > cap) {
-        try { await reader.cancel(); } catch { /* swallow */ }
+        try {
+          await reader.cancel();
+        } catch {
+          /* swallow */
+        }
         throw new Error(`gRPC ${method}: response exceeded cap ${cap} mid-stream`);
       }
       chunks.push(value);
@@ -56,7 +61,10 @@ async function readBoundedBody(resp: Response, method: string): Promise<Uint8Arr
   }
   const out = new Uint8Array(total);
   let off = 0;
-  for (const c of chunks) { out.set(c, off); off += c.length; }
+  for (const c of chunks) {
+    out.set(c, off);
+    off += c.length;
+  }
   return out;
 }
 
@@ -79,7 +87,9 @@ export class LightwalletdClient implements ZcashClient {
     return { height, hash };
   }
 
-  async getTreeState(height: number): Promise<{ height: number; orchardTree: string; time: number }> {
+  async getTreeState(
+    height: number,
+  ): Promise<{ height: number; orchardTree: string; time: number }> {
     // GetTreeState(BlockID{height=1}) → TreeState { height=2; time=4; orchardTree=6 }
     const req = new Uint8Array([0x08, ...this.varint(height)]);
     const resp = await this.grpcCall('GetTreeState', req);
@@ -100,8 +110,10 @@ export class LightwalletdClient implements ZcashClient {
     const startId = [0x08, ...this.varint(startHeight)];
     const endId = [0x08, ...this.varint(endHeight)];
     const req = new Uint8Array([
-      0x0a, ...this.lengthDelimited(new Uint8Array(startId)),
-      0x12, ...this.lengthDelimited(new Uint8Array(endId)),
+      0x0a,
+      ...this.lengthDelimited(new Uint8Array(startId)),
+      0x12,
+      ...this.lengthDelimited(new Uint8Array(endId)),
     ]);
     const resp = await this.grpcCallStream('GetBlockRange', req);
     return this.parseBlockStream(resp);
@@ -147,7 +159,9 @@ export class LightwalletdClient implements ZcashClient {
     return time;
   }
 
-  async sendTransaction(txData: Uint8Array): Promise<{ txid: Uint8Array; errorCode: number; errorMessage: string }> {
+  async sendTransaction(
+    txData: Uint8Array,
+  ): Promise<{ txid: Uint8Array; errorCode: number; errorMessage: string }> {
     // SendTransaction(RawTransaction{data=1}) → SendResponse{errorCode=1; errorMessage=2}; no txid, ok when errorCode===0
     const req = new Uint8Array([0x0a, ...this.lengthDelimited(txData)]);
     const resp = await this.grpcCall('SendTransaction', req);
@@ -167,11 +181,19 @@ export class LightwalletdClient implements ZcashClient {
     return [];
   }
 
-  async getBlockTransactions(height: number): Promise<{ height: number; hash: Uint8Array; txs: Array<{ data: Uint8Array; height: number }> }> {
+  async getBlockTransactions(height: number): Promise<{
+    height: number;
+    hash: Uint8Array;
+    txs: Array<{ data: Uint8Array; height: number }>;
+  }> {
     return { height, hash: new Uint8Array(0), txs: [] };
   }
 
-  async getHeaderProof(): Promise<{ proofBytes: Uint8Array; fromHeight: number; toHeight: number }> {
+  async getHeaderProof(): Promise<{
+    proofBytes: Uint8Array;
+    fromHeight: number;
+    toHeight: number;
+  }> {
     throw UNSUPPORTED('header proof');
   }
 
@@ -196,7 +218,9 @@ export class LightwalletdClient implements ZcashClient {
     if (buf.length < 5) {
       const status = resp.headers.get('grpc-status');
       if (status && status !== '0') {
-        throw new Error(`gRPC ${method}: ${decodeURIComponent(resp.headers.get('grpc-message') ?? `status ${status}`)}`);
+        throw new Error(
+          `gRPC ${method}: ${decodeURIComponent(resp.headers.get('grpc-message') ?? `status ${status}`)}`,
+        );
       }
       throw new Error(`gRPC ${method}: empty response from ${this.serverUrl}`);
     }
@@ -256,14 +280,18 @@ export class LightwalletdClient implements ZcashClient {
   }
 
   /** iterate top-level protobuf fields; `val` is bigint for varints, Uint8Array for length-delimited. */
-  private eachField(buf: Uint8Array, fn: (field: number, wire: number, val: bigint | Uint8Array) => void): void {
+  private eachField(
+    buf: Uint8Array,
+    fn: (field: number, wire: number, val: bigint | Uint8Array) => void,
+  ): void {
     let pos = 0;
     while (pos < buf.length) {
       const tag = buf[pos++]!;
       const field = tag >> 3;
       const wire = tag & 0x7;
       if (wire === 0) {
-        let v = 0n, s = 0n;
+        let v = 0n,
+          s = 0n;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           v |= BigInt(b & 0x7f) << s;
@@ -272,7 +300,8 @@ export class LightwalletdClient implements ZcashClient {
         }
         fn(field, wire, v);
       } else if (wire === 2) {
-        let len = 0, s = 0;
+        let len = 0,
+          s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
@@ -295,7 +324,8 @@ export class LightwalletdClient implements ZcashClient {
     while (pos < buf.length) {
       if (pos + 5 > buf.length) break;
       if (buf[pos]! & 0x80) break; // trailer frame
-      const len = (buf[pos + 1]! << 24) | (buf[pos + 2]! << 16) | (buf[pos + 3]! << 8) | buf[pos + 4]!;
+      const len =
+        (buf[pos + 1]! << 24) | (buf[pos + 2]! << 16) | (buf[pos + 3]! << 8) | buf[pos + 4]!;
       pos += 5;
       if (pos + len > buf.length) break;
       blocks.push(this.parseBlock(buf.subarray(pos, pos + len)));

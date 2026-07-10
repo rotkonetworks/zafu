@@ -6,12 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from '@repo/ui/components/ui/button';
 import { AnimatedQrDisplay } from '../../../../shared/components/animated-qr-display';
 import { AnimatedQrScanner } from '../../../../shared/components/animated-qr-scanner';
-import {
-  openJoinerSession,
-  sendCommitments,
-  sendShare,
-  type RelaySession,
-} from './relay-protocol';
+import { openJoinerSession, sendCommitments, sendShare, type RelaySession } from './relay-protocol';
 import { waitFor, DontQuitIcon, SignStepProgress } from './helpers';
 import {
   frostParseTxOutputsInWorker,
@@ -42,11 +37,24 @@ interface Props {
   onError: (msg: string) => void;
 }
 
-type Step = 'awaiting-sign' | 'review' | 'r1-out' | 'r1-in' | 'r1-relay'
-  | 'r2-out' | 'r2-in' | 'r2-relay';
+type Step =
+  | 'awaiting-sign'
+  | 'review'
+  | 'r1-out'
+  | 'r1-in'
+  | 'r1-relay'
+  | 'r2-out'
+  | 'r2-in'
+  | 'r2-relay';
 
 export function FrostAirgapJoinerSignFlow({
-  ms, roomCode, walletLabel, walletAddress, onComplete, onCancel, onError,
+  ms,
+  roomCode,
+  walletLabel,
+  walletAddress,
+  onComplete,
+  onCancel,
+  onError,
 }: Props) {
   const [step, setStep] = useState<Step>('awaiting-sign');
   const [trigger1, setTrigger1] = useState<Uint8Array | null>(null);
@@ -76,55 +84,76 @@ export function FrostAirgapJoinerSignFlow({
     try {
       const s = openJoinerSession(ms.relayUrl || 'wss://zrelay.rotko.net', roomCode);
       sessionRef.current = s;
-      void s.relay.joinRoom(s.roomCode, s.participantId, (event) => {
-        if (event.type !== 'message') return;
-        const text = new TextDecoder().decode(event.message.payload);
-        const sg = text.match(/^SIGN:([0-9a-fA-F]+):([^:]+):([^:]+):(\d+):(\d+)(?::([0-9a-fA-F]+))?$/);
-        if (sg && !signSeen) {
-          signSeen = true;
-          const captured = {
-            sighash: sg[1]!, alphas: sg[2]!.split(','),
-            recipient: sg[3]!, amountZat: sg[4]!, feeZat: sg[5]!,
-            unsignedTxHex: sg[6],
-          };
-          setTx(captured);
-          setStep((cur) => cur === 'awaiting-sign' ? 'review' : cur);
+      void s.relay.joinRoom(
+        s.roomCode,
+        s.participantId,
+        event => {
+          if (event.type !== 'message') return;
+          const text = new TextDecoder().decode(event.message.payload);
+          const sg = text.match(
+            /^SIGN:([0-9a-fA-F]+):([^:]+):([^:]+):(\d+):(\d+)(?::([0-9a-fA-F]+))?$/,
+          );
+          if (sg && !signSeen) {
+            signSeen = true;
+            const captured = {
+              sighash: sg[1]!,
+              alphas: sg[2]!.split(','),
+              recipient: sg[3]!,
+              amountZat: sg[4]!,
+              feeZat: sg[5]!,
+              unsignedTxHex: sg[6],
+            };
+            setTx(captured);
+            setStep(cur => (cur === 'awaiting-sign' ? 'review' : cur));
 
-          // Verifier: verify host's claim against locally-derived parse.
-          if (!captured.unsignedTxHex) {
-            setVerdict({ kind: 'unverified', reason: 'host did not publish unsigned tx bytes (older client?)' });
-          } else if (!ms.orchardFvkUview) {
-            setVerdict({ kind: 'unverified', reason: 'wallet has no UFVK on file — cannot verify' });
-          } else {
-            void (async () => {
-              try {
-                const p = await frostParseTxOutputsInWorker(captured.unsignedTxHex!, ms.orchardFvkUview!);
-                setParsed(p);
-                setVerdict(computeVerdict({
-                  parsed: p,
-                  claimedRecipient: captured.recipient,
-                  claimedAmountZat: captured.amountZat,
-                  claimedSighashHex: captured.sighash,
-                  mainnet: ms.mainnet ?? true,
-                }));
-              } catch (err) {
-                setVerdict({
-                  kind: 'unverified',
-                  reason: err instanceof Error ? err.message : 'parse failed',
-                });
-              }
-            })();
+            // Verifier: verify host's claim against locally-derived parse.
+            if (!captured.unsignedTxHex) {
+              setVerdict({
+                kind: 'unverified',
+                reason: 'host did not publish unsigned tx bytes (older client?)',
+              });
+            } else if (!ms.orchardFvkUview) {
+              setVerdict({
+                kind: 'unverified',
+                reason: 'wallet has no UFVK on file — cannot verify',
+              });
+            } else {
+              void (async () => {
+                try {
+                  const p = await frostParseTxOutputsInWorker(
+                    captured.unsignedTxHex!,
+                    ms.orchardFvkUview!,
+                  );
+                  setParsed(p);
+                  setVerdict(
+                    computeVerdict({
+                      parsed: p,
+                      claimedRecipient: captured.recipient,
+                      claimedAmountZat: captured.amountZat,
+                      claimedSighashHex: captured.sighash,
+                      mainnet: ms.mainnet ?? true,
+                    }),
+                  );
+                } catch (err) {
+                  setVerdict({
+                    kind: 'unverified',
+                    reason: err instanceof Error ? err.message : 'parse failed',
+                  });
+                }
+              })();
+            }
+            return;
           }
-          return;
-        }
-        const cm = text.match(/^C:([\s\S]*)$/);
-        if (cm) {
-          peerCommitsRawRef.current.push(cm[1]!);
-          setPeersReady(peerCommitsRawRef.current.length);
-          return;
-        }
-        // S: peer shares — joiner ignores; only the host aggregates.
-      }, s.abort.signal);
+          const cm = text.match(/^C:([\s\S]*)$/);
+          if (cm) {
+            peerCommitsRawRef.current.push(cm[1]!);
+            setPeersReady(peerCommitsRawRef.current.length);
+            return;
+          }
+          // S: peer shares — joiner ignores; only the host aggregates.
+        },
+        s.abort.signal,
+      );
     } catch (err) {
       onError(err instanceof Error ? err.message : 'failed to join room');
     }
@@ -151,8 +180,12 @@ export function FrostAirgapJoinerSignFlow({
       sighash: tx.sighash,
       alphas: tx.alphas,
       summary: {
-        recipient: tx.recipient, amountZat: tx.amountZat, feeZat: tx.feeZat,
-        threshold: ms.threshold, maxSigners: ms.maxSigners, roomCode,
+        recipient: tx.recipient,
+        amountZat: tx.amountZat,
+        feeZat: tx.feeZat,
+        threshold: ms.threshold,
+        maxSigners: ms.maxSigners,
+        roomCode,
       },
     });
     setTrigger1(new TextEncoder().encode(trigger));
@@ -238,13 +271,13 @@ export function FrostAirgapJoinerSignFlow({
   };
 
   const Header = ({ onBack }: { onBack?: () => void }) => (
-    <div className="flex items-center gap-3 w-full">
+    <div className='flex items-center gap-3 w-full'>
       {onBack && (
-        <button onClick={onBack} className="text-fg-muted hover:text-fg-high transition-colors">
-          <span className="i-lucide-arrow-left h-5 w-5" />
+        <button onClick={onBack} className='text-fg-muted hover:text-fg-high transition-colors'>
+          <span className='i-lucide-arrow-left h-5 w-5' />
         </button>
       )}
-      <h2 className="text-base font-medium flex-1">co-sign multisig</h2>
+      <h2 className='text-base font-medium flex-1'>co-sign multisig</h2>
       <DontQuitIcon />
     </div>
   );
@@ -255,14 +288,15 @@ export function FrostAirgapJoinerSignFlow({
   switch (step) {
     case 'awaiting-sign':
       return (
-        <div className="flex flex-col items-center gap-4 p-6">
+        <div className='flex flex-col items-center gap-4 p-6'>
           <Header onBack={cancel} />
-          <div className="flex items-center gap-2 text-xs text-fg-muted">
-            <span className="i-lucide-loader-2 size-3.5 animate-spin" />
+          <div className='flex items-center gap-2 text-xs text-fg-muted'>
+            <span className='i-lucide-loader-2 size-3.5 animate-spin' />
             waiting for transaction from coordinator…
           </div>
-          <p className="text-[10px] text-fg-muted/70 leading-snug pt-1 text-center">
-            host publishes a SIGN: payload (sighash + alphas + recipient/amount) on the relay; we review and authorize before triggering zigner.
+          <p className='text-[10px] text-fg-muted/70 leading-snug pt-1 text-center'>
+            host publishes a SIGN: payload (sighash + alphas + recipient/amount) on the relay; we
+            review and authorize before triggering zigner.
           </p>
         </div>
       );
@@ -271,43 +305,47 @@ export function FrostAirgapJoinerSignFlow({
       const hardBlock = verdict.kind === 'mismatch';
       const approveDisabled = verdict.kind === 'pending' || (hardBlock && !acknowledged);
       return (
-        <div className="flex flex-col gap-3 p-4">
+        <div className='flex flex-col gap-3 p-4'>
           <Header onBack={cancel} />
-          <div className="rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-3">
-            <p className="text-[10px] uppercase tracking-wider text-yellow-400">review transaction</p>
+          <div className='rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-3'>
+            <p className='text-[10px] uppercase tracking-wider text-yellow-400'>
+              review transaction
+            </p>
           </div>
-          <div className="rounded-lg border border-border-soft bg-elev-1 p-3 flex flex-col gap-2.5">
+          <div className='rounded-lg border border-border-soft bg-elev-1 p-3 flex flex-col gap-2.5'>
             <div>
-              <p className="text-[10px] uppercase tracking-wider text-fg-muted">from</p>
-              <p className="mt-0.5 text-xs font-medium">{walletLabel}</p>
-              <p className="mt-0.5 break-all font-mono text-[10px] text-fg-muted">{walletAddress}</p>
+              <p className='text-[10px] uppercase tracking-wider text-fg-muted'>from</p>
+              <p className='mt-0.5 text-xs font-medium'>{walletLabel}</p>
+              <p className='mt-0.5 break-all font-mono text-[10px] text-fg-muted'>
+                {walletAddress}
+              </p>
             </div>
-            <div className="border-t border-border-soft" />
+            <div className='border-t border-border-soft' />
             <div>
-              <p className="text-[10px] uppercase tracking-wider text-fg-muted">to</p>
-              <p className="mt-0.5 break-all font-mono text-[10px]">{tx?.recipient}</p>
+              <p className='text-[10px] uppercase tracking-wider text-fg-muted'>to</p>
+              <p className='mt-0.5 break-all font-mono text-[10px]'>{tx?.recipient}</p>
             </div>
-            <div className="border-t border-border-soft" />
-            <div className="flex items-baseline justify-between">
-              <span className="text-[10px] uppercase tracking-wider text-fg-muted">amount</span>
-              <span className="text-sm font-medium">{formatZec(tx?.amountZat ?? '')} ZEC</span>
+            <div className='border-t border-border-soft' />
+            <div className='flex items-baseline justify-between'>
+              <span className='text-[10px] uppercase tracking-wider text-fg-muted'>amount</span>
+              <span className='text-sm font-medium'>{formatZec(tx?.amountZat ?? '')} ZEC</span>
             </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-[10px] uppercase tracking-wider text-fg-muted">fee</span>
-              <span className="text-xs text-fg-muted">{formatZec(tx?.feeZat ?? '')} ZEC</span>
+            <div className='flex items-baseline justify-between'>
+              <span className='text-[10px] uppercase tracking-wider text-fg-muted'>fee</span>
+              <span className='text-xs text-fg-muted'>{formatZec(tx?.feeZat ?? '')} ZEC</span>
             </div>
           </div>
 
           {/* verifier verdict */}
           {verdict.kind === 'pending' && (
-            <div className="rounded-lg border border-border-soft bg-elev-1 p-2.5 text-[10px] text-fg-muted flex items-center gap-2">
-              <span className="i-lucide-loader-2 size-3 animate-spin" />
+            <div className='rounded-lg border border-border-soft bg-elev-1 p-2.5 text-[10px] text-fg-muted flex items-center gap-2'>
+              <span className='i-lucide-loader-2 size-3 animate-spin' />
               verifying tx bytes match host claim…
             </div>
           )}
           {verdict.kind === 'match' && (
-            <div className="rounded-lg border border-green-500/40 bg-green-500/5 p-2.5 text-[10px] text-green-400 flex items-start gap-2">
-              <span className="i-lucide-shield-check size-3.5 mt-0.5 shrink-0" />
+            <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-2.5 text-[10px] text-green-400 flex items-start gap-2'>
+              <span className='i-lucide-shield-check size-3.5 mt-0.5 shrink-0' />
               <span>
                 bytes verified — derived recipient + amount match host claim
                 {verdict.changeZat > 0n && (
@@ -317,55 +355,58 @@ export function FrostAirgapJoinerSignFlow({
             </div>
           )}
           {verdict.kind === 'unverified' && (
-            <div className="rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-2.5 text-[10px] text-yellow-400 flex items-start gap-2">
-              <span className="i-lucide-alert-triangle size-3.5 mt-0.5 shrink-0" />
+            <div className='rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-2.5 text-[10px] text-yellow-400 flex items-start gap-2'>
+              <span className='i-lucide-alert-triangle size-3.5 mt-0.5 shrink-0' />
               <span>host claim shown without verification — {verdict.reason}</span>
             </div>
           )}
           {verdict.kind === 'mismatch' && (
-            <div className="rounded-lg border border-red-500/60 bg-red-500/10 p-3 flex flex-col gap-2">
-              <div className="flex items-center gap-2 text-[11px] font-medium text-red-400">
-                <span className="i-lucide-shield-x size-4" />
+            <div className='rounded-lg border border-red-500/60 bg-red-500/10 p-3 flex flex-col gap-2'>
+              <div className='flex items-center gap-2 text-[11px] font-medium text-red-400'>
+                <span className='i-lucide-shield-x size-4' />
                 mismatch — host claim disagrees with tx bytes
               </div>
-              <ul className="text-[10px] text-red-300/90 list-disc pl-4 space-y-0.5">
-                {verdict.reasons.map((r, i) => (<li key={i}>{r}</li>))}
+              <ul className='text-[10px] text-red-300/90 list-disc pl-4 space-y-0.5'>
+                {verdict.reasons.map((r, i) => (
+                  <li key={i}>{r}</li>
+                ))}
               </ul>
               {parsed && parsed.actions.some(a => a.decrypted && !a.is_change) && (
-                <div className="rounded border border-red-500/30 bg-red-500/5 p-2 text-[10px] font-mono text-red-300/80">
-                  <p className="text-[9px] uppercase tracking-wider text-red-400/80 mb-1">derived outputs</p>
+                <div className='rounded border border-red-500/30 bg-red-500/5 p-2 text-[10px] font-mono text-red-300/80'>
+                  <p className='text-[9px] uppercase tracking-wider text-red-400/80 mb-1'>
+                    derived outputs
+                  </p>
                   {parsed.actions
                     .filter(a => a.decrypted && !a.is_change)
-                    .map((a) => (
-                      <div key={a.index} className="break-all">
+                    .map(a => (
+                      <div key={a.index} className='break-all'>
                         action {a.index}: {formatZec(String(a.amount_zat))} ZEC →{' '}
-                        {a.recipient_raw_hex
-                          ? `${a.recipient_raw_hex.slice(0, 16)}…`
-                          : 'unknown'}
+                        {a.recipient_raw_hex ? `${a.recipient_raw_hex.slice(0, 16)}…` : 'unknown'}
                       </div>
                     ))}
                 </div>
               )}
-              <label className="flex items-start gap-2 text-[10px] text-red-300/90 cursor-pointer mt-1">
+              <label className='flex items-start gap-2 text-[10px] text-red-300/90 cursor-pointer mt-1'>
                 <input
-                  type="checkbox"
+                  type='checkbox'
                   checked={acknowledged}
                   onChange={e => setAcknowledged(e.target.checked)}
-                  className="mt-0.5"
+                  className='mt-0.5'
                 />
-                <span>
-                  I see the mismatch. Override and sign at my own risk.
-                </span>
+                <span>I see the mismatch. Override and sign at my own risk.</span>
               </label>
             </div>
           )}
 
-          <p className="text-[10px] text-fg-muted">
-            approving triggers zigner to sign with this wallet's share. coordinator aggregates and broadcasts.
+          <p className='text-[10px] text-fg-muted'>
+            approving triggers zigner to sign with this wallet's share. coordinator aggregates and
+            broadcasts.
           </p>
-          <div className="grid grid-cols-2 gap-2">
-            <Button variant="secondary" onClick={cancel}>reject</Button>
-            <Button variant="gradient" onClick={approve} disabled={approveDisabled}>
+          <div className='grid grid-cols-2 gap-2'>
+            <Button variant='secondary' onClick={cancel}>
+              reject
+            </Button>
+            <Button variant='gradient' onClick={approve} disabled={approveDisabled}>
               {hardBlock ? 'approve anyway' : 'approve & sign'}
             </Button>
           </div>
@@ -375,57 +416,63 @@ export function FrostAirgapJoinerSignFlow({
 
     case 'r1-out':
       return (
-        <div className="flex flex-col items-center gap-3 p-4">
+        <div className='flex flex-col items-center gap-3 p-4'>
           <Header onBack={cancel} />
           <SignStepProgress current={1} />
-          <p className="text-sm text-fg-high">show this QR to zigner</p>
-          {trigger1 && <AnimatedQrDisplay data={trigger1} urType="zafu-frost-sign" size={220} />}
-          <Button variant="gradient" onClick={() => setStep('r1-in')} className="w-full">
+          <p className='text-sm text-fg-high'>show this QR to zigner</p>
+          {trigger1 && <AnimatedQrDisplay data={trigger1} urType='zafu-frost-sign' size={220} />}
+          <Button variant='gradient' onClick={() => setStep('r1-in')} className='w-full'>
             scan qr from zigner
           </Button>
-          <Button variant="secondary" onClick={cancel} className="w-full">cancel</Button>
-          <p className="text-[10px] text-fg-muted/70 leading-snug pt-1">
-            sighash + per-action alphas. zigner generates fresh round-1 nonces locally and shows commitments back.
+          <Button variant='secondary' onClick={cancel} className='w-full'>
+            cancel
+          </Button>
+          <p className='text-[10px] text-fg-muted/70 leading-snug pt-1'>
+            sighash + per-action alphas. zigner generates fresh round-1 nonces locally and shows
+            commitments back.
           </p>
         </div>
       );
 
     case 'r1-in':
       return (
-        <div className="flex flex-col items-center gap-3 p-4">
+        <div className='flex flex-col items-center gap-3 p-4'>
           <Header onBack={() => setStep('r1-out')} />
           <SignStepProgress current={1} />
-          <p className="text-sm text-fg-high">scan zigner's commitments QR</p>
+          <p className='text-sm text-fg-high'>scan zigner's commitments QR</p>
           <AnimatedQrScanner
             inline
-            title="scan zigner round-1 commitments"
-            onComplete={(data) => void handleR1Response(new TextDecoder().decode(data))}
+            title='scan zigner round-1 commitments'
+            onComplete={data => void handleR1Response(new TextDecoder().decode(data))}
             onClose={() => setStep('r1-out')}
           />
-          <p className="text-[10px] text-fg-muted/70 leading-snug pt-1">
-            public part of zigner's nonces. zafu publishes them to the relay so co-signers can compute the same challenge.
+          <p className='text-[10px] text-fg-muted/70 leading-snug pt-1'>
+            public part of zigner's nonces. zafu publishes them to the relay so co-signers can
+            compute the same challenge.
           </p>
         </div>
       );
 
     case 'r1-relay':
       return (
-        <div className="flex flex-col items-center gap-4 p-6">
+        <div className='flex flex-col items-center gap-4 p-6'>
           <Header />
           <SignStepProgress current={1} />
-          <div className="flex items-center gap-2 text-xs text-fg-muted">
-            <span className="i-lucide-loader-2 size-3.5 animate-spin" />
+          <div className='flex items-center gap-2 text-xs text-fg-muted'>
+            <span className='i-lucide-loader-2 size-3.5 animate-spin' />
             exchanging commitments...
           </div>
-          <div className="flex items-center gap-2 rounded-md bg-elev-2 px-3 py-1.5">
-            <span className="i-lucide-users size-3.5 text-fg-muted" />
-            <span className="text-xs">
-              <span className="font-medium text-fg">{peersReady + 1}</span>
-              <span className="text-fg-muted"> / {ms.threshold} ready</span>
+          <div className='flex items-center gap-2 rounded-md bg-elev-2 px-3 py-1.5'>
+            <span className='i-lucide-users size-3.5 text-fg-muted' />
+            <span className='text-xs'>
+              <span className='font-medium text-fg'>{peersReady + 1}</span>
+              <span className='text-fg-muted'> / {ms.threshold} ready</span>
             </span>
           </div>
-          <Button variant="secondary" onClick={cancel} className="w-full mt-2">cancel</Button>
-          <p className="text-[10px] text-fg-muted/70 leading-snug pt-1 text-center">
+          <Button variant='secondary' onClick={cancel} className='w-full mt-2'>
+            cancel
+          </Button>
+          <p className='text-[10px] text-fg-muted/70 leading-snug pt-1 text-center'>
             zigner's commitments are on the relay. waiting on peer commitment bundle(s).
           </p>
         </div>
@@ -433,34 +480,37 @@ export function FrostAirgapJoinerSignFlow({
 
     case 'r2-out':
       return (
-        <div className="flex flex-col items-center gap-3 p-4">
+        <div className='flex flex-col items-center gap-3 p-4'>
           <Header onBack={cancel} />
           <SignStepProgress current={2} />
-          <p className="text-sm text-fg-high">show this QR to zigner</p>
-          {trigger2 && <AnimatedQrDisplay data={trigger2} urType="zafu-frost-sign" size={220} />}
-          <Button variant="gradient" onClick={() => setStep('r2-in')} className="w-full">
+          <p className='text-sm text-fg-high'>show this QR to zigner</p>
+          {trigger2 && <AnimatedQrDisplay data={trigger2} urType='zafu-frost-sign' size={220} />}
+          <Button variant='gradient' onClick={() => setStep('r2-in')} className='w-full'>
             scan qr from zigner
           </Button>
-          <Button variant="secondary" onClick={cancel} className="w-full">cancel</Button>
-          <p className="text-[10px] text-fg-muted/70 leading-snug pt-1">
-            all co-signers' round-1 commitments grouped per action. zigner derives ρ and computes its share.
+          <Button variant='secondary' onClick={cancel} className='w-full'>
+            cancel
+          </Button>
+          <p className='text-[10px] text-fg-muted/70 leading-snug pt-1'>
+            all co-signers' round-1 commitments grouped per action. zigner derives ρ and computes
+            its share.
           </p>
         </div>
       );
 
     case 'r2-in':
       return (
-        <div className="flex flex-col items-center gap-3 p-4">
+        <div className='flex flex-col items-center gap-3 p-4'>
           <Header onBack={() => setStep('r2-out')} />
           <SignStepProgress current={2} />
-          <p className="text-sm text-fg-high">scan zigner's shares QR</p>
+          <p className='text-sm text-fg-high'>scan zigner's shares QR</p>
           <AnimatedQrScanner
             inline
-            title="scan zigner round-2 shares"
-            onComplete={(data) => void handleR2Response(new TextDecoder().decode(data))}
+            title='scan zigner round-2 shares'
+            onComplete={data => void handleR2Response(new TextDecoder().decode(data))}
             onClose={() => setStep('r2-out')}
           />
-          <p className="text-[10px] text-fg-muted/70 leading-snug pt-1">
+          <p className='text-[10px] text-fg-muted/70 leading-snug pt-1'>
             zafu publishes each share to the relay. coordinator aggregates and broadcasts.
           </p>
         </div>
@@ -468,11 +518,11 @@ export function FrostAirgapJoinerSignFlow({
 
     case 'r2-relay':
       return (
-        <div className="flex flex-col items-center gap-4 p-6">
+        <div className='flex flex-col items-center gap-4 p-6'>
           <Header />
           <SignStepProgress current={3} />
-          <div className="flex items-center gap-2 text-xs text-fg-muted">
-            <span className="i-lucide-loader-2 size-3.5 animate-spin" />
+          <div className='flex items-center gap-2 text-xs text-fg-muted'>
+            <span className='i-lucide-loader-2 size-3.5 animate-spin' />
             publishing shares...
           </div>
         </div>

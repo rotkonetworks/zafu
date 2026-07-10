@@ -126,7 +126,8 @@ const DEFAULT_NETWORKS: Record<NetworkId, NetworkConfig> = {
     enabled: false,
     endpoint: 'https://penumbra.rotko.net',
     chainId: 'penumbra-1',
-    syncDescription: 'Compact blocks verified by state commitment tree. Trial-decrypted locally - keys never leave this device.',
+    syncDescription:
+      'Compact blocks verified by state commitment tree. Trial-decrypted locally - keys never leave this device.',
     bech32Prefix: 'penumbra',
   },
   zcash: {
@@ -136,7 +137,8 @@ const DEFAULT_NETWORKS: Record<NetworkId, NetworkConfig> = {
     decimals: 8,
     enabled: false,
     endpoint: 'https://zcash.rotko.net',
-    syncDescription: 'Zidecar trustless sync - header chain proven via Ligerito polynomial commitments, nullifier set verified by NOMT merkle proofs. Compact blocks are trial-decrypted locally - keys never leave this device.',
+    syncDescription:
+      'Zidecar trustless sync - header chain proven via Ligerito polynomial commitments, nullifier set verified by NOMT merkle proofs. Compact blocks are trial-decrypted locally - keys never leave this device.',
     memoSyncStrategy: 'private',
     mempoolWatch: 'off',
     backend: 'zidecar',
@@ -218,7 +220,13 @@ export const createNetworksSlice =
       const mempoolWatchSettings = await local.get('mempoolWatchSettings');
       const zcashBackend = await local.get('zcashBackend');
 
-      if (enabledNetworks || networkEndpoints || memoSyncStrategies || mempoolWatchSettings || zcashBackend) {
+      if (
+        enabledNetworks ||
+        networkEndpoints ||
+        memoSyncStrategies ||
+        mempoolWatchSettings ||
+        zcashBackend
+      ) {
         set(state => {
           // Apply enabled state from storage
           if (enabledNetworks) {
@@ -272,10 +280,11 @@ export const createNetworksSlice =
         });
 
         const networks = get().networks.networks;
-        await local.set('enabledNetworks',
+        await local.set(
+          'enabledNetworks',
           Object.values(networks)
             .filter(n => n.enabled)
-            .map(n => n.id)
+            .map(n => n.id),
         );
 
         // TODO: Trigger lazy loading of network adapter
@@ -299,10 +308,11 @@ export const createNetworksSlice =
         });
 
         const networks = get().networks.networks;
-        await local.set('enabledNetworks',
+        await local.set(
+          'enabledNetworks',
           Object.values(networks)
             .filter(n => n.enabled)
-            .map(n => n.id)
+            .map(n => n.id),
         );
 
         // TODO: Unload network adapter to free memory
@@ -315,7 +325,7 @@ export const createNetworksSlice =
         });
 
         // Persist endpoint changes using networkEndpoints object
-        const currentEndpoints = await local.get('networkEndpoints') || {};
+        const currentEndpoints = (await local.get('networkEndpoints')) || {};
         await local.set('networkEndpoints', {
           ...currentEndpoints,
           [id]: endpoint,

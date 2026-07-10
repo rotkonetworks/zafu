@@ -33,7 +33,10 @@ export interface PolkadotWallet {
  * SLIP-10 ed25519 key derivation
  * see: https://github.com/satoshilabs/slips/blob/master/slip-0010.md
  */
-function slip10DeriveEd25519(seed: Uint8Array, path: string): { privateKey: Uint8Array; chainCode: Uint8Array } {
+function slip10DeriveEd25519(
+  seed: Uint8Array,
+  path: string,
+): { privateKey: Uint8Array; chainCode: Uint8Array } {
   // master key
   const I = hmac(sha512, 'ed25519 seed', seed);
   let privateKey = I.slice(0, 32);
@@ -78,12 +81,13 @@ function encodeAddress(publicKey: Uint8Array, ss58Format: number): string {
   const SS58_PREFIX_BYTES = new TextEncoder().encode('SS58PRE');
 
   // for simple format (0-63), use single byte
-  const prefixBytes = ss58Format < 64
-    ? new Uint8Array([ss58Format])
-    : new Uint8Array([
-        ((ss58Format & 0xfc) >> 2) | 0x40,
-        (ss58Format >> 8) | ((ss58Format & 0x03) << 6),
-      ]);
+  const prefixBytes =
+    ss58Format < 64
+      ? new Uint8Array([ss58Format])
+      : new Uint8Array([
+          ((ss58Format & 0xfc) >> 2) | 0x40,
+          (ss58Format >> 8) | ((ss58Format & 0x03) << 6),
+        ]);
 
   // payload = prefix + publicKey
   const payload = new Uint8Array(prefixBytes.length + publicKey.length);
@@ -141,7 +145,7 @@ function base58Encode(bytes: Uint8Array): string {
 export async function derivePolkadotWallet(
   mnemonic: string,
   network: SubstrateNetwork = 'polkadot',
-  accountIndex = 0
+  accountIndex = 0,
 ): Promise<PolkadotWallet> {
   // convert mnemonic to seed
   const seed = mnemonicToSeedSync(mnemonic);
@@ -177,7 +181,7 @@ export async function derivePolkadotWallet(
 export async function derivePolkadotAddress(
   mnemonic: string,
   network: SubstrateNetwork = 'polkadot',
-  accountIndex = 0
+  accountIndex = 0,
 ): Promise<string> {
   const wallet = await derivePolkadotWallet(mnemonic, network, accountIndex);
   // clear private key from memory

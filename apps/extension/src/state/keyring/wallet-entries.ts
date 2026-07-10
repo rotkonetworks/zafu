@@ -20,9 +20,8 @@ export async function createPenumbraWalletForMnemonic(
   key: Key,
   local: ExtensionStorage<LocalStorageState>,
 ): Promise<void> {
-  const { generateSpendKey, getFullViewingKey, getWalletId } = await import(
-    '@rotko/penumbra-wasm/keys'
-  );
+  const { generateSpendKey, getFullViewingKey, getWalletId } =
+    await import('@rotko/penumbra-wasm/keys');
   const spendKey = await generateSpendKey(mnemonic);
   const fullViewingKey = await getFullViewingKey(spendKey);
   const walletId = await getWalletId(fullViewingKey);
@@ -53,9 +52,8 @@ export async function createZignerWalletEntries(
 ): Promise<NetworkType[]> {
   if (data.fullViewingKey) {
     try {
-      const { FullViewingKey } = await import(
-        '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb'
-      );
+      const { FullViewingKey } =
+        await import('@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb');
       const { getWalletId } = await import('@rotko/penumbra-wasm/keys');
 
       const fvkBytes = Uint8Array.from(atob(data.fullViewingKey), c => c.charCodeAt(0));
@@ -158,7 +156,7 @@ export async function removeLinkedWallets(
   const updatedWallets = wallets.filter((w: { vaultId?: string }) => w.vaultId !== vaultId);
   if (updatedWallets.length !== wallets.length) {
     await local.set('penumbraWallets', updatedWallets);
-    const activeWalletIndex = await local.get('activeWalletIndex') ?? 0;
+    const activeWalletIndex = (await local.get('activeWalletIndex')) ?? 0;
     if (activeWalletIndex >= updatedWallets.length) {
       await local.set('activeWalletIndex', Math.max(0, updatedWallets.length - 1));
     }
@@ -170,7 +168,7 @@ export async function removeLinkedWallets(
   const updatedZcash = zcashWallets.filter(w => w.vaultId !== vaultId);
   if (updatedZcash.length !== zcashWallets.length) {
     await local.set('zcashWallets', updatedZcash);
-    const activeZcashIndex = await local.get('activeZcashIndex') ?? 0;
+    const activeZcashIndex = (await local.get('activeZcashIndex')) ?? 0;
     if (activeZcashIndex >= updatedZcash.length) {
       await local.set('activeZcashIndex', Math.max(0, updatedZcash.length - 1));
     }
@@ -180,10 +178,7 @@ export async function removeLinkedWallets(
 }
 
 /** clean up zcash worker data + birthday key for a vault */
-export async function cleanupZcashData(
-  vaultId: string,
-  removedZcashIds: string[],
-): Promise<void> {
+export async function cleanupZcashData(vaultId: string, removedZcashIds: string[]): Promise<void> {
   for (const id of removedZcashIds) {
     try {
       const { deleteWalletInWorker } = await import('./network-worker');
@@ -205,22 +200,27 @@ export async function nukeAllWalletData(
   await session.remove('passwordKey');
 
   const allLocalKeys = await chrome.storage.local.get(null);
-  const keysToRemove = Object.keys(allLocalKeys).filter(k =>
-    k.startsWith('zcashBirthday_') ||
-    k === 'zcashSyncHeight' ||
-    k === 'zcashShieldedIndex' ||
-    k === 'zcashTransparentIndex' ||
-    k === 'fullSyncHeight' ||
-    k === 'compactFrontierBlockHeight' ||
-    k === 'pendingClaim' ||
-    k === 'params'
+  const keysToRemove = Object.keys(allLocalKeys).filter(
+    k =>
+      k.startsWith('zcashBirthday_') ||
+      k === 'zcashSyncHeight' ||
+      k === 'zcashShieldedIndex' ||
+      k === 'zcashTransparentIndex' ||
+      k === 'fullSyncHeight' ||
+      k === 'compactFrontierBlockHeight' ||
+      k === 'pendingClaim' ||
+      k === 'params',
   );
   if (keysToRemove.length > 0) {
     await chrome.storage.local.remove(keysToRemove);
   }
 
-  try { indexedDB.deleteDatabase('zafu-zcash'); } catch {}
-  try { indexedDB.deleteDatabase('zafu-memo-cache'); } catch {}
+  try {
+    indexedDB.deleteDatabase('zafu-zcash');
+  } catch {}
+  try {
+    indexedDB.deleteDatabase('zafu-memo-cache');
+  } catch {}
 
   await local.set('selectedVaultId', undefined);
   await local.set('penumbraWallets', []);

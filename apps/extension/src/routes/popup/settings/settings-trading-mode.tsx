@@ -99,9 +99,7 @@ export const SettingsTradingMode = () => {
           <div className='flex items-center justify-between'>
             <div className='flex flex-col gap-1'>
               <span className='text-sm font-medium'>Auto-sign Swaps</span>
-              <span className='text-xs text-fg-muted'>
-                Only swap transactions are auto-signed
-              </span>
+              <span className='text-xs text-fg-muted'>Only swap transactions are auto-signed</span>
             </div>
             <Switch checked={settings.autoSign} onCheckedChange={setAutoSign} />
           </div>
@@ -170,8 +168,9 @@ export const SettingsTradingMode = () => {
                 </div>
               )}
 
-              {approvedSites.filter((s: OriginRecord) => !settings.allowedOrigins.includes(s.origin))
-                .length > 0 && (
+              {approvedSites.filter(
+                (s: OriginRecord) => !settings.allowedOrigins.includes(s.origin),
+              ).length > 0 && (
                 <div className='flex flex-wrap gap-2'>
                   {approvedSites
                     .filter((s: OriginRecord) => !settings.allowedOrigins.includes(s.origin))

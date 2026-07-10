@@ -68,7 +68,7 @@ export const CosmosSubwallets = () => {
   // Compute which chains to render. While loading we render all chains
   // with a dash placeholder so the section doesn't flicker in.
   const entries = data
-    ? Object.entries(data) as [CosmosChainId, NonNullable<typeof data>[CosmosChainId]][]
+    ? (Object.entries(data) as [CosmosChainId, NonNullable<typeof data>[CosmosChainId]][])
     : (Object.keys(COSMOS_CHAINS) as CosmosChainId[]).map(id => [id, undefined] as const);
 
   // Hide the section once data arrives if every balance is zero — we

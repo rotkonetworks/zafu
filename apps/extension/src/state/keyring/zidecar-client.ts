@@ -61,10 +61,10 @@ export interface NullifierProofData {
 }
 
 export interface ProRing {
-  ringKeys: string[];      // hex-encoded 32-byte Bandersnatch pubkeys
-  commitment: Uint8Array;  // 144-byte ring commitment
-  epoch: string;           // YYYY-MM-DD
-  context: string;         // VRF context string (includes server nonce)
+  ringKeys: string[]; // hex-encoded 32-byte Bandersnatch pubkeys
+  commitment: Uint8Array; // 144-byte ring commitment
+  epoch: string; // YYYY-MM-DD
+  context: string; // VRF context string (includes server nonce)
   ringSize: number;
 }
 
@@ -146,7 +146,9 @@ export class ZidecarClient {
   }
 
   /** send raw transaction */
-  async sendTransaction(txData: Uint8Array): Promise<{ txid: Uint8Array; errorCode: number; errorMessage: string }> {
+  async sendTransaction(
+    txData: Uint8Array,
+  ): Promise<{ txid: Uint8Array; errorCode: number; errorMessage: string }> {
     // encode RawTransaction proto
     const parts: number[] = [0x0a, ...this.lengthDelimited(txData)];
     const resp = await this.grpcCall('SendTransaction', new Uint8Array(parts));
@@ -163,7 +165,8 @@ export class ZidecarClient {
       const wire = tag & 0x7;
 
       if (wire === 0) {
-        let v = 0, s = 0;
+        let v = 0,
+          s = 0;
         while (pos < resp.length) {
           const b = resp[pos++]!;
           v |= (b & 0x7f) << s;
@@ -172,7 +175,8 @@ export class ZidecarClient {
         }
         if (field === 2) errorCode = v;
       } else if (wire === 2) {
-        let len = 0, s = 0;
+        let len = 0,
+          s = 0;
         while (pos < resp.length) {
           const b = resp[pos++]!;
           len |= (b & 0x7f) << s;
@@ -190,7 +194,11 @@ export class ZidecarClient {
   }
 
   /** get header proof (ligerito epoch + tip) */
-  async getHeaderProof(): Promise<{ proofBytes: Uint8Array; fromHeight: number; toHeight: number }> {
+  async getHeaderProof(): Promise<{
+    proofBytes: Uint8Array;
+    fromHeight: number;
+    toHeight: number;
+  }> {
     // ProofRequest: field 1 = from_height (0), field 2 = to_height (0 = current tip)
     const resp = await this.grpcCall('GetHeaderProof', new Uint8Array(0));
     return this.parseHeaderProof(resp);
@@ -270,7 +278,7 @@ export class ZidecarClient {
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/grpc-web+proto',
-      'Accept': 'application/grpc-web+proto',
+      Accept: 'application/grpc-web+proto',
       'x-grpc-web': '1',
       ...(ZidecarClient.extraHeaders?.() ?? {}),
     };
@@ -286,7 +294,9 @@ export class ZidecarClient {
       const grpcStatus = resp.headers.get('grpc-status');
       const grpcMessage = resp.headers.get('grpc-message');
       if (grpcStatus && grpcStatus !== '0') {
-        throw new Error(`gRPC ${method}: ${decodeURIComponent(grpcMessage ?? `status ${grpcStatus}`)}`);
+        throw new Error(
+          `gRPC ${method}: ${decodeURIComponent(grpcMessage ?? `status ${grpcStatus}`)}`,
+        );
       }
       throw new Error(`gRPC ${method}: empty response from ${this.serverUrl}`);
     }
@@ -314,7 +324,11 @@ export class ZidecarClient {
   }
 
   /** raw gRPC-web call for server-streaming RPCs — returns full response with frame headers */
-  private async grpcCallStream(method: string, msg: Uint8Array, signal?: AbortSignal): Promise<Uint8Array> {
+  private async grpcCallStream(
+    method: string,
+    msg: Uint8Array,
+    signal?: AbortSignal,
+  ): Promise<Uint8Array> {
     const path = `${this.serverUrl}/zidecar.v1.Zidecar/${method}`;
 
     const body = new Uint8Array(5 + msg.length);
@@ -327,7 +341,7 @@ export class ZidecarClient {
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/grpc-web+proto',
-      'Accept': 'application/grpc-web+proto',
+      Accept: 'application/grpc-web+proto',
       'x-grpc-web': '1',
       ...(ZidecarClient.extraHeaders?.() ?? {}),
     };
@@ -363,7 +377,8 @@ export class ZidecarClient {
       const wire = tag & 0x7;
 
       if (wire === 0) {
-        let v = 0, s = 0;
+        let v = 0,
+          s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           v |= (b & 0x7f) << s;
@@ -372,7 +387,8 @@ export class ZidecarClient {
         }
         if (field === 1) height = v;
       } else if (wire === 2) {
-        let len = 0, s = 0;
+        let len = 0,
+          s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
@@ -404,7 +420,8 @@ export class ZidecarClient {
       const field = tag >> 3;
       if ((tag & 0x7) !== 0) break;
 
-      let v = 0, s = 0;
+      let v = 0,
+        s = 0;
       while (pos < buf.length) {
         const b = buf[pos++]!;
         v |= (b & 0x7f) << s;
@@ -432,7 +449,8 @@ export class ZidecarClient {
       if (pos + 5 > buf.length) break;
       if (buf[pos] === 0x80) break; // trailer
 
-      const len = (buf[pos + 1]! << 24) | (buf[pos + 2]! << 16) | (buf[pos + 3]! << 8) | buf[pos + 4]!;
+      const len =
+        (buf[pos + 1]! << 24) | (buf[pos + 2]! << 16) | (buf[pos + 3]! << 8) | buf[pos + 4]!;
       pos += 5;
       if (pos + len > buf.length) break;
 
@@ -453,7 +471,8 @@ export class ZidecarClient {
       const wire = tag & 0x7;
 
       if (wire === 0) {
-        let v = 0, s = 0;
+        let v = 0,
+          s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           v |= (b & 0x7f) << s;
@@ -462,7 +481,8 @@ export class ZidecarClient {
         }
         if (field === 1) block.height = v;
       } else if (wire === 2) {
-        let len = 0, s = 0;
+        let len = 0,
+          s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
@@ -496,7 +516,8 @@ export class ZidecarClient {
       const wire = tag & 0x7;
 
       if (wire === 2) {
-        let len = 0, s = 0;
+        let len = 0,
+          s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
@@ -517,7 +538,9 @@ export class ZidecarClient {
   }
 
   /** get tree state at a specific height (orchard frontier for witness building) */
-  async getTreeState(height: number): Promise<{ height: number; orchardTree: string; time: number }> {
+  async getTreeState(
+    height: number,
+  ): Promise<{ height: number; orchardTree: string; time: number }> {
     // encode BlockId proto: field 1 = height (varint)
     const parts: number[] = [0x08, ...this.varint(height)];
     const resp = await this.grpcCall('GetTreeState', new Uint8Array(parts));
@@ -535,7 +558,8 @@ export class ZidecarClient {
       const field = tag >> 3;
       const wire = tag & 0x7;
       if (wire === 0) {
-        let v = 0, s = 0;
+        let v = 0,
+          s = 0;
         while (pos < resp.length) {
           const b = resp[pos++]!;
           v |= (b & 0x7f) << s;
@@ -544,7 +568,8 @@ export class ZidecarClient {
         }
         if (field === 5) return v;
       } else if (wire === 2) {
-        let len = 0, s = 0;
+        let len = 0,
+          s = 0;
         while (pos < resp.length) {
           const b = resp[pos++]!;
           len |= (b & 0x7f) << s;
@@ -609,14 +634,22 @@ export class ZidecarClient {
    * privacy-preserving transaction fetch
    * fetches all transactions at a block height - server doesn't learn which tx we care about
    */
-  async getBlockTransactions(height: number): Promise<{ height: number; hash: Uint8Array; txs: Array<{ data: Uint8Array; height: number }> }> {
+  async getBlockTransactions(height: number): Promise<{
+    height: number;
+    hash: Uint8Array;
+    txs: Array<{ data: Uint8Array; height: number }>;
+  }> {
     // encode BlockId proto: field 1 = height (uint32)
     const parts: number[] = [0x08, ...this.varint(height)];
     const resp = await this.grpcCall('GetBlockTransactions', new Uint8Array(parts));
     return this.parseBlockTransactions(resp);
   }
 
-  private parseBlockTransactions(buf: Uint8Array): { height: number; hash: Uint8Array; txs: Array<{ data: Uint8Array; height: number }> } {
+  private parseBlockTransactions(buf: Uint8Array): {
+    height: number;
+    hash: Uint8Array;
+    txs: Array<{ data: Uint8Array; height: number }>;
+  } {
     let height = 0;
     let hash = new Uint8Array(0);
     const txs: Array<{ data: Uint8Array; height: number }> = [];
@@ -628,7 +661,8 @@ export class ZidecarClient {
       const wire = tag & 0x7;
 
       if (wire === 0) {
-        let v = 0, s = 0;
+        let v = 0,
+          s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           v |= (b & 0x7f) << s;
@@ -637,7 +671,8 @@ export class ZidecarClient {
         }
         if (field === 1) height = v;
       } else if (wire === 2) {
-        let len = 0, s = 0;
+        let len = 0,
+          s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
@@ -665,7 +700,8 @@ export class ZidecarClient {
       const wire = tag & 0x7;
 
       if (wire === 0) {
-        let v = 0, s = 0;
+        let v = 0,
+          s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           v |= (b & 0x7f) << s;
@@ -674,7 +710,8 @@ export class ZidecarClient {
         }
         if (field === 2) height = v;
       } else if (wire === 2) {
-        let len = 0, s = 0;
+        let len = 0,
+          s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
@@ -700,7 +737,8 @@ export class ZidecarClient {
       const wire = tag & 0x7;
 
       if (wire === 2) {
-        let len = 0, s = 0;
+        let len = 0,
+          s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
@@ -713,7 +751,9 @@ export class ZidecarClient {
         pos += len;
       } else if (wire === 0) {
         // skip varint
-        while (pos < buf.length && (buf[pos++]! & 0x80)) { /* skip */ }
+        while (pos < buf.length && buf[pos++]! & 0x80) {
+          /* skip */
+        }
       } else break;
     }
 
@@ -758,7 +798,8 @@ export class ZidecarClient {
         else if (field === 5) utxo.valueZat = v;
         else if (field === 6) utxo.height = Number(v);
       } else if (wire === 2) {
-        let len = 0, s = 0;
+        let len = 0,
+          s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
@@ -795,7 +836,8 @@ export class ZidecarClient {
       const wire = tag & 0x7;
 
       if (wire === 0) {
-        let v = 0, s = 0;
+        let v = 0,
+          s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           v |= (b & 0x7f) << s;
@@ -805,7 +847,8 @@ export class ZidecarClient {
         if (field === 1) height = v;
         if (field === 3) time = v;
       } else if (wire === 2) {
-        let len = 0, s = 0;
+        let len = 0,
+          s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
@@ -821,7 +864,11 @@ export class ZidecarClient {
     return { height, orchardTree, time };
   }
 
-  private parseHeaderProof(buf: Uint8Array): { proofBytes: Uint8Array; fromHeight: number; toHeight: number } {
+  private parseHeaderProof(buf: Uint8Array): {
+    proofBytes: Uint8Array;
+    fromHeight: number;
+    toHeight: number;
+  } {
     let proofBytes = new Uint8Array(0);
     let fromHeight = 0;
     let toHeight = 0;
@@ -833,7 +880,8 @@ export class ZidecarClient {
       const wire = tag & 0x7;
 
       if (wire === 0) {
-        let v = 0, s = 0;
+        let v = 0,
+          s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           v |= (b & 0x7f) << s;
@@ -843,7 +891,8 @@ export class ZidecarClient {
         if (field === 2) fromHeight = v;
         else if (field === 3) toHeight = v;
       } else if (wire === 2) {
-        let len = 0, s = 0;
+        let len = 0,
+          s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
@@ -874,7 +923,8 @@ export class ZidecarClient {
       const wire = tag & 0x7;
 
       if (wire === 0) {
-        let v = 0, s = 0;
+        let v = 0,
+          s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           v |= (b & 0x7f) << s;
@@ -883,7 +933,8 @@ export class ZidecarClient {
         }
         if (field === 7) proof.exists = v !== 0;
       } else if (wire === 2) {
-        let len = 0, s = 0;
+        let len = 0,
+          s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
@@ -902,7 +953,10 @@ export class ZidecarClient {
     return proof;
   }
 
-  private parseCommitmentProofsResponse(buf: Uint8Array): { proofs: CommitmentProofData[]; treeRoot: Uint8Array } {
+  private parseCommitmentProofsResponse(buf: Uint8Array): {
+    proofs: CommitmentProofData[];
+    treeRoot: Uint8Array;
+  } {
     const proofs: CommitmentProofData[] = [];
     let treeRoot = new Uint8Array(0);
     let pos = 0;
@@ -913,7 +967,8 @@ export class ZidecarClient {
       const wire = tag & 0x7;
 
       if (wire === 2) {
-        let len = 0, s = 0;
+        let len = 0,
+          s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
@@ -946,7 +1001,8 @@ export class ZidecarClient {
       const wire = tag & 0x7;
 
       if (wire === 0) {
-        let v = 0, s = 0;
+        let v = 0,
+          s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           v |= (b & 0x7f) << s;
@@ -955,7 +1011,8 @@ export class ZidecarClient {
         }
         if (field === 6) proof.isSpent = v !== 0;
       } else if (wire === 2) {
-        let len = 0, s = 0;
+        let len = 0,
+          s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
@@ -974,7 +1031,10 @@ export class ZidecarClient {
     return proof;
   }
 
-  private parseNullifierProofsResponse(buf: Uint8Array): { proofs: NullifierProofData[]; nullifierRoot: Uint8Array } {
+  private parseNullifierProofsResponse(buf: Uint8Array): {
+    proofs: NullifierProofData[];
+    nullifierRoot: Uint8Array;
+  } {
     const proofs: NullifierProofData[] = [];
     let nullifierRoot = new Uint8Array(0);
     let pos = 0;
@@ -985,7 +1045,8 @@ export class ZidecarClient {
       const wire = tag & 0x7;
 
       if (wire === 2) {
-        let len = 0, s = 0;
+        let len = 0,
+          s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
@@ -1013,7 +1074,8 @@ export class ZidecarClient {
       const wire = tag & 0x7;
 
       if (wire === 2) {
-        let len = 0, s = 0;
+        let len = 0,
+          s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
@@ -1025,7 +1087,9 @@ export class ZidecarClient {
         }
         pos += len;
       } else if (wire === 0) {
-        while (pos < buf.length && (buf[pos++]! & 0x80)) { /* skip varint */ }
+        while (pos < buf.length && buf[pos++]! & 0x80) {
+          /* skip varint */
+        }
       } else break;
     }
 
@@ -1046,7 +1110,8 @@ export class ZidecarClient {
       const wire = tag & 0x7;
 
       if (wire === 0) {
-        let v = 0, s = 0;
+        let v = 0,
+          s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           v |= (b & 0x7f) << s;
@@ -1055,7 +1120,8 @@ export class ZidecarClient {
         }
         if (field === 5) ringSize = v;
       } else if (wire === 2) {
-        let len = 0, s = 0;
+        let len = 0,
+          s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
@@ -1094,7 +1160,8 @@ export class ZidecarClient {
       const wire = tag & 0x7;
 
       if (wire === 0) {
-        let v = 0, s = 0;
+        let v = 0,
+          s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           v |= (b & 0x7f) << s;
@@ -1104,7 +1171,8 @@ export class ZidecarClient {
         if (field === 3) expires = v;
         if (field === 5) totalPaidZat = v;
       } else if (wire === 2) {
-        let len = 0, s = 0;
+        let len = 0,
+          s = 0;
         while (pos < buf.length) {
           const b = buf[pos++]!;
           len |= (b & 0x7f) << s;
@@ -1113,7 +1181,10 @@ export class ZidecarClient {
         }
         if (field === 1) zid = new TextDecoder().decode(buf.subarray(pos, pos + len));
         else if (field === 2) plan = new TextDecoder().decode(buf.subarray(pos, pos + len));
-        else if (field === 4) signature = Array.from(buf.subarray(pos, pos + len), b => b.toString(16).padStart(2, '0')).join('');
+        else if (field === 4)
+          signature = Array.from(buf.subarray(pos, pos + len), b =>
+            b.toString(16).padStart(2, '0'),
+          ).join('');
         pos += len;
       } else break;
     }

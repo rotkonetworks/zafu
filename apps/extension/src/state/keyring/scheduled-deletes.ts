@@ -6,12 +6,15 @@ import { localExtStorage } from '@repo/storage-chrome/local';
 import type { EncryptedVault } from './types';
 import type { ZcashWalletJson } from '../wallets';
 
-interface ScheduledDelete { vaultId: string; deleteAt: number }
+interface ScheduledDelete {
+  vaultId: string;
+  deleteAt: number;
+}
 
 const KEY = 'scheduledMultisigDeletes' as const;
 
 async function getList(): Promise<ScheduledDelete[]> {
-  const raw = await (chrome.storage.local.get(KEY));
+  const raw = await chrome.storage.local.get(KEY);
   return (raw[KEY] as ScheduledDelete[] | undefined) ?? [];
 }
 
@@ -55,9 +58,13 @@ export async function purgeVault(vaultId: string): Promise<void> {
     try {
       const { deleteWalletInWorker } = await import('./network-worker');
       await deleteWalletInWorker('zcash', id);
-    } catch { /* worker may not be running */ }
+    } catch {
+      /* worker may not be running */
+    }
   }
-  try { await chrome.storage.local.remove(`zcashBirthday_${vaultId}`); } catch {}
+  try {
+    await chrome.storage.local.remove(`zcashBirthday_${vaultId}`);
+  } catch {}
 }
 
 /** Resolve a multisig wallet by name prefix; picks the most recent if multiple match. */
@@ -65,7 +72,10 @@ export async function findVaultByLabelPrefix(labelPrefix: string): Promise<strin
   if (!labelPrefix) return null;
   const vaults = ((await localExtStorage.get('vaults')) ?? []) as EncryptedVault[];
   const matches = vaults
-    .filter(v => v.type === 'frost-multisig' && typeof v.name === 'string' && v.name.startsWith(labelPrefix))
+    .filter(
+      v =>
+        v.type === 'frost-multisig' && typeof v.name === 'string' && v.name.startsWith(labelPrefix),
+    )
     .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
   return matches[0]?.id ?? null;
 }
@@ -80,6 +90,10 @@ export async function sweepScheduledDeletes(): Promise<void> {
   const remaining = list.filter(e => e.deleteAt > now);
   await setList(remaining);
   for (const e of expired) {
-    try { await purgeVault(e.vaultId); } catch { /* tolerate */ }
+    try {
+      await purgeVault(e.vaultId);
+    } catch {
+      /* tolerate */
+    }
   }
 }

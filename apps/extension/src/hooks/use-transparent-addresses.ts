@@ -66,15 +66,15 @@ export function useTransparentAddresses(isMainnet: boolean) {
             indices.map(i => deriveZcashTransparent(mnemonic, 0, i, isMainnet)),
           );
         } else if (watchOnly) {
-          const ufvk = watchOnly.ufvk ?? (watchOnly.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
+          const ufvk =
+            watchOnly.ufvk ??
+            (watchOnly.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
           if (!ufvk) {
             if (!cancelled) setIsLoading(false);
             return;
           }
           try {
-            addrs = await Promise.all(
-              indices.map(i => deriveZcashTransparentFromUfvk(ufvk, i)),
-            );
+            addrs = await Promise.all(indices.map(i => deriveZcashTransparentFromUfvk(ufvk, i)));
           } catch {
             // UFVK may lack transparent component
             if (!cancelled) setIsLoading(false);
@@ -93,8 +93,18 @@ export function useTransparentAddresses(isMainnet: boolean) {
       if (!cancelled) setIsLoading(false);
     })();
 
-    return () => { cancelled = true; };
-  }, [isMnemonic, selectedKeyInfo?.id, selectedKeyInfo?.type, isMainnet, keyRing, watchOnly?.ufvk, watchOnly?.orchardFvk]);
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isMnemonic,
+    selectedKeyInfo?.id,
+    selectedKeyInfo?.type,
+    isMainnet,
+    keyRing,
+    watchOnly?.ufvk,
+    watchOnly?.orchardFvk,
+  ]);
 
   return { tAddresses, isLoading };
 }

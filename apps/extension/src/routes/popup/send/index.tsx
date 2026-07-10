@@ -26,7 +26,12 @@ import { useCosmosSend, useCosmosIbcTransfer } from '../../../hooks/cosmos-signe
 import { parseAmountToBaseUnits } from '@repo/wallet/networks/cosmos/signer';
 import { useCosmosAssets, type CosmosAsset } from '../../../hooks/cosmos-balance';
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
-import { COSMOS_CHAINS, type CosmosChainId, isValidCosmosAddress, getChainFromAddress } from '@repo/wallet/networks/cosmos/chains';
+import {
+  COSMOS_CHAINS,
+  type CosmosChainId,
+  isValidCosmosAddress,
+  getChainFromAddress,
+} from '@repo/wallet/networks/cosmos/chains';
 import { cn } from '@repo/ui/lib/utils';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { isDedicatedWindow } from '../../../utils/popup-detection';
@@ -58,7 +63,9 @@ function ChainSelector({
         ) : (
           <span className='text-fg-muted'>select chain</span>
         )}
-        <span className={cn('i-lucide-chevron-down h-4 w-4 transition-transform', open && 'rotate-180')} />
+        <span
+          className={cn('i-lucide-chevron-down h-4 w-4 transition-transform', open && 'rotate-180')}
+        />
       </button>
 
       {open && (
@@ -72,7 +79,7 @@ function ChainSelector({
               }}
               className={cn(
                 'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-elev-1',
-                selected?.chainId === chain.chainId && 'bg-elev-2'
+                selected?.chainId === chain.chainId && 'bg-elev-2',
               )}
             >
               {chain.images[0]?.png && (
@@ -127,7 +134,9 @@ function AssetSelector({
         ) : (
           <span className='text-fg-muted'>select asset</span>
         )}
-        <span className={cn('i-lucide-chevron-down h-4 w-4 transition-transform', open && 'rotate-180')} />
+        <span
+          className={cn('i-lucide-chevron-down h-4 w-4 transition-transform', open && 'rotate-180')}
+        />
       </button>
 
       {open && (
@@ -141,7 +150,7 @@ function AssetSelector({
               }}
               className={cn(
                 'flex w-full items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-elev-1',
-                selected?.denom === asset.denom && 'bg-elev-2'
+                selected?.denom === asset.denom && 'bg-elev-2',
               )}
             >
               <span className='font-medium'>{asset.symbol}</span>
@@ -172,11 +181,12 @@ function CosmosChainSelector({
   const [manuallySelected, setManuallySelected] = useState(false);
   const filteredChains = chains.filter(c => c.chainId !== currentChainId);
 
-  const displayName = manuallySelected && selected
-    ? chains.find(c => c.chainId === selected)?.chainName ?? selected
-    : selected
-      ? autoLabel ?? chains.find(c => c.chainId === selected)?.chainName ?? selected
-      : autoLabel ?? 'auto-detect from address';
+  const displayName =
+    manuallySelected && selected
+      ? (chains.find(c => c.chainId === selected)?.chainName ?? selected)
+      : selected
+        ? (autoLabel ?? chains.find(c => c.chainId === selected)?.chainName ?? selected)
+        : (autoLabel ?? 'auto-detect from address');
 
   return (
     <div className='relative'>
@@ -184,10 +194,10 @@ function CosmosChainSelector({
         onClick={() => setOpen(!open)}
         className='flex w-full items-center justify-between rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm transition-colors hover:border-zigner-gold/50'
       >
-        <span className={!manuallySelected && !selected ? 'text-fg-muted' : ''}>
-          {displayName}
-        </span>
-        <span className={cn('i-lucide-chevron-down h-4 w-4 transition-transform', open && 'rotate-180')} />
+        <span className={!manuallySelected && !selected ? 'text-fg-muted' : ''}>{displayName}</span>
+        <span
+          className={cn('i-lucide-chevron-down h-4 w-4 transition-transform', open && 'rotate-180')}
+        />
       </button>
 
       {open && (
@@ -201,7 +211,7 @@ function CosmosChainSelector({
             }}
             className={cn(
               'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-elev-1',
-              !manuallySelected && 'bg-elev-2'
+              !manuallySelected && 'bg-elev-2',
             )}
           >
             <span className='text-fg-muted'>auto-detect from address</span>
@@ -216,12 +226,10 @@ function CosmosChainSelector({
               }}
               className={cn(
                 'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-elev-1',
-                manuallySelected && selected === chain.chainId && 'bg-elev-2'
+                manuallySelected && selected === chain.chainId && 'bg-elev-2',
               )}
             >
-              {chain.logoUri && (
-                <img src={chain.logoUri} alt='' className='h-5 w-5 rounded-full' />
-              )}
+              {chain.logoUri && <img src={chain.logoUri} alt='' className='h-5 w-5 rounded-full' />}
               <span>{chain.chainName}</span>
             </button>
           ))}
@@ -248,15 +256,10 @@ function SaveContactPrompt({
           <span className='i-lucide-user h-4 w-4 text-zigner-gold' />
           <div>
             <p className='text-sm text-fg'>save to contacts?</p>
-            <p className='text-xs text-fg-muted'>
-              you've sent to this address before
-            </p>
+            <p className='text-xs text-fg-muted'>you've sent to this address before</p>
           </div>
         </div>
-        <button
-          onClick={onDismiss}
-          className='text-fg-muted hover:text-fg-high transition-colors'
-        >
+        <button onClick={onDismiss} className='text-fg-muted hover:text-fg-high transition-colors'>
           <span className='i-lucide-x h-4 w-4' />
         </button>
       </div>
@@ -286,7 +289,9 @@ function CosmosSend({ sourceChainId }: { sourceChainId: CosmosChainId }) {
   const [amount, setAmount] = useState('');
   const [selectedAsset, setSelectedAsset] = useState<CosmosAsset | undefined>();
   const [accountIndex, setAccountIndex] = useState(0);
-  const [txStatus, setTxStatus] = useState<'idle' | 'confirm' | 'signing' | 'broadcasting' | 'success' | 'error'>('idle');
+  const [txStatus, setTxStatus] = useState<
+    'idle' | 'confirm' | 'signing' | 'broadcasting' | 'success' | 'error'
+  >('idle');
   const [txHash, setTxHash] = useState<string | undefined>();
   const [txError, setTxError] = useState<string | undefined>();
   const [showSavePrompt, setShowSavePrompt] = useState(false);
@@ -306,7 +311,11 @@ function CosmosSend({ sourceChainId }: { sourceChainId: CosmosChainId }) {
   const { data: skipChains = [], isLoading: chainsLoading } = useSkipChains();
 
   // assets hook - uses accountIndex
-  const { data: assetsData, isLoading: assetsLoading, refetch: refetchAssets } = useCosmosAssets(sourceChainId, accountIndex);
+  const {
+    data: assetsData,
+    isLoading: assetsLoading,
+    refetch: refetchAssets,
+  } = useCosmosAssets(sourceChainId, accountIndex);
 
   // auto-select native asset when data loads
   useMemo(() => {
@@ -346,8 +355,8 @@ function CosmosSend({ sourceChainId }: { sourceChainId: CosmosChainId }) {
     destAssetDenom: destChainId
       ? skipChains.find(c => c.chainId === destChainId)?.bech32Prefix
         ? `u${skipChains.find(c => c.chainId === destChainId)?.bech32Prefix?.replace('1', '')}`
-        : selectedAsset?.denom ?? sourceChain.denom
-      : selectedAsset?.denom ?? sourceChain.denom,
+        : (selectedAsset?.denom ?? sourceChain.denom)
+      : (selectedAsset?.denom ?? sourceChain.denom),
     amount: amountInBase,
     enabled: !!destChainId && parseFloat(amount) > 0 && !!selectedAsset,
   });
@@ -368,7 +377,8 @@ function CosmosSend({ sourceChainId }: { sourceChainId: CosmosChainId }) {
     return isValidCosmosAddress(recipient);
   }, [recipient, destChainId, skipChains]);
 
-const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selectedAsset && txStatus === 'idle';
+  const canSubmit =
+    recipient && recipientValid && parseFloat(amount) > 0 && selectedAsset && txStatus === 'idle';
   // effective destination: manual selection > auto-detect > same chain
   const effectiveDestChainId = destChainId || detectedChain?.chainId || sourceChain.chainId;
   const isSameChain = effectiveDestChainId === sourceChain.chainId;
@@ -426,7 +436,17 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
     }
 
     setTxStatus('confirm');
-  }, [canSubmit, selectedAsset, amount, sourceChainId, sourceChain, isSameChain, recipient, assetsData, route]);
+  }, [
+    canSubmit,
+    selectedAsset,
+    amount,
+    sourceChainId,
+    sourceChain,
+    isSameChain,
+    recipient,
+    assetsData,
+    route,
+  ]);
 
   // confirmed — ask password then sign+broadcast
   const handleConfirm = useCallback(async () => {
@@ -496,7 +516,22 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
       setTxStatus('error');
       setTxError(err instanceof Error ? err.message : 'transaction failed');
     }
-  }, [isSameChain, sourceChainId, effectiveDestChainId, recipient, amount, selectedAsset, accountIndex, route, cosmosSend, cosmosIbcTransfer, refetchAssets, recordUsage, shouldSuggestSave, requestAuth]);
+  }, [
+    isSameChain,
+    sourceChainId,
+    effectiveDestChainId,
+    recipient,
+    amount,
+    selectedAsset,
+    accountIndex,
+    route,
+    cosmosSend,
+    cosmosIbcTransfer,
+    refetchAssets,
+    recordUsage,
+    shouldSuggestSave,
+    requestAuth,
+  ]);
 
   return (
     <div className='flex flex-col gap-4'>
@@ -536,22 +571,16 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
             'w-full rounded-lg border bg-input px-3 py-2.5 text-sm text-fg',
             'placeholder:text-fg-muted transition-colors duration-100',
             'focus:border-penumbra-purple focus:outline-none',
-            recipient && !recipientValid ? 'border-red-400' : 'border-border-soft'
+            recipient && !recipientValid ? 'border-red-400' : 'border-border-soft',
           )}
         />
         {recipient && !recipientValid && (
           <p className='mt-1 text-xs text-red-400'>invalid cosmos address</p>
         )}
         {detectedChain && !destChainId && (
-          <p className='mt-1 text-xs text-fg-muted'>
-            detected: {detectedChain.name}
-          </p>
+          <p className='mt-1 text-xs text-fg-muted'>detected: {detectedChain.name}</p>
         )}
-        <RecipientPicker
-          network='cosmos'
-          onSelect={setRecipient}
-          show={!recipient}
-        />
+        <RecipientPicker network='cosmos' onSelect={setRecipient} show={!recipient} />
       </div>
 
       {/* destination chain */}
@@ -563,7 +592,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
           <CosmosChainSelector
             chains={skipChains}
             selected={destChainId ?? detectedChain?.chainId}
-            onSelect={(id) => setDestChainId(id || undefined)}
+            onSelect={id => setDestChainId(id || undefined)}
             currentChainId={sourceChain.chainId}
             autoLabel={detectedChain ? `auto (${detectedChain.name})` : 'auto-detect from address'}
           />
@@ -588,9 +617,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
             amount {selectedAsset ? `(${selectedAsset.symbol})` : ''}
           </label>
           {selectedAsset && (
-            <span className='text-xs text-fg-muted'>
-              balance: {selectedAsset.formatted}
-            </span>
+            <span className='text-xs text-fg-muted'>balance: {selectedAsset.formatted}</span>
           )}
         </div>
         <div className='relative'>
@@ -642,17 +669,13 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
           )}
         </div>
       )}
-      {routeError && (
-        <p className='text-xs text-red-400'>{(routeError as Error).message}</p>
-      )}
+      {routeError && <p className='text-xs text-red-400'>{(routeError as Error).message}</p>}
 
-{/* transaction status */}
+      {/* transaction status */}
       {txStatus === 'success' && txHash && (
         <div className='rounded-lg border border-green-500/40 bg-green-500/10 p-3'>
           <p className='text-sm text-green-400'>transaction sent!</p>
-          <p className='text-xs text-fg-muted mt-1 font-mono break-all'>
-            {txHash}
-          </p>
+          <p className='text-xs text-fg-muted mt-1 font-mono break-all'>{txHash}</p>
         </div>
       )}
 
@@ -689,7 +712,11 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
               onClick={async () => {
                 if (contactName.trim()) {
                   const newContact = await addContact({ name: contactName.trim() });
-                  await addAddress(newContact.id, { network: 'cosmos', address: recipient, chainId: sourceChainId });
+                  await addAddress(newContact.id, {
+                    network: 'cosmos',
+                    address: recipient,
+                    chainId: sourceChainId,
+                  });
                   setShowContactModal(false);
                   setContactName('');
                 }
@@ -731,12 +758,17 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
             </div>
             <div className='flex justify-between'>
               <span className='text-fg-dim lowercase tracking-[0.04em]'>amount</span>
-              <span className='tabular text-zigner-gold'>{amount} {selectedAsset.symbol}</span>
+              <span className='tabular text-zigner-gold'>
+                {amount} {selectedAsset.symbol}
+              </span>
             </div>
             {!isSameChain && effectiveDestChainId && (
               <div className='flex justify-between'>
                 <span className='text-fg-dim lowercase tracking-[0.04em]'>destination</span>
-                <span className='text-fg-high'>{skipChains.find(c => c.chainId === effectiveDestChainId)?.chainName ?? effectiveDestChainId}</span>
+                <span className='text-fg-high'>
+                  {skipChains.find(c => c.chainId === effectiveDestChainId)?.chainName ??
+                    effectiveDestChainId}
+                </span>
               </div>
             )}
           </div>
@@ -763,7 +795,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
               onClick={() => void handleConfirm()}
               className={cn(
                 'flex-1 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark',
-                'transition-colors hover:bg-zigner-gold-light'
+                'transition-colors hover:bg-zigner-gold-light',
               )}
             >
               confirm & sign
@@ -785,7 +817,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
         </div>
       )}
 
-{/* submit */}
+      {/* submit */}
       <button
         onClick={() => {
           if (txStatus === 'success' || txStatus === 'error') {
@@ -811,7 +843,7 @@ const canSubmit = recipient && recipientValid && parseFloat(amount) > 0 && selec
           'mt-2 w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark',
           'transition-colors hover:bg-zigner-gold-light',
           'disabled:opacity-50 disabled:cursor-not-allowed',
-          txStatus === 'confirm' && 'hidden'
+          txStatus === 'confirm' && 'hidden',
         )}
       >
         {txStatus === 'signing' && 'building transaction...'}
@@ -848,9 +880,7 @@ function PenumbraSend({ onSuccess }: { onSuccess?: () => void }) {
           onClick={() => setMode('send')}
           className={cn(
             'flex-1 rounded-md py-2 text-sm font-medium transition-colors',
-            mode === 'send'
-              ? 'bg-canvas text-fg shadow-sm'
-              : 'text-fg-muted hover:text-fg-high'
+            mode === 'send' ? 'bg-canvas text-fg shadow-sm' : 'text-fg-muted hover:text-fg-high',
           )}
         >
           send
@@ -859,16 +889,18 @@ function PenumbraSend({ onSuccess }: { onSuccess?: () => void }) {
           onClick={() => setMode('ibc')}
           className={cn(
             'flex-1 rounded-md py-2 text-sm font-medium transition-colors',
-            mode === 'ibc'
-              ? 'bg-canvas text-fg shadow-sm'
-              : 'text-fg-muted hover:text-fg-high'
+            mode === 'ibc' ? 'bg-canvas text-fg shadow-sm' : 'text-fg-muted hover:text-fg-high',
           )}
         >
           ibc withdraw
         </button>
       </div>
 
-      {mode === 'send' ? <PenumbraNativeSend onSuccess={onSuccess} /> : <PenumbraIbcSend onSuccess={onSuccess} />}
+      {mode === 'send' ? (
+        <PenumbraNativeSend onSuccess={onSuccess} />
+      ) : (
+        <PenumbraIbcSend onSuccess={onSuccess} />
+      )}
     </div>
   );
 }
@@ -877,7 +909,9 @@ function PenumbraSend({ onSuccess }: { onSuccess?: () => void }) {
 function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
   const sendState = useStore(selectPenumbraSend);
   const penumbraAccount = useStore(selectPenumbraAccount);
-  const [txStatus, setTxStatus] = useState<'idle' | 'planning' | 'signing' | 'broadcasting' | 'success' | 'error'>('idle');
+  const [txStatus, setTxStatus] = useState<
+    'idle' | 'planning' | 'signing' | 'broadcasting' | 'success' | 'error'
+  >('idle');
   const [txHash, setTxHash] = useState<string | undefined>();
   const [txError, setTxError] = useState<string | undefined>();
   const [assetOpen, setAssetOpen] = useState(false);
@@ -891,7 +925,9 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
     staleTime: 30_000,
     queryFn: async () => {
       try {
-        const raw = await Array.fromAsync(viewClient.balances({ accountFilter: { account: penumbraAccount } }));
+        const raw = await Array.fromAsync(
+          viewClient.balances({ accountFilter: { account: penumbraAccount } }),
+        );
         // filter and sort
         return raw
           .filter(b => {
@@ -916,7 +952,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
   });
 
   // local state for selected asset (not in zustand due to immer/protobuf incompatibility)
-  const [selectedAsset, setSelectedAsset] = useState<typeof balances[0] | undefined>();
+  const [selectedAsset, setSelectedAsset] = useState<(typeof balances)[0] | undefined>();
 
   // auto-select first balance if none selected
   useEffect(() => {
@@ -930,7 +966,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
 
   const addressValid = useMemo(
     () => !sendState.recipient || sendState.recipient.startsWith('penumbra1'),
-    [sendState.recipient]
+    [sendState.recipient],
   );
 
   // get display info for selected asset
@@ -949,7 +985,13 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
     sendState.setAmount(selectedBalance);
   }, [selectedBalance, sendState]);
 
-  const canSubmit = addressValid && sendState.recipient && selectedAsset && sendState.amount && parseFloat(sendState.amount) > 0 && txStatus === 'idle';
+  const canSubmit =
+    addressValid &&
+    sendState.recipient &&
+    selectedAsset &&
+    sendState.amount &&
+    parseFloat(sendState.amount) > 0 &&
+    txStatus === 'idle';
 
   const handleSubmit = useCallback(async () => {
     if (!canSubmit || !selectedAsset) return;
@@ -1001,7 +1043,12 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
             ) : (
               <span className='text-fg-muted'>select asset</span>
             )}
-            <span className={cn('i-lucide-chevron-down h-4 w-4 transition-transform', assetOpen && 'rotate-180')} />
+            <span
+              className={cn(
+                'i-lucide-chevron-down h-4 w-4 transition-transform',
+                assetOpen && 'rotate-180',
+              )}
+            />
           </button>
 
           {assetOpen && (
@@ -1020,7 +1067,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
                     }}
                     className={cn(
                       'flex w-full items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-elev-1',
-                      selectedAsset === balance && 'bg-elev-2'
+                      selectedAsset === balance && 'bg-elev-2',
                     )}
                   >
                     <span>{symbol}</span>
@@ -1043,9 +1090,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
 
       {/* recipient address */}
       <div>
-        <label className='mb-1 block text-xs text-fg-muted'>
-          recipient (penumbra1...)
-        </label>
+        <label className='mb-1 block text-xs text-fg-muted'>recipient (penumbra1...)</label>
         <div className='flex gap-1'>
           <input
             type='text'
@@ -1057,7 +1102,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
               'flex-1 rounded-lg border bg-input px-3 py-2.5 text-sm text-fg',
               'placeholder:text-fg-muted transition-colors duration-100',
               'focus:border-penumbra-purple focus:outline-none disabled:opacity-50',
-              sendState.recipient && !addressValid ? 'border-red-400' : 'border-border-soft'
+              sendState.recipient && !addressValid ? 'border-red-400' : 'border-border-soft',
             )}
           />
           <button
@@ -1072,13 +1117,13 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
         </div>
         {showQrScanner && (
           <QrScanner
-            onScan={(data) => {
+            onScan={data => {
               sendState.setRecipient(data);
               setShowQrScanner(false);
             }}
             onClose={() => setShowQrScanner(false)}
-            title="scan address"
-            description="scan a penumbra address QR code"
+            title='scan address'
+            description='scan a penumbra address QR code'
             inline
           />
         )}
@@ -1131,9 +1176,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
       {txStatus === 'success' && txHash && (
         <div className='rounded-lg border border-green-500/40 bg-green-500/10 p-3'>
           <p className='text-sm text-green-400'>transaction sent!</p>
-          <p className='text-xs text-fg-muted mt-1 font-mono break-all'>
-            {txHash}
-          </p>
+          <p className='text-xs text-fg-muted mt-1 font-mono break-all'>{txHash}</p>
         </div>
       )}
 
@@ -1164,7 +1207,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
         className={cn(
           'mt-2 w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark',
           'transition-colors hover:bg-zigner-gold-light',
-          'disabled:opacity-50 disabled:cursor-not-allowed'
+          'disabled:opacity-50 disabled:cursor-not-allowed',
         )}
       >
         {txStatus === 'planning' && 'building plan...'}
@@ -1179,9 +1222,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
         <p className='text-center text-xs text-red-400'>{sendState.error}</p>
       )}
 
-      <p className='text-center text-xs text-fg-muted'>
-        private transfer within penumbra
-      </p>
+      <p className='text-center text-xs text-fg-muted'>private transfer within penumbra</p>
     </div>
   );
 }
@@ -1195,8 +1236,9 @@ const filterWithdrawableAssets = (
   if (!channelId) return balances;
   const prefix = `transfer/${channelId}/`;
   return balances.filter(b => {
-    const base = (b as any)?.balanceView?.valueView?.value?.metadata?.base
-      ?? getMetadataFromBalancesResponse.optional(b as any)?.base;
+    const base =
+      (b as any)?.balanceView?.valueView?.value?.metadata?.base ??
+      getMetadataFromBalancesResponse.optional(b as any)?.base;
     if (!base) return false;
     // show assets that came through this channel (can unwind back)
     // plus native UM (can always send cross-chain)
@@ -1208,7 +1250,9 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
   const { data: chains = [], isLoading: chainsLoading } = useIbcChains();
   const ibcState = useStore(selectIbcWithdraw);
   const penumbraAccount = useStore(selectPenumbraAccount);
-  const [txStatus, setTxStatus] = useState<'idle' | 'planning' | 'signing' | 'broadcasting' | 'success' | 'error'>('idle');
+  const [txStatus, setTxStatus] = useState<
+    'idle' | 'planning' | 'signing' | 'broadcasting' | 'success' | 'error'
+  >('idle');
   const [txHash, setTxHash] = useState<string | undefined>();
   const [txError, setTxError] = useState<string | undefined>();
   const [showSavePrompt, setShowSavePrompt] = useState(false);
@@ -1226,7 +1270,9 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
     staleTime: 30_000,
     queryFn: async () => {
       try {
-        const raw = await Array.fromAsync(viewClient.balances({ accountFilter: { account: penumbraAccount } }));
+        const raw = await Array.fromAsync(
+          viewClient.balances({ accountFilter: { account: penumbraAccount } }),
+        );
         return raw.filter(b => {
           const meta = getMetadataFromBalancesResponse.optional(b);
           if (!meta?.base || typeof meta.base !== 'string') return false;
@@ -1246,10 +1292,10 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
   // filter to withdrawable assets for selected chain
   const withdrawableAssets = useMemo(
     () => filterWithdrawableAssets(allBalances, ibcState.chain?.channelId),
-    [allBalances, ibcState.chain?.channelId]
+    [allBalances, ibcState.chain?.channelId],
   );
 
-  const [selectedAsset, setSelectedAsset] = useState<typeof allBalances[0] | undefined>();
+  const [selectedAsset, setSelectedAsset] = useState<(typeof allBalances)[0] | undefined>();
 
   // auto-select first withdrawable asset when chain changes
   useEffect(() => {
@@ -1270,10 +1316,15 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
 
   const addressValid = useMemo(
     () => isValidIbcAddress(ibcState.chain, ibcState.destinationAddress),
-    [ibcState.chain, ibcState.destinationAddress]
+    [ibcState.chain, ibcState.destinationAddress],
   );
 
-  const canSubmit = ibcState.chain && addressValid && ibcState.amount && parseFloat(ibcState.amount) > 0 && txStatus === 'idle';
+  const canSubmit =
+    ibcState.chain &&
+    addressValid &&
+    ibcState.amount &&
+    parseFloat(ibcState.amount) > 0 &&
+    txStatus === 'idle';
 
   const handleSubmit = useCallback(async () => {
     if (!canSubmit) return;
@@ -1309,7 +1360,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
       setTxError(
         msg.includes('expired')
           ? `${ibcState.chain?.displayName ?? 'IBC'} channel unavailable - client expired`
-          : msg
+          : msg,
       );
     }
   }, [canSubmit, ibcState, penumbraTx, recordUsage, shouldSuggestSave]);
@@ -1331,11 +1382,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
         {chainsLoading ? (
           <div className='h-10 rounded-lg bg-elev-2 animate-pulse' />
         ) : (
-          <ChainSelector
-            chains={chains}
-            selected={ibcState.chain}
-            onSelect={ibcState.setChain}
-          />
+          <ChainSelector chains={chains} selected={ibcState.chain} onSelect={ibcState.setChain} />
         )}
       </div>
 
@@ -1348,17 +1395,21 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
           type='text'
           value={ibcState.destinationAddress}
           onChange={e => ibcState.setDestinationAddress(e.target.value)}
-          placeholder={ibcState.chain ? `${ibcState.chain.addressPrefix}1...` : 'select chain first'}
+          placeholder={
+            ibcState.chain ? `${ibcState.chain.addressPrefix}1...` : 'select chain first'
+          }
           disabled={!ibcState.chain || txStatus !== 'idle'}
           className={cn(
             'w-full rounded-lg border bg-input px-3 py-2.5 text-sm text-fg',
             'placeholder:text-fg-muted transition-colors duration-100',
             'focus:border-penumbra-purple focus:outline-none disabled:opacity-50',
-            ibcState.destinationAddress && !addressValid ? 'border-red-400' : 'border-border-soft'
+            ibcState.destinationAddress && !addressValid ? 'border-red-400' : 'border-border-soft',
           )}
         />
         {ibcState.destinationAddress && !addressValid && (
-          <p className='mt-1 text-xs text-red-400'>invalid address for {ibcState.chain?.displayName}</p>
+          <p className='mt-1 text-xs text-red-400'>
+            invalid address for {ibcState.chain?.displayName}
+          </p>
         )}
         <RecipientPicker
           network='cosmos'
@@ -1383,9 +1434,9 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
                 className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg text-left disabled:opacity-50'
               >
                 {selectedAsset
-                  ? (getMetadataFromBalancesResponse.optional(selectedAsset)?.symbol
-                    ?? getMetadataFromBalancesResponse.optional(selectedAsset)?.display
-                    ?? ibcState.denom)
+                  ? (getMetadataFromBalancesResponse.optional(selectedAsset)?.symbol ??
+                    getMetadataFromBalancesResponse.optional(selectedAsset)?.display ??
+                    ibcState.denom)
                   : 'select asset'}
               </button>
               {assetOpen && (
@@ -1433,9 +1484,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
       {txStatus === 'success' && txHash && (
         <div className='rounded-lg border border-green-500/40 bg-green-500/10 p-3'>
           <p className='text-sm text-green-400'>transaction sent!</p>
-          <p className='text-xs text-fg-muted mt-1 font-mono break-all'>
-            {txHash}
-          </p>
+          <p className='text-xs text-fg-muted mt-1 font-mono break-all'>{txHash}</p>
         </div>
       )}
 
@@ -1472,7 +1521,11 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
               onClick={async () => {
                 if (contactName.trim()) {
                   const newContact = await addContact({ name: contactName.trim() });
-                  await addAddress(newContact.id, { network: 'cosmos', address: sentToAddress, chainId: sentToChainId });
+                  await addAddress(newContact.id, {
+                    network: 'cosmos',
+                    address: sentToAddress,
+                    chainId: sentToChainId,
+                  });
                   setShowContactModal(false);
                   setContactName('');
                 }
@@ -1522,7 +1575,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
         className={cn(
           'mt-2 w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark',
           'transition-colors hover:bg-zigner-gold-light',
-          'disabled:opacity-50 disabled:cursor-not-allowed'
+          'disabled:opacity-50 disabled:cursor-not-allowed',
         )}
       >
         {txStatus === 'planning' && 'building plan...'}
@@ -1580,25 +1633,29 @@ export function SendPage() {
     if (!primaryAddr) return rawMemo;
     return rawMemo.replaceAll('[primary]', primaryAddr).replaceAll('[self]', primaryAddr);
   })();
-  const prefill = locationState?.prefillRecipient ? {
-    recipient: locationState.prefillRecipient,
-    amount: locationState.prefillAmount,
-    memo: locationState.prefillMemo,
-  } : searchParams.get('to') ? {
-    recipient: searchParams.get('to') ?? undefined,
-    // amount_zat (uint64 string, zatoshi) is the unambiguous unit for external callers;
-    // ZcashSend expects a decimal ZEC string so we convert (1 ZEC = 1e8 zat).
-    amount: (() => {
-      const zat = searchParams.get('amount_zat');
-      if (!zat) return undefined;
-      const n = Number(zat);
-      if (!Number.isFinite(n) || n <= 0) return undefined;
-      return (n / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
-    })(),
-    memo: externalMemo,
-  } : undefined;
+  const prefill = locationState?.prefillRecipient
+    ? {
+        recipient: locationState.prefillRecipient,
+        amount: locationState.prefillAmount,
+        memo: locationState.prefillMemo,
+      }
+    : searchParams.get('to')
+      ? {
+          recipient: searchParams.get('to') ?? undefined,
+          // amount_zat (uint64 string, zatoshi) is the unambiguous unit for external callers;
+          // ZcashSend expects a decimal ZEC string so we convert (1 ZEC = 1e8 zat).
+          amount: (() => {
+            const zat = searchParams.get('amount_zat');
+            if (!zat) return undefined;
+            const n = Number(zat);
+            if (!Number.isFinite(n) || n <= 0) return undefined;
+            return (n / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
+          })(),
+          memo: externalMemo,
+        }
+      : undefined;
 
-  const goBack = () => inDedicatedWindow ? window.close() : navigate(PopupPath.INDEX);
+  const goBack = () => (inDedicatedWindow ? window.close() : navigate(PopupPath.INDEX));
   const isPenumbra = activeNetwork === 'penumbra';
   const isCosmos = COSMOS_CHAIN_IDS.includes(activeNetwork as CosmosChainId);
   const isZcash = activeNetwork === 'zcash';
@@ -1619,14 +1676,7 @@ export function SendPage() {
         </div>
       );
     }
-    return (
-      <ZcashSend
-        onClose={goBack}
-        accountIndex={0}
-        mainnet={true}
-        prefill={prefill}
-      />
-    );
+    return <ZcashSend onClose={goBack} accountIndex={0} mainnet={true} prefill={prefill} />;
   }
 
   return (
@@ -1634,10 +1684,7 @@ export function SendPage() {
       {/* Header */}
       <div className='flex items-center gap-3 border-b border-border-soft px-4 py-3'>
         {!inDedicatedWindow && (
-          <button
-            onClick={goBack}
-            className='text-fg-muted transition-colors hover:text-fg-high'
-          >
+          <button onClick={goBack} className='text-fg-muted transition-colors hover:text-fg-high'>
             <span className='i-lucide-arrow-left h-5 w-5' />
           </button>
         )}

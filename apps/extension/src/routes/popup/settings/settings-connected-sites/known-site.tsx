@@ -4,10 +4,19 @@ import { Button } from '@repo/ui/components/ui/button';
 import { DisplayOriginURL } from '../../../../shared/components/display-origin-url';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { useStore } from '../../../../state';
-import { selectPenumbraWallets, selectActivePenumbraIndex, selectZcashWallets, selectActiveZcashIndex } from '../../../../state/wallets';
+import {
+  selectPenumbraWallets,
+  selectActivePenumbraIndex,
+  selectZcashWallets,
+  selectActiveZcashIndex,
+} from '../../../../state/wallets';
 import type { ZidSitePreference } from '../../../../state/identity';
 import { getOriginPermissions } from '@repo/storage-chrome/origin';
-import { CAPABILITY_META, type Capability, type OriginPermissions } from '@repo/storage-chrome/capabilities';
+import {
+  CAPABILITY_META,
+  type Capability,
+  type OriginPermissions,
+} from '@repo/storage-chrome/capabilities';
 import { cn } from '@repo/ui/lib/utils';
 
 const useZidPref = (origin: string) => {
@@ -75,8 +84,14 @@ const useOriginPermissions = (origin: string) => {
 };
 
 const ALL_CAPABILITIES: Capability[] = [
-  'connect', 'sign_identity', 'send_tx', 'export_fvk',
-  'view_contacts', 'view_history', 'frost', 'auto_sign',
+  'connect',
+  'sign_identity',
+  'send_tx',
+  'export_fvk',
+  'view_contacts',
+  'view_history',
+  'frost',
+  'auto_sign',
 ];
 
 const CapabilityToggle = ({
@@ -92,13 +107,15 @@ const CapabilityToggle = ({
   return (
     <label className='flex items-center justify-between gap-2 py-1'>
       <div className='flex items-center gap-1.5'>
-        <span className={cn(
-          'text-[10px]',
-          meta.risk === 'low' && 'text-fg-muted',
-          meta.risk === 'medium' && 'text-yellow-400',
-          meta.risk === 'high' && 'text-orange-400',
-          meta.risk === 'critical' && 'text-red-400',
-        )}>
+        <span
+          className={cn(
+            'text-[10px]',
+            meta.risk === 'low' && 'text-fg-muted',
+            meta.risk === 'medium' && 'text-yellow-400',
+            meta.risk === 'high' && 'text-orange-400',
+            meta.risk === 'critical' && 'text-red-400',
+          )}
+        >
           {meta.label}
         </span>
       </div>
@@ -286,9 +303,7 @@ export const KnownSite = ({
             </button>
             {isSiteMode && (
               <>
-                <span className='text-[10px] text-fg-muted/40'>
-                  #{rotation}
-                </span>
+                <span className='text-[10px] text-fg-muted/40'>#{rotation}</span>
                 <button
                   onClick={rotate}
                   className='flex items-center gap-0.5 text-[10px] text-fg-muted hover:text-fg-high transition-colors'
@@ -305,8 +320,8 @@ export const KnownSite = ({
           {confirming === 'global' && (
             <div className='rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-2.5 flex flex-col gap-2'>
               <p className='text-[10px] text-yellow-400'>
-                switching to global identity lets this site link your activity
-                with every other site using your global zid.
+                switching to global identity lets this site link your activity with every other site
+                using your global zid.
               </p>
               <div className='flex gap-2'>
                 <button
@@ -328,8 +343,8 @@ export const KnownSite = ({
           {confirming === 'rotate' && (
             <div className='rounded-lg border border-border-soft bg-elev-1 p-2.5 flex flex-col gap-2'>
               <p className='text-[10px] text-fg-muted'>
-                this creates a new identity for this site. the site keeps
-                your old zid - rotation only affects future signatures.
+                this creates a new identity for this site. the site keeps your old zid - rotation
+                only affects future signatures.
               </p>
               <div className='flex gap-2'>
                 <button

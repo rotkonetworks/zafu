@@ -39,7 +39,7 @@ describe('blockRangeFetcher', () => {
     const fetcher = blockRangeFetcher(client);
     const events = await collect(fetcher('w', new Set([1_700_000, 1_700_100]), ctx()));
     expect(events).toHaveLength(2);
-    expect(events.map((e) => e.bucketStart).sort()).toEqual([1_700_000, 1_700_100]);
+    expect(events.map(e => e.bucketStart).sort()).toEqual([1_700_000, 1_700_100]);
     // 100 blocks per bucket × 2 buckets = 200 fetches
     expect(calls).toHaveLength(200);
   });
@@ -67,7 +67,7 @@ describe('blockRangeFetcher', () => {
       async getBlockTransactions(height) {
         active += 1;
         maxActive = Math.max(maxActive, active);
-        await new Promise((r) => setTimeout(r, 1));
+        await new Promise(r => setTimeout(r, 1));
         active -= 1;
         return { height, txs: [] };
       },
@@ -86,17 +86,19 @@ describe('blockRangeFetcher', () => {
       async getBlockTransactions(height) {
         calls.push(height);
         // small async gap so the abort microtask can fire between calls
-        await new Promise((r) => setTimeout(r, 0));
+        await new Promise(r => setTimeout(r, 0));
         return { height, txs: [] };
       },
     };
     const fetcher = blockRangeFetcher(client);
     // abort after a few microticks
     setTimeout(() => ac.abort(), 5);
-    await collect(fetcher('w', new Set([1_700_000, 1_700_100, 1_700_200]), {
-      ...ctx(),
-      signal: ac.signal,
-    }));
+    await collect(
+      fetcher('w', new Set([1_700_000, 1_700_100, 1_700_200]), {
+        ...ctx(),
+        signal: ac.signal,
+      }),
+    );
     expect(calls.length).toBeLessThan(300);
   });
 
@@ -124,10 +126,12 @@ describe('blockRangeFetcher', () => {
     const { client } = fakeClient();
     const seen: Array<[number, number]> = [];
     const fetcher = blockRangeFetcher(client);
-    await collect(fetcher('w', new Set([100, 200, 300]), {
-      ...ctx(),
-      onProgress: (done, total) => seen.push([done, total]),
-    }));
+    await collect(
+      fetcher('w', new Set([100, 200, 300]), {
+        ...ctx(),
+        onProgress: (done, total) => seen.push([done, total]),
+      }),
+    );
     expect(seen.map(([d]) => d)).toEqual([1, 2, 3]);
     expect(seen.every(([_, t]) => t === 3)).toBe(true);
   });

@@ -51,7 +51,7 @@ const ThemeToggle: React.FC<ThemeToggleProps> = ({ className }) => {
         isDark
           ? 'border-[#f4a31e] bg-[#12121a] text-[#f4a31e] hover:bg-[#f4a31e] hover:text-black'
           : 'border-[#000066] bg-white text-[#000066] hover:bg-[#000066] hover:text-white',
-        className
+        className,
       )}
       aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
     >

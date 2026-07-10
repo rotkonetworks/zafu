@@ -3,9 +3,7 @@ import { AllSlices, SliceCreator } from '.';
 import { PopupRequest, PopupResponse, PopupType } from '../message/popup';
 
 export interface SignApprovalSlice {
-  responder?: PromiseWithResolvers<
-    PopupResponse<PopupType.SignRequest>[PopupType.SignRequest]
-  >;
+  responder?: PromiseWithResolvers<PopupResponse<PopupType.SignRequest>[PopupType.SignRequest]>;
   origin?: string;
   favIconUrl?: string;
   title?: string;
@@ -55,7 +53,7 @@ export const createSignApprovalSlice = (): SliceCreator<SignApprovalSlice> => (s
     return responder.promise;
   },
 
-  sendResponse: (result) => {
+  sendResponse: result => {
     const { responder, choice } = get().signApproval;
 
     try {

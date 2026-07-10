@@ -38,7 +38,8 @@ export const loadNetworkFeatures = async (network: NetworkType): Promise<void> =
         // lazy import penumbra wasm - use initWasmWithParallel if available
         try {
           const wasmInit = await import('@rotko/penumbra-wasm/init');
-          const numThreads = typeof navigator !== 'undefined' ? (navigator.hardwareConcurrency || 4) : 4;
+          const numThreads =
+            typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 4 : 4;
           await wasmInit.initWasmWithParallel(numThreads);
           loadedNetworks.set('penumbra', { wasmLoaded: true, providers: {} });
         } catch {
@@ -83,7 +84,7 @@ export const syncNetworkLoading = async (
   // get all supported networks from config
   const allNetworks = Object.keys(NETWORK_CONFIGS) as NetworkType[];
   const activations: NetworkActivation[] = allNetworks.map(n =>
-    getNetworkActivation(n, enabledNetworks, derivedKeys)
+    getNetworkActivation(n, enabledNetworks, derivedKeys),
   );
 
   // load features for networks that should be loaded

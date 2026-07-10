@@ -13,7 +13,10 @@ import { findPresetByUrl } from '../../config/zcash-endpoints';
 export type ZcashBackend = 'zidecar' | 'lightwalletd';
 
 /** Construct the right sync client for a known backend (UI-thread helper). */
-export async function zcashClientFor(serverUrl: string, backend: ZcashBackend): Promise<ZcashClient> {
+export async function zcashClientFor(
+  serverUrl: string,
+  backend: ZcashBackend,
+): Promise<ZcashClient> {
   // eager: also bundled into the worker, which has no `document` for chunk loading
   if (backend === 'lightwalletd') {
     const { LightwalletdClient } = await import(/* webpackMode: "eager" */ './lightwalletd-client');
@@ -32,13 +35,26 @@ export interface ZcashClient {
   getAddressUtxos(addresses: string[], startHeight?: number, maxEntries?: number): Promise<Utxo[]>;
   getTaddressTxids(addresses: string[], startHeight?: number): Promise<Uint8Array[]>;
   getTransaction(txid: Uint8Array): Promise<{ data: Uint8Array; height: number }>;
-  getBlockTransactions(height: number): Promise<{ height: number; hash: Uint8Array; txs: Array<{ data: Uint8Array; height: number }> }>;
+  getBlockTransactions(height: number): Promise<{
+    height: number;
+    hash: Uint8Array;
+    txs: Array<{ data: Uint8Array; height: number }>;
+  }>;
   getBlockTime(height: number): Promise<number>;
-  sendTransaction(txData: Uint8Array): Promise<{ txid: Uint8Array; errorCode: number; errorMessage: string }>;
+  sendTransaction(
+    txData: Uint8Array,
+  ): Promise<{ txid: Uint8Array; errorCode: number; errorMessage: string }>;
   // trustless-only (zidecar)
   getHeaderProof(): Promise<{ proofBytes: Uint8Array; fromHeight: number; toHeight: number }>;
-  getCommitmentProofs(cmxs: Uint8Array[], positions: number[], height: number): Promise<{ proofs: CommitmentProofData[]; treeRoot: Uint8Array }>;
-  getNullifierProofs(nullifiers: Uint8Array[], height: number): Promise<{ proofs: NullifierProofData[]; nullifierRoot: Uint8Array }>;
+  getCommitmentProofs(
+    cmxs: Uint8Array[],
+    positions: number[],
+    height: number,
+  ): Promise<{ proofs: CommitmentProofData[]; treeRoot: Uint8Array }>;
+  getNullifierProofs(
+    nullifiers: Uint8Array[],
+    height: number,
+  ): Promise<{ proofs: NullifierProofData[]; nullifierRoot: Uint8Array }>;
   getSyncStatus(): Promise<SyncStatus>;
 }
 
@@ -61,9 +77,7 @@ export interface ZcashClient {
  * The static list is intentionally narrow. Add to it only after we've
  * shipped a zidecar at the deployment in question.
  */
-const KNOWN_ZIDECAR_HOST_SUFFIXES: ReadonlyArray<string> = [
-  'rotko.net',
-];
+const KNOWN_ZIDECAR_HOST_SUFFIXES: ReadonlyArray<string> = ['rotko.net'];
 
 export function isZidecarEndpoint(serverUrl: string): boolean {
   // First: exact-URL match against the curated preset list. zidecar
@@ -82,9 +96,7 @@ export function isZidecarEndpoint(serverUrl: string): boolean {
     return false;
   }
   if (host.length === 0) return false;
-  return KNOWN_ZIDECAR_HOST_SUFFIXES.some(
-    suffix => host === suffix || host.endsWith(`.${suffix}`),
-  );
+  return KNOWN_ZIDECAR_HOST_SUFFIXES.some(suffix => host === suffix || host.endsWith(`.${suffix}`));
 }
 
 /** Trust description used in UI badges / tooltips. Single source of truth. */

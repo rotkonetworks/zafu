@@ -195,12 +195,19 @@ const deriveCosmosAddress = async (
 
 /** convert bytes to hex string */
 function bytesToHex(bytes: Uint8Array): string {
-  return '0x' + Array.from(bytes)
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
+  return (
+    '0x' +
+    Array.from(bytes)
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('')
+  );
 }
 
-const getCosmosBalance = async (address: string, rpcUrl: string, denom?: string): Promise<BalanceResult> => {
+const getCosmosBalance = async (
+  address: string,
+  rpcUrl: string,
+  denom?: string,
+): Promise<BalanceResult> => {
   // cosmos lcd/rest api
   try {
     const response = await fetch(`${rpcUrl}/cosmos/bank/v1beta1/balances/${address}`);
@@ -244,11 +251,11 @@ const getBitcoinBalance = async (address: string, rpcUrl: string): Promise<Balan
     const response = await fetch(`${rpcUrl}/api/address/${address}`);
     const data = await response.json();
 
-    const balance = (data.chain_stats?.funded_txo_sum ?? 0) - (data.chain_stats?.spent_txo_sum ?? 0);
+    const balance =
+      (data.chain_stats?.funded_txo_sum ?? 0) - (data.chain_stats?.spent_txo_sum ?? 0);
     return { free: balance.toString() };
   } catch (err) {
     console.error(`[transparent] bitcoin balance error:`, err);
     return { free: '0' };
   }
 };
-

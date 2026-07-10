@@ -38,6 +38,7 @@ the diversifier index identifies which contact the payment came
 through.
 
 index allocation:
+
 - `0` - default receiving address (your public address)
 - `1-999` - reserved for manual address rotation
 - `1000+` - per-contact diversified addresses

@@ -31,11 +31,25 @@ type FeatureKey = 'stake' | 'swap' | 'vote' | 'inbox';
  * icons" → bottom-tabs already are icon + small label stacked, which
  * is the most compact discoverable pattern.
  */
-const BOTTOM_TABS: ReadonlyArray<{ path: PopupPath; icon: JSX.Element; label: string; feature?: FeatureKey }> = [
-  { path: PopupPath.INDEX,   icon: <span className='i-lucide-home h-5 w-5' />,            label: 'home' },
-  { path: PopupPath.RECEIVE, icon: <span className='i-lucide-arrow-down h-5 w-5' />,      label: 'receive' },
-  { path: PopupPath.SEND,    icon: <span className='i-lucide-arrow-up h-5 w-5' />,        label: 'send' },
-  { path: PopupPath.INBOX,   icon: <span className='i-lucide-mail h-5 w-5' />,            label: 'inbox', feature: 'inbox' },
+const BOTTOM_TABS: ReadonlyArray<{
+  path: PopupPath;
+  icon: JSX.Element;
+  label: string;
+  feature?: FeatureKey;
+}> = [
+  { path: PopupPath.INDEX, icon: <span className='i-lucide-home h-5 w-5' />, label: 'home' },
+  {
+    path: PopupPath.RECEIVE,
+    icon: <span className='i-lucide-arrow-down h-5 w-5' />,
+    label: 'receive',
+  },
+  { path: PopupPath.SEND, icon: <span className='i-lucide-arrow-up h-5 w-5' />, label: 'send' },
+  {
+    path: PopupPath.INBOX,
+    icon: <span className='i-lucide-mail h-5 w-5' />,
+    label: 'inbox',
+    feature: 'inbox',
+  },
 ];
 
 const getTabsForNetwork = (network: NetworkType) =>
@@ -90,7 +104,10 @@ export const PopupLayout = () => {
   const showTabs = showChrome && !matchesRoute(location.pathname, hiddenTabRoutes);
 
   return (
-    <div data-network={activeNetwork} className='relative flex h-full flex-col bg-canvas contain-layout overflow-hidden'>
+    <div
+      data-network={activeNetwork}
+      className='relative flex h-full flex-col bg-canvas contain-layout overflow-hidden'
+    >
       {showChrome && <AppHeader onMenuClick={() => setMenuOpen(true)} />}
       <div
         className='min-h-0 flex-1 overflow-y-auto transform-gpu'

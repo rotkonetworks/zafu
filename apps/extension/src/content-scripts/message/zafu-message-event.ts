@@ -17,7 +17,9 @@ const isZafuMessageEventData = (
   ) &&
   (data as Record<typeof ZAFU_MSG_NS, unknown>)[ZAFU_MSG_NS] != null;
 
-export type ZafuMessageEvent<T = unknown> = MessageEvent<Record<typeof ZAFU_MSG_NS, NonNullable<T>>>;
+export type ZafuMessageEvent<T = unknown> = MessageEvent<
+  Record<typeof ZAFU_MSG_NS, NonNullable<T>>
+>;
 
 export const isZafuMessageEvent = (ev?: unknown): ev is ZafuMessageEvent =>
   ev instanceof MessageEvent && isZafuMessageEventData(ev.data);

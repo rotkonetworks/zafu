@@ -143,9 +143,7 @@ export const ZCASH_MAINNET_ENDPOINTS: ReadonlyArray<ZcashEndpointPreset> = [
 /** Find a preset by URL (used to label a user's current endpoint). */
 export function findPresetByUrl(url: string): ZcashEndpointPreset | undefined {
   const normalized = url.replace(/\/$/, '').toLowerCase();
-  return ZCASH_MAINNET_ENDPOINTS.find(
-    p => p.url.replace(/\/$/, '').toLowerCase() === normalized,
-  );
+  return ZCASH_MAINNET_ENDPOINTS.find(p => p.url.replace(/\/$/, '').toLowerCase() === normalized);
 }
 
 export function findPresetById(id: string): ZcashEndpointPreset | undefined {
@@ -160,13 +158,18 @@ export function defaultZcashEndpoint(): ZcashEndpointPreset {
 export function groupPresetsByRegion(
   presets: ReadonlyArray<ZcashEndpointPreset> = ZCASH_MAINNET_ENDPOINTS,
 ): ReadonlyArray<{ region: RpcEndpointRegion; presets: ZcashEndpointPreset[] }> {
-  const order: RpcEndpointRegion[] = ['default', 'global', 'americas', 'europe', 'asia-pacific', 'community'];
+  const order: RpcEndpointRegion[] = [
+    'default',
+    'global',
+    'americas',
+    'europe',
+    'asia-pacific',
+    'community',
+  ];
   const groups = new Map<RpcEndpointRegion, ZcashEndpointPreset[]>();
   for (const p of presets) {
     if (!groups.has(p.region)) groups.set(p.region, []);
     groups.get(p.region)!.push(p);
   }
-  return order
-    .filter(r => groups.has(r))
-    .map(r => ({ region: r, presets: groups.get(r)! }));
+  return order.filter(r => groups.has(r)).map(r => ({ region: r, presets: groups.get(r)! }));
 }

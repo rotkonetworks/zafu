@@ -75,20 +75,14 @@ export interface NetworkAdapter {
   getTransactions(
     wallet: ZignerWallet,
     limit?: number,
-    offset?: number
+    offset?: number,
   ): Promise<NetworkTransaction[]>;
 
   /** Build an unsigned transaction (returns QR to display) */
-  buildSendTransaction(
-    wallet: ZignerWallet,
-    params: SendParams
-  ): Promise<PendingTransaction>;
+  buildSendTransaction(wallet: ZignerWallet, params: SendParams): Promise<PendingTransaction>;
 
   /** Complete a transaction after receiving signature from Zigner */
-  completeSendTransaction(
-    pendingTx: PendingTransaction,
-    signatureQrHex: string
-  ): Promise<string>; // Returns tx hash
+  completeSendTransaction(pendingTx: PendingTransaction, signatureQrHex: string): Promise<string>; // Returns tx hash
 
   /** Validate an address for this network */
   validateAddress(address: string): boolean;

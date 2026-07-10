@@ -208,7 +208,7 @@ export function usePenumbraMemos() {
             } catch {
               // timestamp unavailable
             }
-          })
+          }),
         );
 
         // update memos with real timestamps
@@ -230,7 +230,7 @@ export function usePenumbraMemos() {
             read: false,
             amount: m.amount,
             asset: m.asset,
-          }))
+          })),
         );
       }
 
@@ -253,5 +253,6 @@ export function usePenumbraMemos() {
  */
 export function usePenumbraUnreadCount() {
   const messages = useStore(messagesSelector);
-  return messages.getByNetwork('penumbra').filter(m => !m.read && m.direction === 'received').length;
+  return messages.getByNetwork('penumbra').filter(m => !m.read && m.direction === 'received')
+    .length;
 }

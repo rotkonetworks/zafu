@@ -70,14 +70,12 @@ function Row({
           {stateLabel}
         </p>
       </div>
-      <button
-        onClick={() => onChange(!checked)}
-        className='shrink-0 transition-colors'
-      >
-        {checked
-          ? <span className='i-lucide-toggle-right size-7 text-green-400' />
-          : <span className='i-lucide-toggle-left size-7 text-fg-muted/40' />
-        }
+      <button onClick={() => onChange(!checked)} className='shrink-0 transition-colors'>
+        {checked ? (
+          <span className='i-lucide-toggle-right size-7 text-green-400' />
+        ) : (
+          <span className='i-lucide-toggle-left size-7 text-fg-muted/40' />
+        )}
       </button>
     </div>
   );
@@ -105,14 +103,20 @@ function ProxySection() {
         <div>
           <p className='text-sm font-medium'>proxy</p>
           <p className={`text-xs mt-0.5 ${proxy.enabled ? 'text-green-500' : 'text-fg-muted'}`}>
-            {proxy.enabled ? `socks5://${proxy.host}:${proxy.port}` : 'direct connection - ip visible to servers'}
+            {proxy.enabled
+              ? `socks5://${proxy.host}:${proxy.port}`
+              : 'direct connection - ip visible to servers'}
           </p>
         </div>
-        <button onClick={() => proxy.enabled ? disable() : (host ? apply() : undefined)} className='shrink-0'>
-          {proxy.enabled
-            ? <span className='i-lucide-toggle-right size-7 text-green-400' />
-            : <span className='i-lucide-toggle-left size-7 text-fg-muted/40' />
-          }
+        <button
+          onClick={() => (proxy.enabled ? disable() : host ? apply() : undefined)}
+          className='shrink-0'
+        >
+          {proxy.enabled ? (
+            <span className='i-lucide-toggle-right size-7 text-green-400' />
+          ) : (
+            <span className='i-lucide-toggle-left size-7 text-fg-muted/40' />
+          )}
         </button>
       </div>
       {!proxy.enabled && (
@@ -151,9 +155,7 @@ export function SettingsPrivacy() {
   const { settings, setSetting } = useStore(privacySelector);
   const activeNetwork = useStore(selectActiveNetwork);
 
-  const visibleRows = PRIVACY_ROWS.filter(
-    row => !row.visible || row.visible(activeNetwork),
-  );
+  const visibleRows = PRIVACY_ROWS.filter(row => !row.visible || row.visible(activeNetwork));
 
   return (
     <SettingsScreen title='privacy'>

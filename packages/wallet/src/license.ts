@@ -41,7 +41,8 @@ export function daysForPayment(amountZat: number): number {
 }
 
 /** rotko's receiving address for license payments */
-export const ROTKO_LICENSE_ADDRESS = 'u1c6wkke2ytaysykam55gratnrne62yx0rvup45qrcyrt5j2wy0g3qvp4y3z97rsq5madg82sntg0gpkadfccelyd7jh0mks65rc9z9wss';
+export const ROTKO_LICENSE_ADDRESS =
+  'u1c6wkke2ytaysykam55gratnrne62yx0rvup45qrcyrt5j2wy0g3qvp4y3z97rsq5madg82sntg0gpkadfccelyd7jh0mks65rc9z9wss';
 
 /** features gated behind pro */
 export const PRO_FEATURES = [
@@ -53,13 +54,9 @@ export const PRO_FEATURES = [
 ] as const;
 
 /** features available to all users */
-export const FREE_FEATURES = [
-  'passwords',
-  'passkeys',
-  'inbox_send',
-] as const;
+export const FREE_FEATURES = ['passwords', 'passkeys', 'inbox_send'] as const;
 
-export type ProFeature = typeof PRO_FEATURES[number];
+export type ProFeature = (typeof PRO_FEATURES)[number];
 
 /**
  * build the license payload that gets signed.
@@ -119,10 +116,16 @@ export function buildPaymentMemo(zidPubkey: string): string {
 export function parseLicense(json: string): License | null {
   try {
     const obj = JSON.parse(json);
-    if (typeof obj.zid === 'string' && typeof obj.expires === 'number' && typeof obj.signature === 'string') {
+    if (
+      typeof obj.zid === 'string' &&
+      typeof obj.expires === 'number' &&
+      typeof obj.signature === 'string'
+    ) {
       return obj as License;
     }
-  } catch { /* */ }
+  } catch {
+    /* */
+  }
   return null;
 }
 

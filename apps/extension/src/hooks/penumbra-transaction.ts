@@ -27,7 +27,9 @@ export const usePenumbraTransaction = () => {
   const messages = useStore(messagesSelector);
 
   return useMutation({
-    mutationFn: async (planRequest: TransactionPlannerRequest): Promise<PenumbraTransactionResult> => {
+    mutationFn: async (
+      planRequest: TransactionPlannerRequest,
+    ): Promise<PenumbraTransactionResult> => {
       // extract memo from plan request before sending
       const memoText = planRequest.memo?.text ?? '';
       let recipientAddress = '';

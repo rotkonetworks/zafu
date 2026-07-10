@@ -65,9 +65,10 @@ const UnbondingTooltipContent = ({
   currentBlockHeight?: number;
   onClaim?: () => void;
 }) => {
-  const blocksRemaining = currentBlockHeight !== undefined
-    ? Math.max(0, info.claimableAt - currentBlockHeight)
-    : undefined;
+  const blocksRemaining =
+    currentBlockHeight !== undefined
+      ? Math.max(0, info.claimableAt - currentBlockHeight)
+      : undefined;
 
   const isReady = blocksRemaining === 0;
 
@@ -97,15 +98,16 @@ const UnbondingTooltipContent = ({
       )}
       <div>
         <span className='text-fg-muted'>Validator: </span>
-        {info.validatorName && (
-          <div className='text-white font-medium'>{info.validatorName}</div>
-        )}
+        {info.validatorName && <div className='text-white font-medium'>{info.validatorName}</div>}
         <div className='text-white break-all text-[10px] font-mono'>{info.validatorId}</div>
       </div>
       {isReady && onClaim && (
         <button
           type='button'
-          onClick={e => { e.stopPropagation(); onClaim(); }}
+          onClick={e => {
+            e.stopPropagation();
+            onClaim();
+          }}
           className='mt-1 rounded-md bg-zigner-gold px-3 py-1.5 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors'
         >
           Claim
@@ -178,7 +180,11 @@ export const ValueComponent = ({
             </button>
           </TooltipTrigger>
           <TooltipContent side='top' sideOffset={8} className='max-w-[280px]'>
-            <UnbondingTooltipContent info={unbondingInfo} currentBlockHeight={currentBlockHeight} onClaim={onClaim} />
+            <UnbondingTooltipContent
+              info={unbondingInfo}
+              currentBlockHeight={currentBlockHeight}
+              onClaim={onClaim}
+            />
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>

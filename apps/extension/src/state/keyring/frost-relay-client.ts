@@ -48,8 +48,11 @@ export class FrostRelayClient {
     const url = serverUrl.replace(/^http/, 'ws').replace(/\/$/, '');
     this.wsUrl = url.includes('/ws') ? url : `${url}/ws`;
     // random nick - relay only sees this opaque string
-    this.nick = 'f' + [...crypto.getRandomValues(new Uint8Array(4))]
-      .map(b => b.toString(16).padStart(2, '0')).join('');
+    this.nick =
+      'f' +
+      [...crypto.getRandomValues(new Uint8Array(4))]
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
   }
 
   /** open WebSocket if not already connected */
@@ -57,10 +60,16 @@ export class FrostRelayClient {
     if (this.ws?.readyState === WebSocket.OPEN) return Promise.resolve();
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(this.wsUrl);
-      ws.onopen = () => { this.ws = ws; resolve(); };
+      ws.onopen = () => {
+        this.ws = ws;
+        resolve();
+      };
       ws.onerror = () => reject(new Error('frost relay: connection failed'));
-      ws.onclose = () => { this.ws = null; this.joined = false; };
-      ws.onmessage = (ev) => {
+      ws.onclose = () => {
+        this.ws = null;
+        this.joined = false;
+      };
+      ws.onmessage = ev => {
         try {
           const msg = JSON.parse(ev.data as string) as Record<string, unknown>;
           // resolve any handshake waiters matching this message, then still
@@ -71,7 +80,9 @@ export class FrostRelayClient {
             if (this.waiters[i]!(msg)) this.waiters.splice(i, 1);
           }
           this.dispatch(msg);
-        } catch { /* malformed message */ }
+        } catch {
+          /* malformed message */
+        }
       };
     });
   }
@@ -94,7 +105,7 @@ export class FrostRelayClient {
     } else if (t === 'joined') {
       // structured join event from the relay (sent both to the joiner and as
       // `system` text to existing participants).
-      const count = typeof msg['count'] === 'number' ? msg['count'] as number : 0;
+      const count = typeof msg['count'] === 'number' ? (msg['count'] as number) : 0;
       const event: RoomEvent = {
         type: 'joined',
         participant: {
@@ -121,7 +132,11 @@ export class FrostRelayClient {
         };
         if (this.onEvent) this.onEvent(event);
         else this.pendingEvents.push(event);
-      } else if (text.includes('left') || text.includes('disconnected') || text.includes('closed')) {
+      } else if (
+        text.includes('left') ||
+        text.includes('disconnected') ||
+        text.includes('closed')
+      ) {
         const event: RoomEvent = { type: 'closed', reason: text };
         if (this.onEvent) this.onEvent(event);
         else this.pendingEvents.push(event);
@@ -135,10 +150,13 @@ export class FrostRelayClient {
 
   /** wait for a specific relay message type */
   private waitFor<T>(predicate: (msg: Record<string, unknown>) => T | false): Promise<T> {
-    return new Promise((resolve) => {
-      this.waiters.push((msg) => {
+    return new Promise(resolve => {
+      this.waiters.push(msg => {
         const result = predicate(msg);
-        if (result !== false) { resolve(result as T); return true; }
+        if (result !== false) {
+          resolve(result as T);
+          return true;
+        }
         return false;
       });
     });
@@ -149,16 +167,12 @@ export class FrostRelayClient {
     await this.connect();
 
     // wait for 'created' response
-    const roomP = this.waitFor((msg) =>
-      msg['t'] === 'created' ? (msg['room'] as string) : false,
-    );
+    const roomP = this.waitFor(msg => (msg['t'] === 'created' ? (msg['room'] as string) : false));
     this.ws!.send(JSON.stringify({ t: 'create', nick: this.nick }));
     const roomCode = await roomP;
 
     // auto-join the room
-    const joinP = this.waitFor((msg) =>
-      msg['t'] === 'joined' ? true : false,
-    );
+    const joinP = this.waitFor(msg => (msg['t'] === 'joined' ? true : false));
     this.ws!.send(JSON.stringify({ t: 'join', room: roomCode, nick: this.nick }));
     await joinP;
 
@@ -191,8 +205,11 @@ export class FrostRelayClient {
     if (this.joined && this.room === roomCode) {
       // already joined from createRoom - wait for abort
       if (signal) {
-        return new Promise<void>((resolve) => {
-          signal.addEventListener('abort', () => { this.disconnect(); resolve(); });
+        return new Promise<void>(resolve => {
+          signal.addEventListener('abort', () => {
+            this.disconnect();
+            resolve();
+          });
         });
       }
       return;
@@ -200,9 +217,7 @@ export class FrostRelayClient {
 
     // connect and join
     await this.connect();
-    const joinP = this.waitFor((msg) =>
-      msg['t'] === 'joined' ? true : false,
-    );
+    const joinP = this.waitFor(msg => (msg['t'] === 'joined' ? true : false));
     this.ws!.send(JSON.stringify({ t: 'join', room: roomCode, nick: this.nick }));
     await joinP;
 
@@ -210,14 +225,21 @@ export class FrostRelayClient {
     this.joined = true;
 
     if (signal) {
-      return new Promise<void>((resolve) => {
-        signal.addEventListener('abort', () => { this.disconnect(); resolve(); });
+      return new Promise<void>(resolve => {
+        signal.addEventListener('abort', () => {
+          this.disconnect();
+          resolve();
+        });
       });
     }
   }
 
   /** send a message to all room participants */
-  async sendMessage(_roomCode: string, _senderId: Uint8Array, payload: Uint8Array): Promise<number> {
+  async sendMessage(
+    _roomCode: string,
+    _senderId: Uint8Array,
+    payload: Uint8Array,
+  ): Promise<number> {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       throw new Error('frost relay: not connected');
     }
@@ -229,7 +251,11 @@ export class FrostRelayClient {
   /** disconnect from relay */
   disconnect() {
     if (this.ws) {
-      try { this.ws.send(JSON.stringify({ t: 'part' })); } catch { /* closing */ }
+      try {
+        this.ws.send(JSON.stringify({ t: 'part' }));
+      } catch {
+        /* closing */
+      }
       this.ws.close();
       this.ws = null;
     }

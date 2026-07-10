@@ -40,15 +40,15 @@ export type NetworkType = PrivacyNetwork | IbcNetwork | TransparentNetwork;
  * same mnemonic can derive keys for any encryption type
  */
 export type EncryptionType =
-  | 'sr25519'        // substrate default (polkadot, kusama, parachains)
-  | 'ed25519'        // substrate alt (native derivation)
+  | 'sr25519' // substrate default (polkadot, kusama, parachains)
+  | 'ed25519' // substrate alt (native derivation)
   | 'ledger_ed25519' // substrate via ledger (SLIP-10/BIP32-Ed25519 derivation)
-  | 'ecdsa'          // substrate alt, also ethereum compatible
-  | 'penumbra'       // penumbra-specific derivation
-  | 'zcash'          // ZIP-32 shielded derivation
-  | 'cosmos'         // BIP44 secp256k1 with bech32
-  | 'bitcoin'        // BIP-84 native segwit
-  | 'ethereum';      // standard secp256k1
+  | 'ecdsa' // substrate alt, also ethereum compatible
+  | 'penumbra' // penumbra-specific derivation
+  | 'zcash' // ZIP-32 shielded derivation
+  | 'cosmos' // BIP44 secp256k1 with bech32
+  | 'bitcoin' // BIP-84 native segwit
+  | 'ethereum'; // standard secp256k1
 
 /**
  * substrate supports multiple encryption types per network
@@ -61,7 +61,12 @@ export type EncryptionType =
  *   → same derivation path as Ledger app, so addresses match
  * - ecdsa: for EVM-compatible substrate chains (moonbeam etc)
  */
-export const SUBSTRATE_ENCRYPTIONS: EncryptionType[] = ['sr25519', 'ed25519', 'ledger_ed25519', 'ecdsa'];
+export const SUBSTRATE_ENCRYPTIONS: EncryptionType[] = [
+  'sr25519',
+  'ed25519',
+  'ledger_ed25519',
+  'ecdsa',
+];
 
 /** default encryption for each network type */
 export const NETWORK_DEFAULT_ENCRYPTION: Record<NetworkType, EncryptionType> = {

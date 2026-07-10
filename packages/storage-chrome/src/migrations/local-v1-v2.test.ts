@@ -234,7 +234,10 @@ describe('local-v1-v2 migration', () => {
       expect(decryptedSeedPhrase).toBe(testSeedPhrase);
 
       // works with new wallet tools
-      const newWalletFromJson = RepoWallet.fromJson({ ...wallets[0]!, vaultId: wallets[0]!.vaultId ?? '' });
+      const newWalletFromJson = RepoWallet.fromJson({
+        ...wallets[0]!,
+        vaultId: wallets[0]!.vaultId ?? '',
+      });
       expect(newWalletFromJson.custodyType).toBe('encryptedSeedPhrase');
       expect(() => newWalletFromJson.custody(recreatedKey!)).not.toThrow();
     });
@@ -263,7 +266,10 @@ describe('local-v1-v2 migration', () => {
       expect(decryptedSeedPhrase).toBe(testSeedPhrase);
 
       // works with new wallet tools
-      const newWalletFromJson = RepoWallet.fromJson({ ...wallets[0]!, vaultId: wallets[0]!.vaultId ?? '' });
+      const newWalletFromJson = RepoWallet.fromJson({
+        ...wallets[0]!,
+        vaultId: wallets[0]!.vaultId ?? '',
+      });
       expect(newWalletFromJson.custodyType).toBe('encryptedSeedPhrase');
       expect(() => newWalletFromJson.custody(recreatedKey!)).not.toThrow();
     });
@@ -288,9 +294,8 @@ describe('local-v1-v2 migration', () => {
     const snapshotPassword = '';
 
     test('pregenesis v0 user migrates correctly', async () => {
-      const { default: onboardV0PregenesisSnapshot } = await import(
-        './test-data/local-v1-v2/onboard-v0-pregenesis.json'
-      );
+      const { default: onboardV0PregenesisSnapshot } =
+        await import('./test-data/local-v1-v2/onboard-v0-pregenesis.json');
       await storageArea.set(onboardV0PregenesisSnapshot);
 
       const wallets = await v2ExtStorage.get('wallets');
@@ -321,15 +326,17 @@ describe('local-v1-v2 migration', () => {
       expect(decryptedSeedPhrase).toBe(testSeedPhrase);
 
       // works with new wallet tools
-      const newWalletFromJson = RepoWallet.fromJson({ ...wallets[0]!, vaultId: wallets[0]!.vaultId ?? '' });
+      const newWalletFromJson = RepoWallet.fromJson({
+        ...wallets[0]!,
+        vaultId: wallets[0]!.vaultId ?? '',
+      });
       expect(newWalletFromJson.custodyType).toBe('encryptedSeedPhrase');
       expect(() => newWalletFromJson.custody(recreatedKey!)).not.toThrow();
     });
 
     test('typical v0 user migrates correctly', async () => {
-      const { default: onboardV0PostgenesisSnapshot } = await import(
-        './test-data/local-v1-v2/onboard-v0-postgenesis.json'
-      );
+      const { default: onboardV0PostgenesisSnapshot } =
+        await import('./test-data/local-v1-v2/onboard-v0-postgenesis.json');
       await storageArea.set(onboardV0PostgenesisSnapshot);
 
       const wallets = await v2ExtStorage.get('wallets');
@@ -363,15 +370,17 @@ describe('local-v1-v2 migration', () => {
       expect(decryptedSeedPhrase).toBe(testSeedPhrase);
 
       // works with new wallet tools
-      const newWalletFromJson = RepoWallet.fromJson({ ...wallets[0]!, vaultId: wallets[0]!.vaultId ?? '' });
+      const newWalletFromJson = RepoWallet.fromJson({
+        ...wallets[0]!,
+        vaultId: wallets[0]!.vaultId ?? '',
+      });
       expect(newWalletFromJson.custodyType).toBe('encryptedSeedPhrase');
       expect(() => newWalletFromJson.custody(recreatedKey!)).not.toThrow();
     });
 
     test('corrupted v1 user migrates correctly', async () => {
-      const { default: onboardV0PregenesisV1CorruptSnapshot } = await import(
-        './test-data/local-v1-v2/onboard-v0-pregenesis-v1-corrupt.json'
-      );
+      const { default: onboardV0PregenesisV1CorruptSnapshot } =
+        await import('./test-data/local-v1-v2/onboard-v0-pregenesis-v1-corrupt.json');
       await storageArea.set(onboardV0PregenesisV1CorruptSnapshot);
 
       const wallets = await v2ExtStorage.get('wallets');
@@ -405,7 +414,10 @@ describe('local-v1-v2 migration', () => {
       expect(decryptedSeedPhrase).toBe(testSeedPhrase);
 
       // works with new wallet tools
-      const newWalletFromJson = RepoWallet.fromJson({ ...wallets[0]!, vaultId: wallets[0]!.vaultId ?? '' });
+      const newWalletFromJson = RepoWallet.fromJson({
+        ...wallets[0]!,
+        vaultId: wallets[0]!.vaultId ?? '',
+      });
       expect(newWalletFromJson.custodyType).toBe('encryptedSeedPhrase');
       expect(() => newWalletFromJson.custody(recreatedKey!)).not.toThrow();
     });

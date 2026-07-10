@@ -110,7 +110,9 @@ export function parseZcashFvkQR(hex: string): ZcashFvkExportData {
     throw new Error(`Invalid Zcash QR: expected Zcash chain 0x04, got 0x${data[1]?.toString(16)}`);
   }
   if (data[2] !== QR_TYPE.FVK_EXPORT) {
-    throw new Error(`Invalid Zcash QR: expected FVK export type 0x01, got 0x${data[2]?.toString(16)}`);
+    throw new Error(
+      `Invalid Zcash QR: expected FVK export type 0x01, got 0x${data[2]?.toString(16)}`,
+    );
   }
 
   let offset = 3;
@@ -249,7 +251,7 @@ export interface ZcashSignRequest {
 export function encodeZcashSignRequest(request: ZcashSignRequest): string {
   const summaryBytes = new TextEncoder().encode(request.summary);
 
-  const totalLen = 3 + 1 + 4 + 32 + 2 + (request.orchardAlphas.length * 32) + 2 + summaryBytes.length;
+  const totalLen = 3 + 1 + 4 + 32 + 2 + request.orchardAlphas.length * 32 + 2 + summaryBytes.length;
   const output = new Uint8Array(totalLen);
   let offset = 0;
 
@@ -323,7 +325,11 @@ export function parseZcashSignatureResponse(hex: string): ZcashSignatureResponse
   if (data.length < 37) {
     throw new Error('Invalid Zcash signature response: too short');
   }
-  if (data[0] !== SUBSTRATE_COMPAT || data[1] !== CHAIN_ID.ZCASH || data[2] !== QR_TYPE.SIGNATURES) {
+  if (
+    data[0] !== SUBSTRATE_COMPAT ||
+    data[1] !== CHAIN_ID.ZCASH ||
+    data[2] !== QR_TYPE.SIGNATURES
+  ) {
     throw new Error('Invalid Zcash signature response: bad prelude');
   }
 
@@ -422,7 +428,9 @@ export function detectQRNetwork(hex: string): 'penumbra' | 'zcash' | 'unknown' {
 /**
  * Detect the operation type of a QR code
  */
-export function detectQRType(hex: string): 'fvk_export' | 'sign_request' | 'signatures' | 'unknown' {
+export function detectQRType(
+  hex: string,
+): 'fvk_export' | 'sign_request' | 'signatures' | 'unknown' {
   try {
     const data = hexToBytes(hex);
     if (data.length < 3 || data[0] !== SUBSTRATE_COMPAT) {

@@ -64,7 +64,7 @@ export function useZcashSyncStatus(): ZcashSyncState {
 
   // also try to read persisted sync height on mount
   useEffect(() => {
-    chrome.storage.local.get('zcashSyncHeight', (result) => {
+    chrome.storage.local.get('zcashSyncHeight', result => {
       if (result['zcashSyncHeight'] && typeof result['zcashSyncHeight'] === 'number') {
         setWorkerSyncHeight(h => Math.max(h, result['zcashSyncHeight'] as number));
       }
@@ -73,7 +73,9 @@ export function useZcashSyncStatus(): ZcashSyncState {
 
   const client = useCallback(
     (): ZcashClient =>
-      backend === 'lightwalletd' ? new LightwalletdClient(zidecarUrl) : new ZidecarClient(zidecarUrl),
+      backend === 'lightwalletd'
+        ? new LightwalletdClient(zidecarUrl)
+        : new ZidecarClient(zidecarUrl),
     [zidecarUrl, backend],
   );
 

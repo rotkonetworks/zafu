@@ -27,53 +27,79 @@ type ProposalEntry = {
 function parseProposalKind(proposal: ProposalListResponse['proposal']): string {
   if (!proposal) return 'unknown';
   switch (proposal.payload.case) {
-    case 'signaling': return 'signaling';
-    case 'emergency': return 'emergency';
-    case 'parameterChange': return 'parameter change';
-    case 'communityPoolSpend': return 'community pool spend';
-    case 'upgradePlan': return 'upgrade';
-    case 'freezeIbcClient': return 'freeze IBC client';
-    case 'unfreezeIbcClient': return 'unfreeze IBC client';
-    default: return 'unknown';
+    case 'signaling':
+      return 'signaling';
+    case 'emergency':
+      return 'emergency';
+    case 'parameterChange':
+      return 'parameter change';
+    case 'communityPoolSpend':
+      return 'community pool spend';
+    case 'upgradePlan':
+      return 'upgrade';
+    case 'freezeIbcClient':
+      return 'freeze IBC client';
+    case 'unfreezeIbcClient':
+      return 'unfreeze IBC client';
+    default:
+      return 'unknown';
   }
 }
 
 function parseState(state: ProposalListResponse['state']): string {
   if (!state) return 'unknown';
   switch (state.state.case) {
-    case 'voting': return 'voting';
-    case 'withdrawn': return 'withdrawn';
-    case 'finished': return 'finished';
-    case 'claimed': return 'claimed';
-    default: return 'unknown';
+    case 'voting':
+      return 'voting';
+    case 'withdrawn':
+      return 'withdrawn';
+    case 'finished':
+      return 'finished';
+    case 'claimed':
+      return 'claimed';
+    default:
+      return 'unknown';
   }
 }
 
 function stateColor(state: string): string {
   switch (state) {
-    case 'voting': return 'text-green-400';
-    case 'withdrawn': return 'text-yellow-400';
-    case 'finished': return 'text-fg-muted';
-    case 'claimed': return 'text-fg-muted';
-    default: return 'text-fg-muted';
+    case 'voting':
+      return 'text-green-400';
+    case 'withdrawn':
+      return 'text-yellow-400';
+    case 'finished':
+      return 'text-fg-muted';
+    case 'claimed':
+      return 'text-fg-muted';
+    default:
+      return 'text-fg-muted';
   }
 }
 
 function voteLabel(vote: Vote_Vote): string {
   switch (vote) {
-    case Vote_Vote.YES: return 'yes';
-    case Vote_Vote.NO: return 'no';
-    case Vote_Vote.ABSTAIN: return 'abstain';
-    default: return '';
+    case Vote_Vote.YES:
+      return 'yes';
+    case Vote_Vote.NO:
+      return 'no';
+    case Vote_Vote.ABSTAIN:
+      return 'abstain';
+    default:
+      return '';
   }
 }
 
 function voteColor(vote: Vote_Vote): string {
   switch (vote) {
-    case Vote_Vote.YES: return 'bg-green-500/20 text-green-400 hover:bg-green-500/30';
-    case Vote_Vote.NO: return 'bg-red-500/20 text-red-400 hover:bg-red-500/30';
-    case Vote_Vote.ABSTAIN: return 'bg-elev-2 text-fg-muted hover:bg-elev-1/80';
-    default: return '';
+    case Vote_Vote.YES:
+      return 'bg-green-500/20 text-green-400 hover:bg-green-500/30';
+    case Vote_Vote.NO:
+      return 'bg-red-500/20 text-red-400 hover:bg-red-500/30';
+    case Vote_Vote.ABSTAIN:
+      return 'bg-elev-2 text-fg-muted hover:bg-elev-1/80';
+    default:
+      return '';
   }
 }
 
@@ -119,13 +145,15 @@ export function VotePage() {
     try {
       // build delegator vote transaction plan via view service
       const plan = await viewClient.transactionPlanner({
-        delegatorVotes: [{
-          proposal: proposalId,
-          vote: { vote },
-          startBlockHeight: 0n, // filled by planner
-          startPosition: 0n,
-          rateData: [],
-        }],
+        delegatorVotes: [
+          {
+            proposal: proposalId,
+            vote: { vote },
+            startBlockHeight: 0n, // filled by planner
+            startPosition: 0n,
+            rateData: [],
+          },
+        ],
       });
 
       if (!plan.plan) throw new Error('failed to create vote plan');
@@ -163,9 +191,7 @@ export function VotePage() {
     <div className='flex flex-col gap-3 p-4'>
       <div className='flex items-center justify-between'>
         <h2 className='text-lg font-medium'>governance</h2>
-        {activeCount > 0 && (
-          <span className='text-xs text-green-400'>{activeCount} active</span>
-        )}
+        {activeCount > 0 && <span className='text-xs text-green-400'>{activeCount} active</span>}
       </div>
 
       {/* filter toggle */}
@@ -187,7 +213,9 @@ export function VotePage() {
       {voteError && (
         <div className='text-xs text-red-400 bg-red-400/10 p-2 rounded-lg border border-red-400/40'>
           {voteError}
-          <button onClick={() => setVoteError(null)} className='ml-2 underline'>dismiss</button>
+          <button onClick={() => setVoteError(null)} className='ml-2 underline'>
+            dismiss
+          </button>
         </div>
       )}
 
@@ -200,7 +228,10 @@ export function VotePage() {
       {proposalsQuery.error && (
         <div className='text-center py-12'>
           <p className='text-sm text-red-400'>failed to load proposals</p>
-          <button onClick={() => void proposalsQuery.refetch()} className='text-sm text-zigner-gold hover:underline mt-1'>
+          <button
+            onClick={() => void proposalsQuery.refetch()}
+            className='text-sm text-zigner-gold hover:underline mt-1'
+          >
             retry
           </button>
         </div>
@@ -236,7 +267,11 @@ export function VotePage() {
                   </div>
                   <p className='text-sm mt-0.5 truncate'>{p.title}</p>
                 </div>
-                {isExpanded ? <span className='i-lucide-chevron-up h-4 w-4 shrink-0 text-fg-muted' /> : <span className='i-lucide-chevron-down h-4 w-4 shrink-0 text-fg-muted' />}
+                {isExpanded ? (
+                  <span className='i-lucide-chevron-up h-4 w-4 shrink-0 text-fg-muted' />
+                ) : (
+                  <span className='i-lucide-chevron-down h-4 w-4 shrink-0 text-fg-muted' />
+                )}
               </button>
 
               {/* expanded detail */}

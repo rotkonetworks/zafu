@@ -65,14 +65,9 @@ export function andThenT<ReqIn, RepOut, ReqOut, RepIn>(
  * Compose multiple simple filters left-to-right into one filter.
  * stack(a, b, c) means: a wraps b wraps c wraps the final service.
  */
-export function stack<Req, Rep>(
-  ...filters: SimpleFilter<Req, Rep>[]
-): SimpleFilter<Req, Rep> {
+export function stack<Req, Rep>(...filters: SimpleFilter<Req, Rep>[]): SimpleFilter<Req, Rep> {
   return (req: Req, service: Service<Req, Rep>) => {
-    const composed = filters.reduceRight<Service<Req, Rep>>(
-      (svc, f) => andThen(f, svc),
-      service,
-    );
+    const composed = filters.reduceRight<Service<Req, Rep>>((svc, f) => andThen(f, svc), service);
     return composed(req);
   };
 }

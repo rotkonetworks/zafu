@@ -39,10 +39,8 @@ export interface BucketCacheOptions {
   readonly alwaysFetch?: (bucket: BucketStart) => boolean;
 }
 
-export const withBucketCache = (
-  store: BucketStore,
-  opts: BucketCacheOptions = {},
-): MemoFilter =>
+export const withBucketCache =
+  (store: BucketStore, opts: BucketCacheOptions = {}): MemoFilter =>
   (inner: MemoFetcher): MemoFetcher =>
     async function* cached(walletId, ownedBuckets, ctx) {
       const seen = await store.list(walletId);
@@ -87,7 +85,7 @@ export function idbBucketStore(provider: IDBProvider, storeName = 'memo-cache'):
   return {
     async has(walletId, bucket) {
       const db = await provider.open();
-      return new Promise<boolean>((resolve) => {
+      return new Promise<boolean>(resolve => {
         const tx = db.transaction(storeName, 'readonly');
         const req = tx.objectStore(storeName).get(`${walletId}:${bucket}`);
         req.onsuccess = () => resolve(req.result !== undefined);
@@ -112,7 +110,10 @@ export function idbBucketStore(provider: IDBProvider, storeName = 'memo-cache'):
         const prefix = `${walletId}:`;
         req.onsuccess = () => {
           const cursor = req.result;
-          if (!cursor) { resolve(out); return; }
+          if (!cursor) {
+            resolve(out);
+            return;
+          }
           const key = cursor.key as string;
           if (key.startsWith(prefix)) {
             const suffix = key.slice(prefix.length);
@@ -132,12 +133,21 @@ export function memoryBucketStore(): BucketStore {
   const map = new Map<string, Set<BucketStart>>();
   const set = (walletId: string) => {
     let s = map.get(walletId);
-    if (!s) { s = new Set(); map.set(walletId, s); }
+    if (!s) {
+      s = new Set();
+      map.set(walletId, s);
+    }
     return s;
   };
   return {
-    async has(w, b) { return set(w).has(b); },
-    async put(w, b) { set(w).add(b); },
-    async list(w) { return set(w); },
+    async has(w, b) {
+      return set(w).has(b);
+    },
+    async put(w, b) {
+      set(w).add(b);
+    },
+    async list(w) {
+      return set(w);
+    },
   };
 }

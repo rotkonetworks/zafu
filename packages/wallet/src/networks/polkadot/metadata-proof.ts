@@ -27,7 +27,7 @@ export async function getMerkleizedMetadata(
   chain: SupportedChain,
   rawMetadata: Uint8Array,
   specVersion: number,
-  specName: string
+  specName: string,
 ): Promise<ReturnType<typeof merkleizeMetadata>> {
   const key = cacheKey(chain, specVersion);
   const cached = metadataCache.get(key);
@@ -67,20 +67,11 @@ export async function generateExtrinsicProof(
   specName: string,
   callData: Uint8Array,
   signedExtensions: Uint8Array,
-  additionalSigned: Uint8Array
+  additionalSigned: Uint8Array,
 ): Promise<Uint8Array> {
-  const merkleized = await getMerkleizedMetadata(
-    chain,
-    rawMetadata,
-    specVersion,
-    specName
-  );
+  const merkleized = await getMerkleizedMetadata(chain, rawMetadata, specVersion, specName);
 
-  return merkleized.getProofForExtrinsicParts(
-    callData,
-    signedExtensions,
-    additionalSigned
-  );
+  return merkleized.getProofForExtrinsicParts(callData, signedExtensions, additionalSigned);
 }
 
 /**
@@ -92,14 +83,9 @@ export async function generateMetadataDigest(
   chain: SupportedChain,
   rawMetadata: Uint8Array,
   specVersion: number,
-  specName: string
+  specName: string,
 ): Promise<Uint8Array> {
-  const merkleized = await getMerkleizedMetadata(
-    chain,
-    rawMetadata,
-    specVersion,
-    specName
-  );
+  const merkleized = await getMerkleizedMetadata(chain, rawMetadata, specVersion, specName);
 
   return merkleized.digest();
 }
@@ -141,11 +127,9 @@ export const UOS_CRYPTO_CODE = {
 export function buildUosPayloadWithProof(
   proof: Uint8Array,
   callData: Uint8Array,
-  signedExtensions: Uint8Array
+  signedExtensions: Uint8Array,
 ): Uint8Array {
-  const payload = new Uint8Array(
-    proof.length + callData.length + signedExtensions.length
-  );
+  const payload = new Uint8Array(proof.length + callData.length + signedExtensions.length);
 
   let offset = 0;
   payload.set(proof, offset);

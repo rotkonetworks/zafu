@@ -166,7 +166,11 @@ function convertBits(data: Uint8Array, fromBits: number, toBits: number, pad: bo
  * encode a segwit address (bech32)
  * witness version 0 for P2WPKH
  */
-function encodeBech32Address(hrp: string, witnessVersion: number, witnessProgram: Uint8Array): string {
+function encodeBech32Address(
+  hrp: string,
+  witnessVersion: number,
+  witnessProgram: Uint8Array,
+): string {
   const data5bit = convertBits(witnessProgram, 8, 5, true);
   const combined = [witnessVersion, ...data5bit];
   const checksum = bech32CreateChecksum(hrp, combined);
@@ -185,10 +189,7 @@ function encodeBech32Address(hrp: string, witnessVersion: number, witnessProgram
  * BIP-84 path: m/84'/0'/0'/0/{accountIndex}
  * produces bc1... (P2WPKH) addresses
  */
-export async function deriveBtcWallet(
-  mnemonic: string,
-  accountIndex = 0,
-): Promise<BitcoinWallet> {
+export async function deriveBtcWallet(mnemonic: string, accountIndex = 0): Promise<BitcoinWallet> {
   const seed = mnemonicToSeedSync(mnemonic);
   const path = `m/84'/0'/0'/0/${accountIndex}`;
 
@@ -213,10 +214,7 @@ export async function deriveBtcWallet(
 /**
  * derive just the address (no private key returned)
  */
-export async function deriveBtcAddress(
-  mnemonic: string,
-  accountIndex = 0,
-): Promise<string> {
+export async function deriveBtcAddress(mnemonic: string, accountIndex = 0): Promise<string> {
   const wallet = await deriveBtcWallet(mnemonic, accountIndex);
   wallet.privateKey.fill(0);
   return wallet.address;

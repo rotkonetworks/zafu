@@ -127,10 +127,7 @@ export interface PrivacySlice {
   settings: PrivacySettings;
 
   /** update a single setting */
-  setSetting: <K extends keyof PrivacySettings>(
-    key: K,
-    value: PrivacySettings[K],
-  ) => Promise<void>;
+  setSetting: <K extends keyof PrivacySettings>(key: K, value: PrivacySettings[K]) => Promise<void>;
 
   /** update proxy config and apply to chrome.proxy */
   setProxy: (config: ProxyConfig) => Promise<void>;
@@ -165,7 +162,7 @@ export const createPrivacySlice =
     settings: { ...DEFAULT_PRIVACY_SETTINGS },
 
     setSetting: async (key, value) => {
-      set((state) => {
+      set(state => {
         state.privacy.settings[key] = value;
       });
 
@@ -174,7 +171,9 @@ export const createPrivacySlice =
     },
 
     setProxy: async (config: ProxyConfig) => {
-      set((state) => { state.privacy.settings.proxy = config; });
+      set(state => {
+        state.privacy.settings.proxy = config;
+      });
 
       const settings = get().privacy.settings;
       await local.set('privacySettings' as keyof LocalStorageState, settings as never);
@@ -205,7 +204,7 @@ export const createPrivacySlice =
     },
 
     resetToDefaults: async () => {
-      set((state) => {
+      set(state => {
         state.privacy.settings = { ...DEFAULT_PRIVACY_SETTINGS };
       });
 
@@ -279,8 +278,7 @@ export const canBackgroundSyncForNetwork = (state: AllSlices, network: NetworkTy
   return state.privacy.settings.enableBackgroundSync;
 };
 
-export const canFetchPrices = (state: AllSlices) =>
-  state.privacy.settings.enablePriceFetching;
+export const canFetchPrices = (state: AllSlices) => state.privacy.settings.enablePriceFetching;
 
 /**
  * zid identity surface enabled? legacy stored state (no field) treats

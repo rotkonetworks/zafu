@@ -17,9 +17,7 @@
  * recover privacy from a leaked txid lookup.
  */
 
-import type {
-  BucketStore,
-} from './filters/cache';
+import type { BucketStore } from './filters/cache';
 import { withBucketCache } from './filters/cache';
 import { withConcurrency } from './filters/concurrency';
 import { withDecoyBuckets } from './filters/decoy';
@@ -42,10 +40,7 @@ export interface StrategyParams {
   readonly alwaysFetch?: (bucket: number) => boolean;
 }
 
-export function buildStrategy(
-  name: MemoSyncStrategy,
-  params: StrategyParams,
-): MemoFetcher {
+export function buildStrategy(name: MemoSyncStrategy, params: StrategyParams): MemoFetcher {
   const { base, store, rng, alwaysFetch } = params;
   const cache = withBucketCache(store, { alwaysFetch });
   // ordering note: filters are applied left-to-right, so the LAST entry is the
@@ -55,10 +50,7 @@ export function buildStrategy(
   // see strategy.ts header comment for call-time flow.
   switch (name) {
     case 'fast':
-      return compose(base, [
-        withConcurrency(8),
-        cache,
-      ]);
+      return compose(base, [withConcurrency(8), cache]);
     case 'private':
     default:
       return compose(base, [

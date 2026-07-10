@@ -8,15 +8,20 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: 'border border-zigner-gold text-zigner-gold hover:bg-zigner-gold hover:text-zigner-gold-foreground',
-        gradient: 'border border-zigner-gold text-zigner-gold hover:bg-zigner-gold hover:text-zigner-gold-foreground',
+        default:
+          'border border-zigner-gold text-zigner-gold hover:bg-zigner-gold hover:text-zigner-gold-foreground',
+        gradient:
+          'border border-zigner-gold text-zigner-gold hover:bg-zigner-gold hover:text-zigner-gold-foreground',
         secondary: 'border border-border-soft text-fg-muted hover:bg-elev-1 hover:text-fg-high',
-        destructive: 'border border-destructive text-destructive hover:bg-destructive hover:text-white',
-        destructiveSecondary: 'border border-destructive/50 text-destructive hover:bg-destructive/20',
+        destructive:
+          'border border-destructive text-destructive hover:bg-destructive hover:text-white',
+        destructiveSecondary:
+          'border border-destructive/50 text-destructive hover:bg-destructive/20',
         outline: 'border border-border-soft text-fg-muted hover:text-fg-high',
         ghost: 'hover:bg-elev-1 hover:text-fg-high',
         link: 'text-fg-muted underline-offset-4 hover:underline',
-        onLight: 'border border-zigner-gold text-zigner-gold hover:bg-zigner-gold hover:text-zigner-gold-foreground',
+        onLight:
+          'border border-zigner-gold text-zigner-gold hover:bg-zigner-gold hover:text-zigner-gold-foreground',
       },
       size: {
         default: 'h-9 md:h-11',
@@ -34,8 +39,7 @@ const buttonVariants = cva(
 );
 
 export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {
   /**
    * Merges its props onto its immediate child.
    *

@@ -44,7 +44,9 @@ export const createPasswordSlice =
         await session.set('passwordKey', keyJson);
 
         // mark keyring as unlocked so persist subscription re-hydrates encrypted data
-        set(state => { state.keyRing.status = 'unlocked'; });
+        set(state => {
+          state.keyRing.status = 'unlocked';
+        });
 
         // refresh pro license from server on unlock
         void (async () => {
@@ -52,7 +54,9 @@ export const createPasswordSlice =
             const keyInfo = get().keyRing.selectedKeyInfo;
             const zidPubkey = keyInfo?.insensitive?.['zid'] as string | undefined;
             if (zidPubkey) await get().license.fetchLicense(zidPubkey);
-          } catch { /* server unreachable — treat as free */ }
+          } catch {
+            /* server unreachable — treat as free */
+          }
         })();
       },
       clearSessionPassword: () => {

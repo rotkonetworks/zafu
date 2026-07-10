@@ -4,7 +4,12 @@
  */
 
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { SkipClient, type RouteRequest, type RouteResponse, type MessagesResponse } from '@penumbra-zone/query/skip/index';
+import {
+  SkipClient,
+  type RouteRequest,
+  type RouteResponse,
+  type MessagesResponse,
+} from '@penumbra-zone/query/skip/index';
 
 const skipClient = new SkipClient();
 
@@ -19,7 +24,14 @@ export interface UseSkipRouteOptions {
 
 /** fetch route for a transfer */
 export const useSkipRoute = (options: UseSkipRouteOptions) => {
-  const { sourceChainId, sourceAssetDenom, destChainId, destAssetDenom, amount, enabled = true } = options;
+  const {
+    sourceChainId,
+    sourceAssetDenom,
+    destChainId,
+    destAssetDenom,
+    amount,
+    enabled = true,
+  } = options;
 
   return useQuery({
     queryKey: ['skipRoute', sourceChainId, sourceAssetDenom, destChainId, destAssetDenom, amount],
@@ -80,7 +92,10 @@ export const useSkipMessages = (options: UseSkipMessagesOptions) => {
 };
 
 /** track transaction status */
-export const useSkipTransactionStatus = (chainId: string | undefined, txHash: string | undefined) => {
+export const useSkipTransactionStatus = (
+  chainId: string | undefined,
+  txHash: string | undefined,
+) => {
   return useQuery({
     queryKey: ['skipTxStatus', chainId, txHash],
     queryFn: async () => {
@@ -88,7 +103,7 @@ export const useSkipTransactionStatus = (chainId: string | undefined, txHash: st
       return skipClient.transactionStatus({ chainId, txHash });
     },
     enabled: !!chainId && !!txHash,
-refetchInterval: (query) => {
+    refetchInterval: query => {
       const data = query.state.data;
       if (!data) return 3000;
       // stop polling when completed

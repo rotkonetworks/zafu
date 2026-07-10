@@ -4,11 +4,12 @@ These vendored .wasm blobs are build artifacts. Do NOT hand-edit.
 Reproduce by checking out the zcli rev below and running the commands.
 
 - source repo: https://github.com/rotkonetworks/zcli (branch feat/NU6.2-lightwallet-endpoint-support)
-- source rev:  eaa9878 (Merge branch 'staging' into feat/NU6.2-lightwallet-endpoint-support)
+- source rev: eaa9878 (Merge branch 'staging' into feat/NU6.2-lightwallet-endpoint-support)
 - source state: clean working tree
 - built (UTC): 2026-06-05T15:28:00Z
 
-## single-thread  (packages/zcash-wasm/zafu_wasm_bg.wasm; duplicated as zcash_wasm_bg.wasm)
+## single-thread (packages/zcash-wasm/zafu_wasm_bg.wasm; duplicated as zcash_wasm_bg.wasm)
+
     cd crates/zcash-wasm
     unset RUSTFLAGS
     RUSTUP_TOOLCHAIN=nightly cargo wasm-single
@@ -20,7 +21,8 @@ Reproduce by checking out the zcli rev below and running the commands.
       pkg/zafu_wasm_bg.wasm -o pkg/zafu_wasm_bg.wasm
     sha256(zafu_wasm_bg.wasm) = 84955a3ff9d002a9a079aca0470e5999aece2ef6814459a0fbcc0108c6616a95
 
-## parallel / rayon  (apps/extension/public/zafu-wasm-parallel/zafu_wasm_bg.wasm)
+## parallel / rayon (apps/extension/public/zafu-wasm-parallel/zafu_wasm_bg.wasm)
+
     # DO NOT set RUSTFLAGS — env var overrides crates/zcash-wasm/.cargo/config.toml
     # rustflags wholesale, which drops the link-args (--shared-memory,
     # --import-memory, --max-memory, --export=__wasm_init_tls…). Without

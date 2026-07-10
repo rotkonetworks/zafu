@@ -2,11 +2,7 @@
 
 import { describe, expect, test } from 'vitest';
 import { withReconnect } from './reconnect';
-import type {
-  MempoolFetchContext,
-  MempoolFetcher,
-  MempoolStreamStatus,
-} from '../types';
+import type { MempoolFetchContext, MempoolFetcher, MempoolStreamStatus } from '../types';
 
 const ctx = (
   signal: AbortSignal,
@@ -36,7 +32,10 @@ describe('withReconnect', () => {
     const statuses: MempoolStreamStatus[] = [];
     const wrapped = withReconnect({ initialDelayMs: 5, maxDelayMs: 10 })(inner);
     const got: number[] = [];
-    for await (const s of wrapped('w', ctx(ctrl.signal, st => statuses.push(st)))) {
+    for await (const s of wrapped(
+      'w',
+      ctx(ctrl.signal, st => statuses.push(st)),
+    )) {
       got.push(s.observedAtMs);
     }
     expect(got).toEqual([99]);
@@ -51,7 +50,9 @@ describe('withReconnect', () => {
     const ctrl = new AbortController();
     const wrapped = withReconnect({ initialDelayMs: 1, maxAttempts: 2 })(inner);
     await expect(async () => {
-      for await (const _ of wrapped('w', ctx(ctrl.signal))) { /* */ }
+      for await (const _ of wrapped('w', ctx(ctrl.signal))) {
+        /* */
+      }
     }).rejects.toThrow('persistent');
   });
 
@@ -63,7 +64,9 @@ describe('withReconnect', () => {
     const wrapped = withReconnect({ initialDelayMs: 5_000, maxAttempts: 0 })(inner);
     // start consumption, then abort almost immediately
     const consume = (async () => {
-      for await (const _ of wrapped('w', ctx(ctrl.signal))) { /* */ }
+      for await (const _ of wrapped('w', ctx(ctrl.signal))) {
+        /* */
+      }
     })();
     await new Promise(r => setTimeout(r, 50));
     ctrl.abort();
@@ -83,7 +86,10 @@ describe('withReconnect', () => {
     const statuses: MempoolStreamStatus[] = [];
     const wrapped = withReconnect({ initialDelayMs: 5 })(inner);
     const got: number[] = [];
-    for await (const s of wrapped('w', ctx(ctrl.signal, st => statuses.push(st)))) {
+    for await (const s of wrapped(
+      'w',
+      ctx(ctrl.signal, st => statuses.push(st)),
+    )) {
       got.push(s.observedAtMs);
       if (got.length === 2) ctrl.abort();
     }

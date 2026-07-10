@@ -16,4 +16,4 @@ By contributing, you acknowledge that you have read and agree to these terms.
 
 ---
 
-*Rotko Networks OÜ*
+_Rotko Networks OÜ_

@@ -11,7 +11,13 @@ const iconClass = 'h-full w-full';
 const PenumbraIcon = () => (
   <svg viewBox='0 0 32 32' className={iconClass}>
     <circle cx='16' cy='16' r='14' fill='#8B5CF6' />
-    <path d='M16 6 L24 14 L16 26 L8 14 Z' fill='none' stroke='white' strokeWidth='1.5' strokeLinejoin='round' />
+    <path
+      d='M16 6 L24 14 L16 26 L8 14 Z'
+      fill='none'
+      stroke='white'
+      strokeWidth='1.5'
+      strokeLinejoin='round'
+    />
     <path d='M16 12 L20 16 L16 22 L12 16 Z' fill='white' opacity='0.6' />
   </svg>
 );
@@ -39,7 +45,17 @@ const ZcashIcon = () => (
 const NobleIcon = () => (
   <svg viewBox='0 0 32 32' className={iconClass}>
     <circle cx='16' cy='16' r='14' fill='#60A5FA' />
-    <text x='16' y='21' textAnchor='middle' fill='white' fontSize='14' fontWeight='bold' fontFamily='sans-serif'>N</text>
+    <text
+      x='16'
+      y='21'
+      textAnchor='middle'
+      fill='white'
+      fontSize='14'
+      fontWeight='bold'
+      fontFamily='sans-serif'
+    >
+      N
+    </text>
   </svg>
 );
 
@@ -47,7 +63,17 @@ const NobleIcon = () => (
 const CosmosHubIcon = () => (
   <svg viewBox='0 0 32 32' className={iconClass}>
     <circle cx='16' cy='16' r='14' fill='#6366F1' />
-    <text x='16' y='21' textAnchor='middle' fill='white' fontSize='13' fontWeight='bold' fontFamily='sans-serif'>ATOM</text>
+    <text
+      x='16'
+      y='21'
+      textAnchor='middle'
+      fill='white'
+      fontSize='13'
+      fontWeight='bold'
+      fontFamily='sans-serif'
+    >
+      ATOM
+    </text>
   </svg>
 );
 
@@ -78,7 +104,11 @@ const FALLBACK_COLORS: Record<string, string> = {
   'orange-400': '#FB923C',
 };
 
-export const NetworkIcon = ({ network, color, size = 'md' }: {
+export const NetworkIcon = ({
+  network,
+  color,
+  size = 'md',
+}: {
   network: NetworkType;
   color?: string;
   size?: 'sm' | 'md' | 'lg';

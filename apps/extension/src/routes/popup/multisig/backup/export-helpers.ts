@@ -25,7 +25,9 @@ const downloadJson = (filename: string, jsonText: string) => {
   URL.revokeObjectURL(url);
 };
 
-const buildSharePayload = async (wallet: ZcashWalletJson): Promise<Omit<FrostSharePayload, 'version' | 'type'>> => {
+const buildSharePayload = async (
+  wallet: ZcashWalletJson,
+): Promise<Omit<FrostSharePayload, 'version' | 'type'>> => {
   if (!wallet.multisig) throw new Error(`wallet ${wallet.id} has no multisig data`);
   if (wallet.multisig.custody === 'airgapSigner') {
     throw new Error(
@@ -52,7 +54,10 @@ const buildSharePayload = async (wallet: ZcashWalletJson): Promise<Omit<FrostSha
 };
 
 /** export a single self-custody multisig wallet as `frost-backup-<label>-<date>.json`. */
-export const exportSingleBackup = async (wallet: ZcashWalletJson, passphrase: string): Promise<void> => {
+export const exportSingleBackup = async (
+  wallet: ZcashWalletJson,
+  passphrase: string,
+): Promise<void> => {
   const share = await buildSharePayload(wallet);
   const payload: FrostSharePayload = { version: 1, type: 'frost-share', ...share };
   const envelope = await sealBackup(payload, passphrase, {
@@ -63,7 +68,10 @@ export const exportSingleBackup = async (wallet: ZcashWalletJson, passphrase: st
 };
 
 /** export every self-custody multisig wallet as `frost-backup-all-<date>.json`. */
-export const exportBatchBackup = async (wallets: ZcashWalletJson[], passphrase: string): Promise<void> => {
+export const exportBatchBackup = async (
+  wallets: ZcashWalletJson[],
+  passphrase: string,
+): Promise<void> => {
   const selfCustody = wallets.filter(w => w.multisig && w.multisig.custody !== 'airgapSigner');
   if (selfCustody.length === 0) {
     throw new Error('no self-custody multisig wallets to export');

@@ -57,19 +57,19 @@ For each owned note, group its block height into a 100-block bucket. Then:
 From the server's view: the wallet downloaded `3N` random 100-block windows
 in random order. The server cannot distinguish real from decoy, and every
 action in a real bucket is fetched whether the wallet owns it or not. The
-server learns *approximate activity windows*, not transaction membership.
+server learns _approximate activity windows_, not transaction membership.
 
 ## Mapping to FMD
 
-| | Penumbra S-FMD | zafu bucket+decoy |
-|---|---|---|
-| Mechanism | Cryptographic clue keys | Random extra fetches |
-| Server role | Scans with detection key | Dumb block server |
-| Server learns | Superset of relevant txs | Superset of relevant blocks |
-| No false negatives | ✓ | ✓ |
-| FP rate tunable | ✓ (precision param) | ✓ (`NOISE_BUCKET_RATIO`) |
-| Requires protocol changes | yes | no |
-| Works on Zcash today | no | yes |
+|                           | Penumbra S-FMD           | zafu bucket+decoy           |
+| ------------------------- | ------------------------ | --------------------------- |
+| Mechanism                 | Cryptographic clue keys  | Random extra fetches        |
+| Server role               | Scans with detection key | Dumb block server           |
+| Server learns             | Superset of relevant txs | Superset of relevant blocks |
+| No false negatives        | ✓                        | ✓                           |
+| FP rate tunable           | ✓ (precision param)      | ✓ (`NOISE_BUCKET_RATIO`)    |
+| Requires protocol changes | yes                      | no                          |
+| Works on Zcash today      | no                       | yes                         |
 
 Same privacy shape — Penumbra does it with crypto at the protocol layer,
 zafu does it ad-hoc at the wallet layer. The bucket+decoy approach is the
@@ -105,6 +105,7 @@ lightwalletd infrastructure would become meaningfully more
 privacy-preserving overnight.
 
 Critique welcome on three points:
+
 - Uniform-random vs activity-weighted decoy distribution
 - Cache-and-don't-refetch policy across multiple syncs
 - Does `2×` decoy ratio give meaningful indistinguishability or is it
@@ -119,7 +120,7 @@ Critique welcome on three points:
 
 ## References
 
-- Beck, Len, Miers, Green. *Fuzzy Message Detection.* CCS 2021.
+- Beck, Len, Miers, Green. _Fuzzy Message Detection._ CCS 2021.
   https://eprint.iacr.org/2021/089
 - Penumbra Protocol — Fuzzy Message Detection design.
   https://protocol.penumbra.zone/main/crypto/fmd.html

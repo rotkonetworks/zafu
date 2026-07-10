@@ -1,21 +1,24 @@
 export type Capability =
-  | 'connect'        // see addresses, balances
-  | 'sign_identity'  // ZID ed25519 signing
-  | 'send_tx'        // request transaction signatures
-  | 'export_fvk'     // full viewing key export (grants read access to ALL transactions)
-  | 'view_contacts'  // read contact list
-  | 'view_history'   // read transaction history
-  | 'frost'          // create/join/sign multisig sessions
-  | 'auto_sign'      // skip per-tx confirmation (time-limited)
-  | 'encrypt';       // sealed box encrypt/decrypt with ZID keys
+  | 'connect' // see addresses, balances
+  | 'sign_identity' // ZID ed25519 signing
+  | 'send_tx' // request transaction signatures
+  | 'export_fvk' // full viewing key export (grants read access to ALL transactions)
+  | 'view_contacts' // read contact list
+  | 'view_history' // read transaction history
+  | 'frost' // create/join/sign multisig sessions
+  | 'auto_sign' // skip per-tx confirmation (time-limited)
+  | 'encrypt'; // sealed box encrypt/decrypt with ZID keys
 
 export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
 
-export const CAPABILITY_META: Record<Capability, {
-  label: string;
-  description: string;
-  risk: RiskLevel;
-}> = {
+export const CAPABILITY_META: Record<
+  Capability,
+  {
+    label: string;
+    description: string;
+    risk: RiskLevel;
+  }
+> = {
   connect: {
     label: 'Connect',
     description: 'View your addresses and balances',
@@ -68,9 +71,9 @@ export interface OriginPermissions {
   granted: Capability[];
   denied: Capability[];
   grantedAt: number;
-  expiresAt?: number;      // for auto_sign TTL
-  displayName?: string;    // user-chosen nickname at this site ("poker-alice")
-  identity?: string;       // which named identity to use ("default", "poker")
+  expiresAt?: number; // for auto_sign TTL
+  displayName?: string; // user-chosen nickname at this site ("poker-alice")
+  identity?: string; // which named identity to use ("default", "poker")
 }
 
 export function hasCapability(perms: OriginPermissions | undefined, cap: Capability): boolean {

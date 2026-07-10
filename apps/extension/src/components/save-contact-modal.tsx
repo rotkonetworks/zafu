@@ -56,7 +56,9 @@ export function SaveContactModal({ address, network, onDone, onCancel }: SaveCon
           >
             <option value=''>select existing contact...</option>
             {safeContacts.map(c => (
-              <option key={c.id} value={c.id}>{c.name}</option>
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
             ))}
           </select>
 

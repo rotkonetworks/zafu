@@ -10,7 +10,6 @@ labels: deployment
 Manual testing to confirm extension works with all flows. Can use mainnet rpc or [testnet](https://testnet.plinfra.net/). Can request testnet tokens from team members.
 
 - Prax UI
-
   - Fresh wallet onboarding
     - [ ] Create new wallet (block sync should be must faster)
       - [ ] Can select 12 vs 24 words

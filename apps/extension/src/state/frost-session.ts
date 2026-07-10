@@ -38,7 +38,11 @@ export const waitForUntil = (
 ): Promise<void> =>
   new Promise((resolve, reject) => {
     const tick = () => {
-      if (condition()) { clearInterval(iv); resolve(); return; }
+      if (condition()) {
+        clearInterval(iv);
+        resolve();
+        return;
+      }
       if (Date.now() >= deadline) {
         clearInterval(iv);
         reject(new Error('frost session timed out'));
@@ -59,7 +63,12 @@ export interface FrostSessionSlice {
   /** start a new DKG as coordinator — creates room, runs round 1 */
   startDkg: (relayUrl: string, threshold: number, maxSigners: number) => Promise<string>;
   /** join an existing DKG room — runs round 1 */
-  joinDkg: (relayUrl: string, roomCode: string, threshold: number, maxSigners: number) => Promise<void>;
+  joinDkg: (
+    relayUrl: string,
+    roomCode: string,
+    threshold: number,
+    maxSigners: number,
+  ) => Promise<void>;
   /** process incoming DKG events from relay */
   handleDkgEvent: (event: RoomEvent) => void;
   /** advance DKG to next round when enough messages collected */
@@ -134,7 +143,7 @@ export const createFrostSessionSlice = (): SliceCreator<FrostSessionSlice> => (s
     });
   },
 
-  handleDkgEvent: (event) => {
+  handleDkgEvent: event => {
     const { dkg } = get().frostSession;
     if (!dkg) return;
 
@@ -175,7 +184,15 @@ export const createFrostSessionSlice = (): SliceCreator<FrostSessionSlice> => (s
     });
   },
 
-  startSigning: async (relayUrl, sighashHex, alphasHex, _keyPackageHex, _ephemeralSeedHex, threshold = 2, maxSigners = 3) => {
+  startSigning: async (
+    relayUrl,
+    sighashHex,
+    alphasHex,
+    _keyPackageHex,
+    _ephemeralSeedHex,
+    threshold = 2,
+    maxSigners = 3,
+  ) => {
     const relay = new FrostRelayClient(relayUrl);
     const room = await relay.createRoom(threshold, maxSigners, 300);
 
@@ -195,7 +212,14 @@ export const createFrostSessionSlice = (): SliceCreator<FrostSessionSlice> => (s
     return room.roomCode;
   },
 
-  joinSigning: async (relayUrl, roomCode, sighashHex, alphasHex, _keyPackageHex, _ephemeralSeedHex) => {
+  joinSigning: async (
+    relayUrl,
+    roomCode,
+    sighashHex,
+    alphasHex,
+    _keyPackageHex,
+    _ephemeralSeedHex,
+  ) => {
     const relay = new FrostRelayClient(relayUrl);
 
     set(state => {
@@ -212,7 +236,7 @@ export const createFrostSessionSlice = (): SliceCreator<FrostSessionSlice> => (s
     });
   },
 
-  handleSigningEvent: (event) => {
+  handleSigningEvent: event => {
     const { signing } = get().frostSession;
     if (!signing) return;
 

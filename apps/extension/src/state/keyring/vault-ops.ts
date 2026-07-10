@@ -5,12 +5,7 @@
  * every function here is independently testable.
  */
 
-import type {
-  KeyInfo,
-  EncryptedVault,
-  NetworkType,
-  ZignerZafuImport,
-} from './types';
+import type { KeyInfo, EncryptedVault, NetworkType, ZignerZafuImport } from './types';
 import type { ZcashWalletJson } from '../wallets';
 import type { BoxJson } from '@repo/encryption/box';
 
@@ -20,10 +15,7 @@ export const generateVaultId = (): string =>
 export const generateZcashWalletId = (): string =>
   `zcash-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
-export const vaultsToKeyInfos = (
-  vaults: EncryptedVault[],
-  selectedId?: string,
-): KeyInfo[] =>
+export const vaultsToKeyInfos = (vaults: EncryptedVault[], selectedId?: string): KeyInfo[] =>
   vaults.map(v => ({
     id: v.id,
     name: v.name,
@@ -167,10 +159,7 @@ export const buildFrostZcashWallet = (
   },
 });
 
-export const mergeEnabledNetworks = (
-  current: NetworkType[],
-  toAdd: string[],
-): NetworkType[] => {
+export const mergeEnabledNetworks = (current: NetworkType[], toAdd: string[]): NetworkType[] => {
   const set = new Set<string>(current);
   for (const n of toAdd) set.add(n);
   return [...set] as NetworkType[];
@@ -195,8 +184,7 @@ export const keyInfoSupportsNetwork = (k: KeyInfo, network: NetworkType): boolea
 export const findCompatibleVault = (
   keyInfos: KeyInfo[],
   network: NetworkType,
-): KeyInfo | undefined =>
-  keyInfos.find(k => keyInfoSupportsNetwork(k, network));
+): KeyInfo | undefined => keyInfos.find(k => keyInfoSupportsNetwork(k, network));
 
 /** should the new zigner vault auto-select? */
 export const shouldAutoSelectZigner = (
@@ -214,5 +202,4 @@ export const shouldAutoSelectZigner = (
 export const findWalletIndex = <T extends { vaultId?: string }>(
   wallets: T[],
   vaultId: string,
-): number =>
-  wallets.findIndex(w => w.vaultId === vaultId);
+): number => wallets.findIndex(w => w.vaultId === vaultId);

@@ -62,7 +62,7 @@ export function blockRangeFetcher(
       if (ctx.signal.aborted) return;
       const batch = buckets.slice(i, i + concurrency);
       const results = await Promise.all(
-        batch.map((bucket) => fetchOne(client, bucket, bucketSize, maxHeight, ctx, onError)),
+        batch.map(bucket => fetchOne(client, bucket, bucketSize, maxHeight, ctx, onError)),
       );
       for (const ev of results) {
         completed += 1;

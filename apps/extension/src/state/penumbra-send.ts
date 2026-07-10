@@ -6,13 +6,19 @@
  */
 
 import { AllSlices, SliceCreator } from '.';
-import { TransactionPlannerRequest, type BalancesResponse } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
+import {
+  TransactionPlannerRequest,
+  type BalancesResponse,
+} from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
 import { Address } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
 import { Value } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
 import { MemoPlaintext } from '@penumbra-zone/protobuf/penumbra/core/transaction/v1/transaction_pb';
 import { FeeTier_Tier } from '@penumbra-zone/protobuf/penumbra/core/component/fee/v1/fee_pb';
-import { getAssetIdFromValueView, getDisplayDenomExponentFromValueView } from '@penumbra-zone/getters/value-view';
+import {
+  getAssetIdFromValueView,
+  getDisplayDenomExponentFromValueView,
+} from '@penumbra-zone/getters/value-view';
 import { viewClient } from '../clients';
 
 export interface PenumbraSendSlice {
@@ -47,17 +53,27 @@ const initialState = {
 export const createPenumbraSendSlice: SliceCreator<PenumbraSendSlice> = (set, get) => ({
   ...initialState,
 
-  setRecipient: (address) => set(state => { state.penumbraSend.recipient = address; }),
-  setAmount: (amount) => set(state => { state.penumbraSend.amount = amount; }),
-  setMemo: (memo) => set(state => { state.penumbraSend.memo = memo; }),
+  setRecipient: address =>
+    set(state => {
+      state.penumbraSend.recipient = address;
+    }),
+  setAmount: amount =>
+    set(state => {
+      state.penumbraSend.amount = amount;
+    }),
+  setMemo: memo =>
+    set(state => {
+      state.penumbraSend.memo = memo;
+    }),
 
-  reset: () => set(state => {
-    state.penumbraSend.recipient = initialState.recipient;
-    state.penumbraSend.amount = initialState.amount;
-    state.penumbraSend.memo = initialState.memo;
-    state.penumbraSend.loading = initialState.loading;
-    state.penumbraSend.error = initialState.error;
-  }),
+  reset: () =>
+    set(state => {
+      state.penumbraSend.recipient = initialState.recipient;
+      state.penumbraSend.amount = initialState.amount;
+      state.penumbraSend.memo = initialState.memo;
+      state.penumbraSend.loading = initialState.loading;
+      state.penumbraSend.error = initialState.error;
+    }),
 
   buildPlanRequest: async (selectedAsset: BalancesResponse) => {
     const { recipient, amount, memo } = get().penumbraSend;
@@ -72,7 +88,10 @@ export const createPenumbraSendSlice: SliceCreator<PenumbraSendSlice> = (set, ge
       throw new Error('invalid penumbra address (must start with penumbra1)');
     }
 
-    set(state => { state.penumbraSend.loading = true; state.penumbraSend.error = undefined; });
+    set(state => {
+      state.penumbraSend.loading = true;
+      state.penumbraSend.error = undefined;
+    });
 
     try {
       // get asset id and exponent from selected balance
@@ -103,21 +122,28 @@ export const createPenumbraSendSlice: SliceCreator<PenumbraSendSlice> = (set, ge
             }),
           },
         ],
-        memo: memo ? new MemoPlaintext({
-          returnAddress: addressResponse.address,
-          text: memo,
-        }) : undefined,
+        memo: memo
+          ? new MemoPlaintext({
+              returnAddress: addressResponse.address,
+              text: memo,
+            })
+          : undefined,
         feeMode: {
           case: 'autoFee',
           value: { feeTier: FeeTier_Tier.LOW },
         },
       });
 
-      set(state => { state.penumbraSend.loading = false; });
+      set(state => {
+        state.penumbraSend.loading = false;
+      });
       return planRequest;
     } catch (err) {
       const error = err instanceof Error ? err.message : 'unknown error';
-      set(state => { state.penumbraSend.loading = false; state.penumbraSend.error = error; });
+      set(state => {
+        state.penumbraSend.loading = false;
+        state.penumbraSend.error = error;
+      });
       throw err;
     }
   },

@@ -9,7 +9,13 @@ import type { FrostParsedTx } from '../../../../state/keyring/network-worker';
 
 export type Verdict =
   | { kind: 'match'; sendZat: bigint; changeZat: bigint }
-  | { kind: 'mismatch'; reasons: string[]; sendZat: bigint; changeZat: bigint; sighashLie?: boolean }
+  | {
+      kind: 'mismatch';
+      reasons: string[];
+      sendZat: bigint;
+      changeZat: bigint;
+      sighashLie?: boolean;
+    }
   | { kind: 'pending' }
   | { kind: 'unverified'; reason: string };
 
@@ -69,8 +75,11 @@ export function computeVerdict(args: {
   }
 
   const claimedAmount = (() => {
-    try { return BigInt(claimedAmountZat); }
-    catch { return null; }
+    try {
+      return BigInt(claimedAmountZat);
+    } catch {
+      return null;
+    }
   })();
 
   if (claimedAmount === null) {
@@ -98,15 +107,17 @@ export function computeVerdict(args: {
   // Recipient address must match exactly. With externals.length === 1
   // (enforced above), this is a precise check, not a permissive `some`.
   const claimedNorm = normaliseAddr(claimedRecipient);
-  const matched = externals.length === 1 && externals.every(a => {
-    if (!a.recipient_raw_hex) return false;
-    try {
-      const ua = encodeOrchardUnifiedAddress(hexToBytes(a.recipient_raw_hex), mainnet);
-      return normaliseAddr(ua) === claimedNorm;
-    } catch {
-      return false;
-    }
-  });
+  const matched =
+    externals.length === 1 &&
+    externals.every(a => {
+      if (!a.recipient_raw_hex) return false;
+      try {
+        const ua = encodeOrchardUnifiedAddress(hexToBytes(a.recipient_raw_hex), mainnet);
+        return normaliseAddr(ua) === claimedNorm;
+      } catch {
+        return false;
+      }
+    });
   if (!matched && externals.length === 1) {
     reasons.push('claimed recipient does not match the derived output');
   }
@@ -120,7 +131,8 @@ export function computeVerdict(args: {
   if (!parsed.computed_sighash_hex) {
     return {
       kind: 'unverified',
-      reason: 'tx has transparent/sapling component — sighash check skipped, OVK decode matched only',
+      reason:
+        'tx has transparent/sapling component — sighash check skipped, OVK decode matched only',
     };
   }
   return { kind: 'match', sendZat, changeZat };

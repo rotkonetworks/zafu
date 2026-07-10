@@ -22,11 +22,7 @@ chrome.runtime.onMessage.addListener((req, _sender, respond) => {
   // Handle parallel build (rayon-based, single WASM call)
   if (type === 'BUILD_PARALLEL' && isParallelBuildRequest(request)) {
     console.log('[Offscreen] Received BUILD_PARALLEL request');
-    void handleBuildRequest(
-      () => spawnParallelBuildWorker(request),
-      type,
-      respond,
-    );
+    void handleBuildRequest(() => spawnParallelBuildWorker(request), type, respond);
     return true;
   }
 
@@ -77,7 +73,7 @@ const getOrCreateParallelWorker = (): Worker => {
     persistentWorker = new Worker('wasm-build-parallel.js');
 
     // Handle worker errors - recreate on fatal error
-    persistentWorker.addEventListener('error', (e) => {
+    persistentWorker.addEventListener('error', e => {
       console.error('[Offscreen] Parallel worker error, will recreate:', e.message);
       persistentWorker = null;
     });
@@ -128,7 +124,7 @@ const getOrCreateZcashWorker = (): Worker => {
   if (!zcashWorker) {
     console.log('[Offscreen] Creating persistent zcash build worker');
     zcashWorker = new Worker('zcash-build-parallel.js');
-    zcashWorker.addEventListener('error', (e) => {
+    zcashWorker.addEventListener('error', e => {
       console.error('[Offscreen] Zcash worker error, will recreate:', e.message);
       zcashWorker = null;
     });
@@ -149,17 +145,25 @@ async function handleZcashBuild(
     const { promise, resolve, reject } = Promise.withResolvers<unknown>();
     const worker = getOrCreateZcashWorker();
 
-    worker.addEventListener('message', (e: MessageEvent) => {
-      const msg = e.data as { data?: unknown; error?: { message: string } };
-      if (msg.error) {
-        reject(new Error(msg.error.message));
-      } else {
-        resolve(msg.data);
-      }
-    }, { once: true });
-    worker.addEventListener('error', ({ message }: ErrorEvent) => {
-      reject(new Error(message));
-    }, { once: true });
+    worker.addEventListener(
+      'message',
+      (e: MessageEvent) => {
+        const msg = e.data as { data?: unknown; error?: { message: string } };
+        if (msg.error) {
+          reject(new Error(msg.error.message));
+        } else {
+          resolve(msg.data);
+        }
+      },
+      { once: true },
+    );
+    worker.addEventListener(
+      'error',
+      ({ message }: ErrorEvent) => {
+        reject(new Error(message));
+      },
+      { once: true },
+    );
 
     worker.postMessage(req);
     const data = await promise;

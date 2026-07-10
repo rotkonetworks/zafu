@@ -18,12 +18,7 @@
  * in the WebRTC layer.
  */
 
-import type {
-  SignalEnvelope,
-  PeerMessage,
-  PeerState,
-  PeerEvents,
-} from './types';
+import type { SignalEnvelope, PeerMessage, PeerState, PeerEvents } from './types';
 
 const CHANNEL_LABEL = 'zafu';
 const CHUNK_SIZE = 16 * 1024; // 16 KiB chunks for file transfer
@@ -38,9 +33,10 @@ type EventMap = Record<string, Set<(...args: any[]) => void>>;
 
 /** Hex encode/decode helpers. */
 const toHex = (buf: ArrayBuffer | Uint8Array) =>
-  Array.from(buf instanceof Uint8Array ? buf : new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-const fromHex = (hex: string) =>
-  new Uint8Array(hex.match(/.{2}/g)!.map(b => parseInt(b, 16)));
+  Array.from(buf instanceof Uint8Array ? buf : new Uint8Array(buf))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+const fromHex = (hex: string) => new Uint8Array(hex.match(/.{2}/g)!.map(b => parseInt(b, 16)));
 
 export class PeerConnection {
   private pc: RTCPeerConnection;
@@ -58,9 +54,7 @@ export class PeerConnection {
   constructor(opts?: PeerConnectionOptions) {
     this._sessionId = crypto.randomUUID();
     this.pc = new RTCPeerConnection({
-      iceServers: opts?.iceServers ?? [
-        { urls: 'stun:stun.l.google.com:19302' },
-      ],
+      iceServers: opts?.iceServers ?? [{ urls: 'stun:stun.l.google.com:19302' }],
     });
 
     // no trickle ICE — candidates are bundled into offer/answer SDP
@@ -78,21 +72,29 @@ export class PeerConnection {
       }
     };
 
-    this.pc.ondatachannel = (e) => {
+    this.pc.ondatachannel = e => {
       this.setupDataChannel(e.channel);
     };
   }
 
-  get state(): PeerState { return this._state; }
-  get sessionId(): string { return this._sessionId; }
-  get authenticated(): boolean { return this._authenticated; }
-  get ephemeralPubHex(): string { return this._ephemeralPubHex; }
+  get state(): PeerState {
+    return this._state;
+  }
+  get sessionId(): string {
+    return this._sessionId;
+  }
+  get authenticated(): boolean {
+    return this._authenticated;
+  }
+  get ephemeralPubHex(): string {
+    return this._ephemeralPubHex;
+  }
 
   /** Generate ephemeral session keypair. Called before createOffer/handleSignal. */
   async init(): Promise<void> {
     this.ephemeralKey = await crypto.subtle.generateKey(
       { name: 'ECDSA', namedCurve: 'P-256' },
-      false,  // not extractable — never leaves this session
+      false, // not extractable — never leaves this session
       ['sign', 'verify'],
     );
     const pubRaw = await crypto.subtle.exportKey('raw', this.ephemeralKey.publicKey);
@@ -181,10 +183,7 @@ export class PeerConnection {
   }
 
   /** Send a file in chunks. */
-  async sendFile(
-    file: File,
-    onProgress?: (sent: number, total: number) => void,
-  ): Promise<void> {
+  async sendFile(file: File, onProgress?: (sent: number, total: number) => void): Promise<void> {
     if (!this._authenticated) throw new Error('not authenticated');
     if (!this.dc || this.dc.readyState !== 'open') {
       throw new Error('data channel not open');
@@ -240,7 +239,9 @@ export class PeerConnection {
           type: 'close',
           payload: '',
         });
-      } catch { /* already closed */ }
+      } catch {
+        /* already closed */
+      }
     }
     this.dc?.close();
     this.pc.close();
@@ -261,10 +262,7 @@ export class PeerConnection {
     this.listeners[event]?.delete(fn as (...args: unknown[]) => void);
   }
 
-  private emit<K extends keyof PeerEvents>(
-    event: K,
-    ...args: Parameters<PeerEvents[K]>
-  ): void {
+  private emit<K extends keyof PeerEvents>(event: K, ...args: Parameters<PeerEvents[K]>): void {
     const set = this.listeners[event];
     if (!set) return;
     for (const fn of set) {
@@ -275,7 +273,7 @@ export class PeerConnection {
   /** Wait for ICE gathering to complete so all candidates are in the SDP. */
   private waitForIceGathering(): Promise<void> {
     if (this.pc.iceGatheringState === 'complete') return Promise.resolve();
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
       const timeout = setTimeout(() => {
         this.pc.removeEventListener('icegatheringstatechange', handler);
         // resolve anyway with whatever candidates we have
@@ -421,11 +419,11 @@ export class PeerConnection {
       this.setState('disconnected');
     };
 
-    dc.onerror = (e) => {
+    dc.onerror = e => {
       this.emit('error', new Error(`DataChannel error: ${(e as ErrorEvent).message ?? 'unknown'}`));
     };
 
-    dc.onmessage = (e) => {
+    dc.onmessage = e => {
       try {
         const msg = JSON.parse(e.data as string) as PeerMessage;
         this.emit('message', msg);

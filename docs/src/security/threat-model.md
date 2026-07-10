@@ -46,13 +46,13 @@ untrusted:
 
 ## encryption at rest
 
-| data | storage | encrypted |
-|------|---------|-----------|
-| penumbra wallets (FVK) | chrome.storage.local | yes (AES-256-GCM) |
-| zcash wallets (UFVK) | chrome.storage.local | yes |
-| contacts | chrome.storage.local | yes |
-| messages | chrome.storage.local | yes |
-| recent addresses | chrome.storage.local | yes |
-| connected sites | chrome.storage.local | no (no private data) |
-| password key | chrome.storage.session | session only |
-| vaults (encrypted mnemonic) | chrome.storage.local | yes (separate key) |
+| data                        | storage                | encrypted            |
+| --------------------------- | ---------------------- | -------------------- |
+| penumbra wallets (FVK)      | chrome.storage.local   | yes (AES-256-GCM)    |
+| zcash wallets (UFVK)        | chrome.storage.local   | yes                  |
+| contacts                    | chrome.storage.local   | yes                  |
+| messages                    | chrome.storage.local   | yes                  |
+| recent addresses            | chrome.storage.local   | yes                  |
+| connected sites             | chrome.storage.local   | no (no private data) |
+| password key                | chrome.storage.session | session only         |
+| vaults (encrypted mnemonic) | chrome.storage.local   | yes (separate key)   |

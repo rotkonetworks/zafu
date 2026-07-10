@@ -52,7 +52,7 @@ function NetworkBadge({ network }: { network: NetworkType }) {
   const info = NETWORK_BADGES[network];
   return (
     <span
-      className="inline-block w-2 h-2 rounded-full"
+      className='inline-block w-2 h-2 rounded-full'
       style={{ backgroundColor: info.color }}
       title={info.name}
     />
@@ -78,19 +78,17 @@ function WalletItem({
         isActive && 'bg-elev-2',
       )}
     >
-      <div className="flex items-center gap-3">
-        <div className="w-8 h-8 rounded-full bg-elev-2 flex items-center justify-center">
-          <Wallet className="w-4 h-4 text-fg-muted" />
+      <div className='flex items-center gap-3'>
+        <div className='w-8 h-8 rounded-full bg-elev-2 flex items-center justify-center'>
+          <Wallet className='w-4 h-4 text-fg-muted' />
         </div>
-        <div className="text-left">
-          <p className="text-sm font-medium">{wallet.label}</p>
-          <p className="text-xs text-fg-muted">
-            Account #{wallet.zignerAccountIndex}
-          </p>
+        <div className='text-left'>
+          <p className='text-sm font-medium'>{wallet.label}</p>
+          <p className='text-xs text-fg-muted'>Account #{wallet.zignerAccountIndex}</p>
         </div>
       </div>
-      <div className="flex items-center gap-1">
-        {wallet.enabledNetworks.map((network) => (
+      <div className='flex items-center gap-1'>
+        {wallet.enabledNetworks.map(network => (
           <NetworkBadge key={network} network={network} />
         ))}
       </div>
@@ -111,15 +109,15 @@ export function ZignerWalletSwitcher({
 
   if (!activeWallet) {
     return (
-      <Button variant="outline" onClick={onAddWallet} className="gap-2">
-        <Plus className="w-4 h-4" />
+      <Button variant='outline' onClick={onAddWallet} className='gap-2'>
+        <Plus className='w-4 h-4' />
         import wallet from zigner
       </Button>
     );
   }
 
   return (
-    <div className="relative">
+    <div className='relative'>
       {/* trigger button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
@@ -128,22 +126,17 @@ export function ZignerWalletSwitcher({
           'hover:bg-elev-1 border border-border-hard',
         )}
       >
-        <div className="w-6 h-6 rounded-full bg-elev-2 flex items-center justify-center">
-          <Wallet className="w-3 h-3 text-fg-muted" />
+        <div className='w-6 h-6 rounded-full bg-elev-2 flex items-center justify-center'>
+          <Wallet className='w-3 h-3 text-fg-muted' />
         </div>
-        <span className="text-sm font-medium max-w-[120px] truncate">
-          {activeWallet.label}
-        </span>
-        <div className="flex items-center gap-1">
-          {activeWallet.enabledNetworks.map((network) => (
+        <span className='text-sm font-medium max-w-[120px] truncate'>{activeWallet.label}</span>
+        <div className='flex items-center gap-1'>
+          {activeWallet.enabledNetworks.map(network => (
             <NetworkBadge key={network} network={network} />
           ))}
         </div>
         <ChevronDown
-          className={cn(
-            'w-4 h-4 text-fg-muted transition-transform',
-            isOpen && 'rotate-180',
-          )}
+          className={cn('w-4 h-4 text-fg-muted transition-transform', isOpen && 'rotate-180')}
         />
       </button>
 
@@ -151,10 +144,7 @@ export function ZignerWalletSwitcher({
       {isOpen && (
         <>
           {/* backdrop */}
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => setIsOpen(false)}
-          />
+          <div className='fixed inset-0 z-40' onClick={() => setIsOpen(false)} />
 
           {/* dropdown content */}
           <div
@@ -164,13 +154,11 @@ export function ZignerWalletSwitcher({
               'py-1',
             )}
           >
-            <div className="px-3 py-2 border-b border-border-hard">
-              <p className="text-xs text-fg-muted font-medium uppercase">
-                zigner wallets
-              </p>
+            <div className='px-3 py-2 border-b border-border-hard'>
+              <p className='text-xs text-fg-muted font-medium uppercase'>zigner wallets</p>
             </div>
 
-            <div className="py-1 max-h-64 overflow-y-auto">
+            <div className='py-1 max-h-64 overflow-y-auto'>
               {wallets.map((wallet, index) => (
                 <WalletItem
                   key={wallet.id}
@@ -185,7 +173,7 @@ export function ZignerWalletSwitcher({
             </div>
 
             {showAddButton && onAddWallet && (
-              <div className="border-t border-border-hard pt-1 px-1">
+              <div className='border-t border-border-hard pt-1 px-1'>
                 <button
                   onClick={() => {
                     onAddWallet();
@@ -197,7 +185,7 @@ export function ZignerWalletSwitcher({
                     'hover:bg-elev-1 transition-colors',
                   )}
                 >
-                  <Plus className="w-4 h-4" />
+                  <Plus className='w-4 h-4' />
                   import new wallet from zigner
                 </button>
               </div>

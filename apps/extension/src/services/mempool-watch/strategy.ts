@@ -38,10 +38,7 @@ import type { MempoolFetcher, MempoolWatchStrategy } from './types';
  *
  * Defensive on inputs: unknown enum values → false.
  */
-export function isMempoolWatchEnabled(
-  setting: unknown,
-  backend: unknown,
-): boolean {
+export function isMempoolWatchEnabled(setting: unknown, backend: unknown): boolean {
   return setting === 'on' && backend === 'zidecar';
 }
 
@@ -52,10 +49,7 @@ export interface StrategyParams {
   readonly pollIntervalMs?: number;
 }
 
-export function buildStrategy(
-  name: MempoolWatchStrategy,
-  params: StrategyParams,
-): MempoolFetcher {
+export function buildStrategy(name: MempoolWatchStrategy, params: StrategyParams): MempoolFetcher {
   if (name === 'off') return offFetcher;
 
   const { base, pollIntervalMs = 10_000 } = params;

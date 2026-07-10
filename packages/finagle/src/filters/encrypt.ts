@@ -94,9 +94,7 @@ export class ChaChaProvider implements EncryptionProvider {
 
   async decrypt(ct: Uint8Array, iv: Uint8Array): Promise<Uint8Array> {
     if (!this.key) throw new Error('chacha provider not initialized');
-    return new Uint8Array(
-      await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, this.key, ct),
-    );
+    return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, this.key, ct));
   }
 }
 

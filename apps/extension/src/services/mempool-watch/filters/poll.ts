@@ -81,18 +81,12 @@ export function nextDelay(
   rng: () => number,
   now: number,
 ): number {
-  const base = phaseAlign
-    ? (Math.floor(now / intervalMs) + 1) * intervalMs - now
-    : intervalMs;
+  const base = phaseAlign ? (Math.floor(now / intervalMs) + 1) * intervalMs - now : intervalMs;
   const jitter = jitterMs > 0 ? (rng() * 2 - 1) * jitterMs : 0;
   return Math.max(0, base + jitter);
 }
 
-async function sleepAbortable(
-  totalMs: number,
-  stepMs: number,
-  signal: AbortSignal,
-): Promise<void> {
+async function sleepAbortable(totalMs: number, stepMs: number, signal: AbortSignal): Promise<void> {
   let remaining = totalMs;
   while (remaining > 0 && !signal.aborted) {
     const slice = Math.min(stepMs, remaining);

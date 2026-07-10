@@ -34,13 +34,11 @@ const SettingsMultisig = lazy(() =>
 const SettingsMultisigBackup = lazy(() =>
   import('./settings-multisig-backup').then(m => ({ default: m.SettingsMultisigBackup })),
 );
-const SubscribePage = lazy(() =>
-  import('./subscribe').then(m => ({ default: m.SubscribePage })),
-);
+const SubscribePage = lazy(() => import('./subscribe').then(m => ({ default: m.SubscribePage })));
 
 const LazyFallback = () => (
-  <div className="flex h-full items-center justify-center p-4">
-    <div className="h-6 w-6 animate-spin rounded-full border-2 border-zigner-gold border-t-transparent" />
+  <div className='flex h-full items-center justify-center p-4'>
+    <div className='h-6 w-6 animate-spin rounded-full border-2 border-zigner-gold border-t-transparent' />
   </div>
 );
 

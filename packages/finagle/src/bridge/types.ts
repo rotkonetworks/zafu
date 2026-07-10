@@ -43,12 +43,7 @@ export function isReplyEnvelope(msg: unknown): msg is ReplyEnvelope {
 }
 
 export function isProgressEnvelope(msg: unknown): msg is ProgressEnvelope {
-  return (
-    typeof msg === 'object' &&
-    msg !== null &&
-    '__finagle' in msg &&
-    'progress' in msg
-  );
+  return typeof msg === 'object' && msg !== null && '__finagle' in msg && 'progress' in msg;
 }
 
 /** Minimal port interface — works with Worker, MessagePort, BroadcastChannel. */

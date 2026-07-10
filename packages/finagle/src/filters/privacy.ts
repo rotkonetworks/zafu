@@ -92,9 +92,12 @@ export class PrivacyProvider {
   /** status string for display */
   statusText(): string {
     switch (this.mode) {
-      case 'normal': return 'normal (relay can link sessions)';
-      case 'private': return 'private (new ID per session)';
-      case 'paranoid': return 'paranoid (new ID per message)';
+      case 'normal':
+        return 'normal (relay can link sessions)';
+      case 'private':
+        return 'private (new ID per session)';
+      case 'paranoid':
+        return 'paranoid (new ID per message)';
     }
   }
 }
@@ -106,5 +109,7 @@ function randomBytes(n: number): Uint8Array {
 }
 
 function toHex(bytes: Uint8Array): string {
-  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  return Array.from(bytes)
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
 }

@@ -28,7 +28,11 @@ import { isMempoolWatchEnabled } from '../services/mempool-watch/strategy';
 
 /** resolve wallet birthday height from storage or chain tip.
  *  never returns below orchard activation — no point scanning pre-orchard blocks. */
-async function resolveBirthday(walletId: string, zidecarUrl: string, backend: ZcashBackend): Promise<number> {
+async function resolveBirthday(
+  walletId: string,
+  zidecarUrl: string,
+  backend: ZcashBackend,
+): Promise<number> {
   const birthdayKey = `zcashBirthday_${walletId}`;
   const stored = await chrome.storage.local.get(birthdayKey);
   // per-wallet birthday takes priority (user-set or auto-detected)
@@ -37,9 +41,12 @@ async function resolveBirthday(walletId: string, zidecarUrl: string, backend: Zc
   }
   // no birthday set — default to near chain tip (new wallet = recent)
   try {
-    const tip = backend === 'lightwalletd'
-      ? await new (await import('../state/keyring/lightwalletd-client')).LightwalletdClient(zidecarUrl).getTip()
-      : await new ZidecarClient(zidecarUrl).getTip();
+    const tip =
+      backend === 'lightwalletd'
+        ? await new (await import('../state/keyring/lightwalletd-client')).LightwalletdClient(
+            zidecarUrl,
+          ).getTip()
+        : await new ZidecarClient(zidecarUrl).getTip();
     const height = Math.floor(Math.max(ZCASH_ORCHARD_ACTIVATION, tip.height - 100) / 10000) * 10000;
     await chrome.storage.local.set({ [birthdayKey]: height });
     return height;
@@ -60,7 +67,9 @@ export function useZcashAutoSync() {
   // Single-source-of-truth gate. UI and worker also enforce; we run the same
   // helper at every layer so all surfaces agree on the answer and no single
   // layer's coercion is silently authoritative.
-  const mempoolWatch: 'off' | 'on' = isMempoolWatchEnabled(mempoolWatchSetting, zcashBackend) ? 'on' : 'off';
+  const mempoolWatch: 'off' | 'on' = isMempoolWatchEnabled(mempoolWatchSetting, zcashBackend)
+    ? 'on'
+    : 'off';
 
   const onLoginPage = location.pathname === '/login';
   const hasMnemonic = selectedKeyInfo?.type === 'mnemonic';
@@ -116,12 +125,22 @@ export function useZcashAutoSync() {
               await useStore.getState().ringVrf.newSessionProof();
               // inject proof headers into all ZidecarClient requests
               ZidecarClient.extraHeaders = () => useStore.getState().ringVrf.getProofHeaders();
-            } catch { /* ring VRF is optional - free tier still works */ }
+            } catch {
+              /* ring VRF is optional - free tier still works */
+            }
           }
 
           syncingWalletRef.current = walletId;
           console.log('[zcash-sync] starting mnemonic sync for', walletId);
-          await startSyncInWorker('zcash', walletId, mnemonic, zidecarUrl, startHeight, zcashBackend, mempoolWatch);
+          await startSyncInWorker(
+            'zcash',
+            walletId,
+            mnemonic,
+            zidecarUrl,
+            startHeight,
+            zcashBackend,
+            mempoolWatch,
+          );
         } catch (err) {
           if (err instanceof Error && err.message.includes('keyring locked')) {
             console.log('[zcash-sync] waiting for unlock');
@@ -136,7 +155,16 @@ export function useZcashAutoSync() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [activeNetwork, onLoginPage, hasMnemonic, walletId, getMnemonic, zidecarUrl, zcashBackend, mempoolWatch]);
+  }, [
+    activeNetwork,
+    onLoginPage,
+    hasMnemonic,
+    walletId,
+    getMnemonic,
+    zidecarUrl,
+    zcashBackend,
+    mempoolWatch,
+  ]);
 
   // watch-only wallet sync
   useEffect(() => {
@@ -144,7 +172,9 @@ export function useZcashAutoSync() {
     if (onLoginPage) return;
     if (hasMnemonic) return;
     if (!watchOnly) return;
-    const ufvkStr = watchOnly.ufvk ?? (watchOnly.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
+    const ufvkStr =
+      watchOnly.ufvk ??
+      (watchOnly.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
     if (!ufvkStr || !walletId) return;
 
     // stop previous wallet's sync if switching
@@ -171,7 +201,15 @@ export function useZcashAutoSync() {
         if (cancelled) return;
         syncingWalletRef.current = walletId;
         console.log('[zcash-sync] starting watch-only sync for', walletId);
-        await startWatchOnlySyncInWorker('zcash', walletId, ufvkStr, zidecarUrl, startHeight, zcashBackend, mempoolWatch);
+        await startWatchOnlySyncInWorker(
+          'zcash',
+          walletId,
+          ufvkStr,
+          zidecarUrl,
+          startHeight,
+          zcashBackend,
+          mempoolWatch,
+        );
       } catch (err) {
         console.error('[zcash-sync] watch-only auto-sync failed:', err);
       }
@@ -180,7 +218,18 @@ export function useZcashAutoSync() {
     return () => {
       cancelled = true;
     };
-  }, [activeNetwork, onLoginPage, hasMnemonic, watchOnly?.id, watchOnly?.ufvk, watchOnly?.orchardFvk, walletId, zidecarUrl, zcashBackend, mempoolWatch]);
+  }, [
+    activeNetwork,
+    onLoginPage,
+    hasMnemonic,
+    watchOnly?.id,
+    watchOnly?.ufvk,
+    watchOnly?.orchardFvk,
+    walletId,
+    zidecarUrl,
+    zcashBackend,
+    mempoolWatch,
+  ]);
 
   // stop sync when switching away from zcash network
   useEffect(() => {

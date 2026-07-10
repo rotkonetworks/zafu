@@ -22,11 +22,7 @@ export interface TransparentBalance {
 export function useTransparentBalance(addresses: string[]): TransparentBalance {
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || DEFAULT_ZIDECAR_URL;
   const backend = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';
-  const {
-    data,
-    isLoading,
-    error,
-  } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['zcashTransparentUtxos', zidecarUrl, backend, ...addresses],
     queryFn: async () => {
       if (addresses.length === 0) return { totalZat: 0n, utxos: [] as Utxo[] };

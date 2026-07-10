@@ -11,6 +11,7 @@ Set by manifest: `zafu wallet BETA`
 ## Summary
 
 Set by manifest description (127 chars):
+
 > Zcash + Penumbra privacy wallet. Cold signing, FROST multisig,
 > client-side proving, ed25519 app identity, verified lightclient.
 
@@ -64,11 +65,11 @@ category.)
 
 ## URLs
 
-| Field | Value |
-|---|---|
+| Field        | Value                                            |
+| ------------ | ------------------------------------------------ |
 | Official URL | None (unless you own + verify in Search Console) |
-| Homepage URL | `https://zafu.rotko.net` |
-| Support URL | `https://github.com/rotkonetworks/zafu/issues` |
+| Homepage URL | `https://zafu.rotko.net`                         |
+| Support URL  | `https://github.com/rotkonetworks/zafu/issues`   |
 
 If `zafu.rotko.net` isn't live yet, use
 `https://github.com/rotkonetworks/zafu` as the homepage until the

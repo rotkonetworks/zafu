@@ -46,9 +46,7 @@ export function QrDisplay({
     }
 
     // qrcode library needs Buffer for byte mode in some builds
-    const bufData = typeof Buffer !== 'undefined'
-      ? Buffer.from(bytes)
-      : bytes;
+    const bufData = typeof Buffer !== 'undefined' ? Buffer.from(bytes) : bytes;
 
     console.log(`[qr-display] payload: ${bytes.length} bytes, hex: ${data.length} chars`);
 
@@ -71,7 +69,7 @@ export function QrDisplay({
         } else {
           console.log(`[qr-display] QR generated successfully at ${size}px`);
         }
-      }
+      },
     );
   }, [data, size]);
 
@@ -87,43 +85,32 @@ export function QrDisplay({
 
   if (error) {
     return (
-      <div className="flex flex-col items-center gap-2 p-4">
-        <p className="text-red-400 text-sm">{error}</p>
+      <div className='flex flex-col items-center gap-2 p-4'>
+        <p className='text-red-400 text-sm'>{error}</p>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col items-center gap-3">
-      {title && (
-        <h3 className="text-lg font-medium text-fg">{title}</h3>
-      )}
+    <div className='flex flex-col items-center gap-3'>
+      {title && <h3 className='text-lg font-medium text-fg'>{title}</h3>}
 
-      <div className="bg-white p-3 rounded-lg">
+      <div className='bg-white p-3 rounded-lg'>
         <canvas ref={canvasRef} />
       </div>
 
-      {description && (
-        <p className="text-sm text-fg-muted text-center max-w-xs">
-          {description}
-        </p>
-      )}
+      {description && <p className='text-sm text-fg-muted text-center max-w-xs'>{description}</p>}
 
       {showCopy && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleCopy}
-          className="gap-2"
-        >
+        <Button variant='ghost' size='sm' onClick={handleCopy} className='gap-2'>
           {copied ? (
             <>
-              <span className="i-lucide-check w-4 h-4 text-green-400" />
+              <span className='i-lucide-check w-4 h-4 text-green-400' />
               copied
             </>
           ) : (
             <>
-              <span className="i-lucide-copy w-4 h-4" />
+              <span className='i-lucide-copy w-4 h-4' />
               copy hex
             </>
           )}

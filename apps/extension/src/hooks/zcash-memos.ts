@@ -82,7 +82,7 @@ export function useZcashMemos(walletId: string, zidecarUrl: string = DEFAULT_ZID
       // with real block times from the server
       const now = Date.now();
       const hasBadTimestamps = existingMessages.some(
-        m => m.timestamp < 1700000000000 || m.timestamp > now + 86400000
+        m => m.timestamp < 1700000000000 || m.timestamp > now + 86400000,
       );
       if (hasBadTimestamps) {
         for (const msg of existingMessages) {
@@ -210,7 +210,7 @@ export function useZcashUnreadCount() {
  */
 export async function decryptTransactionMemos(
   walletId: string,
-  txBytes: Uint8Array
+  txBytes: Uint8Array,
 ): Promise<FoundNoteWithMemo[]> {
   try {
     return await decryptMemosInWorker('zcash', walletId, txBytes);

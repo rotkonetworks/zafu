@@ -1,35 +1,40 @@
 import { useSearchParams } from 'react-router-dom';
 import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
-import { CAPABILITY_META, type Capability, type RiskLevel } from '@repo/storage-chrome/capabilities';
+import {
+  CAPABILITY_META,
+  type Capability,
+  type RiskLevel,
+} from '@repo/storage-chrome/capabilities';
 import { cn } from '@repo/ui/lib/utils';
 import { ApproveDeny } from './approve-deny';
 import { DisplayOriginURL } from '../../../shared/components/display-origin-url';
 import { LinkGradientIcon } from '../../../icons/link-gradient';
 
-const riskStyles: Record<RiskLevel, { border: string; bg: string; text: string; banner?: string }> = {
-  low: {
-    border: 'border-border-soft',
-    bg: '',
-    text: 'text-fg-muted',
-  },
-  medium: {
-    border: 'border-yellow-500/30',
-    bg: 'bg-yellow-500/5',
-    text: 'text-yellow-400',
-  },
-  high: {
-    border: 'border-orange-500/40',
-    bg: 'bg-orange-500/5',
-    text: 'text-orange-400',
-    banner: 'This grants significant access to your wallet.',
-  },
-  critical: {
-    border: 'border-red-500/50',
-    bg: 'bg-red-500/10',
-    text: 'text-red-400',
-    banner: 'DANGER: This capability can sign transactions without your approval.',
-  },
-};
+const riskStyles: Record<RiskLevel, { border: string; bg: string; text: string; banner?: string }> =
+  {
+    low: {
+      border: 'border-border-soft',
+      bg: '',
+      text: 'text-fg-muted',
+    },
+    medium: {
+      border: 'border-yellow-500/30',
+      bg: 'bg-yellow-500/5',
+      text: 'text-yellow-400',
+    },
+    high: {
+      border: 'border-orange-500/40',
+      bg: 'bg-orange-500/5',
+      text: 'text-orange-400',
+      banner: 'This grants significant access to your wallet.',
+    },
+    critical: {
+      border: 'border-red-500/50',
+      bg: 'bg-red-500/10',
+      text: 'text-red-400',
+      banner: 'DANGER: This capability can sign transactions without your approval.',
+    },
+  };
 
 export const CapabilityApproval = () => {
   const [params] = useSearchParams();
@@ -60,7 +65,9 @@ export const CapabilityApproval = () => {
       <div className='flex min-h-screen w-screen flex-col gap-6'>
         <header className='flex h-[70px] flex-col items-center justify-center border-b border-border-soft'>
           <span className='kicker mb-1'>capability request</span>
-          <h1 className='text-[18px] text-fg-high lowercase tracking-[-0.01em]'>permission request</h1>
+          <h1 className='text-[18px] text-fg-high lowercase tracking-[-0.01em]'>
+            permission request
+          </h1>
         </header>
         <div className='mx-auto size-20'>
           <LinkGradientIcon />
@@ -69,9 +76,7 @@ export const CapabilityApproval = () => {
           <div className='flex flex-col gap-2'>
             {/* origin display */}
             <div className='flex items-center gap-2 rounded-lg bg-canvas p-3'>
-              {!!favIconUrl && (
-                <img src={favIconUrl} alt='' className='size-8 rounded-full' />
-              )}
+              {!!favIconUrl && <img src={favIconUrl} alt='' className='size-8 rounded-full' />}
               <div className='flex flex-col overflow-hidden'>
                 {title && <span className='text-sm truncate'>{title}</span>}
                 {origin && (
@@ -85,19 +90,19 @@ export const CapabilityApproval = () => {
             {/* capability card */}
             <div className={cn('rounded-lg border p-4', style.border, style.bg)}>
               {style.banner && (
-                <div className={cn('mb-3 text-xs font-medium', style.text)}>
-                  {style.banner}
-                </div>
+                <div className={cn('mb-3 text-xs font-medium', style.text)}>{style.banner}</div>
               )}
               <div className='flex items-center gap-2'>
                 <span className={cn('text-base font-medium', style.text)}>{meta.label}</span>
-                <span className={cn(
-                  'rounded px-1.5 py-0.5 text-[10px] uppercase',
-                  meta.risk === 'low' && 'bg-elev-2 text-fg-muted',
-                  meta.risk === 'medium' && 'bg-yellow-500/10 text-yellow-400',
-                  meta.risk === 'high' && 'bg-orange-500/10 text-orange-400',
-                  meta.risk === 'critical' && 'bg-red-500/10 text-red-400',
-                )}>
+                <span
+                  className={cn(
+                    'rounded px-1.5 py-0.5 text-[10px] uppercase',
+                    meta.risk === 'low' && 'bg-elev-2 text-fg-muted',
+                    meta.risk === 'medium' && 'bg-yellow-500/10 text-yellow-400',
+                    meta.risk === 'high' && 'bg-orange-500/10 text-orange-400',
+                    meta.risk === 'critical' && 'bg-red-500/10 text-red-400',
+                  )}
+                >
                   {meta.risk}
                 </span>
               </div>
@@ -107,8 +112,8 @@ export const CapabilityApproval = () => {
             {/* extra warning for critical */}
             {meta.risk === 'critical' && (
               <div className='rounded-lg border border-red-500/50 bg-red-500/10 p-3 text-xs text-red-400'>
-                Are you absolutely sure? This site will be able to sign transactions
-                on your behalf without asking for confirmation.
+                Are you absolutely sure? This site will be able to sign transactions on your behalf
+                without asking for confirmation.
               </div>
             )}
           </div>

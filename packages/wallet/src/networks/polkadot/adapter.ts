@@ -5,12 +5,7 @@
  * Uses smoldot light client for trustless access.
  */
 
-import type {
-  NetworkAdapter,
-  NetworkBalance,
-  NetworkTransaction,
-  SendParams,
-} from '../adapter';
+import type { NetworkAdapter, NetworkBalance, NetworkTransaction, SendParams } from '../adapter';
 import type { ZignerWallet, PendingTransaction } from '../common/types';
 import {
   getLightClient,
@@ -120,7 +115,7 @@ export class PolkadotAdapter implements NetworkAdapter {
   async getTransactions(
     _wallet: ZignerWallet,
     _limit = 50,
-    _offset = 0
+    _offset = 0,
   ): Promise<NetworkTransaction[]> {
     // Polkadot light clients don't support transaction history queries
     // Would need an indexer service
@@ -129,7 +124,7 @@ export class PolkadotAdapter implements NetworkAdapter {
 
   async buildSendTransaction(
     wallet: ZignerWallet,
-    params: SendParams
+    params: SendParams,
   ): Promise<PendingTransaction> {
     const polkadotKeys = wallet.networks.polkadot;
     if (!polkadotKeys) {
@@ -158,10 +153,16 @@ export class PolkadotAdapter implements NetworkAdapter {
     const callData = await client.buildTransfer(polkadotKeys, params.recipient, params.amount);
 
     // Format for display
-    const amountDisplay = this.formatAmountWithDecimals(params.amount, chainInfo.decimals, chainInfo.symbol);
+    const amountDisplay = this.formatAmountWithDecimals(
+      params.amount,
+      chainInfo.decimals,
+      chainInfo.symbol,
+    );
 
     // Convert to hex without Buffer
-    const signRequestQr = Array.from(callData).map(b => b.toString(16).padStart(2, '0')).join('');
+    const signRequestQr = Array.from(callData)
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
 
     return {
       id: `polkadot-${Date.now()}`,
@@ -176,7 +177,7 @@ export class PolkadotAdapter implements NetworkAdapter {
 
   async completeSendTransaction(
     _pendingTx: PendingTransaction,
-    _signatureQrHex: string
+    _signatureQrHex: string,
   ): Promise<string> {
     // TODO: Apply signature and broadcast via light client
     throw new Error('Not implemented');
@@ -206,13 +207,10 @@ export class PolkadotAdapter implements NetworkAdapter {
     if (isNaN(value)) {
       throw new Error('Invalid amount');
     }
-    return BigInt(Math.round(value * (10 ** chainInfo.decimals)));
+    return BigInt(Math.round(value * 10 ** chainInfo.decimals));
   }
 
-  async sync(
-    wallet: ZignerWallet,
-    onProgress?: (percent: number) => void
-  ): Promise<void> {
+  async sync(wallet: ZignerWallet, onProgress?: (percent: number) => void): Promise<void> {
     const polkadotKeys = wallet.networks.polkadot;
     if (!polkadotKeys) {
       throw new Error('Wallet has no Polkadot keys');

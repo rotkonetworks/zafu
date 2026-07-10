@@ -17,7 +17,40 @@
 import type { NetworkType } from './types';
 
 export interface NetworkWorkerMessage {
-  type: 'init' | 'derive-address' | 'sync' | 'stop-sync' | 'reset-sync' | 'get-balance' | 'send-tx' | 'send-tx-multi' | 'send-tx-complete' | 'send-tx-pczt' | 'send-tx-pczt-complete' | 'shield' | 'shield-unsigned' | 'shield-complete' | 'list-wallets' | 'delete-wallet' | 'get-notes' | 'note-sync-encode' | 'decrypt-memos' | 'get-transparent-history' | 'get-history' | 'sync-memos' | 'frost-dkg-part1' | 'frost-dkg-part2' | 'frost-dkg-part3' | 'frost-sign-round1' | 'frost-spend-sign' | 'frost-spend-aggregate' | 'frost-derive-address' | 'frost-derive-address-from-sk' | 'frost-sample-fvk-sk' | 'frost-derive-ufvk' | 'frost-parse-tx-outputs';
+  type:
+    | 'init'
+    | 'derive-address'
+    | 'sync'
+    | 'stop-sync'
+    | 'reset-sync'
+    | 'get-balance'
+    | 'send-tx'
+    | 'send-tx-multi'
+    | 'send-tx-complete'
+    | 'send-tx-pczt'
+    | 'send-tx-pczt-complete'
+    | 'shield'
+    | 'shield-unsigned'
+    | 'shield-complete'
+    | 'list-wallets'
+    | 'delete-wallet'
+    | 'get-notes'
+    | 'note-sync-encode'
+    | 'decrypt-memos'
+    | 'get-transparent-history'
+    | 'get-history'
+    | 'sync-memos'
+    | 'frost-dkg-part1'
+    | 'frost-dkg-part2'
+    | 'frost-dkg-part3'
+    | 'frost-sign-round1'
+    | 'frost-spend-sign'
+    | 'frost-spend-aggregate'
+    | 'frost-derive-address'
+    | 'frost-derive-address-from-sk'
+    | 'frost-sample-fvk-sk'
+    | 'frost-derive-ufvk'
+    | 'frost-parse-tx-outputs';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -25,7 +58,34 @@ export interface NetworkWorkerMessage {
 }
 
 export interface NetworkWorkerResponse {
-  type: 'ready' | 'address' | 'sync-progress' | 'send-progress' | 'sync-started' | 'sync-stopped' | 'sync-reset' | 'balance' | 'tx-result' | 'tx-multi-result' | 'send-tx-unsigned' | 'send-tx-pczt-unsigned' | 'shield-result' | 'shield-unsigned-result' | 'wallets' | 'wallet-deleted' | 'notes' | 'note-sync-encoded' | 'memos' | 'transparent-history' | 'history' | 'memos-result' | 'sync-memos-progress' | 'mempool-update' | 'prove-request' | 'frost-result' | 'error';
+  type:
+    | 'ready'
+    | 'address'
+    | 'sync-progress'
+    | 'send-progress'
+    | 'sync-started'
+    | 'sync-stopped'
+    | 'sync-reset'
+    | 'balance'
+    | 'tx-result'
+    | 'tx-multi-result'
+    | 'send-tx-unsigned'
+    | 'send-tx-pczt-unsigned'
+    | 'shield-result'
+    | 'shield-unsigned-result'
+    | 'wallets'
+    | 'wallet-deleted'
+    | 'notes'
+    | 'note-sync-encoded'
+    | 'memos'
+    | 'transparent-history'
+    | 'history'
+    | 'memos-result'
+    | 'sync-memos-progress'
+    | 'mempool-update'
+    | 'prove-request'
+    | 'frost-result'
+    | 'error';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -37,10 +97,13 @@ interface WorkerState {
   worker: Worker;
   ready: boolean;
   syncingWallets: Set<string>; // track which wallets are syncing
-  pendingCallbacks: Map<string, {
-    resolve: (value: unknown) => void;
-    reject: (error: Error) => void;
-  }>;
+  pendingCallbacks: Map<
+    string,
+    {
+      resolve: (value: unknown) => void;
+      reject: (error: Error) => void;
+    }
+  >;
 }
 
 const workers = new Map<NetworkType, WorkerState>();
@@ -105,23 +168,29 @@ const spawnNetworkWorkerInner = async (network: NetworkType): Promise<void> => {
 
     if (msg.type === 'sync-progress') {
       // emit progress event with walletId
-      window.dispatchEvent(new CustomEvent('network-sync-progress', {
-        detail: { network, walletId: msg.walletId, ...msg.payload as object }
-      }));
+      window.dispatchEvent(
+        new CustomEvent('network-sync-progress', {
+          detail: { network, walletId: msg.walletId, ...(msg.payload as object) },
+        }),
+      );
       return;
     }
 
     if (msg.type === 'send-progress') {
-      window.dispatchEvent(new CustomEvent('zcash-send-progress', {
-        detail: { network, walletId: msg.walletId, ...msg.payload as object }
-      }));
+      window.dispatchEvent(
+        new CustomEvent('zcash-send-progress', {
+          detail: { network, walletId: msg.walletId, ...(msg.payload as object) },
+        }),
+      );
       return;
     }
 
     if (msg.type === 'sync-memos-progress') {
-      window.dispatchEvent(new CustomEvent('zcash-memo-sync-progress', {
-        detail: { network, walletId: msg.walletId, ...msg.payload as object }
-      }));
+      window.dispatchEvent(
+        new CustomEvent('zcash-memo-sync-progress', {
+          detail: { network, walletId: msg.walletId, ...(msg.payload as object) },
+        }),
+      );
       return;
     }
 
@@ -149,9 +218,11 @@ const spawnNetworkWorkerInner = async (network: NetworkType): Promise<void> => {
       // against the threat model: a co-located content script can read
       // CustomEvent dispatches in the same realm. There is currently
       // no consumer; add one only after confirming this discipline.
-      window.dispatchEvent(new CustomEvent('zcash-mempool-update', {
-        detail: { network, walletId: msg.walletId, ...msg.payload as object }
-      }));
+      window.dispatchEvent(
+        new CustomEvent('zcash-mempool-update', {
+          detail: { network, walletId: msg.walletId, ...(msg.payload as object) },
+        }),
+      );
       return;
     }
 
@@ -175,7 +246,7 @@ const spawnNetworkWorkerInner = async (network: NetworkType): Promise<void> => {
     }
   };
 
-  worker.onerror = (e) => {
+  worker.onerror = e => {
     console.error(`[network-worker] ${network} error:`, e);
   };
 
@@ -265,7 +336,9 @@ export const startSyncInWorker = async (
   // Defensive: mempool watch is meaningless on lightwalletd. Use the
   // single-source-of-truth gate from the strategy module.
   const { isMempoolWatchEnabled } = await import('../../services/mempool-watch/strategy');
-  const effectiveMempoolWatch: 'off' | 'on' = isMempoolWatchEnabled(mempoolWatch, backend) ? 'on' : 'off';
+  const effectiveMempoolWatch: 'off' | 'on' = isMempoolWatchEnabled(mempoolWatch, backend)
+    ? 'on'
+    : 'off';
   return callWorker(
     network,
     'sync',
@@ -287,7 +360,9 @@ export const startWatchOnlySyncInWorker = async (
   mempoolWatch: 'off' | 'on' = 'off',
 ): Promise<void> => {
   const { isMempoolWatchEnabled } = await import('../../services/mempool-watch/strategy');
-  const effectiveMempoolWatch: 'off' | 'on' = isMempoolWatchEnabled(mempoolWatch, backend) ? 'on' : 'off';
+  const effectiveMempoolWatch: 'off' | 'on' = isMempoolWatchEnabled(mempoolWatch, backend)
+    ? 'on'
+    : 'off';
   return callWorker(
     network,
     'sync',
@@ -313,7 +388,10 @@ export const resetSyncInWorker = async (network: NetworkType, walletId: string):
 /**
  * get balance for a wallet on a network
  */
-export const getBalanceInWorker = async (network: NetworkType, walletId: string): Promise<string> => {
+export const getBalanceInWorker = async (
+  network: NetworkType,
+  walletId: string,
+): Promise<string> => {
   return callWorker(network, 'get-balance', {}, walletId);
 };
 
@@ -327,7 +405,10 @@ export const listWalletsInWorker = async (network: NetworkType): Promise<string[
 /**
  * delete a wallet and all its data from a network
  */
-export const deleteWalletInWorker = async (network: NetworkType, walletId: string): Promise<void> => {
+export const deleteWalletInWorker = async (
+  network: NetworkType,
+  walletId: string,
+): Promise<void> => {
   return callWorker(network, 'delete-wallet', {}, walletId);
 };
 
@@ -347,7 +428,10 @@ export interface DecryptedNoteWithTxid {
 /**
  * get all notes for a wallet (includes txid for memo retrieval)
  */
-export const getNotesInWorker = async (network: NetworkType, walletId: string): Promise<DecryptedNoteWithTxid[]> => {
+export const getNotesInWorker = async (
+  network: NetworkType,
+  walletId: string,
+): Promise<DecryptedNoteWithTxid[]> => {
   return callWorker(network, 'get-notes', {}, walletId);
 };
 
@@ -384,7 +468,7 @@ export interface FoundNoteWithMemo {
 export const decryptMemosInWorker = async (
   network: NetworkType,
   walletId: string,
-  txBytes: Uint8Array
+  txBytes: Uint8Array,
 ): Promise<FoundNoteWithMemo[]> => {
   // convert to array for postMessage serialization
   return callWorker(network, 'decrypt-memos', { txBytes: Array.from(txBytes) }, walletId);
@@ -491,7 +575,12 @@ export const shieldInWorker = async (
   mainnet: boolean,
   addressIndexMap?: Record<string, number>,
 ): Promise<ShieldResult> => {
-  return callWorker(network, 'shield', { mnemonic, serverUrl, tAddresses, mainnet, addressIndexMap }, walletId);
+  return callWorker(
+    network,
+    'shield',
+    { mnemonic, serverUrl, tAddresses, mainnet, addressIndexMap },
+    walletId,
+  );
 };
 
 /** result of building an unsigned send transaction */
@@ -523,7 +612,12 @@ export const buildSendTxInWorker = async (
   mnemonic?: string,
   ufvk?: string,
 ): Promise<SendTxUnsignedResult | { txid: string; fee: string }> => {
-  return callWorker(network, 'send-tx', { serverUrl, recipient, amount, memo, accountIndex, mainnet, mnemonic, ufvk }, walletId);
+  return callWorker(
+    network,
+    'send-tx',
+    { serverUrl, recipient, amount, memo, accountIndex, mainnet, mnemonic, ufvk },
+    walletId,
+  );
 };
 
 /** result of building multi-output transactions */
@@ -546,7 +640,12 @@ export const buildMultiSendTxInWorker = async (
   mainnet: boolean,
   mnemonic: string,
 ): Promise<MultiSendResult> => {
-  return callWorker(network, 'send-tx-multi', { serverUrl, outputs, accountIndex, mainnet, mnemonic }, walletId);
+  return callWorker(
+    network,
+    'send-tx-multi',
+    { serverUrl, outputs, accountIndex, mainnet, mnemonic },
+    walletId,
+  );
 };
 
 /**
@@ -560,7 +659,12 @@ export const completeSendTxInWorker = async (
   signatures: { orchardSigs: string[]; transparentSigs: string[] },
   spendIndices: number[],
 ): Promise<{ txid: string }> => {
-  return callWorker(network, 'send-tx-complete', { serverUrl, unsignedTx, signatures, spendIndices }, walletId);
+  return callWorker(
+    network,
+    'send-tx-complete',
+    { serverUrl, unsignedTx, signatures, spendIndices },
+    walletId,
+  );
 };
 
 /**
@@ -601,7 +705,12 @@ export const buildSendTxPcztInWorker = async (
   ufvk: string,
   fragmentSize = 400,
 ): Promise<SendTxPcztUnsignedResult> => {
-  return callWorker(network, 'send-tx-pczt', { serverUrl, recipient, amount, memo, targetHeight, mainnet, ufvk, fragmentSize }, walletId);
+  return callWorker(
+    network,
+    'send-tx-pczt',
+    { serverUrl, recipient, amount, memo, targetHeight, mainnet, ufvk, fragmentSize },
+    walletId,
+  );
 };
 
 /**
@@ -639,7 +748,12 @@ export const buildUnsignedShieldInWorker = async (
   ufvk: string,
   addressIndexMap?: Record<string, number>,
 ): Promise<ShieldUnsignedResult> => {
-  return callWorker(network, 'shield-unsigned', { serverUrl, tAddresses, mainnet, ufvk, addressIndexMap }, walletId);
+  return callWorker(
+    network,
+    'shield-unsigned',
+    { serverUrl, tAddresses, mainnet, ufvk, addressIndexMap },
+    walletId,
+  );
 };
 
 /**
@@ -694,20 +808,32 @@ async function relayProveRequest(worker: Worker, id: string, request: unknown): 
     // 1. ensure offscreen document exists
     const ensureResult = await chrome.runtime.sendMessage({ type: 'ZCASH_ENSURE_OFFSCREEN' });
     if (!ensureResult?.ok) {
-      worker.postMessage({ type: 'prove-response', id, error: `failed to activate offscreen: ${ensureResult?.error ?? 'unknown'}` });
+      worker.postMessage({
+        type: 'prove-response',
+        id,
+        error: `failed to activate offscreen: ${ensureResult?.error ?? 'unknown'}`,
+      });
       return;
     }
     // 2. send build request to offscreen handler
     const response = await chrome.runtime.sendMessage({ type: 'ZCASH_BUILD', request });
     if (response?.error) {
-      worker.postMessage({ type: 'prove-response', id, error: response.error.message ?? JSON.stringify(response.error) });
+      worker.postMessage({
+        type: 'prove-response',
+        id,
+        error: response.error.message ?? JSON.stringify(response.error),
+      });
     } else if (response?.data === undefined) {
       worker.postMessage({ type: 'prove-response', id, error: 'offscreen returned no data' });
     } else {
       worker.postMessage({ type: 'prove-response', id, data: response.data });
     }
   } catch (e) {
-    worker.postMessage({ type: 'prove-response', id, error: e instanceof Error ? e.message : String(e) });
+    worker.postMessage({
+      type: 'prove-response',
+      id,
+      error: e instanceof Error ? e.message : String(e),
+    });
   }
 }
 
@@ -726,7 +852,10 @@ export const frostDkgPart2InWorker = async (
   secretHex: string,
   peerBroadcasts: string[],
 ): Promise<{ secret: string; peer_packages: string[] }> => {
-  return callWorker('zcash', 'frost-dkg-part2', { secretHex, peerBroadcasts: JSON.stringify(peerBroadcasts) });
+  return callWorker('zcash', 'frost-dkg-part2', {
+    secretHex,
+    peerBroadcasts: JSON.stringify(peerBroadcasts),
+  });
 };
 
 /** DKG round 3: finalize — returns key package + public key package */
@@ -760,7 +889,11 @@ export const frostSpendSignInWorker = async (
   commitments: string[],
 ): Promise<string> => {
   return callWorker('zcash', 'frost-spend-sign', {
-    ephemeralSeedHex, keyPackageHex, noncesHex, sighashHex, alphaHex,
+    ephemeralSeedHex,
+    keyPackageHex,
+    noncesHex,
+    sighashHex,
+    alphaHex,
     commitments: JSON.stringify(commitments),
   });
 };
@@ -774,7 +907,9 @@ export const frostSpendAggregateInWorker = async (
   shares: string[],
 ): Promise<string> => {
   return callWorker('zcash', 'frost-spend-aggregate', {
-    publicKeyPackageHex, sighashHex, alphaHex,
+    publicKeyPackageHex,
+    sighashHex,
+    alphaHex,
     commitments: JSON.stringify(commitments),
     shares: JSON.stringify(shares),
   });
@@ -799,7 +934,9 @@ export const frostDeriveAddressFromSkInWorker = async (
   diversifierIndex: number,
 ): Promise<string> => {
   return callWorker('zcash', 'frost-derive-address-from-sk', {
-    publicKeyPackageHex, skHex, diversifierIndex,
+    publicKeyPackageHex,
+    skHex,
+    diversifierIndex,
   });
 };
 
@@ -856,11 +993,10 @@ export const frostParseTxOutputsInWorker = async (
   unsignedTxHex: string,
   orchardFvkUview: string,
 ): Promise<FrostParsedTx> => {
-  const json = await callWorker<string>(
-    'zcash',
-    'frost-parse-tx-outputs',
-    { unsignedTxHex, orchardFvkUview },
-  );
+  const json = await callWorker<string>('zcash', 'frost-parse-tx-outputs', {
+    unsignedTxHex,
+    orchardFvkUview,
+  });
   return JSON.parse(json) as FrostParsedTx;
 };
 

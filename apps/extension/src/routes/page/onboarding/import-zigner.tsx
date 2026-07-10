@@ -126,7 +126,7 @@ export const ImportZigner = () => {
         const kind = zcashWalletImport.coldSignerType ?? 'zigner';
         const ufvkOrFvkB64 = zcashWalletImport.orchardFvk
           ? btoa(String.fromCharCode(...zcashWalletImport.orchardFvk))
-          : zcashWalletImport.ufvk ?? undefined;
+          : (zcashWalletImport.ufvk ?? undefined);
         // Stable deviceId for keystone: hash of the ufvk (16-char prefix). The
         // ufvk is the only canonical, immutable identifier we have for a
         // Keystone wallet. A timestamp would mean "reimporting the same
@@ -220,10 +220,13 @@ export const ImportZigner = () => {
             processZcashAccountsBytes(bytes, 'keystone');
           }}
           onError={setError}
-          onClose={() => { setKeystoneMode(false); setScanState('idle'); }}
-          title="Scan Keystone QR"
-          description="Hold the camera steady on the animated zcash-accounts QR"
-          urTypeFilter="zcash-accounts"
+          onClose={() => {
+            setKeystoneMode(false);
+            setScanState('idle');
+          }}
+          title='Scan Keystone QR'
+          description='Hold the camera steady on the animated zcash-accounts QR'
+          urTypeFilter='zcash-accounts'
         />
       );
     }
@@ -232,7 +235,7 @@ export const ImportZigner = () => {
         onScan={handleScan}
         onError={setError}
         onClose={() => setScanState('idle')}
-        title="Scan Zafu Zigner QR"
+        title='Scan Zafu Zigner QR'
         description="Point camera at your Zafu Zigner's FVK QR code"
       />
     );
@@ -277,7 +280,10 @@ export const ImportZigner = () => {
                 <Button
                   variant='gradient'
                   className='mt-4'
-                  onClick={() => { setKeystoneMode(false); setScanState('scanning'); }}
+                  onClick={() => {
+                    setKeystoneMode(false);
+                    setScanState('scanning');
+                  }}
                 >
                   <span className='i-lucide-camera size-5 mr-2' />
                   Scan QR Code (Zigner)
@@ -285,15 +291,16 @@ export const ImportZigner = () => {
 
                 <Button
                   variant='secondary'
-                  onClick={() => { setKeystoneMode(true); setScanState('scanning'); }}
+                  onClick={() => {
+                    setKeystoneMode(true);
+                    setScanState('scanning');
+                  }}
                 >
                   <span className='i-lucide-camera size-5 mr-2' />
                   Scan Keystone (animated UR, zcash only)
                 </Button>
 
-                {errorMessage && (
-                  <div className='text-red-400 text-sm mt-2'>{errorMessage}</div>
-                )}
+                {errorMessage && <div className='text-red-400 text-sm mt-2'>{errorMessage}</div>}
               </div>
             )}
 
@@ -313,15 +320,9 @@ export const ImportZigner = () => {
                   value={walletLabel}
                   onChange={e => setWalletLabel(e.target.value)}
                 />
-                {errorMessage && (
-                  <div className='text-red-400 text-sm'>{errorMessage}</div>
-                )}
+                {errorMessage && <div className='text-red-400 text-sm'>{errorMessage}</div>}
                 <div className='flex gap-2'>
-                  <Button
-                    variant='secondary'
-                    className='flex-1'
-                    onClick={resetState}
-                  >
+                  <Button variant='secondary' className='flex-1' onClick={resetState}>
                     Cancel
                   </Button>
                   <Button
@@ -340,7 +341,9 @@ export const ImportZigner = () => {
             {scanState === 'scanned' && detectedNetwork === 'penumbra' && walletImport && (
               <div className='flex flex-col gap-4'>
                 <div className='p-6'>
-                  <div className='text-[15px] text-fg-high lowercase tracking-[-0.005em]'>Success!</div>
+                  <div className='text-[15px] text-fg-high lowercase tracking-[-0.005em]'>
+                    Success!
+                  </div>
                   <div className={cn('font-mono text-fg-muted', 'text-xs', 'break-all', 'mt-2')}>
                     Account #{walletImport.accountIndex}
                   </div>
@@ -360,9 +363,7 @@ export const ImportZigner = () => {
                   </p>
                 </div>
 
-                {errorMessage && (
-                  <div className='text-red-400 text-sm'>{errorMessage}</div>
-                )}
+                {errorMessage && <div className='text-red-400 text-sm'>{errorMessage}</div>}
 
                 <div className='flex flex-col gap-2 mt-2'>
                   <Button
@@ -389,7 +390,12 @@ export const ImportZigner = () => {
                     No login required. Less secure.
                   </p>
 
-                  <Button variant='ghost' className='w-full mt-2' onClick={resetState} disabled={importing}>
+                  <Button
+                    variant='ghost'
+                    className='w-full mt-2'
+                    onClick={resetState}
+                    disabled={importing}
+                  >
                     Scan Again
                   </Button>
                 </div>
@@ -400,10 +406,14 @@ export const ImportZigner = () => {
             {scanState === 'scanned' && detectedNetwork === 'zcash' && zcashWalletImport && (
               <div className='flex flex-col gap-4'>
                 <div className='p-6'>
-                  <div className='text-[15px] text-fg-high lowercase tracking-[-0.005em]'>Zcash Wallet Detected!</div>
+                  <div className='text-[15px] text-fg-high lowercase tracking-[-0.005em]'>
+                    Zcash Wallet Detected!
+                  </div>
                   <div className={cn('font-mono text-fg-muted', 'text-xs', 'break-all', 'mt-2')}>
                     Account #{zcashWalletImport.accountIndex}
-                    <span className='ml-2'>{zcashWalletImport.mainnet ? '(mainnet)' : '(testnet)'}</span>
+                    <span className='ml-2'>
+                      {zcashWalletImport.mainnet ? '(mainnet)' : '(testnet)'}
+                    </span>
                   </div>
                 </div>
 
@@ -421,9 +431,7 @@ export const ImportZigner = () => {
                   </p>
                 </div>
 
-                {errorMessage && (
-                  <div className='text-red-400 text-sm'>{errorMessage}</div>
-                )}
+                {errorMessage && <div className='text-red-400 text-sm'>{errorMessage}</div>}
 
                 <div className='flex flex-col gap-2 mt-2'>
                   <Button
@@ -450,7 +458,12 @@ export const ImportZigner = () => {
                     No login required. Less secure.
                   </p>
 
-                  <Button variant='ghost' className='w-full mt-2' onClick={resetState} disabled={importing}>
+                  <Button
+                    variant='ghost'
+                    className='w-full mt-2'
+                    onClick={resetState}
+                    disabled={importing}
+                  >
                     Scan Again
                   </Button>
                 </div>
@@ -461,9 +474,14 @@ export const ImportZigner = () => {
             {scanState === 'scanned' && detectedNetwork === 'cosmos' && parsedCosmosExport && (
               <div className='flex flex-col gap-4'>
                 <div className='p-6'>
-                  <div className='text-[15px] text-fg-high lowercase tracking-[-0.005em]'>Cosmos Account Detected!</div>
+                  <div className='text-[15px] text-fg-high lowercase tracking-[-0.005em]'>
+                    Cosmos Account Detected!
+                  </div>
                   {parsedCosmosExport.addresses.map(a => (
-                    <div key={a.chainId} className={cn('font-mono text-fg-muted', 'text-xs', 'break-all', 'mt-2')}>
+                    <div
+                      key={a.chainId}
+                      className={cn('font-mono text-fg-muted', 'text-xs', 'break-all', 'mt-2')}
+                    >
                       <span className='text-fg capitalize'>{a.chainId}:</span>{' '}
                       {a.address.slice(0, 12)}...{a.address.slice(-8)}
                     </div>
@@ -480,13 +498,12 @@ export const ImportZigner = () => {
                 <div className='rounded-lg border border-pink-500/40 bg-pink-500/10 p-3 text-sm text-pink-200 text-left'>
                   <p className='font-medium'>Watch-Only Account</p>
                   <p className='mt-1 text-fg-muted text-xs'>
-                    View balances and create unsigned transactions. Signing requires your Zafu Zigner device via QR codes.
+                    View balances and create unsigned transactions. Signing requires your Zafu
+                    Zigner device via QR codes.
                   </p>
                 </div>
 
-                {errorMessage && (
-                  <div className='text-red-400 text-sm'>{errorMessage}</div>
-                )}
+                {errorMessage && <div className='text-red-400 text-sm'>{errorMessage}</div>}
 
                 <div className='flex flex-col gap-2 mt-2'>
                   <Button
@@ -513,7 +530,12 @@ export const ImportZigner = () => {
                     No login required. Less secure.
                   </p>
 
-                  <Button variant='ghost' className='w-full mt-2' onClick={resetState} disabled={importing}>
+                  <Button
+                    variant='ghost'
+                    className='w-full mt-2'
+                    onClick={resetState}
+                    disabled={importing}
+                  >
                     Scan Again
                   </Button>
                 </div>
@@ -524,9 +546,12 @@ export const ImportZigner = () => {
             {scanState === 'scanned' && detectedNetwork === 'polkadot' && parsedPolkadotExport && (
               <div className='flex flex-col gap-4'>
                 <div className='p-6'>
-                  <div className='text-[15px] text-fg-high lowercase tracking-[-0.005em]'>Polkadot Account Detected!</div>
+                  <div className='text-[15px] text-fg-high lowercase tracking-[-0.005em]'>
+                    Polkadot Account Detected!
+                  </div>
                   <div className={cn('font-mono text-fg-muted', 'text-xs', 'break-all', 'mt-2')}>
-                    {parsedPolkadotExport.address.slice(0, 12)}...{parsedPolkadotExport.address.slice(-8)}
+                    {parsedPolkadotExport.address.slice(0, 12)}...
+                    {parsedPolkadotExport.address.slice(-8)}
                   </div>
                 </div>
 
@@ -540,13 +565,12 @@ export const ImportZigner = () => {
                 <div className='rounded-lg border border-pink-500/40 bg-pink-500/10 p-3 text-sm text-pink-200 text-left'>
                   <p className='font-medium'>Watch-Only Account</p>
                   <p className='mt-1 text-fg-muted text-xs'>
-                    View balances and create unsigned transactions. Signing requires your Zafu Zigner device via QR codes.
+                    View balances and create unsigned transactions. Signing requires your Zafu
+                    Zigner device via QR codes.
                   </p>
                 </div>
 
-                {errorMessage && (
-                  <div className='text-red-400 text-sm'>{errorMessage}</div>
-                )}
+                {errorMessage && <div className='text-red-400 text-sm'>{errorMessage}</div>}
 
                 <div className='flex flex-col gap-2 mt-2'>
                   <Button
@@ -573,7 +597,12 @@ export const ImportZigner = () => {
                     No login required. Less secure.
                   </p>
 
-                  <Button variant='ghost' className='w-full mt-2' onClick={resetState} disabled={importing}>
+                  <Button
+                    variant='ghost'
+                    className='w-full mt-2'
+                    onClick={resetState}
+                    disabled={importing}
+                  >
                     Scan Again
                   </Button>
                 </div>

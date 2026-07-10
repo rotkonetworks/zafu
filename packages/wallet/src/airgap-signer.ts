@@ -76,8 +76,10 @@ export function encodePlanToQR(plan: TransactionPlan, effectHash: Uint8Array): s
     4 + // plan length prefix
     planBytes.length +
     64 + // effect hash
-    2 + spendRandomizers.length * 32 + // spend randomizers
-    2 + voteRandomizers.length * 32; // vote randomizers
+    2 +
+    spendRandomizers.length * 32 + // spend randomizers
+    2 +
+    voteRandomizers.length * 32; // vote randomizers
 
   // Combine all parts
   const payload = new Uint8Array(totalSize);
@@ -153,7 +155,9 @@ export function parseAuthorizationQR(hex: string): AuthorizationData {
     if (data.length < offset + 64) {
       throw new Error(`Invalid authorization QR: missing spend signature ${i}`);
     }
-    spendAuths.push(new SpendAuthSignature({ inner: new Uint8Array(data.subarray(offset, offset + 64)) }));
+    spendAuths.push(
+      new SpendAuthSignature({ inner: new Uint8Array(data.subarray(offset, offset + 64)) }),
+    );
     offset += 64;
   }
 
@@ -170,7 +174,9 @@ export function parseAuthorizationQR(hex: string): AuthorizationData {
     if (data.length < offset + 64) {
       throw new Error(`Invalid authorization QR: missing vote signature ${i}`);
     }
-    delegatorVoteAuths.push(new SpendAuthSignature({ inner: new Uint8Array(data.subarray(offset, offset + 64)) }));
+    delegatorVoteAuths.push(
+      new SpendAuthSignature({ inner: new Uint8Array(data.subarray(offset, offset + 64)) }),
+    );
     offset += 64;
   }
 
@@ -188,7 +194,11 @@ export function parseAuthorizationQR(hex: string): AuthorizationData {
  * Validate that the AuthorizationData matches the expected effect hash and plan structure.
  * The expectedEffectHash must be pre-computed using WASM.
  */
-export function validateAuthorization(plan: TransactionPlan, auth: AuthorizationData, expectedEffectHash: Uint8Array): void {
+export function validateAuthorization(
+  plan: TransactionPlan,
+  auth: AuthorizationData,
+  expectedEffectHash: Uint8Array,
+): void {
   if (!auth.effectHash?.inner || !arraysEqual(expectedEffectHash, auth.effectHash.inner)) {
     throw new Error('Effect hash mismatch - signatures do not match transaction plan');
   }

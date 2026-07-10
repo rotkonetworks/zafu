@@ -10,7 +10,20 @@ import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
 import type { SessionStorageState } from '@repo/storage-chrome/session';
 
-export type AddressNetwork = 'penumbra' | 'zcash' | 'cosmos' | 'polkadot' | 'kusama' | 'ethereum' | 'bitcoin' | 'solana' | 'near' | 'base' | 'arbitrum' | 'avalanche' | 'polygon';
+export type AddressNetwork =
+  | 'penumbra'
+  | 'zcash'
+  | 'cosmos'
+  | 'polkadot'
+  | 'kusama'
+  | 'ethereum'
+  | 'bitcoin'
+  | 'solana'
+  | 'near'
+  | 'base'
+  | 'arbitrum'
+  | 'avalanche'
+  | 'polygon';
 
 export interface RecentAddress {
   address: string;
@@ -54,7 +67,10 @@ export interface RecentAddressesSlice {
 }
 
 export const createRecentAddressesSlice =
-  (local: ExtensionStorage<LocalStorageState>, session: ExtensionStorage<SessionStorageState>): SliceCreator<RecentAddressesSlice> =>
+  (
+    local: ExtensionStorage<LocalStorageState>,
+    session: ExtensionStorage<SessionStorageState>,
+  ): SliceCreator<RecentAddressesSlice> =>
   (set, get) => ({
     recentAddresses: [],
     dismissedSuggestions: new Set(),
@@ -62,10 +78,11 @@ export const createRecentAddressesSlice =
     recordUsage: async (address, network, chainId) => {
       const normalized = address.toLowerCase();
 
-      set((state) => {
-        if (!Array.isArray(state.recentAddresses.recentAddresses)) state.recentAddresses.recentAddresses = [];
+      set(state => {
+        if (!Array.isArray(state.recentAddresses.recentAddresses))
+          state.recentAddresses.recentAddresses = [];
         const existing = state.recentAddresses.recentAddresses.find(
-          (r) => r.address.toLowerCase() === normalized
+          r => r.address.toLowerCase() === normalized,
         );
 
         if (existing) {
@@ -84,26 +101,29 @@ export const createRecentAddressesSlice =
         }
       });
 
-      await local.set('recentAddresses' as keyof LocalStorageState, get().recentAddresses.recentAddresses as never);
+      await local.set(
+        'recentAddresses' as keyof LocalStorageState,
+        get().recentAddresses.recentAddresses as never,
+      );
     },
 
     getRecent: (network, limit = 5) => {
       const arr = get().recentAddresses.recentAddresses;
       if (!Array.isArray(arr)) return [];
       return [...arr]
-        .filter((r) => r.network === network)
+        .filter(r => r.network === network)
         .sort((a, b) => b.lastUsedAt - a.lastUsedAt)
         .slice(0, limit);
     },
 
-    getFrequent: (network) => {
+    getFrequent: network => {
       let addresses = get().recentAddresses.recentAddresses;
       if (!Array.isArray(addresses)) return [];
       if (network) {
-        addresses = addresses.filter((r) => r.network === network);
+        addresses = addresses.filter(r => r.network === network);
       }
       return [...addresses]
-        .filter((r) => r.useCount >= SUGGEST_SAVE_THRESHOLD)
+        .filter(r => r.useCount >= SUGGEST_SAVE_THRESHOLD)
         .sort((a, b) => b.useCount - a.useCount);
     },
 
@@ -114,28 +134,36 @@ export const createRecentAddressesSlice =
 
       // get addresses used multiple times that aren't saved as contacts
       return recentAddresses
-        .filter((r) => r.useCount >= SUGGEST_SAVE_THRESHOLD)
-        .filter((r) => !contacts.some((c) => c.addresses.some((a) => a.address.toLowerCase() === r.address.toLowerCase())))
-        .filter((r) => !dismissedSuggestions.has(r.address.toLowerCase()))
+        .filter(r => r.useCount >= SUGGEST_SAVE_THRESHOLD)
+        .filter(
+          r =>
+            !contacts.some(c =>
+              c.addresses.some(a => a.address.toLowerCase() === r.address.toLowerCase()),
+            ),
+        )
+        .filter(r => !dismissedSuggestions.has(r.address.toLowerCase()))
         .sort((a, b) => b.useCount - a.useCount);
     },
 
-    dismissSuggestion: async (address) => {
-      set((state) => {
+    dismissSuggestion: async address => {
+      set(state => {
         state.recentAddresses.dismissedSuggestions.add(address.toLowerCase());
       });
 
-      await local.set('dismissedContactSuggestions' as keyof LocalStorageState, [...get().recentAddresses.dismissedSuggestions] as never);
+      await local.set(
+        'dismissedContactSuggestions' as keyof LocalStorageState,
+        [...get().recentAddresses.dismissedSuggestions] as never,
+      );
     },
 
-    shouldSuggestSave: (address) => {
+    shouldSuggestSave: address => {
       const normalized = address.toLowerCase();
       const { recentAddresses, dismissedSuggestions } = get().recentAddresses;
       if (!Array.isArray(recentAddresses)) return false;
       const contacts = Array.isArray(get().contacts.contacts) ? get().contacts.contacts : [];
 
       // already a contact?
-      if (contacts.some((c) => c.addresses.some((a) => a.address.toLowerCase() === normalized))) {
+      if (contacts.some(c => c.addresses.some(a => a.address.toLowerCase() === normalized))) {
         return false;
       }
 
@@ -145,7 +173,7 @@ export const createRecentAddressesSlice =
       }
 
       // check usage count
-      const recent = recentAddresses.find((r) => r.address.toLowerCase() === normalized);
+      const recent = recentAddresses.find(r => r.address.toLowerCase() === normalized);
       return recent ? recent.useCount >= SUGGEST_SAVE_THRESHOLD : false;
     },
   });

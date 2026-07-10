@@ -15,8 +15,7 @@ const logoVariants = cva('inline-flex items-center justify-center', {
 });
 
 export interface LogoProps
-  extends React.SVGProps<SVGSVGElement>,
-    VariantProps<typeof logoVariants> {
+  extends React.SVGProps<SVGSVGElement>, VariantProps<typeof logoVariants> {
   onlyWords?: boolean;
 }
 

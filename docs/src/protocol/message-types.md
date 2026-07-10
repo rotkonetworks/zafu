@@ -27,7 +27,7 @@ fragment:
     bytes 4-19: message ID (16 bytes, random, shared across fragments)
     bytes 20-511: payload (492 bytes max)
 
-maximum fragments: 15. maximum total payload: 15 * 492 = 7,380 bytes.
+maximum fragments: 15. maximum total payload: 15 \* 492 = 7,380 bytes.
 all fragments of one logical message share the same message ID and type.
 reassembly sorts by part number and concatenates payloads.
 

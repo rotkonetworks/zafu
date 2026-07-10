@@ -81,7 +81,10 @@ export async function runMnemonicFrostSign({
     unsigned.fee,
     unsigned.unsignedTx,
   );
-  await sendCommitments(session, round1s.map(r => r.commitments));
+  await sendCommitments(
+    session,
+    round1s.map(r => r.commitments),
+  );
 
   setProgress(`round 1: waiting for ${ms.threshold - 1} co-signer(s)...`);
   await waitFor(() => peerCommits[0]!.length >= ms.threshold - 1, 120_000);
@@ -91,7 +94,12 @@ export async function runMnemonicFrostSign({
   for (let i = 0; i < numActions; i++) {
     const allCommits = [round1s[i]!.commitments, ...peerCommits[i]!];
     const share = await frostSpendSignInWorker(
-      secrets.ephemeralSeed, secrets.keyPackage, round1s[i]!.nonces, unsigned.sighash, unsigned.alphas[i]!, allCommits,
+      secrets.ephemeralSeed,
+      secrets.keyPackage,
+      round1s[i]!.nonces,
+      unsigned.sighash,
+      unsigned.alphas[i]!,
+      allCommits,
     );
     await sendShare(session, i, share);
 
@@ -100,7 +108,11 @@ export async function runMnemonicFrostSign({
 
     const allShares = [share, ...peerShares[i]!];
     const sig = await frostSpendAggregateInWorker(
-      ms.publicKeyPackage, unsigned.sighash, unsigned.alphas[i]!, allCommits, allShares,
+      ms.publicKeyPackage,
+      unsigned.sighash,
+      unsigned.alphas[i]!,
+      allCommits,
+      allShares,
     );
     orchardSigs.push(sig);
   }

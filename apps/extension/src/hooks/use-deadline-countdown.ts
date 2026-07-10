@@ -14,9 +14,11 @@ export function useDeadlineCountdown(deadline: number | null): number {
   );
 
   useEffect(() => {
-    if (!deadline) { setRemaining(0); return; }
-    const tick = () =>
-      setRemaining(Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
+    if (!deadline) {
+      setRemaining(0);
+      return;
+    }
+    const tick = () => setRemaining(Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
     tick();
     const iv = setInterval(tick, 1000);
     return () => clearInterval(iv);

@@ -22,7 +22,14 @@ import {
   type PenumbraSignRequest,
   type PenumbraSignatureResponse,
 } from './types';
-import { hexToBytes, bytesToHex, readUint16LE, readUint32LE, writeUint16LE, writeUint32LE } from '../common/qr';
+import {
+  hexToBytes,
+  bytesToHex,
+  readUint16LE,
+  readUint32LE,
+  writeUint16LE,
+  writeUint32LE,
+} from '../common/qr';
 
 // =============================================================================
 // FVK Import (Zigner → Zafu)
@@ -110,7 +117,7 @@ export function parsePenumbraFvkQR(hex: string): PenumbraFvkExport {
  */
 export function createPenumbraWalletImport(
   exportData: PenumbraFvkExport,
-  defaultLabel = 'Penumbra Wallet'
+  defaultLabel = 'Penumbra Wallet',
 ): PenumbraWalletImport {
   return {
     label: exportData.label ?? defaultLabel,
@@ -306,8 +313,15 @@ export function isPenumbraQR(hex: string): boolean {
  * Get the QR type for a Penumbra QR code
  */
 export function getPenumbraQRType(
-  hex: string
-): 'fvk_export' | 'sign_request' | 'signatures' | 'schema_update' | 'schema_digest' | 'registry_digest' | 'unknown' {
+  hex: string,
+):
+  | 'fvk_export'
+  | 'sign_request'
+  | 'signatures'
+  | 'schema_update'
+  | 'schema_digest'
+  | 'registry_digest'
+  | 'unknown' {
   try {
     const data = hexToBytes(hex);
     if (data.length < 3 || data[0] !== SUBSTRATE_COMPAT || data[1] !== CHAIN_ID_PENUMBRA) {

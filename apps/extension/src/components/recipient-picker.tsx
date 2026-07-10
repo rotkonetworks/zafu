@@ -59,7 +59,9 @@ export function RecipientPicker({ network, onSelect, show }: RecipientPickerProp
       if (entries.some(e => e.address === r.address)) continue;
       const contact = findByAddress(r.address);
       entries.push({
-        label: contact ? contact.contact.name : `${r.address.slice(0, 10)}...${r.address.slice(-6)}`,
+        label: contact
+          ? contact.contact.name
+          : `${r.address.slice(0, 10)}...${r.address.slice(-6)}`,
         address: r.address,
         category: 'recent',
       });
@@ -114,7 +116,10 @@ export function RecipientPicker({ network, onSelect, show }: RecipientPickerProp
           ref={inputRef}
           type='text'
           value={query}
-          onChange={e => { setQuery(e.target.value); setOpen(true); }}
+          onChange={e => {
+            setQuery(e.target.value);
+            setOpen(true);
+          }}
           onFocus={() => setOpen(true)}
           placeholder={`search ${allEntries.length} address${allEntries.length === 1 ? '' : 'es'}...`}
           className='w-full rounded-lg border border-border-soft bg-input pl-8 pr-3 py-1.5 text-xs focus:border-primary/50 focus:outline-none'
@@ -139,7 +144,11 @@ export function RecipientPicker({ network, onSelect, show }: RecipientPickerProp
                   </div>
                 )}
                 <button
-                  onClick={() => { onSelect(entry.address); setOpen(false); setQuery(''); }}
+                  onClick={() => {
+                    onSelect(entry.address);
+                    setOpen(false);
+                    setQuery('');
+                  }}
                   className='flex w-full flex-col px-3 py-1.5 text-left hover:bg-elev-1 transition-colors'
                 >
                   <span className='text-xs truncate'>{entry.label}</span>

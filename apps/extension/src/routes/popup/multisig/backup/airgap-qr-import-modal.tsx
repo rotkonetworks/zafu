@@ -85,7 +85,10 @@ export const AirgapQrImportModal = ({ open, onClose, onImported }: Props) => {
       let imported = 0;
       let skipped = 0;
       for (const w of payload) {
-        if (existingKeys.has(w.publicKeyPackage)) { skipped++; continue; }
+        if (existingKeys.has(w.publicKeyPackage)) {
+          skipped++;
+          continue;
+        }
         await useStore.getState().keyRing.newFrostMultisigKey({
           label: w.label,
           address: w.address,
@@ -109,20 +112,19 @@ export const AirgapQrImportModal = ({ open, onClose, onImported }: Props) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="w-full max-w-sm rounded-lg border border-border-soft bg-elev-1 p-4">
-        <h2 className="text-base font-medium">Import airgap multisig from zigner</h2>
+    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4'>
+      <div className='w-full max-w-sm rounded-lg border border-border-soft bg-elev-1 p-4'>
+        <h2 className='text-base font-medium'>Import airgap multisig from zigner</h2>
 
         {!payload ? (
           <>
-            <p className="mt-1 text-[10px] text-fg-muted">
-              Scan the animated QR your zigner shows. Public metadata only —
-              no secrets cross over.
+            <p className='mt-1 text-[10px] text-fg-muted'>
+              Scan the animated QR your zigner shows. Public metadata only — no secrets cross over.
             </p>
-            <div className="mt-3">
+            <div className='mt-3'>
               <AnimatedQrScanner
                 inline
-                title="scan zigner airgap-import QR"
+                title='scan zigner airgap-import QR'
                 onComplete={handleScan}
                 onClose={onClose}
               />
@@ -130,15 +132,20 @@ export const AirgapQrImportModal = ({ open, onClose, onImported }: Props) => {
           </>
         ) : (
           <>
-            <p className="mt-1 text-[10px] text-fg-muted">
-              {payload.length} wallet{payload.length === 1 ? '' : 's'} ready to import as airgap multisig.
+            <p className='mt-1 text-[10px] text-fg-muted'>
+              {payload.length} wallet{payload.length === 1 ? '' : 's'} ready to import as airgap
+              multisig.
             </p>
-            <div className="mt-3 max-h-64 overflow-y-auto rounded-lg border border-border-soft bg-elev-2 p-2 flex flex-col gap-1.5">
+            <div className='mt-3 max-h-64 overflow-y-auto rounded-lg border border-border-soft bg-elev-2 p-2 flex flex-col gap-1.5'>
               {payload.map((w, i) => (
-                <div key={i} className="rounded-md bg-elev-1 p-2 text-[11px]">
-                  <p className="font-medium">{w.label}</p>
-                  <p className="text-[10px] text-fg-muted">{w.threshold}-of-{w.maxSigners} · {w.mainnet ? 'mainnet' : 'testnet'}</p>
-                  <p className="text-[10px] font-mono text-fg-muted truncate">{w.address.slice(0, 16)}…{w.address.slice(-8)}</p>
+                <div key={i} className='rounded-md bg-elev-1 p-2 text-[11px]'>
+                  <p className='font-medium'>{w.label}</p>
+                  <p className='text-[10px] text-fg-muted'>
+                    {w.threshold}-of-{w.maxSigners} · {w.mainnet ? 'mainnet' : 'testnet'}
+                  </p>
+                  <p className='text-[10px] font-mono text-fg-muted truncate'>
+                    {w.address.slice(0, 16)}…{w.address.slice(-8)}
+                  </p>
                 </div>
               ))}
             </div>
@@ -146,16 +153,16 @@ export const AirgapQrImportModal = ({ open, onClose, onImported }: Props) => {
         )}
 
         {error && (
-          <p className="mt-2 rounded-md border border-red-500/40 bg-red-500/5 p-2 text-[11px] text-red-400">
+          <p className='mt-2 rounded-md border border-red-500/40 bg-red-500/5 p-2 text-[11px] text-red-400'>
             {error}
           </p>
         )}
 
-        <div className="mt-4 flex gap-2">
+        <div className='mt-4 flex gap-2'>
           <button
             disabled={working}
             onClick={onClose}
-            className="flex-1 rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-2 transition-colors disabled:opacity-50"
+            className='flex-1 rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-2 transition-colors disabled:opacity-50'
           >
             cancel
           </button>
@@ -163,7 +170,7 @@ export const AirgapQrImportModal = ({ open, onClose, onImported }: Props) => {
             <button
               disabled={working}
               onClick={() => void handleConfirm()}
-              className="flex-1 rounded-lg border border-primary/40 bg-primary/5 py-2 text-xs text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className='flex-1 rounded-lg border border-primary/40 bg-primary/5 py-2 text-xs text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
             >
               {working ? 'importing...' : `import ${payload.length}`}
             </button>

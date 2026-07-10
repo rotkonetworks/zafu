@@ -20,31 +20,31 @@ the middleware stack is: `customPersist` -> `immer` -> slice creators.
 
 ### slices
 
-| slice              | purpose                                            |
-|--------------------|----------------------------------------------------|
-| `wallets`          | penumbra and zcash wallet records, active indices   |
-| `password`         | password validation during onboarding               |
-| `seedPhrase`       | seed phrase generation and validation flow           |
-| `network`          | grpc endpoint, chain id, sync height                |
-| `numeraires`       | selected numeraire assets for value display          |
-| `txApproval`       | pending transaction approval state                  |
-| `originApproval`   | pending dapp origin approval state                  |
-| `connectedSites`   | known sites and their approval status               |
-| `defaultFrontend`  | default frontend url for dapp links                 |
-| `zigner`           | zigner air-gap device settings                      |
-| `tradingMode`      | trading mode toggle                                 |
-| `zignerSigning`    | active zigner signing session state                 |
-| `privacy`          | user privacy settings (background sync, etc.)       |
-| `networks`         | network endpoint configuration                     |
-| `keyRing`          | vault management, lock/unlock, key derivation       |
-| `ibcWithdraw`      | ibc withdrawal flow state                           |
-| `penumbraSend`     | penumbra send flow state                            |
-| `contacts`         | encrypted contact book                              |
-| `messages`         | encrypted message history                           |
-| `recentAddresses`  | recently used addresses (encrypted)                 |
-| `signApproval`     | pending sign request approval                       |
-| `frostSession`     | frost multisig dkg/signing session state            |
-| `inbox`            | encrypted inbox for memo-capable chains             |
+| slice             | purpose                                           |
+| ----------------- | ------------------------------------------------- |
+| `wallets`         | penumbra and zcash wallet records, active indices |
+| `password`        | password validation during onboarding             |
+| `seedPhrase`      | seed phrase generation and validation flow        |
+| `network`         | grpc endpoint, chain id, sync height              |
+| `numeraires`      | selected numeraire assets for value display       |
+| `txApproval`      | pending transaction approval state                |
+| `originApproval`  | pending dapp origin approval state                |
+| `connectedSites`  | known sites and their approval status             |
+| `defaultFrontend` | default frontend url for dapp links               |
+| `zigner`          | zigner air-gap device settings                    |
+| `tradingMode`     | trading mode toggle                               |
+| `zignerSigning`   | active zigner signing session state               |
+| `privacy`         | user privacy settings (background sync, etc.)     |
+| `networks`        | network endpoint configuration                    |
+| `keyRing`         | vault management, lock/unlock, key derivation     |
+| `ibcWithdraw`     | ibc withdrawal flow state                         |
+| `penumbraSend`    | penumbra send flow state                          |
+| `contacts`        | encrypted contact book                            |
+| `messages`        | encrypted message history                         |
+| `recentAddresses` | recently used addresses (encrypted)               |
+| `signApproval`    | pending sign request approval                     |
+| `frostSession`    | frost multisig dkg/signing session state          |
+| `inbox`           | encrypted inbox for memo-capable chains           |
 
 each slice creator receives the storage backends it needs. slices that persist
 data get `local` (chrome.storage.local) and/or `session` (chrome.storage.session).
@@ -56,17 +56,19 @@ when the popup closes.
 every slice follows the same signature:
 
 ```typescript
-export const createExampleSlice = (
-  local: ExtensionStorage<LocalStorageState>,
-): SliceCreator<ExampleSlice> => (set, get) => ({
-  // state
-  someValue: defaultValue,
-  // actions
-  setSomeValue: async (v) => {
-    await local.set('someKey', v);
-    set(state => { state.example.someValue = v; });
-  },
-});
+export const createExampleSlice =
+  (local: ExtensionStorage<LocalStorageState>): SliceCreator<ExampleSlice> =>
+  (set, get) => ({
+    // state
+    someValue: defaultValue,
+    // actions
+    setSomeValue: async v => {
+      await local.set('someKey', v);
+      set(state => {
+        state.example.someValue = v;
+      });
+    },
+  });
 ```
 
 `SliceCreator<T>` is typed as `StateCreator<AllSlices, [['zustand/immer', never]], [], T>`,
@@ -203,14 +205,14 @@ the keyring state machine has four states:
 
 ### vault types
 
-| type              | contents                                    |
-|-------------------|---------------------------------------------|
-| `mnemonic`        | bip39 seed phrase, can derive for all networks |
-| `zigner-zafu`     | viewing keys from zigner air-gap device     |
-| `frost-multisig`  | frost dkg key package + ephemeral seed      |
-| `ledger`          | hardware wallet reference (planned)         |
-| `trezor`          | hardware wallet reference (planned)         |
-| `keystone`        | hardware wallet reference (planned)         |
+| type             | contents                                       |
+| ---------------- | ---------------------------------------------- |
+| `mnemonic`       | bip39 seed phrase, can derive for all networks |
+| `zigner-zafu`    | viewing keys from zigner air-gap device        |
+| `frost-multisig` | frost dkg key package + ephemeral seed         |
+| `ledger`         | hardware wallet reference (planned)            |
+| `trezor`         | hardware wallet reference (planned)            |
+| `keystone`       | hardware wallet reference (planned)            |
 
 each vault is stored as an `EncryptedVault`:
 
@@ -220,9 +222,9 @@ interface EncryptedVault {
   type: KeyType;
   name: string;
   createdAt: number;
-  encryptedData: string;  // sealed box containing mnemonic or metadata
+  encryptedData: string; // sealed box containing mnemonic or metadata
   salt: string;
-  insensitive: Record<string, unknown>;  // unencrypted metadata
+  insensitive: Record<string, unknown>; // unencrypted metadata
 }
 ```
 

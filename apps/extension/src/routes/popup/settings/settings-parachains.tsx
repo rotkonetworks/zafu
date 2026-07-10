@@ -162,7 +162,7 @@ export const SettingsParachains = () => {
               'flex-1 py-2 text-sm font-medium transition-colors',
               activeTab === tab
                 ? 'border-b-2 border-zigner-gold text-fg'
-                : 'text-fg-muted hover:text-fg-high'
+                : 'text-fg-muted hover:text-fg-high',
             )}
           >
             {tab}
@@ -226,9 +226,7 @@ export const SettingsParachains = () => {
             <span className='i-lucide-refresh-cw h-5 w-5 animate-spin text-fg-muted' />
           </div>
         ) : parachains.length === 0 ? (
-          <div className='text-center text-sm text-fg-muted py-12'>
-            no parachains available
-          </div>
+          <div className='text-center text-sm text-fg-muted py-12'>no parachains available</div>
         ) : (
           <div className='flex flex-col gap-1'>
             <div className='mb-2 text-xs text-fg-muted'>
@@ -242,19 +240,19 @@ export const SettingsParachains = () => {
                   onClick={() => void handleToggle(chain.id)}
                   className={cn(
                     'flex items-center justify-between p-3 rounded-lg border border-border-soft transition-colors text-left',
-                    isEnabled ? 'bg-primary/5 border-primary/40' : 'hover:bg-elev-1'
+                    isEnabled ? 'bg-primary/5 border-primary/40' : 'hover:bg-elev-1',
                   )}
                 >
                   <div className='flex flex-col'>
                     <span className='font-medium text-sm'>{chain.name}</span>
-                    {chain.symbol && (
-                      <span className='text-xs text-fg-muted'>{chain.symbol}</span>
-                    )}
+                    {chain.symbol && <span className='text-xs text-fg-muted'>{chain.symbol}</span>}
                   </div>
                   <div
                     className={cn(
                       'h-5 w-5 rounded border-2 flex items-center justify-center transition-colors',
-                      isEnabled ? 'border-zigner-gold bg-zigner-gold' : 'border-muted-foreground/50'
+                      isEnabled
+                        ? 'border-zigner-gold bg-zigner-gold'
+                        : 'border-muted-foreground/50',
                     )}
                   >
                     {isEnabled && <span className='i-lucide-check h-3 w-3 text-zigner-dark' />}

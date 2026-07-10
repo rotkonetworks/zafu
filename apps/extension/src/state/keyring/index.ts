@@ -93,7 +93,9 @@ export interface KeyRingSlice {
   deleteKeyRing: (vaultId: string) => Promise<void>;
 
   getMnemonic: (vaultId: string) => Promise<string>;
-  getMultisigSecrets: (vaultId: string) => Promise<{ keyPackage: string; ephemeralSeed: string } | null>;
+  getMultisigSecrets: (
+    vaultId: string,
+  ) => Promise<{ keyPackage: string; ephemeralSeed: string } | null>;
   deriveKey: (vaultId: string, network: NetworkType, accountIndex?: number) => Promise<DerivedKey>;
 
   toggleNetwork: (network: NetworkType) => Promise<void>;
@@ -103,632 +105,719 @@ export interface KeyRingSlice {
   setPenumbraAccount: (account: number) => void;
 }
 
-export const createKeyRingSlice = (
-  session: ExtensionStorage<SessionStorageState>,
-  local: ExtensionStorage<LocalStorageState>,
-): SliceCreator<KeyRingSlice> => (set, get) => {
-  const ctx: CryptoCtx = { session };
+export const createKeyRingSlice =
+  (
+    session: ExtensionStorage<SessionStorageState>,
+    local: ExtensionStorage<LocalStorageState>,
+  ): SliceCreator<KeyRingSlice> =>
+  (set, get) => {
+    const ctx: CryptoCtx = { session };
 
-  return {
-    status: 'not-loaded',
-    keyInfos: [],
-    selectedKeyInfo: undefined,
-    activeNetwork: '' as NetworkType,
-    enabledNetworks: [],
-    penumbraAccount: 0,
-    setPenumbraAccount: (account: number) => set(state => { state.keyRing.penumbraAccount = account; }),
-
-    // ── init ──
-
-    init: async () => {
-      const keyPrint = await local.get('passwordKeyPrint');
-      const rawVaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
-      const selectedId = await local.get('selectedVaultId');
-      const enabledNetworks = (await local.get('enabledNetworks')) ?? [];
-      const activeNetwork = (await local.get('activeNetwork')) ?? (enabledNetworks[0] ?? '');
-      // wallets are encrypted — read via encrypted path if session key available
-      const initSessionKey = await session.get('passwordKey');
-
-      // migration: check zcashWallets for orphaned multisigs (needs decryption)
-      let vaults = rawVaults;
-      if (initSessionKey) {
-        const { readEncrypted } = await import('./../../state/encrypted-storage');
-        type LK = keyof import('@repo/storage-chrome/local').LocalStorageState;
-        const zcashWallets = (await readEncrypted<ZcashWalletJson[]>(local as never, session as never, 'zcashWallets' as LK)) ?? [];
-        if (hasOrphanedMultisigs(zcashWallets)) {
-          const migrated = await migrateOrphanedMultisigs(rawVaults, zcashWallets, initSessionKey, local);
-          vaults = migrated.vaults;
-        }
-      }
-
-      // auto-unlock for airgap-only setups
-      const hasOnlyAirgap = vaults.length > 0 && vaults.every(v => v.insensitive?.['airgapOnly'] === true);
-
-      // sync penumbra wallet index — only if unlocked (wallets are encrypted)
-      let syncedWalletIndex = await local.get('activeWalletIndex') ?? 0;
-
-      if (!keyPrint) {
+    return {
+      status: 'not-loaded',
+      keyInfos: [],
+      selectedKeyInfo: undefined,
+      activeNetwork: '' as NetworkType,
+      enabledNetworks: [],
+      penumbraAccount: 0,
+      setPenumbraAccount: (account: number) =>
         set(state => {
-          state.keyRing.status = 'empty';
-          state.keyRing.keyInfos = [];
-          state.keyRing.selectedKeyInfo = undefined;
-          state.keyRing.activeNetwork = activeNetwork as NetworkType;
-          state.keyRing.enabledNetworks = enabledNetworks as NetworkType[];
-        });
-        return;
-      }
+          state.keyRing.penumbraAccount = account;
+        }),
 
-      let sessionKey = await session.get('passwordKey');
-      const keyInfos = vaultsToKeyInfos(vaults, selectedId as string);
+      // ── init ──
 
-      if (!sessionKey && hasOnlyAirgap) {
-        const result = await recreateMasterKey('', keyPrint);
-        if (result) {
-          await session.set('passwordKey', result.keyJson);
-          sessionKey = result.keyJson;
-        }
-      }
-
-      set(state => {
-        state.keyRing.status = sessionKey ? 'unlocked' : 'locked';
-        state.keyRing.keyInfos = keyInfos;
-        state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
-        state.keyRing.activeNetwork = activeNetwork as NetworkType;
-        state.keyRing.enabledNetworks = enabledNetworks as NetworkType[];
-        state.wallets.activeIndex = syncedWalletIndex;
-      });
-
-      // check pro license after auto-unlock
-      if (sessionKey) {
-        void (async () => {
-          try {
-            const selected = keyInfos.find(k => k.isSelected);
-            const zidPubkey = selected?.insensitive?.['zid'] as string | undefined;
-            if (zidPubkey) {
-              await get().license.fetchLicense(zidPubkey);
-            }
-          } catch { /* server unreachable — no-op */ }
-        })();
-      }
-    },
-
-    // ── password / unlock / lock ──
-
-    setPassword: async (password: string) => {
-      const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
-      const existingKeyPrint = await local.get('passwordKeyPrint');
-      const hasAirgapOnly = vaults.some(v => v.insensitive?.['airgapOnly'] === true);
-
-      if (hasAirgapOnly && existingKeyPrint) {
-        const oldResult = await recreateMasterKey('', existingKeyPrint);
-        if (!oldResult) throw new Error('failed to decrypt existing vaults for migration');
-
-        const { key: newKey, keyPrint: newKeyPrint, keyJson: newKeyJson } = await createMasterKey(password);
-        const migratedVaults = await Promise.all(
-          vaults.map(v => reencryptVault(v, oldResult.key, newKey)),
-        );
-
-        await local.set('vaults', migratedVaults);
-        await local.set('passwordKeyPrint', newKeyPrint.toJson());
-        await session.set('passwordKey', newKeyJson);
-
+      init: async () => {
+        const keyPrint = await local.get('passwordKeyPrint');
+        const rawVaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
         const selectedId = await local.get('selectedVaultId');
-        const keyInfos = vaultsToKeyInfos(migratedVaults, selectedId as string);
-        set(state => {
-          state.keyRing.status = 'unlocked';
-          state.keyRing.keyInfos = keyInfos;
-          state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
-        });
-      } else {
-        const { keyJson, keyPrint } = await createMasterKey(password);
-        await session.set('passwordKey', keyJson);
-        await local.set('passwordKeyPrint', keyPrint.toJson());
-        set(state => { state.keyRing.status = 'unlocked'; });
-      }
-    },
+        const enabledNetworks = (await local.get('enabledNetworks')) ?? [];
+        const activeNetwork = (await local.get('activeNetwork')) ?? enabledNetworks[0] ?? '';
+        // wallets are encrypted — read via encrypted path if session key available
+        const initSessionKey = await session.get('passwordKey');
 
-    unlock: async (password: string) => {
-      const keyPrintJson = await local.get('passwordKeyPrint');
-      if (!keyPrintJson) return false;
-
-      const result = await recreateMasterKey(password, keyPrintJson);
-      if (!result) return false;
-
-      await session.set('passwordKey', result.keyJson);
-      set(state => { state.keyRing.status = 'unlocked'; });
-
-      // check pro license status after unlock
-      void (async () => {
-        try {
-          const keyInfo = get().keyRing.selectedKeyInfo;
-          const zidPubkey = keyInfo?.insensitive?.['zid'] as string | undefined;
-          if (zidPubkey) await get().license.fetchLicense(zidPubkey);
-        } catch { /* server unreachable — treat as free */ }
-      })();
-
-      return true;
-    },
-
-    lock: () => {
-      void session.remove('passwordKey');
-      set(state => { state.keyRing.status = 'locked'; });
-    },
-
-    checkPassword: async (password: string) => {
-      const keyPrintJson = await local.get('passwordKeyPrint');
-      if (!keyPrintJson) return false;
-      return (await recreateMasterKey(password, keyPrintJson)) !== null;
-    },
-
-    // ── vault creation ──
-
-    newMnemonicKey: async (mnemonic: string, name: string) => {
-      const vaultId = generateVaultId();
-      const encryptedData = await encrypt(ctx, mnemonic);
-      const vault = buildMnemonicVault(vaultId, name, encryptedData);
-      // store zid pubkey in unencrypted metadata — readable without password
-      const { deriveZid } = await import('../identity');
-      const zid = deriveZid(mnemonic);
-      vault.insensitive['zid'] = zid.publicKey;
-
-      const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
-      const newVaults = [vault, ...vaults];
-      await local.set('vaults', newVaults);
-      await local.set('selectedVaultId', vaultId);
-
-      // penumbra wallet entry (non-fatal)
-      const key = await requireKey(ctx).catch(() => undefined);
-      if (key) {
-        await createPenumbraWalletForMnemonic(mnemonic, name, vaultId, key, local)
-          .catch(e => console.warn('[keyring] failed to create prax-compatible wallet:', e));
-      }
-
-      const keyInfos = vaultsToKeyInfos(newVaults, vaultId);
-      const enabledNetworks = (await local.get('enabledNetworks')) ?? [];
-      if (vaults.length === 0 && enabledNetworks.length > 0) {
-        await local.set('activeNetwork', enabledNetworks[0]);
-      }
-
-      set(state => {
-        state.keyRing.keyInfos = keyInfos;
-        state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
-        if (vaults.length === 0 && enabledNetworks.length > 0) {
-          state.keyRing.activeNetwork = enabledNetworks[0] as NetworkType;
-        }
-      });
-
-      return vaultId;
-    },
-
-    newZignerZafuKey: async (data: ZignerZafuImport, name: string) => {
-      // merge-by-ZID: if we already have a vault for this zigner device+account,
-      // add the new network capability to it instead of creating a separate vault.
-      if (data.zidPublicKey) {
-        const existingVaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
-        const mergeTarget = existingVaults.find(v =>
-          v.type === 'zigner-zafu'
-          && v.insensitive['zid'] === data.zidPublicKey
-          && v.insensitive['accountIndex'] === data.accountIndex,
-        );
-        if (mergeTarget) {
-          const mergedId = await mergeZignerCapabilities(mergeTarget, data, local, session);
-          const updatedVaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
-          const selectedId = (await local.get('selectedVaultId')) as string;
-          const enabledNetworks = mergeEnabledNetworks(
-            ((await local.get('enabledNetworks')) ?? []) as NetworkType[],
-            zignerSupportedNetworks(data),
-          );
-          await local.set('enabledNetworks', enabledNetworks);
-          const keyInfos = vaultsToKeyInfos(updatedVaults, selectedId);
-          set(state => {
-            state.keyRing.keyInfos = keyInfos;
-            state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
-            state.keyRing.enabledNetworks = enabledNetworks;
-          });
-          return mergedId;
-        }
-      }
-
-      const vaultId = generateVaultId();
-      const encryptedData = await encrypt(ctx, JSON.stringify(data));
-      const supportedNetworks = zignerSupportedNetworks(data);
-      const vault = buildZignerVault(vaultId, name, encryptedData, data, supportedNetworks);
-
-      const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
-      const newVaults = [vault, ...vaults];
-      await local.set('vaults', newVaults);
-      await local.set('selectedVaultId', vaultId);
-
-      const key = await requireKey(ctx).catch(() => undefined);
-      const newEnabledNetworks = key
-        ? await createZignerWalletEntries(data, name, key, vaultId, supportedNetworks, vaults.length, local)
-        : mergeEnabledNetworks((await local.get('enabledNetworks')) ?? [] as NetworkType[], supportedNetworks);
-
-      const keyInfos = vaultsToKeyInfos(newVaults, vaultId);
-      set(state => {
-        state.keyRing.keyInfos = keyInfos;
-        state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
-        state.keyRing.enabledNetworks = newEnabledNetworks;
-        if (vaults.length === 0 && supportedNetworks.length > 0) {
-          state.keyRing.activeNetwork = supportedNetworks[0] as NetworkType;
-        }
-      });
-
-      return vaultId;
-    },
-
-    addZignerUnencrypted: async (data: ZignerZafuImport, name: string) => {
-      const existingVaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
-
-      // ── merge-by-ZID: same zigner device importing a different network ──
-      // if incoming import carries a ZID and there's an existing zigner-zafu
-      // vault with the same ZID + accountIndex, merge the new viewing key(s)
-      // into it instead of creating a separate vault. keeps "one device = one
-      // wallet" invariant across network imports.
-      if (data.zidPublicKey) {
-        const mergeTarget = existingVaults.find(v =>
-          v.type === 'zigner-zafu'
-          && v.insensitive['zid'] === data.zidPublicKey
-          && v.insensitive['accountIndex'] === data.accountIndex,
-        );
-        if (mergeTarget) {
-          const mergedVaultId = await mergeZignerCapabilities(mergeTarget, data, local, session);
-          const updatedVaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
-          const selectedId = (await local.get('selectedVaultId')) as string;
-          const keyInfos = vaultsToKeyInfos(updatedVaults, selectedId);
-          const enabledNetworks = mergeEnabledNetworks(
-            ((await local.get('enabledNetworks')) ?? []) as NetworkType[],
-            zignerSupportedNetworks(data),
-          );
-          await local.set('enabledNetworks', enabledNetworks);
-          set(state => {
-            state.keyRing.keyInfos = keyInfos;
-            state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
-            state.keyRing.status = 'unlocked';
-            state.keyRing.enabledNetworks = enabledNetworks;
-          });
-          return mergedVaultId;
-        }
-      }
-
-      // dedup: check if a vault with the same viewing key already exists
-      for (const v of existingVaults) {
-        if (v.type !== 'zigner-zafu') continue;
-        // match by deviceId + accountIndex (same device, same account = same keys)
-        if (
-          v.insensitive['deviceId'] === data.deviceId &&
-          v.insensitive['accountIndex'] === data.accountIndex
-        ) {
-          throw new Error('this zigner wallet is already imported');
-        }
-      }
-      // also check zcash wallets for matching FVK (catches cross-device duplicates)
-      if (data.viewingKey) {
-        const existingZcash = ((await local.get('zcashWallets')) ?? []) as ZcashWalletJson[];
-        if (existingZcash.some(w => w.orchardFvk === data.viewingKey)) {
-          throw new Error('a wallet with this zcash viewing key already exists');
-        }
-      }
-      // check penumbra wallets for matching FVK
-      if (data.fullViewingKey) {
-        const existingPenumbra = (await local.get('penumbraWallets')) ?? [];
-        const fvkB64 = data.fullViewingKey;
-        // penumbra wallets store FVK as JSON string — compare via base64 of inner bytes
-        for (const w of existingPenumbra) {
-          try {
-            const { FullViewingKey } = await import('@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb');
-            const existing = FullViewingKey.fromJsonString(w.fullViewingKey);
-            const existingB64 = btoa(String.fromCharCode(...existing.inner));
-            if (existingB64 === fvkB64) {
-              throw new Error('a wallet with this penumbra viewing key already exists');
-            }
-          } catch (e) {
-            if (e instanceof Error && e.message.includes('already exists')) throw e;
-            // parse error — skip this wallet
+        // migration: check zcashWallets for orphaned multisigs (needs decryption)
+        let vaults = rawVaults;
+        if (initSessionKey) {
+          const { readEncrypted } = await import('./../../state/encrypted-storage');
+          type LK = keyof import('@repo/storage-chrome/local').LocalStorageState;
+          const zcashWallets =
+            (await readEncrypted<ZcashWalletJson[]>(
+              local as never,
+              session as never,
+              'zcashWallets' as LK,
+            )) ?? [];
+          if (hasOrphanedMultisigs(zcashWallets)) {
+            const migrated = await migrateOrphanedMultisigs(
+              rawVaults,
+              zcashWallets,
+              initSessionKey,
+              local,
+            );
+            vaults = migrated.vaults;
           }
         }
-      }
 
-      const vaultId = generateVaultId();
-      const existingKeyPrint = await local.get('passwordKeyPrint');
-      const existingSessionKey = await session.get('passwordKey');
+        // auto-unlock for airgap-only setups
+        const hasOnlyAirgap =
+          vaults.length > 0 && vaults.every(v => v.insensitive?.['airgapOnly'] === true);
 
-      let key: Key;
-      let isNewSetup = false;
+        // sync penumbra wallet index — only if unlocked (wallets are encrypted)
+        let syncedWalletIndex = (await local.get('activeWalletIndex')) ?? 0;
 
-      if (existingKeyPrint && existingSessionKey) {
-        key = await Key.fromJson(existingSessionKey);
-      } else if (!existingKeyPrint) {
-        const created = await createMasterKey('');
-        key = created.key;
-        isNewSetup = true;
-        await session.set('passwordKey', created.keyJson);
-        await local.set('passwordKeyPrint', created.keyPrint.toJson());
-      } else {
-        throw new Error('keyring locked - unlock first or use password flow');
-      }
-
-      const encryptedBox = await key.seal(JSON.stringify(data));
-      const supportedNetworks = zignerSupportedNetworks(data);
-      const vault = buildZignerVault(
-        vaultId, name, JSON.stringify(encryptedBox.toJson()),
-        data, supportedNetworks, { airgapOnly: isNewSetup },
-      );
-
-      const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
-      const newVaults = [vault, ...vaults];
-      await local.set('vaults', newVaults);
-
-      const currentSelectedId = await local.get('selectedVaultId');
-      const activeNetwork = await local.get('activeNetwork') ?? '';
-      const autoSelect = shouldAutoSelectZigner(
-        currentSelectedId as string, vaults.length, activeNetwork, supportedNetworks,
-      );
-      if (autoSelect) await local.set('selectedVaultId', vaultId);
-
-      const newEnabledNetworks = await createZignerWalletEntries(
-        data, name, key, vaultId, supportedNetworks, vaults.length, local,
-      );
-
-      const selectedId = autoSelect ? vaultId : (currentSelectedId as string);
-      const keyInfos = vaultsToKeyInfos(newVaults, selectedId);
-      set(state => {
-        state.keyRing.keyInfos = keyInfos;
-        state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
-        state.keyRing.status = 'unlocked';
-        state.keyRing.enabledNetworks = newEnabledNetworks;
-        if (vaults.length === 0 && supportedNetworks.length > 0) {
-          state.keyRing.activeNetwork = supportedNetworks[0] as NetworkType;
-        }
-      });
-
-      return vaultId;
-    },
-
-    newFrostMultisigKey: async (params) => {
-      const vaultId = generateVaultId();
-
-      // airgapSigner: share lives on zigner. nothing secret to persist; we
-      // still call encrypt({}) to keep the vault.encryptedData invariant.
-      const isAirgap = params.custody === 'airgapSigner';
-      const encryptedData = isAirgap
-        ? await encrypt(ctx, '{}')
-        : await encrypt(
-            ctx,
-            JSON.stringify({ keyPackage: params.keyPackage, ephemeralSeed: params.ephemeralSeed }),
-          );
-      const vault = buildFrostVault(vaultId, params, encryptedData);
-
-      // hidden multisigs (poker tables) must not steal the active-wallet slot
-      const hidden = params.hidden === true;
-
-      const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
-      const newVaults = [vault, ...vaults];
-      await local.set('vaults', newVaults);
-      const prevSelectedVaultId = await local.get('selectedVaultId');
-      if (!hidden) {
-        await local.set('selectedVaultId', vaultId);
-      }
-
-      let encKeyPackage: Awaited<ReturnType<typeof encryptFrostSecrets>>['encKeyPackage'] | undefined;
-      let encEphemeralSeed: Awaited<ReturnType<typeof encryptFrostSecrets>>['encEphemeralSeed'] | undefined;
-      if (!isAirgap) {
-        const enc = await encryptFrostSecrets(ctx, params.keyPackage!, params.ephemeralSeed!);
-        encKeyPackage = enc.encKeyPackage;
-        encEphemeralSeed = enc.encEphemeralSeed;
-      }
-      const zcashWallet = buildFrostZcashWallet(params, vaultId, encKeyPackage, encEphemeralSeed);
-      const existingZcash = ((await local.get('zcashWallets')) ?? []) as ZcashWalletJson[];
-      const newZcashWallets = [zcashWallet, ...existingZcash];
-      await local.set('zcashWallets', newZcashWallets);
-      // hidden: hold the previous active wallet's slot (we prepended → bump by 1); visible: take 0
-      const prevActiveZcashIndex = (await local.get('activeZcashIndex')) ?? 0;
-      const newActiveZcashIndex = hidden ? prevActiveZcashIndex + 1 : 0;
-      await local.set('activeZcashIndex', newActiveZcashIndex);
-
-      const newEnabledNetworks = mergeEnabledNetworks(
-        (await local.get('enabledNetworks')) ?? [] as NetworkType[], ['zcash'],
-      );
-      await local.set('enabledNetworks', newEnabledNetworks);
-
-      const keyInfos = vaultsToKeyInfos(newVaults, hidden ? (prevSelectedVaultId as string | undefined) : vaultId);
-      set(state => {
-        state.keyRing.keyInfos = keyInfos;
-        state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
-        state.keyRing.enabledNetworks = newEnabledNetworks;
-        state.wallets.zcashWallets = newZcashWallets;
-        state.wallets.activeZcashIndex = newActiveZcashIndex;
-        if (vaults.length === 0) {
-          state.keyRing.activeNetwork = 'zcash' as NetworkType;
-        }
-      });
-
-      return vaultId;
-    },
-
-    // ── vault management ──
-
-    selectKeyRing: async (vaultId: string) => {
-      await local.set('selectedVaultId', vaultId);
-
-      // sync penumbra wallet index
-      const wallets = (await local.get('penumbraWallets')) ?? [];
-      const walletIdx = findWalletIndex(wallets as { vaultId?: string }[], vaultId);
-      if (walletIdx >= 0) await local.set('activeWalletIndex', walletIdx);
-
-      // sync zcash wallet index — -1 means no zcash wallet record (mnemonic derives on-the-fly)
-      const zcashWallets = (await local.get('zcashWallets')) ?? [];
-      const zcashIdx = findWalletIndex(zcashWallets as { vaultId?: string }[], vaultId);
-      // only persist a valid index; -1 means "use vault mnemonic, not a zcash wallet record"
-      if (zcashIdx >= 0) {
-        await local.set('activeZcashIndex', zcashIdx);
-      }
-
-      set(state => {
-        state.keyRing.keyInfos = state.keyRing.keyInfos.map(k => ({
-          ...k, isSelected: k.id === vaultId,
-        }));
-        state.keyRing.selectedKeyInfo = state.keyRing.keyInfos.find(k => k.isSelected);
-        if (walletIdx >= 0) state.wallets.activeIndex = walletIdx;
-        if (zcashIdx >= 0) state.wallets.activeZcashIndex = zcashIdx;
-      });
-    },
-
-    renameKeyRing: async (vaultId: string, newName: string) => {
-      const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
-      const updatedVaults = vaults.map(v => v.id === vaultId ? { ...v, name: newName } : v);
-      await local.set('vaults', updatedVaults);
-
-      const selectedId = await local.get('selectedVaultId');
-      const keyInfos = vaultsToKeyInfos(updatedVaults, selectedId as string);
-      set(state => {
-        state.keyRing.keyInfos = keyInfos;
-        state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
-      });
-    },
-
-    deleteKeyRing: async (vaultId: string) => {
-      const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
-      const updatedVaults = vaults.filter(v => v.id !== vaultId);
-      await local.set('vaults', updatedVaults);
-
-      const { removedZcashIds } = await removeLinkedWallets(vaultId, local);
-      await cleanupZcashData(vaultId, removedZcashIds);
-
-      // last vault — nuke everything
-      if (updatedVaults.length === 0) {
-        await nukeAllWalletData(session, local);
-        set(state => {
-          state.keyRing.keyInfos = [];
-          state.keyRing.selectedKeyInfo = undefined;
-          state.keyRing.status = 'empty';
-          state.wallets.all = [];
-          state.wallets.activeIndex = 0;
-          state.wallets.zcashWallets = [];
-          state.wallets.activeZcashIndex = 0;
-        });
-        return;
-      }
-
-      // re-select if needed
-      const currentSelectedId = await local.get('selectedVaultId');
-      const selectedId = selectionAfterDelete(updatedVaults, vaultId, currentSelectedId as string);
-      if (selectedId !== currentSelectedId) await local.set('selectedVaultId', selectedId);
-
-      const keyInfos = vaultsToKeyInfos(updatedVaults, selectedId);
-      const updatedWallets = (await local.get('penumbraWallets')) ?? [];
-      set(state => {
-        state.keyRing.keyInfos = keyInfos;
-        state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
-        state.wallets.all = updatedWallets.map(
-          (w: { vaultId?: string }) => ({ ...w, vaultId: w.vaultId ?? '' }),
-        ) as typeof state.wallets.all;
-        if (state.wallets.activeIndex >= updatedWallets.length) {
-          state.wallets.activeIndex = Math.max(0, updatedWallets.length - 1);
-        }
-      });
-    },
-
-    // ── secrets ──
-
-    getMnemonic: async (vaultId: string) => {
-      const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
-      const vault = vaults.find(v => v.id === vaultId);
-      if (!vault) throw new Error('vault not found');
-      if (vault.type !== 'mnemonic') throw new Error('not a mnemonic vault');
-      return decryptVault(ctx, vault);
-    },
-
-    getMultisigSecrets: async (vaultId: string) => {
-      const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
-      const vault = vaults.find(v => v.id === vaultId);
-
-      if (vault?.type === 'frost-multisig') {
-        // airgapSigner wallets keep the share on zigner — no secrets to surface here
-        if (vault.insensitive['custody'] === 'airgapSigner') return null;
-        const decrypted = await decryptVault(ctx, vault);
-        try {
-          const parsed = JSON.parse(decrypted);
-          if (!parsed.keyPackage || !parsed.ephemeralSeed) return null;
-          return { keyPackage: parsed.keyPackage as string, ephemeralSeed: parsed.ephemeralSeed as string };
-        } catch {
-          return null;
-        }
-      }
-
-      // fallback: legacy zcash wallet records
-      const zcashWallets = ((await local.get('zcashWallets')) ?? []) as ZcashWalletJson[];
-      const wallet = zcashWallets.find(w => w.vaultId === vaultId);
-      if (!wallet?.multisig || wallet.multisig.custody === 'airgapSigner') return null;
-      if (!wallet.multisig.keyPackage || !wallet.multisig.ephemeralSeed) return null;
-      return decryptMultisigSecrets(ctx, wallet.multisig.keyPackage, wallet.multisig.ephemeralSeed);
-    },
-
-    deriveKey: async (vaultId: string, network: NetworkType, accountIndex = 0) => {
-      const { keyInfos } = get().keyRing;
-      const keyInfo = keyInfos.find(k => k.id === vaultId);
-      if (!keyInfo) throw new Error('vault not found');
-
-      return {
-        keyInfoId: vaultId,
-        network,
-        address: `${network}:placeholder`,
-        derivationPath: `m/44'/${network}'/0'/0/${accountIndex}`,
-        accountIndex,
-      };
-    },
-
-    // ── network management ──
-
-    toggleNetwork: async (network: NetworkType) => {
-      const { enabledNetworks, activeNetwork } = get().keyRing;
-      const disabling = enabledNetworks.includes(network);
-      const newNetworks = disabling
-        ? enabledNetworks.filter(n => n !== network)
-        : [...enabledNetworks, network];
-
-      await local.set('enabledNetworks', newNetworks);
-      set(state => { state.keyRing.enabledNetworks = newNetworks; });
-
-      if (disabling && activeNetwork === network && newNetworks.length > 0) {
-        await get().keyRing.setActiveNetwork(newNetworks[0]!);
-      }
-    },
-
-    setActiveNetwork: async (network: NetworkType) => {
-      await local.set('activeNetwork', network);
-
-      const { keyInfos, selectedKeyInfo } = get().keyRing;
-      const currentSupports = selectedKeyInfo
-        ? keyInfoSupportsNetwork(selectedKeyInfo, network)
-        : false;
-
-      if (!currentSupports) {
-        const compatible = findCompatibleVault(keyInfos, network);
-        if (compatible) {
-          await local.set('selectedVaultId', compatible.id);
-
-          if (network === 'penumbra') {
-            const wallets = (await local.get('penumbraWallets')) ?? [];
-            const idx = findWalletIndex(wallets as { vaultId?: string }[], compatible.id);
-            if (idx >= 0) await local.set('activeWalletIndex', idx);
-          }
-
+        if (!keyPrint) {
           set(state => {
-            state.keyRing.activeNetwork = network;
-            state.keyRing.keyInfos = state.keyRing.keyInfos.map(k => ({
-              ...k, isSelected: k.id === compatible.id,
-            }));
-            state.keyRing.selectedKeyInfo = state.keyRing.keyInfos.find(k => k.isSelected);
+            state.keyRing.status = 'empty';
+            state.keyRing.keyInfos = [];
+            state.keyRing.selectedKeyInfo = undefined;
+            state.keyRing.activeNetwork = activeNetwork as NetworkType;
+            state.keyRing.enabledNetworks = enabledNetworks as NetworkType[];
           });
           return;
         }
-      }
 
-      set(state => { state.keyRing.activeNetwork = network; });
-    },
+        let sessionKey = await session.get('passwordKey');
+        const keyInfos = vaultsToKeyInfos(vaults, selectedId as string);
+
+        if (!sessionKey && hasOnlyAirgap) {
+          const result = await recreateMasterKey('', keyPrint);
+          if (result) {
+            await session.set('passwordKey', result.keyJson);
+            sessionKey = result.keyJson;
+          }
+        }
+
+        set(state => {
+          state.keyRing.status = sessionKey ? 'unlocked' : 'locked';
+          state.keyRing.keyInfos = keyInfos;
+          state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
+          state.keyRing.activeNetwork = activeNetwork as NetworkType;
+          state.keyRing.enabledNetworks = enabledNetworks as NetworkType[];
+          state.wallets.activeIndex = syncedWalletIndex;
+        });
+
+        // check pro license after auto-unlock
+        if (sessionKey) {
+          void (async () => {
+            try {
+              const selected = keyInfos.find(k => k.isSelected);
+              const zidPubkey = selected?.insensitive?.['zid'] as string | undefined;
+              if (zidPubkey) {
+                await get().license.fetchLicense(zidPubkey);
+              }
+            } catch {
+              /* server unreachable — no-op */
+            }
+          })();
+        }
+      },
+
+      // ── password / unlock / lock ──
+
+      setPassword: async (password: string) => {
+        const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+        const existingKeyPrint = await local.get('passwordKeyPrint');
+        const hasAirgapOnly = vaults.some(v => v.insensitive?.['airgapOnly'] === true);
+
+        if (hasAirgapOnly && existingKeyPrint) {
+          const oldResult = await recreateMasterKey('', existingKeyPrint);
+          if (!oldResult) throw new Error('failed to decrypt existing vaults for migration');
+
+          const {
+            key: newKey,
+            keyPrint: newKeyPrint,
+            keyJson: newKeyJson,
+          } = await createMasterKey(password);
+          const migratedVaults = await Promise.all(
+            vaults.map(v => reencryptVault(v, oldResult.key, newKey)),
+          );
+
+          await local.set('vaults', migratedVaults);
+          await local.set('passwordKeyPrint', newKeyPrint.toJson());
+          await session.set('passwordKey', newKeyJson);
+
+          const selectedId = await local.get('selectedVaultId');
+          const keyInfos = vaultsToKeyInfos(migratedVaults, selectedId as string);
+          set(state => {
+            state.keyRing.status = 'unlocked';
+            state.keyRing.keyInfos = keyInfos;
+            state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
+          });
+        } else {
+          const { keyJson, keyPrint } = await createMasterKey(password);
+          await session.set('passwordKey', keyJson);
+          await local.set('passwordKeyPrint', keyPrint.toJson());
+          set(state => {
+            state.keyRing.status = 'unlocked';
+          });
+        }
+      },
+
+      unlock: async (password: string) => {
+        const keyPrintJson = await local.get('passwordKeyPrint');
+        if (!keyPrintJson) return false;
+
+        const result = await recreateMasterKey(password, keyPrintJson);
+        if (!result) return false;
+
+        await session.set('passwordKey', result.keyJson);
+        set(state => {
+          state.keyRing.status = 'unlocked';
+        });
+
+        // check pro license status after unlock
+        void (async () => {
+          try {
+            const keyInfo = get().keyRing.selectedKeyInfo;
+            const zidPubkey = keyInfo?.insensitive?.['zid'] as string | undefined;
+            if (zidPubkey) await get().license.fetchLicense(zidPubkey);
+          } catch {
+            /* server unreachable — treat as free */
+          }
+        })();
+
+        return true;
+      },
+
+      lock: () => {
+        void session.remove('passwordKey');
+        set(state => {
+          state.keyRing.status = 'locked';
+        });
+      },
+
+      checkPassword: async (password: string) => {
+        const keyPrintJson = await local.get('passwordKeyPrint');
+        if (!keyPrintJson) return false;
+        return (await recreateMasterKey(password, keyPrintJson)) !== null;
+      },
+
+      // ── vault creation ──
+
+      newMnemonicKey: async (mnemonic: string, name: string) => {
+        const vaultId = generateVaultId();
+        const encryptedData = await encrypt(ctx, mnemonic);
+        const vault = buildMnemonicVault(vaultId, name, encryptedData);
+        // store zid pubkey in unencrypted metadata — readable without password
+        const { deriveZid } = await import('../identity');
+        const zid = deriveZid(mnemonic);
+        vault.insensitive['zid'] = zid.publicKey;
+
+        const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+        const newVaults = [vault, ...vaults];
+        await local.set('vaults', newVaults);
+        await local.set('selectedVaultId', vaultId);
+
+        // penumbra wallet entry (non-fatal)
+        const key = await requireKey(ctx).catch(() => undefined);
+        if (key) {
+          await createPenumbraWalletForMnemonic(mnemonic, name, vaultId, key, local).catch(e =>
+            console.warn('[keyring] failed to create prax-compatible wallet:', e),
+          );
+        }
+
+        const keyInfos = vaultsToKeyInfos(newVaults, vaultId);
+        const enabledNetworks = (await local.get('enabledNetworks')) ?? [];
+        if (vaults.length === 0 && enabledNetworks.length > 0) {
+          await local.set('activeNetwork', enabledNetworks[0]);
+        }
+
+        set(state => {
+          state.keyRing.keyInfos = keyInfos;
+          state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
+          if (vaults.length === 0 && enabledNetworks.length > 0) {
+            state.keyRing.activeNetwork = enabledNetworks[0] as NetworkType;
+          }
+        });
+
+        return vaultId;
+      },
+
+      newZignerZafuKey: async (data: ZignerZafuImport, name: string) => {
+        // merge-by-ZID: if we already have a vault for this zigner device+account,
+        // add the new network capability to it instead of creating a separate vault.
+        if (data.zidPublicKey) {
+          const existingVaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+          const mergeTarget = existingVaults.find(
+            v =>
+              v.type === 'zigner-zafu' &&
+              v.insensitive['zid'] === data.zidPublicKey &&
+              v.insensitive['accountIndex'] === data.accountIndex,
+          );
+          if (mergeTarget) {
+            const mergedId = await mergeZignerCapabilities(mergeTarget, data, local, session);
+            const updatedVaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+            const selectedId = (await local.get('selectedVaultId')) as string;
+            const enabledNetworks = mergeEnabledNetworks(
+              ((await local.get('enabledNetworks')) ?? []) as NetworkType[],
+              zignerSupportedNetworks(data),
+            );
+            await local.set('enabledNetworks', enabledNetworks);
+            const keyInfos = vaultsToKeyInfos(updatedVaults, selectedId);
+            set(state => {
+              state.keyRing.keyInfos = keyInfos;
+              state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
+              state.keyRing.enabledNetworks = enabledNetworks;
+            });
+            return mergedId;
+          }
+        }
+
+        const vaultId = generateVaultId();
+        const encryptedData = await encrypt(ctx, JSON.stringify(data));
+        const supportedNetworks = zignerSupportedNetworks(data);
+        const vault = buildZignerVault(vaultId, name, encryptedData, data, supportedNetworks);
+
+        const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+        const newVaults = [vault, ...vaults];
+        await local.set('vaults', newVaults);
+        await local.set('selectedVaultId', vaultId);
+
+        const key = await requireKey(ctx).catch(() => undefined);
+        const newEnabledNetworks = key
+          ? await createZignerWalletEntries(
+              data,
+              name,
+              key,
+              vaultId,
+              supportedNetworks,
+              vaults.length,
+              local,
+            )
+          : mergeEnabledNetworks(
+              (await local.get('enabledNetworks')) ?? ([] as NetworkType[]),
+              supportedNetworks,
+            );
+
+        const keyInfos = vaultsToKeyInfos(newVaults, vaultId);
+        set(state => {
+          state.keyRing.keyInfos = keyInfos;
+          state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
+          state.keyRing.enabledNetworks = newEnabledNetworks;
+          if (vaults.length === 0 && supportedNetworks.length > 0) {
+            state.keyRing.activeNetwork = supportedNetworks[0] as NetworkType;
+          }
+        });
+
+        return vaultId;
+      },
+
+      addZignerUnencrypted: async (data: ZignerZafuImport, name: string) => {
+        const existingVaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+
+        // ── merge-by-ZID: same zigner device importing a different network ──
+        // if incoming import carries a ZID and there's an existing zigner-zafu
+        // vault with the same ZID + accountIndex, merge the new viewing key(s)
+        // into it instead of creating a separate vault. keeps "one device = one
+        // wallet" invariant across network imports.
+        if (data.zidPublicKey) {
+          const mergeTarget = existingVaults.find(
+            v =>
+              v.type === 'zigner-zafu' &&
+              v.insensitive['zid'] === data.zidPublicKey &&
+              v.insensitive['accountIndex'] === data.accountIndex,
+          );
+          if (mergeTarget) {
+            const mergedVaultId = await mergeZignerCapabilities(mergeTarget, data, local, session);
+            const updatedVaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+            const selectedId = (await local.get('selectedVaultId')) as string;
+            const keyInfos = vaultsToKeyInfos(updatedVaults, selectedId);
+            const enabledNetworks = mergeEnabledNetworks(
+              ((await local.get('enabledNetworks')) ?? []) as NetworkType[],
+              zignerSupportedNetworks(data),
+            );
+            await local.set('enabledNetworks', enabledNetworks);
+            set(state => {
+              state.keyRing.keyInfos = keyInfos;
+              state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
+              state.keyRing.status = 'unlocked';
+              state.keyRing.enabledNetworks = enabledNetworks;
+            });
+            return mergedVaultId;
+          }
+        }
+
+        // dedup: check if a vault with the same viewing key already exists
+        for (const v of existingVaults) {
+          if (v.type !== 'zigner-zafu') continue;
+          // match by deviceId + accountIndex (same device, same account = same keys)
+          if (
+            v.insensitive['deviceId'] === data.deviceId &&
+            v.insensitive['accountIndex'] === data.accountIndex
+          ) {
+            throw new Error('this zigner wallet is already imported');
+          }
+        }
+        // also check zcash wallets for matching FVK (catches cross-device duplicates)
+        if (data.viewingKey) {
+          const existingZcash = ((await local.get('zcashWallets')) ?? []) as ZcashWalletJson[];
+          if (existingZcash.some(w => w.orchardFvk === data.viewingKey)) {
+            throw new Error('a wallet with this zcash viewing key already exists');
+          }
+        }
+        // check penumbra wallets for matching FVK
+        if (data.fullViewingKey) {
+          const existingPenumbra = (await local.get('penumbraWallets')) ?? [];
+          const fvkB64 = data.fullViewingKey;
+          // penumbra wallets store FVK as JSON string — compare via base64 of inner bytes
+          for (const w of existingPenumbra) {
+            try {
+              const { FullViewingKey } =
+                await import('@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb');
+              const existing = FullViewingKey.fromJsonString(w.fullViewingKey);
+              const existingB64 = btoa(String.fromCharCode(...existing.inner));
+              if (existingB64 === fvkB64) {
+                throw new Error('a wallet with this penumbra viewing key already exists');
+              }
+            } catch (e) {
+              if (e instanceof Error && e.message.includes('already exists')) throw e;
+              // parse error — skip this wallet
+            }
+          }
+        }
+
+        const vaultId = generateVaultId();
+        const existingKeyPrint = await local.get('passwordKeyPrint');
+        const existingSessionKey = await session.get('passwordKey');
+
+        let key: Key;
+        let isNewSetup = false;
+
+        if (existingKeyPrint && existingSessionKey) {
+          key = await Key.fromJson(existingSessionKey);
+        } else if (!existingKeyPrint) {
+          const created = await createMasterKey('');
+          key = created.key;
+          isNewSetup = true;
+          await session.set('passwordKey', created.keyJson);
+          await local.set('passwordKeyPrint', created.keyPrint.toJson());
+        } else {
+          throw new Error('keyring locked - unlock first or use password flow');
+        }
+
+        const encryptedBox = await key.seal(JSON.stringify(data));
+        const supportedNetworks = zignerSupportedNetworks(data);
+        const vault = buildZignerVault(
+          vaultId,
+          name,
+          JSON.stringify(encryptedBox.toJson()),
+          data,
+          supportedNetworks,
+          { airgapOnly: isNewSetup },
+        );
+
+        const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+        const newVaults = [vault, ...vaults];
+        await local.set('vaults', newVaults);
+
+        const currentSelectedId = await local.get('selectedVaultId');
+        const activeNetwork = (await local.get('activeNetwork')) ?? '';
+        const autoSelect = shouldAutoSelectZigner(
+          currentSelectedId as string,
+          vaults.length,
+          activeNetwork,
+          supportedNetworks,
+        );
+        if (autoSelect) await local.set('selectedVaultId', vaultId);
+
+        const newEnabledNetworks = await createZignerWalletEntries(
+          data,
+          name,
+          key,
+          vaultId,
+          supportedNetworks,
+          vaults.length,
+          local,
+        );
+
+        const selectedId = autoSelect ? vaultId : (currentSelectedId as string);
+        const keyInfos = vaultsToKeyInfos(newVaults, selectedId);
+        set(state => {
+          state.keyRing.keyInfos = keyInfos;
+          state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
+          state.keyRing.status = 'unlocked';
+          state.keyRing.enabledNetworks = newEnabledNetworks;
+          if (vaults.length === 0 && supportedNetworks.length > 0) {
+            state.keyRing.activeNetwork = supportedNetworks[0] as NetworkType;
+          }
+        });
+
+        return vaultId;
+      },
+
+      newFrostMultisigKey: async params => {
+        const vaultId = generateVaultId();
+
+        // airgapSigner: share lives on zigner. nothing secret to persist; we
+        // still call encrypt({}) to keep the vault.encryptedData invariant.
+        const isAirgap = params.custody === 'airgapSigner';
+        const encryptedData = isAirgap
+          ? await encrypt(ctx, '{}')
+          : await encrypt(
+              ctx,
+              JSON.stringify({
+                keyPackage: params.keyPackage,
+                ephemeralSeed: params.ephemeralSeed,
+              }),
+            );
+        const vault = buildFrostVault(vaultId, params, encryptedData);
+
+        // hidden multisigs (poker tables) must not steal the active-wallet slot
+        const hidden = params.hidden === true;
+
+        const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+        const newVaults = [vault, ...vaults];
+        await local.set('vaults', newVaults);
+        const prevSelectedVaultId = await local.get('selectedVaultId');
+        if (!hidden) {
+          await local.set('selectedVaultId', vaultId);
+        }
+
+        let encKeyPackage:
+          | Awaited<ReturnType<typeof encryptFrostSecrets>>['encKeyPackage']
+          | undefined;
+        let encEphemeralSeed:
+          | Awaited<ReturnType<typeof encryptFrostSecrets>>['encEphemeralSeed']
+          | undefined;
+        if (!isAirgap) {
+          const enc = await encryptFrostSecrets(ctx, params.keyPackage!, params.ephemeralSeed!);
+          encKeyPackage = enc.encKeyPackage;
+          encEphemeralSeed = enc.encEphemeralSeed;
+        }
+        const zcashWallet = buildFrostZcashWallet(params, vaultId, encKeyPackage, encEphemeralSeed);
+        const existingZcash = ((await local.get('zcashWallets')) ?? []) as ZcashWalletJson[];
+        const newZcashWallets = [zcashWallet, ...existingZcash];
+        await local.set('zcashWallets', newZcashWallets);
+        // hidden: hold the previous active wallet's slot (we prepended → bump by 1); visible: take 0
+        const prevActiveZcashIndex = (await local.get('activeZcashIndex')) ?? 0;
+        const newActiveZcashIndex = hidden ? prevActiveZcashIndex + 1 : 0;
+        await local.set('activeZcashIndex', newActiveZcashIndex);
+
+        const newEnabledNetworks = mergeEnabledNetworks(
+          (await local.get('enabledNetworks')) ?? ([] as NetworkType[]),
+          ['zcash'],
+        );
+        await local.set('enabledNetworks', newEnabledNetworks);
+
+        const keyInfos = vaultsToKeyInfos(
+          newVaults,
+          hidden ? (prevSelectedVaultId as string | undefined) : vaultId,
+        );
+        set(state => {
+          state.keyRing.keyInfos = keyInfos;
+          state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
+          state.keyRing.enabledNetworks = newEnabledNetworks;
+          state.wallets.zcashWallets = newZcashWallets;
+          state.wallets.activeZcashIndex = newActiveZcashIndex;
+          if (vaults.length === 0) {
+            state.keyRing.activeNetwork = 'zcash' as NetworkType;
+          }
+        });
+
+        return vaultId;
+      },
+
+      // ── vault management ──
+
+      selectKeyRing: async (vaultId: string) => {
+        await local.set('selectedVaultId', vaultId);
+
+        // sync penumbra wallet index
+        const wallets = (await local.get('penumbraWallets')) ?? [];
+        const walletIdx = findWalletIndex(wallets as { vaultId?: string }[], vaultId);
+        if (walletIdx >= 0) await local.set('activeWalletIndex', walletIdx);
+
+        // sync zcash wallet index — -1 means no zcash wallet record (mnemonic derives on-the-fly)
+        const zcashWallets = (await local.get('zcashWallets')) ?? [];
+        const zcashIdx = findWalletIndex(zcashWallets as { vaultId?: string }[], vaultId);
+        // only persist a valid index; -1 means "use vault mnemonic, not a zcash wallet record"
+        if (zcashIdx >= 0) {
+          await local.set('activeZcashIndex', zcashIdx);
+        }
+
+        set(state => {
+          state.keyRing.keyInfos = state.keyRing.keyInfos.map(k => ({
+            ...k,
+            isSelected: k.id === vaultId,
+          }));
+          state.keyRing.selectedKeyInfo = state.keyRing.keyInfos.find(k => k.isSelected);
+          if (walletIdx >= 0) state.wallets.activeIndex = walletIdx;
+          if (zcashIdx >= 0) state.wallets.activeZcashIndex = zcashIdx;
+        });
+      },
+
+      renameKeyRing: async (vaultId: string, newName: string) => {
+        const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+        const updatedVaults = vaults.map(v => (v.id === vaultId ? { ...v, name: newName } : v));
+        await local.set('vaults', updatedVaults);
+
+        const selectedId = await local.get('selectedVaultId');
+        const keyInfos = vaultsToKeyInfos(updatedVaults, selectedId as string);
+        set(state => {
+          state.keyRing.keyInfos = keyInfos;
+          state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
+        });
+      },
+
+      deleteKeyRing: async (vaultId: string) => {
+        const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+        const updatedVaults = vaults.filter(v => v.id !== vaultId);
+        await local.set('vaults', updatedVaults);
+
+        const { removedZcashIds } = await removeLinkedWallets(vaultId, local);
+        await cleanupZcashData(vaultId, removedZcashIds);
+
+        // last vault — nuke everything
+        if (updatedVaults.length === 0) {
+          await nukeAllWalletData(session, local);
+          set(state => {
+            state.keyRing.keyInfos = [];
+            state.keyRing.selectedKeyInfo = undefined;
+            state.keyRing.status = 'empty';
+            state.wallets.all = [];
+            state.wallets.activeIndex = 0;
+            state.wallets.zcashWallets = [];
+            state.wallets.activeZcashIndex = 0;
+          });
+          return;
+        }
+
+        // re-select if needed
+        const currentSelectedId = await local.get('selectedVaultId');
+        const selectedId = selectionAfterDelete(
+          updatedVaults,
+          vaultId,
+          currentSelectedId as string,
+        );
+        if (selectedId !== currentSelectedId) await local.set('selectedVaultId', selectedId);
+
+        const keyInfos = vaultsToKeyInfos(updatedVaults, selectedId);
+        const updatedWallets = (await local.get('penumbraWallets')) ?? [];
+        set(state => {
+          state.keyRing.keyInfos = keyInfos;
+          state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
+          state.wallets.all = updatedWallets.map((w: { vaultId?: string }) => ({
+            ...w,
+            vaultId: w.vaultId ?? '',
+          })) as typeof state.wallets.all;
+          if (state.wallets.activeIndex >= updatedWallets.length) {
+            state.wallets.activeIndex = Math.max(0, updatedWallets.length - 1);
+          }
+        });
+      },
+
+      // ── secrets ──
+
+      getMnemonic: async (vaultId: string) => {
+        const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+        const vault = vaults.find(v => v.id === vaultId);
+        if (!vault) throw new Error('vault not found');
+        if (vault.type !== 'mnemonic') throw new Error('not a mnemonic vault');
+        return decryptVault(ctx, vault);
+      },
+
+      getMultisigSecrets: async (vaultId: string) => {
+        const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+        const vault = vaults.find(v => v.id === vaultId);
+
+        if (vault?.type === 'frost-multisig') {
+          // airgapSigner wallets keep the share on zigner — no secrets to surface here
+          if (vault.insensitive['custody'] === 'airgapSigner') return null;
+          const decrypted = await decryptVault(ctx, vault);
+          try {
+            const parsed = JSON.parse(decrypted);
+            if (!parsed.keyPackage || !parsed.ephemeralSeed) return null;
+            return {
+              keyPackage: parsed.keyPackage as string,
+              ephemeralSeed: parsed.ephemeralSeed as string,
+            };
+          } catch {
+            return null;
+          }
+        }
+
+        // fallback: legacy zcash wallet records
+        const zcashWallets = ((await local.get('zcashWallets')) ?? []) as ZcashWalletJson[];
+        const wallet = zcashWallets.find(w => w.vaultId === vaultId);
+        if (!wallet?.multisig || wallet.multisig.custody === 'airgapSigner') return null;
+        if (!wallet.multisig.keyPackage || !wallet.multisig.ephemeralSeed) return null;
+        return decryptMultisigSecrets(
+          ctx,
+          wallet.multisig.keyPackage,
+          wallet.multisig.ephemeralSeed,
+        );
+      },
+
+      deriveKey: async (vaultId: string, network: NetworkType, accountIndex = 0) => {
+        const { keyInfos } = get().keyRing;
+        const keyInfo = keyInfos.find(k => k.id === vaultId);
+        if (!keyInfo) throw new Error('vault not found');
+
+        return {
+          keyInfoId: vaultId,
+          network,
+          address: `${network}:placeholder`,
+          derivationPath: `m/44'/${network}'/0'/0/${accountIndex}`,
+          accountIndex,
+        };
+      },
+
+      // ── network management ──
+
+      toggleNetwork: async (network: NetworkType) => {
+        const { enabledNetworks, activeNetwork } = get().keyRing;
+        const disabling = enabledNetworks.includes(network);
+        const newNetworks = disabling
+          ? enabledNetworks.filter(n => n !== network)
+          : [...enabledNetworks, network];
+
+        await local.set('enabledNetworks', newNetworks);
+        set(state => {
+          state.keyRing.enabledNetworks = newNetworks;
+        });
+
+        if (disabling && activeNetwork === network && newNetworks.length > 0) {
+          await get().keyRing.setActiveNetwork(newNetworks[0]!);
+        }
+      },
+
+      setActiveNetwork: async (network: NetworkType) => {
+        await local.set('activeNetwork', network);
+
+        const { keyInfos, selectedKeyInfo } = get().keyRing;
+        const currentSupports = selectedKeyInfo
+          ? keyInfoSupportsNetwork(selectedKeyInfo, network)
+          : false;
+
+        if (!currentSupports) {
+          const compatible = findCompatibleVault(keyInfos, network);
+          if (compatible) {
+            await local.set('selectedVaultId', compatible.id);
+
+            if (network === 'penumbra') {
+              const wallets = (await local.get('penumbraWallets')) ?? [];
+              const idx = findWalletIndex(wallets as { vaultId?: string }[], compatible.id);
+              if (idx >= 0) await local.set('activeWalletIndex', idx);
+            }
+
+            set(state => {
+              state.keyRing.activeNetwork = network;
+              state.keyRing.keyInfos = state.keyRing.keyInfos.map(k => ({
+                ...k,
+                isSelected: k.id === compatible.id,
+              }));
+              state.keyRing.selectedKeyInfo = state.keyRing.keyInfos.find(k => k.isSelected);
+            });
+            return;
+          }
+        }
+
+        set(state => {
+          state.keyRing.activeNetwork = network;
+        });
+      },
+    };
   };
-};
 
 // ── selectors ──
 

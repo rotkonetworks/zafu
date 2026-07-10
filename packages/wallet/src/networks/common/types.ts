@@ -127,12 +127,12 @@ export const NETWORK_INFO: Record<NetworkType, NetworkInfo> = {
 // =============================================================================
 
 export type TransactionStatus =
-  | 'building'           // Building the transaction
+  | 'building' // Building the transaction
   | 'awaiting_signature' // QR displayed, waiting for Zigner
-  | 'signed'             // Signature scanned from Zigner
-  | 'broadcasting'       // Sending to network
-  | 'confirmed'          // Included in block
-  | 'failed';            // Failed at any stage
+  | 'signed' // Signature scanned from Zigner
+  | 'broadcasting' // Sending to network
+  | 'confirmed' // Included in block
+  | 'failed'; // Failed at any stage
 
 export interface PendingTransaction {
   /** Unique transaction ID (local) */

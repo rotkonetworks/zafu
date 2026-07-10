@@ -3,7 +3,9 @@ import { ChainRegistryClient } from '@penumbra-labs/registry';
 import { useMemo } from 'react';
 
 /** prefetch all asset icon URLs to prevent portfolio timing leak */
-const prefetchAssetIcons = (registry: { getAllAssets: () => Iterable<{ images?: { png?: string; svg?: string }[] }> }) => {
+const prefetchAssetIcons = (registry: {
+  getAllAssets: () => Iterable<{ images?: { png?: string; svg?: string }[] }>;
+}) => {
   try {
     for (const asset of registry.getAllAssets()) {
       for (const img of asset.images ?? []) {
@@ -11,7 +13,9 @@ const prefetchAssetIcons = (registry: { getAllAssets: () => Iterable<{ images?: 
         if (url) void fetch(url, { mode: 'no-cors', cache: 'force-cache' }).catch(() => {});
       }
     }
-  } catch { /* non-critical */ }
+  } catch {
+    /* non-critical */
+  }
 };
 
 export const useNumeraires = (chainId?: string) => {

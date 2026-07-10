@@ -27,17 +27,20 @@ const MainPopup = () => {
   // check for pending side panel navigation
   useEffect(() => {
     if (isSidePanel()) {
-      chrome.storage.local.get('sidePanelNavigateTo').then(result => {
-        const path = result['sidePanelNavigateTo'] as string | undefined;
-        if (path) {
-          // clear the stored path
-          void chrome.storage.local.remove('sidePanelNavigateTo');
-          // navigate to the stored path
-          popupRouter.navigate(path);
-        }
-      }).catch(() => {
-        // ignore errors
-      });
+      chrome.storage.local
+        .get('sidePanelNavigateTo')
+        .then(result => {
+          const path = result['sidePanelNavigateTo'] as string | undefined;
+          if (path) {
+            // clear the stored path
+            void chrome.storage.local.remove('sidePanelNavigateTo');
+            // navigate to the stored path
+            popupRouter.navigate(path);
+          }
+        })
+        .catch(() => {
+          // ignore errors
+        });
     }
   }, []);
 
@@ -52,10 +55,7 @@ const MainPopup = () => {
   return (
     <StrictMode>
       <QueryClientProvider client={queryClient}>
-        <RouterProvider
-          router={popupRouter}
-          future={{ v7_startTransition: true }}
-        />
+        <RouterProvider router={popupRouter} future={{ v7_startTransition: true }} />
       </QueryClientProvider>
     </StrictMode>
   );

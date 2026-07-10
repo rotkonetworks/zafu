@@ -71,7 +71,8 @@ function bech32mEncode(hrp: string, data: Uint8Array, limit = 1023): string {
   const checksum = bech32mCreateChecksum(hrp, words);
   let result = hrp + '1';
   for (const w of words.concat(checksum)) result += CHARSET[w]!;
-  if (result.length > limit) throw new Error(`bech32m result exceeds limit: ${result.length} > ${limit}`);
+  if (result.length > limit)
+    throw new Error(`bech32m result exceeds limit: ${result.length} > ${limit}`);
   return result;
 }
 

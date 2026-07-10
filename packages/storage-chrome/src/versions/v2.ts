@@ -12,9 +12,7 @@ type LOCAL = {
   /** Stringified AssetId */
   numeraires: string[];
   penumbraWallets: {
-    custody:
-      | { encryptedSeedPhrase: BoxJson }
-      | { airgapSigner: BoxJson };
+    custody: { encryptedSeedPhrase: BoxJson } | { airgapSigner: BoxJson };
     /** Stringified FullViewingKey */
     fullViewingKey: string;
     /** Stringified WalletId */
@@ -53,7 +51,15 @@ type LOCAL = {
    */
   pendingClearCache?: ('penumbra' | 'zcash')[];
   /** Active network type for multi-network wallet */
-  activeNetwork?: 'penumbra' | 'zcash' | 'polkadot' | 'kusama' | 'noble' | 'cosmoshub' | 'ethereum' | 'bitcoin';
+  activeNetwork?:
+    | 'penumbra'
+    | 'zcash'
+    | 'polkadot'
+    | 'kusama'
+    | 'noble'
+    | 'cosmoshub'
+    | 'ethereum'
+    | 'bitcoin';
   /** Zcash-specific wallets */
   zcashWallets?: {
     id: string;
@@ -97,7 +103,12 @@ type LOCAL = {
     networks: {
       penumbra?: { fullViewingKey: string; address: string };
       zcash?: { orchardFvk: string; unifiedAddress: string; mainnet: boolean };
-      polkadot?: { publicKey: string; ss58Address: string; scheme: 'sr25519' | 'ed25519'; chain: string };
+      polkadot?: {
+        publicKey: string;
+        ss58Address: string;
+        scheme: 'sr25519' | 'ed25519';
+        chain: string;
+      };
       cosmos?: { publicKey: string; address: string; enabledChains: string[] };
     };
   }[];
@@ -117,7 +128,16 @@ type LOCAL = {
     enablePriceFetching: boolean;
   };
   /** Enabled networks - only these get loaded at startup */
-  enabledNetworks?: ('penumbra' | 'zcash' | 'noble' | 'cosmoshub' | 'polkadot' | 'kusama' | 'ethereum' | 'bitcoin')[];
+  enabledNetworks?: (
+    | 'penumbra'
+    | 'zcash'
+    | 'noble'
+    | 'cosmoshub'
+    | 'polkadot'
+    | 'kusama'
+    | 'ethereum'
+    | 'bitcoin'
+  )[];
   /** Per-network custom endpoints */
   networkEndpoints?: {
     penumbra?: string;
@@ -228,11 +248,14 @@ type LOCAL = {
   }[];
 
   /** per-origin zid identity preferences (default: site-specific) */
-  zidPreferences?: Record<string, {
-    mode: 'cross-site' | 'site';
-    rotation: number;
-    identity: string;
-  }>;
+  zidPreferences?: Record<
+    string,
+    {
+      mode: 'cross-site' | 'site';
+      rotation: number;
+      identity: string;
+    }
+  >;
 
   /** log of zid pubkeys shared during site authentication */
   zidShareLog?: {

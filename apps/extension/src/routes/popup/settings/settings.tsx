@@ -60,7 +60,9 @@ function SettingsRow({
       className='flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-elev-1 hover:text-fg-high group'
     >
       <span className={cn(icon, 'size-5 text-fg-muted group-hover:text-fg-high')} />
-      <span className='flex-1 text-[13px] text-fg group-hover:text-fg-high lowercase tracking-[0.02em]'>{title}</span>
+      <span className='flex-1 text-[13px] text-fg group-hover:text-fg-high lowercase tracking-[0.02em]'>
+        {title}
+      </span>
       <span className='i-lucide-chevron-right size-4 text-fg-dim group-hover:text-fg-muted' />
     </button>
   );
@@ -91,9 +93,7 @@ export const Settings = () => {
     void localExtStorage.set('autoLockMinutes', next.value);
   };
 
-  const visibleLinks = links.filter(
-    l => !l.networks || l.networks.includes(activeNetwork),
-  );
+  const visibleLinks = links.filter(l => !l.networks || l.networks.includes(activeNetwork));
 
   const autoLockLabel = AUTO_LOCK_OPTIONS.find(o => o.value === autoLock)?.label ?? '15 min';
 
@@ -113,9 +113,15 @@ export const Settings = () => {
             onClick={cycleAutoLock}
             className='flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-elev-1 hover:text-fg-high group'
           >
-            <span className={cn('i-lucide-timer', 'size-5 text-fg-muted group-hover:text-fg-high')} />
-            <span className='flex-1 text-[13px] text-fg group-hover:text-fg-high lowercase tracking-[0.02em]'>auto-lock</span>
-            <span className='text-[10px] tabular text-fg-dim group-hover:text-fg-muted'>{autoLockLabel}</span>
+            <span
+              className={cn('i-lucide-timer', 'size-5 text-fg-muted group-hover:text-fg-high')}
+            />
+            <span className='flex-1 text-[13px] text-fg group-hover:text-fg-high lowercase tracking-[0.02em]'>
+              auto-lock
+            </span>
+            <span className='text-[10px] tabular text-fg-dim group-hover:text-fg-muted'>
+              {autoLockLabel}
+            </span>
           </button>
         </div>
 

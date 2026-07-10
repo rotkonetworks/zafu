@@ -29,9 +29,7 @@ export default ({
 
   const keysPackage = path.dirname(require.resolve('@penumbra-zone/keys'));
   // Resolve wasm package via a known export, then go up to package root
-  const wasmPackage = path.dirname(
-    path.dirname(require.resolve('@rotko/penumbra-wasm/build')),
-  );
+  const wasmPackage = path.dirname(path.dirname(require.resolve('@rotko/penumbra-wasm/build')));
 
   const localPackages = [
     ...Object.values(rootPackageJson.dependencies),
@@ -172,7 +170,7 @@ export default ({
       'offscreen-handler': path.join(entryDir, 'offscreen-handler.ts'),
       'page-root': path.join(entryDir, 'page-root.tsx'),
       'popup-root': path.join(entryDir, 'popup-root.tsx'),
-      'zitadel': path.join(srcDir, 'zitadel', 'main.tsx'),
+      zitadel: path.join(srcDir, 'zitadel', 'main.tsx'),
       // network workers (isolated sync per network)
       'workers/zcash-worker': path.join(workersDir, 'zcash-worker.ts'),
     },
@@ -184,7 +182,12 @@ export default ({
       splitChunks: {
         chunks: chunk => {
           // workers must be self-contained (no chunk splitting)
-          const filesNotToChunk = ['injected-session', 'injected-penumbra-global', 'passkey-intercept', 'workers/zcash-worker'];
+          const filesNotToChunk = [
+            'injected-session',
+            'injected-penumbra-global',
+            'passkey-intercept',
+            'workers/zcash-worker',
+          ];
           return chunk.name ? !filesNotToChunk.includes(chunk.name) : false;
         },
       },
@@ -217,7 +220,7 @@ export default ({
         },
       ],
     },
-resolve: {
+    resolve: {
       extensions: ['.ts', '.tsx', '.js'],
       alias: {
         '@ui': path.resolve(__dirname, '../../packages/ui'),

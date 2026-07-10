@@ -33,8 +33,4 @@ export {
   transportSendService,
 } from './filters/transport';
 
-export {
-  type PrivacyMode,
-  type PrivacyIdentity,
-  PrivacyProvider,
-} from './filters/privacy';
+export { type PrivacyMode, type PrivacyIdentity, PrivacyProvider } from './filters/privacy';

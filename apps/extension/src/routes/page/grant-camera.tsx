@@ -9,10 +9,7 @@ import {
 import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
 import { cn } from '@repo/ui/lib/utils';
 import { useState, useEffect } from 'react';
-import {
-  checkCameraPermission,
-  requestCameraPermission,
-} from '../../utils/popup-detection';
+import { checkCameraPermission, requestCameraPermission } from '../../utils/popup-detection';
 
 type PermissionState = 'checking' | 'not-granted' | 'requesting' | 'granted' | 'denied';
 
@@ -50,10 +47,12 @@ export const GrantCamera = () => {
       <div className='flex min-h-screen items-center justify-center p-8'>
         <Card className={cn('p-6', 'w-[500px]')} gradient>
           <CardHeader className='items-center'>
-            <div className={cn(
-              'rounded-full p-4 mb-2',
-              state === 'granted' ? 'bg-green-500/20' : 'bg-primary/20'
-            )}>
+            <div
+              className={cn(
+                'rounded-full p-4 mb-2',
+                state === 'granted' ? 'bg-green-500/20' : 'bg-primary/20',
+              )}
+            >
               {state === 'granted' ? (
                 <span className='i-lucide-check-circle size-10 text-green-400' />
               ) : state === 'denied' ? (
@@ -82,66 +81,46 @@ export const GrantCamera = () => {
                 <>
                   <p>Camera access was denied.</p>
                   <p className='mt-2'>
-                    To enable camera access, click the camera icon in your browser's
-                    address bar or check your browser settings.
+                    To enable camera access, click the camera icon in your browser's address bar or
+                    check your browser settings.
                   </p>
                 </>
               )}
               {state === 'not-granted' && (
                 <>
-<p>
-                    Zafu needs camera access to scan QR codes from your Zafu Zigner device.
-                  </p>
+                  <p>Zafu needs camera access to scan QR codes from your Zafu Zigner device.</p>
                   <p className='mt-2 text-fg-muted text-sm'>
-                    Click the button below to grant access. Your browser will show
-                    a permission prompt.
+                    Click the button below to grant access. Your browser will show a permission
+                    prompt.
                   </p>
                 </>
               )}
-              {state === 'requesting' && (
-                <p>Please allow camera access in the browser prompt...</p>
-              )}
+              {state === 'requesting' && <p>Please allow camera access in the browser prompt...</p>}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className='flex flex-col gap-3'>
               {state === 'not-granted' && (
-                <Button
-                  variant='gradient'
-                  className='w-full'
-                  onClick={handleGrantAccess}
-                >
+                <Button variant='gradient' className='w-full' onClick={handleGrantAccess}>
                   <span className='i-lucide-camera size-5 mr-2' />
                   Grant Camera Access
                 </Button>
               )}
 
               {state === 'denied' && (
-                <Button
-                  variant='secondary'
-                  className='w-full'
-                  onClick={handleGrantAccess}
-                >
+                <Button variant='secondary' className='w-full' onClick={handleGrantAccess}>
                   Try Again
                 </Button>
               )}
 
               {state === 'granted' && (
-                <Button
-                  variant='gradient'
-                  className='w-full'
-                  onClick={handleClose}
-                >
+                <Button variant='gradient' className='w-full' onClick={handleClose}>
                   Close Tab
                 </Button>
               )}
 
               {(state === 'not-granted' || state === 'denied') && (
-                <Button
-                  variant='ghost'
-                  className='w-full text-fg-muted'
-                  onClick={handleClose}
-                >
+                <Button variant='ghost' className='w-full text-fg-muted' onClick={handleClose}>
                   Cancel
                 </Button>
               )}

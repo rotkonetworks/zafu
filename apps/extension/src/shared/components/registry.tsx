@@ -7,7 +7,11 @@ import { ChainRegistryClient } from '@penumbra-labs/registry';
  * icons for assets the user holds, revealing their portfolio to
  * the image host (github).
  */
-const prefetchRegistryIcons = (registry: ReturnType<ChainRegistryClient['remote']['globals']> extends Promise<infer T> ? T : never) => {
+const prefetchRegistryIcons = (
+  registry: ReturnType<ChainRegistryClient['remote']['globals']> extends Promise<infer T>
+    ? T
+    : never,
+) => {
   try {
     const rpcs = registry.rpcs ?? [];
     const frontends = registry.frontends ?? [];

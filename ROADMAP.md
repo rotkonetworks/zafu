@@ -1,6 +1,7 @@
 # zafu wallet — roadmap
 
 ## encrypt user data at rest
+
 all user-entered data stored in `chrome.storage.local` should be encrypted with the master password key. currently only vault `encryptedData` and penumbra custody boxes are encrypted. contacts, recent addresses, and other user data are stored in plaintext.
 
 - contacts → encrypt with session key on save, decrypt on unlock
@@ -9,6 +10,7 @@ all user-entered data stored in `chrome.storage.local` should be encrypted with 
 - storage schema: keep keys readable, encrypt values as BoxJson
 
 ## authentication options
+
 offer opt-in stronger auth beyond the current password:
 
 - **TOTP** — time-based one-time password (google authenticator style)
@@ -17,6 +19,7 @@ offer opt-in stronger auth beyond the current password:
 - unlock flow: password → optional 2FA challenge → session key
 
 ## hardware wallet support
+
 vault types `ledger`, `trezor`, `keystone` are defined in `KeyType` but not implemented.
 
 - ledger: USB HID via WebHID API (chrome extension compatible)
@@ -25,9 +28,11 @@ vault types `ledger`, `trezor`, `keystone` are defined in `KeyType` but not impl
 - each needs a signing filter in the custody layer + UI flow
 
 ## per-wallet penumbra sync
+
 `fullSyncHeight` is currently a global key overwritten by whichever wallet is syncing. should be per-wallet (`fullSyncHeight_${walletId}`) so switching wallets shows correct sync state without waiting for resync.
 
 ## zcash unified full viewing key (UFVK) for seed wallets
+
 seed wallets derive zcash keys on-the-fly in the worker. a stored UFVK per seed vault would enable watch-only balance display without unlocking, and consistent wallet record linking.
 
 > **open question:** do we want this? a stored UFVK is readable without the password. if the service worker is compromised or a site abuses externally_connectable, it could enumerate balances and transaction history silently. current mnemonic path requires unlock to derive anything.
@@ -37,6 +42,7 @@ seed wallets derive zcash keys on-the-fly in the worker. a stored UFVK per seed 
 the wallet IS your identity. ed25519 keypairs derived from seed (or standalone) serve as the authentication and encryption layer for applications.
 
 ### identity panel
+
 - create/manage multiple ed25519 identities per vault
 - per-site identity selection — each origin gets a different pubkey by default
 - sign arbitrary messages (prove ownership to apps)
@@ -44,22 +50,27 @@ the wallet IS your identity. ed25519 keypairs derived from seed (or standalone) 
 - export pubkeys for apps to verify
 
 ### identity cards via memo (ZID protocol)
+
 shareable contact cards sent inside zcash shielded memos:
+
 ```
 ZID:1:<ed25519_pubkey>:<zcash_unified_address>:<name>
 ```
+
 - fits in 512-byte zcash memo field
 - wallet auto-detects `ZID:` prefix, offers to save as contact
 - private exchange — the card itself is inside the shielded memo
 - recipient gets: name, receiving address, pubkey for encrypted replies
 
 ### identity-aware inbox
+
 - filter inbox by identity (which pubkey received the memo)
 - compose replies from the identity that received the message
 - encrypt memo body with recipient's ed25519 pubkey (x25519 ECDH + xchacha20poly1305)
 - cross-chain: same identity works on zcash memos and penumbra memos
 
 ### site authentication
+
 - sites request identity via `externally_connectable` message
 - user picks which identity to present (default: unique per origin)
 - site verifies via ed25519 signature challenge

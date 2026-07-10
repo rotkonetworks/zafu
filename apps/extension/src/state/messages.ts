@@ -24,12 +24,7 @@ export type MessageNetwork = 'penumbra' | 'zcash';
  * then get replaced by the real confirmed record when the block scan picks
  * the tx up.
  */
-export type MessageStatus =
-  | 'submitting'
-  | 'broadcasting'
-  | 'pending'
-  | 'confirmed'
-  | 'failed';
+export type MessageStatus = 'submitting' | 'broadcasting' | 'pending' | 'confirmed' | 'failed';
 
 export interface Message {
   id: string;
@@ -134,240 +129,244 @@ const generateId = () => crypto.randomUUID();
 export const createMessagesSlice =
   (local: ExtensionStorage<LocalStorageState>): SliceCreator<MessagesSlice> =>
   (set, get) => {
-  const safeMessages = (): Message[] => {
-    const m = get().messages.messages;
-    return Array.isArray(m) ? m : [];
-  };
+    const safeMessages = (): Message[] => {
+      const m = get().messages.messages;
+      return Array.isArray(m) ? m : [];
+    };
 
-  /**
-   * Sweep stale optimistic-pending records on slice creation. The popup
-   * unmount handler in zcash-send.tsx marks them failed before navigating,
-   * but a forced close (extension reload, browser quit, crash) bypasses
-   * that path and leaves temp:* records persisted in 'submitting' or
-   * 'broadcasting'. There's no live send flow to drive them forward, so
-   * we mark them failed on startup. Real-txid records in 'pending' are
-   * left alone — the block scan will promote them when the tx mines.
-   */
-  void (async () => {
-    try {
-      const persisted = await local.get('messages' as keyof LocalStorageState) as Message[] | undefined;
-      if (!Array.isArray(persisted) || persisted.length === 0) return;
-      let touched = false;
-      for (const m of persisted) {
-        if (
-          m.txId.startsWith('temp:') &&
-          (m.status === 'submitting' || m.status === 'broadcasting')
-        ) {
-          m.status = 'failed';
-          m.failureReason = 'interrupted';
-          touched = true;
+    /**
+     * Sweep stale optimistic-pending records on slice creation. The popup
+     * unmount handler in zcash-send.tsx marks them failed before navigating,
+     * but a forced close (extension reload, browser quit, crash) bypasses
+     * that path and leaves temp:* records persisted in 'submitting' or
+     * 'broadcasting'. There's no live send flow to drive them forward, so
+     * we mark them failed on startup. Real-txid records in 'pending' are
+     * left alone — the block scan will promote them when the tx mines.
+     */
+    void (async () => {
+      try {
+        const persisted = (await local.get('messages' as keyof LocalStorageState)) as
+          | Message[]
+          | undefined;
+        if (!Array.isArray(persisted) || persisted.length === 0) return;
+        let touched = false;
+        for (const m of persisted) {
+          if (
+            m.txId.startsWith('temp:') &&
+            (m.status === 'submitting' || m.status === 'broadcasting')
+          ) {
+            m.status = 'failed';
+            m.failureReason = 'interrupted';
+            touched = true;
+          }
         }
+        if (touched) {
+          await local.set('messages' as keyof LocalStorageState, persisted as never);
+        }
+      } catch (e) {
+        console.warn('[messages] hydration sweep failed:', e);
       }
-      if (touched) {
-        await local.set('messages' as keyof LocalStorageState, persisted as never);
-      }
-    } catch (e) {
-      console.warn('[messages] hydration sweep failed:', e);
-    }
-  })();
+    })();
 
-  return {
-    messages: [],
+    return {
+      messages: [],
 
-    addMessage: async (messageData) => {
-      // Dedup by (txId, direction). Self-pay (recipient is one of our own
-      // addresses) legitimately produces TWO messages for the same txid:
-      // one from OVK decoding (sent) and one from IVK decoding (received).
-      // The old hasMessage(txId) check collapsed them, hiding the received
-      // side from the inbox.
-      const existing = safeMessages().find(
-        (m) => m.txId === messageData.txId && m.direction === messageData.direction,
-      );
-      if (existing) {
-        // If we have an optimistic-pending record matching this (txid, direction),
-        // promote it to 'confirmed' using the authoritative block-scan data.
-        // Otherwise the second call is a no-op.
-        if (existing.status && existing.status !== 'confirmed') {
-          set((state) => {
-            const list = Array.isArray(state.messages.messages) ? state.messages.messages : [];
-            const m = list.find(
-              (x) => x.txId === messageData.txId && x.direction === messageData.direction,
-            );
-            if (m) {
-              m.blockHeight = messageData.blockHeight;
-              m.timestamp = messageData.timestamp;
-              m.status = 'confirmed';
-              m.failureReason = undefined;
-            }
-          });
-          await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
+      addMessage: async messageData => {
+        // Dedup by (txId, direction). Self-pay (recipient is one of our own
+        // addresses) legitimately produces TWO messages for the same txid:
+        // one from OVK decoding (sent) and one from IVK decoding (received).
+        // The old hasMessage(txId) check collapsed them, hiding the received
+        // side from the inbox.
+        const existing = safeMessages().find(
+          m => m.txId === messageData.txId && m.direction === messageData.direction,
+        );
+        if (existing) {
+          // If we have an optimistic-pending record matching this (txid, direction),
+          // promote it to 'confirmed' using the authoritative block-scan data.
+          // Otherwise the second call is a no-op.
+          if (existing.status && existing.status !== 'confirmed') {
+            set(state => {
+              const list = Array.isArray(state.messages.messages) ? state.messages.messages : [];
+              const m = list.find(
+                x => x.txId === messageData.txId && x.direction === messageData.direction,
+              );
+              if (m) {
+                m.blockHeight = messageData.blockHeight;
+                m.timestamp = messageData.timestamp;
+                m.status = 'confirmed';
+                m.failureReason = undefined;
+              }
+            });
+            await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
+          }
+          return existing;
         }
-        return existing;
-      }
 
-      const message: Message = {
-        ...messageData,
-        id: generateId(),
-      };
+        const message: Message = {
+          ...messageData,
+          id: generateId(),
+        };
 
-      set((state) => {
-        if (!Array.isArray(state.messages.messages)) state.messages.messages = [];
-        state.messages.messages.push(message);
-      });
-
-      await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
-      return message;
-    },
-
-    addMessages: async (messagesData) => {
-      const existingTxIds = new Set(safeMessages().map((m) => m.txId));
-      const newMessages = messagesData
-        .filter((m) => !existingTxIds.has(m.txId))
-        .map((m) => ({ ...m, id: generateId() }));
-
-      if (newMessages.length === 0) return;
-
-      set((state) => {
-        if (!Array.isArray(state.messages.messages)) state.messages.messages = [];
-        state.messages.messages.push(...newMessages);
-      });
-
-      await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
-    },
-
-    addOutgoingPending: async ({ network, recipientAddress, content, amount, asset }) => {
-      const tempTxId = `temp:${generateId()}`;
-      const message: Message = {
-        id: generateId(),
-        network,
-        recipientAddress,
-        content,
-        txId: tempTxId,
-        blockHeight: 0,
-        timestamp: Date.now(),
-        direction: 'sent',
-        read: true,
-        amount,
-        asset,
-        status: 'submitting',
-      };
-
-      set((state) => {
-        if (!Array.isArray(state.messages.messages)) state.messages.messages = [];
-        state.messages.messages.push(message);
-      });
-      await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
-      return { id: message.id, tempTxId };
-    },
-
-    promoteOutgoing: async (tempTxId, realTxId) => {
-      set((state) => {
-        const list = Array.isArray(state.messages.messages) ? state.messages.messages : [];
-        const msg = list.find((m) => m.txId === tempTxId);
-        if (msg) {
-          msg.txId = realTxId;
-          msg.status = 'broadcasting';
-        }
-      });
-      await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
-    },
-
-    markOutgoingBroadcast: async (txId) => {
-      set((state) => {
-        const list = Array.isArray(state.messages.messages) ? state.messages.messages : [];
-        const msg = list.find((m) => m.txId === txId);
-        if (msg) msg.status = 'pending';
-      });
-      await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
-    },
-
-    markOutgoingFailed: async (txIdOrTempId, reason) => {
-      set((state) => {
-        const list = Array.isArray(state.messages.messages) ? state.messages.messages : [];
-        const msg = list.find((m) => m.txId === txIdOrTempId);
-        if (msg) {
-          msg.status = 'failed';
-          msg.failureReason = reason;
-        }
-      });
-      await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
-    },
-
-    markRead: async (id) => {
-      set((state) => {
-        const msg = (Array.isArray(state.messages.messages) ? state.messages.messages : []).find((m) => m.id === id);
-        if (msg) {
-          msg.read = true;
-        }
-      });
-
-      await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
-    },
-
-    markAllRead: async () => {
-      set((state) => {
-        (Array.isArray(state.messages.messages) ? state.messages.messages : []).forEach((m) => {
-          m.read = true;
+        set(state => {
+          if (!Array.isArray(state.messages.messages)) state.messages.messages = [];
+          state.messages.messages.push(message);
         });
-      });
 
-      await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
-    },
+        await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
+        return message;
+      },
 
-    deleteMessage: async (id) => {
-      set((state) => {
-        state.messages.messages = (Array.isArray(state.messages.messages) ? state.messages.messages : []).filter((m) => m.id !== id);
-      });
+      addMessages: async messagesData => {
+        const existingTxIds = new Set(safeMessages().map(m => m.txId));
+        const newMessages = messagesData
+          .filter(m => !existingTxIds.has(m.txId))
+          .map(m => ({ ...m, id: generateId() }));
 
-      await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
-    },
+        if (newMessages.length === 0) return;
 
-    getInbox: () => {
-      return [...safeMessages()]
-        .filter((m) => m.direction === 'received')
-        .sort((a, b) => b.timestamp - a.timestamp);
-    },
+        set(state => {
+          if (!Array.isArray(state.messages.messages)) state.messages.messages = [];
+          state.messages.messages.push(...newMessages);
+        });
 
-    getSent: () => {
-      return [...safeMessages()]
-        .filter((m) => m.direction === 'sent')
-        .sort((a, b) => b.timestamp - a.timestamp);
-    },
+        await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
+      },
 
-    getUnreadCount: () => {
-      return safeMessages().filter((m) => !m.read && m.direction === 'received').length;
-    },
+      addOutgoingPending: async ({ network, recipientAddress, content, amount, asset }) => {
+        const tempTxId = `temp:${generateId()}`;
+        const message: Message = {
+          id: generateId(),
+          network,
+          recipientAddress,
+          content,
+          txId: tempTxId,
+          blockHeight: 0,
+          timestamp: Date.now(),
+          direction: 'sent',
+          read: true,
+          amount,
+          asset,
+          status: 'submitting',
+        };
 
-    getConversation: (address) => {
-      const normalized = address.toLowerCase();
-      return [...safeMessages()]
-        .filter(
-          (m) =>
-            m.senderAddress?.toLowerCase() === normalized ||
-            m.recipientAddress.toLowerCase() === normalized
-        )
-        .sort((a, b) => a.timestamp - b.timestamp);
-    },
+        set(state => {
+          if (!Array.isArray(state.messages.messages)) state.messages.messages = [];
+          state.messages.messages.push(message);
+        });
+        await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
+        return { id: message.id, tempTxId };
+      },
 
-    getByNetwork: (network) => {
-      return [...safeMessages()]
-        .filter((m) => m.network === network)
-        .sort((a, b) => b.timestamp - a.timestamp);
-    },
+      promoteOutgoing: async (tempTxId, realTxId) => {
+        set(state => {
+          const list = Array.isArray(state.messages.messages) ? state.messages.messages : [];
+          const msg = list.find(m => m.txId === tempTxId);
+          if (msg) {
+            msg.txId = realTxId;
+            msg.status = 'broadcasting';
+          }
+        });
+        await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
+      },
 
-    search: (query) => {
-      const q = query.toLowerCase();
-      return safeMessages().filter(
-        (m) =>
-          m.content.toLowerCase().includes(q) ||
-          m.senderAddress?.toLowerCase().includes(q)
-      );
-    },
+      markOutgoingBroadcast: async txId => {
+        set(state => {
+          const list = Array.isArray(state.messages.messages) ? state.messages.messages : [];
+          const msg = list.find(m => m.txId === txId);
+          if (msg) msg.status = 'pending';
+        });
+        await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
+      },
 
-    hasMessage: (txId) => {
-      return safeMessages().some((m) => m.txId === txId);
-    },
-  };
+      markOutgoingFailed: async (txIdOrTempId, reason) => {
+        set(state => {
+          const list = Array.isArray(state.messages.messages) ? state.messages.messages : [];
+          const msg = list.find(m => m.txId === txIdOrTempId);
+          if (msg) {
+            msg.status = 'failed';
+            msg.failureReason = reason;
+          }
+        });
+        await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
+      },
+
+      markRead: async id => {
+        set(state => {
+          const msg = (Array.isArray(state.messages.messages) ? state.messages.messages : []).find(
+            m => m.id === id,
+          );
+          if (msg) {
+            msg.read = true;
+          }
+        });
+
+        await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
+      },
+
+      markAllRead: async () => {
+        set(state => {
+          (Array.isArray(state.messages.messages) ? state.messages.messages : []).forEach(m => {
+            m.read = true;
+          });
+        });
+
+        await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
+      },
+
+      deleteMessage: async id => {
+        set(state => {
+          state.messages.messages = (
+            Array.isArray(state.messages.messages) ? state.messages.messages : []
+          ).filter(m => m.id !== id);
+        });
+
+        await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
+      },
+
+      getInbox: () => {
+        return [...safeMessages()]
+          .filter(m => m.direction === 'received')
+          .sort((a, b) => b.timestamp - a.timestamp);
+      },
+
+      getSent: () => {
+        return [...safeMessages()]
+          .filter(m => m.direction === 'sent')
+          .sort((a, b) => b.timestamp - a.timestamp);
+      },
+
+      getUnreadCount: () => {
+        return safeMessages().filter(m => !m.read && m.direction === 'received').length;
+      },
+
+      getConversation: address => {
+        const normalized = address.toLowerCase();
+        return [...safeMessages()]
+          .filter(
+            m =>
+              m.senderAddress?.toLowerCase() === normalized ||
+              m.recipientAddress.toLowerCase() === normalized,
+          )
+          .sort((a, b) => a.timestamp - b.timestamp);
+      },
+
+      getByNetwork: network => {
+        return [...safeMessages()]
+          .filter(m => m.network === network)
+          .sort((a, b) => b.timestamp - a.timestamp);
+      },
+
+      search: query => {
+        const q = query.toLowerCase();
+        return safeMessages().filter(
+          m => m.content.toLowerCase().includes(q) || m.senderAddress?.toLowerCase().includes(q),
+        );
+      },
+
+      hasMessage: txId => {
+        return safeMessages().some(m => m.txId === txId);
+      },
+    };
   };
 
 // selectors

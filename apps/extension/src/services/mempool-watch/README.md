@@ -13,6 +13,7 @@ model; this module mirrors `services/memo-sync/` exactly.
 Service = `MempoolFetcher: (walletId, ctx) => AsyncIterable<MempoolSnapshot>`.
 
 Filters (call-time, outermost first):
+
 - `withPoll(intervalMs, jitterMs, phaseAlign)` — repeats inner on cadence.
   Wall-clock phase-aligned so all clients fire on the same second-since-epoch
   slot; jitter perturbs around the slot. Without phase-align, per-client

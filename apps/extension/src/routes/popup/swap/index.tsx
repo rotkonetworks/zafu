@@ -95,9 +95,7 @@ export const SwapPage = () => {
       </div>
       <div>
         <h2 className='text-lg font-medium'>swap</h2>
-        <p className='mt-1 text-sm text-fg-muted'>
-          swapping is not available for this network.
-        </p>
+        <p className='mt-1 text-sm text-fg-muted'>swapping is not available for this network.</p>
       </div>
     </div>
   );
@@ -602,9 +600,7 @@ const ZcashCrosschainSwap = () => {
               )}
             </div>
             {selectedToken && (
-              <div className='mt-1 text-xs text-fg-muted'>
-                on {selectedToken.blockchain}
-              </div>
+              <div className='mt-1 text-xs text-fg-muted'>on {selectedToken.blockchain}</div>
             )}
           </div>
 
@@ -647,9 +643,7 @@ const ZcashCrosschainSwap = () => {
                   onClick={() => setShowContacts(!showContacts)}
                   className={cn(
                     'p-0.5 transition-colors',
-                    showContacts
-                      ? 'text-fg'
-                      : 'text-fg-muted hover:text-fg-high',
+                    showContacts ? 'text-fg' : 'text-fg-muted hover:text-fg-high',
                   )}
                   title='address book'
                 >
@@ -893,10 +887,7 @@ const ZcashCrosschainSwap = () => {
             </div>
           </div>
 
-          <button
-            onClick={handleReset}
-            className='text-xs text-fg-muted hover:text-fg-high'
-          >
+          <button onClick={handleReset} className='text-xs text-fg-muted hover:text-fg-high'>
             cancel
           </button>
         </div>

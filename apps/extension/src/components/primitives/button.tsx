@@ -19,7 +19,8 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
  */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = 'primary', size = 'md', loading, disabled, children, ...props }, ref) => {
-    const baseStyles = 'inline-flex items-center justify-center font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none';
+    const baseStyles =
+      'inline-flex items-center justify-center font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none';
 
     const variants = {
       primary: 'bg-zigner-gold text-zigner-dark hover:bg-primary/90',
@@ -49,7 +50,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         )}
       </button>
     );
-  }
+  },
 );
 Button.displayName = 'Button';
 
@@ -62,6 +63,6 @@ export const IconButton = forwardRef<HTMLButtonElement, ButtonProps>(
     <Button ref={ref} variant={variant} size='icon' className={className} {...props}>
       {children}
     </Button>
-  )
+  ),
 );
 IconButton.displayName = 'IconButton';

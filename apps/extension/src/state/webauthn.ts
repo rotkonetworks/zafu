@@ -18,15 +18,14 @@ const enc = new TextEncoder();
 
 /** AAGUID for zafu authenticator */
 const ZAFU_AAGUID = new Uint8Array([
-  0x7a, 0x61, 0x66, 0x75, 0x2d, 0x70, 0x61, 0x73,
-  0x73, 0x6b, 0x65, 0x79, 0x2d, 0x76, 0x31, 0x00,
+  0x7a, 0x61, 0x66, 0x75, 0x2d, 0x70, 0x61, 0x73, 0x73, 0x6b, 0x65, 0x79, 0x2d, 0x76, 0x31, 0x00,
 ]);
 
 const FLAGS = {
-  UP: 0x01,   // user present
-  UV: 0x04,   // user verified
-  AT: 0x40,   // attested credential data
-  ED: 0x80,   // extension data
+  UP: 0x01, // user present
+  UV: 0x04, // user verified
+  AT: 0x40, // attested credential data
+  ED: 0x80, // extension data
 };
 
 /**
@@ -57,12 +56,20 @@ function coseP256Key(publicKey: Uint8Array): Uint8Array {
   const buf = new Uint8Array(77); // exact size for map(5) with 2x bstr(32)
   let o = 0;
   buf[o++] = 0xa5; // map(5)
-  buf[o++] = 0x01; buf[o++] = 0x02; // 1: 2 (kty: EC2)
-  buf[o++] = 0x03; buf[o++] = 0x26; // 3: -7 (alg: ES256)
-  buf[o++] = 0x20; buf[o++] = 0x01; // -1: 1 (crv: P-256)
-  buf[o++] = 0x21; buf[o++] = 0x58; buf[o++] = 0x20; // -2: bstr(32)
-  buf.set(x, o); o += 32;
-  buf[o++] = 0x22; buf[o++] = 0x58; buf[o++] = 0x20; // -3: bstr(32)
+  buf[o++] = 0x01;
+  buf[o++] = 0x02; // 1: 2 (kty: EC2)
+  buf[o++] = 0x03;
+  buf[o++] = 0x26; // 3: -7 (alg: ES256)
+  buf[o++] = 0x20;
+  buf[o++] = 0x01; // -1: 1 (crv: P-256)
+  buf[o++] = 0x21;
+  buf[o++] = 0x58;
+  buf[o++] = 0x20; // -2: bstr(32)
+  buf.set(x, o);
+  o += 32;
+  buf[o++] = 0x22;
+  buf[o++] = 0x58;
+  buf[o++] = 0x20; // -3: bstr(32)
   buf.set(y, o);
   return buf;
 }
@@ -78,7 +85,8 @@ function authData(
   const size = base + (attestedCredData?.length ?? 0);
   const buf = new Uint8Array(size);
   let o = 0;
-  buf.set(rpIdHash, o); o += 32;
+  buf.set(rpIdHash, o);
+  o += 32;
   buf[o++] = flags;
   buf[o++] = (signCount >> 24) & 0xff;
   buf[o++] = (signCount >> 16) & 0xff;
@@ -95,10 +103,12 @@ function attestedCredentialData(credentialId: Uint8Array, publicKey: Uint8Array)
   const cose = coseP256Key(publicKey);
   const buf = new Uint8Array(16 + 2 + credentialId.length + cose.length);
   let o = 0;
-  buf.set(ZAFU_AAGUID, o); o += 16;
+  buf.set(ZAFU_AAGUID, o);
+  o += 16;
   buf[o++] = (credentialId.length >> 8) & 0xff;
   buf[o++] = credentialId.length & 0xff;
-  buf.set(credentialId, o); o += credentialId.length;
+  buf.set(credentialId, o);
+  o += credentialId.length;
   buf.set(cose, o);
   return buf;
 }

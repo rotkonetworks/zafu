@@ -9,7 +9,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { useStore } from '../state';
 import { selectEffectiveKeyInfo, keyRingSelector } from '../state/keyring';
-import { createSigningClient, deriveAllChainAddresses, deriveChainAddress } from '@repo/wallet/networks/cosmos/signer';
+import {
+  createSigningClient,
+  deriveAllChainAddresses,
+  deriveChainAddress,
+} from '@repo/wallet/networks/cosmos/signer';
 import { getBalance, getAllBalances } from '@repo/wallet/networks/cosmos/client';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 
@@ -43,7 +47,9 @@ export const useCosmosBalance = (chainId: CosmosChainId, accountIndex = 0) => {
         formatted: formatBalance(balance.amount, config.decimals, config.symbol),
       };
     },
-    enabled: !!selectedKeyInfo && (selectedKeyInfo.type === 'mnemonic' || selectedKeyInfo.type === 'zigner-zafu'),
+    enabled:
+      !!selectedKeyInfo &&
+      (selectedKeyInfo.type === 'mnemonic' || selectedKeyInfo.type === 'zigner-zafu'),
     structuralSharing: false, // balance.amount is bigint — not JSON-serializable
     staleTime: 30_000, // 30 seconds
     refetchInterval: 60_000, // refetch every minute
@@ -99,7 +105,7 @@ export const useAllCosmosBalances = (accountIndex = 0) => {
               error: true,
             };
           }
-        })
+        }),
       );
 
       return Object.fromEntries(results.map(r => [r.chainId, r])) as Record<
@@ -107,7 +113,9 @@ export const useAllCosmosBalances = (accountIndex = 0) => {
         (typeof results)[0]
       >;
     },
-    enabled: !!selectedKeyInfo && (selectedKeyInfo.type === 'mnemonic' || selectedKeyInfo.type === 'zigner-zafu'),
+    enabled:
+      !!selectedKeyInfo &&
+      (selectedKeyInfo.type === 'mnemonic' || selectedKeyInfo.type === 'zigner-zafu'),
     structuralSharing: false, // balances contain bigint — not JSON-serializable
     staleTime: 30_000,
     refetchInterval: 60_000,
@@ -129,9 +137,13 @@ export interface CosmosAsset {
 }
 
 /** get cosmos address from zigner vault insensitive data */
-function getZignerCosmosAddress(keyInfo: { insensitive: Record<string, unknown> }, chainId: CosmosChainId): string | null {
+function getZignerCosmosAddress(
+  keyInfo: { insensitive: Record<string, unknown> },
+  chainId: CosmosChainId,
+): string | null {
   const addrs = keyInfo.insensitive['cosmosAddresses'] as
-    { chainId: string; address: string; prefix: string }[] | undefined;
+    | { chainId: string; address: string; prefix: string }[]
+    | undefined;
   if (!addrs) return null;
   const match = addrs.find(a => a.chainId === chainId);
   if (match) return match.address;
@@ -139,7 +151,9 @@ function getZignerCosmosAddress(keyInfo: { insensitive: Record<string, unknown> 
   if (addrs.length > 0) {
     try {
       return deriveChainAddress(addrs[0]!.address, chainId);
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   }
   return null;
 }
@@ -153,7 +167,8 @@ function findCosmosCapableKey(
   // try effective first
   if (effective) {
     if (effective.type === 'mnemonic') return effective;
-    if (effective.type === 'zigner-zafu' && getZignerCosmosAddress(effective, chainId)) return effective;
+    if (effective.type === 'zigner-zafu' && getZignerCosmosAddress(effective, chainId))
+      return effective;
   }
   // fallback: search all keyInfos for one with cosmos capability
   for (const ki of keyInfos) {

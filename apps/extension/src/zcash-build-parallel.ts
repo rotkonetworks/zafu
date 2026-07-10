@@ -78,7 +78,12 @@ const initParallelWasm = async (): Promise<WasmModule> => {
 };
 
 interface ZcashBuildRequest {
-  fn: 'build_signed_spend' | 'build_unsigned' | 'build_unsigned_pczt' | 'build_shielding' | 'build_unsigned_shielding';
+  fn:
+    | 'build_signed_spend'
+    | 'build_unsigned'
+    | 'build_unsigned_pczt'
+    | 'build_shielding'
+    | 'build_unsigned_shielding';
   args: unknown[];
 }
 
@@ -99,37 +104,70 @@ async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
   switch (req.fn) {
     case 'build_signed_spend':
       result = wasm['build_signed_spend_transaction'](
-        a[0], a[1], a[2], BigInt(a[3] as string), BigInt(a[4] as string),
-        a[5], a[6], a[7], a[8], a[9] ?? null,
+        a[0],
+        a[1],
+        a[2],
+        BigInt(a[3] as string),
+        BigInt(a[4] as string),
+        a[5],
+        a[6],
+        a[7],
+        a[8],
+        a[9] ?? null,
       );
       break;
 
     case 'build_unsigned':
       result = wasm['build_unsigned_transaction'](
-        a[0], a[1], a[2], BigInt(a[3] as string), BigInt(a[4] as string),
-        a[5], a[6], a[7], a[8], a[9] ?? null,
+        a[0],
+        a[1],
+        a[2],
+        BigInt(a[3] as string),
+        BigInt(a[4] as string),
+        a[5],
+        a[6],
+        a[7],
+        a[8],
+        a[9] ?? null,
       );
       break;
 
     case 'build_unsigned_pczt':
       // a[7] is target_height (number), not account_index
       result = wasm['build_unsigned_pczt'](
-        a[0], a[1], a[2], BigInt(a[3] as string), BigInt(a[4] as string),
-        a[5], a[6], a[7], a[8], a[9] ?? null,
+        a[0],
+        a[1],
+        a[2],
+        BigInt(a[3] as string),
+        BigInt(a[4] as string),
+        a[5],
+        a[6],
+        a[7],
+        a[8],
+        a[9] ?? null,
       );
       break;
 
     case 'build_shielding':
       result = wasm['build_shielding_transaction'](
-        a[0], a[1], a[2], BigInt(a[3] as string), BigInt(a[4] as string),
-        a[5], a[6],
+        a[0],
+        a[1],
+        a[2],
+        BigInt(a[3] as string),
+        BigInt(a[4] as string),
+        a[5],
+        a[6],
       );
       break;
 
     case 'build_unsigned_shielding':
       result = wasm['build_unsigned_shielding_transaction'](
-        a[0], a[1], BigInt(a[2] as string), BigInt(a[3] as string),
-        a[4], a[5],
+        a[0],
+        a[1],
+        BigInt(a[2] as string),
+        BigInt(a[3] as string),
+        a[4],
+        a[5],
       );
       break;
 

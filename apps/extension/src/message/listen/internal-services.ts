@@ -72,8 +72,12 @@ async function clearZcashCache(): Promise<void> {
   await localExtStorage.set('clearingCache', true);
 
   broadcastProgress('clearing-database', completed, steps.length);
-  try { indexedDB.deleteDatabase('zafu-zcash'); } catch {}
-  try { indexedDB.deleteDatabase('zafu-memo-cache'); } catch {}
+  try {
+    indexedDB.deleteDatabase('zafu-zcash');
+  } catch {}
+  try {
+    indexedDB.deleteDatabase('zafu-memo-cache');
+  } catch {}
   completed++;
 
   broadcastProgress('clearing-sync-state', completed, steps.length);
@@ -105,7 +109,9 @@ export const internalServiceListener = (
       }
     })()
       .then(() => respond())
-      .finally(() => { if (!soft) chrome.runtime.reload(); });
+      .finally(() => {
+        if (!soft) chrome.runtime.reload();
+      });
     return true;
   }
 

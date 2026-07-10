@@ -45,6 +45,8 @@ export const allSitesFilteredOutSelector = (state: AllSlices) => {
     return false;
   }
 
-  const sites = Array.isArray(state.connectedSites.knownSites) ? state.connectedSites.knownSites : [];
+  const sites = Array.isArray(state.connectedSites.knownSites)
+    ? state.connectedSites.knownSites
+    : [];
   return !sites.some(site => site.origin.includes(filter));
 };

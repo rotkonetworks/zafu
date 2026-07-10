@@ -29,7 +29,10 @@ function extractPrfSalts(
 }
 
 function bufToHex(buf: BufferSource): string {
-  const bytes = buf instanceof ArrayBuffer ? new Uint8Array(buf) : new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+  const bytes =
+    buf instanceof ArrayBuffer
+      ? new Uint8Array(buf)
+      : new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
   return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
 }
 
@@ -73,20 +76,26 @@ navigator.credentials.create = async function (
     // build PublicKeyCredential from zafu's response
     const credentialId = hexToBuf(response.credentialId);
     const authenticatorData = hexToBuf(response.authenticatorData);
-    const clientDataJSON = new TextEncoder().encode(JSON.stringify({
-      type: 'webauthn.create',
-      challenge: btoa(String.fromCharCode(...new Uint8Array(hexToBuf(challenge))))
-        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
-      origin: window.location.origin,
-      crossOrigin: false,
-    }));
+    const clientDataJSON = new TextEncoder().encode(
+      JSON.stringify({
+        type: 'webauthn.create',
+        challenge: btoa(String.fromCharCode(...new Uint8Array(hexToBuf(challenge))))
+          .replace(/\+/g, '-')
+          .replace(/\//g, '_')
+          .replace(/=/g, ''),
+        origin: window.location.origin,
+        crossOrigin: false,
+      }),
+    );
 
     // construct attestation object (none attestation)
     const attestationObject = buildNoneAttestationObject(authenticatorData);
 
     return {
       id: btoa(String.fromCharCode(...new Uint8Array(credentialId)))
-        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, ''),
       rawId: credentialId,
       type: 'public-key',
       response: {
@@ -123,15 +132,21 @@ navigator.credentials.get = async function (
   const prfSalts = extractPrfSalts(pk.extensions);
 
   // build clientDataJSON first — the service worker needs its hash to sign
-  const clientDataJSON = new TextEncoder().encode(JSON.stringify({
-    type: 'webauthn.get',
-    challenge: btoa(String.fromCharCode(...new Uint8Array(hexToBuf(challenge))))
-      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
-    origin: window.location.origin,
-    crossOrigin: false,
-  }));
+  const clientDataJSON = new TextEncoder().encode(
+    JSON.stringify({
+      type: 'webauthn.get',
+      challenge: btoa(String.fromCharCode(...new Uint8Array(hexToBuf(challenge))))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, ''),
+      origin: window.location.origin,
+      crossOrigin: false,
+    }),
+  );
   // SHA-256 hash of clientDataJSON — this is what gets signed
-  const clientDataHash = bufToHex(new Uint8Array(await crypto.subtle.digest('SHA-256', clientDataJSON)));
+  const clientDataHash = bufToHex(
+    new Uint8Array(await crypto.subtle.digest('SHA-256', clientDataJSON)),
+  );
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -156,7 +171,9 @@ navigator.credentials.get = async function (
 
     return {
       id: btoa(String.fromCharCode(...new Uint8Array(credentialId)))
-        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, ''),
       rawId: credentialId,
       type: 'public-key',
       response: {
@@ -172,7 +189,9 @@ navigator.credentials.get = async function (
           results['prf'] = {
             results: {
               first: hexToBuf(response.prfResults.first),
-              ...(response.prfResults.second ? { second: hexToBuf(response.prfResults.second) } : {}),
+              ...(response.prfResults.second
+                ? { second: hexToBuf(response.prfResults.second) }
+                : {}),
             },
           };
         }

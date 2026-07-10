@@ -42,7 +42,12 @@ import {
   traceAddressReferral,
   type DiversifiedAddressRecord,
 } from '@repo/wallet/networks/zcash/diversified-address';
-import { MemoType, type ContactCard, decodeDataMemo, DataContentType } from '@repo/wallet/networks/zcash/memo-codec';
+import {
+  MemoType,
+  type ContactCard,
+  decodeDataMemo,
+  DataContentType,
+} from '@repo/wallet/networks/zcash/memo-codec';
 
 // ---- helpers ----
 
@@ -69,21 +74,31 @@ function truncateAddress(addr: string, len = 8): string {
 
 function memoTypeIcon(type: MemoType): string {
   switch (type) {
-    case MemoType.Text: return 'i-lucide-message-square';
-    case MemoType.ContactCard: return 'i-lucide-contact';
-    case MemoType.Data: return 'i-lucide-database';
-    case MemoType.Address: return 'i-lucide-link';
-    case MemoType.PaymentRequest: return 'i-lucide-credit-card';
-    case MemoType.Ack: return 'i-lucide-check-check';
-    case MemoType.EncryptedMessage: return 'i-lucide-lock';
+    case MemoType.Text:
+      return 'i-lucide-message-square';
+    case MemoType.ContactCard:
+      return 'i-lucide-contact';
+    case MemoType.Data:
+      return 'i-lucide-database';
+    case MemoType.Address:
+      return 'i-lucide-link';
+    case MemoType.PaymentRequest:
+      return 'i-lucide-credit-card';
+    case MemoType.Ack:
+      return 'i-lucide-check-check';
+    case MemoType.EncryptedMessage:
+      return 'i-lucide-lock';
     case MemoType.DkgRound1:
     case MemoType.DkgRound2:
-    case MemoType.DkgRound3: return 'i-lucide-key-round';
+    case MemoType.DkgRound3:
+      return 'i-lucide-key-round';
     case MemoType.SignRequest:
     case MemoType.SignCommitment:
     case MemoType.SignShare:
-    case MemoType.SignResult: return 'i-lucide-pen-tool';
-    default: return 'i-lucide-file';
+    case MemoType.SignResult:
+      return 'i-lucide-pen-tool';
+    default:
+      return 'i-lucide-file';
   }
 }
 
@@ -137,14 +152,20 @@ function ConversationRow({
       )}
 
       {/* icon */}
-      <div className={cn(
-        'flex h-10 w-10 items-center justify-center rounded-full shrink-0',
-        hasFrost ? 'bg-yellow-500/10' : 'bg-elev-2',
-      )}>
-        <span className={cn(
-          'h-5 w-5',
-          hasFrost ? 'i-lucide-key-round text-yellow-400' : 'i-lucide-message-square text-fg-muted',
-        )} />
+      <div
+        className={cn(
+          'flex h-10 w-10 items-center justify-center rounded-full shrink-0',
+          hasFrost ? 'bg-yellow-500/10' : 'bg-elev-2',
+        )}
+      >
+        <span
+          className={cn(
+            'h-5 w-5',
+            hasFrost
+              ? 'i-lucide-key-round text-yellow-400'
+              : 'i-lucide-message-square text-fg-muted',
+          )}
+        />
       </div>
 
       {/* content */}
@@ -166,10 +187,12 @@ function ConversationRow({
             )}
           </div>
         </div>
-        <p className={cn(
-          'text-xs mt-0.5 line-clamp-1',
-          conversation.unread > 0 ? 'text-fg-high' : 'text-fg-muted',
-        )}>
+        <p
+          className={cn(
+            'text-xs mt-0.5 line-clamp-1',
+            conversation.unread > 0 ? 'text-fg-high' : 'text-fg-muted',
+          )}
+        >
           {preview}
         </p>
         <div className='flex items-center gap-1.5 mt-1'>
@@ -189,12 +212,12 @@ function MessageBubble({ message }: { message: InboxMessage }) {
 
   return (
     <div className={cn('flex', isOutgoing ? 'justify-end' : 'justify-start')}>
-      <div className={cn(
-        'max-w-[85%] rounded-xl px-3 py-2',
-        isOutgoing
-          ? 'bg-primary/15 rounded-br-sm'
-          : 'bg-elev-2/60 rounded-bl-sm',
-      )}>
+      <div
+        className={cn(
+          'max-w-[85%] rounded-xl px-3 py-2',
+          isOutgoing ? 'bg-primary/15 rounded-br-sm' : 'bg-elev-2/60 rounded-bl-sm',
+        )}
+      >
         {/* type badge for non-text */}
         {message.type !== MemoType.Text && (
           <div className='flex items-center gap-1 mb-1'>
@@ -313,9 +336,7 @@ function ContactCardBubble({ card }: { card?: ContactCard }) {
       {card.zid && (
         <div className='flex items-center gap-1'>
           <span className='i-lucide-fingerprint h-3 w-3 text-fg-muted' />
-          <span className='text-[10px] font-mono text-fg-muted'>
-            zid{card.zid.slice(0, 16)}
-          </span>
+          <span className='text-[10px] font-mono text-fg-muted'>zid{card.zid.slice(0, 16)}</span>
         </div>
       )}
       {saved ? (
@@ -350,7 +371,11 @@ function DataBubble({ body }: { body: string }) {
         case DataContentType.Json:
           contentType = 'json';
           display = new TextDecoder().decode(decoded.data);
-          try { display = JSON.stringify(JSON.parse(display), null, 2); } catch { /* keep raw */ }
+          try {
+            display = JSON.stringify(JSON.parse(display), null, 2);
+          } catch {
+            /* keep raw */
+          }
           break;
         case DataContentType.Cbor:
           contentType = 'cbor';
@@ -364,7 +389,9 @@ function DataBubble({ body }: { body: string }) {
           display = `[raw ${decoded.data.length} bytes]`;
       }
       if (decoded.correlationId) {
-        const cid = Array.from(decoded.correlationId).map(b => b.toString(16).padStart(2, '0')).join('');
+        const cid = Array.from(decoded.correlationId)
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join('');
         display = `correlation: ${cid}\n${display}`;
       }
       if (decoded.replyTo) {
@@ -401,8 +428,8 @@ function DataBubble({ body }: { body: string }) {
 
 function FrostDkgBubble({ message }: { message: InboxMessage }) {
   const navigate = useNavigate();
-  const round = message.type === MemoType.DkgRound1 ? 1
-    : message.type === MemoType.DkgRound2 ? 2 : 3;
+  const round =
+    message.type === MemoType.DkgRound1 ? 1 : message.type === MemoType.DkgRound2 ? 2 : 3;
 
   return (
     <div className='space-y-2'>
@@ -443,9 +470,7 @@ function FrostSignBubble({ message }: { message: InboxMessage }) {
         <span className='i-lucide-pen-tool h-4 w-4 text-blue-400' />
         <span className='text-sm font-medium text-blue-400'>{message.typeLabel}</span>
       </div>
-      <p className='text-[10px] text-fg-muted'>
-        {labels[message.type] ?? 'FROST signing round'}
-      </p>
+      <p className='text-[10px] text-fg-muted'>{labels[message.type] ?? 'FROST signing round'}</p>
       {message.direction === 'incoming' && message.type === MemoType.SignRequest && (
         <button
           onClick={() => navigate(PopupPath.MULTISIG_SIGN)}
@@ -502,10 +527,7 @@ function ConversationThread({
     <div className='flex flex-col h-full'>
       {/* header */}
       <div className='flex items-center gap-3 px-4 py-3 border-b border-border-soft'>
-        <button
-          onClick={onClose}
-          className='text-fg-muted hover:text-fg-high transition-colors'
-        >
+        <button onClick={onClose} className='text-fg-muted hover:text-fg-high transition-colors'>
           <span className='i-lucide-arrow-left h-5 w-5' />
         </button>
 
@@ -541,9 +563,7 @@ function ConversationThread({
           )}
         </div>
 
-        <span className='text-[10px] text-fg-muted'>
-          {conversation.messages.length} msg
-        </span>
+        <span className='text-[10px] text-fg-muted'>{conversation.messages.length} msg</span>
       </div>
 
       {/* referral attribution */}
@@ -576,9 +596,7 @@ function ConversationCompose({ diversifierIndex }: { diversifierIndex: number })
   const handleSend = () => {
     if (!message.trim()) return;
 
-    const memoWithReply = ownAddress
-      ? `${message}\nreply:${ownAddress}`
-      : message;
+    const memoWithReply = ownAddress ? `${message}\nreply:${ownAddress}` : message;
 
     navigate(PopupPath.SEND, {
       state: {
@@ -661,12 +679,14 @@ function ComposeMessage({
 
       const planRequest = new TransactionPlannerRequest({
         source: { account: penumbraAccount },
-        outputs: [{
-          address: new Address({ altBech32m: recipient }),
-          value: new Value({
-            amount: { lo: amountInMicroUM, hi: 0n },
-          }),
-        }],
+        outputs: [
+          {
+            address: new Address({ altBech32m: recipient }),
+            value: new Value({
+              amount: { lo: amountInMicroUM, hi: 0n },
+            }),
+          },
+        ],
         memo: new MemoPlaintext({
           returnAddress: addressResponse.address,
           text: message,
@@ -687,9 +707,7 @@ function ComposeMessage({
   }, [recipient, message, amount, penumbraTx, penumbraAccount]);
 
   const handleSendZcash = useCallback(() => {
-    const memoWithReply = ownAddress
-      ? `${message}\nreply:${ownAddress}`
-      : message;
+    const memoWithReply = ownAddress ? `${message}\nreply:${ownAddress}` : message;
 
     navigate(PopupPath.SEND, {
       state: {
@@ -759,7 +777,8 @@ function ComposeMessage({
             className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none resize-none disabled:opacity-50'
           />
           <p className='text-xs text-fg-muted mt-1'>
-            {message.length}/{network === 'zcash' && ownAddress ? 512 - ownAddress.length - 7 : 512} characters
+            {message.length}/{network === 'zcash' && ownAddress ? 512 - ownAddress.length - 7 : 512}{' '}
+            characters
             {network === 'zcash' && ownAddress && (
               <span className='ml-1 text-fg-dim'>(return address reserved)</span>
             )}
@@ -791,13 +810,19 @@ function ComposeMessage({
           className='w-full flex items-center justify-center gap-2 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
         >
           {txStatus === 'sending' ? (
-            <><span className='i-lucide-refresh-cw h-4 w-4 animate-spin' /> sending...</>
+            <>
+              <span className='i-lucide-refresh-cw h-4 w-4 animate-spin' /> sending...
+            </>
           ) : txStatus === 'success' ? (
-            <><span className='i-lucide-check h-4 w-4' /> done</>
+            <>
+              <span className='i-lucide-check h-4 w-4' /> done
+            </>
           ) : txStatus === 'error' ? (
             'close'
           ) : (
-            <><span className='i-lucide-send h-4 w-4' /> send message</>
+            <>
+              <span className='i-lucide-send h-4 w-4' /> send message
+            </>
           )}
         </button>
         <p className='text-xs text-fg-muted text-center mt-2'>
@@ -833,13 +858,24 @@ export function InboxPage() {
   const [showCompose, setShowCompose] = useState(false);
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<'conversations' | 'all'>('conversations');
-  const [addContactData, setAddContactData] = useState<{ address: string; network: 'zcash' | 'penumbra' } | null>(null);
+  const [addContactData, setAddContactData] = useState<{
+    address: string;
+    network: 'zcash' | 'penumbra';
+  } | null>(null);
 
   const walletId = selectedKeyInfo?.id ?? '';
 
   // memo sync
-  const { syncMemos: syncPenumbraMemos, isSyncing: isPenumbraSyncing, syncProgress } = usePenumbraMemos();
-  const { syncMemos: syncZcashMemos, isSyncing: isZcashSyncing, syncProgress: zcashSyncProgress } = useZcashMemos(walletId, zidecarUrl);
+  const {
+    syncMemos: syncPenumbraMemos,
+    isSyncing: isPenumbraSyncing,
+    syncProgress,
+  } = usePenumbraMemos();
+  const {
+    syncMemos: syncZcashMemos,
+    isSyncing: isZcashSyncing,
+    syncProgress: zcashSyncProgress,
+  } = useZcashMemos(walletId, zidecarUrl);
   const isSyncing = isPenumbraSyncing || isZcashSyncing;
   const currentSyncProgress = activeNetwork === 'zcash' ? zcashSyncProgress : syncProgress;
 
@@ -859,23 +895,21 @@ export function InboxPage() {
   const filteredConversations = useMemo(() => {
     if (!search) return conversations;
     const q = search.toLowerCase();
-    return conversations.filter(c =>
-      c.label?.toLowerCase().includes(q) ||
-      c.messages.some(m => m.body.toLowerCase().includes(q))
+    return conversations.filter(
+      c =>
+        c.label?.toLowerCase().includes(q) ||
+        c.messages.some(m => m.body.toLowerCase().includes(q)),
     );
   }, [conversations, search]);
 
   // flat messages view (penumbra + legacy)
   const flatMessages = useMemo(() => {
-    const all = tab === 'all'
-      ? messages.getInbox().filter(m => m.network === activeNetwork)
-      : [];
+    const all = tab === 'all' ? messages.getInbox().filter(m => m.network === activeNetwork) : [];
 
     if (!search) return all;
     const q = search.toLowerCase();
-    return all.filter(m =>
-      m.content.toLowerCase().includes(q) ||
-      m.senderAddress?.toLowerCase().includes(q)
+    return all.filter(
+      m => m.content.toLowerCase().includes(q) || m.senderAddress?.toLowerCase().includes(q),
     );
   }, [messages, tab, search, activeNetwork]);
 
@@ -991,8 +1025,8 @@ export function InboxPage() {
           across nothing. Once anything lands in the inbox, the
           bar appears. */}
       {(tab === 'conversations'
-          ? conversations.length > 0
-          : flatMessages.length > 0 || search.length > 0) && (
+        ? conversations.length > 0
+        : flatMessages.length > 0 || search.length > 0) && (
         <div className='px-4 py-3'>
           <div className='relative'>
             <span className='i-lucide-search absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-fg-muted' />
@@ -1000,7 +1034,9 @@ export function InboxPage() {
               type='text'
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder={tab === 'conversations' ? 'search conversations...' : 'search messages...'}
+              placeholder={
+                tab === 'conversations' ? 'search conversations...' : 'search messages...'
+              }
               className='w-full rounded-lg border border-border-soft bg-input pl-9 pr-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
             />
           </div>
@@ -1029,42 +1065,40 @@ export function InboxPage() {
                   contactName={getContactName(
                     convo.messages.find(m => m.direction === 'incoming')
                       ? undefined // we don't know the address from inbox state alone
-                      : undefined
+                      : undefined,
                   )}
                   onClick={() => setSelectedConvo(convo)}
                 />
               ))}
             </div>
           )
+        ) : flatMessages.length === 0 ? (
+          <EmptyState
+            text='no memos yet'
+            subtitle={`messages travel inside ${activeNetwork} transactions. once someone sends with a memo, it shows up here.`}
+            action={{
+              label: 'show my address',
+              icon: 'i-lucide-arrow-down-to-line',
+              onClick: () => navigate(PopupPath.RECEIVE),
+            }}
+          />
         ) : (
-          flatMessages.length === 0 ? (
-            <EmptyState
-              text='no memos yet'
-              subtitle={`messages travel inside ${activeNetwork} transactions. once someone sends with a memo, it shows up here.`}
-              action={{
-                label: 'show my address',
-                icon: 'i-lucide-arrow-down-to-line',
-                onClick: () => navigate(PopupPath.RECEIVE),
-              }}
-            />
-          ) : (
-            <div className='space-y-2'>
-              {flatMessages.map(msg => (
-                <FlatMessageRow
-                  key={msg.id}
-                  message={msg}
-                  contactName={getContactName(msg.senderAddress)}
-                  onClick={() => {
-                    // find conversation containing this message
-                    const convo = conversations.find(c =>
-                      c.messages.some(m => m.txids.includes(msg.txId))
-                    );
-                    if (convo) setSelectedConvo(convo);
-                  }}
-                />
-              ))}
-            </div>
-          )
+          <div className='space-y-2'>
+            {flatMessages.map(msg => (
+              <FlatMessageRow
+                key={msg.id}
+                message={msg}
+                contactName={getContactName(msg.senderAddress)}
+                onClick={() => {
+                  // find conversation containing this message
+                  const convo = conversations.find(c =>
+                    c.messages.some(m => m.txids.includes(msg.txId)),
+                  );
+                  if (convo) setSelectedConvo(convo);
+                }}
+              />
+            ))}
+          </div>
         )}
       </div>
 
@@ -1088,9 +1122,10 @@ function FlatMessageRow({
   contactName?: string;
   onClick: () => void;
 }) {
-  const displayAddress = message.direction === 'received'
-    ? message.senderAddress ?? 'shielded sender'
-    : message.recipientAddress;
+  const displayAddress =
+    message.direction === 'received'
+      ? (message.senderAddress ?? 'shielded sender')
+      : message.recipientAddress;
 
   return (
     <button
@@ -1103,10 +1138,12 @@ function FlatMessageRow({
       onClick={onClick}
     >
       <div className='flex h-8 w-8 items-center justify-center rounded-full bg-elev-2 shrink-0'>
-        <span className={cn(
-          'h-4 w-4',
-          message.read ? 'i-lucide-mail-open text-fg-muted' : 'i-lucide-mail text-zigner-gold',
-        )} />
+        <span
+          className={cn(
+            'h-4 w-4',
+            message.read ? 'i-lucide-mail-open text-fg-muted' : 'i-lucide-mail text-zigner-gold',
+          )}
+        />
       </div>
       <div className='flex-1 min-w-0'>
         <div className='flex items-center justify-between gap-2'>
@@ -1117,15 +1154,15 @@ function FlatMessageRow({
             {formatTimestamp(message.timestamp)}
           </span>
         </div>
-        <p className={cn(
-          'text-xs mt-0.5 line-clamp-1',
-          message.read ? 'text-fg-muted' : 'text-fg',
-        )}>
+        <p
+          className={cn('text-xs mt-0.5 line-clamp-1', message.read ? 'text-fg-muted' : 'text-fg')}
+        >
           {message.content}
         </p>
         {message.amount && (
           <span className='inline-flex items-center rounded-md bg-green-500/10 px-1.5 py-0.5 mt-1 text-[10px] text-green-400'>
-            {message.direction === 'received' ? '+' : '-'}{message.amount} {message.asset ?? ''}
+            {message.direction === 'received' ? '+' : '-'}
+            {message.amount} {message.asset ?? ''}
           </span>
         )}
         {message.status && message.status !== 'confirmed' && (
@@ -1143,17 +1180,24 @@ function OutgoingStatusBadge({
   status: NonNullable<Message['status']>;
   reason?: string;
 }) {
-  const styles: Record<NonNullable<Message['status']>, { bg: string; fg: string; label: string }> = {
-    submitting:   { bg: 'bg-amber-500/10',  fg: 'text-amber-400',  label: 'sending...' },
-    broadcasting: { bg: 'bg-amber-500/10',  fg: 'text-amber-400',  label: 'broadcasting...' },
-    pending:      { bg: 'bg-blue-500/10',   fg: 'text-blue-400',   label: 'pending' },
-    confirmed:    { bg: 'bg-green-500/10',  fg: 'text-green-400',  label: 'confirmed' },
-    failed:       { bg: 'bg-red-500/10',    fg: 'text-red-400',    label: 'failed' },
+  const styles: Record<
+    NonNullable<Message['status']>,
+    { bg: string; fg: string; label: string }
+  > = {
+    submitting: { bg: 'bg-amber-500/10', fg: 'text-amber-400', label: 'sending...' },
+    broadcasting: { bg: 'bg-amber-500/10', fg: 'text-amber-400', label: 'broadcasting...' },
+    pending: { bg: 'bg-blue-500/10', fg: 'text-blue-400', label: 'pending' },
+    confirmed: { bg: 'bg-green-500/10', fg: 'text-green-400', label: 'confirmed' },
+    failed: { bg: 'bg-red-500/10', fg: 'text-red-400', label: 'failed' },
   };
   const s = styles[status];
   return (
     <span
-      className={cn('inline-flex items-center rounded-md px-1.5 py-0.5 ml-1 mt-1 text-[10px]', s.bg, s.fg)}
+      className={cn(
+        'inline-flex items-center rounded-md px-1.5 py-0.5 ml-1 mt-1 text-[10px]',
+        s.bg,
+        s.fg,
+      )}
       title={status === 'failed' ? reason : undefined}
     >
       {s.label}

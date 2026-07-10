@@ -66,7 +66,7 @@ export const SettingsMultisig = () => {
         open={backupOpen}
         title={`Export "${wallet.label}"`}
         walletLabel={wallet.label}
-        onConfirm={(passphrase) => exportSingleBackup(wallet, passphrase)}
+        onConfirm={passphrase => exportSingleBackup(wallet, passphrase)}
         onClose={() => setBackupOpen(false)}
       />
       <div className='flex flex-col gap-4'>
@@ -120,9 +120,8 @@ export const SettingsMultisig = () => {
             <div className='rounded-lg border border-border-soft bg-elev-1 p-3 text-[11px] text-fg-muted'>
               <p className='font-medium text-fg'>Backup</p>
               <p className='mt-1'>
-                This wallet's FROST share lives on your zigner device. Export the
-                backup from there: Settings → Multisig wallets → tap your wallet
-                → Export backup.
+                This wallet's FROST share lives on your zigner device. Export the backup from there:
+                Settings → Multisig wallets → tap your wallet → Export backup.
               </p>
             </div>
           ) : (
@@ -150,7 +149,8 @@ export const SettingsMultisig = () => {
           ) : (
             <div className='flex flex-col gap-2'>
               <p className='text-xs text-red-400'>
-                permanently delete this multisig wallet? this cannot be undone — you would need to run DKG again.
+                permanently delete this multisig wallet? this cannot be undone — you would need to
+                run DKG again.
               </p>
               <div className='flex gap-2'>
                 <button

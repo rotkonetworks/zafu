@@ -72,7 +72,8 @@ function getZignerAddress(
   chainId: CosmosChainId,
 ): string | null {
   const addrs = insensitive['cosmosAddresses'] as
-    { chainId: string; address: string; prefix: string }[] | undefined;
+    | { chainId: string; address: string; prefix: string }[]
+    | undefined;
   if (!addrs?.length) return null;
   const match = addrs.find(a => a.chainId === chainId);
   if (match) return match.address;
@@ -103,7 +104,8 @@ function findCosmosKey(
 ) {
   if (effective) {
     if (effective.type === 'mnemonic') return effective;
-    if (effective.type === 'zigner-zafu' && getZignerAddress(effective.insensitive ?? {}, chainId)) return effective;
+    if (effective.type === 'zigner-zafu' && getZignerAddress(effective.insensitive ?? {}, chainId))
+      return effective;
   }
   for (const ki of keyInfos) {
     if (ki === effective) continue;
@@ -120,7 +122,9 @@ export const useCosmosSend = () => {
   const { getMnemonic } = useStore(keyRingSelector);
 
   return useMutation({
-    mutationFn: async (params: CosmosSendParams): Promise<CosmosTxResult | CosmosZignerSignResult> => {
+    mutationFn: async (
+      params: CosmosSendParams,
+    ): Promise<CosmosTxResult | CosmosZignerSignResult> => {
       const config = COSMOS_CHAINS[params.chainId];
       const denom = params.denom ?? config.denom;
       const accountIndex = params.accountIndex ?? 0;
@@ -133,7 +137,9 @@ export const useCosmosSend = () => {
         // mnemonic path: direct sign+broadcast
         const mnemonic = await getMnemonic(key.id);
         const { address: fromAddress } = await createSigningClient(
-          params.chainId, mnemonic, accountIndex,
+          params.chainId,
+          mnemonic,
+          accountIndex,
         ).then(r => ({ address: r.address }));
 
         const messages = [
@@ -148,7 +154,12 @@ export const useCosmosSend = () => {
         const fee = calculateFee(params.chainId, gas);
 
         const result = await signAndBroadcast(
-          params.chainId, mnemonic, messages, fee, params.memo ?? '', accountIndex,
+          params.chainId,
+          mnemonic,
+          messages,
+          fee,
+          params.memo ?? '',
+          accountIndex,
         );
 
         return {
@@ -181,7 +192,11 @@ export const useCosmosSend = () => {
         const fee = calculateFee(params.chainId, gas);
 
         const signRequest = await buildZignerSignDoc(
-          params.chainId, fromAddress, messages, fee, params.memo ?? '',
+          params.chainId,
+          fromAddress,
+          messages,
+          fee,
+          params.memo ?? '',
         );
 
         const signRequestQr = encodeCosmosSignRequest(
@@ -211,7 +226,9 @@ export const useCosmosIbcTransfer = () => {
   const { getMnemonic } = useStore(keyRingSelector);
 
   return useMutation({
-    mutationFn: async (params: CosmosIbcTransferParams): Promise<CosmosTxResult | CosmosZignerSignResult> => {
+    mutationFn: async (
+      params: CosmosIbcTransferParams,
+    ): Promise<CosmosTxResult | CosmosZignerSignResult> => {
       const config = COSMOS_CHAINS[params.sourceChainId];
       const denom = params.denom ?? config.denom;
       const accountIndex = params.accountIndex ?? 0;
@@ -225,7 +242,9 @@ export const useCosmosIbcTransfer = () => {
         // mnemonic path: direct sign+broadcast
         const mnemonic = await getMnemonic(key.id);
         const { client, address: fromAddress } = await createSigningClient(
-          params.sourceChainId, mnemonic, accountIndex,
+          params.sourceChainId,
+          mnemonic,
+          accountIndex,
         );
 
         const messages = [
@@ -241,7 +260,12 @@ export const useCosmosIbcTransfer = () => {
         ];
 
         try {
-          const result = await client.signAndBroadcast(fromAddress, messages, 'auto', params.memo ?? '');
+          const result = await client.signAndBroadcast(
+            fromAddress,
+            messages,
+            'auto',
+            params.memo ?? '',
+          );
           return {
             type: 'broadcast',
             txHash: result.transactionHash,
@@ -280,7 +304,11 @@ export const useCosmosIbcTransfer = () => {
         const fee = calculateFee(params.sourceChainId, gas);
 
         const signRequest = await buildZignerSignDoc(
-          params.sourceChainId, fromAddress, messages, fee, params.memo ?? '',
+          params.sourceChainId,
+          fromAddress,
+          messages,
+          fee,
+          params.memo ?? '',
         );
 
         const signRequestQr = encodeCosmosSignRequest(

@@ -70,7 +70,14 @@ import {
 export type ZignerScanState = 'idle' | 'scanning' | 'scanned' | 'importing' | 'complete' | 'error';
 
 /** Detected network type from QR code */
-export type DetectedNetwork = 'penumbra' | 'zcash' | 'polkadot' | 'cosmos' | 'backup' | 'hot-wallet' | 'unknown';
+export type DetectedNetwork =
+  | 'penumbra'
+  | 'zcash'
+  | 'polkadot'
+  | 'cosmos'
+  | 'backup'
+  | 'hot-wallet'
+  | 'unknown';
 
 /** Polkadot address import data from Zigner QR */
 export interface PolkadotImportData {
@@ -259,7 +266,8 @@ export const createZignerSlice =
         // Invalid substrate format
         set(state => {
           state.zigner.scanState = 'error';
-          state.zigner.errorMessage = 'invalid substrate qr format. expected: substrate:address:0xgenesishash';
+          state.zigner.errorMessage =
+            'invalid substrate qr format. expected: substrate:address:0xgenesishash';
         });
         return;
       }
@@ -273,9 +281,11 @@ export const createZignerSlice =
 
           if (address && genesisHash && genesisHash.startsWith('0x')) {
             // Detect chain from address prefix
-            const chainId = address.startsWith('noble') ? 'noble'
-              : address.startsWith('cosmos') ? 'cosmoshub'
-              : 'cosmos';
+            const chainId = address.startsWith('noble')
+              ? 'noble'
+              : address.startsWith('cosmos')
+                ? 'cosmoshub'
+                : 'cosmos';
 
             const cosmosData: CosmosImportData = {
               publicKey: '', // not available from address-only QR
@@ -301,7 +311,8 @@ export const createZignerSlice =
 
         set(state => {
           state.zigner.scanState = 'error';
-          state.zigner.errorMessage = 'invalid cosmos qr format. expected: cosmos:address:0xgenesishash';
+          state.zigner.errorMessage =
+            'invalid cosmos qr format. expected: cosmos:address:0xgenesishash';
         });
         return;
       }
@@ -516,7 +527,7 @@ export const createZignerSlice =
         if (heuristic !== declared) {
           console.warn(
             `[zigner-import] declared cold signer is "${declared}" but byte heuristic suggests "${heuristic}". ` +
-            `zid_pubkey ${urExport.zidPublicKey ? 'present' : 'absent'}. Trusting declaration.`,
+              `zid_pubkey ${urExport.zidPublicKey ? 'present' : 'absent'}. Trusting declaration.`,
           );
         }
         const exportData: ZcashFvkExportData = {
@@ -530,7 +541,8 @@ export const createZignerSlice =
           zidPublicKey: urExport.zidPublicKey,
           coldSignerType: declared,
         };
-        const defaultLabel = urExport.label || (declared === 'zigner' ? 'zigner zcash' : 'keystone zcash');
+        const defaultLabel =
+          urExport.label || (declared === 'zigner' ? 'zigner zcash' : 'keystone zcash');
         set(state => {
           state.zigner.qrData = '<multipart-ur:zcash-accounts>'; // sentinel, not a real UR string
           state.zigner.detectedNetwork = 'zcash';

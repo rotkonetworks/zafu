@@ -37,7 +37,9 @@ waitForMsgType(self, 'wasm_bindgen_worker_init').then(async ({ init, receiver })
   // to single-threaded, and a ~10s proof becomes ~15 min. Reapply this
   // patch after every wasm rebuild.
   const wbgRayonBase = new URL('../../..', import.meta.url).href;
-  const pkg = await import(wbgRayonBase.endsWith('/') ? wbgRayonBase + 'zafu_wasm.js' : wbgRayonBase);
+  const pkg = await import(
+    wbgRayonBase.endsWith('/') ? wbgRayonBase + 'zafu_wasm.js' : wbgRayonBase
+  );
   await pkg.default(init);
   postMessage({ type: 'wasm_bindgen_worker_ready' });
   pkg.wbg_rayon_start_worker(receiver);
@@ -60,7 +62,7 @@ export async function startWorkers(module, memory, builder) {
   const workerInit = {
     type: 'wasm_bindgen_worker_init',
     init: { module_or_path: module, memory },
-    receiver: builder.receiver()
+    receiver: builder.receiver(),
   };
 
   _workers = await Promise.all(
@@ -82,12 +84,12 @@ export async function startWorkers(module, memory, builder) {
       // The only way to work around that is to have side effect code
       // in an entry point such as Worker file itself.
       const worker = new Worker(new URL('./workerHelpers.js', import.meta.url), {
-        type: 'module'
+        type: 'module',
       });
       worker.postMessage(workerInit);
       await waitForMsgType(worker, 'wasm_bindgen_worker_ready');
       return worker;
-    })
+    }),
   );
   builder.build();
 }

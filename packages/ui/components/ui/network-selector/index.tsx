@@ -35,12 +35,12 @@ export const NetworkSelector = ({
   className,
 }: NetworkSelectorProps) => {
   const [open, setOpen] = React.useState(false);
-  const selectedNetwork = networks.find((n) => n.type === value) ?? networks[0];
+  const selectedNetwork = networks.find(n => n.type === value) ?? networks[0];
 
   return (
     <SelectPrimitive.Root
       value={value}
-      onValueChange={(v) => onChange(v as NetworkType)}
+      onValueChange={v => onChange(v as NetworkType)}
       open={open}
       onOpenChange={setOpen}
     >
@@ -77,7 +77,7 @@ export const NetworkSelector = ({
           sideOffset={4}
         >
           <SelectPrimitive.Viewport className='p-1'>
-            {networks.map((network) => (
+            {networks.map(network => (
               <SelectPrimitive.Item
                 key={network.type}
                 value={network.type}
@@ -95,9 +95,7 @@ export const NetworkSelector = ({
                 <SelectPrimitive.ItemIndicator className='ml-auto'>
                   <CheckIcon className='h-4 w-4' />
                 </SelectPrimitive.ItemIndicator>
-                {!network.enabled && (
-                  <span className='ml-auto text-xs text-fg-muted'>Soon</span>
-                )}
+                {!network.enabled && <span className='ml-auto text-xs text-fg-muted'>Soon</span>}
               </SelectPrimitive.Item>
             ))}
           </SelectPrimitive.Viewport>

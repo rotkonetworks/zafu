@@ -6,32 +6,37 @@ import { LinkGradientIcon } from '../../../icons/link-gradient';
 import { DisplayOriginURL } from '../../../shared/components/display-origin-url';
 import { cn } from '@repo/ui/lib/utils';
 import { UserChoice } from '@repo/storage-chrome/records';
-import { CAPABILITY_META, type Capability, type RiskLevel } from '@repo/storage-chrome/capabilities';
+import {
+  CAPABILITY_META,
+  type Capability,
+  type RiskLevel,
+} from '@repo/storage-chrome/capabilities';
 
-const riskStyles: Record<RiskLevel, { border: string; bg: string; text: string; banner?: string }> = {
-  low: {
-    border: 'border-border-soft',
-    bg: '',
-    text: 'text-fg-muted',
-  },
-  medium: {
-    border: 'border-yellow-500/30',
-    bg: 'bg-yellow-500/5',
-    text: 'text-yellow-400',
-  },
-  high: {
-    border: 'border-orange-500/40',
-    bg: 'bg-orange-500/5',
-    text: 'text-orange-400',
-    banner: 'This grants significant access to your wallet.',
-  },
-  critical: {
-    border: 'border-red-500/50',
-    bg: 'bg-red-500/10',
-    text: 'text-red-400',
-    banner: 'DANGER: This capability can sign transactions without your approval.',
-  },
-};
+const riskStyles: Record<RiskLevel, { border: string; bg: string; text: string; banner?: string }> =
+  {
+    low: {
+      border: 'border-border-soft',
+      bg: '',
+      text: 'text-fg-muted',
+    },
+    medium: {
+      border: 'border-yellow-500/30',
+      bg: 'bg-yellow-500/5',
+      text: 'text-yellow-400',
+    },
+    high: {
+      border: 'border-orange-500/40',
+      bg: 'bg-orange-500/5',
+      text: 'text-orange-400',
+      banner: 'This grants significant access to your wallet.',
+    },
+    critical: {
+      border: 'border-red-500/50',
+      bg: 'bg-red-500/10',
+      text: 'text-red-400',
+      banner: 'DANGER: This capability can sign transactions without your approval.',
+    },
+  };
 
 const CapabilityItem = ({ cap }: { cap: Capability }) => {
   const meta = CAPABILITY_META[cap];
@@ -40,19 +45,19 @@ const CapabilityItem = ({ cap }: { cap: Capability }) => {
   return (
     <div className={cn('rounded-lg border p-3', style.border, style.bg)}>
       {style.banner && (
-        <div className={cn('mb-2 text-xs font-medium', style.text)}>
-          {style.banner}
-        </div>
+        <div className={cn('mb-2 text-xs font-medium', style.text)}>{style.banner}</div>
       )}
       <div className='flex items-center gap-2'>
         <span className={cn('text-sm font-medium', style.text)}>{meta.label}</span>
-        <span className={cn(
-          'rounded px-1.5 py-0.5 text-[10px] uppercase',
-          meta.risk === 'low' && 'bg-elev-2 text-fg-muted',
-          meta.risk === 'medium' && 'bg-yellow-500/10 text-yellow-400',
-          meta.risk === 'high' && 'bg-orange-500/10 text-orange-400',
-          meta.risk === 'critical' && 'bg-red-500/10 text-red-400',
-        )}>
+        <span
+          className={cn(
+            'rounded px-1.5 py-0.5 text-[10px] uppercase',
+            meta.risk === 'low' && 'bg-elev-2 text-fg-muted',
+            meta.risk === 'medium' && 'bg-yellow-500/10 text-yellow-400',
+            meta.risk === 'high' && 'bg-orange-500/10 text-orange-400',
+            meta.risk === 'critical' && 'bg-red-500/10 text-red-400',
+          )}
+        >
           {meta.risk}
         </span>
       </div>
@@ -62,8 +67,15 @@ const CapabilityItem = ({ cap }: { cap: Capability }) => {
 };
 
 export const OriginApproval = () => {
-  const { requestOrigin, favIconUrl, title, lastRequest, requestedCapabilities, setChoice, sendResponse } =
-    useStore(originApprovalSelector);
+  const {
+    requestOrigin,
+    favIconUrl,
+    title,
+    lastRequest,
+    requestedCapabilities,
+    setChoice,
+    sendResponse,
+  } = useStore(originApprovalSelector);
 
   const approve = () => {
     setChoice(UserChoice.Approved);
@@ -165,12 +177,14 @@ export const OriginApproval = () => {
 
             {/* extra warning for high/critical */}
             {(maxRisk === 'high' || maxRisk === 'critical') && (
-              <div className={cn(
-                'mt-2 rounded-lg border p-3 text-xs',
-                maxRisk === 'critical'
-                  ? 'border-red-500/50 bg-red-500/10 text-red-400'
-                  : 'border-orange-500/40 bg-orange-500/5 text-orange-400',
-              )}>
+              <div
+                className={cn(
+                  'mt-2 rounded-lg border p-3 text-xs',
+                  maxRisk === 'critical'
+                    ? 'border-red-500/50 bg-red-500/10 text-red-400'
+                    : 'border-orange-500/40 bg-orange-500/5 text-orange-400',
+                )}
+              >
                 review these permissions carefully before approving.
                 {maxRisk === 'critical' && ' this includes dangerous capabilities.'}
               </div>

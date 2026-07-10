@@ -27,9 +27,7 @@ interface GlassStyle extends CSSProperties {
 }
 
 export const Glass = ({ children, className, accent, style, ...rest }: GlassProps) => {
-  const mergedStyle: GlassStyle = accent
-    ? { '--glass-accent': accent, ...style }
-    : (style ?? {});
+  const mergedStyle: GlassStyle = accent ? { '--glass-accent': accent, ...style } : (style ?? {});
   return (
     <div {...rest} className={cn('glass-surface', className)} style={mergedStyle}>
       {children}

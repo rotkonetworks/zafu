@@ -4,9 +4,19 @@
 
 import { useState } from 'react';
 import { useStore } from '../../../state';
-import { selectActiveNetwork, selectEnabledNetworks, selectSetActiveNetwork, type NetworkType } from '../../../state/keyring';
+import {
+  selectActiveNetwork,
+  selectEnabledNetworks,
+  selectSetActiveNetwork,
+  type NetworkType,
+} from '../../../state/keyring';
 import { isIbcNetwork } from '../../../state/keyring/network-types';
-import { networksSelector, type NetworkId, type MemoSyncStrategy, type MempoolWatchSetting } from '../../../state/networks';
+import {
+  networksSelector,
+  type NetworkId,
+  type MemoSyncStrategy,
+  type MempoolWatchSetting,
+} from '../../../state/networks';
 import { backendTrustDescription, type ZcashBackend } from '../../../state/keyring/zcash-backend';
 import { isMempoolWatchEnabled } from '../../../services/mempool-watch/strategy';
 import {
@@ -15,7 +25,10 @@ import {
   groupPresetsByRegion,
   type RpcEndpointRegion,
 } from '../../../config/zcash-endpoints';
-import { measurePresetLatencies, type EndpointLatency } from '../../../state/keyring/endpoint-latency';
+import {
+  measurePresetLatencies,
+  type EndpointLatency,
+} from '../../../state/keyring/endpoint-latency';
 import { NETWORKS, LAUNCHED_NETWORKS } from '../../../config/networks';
 import { cn } from '@repo/ui/lib/utils';
 import { SettingsScreen } from './settings-screen';
@@ -35,8 +48,7 @@ const NETWORK_COLORS: Record<string, string> = {
   'bg-orange-400': '#FB923C',
 };
 
-const getColorHex = (color: string): string =>
-  NETWORK_COLORS[color] ?? '#6B7280';
+const getColorHex = (color: string): string => NETWORK_COLORS[color] ?? '#6B7280';
 
 export const SettingsNetworks = () => {
   const activeNetwork = useStore(selectActiveNetwork);
@@ -45,7 +57,13 @@ export const SettingsNetworks = () => {
   const toggleNetwork = useStore(state => state.keyRing.toggleNetwork);
   const privacySetSetting = useStore(state => state.privacy.setSetting);
   const transparentEnabled = useStore(state => state.privacy.settings.enableTransparentBalances);
-  const { networks: networkState, setNetworkEndpoint, setMemoSyncStrategy, setMempoolWatch, setZcashBackend } = useStore(networksSelector);
+  const {
+    networks: networkState,
+    setNetworkEndpoint,
+    setMemoSyncStrategy,
+    setMempoolWatch,
+    setZcashBackend,
+  } = useStore(networksSelector);
 
   const [expandedNetwork, setExpandedNetwork] = useState<NetworkType | null>(null);
   const [editingEndpoint, setEditingEndpoint] = useState('');
@@ -94,10 +112,13 @@ export const SettingsNetworks = () => {
           const state = networkState[networkId as NetworkId];
 
           return (
-            <div key={networkId} className={cn(
-              'rounded-lg border overflow-hidden transition-colors',
-              isActive ? 'border-primary/60' : 'border-border-soft',
-            )}>
+            <div
+              key={networkId}
+              className={cn(
+                'rounded-lg border overflow-hidden transition-colors',
+                isActive ? 'border-primary/60' : 'border-border-soft',
+              )}
+            >
               {/* network row */}
               <div className='flex items-center p-3'>
                 {/* name — click to set active (if enabled) */}
@@ -109,10 +130,15 @@ export const SettingsNetworks = () => {
                   className='flex flex-1 items-center gap-3'
                 >
                   <div
-                    className={cn('h-3 w-3 rounded-full', isActive && 'ring-2 ring-primary/40 ring-offset-1 ring-offset-background')}
+                    className={cn(
+                      'h-3 w-3 rounded-full',
+                      isActive && 'ring-2 ring-primary/40 ring-offset-1 ring-offset-background',
+                    )}
                     style={{ backgroundColor: getColorHex(network.color) }}
                   />
-                  <span className={cn('font-medium text-sm', !isEnabled && 'text-fg-muted')}>{network.name}</span>
+                  <span className={cn('font-medium text-sm', !isEnabled && 'text-fg-muted')}>
+                    {network.name}
+                  </span>
                   {isActive && (
                     <span className='text-[10px] px-1.5 py-0.5 rounded-md bg-primary/15 text-zigner-gold font-medium leading-none'>
                       active
@@ -132,7 +158,7 @@ export const SettingsNetworks = () => {
                       onClick={() => handleExpandToggle(networkId)}
                       className={cn(
                         'p-1 transition-colors',
-                        isExpanded ? 'text-fg' : 'text-fg-muted hover:text-fg-high'
+                        isExpanded ? 'text-fg' : 'text-fg-muted hover:text-fg-high',
                       )}
                       title='configure endpoint'
                     >
@@ -145,7 +171,9 @@ export const SettingsNetworks = () => {
                     onClick={() => void handleToggle(networkId)}
                     className={cn(
                       'h-5 w-5 rounded border-2 flex items-center justify-center transition-colors',
-                      isEnabled ? 'border-zigner-gold bg-zigner-gold' : 'border-muted-foreground/50'
+                      isEnabled
+                        ? 'border-zigner-gold bg-zigner-gold'
+                        : 'border-muted-foreground/50',
                     )}
                   >
                     {isEnabled && <span className='i-lucide-check h-3 w-3 text-zigner-dark' />}
@@ -163,7 +191,7 @@ export const SettingsNetworks = () => {
                   {networkId === 'zcash' && (
                     <ZcashEndpointPicker
                       currentUrl={editingEndpoint}
-                      onPick={async (url) => {
+                      onPick={async url => {
                         // Persist directly via the store action, bypassing
                         // the editingEndpoint useState (which is async). Then
                         // reflect into the input so the user sees the
@@ -203,31 +231,34 @@ export const SettingsNetworks = () => {
                     <p className='text-[10px] text-fg-muted mt-1.5'>{state.syncDescription}</p>
                   )}
 
-                  {networkId === 'zcash' && (() => {
-                    const zcashState = state as {
-                      memoSyncStrategy?: MemoSyncStrategy;
-                      mempoolWatch?: MempoolWatchSetting;
-                      backend?: ZcashBackend;
-                    } | undefined;
-                    const backend: ZcashBackend = zcashState?.backend ?? 'zidecar';
-                    return (
-                      <>
-                        <BackendTrustBadge
-                          backend={backend}
-                          onChange={(b) => void setZcashBackend(b)}
-                        />
-                        <MemoSyncStrategyPicker
-                          value={zcashState?.memoSyncStrategy ?? 'private'}
-                          onChange={(s) => void setMemoSyncStrategy('zcash', s)}
-                        />
-                        <MempoolWatchToggle
-                          value={zcashState?.mempoolWatch ?? 'off'}
-                          backend={backend}
-                          onChange={(s) => void setMempoolWatch('zcash', s)}
-                        />
-                      </>
-                    );
-                  })()}
+                  {networkId === 'zcash' &&
+                    (() => {
+                      const zcashState = state as
+                        | {
+                            memoSyncStrategy?: MemoSyncStrategy;
+                            mempoolWatch?: MempoolWatchSetting;
+                            backend?: ZcashBackend;
+                          }
+                        | undefined;
+                      const backend: ZcashBackend = zcashState?.backend ?? 'zidecar';
+                      return (
+                        <>
+                          <BackendTrustBadge
+                            backend={backend}
+                            onChange={b => void setZcashBackend(b)}
+                          />
+                          <MemoSyncStrategyPicker
+                            value={zcashState?.memoSyncStrategy ?? 'private'}
+                            onChange={s => void setMemoSyncStrategy('zcash', s)}
+                          />
+                          <MempoolWatchToggle
+                            value={zcashState?.mempoolWatch ?? 'off'}
+                            backend={backend}
+                            onChange={s => void setMempoolWatch('zcash', s)}
+                          />
+                        </>
+                      );
+                    })()}
                 </div>
               )}
             </div>
@@ -273,13 +304,17 @@ const MemoSyncStrategyPicker = ({ value, onChange }: MemoSyncStrategyPickerProps
             onClick={() => onChange(opt.id)}
             className={cn(
               'flex items-start gap-2 p-2 rounded border text-left transition-colors',
-              selected ? 'border-primary/60 bg-primary/5' : 'border-border-soft hover:border-border',
+              selected
+                ? 'border-primary/60 bg-primary/5'
+                : 'border-border-soft hover:border-border',
             )}
           >
-            <div className={cn(
-              'mt-0.5 h-3 w-3 rounded-full border-2 flex-shrink-0',
-              selected ? 'border-zigner-gold bg-zigner-gold' : 'border-muted-foreground/50',
-            )} />
+            <div
+              className={cn(
+                'mt-0.5 h-3 w-3 rounded-full border-2 flex-shrink-0',
+                selected ? 'border-zigner-gold bg-zigner-gold' : 'border-muted-foreground/50',
+              )}
+            />
             <div className='flex-1'>
               <div className='text-xs font-medium leading-none mb-0.5'>{opt.label}</div>
               <div className='text-[10px] text-fg-muted leading-snug'>{opt.hint}</div>
@@ -291,8 +326,8 @@ const MemoSyncStrategyPicker = ({ value, onChange }: MemoSyncStrategyPickerProps
     {value === 'fast' && (
       <div className='mt-2 p-2 rounded border border-amber-500/30 bg-amber-500/5'>
         <div className='text-[10px] text-amber-500 leading-snug'>
-          fast mode skips decoy buckets — the server learns which 100-block ranges your wallet cares about.
-          memos themselves remain encrypted.
+          fast mode skips decoy buckets — the server learns which 100-block ranges your wallet cares
+          about. memos themselves remain encrypted.
         </div>
       </div>
     )}
@@ -324,14 +359,18 @@ const MempoolWatchToggle = ({ value, backend, onChange }: MempoolWatchToggleProp
           !available && 'opacity-50 cursor-not-allowed',
         )}
       >
-        <div className={cn(
-          'mt-0.5 h-4 w-7 rounded-full border-2 flex-shrink-0 relative transition-colors',
-          enabled ? 'border-zigner-gold bg-zigner-gold/30' : 'border-muted-foreground/50',
-        )}>
-          <div className={cn(
-            'absolute top-0 h-3 w-3 rounded-full bg-zigner-gold transition-all',
-            enabled ? 'left-3' : 'left-0',
-          )} />
+        <div
+          className={cn(
+            'mt-0.5 h-4 w-7 rounded-full border-2 flex-shrink-0 relative transition-colors',
+            enabled ? 'border-zigner-gold bg-zigner-gold/30' : 'border-muted-foreground/50',
+          )}
+        >
+          <div
+            className={cn(
+              'absolute top-0 h-3 w-3 rounded-full bg-zigner-gold transition-all',
+              enabled ? 'left-3' : 'left-0',
+            )}
+          />
         </div>
         <div className='flex-1'>
           <div className='text-xs font-medium leading-none mb-0.5'>
@@ -347,9 +386,8 @@ const MempoolWatchToggle = ({ value, backend, onChange }: MempoolWatchToggleProp
       {enabled && (
         <div className='mt-2 p-2 rounded border border-amber-500/30 bg-amber-500/5'>
           <div className='text-[10px] text-amber-500 leading-snug'>
-            polling at ~10s ± jitter. server cannot see which mempool tx is yours
-            (trial-decrypt is local), but it sees a continuous "online" signal from
-            your wallet.
+            polling at ~10s ± jitter. server cannot see which mempool tx is yours (trial-decrypt is
+            local), but it sees a continuous "online" signal from your wallet.
           </div>
         </div>
       )}
@@ -374,16 +412,16 @@ const BackendTrustBadge = ({ backend, onChange }: BackendTrustBadgeProps) => {
   return (
     <div className='mt-3 pt-3 border-t border-border-soft'>
       <div className='flex items-start gap-2'>
-        <span className={cn(
-          'mt-0.5 inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium',
-          isTrustless ? 'bg-green-500/15 text-green-400' : 'bg-amber-500/15 text-amber-400',
-        )}>
+        <span
+          className={cn(
+            'mt-0.5 inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium',
+            isTrustless ? 'bg-green-500/15 text-green-400' : 'bg-amber-500/15 text-amber-400',
+          )}
+        >
           {trust.label}
         </span>
         <div className='flex-1'>
-          <div className='text-xs font-medium leading-none mb-0.5'>
-            sync backend: {backend}
-          </div>
+          <div className='text-xs font-medium leading-none mb-0.5'>sync backend: {backend}</div>
           <div className='text-[10px] text-fg-muted leading-snug'>{trust.summary}</div>
         </div>
       </div>
@@ -414,12 +452,18 @@ interface ZcashEndpointPickerProps {
 
 const regionLabel = (region: RpcEndpointRegion): string => {
   switch (region) {
-    case 'default': return 'recommended';
-    case 'global': return 'global';
-    case 'americas': return 'americas';
-    case 'europe': return 'europe';
-    case 'asia-pacific': return 'asia pacific';
-    case 'community': return 'community';
+    case 'default':
+      return 'recommended';
+    case 'global':
+      return 'global';
+    case 'americas':
+      return 'americas';
+    case 'europe':
+      return 'europe';
+    case 'asia-pacific':
+      return 'asia pacific';
+    case 'community':
+      return 'community';
   }
 };
 
@@ -465,12 +509,16 @@ const ZcashEndpointPicker = ({ currentUrl, onPick }: ZcashEndpointPickerProps) =
         }}
         className='w-full bg-input border border-border-soft px-2 py-1.5 text-xs focus:border-primary/50 focus:outline-none'
       >
-        <option value='' disabled>{matched ? matched.label : 'custom - see below'}</option>
+        <option value='' disabled>
+          {matched ? matched.label : 'custom - see below'}
+        </option>
         {groupPresetsByRegion(ZCASH_MAINNET_ENDPOINTS).map(group => (
           <optgroup key={group.region} label={regionLabel(group.region)}>
             {group.presets.map(p => (
               <option key={p.id} value={p.id}>
-                {p.label}{p.backend === 'zidecar' ? ' · trustless' : ''}{rttSuffix(p.url)}
+                {p.label}
+                {p.backend === 'zidecar' ? ' · trustless' : ''}
+                {rttSuffix(p.url)}
               </option>
             ))}
           </optgroup>

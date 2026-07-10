@@ -38,6 +38,7 @@ sound but has no forward secrecy - if the session key leaks, all messages in
 that session are exposed.
 
 Noise IK solves this:
+
 - **I** = initiator's static key is transmitted (we send our ZID pubkey)
 - **K** = responder's static key is known (we already have their ZID pubkey)
 - one round-trip handshake, then full duplex encrypted transport
@@ -46,6 +47,7 @@ Noise IK solves this:
 - no certificates, no PKI, no CA chain
 
 Noise IK message pattern:
+
 ```
   <- s
   ...
@@ -60,6 +62,7 @@ a nonce counter (no nonce reuse possible without state reset).
 ### ed25519 to x25519 conversion
 
 ZID keys are ed25519. Noise needs x25519 static keys. the conversion is:
+
 ```
 x25519_pub = crypto_sign_ed25519_pk_to_curve25519(ed25519_pub)
 x25519_priv = crypto_sign_ed25519_sk_to_curve25519(ed25519_priv)
@@ -98,6 +101,7 @@ the relay routes by `(from, to)` pubkey pair. it sees the outer envelope
 ### transport encryption
 
 after handshake, both sides have `CipherState` objects with:
+
 - a symmetric key (32 bytes, derived from handshake)
 - a nonce counter (starts at 0, increments per message)
 
@@ -105,6 +109,7 @@ encryption: ChaChaPoly1305(key, nonce_counter, plaintext)
 the nonce is the counter encoded as 12-byte little-endian (padded with zeros).
 
 ChaChaPoly is chosen over AES-GCM because:
+
 - constant-time without hardware support (relevant for WebAssembly)
 - no IV management concerns (counter mode is deterministic)
 - widely used in Noise implementations (WireGuard, Lightning)
@@ -114,6 +119,7 @@ ChaChaPoly is chosen over AES-GCM because:
 location: `packages/zid/src/noise-channel.ts` (new file, replaces channel.ts)
 
 dependencies:
+
 - `@noble/ciphers` for chacha20poly1305
 - `@noble/curves/ed25519` for ed25519-to-x25519 conversion (edwardsToMontgomeryPub/Priv)
 - `@noble/hashes` for HKDF/SHA-256 (Noise uses HKDF for key derivation)
@@ -123,15 +129,16 @@ a full Noise library adds unnecessary attack surface and dependency weight.
 implement the state machine directly.
 
 the handshake state machine:
+
 ```typescript
 interface HandshakeState {
-  s: { pub: Uint8Array; priv: Uint8Array }   // our static x25519
-  e: { pub: Uint8Array; priv: Uint8Array }   // our ephemeral x25519
-  rs: Uint8Array                              // remote static x25519
-  re: Uint8Array | null                       // remote ephemeral (filled during handshake)
-  ck: Uint8Array                              // chaining key (32 bytes)
-  h: Uint8Array                               // handshake hash (32 bytes)
-  initiator: boolean
+  s: { pub: Uint8Array; priv: Uint8Array }; // our static x25519
+  e: { pub: Uint8Array; priv: Uint8Array }; // our ephemeral x25519
+  rs: Uint8Array; // remote static x25519
+  re: Uint8Array | null; // remote ephemeral (filled during handshake)
+  ck: Uint8Array; // chaining key (32 bytes)
+  h: Uint8Array; // handshake hash (32 bytes)
+  initiator: boolean;
 }
 ```
 
@@ -142,10 +149,10 @@ zeroize all handshake state.
 
 ```typescript
 // before (raw DH)
-const channel = await createChannel(session, peerPubkey, relayUrl)
+const channel = await createChannel(session, peerPubkey, relayUrl);
 
 // after (Noise IK) - same external API, different internals
-const channel = await createNoiseChannel(session, peerPubkey, relayUrl)
+const channel = await createNoiseChannel(session, peerPubkey, relayUrl);
 ```
 
 the `ZidChannel` interface stays the same. callers don't change.
@@ -218,6 +225,7 @@ registered in `service-worker.ts` alongside the existing FROST/sign listeners.
 ### the problem
 
 to open a Noise channel, the initiator needs:
+
 1. the responder's ZID pubkey
 2. a relay URL where the responder will connect
 
@@ -262,6 +270,7 @@ to bob, but not what.
 
 in the zcash sync worker and penumbra view service, add a memo pattern
 matcher:
+
 ```typescript
 if (memoBytes.length >= 68 && memo[0..4] === 'zNI\x01') {
   // extract initiator pubkey, ephemeral key, relay URL
@@ -303,6 +312,7 @@ message_key[i] = HKDF-SHA256(
 
 each group member contributes their pairwise Noise session key to the
 group secret. this means:
+
 - all members must complete pairwise Noise handshakes first
 - the group secret is only known to authenticated members
 - if any member's pairwise session is compromised, the group secret
@@ -311,6 +321,7 @@ group secret. this means:
 ### epoch transitions
 
 a new epoch is triggered by:
+
 - member join: new member establishes pairwise Noise with all existing members,
   all members re-derive group secret
 - member leave: remaining members re-derive group secret without the
@@ -319,6 +330,7 @@ a new epoch is triggered by:
 
 epoch transitions are coordinated via a Commit message (similar to MLS but
 simpler):
+
 ```
 {
   type: "epoch",
@@ -353,6 +365,7 @@ messages are stored until the recipient connects (for async channel init).
 ### zid-mail
 
 encrypted async mailbox. a thin HTTP service:
+
 - `POST /box/{recipient_pubkey}` - store sealed box (encrypted to recipient)
 - `GET /box/{my_pubkey}?sig={auth}` - retrieve my messages (auth = signed nonce)
 - `DELETE /box/{my_pubkey}/{id}?sig={auth}` - delete after reading
@@ -379,11 +392,11 @@ standalone library for apps that want ZID encryption without requiring
 the zafu extension. the app provides key material directly:
 
 ```typescript
-import { createIdentity, createChannel } from '@zafu/zid'
+import { createIdentity, createChannel } from '@zafu/zid';
 
-const identity = createIdentity(privateKeyHex)
-const channel = await identity.channel(peerPubkey)
-channel.send('hello')
+const identity = createIdentity(privateKeyHex);
+const channel = await identity.channel(peerPubkey);
+channel.send('hello');
 ```
 
 same Noise IK implementation as the extension, just without the

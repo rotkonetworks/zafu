@@ -2,7 +2,11 @@ import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { viewClient, sctClient } from '../../../clients';
 import { useStore } from '../../../state';
-import { selectActiveNetwork, selectEffectiveKeyInfo, selectPenumbraAccount } from '../../../state/keyring';
+import {
+  selectActiveNetwork,
+  selectEffectiveKeyInfo,
+  selectPenumbraAccount,
+} from '../../../state/keyring';
 import { getHistoryInWorker } from '../../../state/keyring/network-worker';
 import { useTransparentAddresses } from '../../../hooks/use-transparent-addresses';
 import { cn } from '@repo/ui/lib/utils';
@@ -22,7 +26,9 @@ interface ParsedTransaction {
 
 /** extract account index from a visible note's decoded address view */
 function noteAccountIndex(note: unknown): number | undefined {
-  const n = note as { address?: { addressView?: { case?: string; value?: { index?: { account?: number } } } } } | undefined;
+  const n = note as
+    | { address?: { addressView?: { case?: string; value?: { index?: { account?: number } } } } }
+    | undefined;
   if (!n?.address?.addressView) return undefined;
   const av = n.address.addressView;
   if (av.case === 'decoded' && av.value?.index != null) {
@@ -122,10 +128,12 @@ function TransactionRow({ tx }: { tx: ParsedTransaction }) {
 
   return (
     <div className='flex items-center gap-3 rounded-lg border border-border-soft bg-elev-1 p-3 hover:border-muted-foreground/30 transition-colors'>
-      <div className={cn(
-        'flex h-10 w-10 items-center justify-center rounded-full',
-        isShield ? 'bg-blue-500/10' : isIncoming ? 'bg-green-500/10' : 'bg-elev-2'
-      )}>
+      <div
+        className={cn(
+          'flex h-10 w-10 items-center justify-center rounded-full',
+          isShield ? 'bg-blue-500/10' : isIncoming ? 'bg-green-500/10' : 'bg-elev-2',
+        )}
+      >
         {isShield ? (
           <span className='i-lucide-move-horizontal h-5 w-5 text-blue-500' />
         ) : isIncoming ? (
@@ -139,17 +147,19 @@ function TransactionRow({ tx }: { tx: ParsedTransaction }) {
         <div className='flex items-center justify-between gap-2'>
           <span className='text-sm font-medium'>{tx.description}</span>
           {tx.amount && (
-            <span className={cn('text-sm font-mono',
-              isShield ? 'text-blue-500' : isIncoming ? 'text-green-400' : 'text-fg-muted'
-            )}>
-              {isIncoming ? '+' : ''}{tx.amount} {tx.asset ?? ''}
+            <span
+              className={cn(
+                'text-sm font-mono',
+                isShield ? 'text-blue-500' : isIncoming ? 'text-green-400' : 'text-fg-muted',
+              )}
+            >
+              {isIncoming ? '+' : ''}
+              {tx.amount} {tx.asset ?? ''}
             </span>
           )}
         </div>
         <div className='flex items-center justify-between gap-2 mt-0.5'>
-          <p className='text-xs text-fg-muted font-mono truncate'>
-            {tx.id.slice(0, 16)}...
-          </p>
+          <p className='text-xs text-fg-muted font-mono truncate'>{tx.id.slice(0, 16)}...</p>
           <span className='text-xs text-fg-muted whitespace-nowrap'>
             {tx.height > 0 ? `#${tx.height}` : formatTimestamp(tx.timestamp)}
           </span>
@@ -215,7 +225,7 @@ export const HistoryPage = () => {
           } catch {
             // timestamp unavailable
           }
-        })
+        }),
       );
 
       for (const tx of txs) {
@@ -258,8 +268,11 @@ export const HistoryPage = () => {
   // account if any of its visible spend or output notes reference that index
   const filteredTransactions = useMemo(() => {
     if (activeNetwork !== 'penumbra') return transactions;
-    return transactions.filter(tx =>
-      !tx.accountIndices || tx.accountIndices.size === 0 || tx.accountIndices.has(penumbraAccount),
+    return transactions.filter(
+      tx =>
+        !tx.accountIndices ||
+        tx.accountIndices.size === 0 ||
+        tx.accountIndices.has(penumbraAccount),
     );
   }, [transactions, activeNetwork, penumbraAccount]);
 
@@ -321,9 +334,7 @@ export const HistoryPage = () => {
             </div>
             <div>
               <p className='text-sm font-medium'>No transactions yet</p>
-              <p className='text-xs text-fg-muted'>
-                Your transaction history will appear here
-              </p>
+              <p className='text-xs text-fg-muted'>Your transaction history will appear here</p>
             </div>
           </div>
         ) : (

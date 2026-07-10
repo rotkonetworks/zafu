@@ -16,7 +16,10 @@ import {
 import { encodeContactCard, bytesToHex } from '@repo/wallet/networks/zcash/memo-codec';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { cn } from '@repo/ui/lib/utils';
-import { contactDiversifierIndex, type DiversifiedAddressRecord } from '@repo/wallet/networks/zcash/diversified-address';
+import {
+  contactDiversifierIndex,
+  type DiversifiedAddressRecord,
+} from '@repo/wallet/networks/zcash/diversified-address';
 import { deriveZidForContact } from '../../../state/identity';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { selectActiveZcashWallet } from '../../../state/wallets';
@@ -77,9 +80,7 @@ function ContactModal({
   return (
     <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm'>
       <div className='w-full max-w-sm mx-4 rounded-lg bg-canvas border border-border-soft p-5 shadow-xl'>
-        <h2 className='text-lg font-medium mb-4'>
-          {editContact ? 'edit contact' : 'new contact'}
-        </h2>
+        <h2 className='text-lg font-medium mb-4'>{editContact ? 'edit contact' : 'new contact'}</h2>
 
         <div className='space-y-3'>
           <div>
@@ -87,7 +88,7 @@ function ContactModal({
             <input
               type='text'
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={e => setName(e.target.value)}
               placeholder='alice'
               autoFocus
               className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
@@ -98,7 +99,7 @@ function ContactModal({
             <label className='block text-xs text-fg-muted mb-1'>notes (optional)</label>
             <textarea
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={e => setNotes(e.target.value)}
               placeholder='notes about this contact...'
               rows={2}
               className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none resize-none'
@@ -157,16 +158,14 @@ function AddressModal({
   return (
     <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm'>
       <div className='w-full max-w-sm mx-4 rounded-lg bg-canvas border border-border-soft p-5 shadow-xl'>
-        <h2 className='text-lg font-medium mb-4'>
-          {editAddress ? 'edit address' : 'add address'}
-        </h2>
+        <h2 className='text-lg font-medium mb-4'>{editAddress ? 'edit address' : 'add address'}</h2>
 
         <div className='space-y-3'>
           <div>
             <label className='block text-xs text-fg-muted mb-1'>network</label>
             <select
               value={network}
-              onChange={(e) => setNetwork(e.target.value as ContactNetwork)}
+              onChange={e => setNetwork(e.target.value as ContactNetwork)}
               className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
             >
               {Object.entries(NETWORK_LABELS).map(([value, label]) => (
@@ -183,7 +182,7 @@ function AddressModal({
               <input
                 type='text'
                 value={chainId}
-                onChange={(e) => setChainId(e.target.value)}
+                onChange={e => setChainId(e.target.value)}
                 placeholder='osmosis, noble, etc'
                 className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
               />
@@ -195,7 +194,7 @@ function AddressModal({
             <input
               type='text'
               value={address}
-              onChange={(e) => setAddress(e.target.value)}
+              onChange={e => setAddress(e.target.value)}
               placeholder='paste address...'
               className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-xs font-mono focus:border-zigner-gold focus:outline-none'
             />
@@ -206,7 +205,7 @@ function AddressModal({
             <input
               type='text'
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={e => setNotes(e.target.value)}
               placeholder='notes for this address...'
               className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
             />
@@ -254,17 +253,17 @@ function AddressRow({
   return (
     <div className='group flex items-center justify-between py-2 px-3 rounded-lg hover:bg-elev-1 transition-colors'>
       <div className='flex items-center gap-2 min-w-0 flex-1'>
-        <span className={cn('shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium', NETWORK_COLORS[address.network])}>
+        <span
+          className={cn(
+            'shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium',
+            NETWORK_COLORS[address.network],
+          )}
+        >
           {NETWORK_LABELS[address.network]}
           {address.chainId && ` / ${address.chainId}`}
         </span>
-        <span className='font-mono text-xs text-fg-muted truncate'>
-          {address.address}
-        </span>
-        <button
-          onClick={copyAddress}
-          className='shrink-0 p-1 text-fg-muted hover:text-fg-high'
-        >
+        <span className='font-mono text-xs text-fg-muted truncate'>{address.address}</span>
+        <button onClick={copyAddress} className='shrink-0 p-1 text-fg-muted hover:text-fg-high'>
           {copied ? (
             <span className='i-lucide-check h-3 w-3 text-green-400' />
           ) : (
@@ -316,7 +315,7 @@ function ContactCard({
       >
         <div className='flex items-center gap-3'>
           <button
-            onClick={(e) => {
+            onClick={e => {
               e.stopPropagation();
               setExpanded(!expanded);
             }}
@@ -341,14 +340,12 @@ function ContactCard({
               </span>
             </div>
             {contact.notes && (
-              <p className='text-xs text-fg-muted truncate max-w-[180px]'>
-                {contact.notes}
-              </p>
+              <p className='text-xs text-fg-muted truncate max-w-[180px]'>{contact.notes}</p>
             )}
           </div>
         </div>
 
-        <div className='flex items-center gap-1' onClick={(e) => e.stopPropagation()}>
+        <div className='flex items-center gap-1' onClick={e => e.stopPropagation()}>
           <button
             onClick={onToggleFavorite}
             className='p-1.5 rounded-lg hover:bg-elev-1 transition-colors'
@@ -359,10 +356,16 @@ function ContactCard({
               <span className='i-lucide-star h-4 w-4 text-fg-muted' />
             )}
           </button>
-          <button onClick={onEditContact} className='p-1.5 rounded-lg hover:bg-elev-1 transition-colors'>
+          <button
+            onClick={onEditContact}
+            className='p-1.5 rounded-lg hover:bg-elev-1 transition-colors'
+          >
             <span className='i-lucide-pencil h-4 w-4 text-fg-muted' />
           </button>
-          <button onClick={onDeleteContact} className='p-1.5 rounded-lg hover:bg-elev-1 transition-colors'>
+          <button
+            onClick={onDeleteContact}
+            className='p-1.5 rounded-lg hover:bg-elev-1 transition-colors'
+          >
             <span className='i-lucide-trash-2 h-4 w-4 text-red-400' />
           </button>
         </div>
@@ -377,7 +380,7 @@ function ContactCard({
             </div>
           ) : (
             <div className='py-1'>
-              {contact.addresses.map((addr) => (
+              {contact.addresses.map(addr => (
                 <AddressRow
                   key={addr.id}
                   address={addr}
@@ -446,7 +449,8 @@ export function ContactsPage() {
         if (rawAddr) {
           myAddress = rawAddr;
           // record the diversified address for referral tracking
-          const records: DiversifiedAddressRecord[] = (await localExtStorage.get('diversifiedAddresses')) ?? [];
+          const records: DiversifiedAddressRecord[] =
+            (await localExtStorage.get('diversifiedAddresses')) ?? [];
           if (!records.some(r => r.diversifierIndex === divIndex)) {
             records.push({
               diversifierIndex: divIndex,
@@ -488,10 +492,15 @@ export function ContactsPage() {
   const [showContactModal, setShowContactModal] = useState(false);
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | undefined>();
-  const [editingAddress, setEditingAddress] = useState<{ contactId: string; address?: ContactAddress } | undefined>();
+  const [editingAddress, setEditingAddress] = useState<
+    { contactId: string; address?: ContactAddress } | undefined
+  >();
   const [filter, setFilter] = useState<'all' | 'favorites'>('all');
   const [showMenu, setShowMenu] = useState(false);
-  const [importStatus, setImportStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [importStatus, setImportStatus] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // export contacts as encrypted JSON file download
@@ -511,7 +520,10 @@ export function ContactsPage() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (err) {
-      setImportStatus({ type: 'error', message: err instanceof Error ? err.message : 'export failed' });
+      setImportStatus({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'export failed',
+      });
       setTimeout(() => setImportStatus(null), 3000);
     }
     setShowMenu(false);
@@ -544,14 +556,14 @@ export function ContactsPage() {
       }
       setShowMenu(false);
     },
-    [contacts]
+    [contacts],
   );
 
   const filteredContacts = useMemo(() => {
     let result = Array.isArray(contacts.contacts) ? contacts.contacts : [];
 
     if (filter === 'favorites') {
-      result = result.filter((c) => c.favorite);
+      result = result.filter(c => c.favorite);
     }
 
     if (search) {
@@ -576,7 +588,7 @@ export function ContactsPage() {
       }
       setEditingContact(undefined);
     },
-    [contacts, editingContact]
+    [contacts, editingContact],
   );
 
   const handleEditContact = (contact: Contact) => {
@@ -602,7 +614,7 @@ export function ContactsPage() {
       }
       setEditingAddress(undefined);
     },
-    [contacts, editingAddress]
+    [contacts, editingAddress],
   );
 
   const handleAddAddress = (contactId: string) => {
@@ -693,7 +705,7 @@ export function ContactsPage() {
             'mx-4 mt-2 rounded-lg px-3 py-2 text-sm',
             importStatus.type === 'success'
               ? 'bg-green-500/10 text-green-400 border border-green-500/40'
-              : 'bg-red-500/10 text-red-400 border border-red-500/40'
+              : 'bg-red-500/10 text-red-400 border border-red-500/40',
           )}
         >
           {importStatus.message}
@@ -707,7 +719,7 @@ export function ContactsPage() {
           <input
             type='text'
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={e => setSearch(e.target.value)}
             placeholder='search contacts...'
             className='w-full rounded-lg border border-border-soft bg-input pl-9 pr-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
           />
@@ -719,7 +731,7 @@ export function ContactsPage() {
               'rounded-md px-3 py-1 text-xs transition-colors',
               filter === 'all'
                 ? 'bg-zigner-gold text-zigner-dark'
-                : 'bg-elev-2 text-fg-muted hover:bg-elev-1/80'
+                : 'bg-elev-2 text-fg-muted hover:bg-elev-1/80',
             )}
           >
             all
@@ -730,7 +742,7 @@ export function ContactsPage() {
               'rounded-md px-3 py-1 text-xs transition-colors',
               filter === 'favorites'
                 ? 'bg-zigner-gold text-zigner-dark'
-                : 'bg-elev-2 text-fg-muted hover:bg-elev-1/80'
+                : 'bg-elev-2 text-fg-muted hover:bg-elev-1/80',
             )}
           >
             favorites
@@ -769,7 +781,7 @@ export function ContactsPage() {
           </div>
         ) : (
           <div className='space-y-2'>
-            {filteredContacts.map((contact) => (
+            {filteredContacts.map(contact => (
               <ContactCard
                 key={contact.id}
                 contact={contact}
@@ -777,8 +789,8 @@ export function ContactsPage() {
                 onDeleteContact={() => void handleDeleteContact(contact.id)}
                 onToggleFavorite={() => void contacts.toggleFavorite(contact.id)}
                 onAddAddress={() => handleAddAddress(contact.id)}
-                onEditAddress={(addr) => handleEditAddress(contact.id, addr)}
-                onDeleteAddress={(addrId) => void handleDeleteAddress(contact.id, addrId)}
+                onEditAddress={addr => handleEditAddress(contact.id, addr)}
+                onDeleteAddress={addrId => void handleDeleteAddress(contact.id, addrId)}
                 onShareCard={(() => {
                   const zcashAddr = contact.addresses.find(a => a.network === 'zcash');
                   if (!zcashAddr) return undefined;

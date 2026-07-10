@@ -44,7 +44,7 @@ export interface MultisigWallet {
 export interface MultisigZcashWallet {
   id: string;
   label: string;
-  orchardFvk: string;    // base64-encoded FVK bytes
+  orchardFvk: string; // base64-encoded FVK bytes
   address: string;
   accountIndex: number;
   mainnet: boolean;
@@ -96,7 +96,13 @@ export interface SigningSession {
   /** relay server URL */
   relayUrl: string;
   /** current step */
-  step: 'round1' | 'collecting-commitments' | 'round2' | 'collecting-shares' | 'aggregating' | 'complete';
+  step:
+    | 'round1'
+    | 'collecting-commitments'
+    | 'round2'
+    | 'collecting-shares'
+    | 'aggregating'
+    | 'complete';
   /** our nonces (hex, kept locally) */
   noncesHex?: string;
   /** our signed commitments (hex, broadcast) */

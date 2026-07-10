@@ -26,7 +26,12 @@
  */
 
 import { getOriginPermissions, grantCapability, denyCapability } from '@repo/storage-chrome/origin';
-import { hasCapability, isDenied, type Capability, CAPABILITY_META } from '@repo/storage-chrome/capabilities';
+import {
+  hasCapability,
+  isDenied,
+  type Capability,
+  CAPABILITY_META,
+} from '@repo/storage-chrome/capabilities';
 import { isPro } from '../../state/license';
 
 // Gates the zafu_frost_sign_orchard external entry while the popup
@@ -197,7 +202,11 @@ export const externalMessageListener = (
       // sanitize the caller-supplied label prefix; default to the origin host.
       // new URL() throws on non-URL strings (e.g. 'unknown'); fall back safely.
       let originHost = 'multisig';
-      try { originHost = new URL(appOrigin).host || 'multisig'; } catch { /* keep default */ }
+      try {
+        originHost = new URL(appOrigin).host || 'multisig';
+      } catch {
+        /* keep default */
+      }
       const rawPrefix = String(msg['labelPrefix'] || originHost);
       const labelPrefix = rawPrefix.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 32) || 'multisig';
       const requestId = crypto.randomUUID();
@@ -249,7 +258,10 @@ export const externalMessageListener = (
 
     case 'zafu_frost_sign_orchard': {
       if (!ENABLE_FROST_SIGN_ORCHARD) {
-        sendResponse({ error: 'zafu_frost_sign_orchard is disabled in this build (display↔sighash binding pending)' });
+        sendResponse({
+          error:
+            'zafu_frost_sign_orchard is disabled in this build (display↔sighash binding pending)',
+        });
         return true;
       }
       const roomCode = String(msg['roomCode'] || '');
@@ -298,7 +310,9 @@ export const externalMessageListener = (
       const multisigLabel = rawLabel.replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 64);
       const MIN_DELETE_LABEL_LEN = 4;
       if (multisigLabel.length < MIN_DELETE_LABEL_LEN) {
-        sendResponse({ error: `multisigLabel must be at least ${MIN_DELETE_LABEL_LEN} chars after sanitization` });
+        sendResponse({
+          error: `multisigLabel must be at least ${MIN_DELETE_LABEL_LEN} chars after sanitization`,
+        });
         return true;
       }
       const delayMs = Math.max(0, Number(msg['delayMs']) || 0);
@@ -313,7 +327,12 @@ export const externalMessageListener = (
           }
           if (delayMs > 0) {
             await scheduleMultisigDelete(vaultId, Date.now() + delayMs);
-            sendResponse({ success: true, scheduled: true, vaultId, deleteAt: Date.now() + delayMs });
+            sendResponse({
+              success: true,
+              scheduled: true,
+              vaultId,
+              deleteAt: Date.now() + delayMs,
+            });
           } else {
             await purgeVault(vaultId);
             sendResponse({ success: true, scheduled: false, vaultId });
@@ -381,7 +400,7 @@ export const externalMessageListener = (
         const url = chrome.runtime.getURL(`popup.html#/approval/capability?${params.toString()}`);
         void chrome.windows.create({ url, type: 'popup', width: 400, height: 520 });
 
-        const result = await resultPromise as { approved?: boolean };
+        const result = (await resultPromise) as { approved?: boolean };
         if (result?.approved) {
           await grantCapability(origin, cap);
           sendResponse({ granted: true, capability: cap });
@@ -416,7 +435,7 @@ export const externalMessageListener = (
       // msg.fee?: number (default 10000 = 0.0001 ZEC)
       //
       // Opens approval popup showing all outputs for user confirmation
-      const outputs = msg['outputs'] as Array<{address: string; amount: number; memo?: string}>;
+      const outputs = msg['outputs'] as Array<{ address: string; amount: number; memo?: string }>;
       if (!outputs || !Array.isArray(outputs) || outputs.length === 0) {
         sendResponse({ success: false, error: 'outputs array required' });
         return true;
@@ -476,7 +495,10 @@ export const externalMessageListener = (
           const { createCredential } = await import('../../state/webauthn');
           const { useStore } = await import('../../state');
           const keyInfo = useStore.getState().keyRing.selectedKeyInfo;
-          if (!keyInfo) { sendResponse({ success: false }); return; }
+          if (!keyInfo) {
+            sendResponse({ success: false });
+            return;
+          }
           const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
           const result = createCredential(mnemonic, rpId);
           const { bytesToHex } = await import('@noble/hashes/utils');
@@ -495,7 +517,12 @@ export const externalMessageListener = (
     }
 
     case 'zafu_passkey_get': {
-      const { rpId, clientDataHash: clientDataHashHex, prfSalts, origin: getOrigin } = msg as {
+      const {
+        rpId,
+        clientDataHash: clientDataHashHex,
+        prfSalts,
+        origin: getOrigin,
+      } = msg as {
         rpId: string;
         clientDataHash: string;
         prfSalts?: { first: string; second?: string };
@@ -512,7 +539,10 @@ export const externalMessageListener = (
           const { useStore } = await import('../../state');
           const { bytesToHex, hexToBytes: h2b } = await import('@noble/hashes/utils');
           const keyInfo = useStore.getState().keyRing.selectedKeyInfo;
-          if (!keyInfo) { sendResponse({ success: false }); return; }
+          if (!keyInfo) {
+            sendResponse({ success: false });
+            return;
+          }
           const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
 
           // clientDataHash comes from the content script (SHA-256 of its clientDataJSON)
@@ -524,10 +554,14 @@ export const externalMessageListener = (
             credentialId: bytesToHex(buildCredentialId(rpId)),
             authenticatorData: bytesToHex(result.authenticatorData),
             signature: bytesToHex(result.signature),
-            prfResults: result.prfResults ? {
-              first: bytesToHex(result.prfResults.first),
-              second: result.prfResults.second ? bytesToHex(result.prfResults.second) : undefined,
-            } : undefined,
+            prfResults: result.prfResults
+              ? {
+                  first: bytesToHex(result.prfResults.first),
+                  second: result.prfResults.second
+                    ? bytesToHex(result.prfResults.second)
+                    : undefined,
+                }
+              : undefined,
           });
         } catch (e) {
           sendResponse({ success: false, error: String(e) });
@@ -539,8 +573,11 @@ export const externalMessageListener = (
     default: {
       // don't respond to types handled by other listeners
       const delegatedTypes = [
-        'zafu_sign',  // handled by sign-request.ts
-        'zafu_encrypt', 'zafu_decrypt', 'zafu_zid_pubkey', 'zafu_encryption_approval_result',  // handled by external-encryption.ts
+        'zafu_sign', // handled by sign-request.ts
+        'zafu_encrypt',
+        'zafu_decrypt',
+        'zafu_zid_pubkey',
+        'zafu_encryption_approval_result', // handled by external-encryption.ts
       ];
       if (typeof type === 'string' && delegatedTypes.includes(type)) {
         return false;

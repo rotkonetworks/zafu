@@ -38,9 +38,10 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
 
   const networkInfo = getNetwork(activeNetwork);
   // mnemonic vaults derive zcash keys directly — no zcash wallet record
-  const walletName = activeNetwork === 'zcash' && selectedKeyInfo?.type !== 'mnemonic'
-    ? activeZcashWallet?.label ?? selectedKeyInfo?.name ?? 'no wallet'
-    : selectedKeyInfo?.name ?? 'no wallet';
+  const walletName =
+    activeNetwork === 'zcash' && selectedKeyInfo?.type !== 'mnemonic'
+      ? (activeZcashWallet?.label ?? selectedKeyInfo?.name ?? 'no wallet')
+      : (selectedKeyInfo?.name ?? 'no wallet');
 
   /** tap cycles through enabled networks */
   const cycleNetwork = () => {
@@ -101,9 +102,7 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
                 key={k.id}
                 className={cn(
                   'rounded-full transition-all',
-                  k.id === selectedKeyInfo?.id
-                    ? 'h-1.5 w-1.5 bg-fg-high'
-                    : 'h-1 w-1 bg-fg-dim',
+                  k.id === selectedKeyInfo?.id ? 'h-1.5 w-1.5 bg-fg-high' : 'h-1 w-1 bg-fg-dim',
                 )}
               />
             ))}

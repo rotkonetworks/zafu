@@ -62,10 +62,7 @@ export const RulerScale = ({
       {ticks.map(t => (
         <div
           key={t.v}
-          className={cn(
-            'absolute top-11 w-px',
-            t.major ? 'bg-zigner-gold h-4' : 'bg-fg-dim h-3',
-          )}
+          className={cn('absolute top-11 w-px', t.major ? 'bg-zigner-gold h-4' : 'bg-fg-dim h-3')}
           style={{ left: pct(t.v) }}
         >
           {t.label && (
@@ -92,9 +89,7 @@ export const RulerScale = ({
             background: 'linear-gradient(90deg, var(--zigner-gold-dark), var(--zigner-gold))',
           }}
         >
-          <div
-            className='absolute top-[18px] left-1/2 -translate-x-1/2 text-[10px] text-fg whitespace-nowrap'
-          >
+          <div className='absolute top-[18px] left-1/2 -translate-x-1/2 text-[10px] text-fg whitespace-nowrap'>
             {s.label}
           </div>
         </div>

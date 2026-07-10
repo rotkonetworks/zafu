@@ -21,7 +21,10 @@ import {
   frostSpendSignInWorker,
 } from '../../state/keyring/network-worker';
 
-interface PokerPayoutOutput { address: string; amount_zat: number }
+interface PokerPayoutOutput {
+  address: string;
+  amount_zat: number;
+}
 import { encodeOrchardUnifiedAddress } from '@repo/wallet/networks/zcash/unified-address';
 import { hexToBytes } from '@repo/wallet/networks';
 import { FrostRelayClient } from '../../state/keyring/frost-relay-client';
@@ -36,8 +39,13 @@ function waitFor(check: () => boolean, timeoutMs: number): Promise<void> {
     if (check()) return resolve();
     const start = Date.now();
     const iv = setInterval(() => {
-      if (check()) { clearInterval(iv); resolve(); }
-      else if (Date.now() - start > timeoutMs) { clearInterval(iv); reject(new Error('timeout')); }
+      if (check()) {
+        clearInterval(iv);
+        resolve();
+      } else if (Date.now() - start > timeoutMs) {
+        clearInterval(iv);
+        reject(new Error('timeout'));
+      }
     }, 500);
   });
 }
@@ -66,9 +74,15 @@ export const FrostApprove = () => {
   const feeZat = Number(params.get('feeZat')) || 0;
   const multisigLabel = params.get('multisigLabel') || '';
   const hide = params.get('hide') === '1';
-  const plan: PokerPayoutOutput[] = planJson ? (() => {
-    try { return JSON.parse(planJson) as PokerPayoutOutput[]; } catch { return []; }
-  })() : [];
+  const plan: PokerPayoutOutput[] = planJson
+    ? (() => {
+        try {
+          return JSON.parse(planJson) as PokerPayoutOutput[];
+        } catch {
+          return [];
+        }
+      })()
+    : [];
 
   const [phase, setPhase] = useState<Phase>('confirm');
   const [status, setStatus] = useState('');
@@ -133,13 +147,18 @@ export const FrostApprove = () => {
     const prefixed = `DKG:${threshold}:${maxSigners}:${round1.broadcast}`;
     await relay.sendMessage(room.roomCode, pid, new TextEncoder().encode(prefixed));
 
-    void relay.joinRoom(room.roomCode, pid, (event) => {
-      if (event.type === 'message') {
-        const text = new TextDecoder().decode(event.message.payload);
-        if (dkgPhase === 'round1') peerBroadcasts.push(text);
-        else if (dkgPhase === 'round2') peerRound2.push(text);
-      }
-    }, abort.signal);
+    void relay.joinRoom(
+      room.roomCode,
+      pid,
+      event => {
+        if (event.type === 'message') {
+          const text = new TextDecoder().decode(event.message.payload);
+          if (dkgPhase === 'round1') peerBroadcasts.push(text);
+          else if (dkgPhase === 'round2') peerRound2.push(text);
+        }
+      },
+      abort.signal,
+    );
 
     setStatus('round 1 - collecting commitments...');
     await waitFor(() => peerBroadcasts.length >= maxSigners - 1, 120_000);
@@ -169,7 +188,12 @@ export const FrostApprove = () => {
     });
 
     abort.abort();
-    const res = { success: true, address: addr, roomCode: room.roomCode, publicKeyPackage: round3.public_key_package };
+    const res = {
+      success: true,
+      address: addr,
+      roomCode: room.roomCode,
+      publicKeyPackage: round3.public_key_package,
+    };
     setResult(res);
     setPhase('complete');
     sendResult(requestId, res);
@@ -190,22 +214,27 @@ export const FrostApprove = () => {
     let parsedThreshold = threshold;
     let parsedMaxSigners = maxSigners;
 
-    void relay.joinRoom(roomCode, pid, (event) => {
-      if (event.type === 'message') {
-        const text = new TextDecoder().decode(event.message.payload);
-        // coordinator's first message has DKG params prefix
-        const match = text.match(/^DKG:(\d+):(\d+):([\s\S]*)$/);
-        if (match) {
-          parsedThreshold = Number(match[1]);
-          parsedMaxSigners = Number(match[2]);
-          if (dkgPhase === 'round1') peerBroadcasts.push(match[3]!);
-        } else if (dkgPhase === 'round1') {
-          peerBroadcasts.push(text);
-        } else if (dkgPhase === 'round2') {
-          peerRound2.push(text);
+    void relay.joinRoom(
+      roomCode,
+      pid,
+      event => {
+        if (event.type === 'message') {
+          const text = new TextDecoder().decode(event.message.payload);
+          // coordinator's first message has DKG params prefix
+          const match = text.match(/^DKG:(\d+):(\d+):([\s\S]*)$/);
+          if (match) {
+            parsedThreshold = Number(match[1]);
+            parsedMaxSigners = Number(match[2]);
+            if (dkgPhase === 'round1') peerBroadcasts.push(match[3]!);
+          } else if (dkgPhase === 'round1') {
+            peerBroadcasts.push(text);
+          } else if (dkgPhase === 'round2') {
+            peerRound2.push(text);
+          }
         }
-      }
-    }, abort.signal);
+      },
+      abort.signal,
+    );
 
     setStatus('round 1 - collecting commitments...');
     // wait for at least one message to learn params
@@ -263,25 +292,36 @@ export const FrostApprove = () => {
     const peerFvks: string[] = [];
 
     setStatus('joining room...');
-    void relay.joinRoom(roomCode, pid, (event) => {
-      if (event.type === 'message') {
-        const text = new TextDecoder().decode(event.message.payload);
-        const r1 = text.match(/^R1:(?:(\d+):(\d+):SK:([0-9a-fA-F]{64}):)?([\s\S]*)$/);
-        if (r1) {
-          if (r1[1] && r1[2] && r1[3]) {
-            parsedThreshold = Number(r1[1]);
-            parsedMaxSigners = Number(r1[2]);
-            fvkSk = r1[3];
+    void relay.joinRoom(
+      roomCode,
+      pid,
+      event => {
+        if (event.type === 'message') {
+          const text = new TextDecoder().decode(event.message.payload);
+          const r1 = text.match(/^R1:(?:(\d+):(\d+):SK:([0-9a-fA-F]{64}):)?([\s\S]*)$/);
+          if (r1) {
+            if (r1[1] && r1[2] && r1[3]) {
+              parsedThreshold = Number(r1[1]);
+              parsedMaxSigners = Number(r1[2]);
+              fvkSk = r1[3];
+            }
+            peerBroadcasts.push(r1[4]!);
+            return;
           }
-          peerBroadcasts.push(r1[4]!);
-          return;
+          const r2 = text.match(/^R2:([\s\S]*)$/);
+          if (r2) {
+            peerRound2.push(r2[1]!);
+            return;
+          }
+          const fvk = text.match(/^FVK:([\s\S]*)$/);
+          if (fvk) {
+            peerFvks.push(fvk[1]!);
+            return;
+          }
         }
-        const r2 = text.match(/^R2:([\s\S]*)$/);
-        if (r2) { peerRound2.push(r2[1]!); return; }
-        const fvk = text.match(/^FVK:([\s\S]*)$/);
-        if (fvk) { peerFvks.push(fvk[1]!); return; }
-      }
-    }, abort.signal);
+      },
+      abort.signal,
+    );
 
     setStatus('waiting for host...');
     await waitForUntil(
@@ -380,16 +420,21 @@ export const FrostApprove = () => {
     let sigPhase: 'commitments' | 'shares' = 'commitments';
 
     // join room BEFORE sending to avoid race condition
-    void relay.joinRoom(roomCode, pid, (event) => {
-      if (event.type === 'message') {
-        const text = new TextDecoder().decode(event.message.payload);
-        if (text.startsWith('C:') && sigPhase === 'commitments') {
-          peerCommitments.push(text.slice(2));
-        } else if (text.startsWith('S:')) {
-          peerShares.push(text.slice(2));
+    void relay.joinRoom(
+      roomCode,
+      pid,
+      event => {
+        if (event.type === 'message') {
+          const text = new TextDecoder().decode(event.message.payload);
+          if (text.startsWith('C:') && sigPhase === 'commitments') {
+            peerCommitments.push(text.slice(2));
+          } else if (text.startsWith('S:')) {
+            peerShares.push(text.slice(2));
+          }
         }
-      }
-    }, abort.signal);
+      },
+      abort.signal,
+    );
 
     setStatus('generating commitments...');
     const round1 = await frostSignRound1InWorker(secrets.ephemeralSeed, secrets.keyPackage);
@@ -408,7 +453,12 @@ export const FrostApprove = () => {
     const allCommitments = [round1.commitments, ...peerCommitments];
     for (const alpha of alphas) {
       const share = await frostSpendSignInWorker(
-        secrets.ephemeralSeed, secrets.keyPackage, round1.nonces, sighashHex, alpha, allCommitments,
+        secrets.ephemeralSeed,
+        secrets.keyPackage,
+        round1.nonces,
+        sighashHex,
+        alpha,
+        allCommitments,
       );
       await relay.sendMessage(roomCode, pid, new TextEncoder().encode(`S:${share}`));
     }
@@ -454,25 +504,32 @@ export const FrostApprove = () => {
     const peerCommits: string[] = [];
     const peerShares: Record<number, string> = {};
 
-    void relay.joinRoom(roomCode, pid, (event) => {
-      if (event.type !== 'message') return;
-      const text = new TextDecoder().decode(event.message.payload);
-      const sg = text.match(/^SIGN:([0-9a-fA-F]+):([^:]+):([^:]+):(\d+):(\d+)(?::([0-9a-fA-F]+))?$/);
-      if (sg) {
-        initSighash = sg[1]!;
-        initAlphas = sg[2]!.split(',');
-        return;
-      }
-      const cm = text.match(/^C:([\s\S]*)$/);
-      if (cm) {
-        peerCommits.push(cm[1]!);
-        return;
-      }
-      const sm = text.match(/^S:(\d+):(.+)$/);
-      if (sm) {
-        peerShares[Number(sm[1])] = sm[2]!;
-      }
-    }, abort.signal);
+    void relay.joinRoom(
+      roomCode,
+      pid,
+      event => {
+        if (event.type !== 'message') return;
+        const text = new TextDecoder().decode(event.message.payload);
+        const sg = text.match(
+          /^SIGN:([0-9a-fA-F]+):([^:]+):([^:]+):(\d+):(\d+)(?::([0-9a-fA-F]+))?$/,
+        );
+        if (sg) {
+          initSighash = sg[1]!;
+          initAlphas = sg[2]!.split(',');
+          return;
+        }
+        const cm = text.match(/^C:([\s\S]*)$/);
+        if (cm) {
+          peerCommits.push(cm[1]!);
+          return;
+        }
+        const sm = text.match(/^S:(\d+):(.+)$/);
+        if (sm) {
+          peerShares[Number(sm[1])] = sm[2]!;
+        }
+      },
+      abort.signal,
+    );
 
     setStatus('waiting for host SIGN...');
     await waitFor(() => initAlphas.length > 0, 120_000);
@@ -497,7 +554,12 @@ export const FrostApprove = () => {
       setStatus(`round 2: signing action ${i + 1}/${n}...`);
       const allCommits = [round1s[i]!.commitments, hostCommits[i]!];
       const share = await frostSpendSignInWorker(
-        secrets.ephemeralSeed, secrets.keyPackage, round1s[i]!.nonces, initSighash, initAlphas[i]!, allCommits,
+        secrets.ephemeralSeed,
+        secrets.keyPackage,
+        round1s[i]!.nonces,
+        initSighash,
+        initAlphas[i]!,
+        allCommits,
       );
       await relay.sendMessage(roomCode, pid, new TextEncoder().encode(`S:${i}:${share}`));
     }
@@ -510,19 +572,29 @@ export const FrostApprove = () => {
     sendResult(requestId, res);
   };
 
-  const actionLabel = action === 'frost-create' ? 'Create Multisig'
-    : action === 'frost-join' ? 'Join Multisig'
-    : action === 'dkg-join' ? 'Join Multisig'
-    : action === 'frost-sign' ? 'Sign Transaction'
-    : action === 'poker-sign' ? 'Approve Payout'
-    : action;
+  const actionLabel =
+    action === 'frost-create'
+      ? 'Create Multisig'
+      : action === 'frost-join'
+        ? 'Join Multisig'
+        : action === 'dkg-join'
+          ? 'Join Multisig'
+          : action === 'frost-sign'
+            ? 'Sign Transaction'
+            : action === 'poker-sign'
+              ? 'Approve Payout'
+              : action;
 
   return (
     <div className='flex flex-col h-full p-4 gap-4'>
       <div className='text-center'>
         <span className='kicker'>frost multisig</span>
-        <h2 className='mt-1 text-[18px] text-fg-high lowercase tracking-[-0.01em]'>{actionLabel}</h2>
-        <p className='mt-1 text-[10px] text-fg-dim lowercase tracking-[0.04em]'>requested by {app}</p>
+        <h2 className='mt-1 text-[18px] text-fg-high lowercase tracking-[-0.01em]'>
+          {actionLabel}
+        </h2>
+        <p className='mt-1 text-[10px] text-fg-dim lowercase tracking-[0.04em]'>
+          requested by {app}
+        </p>
       </div>
 
       {phase === 'confirm' && (
@@ -530,19 +602,38 @@ export const FrostApprove = () => {
           <div className='rounded-md border border-border-soft bg-elev-1 p-3 text-xs space-y-2 text-fg'>
             {action === 'frost-create' && (
               <>
-                <p>Create a <span className='tabular text-zigner-gold'>{threshold}-of-{maxSigners}</span> FROST multisig wallet.</p>
-                <p className='text-fg-muted'>This generates a shared key via distributed key generation. All participants must be online.</p>
+                <p>
+                  Create a{' '}
+                  <span className='tabular text-zigner-gold'>
+                    {threshold}-of-{maxSigners}
+                  </span>{' '}
+                  FROST multisig wallet.
+                </p>
+                <p className='text-fg-muted'>
+                  This generates a shared key via distributed key generation. All participants must
+                  be online.
+                </p>
               </>
             )}
             {action === 'frost-join' && (
               <>
-                <p>Join FROST DKG room: <span className='tabular text-zigner-gold'>{roomCode}</span></p>
-                <p className='text-fg-muted'>You will participate in key generation to create a shared multisig wallet.</p>
+                <p>
+                  Join FROST DKG room: <span className='tabular text-zigner-gold'>{roomCode}</span>
+                </p>
+                <p className='text-fg-muted'>
+                  You will participate in key generation to create a shared multisig wallet.
+                </p>
               </>
             )}
             {action === 'dkg-join' && (
               <>
-                <p>Join <span className='tabular text-zigner-gold'>{threshold}-of-{maxSigners}</span> multisig DKG</p>
+                <p>
+                  Join{' '}
+                  <span className='tabular text-zigner-gold'>
+                    {threshold}-of-{maxSigners}
+                  </span>{' '}
+                  multisig DKG
+                </p>
                 <p className='text-fg-muted tabular'>label: {labelPrefix}-…</p>
                 <p className='text-fg-muted'>Your share stays on this device.</p>
               </>
@@ -550,7 +641,9 @@ export const FrostApprove = () => {
             {action === 'frost-sign' && (
               <>
                 <p>Co-sign a transaction with your FROST key share.</p>
-                <p className='text-fg-muted tabular break-all'>sighash: {sighashHex.slice(0, 16)}...{sighashHex.slice(-16)}</p>
+                <p className='text-fg-muted tabular break-all'>
+                  sighash: {sighashHex.slice(0, 16)}...{sighashHex.slice(-16)}
+                </p>
               </>
             )}
             {action === 'poker-sign' && (
@@ -560,20 +653,29 @@ export const FrostApprove = () => {
                   {plan.map((o, i) => (
                     <p key={i} className='text-fg-muted tabular break-all'>
                       → {o.address.slice(0, 14)}…{o.address.slice(-8)}
-                      <span className='text-zigner-gold'> {(o.amount_zat / 1e8).toFixed(8)} ZEC</span>
+                      <span className='text-zigner-gold'>
+                        {' '}
+                        {(o.amount_zat / 1e8).toFixed(8)} ZEC
+                      </span>
                     </p>
                   ))}
                   <p className='text-fg-dim tabular'>fee {(feeZat / 1e8).toFixed(8)} ZEC</p>
                 </div>
-                <p className='text-fg-muted'>Your FROST share co-signs; escrow finalizes + broadcasts.</p>
+                <p className='text-fg-muted'>
+                  Your FROST share co-signs; escrow finalizes + broadcasts.
+                </p>
               </>
             )}
             <p className='text-fg-dim tabular'>relay: {relayUrl}</p>
           </div>
 
           <div className='flex gap-2 mt-auto'>
-            <Button variant='secondary' className='flex-1' onClick={deny}>deny</Button>
-            <Button className='flex-1' onClick={approve}>approve</Button>
+            <Button variant='secondary' className='flex-1' onClick={deny}>
+              deny
+            </Button>
+            <Button className='flex-1' onClick={approve}>
+              approve
+            </Button>
           </div>
         </div>
       )}
@@ -594,7 +696,9 @@ export const FrostApprove = () => {
               {result['address'].slice(0, 20)}...
             </p>
           )}
-          <Button variant='secondary' onClick={() => window.close()}>close</Button>
+          <Button variant='secondary' onClick={() => window.close()}>
+            close
+          </Button>
         </div>
       )}
 
@@ -602,7 +706,9 @@ export const FrostApprove = () => {
         <div className='flex flex-col items-center gap-3 flex-1 justify-center'>
           <span className='i-lucide-x-circle size-10 text-red-400' />
           <p className='text-[13px] text-red-400 text-center'>{error}</p>
-          <Button variant='secondary' onClick={() => window.close()}>close</Button>
+          <Button variant='secondary' onClick={() => window.close()}>
+            close
+          </Button>
         </div>
       )}
 

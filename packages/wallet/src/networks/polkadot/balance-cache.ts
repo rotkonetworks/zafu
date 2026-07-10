@@ -91,7 +91,7 @@ export async function getBalances(
     forceRefresh?: boolean;
     /** include dormant chains */
     includeDormant?: boolean;
-  } = {}
+  } = {},
 ): Promise<ChainBalance[]> {
   const chains = getEnabledChainsForRelay(relay);
   const results: ChainBalance[] = [];
@@ -148,13 +148,13 @@ export async function getBalances(
  */
 export async function refreshChains(
   publicKey: string,
-  chains: SupportedChain[]
+  chains: SupportedChain[],
 ): Promise<ChainBalance[]> {
   const results: ChainBalance[] = [];
 
   // fetch in parallel with error tolerance
   const fetchResults = await Promise.allSettled(
-    chains.map(async (chain) => {
+    chains.map(async chain => {
       const info = CHAIN_INFO[chain];
       const client = getLightClient(chain);
       const key = cacheKey(publicKey, chain);
@@ -199,7 +199,7 @@ export async function refreshChains(
           cached: true,
         };
       }
-    })
+    }),
   );
 
   for (const result of fetchResults) {
@@ -216,7 +216,7 @@ export async function refreshChains(
  */
 export async function refreshChain(
   publicKey: string,
-  chain: SupportedChain
+  chain: SupportedChain,
 ): Promise<ChainBalance> {
   const [result] = await refreshChains(publicKey, [chain]);
   return result!;
@@ -225,10 +225,7 @@ export async function refreshChain(
 /**
  * get cached balance without network request
  */
-export function getCachedBalance(
-  publicKey: string,
-  chain: SupportedChain
-): ChainBalance | null {
+export function getCachedBalance(publicKey: string, chain: SupportedChain): ChainBalance | null {
   const key = cacheKey(publicKey, chain);
   const cached = balanceCache.get(key);
 
@@ -270,7 +267,7 @@ export function markChainActive(publicKey: string, chain: SupportedChain): void 
  */
 export async function getNonZeroBalances(
   relay: RelayChain,
-  publicKey: string
+  publicKey: string,
 ): Promise<ChainBalance[]> {
   const all = await getBalances(relay, publicKey);
   return all.filter(b => b.balance > 0n);

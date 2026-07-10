@@ -252,7 +252,8 @@ export function decodeText(payload: Uint8Array): string {
 
 /** encode a FROST DKG round message (hex blob) */
 export function encodeDkgRound(round: 1 | 2 | 3, hexData: string): Uint8Array[] {
-  const type = round === 1 ? MemoType.DkgRound1 : round === 2 ? MemoType.DkgRound2 : MemoType.DkgRound3;
+  const type =
+    round === 1 ? MemoType.DkgRound1 : round === 2 ? MemoType.DkgRound2 : MemoType.DkgRound3;
   const payload = hexToBytes(hexData);
   if (payload.length <= PAYLOAD_SINGLE) {
     return [encodeMemo(type, payload)];
@@ -442,10 +443,12 @@ export function encodeContactCard(card: Omit<ContactCard, 'version'>): Uint8Arra
   payload[offset++] = CONTACT_CARD_VERSION;
   payload[offset++] = card.flags & 0xff;
   payload[offset++] = nameBytes.length;
-  payload.set(nameBytes, offset); offset += nameBytes.length;
+  payload.set(nameBytes, offset);
+  offset += nameBytes.length;
   payload[offset++] = (addrBytes.length >> 8) & 0xff;
   payload[offset++] = addrBytes.length & 0xff;
-  payload.set(addrBytes, offset); offset += addrBytes.length;
+  payload.set(addrBytes, offset);
+  offset += addrBytes.length;
   for (const ext of extensions) {
     payload.set(ext, offset);
     offset += ext.length;
@@ -534,9 +537,9 @@ export const enum DataFlag {
 
 export interface DataMemo {
   contentType: DataContentType;
-  correlationId?: Uint8Array;  // 16 bytes
-  replyTo?: string;            // zcash address
-  data: Uint8Array;            // application payload
+  correlationId?: Uint8Array; // 16 bytes
+  replyTo?: string; // zcash address
+  data: Uint8Array; // application payload
 }
 
 export function encodeDataMemo(msg: DataMemo): Uint8Array[] {
@@ -545,9 +548,8 @@ export function encodeDataMemo(msg: DataMemo): Uint8Array[] {
   if (msg.replyTo) flags |= DataFlag.HasReplyTo;
 
   const replyToBytes = msg.replyTo ? new TextEncoder().encode(msg.replyTo) : null;
-  const headerSize = 2
-    + (msg.correlationId ? 16 : 0)
-    + (replyToBytes ? 2 + replyToBytes.length : 0);
+  const headerSize =
+    2 + (msg.correlationId ? 16 : 0) + (replyToBytes ? 2 + replyToBytes.length : 0);
   const total = headerSize + msg.data.length;
 
   const payload = new Uint8Array(total);
@@ -614,20 +616,35 @@ export function isStructuredMemo(memo: Uint8Array): boolean {
 /** human-readable type name */
 export function memoTypeName(type: MemoType): string {
   switch (type) {
-    case MemoType.Text: return 'message';
-    case MemoType.Address: return 'address';
-    case MemoType.PaymentRequest: return 'payment request';
-    case MemoType.Ack: return 'read receipt';
-    case MemoType.ContactCard: return 'contact card';
-    case MemoType.EncryptedMessage: return 'encrypted message';
-    case MemoType.Data: return 'data';
-    case MemoType.DkgRound1: return 'DKG round 1';
-    case MemoType.DkgRound2: return 'DKG round 2';
-    case MemoType.DkgRound3: return 'DKG round 3';
-    case MemoType.SignRequest: return 'sign request';
-    case MemoType.SignCommitment: return 'commitment';
-    case MemoType.SignShare: return 'signature share';
-    case MemoType.SignResult: return 'signature';
-    default: return `unknown (0x${(type as number).toString(16)})`;
+    case MemoType.Text:
+      return 'message';
+    case MemoType.Address:
+      return 'address';
+    case MemoType.PaymentRequest:
+      return 'payment request';
+    case MemoType.Ack:
+      return 'read receipt';
+    case MemoType.ContactCard:
+      return 'contact card';
+    case MemoType.EncryptedMessage:
+      return 'encrypted message';
+    case MemoType.Data:
+      return 'data';
+    case MemoType.DkgRound1:
+      return 'DKG round 1';
+    case MemoType.DkgRound2:
+      return 'DKG round 2';
+    case MemoType.DkgRound3:
+      return 'DKG round 3';
+    case MemoType.SignRequest:
+      return 'sign request';
+    case MemoType.SignCommitment:
+      return 'commitment';
+    case MemoType.SignShare:
+      return 'signature share';
+    case MemoType.SignResult:
+      return 'signature';
+    default:
+      return `unknown (0x${(type as number).toString(16)})`;
   }
 }

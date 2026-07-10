@@ -125,7 +125,9 @@ export function parseZcashFvkQR(hex: string): ZcashFvkExportData {
     throw new Error(`Invalid Zcash QR: expected Zcash chain 0x04, got 0x${data[1]?.toString(16)}`);
   }
   if (data[2] !== QR_TYPE.FVK_EXPORT) {
-    throw new Error(`Invalid Zcash QR: expected FVK export type 0x01, got 0x${data[2]?.toString(16)}`);
+    throw new Error(
+      `Invalid Zcash QR: expected FVK export type 0x01, got 0x${data[2]?.toString(16)}`,
+    );
   }
 
   let offset = 3;
@@ -196,7 +198,8 @@ export function parseZcashFvkQR(hex: string): ZcashFvkExportData {
   let zidPublicKey: string | undefined;
   if (hasZid && offset + 32 <= data.length) {
     zidPublicKey = Array.from(data.subarray(offset, offset + 32))
-      .map(b => b.toString(16).padStart(2, '0')).join('');
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
   }
 
   return {
@@ -291,7 +294,7 @@ export interface ZcashSignRequest {
 export function encodeZcashSignRequest(request: ZcashSignRequest): string {
   const summaryBytes = new TextEncoder().encode(request.summary);
 
-  const totalLen = 3 + 1 + 4 + 32 + 2 + (request.orchardAlphas.length * 32) + 2 + summaryBytes.length;
+  const totalLen = 3 + 1 + 4 + 32 + 2 + request.orchardAlphas.length * 32 + 2 + summaryBytes.length;
   const output = new Uint8Array(totalLen);
   let offset = 0;
 
@@ -373,7 +376,7 @@ export function encodeZcashShieldingSignRequest(request: ZcashShieldingSignReque
   const inputCount = request.sighashes.length;
 
   // 3 (prelude) + 1 (flags) + 4 (account) + 2 (input_count) + inputCount*(32+4) + 2 (action_count=0) + 2 (summary_len) + summary
-  const totalLen = 3 + 1 + 4 + 2 + (inputCount * 36) + 2 + 2 + summaryBytes.length;
+  const totalLen = 3 + 1 + 4 + 2 + inputCount * 36 + 2 + 2 + summaryBytes.length;
   const output = new Uint8Array(totalLen);
   let offset = 0;
 
@@ -449,7 +452,11 @@ export function parseZcashSignatureResponse(hex: string): ZcashSignatureResponse
   if (data.length < 37) {
     throw new Error('Invalid Zcash signature response: too short');
   }
-  if (data[0] !== SUBSTRATE_COMPAT || data[1] !== CHAIN_ID.ZCASH || data[2] !== QR_TYPE.SIGNATURES) {
+  if (
+    data[0] !== SUBSTRATE_COMPAT ||
+    data[1] !== CHAIN_ID.ZCASH ||
+    data[2] !== QR_TYPE.SIGNATURES
+  ) {
     throw new Error('Invalid Zcash signature response: bad prelude');
   }
 
@@ -558,11 +565,12 @@ function bytesToHex(bytes: Uint8Array): string {
  */
 function readUint32LE(data: Uint8Array, offset: number): number {
   return (
-    (data[offset]!) |
-    (data[offset + 1]! << 8) |
-    (data[offset + 2]! << 16) |
-    (data[offset + 3]! << 24)
-  ) >>> 0;
+    (data[offset]! |
+      (data[offset + 1]! << 8) |
+      (data[offset + 2]! << 16) |
+      (data[offset + 3]! << 24)) >>>
+    0
+  );
 }
 
 /**
@@ -716,7 +724,9 @@ export function decodeNoteSyncPayload(data: Uint8Array): {
 
   const noteLen = 4 + 8 + 32 + 32 + 4; // 80 bytes per note
   if (offset + noteCount * noteLen > data.length) {
-    throw new Error(`note sync payload truncated: need ${noteCount * noteLen} bytes for ${noteCount} notes, have ${data.length - offset}`);
+    throw new Error(
+      `note sync payload truncated: need ${noteCount * noteLen} bytes for ${noteCount} notes, have ${data.length - offset}`,
+    );
   }
 
   const notes: SyncNote[] = [];
@@ -775,7 +785,9 @@ export function detectQRNetwork(hex: string): 'penumbra' | 'zcash' | 'unknown' {
 /**
  * Detect the operation type of a QR code
  */
-export function detectQRType(hex: string): 'fvk_export' | 'sign_request' | 'signatures' | 'unknown' {
+export function detectQRType(
+  hex: string,
+): 'fvk_export' | 'sign_request' | 'signatures' | 'unknown' {
   try {
     const data = hexToBytes(hex);
     if (data.length < 3 || data[0] !== SUBSTRATE_COMPAT) {

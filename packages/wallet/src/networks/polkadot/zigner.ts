@@ -65,11 +65,9 @@ export interface SignedPolkadotTx {
 export function buildSignRequestQr(
   keys: PolkadotNetworkKeys,
   tx: UnsignedPolkadotTx,
-  legacyMode = false
+  legacyMode = false,
 ): string {
-  const cryptoType = keys.scheme === 'sr25519'
-    ? UOS_CRYPTO_CODE.SR25519
-    : UOS_CRYPTO_CODE.ED25519;
+  const cryptoType = keys.scheme === 'sr25519' ? UOS_CRYPTO_CODE.SR25519 : UOS_CRYPTO_CODE.ED25519;
 
   // public key (32 bytes)
   const pubkey = hexToBytes(keys.publicKey);
@@ -111,7 +109,7 @@ function buildLegacySignRequestQr(
   _keys: PolkadotNetworkKeys,
   tx: UnsignedPolkadotTx,
   cryptoType: number,
-  pubkey: Uint8Array
+  pubkey: Uint8Array,
 ): string {
   // legacy payload: call + extensions (no proof)
   const legacyPayload = new Uint8Array(tx.callData.length + tx.signedExtensions.length);
@@ -134,7 +132,7 @@ function buildLegacySignRequestQr(
   ]);
 
   const payload = new Uint8Array(
-    header.length + genesisPrefix.length + pubkey.length + legacyPayload.length
+    header.length + genesisPrefix.length + pubkey.length + legacyPayload.length,
   );
   let offset = 0;
   payload.set(header, offset);
@@ -147,7 +145,6 @@ function buildLegacySignRequestQr(
 
   return bytesToHex(payload);
 }
-
 
 /**
  * parse signature qr from zigner
@@ -189,7 +186,7 @@ export async function buildTransferTx(
   chain: SupportedChain,
   from: PolkadotNetworkKeys,
   to: string,
-  amount: bigint
+  amount: bigint,
 ): Promise<UnsignedPolkadotTx> {
   const client = getLightClient(chain);
 
@@ -244,7 +241,7 @@ export async function buildTransferTx(
     runtimeVersion.specName,
     callData,
     signedExtensions,
-    additionalSigned
+    additionalSigned,
   );
 
   // build complete UOS payload
@@ -274,12 +271,7 @@ function encodeCompact(value: number): Uint8Array {
   } else if (value < 0x4000) {
     return new Uint8Array([(value << 2) | 0x01, value >> 6]);
   } else if (value < 0x40000000) {
-    return new Uint8Array([
-      (value << 2) | 0x02,
-      value >> 6,
-      value >> 14,
-      value >> 22,
-    ]);
+    return new Uint8Array([(value << 2) | 0x02, value >> 6, value >> 14, value >> 22]);
   } else {
     throw new Error('compact encoding for large values not implemented');
   }
@@ -304,7 +296,7 @@ function encodeU32LE(value: number): Uint8Array {
 export async function broadcastTx(
   chain: SupportedChain,
   unsigned: UnsignedPolkadotTx,
-  signed: SignedPolkadotTx
+  signed: SignedPolkadotTx,
 ): Promise<string> {
   const client = getLightClient(chain);
 

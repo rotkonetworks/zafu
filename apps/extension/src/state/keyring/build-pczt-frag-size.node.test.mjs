@@ -15,10 +15,7 @@ import assert from 'node:assert/strict';
 // reverting `fragmentSize` back to a magic number).
 import { readFileSync } from 'node:fs';
 
-const SRC = readFileSync(
-  new URL('./network-worker.ts', import.meta.url),
-  'utf8',
-);
+const SRC = readFileSync(new URL('./network-worker.ts', import.meta.url), 'utf8');
 
 test('buildSendTxPcztInWorker accepts a fragment-size argument', () => {
   // Signature must include a fragmentSize parameter (number, optional).

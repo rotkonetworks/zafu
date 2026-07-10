@@ -1,7 +1,8 @@
 import type { SimpleFilter } from '../types';
 
 /** Log service call timing and errors. */
-export const logging = <Req, Rep>(label: string): SimpleFilter<Req, Rep> =>
+export const logging =
+  <Req, Rep>(label: string): SimpleFilter<Req, Rep> =>
   async (req, service) => {
     const t0 = performance.now();
     try {

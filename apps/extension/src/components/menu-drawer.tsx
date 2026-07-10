@@ -6,7 +6,12 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../state';
-import { selectLock, selectActiveNetwork, selectEffectiveKeyInfo, selectKeyInfos } from '../state/keyring';
+import {
+  selectLock,
+  selectActiveNetwork,
+  selectEffectiveKeyInfo,
+  selectKeyInfos,
+} from '../state/keyring';
 import { isPro } from '../state/license';
 import { isIdentityEnabled } from '../state/privacy';
 import { PopupPath } from '../routes/popup/paths';
@@ -17,7 +22,8 @@ import { hasFeature } from '../config/networks';
 /** donation addresses per network */
 const DONATE: Record<string, { address: string; name: string }> = {
   zcash: {
-    address: 'u153khs43zxz6hcnlwnut77knyqmursnutmungxjxd7khruunhj77ea6tmpzxct9wzlgen66jxwc93ea053j22afkktu7hrs9rmsz003h3',
+    address:
+      'u153khs43zxz6hcnlwnut77knyqmursnutmungxjxd7khruunhj77ea6tmpzxct9wzlgen66jxwc93ea053j22afkktu7hrs9rmsz003h3',
     name: 'zafu / rotko networks',
   },
 };
@@ -39,7 +45,8 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
   const [zidCopied, setZidCopied] = useState(false);
 
   // fall back to any keyInfo's ZID if active one doesn't have it
-  const zidPubkey = (keyInfo?.insensitive?.['zid'] ?? allKeyInfos.find(k => k.insensitive?.['zid'])?.insensitive?.['zid']) as string | undefined;
+  const zidPubkey = (keyInfo?.insensitive?.['zid'] ??
+    allKeyInfos.find(k => k.insensitive?.['zid'])?.insensitive?.['zid']) as string | undefined;
   const zidAddress = zidPubkey ? 'zid' + zidPubkey.slice(0, 16) : undefined;
 
   const handleLock = () => {
@@ -80,67 +87,93 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
   const showMultisig = activeNetwork === 'zcash' && (onMultisigWallet || pro);
 
   type MenuItem = { icon: string; label: string; onClick: () => void; className?: string };
-  const networkDestinations: MenuItem[] = ([
+  const networkDestinations: MenuItem[] = [
     hasFeature(activeNetwork, 'stake') && {
       icon: 'i-lucide-layers',
       label: 'stake',
-      onClick: () => { navigate(PopupPath.STAKE); onClose(); },
+      onClick: () => {
+        navigate(PopupPath.STAKE);
+        onClose();
+      },
     },
     hasFeature(activeNetwork, 'swap') && {
       icon: 'i-lucide-arrow-left-right',
       label: 'swap',
-      onClick: () => { navigate(PopupPath.SWAP); onClose(); },
+      onClick: () => {
+        navigate(PopupPath.SWAP);
+        onClose();
+      },
     },
     hasFeature(activeNetwork, 'vote') && {
       icon: 'i-lucide-vote',
       label: 'vote',
-      onClick: () => { navigate(PopupPath.VOTE); onClose(); },
+      onClick: () => {
+        navigate(PopupPath.VOTE);
+        onClose();
+      },
     },
     showMultisig && {
       icon: 'i-lucide-shield',
       label: 'multisig',
-      onClick: () => { navigate(PopupPath.MULTISIG); onClose(); },
+      onClick: () => {
+        navigate(PopupPath.MULTISIG);
+        onClose();
+      },
     },
-  ].filter(Boolean) as MenuItem[]);
+  ].filter(Boolean) as MenuItem[];
 
   // Grouped so the drawer reads top→bottom as:
   //   network features → account/identity → app settings → session.
   // A new user looking for 'lock' doesn't have to scan through stake
   // and swap to find it; a returning user looking for 'stake' isn't
   // looking past 'settings' to find it.
-  const accountItems: MenuItem[] = ([
+  const accountItems: MenuItem[] = [
     identityEnabled && {
       icon: 'i-lucide-fingerprint',
       label: 'identity & contacts',
-      onClick: () => { navigate(PopupPath.IDENTITY); onClose(); },
+      onClick: () => {
+        navigate(PopupPath.IDENTITY);
+        onClose();
+      },
     },
     {
       icon: 'i-lucide-wallet',
       label: 'wallets',
-      onClick: () => { navigate(PopupPath.SETTINGS_WALLETS); onClose(); },
+      onClick: () => {
+        navigate(PopupPath.SETTINGS_WALLETS);
+        onClose();
+      },
     },
-  ].filter(Boolean) as MenuItem[]);
+  ].filter(Boolean) as MenuItem[];
 
   const appItems: MenuItem[] = [
     {
       icon: 'i-lucide-globe',
       label: 'networks',
-      onClick: () => { navigate(PopupPath.SETTINGS_NETWORKS); onClose(); },
+      onClick: () => {
+        navigate(PopupPath.SETTINGS_NETWORKS);
+        onClose();
+      },
     },
     {
       icon: 'i-lucide-settings',
       label: 'settings',
-      onClick: () => { navigate(PopupPath.SETTINGS); onClose(); },
+      onClick: () => {
+        navigate(PopupPath.SETTINGS);
+        onClose();
+      },
     },
   ];
 
   const sessionItems: MenuItem[] = [
     ...(inSidePanel
-      ? [{
-          icon: 'i-lucide-panel-right',
-          label: 'open as popup',
-          onClick: handleOpenPopupWindow,
-        }]
+      ? [
+          {
+            icon: 'i-lucide-panel-right',
+            label: 'open as popup',
+            onClick: handleOpenPopupWindow,
+          },
+        ]
       : []),
     {
       icon: 'i-lucide-lock',
@@ -164,17 +197,17 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
   return (
     <>
       {/* backdrop */}
-      <div
-        className='fixed inset-0 z-50 bg-black/60 backdrop-blur-sm'
-        onClick={onClose}
-      />
+      <div className='fixed inset-0 z-50 bg-black/60 backdrop-blur-sm' onClick={onClose} />
 
       {/* drawer */}
       <div className='fixed right-0 top-0 bottom-0 z-50 w-64 bg-canvas border-l border-border-soft shadow-xl flex flex-col'>
         {/* header */}
         <div className='flex items-center justify-between px-4 py-3 border-b border-border-soft'>
           <span className='text-[13px] text-fg-high'>zafu</span>
-          <button onClick={onClose} className='p-1 rounded-md text-fg-muted hover:text-fg-high hover:bg-elev-1 transition-colors'>
+          <button
+            onClick={onClose}
+            className='p-1 rounded-md text-fg-muted hover:text-fg-high hover:bg-elev-1 transition-colors'
+          >
             <span className='i-lucide-x h-4 w-4' />
           </button>
         </div>
@@ -200,10 +233,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
         {/* menu items — grouped, with thin top border between groups */}
         <nav className='p-2'>
           {menuGroups.map((group, gi) => (
-            <div
-              key={gi}
-              className={cn(gi > 0 && 'mt-1 pt-1 border-t border-border-soft/40')}
-            >
+            <div key={gi} className={cn(gi > 0 && 'mt-1 pt-1 border-t border-border-soft/40')}>
               {group.map((item, i) => (
                 <button
                   key={i}
@@ -225,7 +255,10 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
         <div className='mt-auto border-t border-border-soft px-4 py-3 flex flex-col gap-2'>
           {!pro && (
             <button
-              onClick={() => { navigate(PopupPath.SUBSCRIBE); onClose(); }}
+              onClick={() => {
+                navigate(PopupPath.SUBSCRIBE);
+                onClose();
+              }}
               className='flex w-full items-center justify-center gap-2 px-3 py-2 rounded-md bg-zigner-gold text-zigner-dark hover:bg-zigner-gold-light transition-colors text-[13px] lowercase tracking-[0.04em]'
             >
               <span className='i-lucide-zap h-3.5 w-3.5' />
@@ -243,9 +276,30 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
           )}
 
           <div className='mt-1 flex items-center gap-3 text-[10px] text-fg-dim lowercase tracking-[0.04em]'>
-            <a href='https://rotko.net' target='_blank' rel='noopener noreferrer' className='hover:text-fg-high'>rotko.net</a>
-            <a href='https://github.com/rotkonetworks/zafu' target='_blank' rel='noopener noreferrer' className='hover:text-fg-high'>github</a>
-            <a href='https://zigner.rotko.net' target='_blank' rel='noopener noreferrer' className='hover:text-fg-high'>zigner</a>
+            <a
+              href='https://rotko.net'
+              target='_blank'
+              rel='noopener noreferrer'
+              className='hover:text-fg-high'
+            >
+              rotko.net
+            </a>
+            <a
+              href='https://github.com/rotkonetworks/zafu'
+              target='_blank'
+              rel='noopener noreferrer'
+              className='hover:text-fg-high'
+            >
+              github
+            </a>
+            <a
+              href='https://zigner.rotko.net'
+              target='_blank'
+              rel='noopener noreferrer'
+              className='hover:text-fg-high'
+            >
+              zigner
+            </a>
           </div>
           <p className='text-[9px] text-fg-dim mt-1 tabular'>GPL-3.0</p>
         </div>

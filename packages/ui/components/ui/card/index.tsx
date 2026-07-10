@@ -15,11 +15,7 @@ const Card = React.forwardRef<HTMLDivElement, CardProps>(
       <motion.div
         layout={layout}
         ref={ref}
-        className={cn(
-          baseClasses,
-          light ? 'bg-stone-300' : 'bg-elev-1',
-          className,
-        )}
+        className={cn(baseClasses, light ? 'bg-stone-300' : 'bg-elev-1', className)}
       >
         {children}
       </motion.div>

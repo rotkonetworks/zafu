@@ -54,27 +54,27 @@ interface OnboardingStep {
  * dynamically (see resolveActiveStep).
  */
 const STEPS_CREATE: ReadonlyArray<OnboardingStep> = [
-  { id: 'welcome',        label: 'welcome',         matches: [PagePath.WELCOME] },
-  { id: 'generate',       label: 'secret phrase',   matches: [PagePath.GENERATE_SEED_PHRASE] },
-  { id: 'set-password',   label: 'password',        matches: [PagePath.SET_PASSWORD] },
-  { id: 'select-networks',label: 'networks',        matches: [PagePath.SELECT_NETWORKS] },
-  { id: 'success',        label: 'done',            matches: [PagePath.ONBOARDING_SUCCESS] },
+  { id: 'welcome', label: 'welcome', matches: [PagePath.WELCOME] },
+  { id: 'generate', label: 'secret phrase', matches: [PagePath.GENERATE_SEED_PHRASE] },
+  { id: 'set-password', label: 'password', matches: [PagePath.SET_PASSWORD] },
+  { id: 'select-networks', label: 'networks', matches: [PagePath.SELECT_NETWORKS] },
+  { id: 'success', label: 'done', matches: [PagePath.ONBOARDING_SUCCESS] },
 ];
 
 const STEPS_IMPORT: ReadonlyArray<OnboardingStep> = [
-  { id: 'welcome',        label: 'welcome',         matches: [PagePath.WELCOME] },
-  { id: 'import',         label: 'recovery phrase', matches: [PagePath.IMPORT_SEED_PHRASE] },
-  { id: 'set-password',   label: 'password',        matches: [PagePath.SET_PASSWORD] },
-  { id: 'select-networks',label: 'networks',        matches: [PagePath.SELECT_NETWORKS] },
-  { id: 'success',        label: 'done',            matches: [PagePath.ONBOARDING_SUCCESS] },
+  { id: 'welcome', label: 'welcome', matches: [PagePath.WELCOME] },
+  { id: 'import', label: 'recovery phrase', matches: [PagePath.IMPORT_SEED_PHRASE] },
+  { id: 'set-password', label: 'password', matches: [PagePath.SET_PASSWORD] },
+  { id: 'select-networks', label: 'networks', matches: [PagePath.SELECT_NETWORKS] },
+  { id: 'success', label: 'done', matches: [PagePath.ONBOARDING_SUCCESS] },
 ];
 
 const STEPS_ZIGNER: ReadonlyArray<OnboardingStep> = [
-  { id: 'welcome',        label: 'welcome',         matches: [PagePath.WELCOME] },
-  { id: 'import-zigner',  label: 'connect zigner',  matches: [PagePath.IMPORT_ZIGNER] },
-  { id: 'set-password',   label: 'password',        matches: [PagePath.SET_PASSWORD] },
-  { id: 'select-networks',label: 'networks',        matches: [PagePath.SELECT_NETWORKS] },
-  { id: 'success',        label: 'done',            matches: [PagePath.ONBOARDING_SUCCESS] },
+  { id: 'welcome', label: 'welcome', matches: [PagePath.WELCOME] },
+  { id: 'import-zigner', label: 'connect zigner', matches: [PagePath.IMPORT_ZIGNER] },
+  { id: 'set-password', label: 'password', matches: [PagePath.SET_PASSWORD] },
+  { id: 'select-networks', label: 'networks', matches: [PagePath.SELECT_NETWORKS] },
+  { id: 'success', label: 'done', matches: [PagePath.ONBOARDING_SUCCESS] },
 ];
 
 function resolveSteps(pathname: string): ReadonlyArray<OnboardingStep> {
@@ -86,10 +86,7 @@ function resolveSteps(pathname: string): ReadonlyArray<OnboardingStep> {
   return STEPS_CREATE;
 }
 
-function resolveActiveStepIndex(
-  steps: ReadonlyArray<OnboardingStep>,
-  pathname: string,
-): number {
+function resolveActiveStepIndex(steps: ReadonlyArray<OnboardingStep>, pathname: string): number {
   const idx = steps.findIndex(s => s.matches.some(m => pathname === m));
   return idx >= 0 ? idx : 0;
 }
@@ -145,9 +142,7 @@ export function OnboardingShell({ children, title, subtitle }: OnboardingShellPr
                 {title && (
                   <h1 className='text-2xl tracking-[-0.01em] text-fg-high lowercase'>{title}</h1>
                 )}
-                {subtitle && (
-                  <p className='text-xs text-fg-muted tracking-[0.02em]'>{subtitle}</p>
-                )}
+                {subtitle && <p className='text-xs text-fg-muted tracking-[0.02em]'>{subtitle}</p>}
               </header>
             )}
             <div className='flex-1'>{children}</div>

@@ -54,8 +54,11 @@ export const SyncProgressBar = ({
     setInput('');
   };
 
-  const showHeights = currentHeight != null && targetHeight != null
-    && targetHeight > 0 && currentHeight < targetHeight;
+  const showHeights =
+    currentHeight != null &&
+    targetHeight != null &&
+    targetHeight > 0 &&
+    currentHeight < targetHeight;
 
   return (
     <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
@@ -76,7 +79,10 @@ export const SyncProgressBar = ({
 
       <div className='h-2 w-full overflow-hidden rounded-full bg-elev-2'>
         <div
-          className={cn('h-full rounded-full transition-all duration-500 ease-out', done ? barDoneColor : barColor)}
+          className={cn(
+            'h-full rounded-full transition-all duration-500 ease-out',
+            done ? barDoneColor : barColor,
+          )}
           style={{ width: `${Math.max(percent, 2)}%` }}
         />
       </div>
@@ -88,11 +94,16 @@ export const SyncProgressBar = ({
       {(showHeights || (startBlock != null && onRescan)) && (
         <div className='mt-0.5 flex items-center justify-between text-[10px] text-fg-muted font-mono tabular-nums'>
           {showHeights ? (
-            <span>{currentHeight.toLocaleString()} / {targetHeight.toLocaleString()}</span>
-          ) : <span />}
+            <span>
+              {currentHeight.toLocaleString()} / {targetHeight.toLocaleString()}
+            </span>
+          ) : (
+            <span />
+          )}
 
-          {startBlock != null && onRescan && (
-            editing ? (
+          {startBlock != null &&
+            onRescan &&
+            (editing ? (
               <span className='flex items-center gap-1'>
                 <input
                   type='number'
@@ -104,22 +115,40 @@ export const SyncProgressBar = ({
                   autoFocus
                   onKeyDown={e => {
                     if (e.key === 'Enter') submitRescan();
-                    else if (e.key === 'Escape') { setEditing(false); setInput(''); }
+                    else if (e.key === 'Escape') {
+                      setEditing(false);
+                      setInput('');
+                    }
                   }}
                 />
-                <button onClick={submitRescan} className='text-[10px] text-zigner-gold hover:underline'>rescan</button>
-                <button onClick={() => { setEditing(false); setInput(''); }} className='text-[10px] text-fg-muted hover:text-fg-high'>&times;</button>
+                <button
+                  onClick={submitRescan}
+                  className='text-[10px] text-zigner-gold hover:underline'
+                >
+                  rescan
+                </button>
+                <button
+                  onClick={() => {
+                    setEditing(false);
+                    setInput('');
+                  }}
+                  className='text-[10px] text-fg-muted hover:text-fg-high'
+                >
+                  &times;
+                </button>
               </span>
             ) : (
               <button
-                onClick={() => { setEditing(true); setInput(String(startBlock)); }}
+                onClick={() => {
+                  setEditing(true);
+                  setInput(String(startBlock));
+                }}
                 className='hover:text-fg-high transition-colors'
                 title='rescan from different block height'
               >
                 from {startBlock > 0 ? startBlock.toLocaleString() : '0'}
               </button>
-            )
-          )}
+            ))}
         </div>
       )}
     </div>

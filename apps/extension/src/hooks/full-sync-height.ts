@@ -2,7 +2,8 @@ import { PopupLoaderData } from '../routes/popup/home';
 import { useLoaderData } from 'react-router-dom';
 import { useLatestBlockHeight } from './latest-block-height';
 import { useStore } from '../state';
-const selectFullSyncHeight = (state: { network: { fullSyncHeight?: number } }) => state.network.fullSyncHeight;
+const selectFullSyncHeight = (state: { network: { fullSyncHeight?: number } }) =>
+  state.network.fullSyncHeight;
 
 const tryGetMax = (a?: number, b?: number): number | undefined => {
   // Height can be 0n which is falsy, so should compare to undefined state

@@ -129,9 +129,7 @@ export const createWatchOnlyWallet = async (
 /**
  * import watch-only wallet from QR code hex
  */
-export const importWatchOnlyFromQr = async (
-  qrHex: string,
-): Promise<WatchOnlyWallet> => {
+export const importWatchOnlyFromQr = async (qrHex: string): Promise<WatchOnlyWallet> => {
   if (!wasmModule) {
     await initZcashWasm();
   }

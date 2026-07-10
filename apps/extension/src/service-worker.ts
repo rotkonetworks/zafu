@@ -74,21 +74,21 @@ localExtStorage.enableMigration(localMigrations);
  * called on startup and when chainspecs change in storage.
  */
 async function loadCustomChainspecs(): Promise<void> {
-  const specs = await localExtStorage.get('customChainspecs') ?? [];
+  const specs = (await localExtStorage.get('customChainspecs')) ?? [];
   const registered = getCustomChainspecs();
 
   // register new chainspecs
   for (const spec of specs) {
     if (!registered.has(spec.id)) {
       // map 'standalone' to null relay, others to RelayChain
-      const relay = spec.relay === 'standalone' ? 'standalone' : spec.relay as RelayChain;
+      const relay = spec.relay === 'standalone' ? 'standalone' : (spec.relay as RelayChain);
       registerCustomChainspec(
         spec.id,
         spec.chainspec,
         relay,
         spec.name,
         spec.symbol,
-        spec.decimals
+        spec.decimals,
       );
     }
   }
@@ -107,7 +107,10 @@ async function loadCustomChainspecs(): Promise<void> {
 // load custom chainspecs on startup
 void loadCustomChainspecs();
 
-let walletServicesResult: Promise<{ services: Services; wallet: import('@repo/wallet').WalletJson }>;
+let walletServicesResult: Promise<{
+  services: Services;
+  wallet: import('@repo/wallet').WalletJson;
+}>;
 let walletServices: Promise<Services>;
 let currentWalletIndex: number | undefined;
 let currentSyncAbort: AbortController | undefined;
@@ -252,7 +255,9 @@ chrome.runtime.onMessage.addListener(internalZidListener);
 // real handler resolves.
 type HandlerFn = (request: never, signal?: AbortSignal, timeoutMs?: number) => Promise<never>;
 let resolveHandler: (h: HandlerFn) => void;
-const handlerReady = new Promise<HandlerFn>(r => { resolveHandler = r; });
+const handlerReady = new Promise<HandlerFn>(r => {
+  resolveHandler = r;
+});
 
 const deferredHandler: HandlerFn = (request, signal, timeoutMs) =>
   handlerReady.then(h => h(request, signal, timeoutMs));
@@ -289,10 +294,14 @@ chrome.runtime.onMessageExternal.addListener(encryptionMessageListener);
 // track last activity timestamp. only UI and dapp interactions reset it.
 // background service messages (sync, alarms) must NOT reset the timer.
 let lastActivityMs = Date.now();
-const touchActivity = () => { lastActivityMs = Date.now(); };
+const touchActivity = () => {
+  lastActivityMs = Date.now();
+};
 
 // reset on external messages (dapp interactions - always user-initiated)
-chrome.runtime.onMessageExternal.addListener(() => { touchActivity(); });
+chrome.runtime.onMessageExternal.addListener(() => {
+  touchActivity();
+});
 
 // reset on internal messages that originate from UI (popup/sidepanel/page),
 // not from the service worker itself. check sender for a tab (UI has tabs,
@@ -372,11 +381,15 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT],
       });
       if (!contexts.length) {
-        await chrome.offscreen.createDocument({
-          url: chrome.runtime.getURL(OFFSCREEN_PATH),
-          reasons: [chrome.offscreen.Reason.WORKERS],
-          justification: 'Zcash Halo 2 parallel proving via rayon thread pool',
-        }).catch(() => { /* already exists */ });
+        await chrome.offscreen
+          .createDocument({
+            url: chrome.runtime.getURL(OFFSCREEN_PATH),
+            reasons: [chrome.offscreen.Reason.WORKERS],
+            justification: 'Zcash Halo 2 parallel proving via rayon thread pool',
+          })
+          .catch(() => {
+            /* already exists */
+          });
       }
       sendResponse({ ok: true });
     } catch (e) {

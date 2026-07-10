@@ -58,7 +58,7 @@ interface NetworkConfig {
   color: string;
   transparent: boolean;
   launched: boolean;
-  features: { stake, swap, vote, inbox };
+  features: { stake; swap; vote; inbox };
 }
 ```
 
@@ -74,16 +74,16 @@ the keyring vault system (described in detail in [state.md](state.md)) maps one
 vault to multiple network keys. a single bip39 mnemonic stored in a vault can
 derive keys for every supported network using standard derivation paths:
 
-| network    | coin type | path                    |
-|------------|-----------|-------------------------|
-| penumbra   | 6532      | `m/44'/6532'/0'`        |
-| zcash      | 133       | `m/44'/133'/0'/0/0`     |
-| noble      | 118       | `m/44'/118'/0'/0/0`     |
-| cosmoshub  | 118       | `m/44'/118'/0'/0/0`     |
-| polkadot   | 354       | `m/44'/354'/0'/0'/0'`   |
-| kusama     | 434       | `m/44'/434'/0'/0'/0'`   |
-| ethereum   | 60        | `m/44'/60'/0'/0/0`      |
-| bitcoin    | 0         | `m/84'/0'/0'/0/0`       |
+| network   | coin type | path                  |
+| --------- | --------- | --------------------- |
+| penumbra  | 6532      | `m/44'/6532'/0'`      |
+| zcash     | 133       | `m/44'/133'/0'/0/0`   |
+| noble     | 118       | `m/44'/118'/0'/0/0`   |
+| cosmoshub | 118       | `m/44'/118'/0'/0/0`   |
+| polkadot  | 354       | `m/44'/354'/0'/0'/0'` |
+| kusama    | 434       | `m/44'/434'/0'/0'/0'` |
+| ethereum  | 60        | `m/44'/60'/0'/0/0`    |
+| bitcoin   | 0         | `m/84'/0'/0'/0/0`     |
 
 zigner-zafu vaults import viewing keys (not mnemonics) from an air-gapped
 signing device. these vaults declare which networks they support based on the
@@ -108,8 +108,8 @@ interface NetworkActivation {
   network: NetworkType;
   hasKeys: boolean;
   isEnabled: boolean;
-  shouldInjectProvider: boolean;  // hasKeys AND isEnabled
-  shouldLoadFeatures: boolean;    // isEnabled
+  shouldInjectProvider: boolean; // hasKeys AND isEnabled
+  shouldLoadFeatures: boolean; // isEnabled
 }
 ```
 

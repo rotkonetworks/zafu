@@ -33,17 +33,21 @@ export async function migrateOrphanedMultisigs(
     let encData = '';
     if (sessionKeyJson) {
       const key = await Key.fromJson(sessionKeyJson);
-      const rawKp = typeof ms.keyPackage === 'string'
-        ? ms.keyPackage
-        : await key.unseal(Box.fromJson(ms.keyPackage as BoxJson)) ?? '';
-      const rawEs = typeof ms.ephemeralSeed === 'string'
-        ? ms.ephemeralSeed
-        : await key.unseal(Box.fromJson(ms.ephemeralSeed as BoxJson)) ?? '';
+      const rawKp =
+        typeof ms.keyPackage === 'string'
+          ? ms.keyPackage
+          : ((await key.unseal(Box.fromJson(ms.keyPackage as BoxJson))) ?? '');
+      const rawEs =
+        typeof ms.ephemeralSeed === 'string'
+          ? ms.ephemeralSeed
+          : ((await key.unseal(Box.fromJson(ms.ephemeralSeed as BoxJson))) ?? '');
       const box = await key.seal(JSON.stringify({ keyPackage: rawKp, ephemeralSeed: rawEs }));
       encData = JSON.stringify(box.toJson());
     } else {
-      const rawKp = typeof ms.keyPackage === 'string' ? ms.keyPackage : JSON.stringify(ms.keyPackage);
-      const rawEs = typeof ms.ephemeralSeed === 'string' ? ms.ephemeralSeed : JSON.stringify(ms.ephemeralSeed);
+      const rawKp =
+        typeof ms.keyPackage === 'string' ? ms.keyPackage : JSON.stringify(ms.keyPackage);
+      const rawEs =
+        typeof ms.ephemeralSeed === 'string' ? ms.ephemeralSeed : JSON.stringify(ms.ephemeralSeed);
       encData = JSON.stringify({ keyPackage: rawKp, ephemeralSeed: rawEs });
     }
 

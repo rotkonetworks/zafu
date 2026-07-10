@@ -20,9 +20,7 @@ export async function checkCameraPermission(): Promise<CameraPermissionState> {
     // (labels are only populated if permission was previously granted)
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
-      const hasLabeledCamera = devices.some(
-        d => d.kind === 'videoinput' && d.label.length > 0
-      );
+      const hasLabeledCamera = devices.some(d => d.kind === 'videoinput' && d.label.length > 0);
       return hasLabeledCamera ? 'granted' : 'unknown';
     } catch {
       return 'unknown';
@@ -66,7 +64,7 @@ export async function requestCameraPermission(): Promise<{
  * Subscribe to camera permission changes
  */
 export function onCameraPermissionChange(
-  callback: (state: CameraPermissionState) => void
+  callback: (state: CameraPermissionState) => void,
 ): () => void {
   let cleanup: (() => void) | undefined;
 

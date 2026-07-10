@@ -63,21 +63,40 @@ export class WebSocketTransport implements TransportProvider {
         resolve();
       };
 
-      this.ws.onmessage = (ev) => {
+      this.ws.onmessage = ev => {
         try {
           const data = JSON.parse(ev.data);
           switch (data.t) {
             case 'msg':
-              this.msgHandler?.({ nick: data.nick, text: data.text, type: 'msg', ts: data.ts, seq: data.seq });
+              this.msgHandler?.({
+                nick: data.nick,
+                text: data.text,
+                type: 'msg',
+                ts: data.ts,
+                seq: data.seq,
+              });
               break;
             case 'joined':
-              this.msgHandler?.({ type: 'joined', text: `joined #${data.room} (${data.count} users)`, room: data.room, count: data.count });
+              this.msgHandler?.({
+                type: 'joined',
+                text: `joined #${data.room} (${data.count} users)`,
+                room: data.room,
+                count: data.count,
+              });
               break;
             case 'created':
-              this.msgHandler?.({ type: 'created', text: `room created: ${data.room}`, room: data.room });
+              this.msgHandler?.({
+                type: 'created',
+                text: `room created: ${data.room}`,
+                room: data.room,
+              });
               break;
             case 'left':
-              this.msgHandler?.({ type: 'left', text: `${data.nick} left (${data.count})`, count: data.count });
+              this.msgHandler?.({
+                type: 'left',
+                text: `${data.nick} left (${data.count})`,
+                count: data.count,
+              });
               break;
             case 'system':
               this.msgHandler?.({ type: 'system', text: data.text });
@@ -86,7 +105,9 @@ export class WebSocketTransport implements TransportProvider {
               this.msgHandler?.({ type: 'error', text: data.msg });
               break;
           }
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
       };
 
       this.ws.onclose = () => {
@@ -144,10 +165,18 @@ export class NymTransport implements TransportProvider {
     // await client.connect({ nymApiUrl, preferredGateway });
     throw new Error('nym transport not yet implemented — install @nymproject/sdk');
   }
-  disconnect(): void { this.connected = false; }
-  send(_msg: Record<string, unknown>): void { /* TODO */ }
-  onMessage(_handler: (msg: ChatMessage | SystemMessage) => void): void { /* TODO */ }
-  onStateChange(_handler: (connected: boolean) => void): void { /* TODO */ }
+  disconnect(): void {
+    this.connected = false;
+  }
+  send(_msg: Record<string, unknown>): void {
+    /* TODO */
+  }
+  onMessage(_handler: (msg: ChatMessage | SystemMessage) => void): void {
+    /* TODO */
+  }
+  onStateChange(_handler: (connected: boolean) => void): void {
+    /* TODO */
+  }
 }
 
 /**
@@ -169,10 +198,18 @@ export class I2PTransport implements TransportProvider {
     // then create a streaming connection to the relay's I2P destination
     throw new Error('i2p transport not yet implemented — requires local I2P router');
   }
-  disconnect(): void { this.connected = false; }
-  send(_msg: Record<string, unknown>): void { /* TODO */ }
-  onMessage(_handler: (msg: ChatMessage | SystemMessage) => void): void { /* TODO */ }
-  onStateChange(_handler: (connected: boolean) => void): void { /* TODO */ }
+  disconnect(): void {
+    this.connected = false;
+  }
+  send(_msg: Record<string, unknown>): void {
+    /* TODO */
+  }
+  onMessage(_handler: (msg: ChatMessage | SystemMessage) => void): void {
+    /* TODO */
+  }
+  onStateChange(_handler: (connected: boolean) => void): void {
+    /* TODO */
+  }
 }
 
 /** Available transport types. */
@@ -181,9 +218,12 @@ export type TransportType = 'websocket' | 'nym' | 'i2p';
 /** Create a transport by type. */
 export function createTransport(type: TransportType, relayUrl: string): TransportProvider {
   switch (type) {
-    case 'websocket': return new WebSocketTransport(relayUrl);
-    case 'nym': return new NymTransport(relayUrl);
-    case 'i2p': return new I2PTransport(relayUrl);
+    case 'websocket':
+      return new WebSocketTransport(relayUrl);
+    case 'nym':
+      return new NymTransport(relayUrl);
+    case 'i2p':
+      return new I2PTransport(relayUrl);
   }
 }
 

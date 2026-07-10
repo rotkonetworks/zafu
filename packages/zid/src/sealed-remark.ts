@@ -16,35 +16,35 @@
  * noise-init-memo.ts, starting with "zNI\x01").
  */
 
-import { x25519 } from '@noble/curves/ed25519'
-import { edwardsToMontgomeryPub, edwardsToMontgomeryPriv } from '@noble/curves/ed25519'
-import { hkdf } from '@noble/hashes/hkdf'
-import { sha256 } from '@noble/hashes/sha256'
-import { gcm } from '@noble/ciphers/aes.js'
-import { randomBytes } from '@noble/ciphers/utils.js'
-import { decodeNoiseInitMemo } from './noise-init-memo'
-import type { NoiseInitPayload } from './noise-init-memo'
+import { x25519 } from '@noble/curves/ed25519';
+import { edwardsToMontgomeryPub, edwardsToMontgomeryPriv } from '@noble/curves/ed25519';
+import { hkdf } from '@noble/hashes/hkdf';
+import { sha256 } from '@noble/hashes/sha256';
+import { gcm } from '@noble/ciphers/aes.js';
+import { randomBytes } from '@noble/ciphers/utils.js';
+import { decodeNoiseInitMemo } from './noise-init-memo';
+import type { NoiseInitPayload } from './noise-init-memo';
 
 /** magic bytes: "zSR" + version 0x01 */
-const MAGIC = new Uint8Array([0x7a, 0x53, 0x52, 0x01])
+const MAGIC = new Uint8Array([0x7a, 0x53, 0x52, 0x01]);
 
 /** fixed overhead: magic(4) + ephemeral(32) + nonce(12) + GCM tag(16) = 64 */
-const OVERHEAD = 4 + 32 + 12 + 16
+const OVERHEAD = 4 + 32 + 12 + 16;
 
 /** HKDF info string for sealed remark key derivation */
-const HKDF_INFO = new TextEncoder().encode('zafu-sealed-remark-v1')
+const HKDF_INFO = new TextEncoder().encode('zafu-sealed-remark-v1');
 
 /**
  * check if raw bytes begin with the sealed remark magic.
  */
 export function isSealedRemark(remarkBytes: Uint8Array): boolean {
-  if (remarkBytes.length < OVERHEAD) return false
+  if (remarkBytes.length < OVERHEAD) return false;
   return (
     remarkBytes[0] === MAGIC[0] &&
     remarkBytes[1] === MAGIC[1] &&
     remarkBytes[2] === MAGIC[2] &&
     remarkBytes[3] === MAGIC[3]
-  )
+  );
 }
 
 /**
@@ -62,53 +62,53 @@ export function encodeSealedRemark(
   recipientEd25519Pub: Uint8Array,
   noiseInitPayload: Uint8Array,
 ): Uint8Array | null {
-  if (recipientEd25519Pub.length !== 32) return null
-  if (noiseInitPayload.length === 0) return null
+  if (recipientEd25519Pub.length !== 32) return null;
+  if (noiseInitPayload.length === 0) return null;
 
   try {
     // convert recipient ed25519 pubkey to x25519
-    const recipientX25519Pub = edwardsToMontgomeryPub(recipientEd25519Pub)
+    const recipientX25519Pub = edwardsToMontgomeryPub(recipientEd25519Pub);
 
     // generate ephemeral x25519 keypair
-    const ephemeralPriv = randomBytes(32)
-    const ephemeralPub = x25519.getPublicKey(ephemeralPriv)
+    const ephemeralPriv = randomBytes(32);
+    const ephemeralPub = x25519.getPublicKey(ephemeralPriv);
 
     // DH: ephemeral priv * recipient x25519 pub
-    const sharedSecret = x25519.getSharedSecret(ephemeralPriv, recipientX25519Pub)
+    const sharedSecret = x25519.getSharedSecret(ephemeralPriv, recipientX25519Pub);
 
     // derive AES-256-GCM key via HKDF-SHA256
     // salt = ephemeral pubkey (binds the key to this specific exchange)
-    const aesKey = hkdf(sha256, sharedSecret, ephemeralPub, HKDF_INFO, 32)
+    const aesKey = hkdf(sha256, sharedSecret, ephemeralPub, HKDF_INFO, 32);
 
     // encrypt with AES-256-GCM
-    const nonce = randomBytes(12)
-    const cipher = gcm(aesKey, nonce)
-    const ciphertext = cipher.encrypt(noiseInitPayload)
+    const nonce = randomBytes(12);
+    const cipher = gcm(aesKey, nonce);
+    const ciphertext = cipher.encrypt(noiseInitPayload);
 
     // assemble: magic + ephemeral pub + nonce + ciphertext (includes tag)
-    const totalSize = 4 + 32 + 12 + ciphertext.length
-    const out = new Uint8Array(totalSize)
-    let offset = 0
+    const totalSize = 4 + 32 + 12 + ciphertext.length;
+    const out = new Uint8Array(totalSize);
+    let offset = 0;
 
-    out.set(MAGIC, offset)
-    offset += 4
+    out.set(MAGIC, offset);
+    offset += 4;
 
-    out.set(ephemeralPub, offset)
-    offset += 32
+    out.set(ephemeralPub, offset);
+    offset += 32;
 
-    out.set(nonce, offset)
-    offset += 12
+    out.set(nonce, offset);
+    offset += 12;
 
-    out.set(ciphertext, offset)
+    out.set(ciphertext, offset);
 
     // zeroize ephemeral private key and shared secret
-    ephemeralPriv.fill(0)
-    sharedSecret.fill(0)
-    aesKey.fill(0)
+    ephemeralPriv.fill(0);
+    sharedSecret.fill(0);
+    aesKey.fill(0);
 
-    return out
+    return out;
   } catch {
-    return null
+    return null;
   }
 }
 
@@ -123,45 +123,45 @@ export function decodeSealedRemark(
   myEd25519Priv: Uint8Array,
   remarkBytes: Uint8Array,
 ): NoiseInitPayload | null {
-  if (!isSealedRemark(remarkBytes)) return null
-  if (myEd25519Priv.length !== 32) return null
+  if (!isSealedRemark(remarkBytes)) return null;
+  if (myEd25519Priv.length !== 32) return null;
 
   try {
-    let offset = 4 // skip magic
+    let offset = 4; // skip magic
 
     // extract ephemeral x25519 pubkey
-    const ephemeralPub = remarkBytes.subarray(offset, offset + 32)
-    offset += 32
+    const ephemeralPub = remarkBytes.subarray(offset, offset + 32);
+    offset += 32;
 
     // extract nonce
-    const nonce = remarkBytes.subarray(offset, offset + 12)
-    offset += 12
+    const nonce = remarkBytes.subarray(offset, offset + 12);
+    offset += 12;
 
     // remaining is ciphertext + GCM tag
-    const ciphertext = remarkBytes.subarray(offset)
-    if (ciphertext.length < 16) return null // at least the GCM tag
+    const ciphertext = remarkBytes.subarray(offset);
+    if (ciphertext.length < 16) return null; // at least the GCM tag
 
     // convert our ed25519 private key to x25519
-    const myX25519Priv = edwardsToMontgomeryPriv(myEd25519Priv)
+    const myX25519Priv = edwardsToMontgomeryPriv(myEd25519Priv);
 
     // DH: my x25519 priv * ephemeral pub
-    const sharedSecret = x25519.getSharedSecret(myX25519Priv, ephemeralPub)
+    const sharedSecret = x25519.getSharedSecret(myX25519Priv, ephemeralPub);
 
     // derive AES-256-GCM key via HKDF-SHA256 (same params as encoder)
-    const aesKey = hkdf(sha256, sharedSecret, ephemeralPub, HKDF_INFO, 32)
+    const aesKey = hkdf(sha256, sharedSecret, ephemeralPub, HKDF_INFO, 32);
 
     // decrypt
-    const cipher = gcm(aesKey, nonce)
-    const plaintext = cipher.decrypt(ciphertext)
+    const cipher = gcm(aesKey, nonce);
+    const plaintext = cipher.decrypt(ciphertext);
 
     // zeroize secrets
-    myX25519Priv.fill(0)
-    sharedSecret.fill(0)
-    aesKey.fill(0)
+    myX25519Priv.fill(0);
+    sharedSecret.fill(0);
+    aesKey.fill(0);
 
     // the plaintext should be a valid Noise init payload
-    return decodeNoiseInitMemo(plaintext)
+    return decodeNoiseInitMemo(plaintext);
   } catch {
-    return null
+    return null;
   }
 }

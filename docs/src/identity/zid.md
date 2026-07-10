@@ -17,11 +17,11 @@ a zid can:
 
 zafu uses two distinct systems for two distinct purposes:
 
-| layer | mechanism | purpose |
-|-------|-----------|---------|
+| layer               | mechanism             | purpose                             |
+| ------------------- | --------------------- | ----------------------------------- |
 | diversified address | zcash FVK diversifier | payment routing + referral tracking |
-| per-site zid | ed25519 per origin | website authentication |
-| per-contact zid | ed25519 per contact | sender auth + e2ee (X25519 DH) |
+| per-site zid        | ed25519 per origin    | website authentication              |
+| per-contact zid     | ed25519 per contact   | sender auth + e2ee (X25519 DH)      |
 
 referral tracking ("via alice") is handled entirely by diversified
 zcash addresses at the transport layer. see
@@ -239,12 +239,12 @@ rotating shows a notice that the site keeps old identities.
 zid preferences and the share log are encrypted at rest alongside
 wallet keys. they are not readable without the wallet password.
 
-| data | encrypted | purpose |
-|------|-----------|---------|
-| zidIdentities | yes | identity names + labels |
-| zidPreferences | yes | per-origin identity choice + mode + rotation counter |
-| zidShareLog | yes | site authentication records |
-| diversifiedAddresses | yes | per-contact zcash address mapping |
+| data                 | encrypted | purpose                                              |
+| -------------------- | --------- | ---------------------------------------------------- |
+| zidIdentities        | yes       | identity names + labels                              |
+| zidPreferences       | yes       | per-origin identity choice + mode + rotation counter |
+| zidShareLog          | yes       | site authentication records                          |
+| diversifiedAddresses | yes       | per-contact zcash address mapping                    |
 
 all identity information is encrypted. no zid pubkeys are stored
 in plaintext vault metadata.

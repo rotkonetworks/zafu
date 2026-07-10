@@ -10,14 +10,14 @@ export interface RetryPolicy {
 }
 
 /** Exponential backoff: base * 2^attempt, capped at max. */
-export const exponentialBackoff = (
-  baseMs: number,
-  maxMs = 30_000,
-): RetryPolicy['backoff'] =>
-  (attempt) => Math.min(baseMs * 2 ** attempt, maxMs);
+export const exponentialBackoff =
+  (baseMs: number, maxMs = 30_000): RetryPolicy['backoff'] =>
+  attempt =>
+    Math.min(baseMs * 2 ** attempt, maxMs);
 
 /** Retry a service call according to the given policy. */
-export const retry = <Req, Rep>(policy: RetryPolicy): SimpleFilter<Req, Rep> =>
+export const retry =
+  <Req, Rep>(policy: RetryPolicy): SimpleFilter<Req, Rep> =>
   async (req, service) => {
     let lastErr: unknown;
     for (let i = 0; i < policy.maxAttempts; i++) {

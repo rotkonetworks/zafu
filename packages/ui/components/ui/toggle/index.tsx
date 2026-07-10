@@ -28,7 +28,8 @@ const toggleVariants = cva(
 );
 
 export interface ToggleProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+  extends
+    React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof toggleVariants>,
     RadixToggleProps {}
 

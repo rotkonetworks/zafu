@@ -8,7 +8,12 @@
 
 import { useState, useEffect } from 'react';
 import { useStore } from '../state';
-import { selectActiveNetwork, selectEffectiveKeyInfo, selectPenumbraAccount, selectGetMnemonic } from '../state/keyring';
+import {
+  selectActiveNetwork,
+  selectEffectiveKeyInfo,
+  selectPenumbraAccount,
+  selectGetMnemonic,
+} from '../state/keyring';
 import { getActiveWalletJson, selectActiveZcashWallet } from '../state/wallets';
 import { NETWORK_CONFIGS, type IbcNetwork, isIbcNetwork } from '../state/keyring/network-types';
 import type { CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
@@ -25,7 +30,7 @@ async function deriveCosmosAddress(mnemonic: string, prefix: string): Promise<st
 /** derive polkadot/kusama ed25519 address from mnemonic */
 async function derivePolkadotAddress(
   mnemonic: string,
-  network: 'polkadot' | 'kusama'
+  network: 'polkadot' | 'kusama',
 ): Promise<string> {
   const { derivePolkadotAddress: derive } = await import('@repo/wallet/networks/polkadot/derive');
   return derive(mnemonic, network, 0);
@@ -33,7 +38,8 @@ async function derivePolkadotAddress(
 
 /** derive penumbra address from mnemonic */
 async function derivePenumbraAddress(mnemonic: string, index = 0): Promise<string> {
-  const { generateSpendKey, getFullViewingKey, getAddressByIndex } = await import('@rotko/penumbra-wasm/keys');
+  const { generateSpendKey, getFullViewingKey, getAddressByIndex } =
+    await import('@rotko/penumbra-wasm/keys');
   const { bech32mAddress } = await import('@penumbra-zone/bech32m/penumbra');
 
   const spendKey = await generateSpendKey(mnemonic);
@@ -44,7 +50,8 @@ async function derivePenumbraAddress(mnemonic: string, index = 0): Promise<strin
 
 /** derive a random ephemeral penumbra address from mnemonic (each call returns a different address) */
 async function derivePenumbraEphemeralFromMnemonic(mnemonic: string, index = 0): Promise<string> {
-  const { generateSpendKey, getFullViewingKey, getEphemeralByIndex } = await import('@rotko/penumbra-wasm/keys');
+  const { generateSpendKey, getFullViewingKey, getEphemeralByIndex } =
+    await import('@rotko/penumbra-wasm/keys');
   const { bech32mAddress } = await import('@penumbra-zone/bech32m/penumbra');
 
   const spendKey = await generateSpendKey(mnemonic);
@@ -95,7 +102,7 @@ async function loadZcashWasm() {
 
 /** derive zcash address from UFVK string (for watch-only wallets) */
 async function deriveZcashAddressFromUfvk(ufvk: string, diversifierIndex = 0): Promise<string> {
-  const zcashWasm = await loadZcashWasm() as any;
+  const zcashWasm = (await loadZcashWasm()) as any;
   // WatchOnlyWallet expects raw FVK bytes, but if we have a ufvk string
   // we need to use address_from_ufvk if it exists, otherwise fall back
   if (typeof zcashWasm.address_from_ufvk === 'function') {
@@ -112,9 +119,12 @@ async function deriveZcashAddressFromUfvk(ufvk: string, diversifierIndex = 0): P
 }
 
 /** derive transparent address from UFVK at given index (uses cached wasm) */
-export async function deriveZcashTransparentFromUfvk(ufvk: string, addressIndex = 0): Promise<string> {
+export async function deriveZcashTransparentFromUfvk(
+  ufvk: string,
+  addressIndex = 0,
+): Promise<string> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const zcashWasm = await loadZcashWasm() as any;
+  const zcashWasm = (await loadZcashWasm()) as any;
   return zcashWasm.transparent_address_from_ufvk(ufvk, addressIndex) as string;
 }
 
@@ -227,7 +237,8 @@ export function useActiveAddress() {
 
         // zigner-zafu vault or fallback - use stored viewing keys
         if (activeNetwork === 'penumbra' && penumbraWallet?.fullViewingKey) {
-          const { FullViewingKey } = await import('@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb');
+          const { FullViewingKey } =
+            await import('@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb');
           const { getAddressByIndex } = await import('@rotko/penumbra-wasm/keys');
           const { bech32mAddress } = await import('@penumbra-zone/bech32m/penumbra');
 
@@ -243,7 +254,9 @@ export function useActiveAddress() {
         if (activeNetwork === 'zcash' && zcashWallet) {
           const mainnet = zcashWallet.mainnet ?? true;
           // derive from UFVK string (stored in ufvk field or orchardFvk field)
-          const ufvkStr = zcashWallet.ufvk ?? (zcashWallet.orchardFvk?.startsWith('uview') ? zcashWallet.orchardFvk : undefined);
+          const ufvkStr =
+            zcashWallet.ufvk ??
+            (zcashWallet.orchardFvk?.startsWith('uview') ? zcashWallet.orchardFvk : undefined);
           if (ufvkStr) {
             try {
               const addr = await deriveZcashAddressFromUfvk(ufvkStr, shieldedIndex);
@@ -257,9 +270,13 @@ export function useActiveAddress() {
           // orchardFvk is base64 FVK bytes (from zigner QR binary) — derive via WatchOnlyWallet
           if (zcashWallet.orchardFvk && !zcashWallet.orchardFvk.startsWith('uview')) {
             try {
-              const zcashWasm = await loadZcashWasm() as any;
+              const zcashWasm = (await loadZcashWasm()) as any;
               const fvkBytes = Uint8Array.from(atob(zcashWallet.orchardFvk), c => c.charCodeAt(0));
-              const wallet = new zcashWasm.WatchOnlyWallet(fvkBytes, zcashWallet.accountIndex ?? 0, mainnet);
+              const wallet = new zcashWasm.WatchOnlyWallet(
+                fvkBytes,
+                zcashWallet.accountIndex ?? 0,
+                mainnet,
+              );
               try {
                 const raw = wallet.get_address_at(shieldedIndex);
                 if (!cancelled) setAddress(fixOrchardAddress(raw, mainnet));
@@ -287,7 +304,8 @@ export function useActiveAddress() {
           // check for stored cosmos/ibc address
           if (isIbcNetwork(activeNetwork)) {
             const addrs = insensitive['cosmosAddresses'] as
-              { chainId: string; address: string; prefix: string }[] | undefined;
+              | { chainId: string; address: string; prefix: string }[]
+              | undefined;
             if (addrs) {
               const match = addrs.find(a => a.chainId === activeNetwork);
               if (match) {
@@ -298,8 +316,12 @@ export function useActiveAddress() {
               // derive from any stored address using bech32 prefix conversion
               if (addrs.length > 0) {
                 try {
-                  const { deriveChainAddress } = await import('@repo/wallet/networks/cosmos/signer');
-                  const addr = deriveChainAddress(addrs[0]!.address, activeNetwork as CosmosChainId);
+                  const { deriveChainAddress } =
+                    await import('@repo/wallet/networks/cosmos/signer');
+                  const addr = deriveChainAddress(
+                    addrs[0]!.address,
+                    activeNetwork as CosmosChainId,
+                  );
                   if (!cancelled) setAddress(addr);
                   if (!cancelled) setLoading(false);
                   return;
@@ -311,7 +333,10 @@ export function useActiveAddress() {
           }
 
           // check for stored polkadot key
-          if ((activeNetwork === 'polkadot' || activeNetwork === 'kusama') && insensitive['polkadotSs58']) {
+          if (
+            (activeNetwork === 'polkadot' || activeNetwork === 'kusama') &&
+            insensitive['polkadotSs58']
+          ) {
             if (!cancelled) setAddress(insensitive['polkadotSs58'] as string);
             if (!cancelled) setLoading(false);
             return;
@@ -329,8 +354,21 @@ export function useActiveAddress() {
     };
 
     void deriveAddress();
-    return () => { cancelled = true; };
-  }, [activeNetwork, selectedKeyInfo?.id, selectedKeyInfo?.type, penumbraAccount, penumbraWallet?.fullViewingKey, zcashWallet?.address, zcashWallet?.orchardFvk, zcashWallet?.ufvk, getMnemonic, shieldedIndex]);
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeNetwork,
+    selectedKeyInfo?.id,
+    selectedKeyInfo?.type,
+    penumbraAccount,
+    penumbraWallet?.fullViewingKey,
+    zcashWallet?.address,
+    zcashWallet?.orchardFvk,
+    zcashWallet?.ufvk,
+    getMnemonic,
+    shieldedIndex,
+  ]);
 
   return { address, loading };
 }

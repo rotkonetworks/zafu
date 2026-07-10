@@ -20,12 +20,7 @@
  */
 
 import { BUCKET_SIZE } from '../types';
-import type {
-  BucketStart,
-  MemoFetcher,
-  MemoFilter,
-  FetchContext,
-} from '../types';
+import type { BucketStart, MemoFetcher, MemoFilter, FetchContext } from '../types';
 import type { BucketStore } from './cache';
 import type { RandomU32 } from './shuffle';
 
@@ -50,7 +45,7 @@ export interface DecoyOptions {
   excludeStore?: BucketStore;
 }
 
-const defaultRng: RandomU32 = (out) => crypto.getRandomValues(out);
+const defaultRng: RandomU32 = out => crypto.getRandomValues(out);
 
 export const withDecoyBuckets = (opts: DecoyOptions): MemoFilter => {
   const ratio = Math.max(0, Math.floor(opts.ratio));

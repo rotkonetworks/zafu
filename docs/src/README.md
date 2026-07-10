@@ -37,10 +37,10 @@ communication.
 
 ## networks
 
-| network   | send | receive | sync | swap | stake |
-|-----------|------|---------|------|------|-------|
-| penumbra  | yes  | yes     | yes  | yes  | yes   |
-| zcash     | yes  | yes     | yes  | -    | -     |
+| network  | send | receive | sync | swap | stake |
+| -------- | ---- | ------- | ---- | ---- | ----- |
+| penumbra | yes  | yes     | yes  | yes  | yes   |
+| zcash    | yes  | yes     | yes  | -    | -     |
 
 ## source
 

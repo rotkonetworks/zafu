@@ -137,8 +137,20 @@ export function createDefaultSchema(): PenumbraActionSchema {
         description: 'Spend a note from your wallet',
         requiresSignature: true,
         fields: [
-          { path: 'note.value.amount', label: 'Amount', fieldType: { type: 'amount', decimals: 6 }, visible: true, priority: 1 },
-          { path: 'note.value.asset_id', label: 'Asset', fieldType: { type: 'assetId' }, visible: true, priority: 2 },
+          {
+            path: 'note.value.amount',
+            label: 'Amount',
+            fieldType: { type: 'amount', decimals: 6 },
+            visible: true,
+            priority: 1,
+          },
+          {
+            path: 'note.value.asset_id',
+            label: 'Asset',
+            fieldType: { type: 'assetId' },
+            visible: true,
+            priority: 2,
+          },
         ],
       },
 
@@ -149,9 +161,27 @@ export function createDefaultSchema(): PenumbraActionSchema {
         description: 'Create an output note',
         requiresSignature: false,
         fields: [
-          { path: 'value.amount', label: 'Amount', fieldType: { type: 'amount', decimals: 6 }, visible: true, priority: 1 },
-          { path: 'value.asset_id', label: 'Asset', fieldType: { type: 'assetId' }, visible: true, priority: 2 },
-          { path: 'dest_address', label: 'To', fieldType: { type: 'address' }, visible: true, priority: 3 },
+          {
+            path: 'value.amount',
+            label: 'Amount',
+            fieldType: { type: 'amount', decimals: 6 },
+            visible: true,
+            priority: 1,
+          },
+          {
+            path: 'value.asset_id',
+            label: 'Asset',
+            fieldType: { type: 'assetId' },
+            visible: true,
+            priority: 2,
+          },
+          {
+            path: 'dest_address',
+            label: 'To',
+            fieldType: { type: 'address' },
+            visible: true,
+            priority: 3,
+          },
         ],
       },
 
@@ -162,9 +192,27 @@ export function createDefaultSchema(): PenumbraActionSchema {
         description: 'Swap assets via DEX',
         requiresSignature: false,
         fields: [
-          { path: 'swap_plaintext.delta_1_i', label: 'Input Amount', fieldType: { type: 'amount', decimals: 6 }, visible: true, priority: 1 },
-          { path: 'swap_plaintext.trading_pair.asset_1', label: 'From Asset', fieldType: { type: 'assetId' }, visible: true, priority: 2 },
-          { path: 'swap_plaintext.trading_pair.asset_2', label: 'To Asset', fieldType: { type: 'assetId' }, visible: true, priority: 3 },
+          {
+            path: 'swap_plaintext.delta_1_i',
+            label: 'Input Amount',
+            fieldType: { type: 'amount', decimals: 6 },
+            visible: true,
+            priority: 1,
+          },
+          {
+            path: 'swap_plaintext.trading_pair.asset_1',
+            label: 'From Asset',
+            fieldType: { type: 'assetId' },
+            visible: true,
+            priority: 2,
+          },
+          {
+            path: 'swap_plaintext.trading_pair.asset_2',
+            label: 'To Asset',
+            fieldType: { type: 'assetId' },
+            visible: true,
+            priority: 3,
+          },
         ],
       },
 
@@ -184,8 +232,20 @@ export function createDefaultSchema(): PenumbraActionSchema {
         description: 'Delegate stake to a validator',
         requiresSignature: false,
         fields: [
-          { path: 'unbonded_amount', label: 'Amount', fieldType: { type: 'amount', decimals: 6 }, visible: true, priority: 1 },
-          { path: 'validator_identity', label: 'Validator', fieldType: { type: 'identityKey' }, visible: true, priority: 2 },
+          {
+            path: 'unbonded_amount',
+            label: 'Amount',
+            fieldType: { type: 'amount', decimals: 6 },
+            visible: true,
+            priority: 1,
+          },
+          {
+            path: 'validator_identity',
+            label: 'Validator',
+            fieldType: { type: 'identityKey' },
+            visible: true,
+            priority: 2,
+          },
         ],
       },
 
@@ -196,8 +256,20 @@ export function createDefaultSchema(): PenumbraActionSchema {
         description: 'Undelegate stake from a validator',
         requiresSignature: false,
         fields: [
-          { path: 'delegation_amount', label: 'Amount', fieldType: { type: 'amount', decimals: 6 }, visible: true, priority: 1 },
-          { path: 'validator_identity', label: 'Validator', fieldType: { type: 'identityKey' }, visible: true, priority: 2 },
+          {
+            path: 'delegation_amount',
+            label: 'Amount',
+            fieldType: { type: 'amount', decimals: 6 },
+            visible: true,
+            priority: 1,
+          },
+          {
+            path: 'validator_identity',
+            label: 'Validator',
+            fieldType: { type: 'identityKey' },
+            visible: true,
+            priority: 2,
+          },
         ],
       },
 
@@ -217,7 +289,13 @@ export function createDefaultSchema(): PenumbraActionSchema {
         description: 'Vote on a governance proposal',
         requiresSignature: true,
         fields: [
-          { path: 'proposal', label: 'Proposal', fieldType: { type: 'u64' }, visible: true, priority: 1 },
+          {
+            path: 'proposal',
+            label: 'Proposal',
+            fieldType: { type: 'u64' },
+            visible: true,
+            priority: 1,
+          },
           {
             path: 'vote.vote',
             label: 'Vote',
@@ -269,9 +347,27 @@ export function createDefaultSchema(): PenumbraActionSchema {
         description: 'Schedule a Dutch auction',
         requiresSignature: false,
         fields: [
-          { path: 'description.input.amount', label: 'Input Amount', fieldType: { type: 'amount', decimals: 6 }, visible: true, priority: 1 },
-          { path: 'description.input.asset_id', label: 'Selling', fieldType: { type: 'assetId' }, visible: true, priority: 2 },
-          { path: 'description.output_id', label: 'For Asset', fieldType: { type: 'assetId' }, visible: true, priority: 3 },
+          {
+            path: 'description.input.amount',
+            label: 'Input Amount',
+            fieldType: { type: 'amount', decimals: 6 },
+            visible: true,
+            priority: 1,
+          },
+          {
+            path: 'description.input.asset_id',
+            label: 'Selling',
+            fieldType: { type: 'assetId' },
+            visible: true,
+            priority: 2,
+          },
+          {
+            path: 'description.output_id',
+            label: 'For Asset',
+            fieldType: { type: 'assetId' },
+            visible: true,
+            priority: 3,
+          },
         ],
       },
 
@@ -300,11 +396,41 @@ export function createDefaultSchema(): PenumbraActionSchema {
         description: 'Create a new token via Token Factory',
         requiresSignature: false,
         fields: [
-          { path: 'metadata.name', label: 'Name', fieldType: { type: 'string' }, visible: true, priority: 1 },
-          { path: 'metadata.symbol', label: 'Symbol', fieldType: { type: 'string' }, visible: true, priority: 2 },
-          { path: 'initial_supply', label: 'Initial Supply', fieldType: { type: 'amount', decimals: 6 }, visible: true, priority: 3 },
-          { path: 'enable_mint', label: 'Minting Enabled', fieldType: { type: 'bool' }, visible: true, priority: 4 },
-          { path: 'metadata.description', label: 'Description', fieldType: { type: 'string' }, visible: true, priority: 5 },
+          {
+            path: 'metadata.name',
+            label: 'Name',
+            fieldType: { type: 'string' },
+            visible: true,
+            priority: 1,
+          },
+          {
+            path: 'metadata.symbol',
+            label: 'Symbol',
+            fieldType: { type: 'string' },
+            visible: true,
+            priority: 2,
+          },
+          {
+            path: 'initial_supply',
+            label: 'Initial Supply',
+            fieldType: { type: 'amount', decimals: 6 },
+            visible: true,
+            priority: 3,
+          },
+          {
+            path: 'enable_mint',
+            label: 'Minting Enabled',
+            fieldType: { type: 'bool' },
+            visible: true,
+            priority: 4,
+          },
+          {
+            path: 'metadata.description',
+            label: 'Description',
+            fieldType: { type: 'string' },
+            visible: true,
+            priority: 5,
+          },
         ],
       },
 
@@ -315,9 +441,27 @@ export function createDefaultSchema(): PenumbraActionSchema {
         description: 'Mint additional tokens using mint capability',
         requiresSignature: false,
         fields: [
-          { path: 'token_id.inner', label: 'Token ID', fieldType: { type: 'bytes' }, visible: true, priority: 1 },
-          { path: 'amount', label: 'Amount to Mint', fieldType: { type: 'amount', decimals: 6 }, visible: true, priority: 2 },
-          { path: 'current_seq', label: 'Sequence', fieldType: { type: 'u64' }, visible: true, priority: 3 },
+          {
+            path: 'token_id.inner',
+            label: 'Token ID',
+            fieldType: { type: 'bytes' },
+            visible: true,
+            priority: 1,
+          },
+          {
+            path: 'amount',
+            label: 'Amount to Mint',
+            fieldType: { type: 'amount', decimals: 6 },
+            visible: true,
+            priority: 2,
+          },
+          {
+            path: 'current_seq',
+            label: 'Sequence',
+            fieldType: { type: 'u64' },
+            visible: true,
+            priority: 3,
+          },
         ],
       },
 
@@ -328,7 +472,13 @@ export function createDefaultSchema(): PenumbraActionSchema {
         description: 'Vote in liquidity tournament',
         requiresSignature: true,
         fields: [
-          { path: 'body.incentivized_asset', label: 'Vote For', fieldType: { type: 'assetId' }, visible: true, priority: 1 },
+          {
+            path: 'body.incentivized_asset',
+            label: 'Vote For',
+            fieldType: { type: 'assetId' },
+            visible: true,
+            priority: 1,
+          },
         ],
       },
 
@@ -339,9 +489,27 @@ export function createDefaultSchema(): PenumbraActionSchema {
         description: 'Transfer assets via IBC',
         requiresSignature: false,
         fields: [
-          { path: 'amount', label: 'Amount', fieldType: { type: 'amount', decimals: 6 }, visible: true, priority: 1 },
-          { path: 'denom', label: 'Asset', fieldType: { type: 'string' }, visible: true, priority: 2 },
-          { path: 'destination_chain_address', label: 'To', fieldType: { type: 'string' }, visible: true, priority: 3 },
+          {
+            path: 'amount',
+            label: 'Amount',
+            fieldType: { type: 'amount', decimals: 6 },
+            visible: true,
+            priority: 1,
+          },
+          {
+            path: 'denom',
+            label: 'Asset',
+            fieldType: { type: 'string' },
+            visible: true,
+            priority: 2,
+          },
+          {
+            path: 'destination_chain_address',
+            label: 'To',
+            fieldType: { type: 'string' },
+            visible: true,
+            priority: 3,
+          },
         ],
       },
     },
@@ -536,6 +704,6 @@ function writeU64LE(arr: Uint8Array, offset: number, value: number): void {
  */
 export function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, '0'))
+    .map(b => b.toString(16).padStart(2, '0'))
     .join('');
 }

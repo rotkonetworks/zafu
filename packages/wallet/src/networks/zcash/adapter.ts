@@ -5,12 +5,7 @@
  * Uses Orchard shielded pool for privacy transactions.
  */
 
-import type {
-  NetworkAdapter,
-  NetworkBalance,
-  NetworkTransaction,
-  SendParams,
-} from '../adapter';
+import type { NetworkAdapter, NetworkBalance, NetworkTransaction, SendParams } from '../adapter';
 import type { ZignerWallet, PendingTransaction } from '../common/types';
 // import { ZCASH_NETWORKS, type ZcashNetworkConfig } from './types';
 
@@ -55,7 +50,7 @@ export class ZcashAdapter implements NetworkAdapter {
   async getTransactions(
     _wallet: ZignerWallet,
     _limit = 50,
-    _offset = 0
+    _offset = 0,
   ): Promise<NetworkTransaction[]> {
     // TODO: Query lightwalletd for transactions
     return [];
@@ -63,7 +58,7 @@ export class ZcashAdapter implements NetworkAdapter {
 
   async buildSendTransaction(
     _wallet: ZignerWallet,
-    _params: SendParams
+    _params: SendParams,
   ): Promise<PendingTransaction> {
     // TODO: Build unsigned Zcash transaction
     // This creates the transaction structure and QR for Zigner
@@ -72,7 +67,7 @@ export class ZcashAdapter implements NetworkAdapter {
 
   async completeSendTransaction(
     _pendingTx: PendingTransaction,
-    _signatureQrHex: string
+    _signatureQrHex: string,
   ): Promise<string> {
     // TODO: Apply signatures and broadcast
     throw new Error('Not implemented');
@@ -105,10 +100,7 @@ export class ZcashAdapter implements NetworkAdapter {
     return BigInt(Math.round(zec * 1e8));
   }
 
-  async sync(
-    wallet: ZignerWallet,
-    onProgress?: (percent: number) => void
-  ): Promise<void> {
+  async sync(wallet: ZignerWallet, onProgress?: (percent: number) => void): Promise<void> {
     const zcashKeys = wallet.networks.zcash;
     if (!zcashKeys) {
       throw new Error('Wallet has no Zcash keys');

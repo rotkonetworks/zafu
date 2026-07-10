@@ -13,10 +13,7 @@ import { usePasswordGate } from '../../../hooks/password-gate';
 import { BackupModal } from '../multisig/backup/backup-modal';
 import { ImportModal } from '../multisig/backup/import-modal';
 import { AirgapQrImportModal } from '../multisig/backup/airgap-qr-import-modal';
-import {
-  exportBatchBackup,
-  exportSingleBackup,
-} from '../multisig/backup/export-helpers';
+import { exportBatchBackup, exportSingleBackup } from '../multisig/backup/export-helpers';
 
 export const SettingsMultisigBackup = () => {
   const allMs = useStore(selectMultisigWallets);
@@ -24,7 +21,7 @@ export const SettingsMultisigBackup = () => {
   const airgap = allMs.filter(w => w.multisig?.custody === 'airgapSigner');
 
   const [batchOpen, setBatchOpen] = useState(false);
-  const [singleTarget, setSingleTarget] = useState<typeof allMs[number] | null>(null);
+  const [singleTarget, setSingleTarget] = useState<(typeof allMs)[number] | null>(null);
   const [restoreOpen, setRestoreOpen] = useState(false);
   const [airgapQrOpen, setAirgapQrOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -43,7 +40,7 @@ export const SettingsMultisigBackup = () => {
         title={`Export ${selfCustody.length} wallet${selfCustody.length === 1 ? '' : 's'}`}
         walletLabel={`${selfCustody.length} self-custody multisig wallet${selfCustody.length === 1 ? '' : 's'}`}
         batch
-        onConfirm={async (passphrase) => {
+        onConfirm={async passphrase => {
           await exportBatchBackup(selfCustody, passphrase);
           showToast(`exported ${selfCustody.length} wallet${selfCustody.length === 1 ? '' : 's'}`);
         }}
@@ -53,7 +50,7 @@ export const SettingsMultisigBackup = () => {
         open={singleTarget !== null}
         title={singleTarget ? `Export "${singleTarget.label}"` : ''}
         walletLabel={singleTarget?.label ?? ''}
-        onConfirm={async (passphrase) => {
+        onConfirm={async passphrase => {
           if (singleTarget) {
             await exportSingleBackup(singleTarget, passphrase);
             showToast(`exported "${singleTarget.label}"`);
@@ -64,18 +61,22 @@ export const SettingsMultisigBackup = () => {
       <ImportModal
         open={restoreOpen}
         onClose={() => setRestoreOpen(false)}
-        onImported={(s) => showToast(
-          `restored ${s.imported} wallet${s.imported === 1 ? '' : 's'}` +
-          (s.skipped ? ` (${s.skipped} already existed)` : ''),
-        )}
+        onImported={s =>
+          showToast(
+            `restored ${s.imported} wallet${s.imported === 1 ? '' : 's'}` +
+              (s.skipped ? ` (${s.skipped} already existed)` : ''),
+          )
+        }
       />
       <AirgapQrImportModal
         open={airgapQrOpen}
         onClose={() => setAirgapQrOpen(false)}
-        onImported={(s) => showToast(
-          `imported ${s.imported} airgap wallet${s.imported === 1 ? '' : 's'}` +
-          (s.skipped ? ` (${s.skipped} already existed)` : ''),
-        )}
+        onImported={s =>
+          showToast(
+            `imported ${s.imported} airgap wallet${s.imported === 1 ? '' : 's'}` +
+              (s.skipped ? ` (${s.skipped} already existed)` : ''),
+          )
+        }
       />
 
       <div className='flex flex-col gap-4'>
@@ -89,8 +90,8 @@ export const SettingsMultisigBackup = () => {
         <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
           <p className='text-sm font-medium'>Batch backup</p>
           <p className='mt-1 text-[11px] text-fg-muted'>
-            One encrypted file containing every self-custody multisig
-            wallet. Single passphrase. Restore on any zafu install.
+            One encrypted file containing every self-custody multisig wallet. Single passphrase.
+            Restore on any zafu install.
           </p>
           {selfCustody.length === 0 ? (
             <p className='mt-3 text-xs text-fg-muted'>
@@ -145,10 +146,12 @@ export const SettingsMultisigBackup = () => {
         {airgap.length > 0 && (
           <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
             <p className='text-[11px] text-fg-muted'>
-              <span className='font-medium text-fg'>{airgap.length} airgap wallet
-              {airgap.length === 1 ? '' : 's'}</span>{' '}
-              not included — those shares live on zigner. Export each
-              from the zigner FROST wallet list.
+              <span className='font-medium text-fg'>
+                {airgap.length} airgap wallet
+                {airgap.length === 1 ? '' : 's'}
+              </span>{' '}
+              not included — those shares live on zigner. Export each from the zigner FROST wallet
+              list.
             </p>
             <ul className='mt-2 flex flex-col gap-0.5 text-[10px] text-fg-muted'>
               {airgap.map(w => (
@@ -164,9 +167,9 @@ export const SettingsMultisigBackup = () => {
         <div className='border-t border-border-soft pt-4 flex flex-col gap-2'>
           <p className='text-sm font-medium'>Restore</p>
           <p className='text-[11px] text-fg-muted'>
-            Import an encrypted backup file (self-custody share material), or
-            scan an airgap QR from a zigner to re-add airgap multisig wallets.
-            Already-known wallets are skipped, not overwritten.
+            Import an encrypted backup file (self-custody share material), or scan an airgap QR from
+            a zigner to re-add airgap multisig wallets. Already-known wallets are skipped, not
+            overwritten.
           </p>
           <div className='flex gap-2'>
             <button

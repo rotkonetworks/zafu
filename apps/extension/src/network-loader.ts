@@ -8,7 +8,15 @@
 import { localExtStorage } from '@repo/storage-chrome/local';
 import type { NetworkAdapter } from '@repo/wallet/networks';
 
-export type NetworkId = 'zcash' | 'penumbra' | 'noble' | 'cosmoshub' | 'polkadot' | 'kusama' | 'ethereum' | 'bitcoin';
+export type NetworkId =
+  | 'zcash'
+  | 'penumbra'
+  | 'noble'
+  | 'cosmoshub'
+  | 'polkadot'
+  | 'kusama'
+  | 'ethereum'
+  | 'bitcoin';
 
 /** Currently loaded network adapters */
 const loadedAdapters = new Map<NetworkId, NetworkAdapter>();
@@ -167,7 +175,9 @@ export async function initializeEnabledNetworks(): Promise<void> {
 
     const networksToEnable: NetworkId[] = vaults
       .flatMap(v => {
-        const nets = (v as { insensitive?: { supportedNetworks?: string[] } }).insensitive?.supportedNetworks ?? [];
+        const nets =
+          (v as { insensitive?: { supportedNetworks?: string[] } }).insensitive
+            ?.supportedNetworks ?? [];
         // mnemonic vaults support both penumbra and zcash by default
         const vaultType = (v as { type?: string }).type;
         if (vaultType === 'mnemonic') return ['penumbra', 'zcash', ...nets] as NetworkId[];
@@ -209,7 +219,10 @@ export async function disableNetwork(network: NetworkId): Promise<void> {
 
   // Update stored enabled networks
   const current = (await localExtStorage.get('enabledNetworks')) || [];
-  await localExtStorage.set('enabledNetworks', current.filter(n => n !== network));
+  await localExtStorage.set(
+    'enabledNetworks',
+    current.filter(n => n !== network),
+  );
 }
 
 /**

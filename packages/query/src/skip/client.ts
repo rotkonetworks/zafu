@@ -32,7 +32,7 @@ const toSnake = (obj: unknown): unknown => {
         acc[snakeKey] = toSnake(value);
         return acc;
       },
-      {} as Record<string, unknown>
+      {} as Record<string, unknown>,
     );
   }
   return obj;
@@ -50,7 +50,7 @@ const toCamel = (obj: unknown): unknown => {
         acc[camelKey] = toCamel(value);
         return acc;
       },
-      {} as Record<string, unknown>
+      {} as Record<string, unknown>,
     );
   }
   return obj;
@@ -142,7 +142,7 @@ export class SkipClient {
   async assets(chainId: string): Promise<SkipAsset[]> {
     const response = await this.get<{ chainToAssetsMap: Record<string, { assets: SkipAsset[] }> }>(
       'v2/fungible/assets',
-      { chainId }
+      { chainId },
     );
     return response.chainToAssetsMap[chainId]?.assets ?? [];
   }
@@ -188,7 +188,7 @@ export class SkipClient {
       maxRetries?: number;
       intervalMs?: number;
       onStatus?: (status: TransactionStatusResponse) => void;
-    }
+    },
   ): Promise<TransactionStatusResponse> {
     const maxRetries = options?.maxRetries ?? 60;
     const intervalMs = options?.intervalMs ?? 2000;

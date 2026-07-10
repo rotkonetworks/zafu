@@ -63,9 +63,7 @@ export const SettingsPassphrase = () => {
                 },
               ]}
             />
-            {error && (
-              <p className='text-xs text-rust'>{error}</p>
-            )}
+            {error && <p className='text-xs text-rust'>{error}</p>}
             <button
               type='submit'
               className='w-full rounded-lg bg-zigner-gold py-2.5 text-sm text-zigner-dark transition-colors hover:bg-primary/90'
@@ -79,9 +77,7 @@ export const SettingsPassphrase = () => {
               <span className='h-2 w-2 rounded-full bg-yellow-400' />
               hot wallet — seed is in browser memory
             </div>
-            <div
-              className='select-all cursor-text rounded-lg bg-canvas border border-border-soft p-3 text-xs leading-relaxed break-words'
-            >
+            <div className='select-all cursor-text rounded-lg bg-canvas border border-border-soft p-3 text-xs leading-relaxed break-words'>
               {phrase.join(' ')}
             </div>
             <CopyToClipboard
@@ -94,8 +90,8 @@ export const SettingsPassphrase = () => {
             {/* backup to zigner */}
             <div className='border-t border-border-soft pt-3 mt-1'>
               <p className='text-[10px] text-fg-dim font-mono mb-2'>
-                scan with zigner to back up this seed on your air-gapped device.
-                the seed goes INTO the air gap — never out.
+                scan with zigner to back up this seed on your air-gapped device. the seed goes INTO
+                the air gap — never out.
               </p>
               <QrSeedDisplay phrase={phrase.join(' ')} />
             </div>
@@ -124,7 +120,9 @@ const QrSeedDisplay = ({ phrase }: { phrase: string }) => {
           color: { dark: '#000', light: '#fff' },
           errorCorrectionLevel: 'L',
         });
-      } catch { /* */ }
+      } catch {
+        /* */
+      }
     },
     [phrase],
   );
@@ -146,8 +144,7 @@ const QrSeedDisplay = ({ phrase }: { phrase: string }) => {
         <canvas ref={ref} />
       </div>
       <p className='text-[9px] text-fg-muted/50 font-mono text-center'>
-        scan with zigner camera to import seed.
-        close this screen when done.
+        scan with zigner camera to import seed. close this screen when done.
       </p>
       <button
         onClick={() => setShow(false)}

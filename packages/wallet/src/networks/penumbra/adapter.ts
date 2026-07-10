@@ -5,12 +5,7 @@
  * This is the primary network that was originally supported.
  */
 
-import type {
-  NetworkAdapter,
-  NetworkBalance,
-  NetworkTransaction,
-  SendParams,
-} from '../adapter';
+import type { NetworkAdapter, NetworkBalance, NetworkTransaction, SendParams } from '../adapter';
 import type { ZignerWallet, PendingTransaction } from '../common/types';
 
 export class PenumbraAdapter implements NetworkAdapter {
@@ -56,7 +51,7 @@ export class PenumbraAdapter implements NetworkAdapter {
   async getTransactions(
     _wallet: ZignerWallet,
     _limit = 50,
-    _offset = 0
+    _offset = 0,
   ): Promise<NetworkTransaction[]> {
     // TODO: Query ViewServer for transactions
     return [];
@@ -64,7 +59,7 @@ export class PenumbraAdapter implements NetworkAdapter {
 
   async buildSendTransaction(
     _wallet: ZignerWallet,
-    _params: SendParams
+    _params: SendParams,
   ): Promise<PendingTransaction> {
     // TODO: Build Penumbra transaction with spend proof
     throw new Error('Not implemented - use existing Zafu flow');
@@ -72,7 +67,7 @@ export class PenumbraAdapter implements NetworkAdapter {
 
   async completeSendTransaction(
     _pendingTx: PendingTransaction,
-    _signatureQrHex: string
+    _signatureQrHex: string,
   ): Promise<string> {
     // TODO: Apply signature and broadcast
     throw new Error('Not implemented - use existing Zafu flow');
@@ -101,10 +96,7 @@ export class PenumbraAdapter implements NetworkAdapter {
     return BigInt(Math.round(um * 1e6));
   }
 
-  async sync(
-    wallet: ZignerWallet,
-    onProgress?: (percent: number) => void
-  ): Promise<void> {
+  async sync(wallet: ZignerWallet, onProgress?: (percent: number) => void): Promise<void> {
     const penumbraKeys = wallet.networks.penumbra;
     if (!penumbraKeys) {
       throw new Error('Wallet has no Penumbra keys');

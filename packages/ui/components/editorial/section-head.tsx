@@ -26,16 +26,11 @@ export interface SectionHeadProps {
 
 export const SectionHead = ({ n, label, hint, className }: SectionHeadProps) => (
   <div
-    className={cn(
-      'grid grid-cols-[12ch_auto_1fr] items-center gap-[18px] mb-[18px]',
-      className,
-    )}
+    className={cn('grid grid-cols-[12ch_auto_1fr] items-center gap-[18px] mb-[18px]', className)}
   >
     <div className='text-[10px] text-fg-dim tabular tracking-[0.1em]'>{n}</div>
     <div className='section-label'>{label}</div>
     <div className='rule' />
-    {hint && (
-      <div className='col-span-3 text-[10px] text-fg-dim lowercase'>{hint}</div>
-    )}
+    {hint && <div className='col-span-3 text-[10px] text-fg-dim lowercase'>{hint}</div>}
   </div>
 );

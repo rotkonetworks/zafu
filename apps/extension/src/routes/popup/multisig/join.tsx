@@ -84,39 +84,44 @@ const MultisigJoinZafu = () => {
       setStep('dkg');
       setProgress('waiting for coordinator...');
 
-      void relay.joinRoom(roomCode.trim(), participantId, (event) => {
-        if (event.type === 'joined') {
-          setParticipantCount(event.participant.participantCount);
-        } else if (event.type === 'message') {
-          const text = new TextDecoder().decode(event.message.payload);
-          const r1 = text.match(/^R1:(?:(\d+):(\d+):SK:([0-9a-fA-F]{64}):)?([\s\S]*)$/);
-          if (r1) {
-            if (r1[1] && r1[2] && r1[3]) {
-              threshold = Number(r1[1]);
-              maxSignersLocal = Number(r1[2]);
-              fvkSk = r1[3];
-              setThresholdInfo(`${threshold}-of-${maxSignersLocal}`);
-              setMaxSignersDisplay(maxSignersLocal);
+      void relay.joinRoom(
+        roomCode.trim(),
+        participantId,
+        event => {
+          if (event.type === 'joined') {
+            setParticipantCount(event.participant.participantCount);
+          } else if (event.type === 'message') {
+            const text = new TextDecoder().decode(event.message.payload);
+            const r1 = text.match(/^R1:(?:(\d+):(\d+):SK:([0-9a-fA-F]{64}):)?([\s\S]*)$/);
+            if (r1) {
+              if (r1[1] && r1[2] && r1[3]) {
+                threshold = Number(r1[1]);
+                maxSignersLocal = Number(r1[2]);
+                fvkSk = r1[3];
+                setThresholdInfo(`${threshold}-of-${maxSignersLocal}`);
+                setMaxSignersDisplay(maxSignersLocal);
+              }
+              peerBroadcasts.push(r1[4]!);
+              return;
             }
-            peerBroadcasts.push(r1[4]!);
-            return;
+            const r2 = text.match(/^R2:([\s\S]*)$/);
+            if (r2) {
+              peerRound2.push(r2[1]!);
+              return;
+            }
+            const fvk = text.match(/^FVK:([\s\S]*)$/);
+            if (fvk) {
+              peerFvks.push(fvk[1]!);
+              return;
+            }
+            console.warn('[multisig-join] unknown frost message, dropping:', text.slice(0, 32));
+          } else if (event.type === 'closed') {
+            setError(`room closed: ${event.reason}`);
+            setStep('error');
           }
-          const r2 = text.match(/^R2:([\s\S]*)$/);
-          if (r2) {
-            peerRound2.push(r2[1]!);
-            return;
-          }
-          const fvk = text.match(/^FVK:([\s\S]*)$/);
-          if (fvk) {
-            peerFvks.push(fvk[1]!);
-            return;
-          }
-          console.warn('[multisig-join] unknown frost message, dropping:', text.slice(0, 32));
-        } else if (event.type === 'closed') {
-          setError(`room closed: ${event.reason}`);
-          setStep('error');
-        }
-      }, abortController.signal);
+        },
+        abortController.signal,
+      );
 
       await waitForUntil(
         () => threshold > 0 && maxSignersLocal > 0 && fvkSk.length === 64,
@@ -125,9 +130,16 @@ const MultisigJoinZafu = () => {
       setProgress('round 1: generating commitment...');
 
       const round1 = await frostDkgPart1InWorker(maxSignersLocal, threshold);
-      console.log('[multisig-join] sending round1.broadcast:',
-        { len: round1.broadcast.length, head: round1.broadcast.slice(0, 32), looksHex: /^[0-9a-f]+$/i.test(round1.broadcast) });
-      await relay.sendMessage(roomCode.trim(), participantId, new TextEncoder().encode(`R1:${round1.broadcast}`));
+      console.log('[multisig-join] sending round1.broadcast:', {
+        len: round1.broadcast.length,
+        head: round1.broadcast.slice(0, 32),
+        looksHex: /^[0-9a-f]+$/i.test(round1.broadcast),
+      });
+      await relay.sendMessage(
+        roomCode.trim(),
+        participantId,
+        new TextEncoder().encode(`R1:${round1.broadcast}`),
+      );
 
       setProgress(`round 1: waiting for ${maxSignersLocal - 1} participant(s)...`);
       await waitForUntil(() => peerBroadcasts.length >= maxSignersLocal - 1, sessionDeadline);
@@ -135,7 +147,11 @@ const MultisigJoinZafu = () => {
       setProgress('round 2: exchanging key shares...');
       const round2 = await frostDkgPart2InWorker(round1.secret, peerBroadcasts);
       for (const pkg of round2.peer_packages) {
-        await relay.sendMessage(roomCode.trim(), participantId, new TextEncoder().encode(`R2:${pkg}`));
+        await relay.sendMessage(
+          roomCode.trim(),
+          participantId,
+          new TextEncoder().encode(`R2:${pkg}`),
+        );
       }
 
       const expectedR2 = (maxSignersLocal - 1) ** 2;
@@ -143,11 +159,7 @@ const MultisigJoinZafu = () => {
       await waitForUntil(() => peerRound2.length >= expectedR2, sessionDeadline);
 
       setProgress('round 3: finalizing...');
-      const round3 = await frostDkgPart3InWorker(
-        round2.secret,
-        peerBroadcasts,
-        peerRound2,
-      );
+      const round3 = await frostDkgPart3InWorker(round2.secret, peerBroadcasts, peerRound2);
 
       const addrRaw = await frostDeriveAddressFromSkInWorker(round3.public_key_package, fvkSk, 0);
       const addr = encodeOrchardUnifiedAddress(hexToBytes(addrRaw), true);
@@ -157,7 +169,11 @@ const MultisigJoinZafu = () => {
 
       setStep('fvk-echo');
       setProgress('verifying viewing key agreement...');
-      await relay.sendMessage(roomCode.trim(), participantId, new TextEncoder().encode(`FVK:${orchardFvk}`));
+      await relay.sendMessage(
+        roomCode.trim(),
+        participantId,
+        new TextEncoder().encode(`FVK:${orchardFvk}`),
+      );
       await waitForUntil(() => peerFvks.length >= maxSignersLocal - 1, sessionDeadline);
       for (const peerFvk of peerFvks) {
         if (peerFvk !== orchardFvk) {
@@ -266,7 +282,10 @@ const MultisigJoinZafu = () => {
             {error}
           </div>
           <button
-            onClick={() => { setStep('input'); setError(''); }}
+            onClick={() => {
+              setStep('input');
+              setError('');
+            }}
             className='rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
           >
             try again
@@ -326,7 +345,10 @@ const MultisigJoinZigner = () => {
   const newFrostMultisigKey = useStore(s => s.keyRing.newFrostMultisigKey);
 
   const countdown = useDeadlineCountdown(
-    step === 'waiting-host-r1' || step.startsWith('dkg') || step === 'fvk-echo' || step.startsWith('waiting')
+    step === 'waiting-host-r1' ||
+      step.startsWith('dkg') ||
+      step === 'fvk-echo' ||
+      step.startsWith('waiting')
       ? deadline
       : null,
   );
@@ -369,30 +391,41 @@ const MultisigJoinZigner = () => {
 
       abortRef.current = new AbortController();
 
-      void relay.joinRoom(roomCode.trim(), pid, event => {
-        if (event.type === 'joined') {
-          setParticipantCount(event.participant.participantCount);
-        } else if (event.type === 'message') {
-          const text = new TextDecoder().decode(event.message.payload);
-          const r1 = text.match(/^R1:(?:(\d+):(\d+):SK:([0-9a-fA-F]{64}):)?([\s\S]*)$/);
-          if (r1) {
-            if (r1[1] && r1[2] && r1[3] && fvkSkRef.current === '') {
-              setThreshold(Number(r1[1]));
-              setMaxSigners(Number(r1[2]));
-              fvkSkRef.current = r1[3];
+      void relay.joinRoom(
+        roomCode.trim(),
+        pid,
+        event => {
+          if (event.type === 'joined') {
+            setParticipantCount(event.participant.participantCount);
+          } else if (event.type === 'message') {
+            const text = new TextDecoder().decode(event.message.payload);
+            const r1 = text.match(/^R1:(?:(\d+):(\d+):SK:([0-9a-fA-F]{64}):)?([\s\S]*)$/);
+            if (r1) {
+              if (r1[1] && r1[2] && r1[3] && fvkSkRef.current === '') {
+                setThreshold(Number(r1[1]));
+                setMaxSigners(Number(r1[2]));
+                fvkSkRef.current = r1[3];
+              }
+              peerR1Ref.current.push(r1[4]!);
+              return;
             }
-            peerR1Ref.current.push(r1[4]!);
-            return;
+            const r2 = text.match(/^R2:([\s\S]*)$/);
+            if (r2) {
+              peerR2Ref.current.push(r2[1]!);
+              return;
+            }
+            const fvk = text.match(/^FVK:([\s\S]*)$/);
+            if (fvk) {
+              peerFvksRef.current.push(fvk[1]!);
+              return;
+            }
+          } else if (event.type === 'closed') {
+            setError(`room closed: ${event.reason}`);
+            setStep('error');
           }
-          const r2 = text.match(/^R2:([\s\S]*)$/);
-          if (r2) { peerR2Ref.current.push(r2[1]!); return; }
-          const fvk = text.match(/^FVK:([\s\S]*)$/);
-          if (fvk) { peerFvksRef.current.push(fvk[1]!); return; }
-        } else if (event.type === 'closed') {
-          setError(`room closed: ${event.reason}`);
-          setStep('error');
-        }
-      }, abortRef.current.signal);
+        },
+        abortRef.current.signal,
+      );
 
       setStep('waiting-host-r1');
     } catch (e) {
@@ -404,14 +437,19 @@ const MultisigJoinZigner = () => {
   const onZignerR1 = async (raw: string) => {
     try {
       if (raw.length === 0) throw new Error('empty r1 ack');
-      const broadcastHex = /^[0-9a-fA-F]+$/.test(raw) && raw.length % 2 === 0
-        ? raw
-        : Array.from(new TextEncoder().encode(raw))
-            .map(b => b.toString(16).padStart(2, '0'))
-            .join('');
+      const broadcastHex =
+        /^[0-9a-fA-F]+$/.test(raw) && raw.length % 2 === 0
+          ? raw
+          : Array.from(new TextEncoder().encode(raw))
+              .map(b => b.toString(16).padStart(2, '0'))
+              .join('');
       const relay = relayRef.current;
       if (!relay || !participantIdRef.current) throw new Error('relay not initialized');
-      await relay.sendMessage(roomCode.trim(), participantIdRef.current, new TextEncoder().encode(`R1:${broadcastHex}`));
+      await relay.sendMessage(
+        roomCode.trim(),
+        participantIdRef.current,
+        new TextEncoder().encode(`R1:${broadcastHex}`),
+      );
       setStep('waiting-r1');
     } catch (e) {
       setError(`r1 scan: ${e instanceof Error ? e.message : String(e)}`);
@@ -428,7 +466,11 @@ const MultisigJoinZigner = () => {
       const relay = relayRef.current;
       if (!relay || !participantIdRef.current) throw new Error('relay not initialized');
       for (const pkg of packages) {
-        await relay.sendMessage(roomCode.trim(), participantIdRef.current, new TextEncoder().encode(`R2:${pkg}`));
+        await relay.sendMessage(
+          roomCode.trim(),
+          participantIdRef.current,
+          new TextEncoder().encode(`R2:${pkg}`),
+        );
       }
       setStep('waiting-r2');
     } catch (e) {
@@ -468,39 +510,51 @@ const MultisigJoinZigner = () => {
       () => threshold > 0 && maxSigners > 0 && fvkSkRef.current.length === 64,
       deadline,
     )
-      .then(() => { if (!cancelled) setStep('dkg1-show'); })
+      .then(() => {
+        if (!cancelled) setStep('dkg1-show');
+      })
       .catch(e => {
         if (cancelled) return;
         setError(e instanceof Error ? e.message : String(e));
         setStep('error');
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [step, threshold, maxSigners, deadline]);
 
   useEffect(() => {
     if (step !== 'waiting-r1' || !deadline) return;
     let cancelled = false;
     void waitForUntil(() => peerR1Ref.current.length >= maxSigners - 1, deadline)
-      .then(() => { if (!cancelled) setStep('dkg2-show'); })
+      .then(() => {
+        if (!cancelled) setStep('dkg2-show');
+      })
       .catch(e => {
         if (cancelled) return;
         setError(e instanceof Error ? e.message : String(e));
         setStep('error');
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [step, maxSigners, deadline]);
 
   useEffect(() => {
     if (step !== 'waiting-r2' || !deadline) return;
     let cancelled = false;
     void waitForUntil(() => peerR2Ref.current.length >= (maxSigners - 1) ** 2, deadline)
-      .then(() => { if (!cancelled) setStep('dkg3-show'); })
+      .then(() => {
+        if (!cancelled) setStep('dkg3-show');
+      })
       .catch(e => {
         if (cancelled) return;
         setError(e instanceof Error ? e.message : String(e));
         setStep('error');
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [step, maxSigners, deadline]);
 
   useEffect(() => {
@@ -508,15 +562,21 @@ const MultisigJoinZigner = () => {
     let cancelled = false;
     void (async () => {
       try {
-        const ufvk = zignerDerivedUfvkRef.current
-          || await frostDeriveUfvkInWorker(publicKeyPackage, fvkSkRef.current, true);
-        const addr = zignerDerivedAddrRef.current
-          || await frostDeriveAddressFromSkInWorker(publicKeyPackage, fvkSkRef.current, 0);
+        const ufvk =
+          zignerDerivedUfvkRef.current ||
+          (await frostDeriveUfvkInWorker(publicKeyPackage, fvkSkRef.current, true));
+        const addr =
+          zignerDerivedAddrRef.current ||
+          (await frostDeriveAddressFromSkInWorker(publicKeyPackage, fvkSkRef.current, 0));
         if (cancelled) return;
 
         const relay = relayRef.current;
         if (!relay || !participantIdRef.current) throw new Error('relay not initialized');
-        await relay.sendMessage(roomCode.trim(), participantIdRef.current, new TextEncoder().encode(`FVK:${ufvk}`));
+        await relay.sendMessage(
+          roomCode.trim(),
+          participantIdRef.current,
+          new TextEncoder().encode(`FVK:${ufvk}`),
+        );
 
         await waitForUntil(() => peerFvksRef.current.length >= maxSigners - 1, deadline);
         for (const peerFvk of peerFvksRef.current) {
@@ -549,8 +609,20 @@ const MultisigJoinZigner = () => {
         setStep('error');
       }
     })();
-    return () => { cancelled = true; };
-  }, [step, deadline, publicKeyPackage, maxSigners, roomCode, threshold, relayUrl, newFrostMultisigKey, walletId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    step,
+    deadline,
+    publicKeyPackage,
+    maxSigners,
+    roomCode,
+    threshold,
+    relayUrl,
+    newFrostMultisigKey,
+    walletId,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -564,8 +636,8 @@ const MultisigJoinZigner = () => {
       {step === 'input' && (
         <div className='flex flex-col gap-4'>
           <div className='rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-2.5 text-[10px] text-yellow-400'>
-            cold-multisig: the FROST share will be generated and stored on
-            zigner only. zafu keeps only the public key package + UFVK.
+            cold-multisig: the FROST share will be generated and stored on zigner only. zafu keeps
+            only the public key package + UFVK.
           </div>
           <label className='text-xs text-fg-muted'>
             relay url
@@ -601,9 +673,7 @@ const MultisigJoinZigner = () => {
           <p className='text-xs text-fg-muted'>waiting for host's round 1 broadcast...</p>
           <span className='i-lucide-loader-2 size-4 animate-spin text-fg-muted' />
           {participantCount > 0 && (
-            <p className='text-[10px] text-fg-muted'>
-              {participantCount} participant(s) joined
-            </p>
+            <p className='text-[10px] text-fg-muted'>{participantCount} participant(s) joined</p>
           )}
           <span className='text-[10px] text-fg-muted tabular-nums'>{countdown}s</span>
         </div>
@@ -708,7 +778,10 @@ const MultisigJoinZigner = () => {
             {error}
           </div>
           <button
-            onClick={() => { setStep('input'); setError(''); }}
+            onClick={() => {
+              setStep('input');
+              setError('');
+            }}
             className='rounded-lg border border-border-soft py-2 text-xs hover:bg-elev-1 transition-colors'
           >
             try again
@@ -760,12 +833,20 @@ const ScanZignerResponse = ({ title, onScan, onCancel }: ScanProps) => (
   <AnimatedQrScanner
     inline
     title={title}
-    onComplete={(data) => onScan(new TextDecoder().decode(data))}
+    onComplete={data => onScan(new TextDecoder().decode(data))}
     onClose={onCancel}
   />
 );
 
-const WaitingForRelay = ({ headline, body, countdown }: { headline: string; body: string; countdown: number | null }) => (
+const WaitingForRelay = ({
+  headline,
+  body,
+  countdown,
+}: {
+  headline: string;
+  body: string;
+  countdown: number | null;
+}) => (
   <div className='flex flex-col items-center gap-3'>
     <p className='text-xs text-fg-muted'>{headline}</p>
     <p className='text-[10px] text-fg-muted text-center'>{body}</p>
@@ -783,8 +864,7 @@ const WaitingForRelay = ({ headline, body, countdown }: { headline: string; body
 export const MultisigJoin = () => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const [params] = useSearchParams();
-  const isZignerMode = params.get('mode') === 'zigner'
-    || selectedKeyInfo?.type === 'zigner-zafu';
+  const isZignerMode = params.get('mode') === 'zigner' || selectedKeyInfo?.type === 'zigner-zafu';
 
   return isZignerMode ? <MultisigJoinZigner /> : <MultisigJoinZafu />;
 };

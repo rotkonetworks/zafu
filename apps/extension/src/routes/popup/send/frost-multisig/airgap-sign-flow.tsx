@@ -43,7 +43,16 @@ interface Props {
 
 type Step = 'r1-out' | 'r1-in' | 'r1-relay' | 'r2-out' | 'r2-in' | 'r2-relay';
 
-export function FrostAirgapSignFlow({ ms, unsigned, recipient, amount, fee, onComplete, onCancel, onError }: Props) {
+export function FrostAirgapSignFlow({
+  ms,
+  unsigned,
+  recipient,
+  amount,
+  fee,
+  onComplete,
+  onCancel,
+  onError,
+}: Props) {
   const [step, setStep] = useState<Step>('r1-out');
   const [trigger1, setTrigger1] = useState<Uint8Array | null>(null);
   const [trigger2, setTrigger2] = useState<Uint8Array | null>(null);
@@ -67,7 +76,10 @@ export function FrostAirgapSignFlow({ ms, unsigned, recipient, amount, fee, onCo
           ms.maxSigners,
           600,
         );
-        if (cancelled) { session.abort.abort(); return; }
+        if (cancelled) {
+          session.abort.abort();
+          return;
+        }
         sessionRef.current = session;
         const trigger = JSON.stringify({
           frost: 'sign1',
@@ -76,9 +88,13 @@ export function FrostAirgapSignFlow({ ms, unsigned, recipient, amount, fee, onCo
           sighash: unsigned.sighash,
           alphas: unsigned.alphas,
           summary: {
-            recipient, amountZat, feeZat: unsigned.fee,
-            threshold: ms.threshold, maxSigners: ms.maxSigners,
-            roomCode: session.roomCode, relayUrl: ms.relayUrl,
+            recipient,
+            amountZat,
+            feeZat: unsigned.fee,
+            threshold: ms.threshold,
+            maxSigners: ms.maxSigners,
+            roomCode: session.roomCode,
+            relayUrl: ms.relayUrl,
           },
         });
         setTrigger1(new TextEncoder().encode(trigger));
@@ -168,7 +184,11 @@ export function FrostAirgapSignFlow({ ms, unsigned, recipient, amount, fee, onCo
         const allCommits = [zignerCommitsRef.current![i]!, ...peerCommits[i]!];
         const allShares = [zignerShares[i]!, ...peerShares[i]!];
         const sig = await frostSpendAggregateInWorker(
-          ms.publicKeyPackage, unsigned.sighash, unsigned.alphas[i]!, allCommits, allShares,
+          ms.publicKeyPackage,
+          unsigned.sighash,
+          unsigned.alphas[i]!,
+          allCommits,
+          allShares,
         );
         orchardSigs.push(sig);
       }
@@ -190,13 +210,13 @@ export function FrostAirgapSignFlow({ ms, unsigned, recipient, amount, fee, onCo
   };
 
   const Header = ({ onBack }: { onBack?: () => void }) => (
-    <div className="flex items-center gap-3 w-full">
+    <div className='flex items-center gap-3 w-full'>
       {onBack && (
-        <button onClick={onBack} className="text-fg-muted hover:text-fg-high transition-colors">
-          <span className="i-lucide-arrow-left h-5 w-5" />
+        <button onClick={onBack} className='text-fg-muted hover:text-fg-high transition-colors'>
+          <span className='i-lucide-arrow-left h-5 w-5' />
         </button>
       )}
-      <h2 className="text-base font-medium flex-1">multisig sign</h2>
+      <h2 className='text-base font-medium flex-1'>multisig sign</h2>
       <DontQuitIcon />
     </div>
   );
@@ -204,64 +224,74 @@ export function FrostAirgapSignFlow({ ms, unsigned, recipient, amount, fee, onCo
   switch (step) {
     case 'r1-out':
       return (
-        <div className="flex flex-col items-center gap-3 p-4">
+        <div className='flex flex-col items-center gap-3 p-4'>
           <Header onBack={cancel} />
           <SignStepProgress current={1} />
-          <p className="text-sm text-fg-high">show this QR to zigner</p>
-          {trigger1 && <AnimatedQrDisplay data={trigger1} urType="zafu-frost-sign" size={220} />}
+          <p className='text-sm text-fg-high'>show this QR to zigner</p>
+          {trigger1 && <AnimatedQrDisplay data={trigger1} urType='zafu-frost-sign' size={220} />}
           {sessionRef.current && <RoomCodeChip code={sessionRef.current.roomCode} />}
-          <div className="w-full rounded bg-elev-2 p-2 text-[11px] text-fg-muted space-y-0.5">
-            <p>{ms.threshold}-of-{ms.maxSigners} threshold</p>
-            <p>send {amount} ZEC to {recipient.slice(0, 16)}…{recipient.slice(-8)}</p>
+          <div className='w-full rounded bg-elev-2 p-2 text-[11px] text-fg-muted space-y-0.5'>
+            <p>
+              {ms.threshold}-of-{ms.maxSigners} threshold
+            </p>
+            <p>
+              send {amount} ZEC to {recipient.slice(0, 16)}…{recipient.slice(-8)}
+            </p>
             <p>fee: {fee} ZEC</p>
           </div>
-          <Button variant="gradient" onClick={() => setStep('r1-in')} className="w-full">
+          <Button variant='gradient' onClick={() => setStep('r1-in')} className='w-full'>
             scan qr from zigner
           </Button>
-          <Button variant="secondary" onClick={cancel} className="w-full">cancel</Button>
-          <p className="text-[10px] text-fg-muted/70 leading-snug pt-1">
-            sighash + per-action alphas + room code. zigner generates fresh round-1 nonces locally and shows commitments back.
+          <Button variant='secondary' onClick={cancel} className='w-full'>
+            cancel
+          </Button>
+          <p className='text-[10px] text-fg-muted/70 leading-snug pt-1'>
+            sighash + per-action alphas + room code. zigner generates fresh round-1 nonces locally
+            and shows commitments back.
           </p>
         </div>
       );
 
     case 'r1-in':
       return (
-        <div className="flex flex-col items-center gap-3 p-4">
+        <div className='flex flex-col items-center gap-3 p-4'>
           <Header onBack={() => setStep('r1-out')} />
           <SignStepProgress current={1} />
-          <p className="text-sm text-fg-high">scan zigner's commitments QR</p>
+          <p className='text-sm text-fg-high'>scan zigner's commitments QR</p>
           <AnimatedQrScanner
             inline
-            title="scan zigner round-1 commitments"
-            onComplete={(data) => void handleR1Response(new TextDecoder().decode(data))}
+            title='scan zigner round-1 commitments'
+            onComplete={data => void handleR1Response(new TextDecoder().decode(data))}
             onClose={() => setStep('r1-out')}
           />
-          <p className="text-[10px] text-fg-muted/70 leading-snug pt-1">
-            public part of zigner's nonces. zafu publishes to the relay so co-signers compute the same challenge — no secret leaves zigner.
+          <p className='text-[10px] text-fg-muted/70 leading-snug pt-1'>
+            public part of zigner's nonces. zafu publishes to the relay so co-signers compute the
+            same challenge — no secret leaves zigner.
           </p>
         </div>
       );
 
     case 'r1-relay':
       return (
-        <div className="flex flex-col items-center gap-4 p-6">
+        <div className='flex flex-col items-center gap-4 p-6'>
           <Header />
           <SignStepProgress current={1} />
-          <div className="flex items-center gap-2 text-xs text-fg-muted">
-            <span className="i-lucide-loader-2 size-3.5 animate-spin" />
+          <div className='flex items-center gap-2 text-xs text-fg-muted'>
+            <span className='i-lucide-loader-2 size-3.5 animate-spin' />
             exchanging commitments...
           </div>
           {sessionRef.current && <RoomCodeChip code={sessionRef.current.roomCode} />}
-          <div className="flex items-center gap-2 rounded-md bg-elev-2 px-3 py-1.5">
-            <span className="i-lucide-users size-3.5 text-fg-muted" />
-            <span className="text-xs">
-              <span className="font-medium text-fg">{peersReady + 1}</span>
-              <span className="text-fg-muted"> / {ms.threshold} ready</span>
+          <div className='flex items-center gap-2 rounded-md bg-elev-2 px-3 py-1.5'>
+            <span className='i-lucide-users size-3.5 text-fg-muted' />
+            <span className='text-xs'>
+              <span className='font-medium text-fg'>{peersReady + 1}</span>
+              <span className='text-fg-muted'> / {ms.threshold} ready</span>
             </span>
           </div>
-          <Button variant="secondary" onClick={cancel} className="w-full mt-2">cancel</Button>
-          <p className="text-[10px] text-fg-muted/70 leading-snug pt-1 text-center">
+          <Button variant='secondary' onClick={cancel} className='w-full mt-2'>
+            cancel
+          </Button>
+          <p className='text-[10px] text-fg-muted/70 leading-snug pt-1 text-center'>
             zigner's commitments are on the relay. waiting on peer commitment bundle(s).
           </p>
         </div>
@@ -269,50 +299,54 @@ export function FrostAirgapSignFlow({ ms, unsigned, recipient, amount, fee, onCo
 
     case 'r2-out':
       return (
-        <div className="flex flex-col items-center gap-3 p-4">
+        <div className='flex flex-col items-center gap-3 p-4'>
           <Header onBack={cancel} />
           <SignStepProgress current={2} />
-          <p className="text-sm text-fg-high">show this QR to zigner</p>
-          {trigger2 && <AnimatedQrDisplay data={trigger2} urType="zafu-frost-sign" size={220} />}
-          <Button variant="gradient" onClick={() => setStep('r2-in')} className="w-full">
+          <p className='text-sm text-fg-high'>show this QR to zigner</p>
+          {trigger2 && <AnimatedQrDisplay data={trigger2} urType='zafu-frost-sign' size={220} />}
+          <Button variant='gradient' onClick={() => setStep('r2-in')} className='w-full'>
             scan qr from zigner
           </Button>
-          <Button variant="secondary" onClick={cancel} className="w-full">cancel</Button>
-          <p className="text-[10px] text-fg-muted/70 leading-snug pt-1">
-            all co-signers' round-1 commitments grouped per action. zigner derives ρ and computes its share — nonces stay on zigner.
+          <Button variant='secondary' onClick={cancel} className='w-full'>
+            cancel
+          </Button>
+          <p className='text-[10px] text-fg-muted/70 leading-snug pt-1'>
+            all co-signers' round-1 commitments grouped per action. zigner derives ρ and computes
+            its share — nonces stay on zigner.
           </p>
         </div>
       );
 
     case 'r2-in':
       return (
-        <div className="flex flex-col items-center gap-3 p-4">
+        <div className='flex flex-col items-center gap-3 p-4'>
           <Header onBack={() => setStep('r2-out')} />
           <SignStepProgress current={2} />
-          <p className="text-sm text-fg-high">scan zigner's shares QR</p>
+          <p className='text-sm text-fg-high'>scan zigner's shares QR</p>
           <AnimatedQrScanner
             inline
-            title="scan zigner round-2 shares"
-            onComplete={(data) => void handleR2Response(new TextDecoder().decode(data))}
+            title='scan zigner round-2 shares'
+            onComplete={data => void handleR2Response(new TextDecoder().decode(data))}
             onClose={() => setStep('r2-out')}
           />
-          <p className="text-[10px] text-fg-muted/70 leading-snug pt-1">
-            one share per action. zafu collects peer shares, aggregates into orchard signatures, then broadcasts.
+          <p className='text-[10px] text-fg-muted/70 leading-snug pt-1'>
+            one share per action. zafu collects peer shares, aggregates into orchard signatures,
+            then broadcasts.
           </p>
         </div>
       );
 
     case 'r2-relay':
       return (
-        <div className="flex flex-col items-center gap-4 p-6">
+        <div className='flex flex-col items-center gap-4 p-6'>
           <Header />
           <SignStepProgress current={3} />
-          <div className="flex items-center gap-2 text-xs text-fg-muted">
-            <span className="i-lucide-loader-2 size-3.5 animate-spin" />
+          <div className='flex items-center gap-2 text-xs text-fg-muted'>
+            <span className='i-lucide-loader-2 size-3.5 animate-spin' />
             {progress || 'finalizing...'}
           </div>
           {sessionRef.current && <RoomCodeChip code={sessionRef.current.roomCode} />}
-          <p className="text-[10px] text-fg-muted/70 leading-snug pt-1 text-center">
+          <p className='text-[10px] text-fg-muted/70 leading-snug pt-1 text-center'>
             publishing shares, waiting on peer shares, aggregating signatures, broadcasting tx.
           </p>
         </div>

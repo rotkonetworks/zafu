@@ -40,7 +40,12 @@ export interface RingVrfSlice {
 /** WASM module interface (lazy loaded) */
 interface RingVrfWasm {
   derive_ring_pubkey: (seed: Uint8Array) => string;
-  ring_vrf_prove: (seed: Uint8Array, ringKeysHex: string, myIndex: number, context: string) => string;
+  ring_vrf_prove: (
+    seed: Uint8Array,
+    ringKeysHex: string,
+    myIndex: number,
+    context: string,
+  ) => string;
 }
 
 let wasmModule: RingVrfWasm | null = null;
@@ -75,7 +80,9 @@ export const createRingVrfSlice = (): SliceCreator<RingVrfSlice> => (set, get) =
       if (cached.ringEpoch === today && cached.myIndex >= 0) return;
 
       const wasm = await loadWasm();
-      set(state => { state.ringVrf.wasmReady = true; });
+      set(state => {
+        state.ringVrf.wasmReady = true;
+      });
 
       const myPubkey = wasm.derive_ring_pubkey(zidSeed);
 
@@ -84,14 +91,18 @@ export const createRingVrfSlice = (): SliceCreator<RingVrfSlice> => (set, get) =
 
       if (!ring.ringKeys.length) {
         console.log('[ring-vrf] empty ring');
-        set(state => { state.ringVrf.myIndex = -1; });
+        set(state => {
+          state.ringVrf.myIndex = -1;
+        });
         return;
       }
 
       const myIndex = ring.ringKeys.findIndex(k => k === myPubkey);
       if (myIndex < 0) {
         console.log('[ring-vrf] not in pro ring');
-        set(state => { state.ringVrf.myIndex = -1; });
+        set(state => {
+          state.ringVrf.myIndex = -1;
+        });
         return;
       }
 
@@ -118,8 +129,9 @@ export const createRingVrfSlice = (): SliceCreator<RingVrfSlice> => (set, get) =
     try {
       const wasm = await loadWasm();
       // one proof per sync session - unlinkable across sessions
-      const nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)),
-        b => b.toString(16).padStart(2, '0')).join('');
+      const nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)), b =>
+        b.toString(16).padStart(2, '0'),
+      ).join('');
       const context = `zafu-pro-${ringEpoch}-${nonce}`;
       const ringKeysHex = ringKeys.join(',');
       const proof = wasm.ring_vrf_prove(zidSeed, ringKeysHex, myIndex, context);

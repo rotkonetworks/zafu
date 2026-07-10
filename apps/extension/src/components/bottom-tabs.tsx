@@ -14,38 +14,43 @@ interface BottomTabsProps {
 }
 
 /** memoized tab button for minimal re-renders */
-const TabButton = memo(({
-  tab,
-  isActive,
-  onNavigate,
-}: {
-  tab: BottomTab;
-  isActive: boolean;
-  onNavigate: (path: string) => void;
-}) => (
-  <button
-    onClick={() => onNavigate(tab.path)}
-    className={cn(
-      'flex flex-1 flex-col items-center justify-center gap-0.5',
-      'transition-colors hover:text-fg-high',
-      isActive ? 'text-zigner-gold' : 'text-fg-dim',
-    )}
-  >
-    {isActive && tab.activeIcon ? tab.activeIcon : tab.icon}
-    <span className='text-[10px] lowercase tracking-[0.04em]'>{tab.label}</span>
-  </button>
-));
+const TabButton = memo(
+  ({
+    tab,
+    isActive,
+    onNavigate,
+  }: {
+    tab: BottomTab;
+    isActive: boolean;
+    onNavigate: (path: string) => void;
+  }) => (
+    <button
+      onClick={() => onNavigate(tab.path)}
+      className={cn(
+        'flex flex-1 flex-col items-center justify-center gap-0.5',
+        'transition-colors hover:text-fg-high',
+        isActive ? 'text-zigner-gold' : 'text-fg-dim',
+      )}
+    >
+      {isActive && tab.activeIcon ? tab.activeIcon : tab.icon}
+      <span className='text-[10px] lowercase tracking-[0.04em]'>{tab.label}</span>
+    </button>
+  ),
+);
 TabButton.displayName = 'TabButton';
 
 export const BottomTabs = memo(({ tabs }: BottomTabsProps) => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const handleNavigate = useCallback((path: string) => {
-    // don't navigate if already there
-    if (location.pathname === path) return;
-    navigate(path);
-  }, [navigate, location.pathname]);
+  const handleNavigate = useCallback(
+    (path: string) => {
+      // don't navigate if already there
+      if (location.pathname === path) return;
+      navigate(path);
+    },
+    [navigate, location.pathname],
+  );
 
   return (
     <nav
@@ -60,16 +65,12 @@ export const BottomTabs = memo(({ tabs }: BottomTabsProps) => {
     >
       <div className='flex h-12 items-center justify-around'>
         {tabs.map(tab => {
-          const isActive = location.pathname === tab.path ||
+          const isActive =
+            location.pathname === tab.path ||
             (tab.path !== '/' && location.pathname.startsWith(tab.path));
 
           return (
-            <TabButton
-              key={tab.path}
-              tab={tab}
-              isActive={isActive}
-              onNavigate={handleNavigate}
-            />
+            <TabButton key={tab.path} tab={tab} isActive={isActive} onNavigate={handleNavigate} />
           );
         })}
       </div>

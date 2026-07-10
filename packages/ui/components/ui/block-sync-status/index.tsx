@@ -64,16 +64,9 @@ const AwaitingSyncState = ({ genesisSyncing }: { genesisSyncing: boolean }) => {
       <Progress status='in-progress' background='stone' shape='squared' value={0} />
       <div className='absolute inset-0 z-10 flex items-center justify-between px-2'>
         <div className='font-mono text-[10px] text-stone-400 leading-none'>
-          {genesisSyncing
-            ? 'Initializing — connecting to network...'
-            : 'Preparing wallet sync...'}
+          {genesisSyncing ? 'Initializing — connecting to network...' : 'Preparing wallet sync...'}
         </div>
-        <LineWave
-          visible={true}
-          height='16'
-          width='16'
-          color='#a8a29e'
-        />
+        <LineWave visible={true} height='16' width='16' color='#a8a29e' />
       </div>
     </div>
   );

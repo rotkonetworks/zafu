@@ -107,7 +107,9 @@ async function nearFetch<T>(path: string, init?: RequestInit): Promise<T> {
     try {
       const err = JSON.parse(body);
       if (err.message) msg = err.message;
-    } catch { /* use default */ }
+    } catch {
+      /* use default */
+    }
     throw new Error(msg);
   }
 
@@ -157,7 +159,9 @@ export async function requestQuote(params: {
 
 /** Check swap status by deposit address. */
 export async function checkSwapStatus(depositAddress: string): Promise<SwapStatusResponse> {
-  return nearFetch<SwapStatusResponse>(`/v0/status?depositAddress=${encodeURIComponent(depositAddress)}`);
+  return nearFetch<SwapStatusResponse>(
+    `/v0/status?depositAddress=${encodeURIComponent(depositAddress)}`,
+  );
 }
 
 /** Submit deposit transaction hash to speed up detection. */

@@ -147,12 +147,11 @@ export function AnimatedQrDisplay({
         </div>
       )}
 
-      {description && (
-        <p className='text-xs text-fg-muted text-center max-w-xs'>{description}</p>
-      )}
+      {description && <p className='text-xs text-fg-muted text-center max-w-xs'>{description}</p>}
 
       <p className='text-[10px] text-fg-muted'>
-        {(totalBytes ?? data?.length ?? 0).toLocaleString()} bytes · {frames.length} frame{frames.length !== 1 ? 's' : ''}
+        {(totalBytes ?? data?.length ?? 0).toLocaleString()} bytes · {frames.length} frame
+        {frames.length !== 1 ? 's' : ''}
       </p>
     </div>
   );

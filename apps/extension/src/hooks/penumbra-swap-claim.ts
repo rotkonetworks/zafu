@@ -62,7 +62,10 @@ async function claimUnclaimedSwaps(account: number): Promise<number> {
       if (!transaction) continue;
 
       // 3. broadcast (don't await detection — fire and forget)
-      for await (const msg of await viewClient.broadcastTransaction({ transaction, awaitDetection: true })) {
+      for await (const msg of await viewClient.broadcastTransaction({
+        transaction,
+        awaitDetection: true,
+      })) {
         if (msg.status.case === 'confirmed') {
           claimed++;
           break;
@@ -81,9 +84,15 @@ async function claimUnclaimedSwaps(account: number): Promise<number> {
   return claimed;
 }
 
-export function usePenumbraSwapClaim(activeNetwork: string, onLoginPage: boolean, penumbraAccount: number) {
+export function usePenumbraSwapClaim(
+  activeNetwork: string,
+  onLoginPage: boolean,
+  penumbraAccount: number,
+) {
   const claimingRef = useRef(false);
-  const fullSyncHeight = useStore((state: { network: { fullSyncHeight?: number } }) => state.network.fullSyncHeight);
+  const fullSyncHeight = useStore(
+    (state: { network: { fullSyncHeight?: number } }) => state.network.fullSyncHeight,
+  );
   const { data: latestBlockHeight } = useLatestBlockHeight();
 
   // track sync state in a ref so the interval callback always sees latest values
@@ -106,7 +115,9 @@ export function usePenumbraSwapClaim(activeNetwork: string, onLoginPage: boolean
       claimingRef.current = true;
 
       claimUnclaimedSwaps(penumbraAccount)
-        .then(n => { if (n > 0) console.log(`[swap-claim] claimed ${n} swap(s)`); })
+        .then(n => {
+          if (n > 0) console.log(`[swap-claim] claimed ${n} swap(s)`);
+        })
         .catch(err => {
           if (isTransientPortClosure(err)) {
             console.debug('[swap-claim] port closed before claim started, will retry');
@@ -114,7 +125,9 @@ export function usePenumbraSwapClaim(activeNetwork: string, onLoginPage: boolean
             console.error('[swap-claim] auto-claim error:', err);
           }
         })
-        .finally(() => { claimingRef.current = false; });
+        .finally(() => {
+          claimingRef.current = false;
+        });
     };
 
     // initial check after sync settles
@@ -122,6 +135,9 @@ export function usePenumbraSwapClaim(activeNetwork: string, onLoginPage: boolean
     // re-check every 30s for swaps made during this session
     const interval = setInterval(tryClaimOnce, 30_000);
 
-    return () => { clearTimeout(timer); clearInterval(interval); };
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
   }, [activeNetwork, onLoginPage, penumbraAccount]);
 }

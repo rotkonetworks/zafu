@@ -48,12 +48,18 @@ const NETWORK_OPTIONS: NetworkOption[] = (Object.keys(NETWORKS) as NetworkType[]
 
 function regionLabel(region: RpcEndpointRegion): string {
   switch (region) {
-    case 'default': return 'recommended';
-    case 'global': return 'global';
-    case 'americas': return 'americas';
-    case 'europe': return 'europe';
-    case 'asia-pacific': return 'asia pacific';
-    case 'community': return 'community';
+    case 'default':
+      return 'recommended';
+    case 'global':
+      return 'global';
+    case 'americas':
+      return 'americas';
+    case 'europe':
+      return 'europe';
+    case 'asia-pacific':
+      return 'asia pacific';
+    case 'community':
+      return 'community';
   }
 }
 
@@ -132,7 +138,10 @@ export const SelectNetworks = () => {
       const num = parseInt(zcashBirthday, 10);
       if (!isNaN(num) && num >= ZCASH_ORCHARD_ACTIVATION) {
         const rounded = Math.floor(num / 10_000) * 10_000 - 10_000;
-        sessionStorage.setItem('pendingZcashBirthday', String(Math.max(rounded, ZCASH_ORCHARD_ACTIVATION)));
+        sessionStorage.setItem(
+          'pendingZcashBirthday',
+          String(Math.max(rounded, ZCASH_ORCHARD_ACTIVATION)),
+        );
       }
     }
 
@@ -164,174 +173,164 @@ export const SelectNetworks = () => {
             <span className='i-lucide-arrow-left h-3 w-3' />
             back
           </button>
-          <h2 className='text-2xl lowercase tracking-[-0.01em] text-fg-high'>
-            select networks
-          </h2>
+          <h2 className='text-2xl lowercase tracking-[-0.01em] text-fg-high'>select networks</h2>
           <p className='text-xs text-fg-muted lowercase tracking-[0.02em]'>
             choose which networks to enable. you can change this later in settings.
           </p>
         </header>
 
         <div className='flex flex-col gap-3'>
-            {NETWORK_OPTIONS.map(network => {
-              const isSelected = selected.has(network.id);
+          {NETWORK_OPTIONS.map(network => {
+            const isSelected = selected.has(network.id);
 
-              return (
-                <button
-                  key={network.id}
-                  type='button'
-                  onClick={() => handleToggle(network.id)}
+            return (
+              <button
+                key={network.id}
+                type='button'
+                onClick={() => handleToggle(network.id)}
+                className={cn(
+                  'flex items-center gap-4 p-4 rounded-lg border transition-colors text-left',
+                  isSelected
+                    ? 'border-zigner-gold bg-primary/10'
+                    : 'border-border-soft hover:border-muted-foreground/50',
+                )}
+              >
+                <div
                   className={cn(
-                    'flex items-center gap-4 p-4 rounded-lg border transition-colors text-left',
-                    isSelected
-                      ? 'border-zigner-gold bg-primary/10'
-                      : 'border-border-soft hover:border-muted-foreground/50',
+                    'w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold',
+                    isSelected ? 'bg-zigner-gold text-zigner-dark' : 'bg-elev-2 text-fg-muted',
                   )}
                 >
-                  <div
-                    className={cn(
-                      'w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold',
-                      isSelected
-                        ? 'bg-zigner-gold text-zigner-dark'
-                        : 'bg-elev-2 text-fg-muted'
+                  {network.icon}
+                </div>
+                <div className='flex-1'>
+                  <div className='font-medium flex items-center gap-2'>
+                    {network.name}
+                    {NETWORKS[network.id]?.transparent && (
+                      <span className='text-[10px] px-1.5 py-0.5 rounded-md bg-red-500/15 text-red-500 font-medium leading-none'>
+                        public
+                      </span>
                     )}
-                  >
-                    {network.icon}
                   </div>
-                  <div className='flex-1'>
-                    <div className='font-medium flex items-center gap-2'>
-                      {network.name}
-                      {NETWORKS[network.id]?.transparent && (
-                        <span className='text-[10px] px-1.5 py-0.5 rounded-md bg-red-500/15 text-red-500 font-medium leading-none'>
-                          public
-                        </span>
-                      )}
-                    </div>
-                    <div className='text-sm text-fg-muted'>
-                      {network.description}
-                    </div>
-                  </div>
-                  <div
-                      className={cn(
-                        'w-5 h-5 rounded border-2 flex items-center justify-center transition-colors',
-                        isSelected
-                          ? 'border-zigner-gold bg-zigner-gold'
-                          : 'border-muted-foreground/50'
-                      )}
-                    >
-                      {isSelected && <span className='i-lucide-check h-3 w-3 text-zigner-dark' />}
-                    </div>
-                </button>
-              );
-            })}
-          </div>
+                  <div className='text-sm text-fg-muted'>{network.description}</div>
+                </div>
+                <div
+                  className={cn(
+                    'w-5 h-5 rounded border-2 flex items-center justify-center transition-colors',
+                    isSelected ? 'border-zigner-gold bg-zigner-gold' : 'border-muted-foreground/50',
+                  )}
+                >
+                  {isSelected && <span className='i-lucide-check h-3 w-3 text-zigner-dark' />}
+                </div>
+              </button>
+            );
+          })}
+        </div>
 
-          {/* zcash node picker — shown on both create and import paths so
+        {/* zcash node picker — shown on both create and import paths so
               users on rotko-blocked networks have an obvious fallback.
               Default is rotko zidecar (trustless). Public lightwalletd
               endpoints are honest alternates. */}
-          {selected.has('zcash') && (
-            <div className='mt-4 rounded-lg border border-border-soft p-3'>
-              <div className='flex items-center justify-between mb-2'>
-                <span className='text-xs font-medium'>zcash node</span>
-                <span className='text-[10px] text-fg-muted'>
-                  fallback if your default is down
-                </span>
-              </div>
-              <select
-                value={zcashEndpointId}
-                onChange={e => setZcashEndpointId(e.target.value)}
-                className='w-full bg-input border border-border-soft px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-zigner-gold'
-              >
-                {groupPresetsByRegion(ZCASH_MAINNET_ENDPOINTS).map(group => (
-                  <optgroup key={group.region} label={regionLabel(group.region)}>
-                    {group.presets.map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.label}{p.backend === 'zidecar' ? ' · trustless' : ''}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-              <p className='mt-1.5 text-[10px] text-fg-muted'>
-                trustless = wallet verifies the server's responses with
-                ligerito + nomt proofs. lightwalletd = trusted public node.
-                you can switch later in settings.
-              </p>
+        {selected.has('zcash') && (
+          <div className='mt-4 rounded-lg border border-border-soft p-3'>
+            <div className='flex items-center justify-between mb-2'>
+              <span className='text-xs font-medium'>zcash node</span>
+              <span className='text-[10px] text-fg-muted'>fallback if your default is down</span>
             </div>
-          )}
+            <select
+              value={zcashEndpointId}
+              onChange={e => setZcashEndpointId(e.target.value)}
+              className='w-full bg-input border border-border-soft px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-zigner-gold'
+            >
+              {groupPresetsByRegion(ZCASH_MAINNET_ENDPOINTS).map(group => (
+                <optgroup key={group.region} label={regionLabel(group.region)}>
+                  {group.presets.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                      {p.backend === 'zidecar' ? ' · trustless' : ''}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            <p className='mt-1.5 text-[10px] text-fg-muted'>
+              trustless = wallet verifies the server's responses with ligerito + nomt proofs.
+              lightwalletd = trusted public node. you can switch later in settings.
+            </p>
+          </div>
+        )}
 
-          {/* zcash sync start — only relevant for *imported* wallets. A
+        {/* zcash sync start — only relevant for *imported* wallets. A
               brand-new wallet has no prior history to scan, so the worker
               starts from chain tip and the birthday is irrelevant. */}
-          {selected.has('zcash') && origin === SEED_PHRASE_ORIGIN.IMPORTED && (
-            <div className='mt-4 rounded-lg border border-border-soft p-3'>
-              <div className='flex items-center justify-between mb-2'>
-                <span className='text-xs font-medium'>wallet birthday</span>
-                <button
-                  type='button'
-                  onClick={() => setInputMode(inputMode === 'date' ? 'block' : 'date')}
-                  className='text-[10px] text-fg-muted hover:text-fg-high transition-colors'
-                >
-                  {inputMode === 'date' ? 'enter block instead' : 'enter date instead'}
-                </button>
-              </div>
-
-              {inputMode === 'date' ? (
-                <input
-                  type='date'
-                  min={formatDateInput(blockToDate(ZCASH_ORCHARD_ACTIVATION))}
-                  max={formatDateInput(new Date())}
-                  value={zcashDate}
-                  onChange={e => {
-                    setZcashDate(e.target.value);
-                    if (e.target.value) {
-                      setZcashBirthday(String(dateToBlock(new Date(e.target.value + 'T00:00:00Z'))));
-                    } else {
-                      setZcashBirthday('');
-                    }
-                  }}
-                  className='w-full bg-input border border-border-soft px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-zigner-gold'
-                />
-              ) : (
-                <input
-                  type='number'
-                  min={ZCASH_ORCHARD_ACTIVATION}
-                  step='10000'
-                  value={zcashBirthday}
-                  onChange={e => {
-                    setZcashBirthday(e.target.value);
-                    const num = parseInt(e.target.value, 10);
-                    if (!isNaN(num) && num >= ZCASH_ORCHARD_ACTIVATION) {
-                      setZcashDate(formatDateInput(blockToDate(num)));
-                    }
-                  }}
-                  placeholder='leave blank to sync from chain tip'
-                  className='w-full bg-input border border-border-soft px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-zigner-gold'
-                />
-              )}
-
-              {zcashBirthday && (
-                <p className='mt-1.5 text-[10px] text-fg-muted'>
-                  ~block {Number(zcashBirthday).toLocaleString()}
-                  {zcashDate && ` (~${zcashDate})`}
-                </p>
-              )}
-              <p className='mt-1 text-[10px] text-fg-muted'>
-                approximate date the wallet was first used. rounded for privacy.
-                skip this if you don't know — scanning starts from chain tip.
-              </p>
+        {selected.has('zcash') && origin === SEED_PHRASE_ORIGIN.IMPORTED && (
+          <div className='mt-4 rounded-lg border border-border-soft p-3'>
+            <div className='flex items-center justify-between mb-2'>
+              <span className='text-xs font-medium'>wallet birthday</span>
+              <button
+                type='button'
+                onClick={() => setInputMode(inputMode === 'date' ? 'block' : 'date')}
+                className='text-[10px] text-fg-muted hover:text-fg-high transition-colors'
+              >
+                {inputMode === 'date' ? 'enter block instead' : 'enter date instead'}
+              </button>
             </div>
-          )}
 
-          <Button
-            variant='gradient'
-            className='w-full mt-6'
-            disabled={availableCount === 0}
-            onClick={() => void handleContinue()}
-          >
-            continue with {availableCount} network{availableCount !== 1 ? 's' : ''}
-          </Button>
+            {inputMode === 'date' ? (
+              <input
+                type='date'
+                min={formatDateInput(blockToDate(ZCASH_ORCHARD_ACTIVATION))}
+                max={formatDateInput(new Date())}
+                value={zcashDate}
+                onChange={e => {
+                  setZcashDate(e.target.value);
+                  if (e.target.value) {
+                    setZcashBirthday(String(dateToBlock(new Date(e.target.value + 'T00:00:00Z'))));
+                  } else {
+                    setZcashBirthday('');
+                  }
+                }}
+                className='w-full bg-input border border-border-soft px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-zigner-gold'
+              />
+            ) : (
+              <input
+                type='number'
+                min={ZCASH_ORCHARD_ACTIVATION}
+                step='10000'
+                value={zcashBirthday}
+                onChange={e => {
+                  setZcashBirthday(e.target.value);
+                  const num = parseInt(e.target.value, 10);
+                  if (!isNaN(num) && num >= ZCASH_ORCHARD_ACTIVATION) {
+                    setZcashDate(formatDateInput(blockToDate(num)));
+                  }
+                }}
+                placeholder='leave blank to sync from chain tip'
+                className='w-full bg-input border border-border-soft px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-zigner-gold'
+              />
+            )}
+
+            {zcashBirthday && (
+              <p className='mt-1.5 text-[10px] text-fg-muted'>
+                ~block {Number(zcashBirthday).toLocaleString()}
+                {zcashDate && ` (~${zcashDate})`}
+              </p>
+            )}
+            <p className='mt-1 text-[10px] text-fg-muted'>
+              approximate date the wallet was first used. rounded for privacy. skip this if you
+              don't know — scanning starts from chain tip.
+            </p>
+          </div>
+        )}
+
+        <Button
+          variant='gradient'
+          className='w-full mt-6'
+          disabled={availableCount === 0}
+          onClick={() => void handleContinue()}
+        >
+          continue with {availableCount} network{availableCount !== 1 ? 's' : ''}
+        </Button>
       </div>
     </FadeTransition>
   );

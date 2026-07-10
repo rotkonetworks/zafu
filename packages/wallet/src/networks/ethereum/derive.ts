@@ -115,10 +115,7 @@ function toChecksumAddress(address: string): string {
  *
  * BIP-44 path: m/44'/60'/0'/0/{accountIndex}
  */
-export async function deriveEthWallet(
-  mnemonic: string,
-  accountIndex = 0,
-): Promise<EthWallet> {
+export async function deriveEthWallet(mnemonic: string, accountIndex = 0): Promise<EthWallet> {
   const seed = mnemonicToSeedSync(mnemonic);
   const path = `m/44'/60'/0'/0/${accountIndex}`;
 
@@ -142,10 +139,7 @@ export async function deriveEthWallet(
 /**
  * derive just the address (no private key returned)
  */
-export async function deriveEthAddress(
-  mnemonic: string,
-  accountIndex = 0,
-): Promise<string> {
+export async function deriveEthAddress(mnemonic: string, accountIndex = 0): Promise<string> {
   const wallet = await deriveEthWallet(mnemonic, accountIndex);
   wallet.privateKey.fill(0);
   return wallet.address;

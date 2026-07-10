@@ -32,10 +32,9 @@ interface EncryptRequest {
 
 interface DecryptRequest {
   type: 'zafu_decrypt';
-  ciphertext: string;       // base64-encoded (includes 12-byte nonce prefix)
-  ephemeral_pubkey: string;  // hex x25519 pubkey
+  ciphertext: string; // base64-encoded (includes 12-byte nonce prefix)
+  ephemeral_pubkey: string; // hex x25519 pubkey
 }
-
 
 // -- rate limiting --
 
@@ -102,7 +101,7 @@ const ensureApproved = async (
   const url = chrome.runtime.getURL(`popup.html#/approval/capability?${params.toString()}`);
   void chrome.windows.create({ url, type: 'popup', width: 400, height: 520 });
 
-  const result = await resultPromise as { approved?: boolean };
+  const result = (await resultPromise) as { approved?: boolean };
   if (result?.approved) {
     await grantCapability(origin, 'encrypt');
     approvedOrigins.add(origin);
@@ -118,9 +117,7 @@ const ensureApproved = async (
 const HEX_RE = /^[0-9a-fA-F]+$/;
 
 const isValidHexPubkey = (hex: unknown, expectedBytes: number): hex is string =>
-  typeof hex === 'string' &&
-  hex.length === expectedBytes * 2 &&
-  HEX_RE.test(hex);
+  typeof hex === 'string' && hex.length === expectedBytes * 2 && HEX_RE.test(hex);
 
 const isValidBase64 = (s: unknown): s is string => {
   if (typeof s !== 'string' || s.length === 0) return false;
@@ -133,11 +130,9 @@ const isValidBase64 = (s: unknown): s is string => {
   }
 };
 
-const base64ToBytes = (s: string): Uint8Array =>
-  Uint8Array.from(atob(s), c => c.charCodeAt(0));
+const base64ToBytes = (s: string): Uint8Array => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 
-const bytesToBase64 = (b: Uint8Array): string =>
-  btoa(String.fromCharCode(...b));
+const bytesToBase64 = (b: Uint8Array): string => btoa(String.fromCharCode(...b));
 
 // -- crypto primitives --
 
@@ -167,7 +162,9 @@ const deriveAesKey = (
  */
 const aesGcmEncrypt = async (key: Uint8Array, plaintext: Uint8Array): Promise<Uint8Array> => {
   const nonce = randomBytes(12);
-  const cryptoKey = await crypto.subtle.importKey('raw', key as BufferSource, 'AES-GCM', false, ['encrypt']);
+  const cryptoKey = await crypto.subtle.importKey('raw', key as BufferSource, 'AES-GCM', false, [
+    'encrypt',
+  ]);
   const encrypted = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv: nonce as BufferSource },
     cryptoKey,
@@ -190,7 +187,9 @@ const aesGcmDecrypt = async (key: Uint8Array, data: Uint8Array): Promise<Uint8Ar
   }
   const nonce = data.slice(0, 12);
   const ciphertext = data.slice(12);
-  const cryptoKey = await crypto.subtle.importKey('raw', key as BufferSource, 'AES-GCM', false, ['decrypt']);
+  const cryptoKey = await crypto.subtle.importKey('raw', key as BufferSource, 'AES-GCM', false, [
+    'decrypt',
+  ]);
   const decrypted = await crypto.subtle.decrypt(
     { name: 'AES-GCM', iv: nonce as BufferSource },
     cryptoKey,
@@ -260,10 +259,7 @@ const handleEncrypt = async (msg: EncryptRequest): Promise<unknown> => {
   }
 };
 
-const handleDecrypt = async (
-  msg: DecryptRequest,
-  origin: string,
-): Promise<unknown> => {
+const handleDecrypt = async (msg: DecryptRequest, origin: string): Promise<unknown> => {
   // identity feature gate: if the user has disabled the zid layer,
   // decryption is unavailable (it'd derive their site-keypair which
   // is exactly the surface they turned off).
@@ -290,7 +286,9 @@ const handleDecrypt = async (
 
     const { deriveZidKeypairForSite, DEFAULT_IDENTITY } = await import('../../state/identity');
     const { privateKey: ed25519Priv, publicKey: ed25519Pub } = deriveZidKeypairForSite(
-      mnemonic, DEFAULT_IDENTITY, origin,
+      mnemonic,
+      DEFAULT_IDENTITY,
+      origin,
     );
 
     // convert our ed25519 private key to x25519
@@ -342,7 +340,12 @@ const handleZidPubkey = async (origin: string): Promise<unknown> => {
 
 // -- main listener --
 
-const ENCRYPTION_TYPES = new Set(['zafu_encrypt', 'zafu_decrypt', 'zafu_zid_pubkey', 'zafu_encryption_approval_result']);
+const ENCRYPTION_TYPES = new Set([
+  'zafu_encrypt',
+  'zafu_decrypt',
+  'zafu_zid_pubkey',
+  'zafu_encryption_approval_result',
+]);
 
 export const encryptionMessageListener = (
   req: unknown,

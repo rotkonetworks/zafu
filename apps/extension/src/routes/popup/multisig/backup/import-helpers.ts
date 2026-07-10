@@ -66,21 +66,24 @@ export const importBackup = async (
   const payload: FrostBackupPayload | null = await openBackup(envelope, passphrase);
   if (!payload) throw new Error('wrong passphrase or corrupted backup');
 
-  const shares = payload.type === 'frost-share'
-    ? [{
-        label: payload.label,
-        publicKeyPackage: payload.publicKeyPackage,
-        keyPackage: payload.keyPackage,
-        ephemeralSeed: payload.ephemeralSeed,
-        threshold: payload.threshold,
-        maxSigners: payload.maxSigners,
-        mainnet: payload.mainnet,
-        orchardFvk: payload.orchardFvk,
-        address: payload.address,
-        relayUrl: payload.relayUrl,
-        createdAt: payload.createdAt,
-      }]
-    : payload.shares;
+  const shares =
+    payload.type === 'frost-share'
+      ? [
+          {
+            label: payload.label,
+            publicKeyPackage: payload.publicKeyPackage,
+            keyPackage: payload.keyPackage,
+            ephemeralSeed: payload.ephemeralSeed,
+            threshold: payload.threshold,
+            maxSigners: payload.maxSigners,
+            mainnet: payload.mainnet,
+            orchardFvk: payload.orchardFvk,
+            address: payload.address,
+            relayUrl: payload.relayUrl,
+            createdAt: payload.createdAt,
+          },
+        ]
+      : payload.shares;
 
   let imported = 0;
   let skipped = 0;

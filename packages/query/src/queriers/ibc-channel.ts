@@ -19,7 +19,9 @@ export class IbcChannelQuerier {
     return await this.client.channel(req);
   }
 
-  async channelClientState(req: QueryChannelClientStateRequest): Promise<QueryChannelClientStateResponse> {
+  async channelClientState(
+    req: QueryChannelClientStateRequest,
+  ): Promise<QueryChannelClientStateResponse> {
     return await this.client.channelClientState(req);
   }
 }

@@ -33,7 +33,9 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
     const frontendUrl = await localExtStorage.get('frontendUrl');
     const numeraires = await localExtStorage.get('numeraires');
     const zignerCameraEnabled = await localExtStorage.get('zignerCameraEnabled');
-    const privacySettings = await localExtStorage.get('privacySettings' as keyof import('@repo/storage-chrome/local').LocalStorageState);
+    const privacySettings = await localExtStorage.get(
+      'privacySettings' as keyof import('@repo/storage-chrome/local').LocalStorageState,
+    );
 
     set(
       produce((state: AllSlices) => {
@@ -53,14 +55,23 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
 
     // hydrate encrypted data + plaintext knownSites
     const hydrateEncryptedData = async () => {
-      const [wallets, zcashWallets, contacts, recentAddresses, messages, rawKnownSites] = await Promise.all([
-        readEncrypted<WalletJson[]>(localExtStorage, sessionExtStorage, 'penumbraWallets' as LK),
-        readEncrypted<ZcashWalletJson[]>(localExtStorage, sessionExtStorage, 'zcashWallets' as LK),
-        readEncrypted<Contact[]>(localExtStorage, sessionExtStorage, 'contacts' as LK),
-        readEncrypted<RecentAddress[]>(localExtStorage, sessionExtStorage, 'recentAddresses' as LK),
-        readEncrypted<unknown[]>(localExtStorage, sessionExtStorage, 'messages' as LK),
-        localExtStorage.get('knownSites'), // plaintext - not encrypted
-      ]);
+      const [wallets, zcashWallets, contacts, recentAddresses, messages, rawKnownSites] =
+        await Promise.all([
+          readEncrypted<WalletJson[]>(localExtStorage, sessionExtStorage, 'penumbraWallets' as LK),
+          readEncrypted<ZcashWalletJson[]>(
+            localExtStorage,
+            sessionExtStorage,
+            'zcashWallets' as LK,
+          ),
+          readEncrypted<Contact[]>(localExtStorage, sessionExtStorage, 'contacts' as LK),
+          readEncrypted<RecentAddress[]>(
+            localExtStorage,
+            sessionExtStorage,
+            'recentAddresses' as LK,
+          ),
+          readEncrypted<unknown[]>(localExtStorage, sessionExtStorage, 'messages' as LK),
+          localExtStorage.get('knownSites'), // plaintext - not encrypted
+        ]);
       const knownSites = Array.isArray(rawKnownSites)
         ? (rawKnownSites as Record<string, unknown>[]).map(r => {
             // handle new OriginPermissions shape
@@ -71,20 +82,36 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
               if (granted.includes('connect')) choice = UserChoice.Approved;
               else if (denied.includes('connect')) choice = UserChoice.Denied;
               else choice = UserChoice.Ignored;
-              return { origin: r['origin'] as string, choice, date: r['grantedAt'] as number } as OriginRecord;
+              return {
+                origin: r['origin'] as string,
+                choice,
+                date: r['grantedAt'] as number,
+              } as OriginRecord;
             }
             return r as unknown as OriginRecord;
           })
         : null;
       const decryptedAny = !!(wallets || zcashWallets || contacts || recentAddresses || messages);
-      set(produce((state: AllSlices) => {
-        if (Array.isArray(wallets)) state.wallets.all = wallets.map(w => ({ ...w, vaultId: w.vaultId ?? '' })) as typeof state.wallets.all;
-        if (Array.isArray(zcashWallets)) state.wallets.zcashWallets = zcashWallets.map(w => ({ ...w, vaultId: w.vaultId ?? '' })) as typeof state.wallets.zcashWallets;
-        if (Array.isArray(contacts)) state.contacts.contacts = contacts;
-        if (Array.isArray(recentAddresses)) state.recentAddresses.recentAddresses = recentAddresses;
-        if (Array.isArray(knownSites)) state.connectedSites.knownSites = knownSites;
-        if (Array.isArray(messages)) state.messages.messages = messages as typeof state.messages.messages;
-      }));
+      set(
+        produce((state: AllSlices) => {
+          if (Array.isArray(wallets))
+            state.wallets.all = wallets.map(w => ({
+              ...w,
+              vaultId: w.vaultId ?? '',
+            })) as typeof state.wallets.all;
+          if (Array.isArray(zcashWallets))
+            state.wallets.zcashWallets = zcashWallets.map(w => ({
+              ...w,
+              vaultId: w.vaultId ?? '',
+            })) as typeof state.wallets.zcashWallets;
+          if (Array.isArray(contacts)) state.contacts.contacts = contacts;
+          if (Array.isArray(recentAddresses))
+            state.recentAddresses.recentAddresses = recentAddresses;
+          if (Array.isArray(knownSites)) state.connectedSites.knownSites = knownSites;
+          if (Array.isArray(messages))
+            state.messages.messages = messages as typeof state.messages.messages;
+        }),
+      );
       // only unblock writes if we actually decrypted data — if locked (all null),
       // keep blocking so persist() can't wipe storage with empty arrays
       if (decryptedAny) markHydrated();
@@ -130,13 +157,19 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
               if (granted.includes('connect')) choice = UserChoice.Approved;
               else if (denied.includes('connect')) choice = UserChoice.Denied;
               else choice = UserChoice.Ignored;
-              return { origin: r['origin'] as string, choice, date: r['grantedAt'] as number } as OriginRecord;
+              return {
+                origin: r['origin'] as string,
+                choice,
+                date: r['grantedAt'] as number,
+              } as OriginRecord;
             }
             return r as unknown as OriginRecord;
           });
-          set(produce((state: AllSlices) => {
-            state.connectedSites.knownSites = sites;
-          }));
+          set(
+            produce((state: AllSlices) => {
+              state.connectedSites.knownSites = sites;
+            }),
+          );
         }
       }
 
@@ -218,7 +251,8 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
         const stored = changes.enabledNetworks.newValue;
         set(
           produce((state: AllSlices) => {
-            state.keyRing.enabledNetworks = (stored ?? []) as AllSlices['keyRing']['enabledNetworks'];
+            state.keyRing.enabledNetworks = (stored ??
+              []) as AllSlices['keyRing']['enabledNetworks'];
           }),
         );
       }

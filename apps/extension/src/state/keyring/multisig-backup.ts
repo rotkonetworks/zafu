@@ -85,10 +85,10 @@ export const openBackup = async (
   passphrase: string,
 ): Promise<FrostBackupPayload | null> => {
   const key = await Key.recreate(passphrase, KeyPrint.fromJson(envelope.keyPrint));
-  if (!key) return null;  // wrong passphrase
+  if (!key) return null; // wrong passphrase
 
   const plaintext = await key.unseal(Box.fromJson(envelope.box));
-  if (!plaintext) return null;  // tampered ciphertext
+  if (!plaintext) return null; // tampered ciphertext
 
   try {
     const parsed = JSON.parse(plaintext) as FrostBackupPayload;
@@ -105,7 +105,8 @@ export const parseEnvelopeJson = (jsonText: string): FrostBackupEnvelope | null 
   try {
     const parsed = JSON.parse(jsonText) as FrostBackupEnvelope;
     if (parsed.version !== 1) return null;
-    if (parsed.type !== 'frost-share-backup' && parsed.type !== 'frost-share-batch-backup') return null;
+    if (parsed.type !== 'frost-share-backup' && parsed.type !== 'frost-share-batch-backup')
+      return null;
     if (!parsed.keyPrint || !parsed.box) return null;
     return parsed;
   } catch {

@@ -15,12 +15,7 @@ interface AddContactDialogProps {
   onSuccess?: () => void;
 }
 
-export function AddContactDialog({
-  address,
-  network,
-  onClose,
-  onSuccess,
-}: AddContactDialogProps) {
+export function AddContactDialog({ address, network, onClose, onSuccess }: AddContactDialogProps) {
   const contacts = useStore(contactsSelector);
   const [mode, setMode] = useState<'new' | 'existing'>('new');
   const [name, setName] = useState('');
@@ -66,15 +61,18 @@ export function AddContactDialog({
   const canSubmit = mode === 'new' || selectedContact !== null;
 
   return (
-    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm' onClick={onClose}>
-      <div className='w-full max-w-sm mx-4 rounded-lg border border-border-soft bg-canvas shadow-xl' onClick={e => e.stopPropagation()}>
+    <div
+      className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm'
+      onClick={onClose}
+    >
+      <div
+        className='w-full max-w-sm mx-4 rounded-lg border border-border-soft bg-canvas shadow-xl'
+        onClick={e => e.stopPropagation()}
+      >
         {/* header */}
         <div className='flex items-center justify-between border-b border-border-soft px-4 py-3'>
           <h2 className='text-lg font-medium'>add to contacts</h2>
-          <button
-            onClick={onClose}
-            className='rounded-lg p-1 hover:bg-elev-1 transition-colors'
-          >
+          <button onClick={onClose} className='rounded-lg p-1 hover:bg-elev-1 transition-colors'>
             <span className='i-lucide-x h-4 w-4' />
           </button>
         </div>
@@ -98,9 +96,7 @@ export function AddContactDialog({
               onClick={() => setMode('new')}
               className={cn(
                 'flex-1 py-2 text-sm font-medium transition-colors',
-                mode === 'new'
-                  ? 'bg-zigner-gold text-zigner-dark'
-                  : 'bg-elev-2 hover:bg-elev-1'
+                mode === 'new' ? 'bg-zigner-gold text-zigner-dark' : 'bg-elev-2 hover:bg-elev-1',
               )}
             >
               <span className='i-lucide-plus h-4 w-4 inline mr-1' />
@@ -114,7 +110,7 @@ export function AddContactDialog({
                 mode === 'existing'
                   ? 'bg-zigner-gold text-zigner-dark'
                   : 'bg-elev-2 hover:bg-elev-1',
-                existingContacts.length === 0 && 'opacity-50 cursor-not-allowed'
+                existingContacts.length === 0 && 'opacity-50 cursor-not-allowed',
               )}
             >
               <span className='i-lucide-user h-4 w-4 inline mr-1' />
@@ -125,35 +121,29 @@ export function AddContactDialog({
           {mode === 'new' ? (
             /* new contact form */
             <div>
-              <label className='block text-xs text-fg-muted mb-1'>
-                contact name
-              </label>
+              <label className='block text-xs text-fg-muted mb-1'>contact name</label>
               <input
                 type='text'
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={e => setName(e.target.value)}
                 placeholder={defaultName}
                 className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
                 autoFocus
               />
-              <p className='text-xs text-fg-muted mt-1'>
-                leave empty to use address as name
-              </p>
+              <p className='text-xs text-fg-muted mt-1'>leave empty to use address as name</p>
             </div>
           ) : (
             /* existing contact selector */
             <div>
-              <label className='block text-xs text-fg-muted mb-1'>
-                select contact
-              </label>
+              <label className='block text-xs text-fg-muted mb-1'>select contact</label>
               <div className='max-h-40 overflow-y-auto rounded-lg border border-border-soft'>
-                {existingContacts.map((contact) => (
+                {existingContacts.map(contact => (
                   <button
                     key={contact.id}
                     onClick={() => setSelectedContact(contact)}
                     className={cn(
                       'flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-elev-1',
-                      selectedContact?.id === contact.id && 'bg-primary/10'
+                      selectedContact?.id === contact.id && 'bg-primary/10',
                     )}
                   >
                     <span className='i-lucide-user h-4 w-4 text-fg-muted' />

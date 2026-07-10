@@ -166,7 +166,12 @@ export interface TransferState {
 }
 
 export interface TransactionStatusResponse {
-  status: 'STATE_UNKNOWN' | 'STATE_SUBMITTED' | 'STATE_PENDING' | 'STATE_COMPLETED' | 'STATE_FAILED';
+  status:
+    | 'STATE_UNKNOWN'
+    | 'STATE_SUBMITTED'
+    | 'STATE_PENDING'
+    | 'STATE_COMPLETED'
+    | 'STATE_FAILED';
   transferSequence: Array<{
     ibcTransfer?: {
       fromChainId: string;

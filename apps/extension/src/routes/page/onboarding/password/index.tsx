@@ -38,8 +38,7 @@ export const SetPassword = () => {
   // floor is one number to change if that calculus shifts.
   const MIN_PASSWORD_LENGTH = 1;
   const tooShort = password.length > 0 && password.length < MIN_PASSWORD_LENGTH;
-  const canSubmit =
-    password.length >= MIN_PASSWORD_LENGTH && password === confirmation && !loading;
+  const canSubmit = password.length >= MIN_PASSWORD_LENGTH && password === confirmation && !loading;
   const onBack = () => {
     if (origin === SEED_PHRASE_ORIGIN.NEWLY_GENERATED) {
       navigate(PagePath.WELCOME);
@@ -60,20 +59,14 @@ export const SetPassword = () => {
             <span className='i-lucide-arrow-left h-3 w-3' />
             back
           </button>
-          <h2 className='text-2xl lowercase tracking-[-0.01em] text-fg-high'>
-            set a password
-          </h2>
+          <h2 className='text-2xl lowercase tracking-[-0.01em] text-fg-high'>set a password</h2>
           <p className='text-xs text-fg-muted lowercase tracking-[0.02em] leading-snug'>
-            encrypts your seed phrase on this device. you'll enter it
-            again every time the wallet locks. there's no way to recover
-            it — pick something you'll remember.
+            encrypts your seed phrase on this device. you'll enter it again every time the wallet
+            locks. there's no way to recover it — pick something you'll remember.
           </p>
         </header>
 
-        <form
-          onSubmit={e => void handleSubmit(e, password)}
-          className='flex flex-col gap-3'
-        >
+        <form onSubmit={e => void handleSubmit(e, password)} className='flex flex-col gap-3'>
           <PasswordInput
             passwordValue={password}
             label='new password'
