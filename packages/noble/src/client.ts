@@ -43,7 +43,7 @@ export class NobleClient implements NobleClientInterface {
   }
 
   async registerAccount({ sequence, accountIndex }: { sequence: number; accountIndex?: number }) {
-    const { penumbraAddr, nobleAddrBech32, nobleAddrBytes } = getNobleForwardingAddr(
+    const { penumbraAddr, nobleAddrBech32, nobleAddrBytes } = await getNobleForwardingAddr(
       sequence,
       this.fvk,
       this.channel,
