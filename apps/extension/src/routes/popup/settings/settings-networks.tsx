@@ -76,7 +76,7 @@ export const SettingsNetworks = () => {
   })();
   const [expandedNetwork, setExpandedNetwork] = useState<NetworkType | null>(initialExpand);
   const [editingEndpoint, setEditingEndpoint] = useState(
-    initialExpand ? networkState[initialExpand as NetworkId]?.endpoint ?? '' : '',
+    initialExpand ? (networkState[initialExpand as NetworkId]?.endpoint ?? '') : '',
   );
   const [saving, setSaving] = useState(false);
 
@@ -208,7 +208,7 @@ export const SettingsNetworks = () => {
                       editingEndpoint={editingEndpoint}
                       setEditingEndpoint={setEditingEndpoint}
                       saving={saving}
-                      onPick={async (url) => {
+                      onPick={async url => {
                         // Persist via the store action; keep the panel open
                         // so the user can verify (or pick again) without
                         // re-expanding the card.
@@ -221,9 +221,9 @@ export const SettingsNetworks = () => {
                         }
                       }}
                       onSaveCustom={() => void handleSaveEndpoint(networkId)}
-                      onBackendChange={(b) => void setZcashBackend(b)}
-                      onStrategyChange={(st) => void setMemoSyncStrategy('zcash', st)}
-                      onMempoolChange={(st) => void setMempoolWatch('zcash', st)}
+                      onBackendChange={b => void setZcashBackend(b)}
+                      onStrategyChange={st => void setMemoSyncStrategy('zcash', st)}
+                      onMempoolChange={st => void setMempoolWatch('zcash', st)}
                     />
                   ) : (
                     <div>
@@ -333,7 +333,9 @@ const ZcashEndpointPanel = ({
     void measurePresetLatencies().then(m => {
       if (!cancelled) setLatencies(m);
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const rttSuffix = (url: string): string => {
@@ -360,12 +362,16 @@ const ZcashEndpointPanel = ({
           }}
           className='w-full bg-input border border-border-soft px-2 py-1.5 text-xs focus:border-primary/50 focus:outline-none'
         >
-          <option value='' disabled>{matched ? matched.label : 'custom url'}</option>
+          <option value='' disabled>
+            {matched ? matched.label : 'custom url'}
+          </option>
           {groupPresetsByRegion(ZCASH_MAINNET_ENDPOINTS).map(group => (
             <optgroup key={group.region} label={regionLabel(group.region)}>
               {group.presets.map(p => (
                 <option key={p.id} value={p.id}>
-                  {p.label}{p.backend === 'zidecar' ? ' · trustless' : ''}{rttSuffix(p.url)}
+                  {p.label}
+                  {p.backend === 'zidecar' ? ' · trustless' : ''}
+                  {rttSuffix(p.url)}
                 </option>
               ))}
             </optgroup>
@@ -375,7 +381,9 @@ const ZcashEndpointPanel = ({
 
       {/* 2 · trust line */}
       <div className='flex items-center gap-1.5 text-label lowercase'>
-        <span className={cn('h-1.5 w-1.5 rounded-full', isTrustless ? 'bg-green-400' : 'bg-amber-400')} />
+        <span
+          className={cn('h-1.5 w-1.5 rounded-full', isTrustless ? 'bg-green-400' : 'bg-amber-400')}
+        />
         <span className={isTrustless ? 'text-green-400' : 'text-amber-400'}>{trust.label}</span>
         <span className='text-fg-muted'>
           {isTrustless ? '· responses verified locally' : '· wallet trusts this server'}
@@ -389,7 +397,12 @@ const ZcashEndpointPanel = ({
           onClick={() => setShowAdvanced(v => !v)}
           className='flex w-full items-center gap-1 text-label text-fg-muted lowercase transition-colors hover:text-fg-high'
         >
-          <span className={cn('i-lucide-chevron-right h-3.5 w-3.5 transition-transform', showAdvanced && 'rotate-90')} />
+          <span
+            className={cn(
+              'i-lucide-chevron-right h-3.5 w-3.5 transition-transform',
+              showAdvanced && 'rotate-90',
+            )}
+          />
           advanced
         </button>
 
@@ -456,14 +469,20 @@ const ZcashEndpointPanel = ({
                 )}
               >
                 <span className='text-label text-fg-muted'>instant pending (mempool watch)</span>
-                <span className={cn(
-                  'relative h-4 w-7 shrink-0 rounded-full border-2 transition-colors',
-                  mempoolOn ? 'border-zigner-gold bg-zigner-gold/30' : 'border-muted-foreground/50',
-                )}>
-                  <span className={cn(
-                    'absolute top-0 h-3 w-3 rounded-full bg-zigner-gold transition-all',
-                    mempoolOn ? 'left-3' : 'left-0',
-                  )} />
+                <span
+                  className={cn(
+                    'relative h-4 w-7 shrink-0 rounded-full border-2 transition-colors',
+                    mempoolOn
+                      ? 'border-zigner-gold bg-zigner-gold/30'
+                      : 'border-muted-foreground/50',
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'absolute top-0 h-3 w-3 rounded-full bg-zigner-gold transition-all',
+                      mempoolOn ? 'left-3' : 'left-0',
+                    )}
+                  />
                 </span>
               </button>
               <p className='mt-1 text-label text-fg-dim lowercase leading-snug'>

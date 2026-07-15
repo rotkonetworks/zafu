@@ -93,8 +93,8 @@ export const SettingsPassphrase = () => {
             {/* backup to zigner */}
             <div className='border-t border-border-soft pt-3 mt-1'>
               <p className='text-label text-fg-dim font-mono mb-2'>
-                scan with zigner to back up this seed on your air-gapped device.
-                the seed goes INTO the air gap — never out.
+                scan with zigner to back up this seed on your air-gapped device. the seed goes INTO
+                the air gap — never out.
               </p>
               <QrSeedDisplay phrase={phrase.join(' ')} />
             </div>
@@ -149,8 +149,7 @@ const QrSeedDisplay = ({ phrase }: { phrase: string }) => {
         <canvas ref={ref} />
       </div>
       <p className='text-label text-fg-muted/50 font-mono text-center'>
-        scan with zigner camera to import seed.
-        close this screen when done.
+        scan with zigner camera to import seed. close this screen when done.
       </p>
       <button
         onClick={() => setShow(false)}

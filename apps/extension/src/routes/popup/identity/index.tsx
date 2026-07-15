@@ -330,12 +330,15 @@ export const IdentityPage = () => {
                 {keyInfo && (
                   <span className='text-label text-fg-muted font-mono'>{keyInfo.name}</span>
                 )}
-                <span className={`text-label font-mono px-1.5 py-0 rounded ${
-                  pro
-                    ? 'bg-green-500/15 text-green-400 border border-green-500/20'
-                    : 'bg-elev-2 text-fg-muted/70 border border-border-soft'
-                }`}>
-                  {plan}{pro && days > 0 ? ` - ${days}d` : ''}
+                <span
+                  className={`text-label font-mono px-1.5 py-0 rounded ${
+                    pro
+                      ? 'bg-green-500/15 text-green-400 border border-green-500/20'
+                      : 'bg-elev-2 text-fg-muted/70 border border-border-soft'
+                  }`}
+                >
+                  {plan}
+                  {pro && days > 0 ? ` - ${days}d` : ''}
                 </span>
                 {zidIndex > 0 && (
                   <span
@@ -388,10 +391,7 @@ export const IdentityPage = () => {
               public key
             </button>
             {showFullKey && (
-              <button
-                onClick={() => copy(zidPubkey, 'zid')}
-                className='mt-1 pl-4 text-left'
-              >
+              <button onClick={() => copy(zidPubkey, 'zid')} className='mt-1 pl-4 text-left'>
                 <div className='font-mono text-label text-fg-muted break-all leading-relaxed'>
                   {zidPubkey}
                 </div>
@@ -420,7 +420,9 @@ export const IdentityPage = () => {
               {showQr ? 'hide qr' : 'qr code'}
             </button>
             {crossSiteCount > 0 && (
-              <span className='text-label text-yellow-500/60 font-mono'>{crossSiteCount} linkable</span>
+              <span className='text-label text-yellow-500/60 font-mono'>
+                {crossSiteCount} linkable
+              </span>
             )}
           </div>
         </section>
@@ -451,8 +453,8 @@ export const IdentityPage = () => {
                 <span className='i-lucide-globe size-6 mb-2' />
                 <p className='text-xs font-mono'>no sites yet.</p>
                 <p className='text-label font-mono mt-1 max-w-[260px]'>
-                  each site you sign into gets its own key, derived from your
-                  seed — sites can't link you across origins.
+                  each site you sign into gets its own key, derived from your seed — sites can't
+                  link you across origins.
                 </p>
               </div>
             ) : (
@@ -661,7 +663,9 @@ const SiteRow = ({
             </span>
           )}
           {!isSiteMode && (
-            <span className='text-label text-yellow-400 font-mono px-1 border border-yellow-500/40 rounded'>cross</span>
+            <span className='text-label text-yellow-400 font-mono px-1 border border-yellow-500/40 rounded'>
+              cross
+            </span>
           )}
         </div>
         <div className='flex items-center gap-2 shrink-0'>
@@ -696,7 +700,9 @@ const SiteRow = ({
             <span>identity mode</span>
             <div className='flex items-center gap-0'>
               <button
-                onClick={() => !isSiteMode ? void onUpdatePref(site.origin, undefined) : undefined}
+                onClick={() =>
+                  !isSiteMode ? void onUpdatePref(site.origin, undefined) : undefined
+                }
                 className={`flex items-center gap-1 px-2 py-0.5 rounded-l border text-label transition-colors ${
                   isSiteMode
                     ? 'bg-green-500/15 border-green-500/30 text-green-400'
@@ -707,7 +713,7 @@ const SiteRow = ({
                 unique
               </button>
               <button
-                onClick={() => isSiteMode ? onConfirm('cross-site') : undefined}
+                onClick={() => (isSiteMode ? onConfirm('cross-site') : undefined)}
                 className={`flex items-center gap-1 px-2 py-0.5 rounded-r border border-l-0 text-label transition-colors ${
                   !isSiteMode
                     ? 'bg-yellow-500/15 border-yellow-500/30 text-yellow-400'

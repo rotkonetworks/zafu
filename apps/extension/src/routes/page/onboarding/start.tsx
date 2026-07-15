@@ -67,9 +67,7 @@ export const OnboardingStart = () => {
           <h2 className='text-2xl lowercase tracking-[-0.01em] text-fg-high'>
             how would you like to begin?
           </h2>
-          <p className='text-xs text-fg-muted lowercase'>
-            your keys stay on this device. always.
-          </p>
+          <p className='text-xs text-fg-muted lowercase'>your keys stay on this device. always.</p>
         </header>
 
         <ul className='flex flex-col gap-2.5'>
@@ -140,9 +138,7 @@ const PathCard = ({ option, onClick }: PathCardProps) => {
       </span>
       <span className='flex flex-1 flex-col'>
         <span className='text-sm lowercase text-fg-high'>{option.label}</span>
-        <span className='mt-0.5 text-body text-fg-muted lowercase'>
-          {option.hint}
-        </span>
+        <span className='mt-0.5 text-body text-fg-muted lowercase'>{option.hint}</span>
       </span>
       <span
         className={cn(

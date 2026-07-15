@@ -49,13 +49,15 @@ const CapabilityItem = ({ cap }: { cap: Capability }) => {
       )}
       <div className='flex items-center gap-2'>
         <span className={cn('text-sm font-medium', style.text)}>{meta.label}</span>
-        <span className={cn(
-          'rounded px-1.5 py-0.5 text-label uppercase',
-          meta.risk === 'low' && 'bg-elev-2 text-fg-muted',
-          meta.risk === 'medium' && 'bg-yellow-500/10 text-yellow-400',
-          meta.risk === 'high' && 'bg-orange-500/10 text-orange-400',
-          meta.risk === 'critical' && 'bg-red-500/10 text-red-400',
-        )}>
+        <span
+          className={cn(
+            'rounded px-1.5 py-0.5 text-label uppercase',
+            meta.risk === 'low' && 'bg-elev-2 text-fg-muted',
+            meta.risk === 'medium' && 'bg-yellow-500/10 text-yellow-400',
+            meta.risk === 'high' && 'bg-orange-500/10 text-orange-400',
+            meta.risk === 'critical' && 'bg-red-500/10 text-red-400',
+          )}
+        >
           {meta.risk}
         </span>
       </div>

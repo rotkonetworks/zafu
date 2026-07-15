@@ -758,7 +758,11 @@ const verifySyncProofs = async (
   // returned root (catches NOMT corruption) and confirm cmx existence; the
   // canonical orchard membership is enforced locally during scan.
   if (pendingCmxs.length > 0) {
-    const { proofs: commitmentProofs } = await client.getCommitmentProofs(pendingCmxs, pendingPositions, tip);
+    const { proofs: commitmentProofs } = await client.getCommitmentProofs(
+      pendingCmxs,
+      pendingPositions,
+      tip,
+    );
     for (const proof of commitmentProofs) {
       const valid = zyncModule['verify_commitment_proof'](
         hexEncode(proof.cmx),
@@ -770,7 +774,9 @@ const verifySyncProofs = async (
         throw new Error(`commitment proof invalid for cmx ${hexEncode(proof.cmx).slice(0, 16)}`);
       }
     }
-    console.log(`[zcash-worker] ${commitmentProofs.length} commitment proofs verified (path only; orchard-root binding is local)`);
+    console.log(
+      `[zcash-worker] ${commitmentProofs.length} commitment proofs verified (path only; orchard-root binding is local)`,
+    );
   }
 
   // 3. verify nullifier proofs for unspent notes

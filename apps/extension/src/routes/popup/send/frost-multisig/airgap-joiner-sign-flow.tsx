@@ -303,8 +303,9 @@ export function FrostAirgapJoinerSignFlow({
             <span className='i-lucide-loader-2 size-3.5 animate-spin' />
             waiting for transaction from coordinator…
           </div>
-          <p className="text-label text-fg-muted/70 leading-snug pt-1 text-center">
-            host publishes a SIGN: payload (sighash + alphas + recipient/amount) on the relay; we review and authorize before triggering zigner.
+          <p className='text-label text-fg-muted/70 leading-snug pt-1 text-center'>
+            host publishes a SIGN: payload (sighash + alphas + recipient/amount) on the relay; we
+            review and authorize before triggering zigner.
           </p>
         </div>
       );
@@ -315,41 +316,43 @@ export function FrostAirgapJoinerSignFlow({
       return (
         <div className='flex flex-col gap-3 p-4'>
           <Header onBack={cancel} />
-          <div className="rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-3">
-            <p className="text-label uppercase tracking-wider text-yellow-400">review transaction</p>
+          <div className='rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-3'>
+            <p className='text-label uppercase tracking-wider text-yellow-400'>
+              review transaction
+            </p>
           </div>
           <div className='rounded-lg border border-border-soft bg-elev-1 p-3 flex flex-col gap-2.5'>
             <div>
-              <p className="text-label uppercase tracking-wider text-fg-muted">from</p>
-              <p className="mt-0.5 text-xs font-medium">{walletLabel}</p>
-              <p className="mt-0.5 break-all font-mono text-label text-fg-muted">{walletAddress}</p>
+              <p className='text-label uppercase tracking-wider text-fg-muted'>from</p>
+              <p className='mt-0.5 text-xs font-medium'>{walletLabel}</p>
+              <p className='mt-0.5 break-all font-mono text-label text-fg-muted'>{walletAddress}</p>
             </div>
             <div className='border-t border-border-soft' />
             <div>
-              <p className="text-label uppercase tracking-wider text-fg-muted">to</p>
-              <p className="mt-0.5 break-all font-mono text-label">{tx?.recipient}</p>
+              <p className='text-label uppercase tracking-wider text-fg-muted'>to</p>
+              <p className='mt-0.5 break-all font-mono text-label'>{tx?.recipient}</p>
             </div>
-            <div className="border-t border-border-soft" />
-            <div className="flex items-baseline justify-between">
-              <span className="text-label uppercase tracking-wider text-fg-muted">amount</span>
-              <span className="text-sm font-medium">{formatZec(tx?.amountZat ?? '')} ZEC</span>
+            <div className='border-t border-border-soft' />
+            <div className='flex items-baseline justify-between'>
+              <span className='text-label uppercase tracking-wider text-fg-muted'>amount</span>
+              <span className='text-sm font-medium'>{formatZec(tx?.amountZat ?? '')} ZEC</span>
             </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-label uppercase tracking-wider text-fg-muted">fee</span>
-              <span className="text-xs text-fg-muted">{formatZec(tx?.feeZat ?? '')} ZEC</span>
+            <div className='flex items-baseline justify-between'>
+              <span className='text-label uppercase tracking-wider text-fg-muted'>fee</span>
+              <span className='text-xs text-fg-muted'>{formatZec(tx?.feeZat ?? '')} ZEC</span>
             </div>
           </div>
 
           {/* verifier verdict */}
           {verdict.kind === 'pending' && (
-            <div className="rounded-lg border border-border-soft bg-elev-1 p-2.5 text-label text-fg-muted flex items-center gap-2">
-              <span className="i-lucide-loader-2 size-3 animate-spin" />
+            <div className='rounded-lg border border-border-soft bg-elev-1 p-2.5 text-label text-fg-muted flex items-center gap-2'>
+              <span className='i-lucide-loader-2 size-3 animate-spin' />
               verifying tx bytes match host claim…
             </div>
           )}
           {verdict.kind === 'match' && (
-            <div className="rounded-lg border border-green-500/40 bg-green-500/5 p-2.5 text-label text-green-400 flex items-start gap-2">
-              <span className="i-lucide-shield-check size-3.5 mt-0.5 shrink-0" />
+            <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-2.5 text-label text-green-400 flex items-start gap-2'>
+              <span className='i-lucide-shield-check size-3.5 mt-0.5 shrink-0' />
               <span>
                 bytes verified — derived recipient + amount match host claim
                 {verdict.changeZat > 0n && (
@@ -359,23 +362,27 @@ export function FrostAirgapJoinerSignFlow({
             </div>
           )}
           {verdict.kind === 'unverified' && (
-            <div className="rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-2.5 text-label text-yellow-400 flex items-start gap-2">
-              <span className="i-lucide-alert-triangle size-3.5 mt-0.5 shrink-0" />
+            <div className='rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-2.5 text-label text-yellow-400 flex items-start gap-2'>
+              <span className='i-lucide-alert-triangle size-3.5 mt-0.5 shrink-0' />
               <span>host claim shown without verification — {verdict.reason}</span>
             </div>
           )}
           {verdict.kind === 'mismatch' && (
-            <div className="rounded-lg border border-red-500/60 bg-red-500/10 p-3 flex flex-col gap-2">
-              <div className="flex items-center gap-2 text-body font-medium text-red-400">
-                <span className="i-lucide-shield-x size-4" />
+            <div className='rounded-lg border border-red-500/60 bg-red-500/10 p-3 flex flex-col gap-2'>
+              <div className='flex items-center gap-2 text-body font-medium text-red-400'>
+                <span className='i-lucide-shield-x size-4' />
                 mismatch — host claim disagrees with tx bytes
               </div>
-              <ul className="text-label text-red-300/90 list-disc pl-4 space-y-0.5">
-                {verdict.reasons.map((r, i) => (<li key={i}>{r}</li>))}
+              <ul className='text-label text-red-300/90 list-disc pl-4 space-y-0.5'>
+                {verdict.reasons.map((r, i) => (
+                  <li key={i}>{r}</li>
+                ))}
               </ul>
               {parsed && parsed.actions.some(a => a.decrypted && !a.is_change) && (
-                <div className="rounded border border-red-500/30 bg-red-500/5 p-2 text-label font-mono text-red-300/80">
-                  <p className="text-label uppercase tracking-wider text-red-400/80 mb-1">derived outputs</p>
+                <div className='rounded border border-red-500/30 bg-red-500/5 p-2 text-label font-mono text-red-300/80'>
+                  <p className='text-label uppercase tracking-wider text-red-400/80 mb-1'>
+                    derived outputs
+                  </p>
                   {parsed.actions
                     .filter(a => a.decrypted && !a.is_change)
                     .map(a => (
@@ -386,7 +393,7 @@ export function FrostAirgapJoinerSignFlow({
                     ))}
                 </div>
               )}
-              <label className="flex items-start gap-2 text-label text-red-300/90 cursor-pointer mt-1">
+              <label className='flex items-start gap-2 text-label text-red-300/90 cursor-pointer mt-1'>
                 <input
                   type='checkbox'
                   checked={acknowledged}
@@ -398,8 +405,9 @@ export function FrostAirgapJoinerSignFlow({
             </div>
           )}
 
-          <p className="text-label text-fg-muted">
-            approving triggers zigner to sign with this wallet's share. coordinator aggregates and broadcasts.
+          <p className='text-label text-fg-muted'>
+            approving triggers zigner to sign with this wallet's share. coordinator aggregates and
+            broadcasts.
           </p>
           <div className='grid grid-cols-2 gap-2'>
             <Button variant='secondary' onClick={cancel}>
@@ -423,9 +431,12 @@ export function FrostAirgapJoinerSignFlow({
           <Button variant='gradient' onClick={() => setStep('r1-in')} className='w-full'>
             scan qr from zigner
           </Button>
-          <Button variant="secondary" onClick={cancel} className="w-full">cancel</Button>
-          <p className="text-label text-fg-muted/70 leading-snug pt-1">
-            sighash + per-action alphas. zigner generates fresh round-1 nonces locally and shows commitments back.
+          <Button variant='secondary' onClick={cancel} className='w-full'>
+            cancel
+          </Button>
+          <p className='text-label text-fg-muted/70 leading-snug pt-1'>
+            sighash + per-action alphas. zigner generates fresh round-1 nonces locally and shows
+            commitments back.
           </p>
         </div>
       );
@@ -442,8 +453,9 @@ export function FrostAirgapJoinerSignFlow({
             onComplete={data => void handleR1Response(new TextDecoder().decode(data))}
             onClose={() => setStep('r1-out')}
           />
-          <p className="text-label text-fg-muted/70 leading-snug pt-1">
-            public part of zigner's nonces. zafu publishes them to the relay so co-signers can compute the same challenge.
+          <p className='text-label text-fg-muted/70 leading-snug pt-1'>
+            public part of zigner's nonces. zafu publishes them to the relay so co-signers can
+            compute the same challenge.
           </p>
         </div>
       );
@@ -464,8 +476,10 @@ export function FrostAirgapJoinerSignFlow({
               <span className='text-fg-muted'> / {ms.threshold} ready</span>
             </span>
           </div>
-          <Button variant="secondary" onClick={cancel} className="w-full mt-2">cancel</Button>
-          <p className="text-label text-fg-muted/70 leading-snug pt-1 text-center">
+          <Button variant='secondary' onClick={cancel} className='w-full mt-2'>
+            cancel
+          </Button>
+          <p className='text-label text-fg-muted/70 leading-snug pt-1 text-center'>
             zigner's commitments are on the relay. waiting on peer commitment bundle(s).
           </p>
         </div>
@@ -481,9 +495,12 @@ export function FrostAirgapJoinerSignFlow({
           <Button variant='gradient' onClick={() => setStep('r2-in')} className='w-full'>
             scan qr from zigner
           </Button>
-          <Button variant="secondary" onClick={cancel} className="w-full">cancel</Button>
-          <p className="text-label text-fg-muted/70 leading-snug pt-1">
-            all co-signers' round-1 commitments grouped per action. zigner derives ρ and computes its share.
+          <Button variant='secondary' onClick={cancel} className='w-full'>
+            cancel
+          </Button>
+          <p className='text-label text-fg-muted/70 leading-snug pt-1'>
+            all co-signers' round-1 commitments grouped per action. zigner derives ρ and computes
+            its share.
           </p>
         </div>
       );
@@ -500,7 +517,7 @@ export function FrostAirgapJoinerSignFlow({
             onComplete={data => void handleR2Response(new TextDecoder().decode(data))}
             onClose={() => setStep('r2-out')}
           />
-          <p className="text-label text-fg-muted/70 leading-snug pt-1">
+          <p className='text-label text-fg-muted/70 leading-snug pt-1'>
             zafu publishes each share to the relay. coordinator aggregates and broadcasts.
           </p>
         </div>

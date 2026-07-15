@@ -71,7 +71,6 @@ export const setOnboardingValuesInStorage = async (seedPhraseOrigin: SEED_PHRASE
   }
 
   if (seedPhraseOrigin === SEED_PHRASE_ORIGIN.NEWLY_GENERATED) {
-
     // NOTE: walletCreationBlockHeight and compactFrontierBlockHeight should already be set
     // by setFreshWalletBlockHeights() BEFORE wallet creation. Only set them here as fallback.
     const existingCreationHeight = await localExtStorage.get('walletCreationBlockHeight');

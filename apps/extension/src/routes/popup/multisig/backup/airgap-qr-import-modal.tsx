@@ -122,9 +122,8 @@ export const AirgapQrImportModal = ({ open, onClose, onImported }: Props) => {
 
         {!payload ? (
           <>
-            <p className="mt-1 text-label text-fg-muted">
-              Scan the animated QR your zigner shows. Public metadata only —
-              no secrets cross over.
+            <p className='mt-1 text-label text-fg-muted'>
+              Scan the animated QR your zigner shows. Public metadata only — no secrets cross over.
             </p>
             <div className='mt-3'>
               <AnimatedQrScanner
@@ -137,15 +136,20 @@ export const AirgapQrImportModal = ({ open, onClose, onImported }: Props) => {
           </>
         ) : (
           <>
-            <p className="mt-1 text-label text-fg-muted">
-              {payload.length} wallet{payload.length === 1 ? '' : 's'} ready to import as airgap multisig.
+            <p className='mt-1 text-label text-fg-muted'>
+              {payload.length} wallet{payload.length === 1 ? '' : 's'} ready to import as airgap
+              multisig.
             </p>
             <div className='mt-3 max-h-64 overflow-y-auto rounded-lg border border-border-soft bg-elev-2 p-2 flex flex-col gap-1.5'>
               {payload.map((w, i) => (
-                <div key={i} className="rounded-md bg-elev-1 p-2 text-body">
-                  <p className="font-medium">{w.label}</p>
-                  <p className="text-label text-fg-muted">{w.threshold}-of-{w.maxSigners} · {w.mainnet ? 'mainnet' : 'testnet'}</p>
-                  <p className="text-label font-mono text-fg-muted truncate">{w.address.slice(0, 16)}…{w.address.slice(-8)}</p>
+                <div key={i} className='rounded-md bg-elev-1 p-2 text-body'>
+                  <p className='font-medium'>{w.label}</p>
+                  <p className='text-label text-fg-muted'>
+                    {w.threshold}-of-{w.maxSigners} · {w.mainnet ? 'mainnet' : 'testnet'}
+                  </p>
+                  <p className='text-label font-mono text-fg-muted truncate'>
+                    {w.address.slice(0, 16)}…{w.address.slice(-8)}
+                  </p>
                 </div>
               ))}
             </div>
@@ -153,7 +157,7 @@ export const AirgapQrImportModal = ({ open, onClose, onImported }: Props) => {
         )}
 
         {error && (
-          <p className="mt-2 rounded-md border border-red-500/40 bg-red-500/5 p-2 text-body text-red-400">
+          <p className='mt-2 rounded-md border border-red-500/40 bg-red-500/5 p-2 text-body text-red-400'>
             {error}
           </p>
         )}

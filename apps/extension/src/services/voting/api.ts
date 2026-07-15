@@ -185,9 +185,9 @@ export const fetchTally = async (
   const resp = await firstReachable(
     config.vote_servers.map(s => s.url),
     base =>
-      getJson<{ results?: Array<{ proposal_id: number; vote_decision?: number; total_value?: number }> }>(
-        `${base}${tallyPath(roundIdHex)}`,
-      ),
+      getJson<{
+        results?: Array<{ proposal_id: number; vote_decision?: number; total_value?: number }>;
+      }>(`${base}${tallyPath(roundIdHex)}`),
   );
   const byProposal = new Map<number, { optionId: number; weight: number }[]>();
   for (const r of resp.results ?? []) {

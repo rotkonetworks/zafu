@@ -146,9 +146,7 @@ export function OnboardingShell({ children, title, subtitle }: OnboardingShellPr
                 {title && (
                   <h1 className='text-2xl tracking-[-0.01em] text-fg-high lowercase'>{title}</h1>
                 )}
-                {subtitle && (
-                  <p className='text-xs text-fg-muted'>{subtitle}</p>
-                )}
+                {subtitle && <p className='text-xs text-fg-muted'>{subtitle}</p>}
               </header>
             )}
             <div className='flex-1'>{children}</div>
@@ -165,9 +163,7 @@ function BrandLockup() {
       <span className='text-3xl font-medium text-zigner-gold lowercase tracking-[-0.02em] leading-none'>
         zafu
       </span>
-      <span className='mt-1 text-body text-fg-muted lowercase'>
-        shielded signing
-      </span>
+      <span className='mt-1 text-body text-fg-muted lowercase'>shielded signing</span>
     </div>
   );
 }

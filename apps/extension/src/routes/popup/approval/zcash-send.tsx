@@ -211,9 +211,13 @@ export function ZcashSendApproval() {
               <div className='flex items-center gap-1.5'>
                 <div className='text-label text-fg-dim lowercase'>output {i + 1}</div>
                 {isTransparent(o.address) ? (
-                  <span className='rounded-sm text-label px-1 py-0.5 bg-orange-500/10 text-orange-400 lowercase tracking-[0.08em]'>transparent</span>
+                  <span className='rounded-sm text-label px-1 py-0.5 bg-orange-500/10 text-orange-400 lowercase tracking-[0.08em]'>
+                    transparent
+                  </span>
                 ) : (
-                  <span className='rounded-sm text-label px-1 py-0.5 bg-success/10 text-success lowercase tracking-[0.08em]'>shielded</span>
+                  <span className='rounded-sm text-label px-1 py-0.5 bg-success/10 text-success lowercase tracking-[0.08em]'>
+                    shielded
+                  </span>
                 )}
                 {status === 'signing' && i < completedOutputs && (
                   <span className='text-label text-success lowercase'>sent</span>
@@ -234,9 +238,7 @@ export function ZcashSendApproval() {
         <div className='rounded-md border border-border-soft bg-elev-1 p-3'>
           <div className='flex justify-between'>
             <div className='text-label text-fg-dim lowercase'>
-              {outputs.length === 1
-                ? 'network fee'
-                : `network fee (per tx × ${outputs.length})`}
+              {outputs.length === 1 ? 'network fee' : `network fee (per tx × ${outputs.length})`}
             </div>
             <div className='text-label tabular text-fg-muted'>~{fmtZec(totalFeeZat)} ZEC</div>
           </div>

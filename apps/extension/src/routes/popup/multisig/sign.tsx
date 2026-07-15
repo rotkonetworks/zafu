@@ -345,7 +345,9 @@ export const MultisigSign = () => {
       {step === 'review' && (
         <div className='flex flex-col gap-3'>
           <div className='rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-3'>
-            <p className='text-label uppercase tracking-wider text-yellow-400'>review transaction</p>
+            <p className='text-label uppercase tracking-wider text-yellow-400'>
+              review transaction
+            </p>
           </div>
 
           <div className='rounded-lg border border-border-soft bg-elev-1 p-3 flex flex-col gap-2.5'>
@@ -403,11 +405,15 @@ export const MultisigSign = () => {
                 mismatch — host claim disagrees with tx bytes
               </div>
               <ul className='text-label text-red-300/90 list-disc pl-4 space-y-0.5'>
-                {verdict.reasons.map((r, i) => (<li key={i}>{r}</li>))}
+                {verdict.reasons.map((r, i) => (
+                  <li key={i}>{r}</li>
+                ))}
               </ul>
               {parsed && parsed.actions.some(a => a.decrypted && !a.is_change) && (
                 <div className='rounded border border-red-500/30 bg-red-500/5 p-2 text-label font-mono text-red-300/80'>
-                  <p className='text-label uppercase tracking-wider text-red-400/80 mb-1'>derived outputs</p>
+                  <p className='text-label uppercase tracking-wider text-red-400/80 mb-1'>
+                    derived outputs
+                  </p>
                   {parsed.actions
                     .filter(a => a.decrypted && !a.is_change)
                     .map(a => (
@@ -461,7 +467,9 @@ export const MultisigSign = () => {
               <p className='text-label uppercase tracking-wider text-yellow-400'>signing</p>
               <p className='mt-0.5 text-sm font-medium text-yellow-300'>
                 {formatZec(amountZat)} ZEC →{' '}
-                <span className='font-mono text-label'>{recipient.slice(0, 16)}…{recipient.slice(-6)}</span>
+                <span className='font-mono text-label'>
+                  {recipient.slice(0, 16)}…{recipient.slice(-6)}
+                </span>
               </p>
             </div>
           )}

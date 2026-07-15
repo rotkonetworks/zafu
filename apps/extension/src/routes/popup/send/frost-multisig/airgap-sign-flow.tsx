@@ -233,17 +233,24 @@ export function FrostAirgapSignFlow({
           <p className='text-sm text-fg-high'>show this QR to zigner</p>
           {trigger1 && <AnimatedQrDisplay data={trigger1} urType='zafu-frost-sign' size={220} />}
           {sessionRef.current && <RoomCodeChip code={sessionRef.current.roomCode} />}
-          <div className="w-full rounded bg-elev-2 p-2 text-body text-fg-muted space-y-0.5">
-            <p>{ms.threshold}-of-{ms.maxSigners} threshold</p>
-            <p>send {amount} ZEC to {recipient.slice(0, 16)}…{recipient.slice(-8)}</p>
+          <div className='w-full rounded bg-elev-2 p-2 text-body text-fg-muted space-y-0.5'>
+            <p>
+              {ms.threshold}-of-{ms.maxSigners} threshold
+            </p>
+            <p>
+              send {amount} ZEC to {recipient.slice(0, 16)}…{recipient.slice(-8)}
+            </p>
             <p>fee: {fee} ZEC</p>
           </div>
           <Button variant='gradient' onClick={() => setStep('r1-in')} className='w-full'>
             scan qr from zigner
           </Button>
-          <Button variant="secondary" onClick={cancel} className="w-full">cancel</Button>
-          <p className="text-label text-fg-muted/70 leading-snug pt-1">
-            sighash + per-action alphas + room code. zigner generates fresh round-1 nonces locally and shows commitments back.
+          <Button variant='secondary' onClick={cancel} className='w-full'>
+            cancel
+          </Button>
+          <p className='text-label text-fg-muted/70 leading-snug pt-1'>
+            sighash + per-action alphas + room code. zigner generates fresh round-1 nonces locally
+            and shows commitments back.
           </p>
         </div>
       );
@@ -260,8 +267,9 @@ export function FrostAirgapSignFlow({
             onComplete={data => void handleR1Response(new TextDecoder().decode(data))}
             onClose={() => setStep('r1-out')}
           />
-          <p className="text-label text-fg-muted/70 leading-snug pt-1">
-            public part of zigner's nonces. zafu publishes to the relay so co-signers compute the same challenge — no secret leaves zigner.
+          <p className='text-label text-fg-muted/70 leading-snug pt-1'>
+            public part of zigner's nonces. zafu publishes to the relay so co-signers compute the
+            same challenge — no secret leaves zigner.
           </p>
         </div>
       );
@@ -283,8 +291,10 @@ export function FrostAirgapSignFlow({
               <span className='text-fg-muted'> / {ms.threshold} ready</span>
             </span>
           </div>
-          <Button variant="secondary" onClick={cancel} className="w-full mt-2">cancel</Button>
-          <p className="text-label text-fg-muted/70 leading-snug pt-1 text-center">
+          <Button variant='secondary' onClick={cancel} className='w-full mt-2'>
+            cancel
+          </Button>
+          <p className='text-label text-fg-muted/70 leading-snug pt-1 text-center'>
             zigner's commitments are on the relay. waiting on peer commitment bundle(s).
           </p>
         </div>
@@ -300,9 +310,12 @@ export function FrostAirgapSignFlow({
           <Button variant='gradient' onClick={() => setStep('r2-in')} className='w-full'>
             scan qr from zigner
           </Button>
-          <Button variant="secondary" onClick={cancel} className="w-full">cancel</Button>
-          <p className="text-label text-fg-muted/70 leading-snug pt-1">
-            all co-signers' round-1 commitments grouped per action. zigner derives ρ and computes its share — nonces stay on zigner.
+          <Button variant='secondary' onClick={cancel} className='w-full'>
+            cancel
+          </Button>
+          <p className='text-label text-fg-muted/70 leading-snug pt-1'>
+            all co-signers' round-1 commitments grouped per action. zigner derives ρ and computes
+            its share — nonces stay on zigner.
           </p>
         </div>
       );
@@ -319,8 +332,9 @@ export function FrostAirgapSignFlow({
             onComplete={data => void handleR2Response(new TextDecoder().decode(data))}
             onClose={() => setStep('r2-out')}
           />
-          <p className="text-label text-fg-muted/70 leading-snug pt-1">
-            one share per action. zafu collects peer shares, aggregates into orchard signatures, then broadcasts.
+          <p className='text-label text-fg-muted/70 leading-snug pt-1'>
+            one share per action. zafu collects peer shares, aggregates into orchard signatures,
+            then broadcasts.
           </p>
         </div>
       );
@@ -335,7 +349,7 @@ export function FrostAirgapSignFlow({
             {progress || 'finalizing...'}
           </div>
           {sessionRef.current && <RoomCodeChip code={sessionRef.current.roomCode} />}
-          <p className="text-label text-fg-muted/70 leading-snug pt-1 text-center">
+          <p className='text-label text-fg-muted/70 leading-snug pt-1 text-center'>
             publishing shares, waiting on peer shares, aggregating signatures, broadcasting tx.
           </p>
         </div>

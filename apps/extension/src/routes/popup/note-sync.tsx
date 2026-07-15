@@ -82,7 +82,8 @@ export const NoteSyncPage = () => {
               <span className='text-xs text-fg-muted'>ZEC</span>
             </div>
             <p className='text-label text-fg-muted mt-1'>
-              {encoded.noteCount} spendable note{encoded.noteCount !== 1 ? 's' : ''} · {encoded.cborBytes.toLocaleString()} bytes
+              {encoded.noteCount} spendable note{encoded.noteCount !== 1 ? 's' : ''} ·{' '}
+              {encoded.cborBytes.toLocaleString()} bytes
             </p>
           </div>
 

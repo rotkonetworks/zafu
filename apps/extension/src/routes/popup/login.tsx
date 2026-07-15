@@ -49,7 +49,9 @@ export const Login = () => {
     <FadeTransition className='flex flex-col items-stretch justify-start'>
       <div className='flex h-screen flex-col justify-between p-[30px] pt-10'>
         <div className='mx-auto my-0 flex flex-col items-center gap-1'>
-          <span className='text-label tracking-[0.18em] text-fg-muted lowercase'>shielded signing</span>
+          <span className='text-label tracking-[0.18em] text-fg-muted lowercase'>
+            shielded signing
+          </span>
           <h1 className='text-display text-zigner-gold lowercase tracking-[-0.01em] leading-none'>
             zafu
           </h1>
@@ -60,9 +62,7 @@ export const Login = () => {
             name='password'
             passwordValue={input}
             label={
-              <p className='text-title text-fg-high lowercase tracking-[-0.01em]'>
-                enter password
-              </p>
+              <p className='text-title text-fg-high lowercase tracking-[-0.01em]'>enter password</p>
             }
             onChange={handleChangePassword}
             validations={[
@@ -73,7 +73,12 @@ export const Login = () => {
               },
             ]}
           />
-          <Button size='lg' variant='gradient' disabled={enteredIncorrect || unlocking} type='submit'>
+          <Button
+            size='lg'
+            variant='gradient'
+            disabled={enteredIncorrect || unlocking}
+            type='submit'
+          >
             {unlocking ? 'unlocking\u2026' : 'unlock'}
           </Button>
           {/* New users who hit a wrong password without a hint of
@@ -83,8 +88,7 @@ export const Login = () => {
               kicks in, the recovery path is visible. */}
           {enteredIncorrect && (
             <p className='text-center text-body text-fg-muted lowercase'>
-              your funds aren't lost — you can restore from your seed phrase by
-              reinstalling zafu.
+              your funds aren't lost — you can restore from your seed phrase by reinstalling zafu.
             </p>
           )}
         </form>

@@ -344,9 +344,7 @@ function ContactCardBubble({ card }: { card?: ContactCard }) {
       {card.zid && (
         <div className='flex items-center gap-1'>
           <span className='i-lucide-fingerprint h-3 w-3 text-fg-muted' />
-          <span className='text-label font-mono text-fg-muted'>
-            zid{card.zid.slice(0, 16)}
-          </span>
+          <span className='text-label font-mono text-fg-muted'>zid{card.zid.slice(0, 16)}</span>
         </div>
       )}
       {saved ? (
@@ -480,9 +478,7 @@ function FrostSignBubble({ message }: { message: InboxMessage }) {
         <span className='i-lucide-pen-tool h-4 w-4 text-blue-400' />
         <span className='text-sm font-medium text-blue-400'>{message.typeLabel}</span>
       </div>
-      <p className='text-label text-fg-muted'>
-        {labels[message.type] ?? 'FROST signing round'}
-      </p>
+      <p className='text-label text-fg-muted'>{labels[message.type] ?? 'FROST signing round'}</p>
       {message.direction === 'incoming' && message.type === MemoType.SignRequest && (
         <button
           onClick={() => navigate(PopupPath.MULTISIG_SIGN)}
@@ -575,9 +571,7 @@ function ConversationThread({
           )}
         </div>
 
-        <span className='text-label text-fg-muted'>
-          {conversation.messages.length} msg
-        </span>
+        <span className='text-label text-fg-muted'>{conversation.messages.length} msg</span>
       </div>
 
       {/* referral attribution */}
@@ -1202,7 +1196,8 @@ function FlatMessageRow({
         </p>
         {message.amount && (
           <span className='inline-flex items-center rounded-md bg-green-500/10 px-1.5 py-0.5 mt-1 text-label text-green-400'>
-            {message.direction === 'received' ? '+' : '-'}{message.amount} {message.asset ?? ''}
+            {message.direction === 'received' ? '+' : '-'}
+            {message.amount} {message.asset ?? ''}
           </span>
         )}
         {message.status && message.status !== 'confirmed' && (
@@ -1233,7 +1228,11 @@ function OutgoingStatusBadge({
   const s = styles[status];
   return (
     <span
-      className={cn('inline-flex items-center rounded-md px-1.5 py-0.5 ml-1 mt-1 text-label', s.bg, s.fg)}
+      className={cn(
+        'inline-flex items-center rounded-md px-1.5 py-0.5 ml-1 mt-1 text-label',
+        s.bg,
+        s.fg,
+      )}
       title={status === 'failed' ? reason : undefined}
     >
       {s.label}

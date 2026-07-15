@@ -71,7 +71,9 @@ export const PasswordsPage = () => {
             className='w-full rounded border border-border-soft bg-transparent px-3 py-2 text-xs font-mono outline-none focus:border-muted-foreground/60'
           />
           {origin.trim() && normalizeOrigin(origin) !== origin.trim().toLowerCase() && (
-            <span className='text-label text-fg-muted/50 font-mono'>→ {normalizeOrigin(origin)}</span>
+            <span className='text-label text-fg-muted/50 font-mono'>
+              → {normalizeOrigin(origin)}
+            </span>
           )}
           <input
             type='text'
@@ -107,7 +109,9 @@ export const PasswordsPage = () => {
               }}
               disabled={index === 0}
               className='text-xs font-mono text-fg-muted hover:text-fg-high disabled:opacity-30 px-1'
-            >-</button>
+            >
+              -
+            </button>
             <span className='text-label text-fg-muted font-mono w-6 text-center'>#{index}</span>
             <button
               onClick={() => {
@@ -119,7 +123,9 @@ export const PasswordsPage = () => {
               +
             </button>
             {index > 0 && (
-              <span className='text-label text-fg-muted/40 font-mono'>password was rotated {index} time{index !== 1 ? 's' : ''}</span>
+              <span className='text-label text-fg-muted/40 font-mono'>
+                password was rotated {index} time{index !== 1 ? 's' : ''}
+              </span>
             )}
           </div>
         </div>
@@ -137,9 +143,7 @@ export const PasswordsPage = () => {
             onClick={copy}
             className='w-full rounded border border-border-soft p-3 text-left hover:bg-elev-1 transition-colors'
           >
-            <div className='font-mono text-xs break-all select-all leading-relaxed'>
-              {password}
-            </div>
+            <div className='font-mono text-xs break-all select-all leading-relaxed'>{password}</div>
             <div className='text-label text-fg-muted/50 font-mono mt-2'>
               {copied ? 'copied' : 'tap to copy'}
             </div>

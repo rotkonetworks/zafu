@@ -55,8 +55,8 @@ export const GenerateSeedPhrase = () => {
             your recovery phrase
           </h2>
           <p className='text-xs text-fg-muted lowercase'>
-            24 words, derived locally — no server ever sees this. write them
-            down in order and store them offline.
+            24 words, derived locally — no server ever sees this. write them down in order and store
+            them offline.
           </p>
         </header>
 

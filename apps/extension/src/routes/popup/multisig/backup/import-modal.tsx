@@ -74,7 +74,7 @@ export const ImportModal = ({ open, onClose, onImported }: Props) => {
 
         {!envelope ? (
           <>
-            <p className="mt-1 text-label text-fg-muted">
+            <p className='mt-1 text-label text-fg-muted'>
               Select an encrypted backup file (.json) you created earlier.
             </p>
             <label className='mt-3 flex cursor-pointer flex-col items-center gap-2 rounded-lg border border-dashed border-border-soft bg-elev-2 px-4 py-6 hover:bg-elev-3 transition-colors'>
@@ -90,20 +90,20 @@ export const ImportModal = ({ open, onClose, onImported }: Props) => {
           </>
         ) : (
           <>
-            <div className="mt-3 rounded-lg border border-border-soft bg-elev-2 p-3 text-body">
-              <p className="text-label uppercase tracking-wide text-fg-muted">backup file</p>
-              <p className="mt-0.5 font-medium">{envelope.label}</p>
+            <div className='mt-3 rounded-lg border border-border-soft bg-elev-2 p-3 text-body'>
+              <p className='text-label uppercase tracking-wide text-fg-muted'>backup file</p>
+              <p className='mt-0.5 font-medium'>{envelope.label}</p>
               {isBatch ? (
-                <p className="mt-0.5 text-label text-fg-muted">
+                <p className='mt-0.5 text-label text-fg-muted'>
                   contains {envelope.shareCount ?? '?'} multisig wallet
                   {envelope.shareCount === 1 ? '' : 's'}
                 </p>
               ) : envelope.publicKeyPackage ? (
-                <p className="mt-0.5 break-all font-mono text-label text-fg-muted">
+                <p className='mt-0.5 break-all font-mono text-label text-fg-muted'>
                   pkg: …{envelope.publicKeyPackage.slice(-16)}
                 </p>
               ) : null}
-              <p className="mt-1 text-label text-fg-muted">
+              <p className='mt-1 text-label text-fg-muted'>
                 exported: {new Date(envelope.exportedAt).toLocaleString()}
               </p>
             </div>
@@ -123,7 +123,7 @@ export const ImportModal = ({ open, onClose, onImported }: Props) => {
         )}
 
         {error && (
-          <p className="mt-2 rounded-md border border-red-500/40 bg-red-500/5 p-2 text-body text-red-400">
+          <p className='mt-2 rounded-md border border-red-500/40 bg-red-500/5 p-2 text-body text-red-400'>
             {error}
           </p>
         )}

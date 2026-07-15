@@ -678,8 +678,8 @@ const MultisigJoinZigner = () => {
       {step === 'input' && (
         <div className='flex flex-col gap-4'>
           <div className='rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-2.5 text-label text-yellow-400'>
-            cold-multisig: the FROST share will be generated and stored on
-            zigner only. zafu keeps only the public key package + UFVK.
+            cold-multisig: the FROST share will be generated and stored on zigner only. zafu keeps
+            only the public key package + UFVK.
           </div>
           <label className='text-xs text-fg-muted'>
             relay url
@@ -715,9 +715,7 @@ const MultisigJoinZigner = () => {
           <p className='text-xs text-fg-muted'>waiting for host's round 1 broadcast...</p>
           <span className='i-lucide-loader-2 size-4 animate-spin text-fg-muted' />
           {participantCount > 0 && (
-            <p className='text-label text-fg-muted'>
-              {participantCount} participant(s) joined
-            </p>
+            <p className='text-label text-fg-muted'>{participantCount} participant(s) joined</p>
           )}
           <span className='text-label text-fg-muted tabular-nums'>{countdown}s</span>
         </div>

@@ -186,9 +186,7 @@ export const PageIndex = () => {
           </div>
         ))}
 
-        <div className='text-label text-fg-muted/40 text-center pb-4'>
-          MIT - rotko networks
-        </div>
+        <div className='text-label text-fg-muted/40 text-center pb-4'>MIT - rotko networks</div>
       </div>
     </FadeTransition>
   );

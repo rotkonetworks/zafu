@@ -188,7 +188,9 @@ export const CosmosSign = () => {
       <div className='flex h-screen flex-col bg-canvas'>
         <header className='border-b border-border-soft p-4'>
           <span className='kicker'>ibc / cosmos transaction</span>
-          <h1 className='mt-1 text-title text-fg-high lowercase tracking-[-0.01em]'>sign with zigner</h1>
+          <h1 className='mt-1 text-title text-fg-high lowercase tracking-[-0.01em]'>
+            sign with zigner
+          </h1>
         </header>
 
         <div className='grow overflow-auto p-4 flex flex-col gap-4'>
@@ -286,9 +288,7 @@ export const CosmosSign = () => {
           <h2 className='text-title text-fg-high lowercase tracking-[-0.01em]'>transaction sent</h2>
         </div>
         {txHash && (
-          <p className='text-label text-fg-muted tabular break-all text-center'>
-            {txHash}
-          </p>
+          <p className='text-label text-fg-muted tabular break-all text-center'>{txHash}</p>
         )}
         <Button variant='gradient' onClick={handleClose} className='mt-4'>
           Done

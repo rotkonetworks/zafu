@@ -770,12 +770,17 @@ function CosmosSend({ sourceChainId }: { sourceChainId: CosmosChainId }) {
             </div>
             <div className='flex justify-between'>
               <span className='text-fg-dim lowercase'>amount</span>
-              <span className='tabular text-zigner-gold'>{amount} {selectedAsset.symbol}</span>
+              <span className='tabular text-zigner-gold'>
+                {amount} {selectedAsset.symbol}
+              </span>
             </div>
             {!isSameChain && effectiveDestChainId && (
               <div className='flex justify-between'>
                 <span className='text-fg-dim lowercase'>destination</span>
-                <span className='text-fg-high'>{skipChains.find(c => c.chainId === effectiveDestChainId)?.chainName ?? effectiveDestChainId}</span>
+                <span className='text-fg-high'>
+                  {skipChains.find(c => c.chainId === effectiveDestChainId)?.chainName ??
+                    effectiveDestChainId}
+                </span>
               </div>
             )}
           </div>

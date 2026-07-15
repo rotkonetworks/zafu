@@ -90,8 +90,8 @@ export const SettingsMultisigBackup = () => {
         <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
           <p className='text-sm font-medium'>Batch backup</p>
           <p className='mt-1 text-body text-fg-muted'>
-            One encrypted file containing every self-custody multisig
-            wallet. Single passphrase. Restore on any zafu install.
+            One encrypted file containing every self-custody multisig wallet. Single passphrase.
+            Restore on any zafu install.
           </p>
           {selfCustody.length === 0 ? (
             <p className='mt-3 text-xs text-fg-muted'>
@@ -150,10 +150,12 @@ export const SettingsMultisigBackup = () => {
         {airgap.length > 0 && (
           <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
             <p className='text-body text-fg-muted'>
-              <span className='font-medium text-fg'>{airgap.length} airgap wallet
-              {airgap.length === 1 ? '' : 's'}</span>{' '}
-              not included — those shares live on zigner. Export each
-              from the zigner FROST wallet list.
+              <span className='font-medium text-fg'>
+                {airgap.length} airgap wallet
+                {airgap.length === 1 ? '' : 's'}
+              </span>{' '}
+              not included — those shares live on zigner. Export each from the zigner FROST wallet
+              list.
             </p>
             <ul className='mt-2 flex flex-col gap-0.5 text-label text-fg-muted'>
               {airgap.map(w => (
@@ -169,9 +171,9 @@ export const SettingsMultisigBackup = () => {
         <div className='border-t border-border-soft pt-4 flex flex-col gap-2'>
           <p className='text-sm font-medium'>Restore</p>
           <p className='text-body text-fg-muted'>
-            Import an encrypted backup file (self-custody share material), or
-            scan an airgap QR from a zigner to re-add airgap multisig wallets.
-            Already-known wallets are skipped, not overwritten.
+            Import an encrypted backup file (self-custody share material), or scan an airgap QR from
+            a zigner to re-add airgap multisig wallets. Already-known wallets are skipped, not
+            overwritten.
           </p>
           <div className='flex gap-2'>
             <button

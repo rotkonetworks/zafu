@@ -258,7 +258,12 @@ function AddressRow({
   return (
     <div className='group flex items-center justify-between py-2 px-3 rounded-lg hover:bg-elev-1 transition-colors'>
       <div className='flex items-center gap-2 min-w-0 flex-1'>
-        <span className={cn('shrink-0 rounded-md px-1.5 py-0.5 text-label font-medium', NETWORK_COLORS[address.network])}>
+        <span
+          className={cn(
+            'shrink-0 rounded-md px-1.5 py-0.5 text-label font-medium',
+            NETWORK_COLORS[address.network],
+          )}
+        >
           {NETWORK_LABELS[address.network]}
           {address.chainId && ` / ${address.chainId}`}
         </span>
@@ -663,10 +668,7 @@ export function ContactsPage() {
       {/* header */}
       <div className='flex items-center justify-between px-4 py-3 border-b border-border-soft'>
         <div className='flex items-center gap-3'>
-          <button
-            onClick={goBack}
-            className='text-fg-muted transition-colors hover:text-fg-high'
-          >
+          <button onClick={goBack} className='text-fg-muted transition-colors hover:text-fg-high'>
             <span className='i-lucide-arrow-left h-5 w-5' />
           </button>
           <h1 className='text-lg font-medium'>contacts</h1>

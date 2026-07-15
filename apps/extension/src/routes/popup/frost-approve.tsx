@@ -729,7 +729,9 @@ export const FrostApprove = () => {
         <div className='flex flex-col items-center gap-3 flex-1 justify-center'>
           <span className='i-lucide-x-circle size-10 text-red-400' />
           <p className='text-data text-red-400 text-center'>{error}</p>
-          <Button variant='secondary' onClick={() => window.close()}>close</Button>
+          <Button variant='secondary' onClick={() => window.close()}>
+            close
+          </Button>
         </div>
       )}
 

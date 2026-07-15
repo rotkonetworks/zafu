@@ -92,9 +92,7 @@ const WalletRow = ({
           <span className='text-sm font-medium truncate'>{wallet.label}</span>
           {isActive && <span className='i-lucide-check h-3 w-3 text-zigner-gold shrink-0' />}
         </div>
-        <span className='text-body text-fg-muted font-mono'>
-          {truncateAddr(wallet.address)}
-        </span>
+        <span className='text-body text-fg-muted font-mono'>{truncateAddr(wallet.address)}</span>
         {wallet.multisig?.zignerWalletId && (
           <span className='text-label text-fg-dim font-mono'>
             zigner: {wallet.multisig.zignerWalletId}

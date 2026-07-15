@@ -133,7 +133,10 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
     identityEnabled && {
       icon: 'i-lucide-fingerprint',
       label: 'identity',
-      onClick: () => { navigate(PopupPath.IDENTITY); onClose(); },
+      onClick: () => {
+        navigate(PopupPath.IDENTITY);
+        onClose();
+      },
     },
     // contacts gets its own row — it's a daily-use destination (pick a
     // recipient, share a card), not an identity sub-setting; burying it
@@ -141,7 +144,10 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
     identityEnabled && {
       icon: 'i-lucide-users',
       label: 'contacts',
-      onClick: () => { navigate(PopupPath.CONTACTS); onClose(); },
+      onClick: () => {
+        navigate(PopupPath.CONTACTS);
+        onClose();
+      },
     },
     {
       icon: 'i-lucide-wallet',
@@ -211,7 +217,10 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
         {/* header */}
         <div className='flex items-center justify-between px-4 py-3 border-b border-border-soft'>
           <span className='text-data text-fg-high'>zafu</span>
-          <button onClick={onClose} className='p-1 rounded-md text-fg-muted hover:text-fg-high hover:bg-elev-1 transition-colors'>
+          <button
+            onClick={onClose}
+            className='p-1 rounded-md text-fg-muted hover:text-fg-high hover:bg-elev-1 transition-colors'
+          >
             <span className='i-lucide-x h-4 w-4' />
           </button>
         </div>
@@ -259,7 +268,10 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
         <div className='mt-auto border-t border-border-soft px-4 py-3 flex flex-col gap-2'>
           {!pro && (
             <button
-              onClick={() => { navigate(PopupPath.SUBSCRIBE); onClose(); }}
+              onClick={() => {
+                navigate(PopupPath.SUBSCRIBE);
+                onClose();
+              }}
               className='flex w-full items-center justify-center gap-2 px-3 py-2 rounded-md bg-zigner-gold text-zigner-dark hover:bg-zigner-gold-light transition-colors text-data lowercase'
             >
               <span className='i-lucide-zap h-3.5 w-3.5' />
@@ -277,9 +289,30 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
           )}
 
           <div className='mt-1 flex items-center gap-3 text-label text-fg-dim lowercase'>
-            <a href='https://rotko.net' target='_blank' rel='noopener noreferrer' className='hover:text-fg-high'>rotko.net</a>
-            <a href='https://github.com/rotkonetworks/zafu' target='_blank' rel='noopener noreferrer' className='hover:text-fg-high'>github</a>
-            <a href='https://zigner.rotko.net' target='_blank' rel='noopener noreferrer' className='hover:text-fg-high'>zigner</a>
+            <a
+              href='https://rotko.net'
+              target='_blank'
+              rel='noopener noreferrer'
+              className='hover:text-fg-high'
+            >
+              rotko.net
+            </a>
+            <a
+              href='https://github.com/rotkonetworks/zafu'
+              target='_blank'
+              rel='noopener noreferrer'
+              className='hover:text-fg-high'
+            >
+              github
+            </a>
+            <a
+              href='https://zigner.rotko.net'
+              target='_blank'
+              rel='noopener noreferrer'
+              className='hover:text-fg-high'
+            >
+              zigner
+            </a>
           </div>
           <p className='text-label text-fg-dim mt-1 tabular'>MIT</p>
         </div>

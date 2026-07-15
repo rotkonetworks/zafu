@@ -59,13 +59,10 @@ export const SetPassword = () => {
             <span className='i-lucide-arrow-left h-3 w-3' />
             back
           </button>
-          <h2 className='text-2xl lowercase tracking-[-0.01em] text-fg-high'>
-            set a password
-          </h2>
+          <h2 className='text-2xl lowercase tracking-[-0.01em] text-fg-high'>set a password</h2>
           <p className='text-xs text-fg-muted lowercase leading-snug'>
-            encrypts your seed phrase on this device. you'll enter it
-            again every time the wallet locks. there's no way to recover
-            it — pick something you'll remember.
+            encrypts your seed phrase on this device. you'll enter it again every time the wallet
+            locks. there's no way to recover it — pick something you'll remember.
           </p>
         </header>
 

@@ -114,9 +114,15 @@ export const Settings = () => {
             onClick={cycleAutoLock}
             className='flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-elev-1 hover:text-fg-high group'
           >
-            <span className={cn('i-lucide-timer', 'size-5 text-fg-muted group-hover:text-fg-high')} />
-            <span className='flex-1 text-data text-fg group-hover:text-fg-high lowercase'>auto-lock</span>
-            <span className='text-label tabular text-fg-dim group-hover:text-fg-muted'>{autoLockLabel}</span>
+            <span
+              className={cn('i-lucide-timer', 'size-5 text-fg-muted group-hover:text-fg-high')}
+            />
+            <span className='flex-1 text-data text-fg group-hover:text-fg-high lowercase'>
+              auto-lock
+            </span>
+            <span className='text-label tabular text-fg-dim group-hover:text-fg-muted'>
+              {autoLockLabel}
+            </span>
           </button>
         </div>
 

@@ -917,13 +917,20 @@ function ReceiveTab({
 
       <div className='w-full'>
         <div className='mb-1 text-xs text-fg-muted'>
-          {ephemeral && isPenumbra
-            ? 'ephemeral address'
-            : transparent && isZcash
-              ? <span className='flex items-center gap-1.5'>transparent address #{transparentIndex} <span className='text-label px-1.5 py-0.5 rounded-md bg-red-500/15 text-red-500 font-medium leading-none'>public</span></span>
-              : isZcash
-                ? `shielded address #${shieldedIndex}`
-                : 'address'}
+          {ephemeral && isPenumbra ? (
+            'ephemeral address'
+          ) : transparent && isZcash ? (
+            <span className='flex items-center gap-1.5'>
+              transparent address #{transparentIndex}{' '}
+              <span className='text-label px-1.5 py-0.5 rounded-md bg-red-500/15 text-red-500 font-medium leading-none'>
+                public
+              </span>
+            </span>
+          ) : isZcash ? (
+            `shielded address #${shieldedIndex}`
+          ) : (
+            'address'
+          )}
         </div>
         <div
           className={`flex items-center gap-2 rounded-lg border p-3 ${
@@ -991,10 +998,7 @@ export function ReceivePage() {
   return (
     <div className='flex h-full flex-col'>
       <div className='flex shrink-0 items-center gap-3 border-b border-border-soft px-4 py-3'>
-        <button
-          onClick={goBack}
-          className='text-fg-muted transition-colors hover:text-fg-high'
-        >
+        <button onClick={goBack} className='text-fg-muted transition-colors hover:text-fg-high'>
           <span className='i-lucide-arrow-left h-5 w-5' />
         </button>
         <h1 className='text-lg font-medium text-fg'>receive</h1>

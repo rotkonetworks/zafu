@@ -124,8 +124,21 @@ export const SyncProgressBar = ({
                     }
                   }}
                 />
-                <button onClick={submitRescan} className='text-label text-zigner-gold hover:underline'>rescan</button>
-                <button onClick={() => { setEditing(false); setInput(''); }} className='text-label text-fg-muted hover:text-fg-high'>&times;</button>
+                <button
+                  onClick={submitRescan}
+                  className='text-label text-zigner-gold hover:underline'
+                >
+                  rescan
+                </button>
+                <button
+                  onClick={() => {
+                    setEditing(false);
+                    setInput('');
+                  }}
+                  className='text-label text-fg-muted hover:text-fg-high'
+                >
+                  &times;
+                </button>
               </span>
             ) : (
               <button

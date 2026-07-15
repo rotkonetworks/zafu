@@ -15,10 +15,7 @@ export const SettingsHeader = ({
 
   return (
     <div className='flex items-center gap-3 border-b border-border-soft px-4 py-3'>
-      <button
-        onClick={goBack}
-        className='text-fg-muted transition-colors hover:text-fg-high'
-      >
+      <button onClick={goBack} className='text-fg-muted transition-colors hover:text-fg-high'>
         <span className='i-lucide-arrow-left h-5 w-5' />
       </button>
       <h1 className='text-title text-fg-high lowercase tracking-[-0.01em]'>{title}</h1>

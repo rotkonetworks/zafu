@@ -770,8 +770,8 @@ const MultisigCreateZigner = () => {
       {step === 'config' && (
         <div className='flex flex-col gap-4'>
           <div className='rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-2.5 text-label text-yellow-400'>
-            cold-multisig: the FROST share will be generated and stored on
-            zigner only. zafu keeps only the public key package + UFVK.
+            cold-multisig: the FROST share will be generated and stored on zigner only. zafu keeps
+            only the public key package + UFVK.
           </div>
           <label className='text-xs text-fg-muted'>
             relay url

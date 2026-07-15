@@ -341,7 +341,9 @@ export const ImportZigner = () => {
             {scanState === 'scanned' && detectedNetwork === 'penumbra' && walletImport && (
               <div className='flex flex-col gap-4'>
                 <div className='p-6'>
-                  <div className='text-title text-fg-high lowercase tracking-[-0.005em]'>Success!</div>
+                  <div className='text-title text-fg-high lowercase tracking-[-0.005em]'>
+                    Success!
+                  </div>
                   <div className={cn('font-mono text-fg-muted', 'text-xs', 'break-all', 'mt-2')}>
                     Account #{walletImport.accountIndex}
                   </div>
@@ -404,7 +406,9 @@ export const ImportZigner = () => {
             {scanState === 'scanned' && detectedNetwork === 'zcash' && zcashWalletImport && (
               <div className='flex flex-col gap-4'>
                 <div className='p-6'>
-                  <div className='text-title text-fg-high lowercase tracking-[-0.005em]'>Zcash Wallet Detected!</div>
+                  <div className='text-title text-fg-high lowercase tracking-[-0.005em]'>
+                    Zcash Wallet Detected!
+                  </div>
                   <div className={cn('font-mono text-fg-muted', 'text-xs', 'break-all', 'mt-2')}>
                     Account #{zcashWalletImport.accountIndex}
                     <span className='ml-2'>
@@ -470,7 +474,9 @@ export const ImportZigner = () => {
             {scanState === 'scanned' && detectedNetwork === 'cosmos' && parsedCosmosExport && (
               <div className='flex flex-col gap-4'>
                 <div className='p-6'>
-                  <div className='text-title text-fg-high lowercase tracking-[-0.005em]'>Cosmos Account Detected!</div>
+                  <div className='text-title text-fg-high lowercase tracking-[-0.005em]'>
+                    Cosmos Account Detected!
+                  </div>
                   {parsedCosmosExport.addresses.map(a => (
                     <div
                       key={a.chainId}
@@ -540,7 +546,9 @@ export const ImportZigner = () => {
             {scanState === 'scanned' && detectedNetwork === 'polkadot' && parsedPolkadotExport && (
               <div className='flex flex-col gap-4'>
                 <div className='p-6'>
-                  <div className='text-title text-fg-high lowercase tracking-[-0.005em]'>Polkadot Account Detected!</div>
+                  <div className='text-title text-fg-high lowercase tracking-[-0.005em]'>
+                    Polkadot Account Detected!
+                  </div>
                   <div className={cn('font-mono text-fg-muted', 'text-xs', 'break-all', 'mt-2')}>
                     {parsedPolkadotExport.address.slice(0, 12)}...
                     {parsedPolkadotExport.address.slice(-8)}

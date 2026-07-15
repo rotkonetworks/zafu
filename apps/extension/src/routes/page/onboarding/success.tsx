@@ -49,9 +49,7 @@ export const OnboardingSuccess = () => {
 
         <header className='flex flex-col gap-1'>
           <h2 className='text-2xl lowercase tracking-[-0.01em] text-fg-high'>wallet ready</h2>
-          <p className='text-xs text-fg-muted lowercase'>
-            shielded signing, on your terms.
-          </p>
+          <p className='text-xs text-fg-muted lowercase'>shielded signing, on your terms.</p>
         </header>
 
         <button
