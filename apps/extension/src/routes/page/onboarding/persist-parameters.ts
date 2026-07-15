@@ -64,10 +64,13 @@ export const setOnboardingValuesInStorage = async (seedPhraseOrigin: SEED_PHRASE
   // Persist the RPC to LS storage.
   await localExtStorage.set('grpcEndpoint', rpc);
 
+  if (seedPhraseOrigin === SEED_PHRASE_ORIGIN.IMPORTED) {
+    // Importing means the user typed the phrase from an existing backup —
+    // they demonstrably possess it. Suppress the home backup nudge.
+    await localExtStorage.set('seedPhraseBackedUp', true);
+  }
+
   if (seedPhraseOrigin === SEED_PHRASE_ORIGIN.NEWLY_GENERATED) {
-    // Flag associated with a dismissible popup that reminds the user to save their seed phrase;
-    // Initially set to false.
-    await localExtStorage.set('backupReminderSeen', false);
 
     // NOTE: walletCreationBlockHeight and compactFrontierBlockHeight should already be set
     // by setFreshWalletBlockHeights() BEFORE wallet creation. Only set them here as fallback.

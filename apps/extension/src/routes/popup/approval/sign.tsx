@@ -188,12 +188,8 @@ export const SignApproval = () => {
       <div className='flex min-h-screen w-screen flex-col gap-6'>
         <header className='flex h-[70px] flex-col items-center justify-center border-b border-border-soft'>
           <span className='kicker mb-1'>signature request</span>
-          <h1 className='text-[18px] text-fg-high lowercase tracking-[-0.01em]'>
-            {step === 'show-qr'
-              ? 'sign with zigner'
-              : step === 'scan-qr'
-                ? 'scan response'
-                : 'sign message'}
+          <h1 className='text-title text-fg-high lowercase tracking-[-0.01em]'>
+            {step === 'show-qr' ? 'sign with zigner' : step === 'scan-qr' ? 'scan response' : 'sign message'}
           </h1>
         </header>
 
@@ -266,18 +262,14 @@ export const SignApproval = () => {
             {passwordError && <p className='text-xs text-red-400 text-center'>{passwordError}</p>}
             <div className='flex gap-3 mt-2'>
               <button
-                onClick={() => {
-                  setStep('review');
-                  setPassword('');
-                  setPasswordError('');
-                }}
-                className='flex-1 rounded-md border border-border-soft p-3 text-xs text-fg-muted hover:text-fg-high hover:bg-elev-1 lowercase tracking-[0.04em]'
+                onClick={() => { setStep('review'); setPassword(''); setPasswordError(''); }}
+                className='flex-1 rounded-md border border-border-soft p-3 text-xs text-fg-muted hover:text-fg-high hover:bg-elev-1 lowercase'
               >
                 back
               </button>
               <button
                 onClick={() => void handlePasswordSubmit()}
-                className='flex-1 rounded-md bg-zigner-gold p-3 text-xs text-zigner-dark hover:bg-zigner-gold-light lowercase tracking-[0.04em]'
+                className='flex-1 rounded-md bg-zigner-gold p-3 text-xs text-zigner-dark hover:bg-zigner-gold-light lowercase'
               >
                 sign
               </button>
@@ -308,13 +300,13 @@ export const SignApproval = () => {
             </div>
             <button
               onClick={() => setStep('scan-qr')}
-              className='w-full rounded-md bg-zigner-gold p-3 text-xs text-zigner-dark hover:bg-zigner-gold-light lowercase tracking-[0.04em]'
+              className='w-full rounded-md bg-zigner-gold p-3 text-xs text-zigner-dark hover:bg-zigner-gold-light lowercase'
             >
               scan signed response
             </button>
             <button
               onClick={() => setStep('review')}
-              className='text-[10px] text-fg-dim hover:text-fg-high lowercase tracking-[0.04em]'
+              className='text-label text-fg-dim hover:text-fg-high lowercase'
             >
               back
             </button>

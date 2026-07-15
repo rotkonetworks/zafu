@@ -46,7 +46,7 @@ export const ImportSeedPhrase = () => {
           <button
             type='button'
             onClick={() => navigate(PagePath.WELCOME)}
-            className='mb-2 inline-flex items-center gap-1.5 self-start text-[11px] text-fg-muted transition-colors hover:text-fg-high lowercase tracking-[0.02em]'
+            className='mb-2 inline-flex items-center gap-1.5 self-start text-body text-fg-muted transition-colors hover:text-fg-high lowercase'
           >
             <span className='i-lucide-arrow-left h-3 w-3' />
             back
@@ -54,7 +54,7 @@ export const ImportSeedPhrase = () => {
           <h2 className='text-2xl lowercase tracking-[-0.01em] text-fg-high'>
             enter your recovery phrase
           </h2>
-          <p className='text-xs text-fg-muted lowercase tracking-[0.02em]'>
+          <p className='text-xs text-fg-muted lowercase'>
             12 or 24 words. paste the first box; the rest fill in.
           </p>
         </header>
@@ -67,7 +67,7 @@ export const ImportSeedPhrase = () => {
             disabled={!valid}
             onClick={handleSubmit}
             className={cn(
-              'group relative flex items-center justify-center gap-2 self-stretch px-5 py-3 text-sm lowercase tracking-[0.01em]',
+              'group relative flex items-center justify-center gap-2 self-stretch px-5 py-3 text-sm lowercase',
               '[border-radius:14px] border transition-[transform,opacity,background-color,border-color] duration-200',
               valid
                 ? 'border-zigner-gold/30 bg-zigner-gold/10 text-zigner-gold hover:-translate-y-[1px] hover:bg-zigner-gold/15'

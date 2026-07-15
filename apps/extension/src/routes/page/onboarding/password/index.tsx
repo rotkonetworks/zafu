@@ -54,15 +54,18 @@ export const SetPassword = () => {
           <button
             type='button'
             onClick={onBack}
-            className='mb-2 inline-flex items-center gap-1.5 self-start text-[11px] text-fg-muted transition-colors hover:text-fg-high lowercase tracking-[0.02em]'
+            className='mb-2 inline-flex items-center gap-1.5 self-start text-body text-fg-muted transition-colors hover:text-fg-high lowercase'
           >
             <span className='i-lucide-arrow-left h-3 w-3' />
             back
           </button>
-          <h2 className='text-2xl lowercase tracking-[-0.01em] text-fg-high'>set a password</h2>
-          <p className='text-xs text-fg-muted lowercase tracking-[0.02em] leading-snug'>
-            encrypts your seed phrase on this device. you'll enter it again every time the wallet
-            locks. there's no way to recover it — pick something you'll remember.
+          <h2 className='text-2xl lowercase tracking-[-0.01em] text-fg-high'>
+            set a password
+          </h2>
+          <p className='text-xs text-fg-muted lowercase leading-snug'>
+            encrypts your seed phrase on this device. you'll enter it
+            again every time the wallet locks. there's no way to recover
+            it — pick something you'll remember.
           </p>
         </header>
 
@@ -96,7 +99,7 @@ export const SetPassword = () => {
             type='submit'
             disabled={!canSubmit}
             className={cn(
-              'group mt-2 inline-flex items-center justify-center gap-2 px-5 py-3 text-sm lowercase tracking-[0.01em]',
+              'group mt-2 inline-flex items-center justify-center gap-2 px-5 py-3 text-sm lowercase',
               '[border-radius:14px] border transition-[transform,opacity,background-color,border-color] duration-200',
               canSubmit
                 ? 'border-zigner-gold/30 bg-zigner-gold/10 text-zigner-gold hover:-translate-y-[1px] hover:bg-zigner-gold/15'

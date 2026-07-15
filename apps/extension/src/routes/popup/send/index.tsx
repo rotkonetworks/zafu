@@ -757,30 +757,25 @@ function CosmosSend({ sourceChainId }: { sourceChainId: CosmosChainId }) {
           <p className='kicker mb-2'>confirm transaction</p>
           <div className='flex flex-col gap-1.5 text-xs'>
             <div className='flex justify-between'>
-              <span className='text-fg-dim lowercase tracking-[0.04em]'>type</span>
+              <span className='text-fg-dim lowercase'>type</span>
               <span className='text-fg-high'>{isSameChain ? 'send' : 'ibc transfer'}</span>
             </div>
             <div className='flex justify-between'>
-              <span className='text-fg-dim lowercase tracking-[0.04em]'>chain</span>
+              <span className='text-fg-dim lowercase'>chain</span>
               <span className='text-fg-high'>{sourceChain.name}</span>
             </div>
             <div className='flex justify-between gap-2'>
-              <span className='text-fg-dim lowercase tracking-[0.04em] shrink-0'>to</span>
+              <span className='text-fg-dim lowercase shrink-0'>to</span>
               <span className='tabular text-right break-all text-fg-high'>{recipient}</span>
             </div>
             <div className='flex justify-between'>
-              <span className='text-fg-dim lowercase tracking-[0.04em]'>amount</span>
-              <span className='tabular text-zigner-gold'>
-                {amount} {selectedAsset.symbol}
-              </span>
+              <span className='text-fg-dim lowercase'>amount</span>
+              <span className='tabular text-zigner-gold'>{amount} {selectedAsset.symbol}</span>
             </div>
             {!isSameChain && effectiveDestChainId && (
               <div className='flex justify-between'>
-                <span className='text-fg-dim lowercase tracking-[0.04em]'>destination</span>
-                <span className='text-fg-high'>
-                  {skipChains.find(c => c.chainId === effectiveDestChainId)?.chainName ??
-                    effectiveDestChainId}
-                </span>
+                <span className='text-fg-dim lowercase'>destination</span>
+                <span className='text-fg-high'>{skipChains.find(c => c.chainId === effectiveDestChainId)?.chainName ?? effectiveDestChainId}</span>
               </div>
             )}
           </div>
@@ -790,12 +785,12 @@ function CosmosSend({ sourceChainId }: { sourceChainId: CosmosChainId }) {
             <div className='mt-2'>
               <button
                 onClick={() => setShowRawJson(!showRawJson)}
-                className='text-[10px] text-fg-dim hover:text-fg-high transition-colors lowercase tracking-[0.04em]'
+                className='text-label text-fg-dim hover:text-fg-high transition-colors lowercase'
               >
                 {showRawJson ? 'hide' : 'view'} raw transaction json
               </button>
               {showRawJson && (
-                <pre className='mt-2 max-h-48 overflow-auto rounded-sm bg-canvas p-2 text-[10px] tabular text-fg-muted leading-relaxed'>
+                <pre className='mt-2 max-h-48 overflow-auto rounded-sm bg-canvas p-2 text-label tabular text-fg-muted leading-relaxed'>
                   {JSON.stringify(txPreview, null, 2)}
                 </pre>
               )}

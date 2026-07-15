@@ -182,12 +182,12 @@ function ConversationRow({
           </span>
           <div className='flex items-center gap-1.5 shrink-0'>
             {conversation.unread > 0 && (
-              <span className='rounded-full bg-zigner-gold px-1.5 py-0.5 text-[10px] tabular text-zigner-dark'>
+              <span className='rounded-full bg-zigner-gold px-1.5 py-0.5 text-label tabular text-zigner-dark'>
                 {conversation.unread}
               </span>
             )}
             {lastMsg?.timestamp && (
-              <span className='text-[10px] tabular text-fg-dim whitespace-nowrap'>
+              <span className='text-label tabular text-fg-dim whitespace-nowrap'>
                 {formatTimestamp(lastMsg.timestamp)}
               </span>
             )}
@@ -202,7 +202,7 @@ function ConversationRow({
           {preview}
         </p>
         <div className='flex items-center gap-1.5 mt-1'>
-          <span className='text-[10px] tabular text-fg-dim lowercase tracking-[0.04em]'>
+          <span className='text-label tabular text-fg-dim lowercase'>
             {conversation.messages.length} message{conversation.messages.length !== 1 ? 's' : ''}
           </span>
         </div>
@@ -228,7 +228,7 @@ function MessageBubble({ message }: { message: InboxMessage }) {
         {message.type !== MemoType.Text && (
           <div className='flex items-center gap-1 mb-1'>
             <span className={cn(memoTypeIcon(message.type), 'h-3 w-3 text-fg-muted')} />
-            <span className='text-[10px] text-fg-muted'>{message.typeLabel}</span>
+            <span className='text-label text-fg-muted'>{message.typeLabel}</span>
           </div>
         )}
 
@@ -238,12 +238,12 @@ function MessageBubble({ message }: { message: InboxMessage }) {
         {/* meta */}
         <div className='flex items-center gap-2 mt-1'>
           {message.timestamp && (
-            <span className='text-[10px] tabular text-fg-dim'>
+            <span className='text-label tabular text-fg-dim'>
               {formatTimestamp(message.timestamp)}
             </span>
           )}
           {!message.complete && (
-            <span className='text-[10px] text-yellow-400'>
+            <span className='text-label text-yellow-400'>
               incomplete ({message.txids.length} fragments)
             </span>
           )}
@@ -340,22 +340,24 @@ function ContactCardBubble({ card }: { card?: ContactCard }) {
         <span className='i-lucide-contact h-4 w-4 text-zigner-gold' />
         <span className='text-sm font-medium'>{card.name || 'anonymous'}</span>
       </div>
-      <p className='text-[10px] font-mono text-fg-muted break-all'>{card.address}</p>
+      <p className='text-label font-mono text-fg-muted break-all'>{card.address}</p>
       {card.zid && (
         <div className='flex items-center gap-1'>
           <span className='i-lucide-fingerprint h-3 w-3 text-fg-muted' />
-          <span className='text-[10px] font-mono text-fg-muted'>zid{card.zid.slice(0, 16)}</span>
+          <span className='text-label font-mono text-fg-muted'>
+            zid{card.zid.slice(0, 16)}
+          </span>
         </div>
       )}
       {saved ? (
-        <span className='flex items-center gap-1 text-[10px] text-green-400'>
+        <span className='flex items-center gap-1 text-label text-green-400'>
           <span className='i-lucide-check h-3 w-3' />
           in contacts
         </span>
       ) : (
         <button
           onClick={() => void handleSave()}
-          className='flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-[10px] text-zigner-gold hover:bg-primary/20 transition-colors'
+          className='flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-label text-zigner-gold hover:bg-primary/20 transition-colors'
         >
           <span className='i-lucide-user-plus h-3 w-3' />
           save to contacts
@@ -415,18 +417,18 @@ function DataBubble({ body }: { body: string }) {
   return (
     <div className='space-y-1'>
       <div className='flex items-center gap-2'>
-        <span className='rounded bg-elev-2 px-1.5 py-0.5 text-[10px] text-fg-muted'>
+        <span className='rounded bg-elev-2 px-1.5 py-0.5 text-label text-fg-muted'>
           {contentType}
         </span>
         <button
           onClick={() => setExpanded(!expanded)}
-          className='text-[10px] text-zigner-gold hover:underline'
+          className='text-label text-zigner-gold hover:underline'
         >
           {expanded ? 'collapse' : 'expand'}
         </button>
       </div>
       {expanded && (
-        <pre className='text-[10px] font-mono text-fg-muted bg-background/50 rounded p-2 overflow-x-auto max-h-48 whitespace-pre-wrap break-all'>
+        <pre className='text-label font-mono text-fg-muted bg-background/50 rounded p-2 overflow-x-auto max-h-48 whitespace-pre-wrap break-all'>
           {display}
         </pre>
       )}
@@ -445,7 +447,7 @@ function FrostDkgBubble({ message }: { message: InboxMessage }) {
         <span className='i-lucide-key-round h-4 w-4 text-yellow-400' />
         <span className='text-sm font-medium text-yellow-400'>DKG round {round}</span>
       </div>
-      <p className='text-[10px] text-fg-muted'>
+      <p className='text-label text-fg-muted'>
         {round === 1 && 'key generation started - share your commitment'}
         {round === 2 && 'commitments collected - share your package'}
         {round === 3 && 'packages collected - finalize key generation'}
@@ -478,7 +480,9 @@ function FrostSignBubble({ message }: { message: InboxMessage }) {
         <span className='i-lucide-pen-tool h-4 w-4 text-blue-400' />
         <span className='text-sm font-medium text-blue-400'>{message.typeLabel}</span>
       </div>
-      <p className='text-[10px] text-fg-muted'>{labels[message.type] ?? 'FROST signing round'}</p>
+      <p className='text-label text-fg-muted'>
+        {labels[message.type] ?? 'FROST signing round'}
+      </p>
       {message.direction === 'incoming' && message.type === MemoType.SignRequest && (
         <button
           onClick={() => navigate(PopupPath.MULTISIG_SIGN)}
@@ -571,7 +575,9 @@ function ConversationThread({
           )}
         </div>
 
-        <span className='text-[10px] text-fg-muted'>{conversation.messages.length} msg</span>
+        <span className='text-label text-fg-muted'>
+          {conversation.messages.length} msg
+        </span>
       </div>
 
       {/* referral attribution */}
@@ -641,7 +647,7 @@ function ConversationCompose({ diversifierIndex }: { diversifierIndex: number })
           <span className='i-lucide-send h-4 w-4' />
         </button>
       </div>
-      <p className='text-[10px] text-fg-muted mt-1'>
+      <p className='text-label text-fg-muted mt-1'>
         sends via {activeNetwork} shielded transaction
       </p>
     </div>
@@ -1033,7 +1039,7 @@ export function InboxPage() {
           <span className='i-lucide-messages-square h-4 w-4' />
           conversations
           {unreadCount > 0 && (
-            <span className='ml-0.5 rounded-full bg-zigner-gold px-1.5 py-0.5 text-[10px] text-zigner-dark'>
+            <span className='ml-0.5 rounded-full bg-zigner-gold px-1.5 py-0.5 text-label text-zigner-dark'>
               {unreadCount}
             </span>
           )}
@@ -1185,7 +1191,7 @@ function FlatMessageRow({
           <span className={cn('text-sm truncate', !message.read && 'font-medium')}>
             {contactName ?? truncateAddress(displayAddress)}
           </span>
-          <span className='text-[10px] text-fg-muted whitespace-nowrap'>
+          <span className='text-label text-fg-muted whitespace-nowrap'>
             {formatTimestamp(message.timestamp)}
           </span>
         </div>
@@ -1195,9 +1201,8 @@ function FlatMessageRow({
           {message.content}
         </p>
         {message.amount && (
-          <span className='inline-flex items-center rounded-md bg-green-500/10 px-1.5 py-0.5 mt-1 text-[10px] text-green-400'>
-            {message.direction === 'received' ? '+' : '-'}
-            {message.amount} {message.asset ?? ''}
+          <span className='inline-flex items-center rounded-md bg-green-500/10 px-1.5 py-0.5 mt-1 text-label text-green-400'>
+            {message.direction === 'received' ? '+' : '-'}{message.amount} {message.asset ?? ''}
           </span>
         )}
         {message.status && message.status !== 'confirmed' && (
@@ -1228,11 +1233,7 @@ function OutgoingStatusBadge({
   const s = styles[status];
   return (
     <span
-      className={cn(
-        'inline-flex items-center rounded-md px-1.5 py-0.5 ml-1 mt-1 text-[10px]',
-        s.bg,
-        s.fg,
-      )}
+      className={cn('inline-flex items-center rounded-md px-1.5 py-0.5 ml-1 mt-1 text-label', s.bg, s.fg)}
       title={status === 'failed' ? reason : undefined}
     >
       {s.label}

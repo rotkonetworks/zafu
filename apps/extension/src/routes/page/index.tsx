@@ -158,7 +158,7 @@ export const PageIndex = () => {
 
         {grouped.map(([category, zapps]) => (
           <div key={category}>
-            <h2 className='text-[10px] font-medium text-fg-muted uppercase tracking-wider mb-2'>
+            <h2 className='text-label font-medium text-fg-muted uppercase tracking-wider mb-2'>
               {CATEGORY_LABELS[category]}
             </h2>
             <div className='grid grid-cols-3 gap-3'>
@@ -170,7 +170,7 @@ export const PageIndex = () => {
                   >
                     <span className={`${zapp.icon} h-6 w-6 text-fg-muted`} />
                     <span className='text-xs font-medium'>{zapp.name}</span>
-                    <span className='text-[10px] text-fg-dim'>{zapp.description}</span>
+                    <span className='text-label text-fg-dim'>{zapp.description}</span>
                   </button>
                   {!zapp.builtin && (
                     <button
@@ -186,8 +186,8 @@ export const PageIndex = () => {
           </div>
         ))}
 
-        <div className='text-[10px] text-fg-muted/40 text-center pb-4'>
-          GPL-3.0 - rotko networks
+        <div className='text-label text-fg-muted/40 text-center pb-4'>
+          MIT - rotko networks
         </div>
       </div>
     </FadeTransition>

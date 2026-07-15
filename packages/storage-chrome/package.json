@@ -2,7 +2,7 @@
   "name": "@repo/storage-chrome",
   "version": "0.0.1",
   "private": true,
-  "license": "(MIT OR Apache-2.0)",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "lint": "eslint src",

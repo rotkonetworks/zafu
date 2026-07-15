@@ -49,7 +49,7 @@ export const OnboardingSuccess = () => {
 
         <header className='flex flex-col gap-1'>
           <h2 className='text-2xl lowercase tracking-[-0.01em] text-fg-high'>wallet ready</h2>
-          <p className='text-xs text-fg-muted lowercase tracking-[0.02em]'>
+          <p className='text-xs text-fg-muted lowercase'>
             shielded signing, on your terms.
           </p>
         </header>
@@ -58,7 +58,7 @@ export const OnboardingSuccess = () => {
           type='button'
           onClick={() => void openSidePanel()}
           className={cn(
-            'group inline-flex items-center justify-center gap-2 px-6 py-3 text-sm lowercase tracking-[0.01em]',
+            'group inline-flex items-center justify-center gap-2 px-6 py-3 text-sm lowercase',
             '[border-radius:14px] border border-zigner-gold/30 bg-zigner-gold/10 text-zigner-gold',
             'transition-[transform,background-color] duration-200',
             'hover:-translate-y-[1px] hover:bg-zigner-gold/15',
@@ -69,7 +69,7 @@ export const OnboardingSuccess = () => {
           <span className='i-lucide-arrow-right h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5' />
         </button>
 
-        <p className='mt-2 max-w-xs text-[11px] text-fg-muted lowercase tracking-[0.02em]'>
+        <p className='mt-2 max-w-xs text-body text-fg-muted lowercase'>
           discover dapps and tools from inside the wallet once you're in.
         </p>
       </div>

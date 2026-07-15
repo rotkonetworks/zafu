@@ -16,16 +16,20 @@ interface SettingsLink {
   networks?: string[];
 }
 
+// Order: what protects funds first (backups), then preferences, then
+// upsell, then the destructive thing last where muscle memory can't
+// hit it by accident.
 const links: SettingsLink[] = [
-  {
-    title: 'pro subscription',
-    icon: 'i-lucide-zap',
-    href: PopupPath.SUBSCRIBE,
-  },
   {
     title: 'recovery passphrase',
     icon: 'i-lucide-file-text',
     href: PopupPath.SETTINGS_RECOVERY_PASSPHRASE,
+  },
+  {
+    title: 'multisig backup',
+    icon: 'i-lucide-shield',
+    href: PopupPath.SETTINGS_MULTISIG_BACKUP,
+    networks: ['zcash'],
   },
   {
     title: 'privacy',
@@ -33,10 +37,9 @@ const links: SettingsLink[] = [
     href: PopupPath.SETTINGS_PRIVACY,
   },
   {
-    title: 'multisig backup',
-    icon: 'i-lucide-shield',
-    href: PopupPath.SETTINGS_MULTISIG_BACKUP,
-    networks: ['zcash'],
+    title: 'pro subscription',
+    icon: 'i-lucide-zap',
+    href: PopupPath.SUBSCRIBE,
   },
   {
     title: 'clear cache',
@@ -60,9 +63,7 @@ function SettingsRow({
       className='flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-elev-1 hover:text-fg-high group'
     >
       <span className={cn(icon, 'size-5 text-fg-muted group-hover:text-fg-high')} />
-      <span className='flex-1 text-[13px] text-fg group-hover:text-fg-high lowercase tracking-[0.02em]'>
-        {title}
-      </span>
+      <span className='flex-1 text-data text-fg group-hover:text-fg-high lowercase'>{title}</span>
       <span className='i-lucide-chevron-right size-4 text-fg-dim group-hover:text-fg-muted' />
     </button>
   );
@@ -113,15 +114,9 @@ export const Settings = () => {
             onClick={cycleAutoLock}
             className='flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-elev-1 hover:text-fg-high group'
           >
-            <span
-              className={cn('i-lucide-timer', 'size-5 text-fg-muted group-hover:text-fg-high')}
-            />
-            <span className='flex-1 text-[13px] text-fg group-hover:text-fg-high lowercase tracking-[0.02em]'>
-              auto-lock
-            </span>
-            <span className='text-[10px] tabular text-fg-dim group-hover:text-fg-muted'>
-              {autoLockLabel}
-            </span>
+            <span className={cn('i-lucide-timer', 'size-5 text-fg-muted group-hover:text-fg-high')} />
+            <span className='flex-1 text-data text-fg group-hover:text-fg-high lowercase'>auto-lock</span>
+            <span className='text-label tabular text-fg-dim group-hover:text-fg-muted'>{autoLockLabel}</span>
           </button>
         </div>
 

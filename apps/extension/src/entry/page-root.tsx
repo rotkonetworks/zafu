@@ -26,7 +26,7 @@ const MainPage = () => {
   if (!wasmReady) {
     return (
       <div className='flex h-screen items-center justify-center bg-canvas text-fg'>
-        <span className='text-[13px] text-fg-dim lowercase tracking-[0.04em]'>loading...</span>
+        <span className='text-data text-fg-dim lowercase'>loading...</span>
       </div>
     );
   }

@@ -14,29 +14,27 @@ interface BottomTabsProps {
 }
 
 /** memoized tab button for minimal re-renders */
-const TabButton = memo(
-  ({
-    tab,
-    isActive,
-    onNavigate,
-  }: {
-    tab: BottomTab;
-    isActive: boolean;
-    onNavigate: (path: string) => void;
-  }) => (
-    <button
-      onClick={() => onNavigate(tab.path)}
-      className={cn(
-        'flex flex-1 flex-col items-center justify-center gap-0.5',
-        'transition-colors hover:text-fg-high',
-        isActive ? 'text-zigner-gold' : 'text-fg-dim',
-      )}
-    >
-      {isActive && tab.activeIcon ? tab.activeIcon : tab.icon}
-      <span className='text-[10px] lowercase tracking-[0.04em]'>{tab.label}</span>
-    </button>
-  ),
-);
+const TabButton = memo(({
+  tab,
+  isActive,
+  onNavigate,
+}: {
+  tab: BottomTab;
+  isActive: boolean;
+  onNavigate: (path: string) => void;
+}) => (
+  <button
+    onClick={() => onNavigate(tab.path)}
+    className={cn(
+      'flex flex-1 flex-col items-center justify-center gap-0.5',
+      'transition-colors hover:text-fg-high',
+      isActive ? 'text-zigner-gold' : 'text-fg-dim',
+    )}
+  >
+    {isActive && tab.activeIcon ? tab.activeIcon : tab.icon}
+    <span className='text-label lowercase'>{tab.label}</span>
+  </button>
+));
 TabButton.displayName = 'TabButton';
 
 export const BottomTabs = memo(({ tabs }: BottomTabsProps) => {

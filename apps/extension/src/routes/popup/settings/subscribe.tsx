@@ -440,7 +440,7 @@ export const SubscribePage = () => {
         )}
 
         {/* features list */}
-        <div className='text-[10px] font-mono text-fg-dim'>
+        <div className='text-label font-mono text-fg-dim'>
           <p className='mb-2'>free for everyone:</p>
           <ul className='flex flex-col gap-0.5 pl-2 mb-3'>
             {FREE_FEATURES.map(f => (
@@ -476,7 +476,7 @@ export const SubscribePage = () => {
                 payment detected - {(pending.pendingZat / 1e8).toFixed(4)} ZEC
               </span>
             </div>
-            <div className='text-[9px] font-mono text-fg-dim mt-1'>
+            <div className='text-label font-mono text-fg-dim mt-1'>
               {pending.requiredConfs === 0
                 ? 'crediting...'
                 : `${pending.pendingConfs}/${pending.requiredConfs} confirmations`}
@@ -535,16 +535,75 @@ export const SubscribePage = () => {
 
           {/* review step — tx summary. zigner hands off to send page for QR
                 signing; mnemonic builds + broadcasts locally after password gate. */}
-          {payState === 'review' && (
-            <div className='rounded border border-primary/40 bg-primary/5 p-3 flex flex-col gap-2'>
-              <p className='text-xs font-mono text-fg-muted'>transaction summary</p>
-              <div className='flex justify-between text-xs font-mono'>
-                <span className='text-fg-muted'>amount</span>
-                <span className='text-fg'>{amountZec} ZEC</span>
+            {payState === 'review' && (
+              <div className='rounded border border-primary/40 bg-primary/5 p-3 flex flex-col gap-2'>
+                <p className='text-xs font-mono text-fg-muted'>transaction summary</p>
+                <div className='flex justify-between text-xs font-mono'>
+                  <span className='text-fg-muted'>amount</span>
+                  <span className='text-fg'>{amountZec} ZEC</span>
+                </div>
+                <div className='flex justify-between text-xs font-mono'>
+                  <span className='text-fg-muted'>duration</span>
+                  <span className='text-fg'>{daysAdded} days pro</span>
+                </div>
+                <div className='flex justify-between items-start text-xs font-mono gap-2'>
+                  <span className='text-fg-muted shrink-0'>to</span>
+                  <span className='text-fg text-right break-all text-label'>{ROTKO_LICENSE_ADDRESS.slice(0, 20)}...{ROTKO_LICENSE_ADDRESS.slice(-8)}</span>
+                </div>
+                <div className='flex justify-between items-start text-xs font-mono gap-2'>
+                  <span className='text-fg-muted shrink-0'>memo</span>
+                  <span className='text-fg text-right break-all text-label'>{memo.slice(0, 12)}...{memo.slice(-8)}</span>
+                </div>
+                {isZignerWallet && (
+                  <p className='text-label font-mono text-fg-muted mt-1'>
+                    next: build an unsigned tx, scan the QR with your zigner device, then scan its signature back.
+                  </p>
+                )}
+                <div className='flex gap-2 mt-2'>
+                  <button
+                    onClick={() => setPayState('idle')}
+                    className='flex-1 rounded border border-border-soft py-2 text-xs font-mono text-fg-muted hover:text-fg-high'
+                  >
+                    cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (isZignerWallet) void handleZignerBuild();
+                      else void handleConfirm();
+                    }}
+                    className='flex-1 rounded border border-primary/40 bg-primary/10 py-2 text-xs font-mono text-zigner-gold hover:bg-primary/20'
+                  >
+                    {isZignerWallet ? 'continue to sign' : 'confirm & pay'}
+                  </button>
+                </div>
               </div>
-              <div className='flex justify-between text-xs font-mono'>
-                <span className='text-fg-muted'>duration</span>
-                <span className='text-fg'>{daysAdded} days pro</span>
+            )}
+
+            {/* zigner: show sign-request QR */}
+            {payState === 'zigner-sign' && signRequestQr && (
+              <div className='rounded border border-primary/40 bg-primary/5 p-3 flex flex-col gap-3 items-center'>
+                <p className='text-xs font-mono text-fg-muted'>sign with zafu zigner</p>
+                <QrDisplay data={signRequestQr} size={220} />
+                <div className='text-label font-mono text-fg-muted text-center leading-relaxed'>
+                  1. open zafu zigner on your phone<br />
+                  2. scan this qr<br />
+                  3. review & approve the transaction<br />
+                  4. tap &quot;scan signature&quot; below
+                </div>
+                <div className='flex gap-2 w-full'>
+                  <button
+                    onClick={() => { unsignedTxRef.current = null; setSignRequestQr(null); setPayState('idle'); }}
+                    className='flex-1 rounded border border-border-soft py-2 text-xs font-mono text-fg-muted hover:text-fg-high'
+                  >
+                    cancel
+                  </button>
+                  <button
+                    onClick={() => setPayState('zigner-scan')}
+                    className='flex-1 rounded border border-primary/40 bg-primary/10 py-2 text-xs font-mono text-zigner-gold hover:bg-primary/20'
+                  >
+                    scan signature
+                  </button>
+                </div>
               </div>
               <div className='flex justify-between items-start text-xs font-mono gap-2'>
                 <span className='text-fg-muted shrink-0'>to</span>
@@ -552,22 +611,89 @@ export const SubscribePage = () => {
                   {ROTKO_LICENSE_ADDRESS.slice(0, 20)}...{ROTKO_LICENSE_ADDRESS.slice(-8)}
                 </span>
               </div>
-              <div className='flex justify-between items-start text-xs font-mono gap-2'>
-                <span className='text-fg-muted shrink-0'>memo</span>
-                <span className='text-fg text-right break-all text-[10px]'>
-                  {memo.slice(0, 12)}...{memo.slice(-8)}
-                </span>
+            )}
+
+            {/* building/broadcasting */}
+            {(payState === 'building' || payState === 'broadcasting') && (
+              <div className='rounded border border-border-soft p-3 flex flex-col gap-2'>
+                <div className='flex items-center justify-between'>
+                  <span className='text-xs font-mono text-fg'>
+                    {payState === 'building' ? 'building transaction' : 'broadcasting'}
+                  </span>
+                  <LiveTimer startMs={buildStartRef.current} />
+                </div>
+                {sendSteps.length > 0 ? (
+                  <div className='flex flex-col gap-0.5 max-h-32 overflow-y-auto'>
+                    {sendSteps.map((s, i) => {
+                      const isLast = i === sendSteps.length - 1;
+                      const prevMs = i > 0 ? sendSteps[i - 1]!.elapsedMs : 0;
+                      const dur = ((s.elapsedMs - prevMs) / 1000).toFixed(1);
+                      return (
+                        <div key={i} className={`flex items-start gap-2 text-label font-mono ${isLast ? 'text-fg' : 'text-fg-muted'}`}>
+                          <span className='w-10 text-right shrink-0 tabular-nums'>{(s.elapsedMs / 1000).toFixed(1)}s</span>
+                          <span>
+                            {s.step}
+                            {s.detail && <span className='text-fg-muted ml-1'>({s.detail})</span>}
+                            {!isLast && Number(dur) >= 0.5 && (
+                              <span className='text-fg-muted ml-1'>+{dur}s</span>
+                            )}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <span className='text-label font-mono text-fg-muted animate-pulse'>preparing...</span>
+                )}
               </div>
-              {isZignerWallet && (
-                <p className='text-[10px] font-mono text-fg-muted mt-1'>
-                  next: build an unsigned tx, scan the QR with your zigner device, then scan its
-                  signature back.
+            )}
+
+            {/* polling for activation */}
+            {payState === 'polling' && (
+              <div className='rounded border border-green-500/30 bg-green-500/10 p-3'>
+                <div className='flex items-center gap-2'>
+                  <span className='h-2 w-2 rounded-full bg-green-400 animate-pulse' />
+                  <span className='text-xs font-mono text-green-400'>
+                    payment sent - waiting for confirmation
+                  </span>
+                </div>
+                {txid && (
+                  <div className='text-label font-mono text-fg-muted/50 mt-1 break-all'>
+                    txid: {txid}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* activated */}
+            {payState === 'activated' && (
+              <div className='rounded border border-green-500/30 bg-green-500/10 p-3 text-center'>
+                <span className='i-lucide-check size-5 text-green-400 inline-block mb-1' />
+                <p className='text-sm font-mono text-green-400'>pro activated</p>
+              </div>
+            )}
+
+            {/* sent but polling timed out */}
+            {payState === 'sent' && (
+              <div className='rounded border border-yellow-500/30 bg-yellow-500/10 p-3'>
+                <p className='text-xs font-mono text-yellow-400'>
+                  payment sent - may need a few more confirmations
                 </p>
-              )}
-              <div className='flex gap-2 mt-2'>
+                {txid && (
+                  <div className='text-label font-mono text-fg-muted/50 mt-1 break-all'>
+                    txid: {txid}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* error */}
+            {payState === 'error' && (
+              <div className='rounded border border-red-500/30 bg-red-500/10 p-3'>
+                <p className='text-xs font-mono text-red-400'>{error}</p>
                 <button
-                  onClick={() => setPayState('idle')}
-                  className='flex-1 rounded border border-border-soft py-2 text-xs font-mono text-fg-muted hover:text-fg-high'
+                  onClick={() => { setPayState('idle'); setError(null); }}
+                  className='text-label font-mono text-fg-muted hover:text-fg-high mt-2'
                 >
                   cancel
                 </button>
@@ -587,19 +713,30 @@ export const SubscribePage = () => {
             </div>
           )}
 
-          {/* zigner: show sign-request QR */}
-          {payState === 'zigner-sign' && signRequestQr && (
-            <div className='rounded border border-primary/40 bg-primary/5 p-3 flex flex-col gap-3 items-center'>
-              <p className='text-xs font-mono text-fg-muted'>sign with zafu zigner</p>
-              <QrDisplay data={signRequestQr} size={220} />
-              <div className='text-[10px] font-mono text-fg-muted text-center leading-relaxed'>
-                1. open zafu zigner on your phone
-                <br />
-                2. scan this qr
-                <br />
-                3. review & approve the transaction
-                <br />
-                4. tap &quot;scan signature&quot; below
+            {/* manual copy fallback — shown only when in-wallet pay isn't available
+                 (e.g. zcash not enabled, or user wants to pay from external wallet) */}
+            {isZignerWallet && (
+              <div className='rounded border border-border-soft p-3'>
+                <p className='text-label font-mono text-fg-muted mb-2'>
+                  or pay from an external wallet
+                </p>
+                <button
+                  onClick={() => copy(ROTKO_LICENSE_ADDRESS, 'address')}
+                  className='w-full text-left mb-2'
+                >
+                  <span className='text-label font-mono text-fg-muted/50'>
+                    {copied === 'address' ? 'copied' : 'tap to copy address'}
+                  </span>
+                  <p className='font-mono text-label break-all'>{ROTKO_LICENSE_ADDRESS}</p>
+                </button>
+                {memo && (
+                  <button onClick={() => copy(memo, 'memo')} className='w-full text-left'>
+                    <span className='text-label font-mono text-fg-muted/50'>
+                      {copied === 'memo' ? 'copied' : 'tap to copy memo'}
+                    </span>
+                    <p className='font-mono text-label break-all'>{memo}</p>
+                  </button>
+                )}
               </div>
               <div className='flex gap-2 w-full'>
                 <button

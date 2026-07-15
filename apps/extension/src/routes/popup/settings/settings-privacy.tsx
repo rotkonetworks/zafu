@@ -142,7 +142,7 @@ function ProxySection() {
           </button>
         </div>
       )}
-      <p className='text-[9px] text-fg-muted/40 mt-1'>
+      <p className='text-label text-fg-muted/40 mt-1'>
         {pro
           ? 'routes all traffic through proxy - pro includes rotko proxy access'
           : 'routes all traffic through your socks5 proxy - pro includes proxy access'}

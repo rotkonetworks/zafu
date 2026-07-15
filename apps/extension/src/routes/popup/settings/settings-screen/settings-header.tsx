@@ -1,19 +1,27 @@
-import { usePopupNav } from '../../../../utils/navigate';
+import { useBackNav } from '../../../../utils/navigate';
 import { PopupPath } from '../../paths';
 
-export const SettingsHeader = ({ title, backPath }: { title: string; backPath?: PopupPath }) => {
-  const navigate = usePopupNav();
-  const target = backPath ?? PopupPath.SETTINGS;
+export const SettingsHeader = ({
+  title,
+  backPath,
+}: {
+  title: string;
+  /** Fallback only — used when this screen is the session's entry point
+   *  (deep link / dedicated window). With in-app history, back follows
+   *  the route the user actually came from. */
+  backPath?: PopupPath;
+}) => {
+  const goBack = useBackNav(backPath ?? PopupPath.SETTINGS);
 
   return (
     <div className='flex items-center gap-3 border-b border-border-soft px-4 py-3'>
       <button
-        onClick={() => navigate(target)}
+        onClick={goBack}
         className='text-fg-muted transition-colors hover:text-fg-high'
       >
         <span className='i-lucide-arrow-left h-5 w-5' />
       </button>
-      <h1 className='text-[15px] text-fg-high lowercase tracking-[-0.01em]'>{title}</h1>
+      <h1 className='text-title text-fg-high lowercase tracking-[-0.01em]'>{title}</h1>
     </div>
   );
 };

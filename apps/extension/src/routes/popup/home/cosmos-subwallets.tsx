@@ -44,7 +44,7 @@ const ChainRow = memo(({ chainId, address, formatted, loading }: ChainRowProps) 
             {loading ? <span className='text-muted-foreground'>—</span> : formatted}
           </span>
         </div>
-        <div className='font-mono text-[10px] text-muted-foreground' title={address}>
+        <div className='font-mono text-label text-muted-foreground' title={address}>
           {truncateAddress(address)}
         </div>
       </div>
@@ -85,7 +85,7 @@ export const CosmosSubwallets = () => {
     <div className='mt-4'>
       <div className='kicker mb-2 flex items-center justify-between'>
         <span>unshielded</span>
-        <span className='text-[10px] font-normal text-muted-foreground normal-case'>
+        <span className='text-label font-normal text-muted-foreground normal-case'>
           shieldable to Penumbra
         </span>
       </div>

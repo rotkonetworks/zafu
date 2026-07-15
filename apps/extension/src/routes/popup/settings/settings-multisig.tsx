@@ -75,11 +75,11 @@ export const SettingsMultisig = () => {
         {/* info */}
         <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
           <div className='flex items-center gap-2'>
-            <span className='rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-zigner-gold'>
+            <span className='rounded-md bg-primary/10 px-2 py-0.5 text-label font-medium text-zigner-gold'>
               {ms.threshold}/{ms.maxSigners}
             </span>
           </div>
-          <p className='mt-2 text-[10px] text-fg-muted'>address</p>
+          <p className='mt-2 text-label text-fg-muted'>address</p>
           <p className='break-all font-mono text-xs'>{wallet.address}</p>
         </div>
 
@@ -119,7 +119,7 @@ export const SettingsMultisig = () => {
         {/* backup */}
         <div className='border-t border-border-soft pt-4'>
           {ms.custody === 'airgapSigner' ? (
-            <div className='rounded-lg border border-border-soft bg-elev-1 p-3 text-[11px] text-fg-muted'>
+            <div className='rounded-lg border border-border-soft bg-elev-1 p-3 text-body text-fg-muted'>
               <p className='font-medium text-fg'>Backup</p>
               <p className='mt-1'>
                 This wallet's FROST share lives on your zigner device. Export the backup from there:

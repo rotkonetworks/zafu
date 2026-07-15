@@ -55,7 +55,7 @@ export const PasswordsPage = () => {
   return (
     <SettingsScreen title='passwords' backPath={PopupPath.IDENTITY}>
       <div className='flex flex-col gap-4'>
-        <p className='text-[10px] text-fg-dim font-mono'>
+        <p className='text-label text-fg-dim font-mono'>
           deterministic. nothing stored. same seed = same password.
         </p>
 
@@ -71,9 +71,7 @@ export const PasswordsPage = () => {
             className='w-full rounded border border-border-soft bg-transparent px-3 py-2 text-xs font-mono outline-none focus:border-muted-foreground/60'
           />
           {origin.trim() && normalizeOrigin(origin) !== origin.trim().toLowerCase() && (
-            <span className='text-[9px] text-fg-muted/50 font-mono'>
-              → {normalizeOrigin(origin)}
-            </span>
+            <span className='text-label text-fg-muted/50 font-mono'>→ {normalizeOrigin(origin)}</span>
           )}
           <input
             type='text'
@@ -86,7 +84,7 @@ export const PasswordsPage = () => {
             className='w-full rounded border border-border-soft bg-transparent px-3 py-2 text-xs font-mono outline-none focus:border-muted-foreground/60'
           />
           <div className='flex items-center gap-2'>
-            <span className='text-[10px] text-fg-dim font-mono'>length</span>
+            <span className='text-label text-fg-dim font-mono'>length</span>
             <input
               type='range'
               min={16}
@@ -98,10 +96,10 @@ export const PasswordsPage = () => {
               }}
               className='flex-1'
             />
-            <span className='text-[10px] text-fg-muted font-mono w-6 text-right'>{length}</span>
+            <span className='text-label text-fg-muted font-mono w-6 text-right'>{length}</span>
           </div>
           <div className='flex items-center gap-2'>
-            <span className='text-[10px] text-fg-dim font-mono'>rotation</span>
+            <span className='text-label text-fg-dim font-mono'>rotation</span>
             <button
               onClick={() => {
                 setIndex(Math.max(0, index - 1));
@@ -109,10 +107,8 @@ export const PasswordsPage = () => {
               }}
               disabled={index === 0}
               className='text-xs font-mono text-fg-muted hover:text-fg-high disabled:opacity-30 px-1'
-            >
-              -
-            </button>
-            <span className='text-[10px] text-fg-muted font-mono w-6 text-center'>#{index}</span>
+            >-</button>
+            <span className='text-label text-fg-muted font-mono w-6 text-center'>#{index}</span>
             <button
               onClick={() => {
                 setIndex(index + 1);
@@ -123,9 +119,7 @@ export const PasswordsPage = () => {
               +
             </button>
             {index > 0 && (
-              <span className='text-[9px] text-fg-muted/40 font-mono'>
-                password was rotated {index} time{index !== 1 ? 's' : ''}
-              </span>
+              <span className='text-label text-fg-muted/40 font-mono'>password was rotated {index} time{index !== 1 ? 's' : ''}</span>
             )}
           </div>
         </div>
@@ -143,8 +137,10 @@ export const PasswordsPage = () => {
             onClick={copy}
             className='w-full rounded border border-border-soft p-3 text-left hover:bg-elev-1 transition-colors'
           >
-            <div className='font-mono text-xs break-all select-all leading-relaxed'>{password}</div>
-            <div className='text-[9px] text-fg-muted/50 font-mono mt-2'>
+            <div className='font-mono text-xs break-all select-all leading-relaxed'>
+              {password}
+            </div>
+            <div className='text-label text-fg-muted/50 font-mono mt-2'>
               {copied ? 'copied' : 'tap to copy'}
             </div>
           </button>

@@ -4,6 +4,7 @@
 
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useBackNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { useStore } from '../../../state';
 import {
@@ -257,12 +258,7 @@ function AddressRow({
   return (
     <div className='group flex items-center justify-between py-2 px-3 rounded-lg hover:bg-elev-1 transition-colors'>
       <div className='flex items-center gap-2 min-w-0 flex-1'>
-        <span
-          className={cn(
-            'shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium',
-            NETWORK_COLORS[address.network],
-          )}
-        >
+        <span className={cn('shrink-0 rounded-md px-1.5 py-0.5 text-label font-medium', NETWORK_COLORS[address.network])}>
           {NETWORK_LABELS[address.network]}
           {address.chainId && ` / ${address.chainId}`}
         </span>
@@ -422,6 +418,8 @@ function ContactCard({
 
 export function ContactsPage() {
   const navigate = useNavigate();
+  // back follows actual origin (identity page or drawer); fallback for deep entry
+  const goBack = useBackNav(PopupPath.IDENTITY);
   const contacts = useStore(contactsSelector);
   const keyInfo = useStore(selectEffectiveKeyInfo);
   const zcashWallet = useStore(selectActiveZcashWallet);
@@ -666,7 +664,7 @@ export function ContactsPage() {
       <div className='flex items-center justify-between px-4 py-3 border-b border-border-soft'>
         <div className='flex items-center gap-3'>
           <button
-            onClick={() => navigate(PopupPath.INDEX)}
+            onClick={goBack}
             className='text-fg-muted transition-colors hover:text-fg-high'
           >
             <span className='i-lucide-arrow-left h-5 w-5' />

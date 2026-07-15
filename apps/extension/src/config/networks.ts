@@ -35,7 +35,7 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     focusColor: 'focus:border-zigner-gold',
     transparent: false,
     launched: true,
-    features: { stake: false, swap: false, vote: false, inbox: true },
+    features: { stake: false, swap: false, vote: true, inbox: true },
   },
   penumbra: {
     name: 'Penumbra',

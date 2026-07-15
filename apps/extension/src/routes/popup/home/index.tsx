@@ -139,21 +139,21 @@ const MultisigOverview = () => {
       >
         <div className='flex items-center gap-2'>
           <span className='i-lucide-key-round h-4 w-4 text-zigner-gold' />
-          <span className='text-[13px] text-fg-high lowercase tracking-[0.04em]'>
+          <span className='text-data text-fg-high lowercase'>
             multisig wallets
           </span>
-          <span className='rounded-full bg-zigner-gold/15 px-1.5 py-0.5 text-[10px] text-zigner-gold tabular'>
+          <span className='rounded-full bg-zigner-gold/15 px-1.5 py-0.5 text-label text-zigner-gold tabular'>
             {multisigWallets.length}
           </span>
         </div>
         <div className='flex items-center gap-2'>
-          <span className='text-[13px] tabular text-fg-muted'>{formatZec(totalZat)} ZEC</span>
-          <span
-            className={cn(
-              'h-4 w-4 text-fg-dim transition-transform',
-              expanded ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down',
-            )}
-          />
+          <span className='text-data tabular text-fg-muted'>
+            {formatZec(totalZat)} ZEC
+          </span>
+          <span className={cn(
+            'h-4 w-4 text-fg-dim transition-transform',
+            expanded ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down',
+          )} />
         </div>
       </button>
 
@@ -174,15 +174,17 @@ const MultisigOverview = () => {
                 )}
               >
                 <div className='flex items-center gap-2 min-w-0'>
-                  <span className='rounded-sm bg-zigner-gold/15 px-1.5 py-0.5 text-[9px] text-zigner-gold tabular leading-none shrink-0'>
+                  <span className='rounded-sm bg-zigner-gold/15 px-1.5 py-0.5 text-label text-zigner-gold tabular leading-none shrink-0'>
                     {w.multisig!.threshold}/{w.multisig!.maxSigners}
                   </span>
-                  <span className='text-[13px] text-fg-high truncate'>{w.label}</span>
+                  <span className='text-data text-fg-high truncate'>{w.label}</span>
                   {isActive && (
                     <span className='i-lucide-check h-3 w-3 text-zigner-gold shrink-0' />
                   )}
                 </div>
-                <span className='text-[13px] tabular text-fg-muted shrink-0'>{formatZec(bal)}</span>
+                <span className='text-data tabular text-fg-muted shrink-0'>
+                  {formatZec(bal)}
+                </span>
               </button>
             );
           })}
@@ -223,13 +225,26 @@ export const PopupIndex = () => {
   // preload balances in background for instant display
   usePreloadBalances(penumbraAccount);
 
-  // dismiss backup reminder on first load
+
+  // Backup nudge: shown for mnemonic vaults until the user demonstrably
+  // possesses their recovery phrase (onboarding checkbox, import, settings
+  // reveal, or explicit dismissal here). Replaces a dead effect that
+  // self-dismissed `backupReminderSeen` without ever rendering anything —
+  // which is why this uses a fresh key: the old one is poisoned `true`
+  // for every pre-fix wallet.
+  const [showBackupNudge, setShowBackupNudge] = useState(false);
   useEffect(() => {
-    void localExtStorage.get('backupReminderSeen').then(seen => {
-      if (seen === false) {
-        void localExtStorage.set('backupReminderSeen', true);
-      }
+    if (selectedKeyInfo?.type !== 'mnemonic') {
+      setShowBackupNudge(false);
+      return;
+    }
+    void localExtStorage.get('seedPhraseBackedUp').then(done => {
+      setShowBackupNudge(done !== true);
     });
+  }, [selectedKeyInfo?.type, selectedKeyInfo?.id]);
+  const dismissBackupNudge = useCallback(() => {
+    setShowBackupNudge(false);
+    void localExtStorage.set('seedPhraseBackedUp', true);
   }, []);
 
   const copyAddress = useCallback(() => {
@@ -261,26 +276,75 @@ export const PopupIndex = () => {
   return (
     <div className='flex min-h-full flex-col'>
       <div className='flex flex-col gap-3 p-4'>
-        {/* address + actions row */}
-        <div className='rounded-lg border border-border-soft bg-elev-1 p-4'>
-          {/* account picker moved into PenumbraContent below sync bar */}
+        {/* backup nudge — amber, dismissible, gone forever once confirmed */}
+        {showBackupNudge && (
+          <div className='flex items-center gap-2.5 rounded-lg border border-warning/30 bg-warning/[0.07] px-3 py-2.5'>
+            <span className='i-lucide-triangle-alert h-4 w-4 shrink-0 text-warning' />
+            <span className='flex-1 text-label text-fg lowercase'>
+              recovery phrase not backed up
+            </span>
+            <button
+              onClick={() => navigate(PopupPath.SETTINGS_RECOVERY_PASSPHRASE)}
+              className='shrink-0 text-label text-warning lowercase underline-offset-2 hover:underline'
+            >
+              back up
+            </button>
+            <button
+              onClick={dismissBackupNudge}
+              title='I already backed it up'
+              className='shrink-0 p-0.5 text-fg-dim transition-colors hover:text-fg-high'
+            >
+              <span className='i-lucide-x h-3.5 w-3.5' />
+            </button>
+          </div>
+        )}
+
+        {/* address + actions row — deliberately unboxed: metadata, not a
+            card. The balance card below is the single hero box on this
+            screen; two bordered boxes competing was visual noise. */}
+        <div className='px-1 pt-1'>
+{/* account picker moved into PenumbraContent below sync bar */}
           <div className='flex items-center justify-between'>
-            <div>
-              <div className='mb-0.5 flex items-center gap-1.5'>
-                <span className='text-[10px] text-fg-dim lowercase tracking-[0.05em]'>
-                  your address
-                </span>
-                {/* tiny shielded indicator — new users may not realize their
+          <div>
+            <div className='mb-0.5 flex items-center gap-1.5'>
+              <span className='text-label text-fg-dim lowercase tracking-[0.05em]'>
+                your address
+              </span>
+              {/* tiny shielded indicator — new users may not realize their
                   unified/orchard address is privacy-preserving. The shield
                   icon is universally understood; one icon, no extra text. */}
-                {address && address.startsWith('u') && (
-                  <span
-                    className='i-lucide-shield-check h-3 w-3 text-zigner-gold/70'
-                    title='shielded address — senders cannot see your other transactions'
-                  />
+              {address && address.startsWith('u') && (
+                <span
+                  className='i-lucide-shield-check h-3 w-3 text-zigner-gold/70'
+                  title='shielded address — senders cannot see your other transactions'
+                />
+              )}
+            </div>
+            <div className='flex items-center gap-1'>
+              <button
+                onClick={copyAddress}
+                disabled={!address}
+                title={address ? (copied ? 'copied!' : 'click to copy') : undefined}
+                className='flex items-center gap-1.5 text-xs text-fg transition-colors duration-100 hover:text-fg-high disabled:opacity-50 disabled:cursor-not-allowed'
+              >
+                {isMultisig && (
+                  <span className='rounded-sm bg-zigner-gold/15 px-1.5 py-0.5 text-label text-zigner-gold tabular leading-none'>
+                    {selectedMultisigWallet!.multisig!.threshold}/{selectedMultisigWallet!.multisig!.maxSigners}
+                  </span>
                 )}
-              </div>
-              <div className='flex items-center gap-1'>
+                <span className='tabular'>{displayAddress}</span>
+                {address && (
+                  copied ? (
+                    <span className='inline-flex items-center gap-0.5 text-zigner-gold'>
+                      <span className='i-lucide-check h-3 w-3' />
+                      <span className='text-label lowercase'>copied</span>
+                    </span>
+                  ) : (
+                    <span className='i-lucide-copy h-3 w-3' />
+                  )
+                )}
+              </button>
+              {address && activeNetwork === 'zcash' && (
                 <button
                   onClick={copyAddress}
                   disabled={!address}
@@ -481,10 +545,10 @@ const PenumbraContent = ({
       {/* balance card — figure renders in the network accent (rebinds per chain) */}
       <div className='rounded-md border border-border-soft bg-elev-1 p-4'>
         <span className='kicker'>total balance</span>
-        <div className='mt-1 text-[32px] leading-none text-network-accent tabular'>
+        <div className='mt-1 text-display leading-none text-network-accent tabular'>
           {balanceDisplay}
         </div>
-        <div className='mt-1 text-[10px] text-fg-dim tabular'>{syncLabel}</div>
+        <div className='mt-1 text-label text-fg-dim tabular'>{syncLabel}</div>
       </div>
 
       {/* sync bar — visible while syncing or connecting */}
@@ -497,14 +561,10 @@ const PenumbraContent = ({
           // one-tap link to the network picker so a new user whose
           // Penumbra grpc endpoint is unreachable doesn't have to
           // hunt through settings to switch.
-          errorAction={
-            error
-              ? {
-                  label: 'switch endpoint',
-                  onClick: () => navigate(PopupPath.SETTINGS_NETWORKS),
-                }
-              : undefined
-          }
+          errorAction={error ? {
+            label: 'switch endpoint',
+            onClick: () => navigate(`${PopupPath.SETTINGS_NETWORKS}?network=penumbra`),
+          } : undefined}
           barColor='bg-penumbra-purple'
           barDoneColor='bg-penumbra-teal'
         />
@@ -891,12 +951,14 @@ const ZcashContent = ({
       {/* combined balance — figure in the network accent (zigner-gold for zcash) */}
       <div className='rounded-md border border-network-accent/20 bg-elev-1 p-4'>
         <span className='kicker'>balance</span>
-        <div className='mt-1 text-[32px] leading-none text-network-accent tabular'>
-          {workerSyncHeight > 0 || totalZat > 0n ? `${fmtZec(totalZec)} ZEC` : '— ZEC'}
+        <div className='mt-1 text-display leading-none text-network-accent tabular'>
+          {workerSyncHeight > 0 || totalZat > 0n
+            ? `${fmtZec(totalZec)} ZEC`
+            : '— ZEC'}
         </div>
-        <div className='mt-1 text-[10px] text-fg-dim tabular'>
+        <div className='mt-1 text-label text-fg-dim tabular'>
           {chainHeight <= 0
-            ? 'connecting...'
+            ? '\u00a0' /* hold the line height; sync bar below owns status */
             : allSynced
               ? // 'synced' is what the user actually cares about — the
                 // block number is meaningful only to power users. Put the
@@ -917,9 +979,10 @@ const ZcashContent = ({
             <span className='i-lucide-info mt-0.5 h-3.5 w-3.5 shrink-0 text-fg-muted' />
             <div className='flex-1'>
               <div className='text-xs text-fg-high lowercase'>scanning for your notes</div>
-              <p className='mt-0.5 text-[10px] text-fg-muted leading-snug'>
-                first sync can take a few minutes. you can leave this open or come back later — the
-                worker keeps running in the background.
+              <p className='mt-0.5 text-label text-fg-muted leading-snug'>
+                first sync can take a few minutes. you can leave this open
+                or come back later — the worker keeps running in the
+                background.
               </p>
             </div>
           </div>
@@ -934,7 +997,6 @@ const ZcashContent = ({
       {allSynced && totalZat === 0n && (
         <GetZecHint
           onReceive={() => navigate(PopupPath.RECEIVE)}
-          onSwap={() => navigate(PopupPath.SWAP)}
         />
       )}
 
@@ -944,9 +1006,7 @@ const ZcashContent = ({
           <div className='flex items-center justify-between'>
             <div className='flex items-center gap-2'>
               <span className='text-xs text-red-400'>transparent</span>
-              <span className='text-[10px] px-1.5 py-0.5 rounded-md bg-red-500/15 text-red-500 font-medium leading-none'>
-                public
-              </span>
+              <span className='text-label px-1.5 py-0.5 rounded-md bg-red-500/15 text-red-500 font-medium leading-none'>public</span>
               <span className='text-xs font-medium tabular-nums'>
                 {utxoLoading ? '...' : `${fmtZec(tZec)} ZEC`}
               </span>
@@ -980,11 +1040,13 @@ const ZcashContent = ({
             )}
           </div>
           {shieldTxid && (
-            <div className='text-[10px] text-green-400 mt-1.5 font-mono'>
+            <div className='text-label text-green-400 mt-1.5 font-mono'>
               shielded: {shieldTxid.slice(0, 16)}... (wait for confirmation)
             </div>
           )}
-          {shieldError && <div className='text-[10px] text-red-400 mt-1.5'>{shieldError}</div>}
+          {shieldError && (
+            <div className='text-label text-red-400 mt-1.5'>{shieldError}</div>
+          )}
 
           {/* zigner shielding QR flow */}
           {zignerShieldStep === 'show_qr' && shieldSignRequestQr && (
@@ -1031,12 +1093,12 @@ const ZcashContent = ({
           )}
 
           {zignerShieldStep === 'complete' && zignerShieldTxid && (
-            <div className='text-[10px] text-green-400 mt-1.5 font-mono'>
+            <div className='text-label text-green-400 mt-1.5 font-mono'>
               shielded: {zignerShieldTxid.slice(0, 16)}... (wait for confirmation)
             </div>
           )}
           {zignerShieldStep === 'error' && zignerShieldError && (
-            <div className='text-[10px] text-red-400 mt-1.5'>
+            <div className='text-label text-red-400 mt-1.5'>
               {zignerShieldError}
               <button
                 onClick={() => {
@@ -1076,17 +1138,11 @@ const ZcashContent = ({
           // red 'Failed to fetch' with no path forward. Giving them a
           // one-tap link to the network picker (where the preset list of
           // alternative LWDs lives) turns a dead-end into a recovery.
-          errorAction={
-            syncError
-              ? {
-                  label: 'switch node',
-                  onClick: () => navigate(PopupPath.SETTINGS_NETWORKS),
-                }
-              : undefined
-          }
-          barColor={
-            scanPct > 0 ? 'bg-zigner-gold' : ligeritoPct > 0 ? 'bg-zigner-gold' : 'bg-fg-muted/30'
-          }
+          errorAction={syncError ? {
+            label: 'switch node',
+            onClick: () => navigate(`${PopupPath.SETTINGS_NETWORKS}?network=zcash`),
+          } : undefined}
+          barColor={scanPct > 0 ? 'bg-zigner-gold' : ligeritoPct > 0 ? 'bg-zigner-gold' : 'bg-fg-muted/30'}
           barDoneColor='bg-zigner-gold'
           currentHeight={workerSyncHeight}
           targetHeight={chainHeight}
@@ -1252,21 +1308,27 @@ const ActionButton = ({
     )}
   >
     <span className={`${icon} h-4 w-4`} />
-    <span className='text-[9px] tracking-[0.05em] lowercase leading-none'>{label}</span>
+    <span className='text-label tracking-[0.05em] lowercase leading-none'>{label}</span>
   </button>
 );
 
 /**
  * Empty-balance hint shown to a new user whose wallet is synced but
- * holds zero ZEC. Three concrete next steps so the wallet doesn't feel
- * like a dead end: receive (here's your address), exchanges (where to
- * buy), swap (already-funded other assets → ZEC via Penumbra DEX).
+ * holds zero ZEC. Two concrete next steps so the wallet doesn't feel
+ * like a dead end: receive (here's your address) and exchanges (where
+ * to buy). A swap path was removed — the swap button sits directly
+ * above this panel, and Penumbra DEX has no ZEC liquidity yet so the
+ * old copy over-promised.
  *
  * Dismissable in the sense that any inbound ZEC makes the panel
  * disappear naturally — there is no manual hide because the panel is
  * informational and we want to nudge action.
  */
-const GetZecHint = ({ onReceive, onSwap }: { onReceive: () => void; onSwap: () => void }) => (
+const GetZecHint = ({
+  onReceive,
+}: {
+  onReceive: () => void;
+}) => (
   <div className='rounded-md border border-network-accent/15 bg-elev-1 p-4'>
     <div className='mb-3 flex items-center gap-2'>
       <span className='i-lucide-sparkles h-3.5 w-3.5 text-network-accent' />
@@ -1280,12 +1342,6 @@ const GetZecHint = ({ onReceive, onSwap }: { onReceive: () => void; onSwap: () =
         hint='share your shielded address — works for any zec sender'
         onClick={onReceive}
       />
-      <HintRow
-        icon='i-lucide-arrow-left-right'
-        title='swap from another asset'
-        hint='trade um or other tokens for zec via penumbra dex'
-        onClick={onSwap}
-      />
       <a
         href='https://z.cash/get-started/'
         target='_blank'
@@ -1297,7 +1353,7 @@ const GetZecHint = ({ onReceive, onSwap }: { onReceive: () => void; onSwap: () =
         </span>
         <span className='flex flex-1 flex-col'>
           <span className='text-xs lowercase text-fg-high'>buy at an exchange</span>
-          <span className='mt-0.5 text-[10px] text-fg-muted lowercase'>
+          <span className='mt-0.5 text-label text-fg-muted lowercase'>
             z.cash list of supported exchanges
           </span>
         </span>
@@ -1328,7 +1384,7 @@ const HintRow = ({
     </span>
     <span className='flex flex-1 flex-col'>
       <span className='text-xs lowercase text-fg-high'>{title}</span>
-      <span className='mt-0.5 text-[10px] text-fg-muted lowercase'>{hint}</span>
+      <span className='mt-0.5 text-label text-fg-muted lowercase'>{hint}</span>
     </span>
     <span className='i-lucide-arrow-right mt-1 h-3 w-3 shrink-0 text-fg-muted transition-transform duration-200 group-hover:translate-x-0.5' />
   </button>
@@ -1540,10 +1596,8 @@ function TxRow({ tx }: { tx: ParsedTransaction }) {
             </div>
           </div>
           <div className='flex items-center justify-between gap-2 mt-0.5'>
-            <span className='text-[10px] text-fg-muted font-mono truncate'>
-              {tx.id.slice(0, 16)}...
-            </span>
-            <span className='text-[10px] text-fg-muted whitespace-nowrap'>
+            <span className='text-label text-fg-muted font-mono truncate'>{tx.id.slice(0, 16)}...</span>
+            <span className='text-label text-fg-muted whitespace-nowrap'>
               {tx.height > 0 ? `#${tx.height}` : fmtTime(tx.timestamp)}
             </span>
           </div>
@@ -1665,20 +1719,15 @@ const HistoryContent = ({
 
   if (!historyEnabled) {
     return (
-      <div className='px-4 py-6 text-center'>
-        <p className='text-xs text-fg-muted/50'>transaction history is off</p>
+      <div className='flex items-center justify-center gap-2 px-4 py-4 text-label lowercase'>
+        <span className='text-fg-muted/50'>history off</span>
+        <span className='text-fg-muted/30'>·</span>
         <button
           onClick={() => void setSetting('enableTransactionHistory', true)}
-          className='mt-3 text-xs text-zigner-gold/70 hover:text-zigner-gold transition-colors'
+          className='text-zigner-gold/70 transition-colors hover:text-zigner-gold'
         >
-          enable transaction history
+          enable
         </button>
-        <a
-          href={`#${PopupPath.SETTINGS_PRIVACY}`}
-          className='text-[10px] text-fg-muted/30 hover:text-zigner-gold mt-2 inline-block'
-        >
-          privacy settings
-        </a>
       </div>
     );
   }

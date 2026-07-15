@@ -2,7 +2,8 @@
  * settings page for managing enabled networks + per-network endpoints
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useStore } from '../../../state';
 import {
   selectActiveNetwork,
@@ -65,8 +66,18 @@ export const SettingsNetworks = () => {
     setZcashBackend,
   } = useStore(networksSelector);
 
-  const [expandedNetwork, setExpandedNetwork] = useState<NetworkType | null>(null);
-  const [editingEndpoint, setEditingEndpoint] = useState('');
+  // Deep-link: `?network=zcash` auto-expands that card. Used by the home
+  // sync-bar "switch node" action so the user lands on the node picker,
+  // not a generic list.
+  const [searchParams] = useSearchParams();
+  const initialExpand = (() => {
+    const n = searchParams.get('network');
+    return n && (LAUNCHED_NETWORKS as readonly string[]).includes(n) ? (n as NetworkType) : null;
+  })();
+  const [expandedNetwork, setExpandedNetwork] = useState<NetworkType | null>(initialExpand);
+  const [editingEndpoint, setEditingEndpoint] = useState(
+    initialExpand ? networkState[initialExpand as NetworkId]?.endpoint ?? '' : '',
+  );
   const [saving, setSaving] = useState(false);
 
   const handleToggle = async (network: NetworkType) => {
@@ -143,12 +154,12 @@ export const SettingsNetworks = () => {
                     {network.name}
                   </span>
                   {isActive && (
-                    <span className='text-[10px] px-1.5 py-0.5 rounded-md bg-primary/15 text-zigner-gold font-medium leading-none'>
+                    <span className='text-label px-1.5 py-0.5 rounded-md bg-primary/15 text-zigner-gold font-medium leading-none'>
                       active
                     </span>
                   )}
                   {network.transparent && (
-                    <span className='text-[10px] px-1.5 py-0.5 rounded-md bg-red-500/15 text-red-500 font-medium leading-none'>
+                    <span className='text-label px-1.5 py-0.5 rounded-md bg-red-500/15 text-red-500 font-medium leading-none'>
                       public
                     </span>
                   )}
@@ -184,84 +195,57 @@ export const SettingsNetworks = () => {
                 </div>
               </div>
 
-              {/* endpoint config — expanded */}
+              {/* endpoint config — expanded. One job up front: pick a
+                  working node. Trust status is a single quiet line derived
+                  from the backend; every tuning knob (custom url, backend
+                  override, memo privacy, mempool watch) lives behind one
+                  "advanced" disclosure so the common path stays calm. */}
               {isExpanded && isEnabled && (
-                <div className='border-t border-border-soft p-3 bg-elev-2/10'>
-                  {/* zcash-specific preset picker — surfaces the same set the
-                      user saw at onboarding so they don't have to type a URL
-                      to switch to a known-good fallback. Free-text input
-                      stays below for custom endpoints. */}
-                  {networkId === 'zcash' && (
-                    <ZcashEndpointPicker
-                      currentUrl={editingEndpoint}
-                      onPick={async url => {
-                        // Persist directly via the store action, bypassing
-                        // the editingEndpoint useState (which is async). Then
-                        // reflect into the input so the user sees the
-                        // selection committed. Close the expanded panel as
-                        // confirmation, same as the manual save path.
+                <div className='border-t border-border-soft p-3 bg-elev-2/10 flex flex-col gap-3'>
+                  {networkId === 'zcash' ? (
+                    <ZcashEndpointPanel
+                      state={state as ZcashNetworkState | undefined}
+                      editingEndpoint={editingEndpoint}
+                      setEditingEndpoint={setEditingEndpoint}
+                      saving={saving}
+                      onPick={async (url) => {
+                        // Persist via the store action; keep the panel open
+                        // so the user can verify (or pick again) without
+                        // re-expanding the card.
                         setSaving(true);
                         try {
                           await setNetworkEndpoint('zcash', url);
                           setEditingEndpoint(url);
-                          setExpandedNetwork(null);
                         } finally {
                           setSaving(false);
                         }
                       }}
+                      onSaveCustom={() => void handleSaveEndpoint(networkId)}
+                      onBackendChange={(b) => void setZcashBackend(b)}
+                      onStrategyChange={(st) => void setMemoSyncStrategy('zcash', st)}
+                      onMempoolChange={(st) => void setMempoolWatch('zcash', st)}
                     />
+                  ) : (
+                    <div>
+                      <div className='text-label text-fg-muted mb-1'>endpoint</div>
+                      <div className='flex gap-2'>
+                        <input
+                          type='text'
+                          value={editingEndpoint}
+                          onChange={e => setEditingEndpoint(e.target.value)}
+                          placeholder={state?.endpoint ?? 'https://...'}
+                          className='flex-1 bg-input border border-border-soft px-2 py-1.5 text-xs font-mono focus:border-primary/50 focus:outline-none'
+                        />
+                        <button
+                          onClick={() => void handleSaveEndpoint(networkId)}
+                          disabled={saving}
+                          className='px-3 py-1.5 text-xs bg-zigner-gold text-zigner-dark hover:bg-primary/90 transition-colors disabled:opacity-50'
+                        >
+                          {saving ? '...' : 'save'}
+                        </button>
+                      </div>
+                    </div>
                   )}
-                  <div className='text-[10px] text-fg-muted mb-1'>
-                    {networkId === 'zcash' ? 'or custom endpoint' : 'endpoint'}
-                  </div>
-                  <div className='flex gap-2'>
-                    <input
-                      type='text'
-                      value={editingEndpoint}
-                      onChange={e => setEditingEndpoint(e.target.value)}
-                      placeholder={state?.endpoint ?? 'https://...'}
-                      className='flex-1 bg-input border border-border-soft px-2 py-1.5 text-xs font-mono focus:border-primary/50 focus:outline-none'
-                    />
-                    <button
-                      onClick={() => void handleSaveEndpoint(networkId)}
-                      disabled={saving}
-                      className='px-3 py-1.5 text-xs bg-zigner-gold text-zigner-dark hover:bg-primary/90 transition-colors disabled:opacity-50'
-                    >
-                      {saving ? '...' : 'save'}
-                    </button>
-                  </div>
-                  {state?.syncDescription && (
-                    <p className='text-[10px] text-fg-muted mt-1.5'>{state.syncDescription}</p>
-                  )}
-
-                  {networkId === 'zcash' &&
-                    (() => {
-                      const zcashState = state as
-                        | {
-                            memoSyncStrategy?: MemoSyncStrategy;
-                            mempoolWatch?: MempoolWatchSetting;
-                            backend?: ZcashBackend;
-                          }
-                        | undefined;
-                      const backend: ZcashBackend = zcashState?.backend ?? 'zidecar';
-                      return (
-                        <>
-                          <BackendTrustBadge
-                            backend={backend}
-                            onChange={b => void setZcashBackend(b)}
-                          />
-                          <MemoSyncStrategyPicker
-                            value={zcashState?.memoSyncStrategy ?? 'private'}
-                            onChange={s => void setMemoSyncStrategy('zcash', s)}
-                          />
-                          <MempoolWatchToggle
-                            value={zcashState?.mempoolWatch ?? 'off'}
-                            backend={backend}
-                            onChange={s => void setMempoolWatch('zcash', s)}
-                          />
-                        </>
-                      );
-                    })()}
                 </div>
               )}
             </div>
@@ -272,186 +256,12 @@ export const SettingsNetworks = () => {
   );
 };
 
-interface MemoSyncStrategyPickerProps {
-  readonly value: MemoSyncStrategy;
-  readonly onChange: (strategy: MemoSyncStrategy) => void;
-}
-
-const STRATEGY_OPTIONS: readonly {
-  id: MemoSyncStrategy;
-  label: string;
-  hint: string;
-}[] = [
-  {
-    id: 'private',
-    label: 'private',
-    hint: 'bucket + 2× decoy + shuffle. recommended default.',
-  },
-  {
-    id: 'fast',
-    label: 'fast',
-    hint: 'bucket only, no decoys. faster sync but server can correlate buckets to wallet.',
-  },
-];
-
-const MemoSyncStrategyPicker = ({ value, onChange }: MemoSyncStrategyPickerProps) => (
-  <div className='mt-3 pt-3 border-t border-border-soft'>
-    <div className='text-[10px] text-fg-muted mb-1.5'>memo sync privacy</div>
-    <div className='flex flex-col gap-1'>
-      {STRATEGY_OPTIONS.map(opt => {
-        const selected = value === opt.id;
-        return (
-          <button
-            key={opt.id}
-            type='button'
-            onClick={() => onChange(opt.id)}
-            className={cn(
-              'flex items-start gap-2 p-2 rounded border text-left transition-colors',
-              selected
-                ? 'border-primary/60 bg-primary/5'
-                : 'border-border-soft hover:border-border',
-            )}
-          >
-            <div
-              className={cn(
-                'mt-0.5 h-3 w-3 rounded-full border-2 flex-shrink-0',
-                selected ? 'border-zigner-gold bg-zigner-gold' : 'border-muted-foreground/50',
-              )}
-            />
-            <div className='flex-1'>
-              <div className='text-xs font-medium leading-none mb-0.5'>{opt.label}</div>
-              <div className='text-[10px] text-fg-muted leading-snug'>{opt.hint}</div>
-            </div>
-          </button>
-        );
-      })}
-    </div>
-    {value === 'fast' && (
-      <div className='mt-2 p-2 rounded border border-amber-500/30 bg-amber-500/5'>
-        <div className='text-[10px] text-amber-500 leading-snug'>
-          fast mode skips decoy buckets — the server learns which 100-block ranges your wallet cares
-          about. memos themselves remain encrypted.
-        </div>
-      </div>
-    )}
-  </div>
-);
-
-interface MempoolWatchToggleProps {
-  readonly value: MempoolWatchSetting;
-  readonly backend: ZcashBackend;
-  readonly onChange: (setting: MempoolWatchSetting) => void;
-}
-
-const MempoolWatchToggle = ({ value, backend, onChange }: MempoolWatchToggleProps) => {
-  // mempool watch requires zidecar's compact-action mempool stream.
-  // lightwalletd returns raw txs we can't trial-decrypt without a heavier
-  // parser, so the toggle is meaningless on that backend. show it as
-  // disabled with a clear hint instead of silently ignoring clicks.
-  // Same gate the worker + hook use. Centralized so UI can't drift.
-  const available = backend === 'zidecar';
-  const enabled = available && isMempoolWatchEnabled(value, backend);
-  return (
-    <div className='mt-3 pt-3 border-t border-border-soft'>
-      <button
-        type='button'
-        disabled={!available}
-        onClick={() => available && onChange(enabled ? 'off' : 'on')}
-        className={cn(
-          'flex items-start gap-2 w-full text-left',
-          !available && 'opacity-50 cursor-not-allowed',
-        )}
-      >
-        <div
-          className={cn(
-            'mt-0.5 h-4 w-7 rounded-full border-2 flex-shrink-0 relative transition-colors',
-            enabled ? 'border-zigner-gold bg-zigner-gold/30' : 'border-muted-foreground/50',
-          )}
-        >
-          <div
-            className={cn(
-              'absolute top-0 h-3 w-3 rounded-full bg-zigner-gold transition-all',
-              enabled ? 'left-3' : 'left-0',
-            )}
-          />
-        </div>
-        <div className='flex-1'>
-          <div className='text-xs font-medium leading-none mb-0.5'>
-            instant pending (mempool watch)
-          </div>
-          <div className='text-[10px] text-fg-muted leading-snug'>
-            {available
-              ? "your indexer learns when you're online."
-              : 'unavailable on lightwalletd backend — switch to a zidecar endpoint.'}
-          </div>
-        </div>
-      </button>
-      {enabled && (
-        <div className='mt-2 p-2 rounded border border-amber-500/30 bg-amber-500/5'>
-          <div className='text-[10px] text-amber-500 leading-snug'>
-            polling at ~10s ± jitter. server cannot see which mempool tx is yours (trial-decrypt is
-            local), but it sees a continuous "online" signal from your wallet.
-          </div>
-        </div>
-      )}
-    </div>
-  );
+type ZcashNetworkState = {
+  endpoint?: string;
+  memoSyncStrategy?: MemoSyncStrategy;
+  mempoolWatch?: MempoolWatchSetting;
+  backend?: ZcashBackend;
 };
-
-interface BackendTrustBadgeProps {
-  readonly backend: ZcashBackend;
-  readonly onChange: (backend: ZcashBackend) => void;
-}
-
-/**
- * Surfaces the trust delta between zidecar (trustless: Ligerito + NOMT
- * proofs verified locally) and lightwalletd (trusted: takes the server's
- * word). Without this, users on third-party endpoints get silently
- * downgraded verification with no UI signal.
- */
-const BackendTrustBadge = ({ backend, onChange }: BackendTrustBadgeProps) => {
-  const trust = backendTrustDescription(backend);
-  const isTrustless = backend === 'zidecar';
-  return (
-    <div className='mt-3 pt-3 border-t border-border-soft'>
-      <div className='flex items-start gap-2'>
-        <span
-          className={cn(
-            'mt-0.5 inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium',
-            isTrustless ? 'bg-green-500/15 text-green-400' : 'bg-amber-500/15 text-amber-400',
-          )}
-        >
-          {trust.label}
-        </span>
-        <div className='flex-1'>
-          <div className='text-xs font-medium leading-none mb-0.5'>sync backend: {backend}</div>
-          <div className='text-[10px] text-fg-muted leading-snug'>{trust.summary}</div>
-        </div>
-      </div>
-      <button
-        type='button'
-        onClick={() => onChange(isTrustless ? 'lightwalletd' : 'zidecar')}
-        className='mt-2 text-[10px] text-fg-muted hover:text-fg-high underline-offset-2 hover:underline'
-      >
-        switch to {isTrustless ? 'lightwalletd' : 'zidecar'} (advanced)
-      </button>
-    </div>
-  );
-};
-
-/**
- * Compact preset dropdown for the settings endpoint screen. Mirrors the
- * onboarding picker so users don't have to remember a known-good URL
- * when their default goes down — pick a fallback, hit save, done.
- *
- * Custom endpoint string stays the source of truth on the
- * `networkState.endpoint` field; the picker just sets it. If the
- * user's current endpoint matches a preset, the picker pre-selects it.
- */
-interface ZcashEndpointPickerProps {
-  readonly currentUrl: string;
-  readonly onPick: (url: string) => void;
-}
 
 const regionLabel = (region: RpcEndpointRegion): string => {
   switch (region) {
@@ -470,19 +280,61 @@ const regionLabel = (region: RpcEndpointRegion): string => {
   }
 };
 
-const ZcashEndpointPicker = ({ currentUrl, onPick }: ZcashEndpointPickerProps) => {
-  const matched = findPresetByUrl(currentUrl);
-  const [testing, setTesting] = useState(false);
+/**
+ * The zcash node panel, composed around the one thing users come for:
+ * picking a working node.
+ *
+ *   1. node select — latencies measured automatically on mount, shown
+ *      inline as `· 23ms`, dead nodes marked unreachable. No manual
+ *      "test" button to discover.
+ *   2. one quiet trust line — derived from the backend, a colored dot
+ *      and six words instead of badge + paragraph.
+ *   3. "advanced" disclosure — custom url, backend override, memo
+ *      privacy, mempool watch. Closed by default; warnings appear as a
+ *      single hint line on the selected option, not amber boxes.
+ */
+const ZcashEndpointPanel = ({
+  state,
+  editingEndpoint,
+  setEditingEndpoint,
+  saving,
+  onPick,
+  onSaveCustom,
+  onBackendChange,
+  onStrategyChange,
+  onMempoolChange,
+}: {
+  readonly state: ZcashNetworkState | undefined;
+  readonly editingEndpoint: string;
+  readonly setEditingEndpoint: (v: string) => void;
+  readonly saving: boolean;
+  readonly onPick: (url: string) => void;
+  readonly onSaveCustom: () => void;
+  readonly onBackendChange: (b: ZcashBackend) => void;
+  readonly onStrategyChange: (s: MemoSyncStrategy) => void;
+  readonly onMempoolChange: (s: MempoolWatchSetting) => void;
+}) => {
+  const backend: ZcashBackend = state?.backend ?? 'zidecar';
+  const strategy: MemoSyncStrategy = state?.memoSyncStrategy ?? 'private';
+  const mempool: MempoolWatchSetting = state?.mempoolWatch ?? 'off';
+  const matched = findPresetByUrl(editingEndpoint);
+  const trust = backendTrustDescription(backend);
+  const isTrustless = backend === 'zidecar';
+  const mempoolAvailable = backend === 'zidecar';
+  const mempoolOn = mempoolAvailable && isMempoolWatchEnabled(mempool, backend);
+
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [latencies, setLatencies] = useState<Map<string, EndpointLatency> | null>(null);
 
-  const handleTest = async () => {
-    setTesting(true);
-    try {
-      setLatencies(await measurePresetLatencies());
-    } finally {
-      setTesting(false);
-    }
-  };
+  // Measure once per panel open — ~10 tiny requests; cheap enough that
+  // a manual "test latencies" affordance was just an extra decision.
+  useEffect(() => {
+    let cancelled = false;
+    void measurePresetLatencies().then(m => {
+      if (!cancelled) setLatencies(m);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   const rttSuffix = (url: string): string => {
     const lat = latencies?.get(url);
@@ -496,45 +348,168 @@ const ZcashEndpointPicker = ({ currentUrl, onPick }: ZcashEndpointPickerProps) =
   };
 
   return (
-    <div className='mb-3'>
-      <div className='flex items-center justify-between mb-1'>
-        <span className='text-[10px] text-fg-muted'>preset</span>
+    <>
+      {/* 1 · node */}
+      <div>
+        <div className='text-label text-fg-muted mb-1'>node</div>
+        <select
+          value={matched?.id ?? ''}
+          onChange={e => {
+            const preset = ZCASH_MAINNET_ENDPOINTS.find(p => p.id === e.target.value);
+            if (preset) onPick(preset.url);
+          }}
+          className='w-full bg-input border border-border-soft px-2 py-1.5 text-xs focus:border-primary/50 focus:outline-none'
+        >
+          <option value='' disabled>{matched ? matched.label : 'custom url'}</option>
+          {groupPresetsByRegion(ZCASH_MAINNET_ENDPOINTS).map(group => (
+            <optgroup key={group.region} label={regionLabel(group.region)}>
+              {group.presets.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.label}{p.backend === 'zidecar' ? ' · trustless' : ''}{rttSuffix(p.url)}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+      </div>
+
+      {/* 2 · trust line */}
+      <div className='flex items-center gap-1.5 text-label lowercase'>
+        <span className={cn('h-1.5 w-1.5 rounded-full', isTrustless ? 'bg-green-400' : 'bg-amber-400')} />
+        <span className={isTrustless ? 'text-green-400' : 'text-amber-400'}>{trust.label}</span>
+        <span className='text-fg-muted'>
+          {isTrustless ? '· responses verified locally' : '· wallet trusts this server'}
+        </span>
+      </div>
+
+      {/* 3 · advanced disclosure */}
+      <div className='border-t border-border-soft pt-2'>
         <button
           type='button'
-          onClick={handleTest}
-          disabled={testing}
-          className='text-[10px] text-zigner-gold hover:underline disabled:opacity-50'
+          onClick={() => setShowAdvanced(v => !v)}
+          className='flex w-full items-center gap-1 text-label text-fg-muted lowercase transition-colors hover:text-fg-high'
         >
-          {testing ? 'testing...' : latencies ? 'retest' : 'test latencies'}
+          <span className={cn('i-lucide-chevron-right h-3.5 w-3.5 transition-transform', showAdvanced && 'rotate-90')} />
+          advanced
         </button>
+
+        {showAdvanced && (
+          <div className='mt-3 flex flex-col gap-4'>
+            {/* custom url */}
+            <div>
+              <div className='text-label text-fg-muted mb-1'>custom url</div>
+              <div className='flex gap-2'>
+                <input
+                  type='text'
+                  value={editingEndpoint}
+                  onChange={e => setEditingEndpoint(e.target.value)}
+                  placeholder='https://...'
+                  className='flex-1 bg-input border border-border-soft px-2 py-1.5 text-xs font-mono focus:border-primary/50 focus:outline-none'
+                />
+                <button
+                  onClick={onSaveCustom}
+                  disabled={saving}
+                  className='px-3 py-1.5 text-xs bg-zigner-gold text-zigner-dark hover:bg-primary/90 transition-colors disabled:opacity-50'
+                >
+                  {saving ? '...' : 'save'}
+                </button>
+              </div>
+            </div>
+
+            {/* backend override */}
+            <div>
+              <div className='text-label text-fg-muted mb-1'>sync backend</div>
+              <SegmentedPair
+                value={backend}
+                a={{ id: 'zidecar', label: 'zidecar' }}
+                b={{ id: 'lightwalletd', label: 'lightwalletd' }}
+                onChange={v => onBackendChange(v as ZcashBackend)}
+              />
+              <p className='mt-1 text-label text-fg-dim lowercase leading-snug'>{trust.summary}</p>
+            </div>
+
+            {/* memo privacy */}
+            <div>
+              <div className='text-label text-fg-muted mb-1'>memo sync privacy</div>
+              <SegmentedPair
+                value={strategy}
+                a={{ id: 'private', label: 'private' }}
+                b={{ id: 'fast', label: 'fast' }}
+                onChange={v => onStrategyChange(v as MemoSyncStrategy)}
+              />
+              <p className='mt-1 text-label text-fg-dim lowercase leading-snug'>
+                {strategy === 'private'
+                  ? 'decoy requests hide which blocks your wallet cares about.'
+                  : 'no decoys — the server learns which block ranges are yours. memos stay encrypted.'}
+              </p>
+            </div>
+
+            {/* mempool watch */}
+            <div>
+              <button
+                type='button'
+                disabled={!mempoolAvailable}
+                onClick={() => mempoolAvailable && onMempoolChange(mempoolOn ? 'off' : 'on')}
+                className={cn(
+                  'flex w-full items-center justify-between gap-2 text-left',
+                  !mempoolAvailable && 'opacity-50 cursor-not-allowed',
+                )}
+              >
+                <span className='text-label text-fg-muted'>instant pending (mempool watch)</span>
+                <span className={cn(
+                  'relative h-4 w-7 shrink-0 rounded-full border-2 transition-colors',
+                  mempoolOn ? 'border-zigner-gold bg-zigner-gold/30' : 'border-muted-foreground/50',
+                )}>
+                  <span className={cn(
+                    'absolute top-0 h-3 w-3 rounded-full bg-zigner-gold transition-all',
+                    mempoolOn ? 'left-3' : 'left-0',
+                  )} />
+                </span>
+              </button>
+              <p className='mt-1 text-label text-fg-dim lowercase leading-snug'>
+                {!mempoolAvailable
+                  ? 'needs a zidecar node.'
+                  : mempoolOn
+                    ? 'polling — the server sees a continuous "online" signal from your wallet.'
+                    : 'shows incoming funds before they confirm. the server learns when you are online.'}
+              </p>
+            </div>
+          </div>
+        )}
       </div>
-      <select
-        value={matched?.id ?? ''}
-        onChange={e => {
-          const preset = ZCASH_MAINNET_ENDPOINTS.find(p => p.id === e.target.value);
-          if (preset) {
-            onPick(preset.url);
-          }
-        }}
-        className='w-full bg-input border border-border-soft px-2 py-1.5 text-xs focus:border-primary/50 focus:outline-none'
-      >
-        <option value='' disabled>
-          {matched ? matched.label : 'custom - see below'}
-        </option>
-        {groupPresetsByRegion(ZCASH_MAINNET_ENDPOINTS).map(group => (
-          <optgroup key={group.region} label={regionLabel(group.region)}>
-            {group.presets.map(p => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-                {p.backend === 'zidecar' ? ' · trustless' : ''}
-                {rttSuffix(p.url)}
-              </option>
-            ))}
-          </optgroup>
-        ))}
-      </select>
-    </div>
+    </>
   );
 };
+
+/** Two-option segmented control — radio cards were heavy for binary picks. */
+const SegmentedPair = ({
+  value,
+  a,
+  b,
+  onChange,
+}: {
+  readonly value: string;
+  readonly a: { id: string; label: string };
+  readonly b: { id: string; label: string };
+  readonly onChange: (id: string) => void;
+}) => (
+  <div className='flex border border-border-soft'>
+    {[a, b].map(opt => (
+      <button
+        key={opt.id}
+        type='button'
+        onClick={() => onChange(opt.id)}
+        className={cn(
+          'flex-1 px-2 py-1.5 text-xs lowercase transition-colors',
+          value === opt.id
+            ? 'bg-zigner-gold/15 text-zigner-gold'
+            : 'text-fg-muted hover:text-fg-high',
+        )}
+      >
+        {opt.label}
+      </button>
+    ))}
+  </div>
+);
 
 export default SettingsNetworks;

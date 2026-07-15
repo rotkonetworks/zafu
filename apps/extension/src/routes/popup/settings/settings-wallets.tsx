@@ -26,13 +26,7 @@ const networkBadge = (network: string) => {
     kusama: 'bg-pink-500/15 text-pink-400',
   };
   return (
-    <span
-      key={network}
-      className={cn(
-        'text-[10px] px-1.5 py-0.5 rounded',
-        colors[network] ?? 'bg-elev-2 text-fg-muted',
-      )}
-    >
+    <span key={network} className={cn('text-label px-1.5 py-0.5 rounded', colors[network] ?? 'bg-elev-2 text-fg-muted')}>
       {network}
     </span>
   );
@@ -343,48 +337,51 @@ export const SettingsWallets = () => {
             <p className='py-12 text-center text-sm text-fg-muted'>no wallets</p>
           )}
 
-          {/* ── removal flow ── */}
-
-          {removingVault && removingType === 'mnemonic' && step === 'password' && (
-            <RemovalCard title={`remove "${removingVault.name}"`}>
-              <p className='text-xs text-fg-muted mb-3'>enter password to view recovery phrase.</p>
-              <form onSubmit={e => void verifyPassword(e)} className='flex flex-col gap-2'>
-                <input
-                  type='password'
-                  value={password}
-                  autoFocus
-                  onChange={e => {
-                    setPassword(e.target.value);
-                    setPasswordError(false);
-                  }}
-                  placeholder='password'
-                  className='w-full bg-input border border-border-soft px-3 py-2.5 text-sm rounded-lg focus:outline-none focus:border-zigner-gold'
-                />
-                {passwordError && <span className='text-xs text-red-400'>wrong password</span>}
-                <div className='flex gap-2 mt-1'>
-                  <Btn onClick={resetRemoval}>cancel</Btn>
-                  <Btn submit destructive disabled={!password}>
-                    continue
-                  </Btn>
+          {/* scanned state */}
+          {showScannedState && (
+            <div className='flex flex-col gap-3'>
+              <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-3'>
+                <div className='flex items-center gap-2'>
+                  <p className='text-xs text-green-400'>qr code scanned</p>
+                  <span className='text-label px-1 rounded-md bg-elev-2 text-fg-muted'>{detectedNetwork}</span>
                 </div>
-              </form>
-            </RemovalCard>
+                <p className='text-label text-fg-muted mt-1 font-mono'>
+                  {parsedCosmosExport ? (
+                    <>{parsedCosmosExport.addresses.map(a => a.address.slice(0, 10)).join(', ')}...</>
+                  ) : parsedPolkadotExport ? (
+                    <>{parsedPolkadotExport.address.slice(0, 8)}...{parsedPolkadotExport.address.slice(-6)}</>
+                  ) : (
+                    <>
+                      account #{walletImport?.accountIndex ?? zcashWalletImport?.accountIndex ?? 0}
+                      {zcashWalletImport && (
+                        <span className='ml-2'>{zcashWalletImport.mainnet ? 'mainnet' : 'testnet'}</span>
+                      )}
+                    </>
+                  )}
+                </p>
+              </div>
+              <Input placeholder='wallet label (optional)' value={walletLabel}
+                onChange={e => setWalletLabel(e.target.value)} />
+              {errorMessage && <p className='text-xs text-red-400'>{errorMessage}</p>}
+              <div className='flex gap-2'>
+                <Btn onClick={resetAdd}>cancel</Btn>
+                <Btn primary disabled={isAdding} onClick={() => void handleAddWallet()}>
+                  {isAdding ? 'adding...' : 'add wallet'}
+                </Btn>
+              </div>
+            </div>
           )}
 
-          {removingVault && removingType === 'mnemonic' && step === 'backup' && (
-            <RemovalCard title='back up recovery phrase'>
-              <div className='select-all cursor-text rounded-lg bg-canvas border border-border-soft p-3 mb-3 text-xs leading-relaxed break-words'>
-                {phrase.join(' ')}
-              </div>
-              <label className='flex items-start gap-2 mb-3 cursor-pointer select-none'>
-                <input
-                  type='checkbox'
-                  checked={backupAcked}
-                  onChange={e => setBackupAcked(e.target.checked)}
-                  className='mt-0.5'
-                />
-                <span className='text-xs text-fg-muted'>i have backed up my phrase</span>
-              </label>
+          {/* manual paste mode (dev) */}
+          {showManualInput && (
+            <div className='flex flex-col gap-3'>
+              <p className='text-label text-fg-muted'>developer mode: paste QR hex data</p>
+              <Input placeholder='paste QR code hex (530301...)'
+                onChange={e => { if (e.target.value.trim()) processQrData(e.target.value); }}
+                className='font-mono text-xs' />
+              <Input placeholder='wallet label (optional)' value={walletLabel}
+                onChange={e => setWalletLabel(e.target.value)} />
+              {errorMessage && <p className='text-xs text-red-400'>{errorMessage}</p>}
               <div className='flex gap-2'>
                 <Btn onClick={resetRemoval}>cancel</Btn>
                 <Btn destructive disabled={!backupAcked} onClick={() => setStep('confirm')}>
@@ -689,7 +686,7 @@ const VaultRow = ({
       {hasZcash && (
         <div className='mt-2'>
           <div className='flex items-center gap-2'>
-            <span className='text-[10px] text-fg-muted whitespace-nowrap'>sync from</span>
+            <span className='text-label text-fg-muted whitespace-nowrap'>sync from</span>
             <input
               type='number'
               min={ZCASH_ORCHARD_ACTIVATION}
@@ -699,19 +696,17 @@ const VaultRow = ({
               onBlur={saveBirthday}
               onKeyDown={e => e.key === 'Enter' && saveBirthday()}
               placeholder='auto'
-              className='w-24 bg-input border border-border-soft px-2 py-1 text-[10px] font-mono rounded focus:outline-none focus:border-primary/50'
+              className='w-24 bg-input border border-border-soft px-2 py-1 text-label font-mono rounded focus:outline-none focus:border-primary/50'
             />
           </div>
-          <p className='text-[9px] text-fg-dim mt-0.5'>
-            orchard only — sapling/sprout not supported
-          </p>
+          <p className='text-label text-fg-dim mt-0.5'>orchard only — sapling/sprout not supported</p>
         </div>
       )}
 
       {vault.type === 'zigner-zafu' && hasZcash && (
         <button
           onClick={() => navigate(PopupPath.NOTE_SYNC)}
-          className='flex items-center gap-1.5 mt-2 text-[10px] text-fg-muted hover:text-fg-high'
+          className='flex items-center gap-1.5 mt-2 text-label text-fg-muted hover:text-fg-high'
         >
           <span className='i-lucide-qr-code size-3' />
           sync balance to zigner
@@ -720,13 +715,12 @@ const VaultRow = ({
 
       {multisigWallet && (
         <div className='flex items-center gap-2 mt-2'>
-          <span className='text-[10px] text-fg-muted'>
-            {String(vault.insensitive['threshold'])}/{String(vault.insensitive['maxSigners'])}{' '}
-            multisig
+          <span className='text-label text-fg-muted'>
+            {String(vault.insensitive['threshold'])}/{String(vault.insensitive['maxSigners'])} multisig
           </span>
           <button
             onClick={() => navigate(PopupPath.MULTISIG)}
-            className='text-[10px] text-zigner-gold hover:underline'
+            className='text-label text-zigner-gold hover:underline'
           >
             manage in multisig tab →
           </button>

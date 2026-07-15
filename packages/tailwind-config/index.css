@@ -21,6 +21,27 @@
   --radius-full: 0;
 
   /* ==============================================================
+   * Type scale (v4 `--text-*` namespace → `text-display`, `text-title`,
+   * `text-body`, `text-label`, `text-data` utilities).
+   *
+   * Five sizes, deliberate jumps. Replaces ~108 ad-hoc `text-[Npx]`
+   * magic numbers. Floor is 12px (`text-label`) — nothing smaller; the
+   * old 8/9/10px micro-text read as thin/illegible "AI slop" in a mono
+   * terminal UI that should be confident and legible.
+   *
+   *   display 28px — the one hero number (wallet balance)
+   *   title   17px — screen titles, section heads (the missing mid-tier)
+   *   body    14px — default running text / buttons / list rows
+   *   data    13px — tabular & monospace numerics (addresses, heights)
+   *   label   12px — kickers, tab labels, captions (the floor)
+   * ============================================================== */
+  --text-display: 28px;
+  --text-title:   17px;
+  --text-body:    14px;
+  --text-data:    13px;
+  --text-label:   12px;
+
+  /* ==============================================================
    * v2 design-system tokens — register with Tailwind so utilities
    * like `text-fg`, `bg-elev-1`, `border-border-soft`, `bg-zigner-gold`
    * compile. Values come from packages/ui/styles/globals.css.
@@ -203,20 +224,23 @@
  * so they can be applied as single classes instead of stacked utilities.
  * ============================================================== */
 
-/* lowercase kicker — dim wide-tracked label above a masthead or section */
+/* lowercase kicker — calm label above a masthead or section.
+   Was 10px / fg-dim / 0.2em — tiny, ghostly, and stretched, the
+   classic "annoying microlabel". Now legible (12px floor), visible
+   (fg-muted not fg-dim), and only lightly tracked. */
 @utility kicker {
-  font-size: 10px;
-  color: var(--fg-dim);
+  font-size: 12px;
+  color: var(--fg-muted);
   text-transform: lowercase;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.06em;
 }
 
 /* small label (inside SectionHead, form labels, nav items) */
 @utility section-label {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--fg-high);
   text-transform: lowercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
 }
 
 /* numeric monospace — addresses, amounts, timestamps.

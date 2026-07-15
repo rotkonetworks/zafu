@@ -195,9 +195,7 @@ export const SettingsZigner = () => {
             <div className='flex items-start gap-3'>
               <span className='i-lucide-zap size-5 text-zigner-gold shrink-0 mt-0.5' />
               <div className='flex flex-col gap-1'>
-                <p className='text-[13px] text-fg-high lowercase tracking-[0.02em]'>
-                  unlock the full zigner workflow
-                </p>
+                <p className='text-data text-fg-high lowercase'>unlock the full zigner workflow</p>
                 <p className='text-xs text-fg-muted'>
                   Your imported Zigner wallet is active. Pro unlocks additional identities,
                   multi-network signing, and vault legacy mode. You can pay for Pro by signing the
@@ -239,23 +237,20 @@ export const SettingsZigner = () => {
                     <div className='flex flex-col gap-1 min-w-0'>
                       <div className='flex items-center gap-2'>
                         <EyeOpenIcon className={`size-4 ${colorClass} flex-shrink-0`} />
-                        <span className='text-[13px] text-fg-high truncate'>{vault.name}</span>
+                        <span className='text-data text-fg-high truncate'>{vault.name}</span>
                         {networks.map(n => (
-                          <span
-                            key={n}
-                            className='rounded-sm text-[10px] px-1 bg-elev-2 text-fg-dim lowercase tracking-[0.04em]'
-                          >
+                          <span key={n} className='rounded-sm text-label px-1 bg-elev-2 text-fg-dim lowercase'>
                             {n}
                           </span>
                         ))}
                       </div>
                       {cosmosAddrs?.map(a => (
-                        <span key={a.chainId} className='text-[10px] tabular text-fg-muted pl-6'>
+                        <span key={a.chainId} className='text-label tabular text-fg-muted pl-6'>
                           {a.chainId}: {a.address.slice(0, 10)}...{a.address.slice(-6)}
                         </span>
                       ))}
                       {ss58 && (
-                        <span className='text-[10px] tabular text-fg-muted pl-6'>
+                        <span className='text-label tabular text-fg-muted pl-6'>
                           {ss58.slice(0, 8)}...{ss58.slice(-6)}
                         </span>
                       )}
@@ -369,24 +364,31 @@ export const SettingsZigner = () => {
 
                 {errorMessage && <p className='text-xs text-red-400'>{errorMessage}</p>}
 
-                <div className='flex gap-2'>
-                  <Button variant='secondary' className='flex-1' onClick={resetForm}>
-                    Cancel
-                  </Button>
-                  <Button
-                    variant='gradient'
-                    className='flex-1'
-                    onClick={handleAddWallet}
-                    disabled={
-                      (!walletImport &&
-                        !zcashWalletImport &&
-                        !parsedPolkadotExport &&
-                        !parsedCosmosExport) ||
-                      isAdding
-                    }
-                  >
-                    {isAdding ? 'Adding...' : 'Add Wallet'}
-                  </Button>
+              <div className='flex gap-2'>
+                <Button variant='secondary' className='flex-1' onClick={resetForm}>
+                  Cancel
+                </Button>
+                <Button
+                  variant='gradient'
+                  className='flex-1'
+                  onClick={handleAddWallet}
+                  disabled={(!walletImport && !zcashWalletImport && !parsedPolkadotExport && !parsedCosmosExport) || isAdding}
+                >
+                  {isAdding ? 'Adding...' : 'Add Wallet'}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Scanned QR - ready to add */}
+          {showScannedState && (
+            <div className='flex flex-col gap-3'>
+              <div className='border border-green-500/30 bg-green-500/10 p-3'>
+                <div className='flex items-center gap-2'>
+                  <p className='text-sm font-medium text-green-400'>qr code scanned</p>
+                  <span className='text-label px-1.5 py-0.5 bg-elev-2 text-fg-muted'>
+                    {detectedNetwork}
+                  </span>
                 </div>
               </div>
             )}

@@ -127,4 +127,4 @@ packages from [@penumbra-zone/web](https://github.com/penumbra-zone/web).
 
 ## license
 
-[MIT](LICENSE-MIT) / [Apache-2.0](LICENSE-APACHE)
+[MIT](LICENSE)

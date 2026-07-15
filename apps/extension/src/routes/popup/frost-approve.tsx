@@ -194,6 +194,7 @@ export const FrostApprove = () => {
       threshold,
       maxSigners,
       relayUrl,
+      createdByOrigin: app,
     });
 
     abort.abort();
@@ -281,6 +282,7 @@ export const FrostApprove = () => {
       threshold: parsedThreshold,
       maxSigners: parsedMaxSigners,
       relayUrl,
+      createdByOrigin: app,
     });
 
     abort.abort();
@@ -392,6 +394,7 @@ export const FrostApprove = () => {
       maxSigners: parsedMaxSigners,
       relayUrl,
       hidden: hide,
+      createdByOrigin: app,
     });
 
     abort.abort();
@@ -613,12 +616,8 @@ export const FrostApprove = () => {
     <div className='flex flex-col h-full p-4 gap-4'>
       <div className='text-center'>
         <span className='kicker'>frost multisig</span>
-        <h2 className='mt-1 text-[18px] text-fg-high lowercase tracking-[-0.01em]'>
-          {actionLabel}
-        </h2>
-        <p className='mt-1 text-[10px] text-fg-dim lowercase tracking-[0.04em]'>
-          requested by {app}
-        </p>
+        <h2 className='mt-1 text-title text-fg-high lowercase tracking-[-0.01em]'>{actionLabel}</h2>
+        <p className='mt-1 text-label text-fg-dim lowercase'>requested by {app}</p>
       </div>
 
       {phase === 'confirm' && (
@@ -707,14 +706,14 @@ export const FrostApprove = () => {
       {phase === 'running' && (
         <div className='flex flex-col items-center gap-3 flex-1 justify-center'>
           <span className='i-lucide-loader-2 size-8 animate-spin text-zigner-gold' />
-          <p className='text-[13px] text-fg text-center lowercase tracking-[0.02em]'>{status}</p>
+          <p className='text-data text-fg text-center lowercase'>{status}</p>
         </div>
       )}
 
       {phase === 'complete' && (
         <div className='flex flex-col items-center gap-3 flex-1 justify-center'>
           <span className='i-lucide-check-circle size-10 text-green-400' />
-          <p className='text-[13px] text-fg-high lowercase tracking-[0.02em]'>done</p>
+          <p className='text-data text-fg-high lowercase'>done</p>
           {typeof result?.['address'] === 'string' && (
             <p className='text-xs tabular text-fg-muted break-all px-4'>
               {result['address'].slice(0, 20)}...
@@ -729,10 +728,8 @@ export const FrostApprove = () => {
       {phase === 'error' && (
         <div className='flex flex-col items-center gap-3 flex-1 justify-center'>
           <span className='i-lucide-x-circle size-10 text-red-400' />
-          <p className='text-[13px] text-red-400 text-center'>{error}</p>
-          <Button variant='secondary' onClick={() => window.close()}>
-            close
-          </Button>
+          <p className='text-data text-red-400 text-center'>{error}</p>
+          <Button variant='secondary' onClick={() => window.close()}>close</Button>
         </div>
       )}
 

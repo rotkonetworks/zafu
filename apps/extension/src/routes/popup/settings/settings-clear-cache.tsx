@@ -118,7 +118,9 @@ export const SettingsClearCache = () => {
               <span>{getClearCacheStepLabel(clearingState.step)}</span>
               <span>{progressPercent}%</span>
             </div>
-            <p className='text-[10px] text-fg-muted'>do not close the extension.</p>
+            <p className='text-label text-fg-muted'>
+              do not close the extension.
+            </p>
           </div>
         ) : (
           <>
@@ -152,7 +154,7 @@ export const SettingsClearCache = () => {
                             <button
                               disabled={!!clearingKey || clearingState.inProgress}
                               onClick={() => void handleClearZcash(v)}
-                              className='rounded border border-red-500/25 bg-red-500/5 px-2 py-0.5 text-[10px] text-red-400 hover:bg-red-500/15 transition-colors disabled:opacity-50'
+                              className='rounded border border-red-500/25 bg-red-500/5 px-2 py-0.5 text-label text-red-400 hover:bg-red-500/15 transition-colors disabled:opacity-50'
                             >
                               {clearingKey === `${v.id}:zcash` ? 'clearing...' : 'clear zcash'}
                             </button>
@@ -160,8 +162,8 @@ export const SettingsClearCache = () => {
                           {hasPenumbra && (
                             <button
                               disabled={!!clearingKey || clearingState.inProgress}
-                              onClick={() => handleClearPenumbra(v)}
-                              className='rounded border border-red-500/25 bg-red-500/5 px-2 py-0.5 text-[10px] text-red-400 hover:bg-red-500/15 transition-colors disabled:opacity-50'
+                              onClick={() => void handleClearPenumbra(v)}
+                              className='rounded border border-red-500/25 bg-red-500/5 px-2 py-0.5 text-label text-red-400 hover:bg-red-500/15 transition-colors disabled:opacity-50'
                             >
                               {clearingKey === `${v.id}:penumbra`
                                 ? 'clearing...'

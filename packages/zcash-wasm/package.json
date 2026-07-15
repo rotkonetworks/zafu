@@ -2,7 +2,7 @@
   "name": "@repo/zcash-wasm",
   "version": "0.1.0",
   "private": true,
-  "license": "(MIT OR Apache-2.0)",
+  "license": "MIT",
   "description": "minimal zcash orchard key derivation for wasm",
   "type": "module",
   "main": "zcash_wasm.js",

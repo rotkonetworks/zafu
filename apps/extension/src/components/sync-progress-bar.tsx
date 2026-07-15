@@ -71,7 +71,7 @@ export const SyncProgressBar = ({
             <button
               type='button'
               onClick={errorAction.onClick}
-              className='text-zigner-gold underline-offset-2 hover:underline lowercase tracking-[0.02em]'
+              className='text-zigner-gold underline-offset-2 hover:underline lowercase'
             >
               {errorAction.label}
             </button>
@@ -94,7 +94,7 @@ export const SyncProgressBar = ({
 
       {/* row 2: heights + rescan — only when there's something to show */}
       {(showHeights || (startBlock != null && onRescan)) && (
-        <div className='mt-0.5 flex items-center justify-between text-[10px] text-fg-muted font-mono tabular-nums'>
+        <div className='mt-0.5 flex items-center justify-between text-label text-fg-muted font-mono tabular-nums'>
           {showHeights ? (
             <span>
               {currentHeight.toLocaleString()} / {targetHeight.toLocaleString()}
@@ -113,7 +113,7 @@ export const SyncProgressBar = ({
                   value={input}
                   onChange={e => setInput(e.target.value)}
                   placeholder={String(startBlock)}
-                  className='w-20 bg-elev-2 px-1.5 py-0.5 text-[10px] font-mono text-fg placeholder:text-fg-muted outline-none'
+                  className='w-20 bg-elev-2 px-1.5 py-0.5 text-label font-mono text-fg placeholder:text-fg-muted outline-none'
                   autoFocus
                   onKeyDown={e => {
                     if (e.key === 'Enter') {
@@ -124,21 +124,8 @@ export const SyncProgressBar = ({
                     }
                   }}
                 />
-                <button
-                  onClick={submitRescan}
-                  className='text-[10px] text-zigner-gold hover:underline'
-                >
-                  rescan
-                </button>
-                <button
-                  onClick={() => {
-                    setEditing(false);
-                    setInput('');
-                  }}
-                  className='text-[10px] text-fg-muted hover:text-fg-high'
-                >
-                  &times;
-                </button>
+                <button onClick={submitRescan} className='text-label text-zigner-gold hover:underline'>rescan</button>
+                <button onClick={() => { setEditing(false); setInput(''); }} className='text-label text-fg-muted hover:text-fg-high'>&times;</button>
               </span>
             ) : (
               <button

@@ -128,9 +128,7 @@ export const TransactionApproval = () => {
       <div className='flex h-screen flex-col'>
         <header className='border-b border-border-soft p-4'>
           <span className='kicker'>transaction</span>
-          <h1 className='mt-1 text-[18px] text-fg-high lowercase tracking-[-0.01em]'>
-            sign with zigner
-          </h1>
+          <h1 className='mt-1 text-title text-fg-high lowercase tracking-[-0.01em]'>sign with zigner</h1>
         </header>
 
         <div className='grow overflow-auto p-4 flex flex-col items-center justify-center'>
@@ -198,9 +196,7 @@ export const TransactionApproval = () => {
     <div className='flex h-screen flex-col'>
       <header className='border-b border-border-soft p-4'>
         <span className='kicker'>transaction</span>
-        <h1 className='mt-1 text-[18px] text-fg-high lowercase tracking-[-0.01em]'>
-          confirm transaction
-        </h1>
+        <h1 className='mt-1 text-title text-fg-high lowercase tracking-[-0.01em]'>confirm transaction</h1>
       </header>
 
       <div className='grow overflow-auto p-4'>

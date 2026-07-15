@@ -13,6 +13,7 @@ import { viewClient } from '../../../clients';
 import { useStore } from '../../../state';
 import { selectActiveNetwork } from '../../../state/keyring';
 import { NetworkUnavailable } from '../../../shared/components/network-unavailable';
+import { ZcashVotePage } from './zcash-vote';
 
 interface ProposalEntry {
   id: bigint;
@@ -191,6 +192,9 @@ export function VotePage() {
 
   // placeholder for other networks. Placed after every hook call so the
   // count stays stable across switches.
+  if (activeNetwork === 'zcash') {
+    return <ZcashVotePage />;
+  }
   if (!isPenumbra) {
     return <NetworkUnavailable feature='governance' iconClass='i-lucide-vote' />;
   }
@@ -269,9 +273,9 @@ export function VotePage() {
               >
                 <div className='flex-1 min-w-0'>
                   <div className='flex items-center gap-2'>
-                    <span className='text-[10px] font-mono text-fg-muted'>#{String(p.id)}</span>
-                    <span className={`text-[10px] ${stateColor(p.state)}`}>{p.state}</span>
-                    <span className='text-[10px] text-fg-muted'>{p.kind}</span>
+                    <span className='text-label font-mono text-fg-muted'>#{String(p.id)}</span>
+                    <span className={`text-label ${stateColor(p.state)}`}>{p.state}</span>
+                    <span className='text-label text-fg-muted'>{p.kind}</span>
                   </div>
                   <p className='text-sm mt-0.5 truncate'>{p.title}</p>
                 </div>
@@ -289,7 +293,7 @@ export function VotePage() {
                     {p.description || 'no description'}
                   </p>
 
-                  <div className='flex items-center gap-3 mt-2 text-[10px] text-fg-muted'>
+                  <div className='flex items-center gap-3 mt-2 text-label text-fg-muted'>
                     <span>start: {p.startBlock.toLocaleString()}</span>
                     <span>end: {p.endBlock.toLocaleString()}</span>
                   </div>

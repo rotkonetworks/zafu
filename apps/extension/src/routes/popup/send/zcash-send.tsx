@@ -778,9 +778,13 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     - amount entered exceeds available — flag immediately so
                       the user doesn't get a build-time rejection. */}
                 {balanceZec === 0 && (
-                  <p className='mt-1.5 text-[10px] text-amber-400 leading-snug'>
-                    you don't have any zec yet. receive some first — your address is on the home
-                    screen.
+                  <p className='mt-1.5 text-label text-amber-400 leading-snug'>
+                    you don't have any zec yet. receive some first — your address is on the home screen.
+                  </p>
+                )}
+                {balanceZec !== null && balanceZec > 0 && Number(amount) > maxSendZec && Number(amount) > 0 && (
+                  <p className='mt-1.5 text-label text-red-400 leading-snug tabular-nums'>
+                    exceeds spendable balance ({maxSendZec.toFixed(8).replace(/0+$/, '').replace(/\.$/, '')} ZEC after fee)
                   </p>
                 )}
                 {balanceZec !== null &&

@@ -289,7 +289,9 @@ export const QrScanner = ({
         <div className='relative aspect-square w-full overflow-hidden rounded-lg border border-yellow-500/40 bg-black'>
           {cameraView}
         </div>
-        {description && <p className='text-[10px] text-fg-muted text-center'>{description}</p>}
+        {description && (
+          <p className='text-label text-fg-muted text-center'>{description}</p>
+        )}
         <style>{`
           @keyframes scan {
             0%, 100% { transform: translateY(0); }

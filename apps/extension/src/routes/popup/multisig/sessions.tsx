@@ -86,15 +86,17 @@ const WalletRow = ({
     >
       <div className='flex flex-col gap-1 min-w-0'>
         <div className='flex items-center gap-2'>
-          <span className='rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-zigner-gold leading-none shrink-0'>
+          <span className='rounded bg-primary/15 px-1.5 py-0.5 text-label font-semibold text-zigner-gold leading-none shrink-0'>
             {wallet.multisig!.threshold}-of-{wallet.multisig!.maxSigners}
           </span>
           <span className='text-sm font-medium truncate'>{wallet.label}</span>
           {isActive && <span className='i-lucide-check h-3 w-3 text-zigner-gold shrink-0' />}
         </div>
-        <span className='text-[11px] text-fg-muted font-mono'>{truncateAddr(wallet.address)}</span>
+        <span className='text-body text-fg-muted font-mono'>
+          {truncateAddr(wallet.address)}
+        </span>
         {wallet.multisig?.zignerWalletId && (
-          <span className='text-[10px] text-fg-dim font-mono'>
+          <span className='text-label text-fg-dim font-mono'>
             zigner: {wallet.multisig.zignerWalletId}
           </span>
         )}

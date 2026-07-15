@@ -183,14 +183,14 @@ export function ZcashSendApproval() {
         {favIcon && <img src={favIcon} className='w-6 h-6 rounded-sm' alt='' />}
         <div>
           <div className='kicker'>zcash transaction</div>
-          <div className='text-[10px] text-fg-dim tabular'>{app}</div>
+          <div className='text-label text-fg-dim tabular'>{app}</div>
         </div>
       </header>
 
       {/* warning banner */}
       <div className='rounded-md border border-zigner-gold/30 bg-zigner-gold/5 p-3 mb-4'>
         <div className='kicker mb-1 text-zigner-gold/80'>review carefully</div>
-        <div className='text-[10px] text-fg'>
+        <div className='text-label text-fg'>
           sending <span className='tabular text-zigner-gold'>{fmtZec(totalOutputZat)} ZEC</span>
           {outputs.length > 1 && ` across ${outputs.length} outputs`} (+ ~
           <span className='tabular text-fg-muted'>{fmtZec(totalFeeZat)}</span> fee)
@@ -209,29 +209,21 @@ export function ZcashSendApproval() {
           <div key={i} className='rounded-md border border-border-soft bg-elev-1 p-3 mb-2'>
             <div className='flex justify-between items-start mb-1'>
               <div className='flex items-center gap-1.5'>
-                <div className='text-[10px] text-fg-dim lowercase tracking-[0.04em]'>
-                  output {i + 1}
-                </div>
+                <div className='text-label text-fg-dim lowercase'>output {i + 1}</div>
                 {isTransparent(o.address) ? (
-                  <span className='rounded-sm text-[9px] px-1 py-0.5 bg-orange-500/10 text-orange-400 lowercase tracking-[0.08em]'>
-                    transparent
-                  </span>
+                  <span className='rounded-sm text-label px-1 py-0.5 bg-orange-500/10 text-orange-400 lowercase tracking-[0.08em]'>transparent</span>
                 ) : (
-                  <span className='rounded-sm text-[9px] px-1 py-0.5 bg-success/10 text-success lowercase tracking-[0.08em]'>
-                    shielded
-                  </span>
+                  <span className='rounded-sm text-label px-1 py-0.5 bg-success/10 text-success lowercase tracking-[0.08em]'>shielded</span>
                 )}
                 {status === 'signing' && i < completedOutputs && (
-                  <span className='text-[9px] text-success lowercase tracking-[0.04em]'>sent</span>
+                  <span className='text-label text-success lowercase'>sent</span>
                 )}
               </div>
-              <div className='text-[13px] tabular text-zigner-gold'>{fmtZec(o.amount)} ZEC</div>
+              <div className='text-data tabular text-zigner-gold'>{fmtZec(o.amount)} ZEC</div>
             </div>
-            <div className='text-[10px] tabular text-fg-muted break-all'>
-              {shortAddr(o.address)}
-            </div>
+            <div className='text-label tabular text-fg-muted break-all'>{shortAddr(o.address)}</div>
             {o.memo && (
-              <div className='text-[10px] text-fg-dim mt-1 italic truncate' title={o.memo}>
+              <div className='text-label text-fg-dim mt-1 italic truncate' title={o.memo}>
                 {o.memo.length > 80 ? o.memo.slice(0, 80) + '...' : o.memo}
               </div>
             )}
@@ -241,23 +233,25 @@ export function ZcashSendApproval() {
         {/* fee display */}
         <div className='rounded-md border border-border-soft bg-elev-1 p-3'>
           <div className='flex justify-between'>
-            <div className='text-[10px] text-fg-dim lowercase tracking-[0.04em]'>
-              {outputs.length === 1 ? 'network fee' : `network fee (per tx × ${outputs.length})`}
+            <div className='text-label text-fg-dim lowercase'>
+              {outputs.length === 1
+                ? 'network fee'
+                : `network fee (per tx × ${outputs.length})`}
             </div>
-            <div className='text-[10px] tabular text-fg-muted'>~{fmtZec(totalFeeZat)} ZEC</div>
+            <div className='text-label tabular text-fg-muted'>~{fmtZec(totalFeeZat)} ZEC</div>
           </div>
         </div>
 
         {/* total */}
         <div className='mt-3 pt-3 border-t border-border-soft flex justify-between items-baseline'>
           <div className='kicker'>total (incl. fees)</div>
-          <div className='text-[15px] tabular text-zigner-gold'>{fmtZec(totalZat)} ZEC</div>
+          <div className='text-title tabular text-zigner-gold'>{fmtZec(totalZat)} ZEC</div>
         </div>
       </div>
 
       {/* progress indicator */}
       {status === 'signing' && progressText && (
-        <div className='rounded-md border border-border-soft bg-elev-1 p-2 mb-3 text-fg-muted text-[11px]'>
+        <div className='rounded-md border border-border-soft bg-elev-1 p-2 mb-3 text-fg-muted text-body'>
           <div className='flex items-center gap-2'>
             <div className='h-3 w-3 animate-spin rounded-full border border-zigner-gold border-t-transparent' />
             <span className='truncate'>{progressText}</span>
@@ -283,7 +277,7 @@ export function ZcashSendApproval() {
       {/* action buttons */}
       <div className='flex gap-3'>
         <button
-          className='flex-1 py-2.5 rounded-md border border-border-soft bg-elev-1 text-[13px] text-fg-muted hover:text-fg-high hover:bg-elev-2 lowercase tracking-[0.04em]'
+          className='flex-1 py-2.5 rounded-md border border-border-soft bg-elev-1 text-data text-fg-muted hover:text-fg-high hover:bg-elev-2 lowercase'
           onClick={handleDeny}
           disabled={status === 'signing'}
         >
@@ -291,7 +285,7 @@ export function ZcashSendApproval() {
         </button>
         <button
           className={cn(
-            'flex-1 py-2.5 rounded-md text-[13px] lowercase tracking-[0.04em] transition-colors',
+            'flex-1 py-2.5 rounded-md text-data lowercase transition-colors',
             countdown > 0 || status !== 'review'
               ? 'bg-elev-1 text-fg-dim cursor-not-allowed'
               : 'bg-zigner-gold text-zigner-dark hover:bg-zigner-gold-light',

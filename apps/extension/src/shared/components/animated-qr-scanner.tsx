@@ -472,15 +472,12 @@ export const AnimatedQrScanner = ({
             style={{ width: `${progress}%` }}
           />
         </div>
-        <span
-          className={`${inline ? 'text-[10px]' : 'text-xs'} font-mono text-white/80 w-12 text-right`}
-        >
+        <span className={`${inline ? 'text-label' : 'text-xs'} font-mono text-white/80 w-12 text-right`}>
           {progress}%
         </span>
       </div>
-      <p className={`mt-1.5 ${inline ? 'text-[9px]' : 'text-[10px]'} text-white/40 text-center`}>
-        {partsReceived} part{partsReceived !== 1 ? 's' : ''} received — hold camera steady over
-        animated QR
+      <p className={`mt-1.5 ${inline ? 'text-label' : 'text-label'} text-white/40 text-center`}>
+        {partsReceived} part{partsReceived !== 1 ? 's' : ''} received — hold camera steady over animated QR
       </p>
     </>
   );
@@ -500,7 +497,9 @@ export const AnimatedQrScanner = ({
         <div className='relative aspect-square w-full overflow-hidden rounded-lg border border-yellow-500/40 bg-black'>
           {cameraView}
         </div>
-        {description && <p className='text-[10px] text-fg-muted text-center'>{description}</p>}
+        {description && (
+          <p className='text-label text-fg-muted text-center'>{description}</p>
+        )}
         <div className='rounded-md bg-black/60 p-2'>{progressBar}</div>
       </div>
     );
