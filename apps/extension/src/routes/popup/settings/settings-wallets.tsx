@@ -26,7 +26,13 @@ const networkBadge = (network: string) => {
     kusama: 'bg-pink-500/15 text-pink-400',
   };
   return (
-    <span key={network} className={cn('text-label px-1.5 py-0.5 rounded', colors[network] ?? 'bg-elev-2 text-fg-muted')}>
+    <span
+      key={network}
+      className={cn(
+        'text-label px-1.5 py-0.5 rounded',
+        colors[network] ?? 'bg-elev-2 text-fg-muted',
+      )}
+    >
       {network}
     </span>
   );
@@ -58,7 +64,7 @@ export const SettingsWallets = () => {
 
   // -- removal state --
   const [removingId, setRemovingId] = useState<string | null>(null);
-  const [removingType, setRemovingType] = useState('mnemonic');
+  const [removingType, setRemovingType] = useState<string>('mnemonic');
   const [step, setStep] = useState<RemovalStep>('idle');
   const [password, setPassword] = useState('');
   const [passwordError, setPasswordError] = useState(false);
@@ -88,7 +94,7 @@ export const SettingsWallets = () => {
     if (autoScan && !scanning && scanState === 'idle') {
       setScanning(true);
     }
-  }, [autoScan]);
+  }, [autoScan]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // -- removal logic --
   const resetRemoval = () => {
@@ -111,9 +117,7 @@ export const SettingsWallets = () => {
 
   const verifyPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!removingId) {
-      return;
-    }
+    if (!removingId) return;
     const ok = await isPassword(password);
     if (!ok) {
       setPasswordError(true);
@@ -129,21 +133,15 @@ export const SettingsWallets = () => {
   };
 
   const executeRemoval = async () => {
-    if (!removingId) {
-      return;
-    }
+    if (!removingId) return;
     setDeleting(true);
     setStateError(null);
     try {
       const isLast = keyInfos.length <= 1;
       await deleteKeyRing(removingId);
-      if (isLast) {
-        terminateNetworkWorker('zcash');
-      }
+      if (isLast) terminateNetworkWorker('zcash');
       resetRemoval();
-      if (isLast) {
-        window.close();
-      }
+      if (isLast) window.close();
     } catch (err) {
       setStateError(err instanceof Error ? err.message : String(err));
       setDeleting(false);
@@ -152,9 +150,7 @@ export const SettingsWallets = () => {
 
   const handleRename = async (id: string, name: string) => {
     const trimmed = name.trim();
-    if (!trimmed) {
-      return;
-    }
+    if (!trimmed) return;
     await renameKeyRing(id, trimmed).catch(() => {});
     // for multisig vaults, also update the linked zcashWallet.label so the
     // multisig tab + overview show the same name.
@@ -175,9 +171,7 @@ export const SettingsWallets = () => {
 
   const handleSecretTap = () => {
     clickCountRef.current += 1;
-    if (clickTimeoutRef.current) {
-      clearTimeout(clickTimeoutRef.current);
-    }
+    if (clickTimeoutRef.current) clearTimeout(clickTimeoutRef.current);
     clickTimeoutRef.current = setTimeout(() => {
       clickCountRef.current = 0;
     }, 3000);
@@ -288,26 +282,16 @@ export const SettingsWallets = () => {
             <div className='flex flex-col divide-y divide-border/40 rounded-lg border border-border-soft bg-elev-1'>
               {keyInfos.map(v => {
                 const networks: string[] = [];
-                if (penumbraWallets.some(w => w.vaultId === v.id)) {
-                  networks.push('penumbra');
-                }
-                if (zcashWallets.some(w => w.vaultId === v.id)) {
-                  networks.push('zcash');
-                }
-                if (v.insensitive['cosmosAddresses'] && isLaunched('noble')) {
+                if (penumbraWallets.some(w => w.vaultId === v.id)) networks.push('penumbra');
+                if (zcashWallets.some(w => w.vaultId === v.id)) networks.push('zcash');
+                if (v.insensitive['cosmosAddresses'] && isLaunched('noble'))
                   networks.push('cosmos');
-                }
-                if (v.insensitive['polkadotSs58'] && isLaunched('polkadot')) {
+                if (v.insensitive['polkadotSs58'] && isLaunched('polkadot'))
                   networks.push('polkadot');
-                }
                 // seed wallets derive keys for all networks
                 if (v.type === 'mnemonic') {
-                  if (!networks.includes('zcash')) {
-                    networks.push('zcash');
-                  }
-                  if (!networks.includes('penumbra')) {
-                    networks.push('penumbra');
-                  }
+                  if (!networks.includes('zcash')) networks.push('zcash');
+                  if (!networks.includes('penumbra')) networks.push('penumbra');
                 }
                 // frost-multisig vaults support zcash
                 if (v.type === 'frost-multisig' && !networks.includes('zcash')) {
@@ -337,51 +321,48 @@ export const SettingsWallets = () => {
             <p className='py-12 text-center text-sm text-fg-muted'>no wallets</p>
           )}
 
-          {/* scanned state */}
-          {showScannedState && (
-            <div className='flex flex-col gap-3'>
-              <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-3'>
-                <div className='flex items-center gap-2'>
-                  <p className='text-xs text-green-400'>qr code scanned</p>
-                  <span className='text-label px-1 rounded-md bg-elev-2 text-fg-muted'>{detectedNetwork}</span>
+          {/* ── removal flow ── */}
+
+          {removingVault && removingType === 'mnemonic' && step === 'password' && (
+            <RemovalCard title={`remove "${removingVault.name}"`}>
+              <p className='text-xs text-fg-muted mb-3'>enter password to view recovery phrase.</p>
+              <form onSubmit={e => void verifyPassword(e)} className='flex flex-col gap-2'>
+                <input
+                  type='password'
+                  value={password}
+                  autoFocus
+                  onChange={e => {
+                    setPassword(e.target.value);
+                    setPasswordError(false);
+                  }}
+                  placeholder='password'
+                  className='w-full bg-input border border-border-soft px-3 py-2.5 text-sm rounded-lg focus:outline-none focus:border-zigner-gold'
+                />
+                {passwordError && <span className='text-xs text-red-400'>wrong password</span>}
+                <div className='flex gap-2 mt-1'>
+                  <Btn onClick={resetRemoval}>cancel</Btn>
+                  <Btn submit destructive disabled={!password}>
+                    continue
+                  </Btn>
                 </div>
-                <p className='text-label text-fg-muted mt-1 font-mono'>
-                  {parsedCosmosExport ? (
-                    <>{parsedCosmosExport.addresses.map(a => a.address.slice(0, 10)).join(', ')}...</>
-                  ) : parsedPolkadotExport ? (
-                    <>{parsedPolkadotExport.address.slice(0, 8)}...{parsedPolkadotExport.address.slice(-6)}</>
-                  ) : (
-                    <>
-                      account #{walletImport?.accountIndex ?? zcashWalletImport?.accountIndex ?? 0}
-                      {zcashWalletImport && (
-                        <span className='ml-2'>{zcashWalletImport.mainnet ? 'mainnet' : 'testnet'}</span>
-                      )}
-                    </>
-                  )}
-                </p>
-              </div>
-              <Input placeholder='wallet label (optional)' value={walletLabel}
-                onChange={e => setWalletLabel(e.target.value)} />
-              {errorMessage && <p className='text-xs text-red-400'>{errorMessage}</p>}
-              <div className='flex gap-2'>
-                <Btn onClick={resetAdd}>cancel</Btn>
-                <Btn primary disabled={isAdding} onClick={() => void handleAddWallet()}>
-                  {isAdding ? 'adding...' : 'add wallet'}
-                </Btn>
-              </div>
-            </div>
+              </form>
+            </RemovalCard>
           )}
 
-          {/* manual paste mode (dev) */}
-          {showManualInput && (
-            <div className='flex flex-col gap-3'>
-              <p className='text-label text-fg-muted'>developer mode: paste QR hex data</p>
-              <Input placeholder='paste QR code hex (530301...)'
-                onChange={e => { if (e.target.value.trim()) processQrData(e.target.value); }}
-                className='font-mono text-xs' />
-              <Input placeholder='wallet label (optional)' value={walletLabel}
-                onChange={e => setWalletLabel(e.target.value)} />
-              {errorMessage && <p className='text-xs text-red-400'>{errorMessage}</p>}
+          {removingVault && removingType === 'mnemonic' && step === 'backup' && (
+            <RemovalCard title='back up recovery phrase'>
+              <div className='select-all cursor-text rounded-lg bg-canvas border border-border-soft p-3 mb-3 text-xs leading-relaxed break-words'>
+                {phrase.join(' ')}
+              </div>
+              <label className='flex items-start gap-2 mb-3 cursor-pointer select-none'>
+                <input
+                  type='checkbox'
+                  checked={backupAcked}
+                  onChange={e => setBackupAcked(e.target.checked)}
+                  className='mt-0.5'
+                />
+                <span className='text-xs text-fg-muted'>i have backed up my phrase</span>
+              </label>
               <div className='flex gap-2'>
                 <Btn onClick={resetRemoval}>cancel</Btn>
                 <Btn destructive disabled={!backupAcked} onClick={() => setStep('confirm')}>
@@ -447,11 +428,11 @@ export const SettingsWallets = () => {
                 <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-3'>
                   <div className='flex items-center gap-2'>
                     <p className='text-xs text-green-400'>qr code scanned</p>
-                    <span className='text-[10px] px-1 rounded-md bg-elev-2 text-fg-muted'>
+                    <span className='text-label px-1 rounded-md bg-elev-2 text-fg-muted'>
                       {detectedNetwork}
                     </span>
                   </div>
-                  <p className='text-[10px] text-fg-muted mt-1 font-mono'>
+                  <p className='text-label text-fg-muted mt-1 font-mono'>
                     {parsedCosmosExport ? (
                       <>
                         {parsedCosmosExport.addresses.map(a => a.address.slice(0, 10)).join(', ')}
@@ -493,13 +474,11 @@ export const SettingsWallets = () => {
             {/* manual paste mode (dev) */}
             {showManualInput && (
               <div className='flex flex-col gap-3'>
-                <p className='text-[10px] text-fg-muted'>developer mode: paste QR hex data</p>
+                <p className='text-label text-fg-muted'>developer mode: paste QR hex data</p>
                 <Input
                   placeholder='paste QR code hex (530301...)'
                   onChange={e => {
-                    if (e.target.value.trim()) {
-                      processQrData(e.target.value);
-                    }
+                    if (e.target.value.trim()) processQrData(e.target.value);
                   }}
                   className='font-mono text-xs'
                 />
@@ -588,18 +567,14 @@ const VaultRow = ({
   const hasZcash = networks.includes('zcash');
 
   // zcash birthday height per wallet
-  const [birthday, setBirthday] = useState('');
+  const [birthday, setBirthday] = useState<string>('');
   const birthdayKey = `zcashBirthday_${vault.id}`;
 
   useEffect(() => {
-    if (!hasZcash) {
-      return;
-    }
+    if (!hasZcash) return;
     chrome.storage.local.get(birthdayKey).then(r => {
       const v = r[birthdayKey];
-      if (v !== undefined) {
-        setBirthday(String(v));
-      }
+      if (v !== undefined) setBirthday(String(v));
     });
   }, [hasZcash, birthdayKey]);
 
@@ -617,25 +592,18 @@ const VaultRow = ({
   };
 
   useEffect(() => {
-    if (editing) {
-      ref.current?.select();
-    }
+    if (editing) ref.current?.select();
   }, [editing]);
 
   const commit = () => {
     setEditing(false);
     const t = draft.trim();
-    if (t && t !== vault.name) {
-      onRename(t);
-    } else {
-      setDraft(vault.name);
-    }
+    if (t && t !== vault.name) onRename(t);
+    else setDraft(vault.name);
   };
 
   const onKey = (e: KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      commit();
-    }
+    if (e.key === 'Enter') commit();
     if (e.key === 'Escape') {
       setDraft(vault.name);
       setEditing(false);
@@ -699,7 +667,9 @@ const VaultRow = ({
               className='w-24 bg-input border border-border-soft px-2 py-1 text-label font-mono rounded focus:outline-none focus:border-primary/50'
             />
           </div>
-          <p className='text-label text-fg-dim mt-0.5'>orchard only — sapling/sprout not supported</p>
+          <p className='text-label text-fg-dim mt-0.5'>
+            orchard only — sapling/sprout not supported
+          </p>
         </div>
       )}
 
@@ -716,7 +686,8 @@ const VaultRow = ({
       {multisigWallet && (
         <div className='flex items-center gap-2 mt-2'>
           <span className='text-label text-fg-muted'>
-            {String(vault.insensitive['threshold'])}/{String(vault.insensitive['maxSigners'])} multisig
+            {String(vault.insensitive['threshold'])}/{String(vault.insensitive['maxSigners'])}{' '}
+            multisig
           </span>
           <button
             onClick={() => navigate(PopupPath.MULTISIG)}
