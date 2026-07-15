@@ -34,7 +34,7 @@ export interface ServiceEndpoint {
 export interface RoundConfigEntry {
   auth_version: number;
   ea_pk: string; // base64
-  signatures: Array<{ key_id: string; alg: string; sig: string }>;
+  signatures: { key_id: string; alg: string; sig: string }[];
 }
 
 export interface VotingServiceConfig {

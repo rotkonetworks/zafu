@@ -85,7 +85,9 @@ export async function findVaultByLabelPrefix(
   labelPrefix: string,
   requireOrigin?: string,
 ): Promise<string | null> {
-  if (!labelPrefix) return null;
+  if (!labelPrefix) {
+    return null;
+  }
   const vaults = ((await localExtStorage.get('vaults')) ?? []) as EncryptedVault[];
   const matches = vaults
     .filter(
@@ -93,7 +95,9 @@ export async function findVaultByLabelPrefix(
         v.type === 'frost-multisig' && typeof v.name === 'string' && v.name.startsWith(labelPrefix),
     )
     .filter(v => {
-      if (requireOrigin === undefined) return true;
+      if (requireOrigin === undefined) {
+        return true;
+      }
       const createdByOrigin = (v.insensitive?.['createdByOrigin'] ?? null) as string | null;
       return createdByOrigin === requireOrigin;
     })

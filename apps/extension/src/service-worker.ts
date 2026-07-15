@@ -367,12 +367,12 @@ chrome.alarms.onAlarm.addListener(async alarm => {
       const services = await walletServices;
       const ws = await services.getWalletServices();
       void ws.blockProcessor.sync().catch((e: unknown) => {
-    // terminal rejection after an intentional stop is expected teardown;
-    // anything else deserves the console
-    if (!String(e).includes('Sync stop')) {
-      console.error('[sync] block processor terminated:', e);
-    }
-  });
+        // terminal rejection after an intentional stop is expected teardown;
+        // anything else deserves the console
+        if (!String(e).includes('Sync stop')) {
+          console.error('[sync] block processor terminated:', e);
+        }
+      });
     } catch (e) {
       // services not initialized or network not enabled - this is expected
       if (globalThis.__DEV__) {

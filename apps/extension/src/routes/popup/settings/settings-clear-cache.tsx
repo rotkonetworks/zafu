@@ -160,7 +160,7 @@ export const SettingsClearCache = () => {
                           {hasPenumbra && (
                             <button
                               disabled={!!clearingKey || clearingState.inProgress}
-                              onClick={() => void handleClearPenumbra(v)}
+                              onClick={() => handleClearPenumbra(v)}
                               className='rounded border border-red-500/25 bg-red-500/5 px-2 py-0.5 text-label text-red-400 hover:bg-red-500/15 transition-colors disabled:opacity-50'
                             >
                               {clearingKey === `${v.id}:penumbra`

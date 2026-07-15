@@ -97,7 +97,9 @@ const MultisigOverview = () => {
   useEffect(() => {
     const fetchAll = () => {
       for (const w of multisigWallets) {
-        if (!w.vaultId) continue;
+        if (!w.vaultId) {
+          continue;
+        }
         const vaultId = w.vaultId;
         const rowId = w.id;
         getBalanceInWorker('zcash', vaultId)
@@ -107,7 +109,9 @@ const MultisigOverview = () => {
     };
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
-      if (detail?.network !== 'zcash') return;
+      if (detail?.network !== 'zcash') {
+        return;
+      }
       fetchAll();
     };
     window.addEventListener('network-sync-progress', handler);
@@ -115,7 +119,9 @@ const MultisigOverview = () => {
     return () => window.removeEventListener('network-sync-progress', handler);
   }, [multisigWallets, workerSyncHeight]);
 
-  if (multisigWallets.length === 0) return null;
+  if (multisigWallets.length === 0) {
+    return null;
+  }
 
   const totalZat = Object.values(balances).reduce((sum, b) => sum + b, 0n);
   const formatZec = (zat: bigint) => {
@@ -191,7 +197,9 @@ export interface PopupLoaderData {
 export const popupIndexLoader = async (): Promise<Response | PopupLoaderData> => {
   await needsOnboard();
   const redirect = await needsLogin();
-  if (redirect) return redirect;
+  if (redirect) {
+    return redirect;
+  }
   return { fullSyncHeight: await localExtStorage.get('fullSyncHeight') };
 };
 
@@ -235,7 +243,9 @@ export const PopupIndex = () => {
   }, []);
 
   const copyAddress = useCallback(() => {
-    if (!address) return;
+    if (!address) {
+      return;
+    }
     setCopied(true);
     void navigator.clipboard.writeText(address);
     setTimeout(() => setCopied(false), 1500);
@@ -314,8 +324,8 @@ export const PopupIndex = () => {
                 >
                   {isMultisig && (
                     <span className='rounded-sm bg-zigner-gold/15 px-1.5 py-0.5 text-label text-zigner-gold tabular leading-none'>
-                      {selectedMultisigWallet!.multisig!.threshold}/
-                      {selectedMultisigWallet!.multisig!.maxSigners}
+                      {selectedMultisigWallet.multisig!.threshold}/
+                      {selectedMultisigWallet.multisig!.maxSigners}
                     </span>
                   )}
                   <span className='tabular'>{displayAddress}</span>
@@ -469,7 +479,9 @@ const PenumbraContent = ({
         const balances = await Array.fromAsync(viewClient.balances({ accountFilter: { account } }));
         let total = 0;
         for (const b of balances) {
-          if (!b.balanceView) continue;
+          if (!b.balanceView) {
+            continue;
+          }
           const denom = getDisplayDenomFromView(b.balanceView);
           if (denom === 'penumbra' || denom === 'UM') {
             total += Number(fromValueView(b.balanceView));
@@ -577,10 +589,14 @@ const ZcashContent = ({
   // wallet birthday — used to show progress relative to start, not block 0
   const [walletBirthday, setWalletBirthday] = useState(0);
   useEffect(() => {
-    if (!hasWallet || !selectedKeyInfo) return;
+    if (!hasWallet || !selectedKeyInfo) {
+      return;
+    }
     const key = `zcashBirthday_${selectedKeyInfo.id}`;
     chrome.storage.local.get(key, r => {
-      if (typeof r[key] === 'number') setWalletBirthday(r[key] as number);
+      if (typeof r[key] === 'number') {
+        setWalletBirthday(r[key]);
+      }
     });
   }, [hasWallet, selectedKeyInfo?.id]);
 
@@ -589,7 +605,9 @@ const ZcashContent = ({
 
   // fetch orchard balance from worker — re-fetch on sync progress and height changes
   useEffect(() => {
-    if (!selectedKeyInfo) return;
+    if (!selectedKeyInfo) {
+      return;
+    }
     const walletId = selectedKeyInfo.id;
 
     const fetchBalance = () => {
@@ -600,8 +618,12 @@ const ZcashContent = ({
 
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
-      if (detail?.network !== 'zcash') return;
-      if (detail.walletId && detail.walletId !== walletId) return;
+      if (detail?.network !== 'zcash') {
+        return;
+      }
+      if (detail.walletId && detail.walletId !== walletId) {
+        return;
+      }
       fetchBalance();
     };
 
@@ -630,11 +652,15 @@ const ZcashContent = ({
   const [zignerShieldError, setZignerShieldError] = useState<string | null>(null);
 
   const handleZignerShield = useCallback(async () => {
-    if (!watchOnly || !selectedKeyInfo) return;
+    if (!watchOnly || !selectedKeyInfo) {
+      return;
+    }
     const ufvk =
       watchOnly.ufvk ??
       (watchOnly.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
-    if (!ufvk) return;
+    if (!ufvk) {
+      return;
+    }
 
     setZignerShieldStep('building');
     setZignerShieldTxid(null);
@@ -661,7 +687,9 @@ const ZcashContent = ({
       // encode QR sign request
       const sighashBytes = result.sighashes.map(h => {
         const bytes = new Uint8Array(32);
-        for (let i = 0; i < 32; i++) bytes[i] = parseInt(h.substring(i * 2, i * 2 + 2), 16);
+        for (let i = 0; i < 32; i++) {
+          bytes[i] = parseInt(h.substring(i * 2, i * 2 + 2), 16);
+        }
         return bytes;
       });
 
@@ -745,8 +773,12 @@ const ZcashContent = ({
   useEffect(() => {
     const handler = async (e: Event) => {
       const height = (e as CustomEvent<number>).detail;
-      if (!selectedKeyInfo) return;
-      if (isNaN(height) || height < 0) return;
+      if (!selectedKeyInfo) {
+        return;
+      }
+      if (isNaN(height) || height < 0) {
+        return;
+      }
 
       try {
         const walletId = selectedKeyInfo.id;
@@ -795,11 +827,17 @@ const ZcashContent = ({
   }, [hasMnemonic, watchOnly, selectedKeyInfo?.id, selectedKeyInfo?.type, keyRing, zidecarUrl]);
 
   const handleShield = useCallback(async () => {
-    if (!hasMnemonic || !selectedKeyInfo || selectedKeyInfo.type !== 'mnemonic') return;
-    if (shielding || transparentZat <= 0n) return;
+    if (!hasMnemonic || !selectedKeyInfo || selectedKeyInfo.type !== 'mnemonic') {
+      return;
+    }
+    if (shielding || transparentZat <= 0n) {
+      return;
+    }
 
     const authorized = await requestAuth();
-    if (!authorized) return;
+    if (!authorized) {
+      return;
+    }
 
     setShielding(true);
     setShieldTxid(null);
@@ -1327,7 +1365,9 @@ function noteAccountIndex(note: unknown): number | undefined {
   const n = note as
     | { address?: { addressView?: { case?: string; value?: { index?: { account?: number } } } } }
     | undefined;
-  if (!n?.address?.addressView) return undefined;
+  if (!n?.address?.addressView) {
+    return undefined;
+  }
   const av = n.address.addressView;
   if (av.case === 'decoded' && av.value?.index != null) {
     return av.value.index.account;
@@ -1353,13 +1393,17 @@ function parsePenumbraTx(txInfo: TransactionInfo): ParsedTransaction {
     if (c === 'spend' && action.actionView.value.spendView?.case === 'visible') {
       hasVisibleSpend = true;
       const idx = noteAccountIndex(action.actionView.value.spendView.value?.note);
-      if (idx != null) accountIndices.add(idx);
+      if (idx != null) {
+        accountIndices.add(idx);
+      }
     } else if (c === 'output') {
       hasOutput = true;
       const ov = action.actionView.value.outputView;
       if (ov?.case === 'visible') {
         const idx = noteAccountIndex(ov.value?.note);
-        if (idx != null) accountIndices.add(idx);
+        if (idx != null) {
+          accountIndices.add(idx);
+        }
       }
     } else if (c === 'swap') {
       type = 'swap';
@@ -1370,7 +1414,9 @@ function parsePenumbraTx(txInfo: TransactionInfo): ParsedTransaction {
         const v = sv.value as { output1?: unknown; output2?: unknown };
         for (const out of [v.output1, v.output2]) {
           const idx = noteAccountIndex(out);
-          if (idx != null) accountIndices.add(idx);
+          if (idx != null) {
+            accountIndices.add(idx);
+          }
         }
       }
     } else if (c === 'swapClaim') {
@@ -1383,7 +1429,9 @@ function parsePenumbraTx(txInfo: TransactionInfo): ParsedTransaction {
         const v = scv.value as { output1?: unknown; output2?: unknown };
         for (const out of [v.output1, v.output2]) {
           const idx = noteAccountIndex(out);
-          if (idx != null) accountIndices.add(idx);
+          if (idx != null) {
+            accountIndices.add(idx);
+          }
         }
       }
     } else if (c === 'delegate') {
@@ -1409,7 +1457,9 @@ function parsePenumbraTx(txInfo: TransactionInfo): ParsedTransaction {
   const memoView = txInfo.view?.bodyView?.memoView?.memoView;
   if (memoView?.case === 'visible' && memoView.value.plaintext?.text) {
     const text = memoView.value.plaintext.text.trim();
-    if (text) memo = text;
+    if (text) {
+      memo = text;
+    }
   }
 
   return { id, height, timestamp: null, type, description, memo, accountIndices };
@@ -1417,11 +1467,15 @@ function parsePenumbraTx(txInfo: TransactionInfo): ParsedTransaction {
 
 /** format ZEC with meaningful digits only — no trailing zeros, min 2 decimals */
 function fmtZec(val: number): string {
-  if (val === 0) return '0';
+  if (val === 0) {
+    return '0';
+  }
   const s = val.toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
   // ensure at least 2 decimal places for readability
   const dot = s.indexOf('.');
-  if (dot === -1) return s + '.00';
+  if (dot === -1) {
+    return s + '.00';
+  }
   const decimals = s.length - dot - 1;
   return decimals < 2 ? s + '0'.repeat(2 - decimals) : s;
 }
@@ -1434,7 +1488,9 @@ function zatToZec(zat: bigint | string): string {
 }
 
 function fmtTime(ts: number | null): string {
-  if (ts === null) return '...';
+  if (ts === null) {
+    return '...';
+  }
   const d = new Date(ts);
   const now = new Date();
   const diff = Math.floor(
@@ -1443,9 +1499,15 @@ function fmtTime(ts: number | null): string {
       86400000,
   );
   const t = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  if (diff === 0) return `Today ${t}`;
-  if (diff === 1) return `Yesterday ${t}`;
-  if (diff < 7) return `${d.toLocaleDateString([], { weekday: 'short' })} ${t}`;
+  if (diff === 0) {
+    return `Today ${t}`;
+  }
+  if (diff === 1) {
+    return `Yesterday ${t}`;
+  }
+  if (diff < 7) {
+    return `${d.toLocaleDateString([], { weekday: 'short' })} ${t}`;
+  }
   return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${t}`;
 }
 
@@ -1544,7 +1606,9 @@ const HistoryContent = ({
   const memoByTxId = useMemo(() => {
     const map = new Map<string, string>();
     for (const m of messages.getByNetwork(network as 'zcash' | 'penumbra')) {
-      if (m.content) map.set(m.txId, m.content);
+      if (m.content) {
+        map.set(m.txId, m.content);
+      }
     }
     return map;
   }, [messages, network]);
@@ -1559,7 +1623,9 @@ const HistoryContent = ({
     queryFn: async () => {
       const txs: ParsedTransaction[] = [];
       for await (const r of viewClient.transactionInfo({})) {
-        if (r.txInfo) txs.push(parsePenumbraTx(r.txInfo));
+        if (r.txInfo) {
+          txs.push(parsePenumbraTx(r.txInfo));
+        }
       }
       const heights = [...new Set(txs.map(t => t.height))];
       const tsMap = new Map<number, number>();
@@ -1567,13 +1633,17 @@ const HistoryContent = ({
         heights.map(async h => {
           try {
             const { timestamp } = await sctClient.timestampByHeight({ height: BigInt(h) });
-            if (timestamp) tsMap.set(h, timestamp.toDate().getTime());
+            if (timestamp) {
+              tsMap.set(h, timestamp.toDate().getTime());
+            }
           } catch {
             /* */
           }
         }),
       );
-      for (const t of txs) t.timestamp = tsMap.get(t.height) ?? null;
+      for (const t of txs) {
+        t.timestamp = tsMap.get(t.height) ?? null;
+      }
       txs.sort((a, b) => b.height - a.height);
       return txs;
     },
@@ -1584,7 +1654,9 @@ const HistoryContent = ({
     enabled: network === 'zcash' && !!walletId && historyEnabled,
     staleTime: 10_000,
     queryFn: async () => {
-      if (!walletId) return [];
+      if (!walletId) {
+        return [];
+      }
       const entries = await getHistoryInWorker('zcash', walletId, zidecarUrl, tAddresses);
       return entries.map(e => ({
         id: e.id,

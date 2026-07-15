@@ -27,8 +27,12 @@ const formatEnd = (round: VotingRound): string => {
   const now = Date.now() / 1000;
   const dt = round.votingEnd - now;
   if (round.status === 'active' && dt > 0) {
-    if (dt > 86400) return `ends in ${Math.round(dt / 86400)}d`;
-    if (dt > 3600) return `ends in ${Math.round(dt / 3600)}h`;
+    if (dt > 86400) {
+      return `ends in ${Math.round(dt / 86400)}d`;
+    }
+    if (dt > 3600) {
+      return `ends in ${Math.round(dt / 3600)}h`;
+    }
     return 'ends soon';
   }
   return `ended ${new Date(round.votingEnd * 1000).toISOString().slice(0, 10)}`;

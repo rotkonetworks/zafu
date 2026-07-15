@@ -36,10 +36,10 @@
    *   label   12px — kickers, tab labels, captions (the floor)
    * ============================================================== */
   --text-display: 28px;
-  --text-title:   17px;
-  --text-body:    14px;
-  --text-data:    13px;
-  --text-label:   12px;
+  --text-title: 17px;
+  --text-body: 14px;
+  --text-data: 13px;
+  --text-label: 12px;
 
   /* ==============================================================
    * v2 design-system tokens — register with Tailwind so utilities

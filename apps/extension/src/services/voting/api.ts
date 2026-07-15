@@ -39,7 +39,9 @@ const getJson = async <T>(url: string): Promise<T> => {
     headers: { Accept: 'application/json' },
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
-  if (!resp.ok) throw new Error(`HTTP ${resp.status} from ${new URL(url).host}`);
+  if (!resp.ok) {
+    throw new Error(`HTTP ${resp.status} from ${new URL(url).host}`);
+  }
   return resp.json() as Promise<T>;
 };
 
@@ -67,7 +69,9 @@ export const fetchStaticConfig = async (
   source: PinnedConfigSource,
 ): Promise<StaticVotingConfig> => {
   const resp = await fetch(source.url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
-  if (!resp.ok) throw new Error(`static voting config: HTTP ${resp.status}`);
+  if (!resp.ok) {
+    throw new Error(`static voting config: HTTP ${resp.status}`);
+  }
   const body = await resp.arrayBuffer();
 
   if (source.sha256) {
@@ -115,14 +119,14 @@ interface ChainRoundDto {
   ceremony_phase_start?: number;
   status?: number;
   discussion_url?: string | null;
-  proposals?: Array<{
+  proposals?: {
     id: number;
     title?: string;
     description?: string;
-    options?: Array<{ id: number; label?: string }>;
+    options?: { id: number; label?: string }[];
     zip_number?: string | null;
     forum_url?: string | null;
-  }>;
+  }[];
 }
 
 const STATUS_BY_CODE: Record<number, RoundStatus> = {
@@ -133,7 +137,9 @@ const STATUS_BY_CODE: Record<number, RoundStatus> = {
 
 /** Round ids arrive as hex or base64 depending on server build; normalize to lowercase hex. */
 const normalizeRoundId = (raw: string): string => {
-  if (/^[0-9a-fA-F]{64}$/.test(raw)) return raw.toLowerCase();
+  if (/^[0-9a-fA-F]{64}$/.test(raw)) {
+    return raw.toLowerCase();
+  }
   try {
     const bytes = Uint8Array.from(atob(raw), c => c.charCodeAt(0));
     return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
@@ -186,7 +192,7 @@ export const fetchTally = async (
     config.vote_servers.map(s => s.url),
     base =>
       getJson<{
-        results?: Array<{ proposal_id: number; vote_decision?: number; total_value?: number }>;
+        results?: { proposal_id: number; vote_decision?: number; total_value?: number }[];
       }>(`${base}${tallyPath(roundIdHex)}`),
   );
   const byProposal = new Map<number, { optionId: number; weight: number }[]>();

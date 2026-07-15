@@ -239,7 +239,10 @@ export const SettingsZigner = () => {
                         <EyeOpenIcon className={`size-4 ${colorClass} flex-shrink-0`} />
                         <span className='text-data text-fg-high truncate'>{vault.name}</span>
                         {networks.map(n => (
-                          <span key={n} className='rounded-sm text-label px-1 bg-elev-2 text-fg-dim lowercase'>
+                          <span
+                            key={n}
+                            className='rounded-sm text-label px-1 bg-elev-2 text-fg-dim lowercase'
+                          >
                             {n}
                           </span>
                         ))}
@@ -364,31 +367,24 @@ export const SettingsZigner = () => {
 
                 {errorMessage && <p className='text-xs text-red-400'>{errorMessage}</p>}
 
-              <div className='flex gap-2'>
-                <Button variant='secondary' className='flex-1' onClick={resetForm}>
-                  Cancel
-                </Button>
-                <Button
-                  variant='gradient'
-                  className='flex-1'
-                  onClick={handleAddWallet}
-                  disabled={(!walletImport && !zcashWalletImport && !parsedPolkadotExport && !parsedCosmosExport) || isAdding}
-                >
-                  {isAdding ? 'Adding...' : 'Add Wallet'}
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Scanned QR - ready to add */}
-          {showScannedState && (
-            <div className='flex flex-col gap-3'>
-              <div className='border border-green-500/30 bg-green-500/10 p-3'>
-                <div className='flex items-center gap-2'>
-                  <p className='text-sm font-medium text-green-400'>qr code scanned</p>
-                  <span className='text-label px-1.5 py-0.5 bg-elev-2 text-fg-muted'>
-                    {detectedNetwork}
-                  </span>
+                <div className='flex gap-2'>
+                  <Button variant='secondary' className='flex-1' onClick={resetForm}>
+                    Cancel
+                  </Button>
+                  <Button
+                    variant='gradient'
+                    className='flex-1'
+                    onClick={handleAddWallet}
+                    disabled={
+                      (!walletImport &&
+                        !zcashWalletImport &&
+                        !parsedPolkadotExport &&
+                        !parsedCosmosExport) ||
+                      isAdding
+                    }
+                  >
+                    {isAdding ? 'Adding...' : 'Add Wallet'}
+                  </Button>
                 </div>
               </div>
             )}
@@ -399,7 +395,7 @@ export const SettingsZigner = () => {
                 <div className='border border-green-500/30 bg-green-500/10 p-3'>
                   <div className='flex items-center gap-2'>
                     <p className='text-sm font-medium text-green-400'>qr code scanned</p>
-                    <span className='text-[10px] px-1.5 py-0.5 bg-elev-2 text-fg-muted'>
+                    <span className='text-label px-1.5 py-0.5 bg-elev-2 text-fg-muted'>
                       {detectedNetwork}
                     </span>
                   </div>

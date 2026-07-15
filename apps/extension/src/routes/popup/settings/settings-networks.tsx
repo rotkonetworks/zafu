@@ -256,12 +256,12 @@ export const SettingsNetworks = () => {
   );
 };
 
-type ZcashNetworkState = {
+interface ZcashNetworkState {
   endpoint?: string;
   memoSyncStrategy?: MemoSyncStrategy;
   mempoolWatch?: MempoolWatchSetting;
   backend?: ZcashBackend;
-};
+}
 
 const regionLabel = (region: RpcEndpointRegion): string => {
   switch (region) {
@@ -331,7 +331,9 @@ const ZcashEndpointPanel = ({
   useEffect(() => {
     let cancelled = false;
     void measurePresetLatencies().then(m => {
-      if (!cancelled) setLatencies(m);
+      if (!cancelled) {
+        setLatencies(m);
+      }
     });
     return () => {
       cancelled = true;
@@ -358,7 +360,9 @@ const ZcashEndpointPanel = ({
           value={matched?.id ?? ''}
           onChange={e => {
             const preset = ZCASH_MAINNET_ENDPOINTS.find(p => p.id === e.target.value);
-            if (preset) onPick(preset.url);
+            if (preset) {
+              onPick(preset.url);
+            }
           }}
           className='w-full bg-input border border-border-soft px-2 py-1.5 text-xs focus:border-primary/50 focus:outline-none'
         >

@@ -303,9 +303,9 @@ export const MultisigSign = () => {
       {PasswordModal}
       <div className='mb-4 rounded-lg border border-border-soft bg-elev-1 p-3'>
         <p className='text-label text-fg-muted'>signing as</p>
-        <p className='mt-0.5 text-sm font-medium truncate'>{activeWallet!.label}</p>
+        <p className='mt-0.5 text-sm font-medium truncate'>{activeWallet.label}</p>
         <p className='text-label font-mono text-fg-muted truncate'>
-          {activeWallet!.address.slice(0, 16)}...{activeWallet!.address.slice(-8)}
+          {activeWallet.address.slice(0, 16)}...{activeWallet.address.slice(-8)}
         </p>
         <span className='mt-1 inline-block rounded-md bg-primary/10 px-2 py-0.5 text-label font-medium text-zigner-gold'>
           {ms.threshold}/{ms.maxSigners}
@@ -353,9 +353,9 @@ export const MultisigSign = () => {
           <div className='rounded-lg border border-border-soft bg-elev-1 p-3 flex flex-col gap-2.5'>
             <div>
               <p className='text-label uppercase tracking-wider text-fg-muted'>from</p>
-              <p className='mt-0.5 text-xs font-medium'>{activeWallet!.label}</p>
+              <p className='mt-0.5 text-xs font-medium'>{activeWallet.label}</p>
               <p className='mt-0.5 break-all font-mono text-label text-fg-muted'>
-                {activeWallet!.address}
+                {activeWallet.address}
               </p>
             </div>
             <div className='border-t border-border-soft' />

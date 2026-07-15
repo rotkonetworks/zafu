@@ -23,7 +23,9 @@ export const Login = () => {
 
   const handleUnlock = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (unlocking) return;
+    if (unlocking) {
+      return;
+    }
     setUnlocking(true);
 
     void (async function () {
