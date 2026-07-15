@@ -237,6 +237,9 @@ jobs:
       # oauth2.googleapis.com/token.
       - name: Publish to Chrome Web Store
         if: steps.vars.outputs.channel != 'skip'
+        # CWS OAuth (CWS_PUBLISHER_JSON) publishing is done manually for now —
+        # keep the attempt but never let it fail the GitHub release.
+        continue-on-error: true
         env:
           CWS_PUBLISHER_JSON: ${{ secrets.CWS_PUBLISHER_JSON }}
           VER: ${{ steps.vars.outputs.version }}
