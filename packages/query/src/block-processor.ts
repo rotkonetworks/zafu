@@ -146,9 +146,15 @@ export class BlockProcessor implements BlockProcessorInterface {
       numOfAttempts: Infinity,
       maxDelay: 20_000, // 20 seconds
       retry: async (e, attemptNumber) => {
+        // Intentional stop (wallet switch, shutdown): in-flight RPCs reject
+        // with the abort reason. That's teardown, not a sync failure - no
+        // scary log, no tree reset, no retry.
+        if (this.abortController.signal.aborted) {
+          return false;
+        }
         console.error(`Sync failure #${attemptNumber}: `, e);
         await this.viewServer.resetTreeToStored();
-        return !this.abortController.signal.aborted;
+        return true;
       },
     })).finally(
       // if the above promise completes, exponential backoff has ended (aborted).
