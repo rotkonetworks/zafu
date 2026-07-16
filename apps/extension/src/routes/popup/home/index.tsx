@@ -924,13 +924,22 @@ const ZcashContent = ({
   const allSynced =
     zcashBackend === 'lightwalletd' ? scanPct >= 100 : scanPct >= 100 && ligeritoPct >= 100;
 
+  // Right after a birthday change the worker's last reported height can sit
+  // at or below the new start height - that's 0 scan progress, not a reason
+  // to fall back to the server pipeline pct (which reads 100% once the
+  // pipeline is ready and made the bar claim "syncing 100.0%" with nothing
+  // scanned yet).
+  const scanNotStarted = workerSyncHeight > 0 && workerSyncHeight <= walletBirthday;
+
   // overall sync percentage (0-100) with 1 decimal — zashi style
   const overallPct =
     scanPct > 0
       ? Math.min(100, (scanProgress / scanRange) * 100)
-      : ligeritoPct > 0
-        ? Math.min(100, ligeritoPct)
-        : nomtPct;
+      : scanNotStarted
+        ? 0
+        : ligeritoPct > 0
+          ? Math.min(100, ligeritoPct)
+          : nomtPct;
 
   // combined balance
   const totalZat = orchardZat + transparentZat;
@@ -1108,7 +1117,7 @@ const ZcashContent = ({
               ? 'connecting...'
               : scanPct > 0
                 ? `scanning · ${overallPct.toFixed(1)}%`
-                : zcashBackend === 'lightwalletd'
+                : zcashBackend === 'lightwalletd' || scanNotStarted
                   ? 'starting scan...'
                   : gigaproofStatus >= 2
                     ? `ligerito · ${blocksUntilReady <= 0 ? 'verified' : `${blocksUntilReady} blocks`}`
