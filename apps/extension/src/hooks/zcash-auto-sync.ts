@@ -78,6 +78,11 @@ export function useZcashAutoSync() {
 
   // track which walletId we started sync for, to avoid double-start
   const syncingWalletRef = useRef<string | null>(null);
+  // endpoint/backend the running sync was started with. The worker loop
+  // captures its client once at start, so an endpoint or backend switch
+  // mid-sync would otherwise leave a stale client hammering the wrong
+  // server type (HTTP 415 storm) until the wallet changes.
+  const syncEndpointRef = useRef<{ endpoint: string; backend: ZcashBackend } | null>(null);
 
   // eagerly pre-spawn zcash worker when on zcash network
   // decouples WASM loading from wallet data hydration so the worker
@@ -113,8 +118,22 @@ export function useZcashAutoSync() {
     }
 
     if (isWalletSyncing('zcash', walletId)) {
-      syncingWalletRef.current = walletId;
-      return;
+      const started = syncEndpointRef.current;
+      const endpointChanged =
+        started !== null && (started.endpoint !== zidecarUrl || started.backend !== zcashBackend);
+      if (!endpointChanged) {
+        syncingWalletRef.current = walletId;
+        return;
+      }
+      // endpoint or backend changed mid-sync - stop the stale loop the same
+      // way a wallet switch does, then fall through to start a fresh sync
+      // against the new server. The worker treats this abort as intentional
+      // (no error surfacing), and runSync waits for the old loop to drain
+      // before starting the new one.
+      console.log('[zcash-sync] endpoint/backend changed, restarting sync for', walletId);
+      void stopSyncInWorker('zcash', walletId).catch(() => {});
+      syncingWalletRef.current = null;
+      syncEndpointRef.current = null;
     }
 
     let cancelled = false;
@@ -147,6 +166,7 @@ export function useZcashAutoSync() {
           }
 
           syncingWalletRef.current = walletId;
+          syncEndpointRef.current = { endpoint: zidecarUrl, backend: zcashBackend };
           console.log('[zcash-sync] starting mnemonic sync for', walletId);
           await startSyncInWorker(
             'zcash',
@@ -162,6 +182,16 @@ export function useZcashAutoSync() {
             console.log('[zcash-sync] waiting for unlock');
           } else {
             console.error('[zcash-sync] auto-sync failed:', err);
+            // surface endpoint-class failures to the UI so the user can
+            // hit "switch node" instead of staring at "syncing 0%"
+            window.dispatchEvent(
+              new CustomEvent('zcash-sync-error', {
+                detail: {
+                  walletId,
+                  message: err instanceof Error ? err.message : String(err),
+                },
+              }),
+            );
           }
         }
       })();
@@ -212,8 +242,22 @@ export function useZcashAutoSync() {
     }
 
     if (isWalletSyncing('zcash', walletId)) {
-      syncingWalletRef.current = walletId;
-      return;
+      const started = syncEndpointRef.current;
+      const endpointChanged =
+        started !== null && (started.endpoint !== zidecarUrl || started.backend !== zcashBackend);
+      if (!endpointChanged) {
+        syncingWalletRef.current = walletId;
+        return;
+      }
+      // endpoint or backend changed mid-sync - stop the stale loop the same
+      // way a wallet switch does, then fall through to start a fresh sync
+      // against the new server. The worker treats this abort as intentional
+      // (no error surfacing), and runSync waits for the old loop to drain
+      // before starting the new one.
+      console.log('[zcash-sync] endpoint/backend changed, restarting sync for', walletId);
+      void stopSyncInWorker('zcash', walletId).catch(() => {});
+      syncingWalletRef.current = null;
+      syncEndpointRef.current = null;
     }
 
     let cancelled = false;
@@ -230,6 +274,7 @@ export function useZcashAutoSync() {
           return;
         }
         syncingWalletRef.current = walletId;
+        syncEndpointRef.current = { endpoint: zidecarUrl, backend: zcashBackend };
         console.log('[zcash-sync] starting watch-only sync for', walletId);
         await startWatchOnlySyncInWorker(
           'zcash',
@@ -242,6 +287,14 @@ export function useZcashAutoSync() {
         );
       } catch (err) {
         console.error('[zcash-sync] watch-only auto-sync failed:', err);
+        window.dispatchEvent(
+          new CustomEvent('zcash-sync-error', {
+            detail: {
+              walletId,
+              message: err instanceof Error ? err.message : String(err),
+            },
+          }),
+        );
       }
     })();
 

@@ -462,6 +462,24 @@ const waitForSyncStop = async (state: WalletState, timeoutMs = 2000): Promise<vo
   }
 };
 
+/**
+ * Sleep that wakes early when the sync loop is asked to stop. The loop's
+ * idle wait (10s at tip) and error backoff (up to 30s) are much longer than
+ * waitForSyncStop's 2s budget - a plain setTimeout sleep would let a stale
+ * loop outlive the teardown and race a freshly-started sync (e.g. after an
+ * endpoint switch, the old loop keeps its old client).
+ */
+const sleepUnlessAborted = async (state: WalletState, ms: number): Promise<void> => {
+  const deadline = Date.now() + ms;
+  while (!state.syncAbort) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      return;
+    }
+    await new Promise(r => setTimeout(r, Math.min(250, remaining)));
+  }
+};
+
 const getOrCreateWalletState = (walletId: string): WalletState => {
   let state = walletStates.get(walletId);
   if (!state) {
@@ -1852,7 +1870,7 @@ const runSync = async (
           walletId,
           payload: { currentHeight, chainHeight, notesFound: state.notes.length, blocksScanned: 0 },
         });
-        await new Promise(r => setTimeout(r, 10000));
+        await sleepUnlessAborted(state, 10000);
         continue;
       }
 
@@ -1873,7 +1891,7 @@ const runSync = async (
           `[zcash-worker] getCompactBlocks(${currentHeight + 1}..${endHeight}) returned 0 blocks, retrying`,
         );
         const backoff = Math.min(30000, 1000 * Math.pow(2, consecutiveErrors - 1));
-        await new Promise(r => setTimeout(r, backoff));
+        await sleepUnlessAborted(state, backoff);
         if (consecutiveErrors >= 10) {
           console.error('[zcash-worker] too many errors, stopping sync');
           break;
@@ -2159,11 +2177,30 @@ const runSync = async (
 
       consecutiveErrors = 0;
     } catch (err) {
+      // Intentional stop (wallet switch, endpoint change, shutdown): in-flight
+      // RPCs can fail once teardown begins. That's not a sync failure - no
+      // error count, no sync-error to the UI. Mirrors the abort handling in
+      // packages/query block-processor retry.
+      if (state.syncAbort) {
+        break;
+      }
       consecutiveErrors++;
       console.error(`[zcash-worker] sync error (${consecutiveErrors}):`, err);
+      // surface to UI from the second consecutive failure (skip transient
+      // single hiccups, but don't make the user stare at "syncing 0%" while
+      // we silently retry forever)
+      if (consecutiveErrors >= 2) {
+        workerSelf.postMessage({
+          type: 'sync-error',
+          id: '',
+          network: 'zcash',
+          walletId,
+          payload: { message: err instanceof Error ? err.message : String(err) },
+        });
+      }
       // back off exponentially, max 30s
       const backoff = Math.min(30000, 2000 * Math.pow(2, consecutiveErrors - 1));
-      await new Promise(r => setTimeout(r, backoff));
+      await sleepUnlessAborted(state, backoff);
       // after 10 consecutive errors, give up
       if (consecutiveErrors >= 10) {
         console.error('[zcash-worker] too many errors, stopping sync');

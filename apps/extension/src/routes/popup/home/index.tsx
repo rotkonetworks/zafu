@@ -809,13 +809,22 @@ const ZcashContent = ({
 
         if (hasMnemonic && selectedKeyInfo.type === 'mnemonic') {
           const mnemonic = await keyRing.getMnemonic(walletId);
-          await startSyncInWorker('zcash', walletId, mnemonic, zidecarUrl, height);
+          // pass the configured backend - defaulting to zidecar here would
+          // point a zidecar client at a lightwalletd endpoint (HTTP 415s)
+          await startSyncInWorker('zcash', walletId, mnemonic, zidecarUrl, height, zcashBackend);
         } else if (watchOnly) {
           const ufvkStr =
             watchOnly.ufvk ??
             (watchOnly.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
           if (ufvkStr) {
-            await startWatchOnlySyncInWorker('zcash', walletId, ufvkStr, zidecarUrl, height);
+            await startWatchOnlySyncInWorker(
+              'zcash',
+              walletId,
+              ufvkStr,
+              zidecarUrl,
+              height,
+              zcashBackend,
+            );
           }
         }
       } catch (err) {
@@ -824,7 +833,15 @@ const ZcashContent = ({
     };
     window.addEventListener('zcash-rescan', handler);
     return () => window.removeEventListener('zcash-rescan', handler);
-  }, [hasMnemonic, watchOnly, selectedKeyInfo?.id, selectedKeyInfo?.type, keyRing, zidecarUrl]);
+  }, [
+    hasMnemonic,
+    watchOnly,
+    selectedKeyInfo?.id,
+    selectedKeyInfo?.type,
+    keyRing,
+    zidecarUrl,
+    zcashBackend,
+  ]);
 
   const handleShield = useCallback(async () => {
     if (!hasMnemonic || !selectedKeyInfo || selectedKeyInfo.type !== 'mnemonic') {
@@ -907,13 +924,22 @@ const ZcashContent = ({
   const allSynced =
     zcashBackend === 'lightwalletd' ? scanPct >= 100 : scanPct >= 100 && ligeritoPct >= 100;
 
+  // Right after a birthday change the worker's last reported height can sit
+  // at or below the new start height - that's 0 scan progress, not a reason
+  // to fall back to the server pipeline pct (which reads 100% once the
+  // pipeline is ready and made the bar claim "syncing 100.0%" with nothing
+  // scanned yet).
+  const scanNotStarted = workerSyncHeight > 0 && workerSyncHeight <= walletBirthday;
+
   // overall sync percentage (0-100) with 1 decimal — zashi style
   const overallPct =
     scanPct > 0
       ? Math.min(100, (scanProgress / scanRange) * 100)
-      : ligeritoPct > 0
-        ? Math.min(100, ligeritoPct)
-        : nomtPct;
+      : scanNotStarted
+        ? 0
+        : ligeritoPct > 0
+          ? Math.min(100, ligeritoPct)
+          : nomtPct;
 
   // combined balance
   const totalZat = orchardZat + transparentZat;
@@ -1091,7 +1117,7 @@ const ZcashContent = ({
               ? 'connecting...'
               : scanPct > 0
                 ? `scanning · ${overallPct.toFixed(1)}%`
-                : zcashBackend === 'lightwalletd'
+                : zcashBackend === 'lightwalletd' || scanNotStarted
                   ? 'starting scan...'
                   : gigaproofStatus >= 2
                     ? `ligerito · ${blocksUntilReady <= 0 ? 'verified' : `${blocksUntilReady} blocks`}`

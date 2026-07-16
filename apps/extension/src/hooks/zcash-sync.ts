@@ -36,11 +36,33 @@ export function useZcashSyncStatus(): ZcashSyncState {
   const activeWalletId = selectedKeyInfo?.id;
   const [workerSyncHeight, setWorkerSyncHeight] = useState(0);
   const [workerChainHeight, setWorkerChainHeight] = useState(0);
+  // Last sync error captured from the worker (via zcash-sync-error events).
+  // Cleared on wallet switch and whenever sync makes forward progress. Lets
+  // the sync bar surface "endpoint won't respond - switch node" instead of
+  // silently sitting at 0%.
+  const [workerError, setWorkerError] = useState<Error | null>(null);
 
   // reset on wallet switch
   useEffect(() => {
     setWorkerSyncHeight(0);
     setWorkerChainHeight(0);
+    setWorkerError(null);
+  }, [activeWalletId]);
+
+  // listen for sync errors relayed from the worker (network-worker.ts) and
+  // dispatched by the auto-sync hook on start failures
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ walletId?: string; message?: string }>).detail;
+      if (activeWalletId && detail?.walletId && detail.walletId !== activeWalletId) {
+        return;
+      }
+      if (typeof detail?.message === 'string') {
+        setWorkerError(new Error(detail.message));
+      }
+    };
+    window.addEventListener('zcash-sync-error', handler);
+    return () => window.removeEventListener('zcash-sync-error', handler);
   }, [activeWalletId]);
 
   // listen for worker sync-progress events — filter by active wallet
@@ -56,9 +78,12 @@ export function useZcashSyncStatus(): ZcashSyncState {
       }
       if (typeof detail.currentHeight === 'number') {
         setWorkerSyncHeight(detail.currentHeight);
+        // forward progress means the endpoint is responding - clear stale error
+        setWorkerError(null);
       }
       if (typeof detail.chainHeight === 'number') {
         setWorkerChainHeight(detail.chainHeight);
+        setWorkerError(null);
       }
     };
 
@@ -115,6 +140,8 @@ export function useZcashSyncStatus(): ZcashSyncState {
     workerSyncHeight,
     workerChainHeight,
     isLoading: syncLoading || tipLoading,
-    error: syncError ?? tipError,
+    // workerError (sync loop / auto-sync failures) takes precedence over the
+    // status/tip query errors - it's the one the user actually needs to act on.
+    error: workerError ?? syncError ?? tipError,
   };
 }
