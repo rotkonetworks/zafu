@@ -273,7 +273,7 @@ export const popupRoutes: RouteObject[] = [
         ),
       },
       {
-        path: '/approval/zcash-send',
+        path: PopupPath.ZCASH_SEND_APPROVAL,
         element: (
           <Suspense fallback={<LazyFallback />}>
             <ZcashSendApproval />
