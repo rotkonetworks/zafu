@@ -2161,6 +2161,18 @@ const runSync = async (
     } catch (err) {
       consecutiveErrors++;
       console.error(`[zcash-worker] sync error (${consecutiveErrors}):`, err);
+      // surface to UI from the second consecutive failure (skip transient
+      // single hiccups, but don't make the user stare at "syncing 0%" while
+      // we silently retry forever)
+      if (consecutiveErrors >= 2) {
+        workerSelf.postMessage({
+          type: 'sync-error',
+          id: '',
+          network: 'zcash',
+          walletId,
+          payload: { message: err instanceof Error ? err.message : String(err) },
+        });
+      }
       // back off exponentially, max 30s
       const backoff = Math.min(30000, 2000 * Math.pow(2, consecutiveErrors - 1));
       await new Promise(r => setTimeout(r, backoff));

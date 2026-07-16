@@ -62,6 +62,7 @@ export interface NetworkWorkerResponse {
     | 'ready'
     | 'address'
     | 'sync-progress'
+    | 'sync-error'
     | 'send-progress'
     | 'sync-started'
     | 'sync-stopped'
@@ -174,6 +175,19 @@ const spawnNetworkWorkerInner = async (network: NetworkType): Promise<void> => {
       window.dispatchEvent(
         new CustomEvent('network-sync-progress', {
           detail: { network, walletId: msg.walletId, ...(msg.payload as object) },
+        }),
+      );
+      return;
+    }
+
+    if (msg.type === 'sync-error' && network === 'zcash') {
+      // forward worker-side sync failures (HTTP 415, GetTip errors, etc) to
+      // the UI via the same event the auto-sync hook uses. The sync bar
+      // listener already picks this up and shows the "switch node" action.
+      const payload = msg.payload as { message?: string } | undefined;
+      window.dispatchEvent(
+        new CustomEvent('zcash-sync-error', {
+          detail: { walletId: msg.walletId, message: payload?.message ?? 'sync error' },
         }),
       );
       return;

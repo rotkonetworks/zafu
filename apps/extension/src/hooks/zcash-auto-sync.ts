@@ -162,6 +162,16 @@ export function useZcashAutoSync() {
             console.log('[zcash-sync] waiting for unlock');
           } else {
             console.error('[zcash-sync] auto-sync failed:', err);
+            // surface endpoint-class failures to the UI so the user can
+            // hit "switch node" instead of staring at "syncing 0%"
+            window.dispatchEvent(
+              new CustomEvent('zcash-sync-error', {
+                detail: {
+                  walletId,
+                  message: err instanceof Error ? err.message : String(err),
+                },
+              }),
+            );
           }
         }
       })();
@@ -242,6 +252,14 @@ export function useZcashAutoSync() {
         );
       } catch (err) {
         console.error('[zcash-sync] watch-only auto-sync failed:', err);
+        window.dispatchEvent(
+          new CustomEvent('zcash-sync-error', {
+            detail: {
+              walletId,
+              message: err instanceof Error ? err.message : String(err),
+            },
+          }),
+        );
       }
     })();
 
