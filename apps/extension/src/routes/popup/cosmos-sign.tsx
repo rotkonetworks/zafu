@@ -129,7 +129,7 @@ export const CosmosSign = () => {
   const handleScan = useCallback(
     async (hex: string) => {
       if (!isCosmosSignatureQR(hex)) {
-        setError('invalid signature QR — expected 64-byte cosmos signature');
+        setError('invalid signature QR - expected 64-byte cosmos signature');
         setStep('error');
         return;
       }
@@ -176,7 +176,7 @@ export const CosmosSign = () => {
   // Loading
   if (step === 'loading') {
     return (
-      <div className='flex h-screen items-center justify-center bg-canvas'>
+      <div className='flex h-full min-h-0 items-center justify-center bg-canvas'>
         <p className='text-sm text-fg-muted'>loading...</p>
       </div>
     );
@@ -185,15 +185,15 @@ export const CosmosSign = () => {
   // Show QR for Zigner to scan
   if (step === 'show-qr' && signData) {
     return (
-      <div className='flex h-screen flex-col bg-canvas'>
-        <header className='border-b border-border-soft p-4'>
+      <div className='flex h-full min-h-0 flex-col bg-canvas'>
+        <header className='shrink-0 border-b border-border-soft p-4'>
           <span className='kicker'>ibc / cosmos transaction</span>
           <h1 className='mt-1 text-title text-fg-high lowercase tracking-[-0.01em]'>
             sign with zigner
           </h1>
         </header>
 
-        <div className='grow overflow-auto p-4 flex flex-col gap-4'>
+        <div className='min-h-0 flex-1 overflow-y-auto p-4 flex flex-col gap-4'>
           {/* Transaction summary */}
           {txSummary && (
             <div className='rounded-md border border-border-soft bg-elev-1 p-3'>
@@ -230,7 +230,7 @@ export const CosmosSign = () => {
           </div>
         </div>
 
-        <div className='border-t border-border-soft p-4 flex gap-3'>
+        <div className='shrink-0 border-t border-border-soft p-4 flex gap-3'>
           <Button
             variant='gradient'
             className='flex-1 py-3.5 text-base'
@@ -255,7 +255,7 @@ export const CosmosSign = () => {
   // Scan signature from Zigner
   if (step === 'scan-qr') {
     return (
-      <div className='flex h-screen flex-col bg-canvas'>
+      <div className='flex h-full min-h-0 flex-col bg-canvas'>
         <QrScanner
           onScan={handleScan}
           onClose={() => setStep('show-qr')}
@@ -269,7 +269,7 @@ export const CosmosSign = () => {
   // Broadcasting
   if (step === 'broadcasting') {
     return (
-      <div className='flex h-screen flex-col items-center justify-center bg-canvas gap-4'>
+      <div className='flex h-full min-h-0 flex-col items-center justify-center bg-canvas gap-4'>
         <div className='animate-spin rounded-full h-6 w-6 border-2 border-zigner-gold border-t-transparent' />
         <p className='text-data text-fg lowercase'>broadcasting transaction...</p>
       </div>
@@ -279,7 +279,7 @@ export const CosmosSign = () => {
   // Success
   if (step === 'success') {
     return (
-      <div className='flex h-screen flex-col items-center justify-center bg-canvas gap-4 p-6'>
+      <div className='flex h-full min-h-0 flex-col items-center justify-center bg-canvas gap-4 p-6'>
         <div className='w-16 h-16 rounded-full bg-success/20 flex items-center justify-center'>
           <span className='i-lucide-check w-8 h-8 text-success' />
         </div>
@@ -299,7 +299,7 @@ export const CosmosSign = () => {
 
   // Error
   return (
-    <div className='flex h-screen flex-col items-center justify-center bg-canvas gap-4 p-6'>
+    <div className='flex h-full min-h-0 flex-col items-center justify-center bg-canvas gap-4 p-6'>
       <p className='text-red-400 text-center'>{error}</p>
       <div className='flex gap-3'>
         <Button

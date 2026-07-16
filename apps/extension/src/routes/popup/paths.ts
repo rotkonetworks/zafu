@@ -48,6 +48,9 @@ export enum PopupPath {
   // Capability approval (opened by external apps via zafu_request_capability)
   CAPABILITY_APPROVAL = '/approval/capability',
 
+  // Zcash multi-output send approval (opened by external apps via zafu_zcash_send)
+  ZCASH_SEND_APPROVAL = '/approval/zcash-send',
+
   // Settings sub-pages (multisig)
   SETTINGS_MULTISIG = '/settings/multisig',
   SETTINGS_MULTISIG_BACKUP = '/settings/multisig-backup',

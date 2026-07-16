@@ -1,6 +1,7 @@
 import { ConnectError, Code } from '@connectrpc/connect';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { PopupPath } from './routes/popup/paths';
+import { openApprovalPopup } from './utils/popup-window';
 
 const POPUP_BASE = chrome.runtime.getURL('/popup.html');
 const LOGIN_POLL_INTERVAL = 500;
@@ -10,23 +11,10 @@ const LOGIN_POLL_INTERVAL = 500;
  * Resolves when logged in, rejects if window is closed without logging in.
  */
 const spawnLoginPopup = async (): Promise<void> => {
-  const geometry = await chrome.windows
-    .getLastFocused()
-    .then(({ top = 0, left = 0, width = 0 }) => ({
-      width: 400,
-      height: 628,
-      top: Math.max(0, top),
-      left: Math.max(0, left + width - 400),
-    }));
-
   const loginUrl = new URL(POPUP_BASE);
   loginUrl.hash = PopupPath.LOGIN;
 
-  const win = await chrome.windows.create({
-    url: loginUrl.href,
-    type: 'popup',
-    ...geometry,
-  });
+  const win = await openApprovalPopup(loginUrl.href);
 
   const windowId = win.id!;
 

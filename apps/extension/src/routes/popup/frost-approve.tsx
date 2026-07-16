@@ -376,7 +376,7 @@ export const FrostApprove = () => {
     for (const peerFvk of peerFvks) {
       if (peerFvk !== orchardFvk) {
         throw new Error(
-          `FVK mismatch: peer saw a different viewing key — ours ends …${orchardFvk.slice(-8)}, theirs ends …${peerFvk.slice(-8)}`,
+          `FVK mismatch: peer saw a different viewing key - ours ends …${orchardFvk.slice(-8)}, theirs ends …${peerFvk.slice(-8)}`,
         );
       }
     }
@@ -591,7 +591,7 @@ export const FrostApprove = () => {
       await relay.sendMessage(roomCode, pid, new TextEncoder().encode(`S:${i}:${share}`));
     }
 
-    setStatus('done — host will broadcast the transaction');
+    setStatus('done - host will broadcast the transaction');
     abort.abort();
     const res = { success: true, signed: true, actions: n };
     setResult(res);
@@ -613,86 +613,89 @@ export const FrostApprove = () => {
               : action;
 
   return (
-    <div className='flex flex-col h-full p-4 gap-4'>
-      <div className='text-center'>
+    <div className='flex h-full min-h-0 flex-col p-4 gap-4'>
+      <div className='shrink-0 text-center'>
         <span className='kicker'>frost multisig</span>
         <h2 className='mt-1 text-title text-fg-high lowercase tracking-[-0.01em]'>{actionLabel}</h2>
         <p className='mt-1 text-label text-fg-dim lowercase'>requested by {app}</p>
       </div>
 
       {phase === 'confirm' && (
-        <div className='flex flex-col gap-4 flex-1'>
-          <div className='rounded-md border border-border-soft bg-elev-1 p-3 text-xs space-y-2 text-fg'>
-            {action === 'frost-create' && (
-              <>
-                <p>
-                  Create a{' '}
-                  <span className='tabular text-zigner-gold'>
-                    {threshold}-of-{maxSigners}
-                  </span>{' '}
-                  FROST multisig wallet.
-                </p>
-                <p className='text-fg-muted'>
-                  This generates a shared key via distributed key generation. All participants must
-                  be online.
-                </p>
-              </>
-            )}
-            {action === 'frost-join' && (
-              <>
-                <p>
-                  Join FROST DKG room: <span className='tabular text-zigner-gold'>{roomCode}</span>
-                </p>
-                <p className='text-fg-muted'>
-                  You will participate in key generation to create a shared multisig wallet.
-                </p>
-              </>
-            )}
-            {action === 'dkg-join' && (
-              <>
-                <p>
-                  Join{' '}
-                  <span className='tabular text-zigner-gold'>
-                    {threshold}-of-{maxSigners}
-                  </span>{' '}
-                  multisig DKG
-                </p>
-                <p className='text-fg-muted tabular'>label: {labelPrefix}-…</p>
-                <p className='text-fg-muted'>Your share stays on this device.</p>
-              </>
-            )}
-            {action === 'frost-sign' && (
-              <>
-                <p>Co-sign a transaction with your FROST key share.</p>
-                <p className='text-fg-muted tabular break-all'>
-                  sighash: {sighashHex.slice(0, 16)}...{sighashHex.slice(-16)}
-                </p>
-              </>
-            )}
-            {action === 'poker-sign' && (
-              <>
-                <p>Approve payout from poker escrow.</p>
-                <div className='mt-1 space-y-1'>
-                  {plan.map((o, i) => (
-                    <p key={i} className='text-fg-muted tabular break-all'>
-                      → {o.address.slice(0, 14)}…{o.address.slice(-8)}
-                      <span className='text-zigner-gold'>
-                        {' '}
-                        {(o.amount_zat / 1e8).toFixed(8)} ZEC
-                      </span>
-                    </p>
-                  ))}
-                  <p className='text-fg-dim tabular'>fee {(feeZat / 1e8).toFixed(8)} ZEC</p>
-                </div>
-                <p className='text-fg-muted'>
-                  Your FROST share co-signs; escrow finalizes + broadcasts.
-                </p>
-              </>
-            )}
-            <p className='text-fg-dim tabular'>relay: {relayUrl}</p>
+        <div className='flex min-h-0 flex-1 flex-col gap-4'>
+          <div className='min-h-0 flex-1 overflow-y-auto'>
+            <div className='rounded-md border border-border-soft bg-elev-1 p-3 text-xs space-y-2 text-fg'>
+              {action === 'frost-create' && (
+                <>
+                  <p>
+                    Create a{' '}
+                    <span className='tabular text-zigner-gold'>
+                      {threshold}-of-{maxSigners}
+                    </span>{' '}
+                    FROST multisig wallet.
+                  </p>
+                  <p className='text-fg-muted'>
+                    This generates a shared key via distributed key generation. All participants
+                    must be online.
+                  </p>
+                </>
+              )}
+              {action === 'frost-join' && (
+                <>
+                  <p>
+                    Join FROST DKG room:{' '}
+                    <span className='tabular text-zigner-gold'>{roomCode}</span>
+                  </p>
+                  <p className='text-fg-muted'>
+                    You will participate in key generation to create a shared multisig wallet.
+                  </p>
+                </>
+              )}
+              {action === 'dkg-join' && (
+                <>
+                  <p>
+                    Join{' '}
+                    <span className='tabular text-zigner-gold'>
+                      {threshold}-of-{maxSigners}
+                    </span>{' '}
+                    multisig DKG
+                  </p>
+                  <p className='text-fg-muted tabular'>label: {labelPrefix}-…</p>
+                  <p className='text-fg-muted'>Your share stays on this device.</p>
+                </>
+              )}
+              {action === 'frost-sign' && (
+                <>
+                  <p>Co-sign a transaction with your FROST key share.</p>
+                  <p className='text-fg-muted tabular break-all'>
+                    sighash: {sighashHex.slice(0, 16)}...{sighashHex.slice(-16)}
+                  </p>
+                </>
+              )}
+              {action === 'poker-sign' && (
+                <>
+                  <p>Approve payout from poker escrow.</p>
+                  <div className='mt-1 space-y-1'>
+                    {plan.map((o, i) => (
+                      <p key={i} className='text-fg-muted tabular break-all'>
+                        → {o.address.slice(0, 14)}…{o.address.slice(-8)}
+                        <span className='text-zigner-gold'>
+                          {' '}
+                          {(o.amount_zat / 1e8).toFixed(8)} ZEC
+                        </span>
+                      </p>
+                    ))}
+                    <p className='text-fg-dim tabular'>fee {(feeZat / 1e8).toFixed(8)} ZEC</p>
+                  </div>
+                  <p className='text-fg-muted'>
+                    Your FROST share co-signs; escrow finalizes + broadcasts.
+                  </p>
+                </>
+              )}
+              <p className='text-fg-dim tabular'>relay: {relayUrl}</p>
+            </div>
           </div>
 
-          <div className='flex gap-2 mt-auto'>
+          <div className='flex shrink-0 gap-2 mt-auto'>
             <Button variant='secondary' className='flex-1' onClick={deny}>
               deny
             </Button>

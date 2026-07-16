@@ -177,9 +177,9 @@ export function ZcashSendApproval() {
   const isTransparent = (addr: string) => addr.startsWith('t1') || addr.startsWith('tm');
 
   return (
-    <div className='flex flex-col h-full bg-canvas text-fg p-4'>
+    <div className='flex h-full min-h-0 flex-col bg-canvas text-fg p-4'>
       {/* header */}
-      <header className='flex items-center gap-3 mb-4'>
+      <header className='flex shrink-0 items-center gap-3 mb-4'>
         {favIcon && <img src={favIcon} className='w-6 h-6 rounded-sm' alt='' />}
         <div>
           <div className='kicker'>zcash transaction</div>
@@ -198,11 +198,11 @@ export function ZcashSendApproval() {
       </div>
 
       {/* outputs list */}
-      <div className='flex-1 overflow-auto mb-4'>
+      <div className='min-h-0 flex-1 overflow-y-auto mb-4'>
         <div className='kicker mb-2'>
           {outputs.length === 1
             ? 'recipient'
-            : `${outputs.length} outputs — each sent as a separate transaction`}
+            : `${outputs.length} outputs - each sent as a separate transaction`}
         </div>
 
         {outputs.map((o, i) => (
@@ -277,7 +277,7 @@ export function ZcashSendApproval() {
       )}
 
       {/* action buttons */}
-      <div className='flex gap-3'>
+      <div className='flex shrink-0 gap-3'>
         <button
           className='flex-1 py-2.5 rounded-md border border-border-soft bg-elev-1 text-data text-fg-muted hover:text-fg-high hover:bg-elev-2 lowercase'
           onClick={handleDeny}

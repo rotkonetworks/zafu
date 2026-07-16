@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
 import { useStore } from '../../../state';
 import { signApprovalSelector } from '../../../state/sign-approval';
+import { ApprovalScreen } from './approval-screen';
 import { ApproveDeny } from './approve-deny';
 import { DisplayOriginURL } from '../../../shared/components/display-origin-url';
 import { UserChoice } from '@repo/storage-chrome/records';
@@ -184,8 +184,8 @@ export const SignApproval = () => {
     : '';
 
   return (
-    <FadeTransition>
-      <div className='flex min-h-screen w-screen flex-col gap-6'>
+    <ApprovalScreen
+      header={
         <header className='flex h-[70px] flex-col items-center justify-center border-b border-border-soft'>
           <span className='kicker mb-1'>signature request</span>
           <h1 className='text-title text-fg-high lowercase tracking-[-0.01em]'>
@@ -196,145 +196,141 @@ export const SignApproval = () => {
                 : 'sign message'}
           </h1>
         </header>
-
-        {/* ── review step ── */}
-        {step === 'review' && (
-          <>
-            <div className='mx-auto flex size-20 items-center justify-center rounded-full bg-elev-2'>
-              <span className='i-lucide-fingerprint h-10 w-10 text-fg-muted' />
-            </div>
-            <div className='w-full px-[30px]'>
-              <div className='flex flex-col gap-3'>
-                <div className='flex min-h-11 w-full items-center overflow-x-auto rounded-md bg-elev-2 p-3 text-fg-muted'>
-                  <div className='mx-auto items-center text-center leading-[0.8em]'>
-                    {origin && <DisplayOriginURL url={new URL(origin)} />}
-                  </div>
+      }
+      footer={step === 'review' ? <ApproveDeny approve={approve} deny={deny} /> : undefined}
+    >
+      {/* ── review step ── */}
+      {step === 'review' && (
+        <>
+          <div className='mx-auto flex size-20 items-center justify-center rounded-full bg-elev-2'>
+            <span className='i-lucide-fingerprint h-10 w-10 text-fg-muted' />
+          </div>
+          <div className='w-full px-[30px]'>
+            <div className='flex flex-col gap-3'>
+              <div className='flex min-h-11 w-full items-center overflow-x-auto rounded-md bg-elev-2 p-3 text-fg-muted'>
+                <div className='mx-auto items-center text-center leading-[0.8em]'>
+                  {origin && <DisplayOriginURL url={new URL(origin)} />}
                 </div>
-                {statement && (
-                  <div className='rounded-md border border-border-soft p-3 text-xs text-fg'>
-                    {statement}
-                  </div>
-                )}
-                <div className='rounded-md bg-elev-2 p-3'>
-                  <p className='kicker'>challenge</p>
-                  <p className='mt-1 break-all tabular text-xs text-fg-high'>
-                    {challengeHex && challengeHex.length > 64
-                      ? challengeHex.slice(0, 64) + '...'
-                      : challengeHex}
-                  </p>
+              </div>
+              {statement && (
+                <div className='rounded-md border border-border-soft p-3 text-xs text-fg'>
+                  {statement}
                 </div>
-                {previewAddress && (
-                  <div className='rounded-md border border-border-soft p-3'>
-                    <p className='kicker mb-1'>
-                      signing as ({signingMode}){isAirgap ? ' — zigner' : ''}
-                    </p>
-                    <p className='tabular text-xs text-fg-high break-all'>{previewAddress}</p>
-                  </div>
-                )}
-                <p className='text-xs text-fg-muted'>
-                  this site is requesting a signature from your identity key. this will not
-                  authorize any transactions.
+              )}
+              <div className='rounded-md bg-elev-2 p-3'>
+                <p className='kicker'>challenge</p>
+                <p className='mt-1 break-all tabular text-xs text-fg-high'>
+                  {challengeHex && challengeHex.length > 64
+                    ? challengeHex.slice(0, 64) + '...'
+                    : challengeHex}
                 </p>
               </div>
+              {previewAddress && (
+                <div className='rounded-md border border-border-soft p-3'>
+                  <p className='kicker mb-1'>
+                    signing as ({signingMode}){isAirgap ? ' - zigner' : ''}
+                  </p>
+                  <p className='tabular text-xs text-fg-high break-all'>{previewAddress}</p>
+                </div>
+              )}
+              <p className='text-xs text-fg-muted'>
+                this site is requesting a signature from your identity key. this will not authorize
+                any transactions.
+              </p>
             </div>
-            <div className='flex grow flex-col justify-end'>
-              <ApproveDeny approve={approve} deny={deny} />
-            </div>
-          </>
-        )}
+          </div>
+        </>
+      )}
 
-        {/* ── password step (mnemonic only) ── */}
-        {step === 'password' && (
-          <div className='w-full px-[30px] flex flex-col gap-4'>
-            <div className='mx-auto flex size-16 items-center justify-center rounded-full bg-elev-2'>
-              <span className='i-lucide-lock h-8 w-8 text-fg-muted' />
-            </div>
-            <p className='text-sm text-fg-muted text-center'>enter password to sign</p>
-            <input
-              type='password'
-              autoFocus
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') {
-                  void handlePasswordSubmit();
-                }
+      {/* ── password step (mnemonic only) ── */}
+      {step === 'password' && (
+        <div className='w-full px-[30px] flex flex-col gap-4'>
+          <div className='mx-auto flex size-16 items-center justify-center rounded-full bg-elev-2'>
+            <span className='i-lucide-lock h-8 w-8 text-fg-muted' />
+          </div>
+          <p className='text-sm text-fg-muted text-center'>enter password to sign</p>
+          <input
+            type='password'
+            autoFocus
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                void handlePasswordSubmit();
+              }
+            }}
+            className='w-full rounded-lg border border-border-soft bg-elev-2 p-3 text-sm outline-none focus:border-foreground/40'
+            placeholder='password'
+          />
+          {passwordError && <p className='text-xs text-red-400 text-center'>{passwordError}</p>}
+          <div className='flex gap-3 mt-2'>
+            <button
+              onClick={() => {
+                setStep('review');
+                setPassword('');
+                setPasswordError('');
               }}
-              className='w-full rounded-lg border border-border-soft bg-elev-2 p-3 text-sm outline-none focus:border-foreground/40'
-              placeholder='password'
-            />
-            {passwordError && <p className='text-xs text-red-400 text-center'>{passwordError}</p>}
-            <div className='flex gap-3 mt-2'>
-              <button
-                onClick={() => {
-                  setStep('review');
-                  setPassword('');
-                  setPasswordError('');
-                }}
-                className='flex-1 rounded-md border border-border-soft p-3 text-xs text-fg-muted hover:text-fg-high hover:bg-elev-1 lowercase'
-              >
-                back
-              </button>
-              <button
-                onClick={() => void handlePasswordSubmit()}
-                className='flex-1 rounded-md bg-zigner-gold p-3 text-xs text-zigner-dark hover:bg-zigner-gold-light lowercase'
-              >
-                sign
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ── signing spinner ── */}
-        {step === 'signing' && (
-          <div className='flex flex-col items-center justify-center gap-3 py-12'>
-            <span className='i-lucide-loader-2 h-8 w-8 text-fg-muted animate-spin' />
-            <p className='text-sm text-fg-muted'>signing...</p>
-          </div>
-        )}
-
-        {/* ── show QR step (zigner only) ── */}
-        {step === 'show-qr' && (
-          <div className='w-full px-[30px] flex flex-col gap-4 items-center'>
-            <p className='text-sm text-fg-muted text-center'>
-              scan this QR with your zigner device
-            </p>
-            <div className='bg-white p-3 rounded-lg'>
-              <QrCanvas data={challengeQr} size={240} />
-            </div>
-            <div className='rounded-md bg-elev-2 p-3 w-full'>
-              <p className='kicker'>origin</p>
-              <p className='tabular text-xs text-fg-high mt-1'>{origin}</p>
-            </div>
-            <button
-              onClick={() => setStep('scan-qr')}
-              className='w-full rounded-md bg-zigner-gold p-3 text-xs text-zigner-dark hover:bg-zigner-gold-light lowercase'
-            >
-              scan signed response
-            </button>
-            <button
-              onClick={() => setStep('review')}
-              className='text-label text-fg-dim hover:text-fg-high lowercase'
+              className='flex-1 rounded-md border border-border-soft p-3 text-xs text-fg-muted hover:text-fg-high hover:bg-elev-1 lowercase'
             >
               back
             </button>
+            <button
+              onClick={() => void handlePasswordSubmit()}
+              className='flex-1 rounded-md bg-zigner-gold p-3 text-xs text-zigner-dark hover:bg-zigner-gold-light lowercase'
+            >
+              sign
+            </button>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* ── scan QR step (zigner only) ── */}
-        {step === 'scan-qr' && (
-          <div className='w-full px-[30px]'>
-            <QrScanner
-              inline
-              title='scan zigner response'
-              description='point at the signed response QR on your zigner device'
-              onScan={handleZidResponse}
-              onClose={() => setStep('show-qr')}
-            />
+      {/* ── signing spinner ── */}
+      {step === 'signing' && (
+        <div className='flex flex-col items-center justify-center gap-3 py-12'>
+          <span className='i-lucide-loader-2 h-8 w-8 text-fg-muted animate-spin' />
+          <p className='text-sm text-fg-muted'>signing...</p>
+        </div>
+      )}
+
+      {/* ── show QR step (zigner only) ── */}
+      {step === 'show-qr' && (
+        <div className='w-full px-[30px] flex flex-col gap-4 items-center'>
+          <p className='text-sm text-fg-muted text-center'>scan this QR with your zigner device</p>
+          <div className='bg-white p-3 rounded-lg'>
+            <QrCanvas data={challengeQr} size={240} />
           </div>
-        )}
-      </div>
-    </FadeTransition>
+          <div className='rounded-md bg-elev-2 p-3 w-full'>
+            <p className='kicker'>origin</p>
+            <p className='tabular text-xs text-fg-high mt-1'>{origin}</p>
+          </div>
+          <button
+            onClick={() => setStep('scan-qr')}
+            className='w-full rounded-md bg-zigner-gold p-3 text-xs text-zigner-dark hover:bg-zigner-gold-light lowercase'
+          >
+            scan signed response
+          </button>
+          <button
+            onClick={() => setStep('review')}
+            className='text-label text-fg-dim hover:text-fg-high lowercase'
+          >
+            back
+          </button>
+        </div>
+      )}
+
+      {/* ── scan QR step (zigner only) ── */}
+      {step === 'scan-qr' && (
+        <div className='w-full px-[30px]'>
+          <QrScanner
+            inline
+            title='scan zigner response'
+            description='point at the signed response QR on your zigner device'
+            onScan={handleZidResponse}
+            onClose={() => setStep('show-qr')}
+          />
+        </div>
+      )}
+    </ApprovalScreen>
   );
 };
 

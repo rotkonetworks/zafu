@@ -74,6 +74,8 @@ const hiddenTabRoutes = [
   PopupPath.ORIGIN_APPROVAL,
   PopupPath.SIGN_APPROVAL,
   PopupPath.CAPABILITY_APPROVAL,
+  PopupPath.ZCASH_SEND_APPROVAL,
+  PopupPath.FROST_APPROVE,
   PopupPath.COSMOS_SIGN,
   PopupPath.CONTACTS,
   PopupPath.MULTISIG_CREATE,
@@ -88,6 +90,8 @@ const hiddenHeaderRoutes = [
   PopupPath.ORIGIN_APPROVAL,
   PopupPath.SIGN_APPROVAL,
   PopupPath.CAPABILITY_APPROVAL,
+  PopupPath.ZCASH_SEND_APPROVAL,
+  PopupPath.FROST_APPROVE,
   PopupPath.COSMOS_SIGN,
 ];
 

@@ -125,15 +125,15 @@ export const TransactionApproval = () => {
   // Airgap QR display step
   if (isAirgap && airgapStep === 'show-qr') {
     return (
-      <div className='flex h-screen flex-col'>
-        <header className='border-b border-border-soft p-4'>
+      <div className='flex h-full min-h-0 flex-col'>
+        <header className='shrink-0 border-b border-border-soft p-4'>
           <span className='kicker'>transaction</span>
           <h1 className='mt-1 text-title text-fg-high lowercase tracking-[-0.01em]'>
             sign with zigner
           </h1>
         </header>
 
-        <div className='grow overflow-auto p-4 flex flex-col items-center justify-center'>
+        <div className='min-h-0 flex-1 overflow-y-auto p-4 flex flex-col items-center justify-center'>
           <QrDisplay
             data={qrHex}
             size={840}
@@ -143,7 +143,7 @@ export const TransactionApproval = () => {
           />
         </div>
 
-        <div className='border-t border-border-soft p-4 flex gap-3'>
+        <div className='shrink-0 border-t border-border-soft p-4 flex gap-3'>
           <Button
             variant='gradient'
             className='flex-1 py-3.5 text-base'
@@ -168,7 +168,7 @@ export const TransactionApproval = () => {
   // Airgap QR scan step
   if (isAirgap && airgapStep === 'scan-qr') {
     return (
-      <div className='flex h-screen flex-col'>
+      <div className='flex h-full min-h-0 flex-col'>
         {scanError ? (
           <div className='flex h-full flex-col items-center justify-center gap-4 p-6'>
             <p className='text-red-400 text-center'>{scanError}</p>
@@ -195,15 +195,15 @@ export const TransactionApproval = () => {
 
   // Review step (shared between normal and airgap)
   return (
-    <div className='flex h-screen flex-col'>
-      <header className='border-b border-border-soft p-4'>
+    <div className='flex h-full min-h-0 flex-col'>
+      <header className='shrink-0 border-b border-border-soft p-4'>
         <span className='kicker'>transaction</span>
         <h1 className='mt-1 text-title text-fg-high lowercase tracking-[-0.01em]'>
           confirm transaction
         </h1>
       </header>
 
-      <div className='grow overflow-auto p-4'>
+      <div className='min-h-0 flex-1 overflow-y-auto p-4'>
         {invalidPlan && (
           <div className='mb-4 rounded-md border border-red-400/40 p-3 text-xs text-red-400'>
             <h2 className='kicker mb-1 text-red-400/80'>⚠ invalid transaction</h2>
@@ -250,7 +250,7 @@ export const TransactionApproval = () => {
           </div>
         )}
       </div>
-      <div className='border-t border-border-soft p-0'>
+      <div className='shrink-0 border-t border-border-soft p-0'>
         {isAirgap ? (
           <div className='flex flex-row justify-between gap-4 rounded-lg bg-elev-1 px-4 py-7 shadow-lg'>
             <Button
