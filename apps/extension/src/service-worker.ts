@@ -18,6 +18,7 @@ import { internalServiceListener } from './message/listen/internal-services';
 import { externalMessageListener } from './message/listen/external-easteregg';
 import { encryptionMessageListener } from './message/listen/external-encryption';
 import { internalZidListener } from './message/listen/internal-zid';
+import { openApprovalPopup } from './utils/popup-window';
 
 // all rpc implementations, local and proxy
 import { getRpcImpls } from './rpc';
@@ -448,11 +449,6 @@ chrome.runtime.onInstalled.addListener(({ reason }) => {
 
 chrome.contextMenus.onClicked.addListener((_info, _tab) => {
   if (_info.menuItemId === 'open-popup-window') {
-    void chrome.windows.create({
-      url: chrome.runtime.getURL('popup.html'),
-      type: 'popup',
-      width: 400,
-      height: 628,
-    });
+    void openApprovalPopup(chrome.runtime.getURL('popup.html'));
   }
 });

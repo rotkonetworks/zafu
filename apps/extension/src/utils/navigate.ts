@@ -1,6 +1,7 @@
 import { NavigateOptions, useLocation, useNavigate } from 'react-router-dom';
 import { PagePath } from '../routes/page/paths';
 import { PopupPath } from '../routes/popup/paths';
+import { POPUP_WINDOW_HEIGHT, POPUP_WINDOW_WIDTH } from './popup-window';
 
 // Used to add type-safety to navigating routes
 export const useTypesafeNav = <T extends string>() => {
@@ -48,7 +49,7 @@ export const openInDedicatedWindow = async (
   path: PopupPath,
   options?: { width?: number; height?: number },
 ): Promise<chrome.windows.Window | undefined> => {
-  const { width = 400, height = 600 } = options ?? {};
+  const { width = POPUP_WINDOW_WIDTH, height = POPUP_WINDOW_HEIGHT } = options ?? {};
 
   // Use hash routing since the popup uses HashRouter
   const url = chrome.runtime.getURL(`popup.html#${path}`);

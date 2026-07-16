@@ -3,6 +3,7 @@ import { PopupRequest, PopupResponse, PopupType } from './message/popup';
 import { sendPopup } from './message/send-popup';
 import { listenReady } from './message/listen-ready';
 import { throwIfNeedsLogin } from './needs-login';
+import { openApprovalPopup } from './utils/popup-window';
 
 const POPUP_READY_TIMEOUT = 60_000;
 const POPUP_PATHS = {
@@ -78,21 +79,7 @@ const spawnDetachedPopup = async (popupType: PopupType): Promise<string> => {
   const popupId = crypto.randomUUID();
   const ready = listenReady(popupId, AbortSignal.timeout(POPUP_READY_TIMEOUT));
 
-  const geometry = await chrome.windows
-    .getLastFocused()
-    .then(({ top = 0, left = 0, width = 0 }) => ({
-      width: 400,
-      height: 628,
-      // top right side of parent
-      top: Math.max(0, top),
-      left: Math.max(0, left + width - 400),
-    }));
-
-  const created = await chrome.windows.create({
-    url: popupUrl(popupType, popupId).href,
-    type: 'popup',
-    ...geometry,
-  });
+  const created = await openApprovalPopup(popupUrl(popupType, popupId).href);
 
   // window id is guaranteed present after `create`
   void ready.catch(() => chrome.windows.remove(created.id!));
