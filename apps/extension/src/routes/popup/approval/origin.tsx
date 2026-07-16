@@ -1,6 +1,6 @@
-import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
 import { useStore } from '../../../state';
 import { originApprovalSelector } from '../../../state/origin-approval';
+import { ApprovalScreen } from './approval-screen';
 import { ApproveDeny } from './approve-deny';
 import { LinkGradientIcon } from '../../../icons/link-gradient';
 import { DisplayOriginURL } from '../../../shared/components/display-origin-url';
@@ -107,98 +107,97 @@ export const OriginApproval = () => {
   }, 'low');
 
   return (
-    <FadeTransition>
-      <div className='flex min-h-screen w-screen flex-col gap-6'>
+    <ApprovalScreen
+      header={
         <header className='flex h-[70px] flex-col items-center justify-center border-b border-border-soft'>
           <span className='kicker mb-1'>permission request</span>
           <h1 className='text-title text-fg-high lowercase tracking-[-0.01em]'>connect</h1>
         </header>
-        <div className='mx-auto size-20'>
-          <LinkGradientIcon />
-        </div>
-        <div className='w-full px-[30px]'>
-          <div className='flex flex-col gap-2'>
+      }
+      footer={<ApproveDeny approve={approve} deny={deny} ignore={lastRequest && ignore} />}
+    >
+      <div className='mx-auto size-20'>
+        <LinkGradientIcon />
+      </div>
+      <div className='w-full px-[30px]'>
+        <div className='flex flex-col gap-2'>
+          <div
+            className={cn(
+              'rounded-[1em]',
+              'border-[1px]',
+              'border-transparent',
+              'p-2',
+              '[background:linear-gradient(var(--charcoal),var(--charcoal))_padding-box,_linear-gradient(to_bottom_left,rgb(139,228,217),rgb(255,144,47))_border-box]',
+            )}
+          >
+            <div className='flex flex-col items-center gap-2'>
+              <div className='flex h-11 max-w-full items-center rounded-lg bg-black p-2 text-fg-muted [z-index:30]'>
+                {!!favIconUrl && (
+                  <div
+                    className={cn(
+                      '-ml-3',
+                      'relative',
+                      'rounded-full',
+                      'border-[1px]',
+                      'border-transparent',
+                      '[background:linear-gradient(var(--charcoal),var(--charcoal))_padding-box,_linear-gradient(to_top_right,rgb(139,228,217),rgb(255,144,47))_border-box]',
+                    )}
+                  >
+                    <img
+                      src={favIconUrl}
+                      alt='requesting website icon'
+                      className='size-20 min-w-20 rounded-full'
+                    />
+                  </div>
+                )}
+                <div className='-ml-3 w-full truncate p-2 pl-6 text-title text-fg-high tracking-[-0.005em]'>
+                  {title ? (
+                    <span className='text-zigner-dark'>{title}</span>
+                  ) : (
+                    <span className='text-fg-muted underline decoration-dotted decoration-2 underline-offset-4'>
+                      no title
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className='z-30 flex min-h-11 w-full items-center overflow-x-auto rounded-lg bg-canvas p-2 text-fg-muted'>
+                <div className='mx-auto items-center p-2 text-center leading-[0.8em]'>
+                  <DisplayOriginURL url={new URL(requestOrigin)} />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* capability list with risk styling */}
+          <div className='mt-3 flex flex-col gap-2'>
+            <p className='text-sm text-fg-muted'>
+              this site is requesting the following permissions:
+            </p>
+            {requestedCapabilities.map(cap => (
+              <CapabilityItem key={cap} cap={cap} />
+            ))}
+          </div>
+
+          {/* extra warning for high/critical */}
+          {(maxRisk === 'high' || maxRisk === 'critical') && (
             <div
               className={cn(
-                'rounded-[1em]',
-                'border-[1px]',
-                'border-transparent',
-                'p-2',
-                '[background:linear-gradient(var(--charcoal),var(--charcoal))_padding-box,_linear-gradient(to_bottom_left,rgb(139,228,217),rgb(255,144,47))_border-box]',
+                'mt-2 rounded-lg border p-3 text-xs',
+                maxRisk === 'critical'
+                  ? 'border-red-500/50 bg-red-500/10 text-red-400'
+                  : 'border-orange-500/40 bg-orange-500/5 text-orange-400',
               )}
             >
-              <div className='flex flex-col items-center gap-2'>
-                <div className='flex h-11 max-w-full items-center rounded-lg bg-black p-2 text-fg-muted [z-index:30]'>
-                  {!!favIconUrl && (
-                    <div
-                      className={cn(
-                        '-ml-3',
-                        'relative',
-                        'rounded-full',
-                        'border-[1px]',
-                        'border-transparent',
-                        '[background:linear-gradient(var(--charcoal),var(--charcoal))_padding-box,_linear-gradient(to_top_right,rgb(139,228,217),rgb(255,144,47))_border-box]',
-                      )}
-                    >
-                      <img
-                        src={favIconUrl}
-                        alt='requesting website icon'
-                        className='size-20 min-w-20 rounded-full'
-                      />
-                    </div>
-                  )}
-                  <div className='-ml-3 w-full truncate p-2 pl-6 text-title text-fg-high tracking-[-0.005em]'>
-                    {title ? (
-                      <span className='text-zigner-dark'>{title}</span>
-                    ) : (
-                      <span className='text-fg-muted underline decoration-dotted decoration-2 underline-offset-4'>
-                        no title
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className='z-30 flex min-h-11 w-full items-center overflow-x-auto rounded-lg bg-canvas p-2 text-fg-muted'>
-                  <div className='mx-auto items-center p-2 text-center leading-[0.8em]'>
-                    <DisplayOriginURL url={new URL(requestOrigin)} />
-                  </div>
-                </div>
-              </div>
+              review these permissions carefully before approving.
+              {maxRisk === 'critical' && ' this includes dangerous capabilities.'}
             </div>
+          )}
 
-            {/* capability list with risk styling */}
-            <div className='mt-3 flex flex-col gap-2'>
-              <p className='text-sm text-fg-muted'>
-                this site is requesting the following permissions:
-              </p>
-              {requestedCapabilities.map(cap => (
-                <CapabilityItem key={cap} cap={cap} />
-              ))}
-            </div>
-
-            {/* extra warning for high/critical */}
-            {(maxRisk === 'high' || maxRisk === 'critical') && (
-              <div
-                className={cn(
-                  'mt-2 rounded-lg border p-3 text-xs',
-                  maxRisk === 'critical'
-                    ? 'border-red-500/50 bg-red-500/10 text-red-400'
-                    : 'border-orange-500/40 bg-orange-500/5 text-orange-400',
-                )}
-              >
-                review these permissions carefully before approving.
-                {maxRisk === 'critical' && ' this includes dangerous capabilities.'}
-              </div>
-            )}
-
-            <p className='mt-1 text-xs text-fg-muted'>
-              your viewing keys stay local - they never leave the extension.
-            </p>
-          </div>
-        </div>
-        <div className='flex grow flex-col justify-end'>
-          <ApproveDeny approve={approve} deny={deny} ignore={lastRequest && ignore} />
+          <p className='mt-1 text-xs text-fg-muted'>
+            your viewing keys stay local - they never leave the extension.
+          </p>
         </div>
       </div>
-    </FadeTransition>
+    </ApprovalScreen>
   );
 };
