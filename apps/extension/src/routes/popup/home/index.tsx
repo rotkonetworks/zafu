@@ -809,13 +809,22 @@ const ZcashContent = ({
 
         if (hasMnemonic && selectedKeyInfo.type === 'mnemonic') {
           const mnemonic = await keyRing.getMnemonic(walletId);
-          await startSyncInWorker('zcash', walletId, mnemonic, zidecarUrl, height);
+          // pass the configured backend - defaulting to zidecar here would
+          // point a zidecar client at a lightwalletd endpoint (HTTP 415s)
+          await startSyncInWorker('zcash', walletId, mnemonic, zidecarUrl, height, zcashBackend);
         } else if (watchOnly) {
           const ufvkStr =
             watchOnly.ufvk ??
             (watchOnly.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
           if (ufvkStr) {
-            await startWatchOnlySyncInWorker('zcash', walletId, ufvkStr, zidecarUrl, height);
+            await startWatchOnlySyncInWorker(
+              'zcash',
+              walletId,
+              ufvkStr,
+              zidecarUrl,
+              height,
+              zcashBackend,
+            );
           }
         }
       } catch (err) {
@@ -824,7 +833,15 @@ const ZcashContent = ({
     };
     window.addEventListener('zcash-rescan', handler);
     return () => window.removeEventListener('zcash-rescan', handler);
-  }, [hasMnemonic, watchOnly, selectedKeyInfo?.id, selectedKeyInfo?.type, keyRing, zidecarUrl]);
+  }, [
+    hasMnemonic,
+    watchOnly,
+    selectedKeyInfo?.id,
+    selectedKeyInfo?.type,
+    keyRing,
+    zidecarUrl,
+    zcashBackend,
+  ]);
 
   const handleShield = useCallback(async () => {
     if (!hasMnemonic || !selectedKeyInfo || selectedKeyInfo.type !== 'mnemonic') {
