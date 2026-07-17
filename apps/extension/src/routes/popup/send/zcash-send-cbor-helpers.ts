@@ -87,14 +87,19 @@ export function unwrapCborSinglePczt(cbor: Uint8Array): Uint8Array {
 //   single request:  [0x53][0x04][0x03] || pczt_bytes
 //   single response: [0x53][0x04][0x03] || digest:32 || pczt_len:u32(LE) || signed_pczt
 //
-// TODO(FIX-B seam): the UR *type strings* below are this stream's best guess
-// derived from the zigner docs (docs/keystone-compat-pczt-signing.md names the
-// batch envelope `zcash-sign-batch`; single -> `zcash-sign`, signed response ->
-// `zcash-signatures`). FIX-B (feat/ironwood-v6-signer) owns the final zafu-
-// facing UR framing (the Kotlin scan dispatcher + response fountain framing are
-// listed as "Remaining" there). If FIX-B pins different type strings, update
-// ONLY the two constants below - the envelope byte layout is frozen by the
-// contract and stays as-is.
+// Transport (RECONCILED with feat/ironwood-v6-signer): both request and
+// response ride the BC-UR fountain under UR type `zigner-module`.
+//   REQUEST  (wallet -> device): ur_encode_frames(preludeWrapSinglePczt(pczt),
+//     'zigner-module') carries the RAW envelope [0x53][0x04][0x03]||pczt (NO
+//     CBOR wrap). The device fountain-decodes it (signer `decode_ur_module_request`)
+//     and dispatches on the 6-hex prelude via CameraViewModel's
+//     `isZcashModulePcztRequest` - the same predicate as the raw-byte / substrate
+//     multi-QR paths.
+//   RESPONSE (device -> wallet): the device's `module_response_to_ur` wraps the
+//     prelude response envelope in CBOR {1: bytes} before the fountain, so the
+//     scanner yields the CBOR wrap - unwrap it (unwrapCborSinglePczt) THEN parse
+//     the inner prelude (parsePreludeSinglePcztResponse).
+// The envelope byte layout is frozen by the contract; only the UR type is shared.
 // ===========================================================================
 
 /** zigner envelope prelude bytes: [0x53][crypto=zcash 0x04][tx_type=PCZT single 0x03]. */
@@ -104,11 +109,11 @@ export const ZIGNER_PRELUDE_PCZT_SINGLE = Object.freeze([0x53, 0x04, 0x03] as co
 export const ZIGNER_PCZT_SIGN_UR_TYPE = 'zigner-module';
 
 /**
- * UR type carrying the module signed-PCZT RESPONSE (cold -> hot), per FIX-B's
- * spec. The device emits `ur:zigner-module` whose decoded payload is a CBOR
- * `{1: bytes}` wrap of the envelope response; unwrap the CBOR first, then hand
- * the inner envelope bytes to `parsePreludeSinglePcztResponse`. Do NOT feed this
- * into the legacy `parseZcashSignatureResponse` digest flow.
+ * UR type carrying the module signed-PCZT RESPONSE (cold -> hot). The device
+ * emits `ur:zigner-module` whose decoded payload is a CBOR `{1: bytes}` wrap of
+ * the envelope response; unwrap the CBOR first, then hand the inner envelope
+ * bytes to `parsePreludeSinglePcztResponse`. Do NOT feed this into the legacy
+ * `parseZcashSignatureResponse` digest flow.
  */
 export const ZIGNER_PCZT_SIGNED_UR_TYPE = 'zigner-module';
 

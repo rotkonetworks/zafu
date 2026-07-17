@@ -16,8 +16,12 @@
  * ironwood output in a single V6 transaction, cold-signed via the existing
  * PCZT QR machine).
  *
- * Default OFF until:
- * - the ironwood wasm exports ship in the deployed blob, and
- * - NU6.3 activates on the target network.
+ * Shipped ON (guard-protected): the ironwood wasm exports are in the deployed
+ * blob and the flow is fully reviewed. Before NU6.3 activates, the migration
+ * is fail-closed at build time - the worker fetches consensus_branch_id from
+ * GetLightdInfo and the producer REFUSES to build unless the bound branch id
+ * equals the real NU6.3 value (0x37a5165b), so the migrate action shows a
+ * clean "NU6.3 not active yet" error rather than producing an invalid tx.
+ * This avoids a second store cycle to enable migration at activation.
  */
-export const IRONWOOD_MIGRATION = false;
+export const IRONWOOD_MIGRATION = true;

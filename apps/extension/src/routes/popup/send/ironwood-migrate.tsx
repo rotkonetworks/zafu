@@ -24,6 +24,7 @@ import {
 } from '../../../state/keyring/network-worker';
 import {
   parsePreludeSinglePcztResponse,
+  unwrapCborSinglePczt,
   ZIGNER_PCZT_SIGNED_UR_TYPE,
 } from './zcash-send-cbor-helpers';
 
@@ -200,10 +201,14 @@ export function IronwoodMigrate({
     async (envelopeBytes: Uint8Array) => {
       setStep('broadcast');
       try {
-        // FIX-C item 1: the signed response comes back in the ironwood-aware
-        // signer's prelude envelope ([0x53][0x04][0x03] || digest || len || pczt),
-        // NOT the CBOR {1: bytes} envelope. Parse it accordingly.
-        const { signedPczt } = parsePreludeSinglePcztResponse(envelopeBytes);
+        // FIX-C item 1: the device emits ur:zigner-module whose decoded payload
+        // is a CBOR {1: bytes} wrap (rust/signer module_response_to_ur ->
+        // encode_pczt_to_cbor) OF the ironwood-aware signer's prelude response
+        // envelope ([0x53][0x04][0x03] || digest || len || signed_pczt). The
+        // scanner hands us the raw ur_decode_frames payload = the CBOR wrap, so
+        // strip the CBOR {1: bytes} first, THEN parse the inner prelude envelope.
+        const responseEnvelope = unwrapCborSinglePczt(envelopeBytes);
+        const { signedPczt } = parsePreludeSinglePcztResponse(responseEnvelope);
         let pcztHex = '';
         for (let i = 0; i < signedPczt.length; i++) {
           pcztHex += signedPczt[i]!.toString(16).padStart(2, '0');
