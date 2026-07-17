@@ -335,15 +335,13 @@ interface WasmModule {
     orchard_merkle_paths_json: string,
     account_index: number,
     target_height: number,
+    // expected_branch_id is the 8th param (before mainnet), matching the
+    // shipped producer signature. It is the fail-closed guard value read from
+    // GetLightdInfo; the producer REFUSES to build unless the branch id it
+    // binds equals this (NU6.3 = 0x37a5165b).
+    expected_branch_id: number,
     mainnet: boolean,
     memo_hex?: string | null,
-    // FIX-A seam: the producer adds a `expected_branch_id` fail-closed guard
-    // (build_turnstile_migration_pczt must REFUSE unless the branch id it binds
-    // matches this caller-passed value, read from GetLightdInfo). The exact
-    // ARG POSITION is owned by FIX-A (feat/ironwood-wasm-producer) - it had not
-    // landed at time of writing. We pass it as the trailing arg here and in the
-    // offscreen prover call; if FIX-A slots it elsewhere, move the arg to match.
-    expected_branch_id?: number,
   ) => unknown;
 
   // FROST multisig
