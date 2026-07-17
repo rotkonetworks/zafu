@@ -151,9 +151,10 @@ async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
       break;
 
     case 'build_turnstile_migration_pczt':
-      // NU6.3 turnstile: (ufvk, orchard_notes_json, fee, orchard_anchor_hex,
-      // orchard_merkle_paths_json, account_index, target_height, mainnet,
-      // memo_hex?) - a[2] is the fee (stringified bigint over postMessage)
+      // NU6.3 turnstile (FIX-A signature): (ufvk, orchard_notes_json, fee,
+      // orchard_anchor_hex, orchard_merkle_paths_json, account_index,
+      // target_height, expected_branch_id, mainnet, memo_hex?) - a[2] is the fee
+      // (stringified bigint over postMessage); a[7] is the fail-closed branch id.
       if (typeof wasm['build_turnstile_migration_pczt'] !== 'function') {
         throw new Error('ironwood turnstile not supported by this wasm build');
       }
@@ -166,7 +167,8 @@ async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
         a[5],
         a[6],
         a[7],
-        a[8] ?? null,
+        a[8],
+        a[9] ?? null,
       );
       break;
 

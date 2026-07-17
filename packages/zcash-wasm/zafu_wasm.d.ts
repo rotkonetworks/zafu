@@ -258,15 +258,13 @@ export function build_turnstile_migration_pczt(
   orchard_merkle_paths_json: string,
   account_index: number,
   target_height: number,
+  // Fail-closed branch-id guard (8th param, per the FIX-A producer signature).
+  // The producer REFUSES to build unless the branch id it binds at target_height
+  // matches this value (the wallet reads it from GetLightdInfo; NU6.3 =
+  // 0x37a5165b). Passing the placeholder 0xffffffff or a mismatch must error.
+  expected_branch_id: number,
   mainnet: boolean,
   memo_hex?: string | null,
-  // FIX-A seam: fail-closed branch-id guard. The producer must REFUSE to build
-  // unless the branch id it binds matches this caller-passed value (the wallet
-  // reads it from GetLightdInfo; NU6.3 = 0x37a5165b). The exact arg POSITION is
-  // owned by FIX-A (feat/ironwood-wasm-producer) and had not landed when this
-  // was written - if it slots elsewhere, move this arg (and the worker call) to
-  // match. Passing the wrong branch id or the placeholder 0xffffffff must error.
-  expected_branch_id?: number,
 ): any;
 
 /**

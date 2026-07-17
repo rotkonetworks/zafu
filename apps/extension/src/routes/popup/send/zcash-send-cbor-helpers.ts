@@ -101,10 +101,16 @@ export function unwrapCborSinglePczt(cbor: Uint8Array): Uint8Array {
 export const ZIGNER_PRELUDE_PCZT_SINGLE = Object.freeze([0x53, 0x04, 0x03] as const);
 
 /** UR type carrying the prelude-envelope single-PCZT signing REQUEST (hot -> cold). */
-export const ZIGNER_PCZT_SIGN_UR_TYPE = 'zcash-sign';
+export const ZIGNER_PCZT_SIGN_UR_TYPE = 'zigner-module';
 
-/** UR type carrying the prelude-envelope signed-PCZT RESPONSE (cold -> hot). */
-export const ZIGNER_PCZT_SIGNED_UR_TYPE = 'zcash-signatures';
+/**
+ * UR type carrying the module signed-PCZT RESPONSE (cold -> hot), per FIX-B's
+ * spec. The device emits `ur:zigner-module` whose decoded payload is a CBOR
+ * `{1: bytes}` wrap of the envelope response; unwrap the CBOR first, then hand
+ * the inner envelope bytes to `parsePreludeSinglePcztResponse`. Do NOT feed this
+ * into the legacy `parseZcashSignatureResponse` digest flow.
+ */
+export const ZIGNER_PCZT_SIGNED_UR_TYPE = 'zigner-module';
 
 /**
  * Wrap a redacted migration PCZT in the ironwood-aware signer's single-PCZT

@@ -4279,13 +4279,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             JSON.stringify(pathsForWasm),
             migratePayload.accountIndex,
             migrateTip.height,
+            // expected_branch_id is the 8th param (before mainnet), matching the
+            // producer signature (FIX-A). It is the value validated from
+            // GetLightdInfo; the producer's fail-closed guard refuses to build
+            // unless the branch id it binds equals this.
+            NU63_CONSENSUS_BRANCH_ID,
             migratePayload.mainnet,
             null,
-            // expected_branch_id: the value we just validated from GetLightdInfo.
-            // The producer's fail-closed guard (FIX-A) refuses to build unless the
-            // branch id it binds equals this. See the wasm decl TODO re: arg
-            // position if FIX-A finalizes it elsewhere.
-            NU63_CONSENSUS_BRANCH_ID,
           ],
         });
         const migrateParsed = built as {
