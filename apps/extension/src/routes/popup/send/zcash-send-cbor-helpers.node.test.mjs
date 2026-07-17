@@ -4,7 +4,7 @@
 // jsdom). Pure-byte logic doesn't need any of that — `node --test` runs the
 // helper directly. Same assertions as the vitest version, kept in sync.
 
-import test from 'vitest';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 // ── Inline helper copy. Keep byte-for-byte identical to the impl in
@@ -144,4 +144,115 @@ test('cbor envelope: rejects trailing bytes after the byte string', () => {
     () => unwrapCborSinglePczt(new Uint8Array([0xa1, 0x01, 0x42, 0xaa, 0xbb, 0xff])),
     /trailing|exact|canonical|exceeds|length/i,
   );
+});
+
+// ===========================================================================
+// Ironwood-aware signer prelude envelope (FIX-C item 1). Byte-for-byte mirror
+// of `preludeWrapSinglePczt` / `parsePreludeSinglePcztResponse`. Fails loudly
+// if either the impl here or in the .ts drifts from zigner's envelope.rs.
+// ===========================================================================
+
+const PRELUDE = [0x53, 0x04, 0x03];
+
+function preludeWrapSinglePczt(pczt) {
+  const out = new Uint8Array(PRELUDE.length + pczt.length);
+  out.set(PRELUDE, 0);
+  out.set(pczt, PRELUDE.length);
+  return out;
+}
+
+// Reference RESPONSE encoder: prelude || digest:32 || len:u32(LE) || signed_pczt.
+function encodePreludeResponse(signedPczt, digest = new Uint8Array(32)) {
+  const len = signedPczt.length;
+  const out = new Uint8Array(3 + 32 + 4 + len);
+  out.set(PRELUDE, 0);
+  out.set(digest, 3);
+  out[35] = len & 0xff;
+  out[36] = (len >>> 8) & 0xff;
+  out[37] = (len >>> 16) & 0xff;
+  out[38] = (len >>> 24) & 0xff;
+  out.set(signedPczt, 39);
+  return out;
+}
+
+function parsePreludeSinglePcztResponse(payload) {
+  if (payload.length < 3) {
+    throw new Error('prelude PCZT response too short');
+  }
+  if (payload[0] !== 0x53) {
+    throw new Error('bad prelude');
+  }
+  if (payload[1] !== 0x04) {
+    throw new Error('bad crypto type');
+  }
+  if (payload[2] !== 0x03) {
+    throw new Error('bad tx type');
+  }
+  if (payload.length < 3 + 32 + 4) {
+    throw new Error('truncated digest/length header');
+  }
+  const digest = payload.slice(3, 35);
+  let pos = 39;
+  const len = payload[35] + payload[36] * 256 + payload[37] * 65536 + payload[38] * 16777216;
+  if (pos + len !== payload.length) {
+    throw new Error('prelude PCZT response not canonical');
+  }
+  return { signedPczt: payload.slice(pos, pos + len), digest };
+}
+
+test('prelude request: wraps with [0x53][0x04][0x03] prelude', () => {
+  const pczt = new Uint8Array([9, 8, 7, 6, 5]);
+  const env = preludeWrapSinglePczt(pczt);
+  assert.deepEqual([env[0], env[1], env[2]], PRELUDE);
+  assert.deepEqual(env.slice(3), pczt);
+});
+
+test('prelude request: NOT the orchard-blind CBOR envelope', () => {
+  // regression guard for FIX-C: the migration must never be shaped like the
+  // ur:zcash-pczt CBOR {1: bytes} map (which starts 0xa1 0x01) - that reaches
+  // the ironwood-blind signer.
+  const env = preludeWrapSinglePczt(new Uint8Array([1, 2, 3]));
+  assert.notEqual(env[0], 0xa1);
+  assert.equal(env[0], 0x53);
+});
+
+test('prelude response: round-trip small signed PCZT', () => {
+  const signed = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
+  const digest = new Uint8Array(32).map((_, i) => (i * 7) & 0xff);
+  const parsed = parsePreludeSinglePcztResponse(encodePreludeResponse(signed, digest));
+  assert.deepEqual(parsed.signedPczt, signed);
+  assert.deepEqual(parsed.digest, digest);
+});
+
+test('prelude response: round-trip 70KB signed PCZT (u32 length path)', () => {
+  const signed = new Uint8Array(70_000).map((_, i) => i & 0xff);
+  const parsed = parsePreludeSinglePcztResponse(encodePreludeResponse(signed));
+  assert.deepEqual(parsed.signedPczt, signed);
+});
+
+test('prelude response: rejects wrong prelude byte', () => {
+  const env = encodePreludeResponse(new Uint8Array([1, 2]));
+  env[0] = 0x52;
+  assert.throws(() => parsePreludeSinglePcztResponse(env), /prelude/i);
+});
+
+test('prelude response: rejects wrong tx type (batch instead of single)', () => {
+  const env = encodePreludeResponse(new Uint8Array([1, 2]));
+  env[2] = 0x04; // batch
+  assert.throws(() => parsePreludeSinglePcztResponse(env), /tx type/i);
+});
+
+test('prelude response: rejects truncated digest/length header', () => {
+  assert.throws(
+    () => parsePreludeSinglePcztResponse(new Uint8Array([0x53, 0x04, 0x03, 0, 0])),
+    /truncated/i,
+  );
+});
+
+test('prelude response: rejects trailing bytes after signed PCZT', () => {
+  const env = encodePreludeResponse(new Uint8Array([1, 2, 3]));
+  const withTrailer = new Uint8Array(env.length + 1);
+  withTrailer.set(env, 0);
+  withTrailer[env.length] = 0xff;
+  assert.throws(() => parsePreludeSinglePcztResponse(withTrailer), /canonical/i);
 });

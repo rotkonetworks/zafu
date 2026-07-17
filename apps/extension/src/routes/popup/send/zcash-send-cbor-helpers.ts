@@ -70,3 +70,97 @@ export function unwrapCborSinglePczt(cbor: Uint8Array): Uint8Array {
   }
   return cbor.slice(pos, pos + len);
 }
+
+// ===========================================================================
+// Ironwood-aware signer prelude envelope (FIX-C item 1)
+//
+// The turnstile (orchard -> ironwood) migration MUST NOT travel over the
+// `zcash-pczt` CBOR `{1: bytes}` envelope. That envelope is consumed by the
+// production, ironwood-BLIND signer path (rust/signer's crates.io pczt) which
+// cannot see V6 / ironwood outputs - it hides the migration destination and
+// renders a fee ~= the whole migrated amount. Instead we ship the migration
+// PCZT in the zigner prelude envelope `[0x53][crypto=0x04][tx_type=0x03]` that
+// reaches the ironwood-AWARE `pczt_signing` module (built with
+// --cfg zcash_unstable="nu6.3"). See zigner rust/pczt_signing/src/envelope.rs.
+//
+// Wire format (from envelope.rs, little-endian lengths):
+//   single request:  [0x53][0x04][0x03] || pczt_bytes
+//   single response: [0x53][0x04][0x03] || digest:32 || pczt_len:u32(LE) || signed_pczt
+//
+// TODO(FIX-B seam): the UR *type strings* below are this stream's best guess
+// derived from the zigner docs (docs/keystone-compat-pczt-signing.md names the
+// batch envelope `zcash-sign-batch`; single -> `zcash-sign`, signed response ->
+// `zcash-signatures`). FIX-B (feat/ironwood-v6-signer) owns the final zafu-
+// facing UR framing (the Kotlin scan dispatcher + response fountain framing are
+// listed as "Remaining" there). If FIX-B pins different type strings, update
+// ONLY the two constants below - the envelope byte layout is frozen by the
+// contract and stays as-is.
+// ===========================================================================
+
+/** zigner envelope prelude bytes: [0x53][crypto=zcash 0x04][tx_type=PCZT single 0x03]. */
+export const ZIGNER_PRELUDE_PCZT_SINGLE = Object.freeze([0x53, 0x04, 0x03] as const);
+
+/** UR type carrying the prelude-envelope single-PCZT signing REQUEST (hot -> cold). */
+export const ZIGNER_PCZT_SIGN_UR_TYPE = 'zcash-sign';
+
+/** UR type carrying the prelude-envelope signed-PCZT RESPONSE (cold -> hot). */
+export const ZIGNER_PCZT_SIGNED_UR_TYPE = 'zcash-signatures';
+
+/**
+ * Wrap a redacted migration PCZT in the ironwood-aware signer's single-PCZT
+ * prelude envelope. Inverse of `parsePreludeSinglePcztResponse` (the response
+ * carries an extra integrity digest + length prefix).
+ */
+export function preludeWrapSinglePczt(pczt: Uint8Array): Uint8Array {
+  const out = new Uint8Array(ZIGNER_PRELUDE_PCZT_SINGLE.length + pczt.length);
+  out.set(ZIGNER_PRELUDE_PCZT_SINGLE, 0);
+  out.set(pczt, ZIGNER_PRELUDE_PCZT_SINGLE.length);
+  return out;
+}
+
+/**
+ * Parse a single-PCZT prelude-envelope RESPONSE from the ironwood-aware signer.
+ * Layout: `[0x53][0x04][0x03] || digest:32 || pczt_len:u32(LE) || signed_pczt`.
+ * Verifies the prelude, the sha256 integrity digest length prefix, and that the
+ * declared length consumes the buffer exactly. Returns the raw signed PCZT
+ * bytes (the caller hex-encodes + extracts). `expectedDigest`, when supplied,
+ * lets the caller cross-check `sha256(signed_pczt)` (Keystone parity).
+ */
+export function parsePreludeSinglePcztResponse(payload: Uint8Array): {
+  signedPczt: Uint8Array;
+  digest: Uint8Array;
+} {
+  if (payload.length < 3) {
+    throw new Error('prelude PCZT response too short');
+  }
+  if (payload[0] !== 0x53) {
+    throw new Error(`expected prelude 0x53, got 0x${(payload[0] ?? 0).toString(16)}`);
+  }
+  if (payload[1] !== 0x04) {
+    throw new Error(`expected crypto type zcash 0x04, got 0x${(payload[1] ?? 0).toString(16)}`);
+  }
+  if (payload[2] !== 0x03) {
+    throw new Error(`expected single-PCZT tx type 0x03, got 0x${(payload[2] ?? 0).toString(16)}`);
+  }
+  // digest(32) + len(4) header must be present
+  if (payload.length < 3 + 32 + 4) {
+    throw new Error('prelude PCZT response truncated at digest/length header');
+  }
+  const digest = payload.slice(3, 3 + 32);
+  let pos = 3 + 32;
+  // little-endian u32 length. Accumulate with `+ b * 2**k` (not `<< 24`) so a
+  // high-bit-set length stays a positive JS number rather than going signed.
+  const len =
+    payload[pos]! +
+    payload[pos + 1]! * 256 +
+    payload[pos + 2]! * 65536 +
+    payload[pos + 3]! * 16777216;
+  pos += 4;
+  if (pos + len !== payload.length) {
+    throw new Error(
+      `prelude PCZT response not canonical: declared length ${len} at offset ${pos} ` +
+        `vs buffer length ${payload.length} (expected exact consume)`,
+    );
+  }
+  return { signedPczt: payload.slice(pos, pos + len), digest };
+}

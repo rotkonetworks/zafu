@@ -51,6 +51,19 @@ export interface ZcashClient {
     txs: { data: Uint8Array; height: number }[];
   }>;
   getBlockTime(height: number): Promise<number>;
+  /**
+   * lightwalletd `GetLightdInfo` (both backends serve it; zidecar via its
+   * CompactTxStreamer compatibility layer). `consensusBranchId` is the hex
+   * branch id the endpoint's node reports for the current chain tip - the
+   * NU6.3 turnstile builder fails closed unless this matches the real NU6.3
+   * value (0x37a5165b) and is not the placeholder 0xffffffff.
+   */
+  getLightdInfo(): Promise<{
+    consensusBranchId: string;
+    chainName: string;
+    blockHeight: number;
+    saplingActivationHeight: number;
+  }>;
   sendTransaction(
     txData: Uint8Array,
   ): Promise<{ txid: Uint8Array; errorCode: number; errorMessage: string }>;

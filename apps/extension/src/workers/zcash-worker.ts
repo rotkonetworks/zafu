@@ -18,6 +18,10 @@ import { idbBucketStore } from '../services/memo-sync/filters/cache';
 import { bucketOf, BUCKET_SIZE as MEMO_BUCKET_SIZE } from '../services/memo-sync/types';
 import type { BucketStart as MemoBucketStart, MemoSyncStrategy } from '../services/memo-sync/types';
 import type { ZcashBackend, ZcashClient } from '../state/keyring/zcash-backend';
+import {
+  preludeWrapSinglePczt,
+  ZIGNER_PCZT_SIGN_UR_TYPE,
+} from '../routes/popup/send/zcash-send-cbor-helpers';
 
 const workerSelf = globalThis as any as DedicatedWorkerGlobalScope;
 
@@ -333,6 +337,13 @@ interface WasmModule {
     target_height: number,
     mainnet: boolean,
     memo_hex?: string | null,
+    // FIX-A seam: the producer adds a `expected_branch_id` fail-closed guard
+    // (build_turnstile_migration_pczt must REFUSE unless the branch id it binds
+    // matches this caller-passed value, read from GetLightdInfo). The exact
+    // ARG POSITION is owned by FIX-A (feat/ironwood-wasm-producer) - it had not
+    // landed at time of writing. We pass it as the trailing arg here and in the
+    // offscreen prover call; if FIX-A slots it elsewhere, move the arg to match.
+    expected_branch_id?: number,
   ) => unknown;
 
   // FROST multisig
@@ -473,6 +484,17 @@ const cborWrapPczt = (pczt: Uint8Array): Uint8Array => {
  * v5 layout: [4B header][4B versionGroupId][4B consensusBranchId]...
  * NU5 branch ID in LE: B4 D0 D6 C2
  */
+/**
+ * NU6.3 consensus branch id (from the live zebra: 0x37a5165b). The turnstile
+ * migration builder binds this into the transaction; we fail closed unless the
+ * endpoint's GetLightdInfo reports exactly this. `GetLightdInfo` returns it as
+ * a lowercase hex string with no `0x` prefix.
+ */
+const NU63_CONSENSUS_BRANCH_ID = 0x37a5165b;
+const NU63_CONSENSUS_BRANCH_ID_HEX = '37a5165b';
+/** Placeholder branch id from a pre-activation / not-yet-real fork. Never build against it. */
+const PLACEHOLDER_BRANCH_ID_HEX = 'ffffffff';
+
 const NU5_BRANCH_ID_LE = [0xb4, 0xd0, 0xd6, 0xc2];
 const patchBranchId = (buf: Uint8Array): void => {
   // only patch v5 transactions (header byte 0 = 0x05, byte 3 = 0x80 for fOverwintered)
@@ -4182,6 +4204,34 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           migratePayload.serverUrl,
           migratePayload.backend,
         );
+
+        // ── FAIL-CLOSED branch-id guard (FIX-C item 2) ────────────────────
+        // Before building anything, read the endpoint's reported consensus
+        // branch id from GetLightdInfo. We refuse to build (and therefore to
+        // broadcast) unless NU6.3 is actually active at this endpoint and the
+        // branch id is the real value (0x37a5165b). A placeholder branch id
+        // (0xffffffff) or any mismatch means NU6.3 has not activated here yet -
+        // a migration built against it would be an invalid / unspendable tx.
+        emitProgress('checking NU6.3 activation');
+        const lightdInfo = await migrateClient.getLightdInfo();
+        const reportedBranchHex = (lightdInfo.consensusBranchId || '')
+          .trim()
+          .toLowerCase()
+          .replace(/^0x/, '');
+        if (!reportedBranchHex || reportedBranchHex === PLACEHOLDER_BRANCH_ID_HEX) {
+          throw new Error(
+            'NU6.3 is not active at this endpoint yet (placeholder consensus branch id) - ' +
+              'turnstile migration is unavailable until NU6.3 activates',
+          );
+        }
+        if (reportedBranchHex !== NU63_CONSENSUS_BRANCH_ID_HEX) {
+          throw new Error(
+            `endpoint consensus branch id 0x${reportedBranchHex} does not match NU6.3 ` +
+              `(0x${NU63_CONSENSUS_BRANCH_ID_HEX}); refusing to build turnstile migration`,
+          );
+        }
+        emitProgress('NU6.3 active', `branch id 0x${reportedBranchHex}`);
+
         emitProgress('fetching chain tip');
         const migrateTip = await migrateClient.getTip();
         const migrateAnchorHeight = await resolveAnchorHeight(walletId, migrateTip.height);
@@ -4231,6 +4281,11 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             migrateTip.height,
             migratePayload.mainnet,
             null,
+            // expected_branch_id: the value we just validated from GetLightdInfo.
+            // The producer's fail-closed guard (FIX-A) refuses to build unless the
+            // branch id it binds equals this. See the wasm decl TODO re: arg
+            // position if FIX-A finalizes it elsewhere.
+            NU63_CONSENSUS_BRANCH_ID,
           ],
         });
         const migrateParsed = built as {
@@ -4240,14 +4295,20 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         };
 
         const migratePcztBytes = hexDecode(migrateParsed.pczt_hex);
-        const migrateCbor = cborWrapPczt(migratePcztBytes);
+        // FIX-C item 1: the migration MUST reach the ironwood-AWARE signer.
+        // `ur:zcash-pczt` (CBOR {1: bytes}) reaches the production, ironwood-
+        // BLIND signer which hides the destination and shows a fee ~= the whole
+        // amount. Wrap the redacted PCZT in the zigner prelude envelope
+        // [0x53][0x04][0x03] (single PCZT) instead - that reaches the
+        // pczt_signing module built with --cfg zcash_unstable="nu6.3".
+        const migrateEnvelope = preludeWrapSinglePczt(migratePcztBytes);
         const migrateFragSize =
           migratePayload.fragmentSize && migratePayload.fragmentSize > 0
             ? migratePayload.fragmentSize
             : 200;
         const migrateFramesJson = wasmModule.ur_encode_frames(
-          migrateCbor,
-          'zcash-pczt',
+          migrateEnvelope,
+          ZIGNER_PCZT_SIGN_UR_TYPE,
           migrateFragSize,
         );
         const migrateUrFrames = JSON.parse(migrateFramesJson) as string[];
@@ -4265,7 +4326,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             fee: fee.toString(),
             amount: migrateAmount.toString(),
             urFrames: migrateUrFrames,
-            cborBytes: migrateCbor.length,
+            cborBytes: migrateEnvelope.length,
           },
         });
         return;

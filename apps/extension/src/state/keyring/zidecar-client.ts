@@ -114,6 +114,27 @@ export class ZidecarClient {
     return this.parseTip(resp);
   }
 
+  /**
+   * lightwalletd `GetLightdInfo`. zidecar serves this via its CompactTxStreamer
+   * compatibility service (`cash.z.wallet.sdk.rpc.CompactTxStreamer`), NOT the
+   * native `zidecar.v1.Zidecar` service, so we hit the lwd path here.
+   * `consensusBranchId` is field 6 (hex string, no 0x prefix); the turnstile
+   * builder fails closed unless it is the real NU6.3 branch id (0x37a5165b).
+   */
+  async getLightdInfo(): Promise<{
+    consensusBranchId: string;
+    chainName: string;
+    blockHeight: number;
+    saplingActivationHeight: number;
+  }> {
+    const resp = await this.grpcCallService(
+      'cash.z.wallet.sdk.rpc.CompactTxStreamer',
+      'GetLightdInfo',
+      new Uint8Array(0),
+    );
+    return this.parseLightdInfo(resp);
+  }
+
   /** get current pro ring for anonymous membership proofs */
   async getProRing(): Promise<ProRing> {
     const resp = await this.grpcCall('GetProRing', new Uint8Array(0));
@@ -293,7 +314,21 @@ export class ZidecarClient {
   // --- private helpers ---
 
   private async grpcCall(method: string, msg: Uint8Array): Promise<Uint8Array> {
-    const path = `${this.serverUrl}/zidecar.v1.Zidecar/${method}`;
+    return this.grpcCallService('zidecar.v1.Zidecar', method, msg);
+  }
+
+  /**
+   * Unary grpc-web call against an arbitrary service on this endpoint. Most
+   * RPCs use the native `zidecar.v1.Zidecar` service (via `grpcCall`), but the
+   * lightwalletd-compat surface (e.g. GetLightdInfo) lives under
+   * `cash.z.wallet.sdk.rpc.CompactTxStreamer` on the same host.
+   */
+  private async grpcCallService(
+    service: string,
+    method: string,
+    msg: Uint8Array,
+  ): Promise<Uint8Array> {
+    const path = `${this.serverUrl}/${service}/${method}`;
 
     // wrap message in grpc-web frame
     const body = new Uint8Array(5 + msg.length);
@@ -958,7 +993,11 @@ export class ZidecarClient {
     //   field 3: uint64 time (varint)
     //   field 4: string sapling_tree (length-delimited)
     //   field 5: string orchard_tree (length-delimited)
-    //   field 6: string ironwood_tree (length-delimited, NU6.3; absent pre-upgrade)
+    //   field 7: string ironwood_tree (length-delimited, NU6.3; absent pre-upgrade)
+    // NOTE (FIX-C): ironwood_tree is proto field 7, not 6. An earlier stream
+    // guessed 6; the authoritative slot (matching lightwalletd-client.ts and
+    // the zidecar producer) is 7 - reading 6 would decode a different field
+    // (or nothing) and silently skip the ironwood frontier.
     let height = 0;
     let time = 0;
     let orchardTree = '';
@@ -1002,7 +1041,7 @@ export class ZidecarClient {
         const data = buf.subarray(pos, pos + len);
         if (field === 5) {
           orchardTree = decoder.decode(data);
-        } else if (field === 6) {
+        } else if (field === 7) {
           ironwoodTree = decoder.decode(data);
         }
         pos += len;
@@ -1361,6 +1400,71 @@ export class ZidecarClient {
     }
 
     return { ringKeys, commitment, epoch, context, ringSize };
+  }
+
+  private parseLightdInfo(buf: Uint8Array): {
+    consensusBranchId: string;
+    chainName: string;
+    blockHeight: number;
+    saplingActivationHeight: number;
+  } {
+    // LightdInfo (lightwalletd service.proto):
+    //   field 4:  string chainName
+    //   field 5:  uint64 saplingActivationHeight (varint)
+    //   field 6:  string consensusBranchId (hex, no 0x)
+    //   field 8:  uint64 blockHeight (varint)
+    let consensusBranchId = '';
+    let chainName = '';
+    let blockHeight = 0;
+    let saplingActivationHeight = 0;
+    let pos = 0;
+    const decoder = new TextDecoder();
+
+    while (pos < buf.length) {
+      const tag = buf[pos++]!;
+      const field = tag >> 3;
+      const wire = tag & 0x7;
+
+      if (wire === 0) {
+        let v = 0,
+          s = 0;
+        while (pos < buf.length) {
+          const b = buf[pos++]!;
+          v |= (b & 0x7f) << s;
+          if (!(b & 0x80)) {
+            break;
+          }
+          s += 7;
+        }
+        if (field === 5) {
+          saplingActivationHeight = v;
+        } else if (field === 8) {
+          blockHeight = v;
+        }
+      } else if (wire === 2) {
+        let len = 0,
+          s = 0;
+        while (pos < buf.length) {
+          const b = buf[pos++]!;
+          len |= (b & 0x7f) << s;
+          if (!(b & 0x80)) {
+            break;
+          }
+          s += 7;
+        }
+        const data = buf.subarray(pos, pos + len);
+        if (field === 4) {
+          chainName = decoder.decode(data);
+        } else if (field === 6) {
+          consensusBranchId = decoder.decode(data);
+        }
+        pos += len;
+      } else {
+        break;
+      }
+    }
+
+    return { consensusBranchId, chainName, blockHeight, saplingActivationHeight };
   }
 
   private parseLicenseResponse(buf: Uint8Array): LicenseInfo {

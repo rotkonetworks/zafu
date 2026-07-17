@@ -21,6 +21,7 @@ const MAX_RESP_BYTES: Record<string, number> = {
   GetTransaction: 1 << 20, // 1 MiB — single tx
   GetMempoolTx: 16 << 20, // 16 MiB — mempool stream
   GetLatestTreeState: 1 << 17,
+  GetLightdInfo: 1 << 12, // 4 KiB - small info struct
 };
 const DEFAULT_MAX_RESP_BYTES = 1 << 20; // 1 MiB
 
@@ -182,6 +183,35 @@ export class LightwalletdClient implements ZcashClient {
       }
     });
     return time;
+  }
+
+  async getLightdInfo(): Promise<{
+    consensusBranchId: string;
+    chainName: string;
+    blockHeight: number;
+    saplingActivationHeight: number;
+  }> {
+    // GetLightdInfo(Empty) → LightdInfo {
+    //   chainName=4; saplingActivationHeight=5; consensusBranchId=6 (hex string);
+    //   blockHeight=8 }
+    const resp = await this.grpcCall('GetLightdInfo', new Uint8Array(0));
+    let consensusBranchId = '';
+    let chainName = '';
+    let blockHeight = 0;
+    let saplingActivationHeight = 0;
+    const decoder = new TextDecoder();
+    this.eachField(resp, (field, wire, val) => {
+      if (wire === 0 && field === 5) {
+        saplingActivationHeight = Number(val as bigint);
+      } else if (wire === 0 && field === 8) {
+        blockHeight = Number(val as bigint);
+      } else if (wire === 2 && field === 4) {
+        chainName = decoder.decode(val as Uint8Array);
+      } else if (wire === 2 && field === 6) {
+        consensusBranchId = decoder.decode(val as Uint8Array);
+      }
+    });
+    return { consensusBranchId, chainName, blockHeight, saplingActivationHeight };
   }
 
   async sendTransaction(

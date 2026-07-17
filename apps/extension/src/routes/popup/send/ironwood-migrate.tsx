@@ -22,10 +22,60 @@ import {
   spawnNetworkWorker,
   type TurnstileMigrationUnsignedResult,
 } from '../../../state/keyring/network-worker';
-import { unwrapCborSinglePczt } from './zcash-send-cbor-helpers';
+import {
+  parsePreludeSinglePcztResponse,
+  ZIGNER_PCZT_SIGNED_UR_TYPE,
+} from './zcash-send-cbor-helpers';
 
 const fmtZec = (zat: bigint): string =>
   (Number(zat) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
+
+/** shape of the wasm PcztSummary the ironwood-aware signer confirms */
+interface PcztSummary {
+  orchard_actions: number;
+  ironwood_actions: number;
+  transparent_inputs: number;
+  /** [label, zatoshis] pairs; label e.g. `ironwood:<43-byte-hex>` / `ironwood:shielded` */
+  outputs: [string, number][];
+  fee_zat?: number | null;
+}
+
+/**
+ * Pull the ironwood migration destination + amount + fee from the PcztSummary
+ * the cold signer will actually confirm (FIX-C item 3). Driving the review off
+ * the summary - never off wallet-computed metadata that could disagree with
+ * what gets signed - is the whole point: the destination and fee the user sees
+ * are bound to the bytes the signer renders.
+ */
+function ironwoodDestinationFromSummary(summary: unknown): {
+  destinationLabel: string | null;
+  ironwoodZat: bigint | null;
+  feeZat: bigint | null;
+} {
+  const s = summary as PcztSummary | null | undefined;
+  if (!s || !Array.isArray(s.outputs)) {
+    return { destinationLabel: null, ironwoodZat: null, feeZat: null };
+  }
+  let destinationLabel: string | null = null;
+  let ironwoodZat: bigint | null = null;
+  for (const entry of s.outputs) {
+    if (!Array.isArray(entry) || entry.length < 2) {
+      continue;
+    }
+    const [label, value] = entry;
+    if (typeof label === 'string' && label.startsWith('ironwood:')) {
+      destinationLabel = label.slice('ironwood:'.length);
+      ironwoodZat = (ironwoodZat ?? 0n) + BigInt(Math.trunc(Number(value) || 0));
+    }
+  }
+  const feeZat =
+    s.fee_zat === null || s.fee_zat === undefined ? null : BigInt(Math.trunc(Number(s.fee_zat)));
+  return { destinationLabel, ironwoodZat, feeZat };
+}
+
+/** truncate a long hex/address for display: first 10 + last 8 with an ellipsis. */
+const shortenDest = (dest: string): string =>
+  dest.length > 22 ? `${dest.slice(0, 10)}...${dest.slice(-8)}` : dest;
 
 /**
  * Home-screen prompt (Zashi proposeShielding style): shown when the wallet
@@ -147,13 +197,16 @@ export function IronwoodMigrate({
   }, [ufvk, walletId, serverUrl, accountIndex, mainnet, backend]);
 
   const handleSignedScanned = useCallback(
-    async (cborBytes: Uint8Array) => {
+    async (envelopeBytes: Uint8Array) => {
       setStep('broadcast');
       try {
-        const pcztBytes = unwrapCborSinglePczt(cborBytes);
+        // FIX-C item 1: the signed response comes back in the ironwood-aware
+        // signer's prelude envelope ([0x53][0x04][0x03] || digest || len || pczt),
+        // NOT the CBOR {1: bytes} envelope. Parse it accordingly.
+        const { signedPczt } = parsePreludeSinglePcztResponse(envelopeBytes);
         let pcztHex = '';
-        for (let i = 0; i < pcztBytes.length; i++) {
-          pcztHex += pcztBytes[i]!.toString(16).padStart(2, '0');
+        for (let i = 0; i < signedPczt.length; i++) {
+          pcztHex += signedPczt[i]!.toString(16).padStart(2, '0');
         }
         const result = await completeTurnstileMigrationInWorker(
           'zcash',
@@ -173,8 +226,18 @@ export function IronwoodMigrate({
     [walletId, serverUrl],
   );
 
-  const fee = unsignedRef.current ? BigInt(unsignedRef.current.fee) : null;
-  const amount = unsignedRef.current ? BigInt(unsignedRef.current.amount) : null;
+  // FIX-C item 3: destination, migrated amount, and fee shown on review are
+  // driven from the PcztSummary the signer will actually confirm - NOT from the
+  // wallet-computed fee/amount fields, which could disagree with the signed
+  // bytes. Fall back to the worker's numbers only if the summary is absent
+  // (e.g. an older blob that predates the structured summary).
+  const summaryView = unsignedRef.current
+    ? ironwoodDestinationFromSummary(unsignedRef.current.summary)
+    : { destinationLabel: null, ironwoodZat: null, feeZat: null };
+  const fee = summaryView.feeZat ?? (unsignedRef.current ? BigInt(unsignedRef.current.fee) : null);
+  const amount =
+    summaryView.ironwoodZat ?? (unsignedRef.current ? BigInt(unsignedRef.current.amount) : null);
+  const destinationLabel = summaryView.destinationLabel;
 
   const renderContent = () => {
     switch (step) {
@@ -271,9 +334,23 @@ export function IronwoodMigrate({
             </div>
 
             {amount !== null && fee !== null && (
-              <div className='rounded bg-elev-2 p-3 text-xs text-fg-muted'>
-                <p>
-                  migrate {fmtZec(amount)} ZEC to ironwood (fee {fmtZec(fee)} ZEC)
+              <div className='rounded bg-elev-2 p-3 text-xs text-fg-muted flex flex-col gap-1'>
+                <div className='flex justify-between'>
+                  <span>migrate</span>
+                  <span className='tabular-nums text-fg-high'>{fmtZec(amount)} ZEC</span>
+                </div>
+                <div className='flex justify-between'>
+                  <span>network fee</span>
+                  <span className='tabular-nums'>{fmtZec(fee)} ZEC</span>
+                </div>
+                <div className='flex justify-between'>
+                  <span>ironwood destination</span>
+                  <span className='font-mono text-fg-high'>
+                    {destinationLabel ? shortenDest(destinationLabel) : 'your wallet'}
+                  </span>
+                </div>
+                <p className='mt-1 text-label leading-snug'>
+                  these values are read from the transaction the zigner will confirm.
                 </p>
               </div>
             )}
@@ -317,7 +394,7 @@ export function IronwoodMigrate({
             onClose={() => setStep('sign')}
             title='scan signed PCZT'
             description='hold camera steady on the animated QR'
-            urTypeFilter='zcash-pczt'
+            urTypeFilter={ZIGNER_PCZT_SIGNED_UR_TYPE}
           />
         );
 

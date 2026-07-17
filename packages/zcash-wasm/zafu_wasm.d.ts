@@ -260,6 +260,13 @@ export function build_turnstile_migration_pczt(
   target_height: number,
   mainnet: boolean,
   memo_hex?: string | null,
+  // FIX-A seam: fail-closed branch-id guard. The producer must REFUSE to build
+  // unless the branch id it binds matches this caller-passed value (the wallet
+  // reads it from GetLightdInfo; NU6.3 = 0x37a5165b). The exact arg POSITION is
+  // owned by FIX-A (feat/ironwood-wasm-producer) and had not landed when this
+  // was written - if it slots elsewhere, move this arg (and the worker call) to
+  // match. Passing the wrong branch id or the placeholder 0xffffffff must error.
+  expected_branch_id?: number,
 ): any;
 
 /**
