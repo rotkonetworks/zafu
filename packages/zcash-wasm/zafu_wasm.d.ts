@@ -56,6 +56,15 @@ export class WalletKeys {
    * This is the main entry point for high-performance scanning
    */
   scan_actions_parallel(actions_bytes: Uint8Array): any;
+  /**
+   * NU6.3 ironwood pool: scan a batch of compact ironwood actions in
+   * PARALLEL and return found notes (mirror of `scan_actions_parallel`).
+   * Returned `DecryptedNote`s carry `pool: "ironwood"`.
+   *
+   * Frozen interface contract (Section 2) - implemented by the ironwood
+   * wasm build; absent from older blobs, so callers must feature-detect.
+   */
+  scan_actions_ironwood_parallel(actions_bytes: Uint8Array): any;
 }
 
 /**
@@ -106,6 +115,11 @@ export class WatchOnlyWallet {
    * Scan compact actions (same interface as WalletKeys)
    */
   scan_actions_parallel(actions_bytes: Uint8Array): any;
+  /**
+   * NU6.3 ironwood pool: scan compact ironwood actions (same interface as
+   * WalletKeys). Returned notes carry `pool: "ironwood"`.
+   */
+  scan_actions_ironwood_parallel(actions_bytes: Uint8Array): any;
 }
 
 /**
@@ -126,6 +140,29 @@ export function address_from_ufvk(ufvk_str: string, diversifier_index: number): 
  * JSON `{anchor_hex, paths: [{position, path: [{hash}]}]}`
  */
 export function build_merkle_paths(
+  tree_state_hex: string,
+  compact_blocks_json: string,
+  note_positions_json: string,
+  anchor_height: number,
+): any;
+
+/**
+ * NU6.3 ironwood pool: build merkle paths for ironwood note positions by
+ * replaying compact blocks from a checkpoint (mirror of `build_merkle_paths`).
+ *
+ * # Arguments
+ * * `tree_state_hex` - hex-encoded IRONWOOD frontier from GetTreeState
+ * * `compact_blocks_json` - JSON array of `[{height, actions: [{cmx_hex}]}]`
+ *   where actions are the block's IRONWOOD actions
+ * * `note_positions_json` - JSON array of ironwood note positions
+ * * `anchor_height` - the block height to use as anchor
+ *
+ * # Returns
+ * JSON `{anchor_hex, paths: [{position, path: [{hash}]}]}`
+ *
+ * Frozen interface contract (Section 2) - absent from pre-ironwood blobs.
+ */
+export function build_merkle_paths_ironwood(
   tree_state_hex: string,
   compact_blocks_json: string,
   note_positions_json: string,
@@ -193,6 +230,37 @@ export function build_signed_spend_transaction(
   mainnet: boolean,
   memo_hex?: string | null,
 ): string;
+
+/**
+ * NU6.3 turnstile: build a migration PCZT that spends the given ORCHARD
+ * notes and outputs the full value (minus fee) to the wallet's OWN ironwood
+ * address, derived INTERNALLY from `ufvk_str` (self-migration - there is no
+ * recipient argument by design).
+ *
+ * The transaction is `TxVersion::V6` (selected by `target_height` at/after
+ * NU6.3 activation): orchard spend(s) + ironwood output(s), no ironwood
+ * anchor needed. Returns a redacted-for-signer PCZT hex with the same
+ * redaction contract as `build_unsigned_pczt`; the TS layer CBOR-wraps and
+ * UR-encodes it for the existing zigner cold-sign flow.
+ *
+ * # Returns
+ * JSON `{ pczt_hex, summary, action_count }` where `summary` includes
+ * `ironwood_actions` and ironwood output recipients/values for device
+ * confirmation.
+ *
+ * Frozen interface contract (Section 2) - absent from pre-ironwood blobs.
+ */
+export function build_turnstile_migration_pczt(
+  ufvk_str: string,
+  orchard_notes_json: string,
+  fee: bigint,
+  orchard_anchor_hex: string,
+  orchard_merkle_paths_json: string,
+  account_index: number,
+  target_height: number,
+  mainnet: boolean,
+  memo_hex?: string | null,
+): any;
 
 /**
  * Build a PCZT for cold-wallet signing via QR.
@@ -383,6 +451,14 @@ export function extract_signed_tx_from_pczt(pczt_hex: string): string;
  * Compute the tree size from a hex-encoded frontier.
  */
 export function frontier_tree_size(tree_state_hex: string): bigint;
+
+/**
+ * NU6.3 ironwood pool: compute the tree size from a hex-encoded IRONWOOD
+ * frontier (mirror of `frontier_tree_size`).
+ *
+ * Frozen interface contract (Section 2) - absent from pre-ironwood blobs.
+ */
+export function frontier_tree_size_ironwood(tree_state_hex: string): bigint;
 
 /**
  * coordinator: aggregate signed shares into final signature
@@ -626,6 +702,14 @@ export function transparent_pubkey_from_ufvk(ufvk_str: string, address_index: nu
  */
 export function tree_root_hex(tree_state_hex: string): string;
 
+/**
+ * NU6.3 ironwood pool: compute the tree root from a hex-encoded IRONWOOD
+ * frontier (mirror of `tree_root_hex`).
+ *
+ * Frozen interface contract (Section 2) - absent from pre-ironwood blobs.
+ */
+export function tree_root_hex_ironwood(tree_state_hex: string): string;
+
 export function ur_decode_frames(parts_json: string, expected_type: string): string;
 
 /**
@@ -676,6 +760,15 @@ export function version(): string;
 export function witness_extract_path(witness_hex: string): any;
 
 /**
+ * NU6.3 ironwood pool: extract a merkle path from a stored per-note
+ * IRONWOOD witness (mirror of `witness_extract_path`). Returns JSON
+ * `{position, root_hex, path: [{hash}]}`.
+ *
+ * Frozen interface contract (Section 2) - absent from pre-ironwood blobs.
+ */
+export function witness_extract_path_ironwood(witness_hex: string): any;
+
+/**
  * Advance tracked witnesses over a range of compact blocks, optionally
  * seeding new ones. Returns JSON
  * `{end_frontier_hex, anchor_hex, witnesses: [{id, position, witness_hex}], seeded_ids: [...], end_position}`.
@@ -687,6 +780,20 @@ export function witness_extract_path(witness_hex: string): any;
  * * `new_notes_json` - `[{id, position}]` - witnesses to seed within this range
  */
 export function witness_sync_update(
+  start_frontier_hex: string,
+  compact_blocks_json: string,
+  existing_witnesses_json: string,
+  new_notes_json: string,
+): any;
+
+/**
+ * NU6.3 ironwood pool: advance tracked IRONWOOD witnesses over a range of
+ * compact blocks, optionally seeding new ones (mirror of
+ * `witness_sync_update`; same JSON shapes, ironwood tree/actions).
+ *
+ * Frozen interface contract (Section 2) - absent from pre-ironwood blobs.
+ */
+export function witness_sync_update_ironwood(
   start_frontier_hex: string,
   compact_blocks_json: string,
   existing_witnesses_json: string,

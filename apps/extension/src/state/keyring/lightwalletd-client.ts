@@ -94,13 +94,15 @@ export class LightwalletdClient implements ZcashClient {
 
   async getTreeState(
     height: number,
-  ): Promise<{ height: number; orchardTree: string; time: number }> {
+  ): Promise<{ height: number; orchardTree: string; ironwoodTree?: string; time: number }> {
     // GetTreeState(BlockID{height=1}) → TreeState { height=2; time=4; orchardTree=6 }
+    // NU6.3 adds ironwoodTree as the next field (7); absent pre-upgrade.
     const req = new Uint8Array([0x08, ...this.varint(height)]);
     const resp = await this.grpcCall('GetTreeState', req);
     let h = 0;
     let time = 0;
     let orchardTree = '';
+    let ironwoodTree = '';
     const decoder = new TextDecoder();
     this.eachField(resp, (field, wire, val) => {
       if (wire === 0 && field === 2) {
@@ -109,9 +111,13 @@ export class LightwalletdClient implements ZcashClient {
         time = Number(val as bigint);
       } else if (wire === 2 && field === 6) {
         orchardTree = decoder.decode(val as Uint8Array);
+      } else if (wire === 2 && field === 7) {
+        ironwoodTree = decoder.decode(val as Uint8Array);
       }
     });
-    return { height: h, orchardTree, time };
+    return ironwoodTree
+      ? { height: h, orchardTree, ironwoodTree, time }
+      : { height: h, orchardTree, time };
   }
 
   async getCompactBlocks(startHeight: number, endHeight: number): Promise<CompactBlock[]> {

@@ -29,7 +29,17 @@ export async function zcashClientFor(
 /** Method surface the worker drives a backend through; ZidecarClient is a structural superset. */
 export interface ZcashClient {
   getTip(): Promise<ChainTip>;
-  getTreeState(height: number): Promise<{ height: number; orchardTree: string; time: number }>;
+  getTreeState(height: number): Promise<{
+    height: number;
+    orchardTree: string;
+    /**
+     * NU6.3 ironwood pool frontier (hex). Optional: only present when the
+     * server serves it (zidecar post-NU6.3; lightwalletd if upstream adds
+     * the field). Absent on pre-upgrade servers and heights.
+     */
+    ironwoodTree?: string;
+    time: number;
+  }>;
   getCompactBlocks(startHeight: number, endHeight: number): Promise<CompactBlock[]>;
   getMempoolStream(): Promise<CompactBlock[]>;
   getAddressUtxos(addresses: string[], startHeight?: number, maxEntries?: number): Promise<Utxo[]>;

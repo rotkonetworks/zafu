@@ -83,6 +83,8 @@ interface WorkerMessage {
     | 'send-tx-complete'
     | 'send-tx-pczt'
     | 'send-tx-pczt-complete'
+    | 'send-turnstile-migration'
+    | 'send-turnstile-migration-complete'
     | 'shield'
     | 'shield-unsigned'
     | 'shield-complete'
@@ -126,6 +128,13 @@ interface FoundNoteWithMemo {
 /** Common scanning interface shared by WalletKeys and WatchOnlyWallet */
 interface ScannerKeys {
   scan_actions_parallel(actionsBytes: Uint8Array): DecryptedNote[];
+  /**
+   * NU6.3 ironwood pool scan (mirror of scan_actions_parallel). Optional:
+   * absent from pre-ironwood wasm blobs, so all callers feature-detect.
+   * Property (not method) syntax so feature-detection references don't trip
+   * @typescript-eslint/unbound-method.
+   */
+  scan_actions_ironwood_parallel?: (actionsBytes: Uint8Array) => DecryptedNote[];
   decrypt_transaction_memos(txBytes: Uint8Array): FoundNoteWithMemo[];
   free(): void;
 }
@@ -145,6 +154,9 @@ interface WatchOnlyWallet extends ScannerKeys {
   export_fvk_hex(): string;
 }
 
+/** Shielded pool a note lives in. NU6.3 adds the ironwood pool. */
+type NotePool = 'orchard' | 'ironwood';
+
 interface DecryptedNote {
   height: number;
   value: string;
@@ -152,6 +164,12 @@ interface DecryptedNote {
   cmx: string;
   txid: string;
   position: number;
+  /**
+   * Pool the note belongs to. Optional for backward compatibility with
+   * records persisted before the ironwood rollout: absent means 'orchard'.
+   * Use `poolOf(note)` instead of reading this directly.
+   */
+  pool?: NotePool;
   is_change?: boolean;
   spent_by_txid?: string;
   spent_at_height?: number;
@@ -163,6 +181,9 @@ interface DecryptedNote {
   /** tree size at which witness was last advanced — used to detect drift */
   witness_tree_size?: number;
 }
+
+/** Pool of a note; records persisted pre-ironwood default to orchard. */
+const poolOf = (note: DecryptedNote): NotePool => note.pool ?? 'orchard';
 
 interface WalletState {
   keys: ScannerKeys | null;
@@ -274,6 +295,45 @@ interface WasmModule {
   witness_extract_path(witness_hex: string): unknown;
   frontier_tree_size(tree_state_hex: string): bigint;
   tree_root_hex(tree_state_hex: string): string;
+
+  // ── NU6.3 ironwood pool (frozen interface contract, Section 2) ──
+  // All optional: pre-ironwood wasm blobs don't export them, so every call
+  // site feature-detects. Signatures mirror the orchard equivalents above.
+  // Property (not method) syntax so feature-detection references and
+  // destructuring don't trip @typescript-eslint/unbound-method.
+  build_merkle_paths_ironwood?: (
+    tree_state_hex: string,
+    compact_blocks_json: string,
+    note_positions_json: string,
+    anchor_height: number,
+  ) => unknown;
+  witness_sync_update_ironwood?: (
+    start_frontier_hex: string,
+    compact_blocks_json: string,
+    existing_witnesses_json: string,
+    new_notes_json: string,
+  ) => unknown;
+  witness_extract_path_ironwood?: (witness_hex: string) => unknown;
+  frontier_tree_size_ironwood?: (tree_state_hex: string) => bigint;
+  tree_root_hex_ironwood?: (tree_state_hex: string) => string;
+  /**
+   * Turnstile migration PCZT: spends the given ORCHARD notes and outputs to
+   * the wallet's OWN ironwood address (derived internally from the UFVK).
+   * Returns JSON `{ pczt_hex, summary, action_count }` with the same
+   * redaction contract as build_unsigned_pczt. Invoked via the offscreen
+   * prover (proveViaOffscreen), declared here for completeness.
+   */
+  build_turnstile_migration_pczt?: (
+    ufvk_str: string,
+    orchard_notes_json: string,
+    fee: bigint,
+    orchard_anchor_hex: string,
+    orchard_merkle_paths_json: string,
+    account_index: number,
+    target_height: number,
+    mainnet: boolean,
+    memo_hex?: string | null,
+  ) => unknown;
 
   // FROST multisig
   frost_dealer_keygen(min_signers: number, max_signers: number): string;
@@ -601,7 +661,12 @@ const parseTransparentTx = (data: Uint8Array, ourScripts: Set<string>): bigint =
 // single connection held open during sync, closed when idle
 
 const DB_NAME = 'zafu-zcash';
-const DB_VERSION = 3;
+// v4: NU6.3 ironwood - adds the 'witnesses-ironwood' store and the
+// ironwoodTreeSize / ironwoodTreeFrontier / ironwoodTreeFrontierHeight meta
+// keys (meta needs no schema change; the store is generic key/value).
+// Strictly additive: orchard stores and keys are untouched, so v3 databases
+// upgrade cleanly with no data migration.
+const DB_VERSION = 4;
 
 let sharedDb: IDBDatabase | null = null;
 
@@ -634,6 +699,15 @@ const getDb = (): Promise<IDBDatabase> => {
       }
       if (!db.objectStoreNames.contains('memo-cache')) {
         db.createObjectStore('memo-cache');
+      }
+      // v4 (NU6.3 ironwood): per-note ironwood witnesses live in their own
+      // store instead of on the note record - additive so old databases
+      // upgrade cleanly and the orchard paths never touch it.
+      if (!db.objectStoreNames.contains('witnesses-ironwood')) {
+        const store = db.createObjectStore('witnesses-ironwood', {
+          keyPath: ['walletId', 'nullifier'],
+        });
+        store.createIndex('byWallet', 'walletId', { unique: false });
       }
     };
   });
@@ -698,7 +772,7 @@ const listWallets = async (): Promise<string[]> => {
 const deleteWallet = async (walletId: string): Promise<void> => {
   const db = await getDb();
   // delete across all stores in parallel transactions
-  for (const storeName of ['wallets', 'notes', 'spent', 'meta'] as const) {
+  for (const storeName of ['wallets', 'notes', 'spent', 'meta', 'witnesses-ironwood'] as const) {
     const tx = db.transaction(storeName, 'readwrite');
     const store = tx.objectStore(storeName);
     if (storeName === 'wallets') {
@@ -718,11 +792,41 @@ const deleteWallet = async (walletId: string): Promise<void> => {
   walletStates.delete(walletId);
 };
 
+/** Per-note ironwood witness record persisted in the 'witnesses-ironwood' store. */
+interface IronwoodWitnessRecord {
+  walletId: string;
+  nullifier: string;
+  witness_hex: string;
+  witness_tree_size: number;
+}
+
 const loadState = async (walletId: string): Promise<WalletState> => {
   const state = getOrCreateWalletState(walletId);
   state.notes = await idbGetAllByIndex<DecryptedNote>('notes', 'byWallet', walletId);
   const spentRecords = await idbGetAllByIndex<{ nullifier: string }>('spent', 'byWallet', walletId);
   state.spentNullifiers = new Set(spentRecords.map(r => r.nullifier));
+
+  // attach ironwood witnesses from their dedicated store (orchard witnesses
+  // live on the note record itself; ironwood ones are stored separately per
+  // the v4 schema so orchard paths stay untouched)
+  const iwWitnesses = await idbGetAllByIndex<IronwoodWitnessRecord>(
+    'witnesses-ironwood',
+    'byWallet',
+    walletId,
+  );
+  if (iwWitnesses.length > 0) {
+    const byNullifier = new Map(iwWitnesses.map(w => [w.nullifier, w]));
+    for (const note of state.notes) {
+      if (poolOf(note) !== 'ironwood') {
+        continue;
+      }
+      const w = byNullifier.get(note.nullifier);
+      if (w) {
+        note.witness_hex = w.witness_hex;
+        note.witness_tree_size = w.witness_tree_size;
+      }
+    }
+  }
   return state;
 };
 
@@ -797,9 +901,11 @@ const verifySyncProofs = async (
     );
   }
 
-  // 3. verify nullifier proofs for unspent notes
+  // 3. verify nullifier proofs for unspent notes. Ironwood notes are
+  // excluded: zidecar's NOMT nullifier tree is orchard-only today; ironwood
+  // proof coverage is a post-NU6.3 server feature.
   const unspentNfs = state.notes
-    .filter(n => !state.spentNullifiers.has(n.nullifier))
+    .filter(n => !state.spentNullifiers.has(n.nullifier) && poolOf(n) !== 'ironwood')
     .map(n => hexDecode(n.nullifier));
 
   if (unspentNfs.length > 0) {
@@ -858,6 +964,23 @@ const getTreeFrontierHeight = async (walletId: string): Promise<number> => {
   return r?.value ?? 0;
 };
 
+// ── NU6.3 ironwood pool meta (mirrors the orchard keys above) ──
+
+const getIronwoodTreeSize = async (walletId: string): Promise<number> => {
+  const r = await idbGet<{ value: number }>('meta', [walletId, 'ironwoodTreeSize']);
+  return r?.value ?? 0;
+};
+
+const getIronwoodTreeFrontier = async (walletId: string): Promise<string | null> => {
+  const r = await idbGet<{ value: string }>('meta', [walletId, 'ironwoodTreeFrontier']);
+  return r?.value ?? null;
+};
+
+const getIronwoodTreeFrontierHeight = async (walletId: string): Promise<number> => {
+  const r = await idbGet<{ value: number }>('meta', [walletId, 'ironwoodTreeFrontierHeight']);
+  return r?.value ?? 0;
+};
+
 /**
  * Orchard anchor height for a spend: the cached sync frontier height — the
  * exact height our note witnesses are rooted at. The witness machinery only
@@ -905,6 +1028,13 @@ const saveFrontierSnapshot = async (
   await txComplete(tx);
 };
 
+/** ironwood pool state persisted alongside a batch (mirrors the orchard args) */
+interface IronwoodBatchMeta {
+  treeSize?: number;
+  frontier?: string;
+  frontierHeight?: number;
+}
+
 /** batch-save notes + spent + sync height + tree size in one transaction */
 const saveBatch = async (
   walletId: string,
@@ -915,19 +1045,39 @@ const saveBatch = async (
   updatedNotes?: DecryptedNote[],
   orchardTreeFrontier?: string,
   orchardTreeFrontierHeight?: number,
+  ironwood?: IronwoodBatchMeta,
 ): Promise<void> => {
   const db = await getDb();
-  const tx = db.transaction(['notes', 'spent', 'meta'], 'readwrite');
+  const tx = db.transaction(['notes', 'spent', 'meta', 'witnesses-ironwood'], 'readwrite');
   const notesStore = tx.objectStore('notes');
   const spentStore = tx.objectStore('spent');
   const metaStore = tx.objectStore('meta');
+  const iwWitnessStore = tx.objectStore('witnesses-ironwood');
+  // orchard notes carry their witness on the record; ironwood witnesses go
+  // to the dedicated v4 store so the orchard note shape stays untouched.
+  const putNote = (note: DecryptedNote) => {
+    if (poolOf(note) === 'ironwood') {
+      const { witness_hex, witness_tree_size, ...rest } = note;
+      notesStore.put({ ...rest, walletId });
+      if (witness_hex !== undefined && witness_tree_size !== undefined) {
+        iwWitnessStore.put({
+          walletId,
+          nullifier: note.nullifier,
+          witness_hex,
+          witness_tree_size,
+        } satisfies IronwoodWitnessRecord);
+      }
+    } else {
+      notesStore.put({ ...note, walletId });
+    }
+  };
   for (const note of notes) {
-    notesStore.put({ ...note, walletId });
+    putNote(note);
   }
   // re-save notes that were updated (e.g. spent_by_txid added, witness advanced)
   if (updatedNotes) {
     for (const note of updatedNotes) {
-      notesStore.put({ ...note, walletId });
+      putNote(note);
     }
   }
   for (const nf of spent) {
@@ -942,6 +1092,19 @@ const saveBatch = async (
   }
   if (orchardTreeFrontierHeight !== undefined) {
     metaStore.put({ walletId, key: 'orchardTreeFrontierHeight', value: orchardTreeFrontierHeight });
+  }
+  if (ironwood?.treeSize !== undefined) {
+    metaStore.put({ walletId, key: 'ironwoodTreeSize', value: ironwood.treeSize });
+  }
+  if (ironwood?.frontier) {
+    metaStore.put({ walletId, key: 'ironwoodTreeFrontier', value: ironwood.frontier });
+  }
+  if (ironwood?.frontierHeight !== undefined) {
+    metaStore.put({
+      walletId,
+      key: 'ironwoodTreeFrontierHeight',
+      value: ironwood.frontierHeight,
+    });
   }
   await txComplete(tx);
 };
@@ -1030,6 +1193,7 @@ interface ZcashBuildRequest {
     | 'build_signed_spend'
     | 'build_unsigned'
     | 'build_unsigned_pczt'
+    | 'build_turnstile_migration_pczt'
     | 'build_shielding'
     | 'build_unsigned_shielding';
   args: unknown[];
@@ -1098,8 +1262,11 @@ const selectNotes = (
   notes: DecryptedNote[],
   spentNullifiers: Set<string>,
   target: bigint,
+  // a transaction spends from exactly one pool; pre-ironwood callers all
+  // spend orchard, so notes without a pool tag (legacy records) qualify
+  pool: NotePool = 'orchard',
 ): DecryptedNote[] => {
-  const unspent = notes.filter(n => !spentNullifiers.has(n.nullifier));
+  const unspent = notes.filter(n => !spentNullifiers.has(n.nullifier) && poolOf(n) === pool);
   unspent.sort((a, b) => Number(BigInt(b.value) - BigInt(a.value)));
   const selected: DecryptedNote[] = [];
   let total = 0n;
@@ -1118,21 +1285,30 @@ const selectNotes = (
 const WITNESS_BATCH_SIZE = 1000;
 
 interface WitnessClient {
-  getTreeState(h: number): Promise<{ height: number; orchardTree: string }>;
+  getTreeState(h: number): Promise<{ height: number; orchardTree: string; ironwoodTree?: string }>;
   getCompactBlocks(
     start: number,
     end: number,
-  ): Promise<{ height: number; actions: { cmx: Uint8Array }[] }[]>;
+  ): Promise<
+    {
+      height: number;
+      actions: { cmx: Uint8Array }[];
+      ironwoodActions?: { cmx: Uint8Array }[];
+    }[]
+  >;
 }
 
 /**
  * Replay blocks for a range and fold them into a compact-blocks JSON payload.
  * Used for both witness seeding (backfill) and witness fast-forwarding.
+ * `pool` selects which action list feeds the commitment tree: orchard
+ * actions (default) or NU6.3 ironwood actions.
  */
 const fetchCompactBlocksRange = async (
   client: WitnessClient,
   start: number,
   end: number,
+  pool: NotePool = 'orchard',
 ): Promise<{
   blocks: { height: number; actions: { cmx_hex: string }[] }[];
   actions: number;
@@ -1147,10 +1323,11 @@ const fetchCompactBlocksRange = async (
     const e = Math.min(current + WITNESS_BATCH_SIZE - 1, end);
     const fetched = await client.getCompactBlocks(current, e);
     for (const block of fetched) {
-      actions += block.actions.length;
+      const poolActions = pool === 'ironwood' ? (block.ironwoodActions ?? []) : block.actions;
+      actions += poolActions.length;
       blocks.push({
         height: block.height,
-        actions: block.actions.map(a => ({ cmx_hex: hexEncode(a.cmx) })),
+        actions: poolActions.map(a => ({ cmx_hex: hexEncode(a.cmx) })),
       });
     }
     current = e + 1;
@@ -1287,15 +1464,18 @@ const backfillWitnesses = async (
 };
 
 /**
- * Build merkle paths for spending notes.
+ * NU6.3 ironwood pool witness/path building (mirror of the orchard path in
+ * buildWitnesses below, via the pool-specific wasm fns).
  *
- * Fast path: every selected note has a stored witness at the sync frontier.
- *            Fast-forward witnesses over any remaining gap (sync frontier →
- *            anchor height), extract paths, done.
- * Slow path: some notes lack a witness (pre-upgrade notes). Replay from a
- *            pre-note snapshot once, persist witnesses, then fast-forward.
+ * Fast path: every selected note has a cached ironwood witness aligned with
+ *            the cached ironwood frontier - fast-forward over the gap with
+ *            witness_sync_update_ironwood and extract paths.
+ * Slow path: replay from a pre-note ironwood tree state with
+ *            build_merkle_paths_ironwood (one-shot; the contract has no
+ *            ironwood equivalent of build_witnesses_and_paths, so nothing
+ *            is persisted on this path - sync repopulates witnesses).
  */
-const buildWitnesses = async (
+const buildWitnessesIronwood = async (
   client: WitnessClient,
   walletId: string,
   notes: DecryptedNote[],
@@ -1304,8 +1484,136 @@ const buildWitnesses = async (
   if (!wasmModule) {
     throw new Error('wasm not initialized');
   }
+  const {
+    witness_sync_update_ironwood: iwSync,
+    witness_extract_path_ironwood: iwExtract,
+    frontier_tree_size_ironwood: iwSize,
+    tree_root_hex_ironwood: iwRoot,
+    build_merkle_paths_ironwood: iwBuildPaths,
+  } = wasmModule;
+  if (!iwSync || !iwExtract || !iwSize || !iwRoot || !iwBuildPaths) {
+    throw new Error('ironwood not supported by this wasm build');
+  }
+
+  // network root at the anchor - cross-checked against whatever we build
+  const anchorTs = await client.getTreeState(anchorHeight);
+  if (!anchorTs.ironwoodTree) {
+    throw new Error(`server has no ironwood tree state at height ${anchorHeight}`);
+  }
+  const networkRoot = iwRoot(anchorTs.ironwoodTree);
+
+  const extractPaths = (
+    witnessed: { nullifier: string; witness_hex: string }[],
+  ): { position: number; path: { hash: string }[] }[] => {
+    const paths: { position: number; path: { hash: string }[] }[] = [];
+    for (const note of witnessed) {
+      const parsed = JSON.parse(iwExtract(note.witness_hex) as string) as {
+        position: number;
+        root_hex: string;
+        path: { hash: string }[];
+      };
+      if (parsed.root_hex !== networkRoot) {
+        throw new Error(`ironwood tree root mismatch at height ${anchorHeight}`);
+      }
+      paths.push({ position: parsed.position, path: parsed.path });
+    }
+    return paths;
+  };
+
+  // Fast path: cached frontier + aligned witnesses -> fast-forward.
+  const frontier = await getIronwoodTreeFrontier(walletId);
+  const frontierHeight = await getIronwoodTreeFrontierHeight(walletId);
+  const frontierSize = frontier ? Number(iwSize(frontier)) : -1;
+  const witnessTreeSize = notes[0]?.witness_tree_size ?? -1;
+  const aligned =
+    !!frontier &&
+    frontierSize === witnessTreeSize &&
+    notes.every(n => n.witness_hex && n.witness_tree_size === witnessTreeSize);
+
+  if (aligned && frontier) {
+    const { blocks: gapBlocks } = await fetchCompactBlocksRange(
+      client,
+      frontierHeight + 1,
+      anchorHeight,
+      'ironwood',
+    );
+    const existingInput = notes.map(n => ({ id: n.nullifier, witness_hex: n.witness_hex! }));
+    const result = JSON.parse(
+      iwSync(frontier, JSON.stringify(gapBlocks), JSON.stringify(existingInput), '[]') as string,
+    ) as { end_frontier_hex: string; witnesses: { id: string; witness_hex: string }[] };
+    const byId = new Map(result.witnesses.map(w => [w.id, w.witness_hex]));
+    const witnessed = notes.map(n => {
+      const w = byId.get(n.nullifier);
+      if (!w) {
+        throw new Error(`ironwood witness update missing note ${n.nullifier}`);
+      }
+      return { nullifier: n.nullifier, witness_hex: w };
+    });
+    const paths = extractPaths(witnessed);
+    console.log(`[zcash-worker] ironwood paths (fast) for ${paths.length} notes`);
+    return { anchorHex: networkRoot, paths };
+  }
+
+  // Slow path: replay from a rounded pre-note checkpoint (mirrors the
+  // orchard backfill's privacy-preserving rounded-height fetch).
+  const earliestNoteHeight = Math.min(...notes.map(n => n.height));
+  const roundedHeight = Math.max(
+    1,
+    Math.floor((earliestNoteHeight - 1) / FRONTIER_SNAPSHOT_INTERVAL) * FRONTIER_SNAPSHOT_INTERVAL,
+  );
+  const checkpointTs = await client.getTreeState(roundedHeight);
+  if (!checkpointTs.ironwoodTree) {
+    throw new Error(`server has no ironwood tree state at height ${roundedHeight}`);
+  }
+  const { blocks } = await fetchCompactBlocksRange(
+    client,
+    roundedHeight + 1,
+    anchorHeight,
+    'ironwood',
+  );
+  const positions = notes.map(n => n.position);
+  const result = JSON.parse(
+    iwBuildPaths(
+      checkpointTs.ironwoodTree,
+      JSON.stringify(blocks),
+      JSON.stringify(positions),
+      anchorHeight,
+    ) as string,
+  ) as { anchor_hex: string; paths: { position: number; path: { hash: string }[] }[] };
+  if (result.anchor_hex !== networkRoot) {
+    throw new Error(`ironwood tree root mismatch at height ${anchorHeight}`);
+  }
+  console.log(`[zcash-worker] ironwood paths (replay) for ${result.paths.length} notes`);
+  return { anchorHex: networkRoot, paths: result.paths };
+};
+
+/**
+ * Build merkle paths for spending notes.
+ *
+ * Fast path: every selected note has a stored witness at the sync frontier.
+ *            Fast-forward witnesses over any remaining gap (sync frontier →
+ *            anchor height), extract paths, done.
+ * Slow path: some notes lack a witness (pre-upgrade notes). Replay from a
+ *            pre-note snapshot once, persist witnesses, then fast-forward.
+ *
+ * `pool` routes to the pool-specific wasm witness fns; 'ironwood' delegates
+ * to buildWitnessesIronwood, keeping the orchard path byte-identical.
+ */
+const buildWitnesses = async (
+  client: WitnessClient,
+  walletId: string,
+  notes: DecryptedNote[],
+  anchorHeight: number,
+  pool: NotePool = 'orchard',
+): Promise<{ anchorHex: string; paths: unknown[] }> => {
+  if (!wasmModule) {
+    throw new Error('wasm not initialized');
+  }
   if (notes.length === 0) {
     throw new Error('buildWitnesses called with no notes');
+  }
+  if (pool === 'ironwood') {
+    return buildWitnessesIronwood(client, walletId, notes, anchorHeight);
   }
 
   const positions = notes.map(n => n.position);
@@ -1715,6 +2023,47 @@ const runSync = async (
     }
   }
 
+  // ── NU6.3 ironwood pool tracking (mirrors the orchard tree/frontier
+  // state above). Everything is guarded on the wasm blob exporting the
+  // ironwood fns: on a pre-ironwood blob iwSupported is false, no extra
+  // RPCs fire, and the whole section is inert. ──
+  const iwSizeFn = wasmModule.frontier_tree_size_ironwood;
+  const iwSupported = !!iwSizeFn && !!wasmModule.witness_sync_update_ironwood;
+  let ironwoodTreeSize = await getIronwoodTreeSize(walletId);
+  let ironwoodFrontier: string = (await getIronwoodTreeFrontier(walletId)) ?? '';
+  let ironwoodFrontierHeight = await getIronwoodTreeFrontierHeight(walletId);
+  if (iwSupported && iwSizeFn) {
+    const iwFrontierSize = ironwoodFrontier ? Number(iwSizeFn(ironwoodFrontier)) : 0;
+    const iwFrontierValid =
+      !!ironwoodFrontier &&
+      iwFrontierSize === ironwoodTreeSize &&
+      ironwoodFrontierHeight === currentHeight;
+    if (!iwFrontierValid && currentHeight > 0) {
+      try {
+        const ts = await client.getTreeState(currentHeight);
+        // pre-NU6.3 servers/heights don't serve an ironwood tree; leave the
+        // frontier empty so the batch loop skips ironwood witness work.
+        if (ts.ironwoodTree) {
+          ironwoodFrontier = ts.ironwoodTree;
+          ironwoodFrontierHeight = currentHeight;
+          ironwoodTreeSize = Number(iwSizeFn(ironwoodFrontier));
+          // mirror orchard: refetched frontier invalidates stored witnesses
+          for (const note of state.notes) {
+            if (poolOf(note) === 'ironwood') {
+              note.witness_hex = undefined;
+              note.witness_tree_size = undefined;
+            }
+          }
+          console.log(
+            `[zcash-worker] bootstrap ironwood frontier: height=${currentHeight} size=${ironwoodTreeSize}`,
+          );
+        }
+      } catch (e) {
+        console.warn('[zcash-worker] failed to bootstrap ironwood frontier:', e);
+      }
+    }
+  }
+
   console.log(
     `[zcash-worker] sync start wallet=${walletId} height=${currentHeight} treeSize=${orchardTreeSize} (idb=${syncedHeight}, requested=${startHeight ?? 'none'})`,
   );
@@ -1831,6 +2180,15 @@ const runSync = async (
           metaTx
             .objectStore('meta')
             .put({ walletId, key: 'orchardTreeFrontierHeight', value: currentHeight });
+          // ironwood mirror - only once the server serves the NU6.3 tree
+          if (iwSupported && syncTs.ironwoodTree) {
+            metaTx
+              .objectStore('meta')
+              .put({ walletId, key: 'ironwoodTreeFrontier', value: syncTs.ironwoodTree });
+            metaTx
+              .objectStore('meta')
+              .put({ walletId, key: 'ironwoodTreeFrontierHeight', value: currentHeight });
+          }
           await txComplete(metaTx);
           console.log(`[zcash-worker] cached tree frontier at height ${currentHeight}`);
         } catch (e) {
@@ -2122,6 +2480,164 @@ const runSync = async (
       // advance tree size by total actions in this batch
       orchardTreeSize += actionCount;
 
+      // ── NU6.3 ironwood pool: mirror of the orchard scan + witness path
+      // above. Dormant until (a) the wasm blob exports the ironwood fns and
+      // (b) the server serves ironwood actions in compact blocks - with a
+      // current blob/server both are absent, so this whole section no-ops
+      // and the orchard behavior is unchanged. ──
+      let ironwoodActionCount = 0;
+      for (const block of blocks) {
+        ironwoodActionCount += block.ironwoodActions?.length ?? 0;
+      }
+      const newIronwoodNotes: DecryptedNote[] = [];
+      const ironwoodUpdatedNotes = new Map<string, DecryptedNote>();
+
+      if (ironwoodActionCount > 0 && iwSupported && state.keys?.scan_actions_ironwood_parallel) {
+        const iwCmxToTxid = new Map<string, string>();
+        const iwCmxToHeight = new Map<string, number>();
+        const iwNfToTxid = new Map<string, string>();
+        const iwNfToHeight = new Map<string, number>();
+        const iwActionNullifiers = new Set<string>();
+
+        // pack the ironwood actions into the same binary layout the orchard
+        // scan uses (nullifier|cmx|epk|compact-ct per action)
+        const iwBuf = new Uint8Array(4 + ironwoodActionCount * ACTION_SIZE);
+        const iwView = new DataView(iwBuf.buffer);
+        iwView.setUint32(0, ironwoodActionCount, true);
+        let iwOff = 4;
+        for (const block of blocks) {
+          for (const a of block.ironwoodActions ?? []) {
+            if (a.nullifier.length === 32) {
+              iwBuf.set(a.nullifier, iwOff);
+            }
+            iwOff += 32;
+            if (a.cmx.length === 32) {
+              iwBuf.set(a.cmx, iwOff);
+            }
+            iwOff += 32;
+            if (a.ephemeralKey.length === 32) {
+              iwBuf.set(a.ephemeralKey, iwOff);
+            }
+            iwOff += 32;
+            if (a.ciphertext.length >= 52) {
+              iwBuf.set(a.ciphertext.subarray(0, 52), iwOff);
+            }
+            iwOff += 52;
+            const cmxHex = hexEncode(a.cmx);
+            const nfHex = hexEncode(a.nullifier);
+            const txidHex = hexEncode(a.txid);
+            iwCmxToTxid.set(cmxHex, txidHex);
+            iwCmxToHeight.set(cmxHex, block.height);
+            iwNfToTxid.set(nfHex, txidHex);
+            iwNfToHeight.set(nfHex, block.height);
+            iwActionNullifiers.add(nfHex);
+          }
+        }
+
+        console.log(`[zcash-worker] scanning ${ironwoodActionCount} ironwood actions (binary)`);
+        try {
+          const foundIronwood = state.keys.scan_actions_ironwood_parallel(iwBuf);
+          for (const note of foundIronwood) {
+            const position = ironwoodTreeSize + (note as unknown as { index: number }).index;
+            const full: DecryptedNote = {
+              ...note,
+              pool: 'ironwood',
+              position,
+              txid: iwCmxToTxid.get(note.cmx) ?? '',
+              height: iwCmxToHeight.get(note.cmx) ?? 0,
+            };
+            console.log(`[zcash-worker] found ironwood note: value=${note.value}, pos=${position}`);
+            newIronwoodNotes.push(full);
+            state.notes.push(full);
+          }
+        } catch (err) {
+          console.error('[zcash-worker] scan_actions_ironwood_parallel crashed:', err);
+        }
+
+        // spent detection: ironwood nullifiers spend ironwood notes
+        for (const note of state.notes) {
+          if (poolOf(note) !== 'ironwood') {
+            continue;
+          }
+          if (
+            !state.spentNullifiers.has(note.nullifier) &&
+            iwActionNullifiers.has(note.nullifier)
+          ) {
+            state.spentNullifiers.add(note.nullifier);
+            note.spent_by_txid = iwNfToTxid.get(note.nullifier) ?? '';
+            note.spent_at_height = iwNfToHeight.get(note.nullifier) ?? 0;
+            newSpent.push(note.nullifier);
+            ironwoodUpdatedNotes.set(note.nullifier, note);
+          }
+        }
+
+        // advance ironwood witnesses over this batch (mirror of the orchard
+        // witness_sync_update block; runs against the pre-batch frontier)
+        const iwSync = wasmModule.witness_sync_update_ironwood;
+        if (iwSync && ironwoodFrontier) {
+          const iwCompact = blocks.map(b => ({
+            height: b.height,
+            actions: (b.ironwoodActions ?? []).map(a => ({ cmx_hex: hexEncode(a.cmx) })),
+          }));
+          const iwNewNullifiers = new Set(newIronwoodNotes.map(n => n.nullifier));
+          const iwExisting: { id: string; witness_hex: string }[] = [];
+          for (const note of state.notes) {
+            if (poolOf(note) !== 'ironwood') {
+              continue;
+            }
+            if (state.spentNullifiers.has(note.nullifier)) {
+              continue;
+            }
+            if (iwNewNullifiers.has(note.nullifier)) {
+              continue;
+            }
+            if (!note.witness_hex) {
+              continue;
+            }
+            iwExisting.push({ id: note.nullifier, witness_hex: note.witness_hex });
+          }
+          const iwSeed = newIronwoodNotes.map(n => ({ id: n.nullifier, position: n.position }));
+          try {
+            const raw = iwSync(
+              ironwoodFrontier,
+              JSON.stringify(iwCompact),
+              JSON.stringify(iwExisting),
+              JSON.stringify(iwSeed),
+            );
+            const result = JSON.parse(raw as string) as {
+              end_frontier_hex: string;
+              witnesses: { id: string; position: number; witness_hex: string }[];
+            };
+            const iwById = new Map(result.witnesses.map(w => [w.id, w]));
+            const newIwTreeSize = ironwoodTreeSize + ironwoodActionCount;
+            for (const note of state.notes) {
+              if (poolOf(note) !== 'ironwood' || state.spentNullifiers.has(note.nullifier)) {
+                continue;
+              }
+              const upd = iwById.get(note.nullifier);
+              if (!upd) {
+                continue;
+              }
+              note.witness_hex = upd.witness_hex;
+              note.witness_tree_size = newIwTreeSize;
+              if (!iwNewNullifiers.has(note.nullifier)) {
+                ironwoodUpdatedNotes.set(note.nullifier, note);
+              }
+            }
+            ironwoodFrontier = result.end_frontier_hex;
+            ironwoodFrontierHeight = endHeight;
+          } catch (e) {
+            console.error('[zcash-worker] witness_sync_update_ironwood failed:', e);
+            // invalidate frontier so the next runSync rebootstraps
+            ironwoodFrontier = '';
+          }
+        }
+      }
+
+      // advance ironwood tree size by this batch's ironwood actions (kept
+      // even when the blob can't scan them, so the count stays monotonic)
+      ironwoodTreeSize += ironwoodActionCount;
+
       // merge witness-updated notes with spent-updated notes (dedupe by nullifier)
       const updatedDedup = new Map<string, DecryptedNote>();
       for (const n of spentUpdatedNotes) {
@@ -2132,19 +2648,33 @@ const runSync = async (
           updatedDedup.set(k, n);
         }
       }
+      for (const [k, n] of ironwoodUpdatedNotes) {
+        if (!updatedDedup.has(k)) {
+          updatedDedup.set(k, n);
+        }
+      }
       const combinedUpdated = Array.from(updatedDedup.values());
 
       // single batched db write for entire batch
       currentHeight = endHeight;
       await saveBatch(
         walletId,
-        newNotes,
+        newIronwoodNotes.length > 0 ? [...newNotes, ...newIronwoodNotes] : newNotes,
         newSpent,
         currentHeight,
         orchardTreeSize,
         combinedUpdated.length > 0 ? combinedUpdated : undefined,
         runningFrontier || undefined,
         runningFrontier ? runningFrontierHeight : undefined,
+        // ironwood meta only once the blob supports the pool - keeps the
+        // pre-ironwood write pattern byte-identical
+        iwSupported
+          ? {
+              treeSize: ironwoodTreeSize,
+              frontier: ironwoodFrontier || undefined,
+              frontierHeight: ironwoodFrontier ? ironwoodFrontierHeight : undefined,
+            }
+          : undefined,
       );
 
       // periodic frontier snapshot for privacy-safe witness building
@@ -3576,6 +4106,215 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           network: 'zcash',
           walletId,
           payload: { txid },
+        });
+        return;
+      }
+
+      // ── NU6.3 turnstile migration (orchard -> ironwood) ──────────────
+      // One V6 transaction: orchard spend(s) + ironwood output to the
+      // wallet's OWN ironwood address (derived inside the wasm from the
+      // UFVK; no user-supplied recipient by design). Reuses the PCZT
+      // cold-sign machine verbatim: build -> CBOR-wrap -> UR frames ->
+      // [zigner scans + signs] -> scan signed -> extract -> broadcast.
+      case 'send-turnstile-migration': {
+        if (!walletId) {
+          throw new Error('walletId required');
+        }
+        await initWasm();
+        if (!wasmModule) {
+          throw new Error('wasm not initialized');
+        }
+
+        const migratePayload = payload as {
+          serverUrl: string;
+          accountIndex: number;
+          mainnet: boolean;
+          ufvk?: string;
+          mnemonic?: string;
+          backend?: ZcashBackend;
+          /** UR fragment-size override; falls back to 200 for back-compat */
+          fragmentSize?: number;
+        };
+        if (migratePayload.backend) {
+          registerBackend(migratePayload.serverUrl, migratePayload.backend);
+        }
+        if (!migratePayload.ufvk) {
+          // The turnstile flow reuses the UFVK-based PCZT cold-sign machine.
+          // Hot-wallet (mnemonic) signing of V6/ironwood transactions needs
+          // the NU6.3 signer wasm and is intentionally not wired here yet.
+          throw new Error('UFVK required for turnstile migration (cold-sign PCZT flow)');
+        }
+
+        const migrateStart = performance.now();
+        const emitProgress = (step: string, detail?: string) => {
+          console.log(
+            `[zcash-worker] turnstile [${((performance.now() - migrateStart) / 1000).toFixed(1)}s] ${step}${detail ? ': ' + detail : ''}`,
+          );
+          workerSelf.postMessage({
+            type: 'send-progress',
+            id: '',
+            network: 'zcash',
+            walletId,
+            payload: { step, detail, elapsedMs: Math.round(performance.now() - migrateStart) },
+          });
+        };
+
+        emitProgress('loading wallet state');
+        const migrateState = await loadState(walletId);
+
+        // migrate the wallet's FULL orchard balance: every unspent orchard note
+        const orchardNotes = migrateState.notes.filter(
+          n => !migrateState.spentNullifiers.has(n.nullifier) && poolOf(n) === 'orchard',
+        );
+        if (orchardNotes.length === 0) {
+          throw new Error('no orchard notes to migrate');
+        }
+        const totalIn = orchardNotes.reduce((sum, n) => sum + BigInt(n.value), 0n);
+        // ZIP-317: n orchard spends + 1 ironwood output, no change (full sweep)
+        const fee = computeFee(orchardNotes.length, 1, 0, false);
+        if (totalIn <= fee) {
+          throw new Error(`orchard balance ${totalIn} zat does not cover migration fee ${fee} zat`);
+        }
+        const migrateAmount = totalIn - fee;
+        emitProgress('notes selected', `${orchardNotes.length} orchard notes, fee=${fee}`);
+
+        const migrateClient = await makeZcashClient(
+          migratePayload.serverUrl,
+          migratePayload.backend,
+        );
+        emitProgress('fetching chain tip');
+        const migrateTip = await migrateClient.getTip();
+        const migrateAnchorHeight = await resolveAnchorHeight(walletId, migrateTip.height);
+        emitProgress(
+          'building merkle witnesses',
+          `anchor=${migrateAnchorHeight} (tip=${migrateTip.height})`,
+        );
+        // orchard spends -> orchard witnesses; the migration needs no
+        // ironwood anchor (output-only on the ironwood side)
+        const { anchorHex, paths } = await buildWitnesses(
+          migrateClient,
+          walletId,
+          orchardNotes,
+          migrateAnchorHeight,
+          'orchard',
+        );
+
+        const notesForWasm = orchardNotes.map(n => ({
+          value: Number(n.value),
+          nullifier: n.nullifier,
+          cmx: n.cmx,
+          position: n.position,
+          rseed_hex: n.rseed ?? '',
+          rho_hex: n.rho ?? '',
+          recipient_hex: n.recipient ?? '',
+        }));
+        const pathsForWasm = (paths as { position: number; path: { hash: string }[] }[]).map(p => ({
+          path: p.path.map(e => e.hash),
+          position: p.position,
+        }));
+
+        emitProgress(
+          'building & proving turnstile PCZT (halo2)',
+          `${orchardNotes.length} orchard spends -> ironwood`,
+        );
+        // target_height = live tip; at/after NU6.3 activation this selects
+        // TxVersion::V6 (orchard spends + ironwood outputs) in the builder.
+        const built = await proveViaOffscreen({
+          fn: 'build_turnstile_migration_pczt',
+          args: [
+            migratePayload.ufvk,
+            JSON.stringify(notesForWasm),
+            fee.toString(),
+            anchorHex,
+            JSON.stringify(pathsForWasm),
+            migratePayload.accountIndex,
+            migrateTip.height,
+            migratePayload.mainnet,
+            null,
+          ],
+        });
+        const migrateParsed = built as {
+          pczt_hex: string;
+          summary: unknown;
+          action_count: number;
+        };
+
+        const migratePcztBytes = hexDecode(migrateParsed.pczt_hex);
+        const migrateCbor = cborWrapPczt(migratePcztBytes);
+        const migrateFragSize =
+          migratePayload.fragmentSize && migratePayload.fragmentSize > 0
+            ? migratePayload.fragmentSize
+            : 200;
+        const migrateFramesJson = wasmModule.ur_encode_frames(
+          migrateCbor,
+          'zcash-pczt',
+          migrateFragSize,
+        );
+        const migrateUrFrames = JSON.parse(migrateFramesJson) as string[];
+        emitProgress('turnstile PCZT QR ready', `${migrateUrFrames.length} frames`);
+
+        workerSelf.postMessage({
+          type: 'send-turnstile-migration-unsigned',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: {
+            pcztHex: migrateParsed.pczt_hex,
+            summary: migrateParsed.summary,
+            actionCount: migrateParsed.action_count,
+            fee: fee.toString(),
+            amount: migrateAmount.toString(),
+            urFrames: migrateUrFrames,
+            cborBytes: migrateCbor.length,
+          },
+        });
+        return;
+      }
+
+      case 'send-turnstile-migration-complete': {
+        // identical machine to send-tx-pczt-complete: the contract's
+        // extract_signed_tx_from_pczt accepts V6 + ironwood bundles.
+        if (!walletId) {
+          throw new Error('walletId required');
+        }
+        await initWasm();
+        if (!wasmModule) {
+          throw new Error('wasm not initialized');
+        }
+
+        const migrateCompletePayload = payload as {
+          serverUrl: string;
+          signedPcztHex: string;
+          backend?: ZcashBackend;
+        };
+        if (migrateCompletePayload.backend) {
+          registerBackend(migrateCompletePayload.serverUrl, migrateCompletePayload.backend);
+        }
+
+        const migrateTxHex = wasmModule.extract_signed_tx_from_pczt(
+          migrateCompletePayload.signedPcztHex,
+        );
+        const migrateTxData = hexDecode(migrateTxHex);
+
+        const migrateCompleteClient = await makeZcashClient(migrateCompletePayload.serverUrl);
+        const migrateResult = await migrateCompleteClient.sendTransaction(migrateTxData);
+        if (migrateResult.errorCode !== 0) {
+          throw new Error(
+            `broadcast failed (${migrateResult.errorCode}): ${migrateResult.errorMessage}`,
+          );
+        }
+
+        const migrateTxid = await resolveBroadcastTxid(
+          migrateResult,
+          migrateTxHex,
+          migrateCompletePayload.serverUrl,
+        );
+        workerSelf.postMessage({
+          type: 'tx-result',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: { txid: migrateTxid },
         });
         return;
       }

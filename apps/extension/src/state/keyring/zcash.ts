@@ -45,6 +45,8 @@ export interface DecryptedNote {
   value: string; // zatoshis as string
   nullifier: string; // hex
   cmx: string; // hex
+  /** shielded pool (NU6.3 adds ironwood); absent means orchard */
+  pool?: 'orchard' | 'ironwood';
 }
 
 export interface ZcashSyncState {

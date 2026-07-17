@@ -20,6 +20,15 @@ export interface CompactBlock {
   hash: Uint8Array;
   actions: CompactAction[];
   actionsRoot?: Uint8Array;
+  /**
+   * NU6.3 ironwood pool actions (same compact-action shape as orchard).
+   * Optional and currently never populated: the compact-block wire format
+   * for ironwood actions is not part of the frozen ironwood contract yet,
+   * so parsers leave this absent until the server-side field lands. The
+   * sync worker consumes it defensively (`?? []`), keeping the ironwood
+   * scan path dormant on today's servers.
+   */
+  ironwoodActions?: CompactAction[];
 }
 
 export interface CompactAction {
@@ -610,10 +619,10 @@ export class ZidecarClient {
     return a;
   }
 
-  /** get tree state at a specific height (orchard frontier for witness building) */
+  /** get tree state at a specific height (orchard + ironwood frontiers for witness building) */
   async getTreeState(
     height: number,
-  ): Promise<{ height: number; orchardTree: string; time: number }> {
+  ): Promise<{ height: number; orchardTree: string; ironwoodTree?: string; time: number }> {
     // encode BlockId proto: field 1 = height (varint)
     const parts: number[] = [0x08, ...this.varint(height)];
     const resp = await this.grpcCall('GetTreeState', new Uint8Array(parts));
@@ -937,16 +946,23 @@ export class ZidecarClient {
     return utxo;
   }
 
-  private parseTreeState(buf: Uint8Array): { height: number; orchardTree: string; time: number } {
+  private parseTreeState(buf: Uint8Array): {
+    height: number;
+    orchardTree: string;
+    ironwoodTree?: string;
+    time: number;
+  } {
     // TreeState proto (zidecar.proto):
     //   field 1: uint32 height (varint)
     //   field 2: bytes hash (length-delimited)
     //   field 3: uint64 time (varint)
     //   field 4: string sapling_tree (length-delimited)
     //   field 5: string orchard_tree (length-delimited)
+    //   field 6: string ironwood_tree (length-delimited, NU6.3; absent pre-upgrade)
     let height = 0;
     let time = 0;
     let orchardTree = '';
+    let ironwoodTree = '';
     let pos = 0;
     const decoder = new TextDecoder();
 
@@ -986,6 +1002,8 @@ export class ZidecarClient {
         const data = buf.subarray(pos, pos + len);
         if (field === 5) {
           orchardTree = decoder.decode(data);
+        } else if (field === 6) {
+          ironwoodTree = decoder.decode(data);
         }
         pos += len;
       } else {
@@ -993,7 +1011,11 @@ export class ZidecarClient {
       }
     }
 
-    return { height, orchardTree, time };
+    // omit ironwoodTree entirely when the server didn't send it so callers
+    // can feature-detect with a simple truthiness check
+    return ironwoodTree
+      ? { height, orchardTree, ironwoodTree, time }
+      : { height, orchardTree, time };
   }
 
   private parseHeaderProof(buf: Uint8Array): {

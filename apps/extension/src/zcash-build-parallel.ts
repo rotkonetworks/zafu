@@ -83,6 +83,7 @@ interface ZcashBuildRequest {
     | 'build_signed_spend'
     | 'build_unsigned'
     | 'build_unsigned_pczt'
+    | 'build_turnstile_migration_pczt'
     | 'build_shielding'
     | 'build_unsigned_shielding';
   args: unknown[];
@@ -146,6 +147,26 @@ async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
         a[7],
         a[8],
         a[9] ?? null,
+      );
+      break;
+
+    case 'build_turnstile_migration_pczt':
+      // NU6.3 turnstile: (ufvk, orchard_notes_json, fee, orchard_anchor_hex,
+      // orchard_merkle_paths_json, account_index, target_height, mainnet,
+      // memo_hex?) - a[2] is the fee (stringified bigint over postMessage)
+      if (typeof wasm['build_turnstile_migration_pczt'] !== 'function') {
+        throw new Error('ironwood turnstile not supported by this wasm build');
+      }
+      result = wasm['build_turnstile_migration_pczt'](
+        a[0],
+        a[1],
+        BigInt(a[2] as string),
+        a[3],
+        a[4],
+        a[5],
+        a[6],
+        a[7],
+        a[8] ?? null,
       );
       break;
 

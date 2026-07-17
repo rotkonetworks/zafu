@@ -29,6 +29,8 @@ export interface NetworkWorkerMessage {
     | 'send-tx-complete'
     | 'send-tx-pczt'
     | 'send-tx-pczt-complete'
+    | 'send-turnstile-migration'
+    | 'send-turnstile-migration-complete'
     | 'shield'
     | 'shield-unsigned'
     | 'shield-complete'
@@ -72,6 +74,7 @@ export interface NetworkWorkerResponse {
     | 'tx-multi-result'
     | 'send-tx-unsigned'
     | 'send-tx-pczt-unsigned'
+    | 'send-turnstile-migration-unsigned'
     | 'shield-result'
     | 'shield-unsigned-result'
     | 'wallets'
@@ -437,6 +440,8 @@ export interface DecryptedNoteWithTxid {
   cmx: string;
   txid: string;
   position: number;
+  /** shielded pool (NU6.3); absent on pre-ironwood records means orchard */
+  pool?: 'orchard' | 'ironwood';
   is_change?: boolean;
   spent?: boolean;
   spent_by_txid?: string;
@@ -742,6 +747,67 @@ export const completeSendTxPcztInWorker = async (
   signedPcztHex: string,
 ): Promise<{ txid: string }> => {
   return callWorker(network, 'send-tx-pczt-complete', { serverUrl, signedPcztHex }, walletId);
+};
+
+/**
+ * Result of building a NU6.3 turnstile migration PCZT (orchard -> ironwood).
+ *
+ * Same shape as SendTxPcztUnsignedResult plus `amount` (the migrated value:
+ * full orchard balance minus fee) and a structured summary carrying the
+ * ironwood action count / output values for device confirmation.
+ */
+export interface TurnstileMigrationUnsignedResult {
+  pcztHex: string;
+  /** PcztSummary from the wasm; includes ironwood_actions and outputs */
+  summary: unknown;
+  actionCount: number;
+  fee: string;
+  /** zatoshi migrated to the wallet's own ironwood address */
+  amount: string;
+  urFrames: string[];
+  cborBytes: number;
+}
+
+/**
+ * Build the NU6.3 turnstile migration PCZT: spends the wallet's FULL
+ * orchard balance to its OWN ironwood address (derived from the UFVK inside
+ * the wasm) in a single V6 transaction, cold-signed via the existing PCZT
+ * QR machine. Feature-flagged (IRONWOOD_MIGRATION) at the UI layer.
+ */
+export const buildTurnstileMigrationInWorker = async (
+  network: NetworkType,
+  walletId: string,
+  serverUrl: string,
+  accountIndex: number,
+  mainnet: boolean,
+  ufvk: string,
+  backend: 'zidecar' | 'lightwalletd' = 'zidecar',
+  fragmentSize = 400,
+): Promise<TurnstileMigrationUnsignedResult> => {
+  return callWorker(
+    network,
+    'send-turnstile-migration',
+    { serverUrl, accountIndex, mainnet, ufvk, backend, fragmentSize },
+    walletId,
+  );
+};
+
+/**
+ * Extract the signed V6 turnstile migration tx from the zigner-signed PCZT
+ * and broadcast it. Mirrors completeSendTxPcztInWorker.
+ */
+export const completeTurnstileMigrationInWorker = async (
+  network: NetworkType,
+  walletId: string,
+  serverUrl: string,
+  signedPcztHex: string,
+): Promise<{ txid: string }> => {
+  return callWorker(
+    network,
+    'send-turnstile-migration-complete',
+    { serverUrl, signedPcztHex },
+    walletId,
+  );
 };
 
 /** result of building an unsigned shielding transaction */
