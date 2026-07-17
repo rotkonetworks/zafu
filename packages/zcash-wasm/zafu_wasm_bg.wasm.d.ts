@@ -44,6 +44,23 @@ export const build_signed_spend_transaction: (
   m: number,
   n: number,
 ) => [number, number, number, number];
+export const build_turnstile_migration_pczt: (
+  a: number,
+  b: number,
+  c: number,
+  d: number,
+  e: bigint,
+  f: number,
+  g: number,
+  h: number,
+  i: number,
+  j: number,
+  k: number,
+  l: number,
+  m: number,
+  n: number,
+  o: number,
+) => [number, number, number];
 export const build_unsigned_pczt: (
   a: number,
   b: number,
@@ -106,7 +123,6 @@ export const complete_transaction: (
   c: any,
   d: any,
 ) => [number, number, number, number];
-export const compute_txid: (a: number, b: number) => [number, number, number, number];
 export const create_sign_request: (
   a: number,
   b: number,
@@ -193,6 +209,11 @@ export const walletkeys_get_receiving_address_at: (
   c: number,
 ) => [number, number];
 export const walletkeys_scan_actions: (a: number, b: any) => [number, number, number];
+export const walletkeys_scan_actions_ironwood_parallel: (
+  a: number,
+  b: number,
+  c: number,
+) => [number, number, number];
 export const walletkeys_scan_actions_parallel: (
   a: number,
   b: number,
@@ -216,6 +237,11 @@ export const watchonlywallet_get_account_index: (a: number) => number;
 export const watchonlywallet_get_address: (a: number) => [number, number];
 export const watchonlywallet_get_address_at: (a: number, b: number) => [number, number];
 export const watchonlywallet_is_mainnet: (a: number) => number;
+export const watchonlywallet_scan_actions_ironwood_parallel: (
+  a: number,
+  b: number,
+  c: number,
+) => [number, number, number];
 export const watchonlywallet_scan_actions_parallel: (
   a: number,
   b: number,
@@ -240,7 +266,29 @@ export const zt_encode_frames: (
   e: number,
   f: number,
 ) => [number, number, number, number];
+export const witness_extract_path_ironwood: (a: number, b: number) => [number, number, number];
 export const init: () => void;
+export const witness_sync_update_ironwood: (
+  a: number,
+  b: number,
+  c: number,
+  d: number,
+  e: number,
+  f: number,
+  g: number,
+  h: number,
+) => [number, number, number];
+export const build_merkle_paths_ironwood: (
+  a: number,
+  b: number,
+  c: number,
+  d: number,
+  e: number,
+  f: number,
+  g: number,
+) => [number, number, number];
+export const tree_root_hex_ironwood: (a: number, b: number) => [number, number, number, number];
+export const frontier_tree_size_ironwood: (a: number, b: number) => [bigint, number, number];
 export const frost_aggregate_shares: (
   a: number,
   b: number,

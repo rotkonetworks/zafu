@@ -52,19 +52,23 @@ export class WalletKeys {
    */
   scan_actions(actions_json: any): any;
   /**
-   * Scan a batch of compact actions in PARALLEL and return found notes
-   * This is the main entry point for high-performance scanning
-   */
-  scan_actions_parallel(actions_bytes: Uint8Array): any;
-  /**
-   * NU6.3 ironwood pool: scan a batch of compact ironwood actions in
-   * PARALLEL and return found notes (mirror of `scan_actions_parallel`).
-   * Returned `DecryptedNote`s carry `pool: "ironwood"`.
+   * Scan a batch of IRONWOOD compact actions in PARALLEL (NU6.3+ pool).
    *
-   * Frozen interface contract (Section 2) - implemented by the ironwood
-   * wasm build; absent from older blobs, so callers must feature-detect.
+   * Same binary format and key material as `scan_actions_parallel` — the
+   * ironwood pool shares orchard's key tree and note encryption; only the
+   * bundle (and note plaintext version, V3) differ. The caller feeds the
+   * actions from the tx's ironwood bundle here so returned notes carry
+   * `pool: "ironwood"`.
    */
   scan_actions_ironwood_parallel(actions_bytes: Uint8Array): any;
+  /**
+   * Scan a batch of compact actions in PARALLEL and return found notes
+   * This is the main entry point for high-performance scanning
+   *
+   * Binary format: [count: u32][action1][action2]...
+   * Each action: [nullifier: 32][cmx: 32][epk: 32][ciphertext: 52] = 148 bytes
+   */
+  scan_actions_parallel(actions_bytes: Uint8Array): any;
 }
 
 /**
@@ -112,14 +116,18 @@ export class WatchOnlyWallet {
    */
   is_mainnet(): boolean;
   /**
+   * Scan a batch of IRONWOOD compact actions (NU6.3+ pool).
+   *
+   * Same binary format and key material as `scan_actions_parallel` — the
+   * ironwood pool shares orchard's key tree and note encryption. Feed the
+   * actions from a tx's ironwood bundle here so returned notes carry
+   * `pool: "ironwood"`.
+   */
+  scan_actions_ironwood_parallel(actions_bytes: Uint8Array): any;
+  /**
    * Scan compact actions (same interface as WalletKeys)
    */
   scan_actions_parallel(actions_bytes: Uint8Array): any;
-  /**
-   * NU6.3 ironwood pool: scan compact ironwood actions (same interface as
-   * WalletKeys). Returned notes carry `pool: "ironwood"`.
-   */
-  scan_actions_ironwood_parallel(actions_bytes: Uint8Array): any;
 }
 
 /**
@@ -147,20 +155,8 @@ export function build_merkle_paths(
 ): any;
 
 /**
- * NU6.3 ironwood pool: build merkle paths for ironwood note positions by
- * replaying compact blocks from a checkpoint (mirror of `build_merkle_paths`).
- *
- * # Arguments
- * * `tree_state_hex` - hex-encoded IRONWOOD frontier from GetTreeState
- * * `compact_blocks_json` - JSON array of `[{height, actions: [{cmx_hex}]}]`
- *   where actions are the block's IRONWOOD actions
- * * `note_positions_json` - JSON array of ironwood note positions
- * * `anchor_height` - the block height to use as anchor
- *
- * # Returns
- * JSON `{anchor_hex, paths: [{position, path: [{hash}]}]}`
- *
- * Frozen interface contract (Section 2) - absent from pre-ironwood blobs.
+ * Ironwood-tree variant of `build_merkle_paths`. Same JSON contract; feed
+ * the ironwood frontier from GetTreeState and cmxs from ironwood bundles.
  */
 export function build_merkle_paths_ironwood(
   tree_state_hex: string,
@@ -232,23 +228,16 @@ export function build_signed_spend_transaction(
 ): string;
 
 /**
- * NU6.3 turnstile: build a migration PCZT that spends the given ORCHARD
- * notes and outputs the full value (minus fee) to the wallet's OWN ironwood
- * address, derived INTERNALLY from `ufvk_str` (self-migration - there is no
- * recipient argument by design).
+ * Build the one-way turnstile migration PCZT: spend the supplied orchard
+ * notes into the wallet's OWN ironwood address in a single V6 transaction.
  *
- * The transaction is `TxVersion::V6` (selected by `target_height` at/after
- * NU6.3 activation): orchard spend(s) + ironwood output(s), no ironwood
- * anchor needed. Returns a redacted-for-signer PCZT hex with the same
- * redaction contract as `build_unsigned_pczt`; the TS layer CBOR-wraps and
- * UR-encodes it for the existing zigner cold-sign flow.
+ * The ironwood recipient is derived INTERNALLY from `ufvk_str` (self
+ * migration); everything minus `fee` migrates. Returns a redacted-for-signer
+ * PCZT (same redaction contract as `build_unsigned_pczt`) as JSON
+ * `{ pczt_hex, summary, action_count }` where `summary` is a `PcztSummary`.
  *
- * # Returns
- * JSON `{ pczt_hex, summary, action_count }` where `summary` includes
- * `ironwood_actions` and ironwood output recipients/values for device
- * confirmation.
- *
- * Frozen interface contract (Section 2) - absent from pre-ironwood blobs.
+ * `account_index` is accepted for API parity with the worker call shape but
+ * is not used for derivation - the UFVK is already account-scoped.
  */
 export function build_turnstile_migration_pczt(
   ufvk_str: string,
@@ -258,10 +247,6 @@ export function build_turnstile_migration_pczt(
   orchard_merkle_paths_json: string,
   account_index: number,
   target_height: number,
-  // Fail-closed branch-id guard (8th param, per the FIX-A producer signature).
-  // The producer REFUSES to build unless the branch id it binds at target_height
-  // matches this value (the wallet reads it from GetLightdInfo; NU6.3 =
-  // 0x37a5165b). Passing the placeholder 0xffffffff or a mismatch must error.
   expected_branch_id: number,
   mainnet: boolean,
   memo_hex?: string | null,
@@ -381,17 +366,6 @@ export function complete_transaction(
 ): string;
 
 /**
- * Canonical ZIP-244 txid for a raw signed v5 transaction.
- *
- * Public lightwalletd's `SendResponse` carries no txid, so the wallet derives
- * it locally instead of trusting the server to echo it. This is the same value
- * zidecar computes server-side and the same bytes that appear as
- * `CompactTx.hash` during sync — returned as lowercase hex in internal/wire
- * byte order so the outgoing record reconciles on the next scan.
- */
-export function compute_txid(tx_hex: string): string;
-
-/**
  * Create a PCZT sign request from transaction parameters
  * This is called by the online wallet to create the data that will be
  * transferred to the cold wallet via QR code.
@@ -458,10 +432,7 @@ export function extract_signed_tx_from_pczt(pczt_hex: string): string;
 export function frontier_tree_size(tree_state_hex: string): bigint;
 
 /**
- * NU6.3 ironwood pool: compute the tree size from a hex-encoded IRONWOOD
- * frontier (mirror of `frontier_tree_size`).
- *
- * Frozen interface contract (Section 2) - absent from pre-ironwood blobs.
+ * Ironwood-tree variant of `frontier_tree_size`.
  */
 export function frontier_tree_size_ironwood(tree_state_hex: string): bigint;
 
@@ -708,13 +679,25 @@ export function transparent_pubkey_from_ufvk(ufvk_str: string, address_index: nu
 export function tree_root_hex(tree_state_hex: string): string;
 
 /**
- * NU6.3 ironwood pool: compute the tree root from a hex-encoded IRONWOOD
- * frontier (mirror of `tree_root_hex`).
- *
- * Frozen interface contract (Section 2) - absent from pre-ironwood blobs.
+ * Ironwood-tree variant of `tree_root_hex`.
  */
 export function tree_root_hex_ironwood(tree_state_hex: string): string;
 
+/**
+ * Decode UR-encoded animated QR string frames back into CBOR bytes.
+ *
+ * Accepts a JSON array of UR strings (each `ur:<type>/...`) collected from
+ * successive scans of an animated QR. Returns the reconstructed payload bytes
+ * once the fountain decoder has enough frames (deduplicated internally), or an
+ * error if the parts are malformed or the fountain code can't yet reconstruct.
+ *
+ * `expected_type` is a sanity check: if non-empty, parts whose UR type doesn't
+ * match are rejected. Pass `""` to accept any type.
+ *
+ * Returns hex-encoded payload bytes (caller can hex_decode if it wants raw).
+ * We return hex (rather than `Vec<u8>` directly) to avoid a wasm-bindgen
+ * `Uint8Array` allocation pattern that's been flaky for us in some browsers.
+ */
 export function ur_decode_frames(parts_json: string, expected_type: string): string;
 
 /**
@@ -765,11 +748,7 @@ export function version(): string;
 export function witness_extract_path(witness_hex: string): any;
 
 /**
- * NU6.3 ironwood pool: extract a merkle path from a stored per-note
- * IRONWOOD witness (mirror of `witness_extract_path`). Returns JSON
- * `{position, root_hex, path: [{hash}]}`.
- *
- * Frozen interface contract (Section 2) - absent from pre-ironwood blobs.
+ * Ironwood-tree variant of `witness_extract_path`. Same JSON contract.
  */
 export function witness_extract_path_ironwood(witness_hex: string): any;
 
@@ -792,11 +771,7 @@ export function witness_sync_update(
 ): any;
 
 /**
- * NU6.3 ironwood pool: advance tracked IRONWOOD witnesses over a range of
- * compact blocks, optionally seeding new ones (mirror of
- * `witness_sync_update`; same JSON shapes, ironwood tree/actions).
- *
- * Frozen interface contract (Section 2) - absent from pre-ironwood blobs.
+ * Ironwood-tree variant of `witness_sync_update`. Same JSON contract.
  */
 export function witness_sync_update_ironwood(
   start_frontier_hex: string,
@@ -860,6 +835,23 @@ export interface InitOutput {
     m: number,
     n: number,
   ) => [number, number, number, number];
+  readonly build_turnstile_migration_pczt: (
+    a: number,
+    b: number,
+    c: number,
+    d: number,
+    e: bigint,
+    f: number,
+    g: number,
+    h: number,
+    i: number,
+    j: number,
+    k: number,
+    l: number,
+    m: number,
+    n: number,
+    o: number,
+  ) => [number, number, number];
   readonly build_unsigned_pczt: (
     a: number,
     b: number,
@@ -922,7 +914,6 @@ export interface InitOutput {
     c: any,
     d: any,
   ) => [number, number, number, number];
-  readonly compute_txid: (a: number, b: number) => [number, number, number, number];
   readonly create_sign_request: (
     a: number,
     b: number,
@@ -1003,6 +994,11 @@ export interface InitOutput {
     c: number,
   ) => [number, number];
   readonly walletkeys_scan_actions: (a: number, b: any) => [number, number, number];
+  readonly walletkeys_scan_actions_ironwood_parallel: (
+    a: number,
+    b: number,
+    c: number,
+  ) => [number, number, number];
   readonly walletkeys_scan_actions_parallel: (
     a: number,
     b: number,
@@ -1026,6 +1022,11 @@ export interface InitOutput {
   readonly watchonlywallet_get_address: (a: number) => [number, number];
   readonly watchonlywallet_get_address_at: (a: number, b: number) => [number, number];
   readonly watchonlywallet_is_mainnet: (a: number) => number;
+  readonly watchonlywallet_scan_actions_ironwood_parallel: (
+    a: number,
+    b: number,
+    c: number,
+  ) => [number, number, number];
   readonly watchonlywallet_scan_actions_parallel: (
     a: number,
     b: number,
@@ -1050,7 +1051,29 @@ export interface InitOutput {
     e: number,
     f: number,
   ) => [number, number, number, number];
+  readonly witness_extract_path_ironwood: (a: number, b: number) => [number, number, number];
   readonly init: () => void;
+  readonly witness_sync_update_ironwood: (
+    a: number,
+    b: number,
+    c: number,
+    d: number,
+    e: number,
+    f: number,
+    g: number,
+    h: number,
+  ) => [number, number, number];
+  readonly build_merkle_paths_ironwood: (
+    a: number,
+    b: number,
+    c: number,
+    d: number,
+    e: number,
+    f: number,
+    g: number,
+  ) => [number, number, number];
+  readonly tree_root_hex_ironwood: (a: number, b: number) => [number, number, number, number];
+  readonly frontier_tree_size_ironwood: (a: number, b: number) => [bigint, number, number];
   readonly frost_aggregate_shares: (
     a: number,
     b: number,

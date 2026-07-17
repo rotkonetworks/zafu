@@ -3,10 +3,13 @@
 These vendored .wasm blobs are build artifacts. Do NOT hand-edit.
 Reproduce by checking out the zcli rev below and running the commands.
 
-- source repo: https://github.com/rotkonetworks/zcli (branch feat/NU6.2-lightwallet-endpoint-support)
-- source rev: eaa9878 (Merge branch 'staging' into feat/NU6.2-lightwallet-endpoint-support)
-- source state: clean working tree
-- built (UTC): 2026-06-05T15:28:00Z
+- source repo: zcli-ironwood (branch feat/ironwood-wasm-producer)
+- source rev: 89eee53 (docs(zcash-wasm): update Nu63Activated comment for the vendored real branch id)
+- source state: clean working tree (pkg/ + pkg-parallel/ are build outputs)
+- includes the final ironwood producer fixes: real branch id, spend-fvk redaction,
+  output-recipient (wallet's own address) redaction on turnstile dummy outputs.
+- built (UTC): see git commit (Date is disabled in this environment)
+- toolchain: wasm-bindgen 0.2.114, wasm-opt (binaryen) version 123
 
 ## single-thread (packages/zcash-wasm/zafu_wasm_bg.wasm; duplicated as zcash_wasm_bg.wasm)
 
@@ -19,7 +22,7 @@ Reproduce by checking out the zcli rev below and running the commands.
       --enable-simd --enable-bulk-memory --enable-mutable-globals \
       --enable-nontrapping-float-to-int \
       pkg/zafu_wasm_bg.wasm -o pkg/zafu_wasm_bg.wasm
-    sha256(zafu_wasm_bg.wasm) = 84955a3ff9d002a9a079aca0470e5999aece2ef6814459a0fbcc0108c6616a95
+    sha256(zafu_wasm_bg.wasm) = f7dafc26aff1ca6f7ad5a99a30cb9fb34702e82c689d5275ebd0e310866b4d2d
 
 ## parallel / rayon (apps/extension/public/zafu-wasm-parallel/zafu_wasm_bg.wasm)
 
@@ -37,7 +40,7 @@ Reproduce by checking out the zcli rev below and running the commands.
     wasm-opt -Oz --enable-threads --enable-bulk-memory --enable-simd \
       --enable-mutable-globals --enable-nontrapping-float-to-int \
       pkg-parallel/zafu_wasm_bg.wasm -o pkg-parallel/zafu_wasm_bg.wasm
-    sha256(zafu_wasm_bg.wasm) = c6485874b15c56e30f4a95e48731a63f4b73210a7a3b8fd9b051617d43e7bc68
+    sha256(zafu_wasm_bg.wasm) = cbec6685e723c381fe4e0de355c2d26c90d119558e86fca370626c4613eefd2f
 
     Verify the rebuilt blob has shared imported memory before shipping:
       `(import "./zafu_wasm_bg.js" "memory" (memory ... shared))` post-bindgen.
