@@ -16,6 +16,17 @@ import {
   type RpcEndpointRegion,
 } from '../../../config/zcash-endpoints';
 import { measurePresetLatencies, type EndpointLatency } from '../../../state/keyring/endpoint-latency';
+import {
+  probeAll,
+  getReferenceTip,
+  peerMedianTip,
+  type EndpointHealth,
+} from '../../../state/keyring/endpoint-health';
+import {
+  pickEndpoint,
+  DEFAULT_STRATEGY,
+  type SelectionStrategy,
+} from '../../../state/keyring/endpoint-strategy';
 import { NETWORKS, LAUNCHED_NETWORKS } from '../../../config/networks';
 import { cn } from '@repo/ui/lib/utils';
 import { SettingsScreen } from './settings-screen';
@@ -423,10 +434,21 @@ const regionLabel = (region: RpcEndpointRegion): string => {
   }
 };
 
+const STRATEGY_LABELS: Record<SelectionStrategy, string> = {
+  privacy: 'privacy (tor + zidecar first)',
+  fastest: 'fastest (lowest latency)',
+  'most-synced': 'most synced (closest to tip)',
+  random: 'random (rotates each pick)',
+};
+
 const ZcashEndpointPicker = ({ currentUrl, onPick }: ZcashEndpointPickerProps) => {
   const matched = findPresetByUrl(currentUrl);
   const [testing, setTesting] = useState(false);
   const [latencies, setLatencies] = useState<Map<string, EndpointLatency> | null>(null);
+  const [strategy, setStrategy] = useState<SelectionStrategy>(DEFAULT_STRATEGY);
+  const [healths, setHealths] = useState<Map<string, EndpointHealth> | null>(null);
+  const [autoPicking, setAutoPicking] = useState(false);
+  const [autoStatus, setAutoStatus] = useState<string | null>(null);
 
   const handleTest = async () => {
     setTesting(true);
@@ -437,25 +459,106 @@ const ZcashEndpointPicker = ({ currentUrl, onPick }: ZcashEndpointPickerProps) =
     }
   };
 
-  const rttSuffix = (url: string): string => {
+  // "Smart pick" probes GetLightdInfo across all presets (returns tip +
+  // version + reachability in one round-trip), fetches hosh's reference tip
+  // to compute behindBy, ranks under the selected strategy, and applies
+  // the top result. Falls back to peer-median tip if hosh is unreachable.
+  const handleAutoPick = async () => {
+    setAutoPicking(true);
+    setAutoStatus('probing endpoints...');
+    try {
+      const referenceTip = await getReferenceTip();
+      setAutoStatus(referenceTip != null ? `probing (ref tip ${referenceTip.toLocaleString()})...` : 'probing (no hosh reference; peer-median fallback)...');
+      const initial = await probeAll(ZCASH_MAINNET_ENDPOINTS, referenceTip);
+      // If hosh was unreachable, recompute behindBy against peer median.
+      let final = initial;
+      if (referenceTip == null) {
+        const peerTip = peerMedianTip(initial);
+        if (peerTip != null) {
+          final = initial.map(h => ({
+            ...h,
+            behindBy: h.info && h.info.blockHeight > 0
+              ? Math.max(0, peerTip - h.info.blockHeight)
+              : null,
+          }));
+        }
+      }
+      const map = new Map<string, EndpointHealth>();
+      final.forEach(h => map.set(h.presetId, h));
+      setHealths(map);
+      const candidates = ZCASH_MAINNET_ENDPOINTS.map(p => ({
+        preset: p,
+        health: map.get(p.id) ?? null,
+      }));
+      const picked = pickEndpoint(candidates, strategy);
+      if (!picked) {
+        setAutoStatus('no healthy endpoint under this strategy — keeping current');
+        return;
+      }
+      setAutoStatus(`picked ${picked.preset.label} (${strategy})`);
+      onPick(picked.preset.url);
+    } catch (e) {
+      setAutoStatus(`probe failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setAutoPicking(false);
+    }
+  };
+
+  const optionSuffix = (url: string, presetId: string): string => {
+    const parts: string[] = [];
     const lat = latencies?.get(url);
-    if (!lat) return '';
-    if (lat.rttMs === null) return ' · unreachable';
-    return ` · ${lat.rttMs}ms`;
+    if (lat) {
+      parts.push(lat.rttMs === null ? 'unreachable' : `${lat.rttMs}ms`);
+    }
+    const h = healths?.get(presetId);
+    if (h) {
+      if (!h.ok) {
+        if (!lat) parts.push(h.error ?? 'unreachable');
+      } else if (h.behindBy != null) {
+        parts.push(h.behindBy === 0 ? 'at tip' : `-${h.behindBy.toLocaleString()} blk`);
+      }
+      // If the endpoint reports a version and we haven't already shown latency, add rtt.
+      if (!lat && h.latencyMs > 0 && h.ok) parts.push(`${h.latencyMs}ms`);
+    }
+    return parts.length ? ' · ' + parts.join(' · ') : '';
   };
 
   return (
     <div className='mb-3'>
       <div className='flex items-center justify-between mb-1'>
         <span className='text-[10px] text-fg-muted'>preset</span>
-        <button
-          type='button'
-          onClick={handleTest}
-          disabled={testing}
-          className='text-[10px] text-zigner-gold hover:underline disabled:opacity-50'
+        <div className='flex items-center gap-2'>
+          <button
+            type='button'
+            onClick={handleTest}
+            disabled={testing || autoPicking}
+            className='text-[10px] text-zigner-gold hover:underline disabled:opacity-50'
+          >
+            {testing ? 'testing...' : latencies ? 'retest' : 'test latencies'}
+          </button>
+          <span className='text-[10px] text-fg-muted'>·</span>
+          <button
+            type='button'
+            onClick={handleAutoPick}
+            disabled={testing || autoPicking}
+            className='text-[10px] text-zigner-gold hover:underline disabled:opacity-50'
+          >
+            {autoPicking ? 'picking...' : 'smart pick'}
+          </button>
+        </div>
+      </div>
+      <div className='flex items-center gap-2 mb-1'>
+        <span className='text-[10px] text-fg-muted whitespace-nowrap'>strategy</span>
+        <select
+          value={strategy}
+          onChange={e => setStrategy(e.target.value as SelectionStrategy)}
+          disabled={autoPicking}
+          className='flex-1 bg-input border border-border-soft px-2 py-1 text-[11px] focus:border-primary/50 focus:outline-none'
         >
-          {testing ? 'testing...' : latencies ? 'retest' : 'test latencies'}
-        </button>
+          {(Object.keys(STRATEGY_LABELS) as SelectionStrategy[]).map(s => (
+            <option key={s} value={s}>{STRATEGY_LABELS[s]}</option>
+          ))}
+        </select>
       </div>
       <select
         value={matched?.id ?? ''}
@@ -470,12 +573,15 @@ const ZcashEndpointPicker = ({ currentUrl, onPick }: ZcashEndpointPickerProps) =
           <optgroup key={group.region} label={regionLabel(group.region)}>
             {group.presets.map(p => (
               <option key={p.id} value={p.id}>
-                {p.label}{p.backend === 'zidecar' ? ' · trustless' : ''}{rttSuffix(p.url)}
+                {p.label}{p.backend === 'zidecar' ? ' · trustless' : ''}{optionSuffix(p.url, p.id)}
               </option>
             ))}
           </optgroup>
         ))}
       </select>
+      {autoStatus && (
+        <div className='text-[10px] text-fg-muted mt-1 leading-snug'>{autoStatus}</div>
+      )}
     </div>
   );
 };
