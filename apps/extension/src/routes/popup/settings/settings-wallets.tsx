@@ -428,7 +428,7 @@ export const SettingsWallets = () => {
                 zafu zigner keeps spending keys offline - sign by QR.
               </p>
               <a
-                href='https://zigner.rotko.net'
+                href='https://zigner.zafu.pro'
                 target='_blank'
                 rel='noopener noreferrer'
                 className='flex items-center gap-1.5 text-xs text-zigner-gold hover:underline mt-2'

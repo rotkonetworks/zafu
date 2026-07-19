@@ -82,7 +82,7 @@ export const DEFAULT_ZAPPS: Zapp[] = [
     name: 'zigner',
     description: 'airgap signing app',
     icon: 'i-lucide-smartphone',
-    url: 'https://zigner.rotko.net',
+    url: 'https://zigner.zafu.pro',
     category: 'tools',
   },
   {

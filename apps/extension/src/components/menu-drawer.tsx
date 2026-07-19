@@ -290,12 +290,12 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
 
           <div className='mt-1 flex items-center gap-3 text-label text-fg-dim lowercase'>
             <a
-              href='https://rotko.net'
+              href='https://zafu.pro'
               target='_blank'
               rel='noopener noreferrer'
               className='hover:text-fg-high'
             >
-              rotko.net
+              zafu.pro
             </a>
             <a
               href='https://github.com/rotkonetworks/zafu'
@@ -306,7 +306,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
               github
             </a>
             <a
-              href='https://zigner.rotko.net'
+              href='https://zigner.zafu.pro'
               target='_blank'
               rel='noopener noreferrer'
               className='hover:text-fg-high'
