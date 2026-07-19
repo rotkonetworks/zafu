@@ -33,6 +33,7 @@ import {
   getChainFromAddress,
 } from '@repo/wallet/networks/cosmos/chains';
 import { cn } from '@repo/ui/lib/utils';
+import { Button } from '@repo/ui/components/ui/button';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { isDedicatedWindow } from '../../../utils/popup-detection';
 import { openInDedicatedWindow } from '../../../utils/navigate';
@@ -803,21 +804,12 @@ function CosmosSend({ sourceChainId }: { sourceChainId: CosmosChainId }) {
           )}
 
           <div className='flex gap-2 mt-3'>
-            <button
-              onClick={() => void handleConfirm()}
-              className={cn(
-                'flex-1 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark',
-                'transition-colors hover:bg-zigner-gold-light',
-              )}
-            >
+            <Button variant='gradient' onClick={() => void handleConfirm()} className='flex-1'>
               confirm & sign
-            </button>
-            <button
-              onClick={() => setTxStatus('idle')}
-              className='flex-1 rounded-lg border border-border-soft py-3 text-sm text-fg-muted hover:text-fg-high transition-colors'
-            >
+            </Button>
+            <Button variant='secondary' onClick={() => setTxStatus('idle')} className='flex-1'>
               back
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -830,7 +822,8 @@ function CosmosSend({ sourceChainId }: { sourceChainId: CosmosChainId }) {
       )}
 
       {/* submit */}
-      <button
+      <Button
+        variant='gradient'
         onClick={() => {
           if (txStatus === 'success' || txStatus === 'error') {
             setTxStatus('idle');
@@ -851,19 +844,14 @@ function CosmosSend({ sourceChainId }: { sourceChainId: CosmosChainId }) {
           txStatus === 'signing' ||
           txStatus === 'broadcasting'
         }
-        className={cn(
-          'mt-2 w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark',
-          'transition-colors hover:bg-zigner-gold-light',
-          'disabled:opacity-50 disabled:cursor-not-allowed',
-          txStatus === 'confirm' && 'hidden',
-        )}
+        className={cn('mt-2 w-full', txStatus === 'confirm' && 'hidden')}
       >
         {txStatus === 'signing' && 'building transaction...'}
         {txStatus === 'broadcasting' && 'broadcasting...'}
         {txStatus === 'idle' && (routeLoading ? 'finding route...' : 'review')}
         {txStatus === 'success' && 'send another'}
         {txStatus === 'error' && 'retry'}
-      </button>
+      </Button>
 
       {txStatus !== 'confirm' && (
         <p className='text-center text-xs text-fg-muted'>

@@ -22,7 +22,7 @@ export const ApproveDeny = ({
         onClick={approve}
         disabled={!approve || count > 0}
       >
-        Approve
+        approve
       </Button>
       <Button
         className='w-1/2 py-3.5 text-base hover:bg-destructive/90 transition-colors'
@@ -30,7 +30,7 @@ export const ApproveDeny = ({
         variant='destructiveSecondary'
         onClick={deny}
       >
-        Deny
+        deny
       </Button>
       {ignore && (
         <Button
@@ -39,7 +39,7 @@ export const ApproveDeny = ({
           variant='secondary'
           onClick={ignore}
         >
-          Ignore Site
+          ignore site
         </Button>
       )}
     </div>

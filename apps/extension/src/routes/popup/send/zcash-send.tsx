@@ -771,16 +771,11 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     max
                   </button>
                 </div>
-                {/* Inline validation. Two cases we hand-hold:
-                    - wallet has no balance at all → tell the user to receive
-                      first instead of letting them fill the form and fail at
-                      build time.
-                    - amount entered exceeds available — flag immediately so
-                      the user doesn't get a build-time rejection. */}
+                {/* Inline validation: empty balance -> receive first; over-spend
+                    -> flag before build time. */}
                 {balanceZec === 0 && (
                   <p className='mt-1.5 text-label text-amber-400 leading-snug'>
-                    you don't have any zec yet. receive some first — your address is on the home
-                    screen.
+                    no zec yet - receive first from the home screen.
                   </p>
                 )}
                 {balanceZec !== null &&
@@ -788,15 +783,6 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                   Number(amount) > maxSendZec &&
                   Number(amount) > 0 && (
                     <p className='mt-1.5 text-label text-red-400 leading-snug tabular-nums'>
-                      exceeds spendable balance (
-                      {maxSendZec.toFixed(8).replace(/0+$/, '').replace(/\.$/, '')} ZEC after fee)
-                    </p>
-                  )}
-                {balanceZec !== null &&
-                  balanceZec > 0 &&
-                  Number(amount) > maxSendZec &&
-                  Number(amount) > 0 && (
-                    <p className='mt-1.5 text-[10px] text-red-400 leading-snug tabular-nums'>
                       exceeds spendable balance (
                       {maxSendZec.toFixed(8).replace(/0+$/, '').replace(/\.$/, '')} ZEC after fee)
                     </p>
@@ -819,18 +805,12 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             </div>
 
             <div className='flex gap-2 mt-4'>
-              <button
-                onClick={handleClose}
-                className='flex-1 rounded-lg border border-border-soft bg-input py-2.5 text-sm text-fg-muted hover:text-fg-high transition-colors'
-              >
+              <Button variant='secondary' onClick={handleClose} className='flex-1'>
                 cancel
-              </button>
-              <button
-                onClick={handleReview}
-                className='flex-1 rounded-lg bg-zigner-gold py-2.5 text-sm font-medium text-zigner-dark hover:bg-primary/90 transition-colors'
-              >
+              </Button>
+              <Button variant='gradient' onClick={handleReview} className='flex-1'>
                 continue
-              </button>
+              </Button>
             </div>
           </div>
         );
@@ -859,15 +839,17 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               </div>
               <div className='flex justify-between'>
                 <span className='text-fg-muted'>amount</span>
-                <span className='font-medium'>{amount} zec</span>
+                <span className='font-medium tabular-nums'>{amount} zec</span>
               </div>
               <div className='flex justify-between'>
                 <span className='text-fg-muted'>fee</span>
-                <span className='text-sm'>{fee} zec</span>
+                <span className='text-sm tabular-nums'>{fee} zec</span>
               </div>
               <div className='border-t border-border-soft pt-2 flex justify-between'>
                 <span className='text-fg-muted'>total</span>
-                <span className='font-medium'>{(Number(amount) + Number(fee)).toFixed(4)} zec</span>
+                <span className='font-medium tabular-nums'>
+                  {(Number(amount) + Number(fee)).toFixed(4)} zec
+                </span>
               </div>
             </div>
 
@@ -956,10 +938,21 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 />
               ) : null}
 
-              <div className='text-center'>
-                <p className='text-sm text-fg-muted'>1. open zafu zigner app on your phone</p>
-                <p className='text-sm text-fg-muted'>2. scan this qr code</p>
-                <p className='text-sm text-fg-muted'>3. review and approve the transaction</p>
+              <div className='flex items-center justify-center gap-3 text-fg-muted'>
+                <span className='flex items-center gap-1.5'>
+                  <span className='i-lucide-smartphone h-4 w-4' />
+                  <span className='text-xs'>open zigner</span>
+                </span>
+                <span className='i-lucide-chevron-right h-3 w-3 shrink-0' />
+                <span className='flex items-center gap-1.5'>
+                  <span className='i-lucide-scan h-4 w-4' />
+                  <span className='text-xs'>scan</span>
+                </span>
+                <span className='i-lucide-chevron-right h-3 w-3 shrink-0' />
+                <span className='flex items-center gap-1.5'>
+                  <span className='i-lucide-check h-4 w-4' />
+                  <span className='text-xs'>approve</span>
+                </span>
               </div>
             </div>
 
@@ -1025,27 +1018,31 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
             {/* save contact prompt */}
             {showSavePrompt && recipient && !findByAddress(recipient) && !showContactModal && (
-              <div className='w-full rounded-lg border border-primary/40 bg-primary/10 p-3'>
+              <div className='w-full rounded-lg border border-border-soft bg-elev-1 p-3'>
                 <div className='flex items-center gap-2 mb-2'>
                   <span className='i-lucide-user h-4 w-4 text-zigner-gold' />
                   <p className='text-sm'>save to contacts?</p>
                 </div>
                 <div className='flex gap-2'>
-                  <button
+                  <Button
+                    variant='gradient'
+                    size='sm'
                     onClick={() => setShowContactModal(true)}
-                    className='flex-1 rounded-lg bg-zigner-gold py-2 text-xs font-medium text-zigner-dark hover:bg-primary/90 transition-colors'
+                    className='flex-1'
                   >
                     save
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant='secondary'
+                    size='sm'
                     onClick={() => {
                       void dismissSuggestion(recipient);
                       setShowSavePrompt(false);
                     }}
-                    className='flex-1 rounded-lg border border-border-soft py-2 text-xs text-fg-muted hover:text-fg-high transition-colors'
+                    className='flex-1'
                   >
                     skip
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}

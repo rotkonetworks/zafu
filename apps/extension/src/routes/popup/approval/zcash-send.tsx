@@ -123,7 +123,7 @@ export function ZcashSendApproval() {
     if (selectedKeyInfo.type !== 'mnemonic') {
       setStatus('error');
       setError(
-        'multi-output send requires a mnemonic wallet (hot wallet). zigner/watch-only wallets are not supported for external send requests.',
+        'multi-output send requires a mnemonic (hot) wallet - zigner/watch-only not supported',
       );
       return;
     }

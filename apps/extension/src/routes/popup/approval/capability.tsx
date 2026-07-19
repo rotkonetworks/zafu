@@ -26,13 +26,13 @@ const riskStyles: Record<RiskLevel, { border: string; bg: string; text: string; 
       border: 'border-orange-500/40',
       bg: 'bg-orange-500/5',
       text: 'text-orange-400',
-      banner: 'This grants significant access to your wallet.',
+      banner: 'this grants significant access to your wallet.',
     },
     critical: {
       border: 'border-red-500/50',
       bg: 'bg-red-500/10',
       text: 'text-red-400',
-      banner: 'DANGER: This capability can sign transactions without your approval.',
+      banner: 'danger: this capability can sign transactions without your approval.',
     },
   };
 
@@ -45,7 +45,7 @@ export const CapabilityApproval = () => {
   const title = params.get('title') || '';
 
   if (!capability || !(capability in CAPABILITY_META)) {
-    return <div className='p-4 text-red-400'>Invalid capability request</div>;
+    return <div className='p-4 text-red-400'>invalid capability request</div>;
   }
 
   const meta = CAPABILITY_META[capability];
@@ -99,7 +99,7 @@ export const CapabilityApproval = () => {
               <span className={cn('text-base font-medium', style.text)}>{meta.label}</span>
               <span
                 className={cn(
-                  'rounded px-1.5 py-0.5 text-label uppercase',
+                  'rounded px-1.5 py-0.5 text-label',
                   meta.risk === 'low' && 'bg-elev-2 text-fg-muted',
                   meta.risk === 'medium' && 'bg-yellow-500/10 text-yellow-400',
                   meta.risk === 'high' && 'bg-orange-500/10 text-orange-400',
@@ -115,8 +115,8 @@ export const CapabilityApproval = () => {
           {/* extra warning for critical */}
           {meta.risk === 'critical' && (
             <div className='rounded-lg border border-red-500/50 bg-red-500/10 p-3 text-xs text-red-400'>
-              Are you absolutely sure? This site will be able to sign transactions on your behalf
-              without asking for confirmation.
+              are you absolutely sure? this site can sign transactions on your behalf without
+              confirmation.
             </div>
           )}
         </div>

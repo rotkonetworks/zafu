@@ -317,29 +317,31 @@ export function FrostAirgapJoinerSignFlow({
         <div className='flex flex-col gap-3 p-4'>
           <Header onBack={cancel} />
           <div className='rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-3'>
-            <p className='text-label uppercase tracking-wider text-yellow-400'>
-              review transaction
-            </p>
+            <p className='text-label tracking-wider text-yellow-400'>review transaction</p>
           </div>
           <div className='rounded-lg border border-border-soft bg-elev-1 p-3 flex flex-col gap-2.5'>
             <div>
-              <p className='text-label uppercase tracking-wider text-fg-muted'>from</p>
+              <p className='text-label tracking-wider text-fg-muted'>from</p>
               <p className='mt-0.5 text-xs font-medium'>{walletLabel}</p>
               <p className='mt-0.5 break-all font-mono text-label text-fg-muted'>{walletAddress}</p>
             </div>
             <div className='border-t border-border-soft' />
             <div>
-              <p className='text-label uppercase tracking-wider text-fg-muted'>to</p>
+              <p className='text-label tracking-wider text-fg-muted'>to</p>
               <p className='mt-0.5 break-all font-mono text-label'>{tx?.recipient}</p>
             </div>
             <div className='border-t border-border-soft' />
             <div className='flex items-baseline justify-between'>
-              <span className='text-label uppercase tracking-wider text-fg-muted'>amount</span>
-              <span className='text-sm font-medium'>{formatZec(tx?.amountZat ?? '')} ZEC</span>
+              <span className='text-label tracking-wider text-fg-muted'>amount</span>
+              <span className='text-sm font-medium tabular-nums'>
+                {formatZec(tx?.amountZat ?? '')} ZEC
+              </span>
             </div>
             <div className='flex items-baseline justify-between'>
-              <span className='text-label uppercase tracking-wider text-fg-muted'>fee</span>
-              <span className='text-xs text-fg-muted'>{formatZec(tx?.feeZat ?? '')} ZEC</span>
+              <span className='text-label tracking-wider text-fg-muted'>fee</span>
+              <span className='text-xs text-fg-muted tabular-nums'>
+                {formatZec(tx?.feeZat ?? '')} ZEC
+              </span>
             </div>
           </div>
 
@@ -380,9 +382,7 @@ export function FrostAirgapJoinerSignFlow({
               </ul>
               {parsed && parsed.actions.some(a => a.decrypted && !a.is_change) && (
                 <div className='rounded border border-red-500/30 bg-red-500/5 p-2 text-label font-mono text-red-300/80'>
-                  <p className='text-label uppercase tracking-wider text-red-400/80 mb-1'>
-                    derived outputs
-                  </p>
+                  <p className='text-label tracking-wider text-red-400/80 mb-1'>derived outputs</p>
                   {parsed.actions
                     .filter(a => a.decrypted && !a.is_change)
                     .map(a => (

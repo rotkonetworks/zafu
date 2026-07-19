@@ -28,13 +28,13 @@ const riskStyles: Record<RiskLevel, { border: string; bg: string; text: string; 
       border: 'border-orange-500/40',
       bg: 'bg-orange-500/5',
       text: 'text-orange-400',
-      banner: 'This grants significant access to your wallet.',
+      banner: 'this grants significant access to your wallet.',
     },
     critical: {
       border: 'border-red-500/50',
       bg: 'bg-red-500/10',
       text: 'text-red-400',
-      banner: 'DANGER: This capability can sign transactions without your approval.',
+      banner: 'danger: this capability can sign transactions without your approval.',
     },
   };
 
@@ -51,7 +51,7 @@ const CapabilityItem = ({ cap }: { cap: Capability }) => {
         <span className={cn('text-sm font-medium', style.text)}>{meta.label}</span>
         <span
           className={cn(
-            'rounded px-1.5 py-0.5 text-label uppercase',
+            'rounded px-1.5 py-0.5 text-label',
             meta.risk === 'low' && 'bg-elev-2 text-fg-muted',
             meta.risk === 'medium' && 'bg-yellow-500/10 text-yellow-400',
             meta.risk === 'high' && 'bg-orange-500/10 text-orange-400',
