@@ -175,15 +175,11 @@ export const SettingsZigner = () => {
   const showInitialState = scanState === 'idle' && !showManualInput;
 
   return (
-    <SettingsScreen title='Zafu Zigner'>
+    <SettingsScreen title='zafu zigner'>
       <div className='flex flex-col gap-4'>
         {/* Info Box */}
         <div className='rounded-md border border-border-soft bg-elev-1 p-4'>
-          <p className='text-xs text-fg'>
-            Zafu Zigner is a cold wallet that keeps your spending keys offline. Zafu stores only the
-            viewing key to show balances. Transactions require QR code signing with your Zafu Zigner
-            device.
-          </p>
+          <p className='text-xs text-fg'>cold wallet - keeps spending keys offline, sign by QR.</p>
         </div>
 
         {/* Upgrade CTA — shown to free users, but non-blocking.
@@ -197,9 +193,8 @@ export const SettingsZigner = () => {
               <div className='flex flex-col gap-1'>
                 <p className='text-data text-fg-high lowercase'>unlock the full zigner workflow</p>
                 <p className='text-xs text-fg-muted'>
-                  Your imported Zigner wallet is active. Pro unlocks additional identities,
-                  multi-network signing, and vault legacy mode. You can pay for Pro by signing the
-                  0.01 ZEC subscription tx with your Zigner device.
+                  pro adds identities, multi-network signing, and vault legacy mode - pay by signing
+                  the 0.01 ZEC subscription tx.
                 </p>
               </div>
             </div>
@@ -303,7 +298,7 @@ export const SettingsZigner = () => {
           <div className='border-t border-border-hard pt-4'>
             <p className='text-sm font-bold mb-3'>polkadot vault</p>
             <div className='flex flex-col gap-3'>
-              <div className='flex items-center justify-between border border-border-hard bg-card-radial p-3'>
+              <div className='flex items-center justify-between border border-border-hard bg-elev-2 p-3'>
                 <div className='flex flex-col'>
                   <span className='text-sm'>legacy mode</span>
                   <span className='text-xs text-fg-muted'>
@@ -351,16 +346,16 @@ export const SettingsZigner = () => {
             {/* Manual input (hidden by default, developer mode) */}
             {showManualInput && (
               <div className='flex flex-col gap-3'>
-                <p className='text-xs text-fg-muted'>Developer mode: Paste QR hex data</p>
+                <p className='text-xs text-fg-muted'>developer mode: paste QR hex data</p>
 
                 <Input
-                  placeholder='Paste QR code hex (530301...)'
+                  placeholder='paste QR code hex (530301...)'
                   onChange={e => handleManualInput(e.target.value)}
                   className='font-mono text-xs'
                 />
 
                 <Input
-                  placeholder='Wallet label (optional)'
+                  placeholder='wallet label (optional)'
                   value={walletLabel}
                   onChange={e => setWalletLabel(e.target.value)}
                 />
@@ -369,7 +364,7 @@ export const SettingsZigner = () => {
 
                 <div className='flex gap-2'>
                   <Button variant='secondary' className='flex-1' onClick={resetForm}>
-                    Cancel
+                    cancel
                   </Button>
                   <Button
                     variant='gradient'
@@ -383,7 +378,7 @@ export const SettingsZigner = () => {
                       isAdding
                     }
                   >
-                    {isAdding ? 'Adding...' : 'Add Wallet'}
+                    {isAdding ? 'adding...' : 'add wallet'}
                   </Button>
                 </div>
               </div>
@@ -425,7 +420,7 @@ export const SettingsZigner = () => {
                 </div>
 
                 <Input
-                  placeholder='Wallet label (optional)'
+                  placeholder='wallet label (optional)'
                   value={walletLabel}
                   onChange={e => setWalletLabel(e.target.value)}
                 />
@@ -434,7 +429,7 @@ export const SettingsZigner = () => {
 
                 <div className='flex gap-2'>
                   <Button variant='secondary' className='flex-1' onClick={resetForm}>
-                    Cancel
+                    cancel
                   </Button>
                   <Button
                     variant='gradient'
@@ -442,7 +437,7 @@ export const SettingsZigner = () => {
                     onClick={handleAddWallet}
                     disabled={isAdding}
                   >
-                    {isAdding ? 'Adding...' : 'Add Wallet'}
+                    {isAdding ? 'adding...' : 'add wallet'}
                   </Button>
                 </div>
               </div>
@@ -453,7 +448,7 @@ export const SettingsZigner = () => {
               <div className='flex flex-col gap-2'>
                 {/* Always open scanner in new tab for better camera experience */}
                 <p className='text-xs text-fg-muted text-center mb-2'>
-                  Opens camera in a new tab for scanning
+                  opens camera in a new tab for scanning
                 </p>
                 <Button
                   variant='secondary'
@@ -461,7 +456,7 @@ export const SettingsZigner = () => {
                   onClick={() => openPageInTab(PagePath.IMPORT_ZIGNER)}
                 >
                   <ExternalLinkIcon className='size-4 mr-2' />
-                  Scan QR Code
+                  scan QR code
                 </Button>
                 {errorMessage && <p className='text-xs text-red-400 text-center'>{errorMessage}</p>}
               </div>
@@ -472,7 +467,7 @@ export const SettingsZigner = () => {
               <div className='flex flex-col gap-3'>
                 <p className='text-sm text-red-400'>{errorMessage}</p>
                 <Button variant='secondary' onClick={resetForm}>
-                  Try Again
+                  try again
                 </Button>
               </div>
             )}

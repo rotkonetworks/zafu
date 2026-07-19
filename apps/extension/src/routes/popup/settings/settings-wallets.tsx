@@ -8,6 +8,7 @@ import { passwordSelector } from '../../../state/password';
 import { SettingsScreen } from './settings-screen';
 import { terminateNetworkWorker } from '../../../state/keyring/network-worker';
 import { QrScanner } from '../../../shared/components/qr-scanner';
+import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
 import { cn } from '@repo/ui/lib/utils';
 import { usePopupNav } from '../../../utils/navigate';
@@ -424,8 +425,7 @@ export const SettingsWallets = () => {
               onClick={handleSecretTap}
             >
               <p className='text-xs text-fg-muted'>
-                zafu zigner keeps spending keys offline. transactions require QR code signing with
-                your device.
+                zafu zigner keeps spending keys offline - sign by QR.
               </p>
               <a
                 href='https://zigner.rotko.net'
@@ -703,7 +703,7 @@ const VaultRow = ({
             />
           </div>
           <p className='text-label text-fg-dim mt-0.5'>
-            orchard only — sapling/sprout not supported
+            orchard only - sapling/sprout not supported
           </p>
         </div>
       )}
@@ -760,17 +760,14 @@ const Btn = ({
   primary?: boolean;
   disabled?: boolean;
 }) => (
-  <button
+  <Button
     type={submit ? 'submit' : 'button'}
     onClick={onClick}
     disabled={disabled}
-    className={cn(
-      'flex-1 rounded-lg py-2 text-xs transition-colors duration-100 disabled:opacity-50',
-      destructive && 'bg-red-500/15 text-red-400 border border-red-500/25 hover:bg-red-500/25',
-      primary && 'bg-primary/15 text-zigner-gold border border-primary/25 hover:bg-primary/25',
-      !destructive && !primary && 'border border-border-soft hover:bg-elev-1',
-    )}
+    variant={destructive ? 'destructiveSecondary' : primary ? 'default' : 'secondary'}
+    size='md'
+    className='flex-1 rounded-lg text-xs'
   >
     {children}
-  </button>
+  </Button>
 );

@@ -19,34 +19,34 @@ const PRIVACY_ROWS: readonly PrivacyRow[] = [
   {
     key: 'enableIdentity',
     label: 'zid identity',
-    onLabel: 'zid surface visible - sites can derive per-site identities',
-    offLabel: 'identity feature off - menu, sign approvals, e2ee disabled',
+    onLabel: 'sites can derive per-site identities',
+    offLabel: 'off - menu, sign approvals, e2ee disabled',
   },
   {
     key: 'enableTransparentBalances',
     label: 'cosmos balances',
-    onLabel: 'querying rpc nodes for balances',
-    offLabel: 'balances hidden - no rpc queries',
+    onLabel: 'querying rpc for balances',
+    offLabel: 'hidden - no rpc queries',
     visible: n => isIbcNetwork(n) || n === 'penumbra',
   },
   {
     key: 'enableTransactionHistory',
     label: 'transaction history',
-    onLabel: 'saving history locally',
-    offLabel: 'history disabled',
+    onLabel: 'saved locally',
+    offLabel: 'disabled',
   },
   {
     key: 'enableBackgroundSync',
     label: 'background sync',
-    onLabel: 'syncing periodically in background',
-    offLabel: 'sync only when extension is open',
+    onLabel: 'syncing in background',
+    offLabel: 'only when extension is open',
     visible: n => isIbcNetwork(n) || n === 'penumbra',
   },
   {
     key: 'enablePriceFetching',
     label: 'price display',
-    onLabel: 'fetching prices — apis cannot see your addresses',
-    offLabel: 'prices hidden',
+    onLabel: 'fetching prices - apis cannot see addresses',
+    offLabel: 'hidden',
     visible: n => n === 'penumbra' || isIbcNetwork(n),
   },
 ];
@@ -66,7 +66,7 @@ function Row({
     <div className='flex items-start justify-between gap-4 py-3'>
       <div className='flex-1'>
         <p className='text-sm font-medium'>{label}</p>
-        <p className={`text-xs mt-0.5 ${checked ? 'text-green-500' : 'text-fg-muted'}`}>
+        <p className={`text-xs mt-0.5 ${checked ? 'text-fg-high' : 'text-fg-muted'}`}>
           {stateLabel}
         </p>
       </div>
@@ -102,10 +102,10 @@ function ProxySection() {
       <div className='flex items-center justify-between'>
         <div>
           <p className='text-sm font-medium'>proxy</p>
-          <p className={`text-xs mt-0.5 ${proxy.enabled ? 'text-green-500' : 'text-fg-muted'}`}>
+          <p className={`text-xs mt-0.5 ${proxy.enabled ? 'text-fg-high' : 'text-fg-muted'}`}>
             {proxy.enabled
               ? `socks5://${proxy.host}:${proxy.port}`
-              : 'direct connection - ip visible to servers'}
+              : 'direct - ip visible to servers'}
           </p>
         </div>
         <button
@@ -144,8 +144,8 @@ function ProxySection() {
       )}
       <p className='text-label text-fg-muted/40 mt-1'>
         {pro
-          ? 'routes all traffic through proxy - pro includes rotko proxy access'
-          : 'routes all traffic through your socks5 proxy - pro includes proxy access'}
+          ? 'routes all traffic - pro includes rotko proxy access'
+          : 'routes all traffic through your socks5 - pro includes proxy access'}
       </p>
     </div>
   );

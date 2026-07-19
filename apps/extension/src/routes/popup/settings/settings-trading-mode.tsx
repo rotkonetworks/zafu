@@ -74,8 +74,7 @@ export const SettingsTradingMode = () => {
         {/* Info Box */}
         <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
           <p className='text-sm text-fg-muted'>
-            Enable auto-signing for swap transactions from whitelisted sites. Sends and withdrawals
-            always require manual approval.
+            auto-sign swaps from whitelisted sites - sends and withdrawals always need approval.
           </p>
         </div>
 
@@ -84,11 +83,11 @@ export const SettingsTradingMode = () => {
           <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-3'>
             <div className='flex items-center justify-between'>
               <div className='flex flex-col'>
-                <span className='text-sm font-medium text-green-400'>Session Active</span>
-                <span className='text-xs text-fg-muted'>Expires in {timeRemaining}</span>
+                <span className='text-sm font-medium text-green-400'>session active</span>
+                <span className='text-xs text-fg-muted'>expires in {timeRemaining}</span>
               </div>
               <Button variant='secondary' size='sm' onClick={handleEndSession}>
-                End
+                end
               </Button>
             </div>
           </div>
@@ -98,8 +97,8 @@ export const SettingsTradingMode = () => {
         <div className='border-t border-border-soft pt-4'>
           <div className='flex items-center justify-between'>
             <div className='flex flex-col gap-1'>
-              <span className='text-sm font-medium'>Auto-sign Swaps</span>
-              <span className='text-xs text-fg-muted'>Only swap transactions are auto-signed</span>
+              <span className='text-sm font-medium'>auto-sign swaps</span>
+              <span className='text-xs text-fg-muted'>only swap transactions are auto-signed</span>
             </div>
             <Switch checked={settings.autoSign} onCheckedChange={setAutoSign} />
           </div>
@@ -109,7 +108,7 @@ export const SettingsTradingMode = () => {
           <>
             {/* Session Duration */}
             <div className='border-t border-border-soft pt-4'>
-              <p className='text-sm font-medium mb-3'>Session Duration</p>
+              <p className='text-sm font-medium mb-3'>session duration</p>
               <div className='flex items-center gap-2'>
                 <Input
                   type='number'
@@ -125,28 +124,28 @@ export const SettingsTradingMode = () => {
 
             {/* Max Value */}
             <div className='border-t border-border-soft pt-4'>
-              <p className='text-sm font-medium mb-3'>Max Value Per Swap</p>
+              <p className='text-sm font-medium mb-3'>max value per swap</p>
               <div className='flex items-center gap-2'>
                 <Input
                   type='text'
                   value={settings.maxValuePerSwap === '0' ? '' : settings.maxValuePerSwap}
                   onChange={e => setMaxValuePerSwap(e.target.value || '0')}
-                  placeholder='Unlimited'
+                  placeholder='unlimited'
                   className='flex-1'
                 />
                 <span className='text-sm text-fg-muted'>base units</span>
               </div>
-              <p className='text-xs text-fg-muted mt-1'>Leave empty for no limit</p>
+              <p className='text-xs text-fg-muted mt-1'>empty = no limit</p>
             </div>
 
             {/* Allowed Origins */}
             <div className='border-t border-border-soft pt-4'>
-              <p className='text-sm font-medium mb-3'>Allowed Sites</p>
+              <p className='text-sm font-medium mb-3'>allowed sites</p>
 
               {settings.allowedOrigins.length === 0 ? (
                 <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
                   <p className='text-xs text-fg-muted'>
-                    No sites selected. Add at least one site to enable auto-signing.
+                    no sites selected - add one to enable auto-signing.
                   </p>
                 </div>
               ) : (
@@ -197,11 +196,11 @@ export const SettingsTradingMode = () => {
                   onClick={handleSave}
                   disabled={saving}
                 >
-                  {saving ? 'Saving...' : 'Save'}
+                  {saving ? 'saving...' : 'save'}
                 </Button>
                 {!sessionActive && settings.allowedOrigins.length > 0 && (
                   <Button variant='gradient' className='flex-1' onClick={handleStartSession}>
-                    Start Session
+                    start session
                   </Button>
                 )}
               </div>
@@ -212,7 +211,7 @@ export const SettingsTradingMode = () => {
         {!settings.autoSign && (
           <div className='border-t border-border-soft pt-4'>
             <Button variant='secondary' className='w-full' onClick={handleSave} disabled={saving}>
-              {saving ? 'Saving...' : 'Save'}
+              {saving ? 'saving...' : 'save'}
             </Button>
           </div>
         )}

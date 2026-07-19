@@ -218,7 +218,7 @@ export const MultisigPage = () => {
       {PasswordModal}
       <BackupModal
         open={backupTarget !== null}
-        title={backupTarget ? `Export "${backupTarget.label}"` : ''}
+        title={backupTarget ? `export "${backupTarget.label}"` : ''}
         walletLabel={backupTarget?.label ?? ''}
         onConfirm={async passphrase => {
           if (backupTarget) {

@@ -7,6 +7,7 @@
 import { useState } from 'react';
 import { useStore } from '../../../state';
 import { selectMultisigWallets } from '../../../state/wallets';
+import { Button } from '@repo/ui/components/ui/button';
 import { SettingsScreen } from './settings-screen';
 import { PopupPath } from '../paths';
 import { usePasswordGate } from '../../../hooks/password-gate';
@@ -37,7 +38,7 @@ export const SettingsMultisigBackup = () => {
       {PasswordModal}
       <BackupModal
         open={batchOpen}
-        title={`Export ${selfCustody.length} wallet${selfCustody.length === 1 ? '' : 's'}`}
+        title={`export ${selfCustody.length} wallet${selfCustody.length === 1 ? '' : 's'}`}
         walletLabel={`${selfCustody.length} self-custody multisig wallet${selfCustody.length === 1 ? '' : 's'}`}
         batch
         onConfirm={async passphrase => {
@@ -48,7 +49,7 @@ export const SettingsMultisigBackup = () => {
       />
       <BackupModal
         open={singleTarget !== null}
-        title={singleTarget ? `Export "${singleTarget.label}"` : ''}
+        title={singleTarget ? `export "${singleTarget.label}"` : ''}
         walletLabel={singleTarget?.label ?? ''}
         onConfirm={async passphrase => {
           if (singleTarget) {
@@ -88,27 +89,28 @@ export const SettingsMultisigBackup = () => {
 
         {/* batch export */}
         <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
-          <p className='text-sm font-medium'>Batch backup</p>
+          <p className='text-sm font-medium'>batch backup</p>
           <p className='mt-1 text-body text-fg-muted'>
-            One encrypted file containing every self-custody multisig wallet. Single passphrase.
-            Restore on any zafu install.
+            one encrypted file, one passphrase - restore on any zafu install.
           </p>
           {selfCustody.length === 0 ? (
             <p className='mt-3 text-xs text-fg-muted'>
-              No self-custody multisig wallets to backup.
+              no self-custody multisig wallets to back up.
             </p>
           ) : (
-            <button
+            <Button
+              variant='default'
+              size='md'
+              className='mt-3 w-full gap-1.5 text-xs'
               onClick={async () => {
                 if (await requestAuth()) {
                   setBatchOpen(true);
                 }
               }}
-              className='mt-3 w-full flex items-center justify-center gap-1.5 rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-xs text-zigner-gold hover:bg-primary/10 transition-colors'
             >
               <span className='i-lucide-archive h-3.5 w-3.5' />
               export all ({selfCustody.length} wallet{selfCustody.length === 1 ? '' : 's'})
-            </button>
+            </Button>
           )}
         </div>
 
@@ -116,7 +118,7 @@ export const SettingsMultisigBackup = () => {
         {selfCustody.length > 0 && (
           <div>
             <p className='mb-2 text-label uppercase tracking-wide text-fg-muted'>
-              Or export individually
+              individual exports
             </p>
             <div className='flex flex-col gap-1.5'>
               {selfCustody.map(w => (
@@ -130,16 +132,17 @@ export const SettingsMultisigBackup = () => {
                       {w.multisig!.threshold}-of-{w.multisig!.maxSigners} · self-custody
                     </span>
                   </div>
-                  <button
+                  <Button
+                    variant='outline'
+                    size='sm'
                     onClick={async () => {
                       if (await requestAuth()) {
                         setSingleTarget(w);
                       }
                     }}
-                    className='rounded-md border border-border-soft px-2 py-1 text-body text-fg-muted hover:text-zigner-gold hover:bg-elev-2 transition-colors'
                   >
                     export
-                  </button>
+                  </Button>
                 </div>
               ))}
             </div>
@@ -154,8 +157,7 @@ export const SettingsMultisigBackup = () => {
                 {airgap.length} airgap wallet
                 {airgap.length === 1 ? '' : 's'}
               </span>{' '}
-              not included — those shares live on zigner. Export each from the zigner FROST wallet
-              list.
+              not included - export each from the zigner FROST wallet list.
             </p>
             <ul className='mt-2 flex flex-col gap-0.5 text-label text-fg-muted'>
               {airgap.map(w => (
@@ -169,35 +171,37 @@ export const SettingsMultisigBackup = () => {
 
         {/* restore */}
         <div className='border-t border-border-soft pt-4 flex flex-col gap-2'>
-          <p className='text-sm font-medium'>Restore</p>
+          <p className='text-sm font-medium'>restore</p>
           <p className='text-body text-fg-muted'>
-            Import an encrypted backup file (self-custody share material), or scan an airgap QR from
-            a zigner to re-add airgap multisig wallets. Already-known wallets are skipped, not
-            overwritten.
+            import a backup file or scan an airgap QR - known wallets are skipped, not overwritten.
           </p>
           <div className='flex gap-2'>
-            <button
+            <Button
+              variant='secondary'
+              size='md'
+              className='flex-1 gap-1.5 text-xs'
               onClick={async () => {
                 if (await requestAuth()) {
                   setRestoreOpen(true);
                 }
               }}
-              className='flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-border-soft py-2.5 text-xs hover:bg-elev-2 transition-colors'
             >
               <span className='i-lucide-file-up h-3.5 w-3.5' />
               from backup file
-            </button>
-            <button
+            </Button>
+            <Button
+              variant='secondary'
+              size='md'
+              className='flex-1 gap-1.5 text-xs'
               onClick={async () => {
                 if (await requestAuth()) {
                   setAirgapQrOpen(true);
                 }
               }}
-              className='flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-border-soft py-2.5 text-xs hover:bg-elev-2 transition-colors'
             >
               <span className='i-lucide-qr-code h-3.5 w-3.5' />
               from zigner QR
-            </button>
+            </Button>
           </div>
         </div>
       </div>

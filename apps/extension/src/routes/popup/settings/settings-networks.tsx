@@ -195,11 +195,7 @@ export const SettingsNetworks = () => {
                 </div>
               </div>
 
-              {/* endpoint config — expanded. One job up front: pick a
-                  working node. Trust status is a single quiet line derived
-                  from the backend; every tuning knob (custom url, backend
-                  override, memo privacy, mempool watch) lives behind one
-                  "advanced" disclosure so the common path stays calm. */}
+              {/* endpoint config — expanded */}
               {isExpanded && isEnabled && (
                 <div className='border-t border-border-soft p-3 bg-elev-2/10 flex flex-col gap-3'>
                   {networkId === 'zcash' ? (
@@ -456,8 +452,8 @@ const ZcashEndpointPanel = ({
               />
               <p className='mt-1 text-label text-fg-dim lowercase leading-snug'>
                 {strategy === 'private'
-                  ? 'decoy requests hide which blocks your wallet cares about.'
-                  : 'no decoys — the server learns which block ranges are yours. memos stay encrypted.'}
+                  ? 'decoys hide which blocks are yours.'
+                  : 'no decoys - server sees your block ranges. memos stay encrypted.'}
               </p>
             </div>
 
@@ -493,8 +489,8 @@ const ZcashEndpointPanel = ({
                 {!mempoolAvailable
                   ? 'needs a zidecar node.'
                   : mempoolOn
-                    ? 'polling — the server sees a continuous "online" signal from your wallet.'
-                    : 'shows incoming funds before they confirm. the server learns when you are online.'}
+                    ? 'polling - server sees a continuous online signal.'
+                    : 'shows funds before they confirm - server learns when you are online.'}
               </p>
             </div>
           </div>
