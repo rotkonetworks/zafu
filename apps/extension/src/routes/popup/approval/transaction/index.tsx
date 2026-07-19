@@ -206,7 +206,10 @@ export const TransactionApproval = () => {
       <div className='min-h-0 flex-1 overflow-y-auto p-4'>
         {invalidPlan && (
           <div className='mb-4 rounded-md border border-red-400/40 p-3 text-xs text-red-400'>
-            <h2 className='kicker mb-1 text-red-400/80'>⚠ invalid transaction</h2>
+            <h2 className='kicker mb-1 flex items-center gap-1 text-red-400/80'>
+              <span className='i-lucide-triangle-alert h-3.5 w-3.5' />
+              invalid transaction
+            </h2>
             <p>
               {invalidPlan instanceof ConnectError ? invalidPlan.rawMessage : String(invalidPlan)}
             </p>
@@ -217,13 +220,19 @@ export const TransactionApproval = () => {
           <>
             {hasTransparentAddress(selectedTransactionView) && (
               <div className='mb-4 rounded-md border border-yellow-400/40 bg-yellow-400/5 p-3 text-xs text-yellow-400'>
-                <h2 className='kicker mb-1 text-yellow-400/80'>⚠ privacy warning</h2>
+                <h2 className='kicker mb-1 flex items-center gap-1 text-yellow-400/80'>
+                  <span className='i-lucide-triangle-alert h-3.5 w-3.5' />
+                  privacy warning
+                </h2>
                 <p>This transaction uses a transparent address which may reduce privacy.</p>
               </div>
             )}
             {!hasAltGasFee(selectedTransactionView) && (
               <div className='mb-4 rounded-md border border-yellow-400/40 bg-yellow-400/5 p-3 text-xs text-yellow-400'>
-                <h2 className='kicker mb-1 text-yellow-400/80'>⚠ privacy warning</h2>
+                <h2 className='kicker mb-1 flex items-center gap-1 text-yellow-400/80'>
+                  <span className='i-lucide-triangle-alert h-3.5 w-3.5' />
+                  privacy warning
+                </h2>
                 <p>
                   Transaction uses a non-native fee token. To reduce gas costs and protect your
                   privacy, maintain an UM balance for fees.
