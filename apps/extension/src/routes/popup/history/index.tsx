@@ -49,7 +49,7 @@ function parseTransaction(txInfo: TransactionInfo): ParsedTransaction {
   const height = Number(txInfo.height ?? 0);
 
   let type: ParsedTransaction['type'] = 'unknown';
-  let description = 'Transaction';
+  let description = 'transaction';
   let hasVisibleSpend = false;
   let hasOutput = false;
   const accountIndices = new Set<number>();
@@ -76,23 +76,23 @@ function parseTransaction(txInfo: TransactionInfo): ParsedTransaction {
       }
     } else if (actionCase === 'swap') {
       type = 'swap';
-      description = 'Swap';
+      description = 'swap';
     } else if (actionCase === 'delegate') {
       type = 'delegate';
-      description = 'Delegate';
+      description = 'delegate';
     } else if (actionCase === 'undelegate') {
       type = 'undelegate';
-      description = 'Undelegate';
+      description = 'undelegate';
     }
   }
 
   if (type === 'unknown') {
     if (hasVisibleSpend) {
       type = 'send';
-      description = 'Send';
+      description = 'send';
     } else if (hasOutput) {
       type = 'receive';
-      description = 'Receive';
+      description = 'receive';
     }
   }
 
@@ -139,7 +139,7 @@ function TransactionRow({ tx }: { tx: ParsedTransaction }) {
   const isShield = tx.type === 'shield';
 
   return (
-    <div className='flex items-center gap-3 rounded-lg border border-border-soft bg-elev-1 p-3 hover:border-muted-foreground/30 transition-colors'>
+    <div className='flex items-center gap-3 rounded-lg border border-border-soft bg-elev-1 p-3 hover:border-fg-muted/30 transition-colors'>
       <div
         className={cn(
           'flex h-10 w-10 items-center justify-center rounded-full',
@@ -251,7 +251,7 @@ export const HistoryPage = () => {
         height: e.height,
         timestamp: null,
         type: e.type as ParsedTransaction['type'],
-        description: e.type === 'send' ? 'Sent' : e.type === 'shield' ? 'Shielded' : 'Received',
+        description: e.type === 'send' ? 'sent' : e.type === 'shield' ? 'shielded' : 'received',
         amount: zatoshiToZec(BigInt(e.amount)),
         asset: e.asset,
       }));
@@ -289,7 +289,7 @@ export const HistoryPage = () => {
     return (
       <div className='flex flex-col h-full'>
         <div className='flex items-center px-4 py-3 border-b border-border-soft'>
-          <h1 className='text-lg font-medium'>History</h1>
+          <h1 className='text-lg font-medium'>history</h1>
         </div>
         <div className='flex-1 flex flex-col items-center justify-center gap-3 p-8 text-center'>
           <span className='i-lucide-eye-off h-8 w-8 text-fg-muted/30' />
@@ -306,7 +306,7 @@ export const HistoryPage = () => {
     <div className='flex flex-col h-full'>
       {/* header */}
       <div className='flex items-center justify-between px-4 py-3 border-b border-border-soft'>
-        <h1 className='text-lg font-medium'>History</h1>
+        <h1 className='text-lg font-medium'>history</h1>
         <button
           onClick={() => void refetch()}
           disabled={isLoading}
@@ -337,12 +337,12 @@ export const HistoryPage = () => {
           </div>
         ) : error ? (
           <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
-            <p className='text-sm text-red-400'>Failed to load transactions</p>
+            <p className='text-sm text-red-400'>failed to load transactions</p>
             <button
               onClick={() => void refetch()}
               className='text-xs text-zigner-gold hover:underline'
             >
-              Try again
+              try again
             </button>
           </div>
         ) : filteredTransactions.length === 0 ? (
@@ -351,8 +351,8 @@ export const HistoryPage = () => {
               <span className='i-lucide-clock h-8 w-8 text-zigner-gold' />
             </div>
             <div>
-              <p className='text-sm font-medium'>No transactions yet</p>
-              <p className='text-xs text-fg-muted'>Your transaction history will appear here</p>
+              <p className='text-sm font-medium'>no transactions yet</p>
+              <p className='text-xs text-fg-muted'>your transaction history will appear here</p>
             </div>
           </div>
         ) : (

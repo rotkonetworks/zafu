@@ -1447,7 +1447,7 @@ function parsePenumbraTx(txInfo: TransactionInfo): ParsedTransaction {
     : '';
   const height = Number(txInfo.height ?? 0);
   let type: ParsedTransaction['type'] = 'unknown';
-  let description = 'Transaction';
+  let description = 'transaction';
   let hasVisibleSpend = false;
   let hasOutput = false;
   const accountIndices = new Set<number>();
@@ -1471,7 +1471,7 @@ function parsePenumbraTx(txInfo: TransactionInfo): ParsedTransaction {
       }
     } else if (c === 'swap') {
       type = 'swap';
-      description = 'Swap';
+      description = 'swap';
       // extract account from swap output notes (populated after claim)
       const sv = action.actionView.value.swapView;
       if (sv?.case === 'visible') {
@@ -1485,7 +1485,7 @@ function parsePenumbraTx(txInfo: TransactionInfo): ParsedTransaction {
       }
     } else if (c === 'swapClaim') {
       type = 'swap';
-      description = 'Swap Claim';
+      description = 'swap claim';
       // swap claims are separate txs with no spend/output actions - extract
       // account from the claim's output notes
       const scv = action.actionView.value.swapClaimView;
@@ -1500,19 +1500,19 @@ function parsePenumbraTx(txInfo: TransactionInfo): ParsedTransaction {
       }
     } else if (c === 'delegate') {
       type = 'delegate';
-      description = 'Delegate';
+      description = 'delegate';
     } else if (c === 'undelegate') {
       type = 'undelegate';
-      description = 'Undelegate';
+      description = 'undelegate';
     }
   }
   if (type === 'unknown') {
     if (hasVisibleSpend) {
       type = 'send';
-      description = 'Send';
+      description = 'send';
     } else if (hasOutput) {
       type = 'receive';
-      description = 'Receive';
+      description = 'receive';
     }
   }
 
@@ -1727,7 +1727,7 @@ const HistoryContent = ({
         height: e.height,
         timestamp: null,
         type: e.type as ParsedTransaction['type'],
-        description: e.type === 'send' ? 'Sent' : e.type === 'shield' ? 'Shielded' : 'Received',
+        description: e.type === 'send' ? 'sent' : e.type === 'shield' ? 'shielded' : 'received',
         amount: zatToZec(BigInt(e.amount)),
         asset: e.asset,
         memo: memoByTxId.get(e.id),

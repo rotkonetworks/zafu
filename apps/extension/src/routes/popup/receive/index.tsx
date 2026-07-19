@@ -269,8 +269,8 @@ function IbcDepositSection({
   return (
     <div className='w-full border-t border-border-soft pt-4'>
       {PasswordModal}
-      <div className='mb-3 text-xs font-medium uppercase tracking-wider text-fg-muted'>
-        Shield Assets via IBC
+      <div className='mb-3 text-xs font-medium lowercase tracking-wider text-fg-muted'>
+        shield assets via IBC
       </div>
 
       {/* source chain selector */}
@@ -375,7 +375,7 @@ function IbcDepositSection({
 
           {/* shielding transfer form */}
           <div className='mb-3'>
-            <div className='mb-2 text-xs font-medium'>Initiate Shielding Transfer</div>
+            <div className='mb-2 text-xs font-medium'>initiate shielding transfer</div>
             <div className='flex gap-2'>
               {/* asset selector */}
               <div className='flex-1'>
@@ -438,9 +438,8 @@ function IbcDepositSection({
               <span>(ephemeral)</span>
             </div>
             <p className='text-xs text-fg-muted lowercase'>
-              the destination address is visible in plaintext on the source chain. this ephemeral
-              address is unlinkable to your main address — source chain observers cannot correlate
-              your deposits.{' '}
+              ephemeral: unlinkable to your main address, though visible in plaintext on the source
+              chain.{' '}
               {depositAddress && (
                 <button
                   onClick={() => {
@@ -767,7 +766,7 @@ function ReceiveTab({
       {isPenumbra && (
         <div className='flex w-full items-center justify-between'>
           <div className='flex items-center gap-1.5'>
-            <span className='text-sm font-medium'>Ephemeral Address</span>
+            <span className='text-sm font-medium'>ephemeral address</span>
             <div className='relative'>
               <button
                 onClick={() => setShowTooltip(prev => !prev)}
@@ -776,20 +775,9 @@ function ReceiveTab({
                 <span className='i-lucide-info h-3.5 w-3.5' />
               </button>
               {showTooltip && (
-                <div className='absolute left-1/2 top-6 z-50 w-72 -translate-x-1/2 rounded-lg border border-border-soft bg-canvas p-3 text-xs text-fg shadow-lg'>
-                  <p className='mb-1.5 font-medium'>Your main address is stable.</p>
-                  <p className='mb-1.5 text-fg-muted'>
-                    Anyone you share it with can recognize future payments to the same address. On
-                    IBC source chains (Osmosis, Noble, etc.) the destination address is posted in
-                    plaintext — visible to all chain observers.
-                  </p>
-                  <p className='mb-1.5 font-medium'>
-                    Ephemeral addresses are randomized and unlinkable.
-                  </p>
-                  <p className='text-fg-muted'>
-                    Only your full viewing key can detect incoming funds. Counterparties and chain
-                    observers cannot link them to your main address or to each other.
-                  </p>
+                <div className='absolute left-1/2 top-6 z-50 w-72 -translate-x-1/2 rounded-lg border border-border-soft bg-canvas p-3 text-xs text-fg-muted shadow-lg lowercase'>
+                  randomized single-use address, unlinkable to your main address or to each other.
+                  only your viewing key detects incoming funds.
                 </div>
               )}
             </div>
@@ -822,7 +810,7 @@ function ReceiveTab({
             <span className='i-lucide-chevron-left h-4 w-4' />
           </button>
           <span className='min-w-[110px] text-center text-xs font-medium text-fg-muted'>
-            Address #{shieldedIndex}
+            address #{shieldedIndex}
           </span>
           <button
             onClick={() => void handleRotateShielded()}
@@ -837,7 +825,7 @@ function ReceiveTab({
         <>
           <div className='flex w-full items-center justify-between'>
             <div className='flex items-center gap-1.5'>
-              <span className='text-sm font-medium'>Transparent Address</span>
+              <span className='text-sm font-medium'>transparent address</span>
               <div className='relative'>
                 <button
                   onClick={() => setShowTransparentTooltip(prev => !prev)}
@@ -846,19 +834,8 @@ function ReceiveTab({
                   <span className='i-lucide-info h-3.5 w-3.5' />
                 </button>
                 {showTransparentTooltip && (
-                  <div className='absolute left-1/2 top-6 z-50 w-72 -translate-x-1/2 rounded-lg border border-border-soft bg-canvas p-3 text-xs text-fg shadow-lg'>
-                    <p className='mb-1.5 font-medium'>
-                      Transparent addresses are fully visible on-chain.
-                    </p>
-                    <p className='mb-1.5 text-fg-muted'>
-                      Anyone can see your balance and transaction history. Use them only when
-                      required (e.g. exchange withdrawals).
-                    </p>
-                    <p className='mb-1.5 font-medium'>Each index gives a unique address.</p>
-                    <p className='text-fg-muted'>
-                      Use one per exchange to track where funds come from. After receiving, shield
-                      to your main (orchard) address for privacy.
-                    </p>
+                  <div className='absolute left-1/2 top-6 z-50 w-72 -translate-x-1/2 rounded-lg border border-border-soft bg-canvas p-3 text-xs text-fg-muted shadow-lg lowercase'>
+                    fully public on-chain - use one index per exchange, then shield to Orchard.
                   </div>
                 )}
               </div>
@@ -891,7 +868,7 @@ function ReceiveTab({
                 <span className='i-lucide-chevron-left h-4 w-4' />
               </button>
               <span className='min-w-[110px] text-center text-xs font-medium text-fg-muted'>
-                Address #{transparentIndex}
+                address #{transparentIndex}
               </span>
               <button
                 onClick={() => {
@@ -973,10 +950,10 @@ function ReceiveTab({
 
       <p className='text-center text-xs text-fg-muted leading-snug lowercase'>
         {ephemeral && isPenumbra
-          ? 'a fresh single-use address. share it with one party; reusing it across senders lets them link payments to each other.'
+          ? 'fresh single-use address - share with one party; reuse lets senders link payments.'
           : transparent && isZcash
-            ? 'transparent address — balance and history are publicly visible. use one index per exchange. shield to orchard after receiving for privacy.'
-            : `share with anyone who wants to send you ${activeNetwork?.toUpperCase() ?? ''}. shielded — senders don't see your other transactions.`}
+            ? 'public on-chain - one index per exchange, then shield to Orchard.'
+            : `share with any ${activeNetwork?.toUpperCase() ?? ''} sender - shielded, so they can't see your other transactions.`}
       </p>
     </div>
   );
