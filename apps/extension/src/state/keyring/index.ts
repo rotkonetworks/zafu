@@ -873,15 +873,19 @@ export const selectToggleNetwork = (state: AllSlices) => state.keyRing.toggleNet
 export const selectDeleteKeyRing = (state: AllSlices) => state.keyRing.deleteKeyRing;
 export const selectRenameKeyRing = (state: AllSlices) => state.keyRing.renameKeyRing;
 
+// hidden vaults (poker tables) stay out of the header switcher; sign-time lookups
+// use selectMultisigWallets (unfiltered) so payout signing still resolves them.
+const isHidden = (k: KeyInfo) => k.insensitive?.['hidden'] === true;
+
 export const selectKeyInfosForActiveNetwork = (state: AllSlices) => {
   const { keyInfos, activeNetwork } = state.keyRing;
-  return keyInfos.filter(k => keyInfoSupportsNetwork(k, activeNetwork));
+  return keyInfos.filter(k => keyInfoSupportsNetwork(k, activeNetwork) && !isHidden(k));
 };
 
 export const selectEffectiveKeyInfo = (state: AllSlices) => {
   const { keyInfos, selectedKeyInfo, activeNetwork } = state.keyRing;
-  if (selectedKeyInfo && keyInfoSupportsNetwork(selectedKeyInfo, activeNetwork)) {
+  if (selectedKeyInfo && keyInfoSupportsNetwork(selectedKeyInfo, activeNetwork) && !isHidden(selectedKeyInfo)) {
     return selectedKeyInfo;
   }
-  return keyInfos.find(k => keyInfoSupportsNetwork(k, activeNetwork));
+  return keyInfos.find(k => keyInfoSupportsNetwork(k, activeNetwork) && !isHidden(k));
 };

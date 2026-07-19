@@ -8,7 +8,7 @@ import { AppHeader } from '../../components/app-header';
 import { MenuDrawer } from '../../components/menu-drawer';
 import { PopupPath } from './paths';
 import { useStore } from '../../state';
-import { selectActiveNetwork, selectPenumbraAccount, type NetworkType } from '../../state/keyring';
+import { selectActiveNetwork, selectEffectiveKeyInfo, selectPenumbraAccount, type NetworkType } from '../../state/keyring';
 import { hasFeature } from '../../config/networks';
 
 type FeatureKey = 'stake' | 'swap' | 'vote' | 'inbox' | 'multisig';
@@ -53,6 +53,12 @@ const BOTTOM_TABS: readonly {
     feature: 'vote',
   },
 ];
+
+const MULTISIG_TAB = {
+  path: PopupPath.MULTISIG,
+  icon: <span className='i-lucide-key h-5 w-5' />,
+  label: 'multisig',
+} as const;
 
 const getTabsForNetwork = (network: NetworkType) =>
   BOTTOM_TABS.filter(tab => !tab.feature || hasFeature(network, tab.feature));
@@ -101,11 +107,15 @@ export const PopupLayout = () => {
   const location = useLocation();
   const activeNetwork = useStore(selectActiveNetwork);
   const penumbraAccount = useStore(selectPenumbraAccount);
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const onLoginPage = location.pathname === '/login';
   usePenumbraSwapClaim(activeNetwork, onLoginPage, penumbraAccount);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const tabs = getTabsForNetwork(activeNetwork);
+  const networkTabs = getTabsForNetwork(activeNetwork);
+  const tabs = selectedKeyInfo?.type === 'frost-multisig'
+    ? [...networkTabs, MULTISIG_TAB]
+    : networkTabs;
   const showChrome = !matchesRoute(location.pathname, hiddenHeaderRoutes);
   const showTabs = showChrome && !matchesRoute(location.pathname, hiddenTabRoutes);
 

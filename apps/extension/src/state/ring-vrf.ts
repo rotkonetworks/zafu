@@ -49,10 +49,15 @@ interface RingVrfWasm {
 }
 
 let wasmModule: RingVrfWasm | null = null;
+let wasmFailed = false;
 
 async function loadWasm(): Promise<RingVrfWasm> {
   if (wasmModule) {
     return wasmModule;
+  }
+  // don't retry a known-failed load — warn once, then fail silently
+  if (wasmFailed) {
+    throw new Error('ring-vrf WASM unavailable');
   }
   try {
     // literal specifiers into /public break vitest's vite transform, so the
@@ -63,6 +68,7 @@ async function loadWasm(): Promise<RingVrfWasm> {
     wasmModule = wasm as unknown as RingVrfWasm;
     return wasmModule;
   } catch (e) {
+    wasmFailed = true;
     console.warn('[ring-vrf] WASM load failed:', e);
     throw e;
   }
@@ -124,7 +130,7 @@ export const createRingVrfSlice = (): SliceCreator<RingVrfSlice> => (set, get) =
 
       console.log('[ring-vrf] in pro ring at index', myIndex, 'epoch', ring.epoch);
     } catch (e) {
-      console.warn('[ring-vrf] refresh failed:', e);
+      if (!wasmFailed) console.warn('[ring-vrf] refresh failed:', e);
     }
   },
 

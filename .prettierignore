@@ -10,4 +10,6 @@ apps/extension/public/ring-vrf-wasm/
 apps/extension/public/zafu-wasm/
 apps/extension/public/zafu-wasm-parallel/
 apps/extension/public/zync-core/
+
+# generated mdbook output (built from docs/src via `mdbook build`)
 docs/book/

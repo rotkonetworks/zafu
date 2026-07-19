@@ -1,13 +1,14 @@
 // wire-tags used by both self-custody and airgap multisig signers on the relay:
-//   SIGN:<sighash>:<alphas>:<recipient>:<amountZat>:<feeZat>[:<unsignedTxHex>]
-//                                                              — joiner display payload + verifier bytes
-//   C:<commit_a0>|<commit_a1>|...                              — round-1 commitments per action
-//   S:<actionIdx>:<share>                                      — round-2 share per action
+//   SIGN:<sighash>:<alphas>:<recipient>:<amountZat>:<feeZat>[:<pcztHex>]
+//                                                            — joiner display payload + verifier bytes
+//   C:<commit_a0>|<commit_a1>|...                            — round-1 commitments per action
+//   S:<actionIdx>:<share>                                    — round-2 share per action
 //
-// `unsignedTxHex` is optional: hosts on the new client publish it so each
-// joiner can OVK-decrypt the bundle locally and refuse to sign if the
-// derived (recipient, amount) disagrees with the host's claim. Old hosts
-// omit it; joiners then fall back to host-claim-only with a warning.
+// `pcztHex` is the standard pczt::Pczt the host built (gh #17 migration). Each
+// joiner parses it via `frostInspectPcztOutputsInWorker`, recomputes the
+// canonical sighash + OVK-decrypts outputs, and refuses to sign if they diverge
+// from the host's claimed (recipient, amount) or sighash. Old hosts that omit it
+// fall back to host-claim-only with a warning.
 
 import { FrostRelayClient } from '../../../../state/keyring/frost-relay-client';
 
@@ -57,7 +58,7 @@ export function subscribePeers(
     recipient: string,
     amountZat: string,
     feeZat: string,
-    unsignedTxHex?: string,
+    pcztHex?: string,
   ) => void,
 ): PeerBuckets {
   const peerCommits: string[][] = Array.from({ length: numActions }, () => []);
@@ -104,10 +105,10 @@ export const sendSignPrefix = (
   recipient: string,
   amountZat: string | number,
   feeZat: string,
-  unsignedTxHex?: string,
+  pcztHex?: string,
 ) => {
   const base = `SIGN:${sighash}:${alphas.join(',')}:${recipient}:${amountZat}:${feeZat}`;
-  const wire = unsignedTxHex ? `${base}:${unsignedTxHex}` : base;
+  const wire = pcztHex ? `${base}:${pcztHex}` : base;
   return s.relay.sendMessage(s.roomCode, s.participantId, new TextEncoder().encode(wire));
 };
 

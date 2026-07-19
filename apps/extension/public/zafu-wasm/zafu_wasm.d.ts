@@ -214,6 +214,15 @@ export function build_unsigned_transaction(ufvk_str: string, notes_json: any, re
 export function build_witnesses_and_paths(tree_state_hex: string, compact_blocks_json: string, note_positions_json: string): any;
 
 /**
+ * Complete an orchard-only FROST multisig PCZT: inject the externally-aggregated
+ * SpendAuth signatures (one per real spend, in `spend_indices` order, matching
+ * what `build_unsigned_pczt` returned) into the PCZT, then extract the
+ * broadcast-ready v5 tx. The mnemonic/zigner host and the poker escrow all
+ * finish a FROST signing round this way (gh #17 PCZT migration).
+ */
+export function complete_orchard_pczt(pczt_hex: string, orchard_sigs_json: any, spend_indices_json: any): string;
+
+/**
  * Complete an unsigned shielding transaction by patching in transparent signatures.
  *
  * Takes the unsigned tx hex (with empty scriptSigs) and an array of `{sig_hex, pubkey_hex}`
@@ -277,7 +286,9 @@ export function derive_transparent_privkey(seed_phrase: string, account: number,
  * * `merkle_result_json` - JSON from build_merkle_paths: `{anchor_hex, paths: [{position, path: [{hash}]}]}`
  * * `anchor_height` - block height of the anchor
  * * `mainnet` - true for mainnet, false for testnet
- * * `attestation_hex` - optional hex-encoded 64-byte FROST attestation signature
+ * * `attestation_hex` - optional hex-encoded 64-byte ed25519 anchor attestation
+ *   signature from a trusted verifier (zidecar SignAnchor). Verified on the
+ *   cold device against its anchor-verifier registry.
  *
  * # Returns
  * `Uint8Array` of CBOR bytes ready for UR fountain encoding
@@ -366,6 +377,17 @@ export function frost_dkg_part3(secret_hex: string, round1_broadcasts_json: stri
  * coordinator: generate signed randomizer
  */
 export function frost_generate_randomizer(ephemeral_seed_hex: string, message_hex: string, commitments_json: string): string;
+
+/**
+ * Inspect a PCZT's orchard outputs + recompute its canonical ZIP-244 sighash,
+ * for the FROST joiner's display↔sighash binding (gh #17). Returns the same
+ * JSON shape as `frost_parse_tx_outputs`, but sources both the bundle and the
+ * sighash from the PCZT itself via `Pczt::into_effects()` → `v5_signature_hash`.
+ * So the value the joiner checks is the canonical message its signature will
+ * commit to — never a host-supplied claim. The host publishes the (proven,
+ * io-finalized, redacted) PCZT; `into_effects` needs neither proof nor sigs.
+ */
+export function frost_inspect_pczt_outputs(pczt_hex: string, orchard_fvk_uview: string): string;
 
 /**
  * Parse the unsigned v5 transaction and recover what each Orchard action
@@ -546,6 +568,19 @@ export function witness_sync_update(start_frontier_hex: string, compact_blocks_j
  */
 export function zt_encode_frames(cbor_data: Uint8Array, zt_type: string, k: number, n: number): string;
 
+/**
+ * Encode CBOR bytes as zoda transport QR frames, auto-sizing `k`/`n` so each
+ * hex-encoded `zt:` frame fits a scannable QR regardless of payload size.
+ * Returns JSON array of `zt:type/hex` strings.
+ *
+ * - `max_qr_bytes`: max *raw* frame bytes before hex encoding. The QR string
+ *   is `len("zt:type/") + 2 * frame_bytes`, so pick this from the target QR
+ *   capacity: roughly `qr_byte_capacity / 2 - prefix`. ~600 gives a ~1.2 KB
+ *   QR string (≈ v24 at ECC-L), comfortable for handheld scanning.
+ * - `redundancy_pct`: extra parity frames as a percentage of `k` (e.g. 30).
+ */
+export function zt_encode_frames_auto(cbor_data: Uint8Array, zt_type: string, max_qr_bytes: number, redundancy_pct: number): string;
+
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
@@ -559,6 +594,7 @@ export interface InitOutput {
     readonly build_unsigned_shielding_transaction: (a: number, b: number, c: number, d: number, e: bigint, f: bigint, g: number, h: number) => [number, number, number, number];
     readonly build_unsigned_transaction: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number) => [number, number, number];
     readonly build_witnesses_and_paths: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
+    readonly complete_orchard_pczt: (a: number, b: number, c: any, d: any) => [number, number, number, number];
     readonly complete_shielding_transaction: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly complete_transaction: (a: number, b: number, c: any, d: any) => [number, number, number, number];
     readonly compute_txid: (a: number, b: number) => [number, number, number, number];
@@ -602,6 +638,7 @@ export interface InitOutput {
     readonly witness_extract_path: (a: number, b: number) => [number, number, number];
     readonly witness_sync_update: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number];
     readonly zt_encode_frames: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly zt_encode_frames_auto: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly init: () => void;
     readonly frost_aggregate_shares: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number, number];
     readonly frost_attestation_digest: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
@@ -614,6 +651,7 @@ export interface InitOutput {
     readonly frost_dkg_part2: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly frost_dkg_part3: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly frost_generate_randomizer: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly frost_inspect_pczt_outputs: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly frost_parse_tx_outputs: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly frost_sample_fvk_sk: () => [number, number];
     readonly frost_sign_round1: (a: number, b: number, c: number, d: number) => [number, number, number, number];

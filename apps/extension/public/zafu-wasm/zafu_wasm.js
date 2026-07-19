@@ -652,6 +652,38 @@ export function build_witnesses_and_paths(tree_state_hex, compact_blocks_json, n
 }
 
 /**
+ * Complete an orchard-only FROST multisig PCZT: inject the externally-aggregated
+ * SpendAuth signatures (one per real spend, in `spend_indices` order, matching
+ * what `build_unsigned_pczt` returned) into the PCZT, then extract the
+ * broadcast-ready v5 tx. The mnemonic/zigner host and the poker escrow all
+ * finish a FROST signing round this way (gh #17 PCZT migration).
+ * @param {string} pczt_hex
+ * @param {any} orchard_sigs_json
+ * @param {any} spend_indices_json
+ * @returns {string}
+ */
+export function complete_orchard_pczt(pczt_hex, orchard_sigs_json, spend_indices_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(pczt_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.complete_orchard_pczt(ptr0, len0, orchard_sigs_json, spend_indices_json);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
  * Complete an unsigned shielding transaction by patching in transparent signatures.
  *
  * Takes the unsigned tx hex (with empty scriptSigs) and an array of `{sig_hex, pubkey_hex}`
@@ -832,7 +864,9 @@ export function derive_transparent_privkey(seed_phrase, account, index) {
  * * `merkle_result_json` - JSON from build_merkle_paths: `{anchor_hex, paths: [{position, path: [{hash}]}]}`
  * * `anchor_height` - block height of the anchor
  * * `mainnet` - true for mainnet, false for testnet
- * * `attestation_hex` - optional hex-encoded 64-byte FROST attestation signature
+ * * `attestation_hex` - optional hex-encoded 64-byte ed25519 anchor attestation
+ *   signature from a trusted verifier (zidecar SignAnchor). Verified on the
+ *   cold device against its anchor-verifier registry.
  *
  * # Returns
  * `Uint8Array` of CBOR bytes ready for UR fountain encoding
@@ -1237,6 +1271,41 @@ export function frost_generate_randomizer(ephemeral_seed_hex, message_hex, commi
         return getStringFromWasm0(ptr4, len4);
     } finally {
         wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
+    }
+}
+
+/**
+ * Inspect a PCZT's orchard outputs + recompute its canonical ZIP-244 sighash,
+ * for the FROST joiner's display↔sighash binding (gh #17). Returns the same
+ * JSON shape as `frost_parse_tx_outputs`, but sources both the bundle and the
+ * sighash from the PCZT itself via `Pczt::into_effects()` → `v5_signature_hash`.
+ * So the value the joiner checks is the canonical message its signature will
+ * commit to — never a host-supplied claim. The host publishes the (proven,
+ * io-finalized, redacted) PCZT; `into_effects` needs neither proof nor sigs.
+ * @param {string} pczt_hex
+ * @param {string} orchard_fvk_uview
+ * @returns {string}
+ */
+export function frost_inspect_pczt_outputs(pczt_hex, orchard_fvk_uview) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(pczt_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(orchard_fvk_uview, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_inspect_pczt_outputs(ptr0, len0, ptr1, len1);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
 }
 
@@ -1855,6 +1924,45 @@ export function zt_encode_frames(cbor_data, zt_type, k, n) {
         const ptr1 = passStringToWasm0(zt_type, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len1 = WASM_VECTOR_LEN;
         const ret = wasm.zt_encode_frames(ptr0, len0, ptr1, len1, k, n);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
+ * Encode CBOR bytes as zoda transport QR frames, auto-sizing `k`/`n` so each
+ * hex-encoded `zt:` frame fits a scannable QR regardless of payload size.
+ * Returns JSON array of `zt:type/hex` strings.
+ *
+ * - `max_qr_bytes`: max *raw* frame bytes before hex encoding. The QR string
+ *   is `len("zt:type/") + 2 * frame_bytes`, so pick this from the target QR
+ *   capacity: roughly `qr_byte_capacity / 2 - prefix`. ~600 gives a ~1.2 KB
+ *   QR string (≈ v24 at ECC-L), comfortable for handheld scanning.
+ * - `redundancy_pct`: extra parity frames as a percentage of `k` (e.g. 30).
+ * @param {Uint8Array} cbor_data
+ * @param {string} zt_type
+ * @param {number} max_qr_bytes
+ * @param {number} redundancy_pct
+ * @returns {string}
+ */
+export function zt_encode_frames_auto(cbor_data, zt_type, max_qr_bytes, redundancy_pct) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passArray8ToWasm0(cbor_data, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(zt_type, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.zt_encode_frames_auto(ptr0, len0, ptr1, len1, max_qr_bytes, redundancy_pct);
         var ptr3 = ret[0];
         var len3 = ret[1];
         if (ret[3]) {

@@ -265,6 +265,55 @@ export class ZidecarClient {
     return this.parseCommitmentProofsResponse(resp);
   }
 
+  /** request an ed25519 anchor attestation from zidecar's verifier (SignAnchor).
+   *  signs SHA256("zcash-anchor-v1" || vk || anchor || height_LE || mainnet).
+   *  available=false when the server has no signing key configured. */
+  async signAnchor(
+    anchor: Uint8Array,
+    height: number,
+    mainnet: boolean,
+  ): Promise<{ available: boolean; signatureHex: string; verifierKeyHex: string }> {
+    const parts: number[] = [];
+    parts.push(0x0a, ...this.lengthDelimited(anchor)); // field 1 bytes anchor
+    if (height > 0) parts.push(0x10, ...this.varint(height)); // field 2 uint32 height
+    if (mainnet) parts.push(0x18, 0x01); // field 3 bool mainnet (omit when false)
+    const resp = await this.grpcCall('SignAnchor', new Uint8Array(parts));
+
+    let pos = 0;
+    const toHex = (u: Uint8Array) => Array.from(u, b => b.toString(16).padStart(2, '0')).join('');
+    let signatureHex = '';
+    let verifierKeyHex = '';
+    let available = false;
+    while (pos < resp.length) {
+      const tag = resp[pos++]!;
+      const field = tag >> 3;
+      const wire = tag & 0x7;
+      if (wire === 2) {
+        let len = 0, s = 0;
+        while (pos < resp.length) {
+          const b = resp[pos++]!;
+          len |= (b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7;
+        }
+        const data = resp.subarray(pos, pos + len);
+        pos += len;
+        if (field === 1) signatureHex = toHex(data);
+        else if (field === 2) verifierKeyHex = toHex(data);
+      } else if (wire === 0) {
+        let v = 0, s = 0;
+        while (pos < resp.length) {
+          const b = resp[pos++]!;
+          v |= (b & 0x7f) << s;
+          if (!(b & 0x80)) break;
+          s += 7;
+        }
+        if (field === 3) available = v !== 0;
+      } else break;
+    }
+    return { available, signatureHex, verifierKeyHex };
+  }
+
   /** get NOMT nullifier proofs for a batch of nullifiers */
   async getNullifierProofs(
     nullifiers: Uint8Array[],

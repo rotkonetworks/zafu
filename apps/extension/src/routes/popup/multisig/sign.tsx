@@ -14,7 +14,7 @@ import { selectActiveZcashWallet } from '../../../state/wallets';
 import {
   frostSignRound1InWorker,
   frostSpendSignInWorker,
-  frostParseTxOutputsInWorker,
+  frostInspectPcztOutputsInWorker,
   type FrostParsedTx,
 } from '../../../state/keyring/network-worker';
 import { computeVerdict, type Verdict } from '../send/frost-multisig/multisig-verifier';
@@ -98,7 +98,7 @@ export const MultisigSign = () => {
             return;
           }
           const text = new TextDecoder().decode(event.message.payload);
-          // SIGN:<sighash>:<alphas>:<recipient>:<amountZat>:<feeZat>[:<unsignedTxHex>]
+          // SIGN:<sighash>:<alphas>:<recipient>:<amountZat>:<feeZat>[:<pcztHex>]
           const signMatch =
             /^SIGN:([0-9a-fA-F]+):([^:]+):([^:]+):(\d+):(\d+)(?::([0-9a-fA-F]+))?$/.exec(text);
           if (signMatch) {
@@ -106,21 +106,22 @@ export const MultisigSign = () => {
             alphasRef.current = signMatch[2]!.split(',');
             const claimedRecipient = signMatch[3]!;
             const claimedAmount = signMatch[4]!;
-            const unsignedTxHex = signMatch[6];
+            const pcztHex = signMatch[6];
             setRecipient(claimedRecipient);
             setAmountZat(claimedAmount);
             setFeeZat(signMatch[5]!);
 
-            // Verifier: derive output truth from tx bytes; mismatch hard-blocks approve.
-            // FROST multisig wallets store the `uview1…` string in `orchardFvk`
-            // (DKG flows save it there); single-key wallets store it in `ufvk`.
+            // Verifier: derive output truth from the PCZT (recompute sighash +
+            // OVK-decrypt outputs); mismatch hard-blocks approve. FROST multisig
+            // wallets store the `uview1…` string in `orchardFvk` (DKG flows save it
+            // there); single-key wallets store it in `ufvk`.
             const ufvkForVerify = activeWallet?.multisig
               ? activeWallet.orchardFvk
               : activeWallet?.ufvk;
-            if (!unsignedTxHex) {
+            if (!pcztHex) {
               setVerdict({
                 kind: 'unverified',
-                reason: 'host did not publish unsigned tx bytes (older client?)',
+                reason: 'host did not publish PCZT bytes (older client?)',
               });
             } else if (!ufvkForVerify) {
               setVerdict({
@@ -132,7 +133,7 @@ export const MultisigSign = () => {
               const isMain = activeWallet.mainnet;
               void (async () => {
                 try {
-                  const p = await frostParseTxOutputsInWorker(unsignedTxHex, ufvk);
+                  const p = await frostInspectPcztOutputsInWorker(pcztHex, ufvk);
                   setParsed(p);
                   setVerdict(
                     computeVerdict({
