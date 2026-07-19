@@ -41,3 +41,11 @@ export const IRONWOOD_MIGRATION = true;
  * id independently (see IRONWOOD_MIGRATION), so this gate is UX, not safety.
  */
 export const NU6_3_ACTIVATION_HEIGHT = 3_428_143;
+
+/**
+ * Deterministic password generator (identity -> passwords: derive a site
+ * password from seed + site + username). Disabled for now - the feature and
+ * its route stay in the codebase, just unreachable from the UI. Flip back to
+ * `true` to re-enable.
+ */
+export const PASSWORD_GENERATOR = false;
