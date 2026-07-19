@@ -8,6 +8,7 @@ import {
   TableRow,
 } from '@repo/ui/components/ui/table';
 import { ValueViewComponent } from '@repo/ui/components/ui/value';
+import { Sensitive } from '../../../components/sensitive';
 import { ValueView } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { getDisplayDenomFromView, getEquivalentValues } from '@penumbra-zone/getters/value-view';
 import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances-response';
@@ -63,15 +64,19 @@ const AssetRow = memo(
   }) => (
     <TableRow className='group'>
       <TableCell>
-        <ValueViewComponent
-          view={balance.balanceView}
-          currentBlockHeight={currentBlockHeight}
-          validatorName={validatorName}
-          onClaim={onClaim}
-        />
+        <Sensitive>
+          <ValueViewComponent
+            view={balance.balanceView}
+            currentBlockHeight={currentBlockHeight}
+            validatorName={validatorName}
+            onClaim={onClaim}
+          />
+        </Sensitive>
       </TableCell>
       <TableCell>
-        <EquivalentValues valueView={balance.balanceView} />
+        <Sensitive>
+          <EquivalentValues valueView={balance.balanceView} />
+        </Sensitive>
       </TableCell>
     </TableRow>
   ),

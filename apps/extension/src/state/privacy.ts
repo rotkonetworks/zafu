@@ -120,6 +120,17 @@ export interface PrivacySettings {
    * (no field) defaults to enabled, matching the default-true intent.
    */
   enableIdentity: boolean;
+
+  /**
+   * hide on-screen balance amounts (shoulder-surfing / screen-share
+   * protection). when true, balance figures across the wallet are blurred
+   * and non-selectable until toggled off. purely a display privacy control -
+   * does not affect syncing, queries, or what is stored.
+   *
+   * read as `settings.hideBalances === true` so legacy stored state (no
+   * field) defaults to visible.
+   */
+  hideBalances: boolean;
 }
 
 export interface PrivacySlice {
@@ -150,6 +161,7 @@ const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = {
   enablePriceFetching: false,
   proxy: { enabled: false, host: '', port: 1080 },
   enableIdentity: true,
+  hideBalances: false,
 };
 
 // ============================================================================
@@ -285,6 +297,9 @@ export const canFetchPrices = (state: AllSlices) => state.privacy.settings.enabl
  * undefined as enabled, matching the default-true intent.
  */
 export const isIdentityEnabled = (state: AllSlices) => state.privacy.settings.enableIdentity;
+
+/** on-screen balances hidden (blurred)? display privacy only. default false. */
+export const selectHideBalances = (state: AllSlices) => state.privacy.settings.hideBalances;
 
 /**
  * Read identity-enabled state from chrome.storage.local directly.

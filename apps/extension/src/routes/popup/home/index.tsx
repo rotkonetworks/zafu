@@ -11,6 +11,7 @@ import {
   type NetworkType,
 } from '../../../state/keyring';
 import { PenumbraAccountPicker } from '../../../components/penumbra-account-picker';
+import { Sensitive } from '../../../components/sensitive';
 import {
   selectActiveZcashWallet,
   selectZcashWallets,
@@ -147,7 +148,9 @@ const MultisigOverview = () => {
           </span>
         </div>
         <div className='flex items-center gap-2'>
-          <span className='text-data tabular text-fg-muted'>{formatZec(totalZat)} ZEC</span>
+          <Sensitive className='text-data tabular text-fg-muted'>
+            {formatZec(totalZat)} ZEC
+          </Sensitive>
           <span
             className={cn(
               'h-4 w-4 text-fg-dim transition-transform',
@@ -182,7 +185,9 @@ const MultisigOverview = () => {
                     <span className='i-lucide-check h-3 w-3 text-zigner-gold shrink-0' />
                   )}
                 </div>
-                <span className='text-data tabular text-fg-muted shrink-0'>{formatZec(bal)}</span>
+                <Sensitive className='text-data tabular text-fg-muted shrink-0'>
+                  {formatZec(bal)}
+                </Sensitive>
               </button>
             );
           })}
@@ -519,7 +524,7 @@ const PenumbraContent = ({
       <div className='rounded-md border border-border-soft bg-elev-1 p-4'>
         <span className='kicker'>total balance</span>
         <div className='mt-1 text-display leading-none text-network-accent tabular'>
-          {balanceDisplay}
+          <Sensitive>{balanceDisplay}</Sensitive>
         </div>
         <div className='mt-1 text-label text-fg-dim tabular'>{syncLabel}</div>
       </div>
@@ -958,7 +963,9 @@ const ZcashContent = ({
       <div className='rounded-md border border-network-accent/20 bg-elev-1 p-4'>
         <span className='kicker'>balance</span>
         <div className='mt-1 text-display leading-none text-network-accent tabular'>
-          {workerSyncHeight > 0 || totalZat > 0n ? `${fmtZec(totalZec)} ZEC` : '— ZEC'}
+          <Sensitive>
+            {workerSyncHeight > 0 || totalZat > 0n ? `${fmtZec(totalZec)} ZEC` : '— ZEC'}
+          </Sensitive>
         </div>
         <div className='mt-1 text-label text-fg-dim tabular'>
           {chainHeight <= 0

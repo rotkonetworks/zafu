@@ -17,6 +17,7 @@ import {
   selectSelectKeyRing,
 } from '../state/keyring';
 import { selectActiveZcashWallet } from '../state/wallets';
+import { selectHideBalances } from '../state/privacy';
 import { getNetwork } from '../config/networks';
 import { cn } from '@repo/ui/lib/utils';
 
@@ -35,6 +36,8 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
   // Without shallow equality the AppHeader re-renders on every state tick.
   const keyInfos = useStore(useShallow(selectKeyInfosForActiveNetwork));
   const selectKeyRing = useStore(selectSelectKeyRing);
+  const hideBalances = useStore(selectHideBalances);
+  const setPrivacySetting = useStore(s => s.privacy.setSetting);
 
   const networkInfo = getNetwork(activeNetwork);
   // mnemonic vaults derive zcash keys directly — no zcash wallet record
@@ -111,10 +114,20 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
         <span className='text-data text-fg-high truncate max-w-[120px]'>{walletName}</span>
       </button>
 
+      {/* hide balances - shoulder-surfing / screen-share privacy */}
+      <button
+        onClick={() => void setPrivacySetting('hideBalances', !hideBalances)}
+        className='ml-auto rounded-md p-2 text-fg-muted transition-colors hover:bg-elev-1 hover:text-fg-high'
+        title={hideBalances ? 'show balances' : 'hide balances'}
+        aria-label={hideBalances ? 'show balances' : 'hide balances'}
+      >
+        <span className={cn(hideBalances ? 'i-lucide-eye-off' : 'i-lucide-eye', 'h-4 w-4')} />
+      </button>
+
       {/* menu */}
       <button
         onClick={onMenuClick}
-        className='p-2 rounded-md text-fg-muted hover:text-fg-high hover:bg-elev-1 transition-colors'
+        className='rounded-md p-2 text-fg-muted transition-colors hover:bg-elev-1 hover:text-fg-high'
       >
         <span className='i-lucide-menu h-4 w-4' />
       </button>
