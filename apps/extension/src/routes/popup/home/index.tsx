@@ -970,22 +970,22 @@ const ZcashContent = ({
           </Sensitive>
         </div>
         <div className='mt-1 text-label text-fg-dim tabular'>
-          {chainHeight <= 0
-            ? '\u00a0' /* hold the line height; sync bar below owns status */
-            : allSynced ? (
-              // 'synced' is what the user actually cares about — the block
-              // number is meaningful only to power users. Tapping it reveals
-              // the sync-detail panel (rescan options) below.
-              <button
-                onClick={() => setShowSyncDetail(v => !v)}
-                className='hover:text-fg-muted transition-colors'
-                title='rescan options'
-              >
-                {`synced · block ${workerSyncHeight.toLocaleString()}`}
-              </button>
-            ) : (
-              `syncing · ${overallPct.toFixed(1)}%`
-            )}
+          {chainHeight <= 0 ? (
+            '\u00a0' /* hold the line height; sync bar below owns status */
+          ) : allSynced ? (
+            // 'synced' is what the user actually cares about — the block
+            // number is meaningful only to power users. Tapping it reveals
+            // the sync-detail panel (rescan options) below.
+            <button
+              onClick={() => setShowSyncDetail(v => !v)}
+              className='hover:text-fg-muted transition-colors'
+              title='rescan options'
+            >
+              {`synced · block ${workerSyncHeight.toLocaleString()}`}
+            </button>
+          ) : (
+            `syncing · ${overallPct.toFixed(1)}%`
+          )}
         </div>
       </div>
 

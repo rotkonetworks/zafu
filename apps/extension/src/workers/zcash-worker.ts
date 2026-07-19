@@ -269,7 +269,11 @@ interface WasmModule {
     memo_hex?: string | null,
   ): unknown;
   extract_signed_tx_from_pczt(pczt_hex: string): string;
-  complete_orchard_pczt(pczt_hex: string, orchard_sigs_json: unknown, spend_indices_json: unknown): string;
+  complete_orchard_pczt(
+    pczt_hex: string,
+    orchard_sigs_json: unknown,
+    spend_indices_json: unknown,
+  ): string;
   compute_txid(tx_hex: string): string;
   ur_decode_frames(parts_json: string, expected_type: string): string;
   build_unsigned_shielding_transaction(
@@ -420,7 +424,12 @@ interface WasmModule {
   ): Uint8Array;
   ur_encode_frames(cbor_data: Uint8Array, ur_type: string, fragment_size: number): string;
   zt_encode_frames(cbor_data: Uint8Array, zt_type: string, k: number, n: number): string;
-  zt_encode_frames_auto(cbor_data: Uint8Array, zt_type: string, max_qr_bytes: number, redundancy_pct: number): string;
+  zt_encode_frames_auto(
+    cbor_data: Uint8Array,
+    zt_type: string,
+    max_qr_bytes: number,
+    redundancy_pct: number,
+  ): string;
 
   // attestation
   frost_attestation_digest(
@@ -1343,7 +1352,7 @@ const fetchCompactBlocksRange = async (
   end: number,
   pool: NotePool = 'orchard',
 ): Promise<{
-  blocks: Array<{ height: number; actions: Array<{ cmx_hex: string }> }>;
+  blocks: { height: number; actions: { cmx_hex: string }[] }[];
   actions: number;
 }> => {
   if (start > end) {
@@ -1354,14 +1363,13 @@ const fetchCompactBlocksRange = async (
   // gRPC/HTTP2 multiplexes over a single connection, but a deep rebuild can
   // produce ~150 batches — capping in-flight requests keeps peak memory and
   // server-side stream count in check.
-  const ranges: Array<[number, number]> = [];
+  const ranges: [number, number][] = [];
   for (let s = start; s <= end; s += WITNESS_BATCH_SIZE) {
     ranges.push([s, Math.min(s + WITNESS_BATCH_SIZE - 1, end)]);
   }
 
   // write results by index to preserve ascending-height order for the WASM replay
-  const results: Array<Array<{ height: number; actions: Array<{ cmx_hex: string }> }>> =
-    new Array(ranges.length);
+  const results = new Array<{ height: number; actions: { cmx_hex: string }[] }[]>(ranges.length);
   let next = 0;
   const worker = async () => {
     while (true) {
@@ -1450,7 +1458,9 @@ const backfillWitnesses = async (
   }
 
   const fetchStart = performance.now();
-  console.log(`[zcash-worker] backfill: fetching ${Math.ceil((anchorHeight - frontierHeight) / WITNESS_BATCH_SIZE)} batches in parallel (${frontierHeight + 1}..${anchorHeight})`);
+  console.log(
+    `[zcash-worker] backfill: fetching ${Math.ceil((anchorHeight - frontierHeight) / WITNESS_BATCH_SIZE)} batches in parallel (${frontierHeight + 1}..${anchorHeight})`,
+  );
   const { blocks: compactBlocks, actions: totalActions } = await fetchCompactBlocksRange(
     client,
     frontierHeight + 1,
@@ -1463,7 +1473,9 @@ const backfillWitnesses = async (
   onProgress?.('backfill: blocks downloaded', `${compactBlocks.length} blocks in ${fetchSecs}s`);
 
   const positions = notes.map(n => n.position);
-  console.log(`[zcash-worker] backfill: wasm replay starting (${totalActions} actions, ${positions.length} notes)`);
+  console.log(
+    `[zcash-worker] backfill: wasm replay starting (${totalActions} actions, ${positions.length} notes)`,
+  );
   onProgress?.('backfill: replaying tree', `${totalActions} actions`);
   const wasmStart = performance.now();
   const raw = wasmModule.build_witnesses_and_paths(
@@ -1790,7 +1802,10 @@ const buildWitnesses = async (
   const anchorTs = await client.getTreeState(anchorHeight);
   const networkRoot = wasmModule.tree_root_hex(anchorTs.orchardTree);
 
-  type ExtractedPath = { position: number; path: Array<{ hash: string }> };
+  interface ExtractedPath {
+    position: number;
+    path: { hash: string }[];
+  }
   const extractFrom = (
     snap: Map<string, string | undefined>,
   ): { paths: ExtractedPath[]; mismatchNote: string | null } => {
@@ -1804,7 +1819,7 @@ const buildWitnesses = async (
       const parsed = JSON.parse(rawPath as string) as {
         position: number;
         root_hex: string;
-        path: Array<{ hash: string }>;
+        path: { hash: string }[];
       };
       if (parsed.root_hex !== networkRoot) {
         return { paths: [], mismatchNote: note.nullifier };
@@ -1828,7 +1843,13 @@ const buildWitnesses = async (
     }
     // Persist the wipe before backfill so a reload mid-backfill doesn't re-expose the corrupt witness.
     await saveBatch(walletId, [], [], await getSyncHeight(walletId), undefined, notes);
-    const { byNullifier } = await backfillWitnesses(client, walletId, notes, anchorHeight, onProgress);
+    const { byNullifier } = await backfillWitnesses(
+      client,
+      walletId,
+      notes,
+      anchorHeight,
+      onProgress,
+    );
     // Use byNullifier (set from WASM result before any await inside backfillWitnesses) — note.witness_hex
     // may have been fast-forwarded past anchorHeight by the sync loop by the time backfill returns.
     const backfillSnap = new Map(
@@ -2291,7 +2312,7 @@ const runSync = async (
             if (localRoot !== netRoot) {
               console.warn(
                 `[zcash-worker] local frontier diverged from network at catch-up ${currentHeight} ` +
-                `(local=${localRoot.slice(0, 16)} net=${netRoot.slice(0, 16)}) — wiping witnesses`,
+                  `(local=${localRoot.slice(0, 16)} net=${netRoot.slice(0, 16)}) — wiping witnesses`,
               );
               runningFrontier = syncTs.orchardTree;
               runningFrontierHeight = currentHeight;
@@ -2307,7 +2328,9 @@ const runSync = async (
               const wipeDb = await getDb();
               const wipeTx = wipeDb.transaction('notes', 'readwrite');
               const notesStore = wipeTx.objectStore('notes');
-              for (const note of wipeState.notes) notesStore.put({ ...note, walletId });
+              for (const note of wipeState.notes) {
+                notesStore.put({ ...note, walletId });
+              }
               await txComplete(wipeTx);
             }
           }
@@ -3174,7 +3197,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         let attestationHex: string | null = null;
         if (lookupBackend(syncServerUrl) === 'zidecar') {
           try {
-            const { ZidecarClient } = await import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client');
+            const { ZidecarClient } = await import(
+              /* webpackMode: "eager" */ '../state/keyring/zidecar-client'
+            );
             const att = await new ZidecarClient(syncServerUrl).signAnchor(
               hexDecode(witnessResult.anchorHex),
               anchorHeight,
@@ -3183,10 +3208,15 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             if (att.available && att.signatureHex.length === 128) {
               attestationHex = att.signatureHex;
             } else {
-              console.warn('[zcash-worker] anchor attestation unavailable (signing disabled); emitting unattested bundle');
+              console.warn(
+                '[zcash-worker] anchor attestation unavailable (signing disabled); emitting unattested bundle',
+              );
             }
           } catch (e) {
-            console.warn('[zcash-worker] anchor attestation failed; emitting unattested bundle:', e);
+            console.warn(
+              '[zcash-worker] anchor attestation failed; emitting unattested bundle:',
+              e,
+            );
           }
         }
 
@@ -5224,9 +5254,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       }
 
       case 'complete-orchard-pczt': {
-        if (!walletId) throw new Error('walletId required');
+        if (!walletId) {
+          throw new Error('walletId required');
+        }
         await initWasm();
-        if (!wasmModule) throw new Error('wasm not initialized');
+        if (!wasmModule) {
+          throw new Error('wasm not initialized');
+        }
         const { serverUrl, pcztHex, orchardSigs, spendIndices } = payload as {
           serverUrl: string;
           pcztHex: string;
@@ -5242,7 +5276,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           throw new Error(`broadcast failed (${cResult.errorCode}): ${cResult.errorMessage}`);
         }
         const cTxid = await resolveBroadcastTxid(cResult, cTxHex, serverUrl);
-        workerSelf.postMessage({ type: 'tx-result', id, network: 'zcash', walletId, payload: { txid: cTxid } });
+        workerSelf.postMessage({
+          type: 'tx-result',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: { txid: cTxid },
+        });
         return;
       }
 

@@ -130,7 +130,9 @@ export const createRingVrfSlice = (): SliceCreator<RingVrfSlice> => (set, get) =
 
       console.log('[ring-vrf] in pro ring at index', myIndex, 'epoch', ring.epoch);
     } catch (e) {
-      if (!wasmFailed) console.warn('[ring-vrf] refresh failed:', e);
+      if (!wasmFailed) {
+        console.warn('[ring-vrf] refresh failed:', e);
+      }
     }
   },
 

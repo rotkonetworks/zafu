@@ -446,7 +446,9 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => 
 void (async () => {
   try {
     // eager: runs at SW startup, where importScripts (lazy chunk loading) is disallowed
-    const { sweepScheduledDeletes } = await import(/* webpackMode: "eager" */ './state/keyring/scheduled-deletes');
+    const { sweepScheduledDeletes } = await import(
+      /* webpackMode: "eager" */ './state/keyring/scheduled-deletes'
+    );
     await sweepScheduledDeletes();
   } catch (e) {
     console.warn('[sw] sweepScheduledDeletes failed:', e);

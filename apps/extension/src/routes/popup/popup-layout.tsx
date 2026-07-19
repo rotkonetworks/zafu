@@ -8,7 +8,12 @@ import { AppHeader } from '../../components/app-header';
 import { MenuDrawer } from '../../components/menu-drawer';
 import { PopupPath } from './paths';
 import { useStore } from '../../state';
-import { selectActiveNetwork, selectEffectiveKeyInfo, selectPenumbraAccount, type NetworkType } from '../../state/keyring';
+import {
+  selectActiveNetwork,
+  selectEffectiveKeyInfo,
+  selectPenumbraAccount,
+  type NetworkType,
+} from '../../state/keyring';
 import { hasFeature } from '../../config/networks';
 
 type FeatureKey = 'stake' | 'swap' | 'vote' | 'inbox' | 'multisig';
@@ -113,9 +118,8 @@ export const PopupLayout = () => {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const networkTabs = getTabsForNetwork(activeNetwork);
-  const tabs = selectedKeyInfo?.type === 'frost-multisig'
-    ? [...networkTabs, MULTISIG_TAB]
-    : networkTabs;
+  const tabs =
+    selectedKeyInfo?.type === 'frost-multisig' ? [...networkTabs, MULTISIG_TAB] : networkTabs;
   const showChrome = !matchesRoute(location.pathname, hiddenHeaderRoutes);
   const showTabs = showChrome && !matchesRoute(location.pathname, hiddenTabRoutes);
 

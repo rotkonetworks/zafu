@@ -912,7 +912,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         );
 
       case 'sign': {
-        const truncAddr = (a: string) => a.length > 22 ? `${a.slice(0, 10)}…${a.slice(-8)}` : a;
+        const truncAddr = (a: string) => (a.length > 22 ? `${a.slice(0, 10)}…${a.slice(-8)}` : a);
         return (
           <div className='flex flex-col h-full'>
             {/* header */}
@@ -978,7 +978,11 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               {/* steps */}
               <ol className='space-y-2'>
                 {(
-                  ['open zafu zigner on your phone', 'scan this QR code', 'review and approve'] as const
+                  [
+                    'open zafu zigner on your phone',
+                    'scan this QR code',
+                    'review and approve',
+                  ] as const
                 ).map((label, i) => (
                   <li key={i} className='flex items-center gap-2.5 text-xs text-fg-muted'>
                     <span className='flex size-4 shrink-0 items-center justify-center rounded-full bg-zigner-gold/15 text-[9px] text-zigner-gold'>

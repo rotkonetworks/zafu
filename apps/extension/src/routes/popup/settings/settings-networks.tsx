@@ -383,7 +383,11 @@ const ZcashEndpointPanel = ({
     setAutoStatus('probing endpoints...');
     try {
       const referenceTip = await getReferenceTip();
-      setAutoStatus(referenceTip != null ? `probing (ref tip ${referenceTip.toLocaleString()})...` : 'probing (no hosh reference; peer-median fallback)...');
+      setAutoStatus(
+        referenceTip != null
+          ? `probing (ref tip ${referenceTip.toLocaleString()})...`
+          : 'probing (no hosh reference; peer-median fallback)...',
+      );
       const initial = await probeAll(ZCASH_MAINNET_ENDPOINTS, referenceTip);
       // If hosh was unreachable, recompute behindBy against peer median.
       let final = initial;
@@ -392,9 +396,8 @@ const ZcashEndpointPanel = ({
         if (peerTip != null) {
           final = initial.map(h => ({
             ...h,
-            behindBy: h.info && h.info.blockHeight > 0
-              ? Math.max(0, peerTip - h.info.blockHeight)
-              : null,
+            behindBy:
+              h.info && h.info.blockHeight > 0 ? Math.max(0, peerTip - h.info.blockHeight) : null,
           }));
         }
       }

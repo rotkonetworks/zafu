@@ -10,6 +10,8 @@ apps/extension/public/ring-vrf-wasm/
 apps/extension/public/zafu-wasm/
 apps/extension/public/zafu-wasm-parallel/
 apps/extension/public/zync-core/
+# wasm-bindgen output (committed but generated — never hand-format)
+packages/zcash-wasm/*_wasm.js
 
 # generated mdbook output (built from docs/src via `mdbook build`)
 docs/book/

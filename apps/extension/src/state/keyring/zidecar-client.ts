@@ -275,8 +275,12 @@ export class ZidecarClient {
   ): Promise<{ available: boolean; signatureHex: string; verifierKeyHex: string }> {
     const parts: number[] = [];
     parts.push(0x0a, ...this.lengthDelimited(anchor)); // field 1 bytes anchor
-    if (height > 0) parts.push(0x10, ...this.varint(height)); // field 2 uint32 height
-    if (mainnet) parts.push(0x18, 0x01); // field 3 bool mainnet (omit when false)
+    if (height > 0) {
+      parts.push(0x10, ...this.varint(height));
+    } // field 2 uint32 height
+    if (mainnet) {
+      parts.push(0x18, 0x01);
+    } // field 3 bool mainnet (omit when false)
     const resp = await this.grpcCall('SignAnchor', new Uint8Array(parts));
 
     let pos = 0;
@@ -289,27 +293,40 @@ export class ZidecarClient {
       const field = tag >> 3;
       const wire = tag & 0x7;
       if (wire === 2) {
-        let len = 0, s = 0;
+        let len = 0,
+          s = 0;
         while (pos < resp.length) {
           const b = resp[pos++]!;
           len |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
         const data = resp.subarray(pos, pos + len);
         pos += len;
-        if (field === 1) signatureHex = toHex(data);
-        else if (field === 2) verifierKeyHex = toHex(data);
+        if (field === 1) {
+          signatureHex = toHex(data);
+        } else if (field === 2) {
+          verifierKeyHex = toHex(data);
+        }
       } else if (wire === 0) {
-        let v = 0, s = 0;
+        let v = 0,
+          s = 0;
         while (pos < resp.length) {
           const b = resp[pos++]!;
           v |= (b & 0x7f) << s;
-          if (!(b & 0x80)) break;
+          if (!(b & 0x80)) {
+            break;
+          }
           s += 7;
         }
-        if (field === 3) available = v !== 0;
-      } else break;
+        if (field === 3) {
+          available = v !== 0;
+        }
+      } else {
+        break;
+      }
     }
     return { available, signatureHex, verifierKeyHex };
   }

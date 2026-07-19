@@ -30,8 +30,8 @@ let createMock: Mock;
 beforeEach(() => {
   // Each test uses a unique origin, so no storage reset is needed — and
   // clearing would wipe the shared mock-chrome storage other test files use.
-  (globalThis.chrome.runtime as unknown as { getURL: unknown }).getURL =
-    (p: string) => `chrome-extension://test/${p}`;
+  (globalThis.chrome.runtime as unknown as { getURL: unknown }).getURL = (p: string) =>
+    `chrome-extension://test/${p}`;
   createMock = vi.fn(async () => ({ id: Math.floor(Math.random() * 1e6) }));
   (globalThis.chrome as unknown as { windows: unknown }).windows = {
     create: createMock,
@@ -74,7 +74,10 @@ describe('gh #18 — zafu_delete_multisig uniform rejection', () => {
   it('rejects a too-short label with the uniform denied shape (granted origin)', async () => {
     const origin = 'https://del-short.example';
     await grantCapability(origin, 'frost');
-    const res = await call({ type: 'zafu_delete_multisig', multisigLabel: 'ab' }, validSender(origin));
+    const res = await call(
+      { type: 'zafu_delete_multisig', multisigLabel: 'ab' },
+      validSender(origin),
+    );
     expect(res).toEqual({ success: false, error: 'denied' });
   });
 

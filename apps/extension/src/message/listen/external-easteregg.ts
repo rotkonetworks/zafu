@@ -43,7 +43,9 @@ import { isValidExternalSender } from '../../senders/external';
  * `sender.origin`, never a caller-supplied field.
  */
 const rpIdMatchesOrigin = (rpId: string, origin: string): boolean => {
-  if (!rpId) return false;
+  if (!rpId) {
+    return false;
+  }
   try {
     const host = new URL(origin).hostname;
     return host === rpId || host.endsWith('.' + rpId);
@@ -263,7 +265,7 @@ export const externalMessageListener = (
           requestId,
         });
         const url = chrome.runtime.getURL(`popup.html#/frost-approve?${params.toString()}`);
-        if (!(await openApprovalPopup(gate.origin, url, { width: 400, height: 520 }))) {
+        if (!(await openApprovalPopup(appOrigin, url, { width: 400, height: 520 }))) {
           sendResponse({ success: false, error: 'denied' });
           return;
         }
@@ -408,7 +410,7 @@ export const externalMessageListener = (
           sendResponse({ error: 'roomCode required' });
           return;
         }
-        const plan = msg['plan'] as Array<{ address: string; amount_zat: number }> | undefined;
+        const plan = msg['plan'] as { address: string; amount_zat: number }[] | undefined;
         if (!plan || !Array.isArray(plan) || plan.length === 0) {
           sendResponse({ error: 'plan array required' });
           return;
@@ -464,9 +466,8 @@ export const externalMessageListener = (
         }
         const delayMs = Math.max(0, Number(msg['delayMs']) || 0);
         try {
-          const { findVaultByLabelPrefix, scheduleMultisigDelete, purgeVault } = await import(
-            '../../state/keyring/scheduled-deletes'
-          );
+          const { findVaultByLabelPrefix, scheduleMultisigDelete, purgeVault } =
+            await import('../../state/keyring/scheduled-deletes');
           // origin-scoped lookup — refuses cross-origin label collisions.
           const vaultId = await findVaultByLabelPrefix(multisigLabel, gate.origin);
           if (!vaultId) {
@@ -676,7 +677,11 @@ export const externalMessageListener = (
     }
 
     case 'zafu_passkey_get': {
-      const { rpId, clientDataHash: clientDataHashHex, prfSalts } = msg as {
+      const {
+        rpId,
+        clientDataHash: clientDataHashHex,
+        prfSalts,
+      } = msg as {
         rpId: string;
         clientDataHash: string;
         prfSalts?: { first: string; second?: string };

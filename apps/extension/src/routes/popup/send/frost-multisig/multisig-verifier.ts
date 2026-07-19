@@ -143,7 +143,12 @@ export function computeVerdict(args: {
 }
 
 export type EscrowVerdict =
-  | { kind: 'ok'; outputs: { recipientUa: string; amountZat: bigint }[]; sendZat: bigint; changeZat: bigint }
+  | {
+      kind: 'ok';
+      outputs: { recipientUa: string; amountZat: bigint }[];
+      sendZat: bigint;
+      changeZat: bigint;
+    }
   | { kind: 'refuse'; reasons: string[] };
 
 /**
@@ -164,7 +169,10 @@ export function computeEscrowVerdict(args: {
   const { parsed, claimedSighashHex, mainnet } = args;
 
   if (!parsed.computed_sighash_hex) {
-    return { kind: 'refuse', reasons: ['PCZT sighash could not be recomputed — refusing to sign an unverifiable payout'] };
+    return {
+      kind: 'refuse',
+      reasons: ['PCZT sighash could not be recomputed — refusing to sign an unverifiable payout'],
+    };
   }
   const expected = parsed.computed_sighash_hex.toLowerCase();
   const claimed = claimedSighashHex.toLowerCase();

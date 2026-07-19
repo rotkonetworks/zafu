@@ -22,16 +22,16 @@ import {
   frostInspectPcztOutputsInWorker,
 } from '../../state/keyring/network-worker';
 import { computeEscrowVerdict } from './send/frost-multisig/multisig-verifier';
-
-interface PokerPayoutOutput {
-  address: string;
-  amount_zat: number;
-}
 import { encodeOrchardUnifiedAddress } from '@repo/wallet/networks/zcash/unified-address';
 import { hexToBytes } from '@repo/wallet/networks';
 import { FrostRelayClient } from '../../state/keyring/frost-relay-client';
 import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../state/frost-session';
 import { usePasswordGate } from '../../hooks/password-gate';
+
+interface PokerPayoutOutput {
+  address: string;
+  amount_zat: number;
+}
 
 type Phase = 'confirm' | 'running' | 'review' | 'complete' | 'error';
 
@@ -107,7 +107,9 @@ export const FrostApprove = () => {
   // poker-sign review gate: after the escrow PCZT is verified we show its
   // OVK-decoded outputs and block on an explicit user confirm before signing.
   const reviewResolveRef = useRef<((ok: boolean) => void) | null>(null);
-  const [reviewOutputs, setReviewOutputs] = useState<{ recipientUa: string; amountZat: bigint }[] | null>(null);
+  const [reviewOutputs, setReviewOutputs] = useState<
+    { recipientUa: string; amountZat: bigint }[] | null
+  >(null);
   const [reviewChangeZat, setReviewChangeZat] = useState<bigint>(0n);
   const [reviewSendZat, setReviewSendZat] = useState<bigint>(0n);
   // the sighash recomputed from the PCZT — equal to the one our share signs,
@@ -115,7 +117,11 @@ export const FrostApprove = () => {
   const [reviewSighash, setReviewSighash] = useState('');
 
   const awaitReview = (
-    v: { outputs: { recipientUa: string; amountZat: bigint }[]; sendZat: bigint; changeZat: bigint },
+    v: {
+      outputs: { recipientUa: string; amountZat: bigint }[];
+      sendZat: bigint;
+      changeZat: bigint;
+    },
     sighashHex: string,
   ) =>
     new Promise<boolean>(resolve => {
@@ -607,7 +613,11 @@ export const FrostApprove = () => {
     }
     setStatus('verifying request against escrow PCZT...');
     const parsed = await frostInspectPcztOutputsInWorker(initPcztHex, zw.orchardFvk);
-    const verdict = computeEscrowVerdict({ parsed, claimedSighashHex: initSighash, mainnet: zw.mainnet });
+    const verdict = computeEscrowVerdict({
+      parsed,
+      claimedSighashHex: initSighash,
+      mainnet: zw.mainnet,
+    });
     if (verdict.kind !== 'ok') {
       throw new Error(verdict.reasons.join(' — '));
     }
@@ -737,7 +747,10 @@ export const FrostApprove = () => {
                   {plan.map((o, i) => (
                     <p key={i} className='text-fg-muted tabular break-all'>
                       → {o.address.slice(0, 14)}…{o.address.slice(-8)}
-                      <span className='text-zigner-gold'> {(o.amount_zat / 1e8).toFixed(8)} ZEC</span>
+                      <span className='text-zigner-gold'>
+                        {' '}
+                        {(o.amount_zat / 1e8).toFixed(8)} ZEC
+                      </span>
                     </p>
                   ))}
                   <p className='text-fg-dim tabular'>fee {(feeZat / 1e8).toFixed(8)} ZEC</p>
@@ -775,7 +788,9 @@ export const FrostApprove = () => {
             <span className='i-lucide-shield-check size-5 shrink-0 text-green-400' />
             <div className='leading-tight'>
               <p className='text-xs text-green-300'>verified on-device</p>
-              <p className='text-[10px] text-fg-muted'>outputs + sighash decoded from the escrow's signed PCZT — not the app's claim</p>
+              <p className='text-[10px] text-fg-muted'>
+                outputs + sighash decoded from the escrow's signed PCZT — not the app's claim
+              </p>
             </div>
           </div>
 
@@ -783,20 +798,28 @@ export const FrostApprove = () => {
             <div className='space-y-1'>
               {reviewOutputs.map((o, i) => (
                 <div key={i} className='flex items-baseline justify-between gap-2'>
-                  <span className='text-fg-muted tabular break-all'>→ {o.recipientUa.slice(0, 14)}…{o.recipientUa.slice(-8)}</span>
-                  <span className='text-zigner-gold tabular shrink-0'>{(Number(o.amountZat) / 1e8).toFixed(8)} ZEC</span>
+                  <span className='text-fg-muted tabular break-all'>
+                    → {o.recipientUa.slice(0, 14)}…{o.recipientUa.slice(-8)}
+                  </span>
+                  <span className='text-zigner-gold tabular shrink-0'>
+                    {(Number(o.amountZat) / 1e8).toFixed(8)} ZEC
+                  </span>
                 </div>
               ))}
             </div>
             <div className='border-t border-border-soft pt-2 space-y-1'>
               <div className='flex items-baseline justify-between'>
                 <span className='text-fg-muted'>total to recipients</span>
-                <span className='text-fg-high tabular'>{(Number(reviewSendZat) / 1e8).toFixed(8)} ZEC</span>
+                <span className='text-fg-high tabular'>
+                  {(Number(reviewSendZat) / 1e8).toFixed(8)} ZEC
+                </span>
               </div>
               {reviewChangeZat > 0n && (
                 <div className='flex items-baseline justify-between'>
                   <span className='text-fg-dim'>change back to vault</span>
-                  <span className='text-fg-dim tabular'>{(Number(reviewChangeZat) / 1e8).toFixed(8)} ZEC</span>
+                  <span className='text-fg-dim tabular'>
+                    {(Number(reviewChangeZat) / 1e8).toFixed(8)} ZEC
+                  </span>
                 </div>
               )}
             </div>
@@ -807,12 +830,18 @@ export const FrostApprove = () => {
               <span className='i-lucide-check size-3 shrink-0 text-green-400' />
               <span>sighash your share signs matches the PCZT</span>
             </div>
-            <p className='tabular break-all text-fg-dim pl-[18px]'>{reviewSighash.slice(0, 24)}…{reviewSighash.slice(-24)}</p>
+            <p className='tabular break-all text-fg-dim pl-[18px]'>
+              {reviewSighash.slice(0, 24)}…{reviewSighash.slice(-24)}
+            </p>
           </div>
 
           <div className='flex gap-2 mt-auto'>
-            <Button variant='secondary' className='flex-1' onClick={() => resolveReview(false)}>cancel</Button>
-            <Button className='flex-1' onClick={() => resolveReview(true)}>sign</Button>
+            <Button variant='secondary' className='flex-1' onClick={() => resolveReview(false)}>
+              cancel
+            </Button>
+            <Button className='flex-1' onClick={() => resolveReview(true)}>
+              sign
+            </Button>
           </div>
         </div>
       )}

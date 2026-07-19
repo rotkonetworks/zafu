@@ -6,8 +6,10 @@ import { AppParameters } from '@penumbra-zone/protobuf/penumbra/core/app/v1/app_
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { sessionExtStorage } from '@repo/storage-chrome/session';
 import { OriginRecord, UserChoice } from '@repo/storage-chrome/records';
-import { readEncrypted, markHydrated } from './encrypted-storage';
+import { readEncrypted, writeEncrypted, markHydrated } from './encrypted-storage';
+import { backfillMissingMultisigMirrors } from './keyring/migration';
 import type { WalletJson } from '@repo/wallet';
+import type { EncryptedVault } from './keyring/types';
 import type { ZcashWalletJson } from './wallets';
 import type { Contact } from './contacts';
 import type { RecentAddress } from './recent-addresses';
@@ -96,6 +98,22 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
           })
         : null;
       const decryptedAny = !!(wallets || zcashWallets || contacts || recentAddresses || messages);
+
+      // forward reconciliation: a frost-multisig vault with no zcashWallets
+      // mirror is fully functional for signing (getMultisigSecrets is
+      // vault-first) but invisible in the multisig manager, which reads only
+      // the mirror. rebuild missing mirrors from vault metadata so every real
+      // multisig surfaces. only runs when unlocked (zcashWallets decrypted);
+      // vaults is plaintext so it's always readable.
+      let effectiveZcash = zcashWallets;
+      let backfilledMirrors = false;
+      if (Array.isArray(zcashWallets)) {
+        const vaults = ((await localExtStorage.get('vaults')) ?? []) as EncryptedVault[];
+        const result = backfillMissingMultisigMirrors(vaults, zcashWallets);
+        effectiveZcash = result.zcashWallets;
+        backfilledMirrors = result.changed;
+      }
+
       set(
         produce((state: AllSlices) => {
           if (Array.isArray(wallets)) {
@@ -104,8 +122,8 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
               vaultId: w.vaultId ?? '',
             })) as typeof state.wallets.all;
           }
-          if (Array.isArray(zcashWallets)) {
-            state.wallets.zcashWallets = zcashWallets.map(w => ({
+          if (Array.isArray(effectiveZcash)) {
+            state.wallets.zcashWallets = effectiveZcash.map(w => ({
               ...w,
               vaultId: w.vaultId ?? '',
             })) as typeof state.wallets.zcashWallets;
@@ -128,6 +146,18 @@ export const customPersistImpl: Persist = f => (set, get, store) => {
       // keep blocking so persist() can't wipe storage with empty arrays
       if (decryptedAny) {
         markHydrated();
+      }
+
+      // persist rebuilt mirrors so the backfill is durable (survives lock and
+      // keeps the on-disk mirror consistent with vaults). writeEncrypted waits
+      // for hydration, which markHydrated() above has now released.
+      if (backfilledMirrors && Array.isArray(effectiveZcash)) {
+        await writeEncrypted(
+          localExtStorage,
+          sessionExtStorage,
+          'zcashWallets' as LK,
+          effectiveZcash,
+        );
       }
     };
 

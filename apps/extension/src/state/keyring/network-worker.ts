@@ -1101,11 +1101,10 @@ export const frostInspectPcztOutputsInWorker = async (
   pcztHex: string,
   orchardFvkUview: string,
 ): Promise<FrostParsedTx> => {
-  const json = await callWorker<string>(
-    'zcash',
-    'frost-inspect-pczt-outputs',
-    { pcztHex, orchardFvkUview },
-  );
+  const json = await callWorker<string>('zcash', 'frost-inspect-pczt-outputs', {
+    pcztHex,
+    orchardFvkUview,
+  });
   return JSON.parse(json) as FrostParsedTx;
 };
 

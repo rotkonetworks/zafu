@@ -716,7 +716,9 @@ const VaultRow = ({
           <span className='i-lucide-qr-code size-4 text-fg-high shrink-0 mt-0.5' />
           <span className='flex flex-col'>
             <span className='text-xs font-medium text-fg-high'>sync balance to zigner</span>
-            <span className='text-[10px] text-fg-muted'>scan it on zigner to verify your notes — re-sync after you send</span>
+            <span className='text-[10px] text-fg-muted'>
+              scan it on zigner to verify your notes — re-sync after you send
+            </span>
           </span>
         </button>
       )}

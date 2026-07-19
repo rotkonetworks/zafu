@@ -34,20 +34,20 @@ export interface Candidate {
  * (typically: keep the user's current selection and show a warning).
  */
 export function rankEndpoints(
-  candidates: ReadonlyArray<Candidate>,
+  candidates: readonly Candidate[],
   strategy: SelectionStrategy,
 ): Candidate[] {
   const healthy = candidates.filter(isHealthy);
-  if (healthy.length === 0) return [];
+  if (healthy.length === 0) {
+    return [];
+  }
   const arr = healthy.slice();
   switch (strategy) {
     case 'fastest':
       arr.sort((a, b) => a.health!.latencyMs - b.health!.latencyMs);
       return arr;
     case 'most-synced':
-      arr.sort(
-        (a, b) => (a.health!.behindBy ?? Infinity) - (b.health!.behindBy ?? Infinity),
-      );
+      arr.sort((a, b) => (a.health!.behindBy ?? Infinity) - (b.health!.behindBy ?? Infinity));
       return arr;
     case 'random':
       // Fisher-Yates. Math.random is fine — this isn't a security-sensitive
@@ -61,7 +61,9 @@ export function rankEndpoints(
     default:
       arr.sort((a, b) => {
         const diff = privacyRank(b.preset) - privacyRank(a.preset);
-        if (diff !== 0) return diff;
+        if (diff !== 0) {
+          return diff;
+        }
         return a.health!.latencyMs - b.health!.latencyMs;
       });
       return arr;
@@ -70,7 +72,7 @@ export function rankEndpoints(
 
 /** Pick a single endpoint under the strategy, or null if none healthy. */
 export function pickEndpoint(
-  candidates: ReadonlyArray<Candidate>,
+  candidates: readonly Candidate[],
   strategy: SelectionStrategy,
 ): Candidate | null {
   const ranked = rankEndpoints(candidates, strategy);
@@ -80,8 +82,12 @@ export function pickEndpoint(
 // ── internals ────────────────────────────────────────────────────────
 
 function isHealthy(c: Candidate): boolean {
-  if (!c.health || !c.health.ok) return false;
-  if (c.health.behindBy != null && c.health.behindBy > MAX_HEALTHY_BEHIND) return false;
+  if (!c.health || !c.health.ok) {
+    return false;
+  }
+  if (c.health.behindBy != null && c.health.behindBy > MAX_HEALTHY_BEHIND) {
+    return false;
+  }
   return true;
 }
 
@@ -96,8 +102,14 @@ function isHealthy(c: Candidate): boolean {
 function privacyRank(preset: ZcashEndpointPreset): number {
   const isOnion = preset.url.toLowerCase().includes('.onion');
   const isZidecar = preset.backend === 'zidecar';
-  if (isOnion && isZidecar) return 4;
-  if (isZidecar) return 3;
-  if (isOnion) return 2;
+  if (isOnion && isZidecar) {
+    return 4;
+  }
+  if (isZidecar) {
+    return 3;
+  }
+  if (isOnion) {
+    return 2;
+  }
   return 1;
 }

@@ -884,7 +884,11 @@ export const selectKeyInfosForActiveNetwork = (state: AllSlices) => {
 
 export const selectEffectiveKeyInfo = (state: AllSlices) => {
   const { keyInfos, selectedKeyInfo, activeNetwork } = state.keyRing;
-  if (selectedKeyInfo && keyInfoSupportsNetwork(selectedKeyInfo, activeNetwork) && !isHidden(selectedKeyInfo)) {
+  if (
+    selectedKeyInfo &&
+    keyInfoSupportsNetwork(selectedKeyInfo, activeNetwork) &&
+    !isHidden(selectedKeyInfo)
+  ) {
     return selectedKeyInfo;
   }
   return keyInfos.find(k => keyInfoSupportsNetwork(k, activeNetwork) && !isHidden(k));
