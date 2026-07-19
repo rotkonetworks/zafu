@@ -248,8 +248,8 @@ export function IronwoodMigrate({
     switch (step) {
       case 'review':
         return (
-          <div className='flex flex-col gap-4 p-4'>
-            <div className='flex items-center gap-3'>
+          <div className='flex h-full min-h-0 flex-col'>
+            <div className='flex shrink-0 items-center gap-3 p-4'>
               <button
                 onClick={onClose}
                 className='text-fg-muted hover:text-fg-high transition-colors'
@@ -259,35 +259,47 @@ export function IronwoodMigrate({
               <h2 className='text-lg font-medium'>migrate to ironwood</h2>
             </div>
 
-            <div className='bg-elev-1 border border-border-soft rounded-lg p-4 flex flex-col gap-3'>
-              <div className='flex justify-between'>
-                <span className='text-fg-muted'>from</span>
-                <span className='font-medium'>orchard pool</span>
+            <div className='flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4'>
+              <div className='flex items-center justify-center gap-4 pt-2'>
+                <div className='flex flex-col items-center gap-1'>
+                  <span className='i-lucide-shield h-7 w-7 text-fg-muted' />
+                  <span className='text-xs text-fg-muted'>orchard</span>
+                </div>
+                <span className='i-lucide-arrow-right h-5 w-5 text-zigner-gold' />
+                <div className='flex flex-col items-center gap-1'>
+                  <span className='i-lucide-shield-check h-7 w-7 text-fg-high' />
+                  <span className='text-xs font-medium'>ironwood</span>
+                </div>
               </div>
-              <div className='flex justify-between'>
-                <span className='text-fg-muted'>to</span>
-                <span className='font-medium'>ironwood pool (your wallet)</span>
+
+              <div className='text-center'>
+                <div className='text-3xl font-semibold tabular-nums'>{fmtZec(orchardZat)}</div>
+                <div className='text-sm text-fg-muted'>ZEC to migrate</div>
               </div>
-              <div className='flex justify-between'>
-                <span className='text-fg-muted'>available to migrate</span>
-                <span className='font-medium tabular-nums'>{fmtZec(orchardZat)} ZEC</span>
+
+              <div className='divide-y divide-border-soft rounded-lg border border-border-soft bg-elev-1'>
+                <div className='flex items-center justify-between px-4 py-3 text-sm'>
+                  <span className='text-fg-muted'>destination</span>
+                  <span className='font-medium'>your ironwood address</span>
+                </div>
+                <div className='flex items-center justify-between px-4 py-3 text-sm'>
+                  <span className='text-fg-muted'>network fee</span>
+                  <span className='text-fg-muted'>computed at build</span>
+                </div>
               </div>
-              <div className='border-t border-border-soft pt-2'>
-                <p className='text-xs text-fg-muted leading-snug'>
-                  this builds a single transaction spending all your orchard notes to your own
-                  ironwood address. the exact fee (ZIP-317) is computed during the build and
-                  deducted from the migrated amount. the turnstile is one-way - funds cannot move
-                  back to orchard.
-                </p>
+
+              <div className='flex items-center gap-2 text-xs text-fg-muted'>
+                <span className='i-lucide-arrow-right h-4 w-4 shrink-0' />
+                <span>one-way - funds cannot move back to orchard</span>
               </div>
             </div>
 
-            <div className='flex gap-2 mt-2'>
+            <div className='flex shrink-0 gap-2 p-4'>
               <Button variant='secondary' onClick={onClose} className='flex-1'>
                 not now
               </Button>
               <Button variant='gradient' onClick={() => void handleBuild()} className='flex-1'>
-                sign with zafu zigner
+                migrate
               </Button>
             </div>
           </div>
@@ -354,9 +366,10 @@ export function IronwoodMigrate({
                     {destinationLabel ? shortenDest(destinationLabel) : 'your wallet'}
                   </span>
                 </div>
-                <p className='mt-1 text-label leading-snug'>
-                  these values are read from the transaction the zigner will confirm.
-                </p>
+                <div className='mt-1 flex items-center gap-1.5 text-label'>
+                  <span className='i-lucide-shield-check h-3.5 w-3.5 shrink-0' />
+                  <span>confirmed on your zigner</span>
+                </div>
               </div>
             )}
 
@@ -371,12 +384,21 @@ export function IronwoodMigrate({
                   description='hold zigner camera steady; multi-frame transfer'
                 />
               )}
-              <div className='text-center'>
-                <p className='text-sm text-fg-muted'>1. open zafu zigner app on your phone</p>
-                <p className='text-sm text-fg-muted'>2. scan this qr code</p>
-                <p className='text-sm text-fg-muted'>
-                  3. review the ironwood migration and approve
-                </p>
+              <div className='flex items-center justify-center gap-3 text-fg-muted'>
+                <span className='flex items-center gap-1.5'>
+                  <span className='i-lucide-smartphone h-4 w-4' />
+                  <span className='text-xs'>open zigner</span>
+                </span>
+                <span className='i-lucide-chevron-right h-3 w-3 shrink-0' />
+                <span className='flex items-center gap-1.5'>
+                  <span className='i-lucide-scan h-4 w-4' />
+                  <span className='text-xs'>scan</span>
+                </span>
+                <span className='i-lucide-chevron-right h-3 w-3 shrink-0' />
+                <span className='flex items-center gap-1.5'>
+                  <span className='i-lucide-check h-4 w-4' />
+                  <span className='text-xs'>approve</span>
+                </span>
               </div>
             </div>
 
@@ -410,9 +432,7 @@ export function IronwoodMigrate({
               <div className='w-8 h-8 border-2 border-zigner-gold border-t-transparent rounded-full animate-spin' />
             </div>
             <h2 className='text-lg font-medium'>broadcasting migration</h2>
-            <p className='text-sm text-fg-muted text-center'>
-              sending your turnstile transaction to the zcash network...
-            </p>
+            <p className='text-center text-sm text-fg-muted'>broadcasting to the network</p>
           </div>
         );
 
@@ -422,12 +442,11 @@ export function IronwoodMigrate({
             <div className='w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center'>
               <span className='i-lucide-check w-8 h-8 text-green-400' />
             </div>
-            <h2 className='text-lg font-medium'>migration sent!</h2>
-            <p className='text-sm text-fg-muted text-center'>
-              your orchard balance is on its way to the ironwood pool. it will show up once the
-              transaction confirms and the sync catches up.
+            <h2 className='text-lg font-medium'>migrated to ironwood</h2>
+            <p className='text-center text-sm text-fg-muted'>
+              your balance updates once the transaction confirms.
             </p>
-            {txid && <p className='font-mono text-xs text-fg-muted break-all'>{txid}</p>}
+            {txid && <p className='break-all font-mono text-xs text-fg-muted'>{txid}</p>}
             <Button variant='gradient' onClick={onClose} className='w-full mt-4'>
               done
             </Button>
