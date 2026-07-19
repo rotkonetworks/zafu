@@ -48,7 +48,7 @@ import {
 } from '@repo/wallet/zcash-zigner';
 import { QrDisplay } from '../../../shared/components/qr-display';
 import { QrScanner } from '../../../shared/components/qr-scanner';
-import { IRONWOOD_MIGRATION } from '../../../config/feature-flags';
+import { IRONWOOD_MIGRATION, NU6_3_ACTIVATION_HEIGHT } from '../../../config/feature-flags';
 import { IronwoodMigrationBanner, IronwoodMigrate } from '../send/ironwood-migrate';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -1124,27 +1124,32 @@ const ZcashContent = ({
           proposeShielding-style prompt, gated behind the IRONWOOD_MIGRATION
           feature flag (default OFF) so this ships dormant until the
           ironwood wasm + activation land. */}
-      {IRONWOOD_MIGRATION && orchardZat > 0n && (
-        <IronwoodMigrationBanner
-          orchardZat={orchardZat}
-          onMigrate={() => setShowIronwoodMigrate(true)}
-        />
-      )}
-      {IRONWOOD_MIGRATION && showIronwoodMigrate && selectedKeyInfo && (
-        <IronwoodMigrate
-          onClose={() => setShowIronwoodMigrate(false)}
-          walletId={selectedKeyInfo.id}
-          serverUrl={zidecarUrl}
-          backend={zcashBackend}
-          mainnet={isMainnet}
-          accountIndex={0}
-          ufvk={
-            watchOnly?.ufvk ??
-            (watchOnly?.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined)
-          }
-          orchardZat={orchardZat}
-        />
-      )}
+      {IRONWOOD_MIGRATION &&
+        (chainTip?.height ?? 0) >= NU6_3_ACTIVATION_HEIGHT &&
+        orchardZat > 0n && (
+          <IronwoodMigrationBanner
+            orchardZat={orchardZat}
+            onMigrate={() => setShowIronwoodMigrate(true)}
+          />
+        )}
+      {IRONWOOD_MIGRATION &&
+        (chainTip?.height ?? 0) >= NU6_3_ACTIVATION_HEIGHT &&
+        showIronwoodMigrate &&
+        selectedKeyInfo && (
+          <IronwoodMigrate
+            onClose={() => setShowIronwoodMigrate(false)}
+            walletId={selectedKeyInfo.id}
+            serverUrl={zidecarUrl}
+            backend={zcashBackend}
+            mainnet={isMainnet}
+            accountIndex={0}
+            ufvk={
+              watchOnly?.ufvk ??
+              (watchOnly?.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined)
+            }
+            orchardZat={orchardZat}
+          />
+        )}
 
       {/* sync pipeline — hidden when fully synced */}
       {!allSynced && (

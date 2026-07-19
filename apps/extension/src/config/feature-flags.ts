@@ -25,3 +25,19 @@
  * This avoids a second store cycle to enable migration at activation.
  */
 export const IRONWOOD_MIGRATION = true;
+
+/**
+ * NU6.3 Ironwood mainnet activation height.
+ *
+ * Confirmed and tagged by Zcash core (Sean Bowe): block 3,428,143,
+ * approximately 2026-07-28 13:00 UTC (8AM EST). At this height the tip's
+ * consensus branch id becomes the real NU6.3 value (0x37a5165b) and
+ * orchard-to-orchard sends are disabled - the one-way turnstile is the only
+ * way to keep spending orchard funds from here on.
+ *
+ * The migrate-to-ironwood surfaces stay hidden until the synced chain tip
+ * reaches this height, so the prompt "activates on the upgrade date" rather
+ * than nagging early. The build-time producer still fail-closes on the branch
+ * id independently (see IRONWOOD_MIGRATION), so this gate is UX, not safety.
+ */
+export const NU6_3_ACTIVATION_HEIGHT = 3_428_143;
