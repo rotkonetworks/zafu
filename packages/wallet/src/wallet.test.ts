@@ -10,9 +10,9 @@ import { Wallet, WalletJson } from './wallet';
 const seedPhrase =
   'benefit cherry cannon tooth exhibit law avocado spare tooth that amount pumpkin scene foil tape mobile shine apology add crouch situate sun business explain';
 
-const spendKey = generateSpendKey(seedPhrase);
-const fvk = getFullViewingKey(spendKey);
-const walletId = getWalletId(fvk);
+const spendKey = await generateSpendKey(seedPhrase);
+const fvk = await getFullViewingKey(spendKey);
+const walletId = await getWalletId(fvk);
 const label = 'Test Wallet';
 const { key: passKey } = await Key.create('s0meUs3rP@ssword');
 

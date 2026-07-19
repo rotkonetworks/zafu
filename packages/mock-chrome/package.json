@@ -10,7 +10,8 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./mocks/storage-area": "./src/mocks/storage-area.ts"
+    "./mocks/storage-area": "./src/mocks/storage-area.ts",
+    "./mocks/navigator-locks": "./src/mocks/navigator-locks.ts"
   },
   "devDependencies": {
     "@types/chrome": "0.0.270",

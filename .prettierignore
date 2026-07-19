@@ -5,3 +5,6 @@ packages/wasm/crate
 packages/wasm/wasm
 *_pk.bin
 vitest.config.ts.timestamp-*-*.mjs
+
+# generated mdbook output (built from docs/src via `mdbook build`)
+docs/book/
