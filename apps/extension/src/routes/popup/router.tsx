@@ -5,6 +5,7 @@ import { Login, popupLoginLoader } from './login';
 import { PopupPath } from './paths';
 import { PopupLayout } from './popup-layout';
 import { settingsRoutes } from './settings/routes';
+import { IRONWOOD_MIGRATION } from '../../config/feature-flags';
 
 // lazy load heavier routes
 const Settings = lazy(() => import('./settings').then(m => ({ default: m.Settings })));
@@ -37,6 +38,7 @@ const MultisigCreate = lazy(() =>
 const MultisigJoin = lazy(() => import('./multisig/join').then(m => ({ default: m.MultisigJoin })));
 const MultisigSign = lazy(() => import('./multisig/sign').then(m => ({ default: m.MultisigSign })));
 const NoteSyncPage = lazy(() => import('./note-sync').then(m => ({ default: m.NoteSyncPage })));
+const PoolNotesPage = lazy(() => import('./pool-notes').then(m => ({ default: m.PoolNotesPage })));
 const IdentityPage = lazy(() => import('./identity').then(m => ({ default: m.IdentityPage })));
 const PasswordsPage = lazy(() =>
   import('./identity/passwords').then(m => ({ default: m.PasswordsPage })),
@@ -213,6 +215,21 @@ export const popupRoutes: RouteObject[] = [
           </Suspense>
         ),
       },
+
+      // Per-pool notes (orchard legacy vs ironwood). Registered only when the
+      // IRONWOOD_MIGRATION flag is ON - the dual-pool UI is dormant otherwise.
+      ...(IRONWOOD_MIGRATION
+        ? [
+            {
+              path: PopupPath.POOL_NOTES,
+              element: (
+                <Suspense fallback={<LazyFallback />}>
+                  <PoolNotesPage />
+                </Suspense>
+              ),
+            },
+          ]
+        : []),
 
       // zid contact picker (external app requests)
       {
