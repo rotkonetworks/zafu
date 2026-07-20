@@ -225,6 +225,8 @@ interface WasmModule {
     fee: bigint,
     anchor_height: number,
     mainnet: boolean,
+    // live consensus branch id (hex, e.g. "37a5165b"); null/'' -> WASM NU6.2 fallback
+    branch_id_hex?: string | null,
   ): string;
   build_unsigned_transaction(
     ufvk_str: string,
@@ -237,6 +239,8 @@ interface WasmModule {
     account_index: number,
     mainnet: boolean,
     memo_hex?: string | null,
+    // live consensus branch id (hex, e.g. "37a5165b"); null/'' -> WASM NU6.2 fallback
+    branch_id_hex?: string | null,
   ): unknown;
   build_signed_spend_transaction(
     seed_phrase: string,
@@ -249,6 +253,8 @@ interface WasmModule {
     account_index: number,
     mainnet: boolean,
     memo_hex?: string | null,
+    // live consensus branch id (hex, e.g. "37a5165b"); null/'' -> WASM NU6.2 fallback
+    branch_id_hex?: string | null,
   ): string;
   complete_transaction(
     unsigned_tx_hex: string,
@@ -283,6 +289,8 @@ interface WasmModule {
     fee: bigint,
     anchor_height: number,
     mainnet: boolean,
+    // live consensus branch id (hex, e.g. "37a5165b"); null/'' -> WASM NU6.2 fallback
+    branch_id_hex?: string | null,
   ): string;
   complete_shielding_transaction(unsigned_tx_hex: string, signatures_json: string): string;
   derive_transparent_privkey(seed_phrase: string, account: number, index: number): string;
@@ -506,6 +514,44 @@ const NU63_CONSENSUS_BRANCH_ID = 0x37a5165b;
 const NU63_CONSENSUS_BRANCH_ID_HEX = '37a5165b';
 /** Placeholder branch id from a pre-activation / not-yet-real fork. Never build against it. */
 const PLACEHOLDER_BRANCH_ID_HEX = 'ffffffff';
+
+/**
+ * Fetch the endpoint's live consensus branch id (GetLightdInfo.consensusBranchId)
+ * as a normalized lowercase hex string with no `0x` prefix, e.g. "5437f330"
+ * (NU6.2) or "37a5165b" (NU6.3). This is threaded verbatim into the ordinary
+ * send/shield WASM builders, which bind it into the ZIP-244 sighash + v5 header.
+ *
+ * Fail-SAFE (unlike the turnstile builder's fail-CLOSED guard at the migration
+ * path): ordinary sends must keep working across the NU6.3 boundary, so a
+ * missing/placeholder value is not fatal here. We return '' in that case; the
+ * WASM side then falls back to its compiled-in NU6.2 value and emits a
+ * console.warn. Once NU6.3 activates the endpoint reports the new id and it
+ * flows straight through with no code change. Networks fail loud on a wrong
+ * branch id ("incorrect consensus branch id" on submit), so a stale endpoint is
+ * self-announcing rather than silently signing an unspendable tx.
+ */
+const fetchBranchIdHex = async (client: ZcashClient): Promise<string> => {
+  try {
+    const info = await client.getLightdInfo();
+    const hex = (info.consensusBranchId || '').trim().toLowerCase().replace(/^0x/, '');
+    if (!hex || hex === PLACEHOLDER_BRANCH_ID_HEX) {
+      console.warn(
+        `[zcash-worker] endpoint reported no/placeholder consensus branch id ` +
+          `(${JSON.stringify(info.consensusBranchId)}); WASM will fall back to ` +
+          `compiled-in NU6.2. This is WRONG after NU6.3 activation.`,
+      );
+      return '';
+    }
+    return hex;
+  } catch (e) {
+    console.warn(
+      '[zcash-worker] GetLightdInfo failed while resolving consensus branch id; ' +
+        'WASM will fall back to compiled-in NU6.2:',
+      e,
+    );
+    return '';
+  }
+};
 
 const NU5_BRANCH_ID_LE = [0xb4, 0xd0, 0xd6, 0xc2];
 const patchBranchId = (buf: Uint8Array): void => {
@@ -3914,6 +3960,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const witnessDuration = ((performance.now() - witnessStart) / 1000).toFixed(1);
         emitProgress('witnesses built', `${witnessDuration}s`);
 
+        // live consensus branch id for the ZIP-244 sighash + v5 header (NU6.3-safe).
+        // Shared by both the mnemonic (signed) and zigner (unsigned) build paths below.
+        const sendBranchIdHex = await fetchBranchIdHex(sendClient);
+
         if (sendPayload.mnemonic) {
           // mnemonic wallet: build fully signed transaction and broadcast directly
           const notesJson = selected.map(n => ({
@@ -3959,6 +4009,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 sendPayload.accountIndex,
                 sendPayload.mainnet,
                 memoHex,
+                sendBranchIdHex,
               ],
             })) as string;
           } catch (e) {
@@ -4041,6 +4092,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             sendPayload.accountIndex,
             sendPayload.mainnet,
             memoHex,
+            sendBranchIdHex,
           ],
         });
 
@@ -4655,6 +4707,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         const txids: string[] = [];
         const fees: string[] = [];
+        // live consensus branch id (NU6.3-safe); resolved once, reused for every output
+        let multiBranchIdHex: string | null = null;
 
         for (let outputIdx = 0; outputIdx < multiPayload.outputs.length; outputIdx++) {
           const out = multiPayload.outputs[outputIdx]!;
@@ -4714,6 +4768,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           // build merkle witnesses
           const multiClient = await makeZcashClient(multiPayload.serverUrl);
           const multiTip = await multiClient.getTip();
+          if (multiBranchIdHex === null) {
+            multiBranchIdHex = await fetchBranchIdHex(multiClient);
+          }
 
           const multiAnchorHeight = await resolveAnchorHeight(walletId, multiTip.height);
           emitMultiProgress(
@@ -4773,6 +4830,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 multiPayload.accountIndex,
                 multiPayload.mainnet,
                 memoHex,
+                multiBranchIdHex,
               ],
             })) as string;
           } finally {
@@ -4880,6 +4938,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         }
         const recipient = fixOrchardAddress(rawRecipient, mainnet);
 
+        // live consensus branch id for the ZIP-244 sighash + v5 header (NU6.3-safe)
+        const shieldBranchIdHex = await fetchBranchIdHex(client);
+
         // shield each group with its matching privkey
         let totalShielded = 0n;
         let totalFee = 0n;
@@ -4919,6 +4980,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               fee.toString(),
               tip.height,
               mainnet,
+              shieldBranchIdHex,
             ],
           })) as string;
           const txData = hexDecode(txHex);
@@ -4971,6 +5033,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         const shieldUClient = await makeZcashClient(shieldUnsignedPayload.serverUrl);
         const shieldUTip = await shieldUClient.getTip();
+        // live consensus branch id for the ZIP-244 sighash + v5 header (NU6.3-safe)
+        const shieldUBranchIdHex = await fetchBranchIdHex(shieldUClient);
         const shieldUUtxos = await shieldUClient.getAddressUtxos(shieldUnsignedPayload.tAddresses);
         if (shieldUUtxos.length === 0) {
           throw new Error('no transparent UTXOs to shield');
@@ -5028,6 +5092,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             shieldUFee.toString(),
             shieldUTip.height,
             shieldUnsignedPayload.mainnet,
+            shieldUBranchIdHex,
           ],
         })) as string;
 
