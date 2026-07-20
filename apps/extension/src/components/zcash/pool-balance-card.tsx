@@ -17,41 +17,10 @@
  * component does not build or broadcast anything.
  */
 
-import { useStore } from '../../state';
 import { Sensitive } from '../sensitive';
+import type { PoolBalances } from '../../state/keyring/network-worker';
 
-// TODO(agent-b): switch to the real per-pool balance selector once Agent B's
-// data-model slice merges, e.g.
-//   import { selectPoolBalances, type PoolBalances } from '../../state/keyring';
-// The interface below mirrors the agreed contract from dualpool-ux-brief.md so
-// this component type-checks and lints green in the meantime. Do NOT invent a
-// parallel balance path - delete this fallback and import the shared selector.
-
-/** per-pool spendable balances in zatoshi (1 ZEC = 100_000_000 zatoshi). */
-export interface PoolBalances {
-  /** legacy Orchard pool (migrate-only after NU6.3 activation). */
-  orchard: bigint;
-  /** active Ironwood pool. */
-  ironwood: bigint;
-  /** orchard + ironwood, provided by the selector for convenience. */
-  total: bigint;
-}
-
-type StoreState = ReturnType<typeof useStore.getState>;
-
-/**
- * Fallback selector matching Agent B's `selectPoolBalances` contract. Reads
- * the pool balances off the store if present, otherwise returns zeros so the
- * card renders a stable (empty) state instead of throwing. Replace the whole
- * block with the real import once the data-model slice lands.
- */
-const selectPoolBalances = (state: StoreState): PoolBalances => {
-  const maybe = (state as { zcashPoolBalances?: Partial<PoolBalances> }).zcashPoolBalances;
-  const orchard = typeof maybe?.orchard === 'bigint' ? maybe.orchard : 0n;
-  const ironwood = typeof maybe?.ironwood === 'bigint' ? maybe.ironwood : 0n;
-  const total = typeof maybe?.total === 'bigint' ? maybe.total : orchard + ironwood;
-  return { orchard, ironwood, total };
-};
+export type { PoolBalances };
 
 /**
  * Format zatoshi -> ZEC string. Mirrors the home balance formatter
@@ -73,6 +42,12 @@ const fmtZec = (zat: bigint): string => {
 };
 
 export interface PoolBalanceCardProps {
+  /**
+   * Per-pool spendable balances (zatoshi). The parent reads these from the
+   * `usePoolBalances` hook and passes them in - this component stays
+   * presentational and does not touch the worker.
+   */
+  balances: PoolBalances;
   /**
    * Opens the existing IRONWOOD_MIGRATION flow. Wired by the parent (home).
    * Only invoked from the legacy-row migrate affordance.
@@ -96,11 +71,12 @@ export interface PoolBalanceCardProps {
  * only when its balance is positive.
  */
 export const PoolBalanceCard = ({
+  balances,
   onMigrate,
   migrationAvailable = true,
   statusLine,
 }: PoolBalanceCardProps) => {
-  const { orchard, ironwood } = useStore(selectPoolBalances);
+  const { orchard, ironwood } = balances;
 
   const hasLegacyOrchard = orchard > 0n;
 
