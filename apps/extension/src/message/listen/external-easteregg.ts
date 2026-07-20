@@ -464,9 +464,8 @@ export const externalMessageListener = (
           sendResponse({ success: false, error: 'denied' });
           return;
         }
-        const delayMs = Math.max(0, Number(msg['delayMs']) || 0);
         try {
-          const { findVaultByLabelPrefix, scheduleMultisigDelete, purgeVault } =
+          const { findVaultByLabelPrefix, cancelScheduledDelete } =
             await import('../../state/keyring/scheduled-deletes');
           // origin-scoped lookup — refuses cross-origin label collisions.
           const vaultId = await findVaultByLabelPrefix(multisigLabel, gate.origin);
@@ -474,18 +473,13 @@ export const externalMessageListener = (
             sendResponse({ success: false, error: 'denied' });
             return;
           }
-          if (delayMs > 0) {
-            await scheduleMultisigDelete(vaultId, Date.now() + delayMs);
-            sendResponse({
-              success: true,
-              scheduled: true,
-              vaultId,
-              deleteAt: Date.now() + delayMs,
-            });
-          } else {
-            await purgeVault(vaultId);
-            sendResponse({ success: true, scheduled: false, vaultId });
-          }
+          // POLICY (money-safety): a dapp can no longer DESTROY a multisig share. A FROST key is
+          // not seed-recoverable and has no auto-backup, and a "settled" table may still receive a
+          // late deposit or hold a not-yet-credited balance — so we RETAIN it (it's already hidden
+          // from the UI) rather than purge. Any prior schedule is cancelled. Removal is exclusively
+          // a user-initiated, balance+sync-gated action in the wallet's multisig manager.
+          await cancelScheduledDelete(vaultId);
+          sendResponse({ success: true, retained: true, vaultId });
         } catch {
           sendResponse({ success: false, error: 'denied' });
         }

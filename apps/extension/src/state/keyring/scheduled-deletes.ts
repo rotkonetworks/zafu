@@ -37,7 +37,14 @@ export async function cancelScheduledDelete(vaultId: string): Promise<void> {
   }
 }
 
-/** storage-only vault+wallet purge. mirrors deleteKeyRing's storage half without the zustand mutation */
+/**
+ * DESTRUCTIVE storage-only vault+wallet purge (mirrors deleteKeyRing's storage half without the
+ * zustand mutation). ⚠️ For a `frost-multisig` vault this erases the ONLY copy of the key share:
+ * it is not seed-recoverable and there is no auto-backup. NEVER wire this to an automatic path
+ * (timer / dapp request). Call it only from a user-initiated flow that has already verified the
+ * wallet is fully synced AND holds a zero balance (or the user explicitly accepted the loss after
+ * exporting a backup). As of the retain-no-autodelete policy this has no automatic callers.
+ */
 export async function purgeVault(vaultId: string): Promise<void> {
   const vaults = ((await localExtStorage.get('vaults')) ?? []) as EncryptedVault[];
   const updatedVaults = vaults.filter(v => v.id !== vaultId);
@@ -105,24 +112,22 @@ export async function findVaultByLabelPrefix(
   return matches[0]?.id ?? null;
 }
 
-/** Scan scheduled-deletes and purge anything past its deleteAt. Safe to call from anywhere. */
+/**
+ * Drain any pending scheduled-delete entries WITHOUT destroying vaults.
+ *
+ * POLICY (money-safety): app-managed multisig vaults (poker tables) are NO LONGER auto-destroyed.
+ * A FROST key share is NOT seed-recoverable, has no auto-backup, and lives only in this device's
+ * `chrome.storage.local` — so a timer-driven purge is a permanent fund-loss vector (a late deposit
+ * to a "settled" table, or an unconfirmed balance the scanner hasn't credited, would be lost). The
+ * vaults are a few KB each and already hidden from the UI, so retaining them costs effectively
+ * nothing. Removal is now EXCLUSIVELY a user-initiated, balance+sync-gated action in the multisig
+ * manager — never an automatic one. This sweep therefore only clears the (now-inert) schedule so
+ * legacy entries stop accumulating; it purges nothing.
+ */
 export async function sweepScheduledDeletes(): Promise<void> {
   const list = await getList();
   if (list.length === 0) {
     return;
   }
-  const now = Date.now();
-  const expired = list.filter(e => e.deleteAt <= now);
-  if (expired.length === 0) {
-    return;
-  }
-  const remaining = list.filter(e => e.deleteAt > now);
-  await setList(remaining);
-  for (const e of expired) {
-    try {
-      await purgeVault(e.vaultId);
-    } catch {
-      /* tolerate */
-    }
-  }
+  await setList([]); // retain every vault; only clear the inert schedule
 }
