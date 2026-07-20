@@ -13,7 +13,18 @@ import { selectEffectiveKeyInfo, selectKeyInfos } from '../../../state/keyring';
 import { allContactsSelector } from '../../../state/contacts';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import type { ZidSitePreference, ZidShareRecord } from '../../../state/identity';
-import { ZID_INDEX_STORAGE_KEY, getZidIndex, rotateZidIndex } from '../../../state/identity';
+import {
+  ZID_INDEX_STORAGE_KEY,
+  ZID_PINS_STORAGE_KEY,
+  type ZidPin,
+  addZidPin,
+  getZidIndex,
+  getZidPins,
+  removeZidPin,
+  rotateZidIndex,
+  rotateZidIndexDown,
+  setZidIndex,
+} from '../../../state/identity';
 import { getOriginPermissions, grantCapability, denyCapability } from '@repo/storage-chrome/origin';
 import { revokeOrigin as revokeOriginFull } from '../../../senders/revoke';
 import {
@@ -123,29 +134,59 @@ export const IdentityPage = () => {
   const [showFullKey, setShowFullKey] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [zidIndex, setZidIndexState] = useState(0);
-  const [confirmingRotate, setConfirmingRotate] = useState(false);
+  const [zidPins, setZidPins] = useState<ZidPin[]>([]);
   const reloadSites = useCallback(() => setReloadKey(k => k + 1), []);
 
-  // load + subscribe to global zidIndex (chrome.storage.local)
+  // load + subscribe to global zidIndex + pinned generations (chrome.storage.local)
   useEffect(() => {
     void getZidIndex().then(setZidIndexState);
+    void getZidPins().then(setZidPins);
     const listener = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
-      if (area === 'local' && changes[ZID_INDEX_STORAGE_KEY]) {
+      if (area !== 'local') {
+        return;
+      }
+      if (changes[ZID_INDEX_STORAGE_KEY]) {
         const v = changes[ZID_INDEX_STORAGE_KEY].newValue;
         if (typeof v === 'number') {
           setZidIndexState(v);
         }
+      }
+      if (changes[ZID_PINS_STORAGE_KEY]) {
+        void getZidPins().then(setZidPins);
       }
     };
     chrome.storage.onChanged.addListener(listener);
     return () => chrome.storage.onChanged.removeListener(listener);
   }, []);
 
-  const handleRotateZid = useCallback(async () => {
+  // Rotation is reversible: up = next generation, down = previous. Every
+  // generation is a deterministic derivation, so switching never destroys an
+  // identity - you can always rotate back down (or jump to a pin) to restore it.
+  const handleRotateUp = useCallback(async () => {
     await rotateZidIndex();
-    setConfirmingRotate(false);
     reloadSites();
   }, [reloadSites]);
+
+  const handleRotateDown = useCallback(async () => {
+    await rotateZidIndexDown();
+    reloadSites();
+  }, [reloadSites]);
+
+  const handleJumpTo = useCallback(
+    async (index: number) => {
+      await setZidIndex(index);
+      reloadSites();
+    },
+    [reloadSites],
+  );
+
+  const handlePinCurrent = useCallback(async () => {
+    setZidPins(await addZidPin(zidIndex, `gen ${zidIndex}`));
+  }, [zidIndex]);
+
+  const handleUnpin = useCallback(async (index: number) => {
+    setZidPins(await removeZidPin(index));
+  }, []);
 
   // try active keyinfo first, then any keyinfo with a zid (mnemonic wallets)
   const zidPubkey = (keyInfo?.insensitive?.['zid'] ??
@@ -340,41 +381,73 @@ export const IdentityPage = () => {
                   {plan}
                   {pro && days > 0 ? ` - ${days}d` : ''}
                 </span>
-                {zidIndex > 0 && (
+                {/* reversible generation switcher - down = previous identity,
+                    up = next. every generation is a deterministic derivation,
+                    so rotating never destroys an identity: rotate back down (or
+                    tap a pin) to restore it exactly. ring vrf seed (pro) is
+                    preserved across generations. */}
+                <span className='flex items-center gap-1'>
+                  <button
+                    type='button'
+                    onClick={() => void handleRotateDown()}
+                    disabled={zidIndex === 0}
+                    className='text-label font-mono px-1 py-0.5 rounded border border-border-soft text-fg-muted hover:bg-elev-2 disabled:opacity-30 disabled:hover:bg-transparent transition-colors'
+                    title='previous identity (rotate down)'
+                  >
+                    <span className='i-lucide-chevron-left h-3 w-3' />
+                  </button>
                   <span
                     className='text-label font-mono px-1.5 py-0 rounded bg-elev-2 text-fg-muted/70 border border-border-soft'
-                    title='global zid rotation index. all sites + cross-site keys derive under this generation.'
+                    title='current zid generation. all sites + cross-site keys derive under it. switching is reversible.'
                   >
                     gen {zidIndex}
                   </span>
-                )}
-                {confirmingRotate ? (
-                  <span className='flex items-center gap-1'>
-                    <button
-                      type='button'
-                      onClick={() => void handleRotateZid()}
-                      className='text-label font-mono px-1.5 py-0 rounded border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 transition-colors'
-                    >
-                      confirm rotate
-                    </button>
-                    <button
-                      type='button'
-                      onClick={() => setConfirmingRotate(false)}
-                      className='text-label font-mono px-1.5 py-0 rounded border border-border-soft text-fg-muted hover:bg-elev-2 transition-colors'
-                    >
-                      cancel
-                    </button>
-                  </span>
-                ) : (
                   <button
                     type='button'
-                    onClick={() => setConfirmingRotate(true)}
-                    className='text-label font-mono px-1.5 py-0 rounded border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 transition-colors'
-                    title='rotate zid - all sites + cross-site keys get fresh derivations. ring vrf seed (pro) is preserved.'
+                    onClick={() => void handleRotateUp()}
+                    className='text-label font-mono px-1 py-0.5 rounded border border-border-soft text-fg-muted hover:bg-elev-2 transition-colors'
+                    title='next identity (rotate up)'
                   >
-                    rotate zid
+                    <span className='i-lucide-chevron-right h-3 w-3' />
                   </button>
-                )}
+                  <button
+                    type='button'
+                    onClick={() =>
+                      zidPins.some(p => p.index === zidIndex)
+                        ? void handleUnpin(zidIndex)
+                        : void handlePinCurrent()
+                    }
+                    className='text-label font-mono px-1 py-0.5 rounded border border-border-soft text-fg-muted hover:bg-elev-2 transition-colors'
+                    title={
+                      zidPins.some(p => p.index === zidIndex)
+                        ? 'unpin this generation'
+                        : 'pin this generation'
+                    }
+                  >
+                    <span
+                      className={`h-3 w-3 ${
+                        zidPins.some(p => p.index === zidIndex)
+                          ? 'i-lucide-pin-off'
+                          : 'i-lucide-pin'
+                      }`}
+                    />
+                  </button>
+                  {zidPins.map(p => (
+                    <button
+                      key={p.index}
+                      type='button'
+                      onClick={() => void handleJumpTo(p.index)}
+                      className={`text-label font-mono px-1.5 py-0 rounded border transition-colors ${
+                        p.index === zidIndex
+                          ? 'border-network-accent/40 bg-network-accent/10 text-network-accent'
+                          : 'border-border-soft text-fg-muted hover:bg-elev-2'
+                      }`}
+                      title={`switch to ${p.label}`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </span>
               </div>
             </div>
           </div>
