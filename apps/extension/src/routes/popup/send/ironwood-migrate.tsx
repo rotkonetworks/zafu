@@ -79,9 +79,35 @@ const shortenDest = (dest: string): string =>
   dest.length > 22 ? `${dest.slice(0, 10)}...${dest.slice(-8)}` : dest;
 
 /**
+ * A fail-closed pre-activation error (worker's activation guard) means NU6.3
+ * has not activated at the endpoint yet - migration is simply not available
+ * yet, not a failure. Detect it so the flow can render a calm "available when
+ * NU6.3 activates" state instead of an alarming "migration failed" screen.
+ * Matches the two guard messages emitted in workers/zcash-worker.ts.
+ */
+function isPreActivationError(message: string | null): boolean {
+  if (!message) {
+    return false;
+  }
+  const m = message.toLowerCase();
+  return (
+    m.includes('nu6.3 is not active') ||
+    m.includes('until nu6.3 activates') ||
+    m.includes('refusing to build turnstile migration')
+  );
+}
+
+/**
  * Home-screen prompt (Zashi proposeShielding style): shown when the wallet
  * holds orchard balance and the turnstile is available. The caller gates on
  * the IRONWOOD_MIGRATION feature flag.
+ *
+ * Orchard is framed as a legacy, migrate-only pool: after NU6.3 activates,
+ * orchard-to-orchard sends are disabled, so funds are moved one-way to your
+ * own ironwood address to keep spending them normally. The funds are never at
+ * risk - only the pool changes. When orchardZat is 0 the wallet is fully
+ * migrated and the banner renders nothing (the parent also gates on
+ * orchardZat > 0, but returning null keeps this component safe on its own).
  */
 export function IronwoodMigrationBanner({
   orchardZat,
@@ -90,14 +116,18 @@ export function IronwoodMigrationBanner({
   orchardZat: bigint;
   onMigrate: () => void;
 }) {
+  // Fully migrated: nothing left in the legacy orchard pool - no prompt.
+  if (orchardZat <= 0n) {
+    return null;
+  }
   return (
     <div className='rounded-lg border border-primary/40 bg-primary/10 p-3'>
       <div className='flex items-center justify-between'>
         <div className='flex items-center gap-2'>
           <span className='i-lucide-arrow-right-left h-4 w-4 text-zigner-gold' />
-          <span className='text-xs text-fg-high'>migrate to ironwood</span>
+          <span className='text-xs text-fg-high'>orchard is now legacy</span>
           <span className='text-xs font-medium tabular-nums text-fg-muted'>
-            {fmtZec(orchardZat)} ZEC
+            {fmtZec(orchardZat)} ZEC to migrate
           </span>
         </div>
         <button
@@ -108,8 +138,9 @@ export function IronwoodMigrationBanner({
         </button>
       </div>
       <p className='mt-1.5 text-label text-fg-muted leading-snug'>
-        NU6.3 replaces the orchard pool with ironwood. move your orchard funds through the one-way
-        turnstile to keep spending them - orchard-to-orchard sends are disabled after activation.
+        NU6.3 makes ironwood the active pool. your orchard funds are safe - move them one-way to
+        your own ironwood address to keep spending normally. orchard-to-orchard sends are disabled
+        after activation.
       </p>
     </div>
   );
@@ -247,6 +278,39 @@ export function IronwoodMigrate({
   const renderContent = () => {
     switch (step) {
       case 'review':
+        // Fully migrated: the legacy orchard pool is empty. Nothing to migrate -
+        // confirm rather than offer a 0 ZEC transaction. (The home banner also
+        // hides at 0, but the flow may already be open when the balance drains.)
+        if (orchardZat <= 0n) {
+          return (
+            <div className='flex h-full min-h-0 flex-col'>
+              <div className='flex shrink-0 items-center gap-3 p-4'>
+                <button
+                  onClick={onClose}
+                  className='text-fg-muted hover:text-fg-high transition-colors'
+                >
+                  <span className='i-lucide-arrow-left h-5 w-5' />
+                </button>
+                <h2 className='text-lg font-medium'>migrate to ironwood</h2>
+              </div>
+              <div className='flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-6 text-center'>
+                <div className='flex h-16 w-16 items-center justify-center rounded-full bg-green-500/20'>
+                  <span className='i-lucide-check h-8 w-8 text-green-400' />
+                </div>
+                <h2 className='text-lg font-medium'>fully migrated</h2>
+                <p className='max-w-sm text-sm text-fg-muted leading-snug'>
+                  your orchard balance is empty - everything has moved to ironwood. there is nothing
+                  left to migrate.
+                </p>
+              </div>
+              <div className='shrink-0 p-4'>
+                <Button variant='gradient' onClick={onClose} className='w-full'>
+                  done
+                </Button>
+              </div>
+            </div>
+          );
+        }
         return (
           <div className='flex h-full min-h-0 flex-col'>
             <div className='flex shrink-0 items-center gap-3 p-4'>
@@ -277,6 +341,11 @@ export function IronwoodMigrate({
                 <div className='text-sm text-fg-muted'>ZEC to migrate</div>
               </div>
 
+              <p className='text-center text-xs text-fg-muted leading-snug'>
+                orchard is now a legacy pool. this moves your full orchard balance to your own
+                ironwood address so you can keep spending it normally.
+              </p>
+
               <div className='divide-y divide-border-soft rounded-lg border border-border-soft bg-elev-1'>
                 <div className='flex items-center justify-between px-4 py-3 text-sm'>
                   <span className='text-fg-muted'>destination</span>
@@ -290,7 +359,7 @@ export function IronwoodMigrate({
 
               <div className='flex items-center gap-2 text-xs text-fg-muted'>
                 <span className='i-lucide-arrow-right h-4 w-4 shrink-0' />
-                <span>one-way - funds cannot move back to orchard</span>
+                <span>one-way - your funds stay yours, they just cannot move back to orchard</span>
               </div>
             </div>
 
@@ -444,7 +513,8 @@ export function IronwoodMigrate({
             </div>
             <h2 className='text-lg font-medium'>migrated to ironwood</h2>
             <p className='text-center text-sm text-fg-muted'>
-              your balance updates once the transaction confirms.
+              your funds are now in the active ironwood pool. your balance updates once the
+              transaction confirms, and you can keep spending normally.
             </p>
             {txid && <p className='break-all font-mono text-xs text-fg-muted'>{txid}</p>}
             <Button variant='gradient' onClick={onClose} className='w-full mt-4'>
@@ -454,6 +524,27 @@ export function IronwoodMigrate({
         );
 
       case 'error':
+        // Pre-activation: the worker's fail-closed guard refused to build
+        // because NU6.3 has not activated at this endpoint yet. This is not a
+        // failure - migration simply is not available yet - so present it
+        // calmly, without the red alarm styling, and without a "try again".
+        if (isPreActivationError(error)) {
+          return (
+            <div className='flex flex-col items-center gap-4 p-8'>
+              <div className='flex h-16 w-16 items-center justify-center rounded-full bg-primary/15'>
+                <span className='i-lucide-clock h-8 w-8 text-zigner-gold' />
+              </div>
+              <h2 className='text-lg font-medium'>migration not available yet</h2>
+              <p className='max-w-sm text-center text-sm text-fg-muted leading-snug'>
+                orchard to ironwood migration becomes available once NU6.3 activates on the network.
+                your orchard funds are safe in the meantime - nothing is required until then.
+              </p>
+              <Button variant='gradient' onClick={onClose} className='mt-2 w-full'>
+                got it
+              </Button>
+            </div>
+          );
+        }
         return (
           <div className='flex flex-col items-center gap-4 p-8'>
             <div className='w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center'>
