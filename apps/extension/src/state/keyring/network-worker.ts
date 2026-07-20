@@ -24,6 +24,7 @@ export interface NetworkWorkerMessage {
     | 'stop-sync'
     | 'reset-sync'
     | 'get-balance'
+    | 'get-pool-balances'
     | 'send-tx'
     | 'send-tx-multi'
     | 'send-tx-complete'
@@ -70,6 +71,7 @@ export interface NetworkWorkerResponse {
     | 'sync-stopped'
     | 'sync-reset'
     | 'balance'
+    | 'pool-balances'
     | 'tx-result'
     | 'tx-multi-result'
     | 'send-tx-unsigned'
@@ -416,6 +418,41 @@ export const getBalanceInWorker = async (
 };
 
 /**
+ * Per-pool spendable balances (NU6.3 dual-pool), as zatoshi bigints.
+ *
+ * Additive to getBalanceInWorker: `total` equals the single balance that call
+ * returns, split into `orchard` / `ironwood` by each note's pool tag (records
+ * persisted before the ironwood rollout count as orchard). The worker sends
+ * decimal strings over postMessage (bigint isn't structured-clone-safe), so we
+ * re-hydrate to bigint here.
+ */
+export interface PoolBalances {
+  /** orchard (legacy, migrate-only) spendable zatoshi */
+  orchard: bigint;
+  /** ironwood (NU6.3 active pool) spendable zatoshi */
+  ironwood: bigint;
+  /** orchard + ironwood; equals getBalanceInWorker's total */
+  total: bigint;
+}
+
+export const getPoolBalancesInWorker = async (
+  network: NetworkType,
+  walletId: string,
+): Promise<PoolBalances> => {
+  const raw = await callWorker<{ orchard: string; ironwood: string; total: string }>(
+    network,
+    'get-pool-balances',
+    {},
+    walletId,
+  );
+  return {
+    orchard: BigInt(raw.orchard),
+    ironwood: BigInt(raw.ironwood),
+    total: BigInt(raw.total),
+  };
+};
+
+/**
  * list all wallets for a network
  */
 export const listWalletsInWorker = async (network: NetworkType): Promise<string[]> => {
@@ -455,6 +492,38 @@ export const getNotesInWorker = async (
   walletId: string,
 ): Promise<DecryptedNoteWithTxid[]> => {
   return callWorker(network, 'get-notes', {}, walletId);
+};
+
+/** Pool a note belongs to; pre-ironwood records (no pool tag) are orchard. */
+export const notesPoolOf = (note: DecryptedNoteWithTxid): 'orchard' | 'ironwood' =>
+  note.pool ?? 'orchard';
+
+/**
+ * Notes grouped by shielded pool for the per-pool notes view (NU6.3). Each
+ * entry carries value / height / spent status (already on DecryptedNoteWithTxid).
+ * Built on top of getNotesInWorker so there's one note source, split by pool
+ * (records with no pool tag default to orchard).
+ */
+export interface PoolNotes {
+  orchard: DecryptedNoteWithTxid[];
+  ironwood: DecryptedNoteWithTxid[];
+}
+
+export const getPoolNotesInWorker = async (
+  network: NetworkType,
+  walletId: string,
+): Promise<PoolNotes> => {
+  const notes = await getNotesInWorker(network, walletId);
+  const orchard: DecryptedNoteWithTxid[] = [];
+  const ironwood: DecryptedNoteWithTxid[] = [];
+  for (const note of notes) {
+    if (notesPoolOf(note) === 'ironwood') {
+      ironwood.push(note);
+    } else {
+      orchard.push(note);
+    }
+  }
+  return { orchard, ironwood };
 };
 
 /** encode notes bundle as UR-encoded QR frames for zigner sync */
