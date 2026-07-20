@@ -90,7 +90,7 @@ export interface KeyRingSlice {
   newFrostMultisigKey: (params: FrostMultisigParams) => Promise<string>;
   selectKeyRing: (vaultId: string) => Promise<void>;
   renameKeyRing: (vaultId: string, newName: string) => Promise<void>;
-  deleteKeyRing: (vaultId: string) => Promise<void>;
+  deleteKeyRing: (vaultId: string, opts?: { allowAppManaged?: boolean }) => Promise<void>;
 
   getMnemonic: (vaultId: string) => Promise<string>;
   getMultisigSecrets: (
@@ -678,8 +678,25 @@ export const createKeyRingSlice =
         });
       },
 
-      deleteKeyRing: async (vaultId: string) => {
+      deleteKeyRing: async (vaultId: string, opts?: { allowAppManaged?: boolean }) => {
         const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+        // CRITICAL money-safety guard: app-managed (hidden) FROST multisig tables — e.g. poker
+        // tables — are NOT seed-recoverable, have no auto-backup, and their on-chain balance cannot
+        // be proven empty from the generic settings UI (only the ACTIVE wallet syncs, and getBalance
+        // has no mempool/confirmation-depth margin). So the generic delete surfaces MUST NOT destroy
+        // them: that could erase the only copy of a share while a deposit is in flight. Removal is
+        // permitted ONLY from the dedicated multisig manager, which passes { allowAppManaged: true }
+        // after its own backup + settled (synced && empty) checks. See retain-no-autodelete policy.
+        const target = vaults.find(v => v.id === vaultId);
+        if (
+          target?.type === 'frost-multisig' &&
+          target.insensitive?.['hidden'] === true &&
+          !opts?.allowAppManaged
+        ) {
+          throw new Error(
+            'app-managed table (e.g. a poker table): remove it from the multisig manager after backing it up — it is not seed-recoverable',
+          );
+        }
         const updatedVaults = vaults.filter(v => v.id !== vaultId);
         await local.set('vaults', updatedVaults);
 

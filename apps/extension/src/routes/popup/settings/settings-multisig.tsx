@@ -25,6 +25,7 @@ export const SettingsMultisig = () => {
   const [relayUrl, setRelayUrl] = useState(wallet?.multisig?.relayUrl ?? '');
   const [saved, setSaved] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [delError, setDelError] = useState<string | null>(null);
   const [backupOpen, setBackupOpen] = useState(false);
   const { requestAuth, PasswordModal } = usePasswordGate();
 
@@ -57,8 +58,14 @@ export const SettingsMultisig = () => {
     if (!wallet.vaultId) {
       return;
     }
-    await deleteKeyRing(wallet.vaultId);
-    navigate(PopupPath.SETTINGS_WALLETS);
+    try {
+      // app-managed (hidden) tables are refused here by the keyring guard — they can only be
+      // removed from the multisig manager after backup. Surface that instead of failing silently.
+      await deleteKeyRing(wallet.vaultId);
+      navigate(PopupPath.SETTINGS_WALLETS);
+    } catch (e) {
+      setDelError(e instanceof Error ? e.message : 'could not delete this wallet');
+    }
   };
 
   return (
@@ -155,6 +162,11 @@ export const SettingsMultisig = () => {
                 permanently delete this multisig wallet? this cannot be undone - you would need to
                 run DKG again.
               </p>
+              {delError && (
+                <p className='rounded-md border border-red-500/40 bg-red-500/5 p-2 text-body text-red-300'>
+                  {delError}
+                </p>
+              )}
               <div className='flex gap-2'>
                 <button
                   onClick={() => setConfirmDelete(false)}
