@@ -83,6 +83,8 @@ export function useZcashAutoSync() {
   // mid-sync would otherwise leave a stale client hammering the wrong
   // server type (HTTP 415 storm) until the wallet changes.
   const syncEndpointRef = useRef<{ endpoint: string; backend: ZcashBackend } | null>(null);
+  // track in-flight stop promise so the start effect can await it on quick network switches
+  const stopPromiseRef = useRef<Promise<void> | null>(null);
 
   // eagerly pre-spawn zcash worker when on zcash network
   // decouples WASM loading from wallet data hydration so the worker
@@ -117,7 +119,9 @@ export function useZcashAutoSync() {
       syncingWalletRef.current = null;
     }
 
-    if (isWalletSyncing('zcash', walletId)) {
+    // only bail if truly syncing with no pending stop (i.e. we started it, it's healthy)
+    // and the endpoint/backend it was started with still matches the current one.
+    if (isWalletSyncing('zcash', walletId) && !stopPromiseRef.current) {
       const started = syncEndpointRef.current;
       const endpointChanged =
         started !== null && (started.endpoint !== zidecarUrl || started.backend !== zcashBackend);
@@ -131,7 +135,7 @@ export function useZcashAutoSync() {
       // (no error surfacing), and runSync waits for the old loop to drain
       // before starting the new one.
       console.log('[zcash-sync] endpoint/backend changed, restarting sync for', walletId);
-      void stopSyncInWorker('zcash', walletId).catch(() => {});
+      stopPromiseRef.current = stopSyncInWorker('zcash', walletId).catch(() => {});
       syncingWalletRef.current = null;
       syncEndpointRef.current = null;
     }
@@ -143,6 +147,15 @@ export function useZcashAutoSync() {
           await spawnNetworkWorker('zcash');
           if (cancelled) {
             return;
+          }
+          // if a stop is in flight (quick network switch back, or endpoint
+          // change above), wait for it to land before starting a fresh sync
+          if (stopPromiseRef.current) {
+            await stopPromiseRef.current;
+            stopPromiseRef.current = null;
+            if (cancelled) {
+              return;
+            }
           }
           const mnemonic = await getMnemonic(walletId);
           if (cancelled) {
@@ -241,7 +254,9 @@ export function useZcashAutoSync() {
       syncingWalletRef.current = null;
     }
 
-    if (isWalletSyncing('zcash', walletId)) {
+    // only bail if truly syncing with no pending stop, and the endpoint/backend
+    // it was started with still matches the current one.
+    if (isWalletSyncing('zcash', walletId) && !stopPromiseRef.current) {
       const started = syncEndpointRef.current;
       const endpointChanged =
         started !== null && (started.endpoint !== zidecarUrl || started.backend !== zcashBackend);
@@ -255,7 +270,7 @@ export function useZcashAutoSync() {
       // (no error surfacing), and runSync waits for the old loop to drain
       // before starting the new one.
       console.log('[zcash-sync] endpoint/backend changed, restarting sync for', walletId);
-      void stopSyncInWorker('zcash', walletId).catch(() => {});
+      stopPromiseRef.current = stopSyncInWorker('zcash', walletId).catch(() => {});
       syncingWalletRef.current = null;
       syncEndpointRef.current = null;
     }
@@ -268,6 +283,15 @@ export function useZcashAutoSync() {
         await spawnNetworkWorker('zcash');
         if (cancelled) {
           return;
+        }
+        // if a stop is in flight (quick network switch back, or endpoint
+        // change above), wait for it to land before starting a fresh sync
+        if (stopPromiseRef.current) {
+          await stopPromiseRef.current;
+          stopPromiseRef.current = null;
+          if (cancelled) {
+            return;
+          }
         }
         const startHeight = await resolveBirthday(walletId, zidecarUrl, zcashBackend);
         if (cancelled) {
@@ -322,7 +346,7 @@ export function useZcashAutoSync() {
     const syncedWallet = syncingWalletRef.current;
     if (syncedWallet && isWalletSyncing('zcash', syncedWallet)) {
       console.log('[zcash-sync] stopping sync (switched away from zcash)');
-      void stopSyncInWorker('zcash', syncedWallet).catch(() => {});
+      stopPromiseRef.current = stopSyncInWorker('zcash', syncedWallet).catch(() => {});
       syncingWalletRef.current = null;
     }
   }, [activeNetwork]);

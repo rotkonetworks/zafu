@@ -9,7 +9,7 @@ import { AnimatedQrScanner } from '../../../../shared/components/animated-qr-sca
 import { openJoinerSession, sendCommitments, sendShare, type RelaySession } from './relay-protocol';
 import { waitFor, DontQuitIcon, SignStepProgress } from './helpers';
 import {
-  frostParseTxOutputsInWorker,
+  frostInspectPcztOutputsInWorker,
   type FrostParsedTx,
 } from '../../../../state/keyring/network-worker';
 import { computeVerdict, type Verdict } from './multisig-verifier';
@@ -66,7 +66,7 @@ export function FrostAirgapJoinerSignFlow({
     recipient: string;
     amountZat: string;
     feeZat: string;
-    unsignedTxHex?: string;
+    pcztHex?: string;
   } | null>(null);
   const [verdict, setVerdict] = useState<Verdict>({ kind: 'pending' });
   const [parsed, setParsed] = useState<FrostParsedTx | null>(null);
@@ -103,16 +103,16 @@ export function FrostAirgapJoinerSignFlow({
               recipient: sg[3]!,
               amountZat: sg[4]!,
               feeZat: sg[5]!,
-              unsignedTxHex: sg[6],
+              pcztHex: sg[6],
             };
             setTx(captured);
             setStep(cur => (cur === 'awaiting-sign' ? 'review' : cur));
 
-            // Verifier: verify host's claim against locally-derived parse.
-            if (!captured.unsignedTxHex) {
+            // Verifier: verify host's claim against the PCZT-derived parse.
+            if (!captured.pcztHex) {
               setVerdict({
                 kind: 'unverified',
-                reason: 'host did not publish unsigned tx bytes (older client?)',
+                reason: 'host did not publish PCZT bytes (older client?)',
               });
             } else if (!ms.orchardFvkUview) {
               setVerdict({
@@ -122,8 +122,8 @@ export function FrostAirgapJoinerSignFlow({
             } else {
               void (async () => {
                 try {
-                  const p = await frostParseTxOutputsInWorker(
-                    captured.unsignedTxHex!,
+                  const p = await frostInspectPcztOutputsInWorker(
+                    captured.pcztHex!,
                     ms.orchardFvkUview!,
                   );
                   setParsed(p);
@@ -184,6 +184,9 @@ export function FrostAirgapJoinerSignFlow({
       ...(ms.zignerWalletId ? { walletId: ms.zignerWalletId } : {}),
       sighash: tx.sighash,
       alphas: tx.alphas,
+      // forward the host-published PCZT so this joiner's zigner can verify
+      // on-device too (gh #17) — same as the host→zigner trigger.
+      ...(tx.pcztHex ? { pczt: tx.pcztHex } : {}),
       summary: {
         recipient: tx.recipient,
         amountZat: tx.amountZat,

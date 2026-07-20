@@ -6,7 +6,7 @@
  * zafu_frost_result internal message.
  */
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '@repo/ui/components/ui/button';
 import { useStore } from '../../state';
@@ -19,7 +19,9 @@ import {
   frostDeriveUfvkInWorker,
   frostSignRound1InWorker,
   frostSpendSignInWorker,
+  frostInspectPcztOutputsInWorker,
 } from '../../state/keyring/network-worker';
+import { computeEscrowVerdict } from './send/frost-multisig/multisig-verifier';
 import { encodeOrchardUnifiedAddress } from '@repo/wallet/networks/zcash/unified-address';
 import { hexToBytes } from '@repo/wallet/networks';
 import { FrostRelayClient } from '../../state/keyring/frost-relay-client';
@@ -31,7 +33,7 @@ interface PokerPayoutOutput {
   amount_zat: number;
 }
 
-type Phase = 'confirm' | 'running' | 'complete' | 'error';
+type Phase = 'confirm' | 'running' | 'review' | 'complete' | 'error';
 
 /** wait for condition with timeout */
 function waitFor(check: () => boolean, timeoutMs: number): Promise<void> {
@@ -95,11 +97,46 @@ export const FrostApprove = () => {
   const newFrostMultisigKey = useStore(s => s.keyRing.newFrostMultisigKey);
   const getMultisigSecrets = useStore(s => s.keyRing.getMultisigSecrets);
   const keyInfos = useStore(s => s.keyRing.keyInfos);
+  const zcashWallets = useStore(s => s.wallets.zcashWallets);
   // find active multisig vault for signing
   const multisigVault = keyInfos.find(k => k.type === 'frost-multisig');
 
   // explicit password prompt before runPokerSign decrypts the FROST share
   const { requestAuth, PasswordModal } = usePasswordGate();
+
+  // poker-sign review gate: after the escrow PCZT is verified we show its
+  // OVK-decoded outputs and block on an explicit user confirm before signing.
+  const reviewResolveRef = useRef<((ok: boolean) => void) | null>(null);
+  const [reviewOutputs, setReviewOutputs] = useState<
+    { recipientUa: string; amountZat: bigint }[] | null
+  >(null);
+  const [reviewChangeZat, setReviewChangeZat] = useState<bigint>(0n);
+  const [reviewSendZat, setReviewSendZat] = useState<bigint>(0n);
+  // the sighash recomputed from the PCZT — equal to the one our share signs,
+  // already asserted by computeEscrowVerdict. Shown so the user can see the bind.
+  const [reviewSighash, setReviewSighash] = useState('');
+
+  const awaitReview = (
+    v: {
+      outputs: { recipientUa: string; amountZat: bigint }[];
+      sendZat: bigint;
+      changeZat: bigint;
+    },
+    sighashHex: string,
+  ) =>
+    new Promise<boolean>(resolve => {
+      setReviewOutputs(v.outputs);
+      setReviewSendZat(v.sendZat);
+      setReviewChangeZat(v.changeZat);
+      setReviewSighash(sighashHex);
+      setPhase('review');
+      reviewResolveRef.current = resolve;
+    });
+
+  const resolveReview = (ok: boolean) => {
+    reviewResolveRef.current?.(ok);
+    reviewResolveRef.current = null;
+  };
 
   const deny = () => {
     sendResult(requestId, { error: 'user denied' });
@@ -520,12 +557,13 @@ export const FrostApprove = () => {
       throw new Error('failed to decrypt multisig secrets');
     }
 
-    setStatus(`joining payout room ${roomCode}...`);
+    setStatus(`joining signing room ${roomCode}...`);
     const pid = new Uint8Array(32);
     crypto.getRandomValues(pid);
 
     let initSighash = '';
     let initAlphas: string[] = [];
+    let initPcztHex = '';
     const peerCommits: string[] = [];
     const peerShares: Record<number, string> = {};
 
@@ -543,6 +581,7 @@ export const FrostApprove = () => {
         if (sg) {
           initSighash = sg[1]!;
           initAlphas = sg[2]!.split(',');
+          initPcztHex = sg[6] ?? '';
           return;
         }
         const cm = /^C:([\s\S]*)$/.exec(text);
@@ -560,6 +599,38 @@ export const FrostApprove = () => {
 
     setStatus('waiting for host SIGN...');
     await waitFor(() => initAlphas.length > 0, 120_000);
+
+    // ── verify before signing (gh #17) ──
+    // The escrow builds the PCZT, so it is the only truth: bind the sighash we
+    // are about to sign to the one recomputed from the PCZT, then show the user
+    // its OVK-decoded outputs. The dapp's URL `plan` is never trusted here.
+    if (!initPcztHex) {
+      throw new Error('escrow did not publish a PCZT — refusing to sign blind');
+    }
+    const zw = zcashWallets.find(w => w.vaultId === vault.id);
+    if (!zw?.orchardFvk) {
+      throw new Error('multisig wallet has no viewing key on file — cannot verify request');
+    }
+    setStatus('verifying request against escrow PCZT...');
+    const parsed = await frostInspectPcztOutputsInWorker(initPcztHex, zw.orchardFvk);
+    const verdict = computeEscrowVerdict({
+      parsed,
+      claimedSighashHex: initSighash,
+      mainnet: zw.mainnet,
+    });
+    if (verdict.kind !== 'ok') {
+      throw new Error(verdict.reasons.join(' — '));
+    }
+    // computeEscrowVerdict already asserted parsed.computed_sighash_hex === initSighash,
+    // so either is the bound value; show the recomputed one as the on-device truth.
+    const confirmed = await awaitReview(verdict, parsed.computed_sighash_hex ?? initSighash);
+    if (!confirmed) {
+      abort.abort();
+      sendResult(requestId, { error: 'user denied after review' });
+      window.close();
+      return;
+    }
+    setPhase('running');
 
     const n = initAlphas.length;
     setStatus(`round 1: generating ${n} commitment(s)...`);
@@ -609,7 +680,7 @@ export const FrostApprove = () => {
           : action === 'frost-sign'
             ? 'Sign Transaction'
             : action === 'poker-sign'
-              ? 'Approve Payout'
+              ? 'Approve Signing'
               : action;
 
   return (
@@ -621,78 +692,76 @@ export const FrostApprove = () => {
       </div>
 
       {phase === 'confirm' && (
-        <div className='flex min-h-0 flex-1 flex-col gap-4'>
-          <div className='min-h-0 flex-1 overflow-y-auto'>
-            <div className='rounded-md border border-border-soft bg-elev-1 p-3 text-xs space-y-2 text-fg'>
-              {action === 'frost-create' && (
-                <>
-                  <p>
-                    Create a{' '}
-                    <span className='tabular text-zigner-gold'>
-                      {threshold}-of-{maxSigners}
-                    </span>{' '}
-                    FROST multisig wallet.
-                  </p>
-                  <p className='text-fg-muted'>
-                    This generates a shared key via distributed key generation. All participants
-                    must be online.
-                  </p>
-                </>
-              )}
-              {action === 'frost-join' && (
-                <>
-                  <p>
-                    Join FROST DKG room:{' '}
-                    <span className='tabular text-zigner-gold'>{roomCode}</span>
-                  </p>
-                  <p className='text-fg-muted'>
-                    You will participate in key generation to create a shared multisig wallet.
-                  </p>
-                </>
-              )}
-              {action === 'dkg-join' && (
-                <>
-                  <p>
-                    Join{' '}
-                    <span className='tabular text-zigner-gold'>
-                      {threshold}-of-{maxSigners}
-                    </span>{' '}
-                    multisig DKG
-                  </p>
-                  <p className='text-fg-muted tabular'>label: {labelPrefix}-…</p>
-                  <p className='text-fg-muted'>Your share stays on this device.</p>
-                </>
-              )}
-              {action === 'frost-sign' && (
-                <>
-                  <p>Co-sign a transaction with your FROST key share.</p>
-                  <p className='text-fg-muted tabular break-all'>
-                    sighash: {sighashHex.slice(0, 16)}...{sighashHex.slice(-16)}
-                  </p>
-                </>
-              )}
-              {action === 'poker-sign' && (
-                <>
-                  <p>Approve payout from poker escrow.</p>
-                  <div className='mt-1 space-y-1'>
-                    {plan.map((o, i) => (
-                      <p key={i} className='text-fg-muted tabular break-all'>
-                        → {o.address.slice(0, 14)}…{o.address.slice(-8)}
-                        <span className='text-zigner-gold'>
-                          {' '}
-                          {(o.amount_zat / 1e8).toFixed(8)} ZEC
-                        </span>
-                      </p>
-                    ))}
-                    <p className='text-fg-dim tabular'>fee {(feeZat / 1e8).toFixed(8)} ZEC</p>
-                  </div>
-                  <p className='text-fg-muted'>
-                    Your FROST share co-signs; escrow finalizes + broadcasts.
-                  </p>
-                </>
-              )}
-              <p className='text-fg-dim tabular'>relay: {relayUrl}</p>
-            </div>
+        <div className='flex flex-col gap-4 flex-1'>
+          <div className='rounded-md border border-border-soft bg-elev-1 p-3 text-xs space-y-2 text-fg'>
+            {action === 'frost-create' && (
+              <>
+                <p>
+                  Create a{' '}
+                  <span className='tabular text-zigner-gold'>
+                    {threshold}-of-{maxSigners}
+                  </span>{' '}
+                  FROST multisig wallet.
+                </p>
+                <p className='text-fg-muted'>
+                  This generates a shared key via distributed key generation. All participants must
+                  be online.
+                </p>
+              </>
+            )}
+            {action === 'frost-join' && (
+              <>
+                <p>
+                  Join FROST DKG room: <span className='tabular text-zigner-gold'>{roomCode}</span>
+                </p>
+                <p className='text-fg-muted'>
+                  You will participate in key generation to create a shared multisig wallet.
+                </p>
+              </>
+            )}
+            {action === 'dkg-join' && (
+              <>
+                <p>
+                  Join{' '}
+                  <span className='tabular text-zigner-gold'>
+                    {threshold}-of-{maxSigners}
+                  </span>{' '}
+                  multisig DKG
+                </p>
+                <p className='text-fg-muted tabular'>label: {labelPrefix}-…</p>
+                <p className='text-fg-muted'>Your share stays on this device.</p>
+              </>
+            )}
+            {action === 'frost-sign' && (
+              <>
+                <p>Co-sign a transaction with your FROST key share.</p>
+                <p className='text-fg-muted tabular break-all'>
+                  sighash: {sighashHex.slice(0, 16)}...{sighashHex.slice(-16)}
+                </p>
+              </>
+            )}
+            {action === 'poker-sign' && (
+              <>
+                <p>Co-sign a transaction requested by an escrow.</p>
+                <div className='mt-1 space-y-1'>
+                  {plan.map((o, i) => (
+                    <p key={i} className='text-fg-muted tabular break-all'>
+                      → {o.address.slice(0, 14)}…{o.address.slice(-8)}
+                      <span className='text-zigner-gold'>
+                        {' '}
+                        {(o.amount_zat / 1e8).toFixed(8)} ZEC
+                      </span>
+                    </p>
+                  ))}
+                  <p className='text-fg-dim tabular'>fee {(feeZat / 1e8).toFixed(8)} ZEC</p>
+                </div>
+                <p className='text-fg-muted'>
+                  Requested amounts shown above. You will re-confirm the exact outputs decoded from
+                  the escrow&apos;s signed tx before your share is released.
+                </p>
+              </>
+            )}
+            <p className='text-fg-dim tabular'>relay: {relayUrl}</p>
           </div>
 
           <div className='flex shrink-0 gap-2 mt-auto'>
@@ -710,6 +779,70 @@ export const FrostApprove = () => {
         <div className='flex flex-col items-center gap-3 flex-1 justify-center'>
           <span className='i-lucide-loader-2 size-8 animate-spin text-zigner-gold' />
           <p className='text-data text-fg text-center lowercase'>{status}</p>
+        </div>
+      )}
+
+      {phase === 'review' && reviewOutputs && (
+        <div className='flex flex-col gap-3 flex-1'>
+          <div className='flex items-center gap-2 rounded-md border border-green-500/40 bg-green-500/10 p-2.5'>
+            <span className='i-lucide-shield-check size-5 shrink-0 text-green-400' />
+            <div className='leading-tight'>
+              <p className='text-xs text-green-300'>verified on-device</p>
+              <p className='text-[10px] text-fg-muted'>
+                outputs + sighash decoded from the escrow's signed PCZT — not the app's claim
+              </p>
+            </div>
+          </div>
+
+          <div className='rounded-md border border-border-soft bg-elev-1 p-3 text-xs space-y-2 text-fg'>
+            <div className='space-y-1'>
+              {reviewOutputs.map((o, i) => (
+                <div key={i} className='flex items-baseline justify-between gap-2'>
+                  <span className='text-fg-muted tabular break-all'>
+                    → {o.recipientUa.slice(0, 14)}…{o.recipientUa.slice(-8)}
+                  </span>
+                  <span className='text-zigner-gold tabular shrink-0'>
+                    {(Number(o.amountZat) / 1e8).toFixed(8)} ZEC
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className='border-t border-border-soft pt-2 space-y-1'>
+              <div className='flex items-baseline justify-between'>
+                <span className='text-fg-muted'>total to recipients</span>
+                <span className='text-fg-high tabular'>
+                  {(Number(reviewSendZat) / 1e8).toFixed(8)} ZEC
+                </span>
+              </div>
+              {reviewChangeZat > 0n && (
+                <div className='flex items-baseline justify-between'>
+                  <span className='text-fg-dim'>change back to vault</span>
+                  <span className='text-fg-dim tabular'>
+                    {(Number(reviewChangeZat) / 1e8).toFixed(8)} ZEC
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className='rounded-md border border-border-soft bg-elev-1 p-2.5 text-[10px] space-y-1'>
+            <div className='flex items-center gap-1.5 text-fg-muted'>
+              <span className='i-lucide-check size-3 shrink-0 text-green-400' />
+              <span>sighash your share signs matches the PCZT</span>
+            </div>
+            <p className='tabular break-all text-fg-dim pl-[18px]'>
+              {reviewSighash.slice(0, 24)}…{reviewSighash.slice(-24)}
+            </p>
+          </div>
+
+          <div className='flex gap-2 mt-auto'>
+            <Button variant='secondary' className='flex-1' onClick={() => resolveReview(false)}>
+              cancel
+            </Button>
+            <Button className='flex-1' onClick={() => resolveReview(true)}>
+              sign
+            </Button>
+          </div>
         </div>
       )}
 

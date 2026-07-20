@@ -24,6 +24,7 @@ import {
 import { isPro, selectDaysRemaining, selectPlan } from '../../../state/license';
 import { SettingsScreen } from '../settings/settings-screen';
 import { PopupPath } from '../paths';
+import { PASSWORD_GENERATOR } from '../../../config/feature-flags';
 
 interface SiteIdentity {
   origin: string;
@@ -512,23 +513,26 @@ export const IdentityPage = () => {
           </section>
         )}
 
-        <hr className='border-border-soft' />
-
         {/* -- links — passwords is the only destination that lives nowhere
             else. contacts has its own drawer entry; the pro upsell lives in
-            the drawer footer + settings. */}
-        <div className='flex flex-col gap-2'>
-          <button
-            onClick={() => navigate(PopupPath.PASSWORDS)}
-            className='flex items-center justify-between text-xs font-mono text-fg hover:text-fg-high'
-          >
-            <span className='flex items-center gap-1.5'>
-              <span className='i-lucide-key-round size-3.5' />
-              passwords
-            </span>
-            <span className='i-lucide-chevron-right size-3 text-fg-muted' />
-          </button>
-        </div>
+            the drawer footer + settings. Gated off for now (PASSWORD_GENERATOR). */}
+        {PASSWORD_GENERATOR && (
+          <>
+            <hr className='border-border-soft' />
+            <div className='flex flex-col gap-2'>
+              <button
+                onClick={() => navigate(PopupPath.PASSWORDS)}
+                className='flex items-center justify-between text-xs font-mono text-fg hover:text-fg-high'
+              >
+                <span className='flex items-center gap-1.5'>
+                  <span className='i-lucide-key-round size-3.5' />
+                  passwords
+                </span>
+                <span className='i-lucide-chevron-right size-3 text-fg-muted' />
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </SettingsScreen>
   );

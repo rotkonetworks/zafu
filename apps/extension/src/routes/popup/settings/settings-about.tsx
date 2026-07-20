@@ -25,13 +25,13 @@ export const SettingsAbout = () => {
           <h3 className='kicker mb-1'>links</h3>
           <div className='flex flex-col gap-1.5'>
             <a
-              href='https://rotko.net'
+              href='https://zafu.pro'
               target='_blank'
               rel='noopener noreferrer'
               className='flex items-center gap-1.5 text-xs text-zigner-gold hover:underline transition-colors'
             >
               <span className='i-lucide-external-link h-3 w-3' />
-              rotko.net
+              zafu.pro
             </a>
             <a
               href='https://github.com/rotkonetworks/zafu'
@@ -43,7 +43,7 @@ export const SettingsAbout = () => {
               github
             </a>
             <a
-              href='https://zigner.rotko.net'
+              href='https://zigner.zafu.pro'
               target='_blank'
               rel='noopener noreferrer'
               className='flex items-center gap-1.5 text-xs text-zigner-gold hover:underline transition-colors'

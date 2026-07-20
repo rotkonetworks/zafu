@@ -30,6 +30,9 @@ function waitForMsgType(target, type) {
 
 waitForMsgType(self, 'wasm_bindgen_worker_init').then(async ({ init, receiver }) => {
   // LOCAL PATCH — DO NOT OVERWRITE BY RERUNNING wasm-bindgen.
+  // Stock emits `import('../../..')` (a directory import) which Chrome
+  // extensions reject → rayon sub-workers hang → halo2 silently falls back
+  // to single-thread (~10s proof becomes ~15min). Resolve the concrete file.
   const wbgRayonBase = new URL('../../..', import.meta.url).href;
   const pkg = await import(wbgRayonBase.endsWith('/') ? wbgRayonBase + 'zafu_wasm.js' : wbgRayonBase);
   await pkg.default(init);

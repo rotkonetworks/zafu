@@ -90,6 +90,7 @@ export const NoteSyncPage = () => {
           <AnimatedQrDisplay
             urFrames={encoded.frames}
             totalBytes={encoded.cborBytes}
+            frameInterval={120}
             title='point zigner camera at this QR'
             description='the QR code cycles through multiple frames - hold the camera steady until zigner shows the balance'
           />

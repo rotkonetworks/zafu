@@ -80,12 +80,12 @@ export const OnboardingStart = () => {
 
         <footer className='mt-auto flex items-center gap-4 pt-6 text-label tracking-[0.05em] text-fg-muted lowercase'>
           <a
-            href='https://rotko.net'
+            href='https://zafu.pro'
             target='_blank'
             rel='noopener noreferrer'
             className='transition-colors hover:text-fg-high'
           >
-            rotko.net
+            zafu.pro
           </a>
           <span className='text-fg-muted/40'>·</span>
           <a

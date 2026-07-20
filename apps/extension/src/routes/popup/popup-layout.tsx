@@ -8,28 +8,29 @@ import { AppHeader } from '../../components/app-header';
 import { MenuDrawer } from '../../components/menu-drawer';
 import { PopupPath } from './paths';
 import { useStore } from '../../state';
-import { selectActiveNetwork, selectPenumbraAccount, type NetworkType } from '../../state/keyring';
+import {
+  selectActiveNetwork,
+  selectEffectiveKeyInfo,
+  selectPenumbraAccount,
+  type NetworkType,
+} from '../../state/keyring';
 import { hasFeature } from '../../config/networks';
 
-type FeatureKey = 'stake' | 'swap' | 'vote' | 'inbox';
+type FeatureKey = 'stake' | 'swap' | 'vote' | 'inbox' | 'multisig';
 
 /**
- * Bottom-tabs are deliberately minimal — the four destinations users
- * touch every session. Stake / Swap / Vote / Multisig were demoted
- * to the menu drawer (one tap further away). The four kept here:
+ * Bottom-tabs are the places users navigate to, not one-shot actions.
+ * Send / Receive are launched from buttons on the home hero (an action,
+ * not a destination), so they aren't tabs. The bar is:
  *
- *   Home    — balance, recent activity
- *   Receive — quick share of address (primary new-user task)
- *   Send    — primary outgoing action
- *   Inbox   — encrypted memos
+ *   Home     — balance, recent activity
+ *   Inbox    — encrypted memos
+ *   Multisig — FROST threshold wallets + pending signing sessions
+ *   Vote     — governance
  *
- * Inbox is feature-gated by network (transparent-only networks don't
- * have memos and the tab disappears for them).
- *
- * Keplr's wallet uses a similar 3-4 tab pattern: balance + send +
- * receive + history. We follow the convention; the user noted "more
- * icons" → bottom-tabs already are icon + small label stacked, which
- * is the most compact discoverable pattern.
+ * Inbox / Multisig / Vote are feature-gated by network (they only appear
+ * on chains that support them — see config/networks.ts), so a transparent
+ * chain collapses the bar down to Home plus whatever it supports.
  */
 const BOTTOM_TABS: readonly {
   path: PopupPath;
@@ -39,24 +40,30 @@ const BOTTOM_TABS: readonly {
 }[] = [
   { path: PopupPath.INDEX, icon: <span className='i-lucide-home h-5 w-5' />, label: 'home' },
   {
-    path: PopupPath.RECEIVE,
-    icon: <span className='i-lucide-arrow-down h-5 w-5' />,
-    label: 'receive',
+    path: PopupPath.INBOX,
+    icon: <span className='i-lucide-mail h-5 w-5' />,
+    label: 'inbox',
+    feature: 'inbox',
   },
-  { path: PopupPath.SEND, icon: <span className='i-lucide-arrow-up h-5 w-5' />, label: 'send' },
+  {
+    path: PopupPath.MULTISIG,
+    icon: <span className='i-lucide-users h-5 w-5' />,
+    label: 'multisig',
+    feature: 'multisig',
+  },
   {
     path: PopupPath.VOTE,
     icon: <span className='i-lucide-vote h-5 w-5' />,
     label: 'vote',
     feature: 'vote',
   },
-  {
-    path: PopupPath.INBOX,
-    icon: <span className='i-lucide-mail h-5 w-5' />,
-    label: 'inbox',
-    feature: 'inbox',
-  },
 ];
+
+const MULTISIG_TAB = {
+  path: PopupPath.MULTISIG,
+  icon: <span className='i-lucide-key h-5 w-5' />,
+  label: 'multisig',
+} as const;
 
 const getTabsForNetwork = (network: NetworkType) =>
   BOTTOM_TABS.filter(tab => !tab.feature || hasFeature(network, tab.feature));
@@ -105,11 +112,14 @@ export const PopupLayout = () => {
   const location = useLocation();
   const activeNetwork = useStore(selectActiveNetwork);
   const penumbraAccount = useStore(selectPenumbraAccount);
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const onLoginPage = location.pathname === '/login';
   usePenumbraSwapClaim(activeNetwork, onLoginPage, penumbraAccount);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const tabs = getTabsForNetwork(activeNetwork);
+  const networkTabs = getTabsForNetwork(activeNetwork);
+  const tabs =
+    selectedKeyInfo?.type === 'frost-multisig' ? [...networkTabs, MULTISIG_TAB] : networkTabs;
   const showChrome = !matchesRoute(location.pathname, hiddenHeaderRoutes);
   const showTabs = showChrome && !matchesRoute(location.pathname, hiddenTabRoutes);
 

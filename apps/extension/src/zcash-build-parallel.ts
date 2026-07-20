@@ -116,6 +116,7 @@ async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
         a[7],
         a[8],
         a[9] ?? null,
+        a[10] ?? null, // branch_id_hex (live consensus branch id; null -> WASM NU6.2 fallback)
       );
       break;
 
@@ -131,6 +132,7 @@ async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
         a[7],
         a[8],
         a[9] ?? null,
+        a[10] ?? null, // branch_id_hex (live consensus branch id; null -> WASM NU6.2 fallback)
       );
       break;
 
@@ -181,6 +183,7 @@ async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
         BigInt(a[4] as string),
         a[5],
         a[6],
+        a[7] ?? null, // branch_id_hex (live consensus branch id; null -> WASM NU6.2 fallback)
       );
       break;
 
@@ -192,6 +195,7 @@ async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
         BigInt(a[3] as string),
         a[4],
         a[5],
+        a[6] ?? null, // branch_id_hex (live consensus branch id; null -> WASM NU6.2 fallback)
       );
       break;
 

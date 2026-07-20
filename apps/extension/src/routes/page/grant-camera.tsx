@@ -1,11 +1,4 @@
 import { Button } from '@repo/ui/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@repo/ui/components/ui/card';
 import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
 import { cn } from '@repo/ui/lib/utils';
 import { useState, useEffect } from 'react';
@@ -14,22 +7,29 @@ import { checkCameraPermission, requestCameraPermission } from '../../utils/popu
 type PermissionState = 'checking' | 'not-granted' | 'requesting' | 'granted' | 'denied';
 
 /**
- * Camera permission grant page.
- *
- * This page is opened from the popup when camera permission is needed.
- * Extension popups cannot trigger browser permission prompts, so we need
- * to open this full page to request camera access.
- *
- * After granting, user is instructed to return to the extension popup.
+ * Camera permission grant page (standalone full-page - popups can't trigger
+ * the browser permission prompt). Lowercase voice, one tight line per state,
+ * no Card wrapper. See apps/extension/DESIGN.md.
  */
+const COPY: Record<PermissionState, { title: string; hint: string }> = {
+  checking: { title: 'checking permission', hint: '' },
+  'not-granted': {
+    title: 'camera access',
+    hint: 'zafu needs your camera to scan QR codes from your zigner.',
+  },
+  requesting: { title: 'requesting access', hint: 'allow camera access in the browser prompt.' },
+  granted: { title: 'camera access granted', hint: 'close this tab and return to zafu.' },
+  denied: {
+    title: 'camera access denied',
+    hint: 'enable it from the camera icon in your address bar, then try again.',
+  },
+};
+
 export const GrantCamera = () => {
   const [state, setState] = useState<PermissionState>('checking');
 
-  // Check current permission status on mount
   useEffect(() => {
-    void checkCameraPermission().then(granted => {
-      setState(granted ? 'granted' : 'not-granted');
-    });
+    void checkCameraPermission().then(granted => setState(granted ? 'granted' : 'not-granted'));
   }, []);
 
   const handleGrantAccess = async () => {
@@ -37,96 +37,73 @@ export const GrantCamera = () => {
     const granted = await requestCameraPermission();
     setState(granted ? 'granted' : 'denied');
   };
+  const handleClose = () => window.close();
 
-  const handleClose = () => {
-    window.close();
-  };
+  const { title, hint } = COPY[state];
 
   return (
     <FadeTransition>
       <div className='flex min-h-screen items-center justify-center p-8'>
-        <Card className={cn('p-6', 'w-[500px]')} gradient>
-          <CardHeader className='items-center'>
-            <div
+        <div className='flex w-full max-w-sm flex-col items-center gap-6 text-center'>
+          <div
+            className={cn(
+              'flex size-16 items-center justify-center rounded-full',
+              state === 'granted'
+                ? 'bg-green-500/15'
+                : state === 'denied'
+                  ? 'bg-red-500/15'
+                  : 'bg-zigner-gold/15',
+            )}
+          >
+            <span
               className={cn(
-                'rounded-full p-4 mb-2',
-                state === 'granted' ? 'bg-green-500/20' : 'bg-primary/20',
+                'size-8',
+                state === 'granted'
+                  ? 'i-lucide-check-circle text-green-400'
+                  : state === 'denied'
+                    ? 'i-lucide-x text-red-400'
+                    : 'i-lucide-camera text-zigner-gold',
               )}
-            >
-              {state === 'granted' ? (
-                <span className='i-lucide-check-circle size-10 text-green-400' />
-              ) : state === 'denied' ? (
-                <span className='i-lucide-x size-10 text-red-400' />
-              ) : (
-                <span className='i-lucide-camera size-10 text-zigner-gold' />
-              )}
-            </div>
-            <CardTitle className='font-medium text-xl'>
-              {state === 'granted' && 'Camera Access Granted'}
-              {state === 'denied' && 'Camera Access Denied'}
-              {state === 'checking' && 'Checking Permission...'}
-              {state === 'not-granted' && 'Camera Permission Required'}
-              {state === 'requesting' && 'Requesting Access...'}
-            </CardTitle>
-            <CardDescription className='text-center mt-2'>
-              {state === 'granted' && (
-                <>
-                  <p>You can now scan QR codes in Zafu.</p>
-                  <p className='mt-2 font-medium text-fg'>
-                    Close this tab and return to the extension popup.
-                  </p>
-                </>
-              )}
-              {state === 'denied' && (
-                <>
-                  <p>Camera access was denied.</p>
-                  <p className='mt-2'>
-                    To enable camera access, click the camera icon in your browser's address bar or
-                    check your browser settings.
-                  </p>
-                </>
-              )}
-              {state === 'not-granted' && (
-                <>
-                  <p>Zafu needs camera access to scan QR codes from your Zafu Zigner device.</p>
-                  <p className='mt-2 text-fg-muted text-sm'>
-                    Click the button below to grant access. Your browser will show a permission
-                    prompt.
-                  </p>
-                </>
-              )}
-              {state === 'requesting' && <p>Please allow camera access in the browser prompt...</p>}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className='flex flex-col gap-3'>
-              {state === 'not-granted' && (
-                <Button variant='gradient' className='w-full' onClick={handleGrantAccess}>
-                  <span className='i-lucide-camera size-5 mr-2' />
-                  Grant Camera Access
-                </Button>
-              )}
+            />
+          </div>
 
-              {state === 'denied' && (
-                <Button variant='secondary' className='w-full' onClick={handleGrantAccess}>
-                  Try Again
-                </Button>
-              )}
+          <div className='flex flex-col gap-1'>
+            <h2 className='text-2xl lowercase tracking-[-0.01em] text-fg-high'>{title}</h2>
+            {hint && <p className='text-xs lowercase text-fg-muted'>{hint}</p>}
+          </div>
 
-              {state === 'granted' && (
-                <Button variant='gradient' className='w-full' onClick={handleClose}>
-                  Close Tab
-                </Button>
-              )}
-
-              {(state === 'not-granted' || state === 'denied') && (
-                <Button variant='ghost' className='w-full text-fg-muted' onClick={handleClose}>
-                  Cancel
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+          <div className='flex w-full flex-col gap-2'>
+            {state === 'not-granted' && (
+              <Button
+                variant='gradient'
+                className='w-full'
+                onClick={() => void handleGrantAccess()}
+              >
+                <span className='i-lucide-camera mr-2 size-4' />
+                grant camera access
+              </Button>
+            )}
+            {state === 'denied' && (
+              <Button
+                variant='secondary'
+                className='w-full'
+                onClick={() => void handleGrantAccess()}
+              >
+                try again
+              </Button>
+            )}
+            {state === 'granted' && (
+              <Button variant='gradient' className='w-full' onClick={handleClose}>
+                close tab
+              </Button>
+            )}
+            {(state === 'not-granted' || state === 'denied') && (
+              <Button variant='ghost' className='w-full text-fg-muted' onClick={handleClose}>
+                cancel
+              </Button>
+            )}
+          </div>
+        </div>
       </div>
     </FadeTransition>
   );

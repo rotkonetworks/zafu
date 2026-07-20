@@ -297,6 +297,25 @@ chrome.runtime.onMessageExternal.addListener(externalMessageListener);
 // listen for external encryption API (sealed box encrypt/decrypt, ZID pubkey)
 chrome.runtime.onMessageExternal.addListener(encryptionMessageListener);
 
+// bridge: popup → SW result messages are sent via INTERNAL chrome.runtime.sendMessage
+// (onMessage), but their handlers live in the external listeners (onMessageExternal).
+const INTERNAL_RESULT_TYPES = new Set([
+  'zafu_pick_contacts_result',
+  'zafu_frost_result',
+  'zafu_capability_result',
+  'zafu_zcash_send_result',
+]);
+chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
+  const t = (req as { type?: unknown } | null)?.type;
+  if (typeof t === 'string' && INTERNAL_RESULT_TYPES.has(t)) {
+    return externalMessageListener(req, sender, sendResponse);
+  }
+  if (t === 'zafu_encryption_approval_result') {
+    return encryptionMessageListener(req, sender, sendResponse);
+  }
+  return false;
+});
+
 // ── idle auto-lock ──
 // track last activity timestamp. only UI and dapp interactions reset it.
 // background service messages (sync, alarms) must NOT reset the timer.
@@ -426,7 +445,10 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => 
 // pass clears any that are past-due whenever the SW spins up.
 void (async () => {
   try {
-    const { sweepScheduledDeletes } = await import('./state/keyring/scheduled-deletes');
+    // eager: runs at SW startup, where importScripts (lazy chunk loading) is disallowed
+    const { sweepScheduledDeletes } = await import(
+      /* webpackMode: "eager" */ './state/keyring/scheduled-deletes'
+    );
     await sweepScheduledDeletes();
   } catch (e) {
     console.warn('[sw] sweepScheduledDeletes failed:', e);

@@ -10,6 +10,7 @@ export const build_unsigned_pczt: (a: number, b: number, c: any, d: number, e: n
 export const build_unsigned_shielding_transaction: (a: number, b: number, c: number, d: number, e: bigint, f: bigint, g: number, h: number) => [number, number, number, number];
 export const build_unsigned_transaction: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number) => [number, number, number];
 export const build_witnesses_and_paths: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
+export const complete_orchard_pczt: (a: number, b: number, c: any, d: any) => [number, number, number, number];
 export const complete_shielding_transaction: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const complete_transaction: (a: number, b: number, c: any, d: any) => [number, number, number, number];
 export const compute_txid: (a: number, b: number) => [number, number, number, number];
@@ -53,6 +54,7 @@ export const watchonlywallet_scan_actions_parallel: (a: number, b: number, c: nu
 export const witness_extract_path: (a: number, b: number) => [number, number, number];
 export const witness_sync_update: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number];
 export const zt_encode_frames: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+export const zt_encode_frames_auto: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
 export const init: () => void;
 export const frost_aggregate_shares: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number, number];
 export const frost_attestation_digest: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
@@ -65,6 +67,7 @@ export const frost_dkg_part1: (a: number, b: number) => [number, number, number,
 export const frost_dkg_part2: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const frost_dkg_part3: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
 export const frost_generate_randomizer: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+export const frost_inspect_pczt_outputs: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const frost_parse_tx_outputs: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const frost_sample_fvk_sk: () => [number, number];
 export const frost_sign_round1: (a: number, b: number, c: number, d: number) => [number, number, number, number];

@@ -24,6 +24,8 @@ export interface NetworkConfig {
     vote: boolean;
     /** encrypted inbox for memo-capable chains */
     inbox: boolean;
+    /** FROST threshold multisig (shielded chains) */
+    multisig: boolean;
   };
 }
 
@@ -35,7 +37,7 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     focusColor: 'focus:border-zigner-gold',
     transparent: false,
     launched: true,
-    features: { stake: false, swap: false, vote: true, inbox: true },
+    features: { stake: false, swap: false, vote: true, inbox: true, multisig: true },
   },
   penumbra: {
     name: 'Penumbra',
@@ -43,7 +45,7 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     focusColor: 'focus:border-penumbra-purple',
     transparent: false,
     launched: true,
-    features: { stake: true, swap: false, vote: true, inbox: true },
+    features: { stake: true, swap: false, vote: true, inbox: true, multisig: true },
   },
   polkadot: {
     name: 'Polkadot',
@@ -51,7 +53,7 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     focusColor: 'focus:border-pink-500',
     transparent: true,
     launched: false,
-    features: { stake: true, swap: false, vote: false, inbox: false },
+    features: { stake: true, swap: false, vote: false, inbox: false, multisig: false },
   },
   kusama: {
     name: 'Kusama',
@@ -59,7 +61,7 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     focusColor: 'focus:border-red-500',
     transparent: true,
     launched: false,
-    features: { stake: true, swap: false, vote: false, inbox: false },
+    features: { stake: true, swap: false, vote: false, inbox: false, multisig: false },
   },
   noble: {
     name: 'Noble',
@@ -67,7 +69,7 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     focusColor: 'focus:border-blue-400',
     transparent: true,
     launched: false,
-    features: { stake: false, swap: false, vote: false, inbox: false },
+    features: { stake: false, swap: false, vote: false, inbox: false, multisig: false },
   },
   cosmoshub: {
     name: 'Cosmos Hub',
@@ -75,7 +77,7 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     focusColor: 'focus:border-indigo-500',
     transparent: true,
     launched: false,
-    features: { stake: true, swap: false, vote: false, inbox: false },
+    features: { stake: true, swap: false, vote: false, inbox: false, multisig: false },
   },
   ethereum: {
     name: 'Ethereum',
@@ -83,7 +85,7 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     focusColor: 'focus:border-blue-500',
     transparent: true,
     launched: false,
-    features: { stake: false, swap: true, vote: false, inbox: false },
+    features: { stake: false, swap: true, vote: false, inbox: false, multisig: false },
   },
   bitcoin: {
     name: 'Bitcoin',
@@ -91,7 +93,7 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     focusColor: 'focus:border-orange-400',
     transparent: true,
     launched: false,
-    features: { stake: false, swap: false, vote: false, inbox: false },
+    features: { stake: false, swap: false, vote: false, inbox: false, multisig: false },
   },
 };
 
@@ -103,7 +105,7 @@ export const getNetwork = (network: NetworkType): NetworkConfig =>
     focusColor: 'focus:border-primary/50',
     transparent: true,
     launched: false,
-    features: { stake: false, swap: false, vote: false, inbox: false },
+    features: { stake: false, swap: false, vote: false, inbox: false, multisig: false },
   };
 
 /** check feature support */

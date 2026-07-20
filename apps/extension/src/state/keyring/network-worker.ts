@@ -52,7 +52,9 @@ export interface NetworkWorkerMessage {
     | 'frost-derive-address-from-sk'
     | 'frost-sample-fvk-sk'
     | 'frost-derive-ufvk'
-    | 'frost-parse-tx-outputs';
+    | 'frost-parse-tx-outputs'
+    | 'frost-inspect-pczt-outputs'
+    | 'complete-orchard-pczt';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -703,6 +705,12 @@ export interface SendTxPcztUnsignedResult {
   fee: string;
   urFrames: string[];
   cborBytes: number;
+  /** FROST multisig fields (gh #17): the canonical sighash + per-real-spend
+   * alphas the host/joiner sign over, and the action indices those sigs map to.
+   * Unused by the single-signer zigner cold-sign path. */
+  sighash: string;
+  alphas: string[];
+  spendIndices: number[];
 }
 
 /**
@@ -1083,6 +1091,39 @@ export const frostParseTxOutputsInWorker = async (
     orchardFvkUview,
   });
   return JSON.parse(json) as FrostParsedTx;
+};
+
+/** PCZT-native variant: inspect a standard pczt::Pczt (the migration target —
+ * mnemonic/zigner hosts + the escrow all publish a PCZT). Recomputes the
+ * canonical sighash from the PCZT itself; same FrostParsedTx contract as the
+ * v5-tx parser so computeVerdict is unchanged. */
+export const frostInspectPcztOutputsInWorker = async (
+  pcztHex: string,
+  orchardFvkUview: string,
+): Promise<FrostParsedTx> => {
+  const json = await callWorker<string>('zcash', 'frost-inspect-pczt-outputs', {
+    pcztHex,
+    orchardFvkUview,
+  });
+  return JSON.parse(json) as FrostParsedTx;
+};
+
+/** Complete a FROST multisig PCZT: inject the aggregated orchard SpendAuth sigs
+ * (one per real spend, in `spendIndices` order from the build) and extract the
+ * broadcast-ready v5 tx hex. Mnemonic/zigner host + escrow all finish here. */
+export const completeOrchardPcztInWorker = async (
+  walletId: string,
+  serverUrl: string,
+  pcztHex: string,
+  orchardSigs: string[],
+  spendIndices: number[],
+): Promise<{ txid: string }> => {
+  return callWorker<{ txid: string }>(
+    'zcash',
+    'complete-orchard-pczt',
+    { serverUrl, pcztHex, orchardSigs, spendIndices },
+    walletId,
+  );
 };
 
 // worker URLs per network

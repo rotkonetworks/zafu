@@ -1,12 +1,5 @@
 import { BackIcon } from '@repo/ui/components/ui/icons/back-icon';
 import { Button } from '@repo/ui/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@repo/ui/components/ui/card';
 import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
 import { Input } from '@repo/ui/components/ui/input';
 import { cn } from '@repo/ui/lib/utils';
@@ -17,11 +10,67 @@ import { usePageNav } from '../../../utils/navigate';
 import { useCallback, useRef, useState } from 'react';
 import { QrScanner } from '../../../shared/components/qr-scanner';
 import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanner';
-import { LineWave } from 'react-loader-spinner';
 import { PagePath } from '../paths';
 import { setOnboardingValuesInStorage } from './persist-parameters';
 import { SEED_PHRASE_ORIGIN } from './password/types';
 import { navigateToPasswordPage } from './password/utils';
+
+/**
+ * access-level note on a scanned import. one tight line, no prose - the
+ * import is always watch-only; the key never leaves the cold device.
+ */
+const AccessNote = ({ kind }: { kind: 'airgap' | 'watch-only' }) => (
+  <div
+    className={cn(
+      'flex flex-col gap-1 rounded-lg border p-3 text-left',
+      kind === 'airgap'
+        ? 'border-yellow-500/40 bg-yellow-500/10 text-yellow-400'
+        : 'border-pink-500/40 bg-pink-500/10 text-pink-200',
+    )}
+  >
+    <p className='flex items-center gap-1.5 text-sm font-medium lowercase'>
+      <span className={cn(kind === 'airgap' ? 'i-lucide-shield' : 'i-lucide-eye', 'h-3.5 w-3.5')} />
+      {kind === 'airgap' ? 'airgap signer' : 'watch-only account'}
+    </p>
+    <p className='text-xs text-fg-muted lowercase'>
+      view balances and build transactions. signing needs your zigner.
+    </p>
+  </div>
+);
+
+/**
+ * password-or-skip footer shown after any successful scan. identical across
+ * every detected network, so it lives here once.
+ */
+const PasswordChoice = ({
+  importing,
+  onSetPassword,
+  onSkip,
+  onScanAgain,
+}: {
+  importing: boolean;
+  onSetPassword: () => void;
+  onSkip: () => void;
+  onScanAgain: () => void;
+}) => (
+  <div className='flex flex-col gap-2'>
+    <Button variant='gradient' className='w-full' onClick={onSetPassword} disabled={importing}>
+      set password
+    </Button>
+    <p className='text-center text-xs text-fg-muted lowercase'>
+      required to use apps. more secure.
+    </p>
+
+    <Button variant='secondary' className='mt-2 w-full' onClick={onSkip} disabled={importing}>
+      {importing ? 'importing...' : 'skip password'}
+    </Button>
+    <p className='text-center text-xs text-fg-muted lowercase'>no login needed. less secure.</p>
+
+    <Button variant='ghost' className='mt-2 w-full' onClick={onScanAgain} disabled={importing}>
+      scan again
+    </Button>
+  </div>
+);
 
 /**
  * Zigner wallet import page for onboarding.
@@ -224,8 +273,8 @@ export const ImportZigner = () => {
             setKeystoneMode(false);
             setScanState('idle');
           }}
-          title='Scan Keystone QR'
-          description='Hold the camera steady on the animated zcash-accounts QR'
+          title='scan keystone QR'
+          description='hold the camera steady on the animated zcash-accounts QR'
           urTypeFilter='zcash-accounts'
         />
       );
@@ -235,8 +284,8 @@ export const ImportZigner = () => {
         onScan={handleScan}
         onError={setError}
         onClose={() => setScanState('idle')}
-        title='Scan Zafu Zigner QR'
-        description="Point camera at your Zafu Zigner's FVK QR code"
+        title='scan zigner QR'
+        description="point the camera at your zigner's viewing-key QR"
       />
     );
   }
@@ -245,389 +294,239 @@ export const ImportZigner = () => {
 
   return (
     <FadeTransition>
-      <BackIcon className='float-left mb-4' onClick={handleBack} />
-      <Card className={cn('p-6', 'w-[600px]')} gradient>
-        <CardHeader className='items-center'>
-          <div onClick={handleIconClick} className='cursor-pointer'>
-            <span className='i-lucide-eye size-8 mb-2 text-fg-muted' />
+      <div className='flex h-full flex-col gap-6'>
+        <header className='flex flex-col gap-1'>
+          <div className='flex items-center gap-2'>
+            <BackIcon onClick={handleBack} />
+            {/* title doubles as the hidden manual-input trigger (10 clicks) */}
+            <h2
+              onClick={handleIconClick}
+              className='cursor-default text-2xl lowercase tracking-[-0.01em] text-fg-high'
+            >
+              connect zigner
+            </h2>
           </div>
-          <CardTitle className='font-medium'>Connect Zafu Zigner</CardTitle>
-          <CardDescription className='text-center'>
-            {scanState === 'idle' && !showManualInput && !importing && (
-              <>
-                <div>Export the viewing key from your Zafu Zigner device.</div>
-                <div>Scan the QR code to import as watch-only wallet.</div>
-              </>
-            )}
-            {importing && (
-              <LineWave
-                visible={true}
-                height='60'
-                width='60'
-                color='#FFFFFF'
-                wrapperClass='mt-[-17.5px] mr-[-21px]'
+          <p className='text-xs text-fg-muted lowercase'>
+            scan the viewing-key QR from your zigner to add a watch-only wallet.
+          </p>
+        </header>
+
+        <div className='flex flex-col gap-4'>
+          {/* idle - scan buttons */}
+          {scanState === 'idle' && !showManualInput && (
+            <div className='flex flex-col gap-2.5'>
+              <Button
+                variant='gradient'
+                className='w-full'
+                onClick={() => {
+                  setKeystoneMode(false);
+                  setScanState('scanning');
+                }}
+              >
+                <span className='i-lucide-scan-line mr-2 h-4 w-4' />
+                scan zigner QR
+              </Button>
+
+              <Button
+                variant='secondary'
+                className='w-full'
+                onClick={() => {
+                  setKeystoneMode(true);
+                  setScanState('scanning');
+                }}
+              >
+                <span className='i-lucide-scan-line mr-2 h-4 w-4' />
+                scan keystone QR (zcash)
+              </Button>
+
+              {errorMessage && <div className='mt-1 text-sm text-red-400'>{errorMessage}</div>}
+            </div>
+          )}
+
+          {/* hidden developer mode - paste raw QR hex */}
+          {showManualInput && (
+            <div className='flex flex-col gap-3'>
+              <p className='text-xs text-fg-muted lowercase'>developer mode. paste QR hex.</p>
+              <Input
+                placeholder='QR hex (starts with 530301...)'
+                onChange={e => handleManualInput(e.target.value)}
+                className='font-mono text-xs'
               />
-            )}
-            {scanState === 'scanned' && !importing && <div>QR code scanned successfully.</div>}
-            {scanState === 'error' && <div className='text-red-400'>Scan failed</div>}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className='text-center'>
-            {/* Idle state - show scan buttons */}
-            {scanState === 'idle' && !showManualInput && (
-              <div className='flex flex-col gap-3'>
+              <Input
+                placeholder='wallet label (optional)'
+                value={walletLabel}
+                onChange={e => setWalletLabel(e.target.value)}
+              />
+              {errorMessage && <div className='text-sm text-red-400'>{errorMessage}</div>}
+              <div className='flex gap-2'>
+                <Button variant='secondary' className='flex-1' onClick={resetState}>
+                  cancel
+                </Button>
                 <Button
                   variant='gradient'
-                  className='mt-4'
-                  onClick={() => {
-                    setKeystoneMode(false);
-                    setScanState('scanning');
-                  }}
+                  className='flex-1'
+                  disabled={!walletImport && !zcashWalletImport && !parsedPolkadotExport}
+                  onClick={handleSkip}
                 >
-                  <span className='i-lucide-camera size-5 mr-2' />
-                  Scan QR Code (Zigner)
-                </Button>
-
-                <Button
-                  variant='secondary'
-                  onClick={() => {
-                    setKeystoneMode(true);
-                    setScanState('scanning');
-                  }}
-                >
-                  <span className='i-lucide-camera size-5 mr-2' />
-                  Scan Keystone (animated UR, zcash only)
-                </Button>
-
-                {errorMessage && <div className='text-red-400 text-sm mt-2'>{errorMessage}</div>}
-              </div>
-            )}
-
-            {/* Hidden manual input mode (developer mode) */}
-            {showManualInput && (
-              <div className='flex flex-col gap-4 text-left'>
-                <p className='text-sm text-fg-muted text-center'>
-                  Developer mode: Paste QR hex data
-                </p>
-                <Input
-                  placeholder='Paste QR code hex (starts with 530301...)'
-                  onChange={e => handleManualInput(e.target.value)}
-                  className='font-mono text-xs'
-                />
-                <Input
-                  placeholder='Wallet label (optional)'
-                  value={walletLabel}
-                  onChange={e => setWalletLabel(e.target.value)}
-                />
-                {errorMessage && <div className='text-red-400 text-sm'>{errorMessage}</div>}
-                <div className='flex gap-2'>
-                  <Button variant='secondary' className='flex-1' onClick={resetState}>
-                    Cancel
-                  </Button>
-                  <Button
-                    variant='gradient'
-                    className='flex-1'
-                    disabled={!walletImport && !zcashWalletImport && !parsedPolkadotExport}
-                    onClick={handleSkip}
-                  >
-                    Import
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Scanned state - show wallet info and confirm (Penumbra) */}
-            {scanState === 'scanned' && detectedNetwork === 'penumbra' && walletImport && (
-              <div className='flex flex-col gap-4'>
-                <div className='p-6'>
-                  <div className='text-title text-fg-high lowercase tracking-[-0.005em]'>
-                    Success!
-                  </div>
-                  <div className={cn('font-mono text-fg-muted', 'text-xs', 'break-all', 'mt-2')}>
-                    Account #{walletImport.accountIndex}
-                  </div>
-                </div>
-
-                <Input
-                  placeholder='Wallet label'
-                  value={walletLabel}
-                  onChange={e => setWalletLabel(e.target.value)}
-                  className='text-center'
-                />
-
-                <div className='rounded-lg border border-yellow-500/40 bg-yellow-500/10 p-3 text-sm text-yellow-400 text-left'>
-                  <p className='font-medium'>Airgap Signer</p>
-                  <p className='mt-1 text-fg-muted text-xs'>
-                    View balances and create transactions. Signing requires your Zafu Zigner device.
-                  </p>
-                </div>
-
-                {errorMessage && <div className='text-red-400 text-sm'>{errorMessage}</div>}
-
-                <div className='flex flex-col gap-2 mt-2'>
-                  <Button
-                    variant='gradient'
-                    className='w-full'
-                    onClick={handleSetPassword}
-                    disabled={importing}
-                  >
-                    Set Password
-                  </Button>
-                  <p className='text-xs text-fg-muted text-center'>
-                    Requires login to use apps. More secure.
-                  </p>
-
-                  <Button
-                    variant='secondary'
-                    className='w-full mt-2'
-                    onClick={handleSkip}
-                    disabled={importing}
-                  >
-                    {importing ? 'Importing...' : 'Skip Password'}
-                  </Button>
-                  <p className='text-xs text-fg-muted text-center'>
-                    No login required. Less secure.
-                  </p>
-
-                  <Button
-                    variant='ghost'
-                    className='w-full mt-2'
-                    onClick={resetState}
-                    disabled={importing}
-                  >
-                    Scan Again
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Scanned state - Zcash */}
-            {scanState === 'scanned' && detectedNetwork === 'zcash' && zcashWalletImport && (
-              <div className='flex flex-col gap-4'>
-                <div className='p-6'>
-                  <div className='text-title text-fg-high lowercase tracking-[-0.005em]'>
-                    Zcash Wallet Detected!
-                  </div>
-                  <div className={cn('font-mono text-fg-muted', 'text-xs', 'break-all', 'mt-2')}>
-                    Account #{zcashWalletImport.accountIndex}
-                    <span className='ml-2'>
-                      {zcashWalletImport.mainnet ? '(mainnet)' : '(testnet)'}
-                    </span>
-                  </div>
-                </div>
-
-                <Input
-                  placeholder='Wallet label'
-                  value={walletLabel}
-                  onChange={e => setWalletLabel(e.target.value)}
-                  className='text-center'
-                />
-
-                <div className='rounded-lg border border-yellow-500/40 bg-yellow-500/10 p-3 text-sm text-yellow-400 text-left'>
-                  <p className='font-medium'>Airgap Signer</p>
-                  <p className='mt-1 text-fg-muted text-xs'>
-                    View balances and create transactions. Signing requires your Zafu Zigner device.
-                  </p>
-                </div>
-
-                {errorMessage && <div className='text-red-400 text-sm'>{errorMessage}</div>}
-
-                <div className='flex flex-col gap-2 mt-2'>
-                  <Button
-                    variant='gradient'
-                    className='w-full'
-                    onClick={handleSetPassword}
-                    disabled={importing}
-                  >
-                    Set Password
-                  </Button>
-                  <p className='text-xs text-fg-muted text-center'>
-                    Requires login to use apps. More secure.
-                  </p>
-
-                  <Button
-                    variant='secondary'
-                    className='w-full mt-2'
-                    onClick={handleSkip}
-                    disabled={importing}
-                  >
-                    {importing ? 'Importing...' : 'Skip Password'}
-                  </Button>
-                  <p className='text-xs text-fg-muted text-center'>
-                    No login required. Less secure.
-                  </p>
-
-                  <Button
-                    variant='ghost'
-                    className='w-full mt-2'
-                    onClick={resetState}
-                    disabled={importing}
-                  >
-                    Scan Again
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Scanned state - Cosmos */}
-            {scanState === 'scanned' && detectedNetwork === 'cosmos' && parsedCosmosExport && (
-              <div className='flex flex-col gap-4'>
-                <div className='p-6'>
-                  <div className='text-title text-fg-high lowercase tracking-[-0.005em]'>
-                    Cosmos Account Detected!
-                  </div>
-                  {parsedCosmosExport.addresses.map(a => (
-                    <div
-                      key={a.chainId}
-                      className={cn('font-mono text-fg-muted', 'text-xs', 'break-all', 'mt-2')}
-                    >
-                      <span className='text-fg capitalize'>{a.chainId}:</span>{' '}
-                      {a.address.slice(0, 12)}...{a.address.slice(-8)}
-                    </div>
-                  ))}
-                </div>
-
-                <Input
-                  placeholder='Wallet label'
-                  value={walletLabel}
-                  onChange={e => setWalletLabel(e.target.value)}
-                  className='text-center'
-                />
-
-                <div className='rounded-lg border border-pink-500/40 bg-pink-500/10 p-3 text-sm text-pink-200 text-left'>
-                  <p className='font-medium'>Watch-Only Account</p>
-                  <p className='mt-1 text-fg-muted text-xs'>
-                    View balances and create unsigned transactions. Signing requires your Zafu
-                    Zigner device via QR codes.
-                  </p>
-                </div>
-
-                {errorMessage && <div className='text-red-400 text-sm'>{errorMessage}</div>}
-
-                <div className='flex flex-col gap-2 mt-2'>
-                  <Button
-                    variant='gradient'
-                    className='w-full'
-                    onClick={handleSetPassword}
-                    disabled={importing}
-                  >
-                    Set Password
-                  </Button>
-                  <p className='text-xs text-fg-muted text-center'>
-                    Requires login to use apps. More secure.
-                  </p>
-
-                  <Button
-                    variant='secondary'
-                    className='w-full mt-2'
-                    onClick={handleSkip}
-                    disabled={importing}
-                  >
-                    {importing ? 'Importing...' : 'Skip Password'}
-                  </Button>
-                  <p className='text-xs text-fg-muted text-center'>
-                    No login required. Less secure.
-                  </p>
-
-                  <Button
-                    variant='ghost'
-                    className='w-full mt-2'
-                    onClick={resetState}
-                    disabled={importing}
-                  >
-                    Scan Again
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Scanned state - Polkadot */}
-            {scanState === 'scanned' && detectedNetwork === 'polkadot' && parsedPolkadotExport && (
-              <div className='flex flex-col gap-4'>
-                <div className='p-6'>
-                  <div className='text-title text-fg-high lowercase tracking-[-0.005em]'>
-                    Polkadot Account Detected!
-                  </div>
-                  <div className={cn('font-mono text-fg-muted', 'text-xs', 'break-all', 'mt-2')}>
-                    {parsedPolkadotExport.address.slice(0, 12)}...
-                    {parsedPolkadotExport.address.slice(-8)}
-                  </div>
-                </div>
-
-                <Input
-                  placeholder='Wallet label'
-                  value={walletLabel}
-                  onChange={e => setWalletLabel(e.target.value)}
-                  className='text-center'
-                />
-
-                <div className='rounded-lg border border-pink-500/40 bg-pink-500/10 p-3 text-sm text-pink-200 text-left'>
-                  <p className='font-medium'>Watch-Only Account</p>
-                  <p className='mt-1 text-fg-muted text-xs'>
-                    View balances and create unsigned transactions. Signing requires your Zafu
-                    Zigner device via QR codes.
-                  </p>
-                </div>
-
-                {errorMessage && <div className='text-red-400 text-sm'>{errorMessage}</div>}
-
-                <div className='flex flex-col gap-2 mt-2'>
-                  <Button
-                    variant='gradient'
-                    className='w-full'
-                    onClick={handleSetPassword}
-                    disabled={importing}
-                  >
-                    Set Password
-                  </Button>
-                  <p className='text-xs text-fg-muted text-center'>
-                    Requires login to use apps. More secure.
-                  </p>
-
-                  <Button
-                    variant='secondary'
-                    className='w-full mt-2'
-                    onClick={handleSkip}
-                    disabled={importing}
-                  >
-                    {importing ? 'Importing...' : 'Skip Password'}
-                  </Button>
-                  <p className='text-xs text-fg-muted text-center'>
-                    No login required. Less secure.
-                  </p>
-
-                  <Button
-                    variant='ghost'
-                    className='w-full mt-2'
-                    onClick={resetState}
-                    disabled={importing}
-                  >
-                    Scan Again
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Error state */}
-            {scanState === 'error' && !showManualInput && (
-              <div className='flex flex-col gap-4'>
-                <div className='text-red-400'>{errorMessage}</div>
-                <Button variant='secondary' onClick={resetState}>
-                  Try Again
+                  import
                 </Button>
               </div>
-            )}
+            </div>
+          )}
 
-            {/* Importing state */}
-            {scanState === 'importing' && (
-              <div className='flex flex-col items-center gap-4 p-8'>
-                <div className='text-fg-muted'>Importing wallet...</div>
+          {/* Scanned state - show wallet info and confirm (Penumbra) */}
+          {scanState === 'scanned' && detectedNetwork === 'penumbra' && walletImport && (
+            <div className='flex flex-col gap-4'>
+              <div className='flex flex-col gap-1'>
+                <div className='text-title text-fg-high lowercase tracking-[-0.005em]'>
+                  penumbra account detected
+                </div>
+                <div className={cn('font-mono text-fg-muted', 'text-xs', 'break-all')}>
+                  account #{walletImport.accountIndex}
+                </div>
               </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+
+              <Input
+                placeholder='wallet label'
+                value={walletLabel}
+                onChange={e => setWalletLabel(e.target.value)}
+              />
+
+              <AccessNote kind='airgap' />
+
+              {errorMessage && <div className='text-red-400 text-sm'>{errorMessage}</div>}
+
+              <PasswordChoice
+                importing={importing}
+                onSetPassword={handleSetPassword}
+                onSkip={handleSkip}
+                onScanAgain={resetState}
+              />
+            </div>
+          )}
+
+          {/* Scanned state - Zcash */}
+          {scanState === 'scanned' && detectedNetwork === 'zcash' && zcashWalletImport && (
+            <div className='flex flex-col gap-4'>
+              <div className='flex flex-col gap-1'>
+                <div className='text-title text-fg-high lowercase tracking-[-0.005em]'>
+                  zcash wallet detected
+                </div>
+                <div className={cn('font-mono text-fg-muted', 'text-xs', 'break-all')}>
+                  account #{zcashWalletImport.accountIndex}
+                  <span className='ml-2'>
+                    {zcashWalletImport.mainnet ? '(mainnet)' : '(testnet)'}
+                  </span>
+                </div>
+              </div>
+
+              <Input
+                placeholder='wallet label'
+                value={walletLabel}
+                onChange={e => setWalletLabel(e.target.value)}
+              />
+
+              <AccessNote kind='airgap' />
+
+              {errorMessage && <div className='text-red-400 text-sm'>{errorMessage}</div>}
+
+              <PasswordChoice
+                importing={importing}
+                onSetPassword={handleSetPassword}
+                onSkip={handleSkip}
+                onScanAgain={resetState}
+              />
+            </div>
+          )}
+
+          {/* Scanned state - Cosmos */}
+          {scanState === 'scanned' && detectedNetwork === 'cosmos' && parsedCosmosExport && (
+            <div className='flex flex-col gap-4'>
+              <div className='flex flex-col gap-1'>
+                <div className='text-title text-fg-high lowercase tracking-[-0.005em]'>
+                  cosmos account detected
+                </div>
+                {parsedCosmosExport.addresses.map(a => (
+                  <div
+                    key={a.chainId}
+                    className={cn('font-mono text-fg-muted', 'text-xs', 'break-all')}
+                  >
+                    <span className='text-fg capitalize'>{a.chainId}:</span>{' '}
+                    {a.address.slice(0, 12)}...{a.address.slice(-8)}
+                  </div>
+                ))}
+              </div>
+
+              <Input
+                placeholder='wallet label'
+                value={walletLabel}
+                onChange={e => setWalletLabel(e.target.value)}
+              />
+
+              <AccessNote kind='watch-only' />
+
+              {errorMessage && <div className='text-red-400 text-sm'>{errorMessage}</div>}
+
+              <PasswordChoice
+                importing={importing}
+                onSetPassword={handleSetPassword}
+                onSkip={handleSkip}
+                onScanAgain={resetState}
+              />
+            </div>
+          )}
+
+          {/* Scanned state - Polkadot */}
+          {scanState === 'scanned' && detectedNetwork === 'polkadot' && parsedPolkadotExport && (
+            <div className='flex flex-col gap-4'>
+              <div className='flex flex-col gap-1'>
+                <div className='text-title text-fg-high lowercase tracking-[-0.005em]'>
+                  polkadot account detected
+                </div>
+                <div className={cn('font-mono text-fg-muted', 'text-xs', 'break-all')}>
+                  {parsedPolkadotExport.address.slice(0, 12)}...
+                  {parsedPolkadotExport.address.slice(-8)}
+                </div>
+              </div>
+
+              <Input
+                placeholder='wallet label'
+                value={walletLabel}
+                onChange={e => setWalletLabel(e.target.value)}
+              />
+
+              <AccessNote kind='watch-only' />
+
+              {errorMessage && <div className='text-red-400 text-sm'>{errorMessage}</div>}
+
+              <PasswordChoice
+                importing={importing}
+                onSetPassword={handleSetPassword}
+                onSkip={handleSkip}
+                onScanAgain={resetState}
+              />
+            </div>
+          )}
+
+          {/* error */}
+          {scanState === 'error' && !showManualInput && (
+            <div className='flex flex-col gap-4'>
+              <div className='text-sm text-red-400'>{errorMessage}</div>
+              <Button variant='secondary' className='w-full' onClick={resetState}>
+                try again
+              </Button>
+            </div>
+          )}
+
+          {/* importing */}
+          {scanState === 'importing' && (
+            <div className='flex flex-col items-center gap-3 py-8 text-fg-muted'>
+              <span className='i-lucide-loader-circle h-5 w-5 animate-spin' />
+              <span className='text-sm lowercase'>importing wallet...</span>
+            </div>
+          )}
+        </div>
+      </div>
     </FadeTransition>
   );
 };

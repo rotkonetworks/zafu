@@ -110,7 +110,9 @@ interface WorkerMessage {
     | 'frost-derive-address-from-sk'
     | 'frost-sample-fvk-sk'
     | 'frost-derive-ufvk'
-    | 'frost-parse-tx-outputs';
+    | 'frost-parse-tx-outputs'
+    | 'frost-inspect-pczt-outputs'
+    | 'complete-orchard-pczt';
   id: string;
   network: 'zcash';
   walletId?: string;
@@ -223,6 +225,8 @@ interface WasmModule {
     fee: bigint,
     anchor_height: number,
     mainnet: boolean,
+    // live consensus branch id (hex, e.g. "37a5165b"); null/'' -> WASM NU6.2 fallback
+    branch_id_hex?: string | null,
   ): string;
   build_unsigned_transaction(
     ufvk_str: string,
@@ -235,6 +239,8 @@ interface WasmModule {
     account_index: number,
     mainnet: boolean,
     memo_hex?: string | null,
+    // live consensus branch id (hex, e.g. "37a5165b"); null/'' -> WASM NU6.2 fallback
+    branch_id_hex?: string | null,
   ): unknown;
   build_signed_spend_transaction(
     seed_phrase: string,
@@ -247,6 +253,8 @@ interface WasmModule {
     account_index: number,
     mainnet: boolean,
     memo_hex?: string | null,
+    // live consensus branch id (hex, e.g. "37a5165b"); null/'' -> WASM NU6.2 fallback
+    branch_id_hex?: string | null,
   ): string;
   complete_transaction(
     unsigned_tx_hex: string,
@@ -267,6 +275,11 @@ interface WasmModule {
     memo_hex?: string | null,
   ): unknown;
   extract_signed_tx_from_pczt(pczt_hex: string): string;
+  complete_orchard_pczt(
+    pczt_hex: string,
+    orchard_sigs_json: unknown,
+    spend_indices_json: unknown,
+  ): string;
   compute_txid(tx_hex: string): string;
   ur_decode_frames(parts_json: string, expected_type: string): string;
   build_unsigned_shielding_transaction(
@@ -276,6 +289,8 @@ interface WasmModule {
     fee: bigint,
     anchor_height: number,
     mainnet: boolean,
+    // live consensus branch id (hex, e.g. "37a5165b"); null/'' -> WASM NU6.2 fallback
+    branch_id_hex?: string | null,
   ): string;
   complete_shielding_transaction(unsigned_tx_hex: string, signatures_json: string): string;
   derive_transparent_privkey(seed_phrase: string, account: number, index: number): string;
@@ -405,6 +420,7 @@ interface WasmModule {
     shares_json: string,
   ): string;
   frost_parse_tx_outputs(unsigned_tx_hex: string, orchard_fvk_uview: string): string;
+  frost_inspect_pczt_outputs(pczt_hex: string, orchard_fvk_uview: string): string;
 
   // note sync encoding (CBOR + UR/ZT)
   encode_notes_bundle(
@@ -416,6 +432,12 @@ interface WasmModule {
   ): Uint8Array;
   ur_encode_frames(cbor_data: Uint8Array, ur_type: string, fragment_size: number): string;
   zt_encode_frames(cbor_data: Uint8Array, zt_type: string, k: number, n: number): string;
+  zt_encode_frames_auto(
+    cbor_data: Uint8Array,
+    zt_type: string,
+    max_qr_bytes: number,
+    redundancy_pct: number,
+  ): string;
 
   // attestation
   frost_attestation_digest(
@@ -492,6 +514,44 @@ const NU63_CONSENSUS_BRANCH_ID = 0x37a5165b;
 const NU63_CONSENSUS_BRANCH_ID_HEX = '37a5165b';
 /** Placeholder branch id from a pre-activation / not-yet-real fork. Never build against it. */
 const PLACEHOLDER_BRANCH_ID_HEX = 'ffffffff';
+
+/**
+ * Fetch the endpoint's live consensus branch id (GetLightdInfo.consensusBranchId)
+ * as a normalized lowercase hex string with no `0x` prefix, e.g. "5437f330"
+ * (NU6.2) or "37a5165b" (NU6.3). This is threaded verbatim into the ordinary
+ * send/shield WASM builders, which bind it into the ZIP-244 sighash + v5 header.
+ *
+ * Fail-SAFE (unlike the turnstile builder's fail-CLOSED guard at the migration
+ * path): ordinary sends must keep working across the NU6.3 boundary, so a
+ * missing/placeholder value is not fatal here. We return '' in that case; the
+ * WASM side then falls back to its compiled-in NU6.2 value and emits a
+ * console.warn. Once NU6.3 activates the endpoint reports the new id and it
+ * flows straight through with no code change. Networks fail loud on a wrong
+ * branch id ("incorrect consensus branch id" on submit), so a stale endpoint is
+ * self-announcing rather than silently signing an unspendable tx.
+ */
+const fetchBranchIdHex = async (client: ZcashClient): Promise<string> => {
+  try {
+    const info = await client.getLightdInfo();
+    const hex = (info.consensusBranchId || '').trim().toLowerCase().replace(/^0x/, '');
+    if (!hex || hex === PLACEHOLDER_BRANCH_ID_HEX) {
+      console.warn(
+        `[zcash-worker] endpoint reported no/placeholder consensus branch id ` +
+          `(${JSON.stringify(info.consensusBranchId)}); WASM will fall back to ` +
+          `compiled-in NU6.2. This is WRONG after NU6.3 activation.`,
+      );
+      return '';
+    }
+    return hex;
+  } catch (e) {
+    console.warn(
+      '[zcash-worker] GetLightdInfo failed while resolving consensus branch id; ' +
+        'WASM will fall back to compiled-in NU6.2:',
+      e,
+    );
+    return '';
+  }
+};
 
 const NU5_BRANCH_ID_LE = [0xb4, 0xd0, 0xd6, 0xc2];
 const patchBranchId = (buf: Uint8Array): void => {
@@ -1304,6 +1364,14 @@ const selectNotes = (
 
 const WITNESS_BATCH_SIZE = 1000;
 
+// Cap concurrent compact-block fetches. A from-corruption witness rebuild can
+// span ~150k blocks (150 batches); firing them all at once spikes worker memory
+// (every decoded payload held until .flat()) and can trip server stream limits —
+// and this runs on the witness-recovery path *during a send*, where a thrown
+// fetch leaves the user unable to broadcast. Bounded fan-out keeps the speed win
+// without the failure mode.
+const WITNESS_FETCH_CONCURRENCY = 12;
+
 interface WitnessClient {
   getTreeState(h: number): Promise<{ height: number; orchardTree: string; ironwoodTree?: string }>;
   getCompactBlocks(
@@ -1333,25 +1401,48 @@ const fetchCompactBlocksRange = async (
   blocks: { height: number; actions: { cmx_hex: string }[] }[];
   actions: number;
 }> => {
-  const blocks: { height: number; actions: { cmx_hex: string }[] }[] = [];
-  let actions = 0;
   if (start > end) {
-    return { blocks, actions };
+    return { blocks: [], actions: 0 };
   }
-  let current = start;
-  while (current <= end) {
-    const e = Math.min(current + WITNESS_BATCH_SIZE - 1, end);
-    const fetched = await client.getCompactBlocks(current, e);
-    for (const block of fetched) {
-      const poolActions = pool === 'ironwood' ? (block.ironwoodActions ?? []) : block.actions;
-      actions += poolActions.length;
-      blocks.push({
-        height: block.height,
-        actions: poolActions.map(a => ({ cmx_hex: hexEncode(a.cmx) })),
+
+  // build all batch ranges, then fetch them through a bounded pool.
+  // gRPC/HTTP2 multiplexes over a single connection, but a deep rebuild can
+  // produce ~150 batches — capping in-flight requests keeps peak memory and
+  // server-side stream count in check.
+  const ranges: [number, number][] = [];
+  for (let s = start; s <= end; s += WITNESS_BATCH_SIZE) {
+    ranges.push([s, Math.min(s + WITNESS_BATCH_SIZE - 1, end)]);
+  }
+
+  // write results by index to preserve ascending-height order for the WASM replay
+  const results = new Array<{ height: number; actions: { cmx_hex: string }[] }[]>(ranges.length);
+  let next = 0;
+  const worker = async () => {
+    while (true) {
+      const i = next++;
+      const range = ranges[i];
+      if (!range) {
+        return;
+      }
+      const [s, e] = range;
+      const bs = await client.getCompactBlocks(s, e);
+      // `pool` selects which action list feeds the commitment tree: orchard
+      // actions (default) or NU6.3 ironwood actions.
+      results[i] = bs.map(b => {
+        const poolActions = pool === 'ironwood' ? (b.ironwoodActions ?? []) : b.actions;
+        return {
+          height: b.height,
+          actions: poolActions.map(a => ({ cmx_hex: hexEncode(a.cmx) })),
+        };
       });
     }
-    current = e + 1;
-  }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(WITNESS_FETCH_CONCURRENCY, ranges.length) }, worker),
+  );
+
+  const blocks = results.flat();
+  const actions = blocks.reduce((sum, b) => sum + b.actions.length, 0);
   return { blocks, actions };
 };
 
@@ -1365,6 +1456,7 @@ const backfillWitnesses = async (
   walletId: string,
   notes: DecryptedNote[],
   anchorHeight: number,
+  onProgress?: (step: string, detail?: string) => void,
 ): Promise<{
   byNullifier: Map<string, { witness_hex: string; tree_size: number }>;
   endFrontier: string;
@@ -1411,21 +1503,35 @@ const backfillWitnesses = async (
     await saveFrontierSnapshot(walletId, roundedHeight, frontierHex);
   }
 
+  const fetchStart = performance.now();
+  console.log(
+    `[zcash-worker] backfill: fetching ${Math.ceil((anchorHeight - frontierHeight) / WITNESS_BATCH_SIZE)} batches in parallel (${frontierHeight + 1}..${anchorHeight})`,
+  );
   const { blocks: compactBlocks, actions: totalActions } = await fetchCompactBlocksRange(
     client,
     frontierHeight + 1,
     anchorHeight,
   );
+  const fetchSecs = ((performance.now() - fetchStart) / 1000).toFixed(1);
   console.log(
-    `[zcash-worker] backfill: replay ${compactBlocks.length} blocks, ${totalActions} actions (${frontierHeight + 1}..${anchorHeight})`,
+    `[zcash-worker] backfill: fetch done in ${fetchSecs}s — ${compactBlocks.length} blocks, ${totalActions} actions`,
   );
+  onProgress?.('backfill: blocks downloaded', `${compactBlocks.length} blocks in ${fetchSecs}s`);
 
   const positions = notes.map(n => n.position);
+  console.log(
+    `[zcash-worker] backfill: wasm replay starting (${totalActions} actions, ${positions.length} notes)`,
+  );
+  onProgress?.('backfill: replaying tree', `${totalActions} actions`);
+  const wasmStart = performance.now();
   const raw = wasmModule.build_witnesses_and_paths(
     frontierHex,
     JSON.stringify(compactBlocks),
     JSON.stringify(positions),
   );
+  const wasmSecs = ((performance.now() - wasmStart) / 1000).toFixed(1);
+  console.log(`[zcash-worker] backfill: wasm done in ${wasmSecs}s`);
+  onProgress?.('backfill: witness rebuilt', `took ${wasmSecs}s`);
   const result = JSON.parse(raw as string) as {
     anchor_hex: string;
     end_frontier_hex: string;
@@ -1438,16 +1544,6 @@ const backfillWitnesses = async (
   // DEBUG (tree-root-mismatch investigation): does the replay reconstruct the
   // same tree the network reports at anchorHeight? If replayRoot !== network,
   // the snapshot-seed → compact-block replay is the culprit, not the anchor.
-  try {
-    const netRoot = wasmModule.tree_root_hex((await client.getTreeState(anchorHeight)).orchardTree);
-    const match = result.anchor_hex === netRoot ? 'OK' : 'MISMATCH';
-    console.log(
-      `[zcash-worker] backfill replay check [${match}]: seed=${frontierHeight}(size ${checkpointSize}) → anchor=${anchorHeight}(size ${endTreeSize}, +${totalActions} actions) replayRoot=${result.anchor_hex} network=${netRoot}`,
-    );
-  } catch (e) {
-    console.warn('[zcash-worker] backfill replay check skipped:', e);
-  }
-
   const byPosition = new Map(result.entries.map(e => [e.position, e]));
   const byNullifier = new Map<string, { witness_hex: string; tree_size: number }>();
   const updatedNotes: DecryptedNote[] = [];
@@ -1465,7 +1561,8 @@ const backfillWitnesses = async (
     updatedNotes.push(note);
   }
 
-  // Persist backfilled witnesses + the end frontier for future incremental updates.
+  // saveBatch before any further await: the sync loop can run at the next yield and update
+  // witness_tree_size to a higher value; saveBatch after that would stomp it back down.
   if (updatedNotes.length > 0) {
     await saveBatch(
       walletId,
@@ -1478,6 +1575,16 @@ const backfillWitnesses = async (
       anchorHeight,
     );
     console.log(`[zcash-worker] backfill: cached witnesses for ${updatedNotes.length} notes`);
+  }
+
+  try {
+    const netRoot = wasmModule.tree_root_hex((await client.getTreeState(anchorHeight)).orchardTree);
+    const match = result.anchor_hex === netRoot ? 'OK' : 'MISMATCH';
+    console.log(
+      `[zcash-worker] backfill replay check [${match}]: seed=${frontierHeight}(size ${checkpointSize}) → anchor=${anchorHeight}(size ${endTreeSize}, +${totalActions} actions) replayRoot=${result.anchor_hex} network=${netRoot}`,
+    );
+  } catch (e) {
+    console.warn('[zcash-worker] backfill replay check skipped:', e);
   }
 
   return { byNullifier, endFrontier: result.end_frontier_hex };
@@ -1625,6 +1732,7 @@ const buildWitnesses = async (
   notes: DecryptedNote[],
   anchorHeight: number,
   pool: NotePool = 'orchard',
+  onProgress?: (step: string, detail?: string) => void,
 ): Promise<{ anchorHex: string; paths: unknown[] }> => {
   if (!wasmModule) {
     throw new Error('wasm not initialized');
@@ -1646,7 +1754,7 @@ const buildWitnesses = async (
   // updating the in-memory notes in place.
   const missing = notes.filter(n => !n.witness_hex);
   if (missing.length > 0) {
-    await backfillWitnesses(client, walletId, missing, anchorHeight);
+    await backfillWitnesses(client, walletId, missing, anchorHeight, onProgress);
   }
 
   // Step 2: gather all note witnesses (now all populated). Use the running
@@ -1675,7 +1783,7 @@ const buildWitnesses = async (
       n.witness_hex = undefined;
       n.witness_tree_size = undefined;
     }
-    await backfillWitnesses(client, walletId, notes, anchorHeight);
+    await backfillWitnesses(client, walletId, notes, anchorHeight, onProgress);
     runningFrontier = (await getTreeFrontier(walletId)) ?? '';
     runningFrontierHeight =
       (await idbGet<{ value: number }>('meta', [walletId, 'orchardTreeFrontierHeight']))?.value ??
@@ -1734,25 +1842,75 @@ const buildWitnesses = async (
   }
 
   // Step 4: extract paths; cross-check witness root against network anchor.
+  // Snapshot witness bytes BEFORE the network call — the sync loop can advance note.witness_hex
+  // past anchorHeight during any await, yielding a root that mismatches the historical anchor.
+  const witnessSnap = new Map(notes.map(n => [n.nullifier, n.witness_hex]));
   const anchorTs = await client.getTreeState(anchorHeight);
   const networkRoot = wasmModule.tree_root_hex(anchorTs.orchardTree);
 
-  const paths: { position: number; path: { hash: string }[] }[] = [];
-  for (const note of notes) {
-    const rawPath = wasmModule.witness_extract_path(note.witness_hex!);
-    const parsed = JSON.parse(rawPath as string) as {
-      position: number;
-      root_hex: string;
-      path: { hash: string }[];
-    };
-    if (parsed.root_hex !== networkRoot) {
-      console.error(
-        `[zcash-worker] witness root mismatch: note=${note.nullifier.slice(0, 8)} ours=${parsed.root_hex} network=${networkRoot} ` +
-          `(anchor=${anchorHeight}, frontierHeight=${runningFrontierHeight}, rebootstrapped=${rebootstrapped})`,
-      );
-      throw new Error(`tree root mismatch at height ${anchorHeight}`);
+  interface ExtractedPath {
+    position: number;
+    path: { hash: string }[];
+  }
+  const extractFrom = (
+    snap: Map<string, string | undefined>,
+  ): { paths: ExtractedPath[]; mismatchNote: string | null } => {
+    const paths: ExtractedPath[] = [];
+    for (const note of notes) {
+      const witnessHex = snap.get(note.nullifier);
+      if (!witnessHex) {
+        return { paths: [], mismatchNote: note.nullifier };
+      }
+      const rawPath = wasmModule!.witness_extract_path(witnessHex);
+      const parsed = JSON.parse(rawPath as string) as {
+        position: number;
+        root_hex: string;
+        path: { hash: string }[];
+      };
+      if (parsed.root_hex !== networkRoot) {
+        return { paths: [], mismatchNote: note.nullifier };
+      }
+      paths.push({ position: parsed.position, path: parsed.path });
     }
-    paths.push({ position: parsed.position, path: parsed.path });
+    return { paths, mismatchNote: null };
+  };
+
+  let { paths, mismatchNote } = extractFrom(witnessSnap);
+
+  if (mismatchNote !== null) {
+    console.warn(
+      `[zcash-worker] witness root mismatch (recovering via backfill): note=${mismatchNote.slice(0, 8)} ` +
+        `(anchor=${anchorHeight}, frontierHeight=${runningFrontierHeight}, rebootstrapped=${rebootstrapped})`,
+    );
+    onProgress?.('witness corrupt — rebuilding', 'this takes ~3 min');
+    for (const n of notes) {
+      n.witness_hex = undefined;
+      n.witness_tree_size = undefined;
+    }
+    // Persist the wipe before backfill so a reload mid-backfill doesn't re-expose the corrupt witness.
+    await saveBatch(walletId, [], [], await getSyncHeight(walletId), undefined, notes);
+    const { byNullifier } = await backfillWitnesses(
+      client,
+      walletId,
+      notes,
+      anchorHeight,
+      onProgress,
+    );
+    // Use byNullifier (set from WASM result before any await inside backfillWitnesses) — note.witness_hex
+    // may have been fast-forwarded past anchorHeight by the sync loop by the time backfill returns.
+    const backfillSnap = new Map(
+      [...byNullifier.entries()].map(
+        ([nf, e]) => [nf, e.witness_hex] as [string, string | undefined],
+      ),
+    );
+    ({ paths, mismatchNote } = extractFrom(backfillSnap));
+    if (mismatchNote !== null) {
+      console.error(
+        `[zcash-worker] witness root mismatch after backfill: note=${mismatchNote.slice(0, 8)} ` +
+          `(anchor=${anchorHeight})`,
+      );
+      throw new Error(`tree root mismatch after backfill at height ${anchorHeight}`);
+    }
   }
 
   console.log(`[zcash-worker] paths extracted for ${paths.length} notes, anchor=${networkRoot}`);
@@ -2189,9 +2347,40 @@ const runSync = async (
       const chainHeight = tip.height;
 
       if (currentHeight >= chainHeight) {
-        // caught up: cache the tree frontier at sync height for fast witness building
+        // caught up: cache the tree frontier at sync height for fast witness building.
+        // Also cross-check local frontier vs network to detect reorg-induced corruption.
         try {
           const syncTs = await client.getTreeState(currentHeight);
+
+          if (wasmModule && runningFrontier) {
+            const localRoot = wasmModule.tree_root_hex(runningFrontier);
+            const netRoot = wasmModule.tree_root_hex(syncTs.orchardTree);
+            if (localRoot !== netRoot) {
+              console.warn(
+                `[zcash-worker] local frontier diverged from network at catch-up ${currentHeight} ` +
+                  `(local=${localRoot.slice(0, 16)} net=${netRoot.slice(0, 16)}) — wiping witnesses`,
+              );
+              runningFrontier = syncTs.orchardTree;
+              runningFrontierHeight = currentHeight;
+              const wipeState = await loadState(walletId);
+              for (const note of wipeState.notes) {
+                note.witness_hex = undefined;
+                note.witness_tree_size = undefined;
+              }
+              for (const note of state.notes) {
+                note.witness_hex = undefined;
+                note.witness_tree_size = undefined;
+              }
+              const wipeDb = await getDb();
+              const wipeTx = wipeDb.transaction('notes', 'readwrite');
+              const notesStore = wipeTx.objectStore('notes');
+              for (const note of wipeState.notes) {
+                notesStore.put({ ...note, walletId });
+              }
+              await txComplete(wipeTx);
+            }
+          }
+
           const db = await getDb();
           const metaTx = db.transaction('meta', 'readwrite');
           metaTx
@@ -2697,11 +2886,41 @@ const runSync = async (
           : undefined,
       );
 
-      // periodic frontier snapshot for privacy-safe witness building
+      // periodic frontier snapshot for privacy-safe witness building.
+      // Also cross-check local frontier vs network to detect reorg-induced corruption.
       if (currentHeight % FRONTIER_SNAPSHOT_INTERVAL < batchSize) {
         try {
           const snapshotTs = await client.getTreeState(currentHeight);
           await saveFrontierSnapshot(walletId, currentHeight, snapshotTs.orchardTree);
+
+          if (wasmModule && runningFrontier) {
+            const localRoot = wasmModule.tree_root_hex(runningFrontier);
+            const netRoot = wasmModule.tree_root_hex(snapshotTs.orchardTree);
+            if (localRoot !== netRoot) {
+              console.warn(
+                `[zcash-worker] local frontier diverged from network at snapshot ${currentHeight} ` +
+                  `(local=${localRoot.slice(0, 16)} net=${netRoot.slice(0, 16)}) — likely reorg; resetting witnesses`,
+              );
+              runningFrontier = snapshotTs.orchardTree;
+              runningFrontierHeight = currentHeight;
+              const wipeState = await loadState(walletId);
+              for (const note of wipeState.notes) {
+                note.witness_hex = undefined;
+                note.witness_tree_size = undefined;
+              }
+              for (const note of state.notes) {
+                note.witness_hex = undefined;
+                note.witness_tree_size = undefined;
+              }
+              const wipeDb = await getDb();
+              const wipeTx = wipeDb.transaction('notes', 'readwrite');
+              const notesStore = wipeTx.objectStore('notes');
+              for (const note of wipeState.notes) {
+                notesStore.put({ ...note, walletId });
+              }
+              await txComplete(wipeTx);
+            }
+          }
         } catch {
           /* best-effort */
         }
@@ -2992,23 +3211,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           Math.max(...unspent.map(n => n.height)),
         );
 
-        // build merkle witnesses
-        const client = {
-          getTreeState: async (h: number) => {
-            const resp = await fetch(`${syncServerUrl}/tree-state/${h}`);
-            if (!resp.ok) {
-              throw new Error(`tree-state ${h}: ${resp.status}`);
-            }
-            return resp.json() as Promise<{ height: number; orchardTree: string }>;
-          },
-          getCompactBlocks: async (start: number, end: number) => {
-            const resp = await fetch(`${syncServerUrl}/compact-blocks/${start}/${end}`);
-            if (!resp.ok) {
-              throw new Error(`compact-blocks ${start}-${end}: ${resp.status}`);
-            }
-            return resp.json() as Promise<{ height: number; actions: { cmx: Uint8Array }[] }[]>;
-          },
-        };
+        // build merkle witnesses — use the backend-aware client (zidecar/
+        // lightwalletd) instead of a hardcoded zidecar REST shape, so export
+        // works on any backend the wallet synced against.
+        const client = await makeZcashClient(syncServerUrl);
         const witnessResult = await buildWitnesses(client, walletId, unspent, anchorHeight);
 
         // prepare notes JSON for WASM encoder
@@ -3028,18 +3234,55 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           paths: witnessResult.paths,
         });
 
+        // fetch an ed25519 anchor attestation from zidecar's verifier so a
+        // FROST cold device (which requires attested anchors) accepts the
+        // bundle. Best-effort: on lightwalletd, server error, or signing
+        // disabled we emit an unattested bundle (still imports on non-FROST
+        // devices). The anchor was already cross-checked against zidecar's
+        // tree-state during witness building, so it isn't arbitrary.
+        let attestationHex: string | null = null;
+        if (lookupBackend(syncServerUrl) === 'zidecar') {
+          try {
+            const { ZidecarClient } = await import(
+              /* webpackMode: "eager" */ '../state/keyring/zidecar-client'
+            );
+            const att = await new ZidecarClient(syncServerUrl).signAnchor(
+              hexDecode(witnessResult.anchorHex),
+              anchorHeight,
+              isMainnet,
+            );
+            if (att.available && att.signatureHex.length === 128) {
+              attestationHex = att.signatureHex;
+            } else {
+              console.warn(
+                '[zcash-worker] anchor attestation unavailable (signing disabled); emitting unattested bundle',
+              );
+            }
+          } catch (e) {
+            console.warn(
+              '[zcash-worker] anchor attestation failed; emitting unattested bundle:',
+              e,
+            );
+          }
+        }
+
         // encode to CBOR via WASM
         const cborBytes = wasmModule.encode_notes_bundle(
           notesJson,
           merkleJson,
           anchorHeight,
           isMainnet,
-          null, // no attestation (TODO: FROST attestation)
+          attestationHex,
         );
 
-        // encode to QR frames via WASM
-        // use zoda transport (verified erasure coding) — 12-of-16 for redundancy
-        const framesJson = wasmModule.zt_encode_frames(cborBytes, 'zcash-notes', 12, 16);
+        // encode to QR frames via zoda transport (verified erasure coding).
+        // auto-size k/n to the payload so each hex-encoded `zt:` frame fits a
+        // scannable QR — a fixed 12-of-16 overflows the QR for large note sets
+        // (each shard ~payload/k, hex-doubled). 300 raw bytes/frame ≈ 0.6KB QR
+        // string (~v15 at ECC-L) keeps each frame light enough to lock fast on
+        // the zigner camera (denser frames scan slowly); 30% parity so the
+        // scanner can miss frames in the cycling display.
+        const framesJson = wasmModule.zt_encode_frames_auto(cborBytes, 'zcash-notes', 300, 30);
         const urFrames = JSON.parse(framesJson) as string[];
 
         // compute balance
@@ -3710,10 +3953,16 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           walletId,
           selected,
           anchorHeight,
+          'orchard',
+          emitProgress,
         );
 
         const witnessDuration = ((performance.now() - witnessStart) / 1000).toFixed(1);
         emitProgress('witnesses built', `${witnessDuration}s`);
+
+        // live consensus branch id for the ZIP-244 sighash + v5 header (NU6.3-safe).
+        // Shared by both the mnemonic (signed) and zigner (unsigned) build paths below.
+        const sendBranchIdHex = await fetchBranchIdHex(sendClient);
 
         if (sendPayload.mnemonic) {
           // mnemonic wallet: build fully signed transaction and broadcast directly
@@ -3760,6 +4009,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 sendPayload.accountIndex,
                 sendPayload.mainnet,
                 memoHex,
+                sendBranchIdHex,
               ],
             })) as string;
           } catch (e) {
@@ -3842,6 +4092,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             sendPayload.accountIndex,
             sendPayload.mainnet,
             memoHex,
+            sendBranchIdHex,
           ],
         });
 
@@ -4015,6 +4266,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           walletId,
           selected,
           anchorHeight,
+          'orchard',
+          emitProgress,
         );
 
         const notesForWasm = selected.map(n => ({
@@ -4061,6 +4314,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           pczt_hex: string;
           summary: string;
           action_count: number;
+          // FROST multisig fields (additive — zigner cold-sign ignores them)
+          sighash: string;
+          alphas: string[];
+          spend_indices: number[];
         };
 
         const proveDuration = ((performance.now() - proveStart) / 1000).toFixed(1);
@@ -4090,6 +4347,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             fee: fee.toString(),
             urFrames,
             cborBytes: cbor.length,
+            // FROST host needs these to drive the relay signing rounds (gh #17)
+            sighash: parsed.sighash,
+            alphas: parsed.alphas,
+            spendIndices: parsed.spend_indices,
           },
         });
         return;
@@ -4446,6 +4707,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         const txids: string[] = [];
         const fees: string[] = [];
+        // live consensus branch id (NU6.3-safe); resolved once, reused for every output
+        let multiBranchIdHex: string | null = null;
 
         for (let outputIdx = 0; outputIdx < multiPayload.outputs.length; outputIdx++) {
           const out = multiPayload.outputs[outputIdx]!;
@@ -4505,6 +4768,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           // build merkle witnesses
           const multiClient = await makeZcashClient(multiPayload.serverUrl);
           const multiTip = await multiClient.getTip();
+          if (multiBranchIdHex === null) {
+            multiBranchIdHex = await fetchBranchIdHex(multiClient);
+          }
 
           const multiAnchorHeight = await resolveAnchorHeight(walletId, multiTip.height);
           emitMultiProgress(
@@ -4516,6 +4782,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             walletId,
             selected,
             multiAnchorHeight,
+            'orchard',
+            emitMultiProgress,
           );
 
           // build note data for WASM
@@ -4562,6 +4830,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 multiPayload.accountIndex,
                 multiPayload.mainnet,
                 memoHex,
+                multiBranchIdHex,
               ],
             })) as string;
           } finally {
@@ -4669,6 +4938,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         }
         const recipient = fixOrchardAddress(rawRecipient, mainnet);
 
+        // live consensus branch id for the ZIP-244 sighash + v5 header (NU6.3-safe)
+        const shieldBranchIdHex = await fetchBranchIdHex(client);
+
         // shield each group with its matching privkey
         let totalShielded = 0n;
         let totalFee = 0n;
@@ -4708,6 +4980,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               fee.toString(),
               tip.height,
               mainnet,
+              shieldBranchIdHex,
             ],
           })) as string;
           const txData = hexDecode(txHex);
@@ -4760,6 +5033,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         const shieldUClient = await makeZcashClient(shieldUnsignedPayload.serverUrl);
         const shieldUTip = await shieldUClient.getTip();
+        // live consensus branch id for the ZIP-244 sighash + v5 header (NU6.3-safe)
+        const shieldUBranchIdHex = await fetchBranchIdHex(shieldUClient);
         const shieldUUtxos = await shieldUClient.getAddressUtxos(shieldUnsignedPayload.tAddresses);
         if (shieldUUtxos.length === 0) {
           throw new Error('no transparent UTXOs to shield');
@@ -4817,6 +5092,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             shieldUFee.toString(),
             shieldUTip.height,
             shieldUnsignedPayload.mainnet,
+            shieldUBranchIdHex,
           ],
         })) as string;
 
@@ -5028,6 +5304,50 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         };
         const json = wasmModule!.frost_parse_tx_outputs(unsignedTxHex, orchardFvkUview);
         workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: json });
+        return;
+      }
+
+      case 'frost-inspect-pczt-outputs': {
+        await initWasm();
+        const { pcztHex, orchardFvkUview } = payload as {
+          pcztHex: string;
+          orchardFvkUview: string;
+        };
+        const json = wasmModule!.frost_inspect_pczt_outputs(pcztHex, orchardFvkUview);
+        workerSelf.postMessage({ type: 'frost-result', id, network: 'zcash', payload: json });
+        return;
+      }
+
+      case 'complete-orchard-pczt': {
+        if (!walletId) {
+          throw new Error('walletId required');
+        }
+        await initWasm();
+        if (!wasmModule) {
+          throw new Error('wasm not initialized');
+        }
+        const { serverUrl, pcztHex, orchardSigs, spendIndices } = payload as {
+          serverUrl: string;
+          pcztHex: string;
+          orchardSigs: string[];
+          spendIndices: number[];
+        };
+        // inject the aggregated FROST SpendAuth sigs → extract v5 tx → broadcast
+        const cTxHex = wasmModule.complete_orchard_pczt(pcztHex, orchardSigs, spendIndices);
+        const cTxData = hexDecode(cTxHex);
+        const cClient = await makeZcashClient(serverUrl);
+        const cResult = await cClient.sendTransaction(cTxData);
+        if (cResult.errorCode !== 0) {
+          throw new Error(`broadcast failed (${cResult.errorCode}): ${cResult.errorMessage}`);
+        }
+        const cTxid = await resolveBroadcastTxid(cResult, cTxHex, serverUrl);
+        workerSelf.postMessage({
+          type: 'tx-result',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: { txid: cTxid },
+        });
         return;
       }
 

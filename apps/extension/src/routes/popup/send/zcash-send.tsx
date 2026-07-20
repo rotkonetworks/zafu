@@ -21,6 +21,7 @@ import {
   buildSendTxInWorker,
   buildSendTxPcztInWorker,
   completeSendTxInWorker,
+  completeOrchardPcztInWorker,
   completeSendTxPcztInWorker,
   getBalanceInWorker,
   type SendTxUnsignedResult,
@@ -32,6 +33,7 @@ import { QrScanner } from '../../../shared/components/qr-scanner';
 import { AnimatedQrDisplay } from '../../../shared/components/animated-qr-display';
 import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanner';
 import { FrostAirgapSignFlow, runMnemonicFrostSign } from './frost-multisig';
+import { DontQuitIcon } from './frost-multisig/helpers';
 import { RecipientPicker } from '../../../components/recipient-picker';
 import { SaveContactModal } from '../../../components/save-contact-modal';
 import { usePasswordGate } from '../../../hooks/password-gate';
@@ -172,6 +174,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const [, setShowContacts] = useState(false);
   const [showQrScanner, setShowQrScanner] = useState(false);
   const unsignedTxRef = useRef<SendTxUnsignedResult | null>(null);
+  // airgap FROST multisig now builds a PCZT (gh #17) — separate from the legacy
+  // v5 unsignedTxRef so the cold-sign scan fallback path stays untouched.
+  const pcztMultisigRef = useRef<SendTxPcztUnsignedResult | null>(null);
   const [sendSteps, setSendSteps] = useState<
     { step: string; detail?: string; elapsedMs: number }[]
   >([]);
@@ -334,27 +339,31 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           }
         }
       } else if (activeZcashWallet?.multisig?.custody === 'airgapSigner') {
-        // airgap multisig: build unsigned tx then hand off to FrostAirgapSignFlow.
-        const result = await buildSendTxInWorker(
+        // airgap multisig: build a PCZT (gh #17) then hand off to FrostAirgapSignFlow.
+        if (!ufvk) {
+          throw new Error('UFVK required for airgap multisig PCZT build');
+        }
+        const result = await buildSendTxPcztInWorker(
           'zcash',
           walletId,
           zidecarUrl,
           recipient.trim(),
           amountZat,
           memo,
-          accountIndex,
+          0,
           mainnet,
-          undefined,
           ufvk,
         );
-        if (!('sighash' in result)) {
-          throw new Error('unexpected result from unsigned tx build');
+        if (!result.pcztHex) {
+          throw new Error('PCZT build succeeded but pcztHex is empty — reload the extension');
         }
-        unsignedTxRef.current = result;
+        pcztMultisigRef.current = result;
         setFee((Number(result.fee) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, ''));
         setStep('airgap-flow');
       } else if (activeZcashWallet?.multisig) {
         // self-custody multisig: zafu has the encrypted FROST share locally.
+        // PCZT-native (gh #17): build a standard pczt::Pczt so co-signers can
+        // inspect + sighash-verify the spend before signing.
         const authorized = await requestAuth();
         if (!authorized) {
           setStep('review');
@@ -367,23 +376,21 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         if (!secrets) {
           throw new Error('failed to decrypt multisig keys - unlock wallet first');
         }
-        const result = await buildSendTxInWorker(
+        if (!ufvk) {
+          throw new Error('UFVK required for multisig PCZT build');
+        }
+        const result = await buildSendTxPcztInWorker(
           'zcash',
           walletId,
           zidecarUrl,
           recipient.trim(),
           amountZat,
           memo,
-          accountIndex,
+          0,
           mainnet,
-          undefined,
           ufvk,
         );
-        if (!('sighash' in result)) {
-          throw new Error('unexpected result from unsigned tx build');
-        }
 
-        unsignedTxRef.current = result;
         setFee((Number(result.fee) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, ''));
 
         setStep('frost-room');
@@ -406,12 +413,11 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
           setStep('broadcast');
           setFrostProgress('broadcasting...');
-          const finalResult = await completeSendTxInWorker(
-            'zcash',
+          const finalResult = await completeOrchardPcztInWorker(
             walletId,
             zidecarUrl,
-            result.unsignedTx,
-            { orchardSigs, transparentSigs: [] },
+            result.pcztHex,
+            orchardSigs,
             result.spendIndices,
           );
           void promoteToBroadcasted(finalResult.txid);
@@ -653,13 +659,12 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const handleAirgapComplete = async (orchardSigs: string[]) => {
     setStep('broadcast');
     try {
-      const result = unsignedTxRef.current!;
-      const finalResult = await completeSendTxInWorker(
-        'zcash',
+      const result = pcztMultisigRef.current!;
+      const finalResult = await completeOrchardPcztInWorker(
         selectedKeyInfo!.id,
         zidecarUrl,
-        result.unsignedTx,
-        { orchardSigs, transparentSigs: [] },
+        result.pcztHex,
+        orchardSigs,
         result.spendIndices,
       );
       void promoteToBroadcasted(finalResult.txid);
@@ -906,77 +911,137 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           </div>
         );
 
-      case 'sign':
+      case 'sign': {
+        const truncAddr = (a: string) => (a.length > 22 ? `${a.slice(0, 10)}…${a.slice(-8)}` : a);
         return (
-          <div className='flex flex-col gap-4 p-4'>
-            <div className='flex items-center gap-2'>
+          <div className='flex flex-col h-full'>
+            {/* header */}
+            <div className='flex items-center gap-2 px-4 py-3 border-b border-border-soft'>
               <button
                 onClick={handleBack}
                 className='text-fg-muted hover:text-fg-high transition-colors'
               >
-                <span className='i-lucide-arrow-left w-5 h-5' />
+                <span className='i-lucide-arrow-left w-4 h-4' />
               </button>
-              <h2 className='text-lg font-medium'>sign with zafu zigner</h2>
-            </div>
-
-            <div className='flex flex-col items-center gap-4 py-4'>
-              {pcztSignFrames && pcztSignFrames.length > 0 ? (
-                <AnimatedQrDisplay
-                  urFrames={pcztSignFrames}
-                  totalBytes={pcztUnsignedRef.current?.cborBytes}
-                  size={220}
-                  frameInterval={200}
-                  title='scan with zafu zigner'
-                  description='hold zigner camera steady; multi-frame transfer'
-                />
-              ) : signRequestQr ? (
-                <QrDisplay
-                  data={signRequestQr}
-                  size={220}
-                  title='scan with zafu zigner'
-                  description='open zafu zigner camera and scan this qr code to sign the transaction'
-                />
-              ) : null}
-
-              <div className='flex items-center justify-center gap-3 text-fg-muted'>
-                <span className='flex items-center gap-1.5'>
-                  <span className='i-lucide-smartphone h-4 w-4' />
-                  <span className='text-xs'>open zigner</span>
-                </span>
-                <span className='i-lucide-chevron-right h-3 w-3 shrink-0' />
-                <span className='flex items-center gap-1.5'>
-                  <span className='i-lucide-scan h-4 w-4' />
-                  <span className='text-xs'>scan</span>
-                </span>
-                <span className='i-lucide-chevron-right h-3 w-3 shrink-0' />
-                <span className='flex items-center gap-1.5'>
-                  <span className='i-lucide-check h-4 w-4' />
-                  <span className='text-xs'>approve</span>
-                </span>
+              <span className='flex-1 text-sm font-medium'>sign with zigner</span>
+              <div className='flex items-center gap-1.5'>
+                <div className='h-1 w-5 rounded-full bg-zigner-gold' />
+                <div className='h-1 w-5 rounded-full bg-elev-2' />
               </div>
+              <DontQuitIcon />
             </div>
 
-            <Button variant='gradient' onClick={handleScanSignature} className='w-full'>
-              scan signature from zafu zigner
-            </Button>
+            <div className='flex flex-col gap-4 p-4 flex-1 overflow-y-auto'>
+              {/* QR */}
+              <div className='flex justify-center'>
+                {pcztSignFrames && pcztSignFrames.length > 0 ? (
+                  <AnimatedQrDisplay
+                    urFrames={pcztSignFrames}
+                    totalBytes={pcztUnsignedRef.current?.cborBytes}
+                    size={210}
+                    frameInterval={200}
+                    title='scan with zafu zigner'
+                    description='hold zigner camera steady; multi-frame transfer'
+                  />
+                ) : signRequestQr ? (
+                  <QrDisplay
+                    data={signRequestQr}
+                    size={210}
+                    title='scan with zafu zigner'
+                    description='open zafu zigner and scan this qr'
+                  />
+                ) : null}
+              </div>
+
+              {/* tx summary */}
+              <div className='rounded-md border border-border-soft bg-elev-1 divide-y divide-border-soft text-xs'>
+                <div className='flex items-center justify-between px-3 py-2'>
+                  <span className='text-fg-muted'>to</span>
+                  <span className='font-mono text-fg-high'>{truncAddr(recipient)}</span>
+                </div>
+                <div className='flex items-center justify-between px-3 py-2'>
+                  <span className='text-fg-muted'>amount</span>
+                  <span className='tabular text-fg-high'>{amount} ZEC</span>
+                </div>
+                <div className='flex items-center justify-between px-3 py-2'>
+                  <span className='text-fg-muted'>fee</span>
+                  <span className='tabular text-fg-dim'>{fee} ZEC</span>
+                </div>
+                {memo && (
+                  <div className='flex items-center justify-between px-3 py-2'>
+                    <span className='text-fg-muted'>memo</span>
+                    <span className='text-fg-high truncate max-w-[60%]'>{memo}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* steps */}
+              <ol className='space-y-2'>
+                {(
+                  [
+                    'open zafu zigner on your phone',
+                    'scan this QR code',
+                    'review and approve',
+                  ] as const
+                ).map((label, i) => (
+                  <li key={i} className='flex items-center gap-2.5 text-xs text-fg-muted'>
+                    <span className='flex size-4 shrink-0 items-center justify-center rounded-full bg-zigner-gold/15 text-[9px] text-zigner-gold'>
+                      {i + 1}
+                    </span>
+                    {label}
+                  </li>
+                ))}
+              </ol>
+            </div>
+
+            <div className='px-4 py-3 border-t border-border-soft'>
+              <Button variant='gradient' onClick={handleScanSignature} className='w-full'>
+                scan signature from zigner
+              </Button>
+            </div>
           </div>
         );
+      }
 
       case 'scan':
         return pcztUnsignedRef.current ? (
-          <AnimatedQrScanner
-            onComplete={bytes => {
-              void handlePcztSignatureScanned(bytes);
-            }}
-            onError={err => {
-              setError(err);
-              setStep('error');
-            }}
-            onClose={() => setStep('sign')}
-            title='scan signed PCZT'
-            description='hold camera steady on the animated QR'
-            urTypeFilter='zcash-pczt'
-          />
+          <div className='flex flex-col h-full'>
+            {/* header */}
+            <div className='flex items-center gap-2 px-4 py-3 border-b border-border-soft'>
+              <button
+                onClick={() => setStep('sign')}
+                className='text-fg-muted hover:text-fg-high transition-colors'
+              >
+                <span className='i-lucide-arrow-left w-4 h-4' />
+              </button>
+              <span className='flex-1 text-sm font-medium'>scan signature</span>
+              <div className='flex items-center gap-1.5'>
+                <div className='h-1 w-5 rounded-full bg-elev-2' />
+                <div className='h-1 w-5 rounded-full bg-zigner-gold' />
+              </div>
+              <DontQuitIcon />
+            </div>
+
+            <div className='flex flex-col gap-3 p-4 flex-1'>
+              <p className='text-xs text-fg-muted'>
+                point camera at the animated QR shown on your zigner device
+              </p>
+              <AnimatedQrScanner
+                inline
+                onComplete={bytes => {
+                  void handlePcztSignatureScanned(bytes);
+                }}
+                onError={err => {
+                  setError(err);
+                  setStep('error');
+                }}
+                onClose={() => setStep('sign')}
+                title='scan signed PCZT'
+                description='hold camera steady on the animated QR'
+                urTypeFilter='zcash-pczt'
+              />
+            </div>
+          </div>
         ) : (
           <QrScanner
             onScan={handleSignatureScanned}
@@ -1104,13 +1169,13 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         );
 
       case 'airgap-flow':
-        if (!unsignedTxRef.current || !activeZcashWallet?.multisig) {
+        if (!pcztMultisigRef.current || !activeZcashWallet?.multisig) {
           return null;
         }
         return (
           <FrostAirgapSignFlow
             ms={activeZcashWallet.multisig}
-            unsigned={unsignedTxRef.current}
+            unsigned={pcztMultisigRef.current}
             recipient={recipient.trim()}
             amount={amount}
             fee={fee}

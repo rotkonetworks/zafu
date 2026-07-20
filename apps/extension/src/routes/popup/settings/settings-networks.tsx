@@ -30,6 +30,17 @@ import {
   measurePresetLatencies,
   type EndpointLatency,
 } from '../../../state/keyring/endpoint-latency';
+import {
+  probeAll,
+  getReferenceTip,
+  peerMedianTip,
+  type EndpointHealth,
+} from '../../../state/keyring/endpoint-health';
+import {
+  pickEndpoint,
+  DEFAULT_STRATEGY,
+  type SelectionStrategy,
+} from '../../../state/keyring/endpoint-strategy';
 import { NETWORKS, LAUNCHED_NETWORKS } from '../../../config/networks';
 import { cn } from '@repo/ui/lib/utils';
 import { SettingsScreen } from './settings-screen';
@@ -276,13 +287,22 @@ const regionLabel = (region: RpcEndpointRegion): string => {
   }
 };
 
+/** human labels for the endpoint-health selection strategies (smart pick). */
+const STRATEGY_LABELS: Record<SelectionStrategy, string> = {
+  privacy: 'privacy (tor + zidecar first)',
+  fastest: 'fastest (lowest latency)',
+  'most-synced': 'most synced (closest to tip)',
+  random: 'random (rotates each pick)',
+};
+
 /**
  * The zcash node panel, composed around the one thing users come for:
  * picking a working node.
  *
  *   1. node select — latencies measured automatically on mount, shown
- *      inline as `· 23ms`, dead nodes marked unreachable. No manual
- *      "test" button to discover.
+ *      inline as `· 23ms`, dead nodes marked unreachable. A "smart pick"
+ *      affordance probes every preset (tip + reachability), ranks them by
+ *      the chosen selection strategy, and applies the winner.
  *   2. one quiet trust line — derived from the backend, a colored dot
  *      and six words instead of badge + paragraph.
  *   3. "advanced" disclosure — custom url, backend override, memo
@@ -320,10 +340,19 @@ const ZcashEndpointPanel = ({
   const mempoolOn = mempoolAvailable && isMempoolWatchEnabled(mempool, backend);
 
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [latencies, setLatencies] = useState<Map<string, EndpointLatency> | null>(null);
+  // endpoint-health "smart pick": selection strategy is distinct from the
+  // memo-sync `strategy` above — this ranks *which node* to use, not how
+  // memos are fetched.
+  const [selectionStrategy, setSelectionStrategy] = useState<SelectionStrategy>(DEFAULT_STRATEGY);
+  const [healths, setHealths] = useState<Map<string, EndpointHealth> | null>(null);
+  const [autoPicking, setAutoPicking] = useState(false);
+  const [autoStatus, setAutoStatus] = useState<string | null>(null);
 
   // Measure once per panel open — ~10 tiny requests; cheap enough that
-  // a manual "test latencies" affordance was just an extra decision.
+  // discovery is automatic. The explicit "retest" button below just
+  // re-runs this on demand.
   useEffect(() => {
     let cancelled = false;
     void measurePresetLatencies().then(m => {
@@ -336,22 +365,128 @@ const ZcashEndpointPanel = ({
     };
   }, []);
 
-  const rttSuffix = (url: string): string => {
+  const handleTest = async () => {
+    setTesting(true);
+    try {
+      setLatencies(await measurePresetLatencies());
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  // "Smart pick" probes GetLightdInfo across all presets (returns tip +
+  // version + reachability in one round-trip), fetches hosh's reference tip
+  // to compute behindBy, ranks under the selected strategy, and applies
+  // the top result. Falls back to peer-median tip if hosh is unreachable.
+  const handleAutoPick = async () => {
+    setAutoPicking(true);
+    setAutoStatus('probing endpoints...');
+    try {
+      const referenceTip = await getReferenceTip();
+      setAutoStatus(
+        referenceTip != null
+          ? `probing (ref tip ${referenceTip.toLocaleString()})...`
+          : 'probing (no hosh reference; peer-median fallback)...',
+      );
+      const initial = await probeAll(ZCASH_MAINNET_ENDPOINTS, referenceTip);
+      // If hosh was unreachable, recompute behindBy against peer median.
+      let final = initial;
+      if (referenceTip == null) {
+        const peerTip = peerMedianTip(initial);
+        if (peerTip != null) {
+          final = initial.map(h => ({
+            ...h,
+            behindBy:
+              h.info && h.info.blockHeight > 0 ? Math.max(0, peerTip - h.info.blockHeight) : null,
+          }));
+        }
+      }
+      const map = new Map<string, EndpointHealth>();
+      final.forEach(h => map.set(h.presetId, h));
+      setHealths(map);
+      const candidates = ZCASH_MAINNET_ENDPOINTS.map(p => ({
+        preset: p,
+        health: map.get(p.id) ?? null,
+      }));
+      const picked = pickEndpoint(candidates, selectionStrategy);
+      if (!picked) {
+        setAutoStatus('no healthy endpoint under this strategy — keeping current');
+        return;
+      }
+      setAutoStatus(`picked ${picked.preset.label} (${selectionStrategy})`);
+      onPick(picked.preset.url);
+    } catch (e) {
+      setAutoStatus(`probe failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setAutoPicking(false);
+    }
+  };
+
+  const optionSuffix = (url: string, presetId: string): string => {
+    const parts: string[] = [];
     const lat = latencies?.get(url);
-    if (!lat) {
-      return '';
+    if (lat) {
+      parts.push(lat.rttMs === null ? 'unreachable' : `${lat.rttMs}ms`);
     }
-    if (lat.rttMs === null) {
-      return ' · unreachable';
+    const h = healths?.get(presetId);
+    if (h) {
+      if (!h.ok) {
+        if (!lat) {
+          parts.push(h.error ?? 'unreachable');
+        }
+      } else if (h.behindBy != null) {
+        parts.push(h.behindBy === 0 ? 'at tip' : `-${h.behindBy.toLocaleString()} blk`);
+      }
+      // If the endpoint reports a version and we haven't already shown latency, add rtt.
+      if (!lat && h.latencyMs > 0 && h.ok) {
+        parts.push(`${h.latencyMs}ms`);
+      }
     }
-    return ` · ${lat.rttMs}ms`;
+    return parts.length ? ' · ' + parts.join(' · ') : '';
   };
 
   return (
     <>
       {/* 1 · node */}
       <div>
-        <div className='text-label text-fg-muted mb-1'>node</div>
+        <div className='flex items-center justify-between mb-1'>
+          <span className='text-label text-fg-muted'>node</span>
+          <div className='flex items-center gap-2'>
+            <button
+              type='button'
+              onClick={() => void handleTest()}
+              disabled={testing || autoPicking}
+              className='text-label text-zigner-gold hover:underline disabled:opacity-50'
+            >
+              {testing ? 'testing...' : latencies ? 'retest' : 'test latencies'}
+            </button>
+            <span className='text-label text-fg-muted'>·</span>
+            <button
+              type='button'
+              onClick={() => void handleAutoPick()}
+              disabled={testing || autoPicking}
+              className='text-label text-zigner-gold hover:underline disabled:opacity-50'
+            >
+              {autoPicking ? 'picking...' : 'smart pick'}
+            </button>
+          </div>
+        </div>
+        {/* selection strategy for "smart pick" — ranks which node to use */}
+        <div className='flex items-center gap-2 mb-1'>
+          <span className='text-label text-fg-muted whitespace-nowrap'>strategy</span>
+          <select
+            value={selectionStrategy}
+            onChange={e => setSelectionStrategy(e.target.value as SelectionStrategy)}
+            disabled={autoPicking}
+            className='flex-1 bg-input border border-border-soft px-2 py-1 text-[11px] focus:border-primary/50 focus:outline-none'
+          >
+            {(Object.keys(STRATEGY_LABELS) as SelectionStrategy[]).map(s => (
+              <option key={s} value={s}>
+                {STRATEGY_LABELS[s]}
+              </option>
+            ))}
+          </select>
+        </div>
         <select
           value={matched?.id ?? ''}
           onChange={e => {
@@ -371,12 +506,15 @@ const ZcashEndpointPanel = ({
                 <option key={p.id} value={p.id}>
                   {p.label}
                   {p.backend === 'zidecar' ? ' · trustless' : ''}
-                  {rttSuffix(p.url)}
+                  {optionSuffix(p.url, p.id)}
                 </option>
               ))}
             </optgroup>
           ))}
         </select>
+        {autoStatus && (
+          <div className='text-label text-fg-muted mt-1 leading-snug'>{autoStatus}</div>
+        )}
       </div>
 
       {/* 2 · trust line */}
