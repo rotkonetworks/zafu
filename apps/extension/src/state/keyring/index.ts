@@ -91,6 +91,10 @@ export interface KeyRingSlice {
   selectKeyRing: (vaultId: string) => Promise<void>;
   renameKeyRing: (vaultId: string, newName: string) => Promise<void>;
   deleteKeyRing: (vaultId: string, opts?: { allowAppManaged?: boolean }) => Promise<void>;
+  /** recover/take-control of (or re-hide) an app-managed multisig table by flipping `hidden` on
+   *  both the vault and its mirror wallet. Unhiding makes a stuck poker table a normal, selectable,
+   *  co-signable multisig. Non-destructive. */
+  setMultisigHidden: (vaultId: string, hidden: boolean) => Promise<void>;
 
   getMnemonic: (vaultId: string) => Promise<string>;
   getMultisigSecrets: (
@@ -737,6 +741,30 @@ export const createKeyRingSlice =
           if (state.wallets.activeIndex >= updatedWallets.length) {
             state.wallets.activeIndex = Math.max(0, updatedWallets.length - 1);
           }
+        });
+      },
+
+      setMultisigHidden: async (vaultId: string, hidden: boolean) => {
+        // flip `hidden` on BOTH records (vault.insensitive + wallet.multisig) so recover/re-hide is
+        // consistent everywhere. Non-destructive — no key material touched.
+        const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+        const updatedVaults = vaults.map(v =>
+          v.id === vaultId ? { ...v, insensitive: { ...v.insensitive, hidden } } : v,
+        );
+        await local.set('vaults', updatedVaults);
+
+        const zcashWallets = ((await local.get('zcashWallets')) ?? []) as ZcashWalletJson[];
+        const updatedWallets = zcashWallets.map(w =>
+          w.vaultId === vaultId && w.multisig ? { ...w, multisig: { ...w.multisig, hidden } } : w,
+        );
+        await local.set('zcashWallets', updatedWallets);
+
+        const selectedId = await local.get('selectedVaultId');
+        const keyInfos = vaultsToKeyInfos(updatedVaults, selectedId);
+        set(state => {
+          state.keyRing.keyInfos = keyInfos;
+          state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
+          state.wallets.zcashWallets = updatedWallets;
         });
       },
 
