@@ -477,5 +477,7 @@ export function IronwoodMigrate({
     }
   };
 
-  return <div className='fixed inset-0 z-50 overflow-y-auto bg-canvas'>{renderContent()}</div>;
+  // z-[60] sits above the bottom tabs + header (both z-50) so the migrate
+  // footer buttons aren't overlapped by the nav bar during this takeover flow.
+  return <div className='fixed inset-0 z-[60] overflow-y-auto bg-canvas'>{renderContent()}</div>;
 }
