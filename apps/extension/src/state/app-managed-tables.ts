@@ -64,15 +64,17 @@ export interface TableFilter {
 }
 
 /** Apply the filter. Order: label query → funded toggle → relevance (unless showAll). Pure. */
-export const applyTableFilter = (
-  tables: TableView[],
-  f: TableFilter,
-  now: number,
-): TableView[] =>
+export const applyTableFilter = (tables: TableView[], f: TableFilter, now: number): TableView[] =>
   tables.filter(t => {
-    if (f.query && !t.wallet.label.toLowerCase().includes(f.query.toLowerCase())) return false;
-    if (f.onlyFunded && !hasFunds(t)) return false;
-    if (!f.showAll && !isRelevant(t, now)) return false;
+    if (f.query && !t.wallet.label.toLowerCase().includes(f.query.toLowerCase())) {
+      return false;
+    }
+    if (f.onlyFunded && !hasFunds(t)) {
+      return false;
+    }
+    if (!f.showAll && !isRelevant(t, now)) {
+      return false;
+    }
     return true;
   });
 

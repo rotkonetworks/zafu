@@ -84,6 +84,7 @@ interface ZcashBuildRequest {
     | 'build_unsigned'
     | 'build_unsigned_pczt'
     | 'build_turnstile_migration_pczt'
+    | 'build_signed_turnstile_migration'
     | 'build_shielding'
     | 'build_unsigned_shielding';
   args: unknown[];
@@ -161,6 +162,32 @@ async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
         throw new Error('ironwood turnstile not supported by this wasm build');
       }
       result = wasm['build_turnstile_migration_pczt'](
+        a[0],
+        a[1],
+        BigInt(a[2] as string),
+        a[3],
+        a[4],
+        a[5],
+        a[6],
+        a[7],
+        a[8],
+        a[9] ?? null,
+      );
+      break;
+
+    case 'build_signed_turnstile_migration':
+      // NU6.3 turnstile HOT path: same param layout as the cold
+      // build_turnstile_migration_pczt above, but a[0] is the SEED PHRASE
+      // (not the UFVK) and the wasm returns the final SIGNED V6 tx hex - no
+      // intermediate PCZT is produced or persisted. Signature:
+      // (seed_phrase, orchard_notes_json, fee, orchard_anchor_hex,
+      //  orchard_merkle_paths_json, account_index, target_height,
+      //  expected_branch_id, mainnet, memo_hex?). a[2] is the fee
+      // (stringified bigint over postMessage); a[7] is the fail-closed branch id.
+      if (typeof wasm['build_signed_turnstile_migration'] !== 'function') {
+        throw new Error('ironwood hot-sign turnstile not supported by this wasm build');
+      }
+      result = wasm['build_signed_turnstile_migration'](
         a[0],
         a[1],
         BigInt(a[2] as string),

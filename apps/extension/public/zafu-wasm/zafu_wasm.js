@@ -161,8 +161,31 @@ export class WalletKeys {
         return takeFromExternrefTable0(ret[0]);
     }
     /**
+     * Scan a batch of IRONWOOD compact actions in PARALLEL (NU6.3+ pool).
+     *
+     * Same binary format and key material as `scan_actions_parallel` — the
+     * ironwood pool shares orchard's key tree and note encryption; only the
+     * bundle (and note plaintext version, V3) differ. The caller feeds the
+     * actions from the tx's ironwood bundle here so returned notes carry
+     * `pool: "ironwood"`.
+     * @param {Uint8Array} actions_bytes
+     * @returns {any}
+     */
+    scan_actions_ironwood_parallel(actions_bytes) {
+        const ptr0 = passArray8ToWasm0(actions_bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.walletkeys_scan_actions_ironwood_parallel(this.__wbg_ptr, ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
      * Scan a batch of compact actions in PARALLEL and return found notes
      * This is the main entry point for high-performance scanning
+     *
+     * Binary format: [count: u32][action1][action2]...
+     * Each action: [nullifier: 32][cmx: 32][epk: 32][ciphertext: 52] = 148 bytes
      * @param {Uint8Array} actions_bytes
      * @returns {any}
      */
@@ -326,6 +349,25 @@ export class WatchOnlyWallet {
         return ret !== 0;
     }
     /**
+     * Scan a batch of IRONWOOD compact actions (NU6.3+ pool).
+     *
+     * Same binary format and key material as `scan_actions_parallel` — the
+     * ironwood pool shares orchard's key tree and note encryption. Feed the
+     * actions from a tx's ironwood bundle here so returned notes carry
+     * `pool: "ironwood"`.
+     * @param {Uint8Array} actions_bytes
+     * @returns {any}
+     */
+    scan_actions_ironwood_parallel(actions_bytes) {
+        const ptr0 = passArray8ToWasm0(actions_bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.watchonlywallet_scan_actions_ironwood_parallel(this.__wbg_ptr, ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
      * Scan compact actions (same interface as WalletKeys)
      * @param {Uint8Array} actions_bytes
      * @returns {any}
@@ -394,6 +436,29 @@ export function build_merkle_paths(tree_state_hex, compact_blocks_json, note_pos
     const ptr2 = passStringToWasm0(note_positions_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len2 = WASM_VECTOR_LEN;
     const ret = wasm.build_merkle_paths(ptr0, len0, ptr1, len1, ptr2, len2, anchor_height);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Ironwood-tree variant of `build_merkle_paths`. Same JSON contract; feed
+ * the ironwood frontier from GetTreeState and cmxs from ironwood bundles.
+ * @param {string} tree_state_hex
+ * @param {string} compact_blocks_json
+ * @param {string} note_positions_json
+ * @param {number} anchor_height
+ * @returns {any}
+ */
+export function build_merkle_paths_ironwood(tree_state_hex, compact_blocks_json, note_positions_json, anchor_height) {
+    const ptr0 = passStringToWasm0(tree_state_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(compact_blocks_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(note_positions_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ret = wasm.build_merkle_paths_ironwood(ptr0, len0, ptr1, len1, ptr2, len2, anchor_height);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
@@ -508,6 +573,111 @@ export function build_signed_spend_transaction(seed_phrase, notes_json, recipien
     } finally {
         wasm.__wbindgen_free(deferred6_0, deferred6_1, 1);
     }
+}
+
+/**
+ * HOT-WALLET sibling of `build_turnstile_migration_pczt`: build the one-way
+ * turnstile migration (spend the supplied orchard notes into the wallet's OWN
+ * ironwood address in a single V6 transaction), sign the wallet-owned orchard
+ * spends LOCALLY with a seed-derived key, and return the hex-encoded, signed,
+ * broadcast-ready V6 transaction.
+ *
+ * Same parameter shape as `build_turnstile_migration_pczt`, except:
+ *  - `seed_phrase` is PREPENDED. The orchard `FullViewingKey` (for the
+ *    self-migration ironwood recipient) AND the `SpendAuthorizingKey` (for
+ *    local signing) are BOTH derived from it via ZIP-32
+ *    (`SpendingKey::from_zip32_seed(seed, coin_type, account_index)` - the
+ *    exact key `UnifiedSpendingKey::from_seed(...).orchard()` and
+ *    `build_signed_spend_transaction` derive), so there is no `ufvk_str`
+ *    parameter: the seed fully determines the account and cannot disagree with
+ *    a separately supplied viewing key.
+ *  - `account_index` selects the ZIP-32 account (it IS used here, unlike the
+ *    cold builder where the UFVK is already account-scoped).
+ *  - Returns the signed transaction hex `String`, not a redacted PCZT.
+ *
+ * The FAIL-CLOSED NU6.3 branch-id guard is inherited unchanged from the shared
+ * build core: the tx binds consensus branch id `expected_branch_id`, the
+ * caller MUST pass the real 0x37a5165b (never the 0xffff_ffff placeholder).
+ * @param {string} seed_phrase
+ * @param {string} orchard_notes_json
+ * @param {bigint} fee
+ * @param {string} orchard_anchor_hex
+ * @param {string} orchard_merkle_paths_json
+ * @param {number} account_index
+ * @param {number} target_height
+ * @param {number} expected_branch_id
+ * @param {boolean} mainnet
+ * @param {string | null} [memo_hex]
+ * @returns {string}
+ */
+export function build_signed_turnstile_migration(seed_phrase, orchard_notes_json, fee, orchard_anchor_hex, orchard_merkle_paths_json, account_index, target_height, expected_branch_id, mainnet, memo_hex) {
+    let deferred7_0;
+    let deferred7_1;
+    try {
+        const ptr0 = passStringToWasm0(seed_phrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(orchard_notes_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(orchard_anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passStringToWasm0(orchard_merkle_paths_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len3 = WASM_VECTOR_LEN;
+        var ptr4 = isLikeNone(memo_hex) ? 0 : passStringToWasm0(memo_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len4 = WASM_VECTOR_LEN;
+        const ret = wasm.build_signed_turnstile_migration(ptr0, len0, ptr1, len1, fee, ptr2, len2, ptr3, len3, account_index, target_height, expected_branch_id, mainnet, ptr4, len4);
+        var ptr6 = ret[0];
+        var len6 = ret[1];
+        if (ret[3]) {
+            ptr6 = 0; len6 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred7_0 = ptr6;
+        deferred7_1 = len6;
+        return getStringFromWasm0(ptr6, len6);
+    } finally {
+        wasm.__wbindgen_free(deferred7_0, deferred7_1, 1);
+    }
+}
+
+/**
+ * Build the one-way turnstile migration PCZT: spend the supplied orchard
+ * notes into the wallet's OWN ironwood address in a single V6 transaction.
+ *
+ * The ironwood recipient is derived INTERNALLY from `ufvk_str` (self
+ * migration); everything minus `fee` migrates. Returns a redacted-for-signer
+ * PCZT (same redaction contract as `build_unsigned_pczt`) as JSON
+ * `{ pczt_hex, summary, action_count }` where `summary` is a `PcztSummary`.
+ *
+ * `account_index` is accepted for API parity with the worker call shape but
+ * is not used for derivation - the UFVK is already account-scoped.
+ * @param {string} ufvk_str
+ * @param {string} orchard_notes_json
+ * @param {bigint} fee
+ * @param {string} orchard_anchor_hex
+ * @param {string} orchard_merkle_paths_json
+ * @param {number} account_index
+ * @param {number} target_height
+ * @param {number} expected_branch_id
+ * @param {boolean} mainnet
+ * @param {string | null} [memo_hex]
+ * @returns {any}
+ */
+export function build_turnstile_migration_pczt(ufvk_str, orchard_notes_json, fee, orchard_anchor_hex, orchard_merkle_paths_json, account_index, target_height, expected_branch_id, mainnet, memo_hex) {
+    const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(orchard_notes_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(orchard_anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ptr3 = passStringToWasm0(orchard_merkle_paths_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len3 = WASM_VECTOR_LEN;
+    var ptr4 = isLikeNone(memo_hex) ? 0 : passStringToWasm0(memo_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len4 = WASM_VECTOR_LEN;
+    const ret = wasm.build_turnstile_migration_pczt(ptr0, len0, ptr1, len1, fee, ptr2, len2, ptr3, len3, account_index, target_height, expected_branch_id, mainnet, ptr4, len4);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
 }
 
 /**
@@ -652,38 +822,6 @@ export function build_witnesses_and_paths(tree_state_hex, compact_blocks_json, n
 }
 
 /**
- * Complete an orchard-only FROST multisig PCZT: inject the externally-aggregated
- * SpendAuth signatures (one per real spend, in `spend_indices` order, matching
- * what `build_unsigned_pczt` returned) into the PCZT, then extract the
- * broadcast-ready v5 tx. The mnemonic/zigner host and the poker escrow all
- * finish a FROST signing round this way (gh #17 PCZT migration).
- * @param {string} pczt_hex
- * @param {any} orchard_sigs_json
- * @param {any} spend_indices_json
- * @returns {string}
- */
-export function complete_orchard_pczt(pczt_hex, orchard_sigs_json, spend_indices_json) {
-    let deferred3_0;
-    let deferred3_1;
-    try {
-        const ptr0 = passStringToWasm0(pczt_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.complete_orchard_pczt(ptr0, len0, orchard_sigs_json, spend_indices_json);
-        var ptr2 = ret[0];
-        var len2 = ret[1];
-        if (ret[3]) {
-            ptr2 = 0; len2 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred3_0 = ptr2;
-        deferred3_1 = len2;
-        return getStringFromWasm0(ptr2, len2);
-    } finally {
-        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
-    }
-}
-
-/**
  * Complete an unsigned shielding transaction by patching in transparent signatures.
  *
  * Takes the unsigned tx hex (with empty scriptSigs) and an array of `{sig_hex, pubkey_hex}`
@@ -742,38 +880,6 @@ export function complete_transaction(unsigned_tx_hex, signatures_json, spend_ind
         const ptr0 = passStringToWasm0(unsigned_tx_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.complete_transaction(ptr0, len0, signatures_json, spend_indices_json);
-        var ptr2 = ret[0];
-        var len2 = ret[1];
-        if (ret[3]) {
-            ptr2 = 0; len2 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred3_0 = ptr2;
-        deferred3_1 = len2;
-        return getStringFromWasm0(ptr2, len2);
-    } finally {
-        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
-    }
-}
-
-/**
- * Canonical ZIP-244 txid for a raw signed v5 transaction.
- *
- * Public lightwalletd's `SendResponse` carries no txid, so the wallet derives
- * it locally instead of trusting the server to echo it. This is the same value
- * zidecar computes server-side and the same bytes that appear as
- * `CompactTx.hash` during sync — returned as lowercase hex in internal/wire
- * byte order so the outgoing record reconciles on the next scan.
- * @param {string} tx_hex
- * @returns {string}
- */
-export function compute_txid(tx_hex) {
-    let deferred3_0;
-    let deferred3_1;
-    try {
-        const ptr0 = passStringToWasm0(tx_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.compute_txid(ptr0, len0);
         var ptr2 = ret[0];
         var len2 = ret[1];
         if (ret[3]) {
@@ -864,9 +970,7 @@ export function derive_transparent_privkey(seed_phrase, account, index) {
  * * `merkle_result_json` - JSON from build_merkle_paths: `{anchor_hex, paths: [{position, path: [{hash}]}]}`
  * * `anchor_height` - block height of the anchor
  * * `mainnet` - true for mainnet, false for testnet
- * * `attestation_hex` - optional hex-encoded 64-byte ed25519 anchor attestation
- *   signature from a trusted verifier (zidecar SignAnchor). Verified on the
- *   cold device against its anchor-verifier registry.
+ * * `attestation_hex` - optional hex-encoded 64-byte FROST attestation signature
  *
  * # Returns
  * `Uint8Array` of CBOR bytes ready for UR fountain encoding
@@ -935,6 +1039,21 @@ export function frontier_tree_size(tree_state_hex) {
     const ptr0 = passStringToWasm0(tree_state_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
     const ret = wasm.frontier_tree_size(ptr0, len0);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return BigInt.asUintN(64, ret[0]);
+}
+
+/**
+ * Ironwood-tree variant of `frontier_tree_size`.
+ * @param {string} tree_state_hex
+ * @returns {bigint}
+ */
+export function frontier_tree_size_ironwood(tree_state_hex) {
+    const ptr0 = passStringToWasm0(tree_state_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.frontier_tree_size_ironwood(ptr0, len0);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
@@ -1271,41 +1390,6 @@ export function frost_generate_randomizer(ephemeral_seed_hex, message_hex, commi
         return getStringFromWasm0(ptr4, len4);
     } finally {
         wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
-    }
-}
-
-/**
- * Inspect a PCZT's orchard outputs + recompute its canonical ZIP-244 sighash,
- * for the FROST joiner's display↔sighash binding (gh #17). Returns the same
- * JSON shape as `frost_parse_tx_outputs`, but sources both the bundle and the
- * sighash from the PCZT itself via `Pczt::into_effects()` → `v5_signature_hash`.
- * So the value the joiner checks is the canonical message its signature will
- * commit to — never a host-supplied claim. The host publishes the (proven,
- * io-finalized, redacted) PCZT; `into_effects` needs neither proof nor sigs.
- * @param {string} pczt_hex
- * @param {string} orchard_fvk_uview
- * @returns {string}
- */
-export function frost_inspect_pczt_outputs(pczt_hex, orchard_fvk_uview) {
-    let deferred4_0;
-    let deferred4_1;
-    try {
-        const ptr0 = passStringToWasm0(pczt_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(orchard_fvk_uview, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len1 = WASM_VECTOR_LEN;
-        const ret = wasm.frost_inspect_pczt_outputs(ptr0, len0, ptr1, len1);
-        var ptr3 = ret[0];
-        var len3 = ret[1];
-        if (ret[3]) {
-            ptr3 = 0; len3 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred4_0 = ptr3;
-        deferred4_1 = len3;
-        return getStringFromWasm0(ptr3, len3);
-    } finally {
-        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
 }
 
@@ -1742,6 +1826,45 @@ export function tree_root_hex(tree_state_hex) {
 }
 
 /**
+ * Ironwood-tree variant of `tree_root_hex`.
+ * @param {string} tree_state_hex
+ * @returns {string}
+ */
+export function tree_root_hex_ironwood(tree_state_hex) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(tree_state_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.tree_root_hex_ironwood(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * Decode UR-encoded animated QR string frames back into CBOR bytes.
+ *
+ * Accepts a JSON array of UR strings (each `ur:<type>/...`) collected from
+ * successive scans of an animated QR. Returns the reconstructed payload bytes
+ * once the fountain decoder has enough frames (deduplicated internally), or an
+ * error if the parts are malformed or the fountain code can't yet reconstruct.
+ *
+ * `expected_type` is a sanity check: if non-empty, parts whose UR type doesn't
+ * match are rejected. Pass `""` to accept any type.
+ *
+ * Returns hex-encoded payload bytes (caller can hex_decode if it wants raw).
+ * We return hex (rather than `Vec<u8>` directly) to avoid a wasm-bindgen
+ * `Uint8Array` allocation pattern that's been flaky for us in some browsers.
  * @param {string} parts_json
  * @param {string} expected_type
  * @returns {string}
@@ -1874,6 +1997,21 @@ export function witness_extract_path(witness_hex) {
 }
 
 /**
+ * Ironwood-tree variant of `witness_extract_path`. Same JSON contract.
+ * @param {string} witness_hex
+ * @returns {any}
+ */
+export function witness_extract_path_ironwood(witness_hex) {
+    const ptr0 = passStringToWasm0(witness_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.witness_extract_path_ironwood(ptr0, len0);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
  * Advance tracked witnesses over a range of compact blocks, optionally
  * seeding new ones. Returns JSON
  * `{end_frontier_hex, anchor_hex, witnesses: [{id, position, witness_hex}], seeded_ids: [...], end_position}`.
@@ -1906,6 +2044,30 @@ export function witness_sync_update(start_frontier_hex, compact_blocks_json, exi
 }
 
 /**
+ * Ironwood-tree variant of `witness_sync_update`. Same JSON contract.
+ * @param {string} start_frontier_hex
+ * @param {string} compact_blocks_json
+ * @param {string} existing_witnesses_json
+ * @param {string} new_notes_json
+ * @returns {any}
+ */
+export function witness_sync_update_ironwood(start_frontier_hex, compact_blocks_json, existing_witnesses_json, new_notes_json) {
+    const ptr0 = passStringToWasm0(start_frontier_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(compact_blocks_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(existing_witnesses_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ptr3 = passStringToWasm0(new_notes_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len3 = WASM_VECTOR_LEN;
+    const ret = wasm.witness_sync_update_ironwood(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
  * Encode CBOR bytes as zoda transport QR frames (verified erasure coding).
  * Returns JSON array of `zt:type/hex` strings.
  * k = minimum frames to reconstruct, n = total frames.
@@ -1924,45 +2086,6 @@ export function zt_encode_frames(cbor_data, zt_type, k, n) {
         const ptr1 = passStringToWasm0(zt_type, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len1 = WASM_VECTOR_LEN;
         const ret = wasm.zt_encode_frames(ptr0, len0, ptr1, len1, k, n);
-        var ptr3 = ret[0];
-        var len3 = ret[1];
-        if (ret[3]) {
-            ptr3 = 0; len3 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred4_0 = ptr3;
-        deferred4_1 = len3;
-        return getStringFromWasm0(ptr3, len3);
-    } finally {
-        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
-    }
-}
-
-/**
- * Encode CBOR bytes as zoda transport QR frames, auto-sizing `k`/`n` so each
- * hex-encoded `zt:` frame fits a scannable QR regardless of payload size.
- * Returns JSON array of `zt:type/hex` strings.
- *
- * - `max_qr_bytes`: max *raw* frame bytes before hex encoding. The QR string
- *   is `len("zt:type/") + 2 * frame_bytes`, so pick this from the target QR
- *   capacity: roughly `qr_byte_capacity / 2 - prefix`. ~600 gives a ~1.2 KB
- *   QR string (≈ v24 at ECC-L), comfortable for handheld scanning.
- * - `redundancy_pct`: extra parity frames as a percentage of `k` (e.g. 30).
- * @param {Uint8Array} cbor_data
- * @param {string} zt_type
- * @param {number} max_qr_bytes
- * @param {number} redundancy_pct
- * @returns {string}
- */
-export function zt_encode_frames_auto(cbor_data, zt_type, max_qr_bytes, redundancy_pct) {
-    let deferred4_0;
-    let deferred4_1;
-    try {
-        const ptr0 = passArray8ToWasm0(cbor_data, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(zt_type, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len1 = WASM_VECTOR_LEN;
-        const ret = wasm.zt_encode_frames_auto(ptr0, len0, ptr1, len1, max_qr_bytes, redundancy_pct);
         var ptr3 = ret[0];
         var len3 = ret[1];
         if (ret[3]) {

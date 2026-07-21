@@ -124,9 +124,22 @@ interface IronwoodMigrateProps {
   backend: 'zidecar' | 'lightwalletd';
   mainnet: boolean;
   accountIndex: number;
-  /** UFVK for the PCZT cold-sign machine; absent = hot wallet (unsupported) */
+  /** UFVK for the PCZT cold-sign machine (cold/watch-only wallets) */
   ufvk?: string;
   orchardZat: bigint;
+  /**
+   * Hot (self-custody / mnemonic) wallet: the wasm signs the V6 tx in-worker
+   * and broadcasts directly - no zigner QR round trip. When true, `getMnemonic`
+   * MUST be provided.
+   */
+  isHotWallet?: boolean;
+  /**
+   * Fetch the decrypted seed phrase (behind the password gate) for the hot
+   * path. Returns null if the user cancels auth. Only called for hot wallets,
+   * only at build time; the returned seed is handed straight to the worker and
+   * never retained in component state.
+   */
+  getMnemonic?: () => Promise<string | null>;
 }
 
 /** Full-screen turnstile migration flow, reusing the send PCZT UI machine. */
@@ -139,6 +152,8 @@ export function IronwoodMigrate({
   accountIndex,
   ufvk,
   orchardZat,
+  isHotWallet,
+  getMnemonic,
 }: IronwoodMigrateProps) {
   const [step, setStep] = useState<MigrateStep>('review');
   const [error, setError] = useState<string | null>(null);
@@ -167,10 +182,63 @@ export function IronwoodMigrate({
   }, [step]);
 
   const handleBuild = useCallback(async () => {
+    // HOT (self-custody) wallet: the wasm builds + proves + SIGNS the V6 tx and
+    // the worker broadcasts it directly. One worker call covers build -> sign ->
+    // broadcast, so we stay on 'building' (which shows live worker progress)
+    // and jump straight to 'complete' - no 'sign'/'scan' zigner steps.
+    if (isHotWallet) {
+      if (!getMnemonic) {
+        setError('hot-wallet signing unavailable (missing key access)');
+        setStep('error');
+        return;
+      }
+      setError(null);
+      setProgressSteps([]);
+      // pull the seed behind the password gate BEFORE showing the building
+      // screen; a cancelled/failed unlock returns to review without building.
+      let seed: string | null;
+      try {
+        seed = await getMnemonic();
+      } catch {
+        setError('could not unlock wallet');
+        setStep('error');
+        return;
+      }
+      if (!seed) {
+        // user cancelled the password prompt
+        setStep('review');
+        return;
+      }
+      setStep('building');
+      try {
+        await spawnNetworkWorker('zcash');
+        const result = await buildTurnstileMigrationInWorker(
+          'zcash',
+          walletId,
+          serverUrl,
+          accountIndex,
+          mainnet,
+          ufvk,
+          backend,
+          seed,
+        );
+        // hot path resolves to { txid, fee } (tx already broadcast in-worker)
+        if (!('txid' in result)) {
+          throw new Error('hot migration did not return a txid');
+        }
+        setTxid(result.txid);
+        setStep('complete');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'failed to build migration transaction');
+        setStep('error');
+      }
+      return;
+    }
+
+    // COLD (zigner / watch-only) wallet: build an UNSIGNED PCZT and hand off to
+    // the zigner QR cold-sign machine (unchanged).
     if (!ufvk) {
-      setError(
-        'turnstile migration currently requires a zigner (cold-sign) wallet - hot-wallet signing lands with the NU6.3 signer update',
-      );
+      setError('turnstile migration requires a zigner (cold-sign) or self-custody wallet');
       setStep('error');
       return;
     }
@@ -188,6 +256,10 @@ export function IronwoodMigrate({
         ufvk,
         backend,
       );
+      // cold path resolves to the unsigned PCZT result (with UR frames)
+      if ('txid' in result) {
+        throw new Error('unexpected signed result on cold-sign path');
+      }
       unsignedRef.current = result;
       setUrFrames(result.urFrames);
       setStep('sign');
@@ -195,7 +267,7 @@ export function IronwoodMigrate({
       setError(err instanceof Error ? err.message : 'failed to build migration transaction');
       setStep('error');
     }
-  }, [ufvk, walletId, serverUrl, accountIndex, mainnet, backend]);
+  }, [isHotWallet, getMnemonic, ufvk, walletId, serverUrl, accountIndex, mainnet, backend]);
 
   const handleSignedScanned = useCallback(
     async (envelopeBytes: Uint8Array) => {

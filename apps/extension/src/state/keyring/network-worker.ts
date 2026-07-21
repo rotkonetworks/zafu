@@ -777,10 +777,17 @@ export interface TurnstileMigrationUnsignedResult {
 }
 
 /**
- * Build the NU6.3 turnstile migration PCZT: spends the wallet's FULL
- * orchard balance to its OWN ironwood address (derived from the UFVK inside
- * the wasm) in a single V6 transaction, cold-signed via the existing PCZT
- * QR machine. Feature-flagged (IRONWOOD_MIGRATION) at the UI layer.
+ * Build the NU6.3 turnstile migration: spends the wallet's FULL orchard
+ * balance to its OWN ironwood address (derived inside the wasm) in a single V6
+ * transaction. Feature-flagged (IRONWOOD_MIGRATION) at the UI layer.
+ *
+ * Two modes, selected by which secret is provided:
+ * - HOT (mnemonic passed): the worker builds + proves + SIGNS the tx inside the
+ *   wasm and broadcasts it directly, resolving to `{ txid, fee }`. No PCZT is
+ *   produced or transmitted. `ufvk` is ignored.
+ * - COLD (mnemonic omitted, ufvk passed): the worker builds an UNSIGNED PCZT
+ *   for the zigner cold-sign QR machine, resolving to
+ *   `TurnstileMigrationUnsignedResult` (frames etc.).
  */
 export const buildTurnstileMigrationInWorker = async (
   network: NetworkType,
@@ -788,14 +795,15 @@ export const buildTurnstileMigrationInWorker = async (
   serverUrl: string,
   accountIndex: number,
   mainnet: boolean,
-  ufvk: string,
+  ufvk: string | undefined,
   backend: 'zidecar' | 'lightwalletd' = 'zidecar',
+  mnemonic?: string,
   fragmentSize = 400,
-): Promise<TurnstileMigrationUnsignedResult> => {
+): Promise<TurnstileMigrationUnsignedResult | { txid: string; fee: string }> => {
   return callWorker(
     network,
     'send-turnstile-migration',
-    { serverUrl, accountIndex, mainnet, ufvk, backend, fragmentSize },
+    { serverUrl, accountIndex, mainnet, ufvk, backend, mnemonic, fragmentSize },
     walletId,
   );
 };

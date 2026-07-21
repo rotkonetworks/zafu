@@ -359,6 +359,28 @@ interface WasmModule {
     memo_hex?: string | null,
   ) => unknown;
 
+  /**
+   * NU6.3 turnstile migration HOT (mnemonic) path: same as
+   * build_turnstile_migration_pczt but takes the SEED PHRASE and returns the
+   * final SIGNED V6 tx hex directly - no intermediate PCZT is produced. The
+   * account_index MUST be the account the orchard notes were scanned under, and
+   * expected_branch_id MUST be the live GetLightdInfo branch id (never the
+   * 0xffffffff placeholder); the producer refuses to build otherwise. Invoked
+   * via the offscreen prover (proveViaOffscreen), declared here for completeness.
+   */
+  build_signed_turnstile_migration?: (
+    seed_phrase: string,
+    orchard_notes_json: string,
+    fee: bigint,
+    orchard_anchor_hex: string,
+    orchard_merkle_paths_json: string,
+    account_index: number,
+    target_height: number,
+    expected_branch_id: number,
+    mainnet: boolean,
+    memo_hex?: string | null,
+  ) => string;
+
   // FROST multisig
   frost_dealer_keygen(min_signers: number, max_signers: number): string;
   frost_dkg_part1(max_signers: number, min_signers: number): string;
@@ -1274,6 +1296,7 @@ interface ZcashBuildRequest {
     | 'build_unsigned'
     | 'build_unsigned_pczt'
     | 'build_turnstile_migration_pczt'
+    | 'build_signed_turnstile_migration'
     | 'build_shielding'
     | 'build_unsigned_shielding';
   args: unknown[];
@@ -4419,11 +4442,15 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (migratePayload.backend) {
           registerBackend(migratePayload.serverUrl, migratePayload.backend);
         }
-        if (!migratePayload.ufvk) {
-          // The turnstile flow reuses the UFVK-based PCZT cold-sign machine.
-          // Hot-wallet (mnemonic) signing of V6/ironwood transactions needs
-          // the NU6.3 signer wasm and is intentionally not wired here yet.
-          throw new Error('UFVK required for turnstile migration (cold-sign PCZT flow)');
+        // HOT (mnemonic) vs COLD (zigner/UFVK) turnstile. A hot/self-custody
+        // wallet supplies the seed phrase in-worker and signs the V6 tx with
+        // the NU6.3 signer wasm (build_signed_turnstile_migration), returning a
+        // ready-to-broadcast tx - no PCZT/QR round trip. A watch-only/zigner
+        // wallet supplies a UFVK and takes the cold PCZT cold-sign machine.
+        // Prefer the seed when present; fall back to the UFVK cold path.
+        const isHotMigration = !!migratePayload.mnemonic;
+        if (!isHotMigration && !migratePayload.ufvk) {
+          throw new Error('turnstile migration requires a mnemonic (hot) or UFVK (cold) wallet');
         }
 
         const migrateStart = performance.now();
@@ -4521,6 +4548,87 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           path: p.path.map(e => e.hash),
           position: p.position,
         }));
+
+        // ── HOT (mnemonic) path ───────────────────────────────────────────
+        // Self-custody wallet: build + prove + SIGN the V6 turnstile tx inside
+        // the wasm with the seed phrase, then broadcast the returned tx hex
+        // directly. No PCZT is produced, persisted, or transmitted - the wasm
+        // returns only the final signed tx. Reuses the EXACT same params the
+        // cold path passes (notes, fee, anchor, merkle paths, accountIndex,
+        // target height, expected branch id, mainnet), so nullifier derivation
+        // and the fail-closed branch-id guard match the cold path bit for bit.
+        if (isHotMigration) {
+          const migrateSeed = migratePayload.mnemonic!;
+          emitProgress(
+            'building, proving & signing turnstile tx (halo2)',
+            `${orchardNotes.length} orchard spends -> ironwood`,
+          );
+          const hotProveStart = performance.now();
+          // keep the clock ticking during proving so the UI isn't frozen
+          const hotProvingTicker = setInterval(() => {
+            const elapsed = ((performance.now() - hotProveStart) / 1000).toFixed(0);
+            emitProgress('proving (halo2)', `${elapsed}s elapsed`);
+          }, 2000);
+          let migrateTxHex: string;
+          try {
+            // target_height = live tip; at/after NU6.3 activation this selects
+            // TxVersion::V6 (orchard spends + ironwood outputs) in the builder.
+            // account_index MUST be the account the orchard notes were scanned
+            // under (same as the cold path) or the wasm's nullifier check
+            // rejects every spend. NU63_CONSENSUS_BRANCH_ID is the live value
+            // validated from GetLightdInfo above (never the placeholder); the
+            // producer refuses to build unless the branch id it binds equals it.
+            migrateTxHex = (await proveViaOffscreen({
+              fn: 'build_signed_turnstile_migration',
+              args: [
+                migrateSeed,
+                JSON.stringify(notesForWasm),
+                fee.toString(),
+                anchorHex,
+                JSON.stringify(pathsForWasm),
+                migratePayload.accountIndex,
+                migrateTip.height,
+                NU63_CONSENSUS_BRANCH_ID,
+                migratePayload.mainnet,
+                null,
+              ],
+            })) as string;
+          } catch (e) {
+            // do NOT log the seed or the caught args; message only
+            console.error('[zcash-worker] build_signed_turnstile_migration failed');
+            throw e;
+          } finally {
+            clearInterval(hotProvingTicker);
+          }
+
+          emitProgress('turnstile tx signed', `${migrateTxHex.length / 2} bytes`);
+          emitProgress('broadcasting migration');
+          const migrateHotTxData = hexDecode(migrateTxHex);
+          const migrateHotClient = await makeZcashClient(
+            migratePayload.serverUrl,
+            migratePayload.backend,
+          );
+          const migrateHotResult = await migrateHotClient.sendTransaction(migrateHotTxData);
+          if (migrateHotResult.errorCode !== 0) {
+            throw new Error(
+              `broadcast failed (${migrateHotResult.errorCode}): ${migrateHotResult.errorMessage}`,
+            );
+          }
+          const migrateHotTxid = await resolveBroadcastTxid(
+            migrateHotResult,
+            migrateTxHex,
+            migratePayload.serverUrl,
+          );
+          emitProgress('complete', `txid=${migrateHotTxid}`);
+          workerSelf.postMessage({
+            type: 'tx-result',
+            id,
+            network: 'zcash',
+            walletId,
+            payload: { txid: migrateHotTxid, fee: fee.toString() },
+          });
+          return;
+        }
 
         emitProgress(
           'building & proving turnstile PCZT (halo2)',
