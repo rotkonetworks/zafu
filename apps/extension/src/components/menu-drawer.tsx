@@ -18,6 +18,7 @@ import { PopupPath } from '../routes/popup/paths';
 import { cn } from '@repo/ui/lib/utils';
 import { isSidePanel } from '../utils/popup-detection';
 import { hasFeature } from '../config/networks';
+import { IRONWOOD_MIGRATION } from '../config/feature-flags';
 
 /** donation addresses per network */
 const DONATE: Record<string, { address: string; name: string }> = {
@@ -114,6 +115,17 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
       },
     },
     // vote lives in the bottom tabs (feature-gated) — no drawer duplicate
+    // per-pool notes (orchard legacy vs ironwood) — zcash + NU6.3 dual-pool
+    // surface only. Dormant when IRONWOOD_MIGRATION is OFF.
+    IRONWOOD_MIGRATION &&
+      activeNetwork === 'zcash' && {
+        icon: 'i-lucide-layers-2',
+        label: 'pool notes',
+        onClick: () => {
+          navigate(PopupPath.POOL_NOTES);
+          onClose();
+        },
+      },
     showMultisig && {
       icon: 'i-lucide-shield',
       label: 'multisig',

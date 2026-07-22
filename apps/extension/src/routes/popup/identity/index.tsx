@@ -4,16 +4,34 @@
  * the zid is a seed-derived ed25519 identity. each site gets a unique
  * key by default (unlinkable). cross-site mode is opt-in and dangerous.
  * rotation creates a fresh key for a site without affecting other sites.
+ *
+ * visual model: "identity as an object". the current generation is a
+ * physical keycard sitting on a visible stack of its sibling generations.
+ * the gen index is the hero number; pins are index-tabs on the stack.
+ * default view stays terse - full pubkey, qr, and per-site controls all
+ * live behind hover/expand reveals (see DESIGN.md restraint).
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import type { CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo, selectKeyInfos } from '../../../state/keyring';
 import { allContactsSelector } from '../../../state/contacts';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import type { ZidSitePreference, ZidShareRecord } from '../../../state/identity';
-import { ZID_INDEX_STORAGE_KEY, getZidIndex, rotateZidIndex } from '../../../state/identity';
+import {
+  ZID_INDEX_STORAGE_KEY,
+  ZID_PINS_STORAGE_KEY,
+  type ZidPin,
+  addZidPin,
+  getZidIndex,
+  getZidPins,
+  removeZidPin,
+  rotateZidIndex,
+  rotateZidIndexDown,
+  setZidIndex,
+} from '../../../state/identity';
 import { getOriginPermissions, grantCapability, denyCapability } from '@repo/storage-chrome/origin';
 import { revokeOrigin as revokeOriginFull } from '../../../senders/revoke';
 import {
@@ -38,6 +56,35 @@ interface SiteIdentity {
 
 type ActiveTab = 'sites' | 'log';
 
+/** shared focus-visible ring for every interactive control (keyboard access). */
+const focusRing =
+  'focus:outline-none focus-visible:ring-1 focus-visible:ring-network-accent focus-visible:ring-offset-0';
+
+/* keycard depth - decorative shadows/tints with no token equivalent, kept
+   inline the same way glass-surface composes its rim. gold = zigner-gold
+   (#f4b728), the only accent the live identity is allowed to carry. */
+const CARD_STYLE: CSSProperties = {
+  background:
+    'radial-gradient(120% 90% at 12% 0%, rgba(244,183,40,0.10) 0%, rgba(244,183,40,0) 42%), linear-gradient(158deg, #151515 0%, #0c0c0c 46%, #070707 100%)',
+  borderTopColor: 'rgba(244,183,40,0.30)',
+  boxShadow:
+    'inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -1px 0 rgba(0,0,0,0.55), 0 0 0 1px rgba(244,183,40,0.06), 0 2px 4px rgba(0,0,0,0.5), 0 18px 34px -16px rgba(0,0,0,0.95)',
+};
+const GHOST_STYLE: CSSProperties = { background: 'linear-gradient(180deg, #0c0c0c, #070707)' };
+const CHIP_STYLE: CSSProperties = {
+  boxShadow:
+    'inset 0 0 0 1px rgba(255,255,255,0.06), 0 0 0 3px rgba(0,0,0,0.6), 0 0 0 4px rgba(244,183,40,0.16), 0 4px 10px -4px rgba(0,0,0,0.9)',
+};
+const CHIP_GLOSS: CSSProperties = {
+  background: 'linear-gradient(150deg, rgba(255,255,255,0.16) 0%, rgba(255,255,255,0) 40%)',
+};
+const WATERMARK_STYLE: CSSProperties = {
+  fontSize: 96,
+  color: 'rgba(244,183,40,0.05)',
+  letterSpacing: '-0.04em',
+};
+const HERO_STYLE: CSSProperties = { textShadow: '0 0 18px rgba(244,183,40,0.28)' };
+
 const shortDate = (ms: number): string => {
   const d = new Date(ms);
   const diff = Date.now() - ms;
@@ -52,6 +99,21 @@ const shortDate = (ms: number): string => {
 
 const displayOrigin = (origin: string): string =>
   origin.replace(/^https?:\/\//, '').replace(/\/$/, '');
+
+const pad2 = (n: number): string => String(n).padStart(2, '0');
+
+/** honor the OS "reduce motion" setting for the card-stack morph. */
+const usePrefersReducedMotion = (): boolean => {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setReduced(mq.matches);
+    const on = () => setReduced(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return reduced;
+};
 
 /**
  * deterministic visual fingerprint from a hex pubkey.
@@ -85,7 +147,7 @@ const ZidFingerprint = ({ pubkeyHex, size = 40 }: { pubkeyHex: string; size?: nu
   const cellSize = size / 5;
   return (
     <div
-      className='rounded overflow-hidden shrink-0'
+      className='overflow-hidden shrink-0'
       style={{
         width: size,
         height: size,
@@ -124,29 +186,77 @@ export const IdentityPage = () => {
   const [showFullKey, setShowFullKey] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [zidIndex, setZidIndexState] = useState(0);
-  const [confirmingRotate, setConfirmingRotate] = useState(false);
+  const [zidPins, setZidPins] = useState<ZidPin[]>([]);
   const reloadSites = useCallback(() => setReloadKey(k => k + 1), []);
 
-  // load + subscribe to global zidIndex (chrome.storage.local)
+  // card-stack morph: a subtle settle when the generation changes. gated by
+  // prefers-reduced-motion so it never animates for users who opt out.
+  const reducedMotion = usePrefersReducedMotion();
+  const [morph, setMorph] = useState(false);
+  const firstGenRef = useRef(true);
+  useEffect(() => {
+    if (firstGenRef.current) {
+      firstGenRef.current = false;
+      return;
+    }
+    if (reducedMotion) {
+      return;
+    }
+    setMorph(true);
+    const t = window.setTimeout(() => setMorph(false), 340);
+    return () => window.clearTimeout(t);
+  }, [zidIndex, reducedMotion]);
+
+  // load + subscribe to global zidIndex + pinned generations (chrome.storage.local)
   useEffect(() => {
     void getZidIndex().then(setZidIndexState);
+    void getZidPins().then(setZidPins);
     const listener = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
-      if (area === 'local' && changes[ZID_INDEX_STORAGE_KEY]) {
+      if (area !== 'local') {
+        return;
+      }
+      if (changes[ZID_INDEX_STORAGE_KEY]) {
         const v = changes[ZID_INDEX_STORAGE_KEY].newValue;
         if (typeof v === 'number') {
           setZidIndexState(v);
         }
+      }
+      if (changes[ZID_PINS_STORAGE_KEY]) {
+        void getZidPins().then(setZidPins);
       }
     };
     chrome.storage.onChanged.addListener(listener);
     return () => chrome.storage.onChanged.removeListener(listener);
   }, []);
 
-  const handleRotateZid = useCallback(async () => {
+  // Rotation is reversible: up = next generation, down = previous. Every
+  // generation is a deterministic derivation, so switching never destroys an
+  // identity - you can always rotate back down (or jump to a pin) to restore it.
+  const handleRotateUp = useCallback(async () => {
     await rotateZidIndex();
-    setConfirmingRotate(false);
     reloadSites();
   }, [reloadSites]);
+
+  const handleRotateDown = useCallback(async () => {
+    await rotateZidIndexDown();
+    reloadSites();
+  }, [reloadSites]);
+
+  const handleJumpTo = useCallback(
+    async (index: number) => {
+      await setZidIndex(index);
+      reloadSites();
+    },
+    [reloadSites],
+  );
+
+  const handlePinCurrent = useCallback(async () => {
+    setZidPins(await addZidPin(zidIndex, `gen ${zidIndex}`));
+  }, [zidIndex]);
+
+  const handleUnpin = useCallback(async (index: number) => {
+    setZidPins(await removeZidPin(index));
+  }, []);
 
   // try active keyinfo first, then any keyinfo with a zid (mnemonic wallets)
   const zidPubkey = (keyInfo?.insensitive?.['zid'] ??
@@ -272,7 +382,7 @@ export const IdentityPage = () => {
                 <p className='mt-2 text-xs text-fg-muted text-center px-6'>
                   create a mnemonic wallet
                   {hasAnyZignerWallet
-                    ? ', or re-import your zigner wallet with the latest zigner build — the fvk QR now embeds your zid automatically.'
+                    ? ', or re-import your zigner wallet with the latest zigner build - the fvk QR now embeds your zid automatically.'
                     : ' to get a zid. zigner-imported wallets also provision a zid when imported from a current zigner build.'}
                 </p>
               </>
@@ -289,7 +399,7 @@ export const IdentityPage = () => {
           <div className='flex flex-col gap-2'>
             <button
               onClick={() => navigate(PopupPath.CONTACTS)}
-              className='flex items-center justify-between text-xs font-mono text-fg-muted hover:text-fg-muted'
+              className={`flex items-center justify-between text-xs font-mono text-fg-muted hover:text-fg-high transition-colors ${focusRing}`}
             >
               <span className='flex items-center gap-1.5'>
                 <span className='i-lucide-users size-3.5' />
@@ -303,160 +413,267 @@ export const IdentityPage = () => {
     );
   }
 
+  const genPad = pad2(zidIndex);
+  const isPinned = zidPins.some(p => p.index === zidIndex);
+  // ghost cards = the generations beneath the current one (honest depth: none
+  // at gen 0, one below at gen 1, two-or-more below from gen 2 up).
+  const stackDepth = Math.min(zidIndex, 2);
+
   return (
     <SettingsScreen title='identity' backPath={PopupPath.INDEX}>
       <div className='flex flex-col gap-5'>
-        {/* -- identity card -- */}
-        <section className='rounded border border-border-soft p-3'>
-          <div className='flex items-start gap-3'>
-            <ZidFingerprint pubkeyHex={zidPubkey} size={44} />
-            <div className='flex-1 min-w-0'>
-              {/* address + copy */}
-              <button
-                onClick={() => copy(zidPubkey, 'zid')}
-                className='flex items-center gap-1.5 group'
-              >
-                <span className='font-mono text-sm text-fg'>{zidAddress}</span>
-                <span
-                  className={`size-3.5 transition-colors ${
-                    copied === 'zid'
-                      ? 'i-lucide-check text-green-400'
-                      : 'i-lucide-copy text-fg-muted/70 group-hover:text-fg-muted'
-                  }`}
-                />
-              </button>
+        {/* -- identity object: the keycard on its stack -- */}
+        <div className='flex flex-col gap-3'>
+          <section className='relative pt-3'>
+            {/* ghost cards behind = sibling generations in the stack */}
+            {stackDepth >= 2 && (
+              <div
+                aria-hidden
+                className='absolute left-4 right-4 top-0 h-14 z-0 border border-border-soft opacity-30'
+                style={GHOST_STYLE}
+              />
+            )}
+            {stackDepth >= 1 && (
+              <div
+                aria-hidden
+                className='absolute left-2 right-2 top-1.5 h-14 z-[1] border border-border-soft opacity-60'
+                style={GHOST_STYLE}
+              />
+            )}
 
-              {/* vault name + plan badge + rotation index */}
-              <div className='flex items-center gap-2 mt-1 flex-wrap'>
-                {keyInfo && (
-                  <span className='text-label text-fg-muted font-mono'>{keyInfo.name}</span>
-                )}
+            <div
+              className={`relative z-[2] overflow-hidden border border-border-hard p-3.5 will-change-transform ease-out motion-safe:transition-transform motion-safe:duration-300 ${
+                morph ? 'translate-y-[3px] scale-[0.99]' : 'translate-y-0 scale-100'
+              }`}
+              style={CARD_STYLE}
+            >
+              {/* engraved generation watermark */}
+              <span
+                aria-hidden
+                className='pointer-events-none absolute -top-3 right-1 select-none font-headline font-bold leading-none tabular'
+                style={WATERMARK_STYLE}
+              >
+                {genPad}
+              </span>
+
+              {/* card head: object label + plan chip */}
+              <div className='relative z-[1] flex items-center justify-between mb-3'>
+                <span className='kicker flex items-center gap-1.5'>
+                  <span className='i-lucide-fingerprint size-3.5 text-network-accent' />
+                  zafu id
+                </span>
                 <span
-                  className={`text-label font-mono px-1.5 py-0 rounded ${
+                  className={`flex items-center gap-1 text-label font-mono px-1.5 py-0.5 border ${
                     pro
-                      ? 'bg-green-500/15 text-green-400 border border-green-500/20'
-                      : 'bg-elev-2 text-fg-muted/70 border border-border-soft'
+                      ? 'border-network-accent/35 bg-network-accent/10 text-network-accent-light'
+                      : 'border-border-soft bg-elev-2 text-fg-muted'
+                  }`}
+                  title={pro ? 'zafu pro' : 'free plan'}
+                >
+                  {pro && <span className='i-lucide-crown size-3' />}
+                  {plan}
+                  {pro && days > 0 ? ` · ${days}d` : ''}
+                </span>
+              </div>
+
+              {/* card body: fingerprint chip + short zid */}
+              <div className='relative z-[1] flex items-center gap-3'>
+                <div className='relative shrink-0 overflow-hidden' style={CHIP_STYLE}>
+                  <ZidFingerprint pubkeyHex={zidPubkey} size={48} />
+                  <span
+                    aria-hidden
+                    className='pointer-events-none absolute inset-0'
+                    style={CHIP_GLOSS}
+                  />
+                </div>
+                <div className='min-w-0 flex-1'>
+                  <button
+                    onClick={() => copy(zidPubkey, 'zid')}
+                    title='copy public key'
+                    className={`flex items-center gap-1.5 group max-w-full ${focusRing}`}
+                  >
+                    <span className='font-mono text-data text-fg-high truncate'>
+                      <span className='text-network-accent'>{zidAddress?.slice(0, 3)}</span>
+                      {zidAddress?.slice(3)}
+                    </span>
+                    <span
+                      className={`size-3.5 shrink-0 transition-colors ${
+                        copied === 'zid'
+                          ? 'i-lucide-check text-success'
+                          : 'i-lucide-copy text-fg-dim group-hover:text-fg-muted'
+                      }`}
+                    />
+                  </button>
+                  {keyInfo?.name && (
+                    <div className='mt-1 flex items-center gap-1.5 text-label font-mono text-fg-muted'>
+                      <span className='i-lucide-layers size-3 text-fg-dim' />
+                      <span className='truncate'>{keyInfo.name}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* reversible generation switcher - rotate down/up to morph
+                  between generations, pin to bookmark. hints live in title
+                  tooltips so the default view stays terse. */}
+              <div className='relative z-[1] mt-3.5 flex items-center gap-2.5 border border-border-soft bg-black/40 p-3'>
+                <button
+                  type='button'
+                  onClick={() => void handleRotateDown()}
+                  disabled={zidIndex === 0}
+                  title='previous generation (rotate down)'
+                  className={`grid size-8 shrink-0 place-items-center border border-border-hard bg-elev-1 text-fg-muted transition-colors hover:text-fg-high hover:border-fg-dim disabled:opacity-30 disabled:hover:text-fg-muted disabled:hover:border-border-hard ${focusRing}`}
+                >
+                  <span className='i-lucide-chevron-left size-4' />
+                </button>
+                <div className='flex-1 text-center leading-none'>
+                  <div className='text-label text-fg-muted lowercase tracking-wide'>generation</div>
+                  <div
+                    className='text-display tabular text-network-accent-light'
+                    style={HERO_STYLE}
+                  >
+                    {genPad}
+                  </div>
+                </div>
+                <button
+                  type='button'
+                  onClick={() => void handleRotateUp()}
+                  title='next generation (rotate up)'
+                  className={`grid size-8 shrink-0 place-items-center border border-border-hard bg-elev-1 text-fg-muted transition-colors hover:text-fg-high hover:border-fg-dim ${focusRing}`}
+                >
+                  <span className='i-lucide-chevron-right size-4' />
+                </button>
+                <button
+                  type='button'
+                  onClick={() => (isPinned ? void handleUnpin(zidIndex) : void handlePinCurrent())}
+                  title={isPinned ? 'unpin this generation' : 'pin this generation'}
+                  className={`grid size-8 shrink-0 place-items-center border transition-colors ${focusRing} ${
+                    isPinned
+                      ? 'border-network-accent/35 bg-network-accent/10 text-network-accent'
+                      : 'border-border-hard text-fg-muted hover:text-fg-high hover:border-fg-dim'
                   }`}
                 >
-                  {plan}
-                  {pro && days > 0 ? ` - ${days}d` : ''}
-                </span>
-                {zidIndex > 0 && (
-                  <span
-                    className='text-label font-mono px-1.5 py-0 rounded bg-elev-2 text-fg-muted/70 border border-border-soft'
-                    title='global zid rotation index. all sites + cross-site keys derive under this generation.'
-                  >
-                    gen {zidIndex}
-                  </span>
-                )}
-                {confirmingRotate ? (
-                  <span className='flex items-center gap-1'>
-                    <button
-                      type='button'
-                      onClick={() => void handleRotateZid()}
-                      className='text-label font-mono px-1.5 py-0 rounded border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 transition-colors'
-                    >
-                      confirm rotate
-                    </button>
-                    <button
-                      type='button'
-                      onClick={() => setConfirmingRotate(false)}
-                      className='text-label font-mono px-1.5 py-0 rounded border border-border-soft text-fg-muted hover:bg-elev-2 transition-colors'
-                    >
-                      cancel
-                    </button>
-                  </span>
-                ) : (
-                  <button
-                    type='button'
-                    onClick={() => setConfirmingRotate(true)}
-                    className='text-label font-mono px-1.5 py-0 rounded border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 transition-colors'
-                    title='rotate zid - all sites + cross-site keys get fresh derivations. ring vrf seed (pro) is preserved.'
-                  >
-                    rotate zid
-                  </button>
-                )}
+                  <span className={`size-4 ${isPinned ? 'i-lucide-pin-off' : 'i-lucide-pin'}`} />
+                </button>
               </div>
-            </div>
-          </div>
 
-          {/* full public key (expandable) */}
-          <div className='mt-3'>
-            <button
-              onClick={() => setShowFullKey(!showFullKey)}
-              className='flex items-center gap-1 text-label text-fg hover:text-fg-high font-mono'
-            >
-              <span
-                className={`size-3 transition-transform ${showFullKey ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'}`}
-              />
-              public key
-            </button>
-            {showFullKey && (
-              <button onClick={() => copy(zidPubkey, 'zid')} className='mt-1 pl-4 text-left'>
-                <div className='font-mono text-label text-fg-muted break-all leading-relaxed'>
-                  {zidPubkey}
+              {/* pins = saved generations / index tabs. hidden until pinned. */}
+              {zidPins.length > 0 && (
+                <div className='relative z-[1] mt-3 flex flex-wrap items-center gap-1.5'>
+                  <span className='text-label text-fg-dim lowercase mr-0.5'>pinned</span>
+                  {zidPins.map(p => (
+                    <button
+                      key={p.index}
+                      type='button'
+                      onClick={() => void handleJumpTo(p.index)}
+                      title={`switch to ${p.label}`}
+                      className={`flex items-center gap-1 text-label font-mono px-2 py-0.5 border transition-colors ${focusRing} ${
+                        p.index === zidIndex
+                          ? 'border-network-accent/40 bg-network-accent/10 text-network-accent'
+                          : 'border-border-hard text-fg-muted hover:text-fg-high hover:border-fg-dim'
+                      }`}
+                    >
+                      <span className='i-lucide-pin size-3' />
+                      {p.label}
+                    </button>
+                  ))}
                 </div>
+              )}
+            </div>
+
+            {morph && (
+              <span className='sr-only' aria-live='polite'>{`generation ${zidIndex}`}</span>
+            )}
+          </section>
+
+          {/* quiet controls beneath the card: reveals for the full pubkey + qr,
+              plus the cross-site linkable signal. detail on demand only. */}
+          <div className='flex flex-col gap-2'>
+            <div className='flex items-center gap-4 text-label font-mono'>
+              <button
+                onClick={() => setShowFullKey(!showFullKey)}
+                title='show full public key'
+                className={`flex items-center gap-1 text-fg-muted hover:text-fg-high transition-colors ${focusRing}`}
+              >
+                <span
+                  className={`size-3 transition-transform ${showFullKey ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'}`}
+                />
+                public key
+              </button>
+              <button
+                onClick={() => setShowQr(!showQr)}
+                title='show qr code'
+                className={`flex items-center gap-1 text-fg-muted hover:text-fg-high transition-colors ${focusRing}`}
+              >
+                <span className={`size-3 ${showQr ? 'i-lucide-eye-off' : 'i-lucide-qr-code'}`} />
+                {showQr ? 'hide qr' : 'qr code'}
+              </button>
+              {crossSiteCount > 0 && (
+                <span
+                  className='flex items-center gap-1 text-warning'
+                  title='sites sharing a key can link your sessions'
+                >
+                  <span className='i-lucide-triangle-alert size-3' />
+                  {crossSiteCount} linkable
+                </span>
+              )}
+            </div>
+
+            {showFullKey && (
+              <button
+                onClick={() => copy(zidPubkey, 'zid')}
+                title='copy public key'
+                className={`text-left border border-border-soft bg-elev-1 p-2 ${focusRing}`}
+              >
+                <span className='block font-mono text-label text-fg-muted break-all leading-relaxed hover:text-fg'>
+                  {zidPubkey}
+                </span>
               </button>
             )}
-          </div>
 
-          {/* qr toggle */}
-          {showQr && (
-            <div className='mt-3 flex justify-center'>
-              <div className='bg-white p-2 rounded'>
-                <QrCanvas data={zidPubkey} size={140} />
+            {showQr && (
+              <div className='flex justify-center'>
+                <div className='bg-white p-2'>
+                  <QrCanvas data={zidPubkey} size={140} />
+                </div>
               </div>
-            </div>
-          )}
-
-          {/* action bar — qr toggle; counts live on the tabs below, not
-              repeated here. the linkable warning stays: it's a signal, not
-              a stat. */}
-          <div className='flex items-center gap-3 mt-3 pt-2 border-t border-border-soft'>
-            <button
-              onClick={() => setShowQr(!showQr)}
-              className='flex items-center gap-1 text-label text-fg-muted/70 hover:text-fg-muted font-mono'
-            >
-              <span className={`size-3 ${showQr ? 'i-lucide-eye-off' : 'i-lucide-qr-code'}`} />
-              {showQr ? 'hide qr' : 'qr code'}
-            </button>
-            {crossSiteCount > 0 && (
-              <span className='text-label text-yellow-500/60 font-mono'>
-                {crossSiteCount} linkable
-              </span>
             )}
           </div>
-        </section>
+        </div>
 
         {/* -- tabs -- */}
-        <div className='flex gap-4 text-xs font-mono'>
+        <div className='flex gap-4 border-b border-border-soft text-body font-mono'>
           <button
             onClick={() => setActiveTab('sites')}
-            className={`flex items-center gap-1 ${activeTab === 'sites' ? 'text-fg' : 'text-fg-muted/70 hover:text-fg-muted'}`}
+            className={`-mb-px flex items-center gap-1.5 pb-2 border-b-2 transition-colors ${focusRing} ${
+              activeTab === 'sites'
+                ? 'border-network-accent text-fg-high'
+                : 'border-transparent text-fg-muted hover:text-fg'
+            }`}
           >
-            <span className='i-lucide-globe size-3' />
-            sites ({sites.length})
+            <span className='i-lucide-globe size-3.5' />
+            sites <span className='text-fg-dim'>({sites.length})</span>
           </button>
           <button
             onClick={() => setActiveTab('log')}
-            className={`flex items-center gap-1 ${activeTab === 'log' ? 'text-fg' : 'text-fg-muted/70 hover:text-fg-muted'}`}
+            className={`-mb-px flex items-center gap-1.5 pb-2 border-b-2 transition-colors ${focusRing} ${
+              activeTab === 'log'
+                ? 'border-network-accent text-fg-high'
+                : 'border-transparent text-fg-muted hover:text-fg'
+            }`}
           >
-            <span className='i-lucide-scroll-text size-3' />
-            log ({shareLog.length})
+            <span className='i-lucide-scroll-text size-3.5' />
+            log <span className='text-fg-dim'>({shareLog.length})</span>
           </button>
         </div>
 
         {/* -- sites -- */}
         {activeTab === 'sites' && (
-          <section className='flex flex-col gap-1'>
+          <section className='flex flex-col'>
             {sites.length === 0 ? (
               <div className='flex flex-col items-center py-6 text-center text-fg-muted'>
                 <span className='i-lucide-globe size-6 mb-2' />
-                <p className='text-xs font-mono'>no sites yet.</p>
-                <p className='text-label font-mono mt-1 max-w-[260px]'>
-                  each site you sign into gets its own key, derived from your seed — sites can't
-                  link you across origins.
-                </p>
+                <p className='text-body font-mono'>no sites yet</p>
               </div>
             ) : (
               sites.map(site => (
@@ -488,23 +705,24 @@ export const IdentityPage = () => {
 
         {/* -- log -- */}
         {activeTab === 'log' && (
-          <section className='flex flex-col gap-0'>
+          <section className='flex flex-col'>
             {shareLog.length === 0 ? (
               <div className='flex flex-col items-center py-6 text-fg-muted'>
                 <span className='i-lucide-scroll-text size-6 mb-2' />
-                <p className='text-xs font-mono'>no keys shared yet.</p>
+                <p className='text-body font-mono'>no keys shared yet</p>
               </div>
             ) : (
               [...shareLog].reverse().map((record, i) => (
                 <button
                   key={`${record.sharedWith}-${record.sharedAt}-${i}`}
                   onClick={() => copy(record.publicKey, `log-${i}`)}
-                  className='flex items-baseline justify-between gap-2 py-1.5 text-left border-b border-border-hard/50 last:border-0'
+                  title='copy shared key'
+                  className={`flex items-baseline justify-between gap-2 py-1.5 text-left border-b border-border-soft last:border-0 text-fg-muted hover:text-fg-high transition-colors ${focusRing}`}
                 >
                   <span className='text-label font-mono truncate'>
                     {displayOrigin(record.sharedWith)}
                   </span>
-                  <span className='text-label text-fg-muted shrink-0 font-mono'>
+                  <span className='text-label text-fg-dim shrink-0 font-mono tabular'>
                     {copied === `log-${i}` ? 'copied' : shortDate(record.sharedAt)}
                   </span>
                 </button>
@@ -513,7 +731,7 @@ export const IdentityPage = () => {
           </section>
         )}
 
-        {/* -- links — passwords is the only destination that lives nowhere
+        {/* -- links - passwords is the only destination that lives nowhere
             else. contacts has its own drawer entry; the pro upsell lives in
             the drawer footer + settings. Gated off for now (PASSWORD_GENERATOR). */}
         {PASSWORD_GENERATOR && (
@@ -522,13 +740,13 @@ export const IdentityPage = () => {
             <div className='flex flex-col gap-2'>
               <button
                 onClick={() => navigate(PopupPath.PASSWORDS)}
-                className='flex items-center justify-between text-xs font-mono text-fg hover:text-fg-high'
+                className={`flex items-center justify-between text-body font-mono text-fg hover:text-fg-high transition-colors ${focusRing}`}
               >
                 <span className='flex items-center gap-1.5'>
                   <span className='i-lucide-key-round size-3.5' />
                   passwords
                 </span>
-                <span className='i-lucide-chevron-right size-3 text-fg-muted' />
+                <span className='i-lucide-chevron-right size-3.5 text-fg-dim' />
               </button>
             </div>
           </>
@@ -630,17 +848,17 @@ const SiteRow = ({
 
   return (
     <div
-      className={`border-b border-border-hard/50 last:border-0 text-white ${!site.connected ? 'opacity-40' : ''}`}
+      className={`border-b border-border-soft last:border-0 ${!site.connected ? 'opacity-40' : ''}`}
     >
-      {/* header */}
+      {/* header - the quiet default row */}
       <button
         onClick={onToggleExpand}
-        className='w-full flex items-center justify-between py-2 text-left'
+        className={`w-full flex items-center justify-between gap-2 py-2 text-left ${focusRing}`}
       >
         <div className='flex items-center gap-2 min-w-0'>
           <span
-            className={`size-3 shrink-0 ${
-              site.connected ? 'i-lucide-link text-green-400' : 'i-lucide-unlink'
+            className={`size-3.5 shrink-0 ${
+              site.connected ? 'i-lucide-link text-network-accent' : 'i-lucide-unlink text-fg-dim'
             }`}
           />
           {editingLabel === site.origin ? (
@@ -658,42 +876,46 @@ const SiteRow = ({
                   setEditingLabel(null);
                 }
               }}
-              className='text-xs font-mono bg-transparent border-b border-foreground/40 outline-none'
+              className={`text-body font-mono bg-transparent border-b border-border-soft outline-none text-fg ${focusRing}`}
               placeholder='label...'
             />
           ) : (
-            <span className='text-xs font-mono truncate'>
+            <span className='text-body font-mono text-fg truncate'>
               {siteLabels[site.origin] || displayOrigin(site.origin)}
             </span>
           )}
           {!isSiteMode && (
-            <span className='text-label text-yellow-400 font-mono px-1 border border-yellow-500/40 rounded'>
+            <span className='text-label text-warning font-mono px-1 border border-warning/40'>
               cross
             </span>
           )}
         </div>
-        <div className='flex items-center gap-2 shrink-0'>
-          <span className='text-label font-mono'>
+        <div className='flex items-center gap-2 shrink-0 text-label font-mono text-fg-muted'>
+          {site.lastShared && (
+            <span className='text-fg-dim tabular'>{shortDate(site.lastShared.sharedAt)}</span>
+          )}
+          <span>
             {site.perms ? `${site.perms.granted.length} caps` : ''}
             {isSiteMode && rotation > 0 ? ` #${rotation}` : ''}
           </span>
           <span
-            className={`size-3 transition-transform ${expanded ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'}`}
+            className={`size-3.5 text-fg-dim transition-transform ${expanded ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'}`}
           />
         </div>
       </button>
 
-      {/* expanded */}
+      {/* expanded - all per-site controls, revealed on demand */}
       {expanded && (
-        <div className='pb-3 pl-7 flex flex-col gap-2.5 text-body font-mono text-white'>
+        <div className='pb-3 pl-7 flex flex-col gap-2.5 text-body font-mono text-fg'>
           {/* last shared key */}
           {site.lastShared && (
             <button
               onClick={() => onCopy(site.lastShared!.publicKey, site.origin)}
-              className='flex items-center gap-1 text-left hover:text-fg-high'
+              title='copy shared key'
+              className={`flex items-center gap-1 text-left text-label text-fg-muted hover:text-fg-high transition-colors ${focusRing}`}
             >
               <span
-                className={`size-3 ${copied === site.origin ? 'i-lucide-check text-green-400' : 'i-lucide-copy'}`}
+                className={`size-3 ${copied === site.origin ? 'i-lucide-check text-success' : 'i-lucide-copy'}`}
               />
               <span className='truncate'>{site.lastShared.publicKey.slice(0, 36)}...</span>
             </button>
@@ -701,16 +923,17 @@ const SiteRow = ({
 
           {/* identity mode toggle */}
           <div className='flex flex-col gap-1.5'>
-            <span>identity mode</span>
-            <div className='flex items-center gap-0'>
+            <span className='text-label text-fg-muted lowercase'>identity mode</span>
+            <div className='flex'>
               <button
                 onClick={() =>
                   !isSiteMode ? void onUpdatePref(site.origin, undefined) : undefined
                 }
-                className={`flex items-center gap-1 px-2 py-0.5 rounded-l border text-label transition-colors ${
+                title='site-specific key (unlinkable)'
+                className={`flex items-center gap-1 px-2 py-0.5 border text-label transition-colors ${focusRing} ${
                   isSiteMode
-                    ? 'bg-green-500/15 border-green-500/30 text-green-400'
-                    : 'border-border-soft hover:text-fg-high'
+                    ? 'bg-elev-2 border-fg-dim text-fg-high'
+                    : 'border-border-soft text-fg-muted hover:text-fg-high'
                 }`}
               >
                 <span className='i-lucide-shield-check size-3' />
@@ -718,10 +941,11 @@ const SiteRow = ({
               </button>
               <button
                 onClick={() => (isSiteMode ? onConfirm('cross-site') : undefined)}
-                className={`flex items-center gap-1 px-2 py-0.5 rounded-r border border-l-0 text-label transition-colors ${
+                title='shared key across sites (linkable)'
+                className={`flex items-center gap-1 px-2 py-0.5 border border-l-0 text-label transition-colors ${focusRing} ${
                   !isSiteMode
-                    ? 'bg-yellow-500/15 border-yellow-500/30 text-yellow-400'
-                    : 'border-border-soft hover:text-fg-high'
+                    ? 'bg-warning/15 border-warning/40 text-warning'
+                    : 'border-border-soft text-fg-muted hover:text-fg-high'
                 }`}
               >
                 <span className='i-lucide-link size-3' />
@@ -729,9 +953,9 @@ const SiteRow = ({
               </button>
             </div>
             {!isSiteMode && (
-              <span className='text-yellow-400'>
-                <span className='i-lucide-triangle-alert size-3 inline-block align-text-bottom mr-0.5' />
-                sites with shared key can link your sessions
+              <span className='flex items-center gap-1 text-label text-warning'>
+                <span className='i-lucide-triangle-alert size-3' />
+                sites with a shared key can link your sessions
               </span>
             )}
           </div>
@@ -739,8 +963,8 @@ const SiteRow = ({
           {/* rotation control */}
           {isSiteMode && (
             <div className='flex flex-col gap-1'>
-              <span>key rotation</span>
-              <div className='flex items-center gap-1.5'>
+              <span className='text-label text-fg-muted lowercase'>key rotation</span>
+              <div className='flex items-center gap-1.5 text-label'>
                 <button
                   onClick={() =>
                     rotation > 0
@@ -748,7 +972,8 @@ const SiteRow = ({
                       : undefined
                   }
                   disabled={rotation === 0}
-                  className='hover:text-fg-high disabled:opacity-20'
+                  title='remove a rotation'
+                  className={`grid size-5 place-items-center border border-border-soft text-fg-muted hover:text-fg-high disabled:opacity-20 transition-colors ${focusRing}`}
                 >
                   <span className='i-lucide-minus size-3' />
                 </button>
@@ -760,12 +985,16 @@ const SiteRow = ({
                     const v = Math.max(0, parseInt(e.target.value, 10) || 0);
                     void onUpdatePref(site.origin, { ...site.pref, rotation: v });
                   }}
-                  className='w-8 bg-transparent border border-border-soft rounded text-center text-label font-mono py-0.5 outline-none'
+                  className={`w-8 bg-transparent border border-border-soft text-center text-label font-mono py-0.5 outline-none text-fg ${focusRing}`}
                 />
-                <button onClick={() => onConfirm('rotate')} className='hover:text-fg-high'>
+                <button
+                  onClick={() => onConfirm('rotate')}
+                  title='rotate to a fresh key'
+                  className={`grid size-5 place-items-center border border-border-soft text-fg-muted hover:text-fg-high transition-colors ${focusRing}`}
+                >
                   <span className='i-lucide-plus size-3' />
                 </button>
-                <span className='ml-1'>
+                <span className='ml-1 text-fg-muted'>
                   {rotation === 0 ? 'original key' : `rotated ${rotation}x`}
                 </span>
               </div>
@@ -773,13 +1002,13 @@ const SiteRow = ({
           )}
 
           {/* quick actions */}
-          <div className='flex items-center gap-3 pt-1'>
+          <div className='flex items-center gap-3 pt-1 text-label'>
             <button
               onClick={() => {
                 setEditingLabel(site.origin);
                 setLabelInput(siteLabels[site.origin] ?? '');
               }}
-              className='flex items-center gap-1 hover:text-fg-high'
+              className={`flex items-center gap-1 text-fg-muted hover:text-fg-high transition-colors ${focusRing}`}
             >
               <span className='i-lucide-tag size-3' />
               label
@@ -787,7 +1016,7 @@ const SiteRow = ({
             {site.perms && (
               <button
                 onClick={() => setCapsOpen(!capsOpen)}
-                className='flex items-center gap-1 hover:text-fg-high'
+                className={`flex items-center gap-1 text-fg-muted hover:text-fg-high transition-colors ${focusRing}`}
               >
                 <span className='i-lucide-shield size-3' />
                 {capsOpen ? 'hide' : 'permissions'}
@@ -795,7 +1024,7 @@ const SiteRow = ({
             )}
             <button
               onClick={() => handleRevoke()}
-              className='flex items-center gap-1 text-red-400 hover:text-red-300'
+              className={`flex items-center gap-1 text-error transition-colors hover:brightness-125 ${focusRing}`}
             >
               <span className='i-lucide-x size-3' />
               revoke
@@ -804,7 +1033,7 @@ const SiteRow = ({
 
           {/* capabilities */}
           {capsOpen && site.perms && (
-            <div className='flex flex-col gap-0.5 pl-2 border-l border-border-soft'>
+            <div className='flex flex-col gap-0.5 pl-2 border-l border-border-soft text-label'>
               {ALL_CAPS.map(cap => (
                 <label key={cap} className='flex items-center justify-between py-0.5'>
                   <span>{CAPABILITY_META[cap].label.toLowerCase()}</span>
@@ -812,7 +1041,7 @@ const SiteRow = ({
                     type='checkbox'
                     checked={site.perms!.granted.includes(cap)}
                     onChange={e => void handleCapToggle(cap, e.target.checked)}
-                    className='h-3 w-3'
+                    className={`size-3 ${focusRing}`}
                   />
                 </label>
               ))}
@@ -821,12 +1050,15 @@ const SiteRow = ({
 
           {/* confirmations */}
           {confirming === 'cross-site' && (
-            <div className='pl-2 border-l-2 border-yellow-500/30'>
-              <p className='text-yellow-400 mb-1.5'>
+            <div className='pl-2 border-l-2 border-warning/40 text-label'>
+              <p className='text-warning mb-1.5'>
                 same key across all origins. sites can link your sessions.
               </p>
-              <div className='flex gap-2'>
-                <button onClick={onCancelConfirm} className='hover:text-fg-high'>
+              <div className='flex gap-3'>
+                <button
+                  onClick={onCancelConfirm}
+                  className={`text-fg-muted hover:text-fg-high transition-colors ${focusRing}`}
+                >
                   cancel
                 </button>
                 <button
@@ -837,7 +1069,7 @@ const SiteRow = ({
                       identity: site.pref.identity,
                     })
                   }
-                  className='text-yellow-400 hover:text-yellow-300'
+                  className={`text-warning transition-colors hover:brightness-125 ${focusRing}`}
                 >
                   confirm
                 </button>
@@ -845,13 +1077,16 @@ const SiteRow = ({
             </div>
           )}
           {confirming === 'rotate' && (
-            <div className='pl-2 border-l-2 border-border-soft'>
+            <div className='pl-2 border-l-2 border-border-soft text-label'>
               <p className='mb-1.5'>
                 new key #{rotation + 1}. old key #{rotation} is abandoned - site keeps whatever key
                 it had.
               </p>
-              <div className='flex gap-2'>
-                <button onClick={onCancelConfirm} className='hover:text-fg-high'>
+              <div className='flex gap-3'>
+                <button
+                  onClick={onCancelConfirm}
+                  className={`text-fg-muted hover:text-fg-high transition-colors ${focusRing}`}
+                >
                   cancel
                 </button>
                 <button
@@ -862,7 +1097,7 @@ const SiteRow = ({
                       identity: site.pref.identity,
                     })
                   }
-                  className='text-fg hover:text-fg-high'
+                  className={`text-fg hover:text-fg-high transition-colors ${focusRing}`}
                 >
                   rotate
                 </button>

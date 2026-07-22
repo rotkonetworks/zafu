@@ -82,6 +82,7 @@ interface WorkerMessage {
     | 'stop-sync'
     | 'reset-sync'
     | 'get-balance'
+    | 'get-pool-balances'
     | 'send-tx'
     | 'send-tx-multi'
     | 'send-tx-complete'
@@ -2998,6 +2999,37 @@ const getBalance = async (walletId: string): Promise<bigint> => {
   return balance;
 };
 
+/** Spendable balance per shielded pool (zatoshi). NU6.3 dual-pool. */
+interface PoolBalances {
+  orchard: bigint;
+  ironwood: bigint;
+  /** orchard + ironwood — the same total getBalance() returns */
+  total: bigint;
+}
+
+/**
+ * Per-pool spendable balances. Same unspent-note summation as getBalance()
+ * (single source of truth), split by poolOf(note) so records persisted before
+ * the ironwood rollout (no pool field) count as orchard. `total` equals the
+ * legacy single balance, so existing callers can keep reading it unchanged.
+ */
+const getPoolBalances = async (walletId: string): Promise<PoolBalances> => {
+  const state = await loadState(walletId);
+  let orchard = 0n;
+  let ironwood = 0n;
+  for (const note of state.notes) {
+    if (state.spentNullifiers.has(note.nullifier)) {
+      continue;
+    }
+    if (poolOf(note) === 'ironwood') {
+      ironwood += BigInt(note.value);
+    } else {
+      orchard += BigInt(note.value);
+    }
+  }
+  return { orchard, ironwood, total: orchard + ironwood };
+};
+
 // ── message handler ──
 
 workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
@@ -3132,6 +3164,29 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           network: 'zcash',
           walletId,
           payload: balance.toString(),
+        });
+        return;
+      }
+
+      case 'get-pool-balances': {
+        if (!walletId) {
+          throw new Error('walletId required');
+        }
+        // NU6.3 dual-pool: orchard vs ironwood spendable balance. Additive to
+        // get-balance (which still returns the single total for back-compat);
+        // bigint isn't structured-clone-safe across postMessage, so serialize
+        // to decimal strings and let the caller re-hydrate.
+        const pools = await getPoolBalances(walletId);
+        workerSelf.postMessage({
+          type: 'pool-balances',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: {
+            orchard: pools.orchard.toString(),
+            ironwood: pools.ironwood.toString(),
+            total: pools.total.toString(),
+          },
         });
         return;
       }

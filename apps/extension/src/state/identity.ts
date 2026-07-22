@@ -437,6 +437,63 @@ export async function rotateZidIndex(): Promise<number> {
 }
 
 /**
+ * Rotate the ZID index DOWN to a previous generation. Floors at 0 so the
+ * original identity is always reachable. Rotation is fully reversible:
+ * every generation is a deterministic derivation from its index, so
+ * rotating up never destroys the old identity - rotating back down
+ * restores it exactly. This is what makes identity switching reversible
+ * ("morph back") rather than a one-way burn.
+ */
+export async function rotateZidIndexDown(): Promise<number> {
+  const current = await getZidIndex();
+  const next = current > 0 ? current - 1 : 0;
+  await setZidIndex(next);
+  return next;
+}
+
+/** A pinned (bookmarked) ZID generation the user can jump back to by name. */
+export interface ZidPin {
+  index: number;
+  label: string;
+}
+
+/** chrome.storage.local key holding the user's pinned ZID generations. */
+export const ZID_PINS_STORAGE_KEY = 'zidPins';
+
+export async function getZidPins(): Promise<ZidPin[]> {
+  const r = await chrome.storage.local.get(ZID_PINS_STORAGE_KEY);
+  const v = r[ZID_PINS_STORAGE_KEY];
+  return Array.isArray(v)
+    ? v.filter(
+        (p): p is ZidPin =>
+          !!p &&
+          typeof p.index === 'number' &&
+          Number.isFinite(p.index) &&
+          p.index >= 0 &&
+          typeof p.label === 'string',
+      )
+    : [];
+}
+
+/** Pin the given generation with a label (replaces any existing pin at that index). */
+export async function addZidPin(index: number, label: string): Promise<ZidPin[]> {
+  const pins = await getZidPins();
+  const next = pins.filter(p => p.index !== index);
+  next.push({ index, label: label.trim() || `gen ${index}` });
+  next.sort((a, b) => a.index - b.index);
+  await chrome.storage.local.set({ [ZID_PINS_STORAGE_KEY]: next });
+  return next;
+}
+
+/** Remove the pin at the given generation index. */
+export async function removeZidPin(index: number): Promise<ZidPin[]> {
+  const pins = await getZidPins();
+  const next = pins.filter(p => p.index !== index);
+  await chrome.storage.local.set({ [ZID_PINS_STORAGE_KEY]: next });
+  return next;
+}
+
+/**
  * Apply the global rotation index to an identity name. At index 0 the
  * original identity is returned unchanged (so existing keys stay stable
  * before any rotation). At index > 0 a suffix is appended so the

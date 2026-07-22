@@ -36,6 +36,9 @@ export enum PopupPath {
   MULTISIG_SIGN = '/multisig/sign',
   NOTE_SYNC = '/note-sync',
 
+  // Per-pool Zcash notes (orchard legacy vs ironwood); IRONWOOD_MIGRATION-gated
+  POOL_NOTES = '/pool-notes',
+
   // zid contact picker (opened by external apps)
   CONTACT_PICKER = '/pick-contacts',
 
