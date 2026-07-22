@@ -95,6 +95,14 @@ export interface KeyRingSlice {
    *  both the vault and its mirror wallet. Unhiding makes a stuck poker table a normal, selectable,
    *  co-signable multisig. Non-destructive. */
   setMultisigHidden: (vaultId: string, hidden: boolean) => Promise<void>;
+  /** Cheap READ-ONLY money view of a multisig table for the manager. `balanceZat` is the worker's
+   *  cached balance (a LOWER BOUND when unsynced). `synced` is TRUE only when the caller PROVES this
+   *  vault scanned to a freshly-fetched tip — never derived from stale IDB height. Hidden tables
+   *  can't pass that proof, so they return synced:false (fail-closed). Never triggers a sync. */
+  getMultisigStatus: (
+    vaultId: string,
+    opts?: { workerSyncHeight?: number; chainTip?: number },
+  ) => Promise<{ balanceZat: bigint; synced: boolean }>;
 
   getMnemonic: (vaultId: string) => Promise<string>;
   getMultisigSecrets: (
@@ -766,6 +774,37 @@ export const createKeyRingSlice =
           state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
           state.wallets.zcashWallets = updatedWallets;
         });
+      },
+
+      getMultisigStatus: async (
+        vaultId: string,
+        opts?: { workerSyncHeight?: number; chainTip?: number },
+      ) => {
+        // balance: cached IDB read via the worker — NO network sync triggered. For an unsynced vault
+        // this is a LOWER BOUND (may read 0 while a deposit is unscanned/mempool); the policy module
+        // (app-managed-tables.ts) treats !synced as possibly-funded, so a stale 0 is safe here.
+        const { getBalanceInWorker } = await import('./network-worker');
+        let balanceZat = 0n;
+        try {
+          balanceZat = BigInt(await getBalanceInWorker('zcash', vaultId));
+        } catch {
+          balanceZat = 0n;
+        }
+
+        // synced: PROVEN only. ⚠️ MONEY-SAFETY — do NOT "improve" this to derive `synced` from the
+        // worker's persisted IDB scan height: a hidden table is never actively synced, its
+        // syncHeight is stuck at ~tip (its birthday), and getBalance ignores mempool/0-conf — so a
+        // never-scanned FUNDED table would read synced && balance 0 and earn the low-friction delete
+        // (permanent loss). We only trust `synced` when the CALLER passes a scan height it knows is
+        // this vault's AND a freshly-fetched chain tip. Hidden tables never get those, so they
+        // resolve to synced:false — the fail-closed default the policy module relies on.
+        const synced =
+          typeof opts?.workerSyncHeight === 'number' &&
+          typeof opts?.chainTip === 'number' &&
+          opts.chainTip > 0 &&
+          opts.workerSyncHeight >= opts.chainTip;
+
+        return { balanceZat, synced };
       },
 
       // ── secrets ──

@@ -15,7 +15,7 @@ import {
   walletsSelector,
   type ZcashWalletJson,
 } from '../../../state/wallets';
-import { selectActiveNetwork, selectEffectiveKeyInfo } from '../../../state/keyring';
+import { selectActiveNetwork, selectEffectiveKeyInfo, keyRingSelector } from '../../../state/keyring';
 import { frostDkgSelector, frostSigningSelector } from '../../../state/frost-session';
 import { getBalanceInWorker } from '../../../state/keyring/network-worker';
 import { useZcashSyncStatus } from '../../../hooks/zcash-sync';
@@ -25,6 +25,8 @@ import { cn } from '@repo/ui/lib/utils';
 import { PopupPath } from '../paths';
 import { BackupModal } from './backup/backup-modal';
 import { exportSingleBackup } from './backup/export-helpers';
+import { applyTableFilter, type TableView, type TableFilter } from '../../../state/app-managed-tables';
+import { useAppManagedTables } from '../../../hooks/app-managed-tables';
 
 /** format zatoshi to ZEC display string */
 const formatZec = (zat: bigint) => {
@@ -121,6 +123,255 @@ const WalletRow = ({
     </button>
   </div>
 );
+
+// ── app-managed (poker) tables manager ──────────────────────────────────────
+// Thin renderer over state/app-managed-tables.ts. Deleting a hidden table is ALWAYS the guarded
+// path (heavy warning + typed intent + backup-first): getMultisigStatus can't PROVE a hidden table
+// is empty (only the active wallet syncs, and getBalance ignores mempool), so a low-friction delete
+// can't be made sound — we don't offer one. Recover first (which syncs it) if you want to verify.
+
+const tableStatusLine = (t: TableView): { text: string; tone: string } => {
+  if (t.balanceZat > 0n) {return { text: `holds ${formatZec(t.balanceZat)} ZEC`, tone: 'text-zigner-gold' };}
+  if (!t.synced) {return { text: 'not synced', tone: 'text-yellow-400/80' };}
+  return { text: 'settled — empty', tone: 'text-fg-muted' };
+};
+
+const GuardedDeleteModal = (props: {
+  row: TableView;
+  onBackup: () => void;
+  onConfirm: () => Promise<void>;
+  onClose: () => void;
+}) => {
+  const label = props.row.wallet.label;
+  const [typed, setTyped] = useState('');
+  const [working, setWorking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const matches = typed === label || typed.trim().toUpperCase() === 'DELETE';
+
+  const confirm = async () => {
+    if (!matches || working) {return;}
+    setWorking(true);
+    setError(null);
+    try {
+      await props.onConfirm();
+      props.onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'delete failed');
+      setWorking(false);
+    }
+  };
+
+  return (
+    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4'>
+      <div className='w-full max-w-sm rounded-lg border border-red-500/30 bg-elev-1 p-4'>
+        <h2 className='text-base font-medium text-red-400'>delete "{label}"?</h2>
+        <div className='mt-3 rounded-md border border-red-500/40 bg-red-500/5 p-2 text-label text-red-300'>
+          <span className='i-lucide-alert-triangle mr-1 inline-block size-3 align-text-bottom' />
+          You will permanently lose access to any funds in this table — it is NOT recoverable from
+          your seed. If other co-signers rely on your share to reach the signing threshold, they may
+          be unable to move funds either.
+        </div>
+        <button
+          onClick={props.onBackup}
+          className='mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border-soft px-3 py-2 text-xs text-fg-muted transition-colors hover:bg-elev-2'
+        >
+          <span className='i-lucide-download h-3.5 w-3.5' />
+          Export backup first
+        </button>
+        <label className='mt-3 block text-xs text-fg-muted'>
+          type <span className='font-mono text-fg'>{label}</span> (or{' '}
+          <span className='font-mono text-fg'>DELETE</span>) to confirm
+          <input
+            type='text'
+            autoFocus
+            autoComplete='off'
+            value={typed}
+            onChange={e => setTyped(e.target.value)}
+            className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2 font-mono text-sm focus:border-red-500/50 focus:outline-none'
+            placeholder={label}
+          />
+        </label>
+        {error && (
+          <p className='mt-2 rounded-md border border-red-500/40 bg-red-500/5 p-2 text-body text-red-400'>
+            {error}
+          </p>
+        )}
+        <div className='mt-4 flex gap-2'>
+          <button
+            onClick={props.onClose}
+            disabled={working}
+            className='flex-1 rounded-lg border border-border-soft py-2 text-xs transition-colors hover:bg-elev-2 disabled:opacity-50'
+          >
+            cancel
+          </button>
+          <button
+            onClick={() => void confirm()}
+            disabled={!matches || working}
+            className='flex-1 rounded-lg border border-red-500/40 bg-red-500/15 py-2 text-xs text-red-400 transition-colors hover:bg-red-500/25 disabled:cursor-not-allowed disabled:opacity-40'
+          >
+            {working ? 'deleting…' : 'delete permanently'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const AppManagedRow = (props: {
+  row: TableView;
+  onRecover: () => void;
+  onBackup: () => void;
+  onDelete: () => void;
+}) => {
+  const status = tableStatusLine(props.row);
+  const created = props.row.createdAt
+    ? new Date(props.row.createdAt).toLocaleDateString()
+    : 'unknown';
+  return (
+    <div className='flex flex-col gap-2 rounded-lg border border-border-soft bg-elev-1 px-3 py-3'>
+      <div className='flex min-w-0 items-center justify-between gap-2'>
+        <div className='flex min-w-0 flex-col gap-0.5'>
+          <span className='truncate text-sm font-medium'>{props.row.wallet.label}</span>
+          <span className='text-label text-fg-dim'>created {created}</span>
+        </div>
+        <span className={cn('shrink-0 font-mono text-xs', status.tone)}>{status.text}</span>
+      </div>
+      <div className='flex gap-2'>
+        <button
+          onClick={props.onRecover}
+          className='flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-border-soft px-2 py-1.5 text-xs text-fg-muted transition-colors hover:bg-elev-2 hover:text-zigner-gold'
+          title='make this a normal, selectable multisig you can co-sign'
+        >
+          <span className='i-lucide-arrow-up-right h-3.5 w-3.5' />
+          Recover
+        </button>
+        <button
+          onClick={props.onBackup}
+          className='flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-border-soft px-2 py-1.5 text-xs text-fg-muted transition-colors hover:bg-elev-2 hover:text-fg'
+          title='export this share as an encrypted backup file'
+        >
+          <span className='i-lucide-download h-3.5 w-3.5' />
+          Back up
+        </button>
+        <button
+          onClick={props.onDelete}
+          className='flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-red-500/30 px-2 py-1.5 text-xs text-red-400 transition-colors hover:bg-red-500/10'
+          title='delete this table'
+        >
+          <span className='i-lucide-trash-2 h-3.5 w-3.5' />
+          Delete
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const AppManagedTablesSection = () => {
+  const tables = useAppManagedTables();
+  const { setMultisigHidden, deleteKeyRing } = useStore(keyRingSelector);
+  const { requestAuth, PasswordModal } = usePasswordGate();
+  const [expanded, setExpanded] = useState(false);
+  const [filter, setFilter] = useState<TableFilter>({});
+  const [backupTarget, setBackupTarget] = useState<TableView | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<TableView | null>(null);
+
+  const visible = useMemo(() => applyTableFilter(tables, filter, Date.now()), [tables, filter]);
+
+  if (tables.length === 0) {return null;}
+
+  const openBackup = async (row: TableView) => {
+    if (await requestAuth()) {setBackupTarget(row);}
+  };
+
+  return (
+    <div className='mt-3 rounded-lg border border-border-soft'>
+      {PasswordModal}
+      <BackupModal
+        open={backupTarget !== null}
+        title={backupTarget ? `export "${backupTarget.wallet.label}"` : ''}
+        walletLabel={backupTarget?.wallet.label ?? ''}
+        onConfirm={async passphrase => {
+          if (backupTarget) {await exportSingleBackup(backupTarget.wallet, passphrase);}
+        }}
+        onClose={() => setBackupTarget(null)}
+      />
+      {deleteTarget && (
+        <GuardedDeleteModal
+          row={deleteTarget}
+          onBackup={() => void openBackup(deleteTarget)}
+          onConfirm={() => deleteKeyRing(deleteTarget.wallet.vaultId, { allowAppManaged: true })}
+          onClose={() => setDeleteTarget(null)}
+        />
+      )}
+      <button
+        onClick={() => setExpanded(e => !e)}
+        className='flex w-full items-center justify-between px-3 py-2.5 text-left'
+      >
+        <span className='flex items-center gap-2'>
+          <span className='i-lucide-layout-grid h-4 w-4 text-fg-muted' />
+          <span className='text-sm font-medium'>App-managed tables</span>
+          <span className='rounded bg-elev-2 px-1.5 py-0.5 text-label font-mono text-fg-muted'>
+            {tables.length}
+          </span>
+        </span>
+        <span
+          className={cn(
+            'i-lucide-chevron-down h-4 w-4 text-fg-muted transition-transform',
+            expanded && 'rotate-180',
+          )}
+        />
+      </button>
+      {expanded && (
+        <div className='flex flex-col gap-3 border-t border-border-soft p-3'>
+          <p className='text-label text-fg-dim'>
+            Tables created by apps (e.g. poker). Hidden from your main wallet. Recover to co-sign by
+            hand; delete only once you're sure it's settled.
+          </p>
+          <input
+            type='text'
+            value={filter.query ?? ''}
+            onChange={e => setFilter(f => ({ ...f, query: e.target.value }))}
+            placeholder='search tables…'
+            className='w-full rounded-lg border border-border-soft bg-input px-3 py-2 text-sm focus:border-primary/50 focus:outline-none'
+          />
+          <div className='flex flex-wrap gap-x-4 gap-y-2'>
+            <label className='flex cursor-pointer select-none items-center gap-1.5 text-xs text-fg-muted'>
+              <input
+                type='checkbox'
+                checked={filter.onlyFunded ?? false}
+                onChange={e => setFilter(f => ({ ...f, onlyFunded: e.target.checked }))}
+              />
+              funded only
+            </label>
+            <label className='flex cursor-pointer select-none items-center gap-1.5 text-xs text-fg-muted'>
+              <input
+                type='checkbox'
+                checked={filter.showAll ?? false}
+                onChange={e => setFilter(f => ({ ...f, showAll: e.target.checked }))}
+              />
+              show all
+            </label>
+          </div>
+          {visible.length > 0 ? (
+            <div className='flex flex-col gap-2'>
+              {visible.map(row => (
+                <AppManagedRow
+                  key={row.wallet.id}
+                  row={row}
+                  onRecover={() => void setMultisigHidden(row.wallet.vaultId, false)}
+                  onBackup={() => void openBackup(row)}
+                  onDelete={() => setDeleteTarget(row)}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className='py-3 text-center text-xs text-fg-muted'>No tables match this filter.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const MultisigPage = () => {
   const navigate = useNavigate();
@@ -359,6 +610,8 @@ export const MultisigPage = () => {
           </div>
         </>
       )}
+
+      {isZcash && <AppManagedTablesSection />}
     </div>
   );
 };
