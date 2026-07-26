@@ -69,7 +69,7 @@ const MultisigJoinZafu = () => {
     const sessionDeadline = Date.now() + FROST_SESSION_TIMEOUT_MS;
     setDeadline(sessionDeadline);
     try {
-      const url = relayUrl || 'wss://zrelay.rotko.net';
+      const url = relayUrl || 'wss://zcash.rotko.net';
       setStep('joining');
 
       const relay = new FrostRelayClient(url);
@@ -217,7 +217,7 @@ const MultisigJoinZafu = () => {
               className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-xs focus:border-primary/50 focus:outline-none'
               value={relayUrl}
               onChange={e => setRelayUrl(e.target.value)}
-              placeholder='wss://zrelay.rotko.net'
+              placeholder='wss://zcash.rotko.net'
             />
           </label>
           <label className='text-xs text-fg-muted'>
@@ -373,7 +373,7 @@ const MultisigJoinZigner = () => {
     r1: peerR1Ref.current,
     r2: peerR2Ref.current,
     sk: fvkSkRef.current,
-    relay_url: relayUrl || 'wss://zrelay.rotko.net',
+    relay_url: relayUrl || 'wss://zcash.rotko.net',
     mainnet: true,
   });
 
@@ -382,7 +382,7 @@ const MultisigJoinZigner = () => {
       return;
     }
     try {
-      const url = relayUrl || 'wss://zrelay.rotko.net';
+      const url = relayUrl || 'wss://zcash.rotko.net';
       const sessionDeadline = Date.now() + FROST_SESSION_TIMEOUT_MS;
       setDeadline(sessionDeadline);
 
@@ -635,7 +635,7 @@ const MultisigJoinZigner = () => {
           publicKeyPackage,
           threshold,
           maxSigners,
-          relayUrl: relayUrl || 'wss://zrelay.rotko.net',
+          relayUrl: relayUrl || 'wss://zcash.rotko.net',
           custody: 'airgapSigner',
           zignerWalletId: walletId,
         });
@@ -687,7 +687,7 @@ const MultisigJoinZigner = () => {
               className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-xs focus:border-primary/50 focus:outline-none'
               value={relayUrl}
               onChange={e => setRelayUrl(e.target.value)}
-              placeholder='wss://zrelay.rotko.net'
+              placeholder='wss://zcash.rotko.net'
             />
           </label>
           <label className='text-xs text-fg-muted'>

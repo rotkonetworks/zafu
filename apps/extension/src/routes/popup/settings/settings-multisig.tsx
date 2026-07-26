@@ -106,7 +106,7 @@ export const SettingsMultisig = () => {
             className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-xs focus:border-primary/50 focus:outline-none'
             value={relayUrl}
             onChange={e => setRelayUrl(e.target.value)}
-            placeholder='wss://zrelay.rotko.net'
+            placeholder='wss://zcash.rotko.net'
           />
         </label>
 

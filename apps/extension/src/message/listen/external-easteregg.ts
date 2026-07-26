@@ -252,7 +252,7 @@ export const externalMessageListener = (
         }
         const threshold = Number(msg['threshold']) || 2;
         const maxSigners = Number(msg['maxSigners']) || 3;
-        const relayUrl = String(msg['relayUrl'] || 'https://poker.zk.bot');
+        const relayUrl = String(msg['relayUrl'] || 'wss://zcash.rotko.net/ws');
         const appOrigin = sender.origin || sender.url || 'unknown';
         const requestId = crypto.randomUUID();
 
@@ -287,7 +287,7 @@ export const externalMessageListener = (
         }
         const threshold = Number(msg['threshold']) || 2;
         const maxSigners = Number(msg['maxSigners']) || 3;
-        const relayUrl = String(msg['relayUrl'] || 'https://poker.zk.bot');
+        const relayUrl = String(msg['relayUrl'] || 'wss://zcash.rotko.net/ws');
         const requestId = crypto.randomUUID();
 
         const params = new URLSearchParams({
@@ -322,7 +322,7 @@ export const externalMessageListener = (
         }
         const threshold = Number(msg['threshold']) || 2;
         const maxSigners = Number(msg['maxSigners']) || 3;
-        const relayUrl = String(msg['relayUrl'] || 'wss://zrelay.rotko.net');
+        const relayUrl = String(msg['relayUrl'] || 'wss://zcash.rotko.net');
         const appOrigin = sender.origin || sender.url || 'unknown';
         // new URL() throws on non-URL strings (e.g. 'unknown'); fall back safely.
         let originHost = 'multisig';
@@ -371,7 +371,7 @@ export const externalMessageListener = (
           sendResponse({ success: false, error: 'denied' });
           return;
         }
-        const relayUrl = String(msg['relayUrl'] || 'https://poker.zk.bot');
+        const relayUrl = String(msg['relayUrl'] || 'wss://zcash.rotko.net/ws');
         const requestId = crypto.randomUUID();
 
         const params = new URLSearchParams({
@@ -415,7 +415,7 @@ export const externalMessageListener = (
           sendResponse({ error: 'plan array required' });
           return;
         }
-        const relayUrl = String(msg['relayUrl'] || 'wss://zrelay.rotko.net');
+        const relayUrl = String(msg['relayUrl'] || 'wss://zcash.rotko.net');
         const feeZat = Number(msg['feeZat']) || 10_000;
         // Empty is allowed here because the popup falls back to the default
         // multisigVault; the popup looks up via startsWith — same charset rules.

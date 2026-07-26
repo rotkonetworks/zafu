@@ -305,7 +305,7 @@ async function isProUser(): Promise<boolean> {
  * chrome.storage.local under RELAY_URL_KEY). The DM transport is
  * derived by appending `/zid` to the chat URL's path - relays that
  * implement zitadel are expected to expose both at adjacent paths. */
-export const DEFAULT_RELAY_WS = 'wss://relay.zk.bot/ws';
+export const DEFAULT_RELAY_WS = 'wss://zcash.rotko.net/ws';
 const RELAY_URL_KEY = 'zitadelRelayUrl';
 /** Per-ZID persisted nickname. Stored under `zidNick:<pubkey>` in
  * chrome.storage.local so the same identity gets the same nick across

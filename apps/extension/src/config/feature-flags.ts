@@ -40,7 +40,12 @@ export const IRONWOOD_MIGRATION = true;
  * than nagging early. The build-time producer still fail-closes on the branch
  * id independently (see IRONWOOD_MIGRATION), so this gate is UX, not safety.
  */
-export const NU6_3_ACTIVATION_HEIGHT = 3_428_143;
+// ============================================================================
+// !!! TEMPORARY TEST OVERRIDE - MUST REVERT TO 3_428_143 BEFORE SUBMISSION !!!
+// Set to 0 so the ironwood migrate surface renders pre-activation for UI
+// testing (footer overlap fix). The real value is 3_428_143 (~2026-07-28).
+// ============================================================================
+export const NU6_3_ACTIVATION_HEIGHT = 0; // TEST-ONLY; real value 3_428_143
 
 /**
  * Deterministic password generator (identity -> passwords: derive a site

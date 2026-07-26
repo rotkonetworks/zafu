@@ -53,7 +53,7 @@ export async function runMnemonicFrostSign({
   setProgress,
 }: RunMnemonicFrostSignArgs): Promise<string[]> {
   const session = await openRelayRoom(
-    ms.relayUrl || 'wss://zrelay.rotko.net',
+    ms.relayUrl || 'wss://zcash.rotko.net',
     ms.threshold,
     ms.maxSigners,
     300,
