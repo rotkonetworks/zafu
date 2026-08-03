@@ -85,6 +85,7 @@ interface ZcashBuildRequest {
     | 'build_unsigned_pczt'
     | 'build_turnstile_migration_pczt'
     | 'build_signed_turnstile_migration'
+    | 'build_signed_ironwood_send'
     | 'build_shielding'
     | 'build_unsigned_shielding';
   args: unknown[];
@@ -198,6 +199,33 @@ async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
         a[7],
         a[8],
         a[9] ?? null,
+      );
+      break;
+
+    case 'build_signed_ironwood_send':
+      // NU6.3 general IRONWOOD hot send. Signature:
+      // (seed_phrase, ironwood_notes_json, recipient, amount, fee,
+      //  ironwood_anchor_hex, ironwood_merkle_paths_json, account_index,
+      //  target_height, expected_branch_id, mainnet, memo_hex?). a[3]/a[4] are
+      // the amount/fee (stringified bigint over postMessage); a[9] is the
+      // fail-closed expected branch id (number). Feature-detected: the export
+      // lands with the NU6.3 blob.
+      if (typeof wasm['build_signed_ironwood_send'] !== 'function') {
+        throw new Error('ironwood send not supported by this wasm build');
+      }
+      result = wasm['build_signed_ironwood_send'](
+        a[0],
+        a[1],
+        a[2],
+        BigInt(a[3] as string),
+        BigInt(a[4] as string),
+        a[5],
+        a[6],
+        a[7],
+        a[8],
+        a[9],
+        a[10],
+        a[11] ?? null,
       );
       break;
 

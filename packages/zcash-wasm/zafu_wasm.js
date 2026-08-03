@@ -517,6 +517,75 @@ export function build_shielding_transaction(utxos_json, privkey_hex, recipient, 
 }
 
 /**
+ * HOT-WALLET general ironwood send: spend the wallet's REAL ironwood notes to
+ * an ARBITRARY `recipient` (plus change back to self) in a single V6
+ * transaction, sign the ironwood spends LOCALLY with a seed-derived key, and
+ * return the hex-encoded, signed, broadcast-ready V6 transaction.
+ *
+ * This is the ironwood analogue of a normal orchard send and the sibling of
+ * `build_signed_turnstile_migration`. Parameters mirror that function's shape,
+ * with `recipient`/`amount` added and the anchor/notes/paths being the
+ * ironwood tree's:
+ *  - `seed_phrase` derives BOTH the orchard `FullViewingKey` (recipient/change
+ *    scoping + nullifier verification) AND the `SpendAuthorizingKey` (local
+ *    signing) via the exact ZIP-32 path `SpendingKey::from_zip32_seed`.
+ *  - `recipient` is a unified address; its orchard-format receiver is used as
+ *    the ironwood recipient (the ironwood pool shares the orchard address
+ *    format - the note VERSION, not the address, selects the pool).
+ *  - `ironwood_anchor_hex` is the REAL ironwood tree anchor;
+ *    `ironwood_merkle_paths_json` are ironwood-tree paths from
+ *    `build_merkle_paths_ironwood`.
+ *
+ * FAIL-CLOSED: inherits the hardened NU6.3 branch-id guard from the build core
+ * - the tx binds branch id 0x37a5165b, the caller MUST pass that real id as
+ * `expected_branch_id`, and the 0xffff_ffff placeholder is refused. No value
+ * or recipient appears in any error.
+ * @param {string} seed_phrase
+ * @param {string} ironwood_notes_json
+ * @param {string} recipient
+ * @param {bigint} amount
+ * @param {bigint} fee
+ * @param {string} ironwood_anchor_hex
+ * @param {string} ironwood_merkle_paths_json
+ * @param {number} account_index
+ * @param {number} target_height
+ * @param {number} expected_branch_id
+ * @param {boolean} mainnet
+ * @param {string | null} [memo_hex]
+ * @returns {string}
+ */
+export function build_signed_ironwood_send(seed_phrase, ironwood_notes_json, recipient, amount, fee, ironwood_anchor_hex, ironwood_merkle_paths_json, account_index, target_height, expected_branch_id, mainnet, memo_hex) {
+    let deferred8_0;
+    let deferred8_1;
+    try {
+        const ptr0 = passStringToWasm0(seed_phrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(ironwood_notes_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passStringToWasm0(ironwood_anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len3 = WASM_VECTOR_LEN;
+        const ptr4 = passStringToWasm0(ironwood_merkle_paths_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len4 = WASM_VECTOR_LEN;
+        var ptr5 = isLikeNone(memo_hex) ? 0 : passStringToWasm0(memo_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len5 = WASM_VECTOR_LEN;
+        const ret = wasm.build_signed_ironwood_send(ptr0, len0, ptr1, len1, ptr2, len2, amount, fee, ptr3, len3, ptr4, len4, account_index, target_height, expected_branch_id, mainnet, ptr5, len5);
+        var ptr7 = ret[0];
+        var len7 = ret[1];
+        if (ret[3]) {
+            ptr7 = 0; len7 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred8_0 = ptr7;
+        deferred8_1 = len7;
+        return getStringFromWasm0(ptr7, len7);
+    } finally {
+        wasm.__wbindgen_free(deferred8_0, deferred8_1, 1);
+    }
+}
+
+/**
  * Build a fully signed orchard spend transaction from a mnemonic wallet.
  *
  * Unlike `build_unsigned_transaction` (for cold signing), this function
