@@ -78,5 +78,9 @@ them recursively, so it keeps working across storage-schema changes.
 - **A weak password is brute-forceable offline** once someone has the profile
   files. PBKDF2 (210k, SHA-512) is solid but not memory-hard; use a strong
   password. Moving the KDF to Argon2id is a worthwhile future hardening.
+- Not every recovered box is a BIP-39 mnemonic. The master key also seals other
+  secrets (e.g. FROST key material, ephemeral seeds); `recover.mjs` prints each
+  with its storage path so you can tell them apart. Your wallet mnemonic is the
+  12/24-word one, typically at `vaults[].encryptedData`.
 - Self-contained multisig backups carry their own keyprint and open with their
   own passphrase, not the master password - `recover.mjs` will skip those boxes.

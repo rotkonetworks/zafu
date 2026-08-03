@@ -118,7 +118,9 @@ async function main() {
     console.error('error: no encrypted seed boxes found in the dump.');
     process.exit(1);
   }
-  const kp = keyprints[0];
+  // Prefer the top-level master passwordKeyPrint; a dump may also contain a
+  // self-contained multisig-backup keyprint (opened by its own passphrase).
+  const kp = keyprints.find((k) => k.path === 'passwordKeyPrint') ?? keyprints[0];
   console.error(`keyprint: "${kp.path}"   encrypted boxes: ${boxes.length}`);
 
   const password = await askPassword();
