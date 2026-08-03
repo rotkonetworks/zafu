@@ -18,7 +18,7 @@ import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { webcrypto as crypto } from 'node:crypto';
 
-const b64 = (s) => Uint8Array.from(Buffer.from(s, 'base64'));
+const b64 = s => Uint8Array.from(Buffer.from(s, 'base64'));
 const bytesEq = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 
 async function deriveKey(password, saltB64) {
@@ -45,13 +45,22 @@ async function passwordMatches(key, hashB64) {
 }
 
 async function decryptBox(key, box) {
-  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64(box.nonce) }, key, b64(box.cipherText));
+  const pt = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: b64(box.nonce) },
+    key,
+    b64(box.cipherText),
+  );
   return new TextDecoder().decode(pt);
 }
 
-const isBox = (v) => v && typeof v === 'object' && typeof v.nonce === 'string' && typeof v.cipherText === 'string';
-const isKeyPrint = (v) =>
-  v && typeof v === 'object' && typeof v.hash === 'string' && typeof v.salt === 'string' && !('nonce' in v);
+const isBox = v =>
+  v && typeof v === 'object' && typeof v.nonce === 'string' && typeof v.cipherText === 'string';
+const isKeyPrint = v =>
+  v &&
+  typeof v === 'object' &&
+  typeof v.hash === 'string' &&
+  typeof v.salt === 'string' &&
+  !('nonce' in v);
 
 // Recursively find the keyprint (salt/hash) and every encrypted box, so the
 // tool survives storage-schema/version changes without knowing exact paths.
@@ -85,12 +94,12 @@ function askPassword() {
   if (process.env.WALLET_RECOVERY_PASSWORD != null) {
     return Promise.resolve(process.env.WALLET_RECOVERY_PASSWORD);
   }
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: true });
     // Mute echo so the password is not shown / logged.
     rl._writeToOutput = () => {};
     process.stdout.write('wallet password: ');
-    rl.question('', (answer) => {
+    rl.question('', answer => {
       rl.close();
       process.stdout.write('\n');
       resolve(answer);
@@ -111,7 +120,9 @@ async function main() {
   walk(dump, '', keyprints, boxes);
 
   if (keyprints.length === 0) {
-    console.error('error: no passwordKeyPrint (salt/hash) found - is this a zafu chrome.storage.local dump?');
+    console.error(
+      'error: no passwordKeyPrint (salt/hash) found - is this a zafu chrome.storage.local dump?',
+    );
     process.exit(1);
   }
   if (boxes.length === 0) {
@@ -120,7 +131,7 @@ async function main() {
   }
   // Prefer the top-level master passwordKeyPrint; a dump may also contain a
   // self-contained multisig-backup keyprint (opened by its own passphrase).
-  const kp = keyprints.find((k) => k.path === 'passwordKeyPrint') ?? keyprints[0];
+  const kp = keyprints.find(k => k.path === 'passwordKeyPrint') ?? keyprints[0];
   console.error(`keyprint: "${kp.path}"   encrypted boxes: ${boxes.length}`);
 
   const password = await askPassword();
@@ -148,7 +159,7 @@ async function main() {
   console.error(`\ndone: ${ok}/${boxes.length} boxes recovered with the master key.`);
 }
 
-main().catch((e) => {
+main().catch(e => {
   console.error('fatal:', e.message);
   process.exit(1);
 });

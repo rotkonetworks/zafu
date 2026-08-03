@@ -20,7 +20,7 @@ intact" path.
 1. `chrome://extensions` -> enable Developer mode -> under zafu click **service worker** (inspect).
 2. In the console:
    ```js
-   chrome.storage.local.get(null).then(d => console.log(JSON.stringify(d)))
+   chrome.storage.local.get(null).then(d => console.log(JSON.stringify(d)));
    ```
 3. Copy the printed JSON into a file, e.g. `dump.json`.
 
@@ -59,14 +59,14 @@ plaintext.
 
 Everything matches `packages/encryption`:
 
-| field | value |
-| --- | --- |
-| KDF | `PBKDF2(password, salt, iterations=210000, hash=SHA-512)` |
-| key | AES-GCM, 256-bit |
-| salt | `passwordKeyPrint.salt`, 16 bytes, base64 |
-| password check | `passwordKeyPrint.hash == SHA-256(raw key)`, base64 |
-| box | `{ nonce: 12 bytes b64, cipherText: b64 }` (AES-GCM, nonce = IV) |
-| seed | `AES-GCM-decrypt(cipherText, iv = nonce, key)` -> UTF-8 |
+| field          | value                                                            |
+| -------------- | ---------------------------------------------------------------- |
+| KDF            | `PBKDF2(password, salt, iterations=210000, hash=SHA-512)`        |
+| key            | AES-GCM, 256-bit                                                 |
+| salt           | `passwordKeyPrint.salt`, 16 bytes, base64                        |
+| password check | `passwordKeyPrint.hash == SHA-256(raw key)`, base64              |
+| box            | `{ nonce: 12 bytes b64, cipherText: b64 }` (AES-GCM, nonce = IV) |
+| seed           | `AES-GCM-decrypt(cipherText, iv = nonce, key)` -> UTF-8          |
 
 Encrypted seeds appear as `vaults[].encryptedData` (a stringified box) and
 `penumbraWallets[].custody.encryptedSeedPhrase` (a box). `recover.mjs` finds

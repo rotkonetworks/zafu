@@ -14,14 +14,20 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const b64e = (u8) => Buffer.from(u8).toString('base64');
+const b64e = u8 => Buffer.from(u8).toString('base64');
 
 const SEED = 'legal winner thank year wave sausage worth useful legal winner thank yellow';
 const PASSWORD = 'sunflower-seedvault-2026';
 
 async function encryptLikeZafu(password, message) {
   const salt = crypto.getRandomValues(new Uint8Array(16));
-  const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), { name: 'PBKDF2' }, false, ['deriveKey']);
+  const km = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(password),
+    { name: 'PBKDF2' },
+    false,
+    ['deriveKey'],
+  );
   const key = await crypto.subtle.deriveKey(
     { name: 'PBKDF2', salt, iterations: 210000, hash: 'SHA-512' },
     km,
@@ -32,7 +38,13 @@ async function encryptLikeZafu(password, message) {
   const raw = new Uint8Array(await crypto.subtle.exportKey('raw', key));
   const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', raw));
   const nonce = crypto.getRandomValues(new Uint8Array(12));
-  const cipherText = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce }, key, new TextEncoder().encode(message)));
+  const cipherText = new Uint8Array(
+    await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv: nonce },
+      key,
+      new TextEncoder().encode(message),
+    ),
+  );
   return {
     passwordKeyPrint: { hash: b64e(hash), salt: b64e(salt) },
     box: { nonce: b64e(nonce), cipherText: b64e(cipherText) },
@@ -42,7 +54,16 @@ async function encryptLikeZafu(password, message) {
 const { passwordKeyPrint, box } = await encryptLikeZafu(PASSWORD, SEED);
 const dump = {
   passwordKeyPrint,
-  vaults: [{ id: 'v1', type: 'mnemonic', name: 'Main', encryptedData: JSON.stringify(box), salt: '', insensitive: {} }],
+  vaults: [
+    {
+      id: 'v1',
+      type: 'mnemonic',
+      name: 'Main',
+      encryptedData: JSON.stringify(box),
+      salt: '',
+      insensitive: {},
+    },
+  ],
   privacySettings: { hideBalances: true },
 };
 const dumpPath = join(here, '.selftest-dump.json');
@@ -51,12 +72,22 @@ const recover = join(here, 'recover.mjs');
 
 let failures = 0;
 try {
-  const out = execFileSync('node', [recover, dumpPath], { env: { ...process.env, WALLET_RECOVERY_PASSWORD: PASSWORD }, encoding: 'utf8' });
+  const out = execFileSync('node', [recover, dumpPath], {
+    env: { ...process.env, WALLET_RECOVERY_PASSWORD: PASSWORD },
+    encoding: 'utf8',
+  });
   if (out.includes(SEED)) console.log('PASS: correct password recovers the seed');
-  else { console.error('FAIL: seed not in output'); failures++; }
+  else {
+    console.error('FAIL: seed not in output');
+    failures++;
+  }
 
   try {
-    execFileSync('node', [recover, dumpPath], { env: { ...process.env, WALLET_RECOVERY_PASSWORD: 'wrong' }, encoding: 'utf8', stdio: 'pipe' });
+    execFileSync('node', [recover, dumpPath], {
+      env: { ...process.env, WALLET_RECOVERY_PASSWORD: 'wrong' },
+      encoding: 'utf8',
+      stdio: 'pipe',
+    });
     console.error('FAIL: wrong password did not error');
     failures++;
   } catch {
