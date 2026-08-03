@@ -23,7 +23,7 @@ const frostVault = (over: Partial<EncryptedVault> = {}): EncryptedVault => ({
     publicKeyPackage: 'pkp-hex',
     threshold: 2,
     maxSigners: 3,
-    relayUrl: 'wss://zrelay.rotko.net',
+    relayUrl: 'wss://zcash.rotko.net',
     address: 'u1frostaddr',
     supportedNetworks: ['zcash'],
     ...(over.insensitive ?? {}),
@@ -42,7 +42,7 @@ const mirrorFor = (vaultId: string): ZcashWalletJson => ({
     publicKeyPackage: 'pkp-hex',
     threshold: 2,
     maxSigners: 3,
-    relayUrl: 'wss://zrelay.rotko.net',
+    relayUrl: 'wss://zcash.rotko.net',
   },
 });
 
@@ -56,7 +56,7 @@ describe('deriveMirrorFromFrostVault', () => {
     expect(m.multisig?.threshold).toBe(2);
     expect(m.multisig?.maxSigners).toBe(3);
     expect(m.multisig?.publicKeyPackage).toBe('pkp-hex');
-    expect(m.multisig?.relayUrl).toBe('wss://zrelay.rotko.net');
+    expect(m.multisig?.relayUrl).toBe('wss://zcash.rotko.net');
     // self-custody secrets live in vault.encryptedData, not the mirror
     expect(m.multisig?.keyPackage).toBeUndefined();
     expect(m.multisig?.custody).toBeUndefined();

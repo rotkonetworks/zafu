@@ -22,6 +22,7 @@ import {
   preludeWrapSinglePczt,
   ZIGNER_PCZT_SIGN_UR_TYPE,
 } from '../routes/popup/send/zcash-send-cbor-helpers';
+import { NU6_3_ACTIVATION_HEIGHT } from '../config/feature-flags';
 
 const workerSelf = globalThis as any as DedicatedWorkerGlobalScope;
 
@@ -359,6 +360,55 @@ interface WasmModule {
     mainnet: boolean,
     memo_hex?: string | null,
   ) => unknown;
+
+  /**
+   * NU6.3 turnstile migration HOT (mnemonic) path: same as
+   * build_turnstile_migration_pczt but takes the SEED PHRASE and returns the
+   * final SIGNED V6 tx hex directly - no intermediate PCZT is produced. The
+   * account_index MUST be the account the orchard notes were scanned under, and
+   * expected_branch_id MUST be the live GetLightdInfo branch id (never the
+   * 0xffffffff placeholder); the producer refuses to build otherwise. Invoked
+   * via the offscreen prover (proveViaOffscreen), declared here for completeness.
+   */
+  build_signed_turnstile_migration?: (
+    seed_phrase: string,
+    orchard_notes_json: string,
+    fee: bigint,
+    orchard_anchor_hex: string,
+    orchard_merkle_paths_json: string,
+    account_index: number,
+    target_height: number,
+    expected_branch_id: number,
+    mainnet: boolean,
+    memo_hex?: string | null,
+  ) => string;
+
+  /**
+   * NU6.3 general IRONWOOD hot send: spends the given IRONWOOD notes to an
+   * arbitrary recipient and returns the final SIGNED V6 tx hex directly (no
+   * intermediate PCZT). Post-NU6.3 this is the only shielded spend path, since
+   * orchard-to-orchard sends are consensus-disabled. Same fail-closed contract
+   * as build_signed_turnstile_migration: account_index MUST be the account the
+   * ironwood notes were scanned under and expected_branch_id MUST be the live
+   * GetLightdInfo branch id (never the 0xffffffff placeholder); the producer
+   * refuses to build otherwise. Invoked via the offscreen prover
+   * (proveViaOffscreen), declared here (optional) for feature detection - the
+   * export lands with the NU6.3 blob.
+   */
+  build_signed_ironwood_send?: (
+    seed_phrase: string,
+    ironwood_notes_json: string,
+    recipient: string,
+    amount: bigint,
+    fee: bigint,
+    ironwood_anchor_hex: string,
+    ironwood_merkle_paths_json: string,
+    account_index: number,
+    target_height: number,
+    expected_branch_id: number,
+    mainnet: boolean,
+    memo_hex?: string | null,
+  ) => string;
 
   // FROST multisig
   frost_dealer_keygen(min_signers: number, max_signers: number): string;
@@ -1275,6 +1325,9 @@ interface ZcashBuildRequest {
     | 'build_unsigned'
     | 'build_unsigned_pczt'
     | 'build_turnstile_migration_pczt'
+    | 'build_signed_turnstile_migration'
+    | 'build_signed_ironwood_send'
+    | 'build_ironwood_send_pczt'
     | 'build_shielding'
     | 'build_unsigned_shielding';
   args: unknown[];
@@ -2756,7 +2809,16 @@ const runSync = async (
               txid: iwCmxToTxid.get(note.cmx) ?? '',
               height: iwCmxToHeight.get(note.cmx) ?? 0,
             };
-            console.log(`[zcash-worker] found ironwood note: value=${note.value}, pos=${position}`);
+            // Diagnostic (mirrors the orchard scan log): build_signed_ironwood_send
+            // reconstructs each spend from recipient_hex/rho/rseed. If
+            // hasRecipient is false here the wasm ironwood scanner is not
+            // capturing the diversified recipient and reconstruction falls back
+            // to diversifier 0 - a real gap to fix in scan_actions_ironwood_parallel.
+            console.log(
+              `[zcash-worker] found ironwood note: value=${note.value}, pos=${position}, ` +
+                `hasRseed=${!!note.rseed}, hasRho=${!!note.rho}, ` +
+                `hasRecipient=${!!(note as unknown as { recipient?: string }).recipient}`,
+            );
             newIronwoodNotes.push(full);
             state.notes.push(full);
           }
@@ -3974,15 +4036,48 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         emitProgress('selecting notes', `${sendState.notes.length} notes available`);
 
-        // estimate fee and select notes
+        // witness/tip client - also reads the chain tip that decides the spend
+        // pool and the endpoint consensus branch id.
+        const sendClient = await makeZcashClient(sendPayload.serverUrl);
+
+        emitProgress('fetching chain tip');
+        const sendTip = await sendClient.getTip();
+
+        // ── NU6.3 spend-pool selection ──────────────────────────────────────
+        // Post-NU6.3 (synced tip >= activation height) orchard-to-orchard sends
+        // are consensus-disabled, so the active shielded spend pool is ironwood.
+        // Pre-activation we keep spending orchard (legacy path).
+        const sendActivePool: NotePool =
+          sendTip.height >= NU6_3_ACTIVATION_HEIGHT ? 'ironwood' : 'orchard';
+
+        // FAIL-CLOSED: never build an orchard tx the network rejects post-NU6.3.
+        // If the active pool is ironwood but the wallet holds no ironwood notes
+        // while it DOES hold orchard funds, refuse and point the user at the
+        // turnstile migration rather than silently building a dead orchard tx.
+        if (sendActivePool === 'ironwood') {
+          const unspentIronwood = sendState.notes.filter(
+            n => !sendState.spentNullifiers.has(n.nullifier) && poolOf(n) === 'ironwood',
+          );
+          const unspentOrchard = sendState.notes.filter(
+            n => !sendState.spentNullifiers.has(n.nullifier) && poolOf(n) === 'orchard',
+          );
+          if (unspentIronwood.length === 0 && unspentOrchard.length > 0) {
+            throw new Error(
+              'orchard sends are disabled at NU6.3 - migrate your orchard funds to ironwood first',
+            );
+          }
+        }
+
+        // estimate fee and select notes from the active pool
         const estFee = computeFee(1, nZOutputs, nTOutputs, true);
         const selected = selectNotes(
           sendState.notes,
           sendState.spentNullifiers,
           amountZat + estFee,
+          sendActivePool,
         );
 
-        // compute exact fee
+        // compute exact fee (n active-pool spends + 1 output + change?)
         const totalIn = selected.reduce((sum, n) => sum + BigInt(n.value), 0n);
         const hasChange =
           totalIn > amountZat + computeFee(selected.length, nZOutputs, nTOutputs, true);
@@ -3991,14 +4086,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           throw new Error(`insufficient funds: have ${totalIn} zat, need ${amountZat + fee} zat`);
         }
 
-        emitProgress('notes selected', `${selected.length} notes, fee=${fee}`);
+        emitProgress('notes selected', `${selected.length} ${sendActivePool} notes, fee=${fee}`);
 
-        // build merkle witnesses
-        const sendClient = await makeZcashClient(sendPayload.serverUrl);
-
-        emitProgress('fetching chain tip');
-        const sendTip = await sendClient.getTip();
-
+        // build merkle witnesses in the active pool (ironwood delegates to the
+        // ironwood witness/anchor path inside buildWitnesses)
         const anchorHeight = await resolveAnchorHeight(walletId, sendTip.height);
         emitProgress('building merkle witnesses', `anchor=${anchorHeight} (tip=${sendTip.height})`);
         const witnessStart = performance.now();
@@ -4008,7 +4099,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           walletId,
           selected,
           anchorHeight,
-          'orchard',
+          sendActivePool,
           emitProgress,
         );
 
@@ -4020,6 +4111,108 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const sendBranchIdHex = await fetchBranchIdHex(sendClient);
 
         if (sendPayload.mnemonic) {
+          // ── NU6.3 IRONWOOD hot send ─────────────────────────────────────
+          // Post-activation shielded spend path. Fail-closed branch-id guard
+          // (copied verbatim from send-turnstile-migration), then build + prove
+          // + SIGN the V6 ironwood tx inside the wasm with the seed phrase and
+          // broadcast the returned tx hex directly. No PCZT is produced.
+          if (sendActivePool === 'ironwood') {
+            emitProgress('checking NU6.3 activation');
+            const iwLightdInfo = await sendClient.getLightdInfo();
+            const iwReportedBranchHex = (iwLightdInfo.consensusBranchId || '')
+              .trim()
+              .toLowerCase()
+              .replace(/^0x/, '');
+            if (!iwReportedBranchHex || iwReportedBranchHex === PLACEHOLDER_BRANCH_ID_HEX) {
+              throw new Error(
+                'NU6.3 is not active at this endpoint yet (placeholder consensus branch id) - ' +
+                  'ironwood send is unavailable until NU6.3 activates',
+              );
+            }
+            if (iwReportedBranchHex !== NU63_CONSENSUS_BRANCH_ID_HEX) {
+              throw new Error(
+                `endpoint consensus branch id 0x${iwReportedBranchHex} does not match NU6.3 ` +
+                  `(0x${NU63_CONSENSUS_BRANCH_ID_HEX}); refusing to build ironwood send`,
+              );
+            }
+            emitProgress('NU6.3 active', `branch id 0x${iwReportedBranchHex}`);
+
+            const iwNotesJson = selected.map(n => ({
+              value: Number(n.value),
+              nullifier: n.nullifier,
+              cmx: n.cmx,
+              position: n.position,
+              rseed_hex: n.rseed ?? '',
+              rho_hex: n.rho ?? '',
+              recipient_hex: n.recipient ?? '',
+            }));
+            const iwPathsForWasm = (paths as { position: number; path: { hash: string }[] }[]).map(
+              p => ({ path: p.path.map(e => e.hash), position: p.position }),
+            );
+
+            emitProgress(
+              'building, proving & signing ironwood tx (halo2)',
+              `${selected.length} ironwood spends`,
+            );
+            const iwProveStart = performance.now();
+            const iwProvingTicker = setInterval(() => {
+              const elapsed = ((performance.now() - iwProveStart) / 1000).toFixed(0);
+              emitProgress('proving (halo2)', `${elapsed}s elapsed`);
+            }, 2000);
+            let iwTxHex: string;
+            try {
+              // arg order matches the build_signed_ironwood_send producer:
+              // [seed, ironwood_notes_json, recipient, amount, fee,
+              //  ironwood_anchor_hex, ironwood_merkle_paths_json, account_index,
+              //  target_height, expected_branch_id, mainnet, memo_hex].
+              // expected_branch_id is the live value validated above; the
+              // producer refuses to build unless the branch id it binds equals it.
+              iwTxHex = (await proveViaOffscreen({
+                fn: 'build_signed_ironwood_send',
+                args: [
+                  sendPayload.mnemonic,
+                  JSON.stringify(iwNotesJson),
+                  sendPayload.recipient,
+                  amountZat.toString(),
+                  fee.toString(),
+                  anchorHex,
+                  JSON.stringify(iwPathsForWasm),
+                  sendPayload.accountIndex,
+                  sendTip.height,
+                  NU63_CONSENSUS_BRANCH_ID,
+                  sendPayload.mainnet,
+                  memoHex,
+                ],
+              })) as string;
+            } catch (e) {
+              // do NOT log the seed or the caught args; message only
+              console.error('[zcash-worker] build_signed_ironwood_send failed');
+              throw e;
+            } finally {
+              clearInterval(iwProvingTicker);
+            }
+
+            emitProgress('ironwood tx signed', `${iwTxHex.length / 2} bytes`);
+            emitProgress('broadcasting transaction');
+            const iwTxData = hexDecode(iwTxHex);
+            const iwBroadcastClient = await makeZcashClient(sendPayload.serverUrl);
+            const iwResult = await iwBroadcastClient.sendTransaction(iwTxData);
+            if (iwResult.errorCode !== 0) {
+              throw new Error(`broadcast failed (${iwResult.errorCode}): ${iwResult.errorMessage}`);
+            }
+            const iwTxid = await resolveBroadcastTxid(iwResult, iwTxHex, sendPayload.serverUrl);
+            const iwTotalDuration = ((performance.now() - sendStart) / 1000).toFixed(1);
+            emitProgress('complete', `txid=${iwTxid}, total=${iwTotalDuration}s`);
+            workerSelf.postMessage({
+              type: 'tx-result',
+              id,
+              network: 'zcash',
+              walletId,
+              payload: { txid: iwTxid, fee: fee.toString() },
+            });
+            return;
+          }
+
           // mnemonic wallet: build fully signed transaction and broadcast directly
           const notesJson = selected.map(n => ({
             value: Number(n.value),
@@ -4109,6 +4302,20 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // zigner wallet: build unsigned transaction for cold signing (real v5 tx bytes)
         if (!sendPayload.ufvk) {
           throw new Error('UFVK required for zigner wallet send');
+        }
+
+        // FAIL-CLOSED (NU6.3): this legacy simple-format (sighash+alphas) cold
+        // path only builds orchard txs, which are consensus-disabled
+        // post-activation. The reachable zigner cold-sign path is the PCZT
+        // machine (`send-tx-pczt`, driven by the send UI's
+        // buildSendTxPcztInWorker), which routes ironwood through
+        // build_ironwood_send_pczt. Refuse here rather than build an invalid
+        // orchard tx or duplicate the ironwood path in an unreachable branch.
+        if (sendActivePool === 'ironwood') {
+          throw new Error(
+            'cold (zigner) ironwood send runs through the PCZT cold-sign path, not this ' +
+              'legacy simple-format path - orchard sends are disabled at NU6.3',
+          );
         }
 
         emitProgress(
@@ -4294,11 +4501,42 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const nTOutputs = isTransparent ? 1 : 0;
 
         emitProgress('selecting notes', `${sendState.notes.length} notes available`);
+
+        // ── NU6.3 spend-pool selection (mirror of the hot send-tx path) ─────
+        // The chain tip decides the active shielded spend pool, so fetch it
+        // BEFORE note selection: post-activation orchard-to-orchard sends are
+        // consensus-disabled, so the active pool is ironwood; pre-activation we
+        // keep spending orchard (legacy cold PCZT path).
+        const sendClient = await makeZcashClient(sendPayload.serverUrl);
+        emitProgress('fetching chain tip');
+        const sendTip = await sendClient.getTip();
+        const pcztPool: NotePool =
+          sendTip.height >= NU6_3_ACTIVATION_HEIGHT ? 'ironwood' : 'orchard';
+
+        // FAIL-CLOSED: never build an orchard PCZT the network rejects
+        // post-NU6.3. If the active pool is ironwood but the wallet holds no
+        // ironwood notes while it DOES hold orchard funds, refuse and point at
+        // the turnstile migration rather than silently building a dead tx.
+        if (pcztPool === 'ironwood') {
+          const unspentIronwood = sendState.notes.filter(
+            n => !sendState.spentNullifiers.has(n.nullifier) && poolOf(n) === 'ironwood',
+          );
+          const unspentOrchard = sendState.notes.filter(
+            n => !sendState.spentNullifiers.has(n.nullifier) && poolOf(n) === 'orchard',
+          );
+          if (unspentIronwood.length === 0 && unspentOrchard.length > 0) {
+            throw new Error(
+              'orchard sends are disabled at NU6.3 - migrate your orchard funds to ironwood first',
+            );
+          }
+        }
+
         const estFee = computeFee(1, nZOutputs, nTOutputs, true);
         const selected = selectNotes(
           sendState.notes,
           sendState.spentNullifiers,
           amountZat + estFee,
+          pcztPool,
         );
         const totalIn = selected.reduce((sum, n) => sum + BigInt(n.value), 0n);
         const hasChange =
@@ -4307,13 +4545,12 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (totalIn < amountZat + fee) {
           throw new Error(`insufficient funds: have ${totalIn} zat, need ${amountZat + fee} zat`);
         }
-        emitProgress('notes selected', `${selected.length} notes, fee=${fee}`);
+        emitProgress('notes selected', `${selected.length} ${pcztPool} notes, fee=${fee}`);
 
-        const sendClient = await makeZcashClient(sendPayload.serverUrl);
-        emitProgress('fetching chain tip');
-        const sendTip = await sendClient.getTip();
         // Anchor at the cached frontier height (where our witnesses are
         // rooted); target_height stays at the live tip for branch_id/expiry.
+        // buildWitnesses delegates to the ironwood witness/anchor path when the
+        // active pool is ironwood.
         const anchorHeight = await resolveAnchorHeight(walletId, sendTip.height);
         emitProgress('building merkle witnesses', `anchor=${anchorHeight} (tip=${sendTip.height})`);
         const { anchorHex, paths } = await buildWitnesses(
@@ -4321,7 +4558,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           walletId,
           selected,
           anchorHeight,
-          'orchard',
+          pcztPool,
           emitProgress,
         );
 
@@ -4339,6 +4576,136 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           position: p.position,
         }));
 
+        // ── NU6.3 IRONWOOD cold (zigner / watch-only) PCZT ─────────────────
+        // Post-activation: build the redacted-for-signer ironwood-send PCZT via
+        // build_ironwood_send_pczt and transport it over the ironwood-AWARE
+        // zigner prelude envelope (the plain ur:zcash-pczt CBOR used by the
+        // orchard branch below reaches the ironwood-BLIND signer, which hides
+        // the destination and shows a fee ~= the whole amount). Returns the
+        // SAME send-tx-pczt-unsigned message shape the orchard branch posts, so
+        // buildSendTxPcztInWorker + the UI PCZT sign step + send-tx-pczt-complete
+        // consume it unchanged; the FROST fields are empty for the single-signer
+        // zigner cold-sign.
+        if (pcztPool === 'ironwood') {
+          // Fail-closed branch-id guard, identical to the hot ironwood send:
+          // refuse unless NU6.3 is really active (real 0x37a5165b, never the
+          // 0xffffffff placeholder).
+          emitProgress('checking NU6.3 activation');
+          const iwLightdInfo = await sendClient.getLightdInfo();
+          const iwReportedBranchHex = (iwLightdInfo.consensusBranchId || '')
+            .trim()
+            .toLowerCase()
+            .replace(/^0x/, '');
+          if (!iwReportedBranchHex || iwReportedBranchHex === PLACEHOLDER_BRANCH_ID_HEX) {
+            throw new Error(
+              'NU6.3 is not active at this endpoint yet (placeholder consensus branch id) - ' +
+                'ironwood send is unavailable until NU6.3 activates',
+            );
+          }
+          if (iwReportedBranchHex !== NU63_CONSENSUS_BRANCH_ID_HEX) {
+            throw new Error(
+              `endpoint consensus branch id 0x${iwReportedBranchHex} does not match NU6.3 ` +
+                `(0x${NU63_CONSENSUS_BRANCH_ID_HEX}); refusing to build ironwood send`,
+            );
+          }
+          emitProgress('NU6.3 active', `branch id 0x${iwReportedBranchHex}`);
+
+          emitProgress(
+            'building & proving ironwood PCZT (halo2)',
+            `${selected.length} ironwood spends`,
+          );
+          const iwProveStart = performance.now();
+          const iwProvingTicker = setInterval(() => {
+            const elapsed = ((performance.now() - iwProveStart) / 1000).toFixed(0);
+            emitProgress('proving (halo2)', `${elapsed}s elapsed`);
+          }, 2000);
+          let iwBuilt: unknown;
+          try {
+            // build_ironwood_send_pczt args:
+            // [ufvk, ironwood_notes_json, recipient, amount, fee,
+            //  ironwood_anchor_hex, ironwood_merkle_paths_json, account_index,
+            //  target_height, expected_branch_id, mainnet, memo_hex].
+            // account_index is unused by the builder (the UFVK is already
+            // account-scoped) so pass 0; this payload carries no accountIndex.
+            // target_height = live tip (selects TxVersion::V6). expected_branch_id
+            // is the value validated above; the producer refuses to build unless
+            // the branch id it binds equals it.
+            iwBuilt = await proveViaOffscreen({
+              fn: 'build_ironwood_send_pczt',
+              args: [
+                sendPayload.ufvk,
+                JSON.stringify(notesForWasm),
+                sendPayload.recipient,
+                amountZat.toString(),
+                fee.toString(),
+                anchorHex,
+                JSON.stringify(pathsForWasm),
+                0,
+                sendTip.height,
+                NU63_CONSENSUS_BRANCH_ID,
+                sendPayload.mainnet,
+                memoHex,
+              ],
+            });
+          } catch (e) {
+            console.error('[zcash-worker] build_ironwood_send_pczt failed');
+            throw e;
+          } finally {
+            clearInterval(iwProvingTicker);
+          }
+          const iwParsed = iwBuilt as {
+            pczt_hex: string;
+            summary: unknown;
+            action_count: number;
+          };
+
+          // Ironwood-AWARE transport: zigner prelude envelope [0x53][0x04][0x03]
+          // (single PCZT), NOT the ironwood-blind ur:zcash-pczt CBOR wrap.
+          const iwPcztBytes = hexDecode(iwParsed.pczt_hex);
+          const iwEnvelope = preludeWrapSinglePczt(iwPcztBytes);
+          const iwFragSize =
+            sendPayload.fragmentSize && sendPayload.fragmentSize > 0
+              ? sendPayload.fragmentSize
+              : 200;
+          const iwFramesJson = wasmModule.ur_encode_frames(
+            iwEnvelope,
+            ZIGNER_PCZT_SIGN_UR_TYPE,
+            iwFragSize,
+          );
+          const iwUrFrames = JSON.parse(iwFramesJson) as string[];
+          const iwTotalDuration = ((performance.now() - sendStart) / 1000).toFixed(1);
+          emitProgress(
+            'ironwood PCZT QR ready',
+            `${iwUrFrames.length} frames, total=${iwTotalDuration}s`,
+          );
+
+          workerSelf.postMessage({
+            type: 'send-tx-pczt-unsigned',
+            id,
+            network: 'zcash',
+            walletId,
+            payload: {
+              pcztHex: iwParsed.pczt_hex,
+              // `summary` is a display string here (SendTxPcztUnsignedResult /
+              // the zigner-signing store type it as `string`, and the UI renders
+              // it as a React child). The authoritative per-output confirmation
+              // (recipient/change/values) is recomputed ON the zigner from the
+              // redacted PCZT, so a short label suffices for the extension side.
+              summary: `ironwood send (${selected.length} spend${selected.length === 1 ? '' : 's'})`,
+              actionCount: iwParsed.action_count,
+              fee: fee.toString(),
+              urFrames: iwUrFrames,
+              cborBytes: iwEnvelope.length,
+              // single-signer zigner cold-sign: no FROST relay rounds.
+              sighash: '',
+              alphas: [],
+              spendIndices: [],
+            },
+          });
+          return;
+        }
+
+        // ── pre-NU6.3 ORCHARD cold PCZT (legacy path, unchanged) ───────────
         emitProgress('building & proving PCZT (halo2)', `${selected.length} spends`);
         const proveStart = performance.now();
         // Use the live chain tip we just fetched for the merkle anchor as
@@ -4474,11 +4841,15 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (migratePayload.backend) {
           registerBackend(migratePayload.serverUrl, migratePayload.backend);
         }
-        if (!migratePayload.ufvk) {
-          // The turnstile flow reuses the UFVK-based PCZT cold-sign machine.
-          // Hot-wallet (mnemonic) signing of V6/ironwood transactions needs
-          // the NU6.3 signer wasm and is intentionally not wired here yet.
-          throw new Error('UFVK required for turnstile migration (cold-sign PCZT flow)');
+        // HOT (mnemonic) vs COLD (zigner/UFVK) turnstile. A hot/self-custody
+        // wallet supplies the seed phrase in-worker and signs the V6 tx with
+        // the NU6.3 signer wasm (build_signed_turnstile_migration), returning a
+        // ready-to-broadcast tx - no PCZT/QR round trip. A watch-only/zigner
+        // wallet supplies a UFVK and takes the cold PCZT cold-sign machine.
+        // Prefer the seed when present; fall back to the UFVK cold path.
+        const isHotMigration = !!migratePayload.mnemonic;
+        if (!isHotMigration && !migratePayload.ufvk) {
+          throw new Error('turnstile migration requires a mnemonic (hot) or UFVK (cold) wallet');
         }
 
         const migrateStart = performance.now();
@@ -4576,6 +4947,87 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           path: p.path.map(e => e.hash),
           position: p.position,
         }));
+
+        // ── HOT (mnemonic) path ───────────────────────────────────────────
+        // Self-custody wallet: build + prove + SIGN the V6 turnstile tx inside
+        // the wasm with the seed phrase, then broadcast the returned tx hex
+        // directly. No PCZT is produced, persisted, or transmitted - the wasm
+        // returns only the final signed tx. Reuses the EXACT same params the
+        // cold path passes (notes, fee, anchor, merkle paths, accountIndex,
+        // target height, expected branch id, mainnet), so nullifier derivation
+        // and the fail-closed branch-id guard match the cold path bit for bit.
+        if (isHotMigration) {
+          const migrateSeed = migratePayload.mnemonic!;
+          emitProgress(
+            'building, proving & signing turnstile tx (halo2)',
+            `${orchardNotes.length} orchard spends -> ironwood`,
+          );
+          const hotProveStart = performance.now();
+          // keep the clock ticking during proving so the UI isn't frozen
+          const hotProvingTicker = setInterval(() => {
+            const elapsed = ((performance.now() - hotProveStart) / 1000).toFixed(0);
+            emitProgress('proving (halo2)', `${elapsed}s elapsed`);
+          }, 2000);
+          let migrateTxHex: string;
+          try {
+            // target_height = live tip; at/after NU6.3 activation this selects
+            // TxVersion::V6 (orchard spends + ironwood outputs) in the builder.
+            // account_index MUST be the account the orchard notes were scanned
+            // under (same as the cold path) or the wasm's nullifier check
+            // rejects every spend. NU63_CONSENSUS_BRANCH_ID is the live value
+            // validated from GetLightdInfo above (never the placeholder); the
+            // producer refuses to build unless the branch id it binds equals it.
+            migrateTxHex = (await proveViaOffscreen({
+              fn: 'build_signed_turnstile_migration',
+              args: [
+                migrateSeed,
+                JSON.stringify(notesForWasm),
+                fee.toString(),
+                anchorHex,
+                JSON.stringify(pathsForWasm),
+                migratePayload.accountIndex,
+                migrateTip.height,
+                NU63_CONSENSUS_BRANCH_ID,
+                migratePayload.mainnet,
+                null,
+              ],
+            })) as string;
+          } catch (e) {
+            // do NOT log the seed or the caught args; message only
+            console.error('[zcash-worker] build_signed_turnstile_migration failed');
+            throw e;
+          } finally {
+            clearInterval(hotProvingTicker);
+          }
+
+          emitProgress('turnstile tx signed', `${migrateTxHex.length / 2} bytes`);
+          emitProgress('broadcasting migration');
+          const migrateHotTxData = hexDecode(migrateTxHex);
+          const migrateHotClient = await makeZcashClient(
+            migratePayload.serverUrl,
+            migratePayload.backend,
+          );
+          const migrateHotResult = await migrateHotClient.sendTransaction(migrateHotTxData);
+          if (migrateHotResult.errorCode !== 0) {
+            throw new Error(
+              `broadcast failed (${migrateHotResult.errorCode}): ${migrateHotResult.errorMessage}`,
+            );
+          }
+          const migrateHotTxid = await resolveBroadcastTxid(
+            migrateHotResult,
+            migrateTxHex,
+            migratePayload.serverUrl,
+          );
+          emitProgress('complete', `txid=${migrateHotTxid}`);
+          workerSelf.postMessage({
+            type: 'tx-result',
+            id,
+            network: 'zcash',
+            walletId,
+            payload: { txid: migrateHotTxid, fee: fee.toString() },
+          });
+          return;
+        }
 
         emitProgress(
           'building & proving turnstile PCZT (halo2)',
@@ -4764,6 +5216,23 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const fees: string[] = [];
         // live consensus branch id (NU6.3-safe); resolved once, reused for every output
         let multiBranchIdHex: string | null = null;
+
+        // FAIL-CLOSED (NU6.3): multi-send only builds orchard txs today, which
+        // are consensus-disabled post-activation, and there is no ironwood
+        // multi-send path yet. Refuse up front rather than build invalid
+        // orchard txs per output.
+        // TODO(ironwood multi-send): route the ironwood pool through
+        // build_signed_ironwood_send per output.
+        {
+          const multiGuardClient = await makeZcashClient(multiPayload.serverUrl);
+          const multiGuardTip = await multiGuardClient.getTip();
+          if (multiGuardTip.height >= NU6_3_ACTIVATION_HEIGHT) {
+            throw new Error(
+              'orchard sends are disabled at NU6.3 - multi-send does not support ironwood ' +
+                'yet; send ironwood funds individually',
+            );
+          }
+        }
 
         for (let outputIdx = 0; outputIdx < multiPayload.outputs.length; outputIdx++) {
           const out = multiPayload.outputs[outputIdx]!;

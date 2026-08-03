@@ -81,7 +81,7 @@ export const MultisigSign = () => {
 
     try {
       const relayUrl =
-        (typeof ms.relayUrl === 'string' ? ms.relayUrl : '') || 'wss://zrelay.rotko.net';
+        (typeof ms.relayUrl === 'string' ? ms.relayUrl : '') || 'wss://zcash.rotko.net';
       const relay = new FrostRelayClient(relayUrl);
       const participantId = new Uint8Array(32);
       crypto.getRandomValues(participantId);

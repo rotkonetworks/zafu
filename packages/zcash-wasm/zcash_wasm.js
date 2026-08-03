@@ -4,216 +4,200 @@
  * Wallet keys derived from seed phrase
  */
 export class WalletKeys {
-  __destroy_into_raw() {
-    const ptr = this.__wbg_ptr;
-    this.__wbg_ptr = 0;
-    WalletKeysFinalization.unregister(this);
-    return ptr;
-  }
-  free() {
-    const ptr = this.__destroy_into_raw();
-    wasm.__wbg_walletkeys_free(ptr, 0);
-  }
-  /**
-   * Calculate balance from found notes minus spent nullifiers
-   * @param {any} notes_json
-   * @param {any} spent_nullifiers_json
-   * @returns {bigint}
-   */
-  calculate_balance(notes_json, spent_nullifiers_json) {
-    const ret = wasm.walletkeys_calculate_balance(
-      this.__wbg_ptr,
-      notes_json,
-      spent_nullifiers_json,
-    );
-    if (ret[2]) {
-      throw takeFromExternrefTable0(ret[1]);
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        WalletKeysFinalization.unregister(this);
+        return ptr;
     }
-    return BigInt.asUintN(64, ret[0]);
-  }
-  /**
-   * Decrypt full notes with memos from a raw transaction
-   *
-   * Takes the raw transaction bytes (from zidecar's get_transaction)
-   * and returns any notes that belong to this wallet, including memos.
-   * @param {Uint8Array} tx_bytes
-   * @returns {any}
-   */
-  decrypt_transaction_memos(tx_bytes) {
-    const ptr0 = passArray8ToWasm0(tx_bytes, wasm.__wbindgen_malloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.walletkeys_decrypt_transaction_memos(this.__wbg_ptr, ptr0, len0);
-    if (ret[2]) {
-      throw takeFromExternrefTable0(ret[1]);
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_walletkeys_free(ptr, 0);
     }
-    return takeFromExternrefTable0(ret[0]);
-  }
-  /**
-   * Export Full Viewing Key as hex-encoded QR data
-   * This is used to create a watch-only wallet on an online device
-   * @param {number} account_index
-   * @param {string | null | undefined} label
-   * @param {boolean} mainnet
-   * @returns {string}
-   */
-  export_fvk_qr_hex(account_index, label, mainnet) {
-    let deferred2_0;
-    let deferred2_1;
-    try {
-      var ptr0 = isLikeNone(label)
-        ? 0
-        : passStringToWasm0(label, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-      var len0 = WASM_VECTOR_LEN;
-      const ret = wasm.walletkeys_export_fvk_qr_hex(
-        this.__wbg_ptr,
-        account_index,
-        ptr0,
-        len0,
-        mainnet,
-      );
-      deferred2_0 = ret[0];
-      deferred2_1 = ret[1];
-      return getStringFromWasm0(ret[0], ret[1]);
-    } finally {
-      wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    /**
+     * Calculate balance from found notes minus spent nullifiers
+     * @param {any} notes_json
+     * @param {any} spent_nullifiers_json
+     * @returns {bigint}
+     */
+    calculate_balance(notes_json, spent_nullifiers_json) {
+        const ret = wasm.walletkeys_calculate_balance(this.__wbg_ptr, notes_json, spent_nullifiers_json);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return BigInt.asUintN(64, ret[0]);
     }
-  }
-  /**
-   * Derive wallet keys from a 24-word BIP39 seed phrase
-   * @param {string} seed_phrase
-   */
-  constructor(seed_phrase) {
-    const ptr0 = passStringToWasm0(seed_phrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.walletkeys_from_seed_phrase(ptr0, len0);
-    if (ret[2]) {
-      throw takeFromExternrefTable0(ret[1]);
+    /**
+     * Decrypt full notes with memos from a raw transaction
+     *
+     * Takes the raw transaction bytes (from zidecar's get_transaction)
+     * and returns any notes that belong to this wallet, including memos.
+     * @param {Uint8Array} tx_bytes
+     * @returns {any}
+     */
+    decrypt_transaction_memos(tx_bytes) {
+        const ptr0 = passArray8ToWasm0(tx_bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.walletkeys_decrypt_transaction_memos(this.__wbg_ptr, ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
     }
-    this.__wbg_ptr = ret[0] >>> 0;
-    WalletKeysFinalization.register(this, this.__wbg_ptr, this);
-    return this;
-  }
-  /**
-   * Get the wallet's receiving address (identifier)
-   * @returns {string}
-   */
-  get_address() {
-    let deferred1_0;
-    let deferred1_1;
-    try {
-      const ret = wasm.walletkeys_get_address(this.__wbg_ptr);
-      deferred1_0 = ret[0];
-      deferred1_1 = ret[1];
-      return getStringFromWasm0(ret[0], ret[1]);
-    } finally {
-      wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    /**
+     * Export Full Viewing Key as hex-encoded QR data
+     * This is used to create a watch-only wallet on an online device
+     * @param {number} account_index
+     * @param {string | null | undefined} label
+     * @param {boolean} mainnet
+     * @returns {string}
+     */
+    export_fvk_qr_hex(account_index, label, mainnet) {
+        let deferred2_0;
+        let deferred2_1;
+        try {
+            var ptr0 = isLikeNone(label) ? 0 : passStringToWasm0(label, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            var len0 = WASM_VECTOR_LEN;
+            const ret = wasm.walletkeys_export_fvk_qr_hex(this.__wbg_ptr, account_index, ptr0, len0, mainnet);
+            deferred2_0 = ret[0];
+            deferred2_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+        }
     }
-  }
-  /**
-   * Get the Orchard FVK bytes (96 bytes) as hex
-   * @returns {string}
-   */
-  get_fvk_hex() {
-    let deferred1_0;
-    let deferred1_1;
-    try {
-      const ret = wasm.walletkeys_get_fvk_hex(this.__wbg_ptr);
-      deferred1_0 = ret[0];
-      deferred1_1 = ret[1];
-      return getStringFromWasm0(ret[0], ret[1]);
-    } finally {
-      wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    /**
+     * Derive wallet keys from a 24-word BIP39 seed phrase
+     * @param {string} seed_phrase
+     */
+    constructor(seed_phrase) {
+        const ptr0 = passStringToWasm0(seed_phrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.walletkeys_from_seed_phrase(ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        this.__wbg_ptr = ret[0] >>> 0;
+        WalletKeysFinalization.register(this, this.__wbg_ptr, this);
+        return this;
     }
-  }
-  /**
-   * Get the default receiving address as a Zcash unified address string
-   * @param {boolean} mainnet
-   * @returns {string}
-   */
-  get_receiving_address(mainnet) {
-    let deferred1_0;
-    let deferred1_1;
-    try {
-      const ret = wasm.walletkeys_get_receiving_address(this.__wbg_ptr, mainnet);
-      deferred1_0 = ret[0];
-      deferred1_1 = ret[1];
-      return getStringFromWasm0(ret[0], ret[1]);
-    } finally {
-      wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    /**
+     * Get the wallet's receiving address (identifier)
+     * @returns {string}
+     */
+    get_address() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.walletkeys_get_address(this.__wbg_ptr);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
     }
-  }
-  /**
-   * Get receiving address at specific diversifier index
-   * @param {number} diversifier_index
-   * @param {boolean} mainnet
-   * @returns {string}
-   */
-  get_receiving_address_at(diversifier_index, mainnet) {
-    let deferred1_0;
-    let deferred1_1;
-    try {
-      const ret = wasm.walletkeys_get_receiving_address_at(
-        this.__wbg_ptr,
-        diversifier_index,
-        mainnet,
-      );
-      deferred1_0 = ret[0];
-      deferred1_1 = ret[1];
-      return getStringFromWasm0(ret[0], ret[1]);
-    } finally {
-      wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    /**
+     * Get the Orchard FVK bytes (96 bytes) as hex
+     * @returns {string}
+     */
+    get_fvk_hex() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.walletkeys_get_fvk_hex(this.__wbg_ptr);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
     }
-  }
-  /**
-   * Scan actions from JSON (legacy compatibility, slower)
-   * @param {any} actions_json
-   * @returns {any}
-   */
-  scan_actions(actions_json) {
-    const ret = wasm.walletkeys_scan_actions(this.__wbg_ptr, actions_json);
-    if (ret[2]) {
-      throw takeFromExternrefTable0(ret[1]);
+    /**
+     * Get the default receiving address as a Zcash unified address string
+     * @param {boolean} mainnet
+     * @returns {string}
+     */
+    get_receiving_address(mainnet) {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.walletkeys_get_receiving_address(this.__wbg_ptr, mainnet);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
     }
-    return takeFromExternrefTable0(ret[0]);
-  }
-  /**
-   * Scan a batch of IRONWOOD compact actions in PARALLEL (NU6.3+ pool).
-   *
-   * Same binary format and key material as `scan_actions_parallel` — the
-   * ironwood pool shares orchard's key tree and note encryption; only the
-   * bundle (and note plaintext version, V3) differ. The caller feeds the
-   * actions from the tx's ironwood bundle here so returned notes carry
-   * `pool: "ironwood"`.
-   * @param {Uint8Array} actions_bytes
-   * @returns {any}
-   */
-  scan_actions_ironwood_parallel(actions_bytes) {
-    const ptr0 = passArray8ToWasm0(actions_bytes, wasm.__wbindgen_malloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.walletkeys_scan_actions_ironwood_parallel(this.__wbg_ptr, ptr0, len0);
-    if (ret[2]) {
-      throw takeFromExternrefTable0(ret[1]);
+    /**
+     * Get receiving address at specific diversifier index
+     * @param {number} diversifier_index
+     * @param {boolean} mainnet
+     * @returns {string}
+     */
+    get_receiving_address_at(diversifier_index, mainnet) {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.walletkeys_get_receiving_address_at(this.__wbg_ptr, diversifier_index, mainnet);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
     }
-    return takeFromExternrefTable0(ret[0]);
-  }
-  /**
-   * Scan a batch of compact actions in PARALLEL and return found notes
-   * This is the main entry point for high-performance scanning
-   *
-   * Binary format: [count: u32][action1][action2]...
-   * Each action: [nullifier: 32][cmx: 32][epk: 32][ciphertext: 52] = 148 bytes
-   * @param {Uint8Array} actions_bytes
-   * @returns {any}
-   */
-  scan_actions_parallel(actions_bytes) {
-    const ptr0 = passArray8ToWasm0(actions_bytes, wasm.__wbindgen_malloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.walletkeys_scan_actions_parallel(this.__wbg_ptr, ptr0, len0);
-    if (ret[2]) {
-      throw takeFromExternrefTable0(ret[1]);
+    /**
+     * Scan actions from JSON (legacy compatibility, slower)
+     * @param {any} actions_json
+     * @returns {any}
+     */
+    scan_actions(actions_json) {
+        const ret = wasm.walletkeys_scan_actions(this.__wbg_ptr, actions_json);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
     }
-    return takeFromExternrefTable0(ret[0]);
-  }
+    /**
+     * Scan a batch of IRONWOOD compact actions in PARALLEL (NU6.3+ pool).
+     *
+     * Same binary format and key material as `scan_actions_parallel` — the
+     * ironwood pool shares orchard's key tree and note encryption; only the
+     * bundle (and note plaintext version, V3) differ. The caller feeds the
+     * actions from the tx's ironwood bundle here so returned notes carry
+     * `pool: "ironwood"`.
+     * @param {Uint8Array} actions_bytes
+     * @returns {any}
+     */
+    scan_actions_ironwood_parallel(actions_bytes) {
+        const ptr0 = passArray8ToWasm0(actions_bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.walletkeys_scan_actions_ironwood_parallel(this.__wbg_ptr, ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * Scan a batch of compact actions in PARALLEL and return found notes
+     * This is the main entry point for high-performance scanning
+     *
+     * Binary format: [count: u32][action1][action2]...
+     * Each action: [nullifier: 32][cmx: 32][epk: 32][ciphertext: 52] = 148 bytes
+     * @param {Uint8Array} actions_bytes
+     * @returns {any}
+     */
+    scan_actions_parallel(actions_bytes) {
+        const ptr0 = passArray8ToWasm0(actions_bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.walletkeys_scan_actions_parallel(this.__wbg_ptr, ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
 }
 if (Symbol.dispose) WalletKeys.prototype[Symbol.dispose] = WalletKeys.prototype.free;
 
@@ -223,180 +207,180 @@ if (Symbol.dispose) WalletKeys.prototype[Symbol.dispose] = WalletKeys.prototype.
  * and build unsigned transactions for cold signing.
  */
 export class WatchOnlyWallet {
-  static __wrap(ptr) {
-    ptr = ptr >>> 0;
-    const obj = Object.create(WatchOnlyWallet.prototype);
-    obj.__wbg_ptr = ptr;
-    WatchOnlyWalletFinalization.register(obj, obj.__wbg_ptr, obj);
-    return obj;
-  }
-  __destroy_into_raw() {
-    const ptr = this.__wbg_ptr;
-    this.__wbg_ptr = 0;
-    WatchOnlyWalletFinalization.unregister(this);
-    return ptr;
-  }
-  free() {
-    const ptr = this.__destroy_into_raw();
-    wasm.__wbg_watchonlywallet_free(ptr, 0);
-  }
-  /**
-   * Decrypt full notes with memos from a raw transaction (watch-only version)
-   * @param {Uint8Array} tx_bytes
-   * @returns {any}
-   */
-  decrypt_transaction_memos(tx_bytes) {
-    const ptr0 = passArray8ToWasm0(tx_bytes, wasm.__wbindgen_malloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.watchonlywallet_decrypt_transaction_memos(this.__wbg_ptr, ptr0, len0);
-    if (ret[2]) {
-      throw takeFromExternrefTable0(ret[1]);
+    static __wrap(ptr) {
+        ptr = ptr >>> 0;
+        const obj = Object.create(WatchOnlyWallet.prototype);
+        obj.__wbg_ptr = ptr;
+        WatchOnlyWalletFinalization.register(obj, obj.__wbg_ptr, obj);
+        return obj;
     }
-    return takeFromExternrefTable0(ret[0]);
-  }
-  /**
-   * Export FVK as hex bytes (for backup)
-   * @returns {string}
-   */
-  export_fvk_hex() {
-    let deferred1_0;
-    let deferred1_1;
-    try {
-      const ret = wasm.watchonlywallet_export_fvk_hex(this.__wbg_ptr);
-      deferred1_0 = ret[0];
-      deferred1_1 = ret[1];
-      return getStringFromWasm0(ret[0], ret[1]);
-    } finally {
-      wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        WatchOnlyWalletFinalization.unregister(this);
+        return ptr;
     }
-  }
-  /**
-   * Import a watch-only wallet from FVK bytes (96 bytes)
-   * @param {Uint8Array} fvk_bytes
-   * @param {number} account_index
-   * @param {boolean} mainnet
-   */
-  constructor(fvk_bytes, account_index, mainnet) {
-    const ptr0 = passArray8ToWasm0(fvk_bytes, wasm.__wbindgen_malloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.watchonlywallet_from_fvk_bytes(ptr0, len0, account_index, mainnet);
-    if (ret[2]) {
-      throw takeFromExternrefTable0(ret[1]);
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_watchonlywallet_free(ptr, 0);
     }
-    this.__wbg_ptr = ret[0] >>> 0;
-    WatchOnlyWalletFinalization.register(this, this.__wbg_ptr, this);
-    return this;
-  }
-  /**
-   * Import from hex-encoded QR data
-   * @param {string} qr_hex
-   * @returns {WatchOnlyWallet}
-   */
-  static from_qr_hex(qr_hex) {
-    const ptr0 = passStringToWasm0(qr_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.watchonlywallet_from_qr_hex(ptr0, len0);
-    if (ret[2]) {
-      throw takeFromExternrefTable0(ret[1]);
+    /**
+     * Decrypt full notes with memos from a raw transaction (watch-only version)
+     * @param {Uint8Array} tx_bytes
+     * @returns {any}
+     */
+    decrypt_transaction_memos(tx_bytes) {
+        const ptr0 = passArray8ToWasm0(tx_bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.watchonlywallet_decrypt_transaction_memos(this.__wbg_ptr, ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
     }
-    return WatchOnlyWallet.__wrap(ret[0]);
-  }
-  /**
-   * Import from a UFVK string (uview1.../uviewtest1...)
-   * @param {string} ufvk_str
-   * @returns {WatchOnlyWallet}
-   */
-  static from_ufvk(ufvk_str) {
-    const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.watchonlywallet_from_ufvk(ptr0, len0);
-    if (ret[2]) {
-      throw takeFromExternrefTable0(ret[1]);
+    /**
+     * Export FVK as hex bytes (for backup)
+     * @returns {string}
+     */
+    export_fvk_hex() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.watchonlywallet_export_fvk_hex(this.__wbg_ptr);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
     }
-    return WatchOnlyWallet.__wrap(ret[0]);
-  }
-  /**
-   * Get account index
-   * @returns {number}
-   */
-  get_account_index() {
-    const ret = wasm.watchonlywallet_get_account_index(this.__wbg_ptr);
-    return ret >>> 0;
-  }
-  /**
-   * Get default receiving address (diversifier index 0)
-   * @returns {string}
-   */
-  get_address() {
-    let deferred1_0;
-    let deferred1_1;
-    try {
-      const ret = wasm.watchonlywallet_get_address(this.__wbg_ptr);
-      deferred1_0 = ret[0];
-      deferred1_1 = ret[1];
-      return getStringFromWasm0(ret[0], ret[1]);
-    } finally {
-      wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    /**
+     * Import a watch-only wallet from FVK bytes (96 bytes)
+     * @param {Uint8Array} fvk_bytes
+     * @param {number} account_index
+     * @param {boolean} mainnet
+     */
+    constructor(fvk_bytes, account_index, mainnet) {
+        const ptr0 = passArray8ToWasm0(fvk_bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.watchonlywallet_from_fvk_bytes(ptr0, len0, account_index, mainnet);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        this.__wbg_ptr = ret[0] >>> 0;
+        WatchOnlyWalletFinalization.register(this, this.__wbg_ptr, this);
+        return this;
     }
-  }
-  /**
-   * Get address at specific diversifier index
-   * @param {number} diversifier_index
-   * @returns {string}
-   */
-  get_address_at(diversifier_index) {
-    let deferred1_0;
-    let deferred1_1;
-    try {
-      const ret = wasm.watchonlywallet_get_address_at(this.__wbg_ptr, diversifier_index);
-      deferred1_0 = ret[0];
-      deferred1_1 = ret[1];
-      return getStringFromWasm0(ret[0], ret[1]);
-    } finally {
-      wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    /**
+     * Import from hex-encoded QR data
+     * @param {string} qr_hex
+     * @returns {WatchOnlyWallet}
+     */
+    static from_qr_hex(qr_hex) {
+        const ptr0 = passStringToWasm0(qr_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.watchonlywallet_from_qr_hex(ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return WatchOnlyWallet.__wrap(ret[0]);
     }
-  }
-  /**
-   * Is mainnet
-   * @returns {boolean}
-   */
-  is_mainnet() {
-    const ret = wasm.watchonlywallet_is_mainnet(this.__wbg_ptr);
-    return ret !== 0;
-  }
-  /**
-   * Scan a batch of IRONWOOD compact actions (NU6.3+ pool).
-   *
-   * Same binary format and key material as `scan_actions_parallel` — the
-   * ironwood pool shares orchard's key tree and note encryption. Feed the
-   * actions from a tx's ironwood bundle here so returned notes carry
-   * `pool: "ironwood"`.
-   * @param {Uint8Array} actions_bytes
-   * @returns {any}
-   */
-  scan_actions_ironwood_parallel(actions_bytes) {
-    const ptr0 = passArray8ToWasm0(actions_bytes, wasm.__wbindgen_malloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.watchonlywallet_scan_actions_ironwood_parallel(this.__wbg_ptr, ptr0, len0);
-    if (ret[2]) {
-      throw takeFromExternrefTable0(ret[1]);
+    /**
+     * Import from a UFVK string (uview1.../uviewtest1...)
+     * @param {string} ufvk_str
+     * @returns {WatchOnlyWallet}
+     */
+    static from_ufvk(ufvk_str) {
+        const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.watchonlywallet_from_ufvk(ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return WatchOnlyWallet.__wrap(ret[0]);
     }
-    return takeFromExternrefTable0(ret[0]);
-  }
-  /**
-   * Scan compact actions (same interface as WalletKeys)
-   * @param {Uint8Array} actions_bytes
-   * @returns {any}
-   */
-  scan_actions_parallel(actions_bytes) {
-    const ptr0 = passArray8ToWasm0(actions_bytes, wasm.__wbindgen_malloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.watchonlywallet_scan_actions_parallel(this.__wbg_ptr, ptr0, len0);
-    if (ret[2]) {
-      throw takeFromExternrefTable0(ret[1]);
+    /**
+     * Get account index
+     * @returns {number}
+     */
+    get_account_index() {
+        const ret = wasm.watchonlywallet_get_account_index(this.__wbg_ptr);
+        return ret >>> 0;
     }
-    return takeFromExternrefTable0(ret[0]);
-  }
+    /**
+     * Get default receiving address (diversifier index 0)
+     * @returns {string}
+     */
+    get_address() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.watchonlywallet_get_address(this.__wbg_ptr);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
+     * Get address at specific diversifier index
+     * @param {number} diversifier_index
+     * @returns {string}
+     */
+    get_address_at(diversifier_index) {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.watchonlywallet_get_address_at(this.__wbg_ptr, diversifier_index);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
+     * Is mainnet
+     * @returns {boolean}
+     */
+    is_mainnet() {
+        const ret = wasm.watchonlywallet_is_mainnet(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * Scan a batch of IRONWOOD compact actions (NU6.3+ pool).
+     *
+     * Same binary format and key material as `scan_actions_parallel` — the
+     * ironwood pool shares orchard's key tree and note encryption. Feed the
+     * actions from a tx's ironwood bundle here so returned notes carry
+     * `pool: "ironwood"`.
+     * @param {Uint8Array} actions_bytes
+     * @returns {any}
+     */
+    scan_actions_ironwood_parallel(actions_bytes) {
+        const ptr0 = passArray8ToWasm0(actions_bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.watchonlywallet_scan_actions_ironwood_parallel(this.__wbg_ptr, ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * Scan compact actions (same interface as WalletKeys)
+     * @param {Uint8Array} actions_bytes
+     * @returns {any}
+     */
+    scan_actions_parallel(actions_bytes) {
+        const ptr0 = passArray8ToWasm0(actions_bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.watchonlywallet_scan_actions_parallel(this.__wbg_ptr, ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
 }
 if (Symbol.dispose) WatchOnlyWallet.prototype[Symbol.dispose] = WatchOnlyWallet.prototype.free;
 
@@ -407,25 +391,82 @@ if (Symbol.dispose) WatchOnlyWallet.prototype[Symbol.dispose] = WatchOnlyWallet.
  * @returns {string}
  */
 export function address_from_ufvk(ufvk_str, diversifier_index) {
-  let deferred3_0;
-  let deferred3_1;
-  try {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.address_from_ufvk(ptr0, len0, diversifier_index);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * COLD (zigner / watch-only) sibling of `build_signed_ironwood_send`: build the
+ * general ironwood send PCZT - spend the wallet's REAL ironwood notes to an
+ * ARBITRARY `recipient` (plus change back to self) in a single V6 transaction -
+ * and return a redacted-for-signer PCZT (same redaction contract as
+ * `build_turnstile_migration_pczt`) as JSON `{ pczt_hex, summary, action_count }`
+ * where `summary` is a `PcztSummary`.
+ *
+ * The wallet-owned ironwood spends are left UNSIGNED for the external cold
+ * signer (zigner), which already knows how to sign redacted ironwood spends
+ * (`pczt_signing::sign_redacted_pczt` signs the orchard AND ironwood spends).
+ * Mirrors `build_turnstile_migration_pczt`'s param shape exactly, except:
+ *  - `recipient` (unified address; its orchard-format receiver is the ironwood
+ *    recipient) and `amount` are added, and
+ *  - the anchor/notes/paths are the IRONWOOD tree's (real anchor + real
+ *    ironwood spends), not the orchard tree's.
+ *
+ * `account_index` is accepted for API parity with the worker call shape but is
+ * not used for derivation - the UFVK is already account-scoped.
+ *
+ * FAIL-CLOSED: inherits the hardened NU6.3 branch-id guard from
+ * `build_ironwood_send_pczt_proven` - the tx binds branch id 0x37a5165b, the
+ * caller MUST pass that real id as `expected_branch_id`, and the 0xffff_ffff
+ * placeholder is refused. No value or recipient appears in any error.
+ * @param {string} ufvk_str
+ * @param {string} ironwood_notes_json
+ * @param {string} recipient
+ * @param {bigint} amount
+ * @param {bigint} fee
+ * @param {string} ironwood_anchor_hex
+ * @param {string} ironwood_merkle_paths_json
+ * @param {number} account_index
+ * @param {number} target_height
+ * @param {number} expected_branch_id
+ * @param {boolean} mainnet
+ * @param {string | null} [memo_hex]
+ * @returns {any}
+ */
+export function build_ironwood_send_pczt(ufvk_str, ironwood_notes_json, recipient, amount, fee, ironwood_anchor_hex, ironwood_merkle_paths_json, account_index, target_height, expected_branch_id, mainnet, memo_hex) {
     const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.address_from_ufvk(ptr0, len0, diversifier_index);
-    var ptr2 = ret[0];
-    var len2 = ret[1];
-    if (ret[3]) {
-      ptr2 = 0;
-      len2 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+    const ptr1 = passStringToWasm0(ironwood_notes_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ptr3 = passStringToWasm0(ironwood_anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len3 = WASM_VECTOR_LEN;
+    const ptr4 = passStringToWasm0(ironwood_merkle_paths_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len4 = WASM_VECTOR_LEN;
+    var ptr5 = isLikeNone(memo_hex) ? 0 : passStringToWasm0(memo_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len5 = WASM_VECTOR_LEN;
+    const ret = wasm.build_ironwood_send_pczt(ptr0, len0, ptr1, len1, ptr2, len2, amount, fee, ptr3, len3, ptr4, len4, account_index, target_height, expected_branch_id, mainnet, ptr5, len5);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
     }
-    deferred3_0 = ptr2;
-    deferred3_1 = len2;
-    return getStringFromWasm0(ptr2, len2);
-  } finally {
-    wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
-  }
+    return takeFromExternrefTable0(ret[0]);
 }
 
 /**
@@ -445,31 +486,18 @@ export function address_from_ufvk(ufvk_str, diversifier_index) {
  * @param {number} anchor_height
  * @returns {any}
  */
-export function build_merkle_paths(
-  tree_state_hex,
-  compact_blocks_json,
-  note_positions_json,
-  anchor_height,
-) {
-  const ptr0 = passStringToWasm0(tree_state_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-  const len0 = WASM_VECTOR_LEN;
-  const ptr1 = passStringToWasm0(
-    compact_blocks_json,
-    wasm.__wbindgen_malloc,
-    wasm.__wbindgen_realloc,
-  );
-  const len1 = WASM_VECTOR_LEN;
-  const ptr2 = passStringToWasm0(
-    note_positions_json,
-    wasm.__wbindgen_malloc,
-    wasm.__wbindgen_realloc,
-  );
-  const len2 = WASM_VECTOR_LEN;
-  const ret = wasm.build_merkle_paths(ptr0, len0, ptr1, len1, ptr2, len2, anchor_height);
-  if (ret[2]) {
-    throw takeFromExternrefTable0(ret[1]);
-  }
-  return takeFromExternrefTable0(ret[0]);
+export function build_merkle_paths(tree_state_hex, compact_blocks_json, note_positions_json, anchor_height) {
+    const ptr0 = passStringToWasm0(tree_state_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(compact_blocks_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(note_positions_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ret = wasm.build_merkle_paths(ptr0, len0, ptr1, len1, ptr2, len2, anchor_height);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
 }
 
 /**
@@ -481,31 +509,18 @@ export function build_merkle_paths(
  * @param {number} anchor_height
  * @returns {any}
  */
-export function build_merkle_paths_ironwood(
-  tree_state_hex,
-  compact_blocks_json,
-  note_positions_json,
-  anchor_height,
-) {
-  const ptr0 = passStringToWasm0(tree_state_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-  const len0 = WASM_VECTOR_LEN;
-  const ptr1 = passStringToWasm0(
-    compact_blocks_json,
-    wasm.__wbindgen_malloc,
-    wasm.__wbindgen_realloc,
-  );
-  const len1 = WASM_VECTOR_LEN;
-  const ptr2 = passStringToWasm0(
-    note_positions_json,
-    wasm.__wbindgen_malloc,
-    wasm.__wbindgen_realloc,
-  );
-  const len2 = WASM_VECTOR_LEN;
-  const ret = wasm.build_merkle_paths_ironwood(ptr0, len0, ptr1, len1, ptr2, len2, anchor_height);
-  if (ret[2]) {
-    throw takeFromExternrefTable0(ret[1]);
-  }
-  return takeFromExternrefTable0(ret[0]);
+export function build_merkle_paths_ironwood(tree_state_hex, compact_blocks_json, note_positions_json, anchor_height) {
+    const ptr0 = passStringToWasm0(tree_state_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(compact_blocks_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(note_positions_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ret = wasm.build_merkle_paths_ironwood(ptr0, len0, ptr1, len1, ptr2, len2, anchor_height);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
 }
 
 /**
@@ -534,49 +549,98 @@ export function build_merkle_paths_ironwood(
  * @param {boolean} mainnet
  * @returns {string}
  */
-export function build_shielding_transaction(
-  utxos_json,
-  privkey_hex,
-  recipient,
-  amount,
-  fee,
-  anchor_height,
-  mainnet,
-) {
-  let deferred5_0;
-  let deferred5_1;
-  try {
-    const ptr0 = passStringToWasm0(utxos_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(privkey_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len1 = WASM_VECTOR_LEN;
-    const ptr2 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len2 = WASM_VECTOR_LEN;
-    const ret = wasm.build_shielding_transaction(
-      ptr0,
-      len0,
-      ptr1,
-      len1,
-      ptr2,
-      len2,
-      amount,
-      fee,
-      anchor_height,
-      mainnet,
-    );
-    var ptr4 = ret[0];
-    var len4 = ret[1];
-    if (ret[3]) {
-      ptr4 = 0;
-      len4 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+export function build_shielding_transaction(utxos_json, privkey_hex, recipient, amount, fee, anchor_height, mainnet) {
+    let deferred5_0;
+    let deferred5_1;
+    try {
+        const ptr0 = passStringToWasm0(utxos_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(privkey_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.build_shielding_transaction(ptr0, len0, ptr1, len1, ptr2, len2, amount, fee, anchor_height, mainnet);
+        var ptr4 = ret[0];
+        var len4 = ret[1];
+        if (ret[3]) {
+            ptr4 = 0; len4 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred5_0 = ptr4;
+        deferred5_1 = len4;
+        return getStringFromWasm0(ptr4, len4);
+    } finally {
+        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
     }
-    deferred5_0 = ptr4;
-    deferred5_1 = len4;
-    return getStringFromWasm0(ptr4, len4);
-  } finally {
-    wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
-  }
+}
+
+/**
+ * HOT-WALLET general ironwood send: spend the wallet's REAL ironwood notes to
+ * an ARBITRARY `recipient` (plus change back to self) in a single V6
+ * transaction, sign the ironwood spends LOCALLY with a seed-derived key, and
+ * return the hex-encoded, signed, broadcast-ready V6 transaction.
+ *
+ * This is the ironwood analogue of a normal orchard send and the sibling of
+ * `build_signed_turnstile_migration`. Parameters mirror that function's shape,
+ * with `recipient`/`amount` added and the anchor/notes/paths being the
+ * ironwood tree's:
+ *  - `seed_phrase` derives BOTH the orchard `FullViewingKey` (recipient/change
+ *    scoping + nullifier verification) AND the `SpendAuthorizingKey` (local
+ *    signing) via the exact ZIP-32 path `SpendingKey::from_zip32_seed`.
+ *  - `recipient` is a unified address; its orchard-format receiver is used as
+ *    the ironwood recipient (the ironwood pool shares the orchard address
+ *    format - the note VERSION, not the address, selects the pool).
+ *  - `ironwood_anchor_hex` is the REAL ironwood tree anchor;
+ *    `ironwood_merkle_paths_json` are ironwood-tree paths from
+ *    `build_merkle_paths_ironwood`.
+ *
+ * FAIL-CLOSED: inherits the hardened NU6.3 branch-id guard from the build core
+ * - the tx binds branch id 0x37a5165b, the caller MUST pass that real id as
+ * `expected_branch_id`, and the 0xffff_ffff placeholder is refused. No value
+ * or recipient appears in any error.
+ * @param {string} seed_phrase
+ * @param {string} ironwood_notes_json
+ * @param {string} recipient
+ * @param {bigint} amount
+ * @param {bigint} fee
+ * @param {string} ironwood_anchor_hex
+ * @param {string} ironwood_merkle_paths_json
+ * @param {number} account_index
+ * @param {number} target_height
+ * @param {number} expected_branch_id
+ * @param {boolean} mainnet
+ * @param {string | null} [memo_hex]
+ * @returns {string}
+ */
+export function build_signed_ironwood_send(seed_phrase, ironwood_notes_json, recipient, amount, fee, ironwood_anchor_hex, ironwood_merkle_paths_json, account_index, target_height, expected_branch_id, mainnet, memo_hex) {
+    let deferred8_0;
+    let deferred8_1;
+    try {
+        const ptr0 = passStringToWasm0(seed_phrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(ironwood_notes_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passStringToWasm0(ironwood_anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len3 = WASM_VECTOR_LEN;
+        const ptr4 = passStringToWasm0(ironwood_merkle_paths_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len4 = WASM_VECTOR_LEN;
+        var ptr5 = isLikeNone(memo_hex) ? 0 : passStringToWasm0(memo_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len5 = WASM_VECTOR_LEN;
+        const ret = wasm.build_signed_ironwood_send(ptr0, len0, ptr1, len1, ptr2, len2, amount, fee, ptr3, len3, ptr4, len4, account_index, target_height, expected_branch_id, mainnet, ptr5, len5);
+        var ptr7 = ret[0];
+        var len7 = ret[1];
+        if (ret[3]) {
+            ptr7 = 0; len7 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred8_0 = ptr7;
+        deferred8_1 = len7;
+        return getStringFromWasm0(ptr7, len7);
+    } finally {
+        wasm.__wbindgen_free(deferred8_0, deferred8_1, 1);
+    }
 }
 
 /**
@@ -611,60 +675,95 @@ export function build_shielding_transaction(
  * @param {string | null} [memo_hex]
  * @returns {string}
  */
-export function build_signed_spend_transaction(
-  seed_phrase,
-  notes_json,
-  recipient,
-  amount,
-  fee,
-  anchor_hex,
-  merkle_paths_json,
-  account_index,
-  mainnet,
-  memo_hex,
-) {
-  let deferred6_0;
-  let deferred6_1;
-  try {
-    const ptr0 = passStringToWasm0(seed_phrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len1 = WASM_VECTOR_LEN;
-    const ptr2 = passStringToWasm0(anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len2 = WASM_VECTOR_LEN;
-    var ptr3 = isLikeNone(memo_hex)
-      ? 0
-      : passStringToWasm0(memo_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    var len3 = WASM_VECTOR_LEN;
-    const ret = wasm.build_signed_spend_transaction(
-      ptr0,
-      len0,
-      notes_json,
-      ptr1,
-      len1,
-      amount,
-      fee,
-      ptr2,
-      len2,
-      merkle_paths_json,
-      account_index,
-      mainnet,
-      ptr3,
-      len3,
-    );
-    var ptr5 = ret[0];
-    var len5 = ret[1];
-    if (ret[3]) {
-      ptr5 = 0;
-      len5 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+export function build_signed_spend_transaction(seed_phrase, notes_json, recipient, amount, fee, anchor_hex, merkle_paths_json, account_index, mainnet, memo_hex) {
+    let deferred6_0;
+    let deferred6_1;
+    try {
+        const ptr0 = passStringToWasm0(seed_phrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        var ptr3 = isLikeNone(memo_hex) ? 0 : passStringToWasm0(memo_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len3 = WASM_VECTOR_LEN;
+        const ret = wasm.build_signed_spend_transaction(ptr0, len0, notes_json, ptr1, len1, amount, fee, ptr2, len2, merkle_paths_json, account_index, mainnet, ptr3, len3);
+        var ptr5 = ret[0];
+        var len5 = ret[1];
+        if (ret[3]) {
+            ptr5 = 0; len5 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred6_0 = ptr5;
+        deferred6_1 = len5;
+        return getStringFromWasm0(ptr5, len5);
+    } finally {
+        wasm.__wbindgen_free(deferred6_0, deferred6_1, 1);
     }
-    deferred6_0 = ptr5;
-    deferred6_1 = len5;
-    return getStringFromWasm0(ptr5, len5);
-  } finally {
-    wasm.__wbindgen_free(deferred6_0, deferred6_1, 1);
-  }
+}
+
+/**
+ * HOT-WALLET sibling of `build_turnstile_migration_pczt`: build the one-way
+ * turnstile migration (spend the supplied orchard notes into the wallet's OWN
+ * ironwood address in a single V6 transaction), sign the wallet-owned orchard
+ * spends LOCALLY with a seed-derived key, and return the hex-encoded, signed,
+ * broadcast-ready V6 transaction.
+ *
+ * Same parameter shape as `build_turnstile_migration_pczt`, except:
+ *  - `seed_phrase` is PREPENDED. The orchard `FullViewingKey` (for the
+ *    self-migration ironwood recipient) AND the `SpendAuthorizingKey` (for
+ *    local signing) are BOTH derived from it via ZIP-32
+ *    (`SpendingKey::from_zip32_seed(seed, coin_type, account_index)` - the
+ *    exact key `UnifiedSpendingKey::from_seed(...).orchard()` and
+ *    `build_signed_spend_transaction` derive), so there is no `ufvk_str`
+ *    parameter: the seed fully determines the account and cannot disagree with
+ *    a separately supplied viewing key.
+ *  - `account_index` selects the ZIP-32 account (it IS used here, unlike the
+ *    cold builder where the UFVK is already account-scoped).
+ *  - Returns the signed transaction hex `String`, not a redacted PCZT.
+ *
+ * The FAIL-CLOSED NU6.3 branch-id guard is inherited unchanged from the shared
+ * build core: the tx binds consensus branch id `expected_branch_id`, the
+ * caller MUST pass the real 0x37a5165b (never the 0xffff_ffff placeholder).
+ * @param {string} seed_phrase
+ * @param {string} orchard_notes_json
+ * @param {bigint} fee
+ * @param {string} orchard_anchor_hex
+ * @param {string} orchard_merkle_paths_json
+ * @param {number} account_index
+ * @param {number} target_height
+ * @param {number} expected_branch_id
+ * @param {boolean} mainnet
+ * @param {string | null} [memo_hex]
+ * @returns {string}
+ */
+export function build_signed_turnstile_migration(seed_phrase, orchard_notes_json, fee, orchard_anchor_hex, orchard_merkle_paths_json, account_index, target_height, expected_branch_id, mainnet, memo_hex) {
+    let deferred7_0;
+    let deferred7_1;
+    try {
+        const ptr0 = passStringToWasm0(seed_phrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(orchard_notes_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(orchard_anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passStringToWasm0(orchard_merkle_paths_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len3 = WASM_VECTOR_LEN;
+        var ptr4 = isLikeNone(memo_hex) ? 0 : passStringToWasm0(memo_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len4 = WASM_VECTOR_LEN;
+        const ret = wasm.build_signed_turnstile_migration(ptr0, len0, ptr1, len1, fee, ptr2, len2, ptr3, len3, account_index, target_height, expected_branch_id, mainnet, ptr4, len4);
+        var ptr6 = ret[0];
+        var len6 = ret[1];
+        if (ret[3]) {
+            ptr6 = 0; len6 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred7_0 = ptr6;
+        deferred7_1 = len6;
+        return getStringFromWasm0(ptr6, len6);
+    } finally {
+        wasm.__wbindgen_free(deferred7_0, deferred7_1, 1);
+    }
 }
 
 /**
@@ -690,63 +789,22 @@ export function build_signed_spend_transaction(
  * @param {string | null} [memo_hex]
  * @returns {any}
  */
-export function build_turnstile_migration_pczt(
-  ufvk_str,
-  orchard_notes_json,
-  fee,
-  orchard_anchor_hex,
-  orchard_merkle_paths_json,
-  account_index,
-  target_height,
-  expected_branch_id,
-  mainnet,
-  memo_hex,
-) {
-  const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-  const len0 = WASM_VECTOR_LEN;
-  const ptr1 = passStringToWasm0(
-    orchard_notes_json,
-    wasm.__wbindgen_malloc,
-    wasm.__wbindgen_realloc,
-  );
-  const len1 = WASM_VECTOR_LEN;
-  const ptr2 = passStringToWasm0(
-    orchard_anchor_hex,
-    wasm.__wbindgen_malloc,
-    wasm.__wbindgen_realloc,
-  );
-  const len2 = WASM_VECTOR_LEN;
-  const ptr3 = passStringToWasm0(
-    orchard_merkle_paths_json,
-    wasm.__wbindgen_malloc,
-    wasm.__wbindgen_realloc,
-  );
-  const len3 = WASM_VECTOR_LEN;
-  var ptr4 = isLikeNone(memo_hex)
-    ? 0
-    : passStringToWasm0(memo_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-  var len4 = WASM_VECTOR_LEN;
-  const ret = wasm.build_turnstile_migration_pczt(
-    ptr0,
-    len0,
-    ptr1,
-    len1,
-    fee,
-    ptr2,
-    len2,
-    ptr3,
-    len3,
-    account_index,
-    target_height,
-    expected_branch_id,
-    mainnet,
-    ptr4,
-    len4,
-  );
-  if (ret[2]) {
-    throw takeFromExternrefTable0(ret[1]);
-  }
-  return takeFromExternrefTable0(ret[0]);
+export function build_turnstile_migration_pczt(ufvk_str, orchard_notes_json, fee, orchard_anchor_hex, orchard_merkle_paths_json, account_index, target_height, expected_branch_id, mainnet, memo_hex) {
+    const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(orchard_notes_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(orchard_anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ptr3 = passStringToWasm0(orchard_merkle_paths_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len3 = WASM_VECTOR_LEN;
+    var ptr4 = isLikeNone(memo_hex) ? 0 : passStringToWasm0(memo_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len4 = WASM_VECTOR_LEN;
+    const ret = wasm.build_turnstile_migration_pczt(ptr0, len0, ptr1, len1, fee, ptr2, len2, ptr3, len3, account_index, target_height, expected_branch_id, mainnet, ptr4, len4);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
 }
 
 /**
@@ -771,48 +829,20 @@ export function build_turnstile_migration_pczt(
  * @param {string | null} [memo_hex]
  * @returns {any}
  */
-export function build_unsigned_pczt(
-  ufvk_str,
-  notes_json,
-  recipient,
-  amount,
-  fee,
-  anchor_hex,
-  merkle_paths_json,
-  target_height,
-  mainnet,
-  memo_hex,
-) {
-  const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-  const len0 = WASM_VECTOR_LEN;
-  const ptr1 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-  const len1 = WASM_VECTOR_LEN;
-  const ptr2 = passStringToWasm0(anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-  const len2 = WASM_VECTOR_LEN;
-  var ptr3 = isLikeNone(memo_hex)
-    ? 0
-    : passStringToWasm0(memo_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-  var len3 = WASM_VECTOR_LEN;
-  const ret = wasm.build_unsigned_pczt(
-    ptr0,
-    len0,
-    notes_json,
-    ptr1,
-    len1,
-    amount,
-    fee,
-    ptr2,
-    len2,
-    merkle_paths_json,
-    target_height,
-    mainnet,
-    ptr3,
-    len3,
-  );
-  if (ret[2]) {
-    throw takeFromExternrefTable0(ret[1]);
-  }
-  return takeFromExternrefTable0(ret[0]);
+export function build_unsigned_pczt(ufvk_str, notes_json, recipient, amount, fee, anchor_hex, merkle_paths_json, target_height, mainnet, memo_hex) {
+    const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    var ptr3 = isLikeNone(memo_hex) ? 0 : passStringToWasm0(memo_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len3 = WASM_VECTOR_LEN;
+    const ret = wasm.build_unsigned_pczt(ptr0, len0, notes_json, ptr1, len1, amount, fee, ptr2, len2, merkle_paths_json, target_height, mainnet, ptr3, len3);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
 }
 
 /**
@@ -830,44 +860,27 @@ export function build_unsigned_pczt(
  * @param {boolean} mainnet
  * @returns {string}
  */
-export function build_unsigned_shielding_transaction(
-  utxos_json,
-  recipient,
-  amount,
-  fee,
-  anchor_height,
-  mainnet,
-) {
-  let deferred4_0;
-  let deferred4_1;
-  try {
-    const ptr0 = passStringToWasm0(utxos_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len1 = WASM_VECTOR_LEN;
-    const ret = wasm.build_unsigned_shielding_transaction(
-      ptr0,
-      len0,
-      ptr1,
-      len1,
-      amount,
-      fee,
-      anchor_height,
-      mainnet,
-    );
-    var ptr3 = ret[0];
-    var len3 = ret[1];
-    if (ret[3]) {
-      ptr3 = 0;
-      len3 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+export function build_unsigned_shielding_transaction(utxos_json, recipient, amount, fee, anchor_height, mainnet) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(utxos_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.build_unsigned_shielding_transaction(ptr0, len0, ptr1, len1, amount, fee, anchor_height, mainnet);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
-    deferred4_0 = ptr3;
-    deferred4_1 = len3;
-    return getStringFromWasm0(ptr3, len3);
-  } finally {
-    wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
-  }
 }
 
 /**
@@ -893,48 +906,20 @@ export function build_unsigned_shielding_transaction(
  * @param {string | null} [memo_hex]
  * @returns {any}
  */
-export function build_unsigned_transaction(
-  ufvk_str,
-  notes_json,
-  recipient,
-  amount,
-  fee,
-  anchor_hex,
-  merkle_paths_json,
-  _account_index,
-  mainnet,
-  memo_hex,
-) {
-  const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-  const len0 = WASM_VECTOR_LEN;
-  const ptr1 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-  const len1 = WASM_VECTOR_LEN;
-  const ptr2 = passStringToWasm0(anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-  const len2 = WASM_VECTOR_LEN;
-  var ptr3 = isLikeNone(memo_hex)
-    ? 0
-    : passStringToWasm0(memo_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-  var len3 = WASM_VECTOR_LEN;
-  const ret = wasm.build_unsigned_transaction(
-    ptr0,
-    len0,
-    notes_json,
-    ptr1,
-    len1,
-    amount,
-    fee,
-    ptr2,
-    len2,
-    merkle_paths_json,
-    _account_index,
-    mainnet,
-    ptr3,
-    len3,
-  );
-  if (ret[2]) {
-    throw takeFromExternrefTable0(ret[1]);
-  }
-  return takeFromExternrefTable0(ret[0]);
+export function build_unsigned_transaction(ufvk_str, notes_json, recipient, amount, fee, anchor_hex, merkle_paths_json, _account_index, mainnet, memo_hex) {
+    const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    var ptr3 = isLikeNone(memo_hex) ? 0 : passStringToWasm0(memo_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len3 = WASM_VECTOR_LEN;
+    const ret = wasm.build_unsigned_transaction(ptr0, len0, notes_json, ptr1, len1, amount, fee, ptr2, len2, merkle_paths_json, _account_index, mainnet, ptr3, len3);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
 }
 
 /**
@@ -949,30 +934,18 @@ export function build_unsigned_transaction(
  * @param {string} note_positions_json
  * @returns {any}
  */
-export function build_witnesses_and_paths(
-  tree_state_hex,
-  compact_blocks_json,
-  note_positions_json,
-) {
-  const ptr0 = passStringToWasm0(tree_state_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-  const len0 = WASM_VECTOR_LEN;
-  const ptr1 = passStringToWasm0(
-    compact_blocks_json,
-    wasm.__wbindgen_malloc,
-    wasm.__wbindgen_realloc,
-  );
-  const len1 = WASM_VECTOR_LEN;
-  const ptr2 = passStringToWasm0(
-    note_positions_json,
-    wasm.__wbindgen_malloc,
-    wasm.__wbindgen_realloc,
-  );
-  const len2 = WASM_VECTOR_LEN;
-  const ret = wasm.build_witnesses_and_paths(ptr0, len0, ptr1, len1, ptr2, len2);
-  if (ret[2]) {
-    throw takeFromExternrefTable0(ret[1]);
-  }
-  return takeFromExternrefTable0(ret[0]);
+export function build_witnesses_and_paths(tree_state_hex, compact_blocks_json, note_positions_json) {
+    const ptr0 = passStringToWasm0(tree_state_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(compact_blocks_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(note_positions_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ret = wasm.build_witnesses_and_paths(ptr0, len0, ptr1, len1, ptr2, len2);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
 }
 
 /**
@@ -1018,35 +991,26 @@ export function complete_orchard_pczt(pczt_hex, orchard_sigs_json, spend_indices
  * @returns {string}
  */
 export function complete_shielding_transaction(unsigned_tx_hex, signatures_json) {
-  let deferred4_0;
-  let deferred4_1;
-  try {
-    const ptr0 = passStringToWasm0(
-      unsigned_tx_hex,
-      wasm.__wbindgen_malloc,
-      wasm.__wbindgen_realloc,
-    );
-    const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(
-      signatures_json,
-      wasm.__wbindgen_malloc,
-      wasm.__wbindgen_realloc,
-    );
-    const len1 = WASM_VECTOR_LEN;
-    const ret = wasm.complete_shielding_transaction(ptr0, len0, ptr1, len1);
-    var ptr3 = ret[0];
-    var len3 = ret[1];
-    if (ret[3]) {
-      ptr3 = 0;
-      len3 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(unsigned_tx_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(signatures_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.complete_shielding_transaction(ptr0, len0, ptr1, len1);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
-    deferred4_0 = ptr3;
-    deferred4_1 = len3;
-    return getStringFromWasm0(ptr3, len3);
-  } finally {
-    wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
-  }
 }
 
 /**
@@ -1069,29 +1033,24 @@ export function complete_shielding_transaction(unsigned_tx_hex, signatures_json)
  * @returns {string}
  */
 export function complete_transaction(unsigned_tx_hex, signatures_json, spend_indices_json) {
-  let deferred3_0;
-  let deferred3_1;
-  try {
-    const ptr0 = passStringToWasm0(
-      unsigned_tx_hex,
-      wasm.__wbindgen_malloc,
-      wasm.__wbindgen_realloc,
-    );
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.complete_transaction(ptr0, len0, signatures_json, spend_indices_json);
-    var ptr2 = ret[0];
-    var len2 = ret[1];
-    if (ret[3]) {
-      ptr2 = 0;
-      len2 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(unsigned_tx_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.complete_transaction(ptr0, len0, signatures_json, spend_indices_json);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
     }
-    deferred3_0 = ptr2;
-    deferred3_1 = len2;
-    return getStringFromWasm0(ptr2, len2);
-  } finally {
-    wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
-  }
 }
 
 /**
@@ -1105,27 +1064,26 @@ export function complete_transaction(unsigned_tx_hex, signatures_json, spend_ind
  * @returns {string}
  */
 export function create_sign_request(account_index, sighash_hex, alphas_json, summary) {
-  let deferred4_0;
-  let deferred4_1;
-  try {
-    const ptr0 = passStringToWasm0(sighash_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(summary, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len1 = WASM_VECTOR_LEN;
-    const ret = wasm.create_sign_request(account_index, ptr0, len0, alphas_json, ptr1, len1);
-    var ptr3 = ret[0];
-    var len3 = ret[1];
-    if (ret[3]) {
-      ptr3 = 0;
-      len3 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(sighash_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(summary, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.create_sign_request(account_index, ptr0, len0, alphas_json, ptr1, len1);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
-    deferred4_0 = ptr3;
-    deferred4_1 = len3;
-    return getStringFromWasm0(ptr3, len3);
-  } finally {
-    wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
-  }
 }
 
 /**
@@ -1139,25 +1097,24 @@ export function create_sign_request(account_index, sighash_hex, alphas_json, sum
  * @returns {string}
  */
 export function derive_transparent_privkey(seed_phrase, account, index) {
-  let deferred3_0;
-  let deferred3_1;
-  try {
-    const ptr0 = passStringToWasm0(seed_phrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.derive_transparent_privkey(ptr0, len0, account, index);
-    var ptr2 = ret[0];
-    var len2 = ret[1];
-    if (ret[3]) {
-      ptr2 = 0;
-      len2 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(seed_phrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.derive_transparent_privkey(ptr0, len0, account, index);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
     }
-    deferred3_0 = ptr2;
-    deferred3_1 = len2;
-    return getStringFromWasm0(ptr2, len2);
-  } finally {
-    wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
-  }
 }
 
 /**
@@ -1185,32 +1142,20 @@ export function derive_transparent_privkey(seed_phrase, account, index) {
  * @param {string | null} [attestation_hex]
  * @returns {Uint8Array}
  */
-export function encode_notes_bundle(
-  notes_json,
-  merkle_result_json,
-  anchor_height,
-  mainnet,
-  attestation_hex,
-) {
-  const ptr0 = passStringToWasm0(notes_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-  const len0 = WASM_VECTOR_LEN;
-  const ptr1 = passStringToWasm0(
-    merkle_result_json,
-    wasm.__wbindgen_malloc,
-    wasm.__wbindgen_realloc,
-  );
-  const len1 = WASM_VECTOR_LEN;
-  var ptr2 = isLikeNone(attestation_hex)
-    ? 0
-    : passStringToWasm0(attestation_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-  var len2 = WASM_VECTOR_LEN;
-  const ret = wasm.encode_notes_bundle(ptr0, len0, ptr1, len1, anchor_height, mainnet, ptr2, len2);
-  if (ret[3]) {
-    throw takeFromExternrefTable0(ret[2]);
-  }
-  var v4 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
-  wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
-  return v4;
+export function encode_notes_bundle(notes_json, merkle_result_json, anchor_height, mainnet, attestation_hex) {
+    const ptr0 = passStringToWasm0(notes_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(merkle_result_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    var ptr2 = isLikeNone(attestation_hex) ? 0 : passStringToWasm0(attestation_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len2 = WASM_VECTOR_LEN;
+    const ret = wasm.encode_notes_bundle(ptr0, len0, ptr1, len1, anchor_height, mainnet, ptr2, len2);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v4 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v4;
 }
 
 /**
@@ -1226,25 +1171,24 @@ export function encode_notes_bundle(
  * @returns {string}
  */
 export function extract_signed_tx_from_pczt(pczt_hex) {
-  let deferred3_0;
-  let deferred3_1;
-  try {
-    const ptr0 = passStringToWasm0(pczt_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.extract_signed_tx_from_pczt(ptr0, len0);
-    var ptr2 = ret[0];
-    var len2 = ret[1];
-    if (ret[3]) {
-      ptr2 = 0;
-      len2 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(pczt_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.extract_signed_tx_from_pczt(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
     }
-    deferred3_0 = ptr2;
-    deferred3_1 = len2;
-    return getStringFromWasm0(ptr2, len2);
-  } finally {
-    wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
-  }
 }
 
 /**
@@ -1253,13 +1197,13 @@ export function extract_signed_tx_from_pczt(pczt_hex) {
  * @returns {bigint}
  */
 export function frontier_tree_size(tree_state_hex) {
-  const ptr0 = passStringToWasm0(tree_state_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-  const len0 = WASM_VECTOR_LEN;
-  const ret = wasm.frontier_tree_size(ptr0, len0);
-  if (ret[2]) {
-    throw takeFromExternrefTable0(ret[1]);
-  }
-  return BigInt.asUintN(64, ret[0]);
+    const ptr0 = passStringToWasm0(tree_state_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.frontier_tree_size(ptr0, len0);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return BigInt.asUintN(64, ret[0]);
 }
 
 /**
@@ -1268,13 +1212,13 @@ export function frontier_tree_size(tree_state_hex) {
  * @returns {bigint}
  */
 export function frontier_tree_size_ironwood(tree_state_hex) {
-  const ptr0 = passStringToWasm0(tree_state_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-  const len0 = WASM_VECTOR_LEN;
-  const ret = wasm.frontier_tree_size_ironwood(ptr0, len0);
-  if (ret[2]) {
-    throw takeFromExternrefTable0(ret[1]);
-  }
-  return BigInt.asUintN(64, ret[0]);
+    const ptr0 = passStringToWasm0(tree_state_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.frontier_tree_size_ironwood(ptr0, len0);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return BigInt.asUintN(64, ret[0]);
 }
 
 /**
@@ -1286,59 +1230,33 @@ export function frontier_tree_size_ironwood(tree_state_hex) {
  * @param {string} randomizer_hex
  * @returns {string}
  */
-export function frost_aggregate_shares(
-  public_key_package_hex,
-  message_hex,
-  commitments_json,
-  shares_json,
-  randomizer_hex,
-) {
-  let deferred7_0;
-  let deferred7_1;
-  try {
-    const ptr0 = passStringToWasm0(
-      public_key_package_hex,
-      wasm.__wbindgen_malloc,
-      wasm.__wbindgen_realloc,
-    );
-    const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(message_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len1 = WASM_VECTOR_LEN;
-    const ptr2 = passStringToWasm0(
-      commitments_json,
-      wasm.__wbindgen_malloc,
-      wasm.__wbindgen_realloc,
-    );
-    const len2 = WASM_VECTOR_LEN;
-    const ptr3 = passStringToWasm0(shares_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len3 = WASM_VECTOR_LEN;
-    const ptr4 = passStringToWasm0(randomizer_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len4 = WASM_VECTOR_LEN;
-    const ret = wasm.frost_aggregate_shares(
-      ptr0,
-      len0,
-      ptr1,
-      len1,
-      ptr2,
-      len2,
-      ptr3,
-      len3,
-      ptr4,
-      len4,
-    );
-    var ptr6 = ret[0];
-    var len6 = ret[1];
-    if (ret[3]) {
-      ptr6 = 0;
-      len6 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+export function frost_aggregate_shares(public_key_package_hex, message_hex, commitments_json, shares_json, randomizer_hex) {
+    let deferred7_0;
+    let deferred7_1;
+    try {
+        const ptr0 = passStringToWasm0(public_key_package_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(message_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(commitments_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passStringToWasm0(shares_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len3 = WASM_VECTOR_LEN;
+        const ptr4 = passStringToWasm0(randomizer_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len4 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_aggregate_shares(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4);
+        var ptr6 = ret[0];
+        var len6 = ret[1];
+        if (ret[3]) {
+            ptr6 = 0; len6 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred7_0 = ptr6;
+        deferred7_1 = len6;
+        return getStringFromWasm0(ptr6, len6);
+    } finally {
+        wasm.__wbindgen_free(deferred7_0, deferred7_1, 1);
     }
-    deferred7_0 = ptr6;
-    deferred7_1 = len6;
-    return getStringFromWasm0(ptr6, len6);
-  } finally {
-    wasm.__wbindgen_free(deferred7_0, deferred7_1, 1);
-  }
 }
 
 /**
@@ -1350,37 +1268,27 @@ export function frost_aggregate_shares(
  * @param {boolean} mainnet
  * @returns {string}
  */
-export function frost_attestation_digest(
-  public_key_package_hex,
-  anchor_hex,
-  anchor_height,
-  mainnet,
-) {
-  let deferred4_0;
-  let deferred4_1;
-  try {
-    const ptr0 = passStringToWasm0(
-      public_key_package_hex,
-      wasm.__wbindgen_malloc,
-      wasm.__wbindgen_realloc,
-    );
-    const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len1 = WASM_VECTOR_LEN;
-    const ret = wasm.frost_attestation_digest(ptr0, len0, ptr1, len1, anchor_height, mainnet);
-    var ptr3 = ret[0];
-    var len3 = ret[1];
-    if (ret[3]) {
-      ptr3 = 0;
-      len3 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+export function frost_attestation_digest(public_key_package_hex, anchor_hex, anchor_height, mainnet) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(public_key_package_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_attestation_digest(ptr0, len0, ptr1, len1, anchor_height, mainnet);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
-    deferred4_0 = ptr3;
-    deferred4_1 = len3;
-    return getStringFromWasm0(ptr3, len3);
-  } finally {
-    wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
-  }
 }
 
 /**
@@ -1392,37 +1300,18 @@ export function frost_attestation_digest(
  * @param {boolean} mainnet
  * @returns {boolean}
  */
-export function frost_attestation_verify(
-  attestation_hex,
-  public_key_package_hex,
-  anchor_hex,
-  anchor_height,
-  mainnet,
-) {
-  const ptr0 = passStringToWasm0(attestation_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-  const len0 = WASM_VECTOR_LEN;
-  const ptr1 = passStringToWasm0(
-    public_key_package_hex,
-    wasm.__wbindgen_malloc,
-    wasm.__wbindgen_realloc,
-  );
-  const len1 = WASM_VECTOR_LEN;
-  const ptr2 = passStringToWasm0(anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-  const len2 = WASM_VECTOR_LEN;
-  const ret = wasm.frost_attestation_verify(
-    ptr0,
-    len0,
-    ptr1,
-    len1,
-    ptr2,
-    len2,
-    anchor_height,
-    mainnet,
-  );
-  if (ret[2]) {
-    throw takeFromExternrefTable0(ret[1]);
-  }
-  return ret[0] !== 0;
+export function frost_attestation_verify(attestation_hex, public_key_package_hex, anchor_hex, anchor_height, mainnet) {
+    const ptr0 = passStringToWasm0(attestation_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(public_key_package_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ret = wasm.frost_attestation_verify(ptr0, len0, ptr1, len1, ptr2, len2, anchor_height, mainnet);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return ret[0] !== 0;
 }
 
 /**
@@ -1432,23 +1321,22 @@ export function frost_attestation_verify(
  * @returns {string}
  */
 export function frost_dealer_keygen(min_signers, max_signers) {
-  let deferred2_0;
-  let deferred2_1;
-  try {
-    const ret = wasm.frost_dealer_keygen(min_signers, max_signers);
-    var ptr1 = ret[0];
-    var len1 = ret[1];
-    if (ret[3]) {
-      ptr1 = 0;
-      len1 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ret = wasm.frost_dealer_keygen(min_signers, max_signers);
+        var ptr1 = ret[0];
+        var len1 = ret[1];
+        if (ret[3]) {
+            ptr1 = 0; len1 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred2_0 = ptr1;
+        deferred2_1 = len1;
+        return getStringFromWasm0(ptr1, len1);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
-    deferred2_0 = ptr1;
-    deferred2_1 = len1;
-    return getStringFromWasm0(ptr1, len1);
-  } finally {
-    wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
-  }
 }
 
 /**
@@ -1463,31 +1351,26 @@ export function frost_dealer_keygen(min_signers, max_signers) {
  * @returns {string}
  */
 export function frost_derive_address_from_sk(public_key_package_hex, sk_hex, diversifier_index) {
-  let deferred4_0;
-  let deferred4_1;
-  try {
-    const ptr0 = passStringToWasm0(
-      public_key_package_hex,
-      wasm.__wbindgen_malloc,
-      wasm.__wbindgen_realloc,
-    );
-    const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(sk_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len1 = WASM_VECTOR_LEN;
-    const ret = wasm.frost_derive_address_from_sk(ptr0, len0, ptr1, len1, diversifier_index);
-    var ptr3 = ret[0];
-    var len3 = ret[1];
-    if (ret[3]) {
-      ptr3 = 0;
-      len3 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(public_key_package_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(sk_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_derive_address_from_sk(ptr0, len0, ptr1, len1, diversifier_index);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
-    deferred4_0 = ptr3;
-    deferred4_1 = len3;
-    return getStringFromWasm0(ptr3, len3);
-  } finally {
-    wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
-  }
 }
 
 /**
@@ -1500,29 +1383,24 @@ export function frost_derive_address_from_sk(public_key_package_hex, sk_hex, div
  * @returns {string}
  */
 export function frost_derive_address_raw(public_key_package_hex, diversifier_index) {
-  let deferred3_0;
-  let deferred3_1;
-  try {
-    const ptr0 = passStringToWasm0(
-      public_key_package_hex,
-      wasm.__wbindgen_malloc,
-      wasm.__wbindgen_realloc,
-    );
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.frost_derive_address_raw(ptr0, len0, diversifier_index);
-    var ptr2 = ret[0];
-    var len2 = ret[1];
-    if (ret[3]) {
-      ptr2 = 0;
-      len2 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(public_key_package_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_derive_address_raw(ptr0, len0, diversifier_index);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
     }
-    deferred3_0 = ptr2;
-    deferred3_1 = len2;
-    return getStringFromWasm0(ptr2, len2);
-  } finally {
-    wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
-  }
 }
 
 /**
@@ -1536,31 +1414,26 @@ export function frost_derive_address_raw(public_key_package_hex, diversifier_ind
  * @returns {string}
  */
 export function frost_derive_ufvk(public_key_package_hex, sk_hex, mainnet) {
-  let deferred4_0;
-  let deferred4_1;
-  try {
-    const ptr0 = passStringToWasm0(
-      public_key_package_hex,
-      wasm.__wbindgen_malloc,
-      wasm.__wbindgen_realloc,
-    );
-    const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(sk_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len1 = WASM_VECTOR_LEN;
-    const ret = wasm.frost_derive_ufvk(ptr0, len0, ptr1, len1, mainnet);
-    var ptr3 = ret[0];
-    var len3 = ret[1];
-    if (ret[3]) {
-      ptr3 = 0;
-      len3 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(public_key_package_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(sk_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_derive_ufvk(ptr0, len0, ptr1, len1, mainnet);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
-    deferred4_0 = ptr3;
-    deferred4_1 = len3;
-    return getStringFromWasm0(ptr3, len3);
-  } finally {
-    wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
-  }
 }
 
 /**
@@ -1570,23 +1443,22 @@ export function frost_derive_ufvk(public_key_package_hex, sk_hex, mainnet) {
  * @returns {string}
  */
 export function frost_dkg_part1(max_signers, min_signers) {
-  let deferred2_0;
-  let deferred2_1;
-  try {
-    const ret = wasm.frost_dkg_part1(max_signers, min_signers);
-    var ptr1 = ret[0];
-    var len1 = ret[1];
-    if (ret[3]) {
-      ptr1 = 0;
-      len1 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ret = wasm.frost_dkg_part1(max_signers, min_signers);
+        var ptr1 = ret[0];
+        var len1 = ret[1];
+        if (ret[3]) {
+            ptr1 = 0; len1 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred2_0 = ptr1;
+        deferred2_1 = len1;
+        return getStringFromWasm0(ptr1, len1);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
-    deferred2_0 = ptr1;
-    deferred2_1 = len1;
-    return getStringFromWasm0(ptr1, len1);
-  } finally {
-    wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
-  }
 }
 
 /**
@@ -1596,31 +1468,26 @@ export function frost_dkg_part1(max_signers, min_signers) {
  * @returns {string}
  */
 export function frost_dkg_part2(secret_hex, peer_broadcasts_json) {
-  let deferred4_0;
-  let deferred4_1;
-  try {
-    const ptr0 = passStringToWasm0(secret_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(
-      peer_broadcasts_json,
-      wasm.__wbindgen_malloc,
-      wasm.__wbindgen_realloc,
-    );
-    const len1 = WASM_VECTOR_LEN;
-    const ret = wasm.frost_dkg_part2(ptr0, len0, ptr1, len1);
-    var ptr3 = ret[0];
-    var len3 = ret[1];
-    if (ret[3]) {
-      ptr3 = 0;
-      len3 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(secret_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(peer_broadcasts_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_dkg_part2(ptr0, len0, ptr1, len1);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
-    deferred4_0 = ptr3;
-    deferred4_1 = len3;
-    return getStringFromWasm0(ptr3, len3);
-  } finally {
-    wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
-  }
 }
 
 /**
@@ -1631,37 +1498,28 @@ export function frost_dkg_part2(secret_hex, peer_broadcasts_json) {
  * @returns {string}
  */
 export function frost_dkg_part3(secret_hex, round1_broadcasts_json, round2_packages_json) {
-  let deferred5_0;
-  let deferred5_1;
-  try {
-    const ptr0 = passStringToWasm0(secret_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(
-      round1_broadcasts_json,
-      wasm.__wbindgen_malloc,
-      wasm.__wbindgen_realloc,
-    );
-    const len1 = WASM_VECTOR_LEN;
-    const ptr2 = passStringToWasm0(
-      round2_packages_json,
-      wasm.__wbindgen_malloc,
-      wasm.__wbindgen_realloc,
-    );
-    const len2 = WASM_VECTOR_LEN;
-    const ret = wasm.frost_dkg_part3(ptr0, len0, ptr1, len1, ptr2, len2);
-    var ptr4 = ret[0];
-    var len4 = ret[1];
-    if (ret[3]) {
-      ptr4 = 0;
-      len4 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+    let deferred5_0;
+    let deferred5_1;
+    try {
+        const ptr0 = passStringToWasm0(secret_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(round1_broadcasts_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(round2_packages_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_dkg_part3(ptr0, len0, ptr1, len1, ptr2, len2);
+        var ptr4 = ret[0];
+        var len4 = ret[1];
+        if (ret[3]) {
+            ptr4 = 0; len4 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred5_0 = ptr4;
+        deferred5_1 = len4;
+        return getStringFromWasm0(ptr4, len4);
+    } finally {
+        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
     }
-    deferred5_0 = ptr4;
-    deferred5_1 = len4;
-    return getStringFromWasm0(ptr4, len4);
-  } finally {
-    wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
-  }
 }
 
 /**
@@ -1672,37 +1530,28 @@ export function frost_dkg_part3(secret_hex, round1_broadcasts_json, round2_packa
  * @returns {string}
  */
 export function frost_generate_randomizer(ephemeral_seed_hex, message_hex, commitments_json) {
-  let deferred5_0;
-  let deferred5_1;
-  try {
-    const ptr0 = passStringToWasm0(
-      ephemeral_seed_hex,
-      wasm.__wbindgen_malloc,
-      wasm.__wbindgen_realloc,
-    );
-    const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(message_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len1 = WASM_VECTOR_LEN;
-    const ptr2 = passStringToWasm0(
-      commitments_json,
-      wasm.__wbindgen_malloc,
-      wasm.__wbindgen_realloc,
-    );
-    const len2 = WASM_VECTOR_LEN;
-    const ret = wasm.frost_generate_randomizer(ptr0, len0, ptr1, len1, ptr2, len2);
-    var ptr4 = ret[0];
-    var len4 = ret[1];
-    if (ret[3]) {
-      ptr4 = 0;
-      len4 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+    let deferred5_0;
+    let deferred5_1;
+    try {
+        const ptr0 = passStringToWasm0(ephemeral_seed_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(message_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(commitments_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_generate_randomizer(ptr0, len0, ptr1, len1, ptr2, len2);
+        var ptr4 = ret[0];
+        var len4 = ret[1];
+        if (ret[3]) {
+            ptr4 = 0; len4 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred5_0 = ptr4;
+        deferred5_1 = len4;
+        return getStringFromWasm0(ptr4, len4);
+    } finally {
+        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
     }
-    deferred5_0 = ptr4;
-    deferred5_1 = len4;
-    return getStringFromWasm0(ptr4, len4);
-  } finally {
-    wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
-  }
 }
 
 /**
@@ -1778,35 +1627,26 @@ export function frost_inspect_pczt_outputs(pczt_hex, orchard_fvk_uview) {
  * @returns {string}
  */
 export function frost_parse_tx_outputs(unsigned_tx_hex, orchard_fvk_uview) {
-  let deferred4_0;
-  let deferred4_1;
-  try {
-    const ptr0 = passStringToWasm0(
-      unsigned_tx_hex,
-      wasm.__wbindgen_malloc,
-      wasm.__wbindgen_realloc,
-    );
-    const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(
-      orchard_fvk_uview,
-      wasm.__wbindgen_malloc,
-      wasm.__wbindgen_realloc,
-    );
-    const len1 = WASM_VECTOR_LEN;
-    const ret = wasm.frost_parse_tx_outputs(ptr0, len0, ptr1, len1);
-    var ptr3 = ret[0];
-    var len3 = ret[1];
-    if (ret[3]) {
-      ptr3 = 0;
-      len3 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(unsigned_tx_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(orchard_fvk_uview, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_parse_tx_outputs(ptr0, len0, ptr1, len1);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
-    deferred4_0 = ptr3;
-    deferred4_1 = len3;
-    return getStringFromWasm0(ptr3, len3);
-  } finally {
-    wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
-  }
 }
 
 /**
@@ -1816,16 +1656,16 @@ export function frost_parse_tx_outputs(unsigned_tx_hex, orchard_fvk_uview) {
  * @returns {string}
  */
 export function frost_sample_fvk_sk() {
-  let deferred1_0;
-  let deferred1_1;
-  try {
-    const ret = wasm.frost_sample_fvk_sk();
-    deferred1_0 = ret[0];
-    deferred1_1 = ret[1];
-    return getStringFromWasm0(ret[0], ret[1]);
-  } finally {
-    wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
-  }
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.frost_sample_fvk_sk();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
 }
 
 /**
@@ -1835,35 +1675,26 @@ export function frost_sample_fvk_sk() {
  * @returns {string}
  */
 export function frost_sign_round1(ephemeral_seed_hex, key_package_hex) {
-  let deferred4_0;
-  let deferred4_1;
-  try {
-    const ptr0 = passStringToWasm0(
-      ephemeral_seed_hex,
-      wasm.__wbindgen_malloc,
-      wasm.__wbindgen_realloc,
-    );
-    const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(
-      key_package_hex,
-      wasm.__wbindgen_malloc,
-      wasm.__wbindgen_realloc,
-    );
-    const len1 = WASM_VECTOR_LEN;
-    const ret = wasm.frost_sign_round1(ptr0, len0, ptr1, len1);
-    var ptr3 = ret[0];
-    var len3 = ret[1];
-    if (ret[3]) {
-      ptr3 = 0;
-      len3 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(ephemeral_seed_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(key_package_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_sign_round1(ptr0, len0, ptr1, len1);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
-    deferred4_0 = ptr3;
-    deferred4_1 = len3;
-    return getStringFromWasm0(ptr3, len3);
-  } finally {
-    wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
-  }
 }
 
 /**
@@ -1876,68 +1707,35 @@ export function frost_sign_round1(ephemeral_seed_hex, key_package_hex) {
  * @param {string} randomizer_hex
  * @returns {string}
  */
-export function frost_sign_round2(
-  ephemeral_seed_hex,
-  key_package_hex,
-  nonces_hex,
-  message_hex,
-  commitments_json,
-  randomizer_hex,
-) {
-  let deferred8_0;
-  let deferred8_1;
-  try {
-    const ptr0 = passStringToWasm0(
-      ephemeral_seed_hex,
-      wasm.__wbindgen_malloc,
-      wasm.__wbindgen_realloc,
-    );
-    const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(
-      key_package_hex,
-      wasm.__wbindgen_malloc,
-      wasm.__wbindgen_realloc,
-    );
-    const len1 = WASM_VECTOR_LEN;
-    const ptr2 = passStringToWasm0(nonces_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len2 = WASM_VECTOR_LEN;
-    const ptr3 = passStringToWasm0(message_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len3 = WASM_VECTOR_LEN;
-    const ptr4 = passStringToWasm0(
-      commitments_json,
-      wasm.__wbindgen_malloc,
-      wasm.__wbindgen_realloc,
-    );
-    const len4 = WASM_VECTOR_LEN;
-    const ptr5 = passStringToWasm0(randomizer_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len5 = WASM_VECTOR_LEN;
-    const ret = wasm.frost_sign_round2(
-      ptr0,
-      len0,
-      ptr1,
-      len1,
-      ptr2,
-      len2,
-      ptr3,
-      len3,
-      ptr4,
-      len4,
-      ptr5,
-      len5,
-    );
-    var ptr7 = ret[0];
-    var len7 = ret[1];
-    if (ret[3]) {
-      ptr7 = 0;
-      len7 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+export function frost_sign_round2(ephemeral_seed_hex, key_package_hex, nonces_hex, message_hex, commitments_json, randomizer_hex) {
+    let deferred8_0;
+    let deferred8_1;
+    try {
+        const ptr0 = passStringToWasm0(ephemeral_seed_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(key_package_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(nonces_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passStringToWasm0(message_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len3 = WASM_VECTOR_LEN;
+        const ptr4 = passStringToWasm0(commitments_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len4 = WASM_VECTOR_LEN;
+        const ptr5 = passStringToWasm0(randomizer_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len5 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_sign_round2(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, ptr5, len5);
+        var ptr7 = ret[0];
+        var len7 = ret[1];
+        if (ret[3]) {
+            ptr7 = 0; len7 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred8_0 = ptr7;
+        deferred8_1 = len7;
+        return getStringFromWasm0(ptr7, len7);
+    } finally {
+        wasm.__wbindgen_free(deferred8_0, deferred8_1, 1);
     }
-    deferred8_0 = ptr7;
-    deferred8_1 = len7;
-    return getStringFromWasm0(ptr7, len7);
-  } finally {
-    wasm.__wbindgen_free(deferred8_0, deferred8_1, 1);
-  }
 }
 
 /**
@@ -1949,59 +1747,33 @@ export function frost_sign_round2(
  * @param {string} shares_json
  * @returns {string}
  */
-export function frost_spend_aggregate(
-  public_key_package_hex,
-  sighash_hex,
-  alpha_hex,
-  commitments_json,
-  shares_json,
-) {
-  let deferred7_0;
-  let deferred7_1;
-  try {
-    const ptr0 = passStringToWasm0(
-      public_key_package_hex,
-      wasm.__wbindgen_malloc,
-      wasm.__wbindgen_realloc,
-    );
-    const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(sighash_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len1 = WASM_VECTOR_LEN;
-    const ptr2 = passStringToWasm0(alpha_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len2 = WASM_VECTOR_LEN;
-    const ptr3 = passStringToWasm0(
-      commitments_json,
-      wasm.__wbindgen_malloc,
-      wasm.__wbindgen_realloc,
-    );
-    const len3 = WASM_VECTOR_LEN;
-    const ptr4 = passStringToWasm0(shares_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len4 = WASM_VECTOR_LEN;
-    const ret = wasm.frost_spend_aggregate(
-      ptr0,
-      len0,
-      ptr1,
-      len1,
-      ptr2,
-      len2,
-      ptr3,
-      len3,
-      ptr4,
-      len4,
-    );
-    var ptr6 = ret[0];
-    var len6 = ret[1];
-    if (ret[3]) {
-      ptr6 = 0;
-      len6 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+export function frost_spend_aggregate(public_key_package_hex, sighash_hex, alpha_hex, commitments_json, shares_json) {
+    let deferred7_0;
+    let deferred7_1;
+    try {
+        const ptr0 = passStringToWasm0(public_key_package_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(sighash_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(alpha_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passStringToWasm0(commitments_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len3 = WASM_VECTOR_LEN;
+        const ptr4 = passStringToWasm0(shares_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len4 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_spend_aggregate(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4);
+        var ptr6 = ret[0];
+        var len6 = ret[1];
+        if (ret[3]) {
+            ptr6 = 0; len6 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred7_0 = ptr6;
+        deferred7_1 = len6;
+        return getStringFromWasm0(ptr6, len6);
+    } finally {
+        wasm.__wbindgen_free(deferred7_0, deferred7_1, 1);
     }
-    deferred7_0 = ptr6;
-    deferred7_1 = len6;
-    return getStringFromWasm0(ptr6, len6);
-  } finally {
-    wasm.__wbindgen_free(deferred7_0, deferred7_1, 1);
-  }
 }
 
 /**
@@ -2013,59 +1785,33 @@ export function frost_spend_aggregate(
  * @param {string} commitments_json
  * @returns {string}
  */
-export function frost_spend_sign_round2(
-  key_package_hex,
-  nonces_hex,
-  sighash_hex,
-  alpha_hex,
-  commitments_json,
-) {
-  let deferred7_0;
-  let deferred7_1;
-  try {
-    const ptr0 = passStringToWasm0(
-      key_package_hex,
-      wasm.__wbindgen_malloc,
-      wasm.__wbindgen_realloc,
-    );
-    const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(nonces_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len1 = WASM_VECTOR_LEN;
-    const ptr2 = passStringToWasm0(sighash_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len2 = WASM_VECTOR_LEN;
-    const ptr3 = passStringToWasm0(alpha_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len3 = WASM_VECTOR_LEN;
-    const ptr4 = passStringToWasm0(
-      commitments_json,
-      wasm.__wbindgen_malloc,
-      wasm.__wbindgen_realloc,
-    );
-    const len4 = WASM_VECTOR_LEN;
-    const ret = wasm.frost_spend_sign_round2(
-      ptr0,
-      len0,
-      ptr1,
-      len1,
-      ptr2,
-      len2,
-      ptr3,
-      len3,
-      ptr4,
-      len4,
-    );
-    var ptr6 = ret[0];
-    var len6 = ret[1];
-    if (ret[3]) {
-      ptr6 = 0;
-      len6 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+export function frost_spend_sign_round2(key_package_hex, nonces_hex, sighash_hex, alpha_hex, commitments_json) {
+    let deferred7_0;
+    let deferred7_1;
+    try {
+        const ptr0 = passStringToWasm0(key_package_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(nonces_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(sighash_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passStringToWasm0(alpha_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len3 = WASM_VECTOR_LEN;
+        const ptr4 = passStringToWasm0(commitments_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len4 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_spend_sign_round2(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4);
+        var ptr6 = ret[0];
+        var len6 = ret[1];
+        if (ret[3]) {
+            ptr6 = 0; len6 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred7_0 = ptr6;
+        deferred7_1 = len6;
+        return getStringFromWasm0(ptr6, len6);
+    } finally {
+        wasm.__wbindgen_free(deferred7_0, deferred7_1, 1);
     }
-    deferred7_0 = ptr6;
-    deferred7_1 = len6;
-    return getStringFromWasm0(ptr6, len6);
-  } finally {
-    wasm.__wbindgen_free(deferred7_0, deferred7_1, 1);
-  }
 }
 
 /**
@@ -2078,68 +1824,35 @@ export function frost_spend_sign_round2(
  * @param {string} commitments_json
  * @returns {string}
  */
-export function frost_spend_sign_round2_signed(
-  ephemeral_seed_hex,
-  key_package_hex,
-  nonces_hex,
-  sighash_hex,
-  alpha_hex,
-  commitments_json,
-) {
-  let deferred8_0;
-  let deferred8_1;
-  try {
-    const ptr0 = passStringToWasm0(
-      ephemeral_seed_hex,
-      wasm.__wbindgen_malloc,
-      wasm.__wbindgen_realloc,
-    );
-    const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(
-      key_package_hex,
-      wasm.__wbindgen_malloc,
-      wasm.__wbindgen_realloc,
-    );
-    const len1 = WASM_VECTOR_LEN;
-    const ptr2 = passStringToWasm0(nonces_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len2 = WASM_VECTOR_LEN;
-    const ptr3 = passStringToWasm0(sighash_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len3 = WASM_VECTOR_LEN;
-    const ptr4 = passStringToWasm0(alpha_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len4 = WASM_VECTOR_LEN;
-    const ptr5 = passStringToWasm0(
-      commitments_json,
-      wasm.__wbindgen_malloc,
-      wasm.__wbindgen_realloc,
-    );
-    const len5 = WASM_VECTOR_LEN;
-    const ret = wasm.frost_spend_sign_round2_signed(
-      ptr0,
-      len0,
-      ptr1,
-      len1,
-      ptr2,
-      len2,
-      ptr3,
-      len3,
-      ptr4,
-      len4,
-      ptr5,
-      len5,
-    );
-    var ptr7 = ret[0];
-    var len7 = ret[1];
-    if (ret[3]) {
-      ptr7 = 0;
-      len7 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+export function frost_spend_sign_round2_signed(ephemeral_seed_hex, key_package_hex, nonces_hex, sighash_hex, alpha_hex, commitments_json) {
+    let deferred8_0;
+    let deferred8_1;
+    try {
+        const ptr0 = passStringToWasm0(ephemeral_seed_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(key_package_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(nonces_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passStringToWasm0(sighash_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len3 = WASM_VECTOR_LEN;
+        const ptr4 = passStringToWasm0(alpha_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len4 = WASM_VECTOR_LEN;
+        const ptr5 = passStringToWasm0(commitments_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len5 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_spend_sign_round2_signed(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, ptr5, len5);
+        var ptr7 = ret[0];
+        var len7 = ret[1];
+        if (ret[3]) {
+            ptr7 = 0; len7 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred8_0 = ptr7;
+        deferred8_1 = len7;
+        return getStringFromWasm0(ptr7, len7);
+    } finally {
+        wasm.__wbindgen_free(deferred8_0, deferred8_1, 1);
     }
-    deferred8_0 = ptr7;
-    deferred8_1 = len7;
-    return getStringFromWasm0(ptr7, len7);
-  } finally {
-    wasm.__wbindgen_free(deferred8_0, deferred8_1, 1);
-  }
 }
 
 /**
@@ -2147,23 +1860,22 @@ export function frost_spend_sign_round2_signed(
  * @returns {string}
  */
 export function generate_seed_phrase() {
-  let deferred2_0;
-  let deferred2_1;
-  try {
-    const ret = wasm.generate_seed_phrase();
-    var ptr1 = ret[0];
-    var len1 = ret[1];
-    if (ret[3]) {
-      ptr1 = 0;
-      len1 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ret = wasm.generate_seed_phrase();
+        var ptr1 = ret[0];
+        var len1 = ret[1];
+        if (ret[3]) {
+            ptr1 = 0; len1 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred2_0 = ptr1;
+        deferred2_1 = len1;
+        return getStringFromWasm0(ptr1, len1);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
-    deferred2_0 = ptr1;
-    deferred2_1 = len1;
-    return getStringFromWasm0(ptr1, len1);
-  } finally {
-    wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
-  }
 }
 
 /**
@@ -2173,32 +1885,31 @@ export function generate_seed_phrase() {
  * @returns {string}
  */
 export function get_commitment_proof_request(note_cmx_hex) {
-  let deferred3_0;
-  let deferred3_1;
-  try {
-    const ptr0 = passStringToWasm0(note_cmx_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.get_commitment_proof_request(ptr0, len0);
-    var ptr2 = ret[0];
-    var len2 = ret[1];
-    if (ret[3]) {
-      ptr2 = 0;
-      len2 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(note_cmx_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.get_commitment_proof_request(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
     }
-    deferred3_0 = ptr2;
-    deferred3_1 = len2;
-    return getStringFromWasm0(ptr2, len2);
-  } finally {
-    wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
-  }
 }
 
 /**
  * Initialize panic hook for better error messages
  */
 export function init() {
-  wasm.init();
+    wasm.init();
 }
 
 /**
@@ -2206,8 +1917,8 @@ export function init() {
  * @returns {number}
  */
 export function num_threads() {
-  const ret = wasm.num_threads();
-  return ret >>> 0;
+    const ret = wasm.num_threads();
+    return ret >>> 0;
 }
 
 /**
@@ -2217,13 +1928,13 @@ export function num_threads() {
  * @returns {any}
  */
 export function parse_signature_response(qr_hex) {
-  const ptr0 = passStringToWasm0(qr_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-  const len0 = WASM_VECTOR_LEN;
-  const ret = wasm.parse_signature_response(ptr0, len0);
-  if (ret[2]) {
-    throw takeFromExternrefTable0(ret[1]);
-  }
-  return takeFromExternrefTable0(ret[0]);
+    const ptr0 = passStringToWasm0(qr_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.parse_signature_response(ptr0, len0);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
 }
 
 /**
@@ -2234,25 +1945,24 @@ export function parse_signature_response(qr_hex) {
  * @returns {string}
  */
 export function transparent_address_from_ufvk(ufvk_str, address_index) {
-  let deferred3_0;
-  let deferred3_1;
-  try {
-    const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.transparent_address_from_ufvk(ptr0, len0, address_index);
-    var ptr2 = ret[0];
-    var len2 = ret[1];
-    if (ret[3]) {
-      ptr2 = 0;
-      len2 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.transparent_address_from_ufvk(ptr0, len0, address_index);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
     }
-    deferred3_0 = ptr2;
-    deferred3_1 = len2;
-    return getStringFromWasm0(ptr2, len2);
-  } finally {
-    wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
-  }
 }
 
 /**
@@ -2265,25 +1975,24 @@ export function transparent_address_from_ufvk(ufvk_str, address_index) {
  * @returns {string}
  */
 export function transparent_pubkey_from_ufvk(ufvk_str, address_index) {
-  let deferred3_0;
-  let deferred3_1;
-  try {
-    const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.transparent_pubkey_from_ufvk(ptr0, len0, address_index);
-    var ptr2 = ret[0];
-    var len2 = ret[1];
-    if (ret[3]) {
-      ptr2 = 0;
-      len2 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.transparent_pubkey_from_ufvk(ptr0, len0, address_index);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
     }
-    deferred3_0 = ptr2;
-    deferred3_1 = len2;
-    return getStringFromWasm0(ptr2, len2);
-  } finally {
-    wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
-  }
 }
 
 /**
@@ -2292,25 +2001,24 @@ export function transparent_pubkey_from_ufvk(ufvk_str, address_index) {
  * @returns {string}
  */
 export function tree_root_hex(tree_state_hex) {
-  let deferred3_0;
-  let deferred3_1;
-  try {
-    const ptr0 = passStringToWasm0(tree_state_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.tree_root_hex(ptr0, len0);
-    var ptr2 = ret[0];
-    var len2 = ret[1];
-    if (ret[3]) {
-      ptr2 = 0;
-      len2 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(tree_state_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.tree_root_hex(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
     }
-    deferred3_0 = ptr2;
-    deferred3_1 = len2;
-    return getStringFromWasm0(ptr2, len2);
-  } finally {
-    wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
-  }
 }
 
 /**
@@ -2319,25 +2027,24 @@ export function tree_root_hex(tree_state_hex) {
  * @returns {string}
  */
 export function tree_root_hex_ironwood(tree_state_hex) {
-  let deferred3_0;
-  let deferred3_1;
-  try {
-    const ptr0 = passStringToWasm0(tree_state_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.tree_root_hex_ironwood(ptr0, len0);
-    var ptr2 = ret[0];
-    var len2 = ret[1];
-    if (ret[3]) {
-      ptr2 = 0;
-      len2 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(tree_state_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.tree_root_hex_ironwood(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
     }
-    deferred3_0 = ptr2;
-    deferred3_1 = len2;
-    return getStringFromWasm0(ptr2, len2);
-  } finally {
-    wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
-  }
 }
 
 /**
@@ -2359,27 +2066,26 @@ export function tree_root_hex_ironwood(tree_state_hex) {
  * @returns {string}
  */
 export function ur_decode_frames(parts_json, expected_type) {
-  let deferred4_0;
-  let deferred4_1;
-  try {
-    const ptr0 = passStringToWasm0(parts_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(expected_type, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len1 = WASM_VECTOR_LEN;
-    const ret = wasm.ur_decode_frames(ptr0, len0, ptr1, len1);
-    var ptr3 = ret[0];
-    var len3 = ret[1];
-    if (ret[3]) {
-      ptr3 = 0;
-      len3 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(parts_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(expected_type, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.ur_decode_frames(ptr0, len0, ptr1, len1);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
-    deferred4_0 = ptr3;
-    deferred4_1 = len3;
-    return getStringFromWasm0(ptr3, len3);
-  } finally {
-    wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
-  }
 }
 
 /**
@@ -2393,27 +2099,26 @@ export function ur_decode_frames(parts_json, expected_type) {
  * @returns {string}
  */
 export function ur_encode_frames(cbor_data, ur_type, fragment_size) {
-  let deferred4_0;
-  let deferred4_1;
-  try {
-    const ptr0 = passArray8ToWasm0(cbor_data, wasm.__wbindgen_malloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(ur_type, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len1 = WASM_VECTOR_LEN;
-    const ret = wasm.ur_encode_frames(ptr0, len0, ptr1, len1, fragment_size);
-    var ptr3 = ret[0];
-    var len3 = ret[1];
-    if (ret[3]) {
-      ptr3 = 0;
-      len3 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passArray8ToWasm0(cbor_data, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(ur_type, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.ur_encode_frames(ptr0, len0, ptr1, len1, fragment_size);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
-    deferred4_0 = ptr3;
-    deferred4_1 = len3;
-    return getStringFromWasm0(ptr3, len3);
-  } finally {
-    wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
-  }
 }
 
 /**
@@ -2422,10 +2127,10 @@ export function ur_encode_frames(cbor_data, ur_type, fragment_size) {
  * @returns {boolean}
  */
 export function validate_seed_phrase(seed_phrase) {
-  const ptr0 = passStringToWasm0(seed_phrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-  const len0 = WASM_VECTOR_LEN;
-  const ret = wasm.validate_seed_phrase(ptr0, len0);
-  return ret !== 0;
+    const ptr0 = passStringToWasm0(seed_phrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.validate_seed_phrase(ptr0, len0);
+    return ret !== 0;
 }
 
 /**
@@ -2447,10 +2152,10 @@ export function validate_seed_phrase(seed_phrase) {
  * @returns {boolean}
  */
 export function validate_ufvk(ufvk_str) {
-  const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-  const len0 = WASM_VECTOR_LEN;
-  const ret = wasm.validate_ufvk(ptr0, len0);
-  return ret !== 0;
+    const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.validate_ufvk(ptr0, len0);
+    return ret !== 0;
 }
 
 /**
@@ -2458,16 +2163,16 @@ export function validate_ufvk(ufvk_str) {
  * @returns {string}
  */
 export function version() {
-  let deferred1_0;
-  let deferred1_1;
-  try {
-    const ret = wasm.version();
-    deferred1_0 = ret[0];
-    deferred1_1 = ret[1];
-    return getStringFromWasm0(ret[0], ret[1]);
-  } finally {
-    wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
-  }
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.version();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
 }
 
 /**
@@ -2478,13 +2183,13 @@ export function version() {
  * @returns {any}
  */
 export function witness_extract_path(witness_hex) {
-  const ptr0 = passStringToWasm0(witness_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-  const len0 = WASM_VECTOR_LEN;
-  const ret = wasm.witness_extract_path(ptr0, len0);
-  if (ret[2]) {
-    throw takeFromExternrefTable0(ret[1]);
-  }
-  return takeFromExternrefTable0(ret[0]);
+    const ptr0 = passStringToWasm0(witness_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.witness_extract_path(ptr0, len0);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
 }
 
 /**
@@ -2493,13 +2198,13 @@ export function witness_extract_path(witness_hex) {
  * @returns {any}
  */
 export function witness_extract_path_ironwood(witness_hex) {
-  const ptr0 = passStringToWasm0(witness_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-  const len0 = WASM_VECTOR_LEN;
-  const ret = wasm.witness_extract_path_ironwood(ptr0, len0);
-  if (ret[2]) {
-    throw takeFromExternrefTable0(ret[1]);
-  }
-  return takeFromExternrefTable0(ret[0]);
+    const ptr0 = passStringToWasm0(witness_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.witness_extract_path_ironwood(ptr0, len0);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
 }
 
 /**
@@ -2518,37 +2223,20 @@ export function witness_extract_path_ironwood(witness_hex) {
  * @param {string} new_notes_json
  * @returns {any}
  */
-export function witness_sync_update(
-  start_frontier_hex,
-  compact_blocks_json,
-  existing_witnesses_json,
-  new_notes_json,
-) {
-  const ptr0 = passStringToWasm0(
-    start_frontier_hex,
-    wasm.__wbindgen_malloc,
-    wasm.__wbindgen_realloc,
-  );
-  const len0 = WASM_VECTOR_LEN;
-  const ptr1 = passStringToWasm0(
-    compact_blocks_json,
-    wasm.__wbindgen_malloc,
-    wasm.__wbindgen_realloc,
-  );
-  const len1 = WASM_VECTOR_LEN;
-  const ptr2 = passStringToWasm0(
-    existing_witnesses_json,
-    wasm.__wbindgen_malloc,
-    wasm.__wbindgen_realloc,
-  );
-  const len2 = WASM_VECTOR_LEN;
-  const ptr3 = passStringToWasm0(new_notes_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-  const len3 = WASM_VECTOR_LEN;
-  const ret = wasm.witness_sync_update(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
-  if (ret[2]) {
-    throw takeFromExternrefTable0(ret[1]);
-  }
-  return takeFromExternrefTable0(ret[0]);
+export function witness_sync_update(start_frontier_hex, compact_blocks_json, existing_witnesses_json, new_notes_json) {
+    const ptr0 = passStringToWasm0(start_frontier_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(compact_blocks_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(existing_witnesses_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ptr3 = passStringToWasm0(new_notes_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len3 = WASM_VECTOR_LEN;
+    const ret = wasm.witness_sync_update(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
 }
 
 /**
@@ -2559,37 +2247,20 @@ export function witness_sync_update(
  * @param {string} new_notes_json
  * @returns {any}
  */
-export function witness_sync_update_ironwood(
-  start_frontier_hex,
-  compact_blocks_json,
-  existing_witnesses_json,
-  new_notes_json,
-) {
-  const ptr0 = passStringToWasm0(
-    start_frontier_hex,
-    wasm.__wbindgen_malloc,
-    wasm.__wbindgen_realloc,
-  );
-  const len0 = WASM_VECTOR_LEN;
-  const ptr1 = passStringToWasm0(
-    compact_blocks_json,
-    wasm.__wbindgen_malloc,
-    wasm.__wbindgen_realloc,
-  );
-  const len1 = WASM_VECTOR_LEN;
-  const ptr2 = passStringToWasm0(
-    existing_witnesses_json,
-    wasm.__wbindgen_malloc,
-    wasm.__wbindgen_realloc,
-  );
-  const len2 = WASM_VECTOR_LEN;
-  const ptr3 = passStringToWasm0(new_notes_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-  const len3 = WASM_VECTOR_LEN;
-  const ret = wasm.witness_sync_update_ironwood(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
-  if (ret[2]) {
-    throw takeFromExternrefTable0(ret[1]);
-  }
-  return takeFromExternrefTable0(ret[0]);
+export function witness_sync_update_ironwood(start_frontier_hex, compact_blocks_json, existing_witnesses_json, new_notes_json) {
+    const ptr0 = passStringToWasm0(start_frontier_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(compact_blocks_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(existing_witnesses_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ptr3 = passStringToWasm0(new_notes_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len3 = WASM_VECTOR_LEN;
+    const ret = wasm.witness_sync_update_ironwood(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
 }
 
 /**
@@ -2603,27 +2274,26 @@ export function witness_sync_update_ironwood(
  * @returns {string}
  */
 export function zt_encode_frames(cbor_data, zt_type, k, n) {
-  let deferred4_0;
-  let deferred4_1;
-  try {
-    const ptr0 = passArray8ToWasm0(cbor_data, wasm.__wbindgen_malloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passStringToWasm0(zt_type, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len1 = WASM_VECTOR_LEN;
-    const ret = wasm.zt_encode_frames(ptr0, len0, ptr1, len1, k, n);
-    var ptr3 = ret[0];
-    var len3 = ret[1];
-    if (ret[3]) {
-      ptr3 = 0;
-      len3 = 0;
-      throw takeFromExternrefTable0(ret[2]);
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passArray8ToWasm0(cbor_data, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(zt_type, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.zt_encode_frames(ptr0, len0, ptr1, len1, k, n);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
-    deferred4_0 = ptr3;
-    deferred4_1 = len3;
-    return getStringFromWasm0(ptr3, len3);
-  } finally {
-    wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
-  }
 }
 
 /**
@@ -2666,635 +2336,594 @@ export function zt_encode_frames_auto(cbor_data, zt_type, max_qr_bytes, redundan
 }
 
 function __wbg_get_imports(memory) {
-  const import0 = {
-    __proto__: null,
-    __wbg_Error_83742b46f01ce22d: function (arg0, arg1) {
-      const ret = Error(getStringFromWasm0(arg0, arg1));
-      return ret;
-    },
-    __wbg_Number_a5a435bd7bbec835: function (arg0) {
-      const ret = Number(arg0);
-      return ret;
-    },
-    __wbg_String_8564e559799eccda: function (arg0, arg1) {
-      const ret = String(arg1);
-      const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-      const len1 = WASM_VECTOR_LEN;
-      getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
-      getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
-    },
-    __wbg___wbindgen_bigint_get_as_i64_447a76b5c6ef7bda: function (arg0, arg1) {
-      const v = arg1;
-      const ret = typeof v === 'bigint' ? v : undefined;
-      getDataViewMemory0().setBigInt64(arg0 + 8 * 1, isLikeNone(ret) ? BigInt(0) : ret, true);
-      getDataViewMemory0().setInt32(arg0 + 4 * 0, !isLikeNone(ret), true);
-    },
-    __wbg___wbindgen_boolean_get_c0f3f60bac5a78d1: function (arg0) {
-      const v = arg0;
-      const ret = typeof v === 'boolean' ? v : undefined;
-      return isLikeNone(ret) ? 0xffffff : ret ? 1 : 0;
-    },
-    __wbg___wbindgen_debug_string_5398f5bb970e0daa: function (arg0, arg1) {
-      const ret = debugString(arg1);
-      const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-      const len1 = WASM_VECTOR_LEN;
-      getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
-      getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
-    },
-    __wbg___wbindgen_in_41dbb8413020e076: function (arg0, arg1) {
-      const ret = arg0 in arg1;
-      return ret;
-    },
-    __wbg___wbindgen_is_bigint_e2141d4f045b7eda: function (arg0) {
-      const ret = typeof arg0 === 'bigint';
-      return ret;
-    },
-    __wbg___wbindgen_is_function_3c846841762788c1: function (arg0) {
-      const ret = typeof arg0 === 'function';
-      return ret;
-    },
-    __wbg___wbindgen_is_object_781bc9f159099513: function (arg0) {
-      const val = arg0;
-      const ret = typeof val === 'object' && val !== null;
-      return ret;
-    },
-    __wbg___wbindgen_is_string_7ef6b97b02428fae: function (arg0) {
-      const ret = typeof arg0 === 'string';
-      return ret;
-    },
-    __wbg___wbindgen_is_undefined_52709e72fb9f179c: function (arg0) {
-      const ret = arg0 === undefined;
-      return ret;
-    },
-    __wbg___wbindgen_jsval_eq_ee31bfad3e536463: function (arg0, arg1) {
-      const ret = arg0 === arg1;
-      return ret;
-    },
-    __wbg___wbindgen_jsval_loose_eq_5bcc3bed3c69e72b: function (arg0, arg1) {
-      const ret = arg0 == arg1;
-      return ret;
-    },
-    __wbg___wbindgen_number_get_34bb9d9dcfa21373: function (arg0, arg1) {
-      const obj = arg1;
-      const ret = typeof obj === 'number' ? obj : undefined;
-      getDataViewMemory0().setFloat64(arg0 + 8 * 1, isLikeNone(ret) ? 0 : ret, true);
-      getDataViewMemory0().setInt32(arg0 + 4 * 0, !isLikeNone(ret), true);
-    },
-    __wbg___wbindgen_string_get_395e606bd0ee4427: function (arg0, arg1) {
-      const obj = arg1;
-      const ret = typeof obj === 'string' ? obj : undefined;
-      var ptr1 = isLikeNone(ret)
-        ? 0
-        : passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-      var len1 = WASM_VECTOR_LEN;
-      getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
-      getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
-    },
-    __wbg___wbindgen_throw_6ddd609b62940d55: function (arg0, arg1) {
-      throw new Error(getStringFromWasm0(arg0, arg1));
-    },
-    __wbg_call_2d781c1f4d5c0ef8: function () {
-      return handleError(function (arg0, arg1, arg2) {
-        const ret = arg0.call(arg1, arg2);
-        return ret;
-      }, arguments);
-    },
-    __wbg_call_e133b57c9155d22c: function () {
-      return handleError(function (arg0, arg1) {
-        const ret = arg0.call(arg1);
-        return ret;
-      }, arguments);
-    },
-    __wbg_crypto_38df2bab126b63dc: function (arg0) {
-      const ret = arg0.crypto;
-      return ret;
-    },
-    __wbg_done_08ce71ee07e3bd17: function (arg0) {
-      const ret = arg0.done;
-      return ret;
-    },
-    __wbg_error_a6fa202b58aa1cd3: function (arg0, arg1) {
-      let deferred0_0;
-      let deferred0_1;
-      try {
-        deferred0_0 = arg0;
-        deferred0_1 = arg1;
-        console.error(getStringFromWasm0(arg0, arg1));
-      } finally {
-        wasm.__wbindgen_free(deferred0_0, deferred0_1, 1);
-      }
-    },
-    __wbg_getRandomValues_c44a50d8cfdaebeb: function () {
-      return handleError(function (arg0, arg1) {
-        arg0.getRandomValues(arg1);
-      }, arguments);
-    },
-    __wbg_get_326e41e095fb2575: function () {
-      return handleError(function (arg0, arg1) {
-        const ret = Reflect.get(arg0, arg1);
-        return ret;
-      }, arguments);
-    },
-    __wbg_get_unchecked_329cfe50afab7352: function (arg0, arg1) {
-      const ret = arg0[arg1 >>> 0];
-      return ret;
-    },
-    __wbg_get_with_ref_key_6412cf3094599694: function (arg0, arg1) {
-      const ret = arg0[arg1];
-      return ret;
-    },
-    __wbg_instanceof_ArrayBuffer_101e2bf31071a9f6: function (arg0) {
-      let result;
-      try {
-        result = arg0 instanceof ArrayBuffer;
-      } catch (_) {
-        result = false;
-      }
-      const ret = result;
-      return ret;
-    },
-    __wbg_instanceof_Uint8Array_740438561a5b956d: function (arg0) {
-      let result;
-      try {
-        result = arg0 instanceof Uint8Array;
-      } catch (_) {
-        result = false;
-      }
-      const ret = result;
-      return ret;
-    },
-    __wbg_isArray_33b91feb269ff46e: function (arg0) {
-      const ret = Array.isArray(arg0);
-      return ret;
-    },
-    __wbg_isSafeInteger_ecd6a7f9c3e053cd: function (arg0) {
-      const ret = Number.isSafeInteger(arg0);
-      return ret;
-    },
-    __wbg_iterator_d8f549ec8fb061b1: function () {
-      const ret = Symbol.iterator;
-      return ret;
-    },
-    __wbg_length_b3416cf66a5452c8: function (arg0) {
-      const ret = arg0.length;
-      return ret;
-    },
-    __wbg_length_ea16607d7b61445b: function (arg0) {
-      const ret = arg0.length;
-      return ret;
-    },
-    __wbg_log_5bad81a8c5e4232f: function (arg0, arg1) {
-      console.log(getStringFromWasm0(arg0, arg1));
-    },
-    __wbg_msCrypto_bd5a034af96bcba6: function (arg0) {
-      const ret = arg0.msCrypto;
-      return ret;
-    },
-    __wbg_new_227d7c05414eb861: function () {
-      const ret = new Error();
-      return ret;
-    },
-    __wbg_new_5f486cdf45a04d78: function (arg0) {
-      const ret = new Uint8Array(arg0);
-      return ret;
-    },
-    __wbg_new_a70fbab9066b301f: function () {
-      const ret = new Array();
-      return ret;
-    },
-    __wbg_new_ab79df5bd7c26067: function () {
-      const ret = new Object();
-      return ret;
-    },
-    __wbg_new_with_length_825018a1616e9e55: function (arg0) {
-      const ret = new Uint8Array(arg0 >>> 0);
-      return ret;
-    },
-    __wbg_next_11b99ee6237339e3: function () {
-      return handleError(function (arg0) {
-        const ret = arg0.next();
-        return ret;
-      }, arguments);
-    },
-    __wbg_next_e01a967809d1aa68: function (arg0) {
-      const ret = arg0.next;
-      return ret;
-    },
-    __wbg_node_84ea875411254db1: function (arg0) {
-      const ret = arg0.node;
-      return ret;
-    },
-    __wbg_process_44c7a14e11e9f69e: function (arg0) {
-      const ret = arg0.process;
-      return ret;
-    },
-    __wbg_prototypesetcall_d62e5099504357e6: function (arg0, arg1, arg2) {
-      Uint8Array.prototype.set.call(getArrayU8FromWasm0(arg0, arg1), arg2);
-    },
-    __wbg_randomFillSync_6c25eac9869eb53c: function () {
-      return handleError(function (arg0, arg1) {
-        arg0.randomFillSync(arg1);
-      }, arguments);
-    },
-    __wbg_require_b4edbdcf3e2a1ef0: function () {
-      return handleError(function () {
-        const ret = module.require;
-        return ret;
-      }, arguments);
-    },
-    __wbg_set_282384002438957f: function (arg0, arg1, arg2) {
-      arg0[arg1 >>> 0] = arg2;
-    },
-    __wbg_set_6be42768c690e380: function (arg0, arg1, arg2) {
-      arg0[arg1] = arg2;
-    },
-    __wbg_stack_3b0d974bbf31e44f: function (arg0, arg1) {
-      const ret = arg1.stack;
-      const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-      const len1 = WASM_VECTOR_LEN;
-      getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
-      getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
-    },
-    __wbg_static_accessor_GLOBAL_8adb955bd33fac2f: function () {
-      const ret = typeof global === 'undefined' ? null : global;
-      return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
-    },
-    __wbg_static_accessor_GLOBAL_THIS_ad356e0db91c7913: function () {
-      const ret = typeof globalThis === 'undefined' ? null : globalThis;
-      return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
-    },
-    __wbg_static_accessor_SELF_f207c857566db248: function () {
-      const ret = typeof self === 'undefined' ? null : self;
-      return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
-    },
-    __wbg_static_accessor_WINDOW_bb9f1ba69d61b386: function () {
-      const ret = typeof window === 'undefined' ? null : window;
-      return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
-    },
-    __wbg_subarray_a068d24e39478a8a: function (arg0, arg1, arg2) {
-      const ret = arg0.subarray(arg1 >>> 0, arg2 >>> 0);
-      return ret;
-    },
-    __wbg_value_21fc78aab0322612: function (arg0) {
-      const ret = arg0.value;
-      return ret;
-    },
-    __wbg_versions_276b2795b1c6a219: function (arg0) {
-      const ret = arg0.versions;
-      return ret;
-    },
-    __wbindgen_cast_0000000000000001: function (arg0) {
-      // Cast intrinsic for `F64 -> Externref`.
-      const ret = arg0;
-      return ret;
-    },
-    __wbindgen_cast_0000000000000002: function (arg0, arg1) {
-      // Cast intrinsic for `Ref(Slice(U8)) -> NamedExternref("Uint8Array")`.
-      const ret = getArrayU8FromWasm0(arg0, arg1);
-      return ret;
-    },
-    __wbindgen_cast_0000000000000003: function (arg0, arg1) {
-      // Cast intrinsic for `Ref(String) -> Externref`.
-      const ret = getStringFromWasm0(arg0, arg1);
-      return ret;
-    },
-    __wbindgen_cast_0000000000000004: function (arg0) {
-      // Cast intrinsic for `U64 -> Externref`.
-      const ret = BigInt.asUintN(64, arg0);
-      return ret;
-    },
-    __wbindgen_init_externref_table: function () {
-      const table = wasm.__wbindgen_externrefs;
-      const offset = table.grow(4);
-      table.set(0, undefined);
-      table.set(offset + 0, undefined);
-      table.set(offset + 1, null);
-      table.set(offset + 2, true);
-      table.set(offset + 3, false);
-    },
-    memory: memory || new WebAssembly.Memory({ initial: 51, maximum: 32768, shared: true }),
-  };
-  return {
-    __proto__: null,
-    './zafu_wasm_bg.js': import0,
-  };
+    const import0 = {
+        __proto__: null,
+        __wbg_Error_83742b46f01ce22d: function(arg0, arg1) {
+            const ret = Error(getStringFromWasm0(arg0, arg1));
+            return ret;
+        },
+        __wbg_Number_a5a435bd7bbec835: function(arg0) {
+            const ret = Number(arg0);
+            return ret;
+        },
+        __wbg_String_8564e559799eccda: function(arg0, arg1) {
+            const ret = String(arg1);
+            const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            const len1 = WASM_VECTOR_LEN;
+            getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
+            getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
+        },
+        __wbg___wbindgen_bigint_get_as_i64_447a76b5c6ef7bda: function(arg0, arg1) {
+            const v = arg1;
+            const ret = typeof(v) === 'bigint' ? v : undefined;
+            getDataViewMemory0().setBigInt64(arg0 + 8 * 1, isLikeNone(ret) ? BigInt(0) : ret, true);
+            getDataViewMemory0().setInt32(arg0 + 4 * 0, !isLikeNone(ret), true);
+        },
+        __wbg___wbindgen_boolean_get_c0f3f60bac5a78d1: function(arg0) {
+            const v = arg0;
+            const ret = typeof(v) === 'boolean' ? v : undefined;
+            return isLikeNone(ret) ? 0xFFFFFF : ret ? 1 : 0;
+        },
+        __wbg___wbindgen_debug_string_5398f5bb970e0daa: function(arg0, arg1) {
+            const ret = debugString(arg1);
+            const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            const len1 = WASM_VECTOR_LEN;
+            getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
+            getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
+        },
+        __wbg___wbindgen_in_41dbb8413020e076: function(arg0, arg1) {
+            const ret = arg0 in arg1;
+            return ret;
+        },
+        __wbg___wbindgen_is_bigint_e2141d4f045b7eda: function(arg0) {
+            const ret = typeof(arg0) === 'bigint';
+            return ret;
+        },
+        __wbg___wbindgen_is_function_3c846841762788c1: function(arg0) {
+            const ret = typeof(arg0) === 'function';
+            return ret;
+        },
+        __wbg___wbindgen_is_object_781bc9f159099513: function(arg0) {
+            const val = arg0;
+            const ret = typeof(val) === 'object' && val !== null;
+            return ret;
+        },
+        __wbg___wbindgen_is_string_7ef6b97b02428fae: function(arg0) {
+            const ret = typeof(arg0) === 'string';
+            return ret;
+        },
+        __wbg___wbindgen_is_undefined_52709e72fb9f179c: function(arg0) {
+            const ret = arg0 === undefined;
+            return ret;
+        },
+        __wbg___wbindgen_jsval_eq_ee31bfad3e536463: function(arg0, arg1) {
+            const ret = arg0 === arg1;
+            return ret;
+        },
+        __wbg___wbindgen_jsval_loose_eq_5bcc3bed3c69e72b: function(arg0, arg1) {
+            const ret = arg0 == arg1;
+            return ret;
+        },
+        __wbg___wbindgen_number_get_34bb9d9dcfa21373: function(arg0, arg1) {
+            const obj = arg1;
+            const ret = typeof(obj) === 'number' ? obj : undefined;
+            getDataViewMemory0().setFloat64(arg0 + 8 * 1, isLikeNone(ret) ? 0 : ret, true);
+            getDataViewMemory0().setInt32(arg0 + 4 * 0, !isLikeNone(ret), true);
+        },
+        __wbg___wbindgen_string_get_395e606bd0ee4427: function(arg0, arg1) {
+            const obj = arg1;
+            const ret = typeof(obj) === 'string' ? obj : undefined;
+            var ptr1 = isLikeNone(ret) ? 0 : passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            var len1 = WASM_VECTOR_LEN;
+            getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
+            getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
+        },
+        __wbg___wbindgen_throw_6ddd609b62940d55: function(arg0, arg1) {
+            throw new Error(getStringFromWasm0(arg0, arg1));
+        },
+        __wbg_call_2d781c1f4d5c0ef8: function() { return handleError(function (arg0, arg1, arg2) {
+            const ret = arg0.call(arg1, arg2);
+            return ret;
+        }, arguments); },
+        __wbg_call_e133b57c9155d22c: function() { return handleError(function (arg0, arg1) {
+            const ret = arg0.call(arg1);
+            return ret;
+        }, arguments); },
+        __wbg_crypto_38df2bab126b63dc: function(arg0) {
+            const ret = arg0.crypto;
+            return ret;
+        },
+        __wbg_done_08ce71ee07e3bd17: function(arg0) {
+            const ret = arg0.done;
+            return ret;
+        },
+        __wbg_error_a6fa202b58aa1cd3: function(arg0, arg1) {
+            let deferred0_0;
+            let deferred0_1;
+            try {
+                deferred0_0 = arg0;
+                deferred0_1 = arg1;
+                console.error(getStringFromWasm0(arg0, arg1));
+            } finally {
+                wasm.__wbindgen_free(deferred0_0, deferred0_1, 1);
+            }
+        },
+        __wbg_getRandomValues_c44a50d8cfdaebeb: function() { return handleError(function (arg0, arg1) {
+            arg0.getRandomValues(arg1);
+        }, arguments); },
+        __wbg_get_326e41e095fb2575: function() { return handleError(function (arg0, arg1) {
+            const ret = Reflect.get(arg0, arg1);
+            return ret;
+        }, arguments); },
+        __wbg_get_unchecked_329cfe50afab7352: function(arg0, arg1) {
+            const ret = arg0[arg1 >>> 0];
+            return ret;
+        },
+        __wbg_get_with_ref_key_6412cf3094599694: function(arg0, arg1) {
+            const ret = arg0[arg1];
+            return ret;
+        },
+        __wbg_instanceof_ArrayBuffer_101e2bf31071a9f6: function(arg0) {
+            let result;
+            try {
+                result = arg0 instanceof ArrayBuffer;
+            } catch (_) {
+                result = false;
+            }
+            const ret = result;
+            return ret;
+        },
+        __wbg_instanceof_Uint8Array_740438561a5b956d: function(arg0) {
+            let result;
+            try {
+                result = arg0 instanceof Uint8Array;
+            } catch (_) {
+                result = false;
+            }
+            const ret = result;
+            return ret;
+        },
+        __wbg_isArray_33b91feb269ff46e: function(arg0) {
+            const ret = Array.isArray(arg0);
+            return ret;
+        },
+        __wbg_isSafeInteger_ecd6a7f9c3e053cd: function(arg0) {
+            const ret = Number.isSafeInteger(arg0);
+            return ret;
+        },
+        __wbg_iterator_d8f549ec8fb061b1: function() {
+            const ret = Symbol.iterator;
+            return ret;
+        },
+        __wbg_length_b3416cf66a5452c8: function(arg0) {
+            const ret = arg0.length;
+            return ret;
+        },
+        __wbg_length_ea16607d7b61445b: function(arg0) {
+            const ret = arg0.length;
+            return ret;
+        },
+        __wbg_log_5bad81a8c5e4232f: function(arg0, arg1) {
+            console.log(getStringFromWasm0(arg0, arg1));
+        },
+        __wbg_msCrypto_bd5a034af96bcba6: function(arg0) {
+            const ret = arg0.msCrypto;
+            return ret;
+        },
+        __wbg_new_227d7c05414eb861: function() {
+            const ret = new Error();
+            return ret;
+        },
+        __wbg_new_5f486cdf45a04d78: function(arg0) {
+            const ret = new Uint8Array(arg0);
+            return ret;
+        },
+        __wbg_new_a70fbab9066b301f: function() {
+            const ret = new Array();
+            return ret;
+        },
+        __wbg_new_ab79df5bd7c26067: function() {
+            const ret = new Object();
+            return ret;
+        },
+        __wbg_new_with_length_825018a1616e9e55: function(arg0) {
+            const ret = new Uint8Array(arg0 >>> 0);
+            return ret;
+        },
+        __wbg_next_11b99ee6237339e3: function() { return handleError(function (arg0) {
+            const ret = arg0.next();
+            return ret;
+        }, arguments); },
+        __wbg_next_e01a967809d1aa68: function(arg0) {
+            const ret = arg0.next;
+            return ret;
+        },
+        __wbg_node_84ea875411254db1: function(arg0) {
+            const ret = arg0.node;
+            return ret;
+        },
+        __wbg_process_44c7a14e11e9f69e: function(arg0) {
+            const ret = arg0.process;
+            return ret;
+        },
+        __wbg_prototypesetcall_d62e5099504357e6: function(arg0, arg1, arg2) {
+            Uint8Array.prototype.set.call(getArrayU8FromWasm0(arg0, arg1), arg2);
+        },
+        __wbg_randomFillSync_6c25eac9869eb53c: function() { return handleError(function (arg0, arg1) {
+            arg0.randomFillSync(arg1);
+        }, arguments); },
+        __wbg_require_b4edbdcf3e2a1ef0: function() { return handleError(function () {
+            const ret = module.require;
+            return ret;
+        }, arguments); },
+        __wbg_set_282384002438957f: function(arg0, arg1, arg2) {
+            arg0[arg1 >>> 0] = arg2;
+        },
+        __wbg_set_6be42768c690e380: function(arg0, arg1, arg2) {
+            arg0[arg1] = arg2;
+        },
+        __wbg_stack_3b0d974bbf31e44f: function(arg0, arg1) {
+            const ret = arg1.stack;
+            const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            const len1 = WASM_VECTOR_LEN;
+            getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
+            getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
+        },
+        __wbg_static_accessor_GLOBAL_8adb955bd33fac2f: function() {
+            const ret = typeof global === 'undefined' ? null : global;
+            return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
+        },
+        __wbg_static_accessor_GLOBAL_THIS_ad356e0db91c7913: function() {
+            const ret = typeof globalThis === 'undefined' ? null : globalThis;
+            return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
+        },
+        __wbg_static_accessor_SELF_f207c857566db248: function() {
+            const ret = typeof self === 'undefined' ? null : self;
+            return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
+        },
+        __wbg_static_accessor_WINDOW_bb9f1ba69d61b386: function() {
+            const ret = typeof window === 'undefined' ? null : window;
+            return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
+        },
+        __wbg_subarray_a068d24e39478a8a: function(arg0, arg1, arg2) {
+            const ret = arg0.subarray(arg1 >>> 0, arg2 >>> 0);
+            return ret;
+        },
+        __wbg_value_21fc78aab0322612: function(arg0) {
+            const ret = arg0.value;
+            return ret;
+        },
+        __wbg_versions_276b2795b1c6a219: function(arg0) {
+            const ret = arg0.versions;
+            return ret;
+        },
+        __wbindgen_cast_0000000000000001: function(arg0) {
+            // Cast intrinsic for `F64 -> Externref`.
+            const ret = arg0;
+            return ret;
+        },
+        __wbindgen_cast_0000000000000002: function(arg0, arg1) {
+            // Cast intrinsic for `Ref(Slice(U8)) -> NamedExternref("Uint8Array")`.
+            const ret = getArrayU8FromWasm0(arg0, arg1);
+            return ret;
+        },
+        __wbindgen_cast_0000000000000003: function(arg0, arg1) {
+            // Cast intrinsic for `Ref(String) -> Externref`.
+            const ret = getStringFromWasm0(arg0, arg1);
+            return ret;
+        },
+        __wbindgen_cast_0000000000000004: function(arg0) {
+            // Cast intrinsic for `U64 -> Externref`.
+            const ret = BigInt.asUintN(64, arg0);
+            return ret;
+        },
+        __wbindgen_init_externref_table: function() {
+            const table = wasm.__wbindgen_externrefs;
+            const offset = table.grow(4);
+            table.set(0, undefined);
+            table.set(offset + 0, undefined);
+            table.set(offset + 1, null);
+            table.set(offset + 2, true);
+            table.set(offset + 3, false);
+        },
+        memory: memory || new WebAssembly.Memory({initial:51,maximum:32768,shared:true}),
+    };
+    return {
+        __proto__: null,
+        "./zafu_wasm_bg.js": import0,
+    };
 }
 
-const WalletKeysFinalization =
-  typeof FinalizationRegistry === 'undefined'
+const WalletKeysFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_walletkeys_free(ptr >>> 0, 1));
-const WatchOnlyWalletFinalization =
-  typeof FinalizationRegistry === 'undefined'
+const WatchOnlyWalletFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_watchonlywallet_free(ptr >>> 0, 1));
 
 function addToExternrefTable0(obj) {
-  const idx = wasm.__externref_table_alloc();
-  wasm.__wbindgen_externrefs.set(idx, obj);
-  return idx;
+    const idx = wasm.__externref_table_alloc();
+    wasm.__wbindgen_externrefs.set(idx, obj);
+    return idx;
 }
 
 function debugString(val) {
-  // primitive types
-  const type = typeof val;
-  if (type == 'number' || type == 'boolean' || val == null) {
-    return `${val}`;
-  }
-  if (type == 'string') {
-    return `"${val}"`;
-  }
-  if (type == 'symbol') {
-    const description = val.description;
-    if (description == null) {
-      return 'Symbol';
+    // primitive types
+    const type = typeof val;
+    if (type == 'number' || type == 'boolean' || val == null) {
+        return  `${val}`;
+    }
+    if (type == 'string') {
+        return `"${val}"`;
+    }
+    if (type == 'symbol') {
+        const description = val.description;
+        if (description == null) {
+            return 'Symbol';
+        } else {
+            return `Symbol(${description})`;
+        }
+    }
+    if (type == 'function') {
+        const name = val.name;
+        if (typeof name == 'string' && name.length > 0) {
+            return `Function(${name})`;
+        } else {
+            return 'Function';
+        }
+    }
+    // objects
+    if (Array.isArray(val)) {
+        const length = val.length;
+        let debug = '[';
+        if (length > 0) {
+            debug += debugString(val[0]);
+        }
+        for(let i = 1; i < length; i++) {
+            debug += ', ' + debugString(val[i]);
+        }
+        debug += ']';
+        return debug;
+    }
+    // Test for built-in
+    const builtInMatches = /\[object ([^\]]+)\]/.exec(toString.call(val));
+    let className;
+    if (builtInMatches && builtInMatches.length > 1) {
+        className = builtInMatches[1];
     } else {
-      return `Symbol(${description})`;
+        // Failed to match the standard '[object ClassName]'
+        return toString.call(val);
     }
-  }
-  if (type == 'function') {
-    const name = val.name;
-    if (typeof name == 'string' && name.length > 0) {
-      return `Function(${name})`;
-    } else {
-      return 'Function';
+    if (className == 'Object') {
+        // we're a user defined class or Object
+        // JSON.stringify avoids problems with cycles, and is generally much
+        // easier than looping through ownProperties of `val`.
+        try {
+            return 'Object(' + JSON.stringify(val) + ')';
+        } catch (_) {
+            return 'Object';
+        }
     }
-  }
-  // objects
-  if (Array.isArray(val)) {
-    const length = val.length;
-    let debug = '[';
-    if (length > 0) {
-      debug += debugString(val[0]);
+    // errors
+    if (val instanceof Error) {
+        return `${val.name}: ${val.message}\n${val.stack}`;
     }
-    for (let i = 1; i < length; i++) {
-      debug += ', ' + debugString(val[i]);
-    }
-    debug += ']';
-    return debug;
-  }
-  // Test for built-in
-  const builtInMatches = /\[object ([^\]]+)\]/.exec(toString.call(val));
-  let className;
-  if (builtInMatches && builtInMatches.length > 1) {
-    className = builtInMatches[1];
-  } else {
-    // Failed to match the standard '[object ClassName]'
-    return toString.call(val);
-  }
-  if (className == 'Object') {
-    // we're a user defined class or Object
-    // JSON.stringify avoids problems with cycles, and is generally much
-    // easier than looping through ownProperties of `val`.
-    try {
-      return 'Object(' + JSON.stringify(val) + ')';
-    } catch (_) {
-      return 'Object';
-    }
-  }
-  // errors
-  if (val instanceof Error) {
-    return `${val.name}: ${val.message}\n${val.stack}`;
-  }
-  // TODO we could test for more things here, like `Set`s and `Map`s.
-  return className;
+    // TODO we could test for more things here, like `Set`s and `Map`s.
+    return className;
 }
 
 function getArrayU8FromWasm0(ptr, len) {
-  ptr = ptr >>> 0;
-  return getUint8ArrayMemory0().subarray(ptr / 1, ptr / 1 + len);
+    ptr = ptr >>> 0;
+    return getUint8ArrayMemory0().subarray(ptr / 1, ptr / 1 + len);
 }
 
 let cachedDataViewMemory0 = null;
 function getDataViewMemory0() {
-  if (cachedDataViewMemory0 === null || cachedDataViewMemory0.buffer !== wasm.memory.buffer) {
-    cachedDataViewMemory0 = new DataView(wasm.memory.buffer);
-  }
-  return cachedDataViewMemory0;
+    if (cachedDataViewMemory0 === null || cachedDataViewMemory0.buffer !== wasm.memory.buffer) {
+        cachedDataViewMemory0 = new DataView(wasm.memory.buffer);
+    }
+    return cachedDataViewMemory0;
 }
 
 function getStringFromWasm0(ptr, len) {
-  ptr = ptr >>> 0;
-  return decodeText(ptr, len);
+    ptr = ptr >>> 0;
+    return decodeText(ptr, len);
 }
 
 let cachedUint8ArrayMemory0 = null;
 function getUint8ArrayMemory0() {
-  if (cachedUint8ArrayMemory0 === null || cachedUint8ArrayMemory0.buffer !== wasm.memory.buffer) {
-    cachedUint8ArrayMemory0 = new Uint8Array(wasm.memory.buffer);
-  }
-  return cachedUint8ArrayMemory0;
+    if (cachedUint8ArrayMemory0 === null || cachedUint8ArrayMemory0.buffer !== wasm.memory.buffer) {
+        cachedUint8ArrayMemory0 = new Uint8Array(wasm.memory.buffer);
+    }
+    return cachedUint8ArrayMemory0;
 }
 
 function handleError(f, args) {
-  try {
-    return f.apply(this, args);
-  } catch (e) {
-    const idx = addToExternrefTable0(e);
-    wasm.__wbindgen_exn_store(idx);
-  }
+    try {
+        return f.apply(this, args);
+    } catch (e) {
+        const idx = addToExternrefTable0(e);
+        wasm.__wbindgen_exn_store(idx);
+    }
 }
 
 function isLikeNone(x) {
-  return x === undefined || x === null;
+    return x === undefined || x === null;
 }
 
 function passArray8ToWasm0(arg, malloc) {
-  const ptr = malloc(arg.length * 1, 1) >>> 0;
-  getUint8ArrayMemory0().set(arg, ptr / 1);
-  WASM_VECTOR_LEN = arg.length;
-  return ptr;
+    const ptr = malloc(arg.length * 1, 1) >>> 0;
+    getUint8ArrayMemory0().set(arg, ptr / 1);
+    WASM_VECTOR_LEN = arg.length;
+    return ptr;
 }
 
 function passStringToWasm0(arg, malloc, realloc) {
-  if (realloc === undefined) {
-    const buf = cachedTextEncoder.encode(arg);
-    const ptr = malloc(buf.length, 1) >>> 0;
-    getUint8ArrayMemory0()
-      .subarray(ptr, ptr + buf.length)
-      .set(buf);
-    WASM_VECTOR_LEN = buf.length;
-    return ptr;
-  }
-
-  let len = arg.length;
-  let ptr = malloc(len, 1) >>> 0;
-
-  const mem = getUint8ArrayMemory0();
-
-  let offset = 0;
-
-  for (; offset < len; offset++) {
-    const code = arg.charCodeAt(offset);
-    if (code > 0x7f) break;
-    mem[ptr + offset] = code;
-  }
-  if (offset !== len) {
-    if (offset !== 0) {
-      arg = arg.slice(offset);
+    if (realloc === undefined) {
+        const buf = cachedTextEncoder.encode(arg);
+        const ptr = malloc(buf.length, 1) >>> 0;
+        getUint8ArrayMemory0().subarray(ptr, ptr + buf.length).set(buf);
+        WASM_VECTOR_LEN = buf.length;
+        return ptr;
     }
-    ptr = realloc(ptr, len, (len = offset + arg.length * 3), 1) >>> 0;
-    const view = getUint8ArrayMemory0().subarray(ptr + offset, ptr + len);
-    const ret = cachedTextEncoder.encodeInto(arg, view);
 
-    offset += ret.written;
-    ptr = realloc(ptr, len, offset, 1) >>> 0;
-  }
+    let len = arg.length;
+    let ptr = malloc(len, 1) >>> 0;
 
-  WASM_VECTOR_LEN = offset;
-  return ptr;
+    const mem = getUint8ArrayMemory0();
+
+    let offset = 0;
+
+    for (; offset < len; offset++) {
+        const code = arg.charCodeAt(offset);
+        if (code > 0x7F) break;
+        mem[ptr + offset] = code;
+    }
+    if (offset !== len) {
+        if (offset !== 0) {
+            arg = arg.slice(offset);
+        }
+        ptr = realloc(ptr, len, len = offset + arg.length * 3, 1) >>> 0;
+        const view = getUint8ArrayMemory0().subarray(ptr + offset, ptr + len);
+        const ret = cachedTextEncoder.encodeInto(arg, view);
+
+        offset += ret.written;
+        ptr = realloc(ptr, len, offset, 1) >>> 0;
+    }
+
+    WASM_VECTOR_LEN = offset;
+    return ptr;
 }
 
 function takeFromExternrefTable0(idx) {
-  const value = wasm.__wbindgen_externrefs.get(idx);
-  wasm.__externref_table_dealloc(idx);
-  return value;
+    const value = wasm.__wbindgen_externrefs.get(idx);
+    wasm.__externref_table_dealloc(idx);
+    return value;
 }
 
-let cachedTextDecoder =
-  typeof TextDecoder !== 'undefined'
-    ? new TextDecoder('utf-8', { ignoreBOM: true, fatal: true })
-    : undefined;
+let cachedTextDecoder = (typeof TextDecoder !== 'undefined' ? new TextDecoder('utf-8', { ignoreBOM: true, fatal: true }) : undefined);
 if (cachedTextDecoder) cachedTextDecoder.decode();
 
 const MAX_SAFARI_DECODE_BYTES = 2146435072;
 let numBytesDecoded = 0;
 function decodeText(ptr, len) {
-  numBytesDecoded += len;
-  if (numBytesDecoded >= MAX_SAFARI_DECODE_BYTES) {
-    cachedTextDecoder = new TextDecoder('utf-8', { ignoreBOM: true, fatal: true });
-    cachedTextDecoder.decode();
-    numBytesDecoded = len;
-  }
-  return cachedTextDecoder.decode(getUint8ArrayMemory0().slice(ptr, ptr + len));
+    numBytesDecoded += len;
+    if (numBytesDecoded >= MAX_SAFARI_DECODE_BYTES) {
+        cachedTextDecoder = new TextDecoder('utf-8', { ignoreBOM: true, fatal: true });
+        cachedTextDecoder.decode();
+        numBytesDecoded = len;
+    }
+    return cachedTextDecoder.decode(getUint8ArrayMemory0().slice(ptr, ptr + len));
 }
 
-const cachedTextEncoder = typeof TextEncoder !== 'undefined' ? new TextEncoder() : undefined;
+const cachedTextEncoder = (typeof TextEncoder !== 'undefined' ? new TextEncoder() : undefined);
 
 if (cachedTextEncoder) {
-  cachedTextEncoder.encodeInto = function (arg, view) {
-    const buf = cachedTextEncoder.encode(arg);
-    view.set(buf);
-    return {
-      read: arg.length,
-      written: buf.length,
+    cachedTextEncoder.encodeInto = function (arg, view) {
+        const buf = cachedTextEncoder.encode(arg);
+        view.set(buf);
+        return {
+            read: arg.length,
+            written: buf.length
+        };
     };
-  };
 }
 
 let WASM_VECTOR_LEN = 0;
 
 let wasmModule, wasm;
 function __wbg_finalize_init(instance, module, thread_stack_size) {
-  wasm = instance.exports;
-  wasmModule = module;
-  cachedDataViewMemory0 = null;
-  cachedUint8ArrayMemory0 = null;
-  if (
-    typeof thread_stack_size !== 'undefined' &&
-    (typeof thread_stack_size !== 'number' ||
-      thread_stack_size === 0 ||
-      thread_stack_size % 65536 !== 0)
-  ) {
-    throw new Error('invalid stack size');
-  }
+    wasm = instance.exports;
+    wasmModule = module;
+    cachedDataViewMemory0 = null;
+    cachedUint8ArrayMemory0 = null;
+    if (typeof thread_stack_size !== 'undefined' && (typeof thread_stack_size !== 'number' || thread_stack_size === 0 || thread_stack_size % 65536 !== 0)) {
+        throw new Error('invalid stack size');
+    }
 
-  wasm.__wbindgen_start(thread_stack_size);
-  return wasm;
+    wasm.__wbindgen_start(thread_stack_size);
+    return wasm;
 }
 
 async function __wbg_load(module, imports) {
-  if (typeof Response === 'function' && module instanceof Response) {
-    if (typeof WebAssembly.instantiateStreaming === 'function') {
-      try {
-        return await WebAssembly.instantiateStreaming(module, imports);
-      } catch (e) {
-        const validResponse = module.ok && expectedResponseType(module.type);
+    if (typeof Response === 'function' && module instanceof Response) {
+        if (typeof WebAssembly.instantiateStreaming === 'function') {
+            try {
+                return await WebAssembly.instantiateStreaming(module, imports);
+            } catch (e) {
+                const validResponse = module.ok && expectedResponseType(module.type);
 
-        if (validResponse && module.headers.get('Content-Type') !== 'application/wasm') {
-          console.warn(
-            '`WebAssembly.instantiateStreaming` failed because your server does not serve Wasm with `application/wasm` MIME type. Falling back to `WebAssembly.instantiate` which is slower. Original error:\n',
-            e,
-          );
-        } else {
-          throw e;
+                if (validResponse && module.headers.get('Content-Type') !== 'application/wasm') {
+                    console.warn("`WebAssembly.instantiateStreaming` failed because your server does not serve Wasm with `application/wasm` MIME type. Falling back to `WebAssembly.instantiate` which is slower. Original error:\n", e);
+
+                } else { throw e; }
+            }
         }
-      }
-    }
 
-    const bytes = await module.arrayBuffer();
-    return await WebAssembly.instantiate(bytes, imports);
-  } else {
-    const instance = await WebAssembly.instantiate(module, imports);
-
-    if (instance instanceof WebAssembly.Instance) {
-      return { instance, module };
+        const bytes = await module.arrayBuffer();
+        return await WebAssembly.instantiate(bytes, imports);
     } else {
-      return instance;
-    }
-  }
+        const instance = await WebAssembly.instantiate(module, imports);
 
-  function expectedResponseType(type) {
-    switch (type) {
-      case 'basic':
-      case 'cors':
-      case 'default':
-        return true;
+        if (instance instanceof WebAssembly.Instance) {
+            return { instance, module };
+        } else {
+            return instance;
+        }
     }
-    return false;
-  }
+
+    function expectedResponseType(type) {
+        switch (type) {
+            case 'basic': case 'cors': case 'default': return true;
+        }
+        return false;
+    }
 }
 
 function initSync(module, memory) {
-  if (wasm !== undefined) return wasm;
+    if (wasm !== undefined) return wasm;
 
-  let thread_stack_size;
-  if (module !== undefined) {
-    if (Object.getPrototypeOf(module) === Object.prototype) {
-      ({ module, memory, thread_stack_size } = module);
-    } else {
-      console.warn('using deprecated parameters for `initSync()`; pass a single object instead');
+    let thread_stack_size
+    if (module !== undefined) {
+        if (Object.getPrototypeOf(module) === Object.prototype) {
+            ({module, memory, thread_stack_size} = module)
+        } else {
+            console.warn('using deprecated parameters for `initSync()`; pass a single object instead')
+        }
     }
-  }
 
-  const imports = __wbg_get_imports(memory);
-  if (!(module instanceof WebAssembly.Module)) {
-    module = new WebAssembly.Module(module);
-  }
-  const instance = new WebAssembly.Instance(module, imports);
-  return __wbg_finalize_init(instance, module, thread_stack_size);
+    const imports = __wbg_get_imports(memory);
+    if (!(module instanceof WebAssembly.Module)) {
+        module = new WebAssembly.Module(module);
+    }
+    const instance = new WebAssembly.Instance(module, imports);
+    return __wbg_finalize_init(instance, module, thread_stack_size);
 }
 
 async function __wbg_init(module_or_path, memory) {
-  if (wasm !== undefined) return wasm;
+    if (wasm !== undefined) return wasm;
 
-  let thread_stack_size;
-  if (module_or_path !== undefined) {
-    if (Object.getPrototypeOf(module_or_path) === Object.prototype) {
-      ({ module_or_path, memory, thread_stack_size } = module_or_path);
-    } else {
-      console.warn(
-        'using deprecated parameters for the initialization function; pass a single object instead',
-      );
+    let thread_stack_size
+    if (module_or_path !== undefined) {
+        if (Object.getPrototypeOf(module_or_path) === Object.prototype) {
+            ({module_or_path, memory, thread_stack_size} = module_or_path)
+        } else {
+            console.warn('using deprecated parameters for the initialization function; pass a single object instead')
+        }
     }
-  }
 
-  if (module_or_path === undefined) {
-    module_or_path = new URL('zafu_wasm_bg.wasm', import.meta.url);
-  }
-  const imports = __wbg_get_imports(memory);
+    if (module_or_path === undefined) {
+        module_or_path = new URL('zafu_wasm_bg.wasm', import.meta.url);
+    }
+    const imports = __wbg_get_imports(memory);
 
-  if (
-    typeof module_or_path === 'string' ||
-    (typeof Request === 'function' && module_or_path instanceof Request) ||
-    (typeof URL === 'function' && module_or_path instanceof URL)
-  ) {
-    module_or_path = fetch(module_or_path);
-  }
+    if (typeof module_or_path === 'string' || (typeof Request === 'function' && module_or_path instanceof Request) || (typeof URL === 'function' && module_or_path instanceof URL)) {
+        module_or_path = fetch(module_or_path);
+    }
 
-  const { instance, module } = await __wbg_load(await module_or_path, imports);
+    const { instance, module } = await __wbg_load(await module_or_path, imports);
 
-  return __wbg_finalize_init(instance, module, thread_stack_size);
+    return __wbg_finalize_init(instance, module, thread_stack_size);
 }
 
 export { initSync, __wbg_init as default };

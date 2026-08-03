@@ -585,6 +585,7 @@ const VaultRow = ({
   disabled: boolean;
 }) => {
   const navigate = usePopupNav();
+  const { setMultisigHidden } = useStore(keyRingSelector);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(vault.name);
   const ref = useRef<HTMLInputElement>(null);
@@ -729,12 +730,24 @@ const VaultRow = ({
             {String(vault.insensitive['threshold'])}/{String(vault.insensitive['maxSigners'])}{' '}
             multisig
           </span>
-          <button
-            onClick={() => navigate(PopupPath.MULTISIG)}
-            className='text-label text-zigner-gold hover:underline'
-          >
-            manage in multisig tab →
-          </button>
+          {multisigWallet.multisig?.hidden ? (
+            // app-managed (poker) table: the multisig manager hides it, so a plain "manage" link
+            // dead-ends. Offer recovery — unhide it into a normal, selectable, co-signable multisig.
+            <button
+              onClick={() => void setMultisigHidden(vault.id, false)}
+              className='text-label text-zigner-gold hover:underline'
+              title='make this app-managed table a normal multisig you can select and co-sign'
+            >
+              recover / take control →
+            </button>
+          ) : (
+            <button
+              onClick={() => navigate(PopupPath.MULTISIG)}
+              className='text-label text-zigner-gold hover:underline'
+            >
+              manage in multisig tab →
+            </button>
+          )}
         </div>
       )}
     </div>

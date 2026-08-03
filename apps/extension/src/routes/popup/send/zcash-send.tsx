@@ -167,6 +167,11 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   // shows AnimatedQrDisplay instead of the legacy single QR, and the scan
   // step uses AnimatedQrScanner with `ur:zcash-pczt` filter.
   const [pcztSignFrames, setPcztSignFrames] = useState<string[] | null>(null);
+  // The signed PCZT returns under the SAME UR type the unsigned display frames
+  // carry: orchard uses `zcash-pczt`; an ironwood (NU6.3) send uses the
+  // zigner-module prelude envelope. Derive the signed-scan filter from the
+  // display frames so the return leg matches for both pools (default orchard).
+  const [pcztSignedUrType, setPcztSignedUrType] = useState<string>('zcash-pczt');
   const pcztUnsignedRef = useRef<SendTxPcztUnsignedResult | null>(null);
   const [showSavePrompt, setShowSavePrompt] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
@@ -461,6 +466,11 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         const feeZec = (Number(result.fee) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
         setFee(feeZec);
         setPcztSignFrames(result.urFrames);
+        // e.g. "ur:zigner-module/1-3/..." -> "zigner-module" (ironwood),
+        // "ur:zcash-pczt/..." -> "zcash-pczt" (orchard). The zigner replays the
+        // signed PCZT under this same type, so the return scanner must match it.
+        const displayUrType = result.urFrames[0]?.split('/')[0]?.replace(/^ur:/i, '');
+        setPcztSignedUrType(displayUrType || 'zcash-pczt');
 
         startSigning({
           id: `zcash-${Date.now()}`,
@@ -1038,7 +1048,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 onClose={() => setStep('sign')}
                 title='scan signed PCZT'
                 description='hold camera steady on the animated QR'
-                urTypeFilter='zcash-pczt'
+                urTypeFilter={pcztSignedUrType}
               />
             </div>
           </div>

@@ -12,6 +12,8 @@ apps/extension/public/zafu-wasm-parallel/
 apps/extension/public/zync-core/
 # wasm-bindgen output (committed but generated — never hand-format)
 packages/zcash-wasm/*_wasm.js
+packages/zcash-wasm/*_wasm.d.ts
+packages/zcash-wasm/*_wasm_bg.wasm.d.ts
 
 # generated mdbook output (built from docs/src via `mdbook build`)
 docs/book/

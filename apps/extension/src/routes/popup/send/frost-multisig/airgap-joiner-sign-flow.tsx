@@ -82,7 +82,7 @@ export function FrostAirgapJoinerSignFlow({
   useEffect(() => {
     let signSeen = false;
     try {
-      const s = openJoinerSession(ms.relayUrl || 'wss://zrelay.rotko.net', roomCode);
+      const s = openJoinerSession(ms.relayUrl || 'wss://zcash.rotko.net', roomCode);
       sessionRef.current = s;
       void s.relay.joinRoom(
         s.roomCode,

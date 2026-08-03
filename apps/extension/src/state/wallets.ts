@@ -273,6 +273,12 @@ export const selectVisibleMultisigWallets = (state: AllSlices) => {
   const wallets = Array.isArray(state.wallets.zcashWallets) ? state.wallets.zcashWallets : [];
   return wallets.filter(w => w.multisig && !w.multisig.hidden);
 };
+/** app-managed tables = multisig AND hidden (the poker tables the dedicated manager owns). Feed for
+ *  the manager's TableView only — NOT for backup/dedupe (that needs the unfiltered set). */
+export const selectAppManagedMultisigWallets = (state: AllSlices) => {
+  const wallets = Array.isArray(state.wallets.zcashWallets) ? state.wallets.zcashWallets : [];
+  return wallets.filter(w => w.multisig && w.multisig.hidden);
+};
 export const selectPenumbraWallets = (state: AllSlices) =>
   Array.isArray(state.wallets.all) ? state.wallets.all : [];
 export const selectActivePenumbraIndex = (state: AllSlices) => state.wallets.activeIndex;

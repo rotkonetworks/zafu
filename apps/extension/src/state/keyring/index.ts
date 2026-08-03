@@ -90,7 +90,19 @@ export interface KeyRingSlice {
   newFrostMultisigKey: (params: FrostMultisigParams) => Promise<string>;
   selectKeyRing: (vaultId: string) => Promise<void>;
   renameKeyRing: (vaultId: string, newName: string) => Promise<void>;
-  deleteKeyRing: (vaultId: string) => Promise<void>;
+  deleteKeyRing: (vaultId: string, opts?: { allowAppManaged?: boolean }) => Promise<void>;
+  /** recover/take-control of (or re-hide) an app-managed multisig table by flipping `hidden` on
+   *  both the vault and its mirror wallet. Unhiding makes a stuck poker table a normal, selectable,
+   *  co-signable multisig. Non-destructive. */
+  setMultisigHidden: (vaultId: string, hidden: boolean) => Promise<void>;
+  /** Cheap READ-ONLY money view of a multisig table for the manager. `balanceZat` is the worker's
+   *  cached balance (a LOWER BOUND when unsynced). `synced` is TRUE only when the caller PROVES this
+   *  vault scanned to a freshly-fetched tip — never derived from stale IDB height. Hidden tables
+   *  can't pass that proof, so they return synced:false (fail-closed). Never triggers a sync. */
+  getMultisigStatus: (
+    vaultId: string,
+    opts?: { workerSyncHeight?: number; chainTip?: number },
+  ) => Promise<{ balanceZat: bigint; synced: boolean }>;
 
   getMnemonic: (vaultId: string) => Promise<string>;
   getMultisigSecrets: (
@@ -678,8 +690,25 @@ export const createKeyRingSlice =
         });
       },
 
-      deleteKeyRing: async (vaultId: string) => {
+      deleteKeyRing: async (vaultId: string, opts?: { allowAppManaged?: boolean }) => {
         const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+        // CRITICAL money-safety guard: app-managed (hidden) FROST multisig tables — e.g. poker
+        // tables — are NOT seed-recoverable, have no auto-backup, and their on-chain balance cannot
+        // be proven empty from the generic settings UI (only the ACTIVE wallet syncs, and getBalance
+        // has no mempool/confirmation-depth margin). So the generic delete surfaces MUST NOT destroy
+        // them: that could erase the only copy of a share while a deposit is in flight. Removal is
+        // permitted ONLY from the dedicated multisig manager, which passes { allowAppManaged: true }
+        // after its own backup + settled (synced && empty) checks. See retain-no-autodelete policy.
+        const target = vaults.find(v => v.id === vaultId);
+        if (
+          target?.type === 'frost-multisig' &&
+          target.insensitive?.['hidden'] === true &&
+          !opts?.allowAppManaged
+        ) {
+          throw new Error(
+            'app-managed table (e.g. a poker table): remove it from the multisig manager after backing it up — it is not seed-recoverable',
+          );
+        }
         const updatedVaults = vaults.filter(v => v.id !== vaultId);
         await local.set('vaults', updatedVaults);
 
@@ -721,6 +750,61 @@ export const createKeyRingSlice =
             state.wallets.activeIndex = Math.max(0, updatedWallets.length - 1);
           }
         });
+      },
+
+      setMultisigHidden: async (vaultId: string, hidden: boolean) => {
+        // flip `hidden` on BOTH records (vault.insensitive + wallet.multisig) so recover/re-hide is
+        // consistent everywhere. Non-destructive — no key material touched.
+        const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+        const updatedVaults = vaults.map(v =>
+          v.id === vaultId ? { ...v, insensitive: { ...v.insensitive, hidden } } : v,
+        );
+        await local.set('vaults', updatedVaults);
+
+        const zcashWallets = ((await local.get('zcashWallets')) ?? []) as ZcashWalletJson[];
+        const updatedWallets = zcashWallets.map(w =>
+          w.vaultId === vaultId && w.multisig ? { ...w, multisig: { ...w.multisig, hidden } } : w,
+        );
+        await local.set('zcashWallets', updatedWallets);
+
+        const selectedId = await local.get('selectedVaultId');
+        const keyInfos = vaultsToKeyInfos(updatedVaults, selectedId);
+        set(state => {
+          state.keyRing.keyInfos = keyInfos;
+          state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
+          state.wallets.zcashWallets = updatedWallets;
+        });
+      },
+
+      getMultisigStatus: async (
+        vaultId: string,
+        opts?: { workerSyncHeight?: number; chainTip?: number },
+      ) => {
+        // balance: cached IDB read via the worker — NO network sync triggered. For an unsynced vault
+        // this is a LOWER BOUND (may read 0 while a deposit is unscanned/mempool); the policy module
+        // (app-managed-tables.ts) treats !synced as possibly-funded, so a stale 0 is safe here.
+        const { getBalanceInWorker } = await import('./network-worker');
+        let balanceZat = 0n;
+        try {
+          balanceZat = BigInt(await getBalanceInWorker('zcash', vaultId));
+        } catch {
+          balanceZat = 0n;
+        }
+
+        // synced: PROVEN only. ⚠️ MONEY-SAFETY — do NOT "improve" this to derive `synced` from the
+        // worker's persisted IDB scan height: a hidden table is never actively synced, its
+        // syncHeight is stuck at ~tip (its birthday), and getBalance ignores mempool/0-conf — so a
+        // never-scanned FUNDED table would read synced && balance 0 and earn the low-friction delete
+        // (permanent loss). We only trust `synced` when the CALLER passes a scan height it knows is
+        // this vault's AND a freshly-fetched chain tip. Hidden tables never get those, so they
+        // resolve to synced:false — the fail-closed default the policy module relies on.
+        const synced =
+          typeof opts?.workerSyncHeight === 'number' &&
+          typeof opts?.chainTip === 'number' &&
+          opts.chainTip > 0 &&
+          opts.workerSyncHeight >= opts.chainTip;
+
+        return { balanceZat, synced };
       },
 
       // ── secrets ──

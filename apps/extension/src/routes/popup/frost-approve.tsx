@@ -70,7 +70,7 @@ export const FrostApprove = () => {
   const MAX_FROST_SIGNERS = 15;
   const threshold = Math.min(Number(params.get('threshold')) || 2, MAX_FROST_SIGNERS);
   const maxSigners = Math.min(Number(params.get('maxSigners')) || 3, MAX_FROST_SIGNERS);
-  const relayUrl = params.get('relayUrl') || 'wss://zrelay.rotko.net';
+  const relayUrl = params.get('relayUrl') || 'wss://zcash.rotko.net';
   const roomCode = params.get('roomCode') || '';
   const sighashHex = params.get('sighashHex') || '';
   const labelPrefix = params.get('labelPrefix') || 'multisig';

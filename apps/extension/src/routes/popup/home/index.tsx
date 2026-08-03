@@ -1157,6 +1157,21 @@ const ZcashContent = ({
               (watchOnly?.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined)
             }
             orchardZat={orchardZat}
+            isHotWallet={selectedKeyInfo.type === 'mnemonic'}
+            getMnemonic={
+              selectedKeyInfo.type === 'mnemonic'
+                ? async () => {
+                    // gate the seed behind the password prompt, exactly like
+                    // handleShield / zcash-send. Returns null on cancel so the
+                    // migrate flow returns to review instead of building.
+                    const authorized = await requestAuth();
+                    if (!authorized) {
+                      return null;
+                    }
+                    return keyRing.getMnemonic(selectedKeyInfo.id);
+                  }
+                : undefined
+            }
           />
         )}
 
