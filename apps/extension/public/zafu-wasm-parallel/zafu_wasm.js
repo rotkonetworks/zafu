@@ -413,6 +413,64 @@ export function address_from_ufvk(ufvk_str, diversifier_index) {
 }
 
 /**
+ * COLD (zigner / watch-only) sibling of `build_signed_ironwood_send`: build the
+ * general ironwood send PCZT - spend the wallet's REAL ironwood notes to an
+ * ARBITRARY `recipient` (plus change back to self) in a single V6 transaction -
+ * and return a redacted-for-signer PCZT (same redaction contract as
+ * `build_turnstile_migration_pczt`) as JSON `{ pczt_hex, summary, action_count }`
+ * where `summary` is a `PcztSummary`.
+ *
+ * The wallet-owned ironwood spends are left UNSIGNED for the external cold
+ * signer (zigner), which already knows how to sign redacted ironwood spends
+ * (`pczt_signing::sign_redacted_pczt` signs the orchard AND ironwood spends).
+ * Mirrors `build_turnstile_migration_pczt`'s param shape exactly, except:
+ *  - `recipient` (unified address; its orchard-format receiver is the ironwood
+ *    recipient) and `amount` are added, and
+ *  - the anchor/notes/paths are the IRONWOOD tree's (real anchor + real
+ *    ironwood spends), not the orchard tree's.
+ *
+ * `account_index` is accepted for API parity with the worker call shape but is
+ * not used for derivation - the UFVK is already account-scoped.
+ *
+ * FAIL-CLOSED: inherits the hardened NU6.3 branch-id guard from
+ * `build_ironwood_send_pczt_proven` - the tx binds branch id 0x37a5165b, the
+ * caller MUST pass that real id as `expected_branch_id`, and the 0xffff_ffff
+ * placeholder is refused. No value or recipient appears in any error.
+ * @param {string} ufvk_str
+ * @param {string} ironwood_notes_json
+ * @param {string} recipient
+ * @param {bigint} amount
+ * @param {bigint} fee
+ * @param {string} ironwood_anchor_hex
+ * @param {string} ironwood_merkle_paths_json
+ * @param {number} account_index
+ * @param {number} target_height
+ * @param {number} expected_branch_id
+ * @param {boolean} mainnet
+ * @param {string | null} [memo_hex]
+ * @returns {any}
+ */
+export function build_ironwood_send_pczt(ufvk_str, ironwood_notes_json, recipient, amount, fee, ironwood_anchor_hex, ironwood_merkle_paths_json, account_index, target_height, expected_branch_id, mainnet, memo_hex) {
+    const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(ironwood_notes_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ptr3 = passStringToWasm0(ironwood_anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len3 = WASM_VECTOR_LEN;
+    const ptr4 = passStringToWasm0(ironwood_merkle_paths_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len4 = WASM_VECTOR_LEN;
+    var ptr5 = isLikeNone(memo_hex) ? 0 : passStringToWasm0(memo_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len5 = WASM_VECTOR_LEN;
+    const ret = wasm.build_ironwood_send_pczt(ptr0, len0, ptr1, len1, ptr2, len2, amount, fee, ptr3, len3, ptr4, len4, account_index, target_height, expected_branch_id, mainnet, ptr5, len5);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
  * Build merkle paths for note positions by replaying compact blocks from a checkpoint.
  *
  * # Arguments

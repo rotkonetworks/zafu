@@ -15,7 +15,11 @@ import {
   walletsSelector,
   type ZcashWalletJson,
 } from '../../../state/wallets';
-import { selectActiveNetwork, selectEffectiveKeyInfo, keyRingSelector } from '../../../state/keyring';
+import {
+  selectActiveNetwork,
+  selectEffectiveKeyInfo,
+  keyRingSelector,
+} from '../../../state/keyring';
 import { frostDkgSelector, frostSigningSelector } from '../../../state/frost-session';
 import { getBalanceInWorker } from '../../../state/keyring/network-worker';
 import { useZcashSyncStatus } from '../../../hooks/zcash-sync';
@@ -25,7 +29,11 @@ import { cn } from '@repo/ui/lib/utils';
 import { PopupPath } from '../paths';
 import { BackupModal } from './backup/backup-modal';
 import { exportSingleBackup } from './backup/export-helpers';
-import { applyTableFilter, type TableView, type TableFilter } from '../../../state/app-managed-tables';
+import {
+  applyTableFilter,
+  type TableView,
+  type TableFilter,
+} from '../../../state/app-managed-tables';
 import { useAppManagedTables } from '../../../hooks/app-managed-tables';
 
 /** format zatoshi to ZEC display string */
@@ -131,8 +139,12 @@ const WalletRow = ({
 // can't be made sound — we don't offer one. Recover first (which syncs it) if you want to verify.
 
 const tableStatusLine = (t: TableView): { text: string; tone: string } => {
-  if (t.balanceZat > 0n) {return { text: `holds ${formatZec(t.balanceZat)} ZEC`, tone: 'text-zigner-gold' };}
-  if (!t.synced) {return { text: 'not synced', tone: 'text-yellow-400/80' };}
+  if (t.balanceZat > 0n) {
+    return { text: `holds ${formatZec(t.balanceZat)} ZEC`, tone: 'text-zigner-gold' };
+  }
+  if (!t.synced) {
+    return { text: 'not synced', tone: 'text-yellow-400/80' };
+  }
   return { text: 'settled — empty', tone: 'text-fg-muted' };
 };
 
@@ -149,7 +161,9 @@ const GuardedDeleteModal = (props: {
   const matches = typed === label || typed.trim().toUpperCase() === 'DELETE';
 
   const confirm = async () => {
-    if (!matches || working) {return;}
+    if (!matches || working) {
+      return;
+    }
     setWorking(true);
     setError(null);
     try {
@@ -277,10 +291,14 @@ const AppManagedTablesSection = () => {
 
   const visible = useMemo(() => applyTableFilter(tables, filter, Date.now()), [tables, filter]);
 
-  if (tables.length === 0) {return null;}
+  if (tables.length === 0) {
+    return null;
+  }
 
   const openBackup = async (row: TableView) => {
-    if (await requestAuth()) {setBackupTarget(row);}
+    if (await requestAuth()) {
+      setBackupTarget(row);
+    }
   };
 
   return (
@@ -291,7 +309,9 @@ const AppManagedTablesSection = () => {
         title={backupTarget ? `export "${backupTarget.wallet.label}"` : ''}
         walletLabel={backupTarget?.wallet.label ?? ''}
         onConfirm={async passphrase => {
-          if (backupTarget) {await exportSingleBackup(backupTarget.wallet, passphrase);}
+          if (backupTarget) {
+            await exportSingleBackup(backupTarget.wallet, passphrase);
+          }
         }}
         onClose={() => setBackupTarget(null)}
       />

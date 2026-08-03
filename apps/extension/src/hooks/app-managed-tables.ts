@@ -23,9 +23,9 @@ export function useAppManagedTables(): TableView[] {
   // re-run on each scan tick, same trigger sessions.tsx uses to keep balances fresh
   const { workerSyncHeight } = useZcashSyncStatus();
 
-  const [statuses, setStatuses] = useState<
-    Record<string, { balanceZat: bigint; synced: boolean }>
-  >({});
+  const [statuses, setStatuses] = useState<Record<string, { balanceZat: bigint; synced: boolean }>>(
+    {},
+  );
 
   useEffect(() => {
     let cancelled = false;

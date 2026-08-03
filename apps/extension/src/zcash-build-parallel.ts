@@ -86,6 +86,7 @@ interface ZcashBuildRequest {
     | 'build_turnstile_migration_pczt'
     | 'build_signed_turnstile_migration'
     | 'build_signed_ironwood_send'
+    | 'build_ironwood_send_pczt'
     | 'build_shielding'
     | 'build_unsigned_shielding';
   args: unknown[];
@@ -214,6 +215,36 @@ async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
         throw new Error('ironwood send not supported by this wasm build');
       }
       result = wasm['build_signed_ironwood_send'](
+        a[0],
+        a[1],
+        a[2],
+        BigInt(a[3] as string),
+        BigInt(a[4] as string),
+        a[5],
+        a[6],
+        a[7],
+        a[8],
+        a[9],
+        a[10],
+        a[11] ?? null,
+      );
+      break;
+
+    case 'build_ironwood_send_pczt':
+      // NU6.3 general IRONWOOD COLD send (zigner / watch-only). Same param
+      // layout as build_signed_ironwood_send above, but a[0] is the UFVK (not
+      // the seed) and the wasm returns a redacted-for-signer PCZT
+      // { pczt_hex, summary, action_count } rather than a signed tx. Signature:
+      // (ufvk_str, ironwood_notes_json, recipient, amount, fee,
+      //  ironwood_anchor_hex, ironwood_merkle_paths_json, account_index,
+      //  target_height, expected_branch_id, mainnet, memo_hex?). a[3]/a[4] are
+      // the amount/fee (stringified bigint over postMessage); a[9] is the
+      // fail-closed expected branch id (number). Feature-detected: the export
+      // lands with the NU6.3 blob.
+      if (typeof wasm['build_ironwood_send_pczt'] !== 'function') {
+        throw new Error('ironwood cold send not supported by this wasm build');
+      }
+      result = wasm['build_ironwood_send_pczt'](
         a[0],
         a[1],
         a[2],

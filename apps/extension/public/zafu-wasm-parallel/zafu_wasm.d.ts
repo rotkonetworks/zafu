@@ -132,6 +132,33 @@ export class WatchOnlyWallet {
 export function address_from_ufvk(ufvk_str: string, diversifier_index: number): string;
 
 /**
+ * COLD (zigner / watch-only) sibling of `build_signed_ironwood_send`: build the
+ * general ironwood send PCZT - spend the wallet's REAL ironwood notes to an
+ * ARBITRARY `recipient` (plus change back to self) in a single V6 transaction -
+ * and return a redacted-for-signer PCZT (same redaction contract as
+ * `build_turnstile_migration_pczt`) as JSON `{ pczt_hex, summary, action_count }`
+ * where `summary` is a `PcztSummary`.
+ *
+ * The wallet-owned ironwood spends are left UNSIGNED for the external cold
+ * signer (zigner), which already knows how to sign redacted ironwood spends
+ * (`pczt_signing::sign_redacted_pczt` signs the orchard AND ironwood spends).
+ * Mirrors `build_turnstile_migration_pczt`'s param shape exactly, except:
+ *  - `recipient` (unified address; its orchard-format receiver is the ironwood
+ *    recipient) and `amount` are added, and
+ *  - the anchor/notes/paths are the IRONWOOD tree's (real anchor + real
+ *    ironwood spends), not the orchard tree's.
+ *
+ * `account_index` is accepted for API parity with the worker call shape but is
+ * not used for derivation - the UFVK is already account-scoped.
+ *
+ * FAIL-CLOSED: inherits the hardened NU6.3 branch-id guard from
+ * `build_ironwood_send_pczt_proven` - the tx binds branch id 0x37a5165b, the
+ * caller MUST pass that real id as `expected_branch_id`, and the 0xffff_ffff
+ * placeholder is refused. No value or recipient appears in any error.
+ */
+export function build_ironwood_send_pczt(ufvk_str: string, ironwood_notes_json: string, recipient: string, amount: bigint, fee: bigint, ironwood_anchor_hex: string, ironwood_merkle_paths_json: string, account_index: number, target_height: number, expected_branch_id: number, mainnet: boolean, memo_hex?: string | null): any;
+
+/**
  * Build merkle paths for note positions by replaying compact blocks from a checkpoint.
  *
  * # Arguments
@@ -684,6 +711,7 @@ export interface InitOutput {
     readonly __wbg_walletkeys_free: (a: number, b: number) => void;
     readonly __wbg_watchonlywallet_free: (a: number, b: number) => void;
     readonly address_from_ufvk: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly build_ironwood_send_pczt: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number) => [number, number, number];
     readonly build_merkle_paths: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
     readonly build_shielding_transaction: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number) => [number, number, number, number];
     readonly build_signed_ironwood_send: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number) => [number, number, number, number];
