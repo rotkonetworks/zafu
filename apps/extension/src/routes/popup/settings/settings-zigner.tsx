@@ -6,7 +6,7 @@ import { isPro } from '../../../state/license';
 import { SettingsScreen } from './settings-screen';
 import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
-import { Switch } from '@repo/ui/components/ui/switch';
+import { ToggleSwitch } from '../../../components/toggle-switch';
 import { useState, useRef, useEffect } from 'react';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { PagePath } from '../../page/paths';
@@ -305,9 +305,10 @@ export const SettingsZigner = () => {
                     for older parity signer / polkadot vault devices
                   </span>
                 </div>
-                <Switch
+                <ToggleSwitch
                   checked={vaultLegacyMode}
-                  onCheckedChange={v => void handleVaultLegacyModeChange(v)}
+                  onChange={v => void handleVaultLegacyModeChange(v)}
+                  label='legacy mode'
                 />
               </div>
 

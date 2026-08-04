@@ -1,7 +1,7 @@
 import { useStore } from '../../../state';
 import { tradingModeSelector } from '../../../state/trading-mode';
 import { SettingsScreen } from './settings-screen';
-import { Switch } from '@repo/ui/components/ui/switch';
+import { ToggleSwitch } from '../../../components/toggle-switch';
 import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
 import { useState, useEffect } from 'react';
@@ -100,7 +100,11 @@ export const SettingsTradingMode = () => {
               <span className='text-sm font-medium'>auto-sign swaps</span>
               <span className='text-xs text-fg-muted'>only swap transactions are auto-signed</span>
             </div>
-            <Switch checked={settings.autoSign} onCheckedChange={setAutoSign} />
+            <ToggleSwitch
+              checked={settings.autoSign}
+              onChange={setAutoSign}
+              label='auto-sign swaps'
+            />
           </div>
         </div>
 
