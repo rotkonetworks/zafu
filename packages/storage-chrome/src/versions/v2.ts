@@ -288,6 +288,9 @@ type LOCAL = {
   /** appearance theme: 'sumi' (warm ink, default) | 'washi' (light paper) | 'terminal' (cold black) */
   zafuTheme?: 'sumi' | 'washi' | 'terminal';
 
+  /** appearance font: 'iosevka' (default) | 'system' (OS monospace) */
+  zafuFont?: 'iosevka' | 'system';
+
   /** serialized pro license JSON */
   proLicense?: string;
 

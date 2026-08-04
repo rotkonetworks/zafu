@@ -1,0 +1,294 @@
+import { useEffect, useRef, useState } from 'react';
+import { cn } from '@repo/ui/lib/utils';
+import { ZCASH_ORCHARD_ACTIVATION } from '../../config/networks';
+
+/**
+ * SyncStatus — the one sync surface for the zcash home screen.
+ *
+ * Design intent: sync state is a *property of the balance*, not a sibling
+ * feature. So it renders as a single quiet line attached to the balance —
+ * an ensō that draws itself closed as the wallet becomes whole, one
+ * humanized figure, and everything else (bar, stages, heights, rescan,
+ * reassurance) behind one tap. Replaces the old trio of status line +
+ * info card + progress card that repeated the same percent twice.
+ */
+
+export interface SyncStage {
+  key: string;
+  label: string;
+  state: 'done' | 'active' | 'pending';
+  /** short suffix shown on the active stage, e.g. "33%" or "12 blocks" */
+  detail?: string;
+}
+
+export interface SyncStatusProps {
+  /** 0..100 overall progress */
+  percent: number;
+  synced: boolean;
+  /** chain tip unknown yet (connecting) */
+  connecting: boolean;
+  currentHeight: number;
+  targetHeight: number;
+  startBlock: number;
+  stages: SyncStage[];
+  /** true during a wallet's first scan — adds the leave-it-running line */
+  firstSync: boolean;
+  error?: string;
+  errorAction?: { label: string; onClick: () => void };
+  onRescan?: (height: number) => void;
+}
+
+/**
+ * The ensō arc. While syncing the circle stays open like a brush stroke
+ * (caps at 92/100) — it only closes completely when the wallet is synced.
+ */
+const EnsoArc = ({ percent, synced, dim }: { percent: number; synced: boolean; dim?: boolean }) => {
+  const fill = synced ? 100 : Math.min(Math.max(percent, 4) * 0.92, 92);
+  return (
+    <svg width='16' height='16' viewBox='0 0 16 16' className='-rotate-90 shrink-0'>
+      <circle
+        cx='8'
+        cy='8'
+        r='6.4'
+        pathLength='100'
+        fill='none'
+        strokeWidth='1.8'
+        strokeLinecap='round'
+        strokeDasharray='100'
+        strokeDashoffset={100 - fill}
+        className={cn(
+          'transition-[stroke-dashoffset] duration-700 ease-out',
+          dim ? 'stroke-fg-dim' : 'stroke-zigner-gold',
+        )}
+      />
+    </svg>
+  );
+};
+
+/** humanize a remaining-time estimate; empty string when not worth showing */
+const fmtEta = (seconds: number): string => {
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return '';
+  }
+  if (seconds < 90) {
+    return '~1 min';
+  }
+  if (seconds < 3600) {
+    return `~${Math.round(seconds / 60)} min`;
+  }
+  return `~${Math.round(seconds / 3600)} h`;
+};
+
+export const SyncStatus = ({
+  percent,
+  synced,
+  connecting,
+  currentHeight,
+  targetHeight,
+  startBlock,
+  stages,
+  firstSync,
+  error,
+  errorAction,
+  onRescan,
+}: SyncStatusProps) => {
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [input, setInput] = useState('');
+
+  // scan-rate window for the ETA: ring of (height, t) samples over ~45s.
+  // Shown only once the rate is stable — a wrong ETA is worse than none.
+  const samples = useRef<{ h: number; t: number }[]>([]);
+  const [eta, setEta] = useState('');
+  useEffect(() => {
+    if (synced || connecting || currentHeight <= 0) {
+      samples.current = [];
+      setEta('');
+      return;
+    }
+    const now = Date.now();
+    const s = samples.current;
+    if (s.length === 0 || currentHeight > s[s.length - 1]!.h) {
+      s.push({ h: currentHeight, t: now });
+    }
+    while (s.length > 0 && now - s[0]!.t > 45_000) {
+      s.shift();
+    }
+    const first = s[0];
+    const last = s[s.length - 1];
+    if (first && last && last.t - first.t > 8_000 && last.h > first.h) {
+      const rate = ((last.h - first.h) / (last.t - first.t)) * 1000; // blocks/s
+      setEta(fmtEta((targetHeight - currentHeight) / rate));
+    }
+  }, [currentHeight, targetHeight, synced, connecting]);
+
+  const submitRescan = () => {
+    const h = parseInt(input, 10);
+    if (!isNaN(h) && h >= ZCASH_ORCHARD_ACTIVATION && onRescan) {
+      onRescan(h);
+    }
+    setEditing(false);
+    setInput('');
+  };
+
+  const line = error
+    ? 'sync error'
+    : connecting
+      ? 'connecting…'
+      : synced
+        ? `synced · block ${currentHeight.toLocaleString()}`
+        : `syncing ${Math.floor(percent)}%${eta ? ` · ${eta}` : ''}`;
+
+  return (
+    <div>
+      {/* the one line — everything else is behind this tap */}
+      <button
+        type='button'
+        onClick={() => setOpen(v => !v)}
+        className='group/sync mt-1.5 flex items-center gap-2 text-label tabular transition-colors'
+        title={open ? 'hide sync detail' : 'sync detail'}
+      >
+        <EnsoArc percent={percent} synced={synced} dim={connecting || !!error} />
+        <span
+          className={cn(
+            error ? 'text-red-400' : 'text-fg-dim group-hover/sync:text-fg-muted',
+            'lowercase',
+          )}
+        >
+          {line}
+        </span>
+        {error && errorAction && (
+          <span
+            role='button'
+            tabIndex={0}
+            onClick={e => {
+              e.stopPropagation();
+              errorAction.onClick();
+            }}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                e.stopPropagation();
+                errorAction.onClick();
+              }
+            }}
+            className='text-zigner-gold underline-offset-2 hover:underline lowercase'
+          >
+            {errorAction.label}
+          </span>
+        )}
+        <span
+          className={cn(
+            'i-lucide-chevron-down h-3 w-3 text-fg-dim transition-transform duration-200',
+            open && 'rotate-180',
+          )}
+        />
+      </button>
+
+      {/* the panel — grid-rows trick for a measured slide */}
+      <div
+        className={cn(
+          'grid transition-[grid-template-rows] duration-200',
+          open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
+        )}
+      >
+        <div className='overflow-hidden'>
+          <div className='mt-2 flex flex-col gap-2 rounded-md border border-border-soft bg-elev-1 p-3'>
+            {error && <div className='text-xs text-red-400 break-words'>{error}</div>}
+
+            {!synced && (
+              <div className='h-1.5 w-full overflow-hidden rounded-full bg-elev-2'>
+                <div
+                  className='h-full rounded-full bg-zigner-gold transition-all duration-500 ease-out'
+                  style={{ width: `${Math.max(percent, 2)}%` }}
+                />
+              </div>
+            )}
+
+            {/* pipeline stages — steady row instead of a flickering label */}
+            <div className='flex flex-wrap items-center gap-x-2 gap-y-0.5 text-label lowercase'>
+              {stages.map((st, i) => (
+                <span key={st.key} className='flex items-center gap-2'>
+                  {i > 0 && <span className='text-fg-dim'>·</span>}
+                  <span
+                    className={cn(
+                      st.state === 'done' && 'text-fg-muted',
+                      st.state === 'active' && 'text-zigner-gold',
+                      st.state === 'pending' && 'text-fg-dim',
+                    )}
+                  >
+                    {st.label}
+                    {st.state === 'done' && ' ✓'}
+                    {st.state === 'active' && st.detail ? ` ${st.detail}` : ''}
+                  </span>
+                </span>
+              ))}
+            </div>
+
+            {/* heights + rescan */}
+            <div className='flex items-center justify-between text-label text-fg-muted font-mono tabular-nums'>
+              <span>
+                {currentHeight > 0 && targetHeight > 0
+                  ? `${currentHeight.toLocaleString()} / ${targetHeight.toLocaleString()}`
+                  : '—'}
+              </span>
+              {onRescan &&
+                (editing ? (
+                  <span className='flex items-center gap-1'>
+                    <input
+                      type='number'
+                      min={ZCASH_ORCHARD_ACTIVATION}
+                      value={input}
+                      onChange={e => setInput(e.target.value)}
+                      placeholder={String(startBlock)}
+                      className='w-20 bg-elev-2 px-1.5 py-0.5 text-label font-mono text-fg placeholder:text-fg-muted outline-none'
+                      autoFocus
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          submitRescan();
+                        } else if (e.key === 'Escape') {
+                          setEditing(false);
+                          setInput('');
+                        }
+                      }}
+                    />
+                    <button
+                      onClick={submitRescan}
+                      className='text-label text-zigner-gold hover:underline'
+                    >
+                      rescan
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditing(false);
+                        setInput('');
+                      }}
+                      className='text-label text-fg-muted hover:text-fg-high'
+                    >
+                      &times;
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setEditing(true);
+                      setInput(String(startBlock));
+                    }}
+                    className='hover:text-fg-high transition-colors'
+                    title='rescan from a different block height'
+                  >
+                    from {startBlock > 0 ? startBlock.toLocaleString() : '0'}
+                  </button>
+                ))}
+            </div>
+
+            {firstSync && !synced && !error && (
+              <div className='text-label text-fg-dim leading-snug'>
+                you can close this — the worker keeps scanning in the background.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};

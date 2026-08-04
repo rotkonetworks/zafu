@@ -227,6 +227,11 @@
     --light-grey: #4a4437;
   }
 
+  /* type: 'system' swaps Iosevka for the OS monospace (settings → appearance) */
+  :root[data-font='system'] {
+    --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  }
+
   :root[data-theme='washi'] body {
     /* ink-dark threads on paper */
     background-image:
@@ -332,7 +337,7 @@
       repeating-linear-gradient(0deg, rgb(226 209 182 / 0.023) 0 1px, transparent 1px 3px),
       repeating-linear-gradient(90deg, rgb(226 209 182 / 0.016) 0 1px, transparent 1px 3px);
     color: hsl(var(--foreground));
-    font-family: 'Iosevka Term', 'Courier New', Courier, monospace;
+    font-family: var(--font-mono);
     font-size: 13px;
     line-height: 1.5;
   }
@@ -374,7 +379,7 @@
 
   code,
   pre {
-    font-family: 'Iosevka Term', 'Courier New', Courier, monospace;
+    font-family: var(--font-mono);
     color: var(--zigner-gold);
   }
   pre {

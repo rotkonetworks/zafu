@@ -9,9 +9,11 @@
 
 /* Zafu terminal theme - CSS-first config (Tailwind v4) */
 @theme {
-  --font-body: 'Iosevka Term', 'Courier New', Courier, monospace;
-  --font-headline: 'Iosevka Term', 'Courier New', Courier, monospace;
-  --font-mono: 'Iosevka Term', 'Courier New', Courier, monospace;
+  /* resolve through the runtime var so settings→appearance font choice
+     applies to font-* utilities too (globals.css owns the default) */
+  --font-body: var(--font-mono);
+  --font-headline: var(--font-mono);
+  --font-mono: var(--font-mono);
 
   --radius-sm: 0;
   --radius-md: 0;

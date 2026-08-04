@@ -78,6 +78,11 @@ const groups: SettingsGroup[] = [
         href: PopupPath.SETTINGS_NETWORKS,
       },
       {
+        title: 'appearance',
+        icon: 'i-zafu-enso',
+        href: PopupPath.SETTINGS_APPEARANCE,
+      },
+      {
         title: 'zigner',
         icon: 'i-lucide-qr-code',
         href: PopupPath.SETTINGS_ZIGNER,
@@ -139,20 +144,10 @@ export const Settings = () => {
   const { clearSessionPassword } = useStore(passwordSelector);
   const activeNetwork = useStore(selectActiveNetwork);
   const [autoLock, setAutoLock] = useState(15);
-  const [theme, setTheme] = useState<'sumi' | 'washi' | 'terminal'>('sumi');
 
   useEffect(() => {
     void localExtStorage.get('autoLockMinutes').then(v => setAutoLock(v ?? 15));
-    void localExtStorage.get('zafuTheme').then(v => setTheme(v ?? 'sumi'));
   }, []);
-
-  const cycleTheme = () => {
-    const order = ['sumi', 'washi', 'terminal'] as const;
-    const next = order[(order.indexOf(theme) + 1) % order.length]!;
-    setTheme(next);
-    document.documentElement.dataset['theme'] = next;
-    void localExtStorage.set('zafuTheme', next);
-  };
 
   const cycleAutoLock = () => {
     const idx = AUTO_LOCK_OPTIONS.findIndex(o => o.value === autoLock);
@@ -180,26 +175,6 @@ export const Settings = () => {
               <div className='flex flex-col divide-y divide-border-soft/40'>
                 {group.links.map(l => (
                   <Fragment key={l.href}>
-                    {/* appearance lives with wallet plumbing, before zigner */}
-                    {group.label === 'wallet' && l.title === 'zigner' && (
-                      <button
-                        onClick={cycleTheme}
-                        className='flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-elev-1 hover:text-fg-high group'
-                      >
-                        <span
-                          className={cn(
-                            'i-zafu-enso',
-                            'size-5 text-fg-muted group-hover:text-fg-high',
-                          )}
-                        />
-                        <span className='flex-1 text-data text-fg group-hover:text-fg-high lowercase'>
-                          appearance
-                        </span>
-                        <span className='text-label tabular text-fg-dim group-hover:text-fg-muted'>
-                          {theme === 'sumi' ? 'sumi ink' : theme === 'washi' ? 'washi' : 'terminal'}
-                        </span>
-                      </button>
-                    )}
                     {/* auto-lock lives with the security controls, before clear cache */}
                     {group.label === 'security & backup' && l.title === 'clear cache' && (
                       <button

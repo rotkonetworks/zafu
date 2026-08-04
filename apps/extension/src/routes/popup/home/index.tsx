@@ -51,6 +51,7 @@ import { getHistoryInWorker } from '../../../state/keyring/network-worker';
 import { cn } from '@repo/ui/lib/utils';
 import { messagesSelector } from '../../../state/messages';
 import { SyncProgressBar } from '../../../components/sync-progress-bar';
+import { SyncStatus, type SyncStage } from '../../../components/zcash/sync-status';
 import { useSyncProgress } from '../../../hooks/full-sync-height';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import type { TransactionInfo } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
@@ -711,7 +712,6 @@ const ZcashContent = ({
   // NU6.3 turnstile migration flow (feature-flagged; see feature-flags.ts)
   const [showIronwoodMigrate, setShowIronwoodMigrate] = useState(false);
   // toggle to show sync detail panel when wallet is fully synced
-  const [showSyncDetail, setShowSyncDetail] = useState(false);
 
   // rescan via custom event — terminate worker, clear IDB, let auto-sync restart
   useEffect(() => {
@@ -833,6 +833,42 @@ const ZcashContent = ({
   // scanned yet).
   const scanNotStarted = workerSyncHeight > 0 && workerSyncHeight <= walletBirthday;
 
+  // pipeline stages for the sync detail panel — a steady row instead of
+  // the old flickering label rotation. lightwalletd skips verification.
+  const syncStages: SyncStage[] =
+    zcashBackend === 'lightwalletd'
+      ? [
+          {
+            key: 'scan',
+            label: 'scanning notes',
+            state: scanPct >= 100 ? 'done' : scanPct > 0 ? 'active' : 'pending',
+            detail: `${Math.floor(scanPct)}%`,
+          },
+        ]
+      : [
+          {
+            key: 'nomt',
+            label: 'nomt',
+            state: nomtPct >= 100 ? 'done' : 'active',
+          },
+          {
+            key: 'ligerito',
+            label: 'ligerito',
+            state:
+              ligeritoPct >= 100 ? 'done' : gigaproofStatus >= 1 ? 'active' : 'pending',
+            detail:
+              gigaproofStatus >= 2 && blocksUntilReady > 0
+                ? `${blocksUntilReady} blocks`
+                : 'proving',
+          },
+          {
+            key: 'scan',
+            label: 'scanning notes',
+            state: scanPct >= 100 ? 'done' : scanPct > 0 ? 'active' : 'pending',
+            detail: `${Math.floor(scanPct)}%`,
+          },
+        ];
+
   // overall sync percentage (0-100) with 1 decimal — zashi style
   const overallPct =
     scanPct > 0
@@ -865,8 +901,6 @@ const ZcashContent = ({
     nudge
   ) : allSynced && totalZat === 0n ? (
     <GetZecHint onReceive={() => navigate(PopupPath.RECEIVE)} />
-  ) : !allSynced && totalZat === 0n && chainHeight > 0 ? (
-    <FirstSyncNote />
   ) : null;
 
   // Pool rows for the hero-card reveal. All three pools stay visible
@@ -952,24 +986,31 @@ const ZcashContent = ({
             </Sensitive>
           </div>
         )}
-        <div className='mt-1 text-label text-fg-dim tabular'>
-          {chainHeight <= 0 ? (
-            '\u00a0' /* hold the line height; sync bar below owns status */
-          ) : allSynced ? (
-            // 'synced' is what the user actually cares about — the block
-            // number is meaningful only to power users. Tapping it reveals
-            // the sync-detail panel (rescan options) below.
-            <button
-              onClick={() => setShowSyncDetail(v => !v)}
-              className='hover:text-fg-muted transition-colors'
-              title='rescan options'
-            >
-              {`synced · zcash block ${workerSyncHeight.toLocaleString()}`}
-            </button>
-          ) : (
-            `syncing · ${overallPct.toFixed(1)}%`
-          )}
-        </div>
+        {/* the one sync surface: enso line + expandable detail (bar, stages,
+            heights, rescan). Replaces the old status line + info card +
+            progress card trio that repeated the same percent twice. */}
+        <SyncStatus
+          percent={overallPct}
+          synced={allSynced}
+          connecting={chainHeight <= 0}
+          currentHeight={workerSyncHeight}
+          targetHeight={chainHeight}
+          startBlock={walletBirthday}
+          stages={syncStages}
+          firstSync={totalZat === 0n}
+          error={syncError?.message}
+          errorAction={
+            syncError
+              ? {
+                  label: 'switch node',
+                  onClick: () => navigate(`${PopupPath.SETTINGS_NETWORKS}?network=zcash`),
+                }
+              : undefined
+          }
+          onRescan={h => {
+            window.dispatchEvent(new CustomEvent('zcash-rescan', { detail: h }));
+          }}
+        />
 
         {/* per-pool reveal: hover-expand, chevron pins it open for touch.
             Three rows - ironwood (active), orchard (legacy), transparent
@@ -1091,61 +1132,7 @@ const ZcashContent = ({
           />
         )}
 
-      {/* sync pipeline — hidden when fully synced, unless user taps the synced label */}
-      {(!allSynced || showSyncDetail) && (
-        <SyncProgressBar
-          percent={allSynced ? 100 : Math.max(overallPct, 2)}
-          label={
-            allSynced
-              ? `synced · zcash block ${workerSyncHeight.toLocaleString()}`
-              : chainHeight <= 0
-                ? 'connecting...'
-                : scanPct > 0
-                  ? `scanning · ${overallPct.toFixed(1)}%`
-                  : zcashBackend === 'lightwalletd' || scanNotStarted
-                    ? 'starting scan...'
-                    : gigaproofStatus >= 2
-                      ? `ligerito · ${blocksUntilReady <= 0 ? 'verified' : `${blocksUntilReady} blocks`}`
-                      : gigaproofStatus === 1
-                        ? 'ligerito proving...'
-                        : nomtPct >= 100
-                          ? 'nomt verified'
-                          : 'verifying nomt...'
-          }
-          error={syncError?.message}
-          // When the default node is unreachable, a new user sees only a
-          // red 'Failed to fetch' with no path forward. Giving them a
-          // one-tap link to the network picker (where the preset list of
-          // alternative LWDs lives) turns a dead-end into a recovery.
-          errorAction={
-            syncError
-              ? {
-                  label: 'switch node',
-                  onClick: () => navigate(`${PopupPath.SETTINGS_NETWORKS}?network=zcash`),
-                }
-              : undefined
-          }
-          barColor={
-            allSynced
-              ? 'bg-zigner-gold'
-              : scanPct > 0
-                ? 'bg-zigner-gold'
-                : ligeritoPct > 0
-                  ? 'bg-zigner-gold'
-                  : 'bg-fg-muted/30'
-          }
-          barDoneColor='bg-zigner-gold'
-          currentHeight={workerSyncHeight}
-          targetHeight={chainHeight}
-          startBlock={walletBirthday}
-          onRescan={h => {
-            setShowSyncDetail(false);
-            window.dispatchEvent(new CustomEvent('zcash-rescan', { detail: h }));
-          }}
-        />
-      )}
-
-      {/* rescan is now in the recent activity header */}
+      {/* rescan lives in the sync detail panel attached to the balance */}
     </div>
   );
 };
@@ -1317,20 +1304,6 @@ const ActionButton = ({
  * while actively syncing with no balance yet (the canonical new-user
  * state) so the user doesn't think the wallet is broken.
  */
-const FirstSyncNote = () => (
-  <div className='rounded-md border border-border-soft bg-elev-1 p-4'>
-    <div className='flex items-start gap-2'>
-      <span className='i-lucide-info mt-0.5 h-3.5 w-3.5 shrink-0 text-fg-muted' />
-      <div className='flex-1'>
-        <div className='text-xs text-fg-high lowercase'>scanning for your notes</div>
-        <p className='mt-0.5 text-label text-fg-muted leading-snug'>
-          first sync can take a few minutes. you can leave this open or come back later - the worker
-          keeps running in the background.
-        </p>
-      </div>
-    </div>
-  </div>
-);
 
 /**
  * Empty-balance hint shown to a new user whose wallet is synced but

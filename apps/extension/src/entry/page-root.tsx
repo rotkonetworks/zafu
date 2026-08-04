@@ -49,5 +49,10 @@ void localExtStorage.get('zafuTheme').then(v => {
     document.documentElement.dataset['theme'] = v;
   }
 });
+void localExtStorage.get('zafuFont').then(v => {
+  if (v === 'system') {
+    document.documentElement.dataset['font'] = v;
+  }
+});
 
 createRoot(rootElement).render(<MainPage />);

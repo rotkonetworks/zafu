@@ -196,21 +196,41 @@ export const SettingsZigner = () => {
                 </p>
               </div>
             </div>
-            <Button
-              variant='secondary'
-              size='sm'
-              onClick={() => window.open('https://zigner.zafu.pro', '_blank', 'noopener,noreferrer')}
-              className='self-start'
-            >
-              get zigner
-            </Button>
+            <div className='flex gap-2'>
+              <Button
+                size='sm'
+                onClick={() => openPageInTab(PagePath.IMPORT_ZIGNER)}
+                title='scan the pairing QR from your zigner'
+              >
+                pair zigner
+              </Button>
+              <Button
+                variant='secondary'
+                size='sm'
+                onClick={() =>
+                  window.open('https://zigner.zafu.pro', '_blank', 'noopener,noreferrer')
+                }
+              >
+                get zigner
+              </Button>
+            </div>
           </div>
         )}
 
         {/* Zigner Wallets — unified list from keyring (visible to all users) */}
         {zignerVaults.length > 0 && (
           <div className='border-t border-border-soft pt-4'>
-            <p className='kicker mb-3'>wallets</p>
+            <div className='mb-3 flex items-center justify-between'>
+              <p className='kicker'>wallets</p>
+              <button
+                type='button'
+                onClick={() => openPageInTab(PagePath.IMPORT_ZIGNER)}
+                className='text-label text-zigner-gold hover:underline underline-offset-2 lowercase'
+                title='scan the pairing QR from another zigner'
+              >
+                + pair another
+              </button>
+            </div>
             <div className='flex flex-col gap-2'>
               {zignerVaults.map(vault => {
                 const networks =

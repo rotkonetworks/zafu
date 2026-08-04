@@ -10,26 +10,26 @@ interface SensitiveProps {
 
 /**
  * Wraps a sensitive on-screen value (typically a balance amount). When the
- * user has "hide balances" enabled, the content is blurred and made
- * non-selectable - a display-only privacy control for shoulder-surfing and
- * screen sharing. The value stays in the DOM (no layout shift); only its
- * rendering is obscured, and it un-blurs the instant the toggle is turned off.
+ * user has "hide balances" enabled, the value is replaced with a
+ * constant-width mask.
  *
- * Blur is applied via inline style so it does not depend on Tailwind's
- * `filter` utilities being enabled in the shared config.
+ * Deliberately NOT a blur: blurring preserves glyph count and decimal
+ * position, so "0.0100" and "12,438.0000" blur to visibly different
+ * shapes — a shoulder-surfer still learns the magnitude. The mask is the
+ * same five dots for every value, and the real value is removed from the
+ * DOM entirely while hidden (so devtools/copy can't recover it either).
  */
 export const Sensitive = ({ children, className }: SensitiveProps) => {
   const hidden = useStore(selectHideBalances);
-  return (
-    <span
-      aria-hidden={hidden || undefined}
-      className={cn('inline-block', hidden && 'pointer-events-none select-none', className)}
-      style={{
-        filter: hidden ? 'blur(7px)' : undefined,
-        transition: 'filter 150ms ease',
-      }}
-    >
-      {children}
-    </span>
-  );
+  if (hidden) {
+    return (
+      <span
+        aria-label='hidden'
+        className={cn('inline-block select-none tracking-widest', className)}
+      >
+        •••••
+      </span>
+    );
+  }
+  return <span className={cn('inline-block', className)}>{children}</span>;
 };
