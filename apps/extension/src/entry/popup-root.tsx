@@ -66,7 +66,7 @@ const rootElement = document.getElementById('popup-root') as HTMLDivElement;
 // apply persisted appearance theme before first paint ('sumi' is the
 // :root default; 'terminal' restores the cold pure-black material)
 void localExtStorage.get('zafuTheme').then(v => {
-  if (v === 'terminal') {
+  if (v && v !== 'sumi') {
     document.documentElement.dataset['theme'] = v;
   }
 });

@@ -180,6 +180,60 @@
     background-image: none;
   }
 
+  /* washi — the light sibling: sumi ink on warm unbleached paper.
+   * Same material logic inverted; gold darkens for AA contrast on paper,
+   * hanko vermillion stays (a red seal on paper is the real thing). */
+  :root[data-theme='washi'] {
+    --surface-canvas: #efe9dc;
+    --surface-elev-1: #f6f2e8;
+    --surface-elev-2: #fbf8f1;
+    --surface-border-soft: #ddd3c1;
+    --surface-border: #c9bda7;
+    --fg-high: #171310;
+    --fg: #2b241c;
+    --fg-muted: #6f6555;
+    --fg-dim: #a3947e;
+    /* gold on paper: brand hue held, lightness dropped for contrast */
+    --zigner-gold: #8a6508;
+    --zigner-gold-light: #b8860b;
+    --zigner-gold-dark: #6b4e06;
+    --background: 41 37% 90%;
+    --foreground: 32 21% 14%;
+    --muted: 43 56% 95%;
+    --muted-foreground: 34 13% 38%;
+    --popover: 43 44% 94%;
+    --popover-foreground: 26 18% 8%;
+    --card: 43 44% 94%;
+    --card-foreground: 32 21% 14%;
+    --border: 39 24% 72%;
+    --border-secondary: 39 30% 81%;
+    --input: 43 56% 95%;
+    --primary: 42 89% 29%;
+    --primary-foreground: 43 44% 96%;
+    --secondary: 42 80% 25%;
+    --secondary-foreground: 43 44% 96%;
+    --accent: 42 40% 85%;
+    --accent-foreground: 26 18% 12%;
+    --ring: 42 89% 29%;
+    --success: #3d7a2a;
+    --green: #3d7a2a;
+    --error: #b03030;
+    --red: #b03030;
+    --warning: #8a6508;
+    --info: #8a6508;
+    --charcoal: #f6f2e8;
+    --charcoal-secondary: #efe9dc;
+    --light-brown: #f6f2e8;
+    --light-grey: #4a4437;
+  }
+
+  :root[data-theme='washi'] body {
+    /* ink-dark threads on paper */
+    background-image:
+      repeating-linear-gradient(0deg, rgb(62 47 26 / 0.028) 0 1px, transparent 1px 3px),
+      repeating-linear-gradient(90deg, rgb(62 47 26 / 0.02) 0 1px, transparent 1px 3px);
+  }
+
   /* network-specific theming */
   [data-network='zcash'] {
     --network-accent: var(--zigner-gold);

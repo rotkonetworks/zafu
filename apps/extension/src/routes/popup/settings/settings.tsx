@@ -139,7 +139,7 @@ export const Settings = () => {
   const { clearSessionPassword } = useStore(passwordSelector);
   const activeNetwork = useStore(selectActiveNetwork);
   const [autoLock, setAutoLock] = useState(15);
-  const [theme, setTheme] = useState<'sumi' | 'terminal'>('sumi');
+  const [theme, setTheme] = useState<'sumi' | 'washi' | 'terminal'>('sumi');
 
   useEffect(() => {
     void localExtStorage.get('autoLockMinutes').then(v => setAutoLock(v ?? 15));
@@ -147,7 +147,8 @@ export const Settings = () => {
   }, []);
 
   const cycleTheme = () => {
-    const next = theme === 'sumi' ? 'terminal' : 'sumi';
+    const order = ['sumi', 'washi', 'terminal'] as const;
+    const next = order[(order.indexOf(theme) + 1) % order.length]!;
     setTheme(next);
     document.documentElement.dataset['theme'] = next;
     void localExtStorage.set('zafuTheme', next);
@@ -195,7 +196,7 @@ export const Settings = () => {
                           appearance
                         </span>
                         <span className='text-label tabular text-fg-dim group-hover:text-fg-muted'>
-                          {theme === 'sumi' ? 'sumi ink' : 'terminal'}
+                          {theme === 'sumi' ? 'sumi ink' : theme === 'washi' ? 'washi' : 'terminal'}
                         </span>
                       </button>
                     )}
