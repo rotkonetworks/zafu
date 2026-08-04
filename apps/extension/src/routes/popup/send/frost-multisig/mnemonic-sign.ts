@@ -16,6 +16,7 @@ import {
   sendShare,
 } from './relay-protocol';
 import { waitFor } from './helpers';
+import { DEFAULT_RELAY_URL } from '../../multisig/dkg-helpers';
 
 export interface MnemonicFrostSecrets {
   ephemeralSeed: string;
@@ -53,7 +54,7 @@ export async function runMnemonicFrostSign({
   setProgress,
 }: RunMnemonicFrostSignArgs): Promise<string[]> {
   const session = await openRelayRoom(
-    ms.relayUrl || 'wss://zcash.rotko.net',
+    ms.relayUrl || DEFAULT_RELAY_URL,
     ms.threshold,
     ms.maxSigners,
     300,
@@ -64,7 +65,7 @@ export async function runMnemonicFrostSign({
   setProgress('round 1: generating commitments...');
   const numActions = unsigned.alphas.length;
 
-  // fresh nonces+commitments per action — never reuse across actions
+  // fresh nonces+commitments per action - never reuse across actions
   const round1s: { nonces: string; commitments: string }[] = [];
   for (let i = 0; i < numActions; i++) {
     round1s.push(await frostSignRound1InWorker(secrets.ephemeralSeed, secrets.keyPackage));

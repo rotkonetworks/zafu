@@ -1,7 +1,7 @@
 /**
  * Scan a zigner-emitted "zafu-airgap-import" QR and re-add the airgap
  * multisig wallets it carries. The QR is unencrypted (public-only metadata,
- * no secret material) so this flow has no passphrase step — just scan,
+ * no secret material) so this flow has no passphrase step - just scan,
  * review, confirm, import.
  */
 
@@ -65,7 +65,7 @@ export const AirgapQrImportModal = ({ open, onClose, onImported }: Props) => {
       if (!Array.isArray(wallets) || wallets.length === 0) {
         throw new Error('no wallets in QR payload');
       }
-      // basic shape check on every entry — fail fast on partial payloads
+      // basic shape check on every entry - fail fast on partial payloads
       for (const w of wallets) {
         if (!w.publicKeyPackage || !w.orchardFvk || !w.address || !w.relayUrl) {
           throw new Error('payload missing required metadata fields');
@@ -118,12 +118,12 @@ export const AirgapQrImportModal = ({ open, onClose, onImported }: Props) => {
   return (
     <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4'>
       <div className='w-full max-w-sm rounded-lg border border-border-soft bg-elev-1 p-4'>
-        <h2 className='text-base font-medium'>Import airgap multisig from zigner</h2>
+        <h2 className='text-lg font-medium'>import airgap multisig from zigner</h2>
 
         {!payload ? (
           <>
             <p className='mt-1 text-label text-fg-muted'>
-              Scan the animated QR your zigner shows. Public metadata only — no secrets cross over.
+              Scan the animated QR your zigner shows. Public metadata only - no secrets cross over.
             </p>
             <div className='mt-3'>
               <AnimatedQrScanner

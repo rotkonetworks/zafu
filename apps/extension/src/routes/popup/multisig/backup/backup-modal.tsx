@@ -1,6 +1,6 @@
 /**
  * Passphrase entry modal for FROST multisig backup export.
- * Always starts with empty fields — never caches the backup passphrase.
+ * Always starts with empty fields - never caches the backup passphrase.
  */
 
 import { useState, useEffect } from 'react';
@@ -31,7 +31,7 @@ export const BackupModal = ({
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
 
-  // reset every time the modal opens — never carry passphrase across sessions
+  // reset every time the modal opens - never carry passphrase across sessions
   useEffect(() => {
     if (open) {
       setPassphrase('');
@@ -66,7 +66,7 @@ export const BackupModal = ({
   return (
     <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4'>
       <div className='w-full max-w-sm rounded-lg border border-border-soft bg-elev-1 p-4'>
-        <h2 className='text-base font-medium'>{title}</h2>
+        <h2 className='text-lg font-medium'>{title}</h2>
         <p className='mt-1 text-label text-fg-muted'>
           {batch ? `Exporting ${walletLabel}.` : `Exporting "${walletLabel}".`}
         </p>
@@ -74,7 +74,7 @@ export const BackupModal = ({
         <div className='mt-3 rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-label text-amber-300'>
           <span className='i-lucide-alert-triangle mr-1 inline-block size-3 align-text-bottom' />
           This file contains the FROST share. Anyone with the file AND the passphrase can sign as
-          this signer. The passphrase cannot be reset — losing it means the backup is unusable.
+          this signer. The passphrase cannot be reset - losing it means the backup is unusable.
         </div>
 
         <label className='mt-3 block text-xs text-fg-muted'>

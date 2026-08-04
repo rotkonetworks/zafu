@@ -1,4 +1,4 @@
-// airgap (zigner-mediated) FROST multisig — JOINER side. zafu has no FROST
+// airgap (zigner-mediated) FROST multisig - JOINER side. zafu has no FROST
 // share locally; joins an existing relay room, awaits the host's SIGN: tx
 // context, then mediates QR round-trips with zigner to publish C: + S: shares.
 
@@ -13,6 +13,8 @@ import {
   type FrostParsedTx,
 } from '../../../../state/keyring/network-worker';
 import { computeVerdict, type Verdict } from './multisig-verifier';
+import { Sensitive } from '../../../../components/sensitive';
+import { DEFAULT_RELAY_URL } from '../../multisig/dkg-helpers';
 
 export interface JoinerMultisig {
   publicKeyPackage: string;
@@ -23,7 +25,7 @@ export interface JoinerMultisig {
   zignerWalletId?: string;
   /** ZIP-316 unified viewing key (`uview1…`) for multisig-verifier OVK decryption. */
   orchardFvkUview?: string;
-  /** mainnet vs testnet — used for unified address re-encoding when comparing. */
+  /** mainnet vs testnet - used for unified address re-encoding when comparing. */
   mainnet?: boolean;
 }
 
@@ -73,7 +75,7 @@ export function FrostAirgapJoinerSignFlow({
   const [acknowledged, setAcknowledged] = useState(false);
   const sessionRef = useRef<RelaySession | null>(null);
   const zignerCommitsRef = useRef<string[] | null>(null);
-  // raw peer C: payloads — split per-action only after numActions is known.
+  // raw peer C: payloads - split per-action only after numActions is known.
   // joiner doesn't aggregate, so peer S: shares are intentionally not buffered.
   const peerCommitsRawRef = useRef<string[]>([]);
 
@@ -82,7 +84,7 @@ export function FrostAirgapJoinerSignFlow({
   useEffect(() => {
     let signSeen = false;
     try {
-      const s = openJoinerSession(ms.relayUrl || 'wss://zcash.rotko.net', roomCode);
+      const s = openJoinerSession(ms.relayUrl || DEFAULT_RELAY_URL, roomCode);
       sessionRef.current = s;
       void s.relay.joinRoom(
         s.roomCode,
@@ -117,7 +119,7 @@ export function FrostAirgapJoinerSignFlow({
             } else if (!ms.orchardFvkUview) {
               setVerdict({
                 kind: 'unverified',
-                reason: 'wallet has no UFVK on file — cannot verify',
+                reason: 'wallet has no UFVK on file - cannot verify',
               });
             } else {
               void (async () => {
@@ -152,7 +154,7 @@ export function FrostAirgapJoinerSignFlow({
             setPeersReady(peerCommitsRawRef.current.length);
             return;
           }
-          // S: peer shares — joiner ignores; only the host aggregates.
+          // S: peer shares - joiner ignores; only the host aggregates.
         },
         s.abort.signal,
       );
@@ -185,7 +187,7 @@ export function FrostAirgapJoinerSignFlow({
       sighash: tx.sighash,
       alphas: tx.alphas,
       // forward the host-published PCZT so this joiner's zigner can verify
-      // on-device too (gh #17) — same as the host→zigner trigger.
+      // on-device too (gh #17) - same as the host→zigner trigger.
       ...(tx.pcztHex ? { pczt: tx.pcztHex } : {}),
       summary: {
         recipient: tx.recipient,
@@ -209,7 +211,7 @@ export function FrostAirgapJoinerSignFlow({
       }
       const json = JSON.parse(raw);
       if (json.frost !== 'sign1-resp' || !Array.isArray(json.commitments)) {
-        throw new Error('unexpected zigner response — expected sign1-resp');
+        throw new Error('unexpected zigner response - expected sign1-resp');
       }
       zignerCommitsRef.current = json.commitments as string[];
       setStep('r1-relay');
@@ -257,7 +259,7 @@ export function FrostAirgapJoinerSignFlow({
       }
       const json = JSON.parse(raw);
       if (json.frost !== 'sign2-resp' || !Array.isArray(json.shares)) {
-        throw new Error('unexpected zigner response — expected sign2-resp');
+        throw new Error('unexpected zigner response - expected sign2-resp');
       }
       const shares = json.shares as string[];
       setStep('r2-relay');
@@ -289,7 +291,7 @@ export function FrostAirgapJoinerSignFlow({
           <span className='i-lucide-arrow-left h-5 w-5' />
         </button>
       )}
-      <h2 className='text-base font-medium flex-1'>co-sign multisig</h2>
+      <h2 className='text-lg font-medium flex-1'>co-sign multisig</h2>
       <DontQuitIcon />
     </div>
   );
@@ -300,7 +302,7 @@ export function FrostAirgapJoinerSignFlow({
   switch (step) {
     case 'awaiting-sign':
       return (
-        <div className='flex flex-col items-center gap-4 p-6'>
+        <div className='flex flex-col items-center gap-4 p-4'>
           <Header onBack={cancel} />
           <div className='flex items-center gap-2 text-xs text-fg-muted'>
             <span className='i-lucide-loader-2 size-3.5 animate-spin' />
@@ -336,15 +338,15 @@ export function FrostAirgapJoinerSignFlow({
             <div className='border-t border-border-soft' />
             <div className='flex items-baseline justify-between'>
               <span className='text-label tracking-wider text-fg-muted'>amount</span>
-              <span className='text-sm font-medium tabular-nums'>
+              <Sensitive className='text-sm font-medium tabular-nums'>
                 {formatZec(tx?.amountZat ?? '')} ZEC
-              </span>
+              </Sensitive>
             </div>
             <div className='flex items-baseline justify-between'>
               <span className='text-label tracking-wider text-fg-muted'>fee</span>
-              <span className='text-xs text-fg-muted tabular-nums'>
+              <Sensitive className='text-xs text-fg-muted tabular-nums'>
                 {formatZec(tx?.feeZat ?? '')} ZEC
-              </span>
+              </Sensitive>
             </div>
           </div>
 
@@ -359,9 +361,13 @@ export function FrostAirgapJoinerSignFlow({
             <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-2.5 text-label text-green-400 flex items-start gap-2'>
               <span className='i-lucide-shield-check size-3.5 mt-0.5 shrink-0' />
               <span>
-                bytes verified — derived recipient + amount match host claim
+                bytes verified - derived recipient + amount match host claim
                 {verdict.changeZat > 0n && (
-                  <> (+{formatZec(verdict.changeZat.toString())} ZEC change to self)</>
+                  <>
+                    {' '}
+                    (<Sensitive>+{formatZec(verdict.changeZat.toString())} ZEC</Sensitive> change to
+                    self)
+                  </>
                 )}
               </span>
             </div>
@@ -369,14 +375,14 @@ export function FrostAirgapJoinerSignFlow({
           {verdict.kind === 'unverified' && (
             <div className='rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-2.5 text-label text-yellow-400 flex items-start gap-2'>
               <span className='i-lucide-alert-triangle size-3.5 mt-0.5 shrink-0' />
-              <span>host claim shown without verification — {verdict.reason}</span>
+              <span>host claim shown without verification - {verdict.reason}</span>
             </div>
           )}
           {verdict.kind === 'mismatch' && (
             <div className='rounded-lg border border-red-500/60 bg-red-500/10 p-3 flex flex-col gap-2'>
               <div className='flex items-center gap-2 text-body font-medium text-red-400'>
                 <span className='i-lucide-shield-x size-4' />
-                mismatch — host claim disagrees with tx bytes
+                mismatch - host claim disagrees with tx bytes
               </div>
               <ul className='text-label text-red-300/90 list-disc pl-4 space-y-0.5'>
                 {verdict.reasons.map((r, i) => (
@@ -390,7 +396,8 @@ export function FrostAirgapJoinerSignFlow({
                     .filter(a => a.decrypted && !a.is_change)
                     .map(a => (
                       <div key={a.index} className='break-all'>
-                        action {a.index}: {formatZec(String(a.amount_zat))} ZEC →{' '}
+                        action {a.index}:{' '}
+                        <Sensitive>{formatZec(String(a.amount_zat))} ZEC</Sensitive> →{' '}
                         {a.recipient_raw_hex ? `${a.recipient_raw_hex.slice(0, 16)}…` : 'unknown'}
                       </div>
                     ))}
@@ -465,7 +472,7 @@ export function FrostAirgapJoinerSignFlow({
 
     case 'r1-relay':
       return (
-        <div className='flex flex-col items-center gap-4 p-6'>
+        <div className='flex flex-col items-center gap-4 p-4'>
           <Header />
           <SignStepProgress current={1} />
           <div className='flex items-center gap-2 text-xs text-fg-muted'>
@@ -528,7 +535,7 @@ export function FrostAirgapJoinerSignFlow({
 
     case 'r2-relay':
       return (
-        <div className='flex flex-col items-center gap-4 p-6'>
+        <div className='flex flex-col items-center gap-4 p-4'>
           <Header />
           <SignStepProgress current={3} />
           <div className='flex items-center gap-2 text-xs text-fg-muted'>
