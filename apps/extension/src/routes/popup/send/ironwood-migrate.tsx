@@ -12,6 +12,7 @@
  * a banner on the zcash home surface whenever orchard balance > 0.
  */
 
+import { OverlayPortal } from '../../../components/overlay-portal';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@repo/ui/components/ui/button';
 import { Sensitive } from '../../../components/sensitive';
@@ -647,7 +648,13 @@ export function IronwoodMigrate({
     }
   };
 
-  // z-[60] sits above the bottom tabs + header (both z-50) so the migrate
-  // footer buttons aren't overlapped by the nav bar during this takeover flow.
-  return <div className='fixed inset-0 z-[60] overflow-y-auto bg-canvas'>{renderContent()}</div>;
+  // Portaled to document.body: rendered inline, the layout root's
+  // contain-layout + the scroll area's transform trap this overlay in a
+  // lower stacking context, so no z-index can lift it above the bottom
+  // tabs — the confirm buttons ended up hidden under the footer.
+  return (
+    <OverlayPortal>
+      <div className='fixed inset-0 z-[60] overflow-y-auto bg-canvas'>{renderContent()}</div>
+    </OverlayPortal>
+  );
 }
