@@ -864,12 +864,23 @@ const ZcashContent = ({
     <FirstSyncNote />
   ) : null;
 
-  // Pool rows for the hero-card reveal. Falls back to a single "shielded"
-  // row if the worker's per-pool endpoint reports nothing while the
-  // combined balance is positive (older worker builds).
+  // Pool rows for the hero-card reveal. All three pools stay visible
+  // (ironwood active / orchard legacy / transparent public below) so no
+  // pool is ever hidden. Falls back to a single "shielded" row if the
+  // worker's per-pool endpoint reports nothing while the combined balance
+  // is positive (older worker builds).
   const poolRows =
-    pools.total > 0n
+    pools.total === 0n && orchardZat > 0n
       ? [
+          {
+            key: 'shielded',
+            icon: 'i-lucide-shield-check',
+            label: 'shielded',
+            badge: undefined as string | undefined,
+            zat: orchardZat,
+          },
+        ]
+      : [
           {
             key: 'ironwood',
             icon: 'i-lucide-shield-check',
@@ -884,49 +895,58 @@ const ZcashContent = ({
             badge: 'legacy' as string | undefined,
             zat: pools.orchard,
           },
-        ].filter(r => r.zat > 0n)
-      : orchardZat > 0n
-        ? [
-            {
-              key: 'shielded',
-              icon: 'i-lucide-shield-check',
-              label: 'shielded',
-              badge: undefined as string | undefined,
-              zat: orchardZat,
-            },
-          ]
-        : [];
-  const hasPoolDetail = poolRows.length > 0 || transparentZat > 0n;
+        ];
+
+  // glance -> detail: the hero balance opens the full per-pool notes view;
+  // each reveal row deep-links to its pool ('shielded' fallback -> ironwood)
+  const openPoolNotes = (pool?: string) => {
+    if (!IRONWOOD_MIGRATION) {
+      return; // route is registered only when the flag is on
+    }
+    navigate(pool ? `${PopupPath.POOL_NOTES}?pool=${pool}` : PopupPath.POOL_NOTES);
+  };
 
   return (
     <div className='flex-1 flex flex-col gap-3'>
       {PasswordModal}
-      {/* hero balance - the single figure on this screen. Hovering (or
-          pinning via the chevron) reveals the per-pool split inline; the
-          split never occupies a second permanent box. */}
+      {/* hero balance - the single figure on this screen at two depths:
+          hover (or pin via the chevron) reveals the per-pool split inline,
+          click opens the full per-pool notes view. The split never
+          occupies a second permanent box. */}
       <div className='group rounded-md border border-network-accent/20 bg-elev-1 p-4'>
         <div className='flex items-center justify-between'>
           <span className='kicker'>balance</span>
-          {hasPoolDetail && (
-            <button
-              onClick={() => setPoolsPinned(v => !v)}
-              title='pool detail'
-              className='p-0.5 text-fg-dim transition-colors hover:text-fg-high'
-            >
-              <span
-                className={cn(
-                  'block h-3.5 w-3.5 transition-transform',
-                  poolsPinned ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down',
-                )}
-              />
-            </button>
-          )}
+          <button
+            onClick={() => setPoolsPinned(v => !v)}
+            title='pool detail'
+            className='p-0.5 text-fg-dim transition-colors hover:text-fg-high'
+          >
+            <span
+              className={cn(
+                'block h-3.5 w-3.5 transition-transform',
+                poolsPinned ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down',
+              )}
+            />
+          </button>
         </div>
-        <div className='mt-1 text-display leading-none text-network-accent tabular'>
-          <Sensitive>
-            {workerSyncHeight > 0 || totalZat > 0n ? `${fmtZec(totalZec)} ZEC` : '— ZEC'}
-          </Sensitive>
-        </div>
+        {IRONWOOD_MIGRATION ? (
+          <button
+            type='button'
+            onClick={() => openPoolNotes()}
+            title='view notes'
+            className='mt-1 block text-left text-display leading-none text-network-accent tabular transition-opacity hover:opacity-80'
+          >
+            <Sensitive>
+              {workerSyncHeight > 0 || totalZat > 0n ? `${fmtZec(totalZec)} ZEC` : '— ZEC'}
+            </Sensitive>
+          </button>
+        ) : (
+          <div className='mt-1 text-display leading-none text-network-accent tabular'>
+            <Sensitive>
+              {workerSyncHeight > 0 || totalZat > 0n ? `${fmtZec(totalZec)} ZEC` : '— ZEC'}
+            </Sensitive>
+          </div>
+        )}
         <div className='mt-1 text-label text-fg-dim tabular'>
           {chainHeight <= 0 ? (
             '\u00a0' /* hold the line height; sync bar below owns status */
@@ -946,60 +966,70 @@ const ZcashContent = ({
           )}
         </div>
 
-        {/* per-pool reveal: hover-expand, chevron pins it open for touch */}
-        {hasPoolDetail && (
-          <div
-            className={cn(
-              'grid transition-[grid-template-rows] duration-200',
-              poolsPinned ? 'grid-rows-[1fr]' : 'grid-rows-[0fr] group-hover:grid-rows-[1fr]',
-            )}
-          >
-            <div className='overflow-hidden'>
-              <div className='mt-3 flex flex-col gap-2 border-t border-border-soft pt-3'>
-                {poolRows.map(row => (
-                  <div key={row.key} className='flex items-center justify-between gap-2'>
-                    <div className='flex min-w-0 items-center gap-2'>
-                      <span className={cn(row.icon, 'h-3.5 w-3.5 shrink-0 text-fg-muted')} />
-                      <span className='text-xs text-fg-muted lowercase'>{row.label}</span>
-                      {row.badge && (
-                        <span className='rounded-sm bg-elev-2 px-1.5 py-0.5 text-label text-fg-dim leading-none lowercase'>
-                          {row.badge}
-                        </span>
-                      )}
-                    </div>
-                    <div className='flex shrink-0 items-center gap-2'>
-                      <Sensitive className='text-xs tabular text-fg-high'>
-                        {`${fmtZec(Number(row.zat) / 1e8)} ZEC`}
-                      </Sensitive>
-                      {row.key === 'orchard' && ironwoodEligible && (
-                        <button
-                          onClick={() => setShowIronwoodMigrate(true)}
-                          className='text-label font-medium text-network-accent transition-colors hover:text-fg-high'
-                        >
-                          migrate
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                {transparentZat > 0n && (
-                  <div className='flex items-center justify-between gap-2'>
-                    <div className='flex min-w-0 items-center gap-2'>
-                      <span className='i-lucide-eye h-3.5 w-3.5 shrink-0 text-fg-muted' />
-                      <span className='text-xs text-fg-muted lowercase'>transparent</span>
+        {/* per-pool reveal: hover-expand, chevron pins it open for touch.
+            Three rows - ironwood (active), orchard (legacy), transparent
+            (public) - each deep-linking into the notes view for that pool. */}
+        <div
+          className={cn(
+            'grid transition-[grid-template-rows] duration-200',
+            poolsPinned ? 'grid-rows-[1fr]' : 'grid-rows-[0fr] group-hover:grid-rows-[1fr]',
+          )}
+        >
+          <div className='overflow-hidden'>
+            <div className='mt-3 flex flex-col gap-2 border-t border-border-soft pt-3'>
+              {poolRows.map(row => (
+                <div key={row.key} className='flex items-center justify-between gap-2'>
+                  <button
+                    type='button'
+                    onClick={() => openPoolNotes(row.key === 'shielded' ? 'ironwood' : row.key)}
+                    title={`view ${row.label} notes`}
+                    className='group/row flex min-w-0 flex-1 items-center gap-2 text-left'
+                  >
+                    <span className={cn(row.icon, 'h-3.5 w-3.5 shrink-0 text-fg-muted')} />
+                    <span className='text-xs text-fg-muted lowercase transition-colors group-hover/row:text-fg-high'>
+                      {row.label}
+                    </span>
+                    {row.badge && (
                       <span className='rounded-sm bg-elev-2 px-1.5 py-0.5 text-label text-fg-dim leading-none lowercase'>
-                        public
+                        {row.badge}
                       </span>
-                    </div>
-                    <Sensitive className='shrink-0 text-xs tabular text-fg-high'>
-                      {`${fmtZec(Number(transparentZat) / 1e8)} ZEC`}
+                    )}
+                    <span className='i-lucide-chevron-right h-3 w-3 shrink-0 text-fg-dim opacity-0 transition-opacity group-hover/row:opacity-100' />
+                    <Sensitive className='ml-auto text-xs tabular text-fg-high'>
+                      {`${fmtZec(Number(row.zat) / 1e8)} ZEC`}
                     </Sensitive>
-                  </div>
-                )}
-              </div>
+                  </button>
+                  {row.key === 'orchard' && ironwoodEligible && (
+                    <button
+                      onClick={() => setShowIronwoodMigrate(true)}
+                      className='shrink-0 text-label font-medium text-network-accent transition-colors hover:text-fg-high'
+                    >
+                      migrate
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                type='button'
+                onClick={() => openPoolNotes('transparent')}
+                title='view transparent funds'
+                className='group/row flex min-w-0 items-center gap-2 text-left'
+              >
+                <span className='i-lucide-eye h-3.5 w-3.5 shrink-0 text-fg-muted' />
+                <span className='text-xs text-fg-muted lowercase transition-colors group-hover/row:text-fg-high'>
+                  transparent
+                </span>
+                <span className='rounded-sm bg-elev-2 px-1.5 py-0.5 text-label text-fg-dim leading-none lowercase'>
+                  public
+                </span>
+                <span className='i-lucide-chevron-right h-3 w-3 shrink-0 text-fg-dim opacity-0 transition-opacity group-hover/row:opacity-100' />
+                <Sensitive className='ml-auto text-xs tabular text-fg-high'>
+                  {`${fmtZec(Number(transparentZat) / 1e8)} ZEC`}
+                </Sensitive>
+              </button>
             </div>
           </div>
-        )}
+        </div>
       </div>
 
       {/* action row directly under the balance - Zashi placement */}
