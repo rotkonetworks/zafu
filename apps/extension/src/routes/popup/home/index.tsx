@@ -519,7 +519,7 @@ const PenumbraContent = ({
     ? 'connecting...'
     : isSyncing
       ? `syncing ${syncPct}%`
-      : `block ${(fullSyncHeight ?? latestBlockHeight).toLocaleString()}`;
+      : `penumbra block ${(fullSyncHeight ?? latestBlockHeight).toLocaleString()}`;
 
   // query UM balance for the balance card
   const { data: umBalance } = useQuery({
@@ -959,7 +959,7 @@ const ZcashContent = ({
               className='hover:text-fg-muted transition-colors'
               title='rescan options'
             >
-              {`synced · block ${workerSyncHeight.toLocaleString()}`}
+              {`synced · zcash block ${workerSyncHeight.toLocaleString()}`}
             </button>
           ) : (
             `syncing · ${overallPct.toFixed(1)}%`
@@ -1092,7 +1092,7 @@ const ZcashContent = ({
           percent={allSynced ? 100 : Math.max(overallPct, 2)}
           label={
             allSynced
-              ? `synced · block ${workerSyncHeight.toLocaleString()}`
+              ? `synced · zcash block ${workerSyncHeight.toLocaleString()}`
               : chainHeight <= 0
                 ? 'connecting...'
                 : scanPct > 0

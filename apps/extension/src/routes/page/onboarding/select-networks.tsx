@@ -266,7 +266,7 @@ export const SelectNetworks = () => {
         {selected.has('zcash') && origin === SEED_PHRASE_ORIGIN.IMPORTED && (
           <div className='mt-4 rounded-lg border border-border-soft p-3'>
             <div className='flex items-center justify-between mb-2'>
-              <span className='text-xs font-medium'>wallet birthday</span>
+              <span className='text-xs font-medium'>zcash wallet birthday</span>
               <button
                 type='button'
                 onClick={() => setInputMode(inputMode === 'date' ? 'block' : 'date')}
@@ -312,13 +312,13 @@ export const SelectNetworks = () => {
 
             {zcashBirthday && (
               <p className='mt-1.5 text-label text-fg-muted'>
-                ~block {Number(zcashBirthday).toLocaleString()}
+                ~zcash block {Number(zcashBirthday).toLocaleString()}
                 {zcashDate && ` (~${zcashDate})`}
               </p>
             )}
             <p className='mt-1 text-label text-fg-muted'>
               approximate date the wallet was first used. rounded for privacy. skip this if you
-              don't know — scanning starts from chain tip.
+              don't know - scanning starts from chain tip.
             </p>
           </div>
         )}
