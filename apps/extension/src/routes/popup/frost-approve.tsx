@@ -27,6 +27,7 @@ import { hexToBytes } from '@repo/wallet/networks';
 import { FrostRelayClient } from '../../state/keyring/frost-relay-client';
 import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../state/frost-session';
 import { usePasswordGate } from '../../hooks/password-gate';
+import { Sensitive } from '../../components/sensitive';
 
 interface PokerPayoutOutput {
   address: string;
@@ -749,11 +750,13 @@ export const FrostApprove = () => {
                       → {o.address.slice(0, 14)}…{o.address.slice(-8)}
                       <span className='text-zigner-gold'>
                         {' '}
-                        {(o.amount_zat / 1e8).toFixed(8)} ZEC
+                        <Sensitive>{(o.amount_zat / 1e8).toFixed(8)} ZEC</Sensitive>
                       </span>
                     </p>
                   ))}
-                  <p className='text-fg-dim tabular'>fee {(feeZat / 1e8).toFixed(8)} ZEC</p>
+                  <p className='text-fg-dim tabular'>
+                    fee <Sensitive>{(feeZat / 1e8).toFixed(8)} ZEC</Sensitive>
+                  </p>
                 </div>
                 <p className='text-fg-muted'>
                   Requested amounts shown above. You will re-confirm the exact outputs decoded from
@@ -801,25 +804,25 @@ export const FrostApprove = () => {
                   <span className='text-fg-muted tabular break-all'>
                     → {o.recipientUa.slice(0, 14)}…{o.recipientUa.slice(-8)}
                   </span>
-                  <span className='text-zigner-gold tabular shrink-0'>
+                  <Sensitive className='text-zigner-gold tabular shrink-0'>
                     {(Number(o.amountZat) / 1e8).toFixed(8)} ZEC
-                  </span>
+                  </Sensitive>
                 </div>
               ))}
             </div>
             <div className='border-t border-border-soft pt-2 space-y-1'>
               <div className='flex items-baseline justify-between'>
                 <span className='text-fg-muted'>total to recipients</span>
-                <span className='text-fg-high tabular'>
+                <Sensitive className='text-fg-high tabular'>
                   {(Number(reviewSendZat) / 1e8).toFixed(8)} ZEC
-                </span>
+                </Sensitive>
               </div>
               {reviewChangeZat > 0n && (
                 <div className='flex items-baseline justify-between'>
                   <span className='text-fg-dim'>change back to vault</span>
-                  <span className='text-fg-dim tabular'>
+                  <Sensitive className='text-fg-dim tabular'>
                     {(Number(reviewChangeZat) / 1e8).toFixed(8)} ZEC
-                  </span>
+                  </Sensitive>
                 </div>
               )}
             </div>

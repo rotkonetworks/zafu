@@ -25,6 +25,8 @@ import { usePasswordGate } from '../../../hooks/password-gate';
 import { SettingsScreen } from '../settings/settings-screen';
 import { PopupPath } from '../paths';
 import { FrostAirgapJoinerSignFlow } from '../send/frost-multisig';
+import { Sensitive } from '../../../components/sensitive';
+import { DEFAULT_RELAY_URL } from './dkg-helpers';
 
 type Step = 'input' | 'joining' | 'review' | 'signing' | 'complete' | 'error';
 
@@ -80,8 +82,7 @@ export const MultisigSign = () => {
     setProgress('connecting to signing session...');
 
     try {
-      const relayUrl =
-        (typeof ms.relayUrl === 'string' ? ms.relayUrl : '') || 'wss://zcash.rotko.net';
+      const relayUrl = (typeof ms.relayUrl === 'string' ? ms.relayUrl : '') || DEFAULT_RELAY_URL;
       const relay = new FrostRelayClient(relayUrl);
       const participantId = new Uint8Array(32);
       crypto.getRandomValues(participantId);
@@ -126,7 +127,7 @@ export const MultisigSign = () => {
             } else if (!ufvkForVerify) {
               setVerdict({
                 kind: 'unverified',
-                reason: 'wallet has no UFVK on file — cannot verify',
+                reason: 'wallet has no UFVK on file - cannot verify',
               });
             } else {
               const ufvk = ufvkForVerify;
@@ -154,7 +155,7 @@ export const MultisigSign = () => {
             }
             return;
           }
-          // collect ALL peer C: bundles — t≥3 needs threshold-1 of them, not just 1.
+          // collect ALL peer C: bundles - t≥3 needs threshold-1 of them, not just 1.
           const commitMatch = /^C:([\s\S]*)$/.exec(text);
           if (commitMatch) {
             peerCommitsRawRef.current.push(commitMatch[1]!);
@@ -346,14 +347,12 @@ export const MultisigSign = () => {
       {step === 'review' && (
         <div className='flex flex-col gap-3'>
           <div className='rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-3'>
-            <p className='text-label uppercase tracking-wider text-yellow-400'>
-              review transaction
-            </p>
+            <p className='text-label tracking-wider text-yellow-400'>review transaction</p>
           </div>
 
           <div className='rounded-lg border border-border-soft bg-elev-1 p-3 flex flex-col gap-2.5'>
             <div>
-              <p className='text-label uppercase tracking-wider text-fg-muted'>from</p>
+              <p className='text-label tracking-wider text-fg-muted'>from</p>
               <p className='mt-0.5 text-xs font-medium'>{activeWallet.label}</p>
               <p className='mt-0.5 break-all font-mono text-label text-fg-muted'>
                 {activeWallet.address}
@@ -361,17 +360,21 @@ export const MultisigSign = () => {
             </div>
             <div className='border-t border-border-soft' />
             <div>
-              <p className='text-label uppercase tracking-wider text-fg-muted'>to</p>
+              <p className='text-label tracking-wider text-fg-muted'>to</p>
               <p className='mt-0.5 break-all font-mono text-label'>{recipient}</p>
             </div>
             <div className='border-t border-border-soft' />
             <div className='flex items-baseline justify-between'>
-              <span className='text-label uppercase tracking-wider text-fg-muted'>amount</span>
-              <span className='tabular text-sm font-medium'>{formatZec(amountZat)} ZEC</span>
+              <span className='text-label tracking-wider text-fg-muted'>amount</span>
+              <Sensitive className='tabular text-sm font-medium'>
+                {formatZec(amountZat)} ZEC
+              </Sensitive>
             </div>
             <div className='flex items-baseline justify-between'>
-              <span className='text-label uppercase tracking-wider text-fg-muted'>fee</span>
-              <span className='tabular text-xs text-fg-muted'>{formatZec(feeZat)} ZEC</span>
+              <span className='text-label tracking-wider text-fg-muted'>fee</span>
+              <Sensitive className='tabular text-xs text-fg-muted'>
+                {formatZec(feeZat)} ZEC
+              </Sensitive>
             </div>
           </div>
 
@@ -386,9 +389,13 @@ export const MultisigSign = () => {
             <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-2.5 text-label text-green-400 flex items-start gap-2'>
               <span className='i-lucide-shield-check size-3.5 mt-0.5 shrink-0' />
               <span>
-                bytes verified — derived recipient + amount match host claim
+                bytes verified - derived recipient + amount match host claim
                 {verdict.changeZat > 0n && (
-                  <> (+{formatZec(verdict.changeZat.toString())} ZEC change to self)</>
+                  <>
+                    {' '}
+                    (<Sensitive>+{formatZec(verdict.changeZat.toString())} ZEC</Sensitive> change to
+                    self)
+                  </>
                 )}
               </span>
             </div>
@@ -396,14 +403,14 @@ export const MultisigSign = () => {
           {verdict.kind === 'unverified' && (
             <div className='rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-2.5 text-label text-yellow-400 flex items-start gap-2'>
               <span className='i-lucide-alert-triangle size-3.5 mt-0.5 shrink-0' />
-              <span>host claim shown without verification — {verdict.reason}</span>
+              <span>host claim shown without verification - {verdict.reason}</span>
             </div>
           )}
           {verdict.kind === 'mismatch' && (
             <div className='rounded-lg border border-red-500/60 bg-red-500/10 p-3 flex flex-col gap-2'>
               <div className='flex items-center gap-2 text-body font-medium text-red-400'>
                 <span className='i-lucide-shield-x size-4' />
-                mismatch — host claim disagrees with tx bytes
+                mismatch - host claim disagrees with tx bytes
               </div>
               <ul className='text-label text-red-300/90 list-disc pl-4 space-y-0.5'>
                 {verdict.reasons.map((r, i) => (
@@ -412,14 +419,13 @@ export const MultisigSign = () => {
               </ul>
               {parsed && parsed.actions.some(a => a.decrypted && !a.is_change) && (
                 <div className='rounded border border-red-500/30 bg-red-500/5 p-2 text-label font-mono text-red-300/80'>
-                  <p className='text-label uppercase tracking-wider text-red-400/80 mb-1'>
-                    derived outputs
-                  </p>
+                  <p className='text-label tracking-wider text-red-400/80 mb-1'>derived outputs</p>
                   {parsed.actions
                     .filter(a => a.decrypted && !a.is_change)
                     .map(a => (
                       <div key={a.index} className='break-all'>
-                        action {a.index}: {formatZec(String(a.amount_zat))} ZEC →{' '}
+                        action {a.index}:{' '}
+                        <Sensitive>{formatZec(String(a.amount_zat))} ZEC</Sensitive> →{' '}
                         {a.recipient_raw_hex ? `${a.recipient_raw_hex.slice(0, 16)}…` : 'unknown'}
                       </div>
                     ))}
@@ -465,9 +471,9 @@ export const MultisigSign = () => {
         <div className='flex flex-col items-center gap-4'>
           {recipient && (
             <div className='w-full rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-3'>
-              <p className='text-label uppercase tracking-wider text-yellow-400'>signing</p>
+              <p className='text-label tracking-wider text-yellow-400'>signing</p>
               <p className='mt-0.5 text-sm font-medium text-yellow-300'>
-                {formatZec(amountZat)} ZEC →{' '}
+                <Sensitive>{formatZec(amountZat)} ZEC</Sensitive> →{' '}
                 <span className='font-mono text-label'>
                   {recipient.slice(0, 16)}…{recipient.slice(-6)}
                 </span>
@@ -592,7 +598,7 @@ const AirgapJoinerWrapper = ({
         <WalletCard />
         <div className='flex flex-col gap-3'>
           <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-3 text-xs text-green-400'>
-            signing shares sent — coordinator will broadcast the transaction
+            signing shares sent - coordinator will broadcast the transaction
           </div>
           <button
             onClick={reset}

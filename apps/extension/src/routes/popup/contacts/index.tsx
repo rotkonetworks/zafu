@@ -345,7 +345,7 @@ function ContactCard({
               </span>
             </div>
             {contact.notes && (
-              <p className='text-xs text-fg-muted truncate max-w-[180px]'>{contact.notes}</p>
+              <p className='text-xs text-fg-muted truncate max-w-44'>{contact.notes}</p>
             )}
           </div>
         </div>
@@ -423,8 +423,10 @@ function ContactCard({
 
 export function ContactsPage() {
   const navigate = useNavigate();
-  // back follows actual origin (identity page or drawer); fallback for deep entry
-  const goBack = useBackNav(PopupPath.IDENTITY);
+  // back follows actual origin (drawer, or wherever the user came from);
+  // contacts is entered directly from the drawer, so a direct-entry fallback
+  // must land on home - never teleport into a menu the user never opened.
+  const goBack = useBackNav(PopupPath.INDEX);
   const contacts = useStore(contactsSelector);
   const keyInfo = useStore(selectEffectiveKeyInfo);
   const zcashWallet = useStore(selectActiveZcashWallet);

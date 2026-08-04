@@ -19,6 +19,8 @@ import {
   type RelaySession,
 } from './relay-protocol';
 import { waitFor, DontQuitIcon, RoomCodeChip, SignStepProgress } from './helpers';
+import { Sensitive } from '../../../../components/sensitive';
+import { DEFAULT_RELAY_URL } from '../../multisig/dkg-helpers';
 
 export interface AirgapMultisig {
   publicKeyPackage: string;
@@ -71,7 +73,7 @@ export function FrostAirgapSignFlow({
     (async () => {
       try {
         const session = await openRelayRoom(
-          ms.relayUrl || 'wss://zcash.rotko.net',
+          ms.relayUrl || DEFAULT_RELAY_URL,
           ms.threshold,
           ms.maxSigners,
           600,
@@ -129,7 +131,7 @@ export function FrostAirgapSignFlow({
     try {
       const json = JSON.parse(raw);
       if (json.frost !== 'sign1-resp' || !Array.isArray(json.commitments)) {
-        throw new Error('unexpected zigner response — expected sign1-resp');
+        throw new Error('unexpected zigner response - expected sign1-resp');
       }
       zignerCommitsRef.current = json.commitments as string[];
       setStep('r1-relay');
@@ -176,7 +178,7 @@ export function FrostAirgapSignFlow({
     try {
       const json = JSON.parse(raw);
       if (json.frost !== 'sign2-resp' || !Array.isArray(json.shares)) {
-        throw new Error('unexpected zigner response — expected sign2-resp');
+        throw new Error('unexpected zigner response - expected sign2-resp');
       }
       const zignerShares = json.shares as string[];
       setStep('r2-relay');
@@ -224,7 +226,7 @@ export function FrostAirgapSignFlow({
           <span className='i-lucide-arrow-left h-5 w-5' />
         </button>
       )}
-      <h2 className='text-base font-medium flex-1'>multisig sign</h2>
+      <h2 className='text-lg font-medium flex-1'>multisig sign</h2>
       <DontQuitIcon />
     </div>
   );
@@ -243,9 +245,12 @@ export function FrostAirgapSignFlow({
               {ms.threshold}-of-{ms.maxSigners} threshold
             </p>
             <p>
-              send {amount} ZEC to {recipient.slice(0, 16)}…{recipient.slice(-8)}
+              send <Sensitive>{amount} ZEC</Sensitive> to {recipient.slice(0, 16)}…
+              {recipient.slice(-8)}
             </p>
-            <p>fee: {fee} ZEC</p>
+            <p>
+              fee: <Sensitive>{fee} ZEC</Sensitive>
+            </p>
           </div>
           <Button variant='gradient' onClick={() => setStep('r1-in')} className='w-full'>
             scan qr from zigner
@@ -274,14 +279,14 @@ export function FrostAirgapSignFlow({
           />
           <p className='text-label text-fg-muted/70 leading-snug pt-1'>
             public part of zigner's nonces. zafu publishes to the relay so co-signers compute the
-            same challenge — no secret leaves zigner.
+            same challenge - no secret leaves zigner.
           </p>
         </div>
       );
 
     case 'r1-relay':
       return (
-        <div className='flex flex-col items-center gap-4 p-6'>
+        <div className='flex flex-col items-center gap-4 p-4'>
           <Header />
           <SignStepProgress current={1} />
           <div className='flex items-center gap-2 text-xs text-fg-muted'>
@@ -320,7 +325,7 @@ export function FrostAirgapSignFlow({
           </Button>
           <p className='text-label text-fg-muted/70 leading-snug pt-1'>
             all co-signers' round-1 commitments grouped per action. zigner derives ρ and computes
-            its share — nonces stay on zigner.
+            its share - nonces stay on zigner.
           </p>
         </div>
       );
@@ -346,7 +351,7 @@ export function FrostAirgapSignFlow({
 
     case 'r2-relay':
       return (
-        <div className='flex flex-col items-center gap-4 p-6'>
+        <div className='flex flex-col items-center gap-4 p-4'>
           <Header />
           <SignStepProgress current={3} />
           <div className='flex items-center gap-2 text-xs text-fg-muted'>

@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useCallback, memo } from 'react';
 import { localExtStorage } from '@repo/storage-chrome/local';
+import { Sensitive } from '../../../components/sensitive';
 import {
   getBalances,
   refreshChains,
@@ -39,9 +40,9 @@ const ChainRow = memo(({ balance }: { balance: ChainBalance }) => (
       </div>
     </div>
     <div className='text-right'>
-      <div className='text-sm font-medium tabular-nums'>
+      <Sensitive className='text-sm font-medium tabular-nums'>
         {formatBalance(balance.balance, balance.decimals, 4)} {balance.symbol}
-      </div>
+      </Sensitive>
       {balance.cached && <div className='text-xs text-fg-muted/70'>cached</div>}
     </div>
   </div>
@@ -115,9 +116,7 @@ export const PolkadotAssets = ({ publicKey, relay = 'polkadot' }: PolkadotAssets
   return (
     <div className='flex flex-col'>
       <div className='flex items-center justify-between mb-2'>
-        <span className='text-xs font-medium uppercase tracking-wider text-fg-muted'>
-          {relay} ecosystem
-        </span>
+        <span className='kicker'>{relay} ecosystem</span>
         <button
           onClick={() => void handleRefresh()}
           disabled={refreshing}

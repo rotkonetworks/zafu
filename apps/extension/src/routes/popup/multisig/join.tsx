@@ -34,8 +34,15 @@ import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../../state/frost-ses
 import { useDeadlineCountdown } from '../../../hooks/use-deadline-countdown';
 import { SettingsScreen } from '../settings/settings-screen';
 import { PopupPath } from '../paths';
-import { AnimatedQrDisplay } from '../../../shared/components/animated-qr-display';
-import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanner';
+import { useBackNav } from '../../../utils/navigate';
+import {
+  DEFAULT_RELAY_URL,
+  RelayTransportField,
+  CancelSessionModal,
+  ScreenWithTriggerQr,
+  ScanZignerResponse,
+  WaitingForRelay,
+} from './dkg-helpers';
 
 /* ────────────────────────────────────────────────────────────────────
  * Zafu-hot flow: FROST math runs in zafu's worker; share stored locally.
@@ -54,6 +61,8 @@ const MultisigJoinZafu = () => {
   const [participantCount, setParticipantCount] = useState(0);
   const [maxSigners, setMaxSignersDisplay] = useState(0);
   const [deadline, setDeadline] = useState<number | null>(null);
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  const goBack = useBackNav(PopupPath.MULTISIG);
   const newFrostMultisigKey = useStore(s => s.keyRing.newFrostMultisigKey);
 
   const countdown = useDeadlineCountdown(
@@ -69,7 +78,7 @@ const MultisigJoinZafu = () => {
     const sessionDeadline = Date.now() + FROST_SESSION_TIMEOUT_MS;
     setDeadline(sessionDeadline);
     try {
-      const url = relayUrl || 'wss://zcash.rotko.net';
+      const url = relayUrl || DEFAULT_RELAY_URL;
       setStep('joining');
 
       const relay = new FrostRelayClient(url);
@@ -84,7 +93,7 @@ const MultisigJoinZafu = () => {
       const peerFvks: string[] = [];
 
       setStep('dkg');
-      setProgress('waiting for coordinator...');
+      setProgress('waiting for the wallet creator...');
 
       void relay.joinRoom(
         roomCode.trim(),
@@ -129,7 +138,7 @@ const MultisigJoinZafu = () => {
         () => threshold > 0 && maxSignersLocal > 0 && fvkSk.length === 64,
         sessionDeadline,
       );
-      setProgress('round 1: generating commitment...');
+      setProgress('step 1 of 3: preparing your key...');
 
       const round1 = await frostDkgPart1InWorker(maxSignersLocal, threshold);
       console.log('[multisig-join] sending round1.broadcast:', {
@@ -143,10 +152,10 @@ const MultisigJoinZafu = () => {
         new TextEncoder().encode(`R1:${round1.broadcast}`),
       );
 
-      setProgress(`round 1: waiting for ${maxSignersLocal - 1} participant(s)...`);
+      setProgress('step 1 of 3: waiting for the other signers...');
       await waitForUntil(() => peerBroadcasts.length >= maxSignersLocal - 1, sessionDeadline);
 
-      setProgress('round 2: exchanging key shares...');
+      setProgress('step 2 of 3: exchanging keys...');
       const round2 = await frostDkgPart2InWorker(round1.secret, peerBroadcasts);
       for (const pkg of round2.peer_packages) {
         await relay.sendMessage(
@@ -157,10 +166,10 @@ const MultisigJoinZafu = () => {
       }
 
       const expectedR2 = (maxSignersLocal - 1) ** 2;
-      setProgress(`round 2: waiting for ${expectedR2} peer package(s)...`);
+      setProgress('step 2 of 3: waiting for the other signers...');
       await waitForUntil(() => peerRound2.length >= expectedR2, sessionDeadline);
 
-      setProgress('round 3: finalizing...');
+      setProgress('step 3 of 3: finishing up...');
       const round3 = await frostDkgPart3InWorker(round2.secret, peerBroadcasts, peerRound2);
 
       const addrRaw = await frostDeriveAddressFromSkInWorker(round3.public_key_package, fvkSk, 0);
@@ -170,7 +179,7 @@ const MultisigJoinZafu = () => {
       const orchardFvk = await frostDeriveUfvkInWorker(round3.public_key_package, fvkSk, true);
 
       setStep('fvk-echo');
-      setProgress('verifying viewing key agreement...');
+      setProgress('double-checking everyone sees the same wallet...');
       await relay.sendMessage(
         roomCode.trim(),
         participantId,
@@ -207,21 +216,23 @@ const MultisigJoinZafu = () => {
     }
   };
 
+  const sessionLive = step === 'joining' || step === 'dkg' || step === 'fvk-echo';
+
   return (
-    <SettingsScreen title='join multisig' backPath={PopupPath.MULTISIG}>
+    <SettingsScreen
+      title='join multisig'
+      backPath={PopupPath.MULTISIG}
+      onBack={() => (sessionLive ? setConfirmLeave(true) : goBack())}
+    >
+      <CancelSessionModal
+        open={confirmLeave}
+        onStay={() => setConfirmLeave(false)}
+        onLeave={goBack}
+      />
       {step === 'input' && (
         <div className='flex flex-col gap-4'>
           <label className='text-xs text-fg-muted'>
-            relay url
-            <input
-              className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-xs focus:border-primary/50 focus:outline-none'
-              value={relayUrl}
-              onChange={e => setRelayUrl(e.target.value)}
-              placeholder='wss://zcash.rotko.net'
-            />
-          </label>
-          <label className='text-xs text-fg-muted'>
-            room code
+            code from the wallet creator
             <input
               className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
               value={roomCode}
@@ -230,6 +241,7 @@ const MultisigJoinZafu = () => {
               autoFocus
             />
           </label>
+          <RelayTransportField value={relayUrl} onChange={setRelayUrl} />
           <button
             className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-50'
             onClick={() => void handleJoin()}
@@ -275,6 +287,12 @@ const MultisigJoinZafu = () => {
             <p className='text-label text-fg-muted'>address</p>
             <p className='mt-1 break-all font-mono text-xs'>{address}</p>
           </div>
+          <button
+            className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors'
+            onClick={goBack}
+          >
+            done
+          </button>
         </div>
       )}
 
@@ -333,6 +351,8 @@ const MultisigJoinZigner = () => {
   const [, setOrchardFvk] = useState('');
   const [address, setAddress] = useState('');
   const [deadline, setDeadline] = useState<number | null>(null);
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  const goBack = useBackNav(PopupPath.MULTISIG);
 
   const participantIdRef = useRef<Uint8Array | null>(null);
   const fvkSkRef = useRef('');
@@ -373,7 +393,7 @@ const MultisigJoinZigner = () => {
     r1: peerR1Ref.current,
     r2: peerR2Ref.current,
     sk: fvkSkRef.current,
-    relay_url: relayUrl || 'wss://zcash.rotko.net',
+    relay_url: relayUrl || DEFAULT_RELAY_URL,
     mainnet: true,
   });
 
@@ -382,7 +402,7 @@ const MultisigJoinZigner = () => {
       return;
     }
     try {
-      const url = relayUrl || 'wss://zcash.rotko.net';
+      const url = relayUrl || DEFAULT_RELAY_URL;
       const sessionDeadline = Date.now() + FROST_SESSION_TIMEOUT_MS;
       setDeadline(sessionDeadline);
 
@@ -635,7 +655,7 @@ const MultisigJoinZigner = () => {
           publicKeyPackage,
           threshold,
           maxSigners,
-          relayUrl: relayUrl || 'wss://zcash.rotko.net',
+          relayUrl: relayUrl || DEFAULT_RELAY_URL,
           custody: 'airgapSigner',
           zignerWalletId: walletId,
         });
@@ -673,25 +693,27 @@ const MultisigJoinZigner = () => {
     };
   }, []);
 
+  const sessionLive = step !== 'input' && step !== 'complete' && step !== 'error';
+
   return (
-    <SettingsScreen title='join multisig (zigner)' backPath={PopupPath.MULTISIG}>
+    <SettingsScreen
+      title='join multisig (zigner)'
+      backPath={PopupPath.MULTISIG}
+      onBack={() => (sessionLive ? setConfirmLeave(true) : goBack())}
+    >
+      <CancelSessionModal
+        open={confirmLeave}
+        onStay={() => setConfirmLeave(false)}
+        onLeave={goBack}
+      />
       {step === 'input' && (
         <div className='flex flex-col gap-4'>
           <div className='rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-2.5 text-label text-yellow-400'>
-            cold-multisig: the FROST share will be generated and stored on zigner only. zafu keeps
-            only the public key package + UFVK.
+            cold-multisig: your signing key is generated and stored on zigner only. zafu keeps only
+            the public keys needed to watch the wallet.
           </div>
           <label className='text-xs text-fg-muted'>
-            relay url
-            <input
-              className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-xs focus:border-primary/50 focus:outline-none'
-              value={relayUrl}
-              onChange={e => setRelayUrl(e.target.value)}
-              placeholder='wss://zcash.rotko.net'
-            />
-          </label>
-          <label className='text-xs text-fg-muted'>
-            room code
+            code from the wallet creator
             <input
               className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
               value={roomCode}
@@ -700,6 +722,7 @@ const MultisigJoinZigner = () => {
               autoFocus
             />
           </label>
+          <RelayTransportField value={relayUrl} onChange={setRelayUrl} />
           <button
             className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-50'
             onClick={() => void handleJoin()}
@@ -712,10 +735,10 @@ const MultisigJoinZigner = () => {
 
       {step === 'waiting-host-r1' && (
         <div className='flex flex-col items-center gap-3'>
-          <p className='text-xs text-fg-muted'>waiting for host's round 1 broadcast...</p>
+          <p className='text-xs text-fg-muted'>waiting for the wallet creator to start...</p>
           <span className='i-lucide-loader-2 size-4 animate-spin text-fg-muted' />
           {participantCount > 0 && (
-            <p className='text-label text-fg-muted'>{participantCount} participant(s) joined</p>
+            <p className='text-label text-fg-muted'>{participantCount} signer(s) joined</p>
           )}
           <span className='text-label text-fg-muted tabular-nums'>{countdown}s</span>
         </div>
@@ -723,8 +746,8 @@ const MultisigJoinZigner = () => {
 
       {step === 'dkg1-show' && (
         <ScreenWithTriggerQr
-          headline={`round 1 of 3 (${threshold}-of-${maxSigners})`}
-          body='Scan with zigner to start DKG round 1.'
+          headline={`step 1 of 3 (${threshold}-of-${maxSigners})`}
+          body='scan with zigner to start key setup.'
           triggerJson={dkg1Trigger}
           nextLabel='scan zigner response'
           onNext={() => setStep('dkg1-scan')}
@@ -733,7 +756,7 @@ const MultisigJoinZigner = () => {
 
       {step === 'dkg1-scan' && (
         <ScanZignerResponse
-          title='scan zigner round-1 broadcast'
+          title='scan the response QR from zigner'
           onScan={raw => void onZignerR1(raw)}
           onCancel={() => setStep('dkg1-show')}
         />
@@ -741,16 +764,16 @@ const MultisigJoinZigner = () => {
 
       {step === 'waiting-r1' && (
         <WaitingForRelay
-          headline='round 1 sent'
-          body={`waiting for ${maxSigners - 1} peer R1 broadcast(s)...`}
+          headline='step 1 sent'
+          body='waiting for the other signers...'
           countdown={countdown}
         />
       )}
 
       {step === 'dkg2-show' && (
         <ScreenWithTriggerQr
-          headline='round 2 of 3'
-          body='Scan with zigner to compute R2 packages.'
+          headline='step 2 of 3'
+          body='scan with zigner to exchange keys.'
           triggerJson={dkg2Trigger}
           nextLabel='scan zigner response'
           onNext={() => setStep('dkg2-scan')}
@@ -759,7 +782,7 @@ const MultisigJoinZigner = () => {
 
       {step === 'dkg2-scan' && (
         <ScanZignerResponse
-          title='scan zigner round-2 packages'
+          title='scan the response QR from zigner'
           onScan={raw => void onZignerR2(raw)}
           onCancel={() => setStep('dkg2-show')}
         />
@@ -767,25 +790,25 @@ const MultisigJoinZigner = () => {
 
       {step === 'waiting-r2' && (
         <WaitingForRelay
-          headline='round 2 sent'
-          body={`waiting for ${(maxSigners - 1) ** 2} peer R2 package(s)...`}
+          headline='step 2 sent'
+          body='waiting for the other signers...'
           countdown={countdown}
         />
       )}
 
       {step === 'dkg3-show' && (
         <ScreenWithTriggerQr
-          headline='round 3 of 3'
-          body='Scan with zigner to finalize and store the share.'
+          headline='step 3 of 3'
+          body='scan with zigner to finish - your key is stored on the device.'
           triggerJson={dkg3Trigger}
-          nextLabel='scan zigner ack'
+          nextLabel='scan zigner confirmation'
           onNext={() => setStep('dkg3-scan')}
         />
       )}
 
       {step === 'dkg3-scan' && (
         <ScanZignerResponse
-          title='scan zigner r3 ack (public_key_package)'
+          title='scan the confirmation QR from zigner'
           onScan={onZignerR3}
           onCancel={() => setStep('dkg3-show')}
         />
@@ -793,7 +816,7 @@ const MultisigJoinZigner = () => {
 
       {step === 'fvk-echo' && (
         <div className='flex flex-col items-center gap-3'>
-          <p className='text-xs text-fg-muted'>verifying viewing key agreement...</p>
+          <p className='text-xs text-fg-muted'>double-checking everyone sees the same wallet...</p>
           <span className='i-lucide-loader-2 size-4 animate-spin text-fg-muted' />
           <p className='text-label text-fg-muted tabular-nums'>{countdown}s</p>
         </div>
@@ -802,7 +825,7 @@ const MultisigJoinZigner = () => {
       {step === 'complete' && (
         <div className='flex flex-col gap-3'>
           <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-3 text-xs text-green-400'>
-            multisig wallet saved - share lives on zigner only
+            multisig wallet saved - signing key lives on zigner only
           </div>
           <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
             <p className='text-label text-fg-muted'>address</p>
@@ -811,6 +834,12 @@ const MultisigJoinZigner = () => {
           <p className='text-label text-fg-muted'>
             zigner wallet_id: <span className='font-mono'>{walletId}</span>
           </p>
+          <button
+            className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors'
+            onClick={goBack}
+          >
+            done
+          </button>
         </div>
       )}
 
@@ -833,71 +862,6 @@ const MultisigJoinZigner = () => {
     </SettingsScreen>
   );
 };
-
-/* ────────────────────────────────────────────────────────────────────
- * Small inline helpers used by the QR-mediated flow.
- * ──────────────────────────────────────────────────────────────────── */
-
-interface TriggerProps {
-  headline: string;
-  body: string;
-  triggerJson: string;
-  nextLabel: string;
-  onNext: () => void;
-}
-
-const TRIGGER_UR_TYPE = 'zafu-frost-dkg';
-
-const ScreenWithTriggerQr = ({ headline, body, triggerJson, nextLabel, onNext }: TriggerProps) => {
-  const bytes = new TextEncoder().encode(triggerJson);
-  return (
-    <div className='flex flex-col items-center gap-3'>
-      <p className='text-xs text-fg-muted'>{headline}</p>
-      <p className='text-label text-fg-muted text-center max-w-xs'>{body}</p>
-      <AnimatedQrDisplay data={bytes} urType={TRIGGER_UR_TYPE} size={200} />
-      <button
-        className='rounded-lg border border-primary/40 bg-primary/5 px-3 py-1.5 text-xs text-zigner-gold'
-        onClick={onNext}
-      >
-        {nextLabel}
-      </button>
-    </div>
-  );
-};
-
-interface ScanProps {
-  title: string;
-  onScan: (raw: string) => void;
-  onCancel: () => void;
-}
-
-const ScanZignerResponse = ({ title, onScan, onCancel }: ScanProps) => (
-  <AnimatedQrScanner
-    inline
-    title={title}
-    onComplete={data => onScan(new TextDecoder().decode(data))}
-    onClose={onCancel}
-  />
-);
-
-const WaitingForRelay = ({
-  headline,
-  body,
-  countdown,
-}: {
-  headline: string;
-  body: string;
-  countdown: number | null;
-}) => (
-  <div className='flex flex-col items-center gap-3'>
-    <p className='text-xs text-fg-muted'>{headline}</p>
-    <p className='text-label text-fg-muted text-center'>{body}</p>
-    <span className='i-lucide-loader-2 size-4 animate-spin text-fg-muted' />
-    {countdown != null && (
-      <span className='text-label text-fg-muted tabular-nums'>{countdown}s</span>
-    )}
-  </div>
-);
 
 /* ────────────────────────────────────────────────────────────────────
  * Unified entry: picks zafu-hot or zigner-QR based on URL or wallet.

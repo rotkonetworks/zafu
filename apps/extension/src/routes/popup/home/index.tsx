@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { useStore } from '../../../state';
@@ -30,24 +31,15 @@ import { useCosmosAssets } from '../../../hooks/cosmos-balance';
 import { useZcashSyncStatus } from '../../../hooks/zcash-sync';
 import { useTransparentBalance } from '../../../hooks/zcash-transparent-balance';
 import {
-  shieldInWorker,
-  buildUnsignedShieldInWorker,
-  completeShieldInWorker,
   spawnNetworkWorker,
   terminateNetworkWorker,
   markWalletSyncing,
   startSyncInWorker,
   startWatchOnlySyncInWorker,
   getBalanceInWorker,
-  type ShieldUnsignedResult,
 } from '../../../state/keyring/network-worker';
-import {
-  encodeZcashShieldingSignRequest,
-  isZcashSignatureQR,
-  parseZcashSignatureResponse,
-} from '@repo/wallet/zcash-zigner';
-import { QrDisplay } from '../../../shared/components/qr-display';
-import { QrScanner } from '../../../shared/components/qr-scanner';
+import { usePoolBalances } from '../../../hooks/zcash-pool-balances';
+import { ShieldTransparent } from '../../../components/zcash/shield-transparent';
 import { IRONWOOD_MIGRATION, NU6_3_ACTIVATION_HEIGHT } from '../../../config/feature-flags';
 import { IronwoodMigrationBanner, IronwoodMigrate } from '../send/ironwood-migrate';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
@@ -275,114 +267,95 @@ export const PopupIndex = () => {
   // truncate address for display
   const displayAddress = address ? `${address.slice(0, 12)}...${address.slice(-8)}` : walletName;
 
+  // Backup nudge as a slot candidate: on zcash it competes inside the single
+  // message slot (see ZcashContent); on other networks it renders alone.
+  const backupNudge = showBackupNudge ? (
+    <BackupNudge
+      onBackUp={() => navigate(PopupPath.SETTINGS_RECOVERY_PASSPHRASE)}
+      onDismiss={dismissBackupNudge}
+    />
+  ) : null;
+
+  // One tidy, evenly-spaced action row rendered under the balance figure.
+  // Icon-forward: labels reveal on hover (plus a title tooltip), so the row
+  // stays graphical and calm - Zashi's big obvious actions, zafu-sized.
+  const actions = (
+    <div className='grid grid-cols-3 gap-3'>
+      <ActionButton
+        icon='i-lucide-arrow-down'
+        label='receive'
+        onClick={() => navigate(PopupPath.RECEIVE)}
+      />
+      <ActionButton
+        icon='i-lucide-arrow-left-right'
+        label='swap'
+        onClick={() => navigate(PopupPath.SWAP)}
+      />
+      <ActionButton
+        icon='i-lucide-arrow-up'
+        label='send'
+        onClick={() => navigate(PopupPath.SEND)}
+        variant={activeNetwork === 'penumbra' ? 'penumbra' : 'zcash'}
+      />
+    </div>
+  );
+
   return (
     <div className='flex min-h-full flex-col'>
       <div className='flex flex-col gap-3 p-4'>
-        {/* backup nudge — amber, dismissible, gone forever once confirmed */}
-        {showBackupNudge && (
-          <div className='flex items-center gap-2.5 rounded-lg border border-warning/30 bg-warning/[0.07] px-3 py-2.5'>
-            <span className='i-lucide-triangle-alert h-4 w-4 shrink-0 text-warning' />
-            <span className='flex-1 text-label text-fg lowercase'>
-              recovery phrase not backed up
-            </span>
-            <button
-              onClick={() => navigate(PopupPath.SETTINGS_RECOVERY_PASSPHRASE)}
-              className='shrink-0 text-label text-warning lowercase underline-offset-2 hover:underline'
-            >
-              back up
-            </button>
-            <button
-              onClick={dismissBackupNudge}
-              title='I already backed it up'
-              className='shrink-0 p-0.5 text-fg-dim transition-colors hover:text-fg-high'
-            >
-              <span className='i-lucide-x h-3.5 w-3.5' />
-            </button>
-          </div>
-        )}
-
-        {/* address + actions row — deliberately unboxed: metadata, not a
-            card. The balance card below is the single hero box on this
-            screen; two bordered boxes competing was visual noise. */}
+        {/* address row - deliberately unboxed: metadata, not a card. The
+            balance card below is the single hero box on this screen. */}
         <div className='px-1 pt-1'>
-          {/* account picker moved into PenumbraContent below sync bar */}
-          <div className='flex items-center justify-between'>
-            <div>
-              <div className='mb-0.5 flex items-center gap-1.5'>
-                <span className='text-label text-fg-dim lowercase tracking-[0.05em]'>
-                  your address
+          <div className='mb-0.5 flex items-center gap-1.5'>
+            <span className='text-label text-fg-dim lowercase tracking-[0.05em]'>your address</span>
+            {/* tiny shielded indicator - new users may not realize their
+                unified/orchard address is privacy-preserving. The shield
+                icon is universally understood; one icon, no extra text. */}
+            {address && address.startsWith('u') && (
+              <span
+                className='i-lucide-shield-check h-3 w-3 text-zigner-gold/70'
+                title='shielded address - senders cannot see your other transactions'
+              />
+            )}
+          </div>
+          <div className='flex items-center gap-1'>
+            <button
+              onClick={copyAddress}
+              disabled={!address}
+              title={address ? (copied ? 'copied!' : 'click to copy') : undefined}
+              className='flex items-center gap-1.5 text-xs text-fg transition-colors duration-100 hover:text-fg-high disabled:opacity-50 disabled:cursor-not-allowed'
+            >
+              {isMultisig && (
+                <span className='rounded-sm bg-zigner-gold/15 px-1.5 py-0.5 text-label text-zigner-gold tabular leading-none'>
+                  {selectedMultisigWallet.multisig!.threshold}/
+                  {selectedMultisigWallet.multisig!.maxSigners}
                 </span>
-                {/* tiny shielded indicator — new users may not realize their
-                  unified/orchard address is privacy-preserving. The shield
-                  icon is universally understood; one icon, no extra text. */}
-                {address && address.startsWith('u') && (
-                  <span
-                    className='i-lucide-shield-check h-3 w-3 text-zigner-gold/70'
-                    title='shielded address — senders cannot see your other transactions'
-                  />
-                )}
-              </div>
-              <div className='flex items-center gap-1'>
-                <button
-                  onClick={copyAddress}
-                  disabled={!address}
-                  title={address ? (copied ? 'copied!' : 'click to copy') : undefined}
-                  className='flex items-center gap-1.5 text-xs text-fg transition-colors duration-100 hover:text-fg-high disabled:opacity-50 disabled:cursor-not-allowed'
-                >
-                  {isMultisig && (
-                    <span className='rounded-sm bg-zigner-gold/15 px-1.5 py-0.5 text-label text-zigner-gold tabular leading-none'>
-                      {selectedMultisigWallet.multisig!.threshold}/
-                      {selectedMultisigWallet.multisig!.maxSigners}
-                    </span>
-                  )}
-                  <span className='tabular'>{displayAddress}</span>
-                  {address &&
-                    (copied ? (
-                      <span className='inline-flex items-center gap-0.5 text-zigner-gold'>
-                        <span className='i-lucide-check h-3 w-3' />
-                        <span className='text-label lowercase'>copied</span>
-                      </span>
-                    ) : (
-                      <span className='i-lucide-copy h-3 w-3' />
-                    ))}
-                </button>
-                {address && activeNetwork === 'zcash' && (
-                  <button
-                    onClick={() => {
-                      chrome.storage.local.get('zcashShieldedIndex', r => {
-                        const next = ((r['zcashShieldedIndex'] as number) ?? 0) + 1;
-                        void chrome.storage.local.set({ zcashShieldedIndex: next });
-                      });
-                    }}
-                    className='p-0.5 text-fg-muted transition-colors hover:text-fg-high'
-                    title='rotate address'
-                  >
-                    <span className='i-lucide-refresh-cw h-3 w-3' />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Fixed 40×40 icon-only action buttons. Send keeps
-              network-accent so the primary action stands out. */}
-            <div className='flex gap-1.5'>
-              <ActionButton
-                icon='i-lucide-arrow-down'
-                label='receive'
-                onClick={() => navigate(PopupPath.RECEIVE)}
-              />
-              <ActionButton
-                icon='i-lucide-arrow-left-right'
-                label='swap'
-                onClick={() => navigate(PopupPath.SWAP)}
-              />
-              <ActionButton
-                icon='i-lucide-arrow-up'
-                label='send'
-                onClick={() => navigate(PopupPath.SEND)}
-                variant={activeNetwork === 'penumbra' ? 'penumbra' : 'zcash'}
-              />
-            </div>
+              )}
+              <span className='tabular'>{displayAddress}</span>
+              {address &&
+                (copied ? (
+                  <span className='inline-flex items-center gap-0.5 text-zigner-gold'>
+                    <span className='i-lucide-check h-3 w-3' />
+                    <span className='text-label lowercase'>copied</span>
+                  </span>
+                ) : (
+                  <span className='i-lucide-copy h-3 w-3' />
+                ))}
+            </button>
+            {address && activeNetwork === 'zcash' && (
+              <button
+                onClick={() => {
+                  chrome.storage.local.get('zcashShieldedIndex', r => {
+                    const next = ((r['zcashShieldedIndex'] as number) ?? 0) + 1;
+                    void chrome.storage.local.set({ zcashShieldedIndex: next });
+                  });
+                }}
+                className='p-0.5 text-fg-muted transition-colors hover:text-fg-high'
+                title='rotate address'
+              >
+                <span className='i-lucide-refresh-cw h-3 w-3' />
+              </button>
+            )}
           </div>
         </div>
 
@@ -398,6 +371,8 @@ export const PopupIndex = () => {
             zcashWallet={selectedKeyInfo?.type === 'mnemonic' ? undefined : activeZcashWallet}
             polkadotPublicKey={polkadotPublicKey}
             hasMnemonic={selectedKeyInfo?.type === 'mnemonic'}
+            actions={actions}
+            nudge={backupNudge}
           />
         </Suspense>
 
@@ -410,6 +385,27 @@ export const PopupIndex = () => {
   );
 };
 
+/** amber, dismissible backup reminder - gone forever once confirmed */
+const BackupNudge = ({ onBackUp, onDismiss }: { onBackUp: () => void; onDismiss: () => void }) => (
+  <div className='flex items-center gap-2.5 rounded-md border border-warning/30 bg-warning/[0.07] px-3 py-2.5'>
+    <span className='i-lucide-triangle-alert h-4 w-4 shrink-0 text-warning' />
+    <span className='flex-1 text-label text-fg lowercase'>recovery phrase not backed up</span>
+    <button
+      onClick={onBackUp}
+      className='shrink-0 text-label text-warning lowercase underline-offset-2 hover:underline'
+    >
+      back up
+    </button>
+    <button
+      onClick={onDismiss}
+      title='I already backed it up'
+      className='shrink-0 p-0.5 text-fg-dim transition-colors hover:text-fg-high'
+    >
+      <span className='i-lucide-x h-3.5 w-3.5' />
+    </button>
+  </div>
+);
+
 /** network-specific content - split out to minimize re-renders */
 const NetworkContent = ({
   network,
@@ -418,6 +414,8 @@ const NetworkContent = ({
   zcashWallet,
   polkadotPublicKey,
   hasMnemonic,
+  actions,
+  nudge,
 }: {
   network: NetworkType;
   penumbraAccount: number;
@@ -431,26 +429,68 @@ const NetworkContent = ({
   };
   polkadotPublicKey?: string;
   hasMnemonic?: boolean;
+  /** shared receive/swap/send row - rendered directly under the balance */
+  actions?: ReactNode;
+  /** backup nudge - joins the zcash message slot; renders alone elsewhere */
+  nudge?: ReactNode;
 }) => {
   switch (network) {
     case 'penumbra':
-      return <PenumbraContent account={penumbraAccount} onAccountChange={setPenumbraAccount} />;
+      return (
+        <PenumbraContent
+          account={penumbraAccount}
+          onAccountChange={setPenumbraAccount}
+          actions={actions}
+          nudge={nudge}
+        />
+      );
 
     case 'zcash':
-      return <ZcashContent hasMnemonic={hasMnemonic} watchOnly={zcashWallet} />;
+      return (
+        <ZcashContent
+          hasMnemonic={hasMnemonic}
+          watchOnly={zcashWallet}
+          actions={actions}
+          nudge={nudge}
+        />
+      );
 
     case 'polkadot':
-      return <PolkadotContent publicKey={polkadotPublicKey} />;
+      return (
+        <>
+          {nudge}
+          {actions}
+          <PolkadotContent publicKey={polkadotPublicKey} />
+        </>
+      );
 
     case 'kusama':
-      return <PolkadotContent publicKey={polkadotPublicKey} relay='kusama' />;
+      return (
+        <>
+          {nudge}
+          {actions}
+          <PolkadotContent publicKey={polkadotPublicKey} relay='kusama' />
+        </>
+      );
 
     case 'noble':
     case 'cosmoshub':
-      return <CosmosContent chainId={network as CosmosChainId} />;
+      return (
+        <>
+          {nudge}
+          {actions}
+          <CosmosContent chainId={network as CosmosChainId} />
+        </>
+      );
 
     default:
-      return <NetworkPlaceholder network={network} />;
+      return (
+        <>
+          {nudge}
+          {actions}
+          <NetworkPlaceholder network={network} />
+        </>
+      );
   }
 };
 
@@ -458,9 +498,13 @@ const NetworkContent = ({
 const PenumbraContent = ({
   account,
   onAccountChange,
+  actions,
+  nudge,
 }: {
   account: number;
   onAccountChange: (n: number) => void;
+  actions?: ReactNode;
+  nudge?: ReactNode;
 }) => {
   const navigate = useNavigate();
   const { latestBlockHeight, fullSyncHeight, error } = useSyncProgress();
@@ -475,7 +519,7 @@ const PenumbraContent = ({
     ? 'connecting...'
     : isSyncing
       ? `syncing ${syncPct}%`
-      : `block ${(fullSyncHeight ?? latestBlockHeight).toLocaleString()}`;
+      : `penumbra block ${(fullSyncHeight ?? latestBlockHeight).toLocaleString()}`;
 
   // query UM balance for the balance card
   const { data: umBalance } = useQuery({
@@ -529,6 +573,12 @@ const PenumbraContent = ({
         <div className='mt-1 text-label text-fg-dim tabular'>{syncLabel}</div>
       </div>
 
+      {/* action row directly under the balance - Zashi placement */}
+      {actions}
+
+      {/* single message slot for penumbra: only the backup nudge competes */}
+      {nudge}
+
       {/* sync bar — visible while syncing or connecting */}
       {(isSyncing || !latestBlockHeight) && (
         <SyncProgressBar
@@ -575,9 +625,13 @@ const PenumbraContent = ({
 const ZcashContent = ({
   hasMnemonic,
   watchOnly,
+  actions,
+  nudge,
 }: {
   hasMnemonic?: boolean;
   watchOnly?: { label: string; mainnet: boolean; orchardFvk?: string; ufvk?: string; id?: string };
+  actions?: ReactNode;
+  nudge?: ReactNode;
 }) => {
   const hasWallet = !!(hasMnemonic || watchOnly);
   const isMainnet = watchOnly?.mainnet ?? true;
@@ -644,142 +698,15 @@ const ZcashContent = ({
 
   const { totalZat: transparentZat, isLoading: utxoLoading } = useTransparentBalance(tAddresses);
 
-  // shielding state
-  const [shielding, setShielding] = useState(false);
-  const [shieldTxid, setShieldTxid] = useState<string | null>(null);
-  const [shieldError, setShieldError] = useState<string | null>(null);
+  // per-pool split (orchard legacy / ironwood active) - revealed on
+  // hover/expand of the hero balance, never a second permanent box
+  const pools = usePoolBalances(selectedKeyInfo?.id, workerSyncHeight);
+  const [poolsPinned, setPoolsPinned] = useState(false);
 
   // NU6.3 turnstile migration flow (feature-flagged; see feature-flags.ts)
   const [showIronwoodMigrate, setShowIronwoodMigrate] = useState(false);
   // toggle to show sync detail panel when wallet is fully synced
   const [showSyncDetail, setShowSyncDetail] = useState(false);
-
-  // zigner shielding state
-  const [zignerShieldStep, setZignerShieldStep] = useState<
-    'idle' | 'building' | 'show_qr' | 'scanning' | 'broadcasting' | 'complete' | 'error'
-  >('idle');
-  const [shieldSignRequestQr, setShieldSignRequestQr] = useState<string | null>(null);
-  const [shieldUnsignedData, setShieldUnsignedData] = useState<ShieldUnsignedResult | null>(null);
-  const [zignerShieldTxid, setZignerShieldTxid] = useState<string | null>(null);
-  const [zignerShieldError, setZignerShieldError] = useState<string | null>(null);
-
-  const handleZignerShield = useCallback(async () => {
-    if (!watchOnly || !selectedKeyInfo) {
-      return;
-    }
-    const ufvk =
-      watchOnly.ufvk ??
-      (watchOnly.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
-    if (!ufvk) {
-      return;
-    }
-
-    setZignerShieldStep('building');
-    setZignerShieldTxid(null);
-    setZignerShieldError(null);
-
-    try {
-      await spawnNetworkWorker('zcash');
-      const addressIndexMap: Record<string, number> = {};
-      tAddresses.forEach((addr, i) => {
-        addressIndexMap[addr] = i;
-      });
-
-      const result = await buildUnsignedShieldInWorker(
-        'zcash',
-        selectedKeyInfo.id,
-        zidecarUrl,
-        tAddresses,
-        isMainnet,
-        ufvk,
-        addressIndexMap,
-      );
-      setShieldUnsignedData(result);
-
-      // encode QR sign request
-      const sighashBytes = result.sighashes.map(h => {
-        const bytes = new Uint8Array(32);
-        for (let i = 0; i < 32; i++) {
-          bytes[i] = parseInt(h.substring(i * 2, i * 2 + 2), 16);
-        }
-        return bytes;
-      });
-
-      const qrHex = encodeZcashShieldingSignRequest({
-        accountIndex: watchOnly.id ? 0 : 0,
-        sighashes: sighashBytes,
-        addressIndices: result.addressIndices,
-        summary: result.summary,
-        mainnet: isMainnet,
-      });
-
-      setShieldSignRequestQr(qrHex);
-      setZignerShieldStep('show_qr');
-    } catch (err) {
-      setZignerShieldError(err instanceof Error ? err.message : String(err));
-      setZignerShieldStep('error');
-    }
-  }, [watchOnly, selectedKeyInfo, tAddresses, isMainnet, zidecarUrl]);
-
-  const handleZignerShieldSigScanned = useCallback(
-    async (data: string) => {
-      if (!isZcashSignatureQR(data)) {
-        setZignerShieldError('invalid signature QR code');
-        setZignerShieldStep('error');
-        return;
-      }
-
-      try {
-        const sigResponse = parseZcashSignatureResponse(data);
-
-        if (!shieldUnsignedData || !selectedKeyInfo) {
-          throw new Error('missing unsigned transaction data');
-        }
-
-        // verify the returned sighash matches what we sent
-        const toHex = (b: Uint8Array) =>
-          Array.from(b)
-            .map(x => x.toString(16).padStart(2, '0'))
-            .join('');
-        const responseSighash = toHex(sigResponse.sighash);
-        if (
-          shieldUnsignedData.sighashes.length > 0 &&
-          responseSighash !== shieldUnsignedData.sighashes[0]
-        ) {
-          throw new Error('sighash mismatch — signature is for a different transaction');
-        }
-
-        setZignerShieldStep('broadcasting');
-
-        // zigner returns each transparent sig as: DER_sig + 0x01(hashtype) + compressed_pubkey(33 bytes)
-        // split into sig (with hashtype) and pubkey
-        const signatures = sigResponse.transparentSigs.map(combined => {
-          const pubkey = combined.slice(-33);
-          const sig = combined.slice(0, -33);
-          const toHex = (b: Uint8Array) =>
-            Array.from(b)
-              .map(x => x.toString(16).padStart(2, '0'))
-              .join('');
-          return { sig_hex: toHex(sig), pubkey_hex: toHex(pubkey) };
-        });
-
-        const result = await completeShieldInWorker(
-          'zcash',
-          selectedKeyInfo.id,
-          zidecarUrl,
-          shieldUnsignedData.unsignedTxHex,
-          signatures,
-        );
-
-        setZignerShieldTxid(result.txid);
-        setZignerShieldStep('complete');
-      } catch (err) {
-        setZignerShieldError(err instanceof Error ? err.message : String(err));
-        setZignerShieldStep('error');
-      }
-    },
-    [shieldUnsignedData, selectedKeyInfo, watchOnly, zidecarUrl],
-  );
 
   // rescan via custom event — terminate worker, clear IDB, let auto-sync restart
   useEffect(() => {
@@ -855,48 +782,6 @@ const ZcashContent = ({
     zcashBackend,
   ]);
 
-  const handleShield = useCallback(async () => {
-    if (!hasMnemonic || !selectedKeyInfo || selectedKeyInfo.type !== 'mnemonic') {
-      return;
-    }
-    if (shielding || transparentZat <= 0n) {
-      return;
-    }
-
-    const authorized = await requestAuth();
-    if (!authorized) {
-      return;
-    }
-
-    setShielding(true);
-    setShieldTxid(null);
-    setShieldError(null);
-
-    try {
-      const mnemonic = await keyRing.getMnemonic(selectedKeyInfo.id);
-      const walletId = selectedKeyInfo.id;
-      // map each address to its BIP44 derivation index so the worker signs with the correct key
-      const addressIndexMap: Record<string, number> = {};
-      tAddresses.forEach((addr, i) => {
-        addressIndexMap[addr] = i;
-      });
-      const result = await shieldInWorker(
-        'zcash',
-        walletId,
-        mnemonic,
-        zidecarUrl,
-        tAddresses,
-        isMainnet,
-        addressIndexMap,
-      );
-      setShieldTxid(result.txid);
-    } catch (err) {
-      setShieldError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setShielding(false);
-    }
-  }, [hasMnemonic, selectedKeyInfo, keyRing, shielding, transparentZat, tAddresses, isMainnet]);
-
   if (!hasWallet) {
     return (
       <div className='flex flex-col items-center justify-center py-12 text-center'>
@@ -953,22 +838,115 @@ const ZcashContent = ({
           ? Math.min(100, ligeritoPct)
           : nomtPct;
 
-  // combined balance
+  // combined balance - transparent funds fold into the single hero figure
   const totalZat = orchardZat + transparentZat;
   const totalZec = Number(totalZat) / 1e8;
-  const tZec = Number(transparentZat) / 1e8;
+
+  // NU6.3 turnstile: eligible once the flag is on, activation has passed,
+  // and legacy orchard funds remain (per-pool split from the worker)
+  const ironwoodEligible =
+    IRONWOOD_MIGRATION && (chainTip?.height ?? 0) >= NU6_3_ACTIVATION_HEIGHT && pools.orchard > 0n;
+
+  // Single message slot - Zashi's HomeMessage pattern: exactly one nudge at
+  // a time. Priority: sync error (the sync bar below owns that surface, so
+  // the slot yields entirely) > ironwood migrate > backup nudge > get-zec
+  // hint / first-sync reassurance (mutually exclusive by allSynced).
+  const messageSlot: ReactNode = syncError ? null : ironwoodEligible ? (
+    <IronwoodMigrationBanner
+      orchardZat={pools.orchard}
+      onMigrate={() => setShowIronwoodMigrate(true)}
+    />
+  ) : nudge ? (
+    nudge
+  ) : allSynced && totalZat === 0n ? (
+    <GetZecHint onReceive={() => navigate(PopupPath.RECEIVE)} />
+  ) : !allSynced && totalZat === 0n && chainHeight > 0 ? (
+    <FirstSyncNote />
+  ) : null;
+
+  // Pool rows for the hero-card reveal. All three pools stay visible
+  // (ironwood active / orchard legacy / transparent public below) so no
+  // pool is ever hidden. Falls back to a single "shielded" row if the
+  // worker's per-pool endpoint reports nothing while the combined balance
+  // is positive (older worker builds).
+  const poolRows =
+    pools.total === 0n && orchardZat > 0n
+      ? [
+          {
+            key: 'shielded',
+            icon: 'i-lucide-shield-check',
+            label: 'shielded',
+            badge: undefined as string | undefined,
+            zat: orchardZat,
+          },
+        ]
+      : [
+          {
+            key: 'ironwood',
+            icon: 'i-lucide-shield-check',
+            label: 'ironwood',
+            badge: undefined as string | undefined,
+            zat: pools.ironwood,
+          },
+          {
+            key: 'orchard',
+            icon: 'i-lucide-clock',
+            label: 'orchard',
+            badge: 'legacy' as string | undefined,
+            zat: pools.orchard,
+          },
+        ];
+
+  // glance -> detail: the hero balance opens the full per-pool notes view;
+  // each reveal row deep-links to its pool ('shielded' fallback -> ironwood)
+  const openPoolNotes = (pool?: string) => {
+    if (!IRONWOOD_MIGRATION) {
+      return; // route is registered only when the flag is on
+    }
+    navigate(pool ? `${PopupPath.POOL_NOTES}?pool=${pool}` : PopupPath.POOL_NOTES);
+  };
 
   return (
     <div className='flex-1 flex flex-col gap-3'>
       {PasswordModal}
-      {/* combined balance — figure in the network accent (zigner-gold for zcash) */}
-      <div className='rounded-md border border-network-accent/20 bg-elev-1 p-4'>
-        <span className='kicker'>balance</span>
-        <div className='mt-1 text-display leading-none text-network-accent tabular'>
-          <Sensitive>
-            {workerSyncHeight > 0 || totalZat > 0n ? `${fmtZec(totalZec)} ZEC` : '— ZEC'}
-          </Sensitive>
+      {/* hero balance - the single figure on this screen at two depths:
+          hover (or pin via the chevron) reveals the per-pool split inline,
+          click opens the full per-pool notes view. The split never
+          occupies a second permanent box. */}
+      <div className='group rounded-md border border-network-accent/20 bg-elev-1 p-4'>
+        <div className='flex items-center justify-between'>
+          <span className='kicker'>balance</span>
+          <button
+            onClick={() => setPoolsPinned(v => !v)}
+            title='pool detail'
+            className='p-0.5 text-fg-dim transition-colors hover:text-fg-high'
+          >
+            <span
+              className={cn(
+                'block h-3.5 w-3.5 transition-transform',
+                poolsPinned ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down',
+              )}
+            />
+          </button>
         </div>
+        {IRONWOOD_MIGRATION ? (
+          <button
+            type='button'
+            onClick={() => openPoolNotes()}
+            title='view notes'
+            className='mt-1 block text-left text-display leading-none text-network-accent tabular transition-opacity hover:opacity-80'
+          >
+            <Sensitive>
+              {workerSyncHeight > 0 || totalZat > 0n ? `${fmtZec(totalZec)} ZEC` : '— ZEC'}
+            </Sensitive>
+          </button>
+        ) : (
+          <div className='mt-1 text-display leading-none text-network-accent tabular'>
+            <Sensitive>
+              {workerSyncHeight > 0 || totalZat > 0n ? `${fmtZec(totalZec)} ZEC` : '— ZEC'}
+            </Sensitive>
+          </div>
+        )}
         <div className='mt-1 text-label text-fg-dim tabular'>
           {chainHeight <= 0 ? (
             '\u00a0' /* hold the line height; sync bar below owns status */
@@ -981,166 +959,99 @@ const ZcashContent = ({
               className='hover:text-fg-muted transition-colors'
               title='rescan options'
             >
-              {`synced · block ${workerSyncHeight.toLocaleString()}`}
+              {`synced · zcash block ${workerSyncHeight.toLocaleString()}`}
             </button>
           ) : (
             `syncing · ${overallPct.toFixed(1)}%`
           )}
         </div>
+
+        {/* per-pool reveal: hover-expand, chevron pins it open for touch.
+            Three rows - ironwood (active), orchard (legacy), transparent
+            (public) - each deep-linking into the notes view for that pool. */}
+        <div
+          className={cn(
+            'grid transition-[grid-template-rows] duration-200',
+            poolsPinned ? 'grid-rows-[1fr]' : 'grid-rows-[0fr] group-hover:grid-rows-[1fr]',
+          )}
+        >
+          <div className='overflow-hidden'>
+            <div className='mt-3 flex flex-col gap-2 border-t border-border-soft pt-3'>
+              {poolRows.map(row => (
+                <div key={row.key} className='flex items-center justify-between gap-2'>
+                  <button
+                    type='button'
+                    onClick={() => openPoolNotes(row.key === 'shielded' ? 'ironwood' : row.key)}
+                    title={`view ${row.label} notes`}
+                    className='group/row flex min-w-0 flex-1 items-center gap-2 text-left'
+                  >
+                    <span className={cn(row.icon, 'h-3.5 w-3.5 shrink-0 text-fg-muted')} />
+                    <span className='text-xs text-fg-muted lowercase transition-colors group-hover/row:text-fg-high'>
+                      {row.label}
+                    </span>
+                    {row.badge && (
+                      <span className='rounded-sm bg-elev-2 px-1.5 py-0.5 text-label text-fg-dim leading-none lowercase'>
+                        {row.badge}
+                      </span>
+                    )}
+                    <span className='i-lucide-chevron-right h-3 w-3 shrink-0 text-fg-dim opacity-0 transition-opacity group-hover/row:opacity-100' />
+                    <Sensitive className='ml-auto text-xs tabular text-fg-high'>
+                      {`${fmtZec(Number(row.zat) / 1e8)} ZEC`}
+                    </Sensitive>
+                  </button>
+                  {row.key === 'orchard' && ironwoodEligible && (
+                    <button
+                      onClick={() => setShowIronwoodMigrate(true)}
+                      className='shrink-0 text-label font-medium text-network-accent transition-colors hover:text-fg-high'
+                    >
+                      migrate
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                type='button'
+                onClick={() => openPoolNotes('transparent')}
+                title='view transparent funds'
+                className='group/row flex min-w-0 items-center gap-2 text-left'
+              >
+                <span className='i-lucide-eye h-3.5 w-3.5 shrink-0 text-fg-muted' />
+                <span className='text-xs text-fg-muted lowercase transition-colors group-hover/row:text-fg-high'>
+                  transparent
+                </span>
+                <span className='rounded-sm bg-elev-2 px-1.5 py-0.5 text-label text-fg-dim leading-none lowercase'>
+                  public
+                </span>
+                <span className='i-lucide-chevron-right h-3 w-3 shrink-0 text-fg-dim opacity-0 transition-opacity group-hover/row:opacity-100' />
+                <Sensitive className='ml-auto text-xs tabular text-fg-high'>
+                  {`${fmtZec(Number(transparentZat) / 1e8)} ZEC`}
+                </Sensitive>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* first-sync reassurance — only when actively syncing with no
-          balance yet (the canonical new-user state). Sets expectations so
-          the user doesn't think the wallet is broken. Disappears once
-          either sync completes or any balance shows up. */}
-      {!allSynced && totalZat === 0n && chainHeight > 0 && (
-        <div className='rounded-md border border-border-soft bg-elev-1 p-3'>
-          <div className='flex items-start gap-2'>
-            <span className='i-lucide-info mt-0.5 h-3.5 w-3.5 shrink-0 text-fg-muted' />
-            <div className='flex-1'>
-              <div className='text-xs text-fg-high lowercase'>scanning for your notes</div>
-              <p className='mt-0.5 text-label text-fg-muted leading-snug'>
-                first sync can take a few minutes. you can leave this open or come back later — the
-                worker keeps running in the background.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* action row directly under the balance - Zashi placement */}
+      {actions}
 
-      {/* empty-state hint for new users — only shown when the wallet is
-          synced AND the balance is zero. Disappears the moment any ZEC
-          lands. The hint surfaces concrete next steps (receive address,
-          exchanges, swap from another asset) instead of leaving the new
-          user staring at a 0.00 ZEC card wondering what to do next. */}
-      {allSynced && totalZat === 0n && <GetZecHint onReceive={() => navigate(PopupPath.RECEIVE)} />}
+      {/* single priority message slot */}
+      {messageSlot}
 
-      {/* transparent pool detail — only shown when transparent > 0 */}
+      {/* small shield entry - replaces the old red alarming box; the full
+          hot + zigner flow lives in ShieldTransparent */}
       {transparentZat > 0n && (
-        <div className='rounded-lg border border-red-500/40 bg-red-500/5 p-3'>
-          <div className='flex items-center justify-between'>
-            <div className='flex items-center gap-2'>
-              <span className='text-xs text-red-400'>transparent</span>
-              <span className='text-label px-1.5 py-0.5 rounded-md bg-red-500/15 text-red-500 font-medium leading-none'>
-                public
-              </span>
-              <span className='text-xs font-medium tabular-nums'>
-                {utxoLoading ? '...' : `${fmtZec(tZec)} ZEC`}
-              </span>
-            </div>
-            {hasMnemonic ? (
-              <button
-                onClick={() => void handleShield()}
-                disabled={shielding || !!shieldTxid}
-                className='text-xs font-medium text-red-400 hover:text-red-300 transition-colors disabled:opacity-50'
-              >
-                {shielding ? 'shielding...' : shieldTxid ? 'pending...' : 'shield'}
-              </button>
-            ) : (
-              <button
-                onClick={() => void handleZignerShield()}
-                disabled={
-                  zignerShieldStep !== 'idle' &&
-                  zignerShieldStep !== 'error' &&
-                  zignerShieldStep !== 'complete'
-                }
-                className='text-xs font-medium text-red-400 hover:text-red-300 transition-colors disabled:opacity-50'
-              >
-                {zignerShieldStep === 'building'
-                  ? 'building...'
-                  : zignerShieldStep === 'broadcasting'
-                    ? 'broadcasting...'
-                    : zignerShieldStep === 'complete'
-                      ? 'pending...'
-                      : 'shield via zigner'}
-              </button>
-            )}
-          </div>
-          {shieldTxid && (
-            <div className='text-label text-green-400 mt-1.5 font-mono'>
-              shielded: {shieldTxid.slice(0, 16)}... (wait for confirmation)
-            </div>
-          )}
-          {shieldError && <div className='text-label text-red-400 mt-1.5'>{shieldError}</div>}
-
-          {/* zigner shielding QR flow */}
-          {zignerShieldStep === 'show_qr' && shieldSignRequestQr && (
-            <div className='mt-3 flex flex-col items-center gap-2'>
-              <QrDisplay
-                data={shieldSignRequestQr}
-                size={180}
-                title='scan with zafu zigner'
-                description='scan to sign shielding transaction'
-              />
-              <div className='flex gap-2 w-full'>
-                <button
-                  onClick={() => setZignerShieldStep('scanning')}
-                  className='flex-1 text-xs font-medium bg-zigner-gold text-zigner-dark py-1.5 hover:bg-primary/90 transition-colors'
-                >
-                  scan signature
-                </button>
-                <button
-                  onClick={() => {
-                    setZignerShieldStep('idle');
-                    setShieldSignRequestQr(null);
-                  }}
-                  className='text-xs text-fg-muted hover:text-fg-high px-2 transition-colors'
-                >
-                  cancel
-                </button>
-              </div>
-            </div>
-          )}
-
-          {zignerShieldStep === 'scanning' && (
-            <div className='mt-3'>
-              <QrScanner
-                onScan={data => void handleZignerShieldSigScanned(data)}
-                onError={err => {
-                  setZignerShieldError(err);
-                  setZignerShieldStep('error');
-                }}
-                onClose={() => setZignerShieldStep('show_qr')}
-                title='scan signature'
-                description='point camera at zafu zigner signature qr'
-              />
-            </div>
-          )}
-
-          {zignerShieldStep === 'complete' && zignerShieldTxid && (
-            <div className='text-label text-green-400 mt-1.5 font-mono'>
-              shielded: {zignerShieldTxid.slice(0, 16)}... (wait for confirmation)
-            </div>
-          )}
-          {zignerShieldStep === 'error' && zignerShieldError && (
-            <div className='text-label text-red-400 mt-1.5'>
-              {zignerShieldError}
-              <button
-                onClick={() => {
-                  setZignerShieldStep('idle');
-                  setZignerShieldError(null);
-                }}
-                className='ml-2 underline'
-              >
-                dismiss
-              </button>
-            </div>
-          )}
-        </div>
+        <ShieldTransparent
+          transparentZat={transparentZat}
+          utxoLoading={utxoLoading}
+          hasMnemonic={hasMnemonic}
+          watchOnly={watchOnly}
+          tAddresses={tAddresses}
+          isMainnet={isMainnet}
+          zidecarUrl={zidecarUrl}
+        />
       )}
 
-      {/* NU6.3 turnstile: migrate orchard -> ironwood. Zashi
-          proposeShielding-style prompt, gated behind the IRONWOOD_MIGRATION
-          feature flag (default OFF) so this ships dormant until the
-          ironwood wasm + activation land. */}
-      {IRONWOOD_MIGRATION &&
-        (chainTip?.height ?? 0) >= NU6_3_ACTIVATION_HEIGHT &&
-        orchardZat > 0n && (
-          <IronwoodMigrationBanner
-            orchardZat={orchardZat}
-            onMigrate={() => setShowIronwoodMigrate(true)}
-          />
-        )}
       {IRONWOOD_MIGRATION &&
         (chainTip?.height ?? 0) >= NU6_3_ACTIVATION_HEIGHT &&
         showIronwoodMigrate &&
@@ -1156,7 +1067,7 @@ const ZcashContent = ({
               watchOnly?.ufvk ??
               (watchOnly?.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined)
             }
-            orchardZat={orchardZat}
+            orchardZat={pools.orchard > 0n ? pools.orchard : orchardZat}
             isHotWallet={selectedKeyInfo.type === 'mnemonic'}
             getMnemonic={
               selectedKeyInfo.type === 'mnemonic'
@@ -1181,7 +1092,7 @@ const ZcashContent = ({
           percent={allSynced ? 100 : Math.max(overallPct, 2)}
           label={
             allSynced
-              ? `synced · block ${workerSyncHeight.toLocaleString()}`
+              ? `synced · zcash block ${workerSyncHeight.toLocaleString()}`
               : chainHeight <= 0
                 ? 'connecting...'
                 : scanPct > 0
@@ -1289,7 +1200,7 @@ const CosmosContent = ({ chainId }: { chainId: CosmosChainId }) => {
 
   return (
     <div className='flex-1'>
-      <div className='mb-2 text-xs font-medium uppercase tracking-wider text-fg-muted'>assets</div>
+      <div className='kicker mb-2'>assets</div>
       {isLoading ? (
         <AssetListSkeleton rows={2} />
       ) : assetsData?.assets.length === 0 ? (
@@ -1305,7 +1216,7 @@ const CosmosContent = ({ chainId }: { chainId: CosmosChainId }) => {
               </div>
             </div>
             <div className='text-right'>
-              <div className='text-sm font-medium tabular-nums'>0 {config.symbol}</div>
+              <Sensitive className='text-sm font-medium tabular-nums'>0 {config.symbol}</Sensitive>
             </div>
           </div>
         </div>
@@ -1326,7 +1237,9 @@ const CosmosContent = ({ chainId }: { chainId: CosmosChainId }) => {
                   </div>
                 </div>
                 <div className='text-right'>
-                  <div className='text-sm font-medium tabular-nums'>{asset.formatted}</div>
+                  <Sensitive className='text-sm font-medium tabular-nums'>
+                    {asset.formatted}
+                  </Sensitive>
                 </div>
               </div>
             </div>
@@ -1353,10 +1266,11 @@ interface ParsedTransaction {
 }
 
 /**
- * Stacked action button — icon (top) + label (bottom). Used for the
- * home action row (receive / swap / send). Keplr's pattern: compact
- * enough for a narrow popup, but with the label visible so new users
- * can read what each button does without hovering for a tooltip.
+ * Icon-forward action button for the home action row (receive / swap /
+ * send). Graphical at rest - just the icon, evenly spaced in a 3-column
+ * grid under the balance - with the text label revealed on hover
+ * (hover-expand plus a title tooltip). Zashi's few-big-obvious-actions,
+ * without permanent text clutter.
  *
  * Variants:
  *   - default: subdued elev-2 background
@@ -1378,16 +1292,39 @@ const ActionButton = ({
     type='button'
     onClick={onClick}
     title={label}
+    aria-label={label}
     className={cn(
-      'flex h-[52px] w-14 flex-col items-center justify-center gap-1 transition-colors',
+      'group/action flex h-11 w-full items-center justify-center rounded-md px-3 transition-colors',
       variant === 'default' && 'bg-elev-2 text-fg hover:bg-elev-1/80 hover:text-fg-high',
       variant === 'zcash' && 'bg-zigner-gold text-zigner-dark hover:bg-primary/90',
       variant === 'penumbra' && 'bg-penumbra-purple text-white hover:bg-penumbra-purple-dark',
     )}
   >
-    <span className={`${icon} h-4 w-4`} />
-    <span className='text-label tracking-[0.05em] lowercase leading-none'>{label}</span>
+    <span className={`${icon} h-5 w-5 shrink-0`} />
+    <span className='max-w-0 overflow-hidden text-label lowercase leading-none tracking-[0.05em] whitespace-nowrap opacity-0 transition-all duration-200 group-hover/action:ml-2 group-hover/action:max-w-16 group-hover/action:opacity-100'>
+      {label}
+    </span>
   </button>
+);
+
+/**
+ * First-sync reassurance - one of the message-slot candidates. Shown only
+ * while actively syncing with no balance yet (the canonical new-user
+ * state) so the user doesn't think the wallet is broken.
+ */
+const FirstSyncNote = () => (
+  <div className='rounded-md border border-border-soft bg-elev-1 p-4'>
+    <div className='flex items-start gap-2'>
+      <span className='i-lucide-info mt-0.5 h-3.5 w-3.5 shrink-0 text-fg-muted' />
+      <div className='flex-1'>
+        <div className='text-xs text-fg-high lowercase'>scanning for your notes</div>
+        <p className='mt-0.5 text-label text-fg-muted leading-snug'>
+          first sync can take a few minutes. you can leave this open or come back later - the worker
+          keeps running in the background.
+        </p>
+      </div>
+    </div>
+  </div>
 );
 
 /**
@@ -1604,10 +1541,10 @@ function fmtTime(ts: number | null): string {
   );
   const t = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   if (diff === 0) {
-    return `Today ${t}`;
+    return `today ${t}`;
   }
   if (diff === 1) {
-    return `Yesterday ${t}`;
+    return `yesterday ${t}`;
   }
   if (diff < 7) {
     return `${d.toLocaleDateString([], { weekday: 'short' })} ${t}`;
@@ -1630,16 +1567,13 @@ function TxRow({ tx }: { tx: ParsedTransaction }) {
       onClick={hasMemo ? () => setExpanded(e => !e) : undefined}
     >
       <div className='flex items-center gap-3'>
-        <div
-          className={cn(
-            'flex h-8 w-8 items-center justify-center rounded-full',
-            isSh ? 'bg-blue-500/10' : isIn ? 'bg-green-500/10' : 'bg-elev-2',
-          )}
-        >
+        {/* direction reads from the lucide icon, not from color-as-category:
+            shield / arrow-down / arrow-up on a neutral chip */}
+        <div className='flex h-8 w-8 items-center justify-center rounded-full bg-elev-2'>
           {isSh ? (
-            <span className='i-lucide-move-horizontal h-4 w-4 text-blue-500' />
+            <span className='i-lucide-shield h-4 w-4 text-fg-muted' />
           ) : isIn ? (
-            <span className='i-lucide-arrow-down h-4 w-4 text-green-400' />
+            <span className='i-lucide-arrow-down h-4 w-4 text-fg-high' />
           ) : (
             <span className='i-lucide-arrow-up h-4 w-4 text-fg-muted' />
           )}
@@ -1649,15 +1583,12 @@ function TxRow({ tx }: { tx: ParsedTransaction }) {
             <span className='text-xs font-medium'>{tx.description}</span>
             <div className='flex items-center gap-1'>
               {tx.amount && (
-                <span
-                  className={cn(
-                    'text-xs font-mono',
-                    isSh ? 'text-blue-500' : isIn ? 'text-green-400' : 'text-fg-muted',
-                  )}
+                <Sensitive
+                  className={cn('text-xs font-mono', isIn ? 'text-fg-high' : 'text-fg-muted')}
                 >
                   {isIn ? '+' : ''}
                   {tx.amount} {tx.asset ?? ''}
-                </span>
+                </Sensitive>
               )}
               {hasMemo && (
                 <span
@@ -1859,9 +1790,7 @@ const HistoryContent = ({
   return (
     <div className='flex flex-col gap-1'>
       <div className='mb-1'>
-        <span className='text-xs font-medium uppercase tracking-wider text-fg-muted'>
-          recent activity
-        </span>
+        <span className='kicker'>recent activity</span>
       </div>
       {recent.map(tx => (
         <TxRow key={tx.id} tx={tx} />

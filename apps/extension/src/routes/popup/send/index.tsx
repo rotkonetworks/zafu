@@ -6,6 +6,7 @@
 
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { Sensitive } from '../../../components/sensitive';
 import { PopupPath } from '../paths';
 import { useQuery } from '@tanstack/react-query';
 import { ZcashSend } from './zcash-send';
@@ -130,7 +131,9 @@ function AssetSelector({
         {selected ? (
           <div className='flex items-center gap-2'>
             <span className='font-medium'>{selected.symbol}</span>
-            <span className='text-fg-muted'>{selected.formatted}</span>
+            <span className='text-fg-muted'>
+              <Sensitive>{selected.formatted}</Sensitive>
+            </span>
           </div>
         ) : (
           <span className='text-fg-muted'>select asset</span>
@@ -155,7 +158,9 @@ function AssetSelector({
               )}
             >
               <span className='font-medium'>{asset.symbol}</span>
-              <span className='text-fg-muted'>{asset.formatted}</span>
+              <span className='text-fg-muted'>
+                <Sensitive>{asset.formatted}</Sensitive>
+              </span>
             </button>
           ))}
         </div>
@@ -630,7 +635,9 @@ function CosmosSend({ sourceChainId }: { sourceChainId: CosmosChainId }) {
             amount {selectedAsset ? `(${selectedAsset.symbol})` : ''}
           </label>
           {selectedAsset && (
-            <span className='text-xs text-fg-muted'>balance: {selectedAsset.formatted}</span>
+            <span className='text-xs text-fg-muted'>
+              balance: <Sensitive>{selectedAsset.formatted}</Sensitive>
+            </span>
           )}
         </div>
         <div className='relative'>
@@ -665,7 +672,7 @@ function CosmosSend({ sourceChainId }: { sourceChainId: CosmosChainId }) {
           <div className='flex items-center justify-between text-xs'>
             <span className='text-fg-muted'>receive</span>
             <span className='font-mono'>
-              {(parseFloat(route.amountOut) / Math.pow(10, 6)).toFixed(6)}
+              <Sensitive>{(parseFloat(route.amountOut) / Math.pow(10, 6)).toFixed(6)}</Sensitive>
             </span>
           </div>
           {route.doesSwap && route.swapVenue && (
@@ -772,7 +779,9 @@ function CosmosSend({ sourceChainId }: { sourceChainId: CosmosChainId }) {
             <div className='flex justify-between'>
               <span className='text-fg-dim lowercase'>amount</span>
               <span className='tabular text-zigner-gold'>
-                {amount} {selectedAsset.symbol}
+                <Sensitive>
+                  {amount} {selectedAsset.symbol}
+                </Sensitive>
               </span>
             </div>
             {!isSameChain && effectiveDestChainId && (

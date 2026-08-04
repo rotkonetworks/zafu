@@ -14,6 +14,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@repo/ui/components/ui/button';
+import { Sensitive } from '../../../components/sensitive';
 import { AnimatedQrDisplay } from '../../../shared/components/animated-qr-display';
 import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanner';
 import {
@@ -127,7 +128,7 @@ export function IronwoodMigrationBanner({
           <span className='i-lucide-arrow-right-left h-4 w-4 text-zigner-gold' />
           <span className='text-xs text-fg-high'>orchard is now legacy</span>
           <span className='text-xs font-medium tabular-nums text-fg-muted'>
-            {fmtZec(orchardZat)} ZEC to migrate
+            <Sensitive>{fmtZec(orchardZat)}</Sensitive> ZEC to migrate
           </span>
         </div>
         <button
@@ -409,7 +410,9 @@ export function IronwoodMigrate({
               </div>
 
               <div className='text-center'>
-                <div className='text-3xl font-semibold tabular-nums'>{fmtZec(orchardZat)}</div>
+                <div className='text-3xl font-semibold tabular-nums'>
+                  <Sensitive>{fmtZec(orchardZat)}</Sensitive>
+                </div>
                 <div className='text-sm text-fg-muted'>ZEC to migrate</div>
               </div>
 
@@ -495,11 +498,15 @@ export function IronwoodMigrate({
               <div className='rounded bg-elev-2 p-3 text-xs text-fg-muted flex flex-col gap-1'>
                 <div className='flex justify-between'>
                   <span>migrate</span>
-                  <span className='tabular-nums text-fg-high'>{fmtZec(amount)} ZEC</span>
+                  <span className='tabular-nums text-fg-high'>
+                    <Sensitive>{fmtZec(amount)} ZEC</Sensitive>
+                  </span>
                 </div>
                 <div className='flex justify-between'>
                   <span>network fee</span>
-                  <span className='tabular-nums'>{fmtZec(fee)} ZEC</span>
+                  <span className='tabular-nums'>
+                    <Sensitive>{fmtZec(fee)} ZEC</Sensitive>
+                  </span>
                 </div>
                 <div className='flex justify-between'>
                   <span>ironwood destination</span>

@@ -4,6 +4,7 @@ import { privacySelector, type PrivacySettings } from '../../../state/privacy';
 import { selectActiveNetwork } from '../../../state/keyring';
 import { isPro } from '../../../state/license';
 import { SettingsScreen } from './settings-screen';
+import { ToggleSwitch } from '../../../components/toggle-switch';
 import { isIbcNetwork, type NetworkType } from '../../../state/keyring/network-types';
 
 interface PrivacyRow {
@@ -16,6 +17,12 @@ interface PrivacyRow {
 }
 
 const PRIVACY_ROWS: readonly PrivacyRow[] = [
+  {
+    key: 'hideBalances',
+    label: 'hide balances',
+    onLabel: 'amounts blurred across every screen',
+    offLabel: 'amounts visible',
+  },
   {
     key: 'enableIdentity',
     label: 'zid identity',
@@ -70,13 +77,7 @@ function Row({
           {stateLabel}
         </p>
       </div>
-      <button onClick={() => onChange(!checked)} className='shrink-0 transition-colors'>
-        {checked ? (
-          <span className='i-lucide-toggle-right size-7 text-green-400' />
-        ) : (
-          <span className='i-lucide-toggle-left size-7 text-fg-muted/40' />
-        )}
-      </button>
+      <ToggleSwitch checked={checked} onChange={onChange} label={label} className='mt-0.5' />
     </div>
   );
 }
@@ -108,16 +109,11 @@ function ProxySection() {
               : 'direct - ip visible to servers'}
           </p>
         </div>
-        <button
-          onClick={() => (proxy.enabled ? disable() : host ? apply() : undefined)}
-          className='shrink-0'
-        >
-          {proxy.enabled ? (
-            <span className='i-lucide-toggle-right size-7 text-green-400' />
-          ) : (
-            <span className='i-lucide-toggle-left size-7 text-fg-muted/40' />
-          )}
-        </button>
+        <ToggleSwitch
+          checked={proxy.enabled}
+          onChange={next => (next ? (host.trim() ? apply() : undefined) : disable())}
+          label='proxy'
+        />
       </div>
       {!proxy.enabled && (
         <div className='mt-2 flex gap-2'>

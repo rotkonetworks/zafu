@@ -16,9 +16,10 @@ import { loadVoting, fetchTally } from '../../../services/voting/api';
 import { BUNDLED_PINNED_SOURCE } from '../../../services/voting/types';
 import type { VotingRound, RoundStatus } from '../../../services/voting/types';
 
+// round status is a category, not an alarm - fg tokens only (DESIGN.md).
 const STATUS_STYLE: Record<RoundStatus, string> = {
-  active: 'text-green-400',
-  tallying: 'text-yellow-400',
+  active: 'text-fg-high',
+  tallying: 'text-fg-muted',
   completed: 'text-fg-muted',
   cancelled: 'text-fg-dim',
 };
@@ -54,7 +55,7 @@ export const ZcashVotePage = () => {
     <div className='flex flex-col gap-3 p-4'>
       <div className='flex items-center justify-between'>
         <h2 className='text-title text-fg-high lowercase'>coinholder vote</h2>
-        {activeCount > 0 && <span className='text-label text-green-400'>{activeCount} active</span>}
+        {activeCount > 0 && <span className='text-label text-fg-high'>{activeCount} active</span>}
       </div>
 
       {votingQ.isLoading && (
@@ -138,7 +139,7 @@ const RoundCard = ({
             <span className='text-label text-fg-muted'>{formatEnd(round)}</span>
             {!round.inConfig && (
               <span
-                className='text-label text-amber-400'
+                className='text-label text-warning'
                 title='round is not listed in the pinned voting config'
               >
                 unverified
@@ -208,7 +209,7 @@ const RoundCard = ({
                             />
                           </div>
                           <span className='w-12 shrink-0 text-right text-label text-fg-dim tabular'>
-                            {total > 0 ? `${pct.toFixed(1)}%` : '—'}
+                            {total > 0 ? `${pct.toFixed(1)}%` : '-'}
                           </span>
                         </>
                       ) : (
@@ -230,7 +231,7 @@ const RoundCard = ({
 
           {round.status === 'active' && (
             <p className='border-t border-border-soft pt-2 text-label text-fg-dim lowercase'>
-              casting from zafu is coming — this round is view-only here for now.
+              casting from zafu is coming - this round is view-only here for now.
             </p>
           )}
         </div>

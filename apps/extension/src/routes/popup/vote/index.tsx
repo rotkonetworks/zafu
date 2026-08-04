@@ -67,16 +67,11 @@ function parseState(state: ProposalListResponse['state']): string {
   }
 }
 
+// proposal state is a category, not an alarm - fg tokens only (DESIGN.md).
 function stateColor(state: string): string {
   switch (state) {
     case 'voting':
-      return 'text-green-400';
-    case 'withdrawn':
-      return 'text-yellow-400';
-    case 'finished':
-      return 'text-fg-muted';
-    case 'claimed':
-      return 'text-fg-muted';
+      return 'text-fg-high';
     default:
       return 'text-fg-muted';
   }
@@ -95,14 +90,15 @@ function voteLabel(vote: Vote_Vote): string {
   }
 }
 
-function voteColor(vote: Vote_Vote): string {
+/** icon carries the vote meaning; color stays on-token (no green/red category coding) */
+function voteIcon(vote: Vote_Vote): string {
   switch (vote) {
     case Vote_Vote.YES:
-      return 'bg-green-500/20 text-green-400 hover:bg-green-500/30';
+      return 'i-lucide-check';
     case Vote_Vote.NO:
-      return 'bg-red-500/20 text-red-400 hover:bg-red-500/30';
+      return 'i-lucide-x';
     case Vote_Vote.ABSTAIN:
-      return 'bg-elev-2 text-fg-muted hover:bg-elev-1/80';
+      return 'i-lucide-minus';
     default:
       return '';
   }
@@ -203,7 +199,7 @@ export function VotePage() {
     <div className='flex flex-col gap-3 p-4'>
       <div className='flex items-center justify-between'>
         <h2 className='text-lg font-medium'>governance</h2>
-        {activeCount > 0 && <span className='text-xs text-green-400'>{activeCount} active</span>}
+        {activeCount > 0 && <span className='text-xs text-fg-high'>{activeCount} active</span>}
       </div>
 
       {/* filter toggle */}
@@ -306,9 +302,16 @@ export function VotePage() {
                           key={v}
                           onClick={() => void handleVote(p.id, v)}
                           disabled={isVoting}
-                          className={`flex-1 py-1.5 rounded-md text-xs font-medium transition-colors disabled:opacity-50 ${voteColor(v)}`}
+                          className='flex flex-1 items-center justify-center gap-1 py-1.5 rounded-md bg-elev-2 text-xs font-medium text-fg-high transition-colors hover:bg-elev-1 disabled:opacity-50'
                         >
-                          {isVoting ? '...' : voteLabel(v)}
+                          {isVoting ? (
+                            '...'
+                          ) : (
+                            <>
+                              <span className={`${voteIcon(v)} h-3.5 w-3.5`} />
+                              {voteLabel(v)}
+                            </>
+                          )}
                         </button>
                       ))}
                     </div>

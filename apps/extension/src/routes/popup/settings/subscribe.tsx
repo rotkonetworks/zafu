@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { Sensitive } from '../../../components/sensitive';
 import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo, selectGetMnemonic } from '../../../state/keyring';
 import { isPro, selectDaysRemaining, selectPending, licenseSelector } from '../../../state/license';
@@ -473,7 +474,8 @@ export const SubscribePage = () => {
             <div className='flex items-center gap-2'>
               <span className='h-2 w-2 rounded-full bg-yellow-400 animate-pulse' />
               <span className='text-xs font-mono'>
-                payment detected - {(pending.pendingZat / 1e8).toFixed(4)} ZEC
+                payment detected -{' '}
+                <Sensitive>{(pending.pendingZat / 1e8).toFixed(4)} ZEC</Sensitive>
               </span>
             </div>
             <div className='text-label font-mono text-fg-dim mt-1'>
@@ -513,7 +515,9 @@ export const SubscribePage = () => {
           </div>
 
           <div className='text-center'>
-            <span className='text-sm font-mono text-fg'>{amountZec} ZEC</span>
+            <span className='text-sm font-mono text-fg'>
+              <Sensitive>{amountZec} ZEC</Sensitive>
+            </span>
             <span className='text-xs font-mono text-fg-muted ml-2'>
               {pro ? `= +${daysAdded} days` : `= ${daysAdded} days`}
             </span>
@@ -540,7 +544,9 @@ export const SubscribePage = () => {
               <p className='text-xs font-mono text-fg-muted'>transaction summary</p>
               <div className='flex justify-between text-xs font-mono'>
                 <span className='text-fg-muted'>amount</span>
-                <span className='text-fg'>{amountZec} ZEC</span>
+                <span className='text-fg'>
+                  <Sensitive>{amountZec} ZEC</Sensitive>
+                </span>
               </div>
               <div className='flex justify-between text-xs font-mono'>
                 <span className='text-fg-muted'>duration</span>

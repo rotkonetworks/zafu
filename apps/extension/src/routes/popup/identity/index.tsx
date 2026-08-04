@@ -187,6 +187,9 @@ export const IdentityPage = () => {
   const [reloadKey, setReloadKey] = useState(0);
   const [zidIndex, setZidIndexState] = useState(0);
   const [zidPins, setZidPins] = useState<ZidPin[]>([]);
+  // inline pin rename: which pin index is being edited + the draft label
+  const [editingPin, setEditingPin] = useState<number | null>(null);
+  const [pinDraft, setPinDraft] = useState('');
   const reloadSites = useCallback(() => setReloadKey(k => k + 1), []);
 
   // card-stack morph: a subtle settle when the generation changes. gated by
@@ -257,6 +260,20 @@ export const IdentityPage = () => {
   const handleUnpin = useCallback(async (index: number) => {
     setZidPins(await removeZidPin(index));
   }, []);
+
+  // rename a pinned generation locally (label only - keys are untouched).
+  // addZidPin replaces the existing pin at that index.
+  const handleRenamePin = useCallback(
+    async (index: number, label: string) => {
+      const existing = zidPins.find(p => p.index === index);
+      const next = label.trim();
+      if (next && next !== existing?.label) {
+        setZidPins(await addZidPin(index, next));
+      }
+      setEditingPin(null);
+    },
+    [zidPins],
+  );
 
   // try active keyinfo first, then any keyinfo with a zid (mnemonic wallets)
   const zidPubkey = (keyInfo?.insensitive?.['zid'] ??
@@ -561,22 +578,63 @@ export const IdentityPage = () => {
               {zidPins.length > 0 && (
                 <div className='relative z-[1] mt-3 flex flex-wrap items-center gap-1.5'>
                   <span className='text-label text-fg-dim lowercase mr-0.5'>pinned</span>
-                  {zidPins.map(p => (
-                    <button
-                      key={p.index}
-                      type='button'
-                      onClick={() => void handleJumpTo(p.index)}
-                      title={`switch to ${p.label}`}
-                      className={`flex items-center gap-1 text-label font-mono px-2 py-0.5 border transition-colors ${focusRing} ${
-                        p.index === zidIndex
-                          ? 'border-network-accent/40 bg-network-accent/10 text-network-accent'
-                          : 'border-border-hard text-fg-muted hover:text-fg-high hover:border-fg-dim'
-                      }`}
-                    >
-                      <span className='i-lucide-pin size-3' />
-                      {p.label}
-                    </button>
-                  ))}
+                  {zidPins.map(p =>
+                    editingPin === p.index ? (
+                      <span
+                        key={p.index}
+                        className='flex items-center gap-1 text-label font-mono px-2 py-0.5 border border-network-accent/40 bg-network-accent/10'
+                      >
+                        <span className='i-lucide-pin size-3 text-network-accent' />
+                        <input
+                          autoFocus
+                          value={pinDraft}
+                          onChange={e => setPinDraft(e.target.value)}
+                          onBlur={() => void handleRenamePin(p.index, pinDraft)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') {
+                              void handleRenamePin(p.index, pinDraft);
+                            }
+                            if (e.key === 'Escape') {
+                              setEditingPin(null);
+                            }
+                          }}
+                          maxLength={24}
+                          placeholder={`gen ${p.index}`}
+                          className={`w-16 bg-transparent text-label font-mono text-fg-high outline-none ${focusRing}`}
+                        />
+                      </span>
+                    ) : (
+                      <span
+                        key={p.index}
+                        className={`flex items-center border transition-colors ${
+                          p.index === zidIndex
+                            ? 'border-network-accent/40 bg-network-accent/10 text-network-accent'
+                            : 'border-border-hard text-fg-muted'
+                        }`}
+                      >
+                        <button
+                          type='button'
+                          onClick={() => void handleJumpTo(p.index)}
+                          title={`switch to ${p.label} (gen ${p.index})`}
+                          className={`flex items-center gap-1 text-label font-mono pl-2 pr-1 py-0.5 transition-colors hover:text-fg-high ${focusRing}`}
+                        >
+                          <span className='i-lucide-pin size-3' />
+                          {p.label}
+                        </button>
+                        <button
+                          type='button'
+                          onClick={() => {
+                            setEditingPin(p.index);
+                            setPinDraft(p.label);
+                          }}
+                          title='rename pin'
+                          className={`grid place-items-center px-1 py-0.5 text-fg-dim transition-colors hover:text-fg-high ${focusRing}`}
+                        >
+                          <span className='i-lucide-pencil size-2.5' />
+                        </button>
+                      </span>
+                    ),
+                  )}
                 </div>
               )}
             </div>

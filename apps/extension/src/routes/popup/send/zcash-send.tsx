@@ -10,6 +10,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { Sensitive } from '../../../components/sensitive';
 import { useStore } from '../../../state';
 import { zignerSigningSelector } from '../../../state/zigner-signing';
 import { recentAddressesSelector } from '../../../state/recent-addresses';
@@ -757,7 +758,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                   <label className='text-xs text-fg-muted'>amount (zec)</label>
                   {balanceZec !== null && (
                     <span className='text-xs text-fg-muted tabular-nums'>
-                      balance: {balanceZec.toFixed(8).replace(/0+$/, '').replace(/\.$/, '')} ZEC
+                      balance:{' '}
+                      <Sensitive>
+                        {balanceZec.toFixed(8).replace(/0+$/, '').replace(/\.$/, '')} ZEC
+                      </Sensitive>
                     </span>
                   )}
                 </div>
@@ -799,7 +803,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                   Number(amount) > 0 && (
                     <p className='mt-1.5 text-label text-red-400 leading-snug tabular-nums'>
                       exceeds spendable balance (
-                      {maxSendZec.toFixed(8).replace(/0+$/, '').replace(/\.$/, '')} ZEC after fee)
+                      <Sensitive>
+                        {maxSendZec.toFixed(8).replace(/0+$/, '').replace(/\.$/, '')} ZEC
+                      </Sensitive>{' '}
+                      after fee)
                     </p>
                   )}
               </div>
@@ -854,16 +861,20 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               </div>
               <div className='flex justify-between'>
                 <span className='text-fg-muted'>amount</span>
-                <span className='font-medium tabular-nums'>{amount} zec</span>
+                <span className='font-medium tabular-nums'>
+                  <Sensitive>{amount} zec</Sensitive>
+                </span>
               </div>
               <div className='flex justify-between'>
                 <span className='text-fg-muted'>fee</span>
-                <span className='text-sm tabular-nums'>{fee} zec</span>
+                <span className='text-sm tabular-nums'>
+                  <Sensitive>{fee} zec</Sensitive>
+                </span>
               </div>
               <div className='border-t border-border-soft pt-2 flex justify-between'>
                 <span className='text-fg-muted'>total</span>
                 <span className='font-medium tabular-nums'>
-                  {(Number(amount) + Number(fee)).toFixed(4)} zec
+                  <Sensitive>{(Number(amount) + Number(fee)).toFixed(4)} zec</Sensitive>
                 </span>
               </div>
             </div>
@@ -971,11 +982,15 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 </div>
                 <div className='flex items-center justify-between px-3 py-2'>
                   <span className='text-fg-muted'>amount</span>
-                  <span className='tabular text-fg-high'>{amount} ZEC</span>
+                  <span className='tabular text-fg-high'>
+                    <Sensitive>{amount} ZEC</Sensitive>
+                  </span>
                 </div>
                 <div className='flex items-center justify-between px-3 py-2'>
                   <span className='text-fg-muted'>fee</span>
-                  <span className='tabular text-fg-dim'>{fee} ZEC</span>
+                  <span className='tabular text-fg-dim'>
+                    <Sensitive>{fee} ZEC</Sensitive>
+                  </span>
                 </div>
                 {memo && (
                   <div className='flex items-center justify-between px-3 py-2'>
@@ -1167,7 +1182,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 {activeZcashWallet?.multisig?.maxSigners} threshold
               </p>
               <p className='mt-1'>
-                send {amount} ZEC to {recipient.slice(0, 16)}...{recipient.slice(-8)}
+                send <Sensitive>{amount} ZEC</Sensitive> to {recipient.slice(0, 16)}...
+                {recipient.slice(-8)}
               </p>
               <p className='mt-1'>fee: {fee} ZEC</p>
             </div>

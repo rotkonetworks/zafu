@@ -66,7 +66,7 @@ export const DEFAULT_ZAPPS: Zapp[] = [
     name: 'poker',
     description: 'play with zcash',
     icon: 'i-lucide-spade',
-    url: 'https://poker.zk.bot',
+    url: 'https://poker.zafu.pro',
     category: 'games',
   },
   {
@@ -130,16 +130,16 @@ export const DEFAULT_ZAPPS: Zapp[] = [
     category: 'learn',
     builtin: true,
   },
-  // learn - penumbra
   {
-    id: 'learn-antumbra',
-    name: 'antumbra',
-    description: 'penumbra resources hub',
-    icon: 'i-lucide-globe',
-    url: 'https://antumbra.net',
+    id: 'learn-zechub',
+    name: 'zechub',
+    description: 'zcash education hub',
+    icon: 'i-lucide-graduation-cap',
+    url: 'https://zechub.wiki',
     category: 'learn',
     builtin: true,
   },
+  // learn - penumbra
   {
     id: 'learn-penumbra-protocol',
     name: 'penumbra protocol',

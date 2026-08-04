@@ -2344,8 +2344,8 @@ const runSync = async (
   if (watcherEnabled) {
     const [{ ZidecarClient: MempoolZidecarClient }, mempoolMod, strategyMod] = await Promise.all([
       import(/* webpackMode: "eager" */ '../state/keyring/zidecar-client'),
-      import('../services/mempool-watch/zidecar-mempool-fetcher'),
-      import('../services/mempool-watch/strategy'),
+      import(/* webpackMode: "eager" */ '../services/mempool-watch/zidecar-mempool-fetcher'),
+      import(/* webpackMode: "eager" */ '../services/mempool-watch/strategy'),
     ]);
     const mempoolClient = new MempoolZidecarClient(serverUrl);
     const base = mempoolMod.zidecarMempoolFetcher(mempoolClient);

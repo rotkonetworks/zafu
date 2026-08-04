@@ -25,6 +25,7 @@ import { getBalanceInWorker } from '../../../state/keyring/network-worker';
 import { useZcashSyncStatus } from '../../../hooks/zcash-sync';
 import { NetworkUnavailable } from '../../../shared/components/network-unavailable';
 import { usePasswordGate } from '../../../hooks/password-gate';
+import { Sensitive } from '../../../components/sensitive';
 import { cn } from '@repo/ui/lib/utils';
 import { PopupPath } from '../paths';
 import { BackupModal } from './backup/backup-modal';
@@ -57,7 +58,7 @@ const SessionBadge = () => {
     return null;
   }
 
-  const label = dkg ? `DKG round ${dkg.round}` : `signing - ${signing!.step}`;
+  const label = dkg ? `wallet setup - step ${dkg.round} of 3` : `signing - ${signing!.step}`;
 
   return (
     <div className='flex items-center gap-1.5 rounded-md bg-yellow-500/10 px-2.5 py-1.5 text-xs text-yellow-400'>
@@ -81,7 +82,7 @@ const WalletRow = ({
   isActive: boolean;
   onSelect: () => void;
   onEdit: () => void;
-  /** present only for self-custody multisig — airgap shows nothing here. */
+  /** present only for self-custody multisig - airgap shows nothing here. */
   onBackup?: () => void;
 }) => (
   <div
@@ -109,9 +110,9 @@ const WalletRow = ({
           </span>
         )}
       </div>
-      <span className='text-sm font-mono text-fg-muted shrink-0 ml-2'>
+      <Sensitive className='text-sm font-mono text-fg-muted shrink-0 ml-2'>
         {formatZec(balance)} ZEC
-      </span>
+      </Sensitive>
     </button>
     {onBackup && (
       <button
@@ -136,7 +137,7 @@ const WalletRow = ({
 // Thin renderer over state/app-managed-tables.ts. Deleting a hidden table is ALWAYS the guarded
 // path (heavy warning + typed intent + backup-first): getMultisigStatus can't PROVE a hidden table
 // is empty (only the active wallet syncs, and getBalance ignores mempool), so a low-friction delete
-// can't be made sound — we don't offer one. Recover first (which syncs it) if you want to verify.
+// can't be made sound - we don't offer one. Recover first (which syncs it) if you want to verify.
 
 const tableStatusLine = (t: TableView): { text: string; tone: string } => {
   if (t.balanceZat > 0n) {
@@ -145,7 +146,7 @@ const tableStatusLine = (t: TableView): { text: string; tone: string } => {
   if (!t.synced) {
     return { text: 'not synced', tone: 'text-yellow-400/80' };
   }
-  return { text: 'settled — empty', tone: 'text-fg-muted' };
+  return { text: 'settled - empty', tone: 'text-fg-muted' };
 };
 
 const GuardedDeleteModal = (props: {
@@ -178,10 +179,10 @@ const GuardedDeleteModal = (props: {
   return (
     <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4'>
       <div className='w-full max-w-sm rounded-lg border border-red-500/30 bg-elev-1 p-4'>
-        <h2 className='text-base font-medium text-red-400'>delete "{label}"?</h2>
+        <h2 className='text-lg font-medium text-red-400'>delete "{label}"?</h2>
         <div className='mt-3 rounded-md border border-red-500/40 bg-red-500/5 p-2 text-label text-red-300'>
           <span className='i-lucide-alert-triangle mr-1 inline-block size-3 align-text-bottom' />
-          You will permanently lose access to any funds in this table — it is NOT recoverable from
+          You will permanently lose access to any funds in this table - it is NOT recoverable from
           your seed. If other co-signers rely on your share to reach the signing threshold, they may
           be unable to move funds either.
         </div>
@@ -248,7 +249,13 @@ const AppManagedRow = (props: {
           <span className='truncate text-sm font-medium'>{props.row.wallet.label}</span>
           <span className='text-label text-fg-dim'>created {created}</span>
         </div>
-        <span className={cn('shrink-0 font-mono text-xs', status.tone)}>{status.text}</span>
+        {props.row.balanceZat > 0n ? (
+          <Sensitive className={cn('shrink-0 font-mono text-xs', status.tone)}>
+            {status.text}
+          </Sensitive>
+        ) : (
+          <span className={cn('shrink-0 font-mono text-xs', status.tone)}>{status.text}</span>
+        )}
       </div>
       <div className='flex gap-2'>
         <button
@@ -425,7 +432,7 @@ export const MultisigPage = () => {
   // vaultId (selectedKeyInfo.id), not zcashWallet.id, so the balance lookup
   // must use vaultId; local state stays keyed by w.id for row identity.
   // re-fetch on every sync-progress tick so the active vault's row stays
-  // in step with the home-page balance. skip entirely when off zcash —
+  // in step with the home-page balance. skip entirely when off zcash -
   // gate inside the effect, not around it (Rules of Hooks).
   useEffect(() => {
     if (!isZcash) {
@@ -457,7 +464,7 @@ export const MultisigPage = () => {
 
   const totalZat = Object.values(balances).reduce((sum, b) => sum + b, 0n);
 
-  // operate-mode: gate on the selected vault, not activeZcashIndex — the
+  // operate-mode: gate on the selected vault, not activeZcashIndex - the
   // index lags on switches to mnemonic (which has no zcash wallet record),
   // so the index can still point at a multisig vault while the user is on
   // a mnemonic. selectedKeyInfo.type is the source of truth.
@@ -466,7 +473,7 @@ export const MultisigPage = () => {
       ? walletsWithIndex.find(w => w.vaultId === selectedKeyInfo.id)
       : undefined;
 
-  // route to zigner-airgap flows when the user is signing through a zigner —
+  // route to zigner-airgap flows when the user is signing through a zigner -
   // either the active multisig is airgap, or the active single-sig is zigner-imported.
   const useAirgap =
     activeMs?.multisig?.custody === 'airgapSigner' || selectedKeyInfo?.type === 'zigner-zafu';
@@ -502,10 +509,12 @@ export const MultisigPage = () => {
       <div className='flex items-center justify-between'>
         <div className='flex items-center gap-2'>
           <span className='i-lucide-shield h-5 w-5 text-zigner-gold' />
-          <h2 className='text-base font-semibold'>Multisig</h2>
+          <h2 className='text-lg font-medium'>multisig</h2>
         </div>
         {walletsWithIndex.length > 0 && (
-          <span className='text-sm font-mono text-fg-muted'>{formatZec(totalZat)} ZEC</span>
+          <Sensitive className='text-sm font-mono text-fg-muted'>
+            {formatZec(totalZat)} ZEC
+          </Sensitive>
         )}
       </div>
 
@@ -513,7 +522,7 @@ export const MultisigPage = () => {
       <SessionBadge />
 
       {activeMs ? (
-        // operate mode — active vault is multisig
+        // operate mode - active vault is multisig
         <>
           {/* primary CTA: co-sign */}
           <button
@@ -563,7 +572,7 @@ export const MultisigPage = () => {
           </div>
         </>
       ) : (
-        // overview mode — active wallet is not multisig (or none exist)
+        // overview mode - active wallet is not multisig (or none exist)
         <>
           {walletsWithIndex.length > 0 ? (
             <div className='flex flex-col gap-1.5'>
@@ -590,7 +599,7 @@ export const MultisigPage = () => {
           ) : (
             <div className='flex flex-col items-center gap-2 py-8 text-center text-fg-muted'>
               <span className='i-lucide-shield-off h-8 w-8 opacity-50' />
-              <p className='text-sm'>No multisig wallets yet</p>
+              <p className='text-sm'>no multisig wallets yet</p>
             </div>
           )}
 

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Sensitive } from '../../../components/sensitive';
 import { viewClient, sctClient } from '../../../clients';
 import { useStore } from '../../../state';
 import {
@@ -166,7 +167,9 @@ function TransactionRow({ tx }: { tx: ParsedTransaction }) {
               )}
             >
               {isIncoming ? '+' : ''}
-              {tx.amount} {tx.asset ?? ''}
+              <Sensitive>
+                {tx.amount} {tx.asset ?? ''}
+              </Sensitive>
             </span>
           )}
         </div>

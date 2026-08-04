@@ -8,6 +8,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { Sensitive } from '../../../components/sensitive';
 import { useBackNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { useStore } from '../../../state';
@@ -366,7 +367,9 @@ function IbcDepositSection({
                     className='flex items-center justify-between px-3 py-2 text-xs border-b border-border-soft last:border-0'
                   >
                     <span className='text-fg-muted truncate max-w-[60%]'>{asset.symbol}</span>
-                    <span className='font-mono'>{asset.formatted}</span>
+                    <span className='font-mono'>
+                      <Sensitive>{asset.formatted}</Sensitive>
+                    </span>
                   </div>
                 ))}
               </div>
@@ -408,7 +411,9 @@ function IbcDepositSection({
                             className='flex w-full items-center justify-between px-3 py-2 text-xs hover:bg-elev-1 first:rounded-t-lg last:rounded-b-lg'
                           >
                             <span>{asset.symbol}</span>
-                            <span className='text-fg-muted'>{asset.formatted}</span>
+                            <span className='text-fg-muted'>
+                              <Sensitive>{asset.formatted}</Sensitive>
+                            </span>
                           </button>
                         ))}
                       </div>

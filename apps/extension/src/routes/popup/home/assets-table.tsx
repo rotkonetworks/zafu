@@ -395,7 +395,9 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
               <div className='flex flex-col gap-3'>
                 <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
                   <div className='text-xs text-fg-muted'>amount to receive</div>
-                  <div className='text-lg font-medium tabular-nums'>{claimDisplayAmount} UM</div>
+                  <div className='text-lg font-medium tabular-nums'>
+                    <Sensitive>{claimDisplayAmount} UM</Sensitive>
+                  </div>
                 </div>
 
                 <div className='text-sm'>

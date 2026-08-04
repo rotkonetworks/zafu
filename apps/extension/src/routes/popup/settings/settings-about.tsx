@@ -15,7 +15,7 @@ export const SettingsAbout = () => {
         <div>
           <h3 className='kicker mb-1'>networks</h3>
           <ul className='text-xs text-fg-muted space-y-0.5'>
-            <li>zcash - orchard shielded pool</li>
+            <li>zcash - orchard + ironwood shielded pools</li>
             <li>penumbra - shielded defi</li>
             <li>cosmos IBC - noble, cosmos hub</li>
           </ul>

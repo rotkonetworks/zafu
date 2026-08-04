@@ -69,11 +69,12 @@ const getTabsForNetwork = (network: NetworkType) =>
   BOTTOM_TABS.filter(tab => !tab.feature || hasFeature(network, tab.feature));
 
 /**
- * Routes where bottom-tabs should NOT be shown. SEND and RECEIVE used
- * to live here (back when they weren't top-level tabs) — they're now
- * primary destinations so the bar stays visible on them. The
- * remaining hidden routes are auth / approval / multi-step flows
- * where the user is in the middle of a one-shot interaction.
+ * Routes where bottom-tabs should NOT be shown. The bar belongs on the
+ * primary destinations (home / inbox / multisig / vote); it has no place
+ * under a focused sub-flow. Send / Receive / Settings and their subtrees
+ * are flows with their own screen chrome, so the tab rail is hidden there
+ * (it would otherwise sit beneath a Send / Receive / settings screen). The
+ * rest are auth / approval / multi-step flows - one-shot interactions.
  */
 const hiddenTabRoutes = [
   PopupPath.LOGIN,
@@ -85,12 +86,28 @@ const hiddenTabRoutes = [
   PopupPath.FROST_APPROVE,
   PopupPath.COSMOS_SIGN,
   PopupPath.CONTACTS,
+  PopupPath.IDENTITY,
+  PopupPath.SEND,
+  PopupPath.RECEIVE,
+  PopupPath.SWAP,
+  PopupPath.SETTINGS,
   PopupPath.MULTISIG_CREATE,
   PopupPath.MULTISIG_JOIN,
   PopupPath.MULTISIG_SIGN,
 ];
 
-/** routes where header should NOT be shown (auth/approval flows only) */
+/**
+ * Routes where the persistent AppHeader should NOT be shown. A screen with
+ * its own back-header would otherwise render two stacked bars, and the
+ * AppHeader's network / wallet controls are meaningless mid-flow. Covers
+ * auth / approval flows plus every secondary screen that carries its own
+ * header: settings (whole subtree), identity, contacts, send, receive,
+ * swap, and the multisig sub-flows.
+ *
+ * Deliberately excluded: the multisig tab (/multisig) and stake are
+ * primary destinations with no own back-header - they rely on the
+ * AppHeader + bottom tabs to stay navigable, so their header stays.
+ */
 const hiddenHeaderRoutes = [
   PopupPath.LOGIN,
   PopupPath.TRANSACTION_APPROVAL,
@@ -100,6 +117,15 @@ const hiddenHeaderRoutes = [
   PopupPath.ZCASH_SEND_APPROVAL,
   PopupPath.FROST_APPROVE,
   PopupPath.COSMOS_SIGN,
+  PopupPath.SETTINGS,
+  PopupPath.IDENTITY,
+  PopupPath.CONTACTS,
+  PopupPath.SEND,
+  PopupPath.RECEIVE,
+  PopupPath.SWAP,
+  PopupPath.MULTISIG_CREATE,
+  PopupPath.MULTISIG_JOIN,
+  PopupPath.MULTISIG_SIGN,
 ];
 
 /** check if current path matches any hidden routes */
@@ -118,8 +144,14 @@ export const PopupLayout = () => {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const networkTabs = getTabsForNetwork(activeNetwork);
+  // On a frost wallet, guarantee a multisig tab - but only append one if the
+  // network's own feature-gated tabs don't already include it, otherwise the
+  // rail shows two tabs both labeled "multisig".
+  const hasMultisigTab = networkTabs.some(tab => tab.path === PopupPath.MULTISIG);
   const tabs =
-    selectedKeyInfo?.type === 'frost-multisig' ? [...networkTabs, MULTISIG_TAB] : networkTabs;
+    selectedKeyInfo?.type === 'frost-multisig' && !hasMultisigTab
+      ? [...networkTabs, MULTISIG_TAB]
+      : networkTabs;
   const showChrome = !matchesRoute(location.pathname, hiddenHeaderRoutes);
   const showTabs = showChrome && !matchesRoute(location.pathname, hiddenTabRoutes);
 
