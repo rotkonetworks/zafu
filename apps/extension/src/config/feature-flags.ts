@@ -49,3 +49,10 @@ export const NU6_3_ACTIVATION_HEIGHT = 3_428_143;
  * `true` to re-enable.
  */
 export const PASSWORD_GENERATOR = false;
+
+/**
+ * Pro subscription upsell surface. Hidden for now - the subscribe route and
+ * pro-gating logic stay in the codebase, just unreachable from the settings
+ * list and the drawer "upgrade" button. Flip back to `true` to re-enable.
+ */
+export const SUBSCRIBE_ENABLED = false;

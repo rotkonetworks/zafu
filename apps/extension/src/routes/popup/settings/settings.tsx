@@ -4,6 +4,7 @@ import { passwordSelector } from '../../../state/password';
 import { selectActiveNetwork } from '../../../state/keyring';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
+import { SUBSCRIBE_ENABLED } from '../../../config/feature-flags';
 import { SettingsScreen } from './settings-screen';
 import { cn } from '@repo/ui/lib/utils';
 import { localExtStorage } from '@repo/storage-chrome/local';
@@ -50,11 +51,15 @@ const links: SettingsLink[] = [
     icon: 'i-lucide-qr-code',
     href: PopupPath.SETTINGS_ZIGNER,
   },
-  {
-    title: 'pro subscription',
-    icon: 'i-lucide-zap',
-    href: PopupPath.SUBSCRIBE,
-  },
+  ...(SUBSCRIBE_ENABLED
+    ? [
+        {
+          title: 'pro subscription',
+          icon: 'i-lucide-zap',
+          href: PopupPath.SUBSCRIBE,
+        },
+      ]
+    : []),
   {
     title: 'about',
     icon: 'i-lucide-info',

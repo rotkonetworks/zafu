@@ -18,7 +18,7 @@ import { PopupPath } from '../routes/popup/paths';
 import { cn } from '@repo/ui/lib/utils';
 import { isSidePanel } from '../utils/popup-detection';
 import { hasFeature } from '../config/networks';
-import { IRONWOOD_MIGRATION } from '../config/feature-flags';
+import { IRONWOOD_MIGRATION, SUBSCRIBE_ENABLED } from '../config/feature-flags';
 
 /** donation addresses per network */
 const DONATE: Record<string, { address: string; name: string }> = {
@@ -278,7 +278,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
 
         {/* footer — upgrade (if free) + donate (always offered when available) + about */}
         <div className='mt-auto border-t border-border-soft px-4 py-3 flex flex-col gap-2'>
-          {!pro && (
+          {!pro && SUBSCRIBE_ENABLED && (
             <button
               onClick={() => {
                 navigate(PopupPath.SUBSCRIBE);
