@@ -66,7 +66,7 @@ export const DEFAULT_ZAPPS: Zapp[] = [
     name: 'poker',
     description: 'play with zcash',
     icon: 'i-lucide-spade',
-    url: 'https://poker.zk.bot',
+    url: 'https://poker.zafu.pro',
     category: 'games',
   },
   {
