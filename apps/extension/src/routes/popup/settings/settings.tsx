@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { Fragment, useState, useEffect } from 'react';
 import { useStore } from '../../../state';
 import { passwordSelector } from '../../../state/password';
 import { selectActiveNetwork } from '../../../state/keyring';
@@ -17,58 +17,91 @@ interface SettingsLink {
   networks?: string[];
 }
 
-// Order: what protects funds first (backups), then preferences, then
-// upsell, then the destructive thing last where muscle memory can't
-// hit it by accident.
+interface SettingsGroup {
+  /** lowercase kicker header for the group */
+  label: string;
+  links: SettingsLink[];
+}
+
+// Grouped by intent: what protects funds first (security & backup, with
+// auto-lock rendered inline in that group), then privacy, then wallet
+// plumbing (networks, zigner), then about. Lock stays pinned at the
+// bottom where muscle memory can't hit it by accident.
 //
 // TODO(orphan): link or delete - settings-rpc, settings-numeraires,
 // settings-trading-mode, and settings-parachains have screens but no route
 // and no nav-in. Decide whether they should be reachable or removed.
-const links: SettingsLink[] = [
+const groups: SettingsGroup[] = [
   {
-    title: 'recovery passphrase',
-    icon: 'i-lucide-file-text',
-    href: PopupPath.SETTINGS_RECOVERY_PASSPHRASE,
+    label: 'security & backup',
+    links: [
+      {
+        title: 'recovery passphrase',
+        icon: 'i-lucide-file-text',
+        href: PopupPath.SETTINGS_RECOVERY_PASSPHRASE,
+      },
+      {
+        title: 'multisig backup',
+        icon: 'i-lucide-shield',
+        href: PopupPath.SETTINGS_MULTISIG_BACKUP,
+        networks: ['zcash'],
+      },
+      // auto-lock renders here as an inline control (see below)
+      {
+        title: 'clear cache',
+        icon: 'i-lucide-trash-2',
+        href: PopupPath.SETTINGS_CLEAR_CACHE,
+      },
+    ],
   },
   {
-    title: 'multisig backup',
-    icon: 'i-lucide-shield',
-    href: PopupPath.SETTINGS_MULTISIG_BACKUP,
-    networks: ['zcash'],
+    label: 'privacy',
+    links: [
+      {
+        title: 'privacy',
+        icon: 'i-lucide-eye-off',
+        href: PopupPath.SETTINGS_PRIVACY,
+      },
+      {
+        title: 'connected sites',
+        icon: 'i-lucide-globe',
+        href: PopupPath.SETTINGS_CONNECTED_SITES,
+      },
+    ],
   },
   {
-    title: 'privacy',
-    icon: 'i-lucide-eye-off',
-    href: PopupPath.SETTINGS_PRIVACY,
+    label: 'wallet',
+    links: [
+      {
+        title: 'networks',
+        icon: 'i-lucide-network',
+        href: PopupPath.SETTINGS_NETWORKS,
+      },
+      {
+        title: 'zigner',
+        icon: 'i-lucide-qr-code',
+        href: PopupPath.SETTINGS_ZIGNER,
+      },
+    ],
   },
   {
-    title: 'connected sites',
-    icon: 'i-lucide-globe',
-    href: PopupPath.SETTINGS_CONNECTED_SITES,
-  },
-  {
-    title: 'zigner',
-    icon: 'i-lucide-qr-code',
-    href: PopupPath.SETTINGS_ZIGNER,
-  },
-  ...(SUBSCRIBE_ENABLED
-    ? [
-        {
-          title: 'pro subscription',
-          icon: 'i-lucide-zap',
-          href: PopupPath.SUBSCRIBE,
-        },
-      ]
-    : []),
-  {
-    title: 'about',
-    icon: 'i-lucide-info',
-    href: PopupPath.SETTINGS_ABOUT,
-  },
-  {
-    title: 'clear cache',
-    icon: 'i-lucide-trash-2',
-    href: PopupPath.SETTINGS_CLEAR_CACHE,
+    label: 'about',
+    links: [
+      ...(SUBSCRIBE_ENABLED
+        ? [
+            {
+              title: 'pro subscription',
+              icon: 'i-lucide-zap',
+              href: PopupPath.SUBSCRIBE,
+            },
+          ]
+        : []),
+      {
+        title: 'about',
+        icon: 'i-lucide-info',
+        href: PopupPath.SETTINGS_ABOUT,
+      },
+    ],
   },
 ];
 
@@ -118,36 +151,51 @@ export const Settings = () => {
     void localExtStorage.set('autoLockMinutes', next.value);
   };
 
-  const visibleLinks = links.filter(l => !l.networks || l.networks.includes(activeNetwork));
+  const visibleGroups = groups
+    .map(g => ({
+      ...g,
+      links: g.links.filter(l => !l.networks || l.networks.includes(activeNetwork)),
+    }))
+    .filter(g => g.links.length > 0);
 
   const autoLockLabel = AUTO_LOCK_OPTIONS.find(o => o.value === autoLock)?.label ?? '15 min';
 
   return (
     <SettingsScreen title='settings' backPath={PopupPath.INDEX}>
       <div className='flex grow flex-col justify-between'>
-        <div className='flex flex-col divide-y divide-border-soft'>
-          {visibleLinks.map(l => (
-            <SettingsRow
-              key={l.href}
-              icon={l.icon}
-              title={l.title}
-              onClick={() => navigate(l.href)}
-            />
+        <div className='flex flex-col gap-4'>
+          {visibleGroups.map(group => (
+            <div key={group.label}>
+              <p className='kicker px-4 pb-1'>{group.label}</p>
+              <div className='flex flex-col divide-y divide-border-soft/40'>
+                {group.links.map(l => (
+                  <Fragment key={l.href}>
+                    {/* auto-lock lives with the security controls, before clear cache */}
+                    {group.label === 'security & backup' && l.title === 'clear cache' && (
+                      <button
+                        onClick={cycleAutoLock}
+                        className='flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-elev-1 hover:text-fg-high group'
+                      >
+                        <span
+                          className={cn(
+                            'i-lucide-timer',
+                            'size-5 text-fg-muted group-hover:text-fg-high',
+                          )}
+                        />
+                        <span className='flex-1 text-data text-fg group-hover:text-fg-high lowercase'>
+                          auto-lock
+                        </span>
+                        <span className='text-label tabular text-fg-dim group-hover:text-fg-muted'>
+                          {autoLockLabel}
+                        </span>
+                      </button>
+                    )}
+                    <SettingsRow icon={l.icon} title={l.title} onClick={() => navigate(l.href)} />
+                  </Fragment>
+                ))}
+              </div>
+            </div>
           ))}
-          <button
-            onClick={cycleAutoLock}
-            className='flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-elev-1 hover:text-fg-high group'
-          >
-            <span
-              className={cn('i-lucide-timer', 'size-5 text-fg-muted group-hover:text-fg-high')}
-            />
-            <span className='flex-1 text-data text-fg group-hover:text-fg-high lowercase'>
-              auto-lock
-            </span>
-            <span className='text-label tabular text-fg-dim group-hover:text-fg-muted'>
-              {autoLockLabel}
-            </span>
-          </button>
         </div>
 
         <div className='mt-4 border-t border-border-soft pt-4'>

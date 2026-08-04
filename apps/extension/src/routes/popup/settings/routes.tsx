@@ -1,5 +1,4 @@
 import { lazy, Suspense } from 'react';
-import { Navigate } from 'react-router-dom';
 import { PopupPath } from '../paths';
 
 // lazy load all settings screens
@@ -33,6 +32,9 @@ const SettingsMultisig = lazy(() =>
 );
 const SettingsMultisigBackup = lazy(() =>
   import('./settings-multisig-backup').then(m => ({ default: m.SettingsMultisigBackup })),
+);
+const SettingsZigner = lazy(() =>
+  import('./settings-zigner').then(m => ({ default: m.SettingsZigner })),
 );
 const SubscribePage = lazy(() => import('./subscribe').then(m => ({ default: m.SubscribePage })));
 
@@ -74,8 +76,11 @@ export const settingsRoutes = [
     element: withSuspense(SettingsPassphrase),
   },
   {
+    // real zigner screen - a "zigner" link that silently redirected to the
+    // wallets list made the label lie. wallets still handles vault import;
+    // this screen owns zigner-specific settings (vault legacy mode, scan).
     path: PopupPath.SETTINGS_ZIGNER,
-    element: <Navigate to={PopupPath.SETTINGS_WALLETS} replace />,
+    element: withSuspense(SettingsZigner),
   },
   {
     path: PopupPath.SETTINGS_NETWORKS,

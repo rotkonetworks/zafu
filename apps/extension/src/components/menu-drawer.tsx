@@ -18,7 +18,7 @@ import { PopupPath } from '../routes/popup/paths';
 import { cn } from '@repo/ui/lib/utils';
 import { isSidePanel } from '../utils/popup-detection';
 import { hasFeature } from '../config/networks';
-import { IRONWOOD_MIGRATION, SUBSCRIBE_ENABLED } from '../config/feature-flags';
+import { SUBSCRIBE_ENABLED } from '../config/feature-flags';
 
 /** donation addresses per network */
 const DONATE: Record<string, { address: string; name: string }> = {
@@ -114,18 +114,9 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
         onClose();
       },
     },
-    // vote lives in the bottom tabs (feature-gated) — no drawer duplicate
-    // per-pool notes (orchard legacy vs ironwood) — zcash + NU6.3 dual-pool
-    // surface only. Dormant when IRONWOOD_MIGRATION is OFF.
-    IRONWOOD_MIGRATION &&
-      activeNetwork === 'zcash' && {
-        icon: 'i-lucide-layers-2',
-        label: 'pool notes',
-        onClick: () => {
-          navigate(PopupPath.POOL_NOTES);
-          onClose();
-        },
-      },
+    // vote lives in the bottom tabs (feature-gated) - no drawer duplicate.
+    // pool notes has no drawer entry either: the home balance card links
+    // straight into the per-pool notes view.
     showMultisig && {
       icon: 'i-lucide-shield',
       label: 'multisig',
@@ -171,15 +162,9 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
     },
   ].filter(Boolean) as MenuItem[];
 
+  // networks moved into settings (wallet group) - the drawer stays
+  // switches + actions only.
   const appItems: MenuItem[] = [
-    {
-      icon: 'i-lucide-globe',
-      label: 'networks',
-      onClick: () => {
-        navigate(PopupPath.SETTINGS_NETWORKS);
-        onClose();
-      },
-    },
     {
       icon: 'i-lucide-settings',
       label: 'settings',
