@@ -503,6 +503,40 @@ export function rotatedIdentity(baseIdentity: string, zidIndex: number): string 
   return zidIndex > 0 ? `${baseIdentity}-v${zidIndex}` : baseIdentity;
 }
 
+/** current rotated identity name for the login/share paths.
+ * NOTE: multisig, license, and escrow identities deliberately do NOT use
+ * this — those must stay pinned to their creation generation or funds and
+ * subscriptions would "rotate away". Only site login/share rotates. */
+export async function currentIdentityName(base: string = DEFAULT_IDENTITY): Promise<string> {
+  return rotatedIdentity(base, await getZidIndex());
+}
+
+/** chrome.storage.local key: map of generation index -> zid public key hex.
+ * Populated whenever a generation is actually derived, so display surfaces
+ * can show the real key for the active generation without secret access. */
+export const ZID_GEN_KEYS_STORAGE_KEY = 'zidGenKeys';
+
+export async function getZidGenKeys(): Promise<Record<number, string>> {
+  const v = (await chrome.storage.local.get(ZID_GEN_KEYS_STORAGE_KEY))[
+    ZID_GEN_KEYS_STORAGE_KEY
+  ] as Record<number, string> | undefined;
+  return v ?? {};
+}
+
+/** derive the identity-level zid for a generation and record its public key */
+export async function deriveAndCacheZidGeneration(
+  mnemonic: string,
+  zidIndex: number,
+): Promise<string> {
+  const zid = deriveZidCrossSite(mnemonic, rotatedIdentity(DEFAULT_IDENTITY, zidIndex));
+  const keys = await getZidGenKeys();
+  if (keys[zidIndex] !== zid.publicKey) {
+    keys[zidIndex] = zid.publicKey;
+    await chrome.storage.local.set({ [ZID_GEN_KEYS_STORAGE_KEY]: keys });
+  }
+  return zid.publicKey;
+}
+
 /**
  * resolve which zid to use for a given origin based on preference.
  * default: site-specific for the "default" identity.

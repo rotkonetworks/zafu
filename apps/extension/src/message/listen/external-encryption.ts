@@ -294,10 +294,10 @@ const handleDecrypt = async (msg: DecryptRequest, origin: string): Promise<unkno
 
     const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
 
-    const { deriveZidKeypairForSite, DEFAULT_IDENTITY } = await import('../../state/identity');
+    const { deriveZidKeypairForSite, currentIdentityName } = await import('../../state/identity');
     const { privateKey: ed25519Priv, publicKey: ed25519Pub } = deriveZidKeypairForSite(
       mnemonic,
-      DEFAULT_IDENTITY,
+      await currentIdentityName(),
       origin,
     );
 
@@ -341,8 +341,8 @@ const handleZidPubkey = async (origin: string): Promise<unknown> => {
 
     const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
 
-    const { deriveZidForSite, DEFAULT_IDENTITY } = await import('../../state/identity');
-    const zid = deriveZidForSite(mnemonic, DEFAULT_IDENTITY, origin);
+    const { deriveZidForSite, currentIdentityName } = await import('../../state/identity');
+    const zid = deriveZidForSite(mnemonic, await currentIdentityName(), origin);
 
     return { pubkey: zid.publicKey };
   } catch (e) {

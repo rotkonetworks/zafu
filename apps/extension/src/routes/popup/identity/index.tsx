@@ -16,7 +16,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../../state';
-import { selectEffectiveKeyInfo, selectKeyInfos } from '../../../state/keyring';
+import { selectEffectiveKeyInfo, selectKeyInfos, selectGetMnemonic } from '../../../state/keyring';
 import { allContactsSelector } from '../../../state/contacts';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import type { ZidSitePreference, ZidShareRecord } from '../../../state/identity';
@@ -31,6 +31,9 @@ import {
   rotateZidIndex,
   rotateZidIndexDown,
   setZidIndex,
+  getZidGenKeys,
+  ZID_GEN_KEYS_STORAGE_KEY,
+  deriveAndCacheZidGeneration,
 } from '../../../state/identity';
 import { getOriginPermissions, grantCapability, denyCapability } from '@repo/storage-chrome/origin';
 import { revokeOrigin as revokeOriginFull } from '../../../senders/revoke';
@@ -116,48 +119,44 @@ const usePrefersReducedMotion = (): boolean => {
 };
 
 /**
- * deterministic visual fingerprint from a hex pubkey.
- * renders a 5x5 grid of colored cells derived from the key bytes.
- * makes it easy to visually verify you are looking at the right identity.
+ * deterministic visual fingerprint from a hex pubkey — a personal hanko.
+ *
+ * A zid IS a signing identity, and the traditional mark of a signing
+ * identity is a seal: a vermillion square carrying one character, pressed
+ * slightly askew. Both the character and the tilt are derived from the
+ * key bytes, so every generation gets its own recognizable stamp.
  */
+const SEAL_KANJI = [...'松竹梅月山川雪花風林火水石空海島雲星霜露谷岩波泉森光影音刀弓馬鶴亀龍虎蓮桜柳楓菊苔庭道門橋鈴壺筆墨'];
+
 const ZidFingerprint = ({ pubkeyHex, size = 40 }: { pubkeyHex: string; size?: number }) => {
-  const cells = useMemo(() => {
-    const bytes: number[] = [];
-    for (let i = 0; i < Math.min(pubkeyHex.length, 50); i += 2) {
-      bytes.push(parseInt(pubkeyHex.slice(i, i + 2), 16));
-    }
-    // 5x5 grid = 25 cells, mirror horizontally for symmetry (like github identicons)
-    const grid: string[] = [];
-    const hue = ((bytes[0] ?? 0) * 360) / 256;
-    for (let row = 0; row < 5; row++) {
-      for (let col = 0; col < 5; col++) {
-        // mirror: col 0 = col 4, col 1 = col 3, col 2 = center
-        const effCol = col < 3 ? col : 4 - col;
-        const byteIdx = 1 + row * 3 + effCol;
-        const val = bytes[byteIdx] ?? 0;
-        const on = val > 127;
-        const lightness = on ? 45 + (val % 20) : 15;
-        const sat = on ? 60 + (val % 30) : 5;
-        grid.push(`hsl(${hue}, ${sat}%, ${lightness}%)`);
-      }
-    }
-    return grid;
+  const { glyph, tilt } = useMemo(() => {
+    const b0 = parseInt(pubkeyHex.slice(0, 2), 16) || 0;
+    const b1 = parseInt(pubkeyHex.slice(2, 4), 16) || 0;
+    const b2 = parseInt(pubkeyHex.slice(4, 6), 16) || 0;
+    // two bytes select the glyph so the space is used evenly
+    const idx = (b0 * 256 + b1) % SEAL_KANJI.length;
+    return { glyph: SEAL_KANJI[idx]!, tilt: (b2 % 13) - 6 };
   }, [pubkeyHex]);
 
-  const cellSize = size / 5;
   return (
     <div
-      className='overflow-hidden shrink-0'
+      className='relative flex shrink-0 select-none items-center justify-center border-hanko text-hanko'
       style={{
         width: size,
         height: size,
-        display: 'grid',
-        gridTemplateColumns: `repeat(5, ${cellSize}px)`,
+        borderWidth: Math.max(1.5, size / 30),
+        borderRadius: size / 7,
+        fontSize: size * 0.48,
+        transform: `rotate(${tilt}deg)`,
       }}
+      title='your seal — changes with each generation'
     >
-      {cells.map((color, i) => (
-        <div key={i} style={{ width: cellSize, height: cellSize, backgroundColor: color }} />
-      ))}
+      <span
+        aria-hidden
+        className='absolute border border-hanko/35'
+        style={{ inset: size / 14, borderRadius: size / 12 }}
+      />
+      {glyph}
     </div>
   );
 };
@@ -227,6 +226,9 @@ export const IdentityPage = () => {
       if (changes[ZID_PINS_STORAGE_KEY]) {
         void getZidPins().then(setZidPins);
       }
+      if (changes[ZID_GEN_KEYS_STORAGE_KEY]) {
+        void getZidGenKeys().then(setGenKeys);
+      }
     };
     chrome.storage.onChanged.addListener(listener);
     return () => chrome.storage.onChanged.removeListener(listener);
@@ -276,9 +278,37 @@ export const IdentityPage = () => {
   );
 
   // try active keyinfo first, then any keyinfo with a zid (mnemonic wallets)
-  const zidPubkey = (keyInfo?.insensitive?.['zid'] ??
+  const storedZid = (keyInfo?.insensitive?.['zid'] ??
     allKeyInfos.find(k => k.insensitive?.['zid'])?.insensitive?.['zid']) as string | undefined;
+  // generation-aware: the stored value is generation 0 (written at vault
+  // creation); rotated generations come from the derived-key cache, filled
+  // on rotation below. Without this, rotating generations changed nothing
+  // on screen — the icon and zid stayed pinned to gen 0.
+  const getMnemonic = useStore(selectGetMnemonic);
+  const [genKeys, setGenKeys] = useState<Record<number, string>>({});
+  useEffect(() => {
+    void getZidGenKeys().then(setGenKeys);
+  }, []);
+  const zidPubkey = genKeys[zidIndex] ?? (zidIndex === 0 ? storedZid : undefined);
   const zidAddress = zidPubkey ? 'zid' + zidPubkey.slice(0, 16) : undefined;
+
+  // derive + cache the active generation's key whenever it's missing (the
+  // wallet is unlocked here, so getMnemonic works without a prompt)
+  const mnemonicVault = allKeyInfos.find(k => k.insensitive?.['zid']);
+  useEffect(() => {
+    if (zidPubkey || !mnemonicVault) {
+      return;
+    }
+    void (async () => {
+      try {
+        const mnemonic = await getMnemonic(mnemonicVault.id);
+        await deriveAndCacheZidGeneration(mnemonic, zidIndex);
+        setGenKeys(await getZidGenKeys());
+      } catch {
+        /* locked or non-mnemonic vault — stored gen-0 display only */
+      }
+    })();
+  }, [zidIndex, zidPubkey, mnemonicVault, getMnemonic]);
 
   useEffect(() => {
     void (async () => {

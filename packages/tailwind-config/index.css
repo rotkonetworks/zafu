@@ -9,11 +9,12 @@
 
 /* Zafu terminal theme - CSS-first config (Tailwind v4) */
 @theme {
-  /* resolve through the runtime var so settings→appearance font choice
-     applies to font-* utilities too (globals.css owns the default) */
-  --font-body: var(--font-mono);
-  --font-headline: var(--font-mono);
-  --font-mono: var(--font-mono);
+  /* resolve through the runtime var (--zafu-font, owned by globals.css)
+     so the settings→appearance font choice reaches font-* utilities.
+     NOT var(--font-mono): that would self-reference the theme token. */
+  --font-body: var(--zafu-font);
+  --font-headline: var(--zafu-font);
+  --font-mono: var(--zafu-font);
 
   --radius-sm: 0;
   --radius-md: 0;
@@ -127,6 +128,7 @@
   --color-zigner-gold: var(--zigner-gold);
   --color-zigner-gold-light: var(--zigner-gold-light);
   --color-zigner-gold-dark: var(--zigner-gold-dark);
+  --color-zigner-gold-foreground: var(--zigner-gold-foreground);
   --color-zigner-dark: var(--zigner-dark);
   --color-zigner-darker: var(--zigner-darker);
 

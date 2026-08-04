@@ -33,6 +33,8 @@
     --zigner-gold-dark: #b8860b;
     --zigner-gold: #f4b728;
     --zigner-gold-light: #fcd34d;
+    /* ink to use ON a gold fill (button hover states) */
+    --zigner-gold-foreground: #141008;
     --zigner-dark: #0a0a0a;
     --zigner-darker: #000000;
 
@@ -64,8 +66,11 @@
     --radius-lg: 10px;
     --radius-pill: 9999px;
 
-    /* typography stack — monospace is the only stack */
-    --font-mono: 'Iosevka Term', 'Courier New', Courier, monospace;
+    /* typography stack — monospace is the only stack. --zafu-font is the
+       runtime choice (settings → appearance overrides it via data-font);
+       --font-mono stays as a compat alias for anything referencing it. */
+    --zafu-font: 'Iosevka Term', 'Courier New', Courier, monospace;
+    --font-mono: var(--zafu-font);
 
     /* ==============================================================
      * shadcn / tailwind HSL layer — aliases onto the v2 tokens above.
@@ -197,6 +202,7 @@
     --zigner-gold: #8a6508;
     --zigner-gold-light: #b8860b;
     --zigner-gold-dark: #6b4e06;
+    --zigner-gold-foreground: #f6efe2;
     --background: 41 37% 90%;
     --foreground: 32 21% 14%;
     --muted: 43 56% 95%;
@@ -229,7 +235,7 @@
 
   /* type: 'system' swaps Iosevka for the OS monospace (settings → appearance) */
   :root[data-font='system'] {
-    --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    --zafu-font: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   }
 
   :root[data-theme='washi'] body {

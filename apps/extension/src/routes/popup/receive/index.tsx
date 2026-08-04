@@ -7,6 +7,7 @@
  * - pick asset + amount, shield into penumbra via IBC
  */
 
+import { getTransparentHistoryInWorker } from '../../../state/keyring/network-worker';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Sensitive } from '../../../components/sensitive';
 import { ToggleSwitch } from '../../../components/toggle-switch';
@@ -556,6 +557,32 @@ function ReceiveTab({
   const [transparentAddress, setTransparentAddress] = useState('');
   const [transparentLoading, setTransparentLoading] = useState(false);
   const [transparentError, setTransparentError] = useState<string | null>(null);
+  // reuse guard: a transparent address that already has on-chain history
+  // publicly links any new payment to the old ones. Probed per address.
+  const [transparentUsed, setTransparentUsed] = useState(false);
+  const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
+  useEffect(() => {
+    setTransparentUsed(false);
+    if (!transparent || !transparentAddress) {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const hist = await getTransparentHistoryInWorker('zcash', zidecarUrl, [
+          transparentAddress,
+        ]);
+        if (!cancelled && hist.length > 0) {
+          setTransparentUsed(true);
+        }
+      } catch {
+        /* probe is best-effort — never block showing the address */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [transparent, transparentAddress, zidecarUrl]);
 
   // auto-rotate zcash addresses on mount: bump both indices
   useEffect(() => {
@@ -906,6 +933,13 @@ function ReceiveTab({
           ) : transparent && isZcash ? (
             <span className='flex items-center gap-1.5'>
               transparent address #{transparentIndex}{' '}
+              {transparentUsed && (
+                <span className='mt-1 flex items-start gap-1.5 text-label text-hanko'>
+                  <span className='i-lucide-alert-triangle mt-0.5 size-3 shrink-0' />
+                  this address was used before — reusing it publicly links your payments. rotate to
+                  a fresh address.
+                </span>
+              )}
               <span className='text-label px-1.5 py-0.5 rounded-md bg-red-500/15 text-red-500 font-medium leading-none'>
                 public
               </span>

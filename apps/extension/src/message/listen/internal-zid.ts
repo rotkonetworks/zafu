@@ -81,12 +81,15 @@ export const internalZidListener = (
       }
 
       const mnemonic = await useStore.getState().keyRing.getMnemonic(keyInfo.id);
-      const { deriveZidKeypairForSite, DEFAULT_IDENTITY } = await import('../../state/identity');
+      const { deriveZidKeypairForSite, currentIdentityName, getZidIndex, deriveAndCacheZidGeneration } =
+        await import('../../state/identity');
+      // rotation-aware: the generation index picks the identity the site sees
       const { privateKey, publicKey } = deriveZidKeypairForSite(
         mnemonic,
-        DEFAULT_IDENTITY,
+        await currentIdentityName(),
         req.origin,
       );
+      void deriveAndCacheZidGeneration(mnemonic, await getZidIndex());
 
       const pubHex = bytesToHex(publicKey);
       const privHex = bytesToHex(privateKey);
