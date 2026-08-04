@@ -1303,9 +1303,17 @@ function boot() {
           return `<div class="dm-ch" data-pubkey="${esc(pub)}" title="end-to-end encrypted DM" style="padding:5px 12px;cursor:pointer;background:${bg};color:${col};font-size:12px;font-weight:${fontWeight};transition:background 0.1s;">${esc(label)}${badge}</div>`;
         })
         .join('')}
-      <div class="me-chip" style="padding:8px 12px;margin-top:auto;border-top:1px solid ${C.border};cursor:pointer;transition:background 0.1s;" title="${zidPrivkey ? 'click for /whois (your identity)' : zidPubkey ? 'click to /login' : 'no zafu identity - install zafu first'}">
-        <div style="color:${C.muted};font-size:11px;">${zidPrivkey ? `<span style="color:${C.green}" title="logged in - your messages are signed under zid-msg-v1">+</span>` : ''}${esc(nick)}</div>
-        <div style="color:${zidPrivkey ? C.green : C.muted};font-size:10px;">${zidPubkey ? shortPub(zidPubkey) : 'anon · click to login'}</div>
+      <div class="me-chip" style="padding:8px 12px;margin-top:auto;border-top:1px solid ${C.border};cursor:pointer;transition:background 0.1s;display:flex;align-items:center;gap:9px;" title="${zidPrivkey ? 'click for /whois (your identity)' : zidPubkey ? 'click to /login' : 'no zafu identity - install zafu first'}">
+        ${
+          /* hanko seal — a zid renders as its own personal stamp (nick
+             initial, vermillion, pressed slightly askew like a real seal).
+             Greyed out until there's a signing identity behind it. */
+          `<div style="width:26px;height:26px;flex:none;border:1.5px solid ${zidPrivkey ? '#c73e3a' : C.muted};border-radius:5px;color:${zidPrivkey ? '#c73e3a' : C.muted};display:flex;align-items:center;justify-content:center;font-size:13px;transform:rotate(-5deg);" title="${zidPrivkey ? 'your seal' : 'unsigned'}">${esc(([...nick.trim()][0] ?? '?').toUpperCase())}</div>`
+        }
+        <div>
+          <div style="color:${C.muted};font-size:11px;">${zidPrivkey ? `<span style="color:${C.green}" title="logged in - your messages are signed under zid-msg-v1">+</span>` : ''}${esc(nick)}</div>
+          <div style="color:${zidPrivkey ? C.green : C.muted};font-size:10px;">${zidPubkey ? shortPub(zidPubkey) : 'anon · click to login'}</div>
+        </div>
       </div>
     `;
 

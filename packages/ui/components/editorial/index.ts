@@ -19,3 +19,6 @@ export type { GlassProps } from './glass';
 
 export { Rule, RulerScale } from './ruler';
 export type { RulerScaleProps } from './ruler';
+
+export { HankoSeal, zidSealGlyph } from './hanko-seal';
+export type { HankoSealProps } from './hanko-seal';

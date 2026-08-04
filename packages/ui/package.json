@@ -19,6 +19,7 @@
   ],
   "exports": {
     "./components/ui/icons/*": "./components/ui/icons/*.tsx",
+    "./components/editorial": "./components/editorial/index.ts",
     "./components/ui/*": "./components/ui/*/index.tsx",
     "./lib/toast/*": "./lib/toast/*.ts",
     "./lib/toast/transaction-toast": "./lib/toast/transaction-toast.tsx",

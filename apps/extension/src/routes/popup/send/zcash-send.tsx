@@ -29,6 +29,7 @@ import {
   type SendTxPcztUnsignedResult,
 } from '../../../state/keyring/network-worker';
 import { Button } from '@repo/ui/components/ui/button';
+import { HankoSeal } from '@repo/ui/components/editorial';
 import { QrDisplay } from '../../../shared/components/qr-display';
 import { QrScanner } from '../../../shared/components/qr-scanner';
 import { AnimatedQrDisplay } from '../../../shared/components/animated-qr-display';
@@ -1096,10 +1097,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
       case 'complete':
         return (
           <div className='flex flex-col items-center gap-4 p-8'>
-            <div className='w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center'>
-              <span className='i-lucide-check w-8 h-8 text-green-400' />
-            </div>
-            <h2 className='text-lg font-medium'>transaction sent!</h2>
+            {/* the receipt gets stamped — a broadcast tx is sealed (封) */}
+            <HankoSeal glyph='封' size='lg' />
+            <h2 className='text-lg font-medium'>sealed — transaction sent</h2>
             <p className='text-sm text-fg-muted text-center'>
               {amount} zec sent successfully
               {totalElapsedSec !== null && ` in ${totalElapsedSec}s`}

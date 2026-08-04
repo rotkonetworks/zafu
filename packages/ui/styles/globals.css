@@ -17,17 +17,17 @@
      * ============================================================== */
 
     /* surfaces */
-    --surface-canvas: #000000;
-    --surface-elev-1: #0a0a0a;
-    --surface-elev-2: #0f0f0f;
-    --surface-border-soft: #1a1a1a;
-    --surface-border: #212121;
+    --surface-canvas: #0c0a08;
+    --surface-elev-1: #131009;
+    --surface-elev-2: #1a1611;
+    --surface-border-soft: #241f18;
+    --surface-border: #322a21;
 
     /* ink */
-    --fg-high: #f5f5f5;
-    --fg: #dcdcdc;
-    --fg-muted: #8a8a8a;
-    --fg-dim: #5a5a5a;
+    --fg-high: #f2ecdf;
+    --fg: #ded5c4;
+    --fg-muted: #948a79;
+    --fg-dim: #625a4d;
 
     /* brand — gold (cold side) */
     --zigner-gold-dark: #b8860b;
@@ -35,6 +35,12 @@
     --zigner-gold-light: #fcd34d;
     --zigner-dark: #0a0a0a;
     --zigner-darker: #000000;
+
+    /* brand — hanko vermillion. Personality accent, never a button fill:
+       the kicker tick, the sealed-receipt stamp, genuinely destructive acts. */
+    --hanko-dark: #9e2f2c;
+    --hanko: #c73e3a;
+    --hanko-light: #d95b4e;
 
     /* brand — blue (hot side) */
     --zafu-blue-dark: #1d4ed8;
@@ -68,25 +74,25 @@
      * ============================================================== */
 
     /* terminal dark theme - black bg, gold accent, monospace */
-    --background: 0 0% 0%; /* --surface-canvas      #000000 */
-    --foreground: 0 0% 86%; /* --fg                  #dcdcdc */
+    --background: 30 14% 4%; /* --surface-canvas      #0c0a08 */
+    --foreground: 39 28% 82%; /* --fg                  #ded5c4 */
 
     /* muted text */
-    --muted: 0 0% 6%; /* --surface-elev-2      #0f0f0f */
-    --muted-foreground: 0 0% 54%; /* --fg-muted            #8a8a8a */
+    --muted: 33 21% 8%; /* --surface-elev-2      #1a1611 */
+    --muted-foreground: 38 11% 53%; /* --fg-muted            #948a79 */
 
     /* popover/dropdown */
-    --popover: 0 0% 4%; /* --surface-elev-1      #0a0a0a */
-    --popover-foreground: 0 0% 96%; /* --fg-high             #f5f5f5 */
+    --popover: 42 36% 5%; /* --surface-elev-1      #131009 */
+    --popover-foreground: 41 42% 91%; /* --fg-high             #f2ecdf */
 
     /* card - subtle elevation */
-    --card: 0 0% 4%; /* --surface-elev-1      #0a0a0a */
-    --card-foreground: 0 0% 86%; /* --fg                  #dcdcdc */
+    --card: 42 36% 5%; /* --surface-elev-1      #131009 */
+    --card-foreground: 39 28% 82%; /* --fg                  #ded5c4 */
 
     /* border */
-    --border: 0 0% 13%; /* --surface-border      #212121 */
-    --border-secondary: 0 0% 10%; /* --surface-border-soft #1a1a1a */
-    --input: 0 0% 6%; /* --surface-elev-2      #0f0f0f */
+    --border: 32 20% 16%; /* --surface-border      #322a21 */
+    --border-secondary: 35 20% 12%; /* --surface-border-soft #241f18 */
+    --input: 33 21% 8%; /* --surface-elev-2      #1a1611 */
 
     /* primary - zcash gold */
     --primary: 42 91% 55%;
@@ -126,14 +132,14 @@
     --info: #f4b728;
 
     /* legacy compat */
-    --charcoal: #0a0a0a;
+    --charcoal: #131009;
     --charcoal-secondary: #000000;
     --teal: #629994;
     --sand: #847a5b;
     --rust: #8d5728;
     --green: #5f5;
     --red: #f55;
-    --light-brown: #0a0a0a;
+    --light-brown: #131009;
     --light-grey: #ccc;
     --brown: rgba(0, 0, 0, 0.8);
   }
@@ -229,6 +235,12 @@
 
   body {
     background-color: hsl(var(--background));
+    /* woven-cloth grain — a zafu is fabric. Two crossed 1px rasters at ~4.5%
+       opacity over the sumi canvas: invisible at a glance, felt as material.
+       Inline data-free CSS, zero requests, zero paint cost worth noting. */
+    background-image:
+      repeating-linear-gradient(0deg, rgb(226 209 182 / 0.023) 0 1px, transparent 1px 3px),
+      repeating-linear-gradient(90deg, rgb(226 209 182 / 0.016) 0 1px, transparent 1px 3px);
     color: hsl(var(--foreground));
     font-family: 'Iosevka Term', 'Courier New', Courier, monospace;
     font-size: 13px;
