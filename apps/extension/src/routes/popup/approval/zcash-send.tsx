@@ -10,6 +10,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { Sensitive } from '../../../components/sensitive';
 import { cn } from '@repo/ui/lib/utils';
 import { useStore } from '../../../state';
 import { selectEffectiveKeyInfo, selectGetMnemonic } from '../../../state/keyring';
@@ -191,9 +192,15 @@ export function ZcashSendApproval() {
       <div className='rounded-md border border-zigner-gold/30 bg-zigner-gold/5 p-3 mb-4'>
         <div className='kicker mb-1 text-zigner-gold/80'>review carefully</div>
         <div className='text-label text-fg'>
-          sending <span className='tabular text-zigner-gold'>{fmtZec(totalOutputZat)} ZEC</span>
+          sending{' '}
+          <span className='tabular text-zigner-gold'>
+            <Sensitive>{fmtZec(totalOutputZat)} ZEC</Sensitive>
+          </span>
           {outputs.length > 1 && ` across ${outputs.length} outputs`} (+ ~
-          <span className='tabular text-fg-muted'>{fmtZec(totalFeeZat)}</span> fee)
+          <span className='tabular text-fg-muted'>
+            <Sensitive>{fmtZec(totalFeeZat)}</Sensitive>
+          </span>{' '}
+          fee)
         </div>
       </div>
 
@@ -223,7 +230,9 @@ export function ZcashSendApproval() {
                   <span className='text-label text-success lowercase'>sent</span>
                 )}
               </div>
-              <div className='text-data tabular text-zigner-gold'>{fmtZec(o.amount)} ZEC</div>
+              <div className='text-data tabular text-zigner-gold'>
+                <Sensitive>{fmtZec(o.amount)} ZEC</Sensitive>
+              </div>
             </div>
             <div className='text-label tabular text-fg-muted break-all'>{shortAddr(o.address)}</div>
             {o.memo && (
@@ -240,14 +249,18 @@ export function ZcashSendApproval() {
             <div className='text-label text-fg-dim lowercase'>
               {outputs.length === 1 ? 'network fee' : `network fee (per tx × ${outputs.length})`}
             </div>
-            <div className='text-label tabular text-fg-muted'>~{fmtZec(totalFeeZat)} ZEC</div>
+            <div className='text-label tabular text-fg-muted'>
+              ~<Sensitive>{fmtZec(totalFeeZat)} ZEC</Sensitive>
+            </div>
           </div>
         </div>
 
         {/* total */}
         <div className='mt-3 pt-3 border-t border-border-soft flex justify-between items-baseline'>
           <div className='kicker'>total (incl. fees)</div>
-          <div className='text-title tabular text-zigner-gold'>{fmtZec(totalZat)} ZEC</div>
+          <div className='text-title tabular text-zigner-gold'>
+            <Sensitive>{fmtZec(totalZat)} ZEC</Sensitive>
+          </div>
         </div>
       </div>
 

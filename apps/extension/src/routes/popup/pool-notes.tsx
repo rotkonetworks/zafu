@@ -13,6 +13,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Sensitive } from '../../components/sensitive';
 import { useStore } from '../../state';
 import { selectEffectiveKeyInfo } from '../../state/keyring';
 import { getNotesInWorker, type DecryptedNoteWithTxid } from '../../state/keyring/network-worker';
@@ -139,7 +140,7 @@ function NoteRow({ note }: { note: DecryptedNoteWithTxid }) {
       <div className='min-w-0 flex-1'>
         <div className='flex items-center justify-between gap-2'>
           <span className='font-mono text-sm tabular-nums text-fg-high'>
-            {fmtZec(BigInt(note.value))} ZEC
+            <Sensitive>{fmtZec(BigInt(note.value))} ZEC</Sensitive>
           </span>
           <span
             className={cn(
@@ -174,7 +175,7 @@ function PoolHeader({ label, notes }: { label: string; notes: DecryptedNoteWithT
         {label} - {count} note{count === 1 ? '' : 's'}
       </span>
       <span className='font-mono text-xs tabular-nums text-fg-muted'>
-        {fmtZec(subtotal(notes))} ZEC
+        <Sensitive>{fmtZec(subtotal(notes))} ZEC</Sensitive>
       </span>
     </div>
   );

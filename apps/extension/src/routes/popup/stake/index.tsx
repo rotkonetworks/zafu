@@ -6,6 +6,7 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Sensitive } from '../../../components/sensitive';
 import { viewClient, stakeClient } from '../../../clients';
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
 import { useStore } from '../../../state';
@@ -425,7 +426,7 @@ export const StakePage = () => {
                 const balStr = typeof bal === 'string' ? bal : bal.toString();
                 return (
                   <option key={i} value={i}>
-                    {symbol} ({balStr})
+                    {symbol} (<Sensitive>{balStr}</Sensitive>)
                   </option>
                 );
               })}
@@ -441,7 +442,7 @@ export const StakePage = () => {
               onClick={() => setAmount(maxAmount)}
               className='text-xs text-zigner-gold hover:text-zigner-gold-light'
             >
-              max: {maxAmount}
+              max: <Sensitive>{maxAmount}</Sensitive>
             </button>
           </div>
           <input
@@ -522,7 +523,9 @@ export const StakePage = () => {
       <div className='rounded-lg border border-border-soft bg-elev-2/20 p-4'>
         <p className='text-xs text-fg-muted'>available to stake</p>
         <p className='text-xl font-medium'>
-          {stakingBalance || '0'} {STAKING_TOKEN}
+          <Sensitive>
+            {stakingBalance || '0'} {STAKING_TOKEN}
+          </Sensitive>
         </p>
         <button
           onClick={() => setAction('delegate')}
@@ -565,7 +568,9 @@ export const StakePage = () => {
                 >
                   <div className='min-w-0 flex-1'>
                     <p className='text-sm font-medium truncate'>{displayName}</p>
-                    <p className='text-xs text-fg-muted'>{balStr} staked</p>
+                    <p className='text-xs text-fg-muted'>
+                      <Sensitive>{balStr}</Sensitive> staked
+                    </p>
                   </div>
                   <button
                     onClick={() => {

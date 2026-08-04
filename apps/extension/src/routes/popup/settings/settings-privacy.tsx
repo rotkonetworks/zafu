@@ -17,6 +17,12 @@ interface PrivacyRow {
 
 const PRIVACY_ROWS: readonly PrivacyRow[] = [
   {
+    key: 'hideBalances',
+    label: 'hide balances',
+    onLabel: 'amounts blurred across every screen',
+    offLabel: 'amounts visible',
+  },
+  {
     key: 'enableIdentity',
     label: 'zid identity',
     onLabel: 'sites can derive per-site identities',
@@ -72,9 +78,9 @@ function Row({
       </div>
       <button onClick={() => onChange(!checked)} className='shrink-0 transition-colors'>
         {checked ? (
-          <span className='i-lucide-toggle-right size-7 text-green-400' />
+          <span className='i-lucide-toggle-right size-7 text-fg-high' />
         ) : (
-          <span className='i-lucide-toggle-left size-7 text-fg-muted/40' />
+          <span className='i-lucide-toggle-left size-7 text-fg-muted' />
         )}
       </button>
     </div>
@@ -113,9 +119,9 @@ function ProxySection() {
           className='shrink-0'
         >
           {proxy.enabled ? (
-            <span className='i-lucide-toggle-right size-7 text-green-400' />
+            <span className='i-lucide-toggle-right size-7 text-fg-high' />
           ) : (
-            <span className='i-lucide-toggle-left size-7 text-fg-muted/40' />
+            <span className='i-lucide-toggle-left size-7 text-fg-muted' />
           )}
         </button>
       </div>

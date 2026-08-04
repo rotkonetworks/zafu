@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { MetadataFetchFn, TransactionViewComponent } from '@repo/ui/components/ui/tx';
+import { Sensitive } from '../../../../components/sensitive';
 import { useStore } from '../../../../state';
 import { txApprovalSelector } from '../../../../state/tx-approval';
 import { PasswordGateModal } from '../../../../shared/components/password-gate';
@@ -247,7 +248,9 @@ export const TransactionApproval = () => {
           onValueChange={setSelectedTransactionViewName}
         />
 
-        <TransactionViewComponent txv={selectedTransactionView} metadataFetcher={getMetadata} />
+        <Sensitive className='w-full'>
+          <TransactionViewComponent txv={selectedTransactionView} metadataFetcher={getMetadata} />
+        </Sensitive>
 
         {selectedTransactionViewName === TransactionViewTab.SENDER && (
           <div className='mt-2'>

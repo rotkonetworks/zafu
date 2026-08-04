@@ -7,6 +7,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { Sensitive } from '../../components/sensitive';
 import { useStore } from '../../state';
 import { selectActiveZcashWallet } from '../../state/wallets';
 import { selectEffectiveKeyInfo } from '../../state/keyring';
@@ -78,7 +79,9 @@ export const NoteSyncPage = () => {
             <p className='text-label text-fg-muted'>wallet</p>
             <p className='text-sm font-medium truncate'>{activeWallet.label}</p>
             <div className='mt-1 flex items-center gap-2'>
-              <span className='text-lg font-mono font-medium'>{balanceDisplay}</span>
+              <span className='text-lg font-mono font-medium'>
+                <Sensitive>{balanceDisplay}</Sensitive>
+              </span>
               <span className='text-xs text-fg-muted'>ZEC</span>
             </div>
             <p className='text-label text-fg-muted mt-1'>

@@ -9,6 +9,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { viewClient, simulationClient } from '../../../clients';
+import { Sensitive } from '../../../components/sensitive';
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
 import { useStore } from '../../../state';
 import {
@@ -542,7 +543,7 @@ const ZcashCrosschainSwap = () => {
                   }}
                   className='text-xs text-fg-muted hover:text-fg-high'
                 >
-                  bal: {parseFloat(balanceZec).toFixed(4)}
+                  bal: <Sensitive>{parseFloat(balanceZec).toFixed(4)}</Sensitive>
                 </button>
               )}
             </div>
@@ -741,13 +742,17 @@ const ZcashCrosschainSwap = () => {
             <div className='flex flex-col gap-1.5 text-xs'>
               <div className='flex justify-between'>
                 <span className='text-fg-muted'>you send</span>
-                <span>{amountIn} ZEC</span>
+                <span>
+                  <Sensitive>{amountIn} ZEC</Sensitive>
+                </span>
               </div>
 
               <div className='flex justify-between'>
                 <span className='text-fg-muted'>you receive</span>
                 <span>
-                  {quote.quote.amountOutFormatted} {isFromZec ? selectedToken?.symbol : 'ZEC'}
+                  <Sensitive>
+                    {quote.quote.amountOutFormatted} {isFromZec ? selectedToken?.symbol : 'ZEC'}
+                  </Sensitive>
                 </span>
               </div>
 
@@ -870,19 +875,25 @@ const ZcashCrosschainSwap = () => {
             <div className='flex justify-between text-sm'>
               <span className='text-fg-muted'>send</span>
               <span className='font-medium'>
-                {quote.quote.amountInFormatted} {isFromZec ? 'ZEC' : selectedToken?.symbol}
+                <Sensitive>
+                  {quote.quote.amountInFormatted} {isFromZec ? 'ZEC' : selectedToken?.symbol}
+                </Sensitive>
               </span>
             </div>
             <div className='flex justify-between text-sm mt-1'>
               <span className='text-fg-muted'>receive</span>
               <span className='font-medium'>
-                {quote.quote.amountOutFormatted} {isFromZec ? selectedToken?.symbol : 'ZEC'}
+                <Sensitive>
+                  {quote.quote.amountOutFormatted} {isFromZec ? selectedToken?.symbol : 'ZEC'}
+                </Sensitive>
               </span>
             </div>
             {quote.quote.amountInUsd !== '0' && (
               <div className='flex justify-between text-xs text-fg-muted mt-1'>
                 <span>value</span>
-                <span>${parseFloat(quote.quote.amountInUsd).toFixed(2)}</span>
+                <span>
+                  $<Sensitive>{parseFloat(quote.quote.amountInUsd).toFixed(2)}</Sensitive>
+                </span>
               </div>
             )}
           </div>
@@ -917,9 +928,13 @@ const ZcashCrosschainSwap = () => {
             <p className='text-sm text-green-400'>swap complete</p>
             {quote && (
               <p className='text-xs text-fg-muted mt-1'>
-                {quote.quote.amountInFormatted} {isFromZec ? 'ZEC' : selectedToken?.symbol}
+                <Sensitive>
+                  {quote.quote.amountInFormatted} {isFromZec ? 'ZEC' : selectedToken?.symbol}
+                </Sensitive>
                 {' → '}
-                {quote.quote.amountOutFormatted} {isFromZec ? selectedToken?.symbol : 'ZEC'}
+                <Sensitive>
+                  {quote.quote.amountOutFormatted} {isFromZec ? selectedToken?.symbol : 'ZEC'}
+                </Sensitive>
               </p>
             )}
           </div>

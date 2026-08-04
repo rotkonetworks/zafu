@@ -5,6 +5,7 @@
  */
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
+import { Sensitive } from '../../components/sensitive';
 import { QrDisplay } from '../../shared/components/qr-display';
 import { QrScanner } from '../../shared/components/qr-scanner';
 import { Button } from '@repo/ui/components/ui/button';
@@ -66,11 +67,23 @@ function parseTxSummary(signDoc: SignDocLike) {
 }
 
 /** summary row */
-function SummaryRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function SummaryRow({
+  label,
+  value,
+  mono,
+  sensitive,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  sensitive?: boolean;
+}) {
   return (
     <div className='flex justify-between gap-2 py-1.5'>
       <span className='text-xs text-fg-muted shrink-0'>{label}</span>
-      <span className={`text-xs text-right break-all ${mono ? 'font-mono' : ''}`}>{value}</span>
+      <span className={`text-xs text-right break-all ${mono ? 'font-mono' : ''}`}>
+        {sensitive ? <Sensitive>{value}</Sensitive> : value}
+      </span>
     </div>
   );
 }
@@ -207,12 +220,12 @@ export const CosmosSign = () => {
                   <div key={i}>
                     <SummaryRow label='type' value={msg.type} />
                     {msg.to && <SummaryRow label='to' value={msg.to} mono />}
-                    {msg.amount && <SummaryRow label='amount' value={msg.amount} />}
+                    {msg.amount && <SummaryRow label='amount' value={msg.amount} sensitive />}
                     {msg.channel && <SummaryRow label='channel' value={msg.channel} />}
                   </div>
                 ),
               )}
-              <SummaryRow label='fee' value={txSummary.fee} />
+              <SummaryRow label='fee' value={txSummary.fee} sensitive />
               <SummaryRow label='gas' value={txSummary.gas} />
               {txSummary.memo && <SummaryRow label='memo' value={txSummary.memo} />}
             </div>
