@@ -287,7 +287,7 @@ export const SettingsWallets = () => {
           description='point camera at your zigner FVK QR code'
         />
       )}
-      <SettingsScreen title='wallets'>
+      <SettingsScreen title='wallets' backPath={PopupPath.INDEX}>
         <div className='flex flex-col gap-5'>
           {/* ── wallet list ── */}
 
@@ -717,8 +717,8 @@ const VaultRow = ({
           <span className='i-lucide-qr-code size-4 text-fg-high shrink-0 mt-0.5' />
           <span className='flex flex-col'>
             <span className='text-xs font-medium text-fg-high'>sync balance to zigner</span>
-            <span className='text-[10px] text-fg-muted'>
-              scan it on zigner to verify your notes — re-sync after you send
+            <span className='text-label text-fg-muted'>
+              scan it on zigner to verify your notes - re-sync after you send
             </span>
           </span>
         </button>

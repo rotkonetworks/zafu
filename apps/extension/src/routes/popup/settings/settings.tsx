@@ -19,6 +19,10 @@ interface SettingsLink {
 // Order: what protects funds first (backups), then preferences, then
 // upsell, then the destructive thing last where muscle memory can't
 // hit it by accident.
+//
+// TODO(orphan): link or delete - settings-rpc, settings-numeraires,
+// settings-trading-mode, and settings-parachains have screens but no route
+// and no nav-in. Decide whether they should be reachable or removed.
 const links: SettingsLink[] = [
   {
     title: 'recovery passphrase',
@@ -37,9 +41,24 @@ const links: SettingsLink[] = [
     href: PopupPath.SETTINGS_PRIVACY,
   },
   {
+    title: 'connected sites',
+    icon: 'i-lucide-globe',
+    href: PopupPath.SETTINGS_CONNECTED_SITES,
+  },
+  {
+    title: 'zigner',
+    icon: 'i-lucide-qr-code',
+    href: PopupPath.SETTINGS_ZIGNER,
+  },
+  {
     title: 'pro subscription',
     icon: 'i-lucide-zap',
     href: PopupPath.SUBSCRIBE,
+  },
+  {
+    title: 'about',
+    icon: 'i-lucide-info',
+    href: PopupPath.SETTINGS_ABOUT,
   },
   {
     title: 'clear cache',

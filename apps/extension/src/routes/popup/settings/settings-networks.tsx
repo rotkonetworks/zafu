@@ -124,7 +124,7 @@ export const SettingsNetworks = () => {
   };
 
   return (
-    <SettingsScreen title='networks' backPath={PopupPath.SETTINGS}>
+    <SettingsScreen title='networks' backPath={PopupPath.INDEX}>
       <div className='flex flex-col gap-1'>
         {LAUNCHED_NETWORKS.map(networkId => {
           const network = NETWORKS[networkId];
@@ -410,7 +410,7 @@ const ZcashEndpointPanel = ({
       }));
       const picked = pickEndpoint(candidates, selectionStrategy);
       if (!picked) {
-        setAutoStatus('no healthy endpoint under this strategy — keeping current');
+        setAutoStatus('no healthy endpoint under this strategy - keeping current');
         return;
       }
       setAutoStatus(`picked ${picked.preset.label} (${selectionStrategy})`);
@@ -478,7 +478,7 @@ const ZcashEndpointPanel = ({
             value={selectionStrategy}
             onChange={e => setSelectionStrategy(e.target.value as SelectionStrategy)}
             disabled={autoPicking}
-            className='flex-1 bg-input border border-border-soft px-2 py-1 text-[11px] focus:border-primary/50 focus:outline-none'
+            className='flex-1 bg-input border border-border-soft px-2 py-1 text-label focus:border-primary/50 focus:outline-none'
           >
             {(Object.keys(STRATEGY_LABELS) as SelectionStrategy[]).map(s => (
               <option key={s} value={s}>

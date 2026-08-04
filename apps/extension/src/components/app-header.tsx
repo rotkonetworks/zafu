@@ -1,13 +1,13 @@
 /**
- * persistent app header — minimal, no dropdowns
- * tap network dot → cycle network
- * tap wallet name → cycle wallet identity
+ * persistent app header - minimal
+ * click the network chip -> pick a network from a dropdown
+ * click the wallet chip  -> pick an active wallet from a dropdown
+ * no silent cycling, no stray-tap wallet/network switches
  */
 
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '../state';
-import { PopupPath } from '../routes/popup/paths';
 import {
   selectActiveNetwork,
   selectEnabledNetworks,
@@ -25,8 +25,9 @@ interface AppHeaderProps {
   onMenuClick: () => void;
 }
 
+type OpenPicker = 'network' | 'wallet' | null;
+
 export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
-  const navigate = useNavigate();
   const activeNetwork = useStore(selectActiveNetwork);
   const enabledNetworks = useStore(selectEnabledNetworks);
   const setActiveNetwork = useStore(selectSetActiveNetwork);
@@ -39,80 +40,101 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
   const hideBalances = useStore(selectHideBalances);
   const setPrivacySetting = useStore(s => s.privacy.setSetting);
 
+  const [openPicker, setOpenPicker] = useState<OpenPicker>(null);
+
   const networkInfo = getNetwork(activeNetwork);
-  // mnemonic vaults derive zcash keys directly — no zcash wallet record
+  // mnemonic vaults derive zcash keys directly - no zcash wallet record
   const walletName =
     activeNetwork === 'zcash' && selectedKeyInfo?.type !== 'mnemonic'
       ? (activeZcashWallet?.label ?? selectedKeyInfo?.name ?? 'no wallet')
       : (selectedKeyInfo?.name ?? 'no wallet');
 
-  /** tap cycles through enabled networks */
-  const cycleNetwork = () => {
-    if (enabledNetworks.length <= 1) {
-      navigate(PopupPath.SETTINGS_NETWORKS);
-      return;
+  const toggle = (picker: OpenPicker) => setOpenPicker(prev => (prev === picker ? null : picker));
+
+  const pickNetwork = (n: (typeof enabledNetworks)[number]) => {
+    setOpenPicker(null);
+    if (n !== activeNetwork) {
+      void setActiveNetwork(n);
     }
-    const idx = enabledNetworks.indexOf(activeNetwork);
-    const next = enabledNetworks[(idx + 1) % enabledNetworks.length]!;
-    void setActiveNetwork(next);
   };
 
-  /** tap cycles through wallet identities */
-  const cycleWallet = () => {
-    if (keyInfos.length <= 1) {
-      navigate(PopupPath.SETTINGS_WALLETS);
-      return;
+  const pickWallet = (id: string) => {
+    setOpenPicker(null);
+    if (id !== selectedKeyInfo?.id) {
+      void selectKeyRing(id);
     }
-    const currentId = selectedKeyInfo?.id;
-    const idx = keyInfos.findIndex(k => k.id === currentId);
-    const next = keyInfos[(idx + 1) % keyInfos.length]!;
-    void selectKeyRing(next.id);
   };
 
   return (
-    <header className='sticky top-0 z-50 flex shrink-0 items-center justify-between px-3 py-2 border-b border-border-soft bg-canvas/80 backdrop-blur-sm'>
-      {/* network indicator — tap to cycle */}
-      <button
-        onClick={cycleNetwork}
-        className='flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-elev-1 transition-colors'
-        title={`${networkInfo.name} — tap to switch network`}
-      >
-        <div className='flex items-center gap-1'>
-          {enabledNetworks.map(n => (
-            <div
-              key={n}
-              className={cn(
-                'rounded-full transition-all',
-                n === activeNetwork ? 'h-2.5 w-2.5' : 'h-1.5 w-1.5 opacity-40',
-                getNetwork(n).color,
-              )}
-            />
-          ))}
-        </div>
-        <span className='text-data text-fg-high'>{networkInfo.name}</span>
-      </button>
+    <header className='sticky top-0 z-50 flex shrink-0 items-center justify-between gap-2 border-b border-border-soft bg-canvas/80 px-3 py-2 backdrop-blur-sm'>
+      {/* click-away backdrop for any open picker */}
+      {openPicker && <div className='fixed inset-0 z-40' onClick={() => setOpenPicker(null)} />}
 
-      {/* wallet name — tap to cycle identity, shows dot per vault */}
-      <button
-        onClick={cycleWallet}
-        className='flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-elev-1 transition-colors'
-        title={`${walletName} — tap to switch wallet`}
-      >
-        {keyInfos.length > 1 && (
-          <div className='flex items-center gap-0.5'>
-            {keyInfos.map(k => (
-              <div
-                key={k.id}
-                className={cn(
-                  'rounded-full transition-all',
-                  k.id === selectedKeyInfo?.id ? 'h-1.5 w-1.5 bg-fg-high' : 'h-1 w-1 bg-fg-dim',
+      {/* network picker */}
+      <div className='relative z-50'>
+        <button
+          onClick={() => toggle('network')}
+          className='flex items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-elev-1'
+          title='switch network'
+          aria-haspopup='menu'
+          aria-expanded={openPicker === 'network'}
+        >
+          <span className={cn('h-2.5 w-2.5 rounded-full', networkInfo.color)} />
+          <span className='text-data text-fg-high'>{networkInfo.name}</span>
+          <span className='i-lucide-chevron-down h-3 w-3 text-fg-muted' />
+        </button>
+        {openPicker === 'network' && (
+          <div className='absolute left-0 top-full z-50 mt-1 min-w-40 rounded-md border border-border-soft bg-canvas py-1 shadow-xl'>
+            {enabledNetworks.map(n => (
+              <button
+                key={n}
+                onClick={() => pickNetwork(n)}
+                className='flex w-full items-center gap-2 px-3 py-2 text-left text-data text-fg transition-colors hover:bg-elev-1 hover:text-fg-high'
+              >
+                <span className={cn('h-2 w-2 rounded-full', getNetwork(n).color)} />
+                <span className='flex-1 truncate'>{getNetwork(n).name}</span>
+                {n === activeNetwork && (
+                  <span className='i-lucide-check h-3.5 w-3.5 text-zigner-gold' />
                 )}
-              />
+              </button>
             ))}
           </div>
         )}
-        <span className='text-data text-fg-high truncate max-w-[120px]'>{walletName}</span>
-      </button>
+      </div>
+
+      {/* wallet picker */}
+      <div className='relative z-50'>
+        <button
+          onClick={() => toggle('wallet')}
+          className='flex items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-elev-1'
+          title='switch wallet'
+          aria-haspopup='menu'
+          aria-expanded={openPicker === 'wallet'}
+        >
+          <span className='max-w-32 truncate text-data text-fg-high'>{walletName}</span>
+          <span className='i-lucide-chevron-down h-3 w-3 text-fg-muted' />
+        </button>
+        {openPicker === 'wallet' && (
+          <div className='absolute right-0 top-full z-50 mt-1 min-w-40 max-w-56 rounded-md border border-border-soft bg-canvas py-1 shadow-xl'>
+            {keyInfos.length === 0 ? (
+              <span className='block px-3 py-2 text-data text-fg-muted'>no wallets</span>
+            ) : (
+              keyInfos.map(k => (
+                <button
+                  key={k.id}
+                  onClick={() => pickWallet(k.id)}
+                  className='flex w-full items-center gap-2 px-3 py-2 text-left text-data text-fg transition-colors hover:bg-elev-1 hover:text-fg-high'
+                >
+                  <span className='flex-1 truncate'>{k.name}</span>
+                  {k.id === selectedKeyInfo?.id && (
+                    <span className='i-lucide-check h-3.5 w-3.5 text-zigner-gold' />
+                  )}
+                </button>
+              ))
+            )}
+          </div>
+        )}
+      </div>
 
       {/* hide balances - shoulder-surfing / screen-share privacy */}
       <button
@@ -128,6 +150,7 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
       <button
         onClick={onMenuClick}
         className='rounded-md p-2 text-fg-muted transition-colors hover:bg-elev-1 hover:text-fg-high'
+        aria-label='open menu'
       >
         <span className='i-lucide-menu h-4 w-4' />
       </button>
