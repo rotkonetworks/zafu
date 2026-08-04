@@ -285,6 +285,9 @@ type LOCAL = {
   /** auto-lock timeout in minutes (0 = disabled, default 15) */
   autoLockMinutes?: number;
 
+  /** appearance theme: 'sumi' (warm ink, default) | 'terminal' (cold black) */
+  zafuTheme?: 'sumi' | 'terminal';
+
   /** serialized pro license JSON */
   proLicense?: string;
 

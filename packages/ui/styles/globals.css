@@ -144,6 +144,42 @@
     --brown: rgba(0, 0, 0, 0.8);
   }
 
+  /* ==============================================================
+   * appearance themes — the default (:root above) is 'sumi': warm ink
+   * on woven cloth. data-theme='terminal' restores the original cold
+   * pure-black material for users who want it; toggled from settings
+   * (zafuTheme in local storage, applied in entry/*-root.tsx).
+   * ============================================================== */
+  :root[data-theme='terminal'] {
+    --surface-canvas: #000000;
+    --surface-elev-1: #0a0a0a;
+    --surface-elev-2: #0f0f0f;
+    --surface-border-soft: #1a1a1a;
+    --surface-border: #212121;
+    --fg-high: #f5f5f5;
+    --fg: #dcdcdc;
+    --fg-muted: #8a8a8a;
+    --fg-dim: #5a5a5a;
+    --background: 0 0% 0%;
+    --foreground: 0 0% 86%;
+    --muted: 0 0% 6%;
+    --muted-foreground: 0 0% 54%;
+    --popover: 0 0% 4%;
+    --popover-foreground: 0 0% 96%;
+    --card: 0 0% 4%;
+    --card-foreground: 0 0% 86%;
+    --border: 0 0% 13%;
+    --border-secondary: 0 0% 10%;
+    --input: 0 0% 6%;
+    --charcoal: #0a0a0a;
+    --light-brown: #0a0a0a;
+  }
+
+  :root[data-theme='terminal'] body {
+    /* no cloth on the terminal — flat black */
+    background-image: none;
+  }
+
   /* network-specific theming */
   [data-network='zcash'] {
     --network-accent: var(--zigner-gold);

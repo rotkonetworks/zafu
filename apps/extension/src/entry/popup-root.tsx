@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router-dom';
 import { popupRouter } from '../routes/popup/router';
 import { isSidePanel } from '../utils/popup-detection';
+import { localExtStorage } from '@repo/storage-chrome/local';
 
 import '@repo/ui/styles/globals.css';
 import '@repo/ui/styles/icons.css';
@@ -62,4 +63,12 @@ const MainPopup = () => {
 };
 
 const rootElement = document.getElementById('popup-root') as HTMLDivElement;
+// apply persisted appearance theme before first paint ('sumi' is the
+// :root default; 'terminal' restores the cold pure-black material)
+void localExtStorage.get('zafuTheme').then(v => {
+  if (v === 'terminal') {
+    document.documentElement.dataset['theme'] = v;
+  }
+});
+
 createRoot(rootElement).render(<MainPopup />);

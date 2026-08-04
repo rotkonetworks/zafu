@@ -1,5 +1,6 @@
 import { defineConfig } from 'unocss';
 import presetIcons from '@unocss/preset-icons';
+import { zafuIcons } from './src/icons/zafu-icons';
 
 /**
  * UnoCSS in this project generates icon classes only (e.g. `i-lucide-home`).
@@ -18,6 +19,10 @@ export default defineConfig({
       extraProperties: {
         display: 'inline-block',
         'vertical-align': 'middle',
+      },
+      // hand-drawn japanese-motif set — see src/icons/zafu-icons.ts
+      collections: {
+        zafu: zafuIcons,
       },
     }),
   ],

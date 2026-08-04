@@ -38,22 +38,22 @@ const BOTTOM_TABS: readonly {
   label: string;
   feature?: FeatureKey;
 }[] = [
-  { path: PopupPath.INDEX, icon: <span className='i-lucide-home h-5 w-5' />, label: 'home' },
+  { path: PopupPath.INDEX, icon: <span className='i-zafu-mon h-5 w-5' />, label: 'home' },
   {
     path: PopupPath.INBOX,
-    icon: <span className='i-lucide-mail h-5 w-5' />,
+    icon: <span className='i-zafu-letter h-5 w-5' />,
     label: 'inbox',
     feature: 'inbox',
   },
   {
     path: PopupPath.MULTISIG,
-    icon: <span className='i-lucide-users h-5 w-5' />,
+    icon: <span className='i-zafu-torii h-5 w-5' />,
     label: 'multisig',
     feature: 'multisig',
   },
   {
     path: PopupPath.VOTE,
-    icon: <span className='i-lucide-vote h-5 w-5' />,
+    icon: <span className='i-zafu-sensu h-5 w-5' />,
     label: 'vote',
     feature: 'vote',
   },
@@ -61,7 +61,7 @@ const BOTTOM_TABS: readonly {
 
 const MULTISIG_TAB = {
   path: PopupPath.MULTISIG,
-  icon: <span className='i-lucide-key h-5 w-5' />,
+  icon: <span className='i-zafu-hanko h-5 w-5' />,
   label: 'multisig',
 } as const;
 

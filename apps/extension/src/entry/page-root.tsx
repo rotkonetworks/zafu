@@ -3,6 +3,7 @@ import { RouterProvider } from 'react-router-dom';
 import { pageRouter } from '../routes/page/router';
 import { StrictMode, useState, useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { localExtStorage } from '@repo/storage-chrome/local';
 
 import '@repo/ui/styles/globals.css';
 import '@repo/ui/styles/icons.css';
@@ -41,4 +42,12 @@ const MainPage = () => {
 };
 
 const rootElement = document.getElementById('root') as HTMLDivElement;
+// apply persisted appearance theme before first paint ('sumi' is the
+// :root default; 'terminal' restores the cold pure-black material)
+void localExtStorage.get('zafuTheme').then(v => {
+  if (v === 'terminal') {
+    document.documentElement.dataset['theme'] = v;
+  }
+});
+
 createRoot(rootElement).render(<MainPage />);
