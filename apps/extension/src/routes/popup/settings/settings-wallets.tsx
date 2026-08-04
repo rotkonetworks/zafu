@@ -704,7 +704,7 @@ const VaultRow = ({
             />
           </div>
           <p className='text-label text-fg-dim mt-0.5'>
-            orchard only - sapling/sprout not supported
+            zcash block to sync from - scans the orchard + ironwood shielded pools
           </p>
         </div>
       )}
