@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { useStore } from '../../../state';
+import { privacySelector } from '../../../state/privacy';
 import {
   selectActiveNetwork,
   selectEffectiveKeyInfo,
@@ -936,6 +937,8 @@ const ZcashContent = ({
           },
         ];
 
+  const { settings: privacySettings, setSetting: setPrivacySetting } = useStore(privacySelector);
+
   // glance -> detail: the hero balance opens the full per-pool notes view;
   // each reveal row deep-links to its pool ('shielded' fallback -> ironwood)
   const openPoolNotes = (pool?: string) => {
@@ -955,6 +958,22 @@ const ZcashContent = ({
       <div className='group rounded-md border border-network-accent/20 bg-elev-1 p-4'>
         <div className='flex items-center justify-between'>
           <span className='kicker'>balance</span>
+          <div className='flex items-center gap-1'>
+          {/* the global hide-balances control lives where you notice you
+              need it — same state as settings → privacy, effective on
+              every amount in the app */}
+          <button
+            onClick={() => void setPrivacySetting('hideBalances', !privacySettings.hideBalances)}
+            title={privacySettings.hideBalances ? 'show balances' : 'hide balances'}
+            className='p-0.5 text-fg-dim transition-colors hover:text-fg-high'
+          >
+            <span
+              className={cn(
+                'block h-3.5 w-3.5',
+                privacySettings.hideBalances ? 'i-lucide-eye-off' : 'i-lucide-eye',
+              )}
+            />
+          </button>
           <button
             onClick={() => setPoolsPinned(v => !v)}
             title='pool detail'
@@ -967,6 +986,7 @@ const ZcashContent = ({
               )}
             />
           </button>
+          </div>
         </div>
         {IRONWOOD_MIGRATION ? (
           <button
