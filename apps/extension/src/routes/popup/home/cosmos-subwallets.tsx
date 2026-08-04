@@ -11,6 +11,7 @@
  */
 
 import { memo } from 'react';
+import { Sensitive } from '../../../components/sensitive';
 import { useAllCosmosBalances } from '../../../hooks/cosmos-balance';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { cn } from '@repo/ui/lib/utils';
@@ -40,9 +41,9 @@ const ChainRow = memo(({ chainId, address, formatted, loading }: ChainRowProps) 
       <div className='flex flex-1 flex-col min-w-0'>
         <div className='flex items-center justify-between gap-2'>
           <span className='text-sm font-medium'>{config.name}</span>
-          <span className='font-mono text-sm tabular-nums'>
-            {loading ? <span className='text-fg-muted'>—</span> : formatted}
-          </span>
+          <Sensitive className='font-mono text-sm tabular-nums'>
+            {loading ? <span className='text-fg-muted'>-</span> : formatted}
+          </Sensitive>
         </div>
         <div className='font-mono text-label text-fg-muted' title={address}>
           {truncateAddress(address)}
