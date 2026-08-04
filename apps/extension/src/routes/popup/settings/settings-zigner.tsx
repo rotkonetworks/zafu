@@ -182,29 +182,27 @@ export const SettingsZigner = () => {
           <p className='text-xs text-fg'>cold wallet - keeps spending keys offline, sign by QR.</p>
         </div>
 
-        {/* Upgrade CTA — shown to free users, but non-blocking.
-            Free users can still use their imported Zigner wallet(s) and pay
-            for Pro with them. Pro unlocks additional identities, vault legacy
-            mode, and broader signing beyond the subscription tx. */}
-        {!pro && (
+        {/* Cold-signing value prop, shown when no zigner is paired yet - markets
+            the air-gapped signer itself (security), not a subscription. */}
+        {zignerVaults.length === 0 && (
           <div className='rounded-md border border-zigner-gold/30 bg-zigner-gold/5 p-4 flex flex-col gap-3'>
             <div className='flex items-start gap-3'>
-              <span className='i-lucide-zap size-5 text-zigner-gold shrink-0 mt-0.5' />
+              <span className='i-lucide-shield-check size-5 text-zigner-gold shrink-0 mt-0.5' />
               <div className='flex flex-col gap-2'>
-                <p className='text-data text-fg-high lowercase'>unlock the full zigner workflow</p>
+                <p className='text-data text-fg-high lowercase'>keep your keys off this device</p>
                 <p className='text-xs text-fg-muted'>
-                  pro adds identities, multi-network signing, and vault legacy mode - pay by signing
-                  the 0.01 ZEC subscription tx.
+                  pair a zigner air-gapped signer - your spending keys never touch a networked
+                  device, and you approve each transaction by scanning a QR.
                 </p>
               </div>
             </div>
             <Button
               variant='secondary'
               size='sm'
-              onClick={() => navigate(PopupPath.SUBSCRIBE)}
+              onClick={() => window.open('https://zigner.zafu.pro', '_blank', 'noopener,noreferrer')}
               className='self-start'
             >
-              subscribe
+              get zigner
             </Button>
           </div>
         )}
