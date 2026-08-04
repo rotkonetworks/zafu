@@ -261,8 +261,8 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
           ))}
         </nav>
 
-        {/* footer — upgrade (if free) + donate (always offered when available) + about */}
-        <div className='mt-auto border-t border-border-soft px-4 py-3 flex flex-col gap-2'>
+        {/* footer — upgrade (if free) + donate (always offered when available) + links */}
+        <div className='mt-auto flex flex-col gap-3 border-t border-border-soft px-4 py-4'>
           {!pro && SUBSCRIBE_ENABLED && (
             <button
               onClick={() => {
@@ -285,33 +285,35 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
             </button>
           )}
 
-          <div className='mt-1 flex items-center gap-3 text-label text-fg-dim lowercase'>
+          <div className='flex items-center justify-between text-label text-fg-dim lowercase'>
             <a
               href='https://zafu.pro'
               target='_blank'
               rel='noopener noreferrer'
-              className='hover:text-fg-high'
+              className='flex items-center gap-1 transition-colors hover:text-fg-high'
             >
+              <span className='i-lucide-globe h-3 w-3' />
               zafu.pro
             </a>
             <a
               href='https://github.com/rotkonetworks/zafu'
               target='_blank'
               rel='noopener noreferrer'
-              className='hover:text-fg-high'
+              className='flex items-center gap-1 transition-colors hover:text-fg-high'
             >
+              <span className='i-lucide-code h-3 w-3' />
               github
             </a>
             <a
               href='https://zigner.zafu.pro'
               target='_blank'
               rel='noopener noreferrer'
-              className='hover:text-fg-high'
+              className='flex items-center gap-1 transition-colors hover:text-fg-high'
             >
+              <span className='i-lucide-smartphone h-3 w-3' />
               zigner
             </a>
           </div>
-          <p className='text-label text-fg-dim mt-1 tabular'>MIT</p>
         </div>
       </div>
     </>
