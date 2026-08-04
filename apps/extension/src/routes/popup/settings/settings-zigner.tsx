@@ -190,7 +190,7 @@ export const SettingsZigner = () => {
           <div className='rounded-md border border-zigner-gold/30 bg-zigner-gold/5 p-4 flex flex-col gap-3'>
             <div className='flex items-start gap-3'>
               <span className='i-lucide-zap size-5 text-zigner-gold shrink-0 mt-0.5' />
-              <div className='flex flex-col gap-1'>
+              <div className='flex flex-col gap-2'>
                 <p className='text-data text-fg-high lowercase'>unlock the full zigner workflow</p>
                 <p className='text-xs text-fg-muted'>
                   pro adds identities, multi-network signing, and vault legacy mode - pay by signing
@@ -229,7 +229,7 @@ export const SettingsZigner = () => {
                     key={vault.id}
                     className='flex items-center justify-between rounded-md border border-border-soft bg-elev-1 p-3'
                   >
-                    <div className='flex flex-col gap-1 min-w-0'>
+                    <div className='flex flex-col gap-2 min-w-0'>
                       <div className='flex items-center gap-2'>
                         <EyeOpenIcon className={`size-4 ${colorClass} flex-shrink-0`} />
                         <span className='text-data text-fg-high truncate'>{vault.name}</span>
@@ -321,7 +321,7 @@ export const SettingsZigner = () => {
                     href='https://metadata.novasama.io/'
                     target='_blank'
                     rel='noopener noreferrer'
-                    className='flex items-center gap-1.5 text-xs text-zigner-gold hover:underline'
+                    className='flex items-center gap-2 text-xs text-zigner-gold hover:underline'
                   >
                     <Link2Icon className='size-3' />
                     update metadata at novasama.io

@@ -91,7 +91,7 @@ export const ImportModal = ({ open, onClose, onImported }: Props) => {
         ) : (
           <>
             <div className='mt-3 rounded-lg border border-border-soft bg-elev-2 p-3 text-body'>
-              <p className='text-label uppercase tracking-wide text-fg-muted'>backup file</p>
+              <p className='kicker'>backup file</p>
               <p className='mt-0.5 font-medium'>{envelope.label}</p>
               {isBatch ? (
                 <p className='mt-0.5 text-label text-fg-muted'>

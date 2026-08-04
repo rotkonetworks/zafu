@@ -443,18 +443,18 @@ export const SubscribePage = () => {
         {/* features list */}
         <div className='text-label font-mono text-fg-dim'>
           <p className='mb-2'>free for everyone:</p>
-          <ul className='flex flex-col gap-0.5 pl-2 mb-3'>
+          <ul className='flex flex-col gap-2 pl-2 mb-3'>
             {FREE_FEATURES.map(f => (
-              <li key={f} className='flex items-center gap-1.5'>
+              <li key={f} className='flex items-center gap-2'>
                 <span className='i-lucide-check size-3 text-green-400' />
                 {f.replace(/_/g, ' ')}
               </li>
             ))}
           </ul>
           <p className='mb-2'>pro unlocks:</p>
-          <ul className='flex flex-col gap-0.5 pl-2'>
+          <ul className='flex flex-col gap-2 pl-2'>
             {PRO_FEATURES.map(f => (
-              <li key={f} className='flex items-center gap-1.5'>
+              <li key={f} className='flex items-center gap-2'>
                 <span
                   className={
                     pro ? 'i-lucide-check size-3 text-green-400' : 'size-3 text-fg-muted/30'
@@ -651,7 +651,7 @@ export const SubscribePage = () => {
                 <LiveTimer startMs={buildStartRef.current} />
               </div>
               {sendSteps.length > 0 ? (
-                <div className='flex flex-col gap-0.5 max-h-32 overflow-y-auto'>
+                <div className='flex flex-col gap-2 max-h-32 overflow-y-auto'>
                   {sendSteps.map((s, i) => {
                     const isLast = i === sendSteps.length - 1;
                     const prevMs = i > 0 ? sendSteps[i - 1]!.elapsedMs : 0;

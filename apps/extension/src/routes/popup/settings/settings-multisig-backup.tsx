@@ -117,9 +117,7 @@ export const SettingsMultisigBackup = () => {
         {/* per-wallet list */}
         {selfCustody.length > 0 && (
           <div>
-            <p className='mb-2 text-label uppercase tracking-wide text-fg-muted'>
-              individual exports
-            </p>
+            <p className='kicker mb-2'>individual exports</p>
             <div className='flex flex-col gap-1.5'>
               {selfCustody.map(w => (
                 <div

@@ -9,6 +9,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Sensitive } from '../../../components/sensitive';
+import { ToggleSwitch } from '../../../components/toggle-switch';
 import { useBackNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { useStore } from '../../../state';
@@ -512,6 +513,7 @@ function ReceiveTab({
   const [ephemeralAddress, setEphemeralAddress] = useState('');
   const [ephemeralLoading, setEphemeralLoading] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
@@ -554,7 +556,6 @@ function ReceiveTab({
   const [transparentAddress, setTransparentAddress] = useState('');
   const [transparentLoading, setTransparentLoading] = useState(false);
   const [transparentError, setTransparentError] = useState<string | null>(null);
-  const [showTransparentTooltip, setShowTransparentTooltip] = useState(false);
 
   // auto-rotate zcash addresses on mount: bump both indices
   useEffect(() => {
@@ -768,133 +769,134 @@ function ReceiveTab({
         )}
       </div>
 
-      {isPenumbra && (
-        <div className='flex w-full items-center justify-between'>
-          <div className='flex items-center gap-1.5'>
-            <span className='text-sm font-medium'>ephemeral address</span>
-            <div className='relative'>
-              <button
-                onClick={() => setShowTooltip(prev => !prev)}
-                className='text-fg-muted transition-colors hover:text-fg-high'
-              >
-                <span className='i-lucide-info h-3.5 w-3.5' />
-              </button>
-              {showTooltip && (
-                <div className='absolute left-1/2 top-6 z-50 w-72 -translate-x-1/2 rounded-lg border border-border-soft bg-canvas p-3 text-xs text-fg-muted shadow-lg lowercase'>
-                  randomized single-use address, unlinkable to your main address or to each other.
-                  only your viewing key detects incoming funds.
-                </div>
-              )}
-            </div>
-          </div>
+      {/* zcash: shielded is the default; transparent is a secondary tab */}
+      {isZcash && canTransparent && (
+        <div className='flex w-full rounded-lg bg-elev-2 p-1'>
           <button
-            onClick={handleToggle}
-            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ${
-              ephemeral ? 'bg-green-500' : 'bg-fg-muted/30'
+            onClick={() => transparent && handleTransparentToggle()}
+            className={`flex-1 rounded-md py-1.5 text-xs font-medium transition-colors ${
+              !transparent ? 'bg-canvas text-fg shadow-sm' : 'text-fg-muted hover:text-fg-high'
             }`}
           >
+            shielded
+          </button>
+          <button
+            onClick={() => !transparent && handleTransparentToggle()}
+            className={`flex-1 rounded-md py-1.5 text-xs font-medium transition-colors ${
+              transparent ? 'bg-canvas text-fg shadow-sm' : 'text-fg-muted hover:text-fg-high'
+            }`}
+          >
+            transparent
+          </button>
+        </div>
+      )}
+
+      {isZcash && transparent && transparentError && (
+        <p className='w-full text-xs text-red-400'>{transparentError}</p>
+      )}
+
+      {/* advanced: address rotation + ephemeral live behind one disclosure */}
+      {(isPenumbra || isZcash) && (
+        <div className='w-full'>
+          <button
+            onClick={() => setShowAdvanced(prev => !prev)}
+            className='flex w-full items-center justify-between py-1 text-xs text-fg-muted transition-colors hover:text-fg-high lowercase'
+          >
+            <span>advanced</span>
             <span
-              className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${
-                ephemeral ? 'translate-x-[18px]' : 'translate-x-0.5'
+              className={`i-lucide-chevron-down h-4 w-4 transition-transform ${
+                showAdvanced ? 'rotate-180' : ''
               }`}
             />
           </button>
-        </div>
-      )}
 
-      {isZcash && !transparent && (
-        <div className='flex w-full items-center justify-center gap-1'>
-          <button
-            disabled={shieldedIndex <= 0}
-            onClick={() => {
-              const prev = Math.max(0, shieldedIndex - 1);
-              void chrome.storage.local.set({ zcashShieldedIndex: prev });
-            }}
-            className='p-1 text-fg-muted transition-colors hover:text-fg-high disabled:opacity-50'
-          >
-            <span className='i-lucide-chevron-left h-4 w-4' />
-          </button>
-          <span className='min-w-[110px] text-center text-xs font-medium text-fg-muted'>
-            address #{shieldedIndex}
-          </span>
-          <button
-            onClick={() => void handleRotateShielded()}
-            className='p-1 text-fg-muted transition-colors hover:text-fg-high'
-          >
-            <span className='i-lucide-chevron-right h-4 w-4' />
-          </button>
-        </div>
-      )}
-
-      {isZcash && canTransparent && (
-        <>
-          <div className='flex w-full items-center justify-between'>
-            <div className='flex items-center gap-1.5'>
-              <span className='text-sm font-medium'>transparent address</span>
-              <div className='relative'>
-                <button
-                  onClick={() => setShowTransparentTooltip(prev => !prev)}
-                  className='text-fg-muted transition-colors hover:text-fg-high'
-                >
-                  <span className='i-lucide-info h-3.5 w-3.5' />
-                </button>
-                {showTransparentTooltip && (
-                  <div className='absolute left-1/2 top-6 z-50 w-72 -translate-x-1/2 rounded-lg border border-border-soft bg-canvas p-3 text-xs text-fg-muted shadow-lg lowercase'>
-                    fully public on-chain - use one index per exchange, then shield to Orchard.
+          {showAdvanced && (
+            <div className='mt-2 flex flex-col gap-3 rounded-lg border border-border-soft bg-elev-1 p-3'>
+              {isPenumbra && (
+                <div className='flex w-full items-center justify-between'>
+                  <div className='flex items-center gap-2'>
+                    <span className='text-sm font-medium'>ephemeral address</span>
+                    <div className='relative'>
+                      <button
+                        onClick={() => setShowTooltip(prev => !prev)}
+                        className='text-fg-muted transition-colors hover:text-fg-high'
+                      >
+                        <span className='i-lucide-info h-3.5 w-3.5' />
+                      </button>
+                      {showTooltip && (
+                        <div className='absolute left-1/2 top-6 z-50 w-72 -translate-x-1/2 rounded-lg border border-border-soft bg-canvas p-3 text-xs text-fg-muted shadow-lg lowercase'>
+                          randomized single-use address, unlinkable to your main address or to each
+                          other. only your viewing key detects incoming funds.
+                        </div>
+                      )}
+                    </div>
                   </div>
-                )}
-              </div>
-            </div>
-            <button
-              onClick={handleTransparentToggle}
-              className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ${
-                transparent ? 'bg-red-500' : 'bg-fg-muted/30'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${
-                  transparent ? 'translate-x-[18px]' : 'translate-x-0.5'
-                }`}
-              />
-            </button>
-          </div>
+                  <ToggleSwitch
+                    checked={ephemeral}
+                    onChange={() => handleToggle()}
+                    label='ephemeral address'
+                  />
+                </div>
+              )}
 
-          {transparent && transparentError && (
-            <p className='w-full text-xs text-red-400'>{transparentError}</p>
-          )}
+              {isZcash && !transparent && (
+                <div className='flex w-full items-center justify-center gap-2'>
+                  <button
+                    disabled={shieldedIndex <= 0}
+                    onClick={() => {
+                      const prev = Math.max(0, shieldedIndex - 1);
+                      void chrome.storage.local.set({ zcashShieldedIndex: prev });
+                    }}
+                    className='p-1 text-fg-muted transition-colors hover:text-fg-high disabled:opacity-50'
+                  >
+                    <span className='i-lucide-chevron-left h-4 w-4' />
+                  </button>
+                  <span className='min-w-[110px] text-center text-xs font-medium text-fg-muted'>
+                    address #{shieldedIndex}
+                  </span>
+                  <button
+                    onClick={() => void handleRotateShielded()}
+                    className='p-1 text-fg-muted transition-colors hover:text-fg-high'
+                  >
+                    <span className='i-lucide-chevron-right h-4 w-4' />
+                  </button>
+                </div>
+              )}
 
-          {transparent && canTransparent && !transparentError && (
-            <div className='flex w-full items-center justify-center gap-1'>
-              <button
-                disabled={transparentIndex <= 0}
-                onClick={() => setTransparentIndex(i => i - 1)}
-                className='p-1 text-fg-muted transition-colors hover:text-fg-high disabled:opacity-50'
-              >
-                <span className='i-lucide-chevron-left h-4 w-4' />
-              </button>
-              <span className='min-w-[110px] text-center text-xs font-medium text-fg-muted'>
-                address #{transparentIndex}
-              </span>
-              <button
-                onClick={() => {
-                  setTransparentIndex(i => {
-                    const next = i + 1;
-                    // persist highest-seen index
-                    chrome.storage.local.get('zcashTransparentIndex').then(r => {
-                      if (next > (r['zcashTransparentIndex'] ?? 0)) {
-                        void chrome.storage.local.set({ zcashTransparentIndex: next });
-                      }
-                    });
-                    return next;
-                  });
-                }}
-                className='p-1 text-fg-muted transition-colors hover:text-fg-high'
-              >
-                <span className='i-lucide-chevron-right h-4 w-4' />
-              </button>
+              {isZcash && transparent && canTransparent && !transparentError && (
+                <div className='flex w-full items-center justify-center gap-2'>
+                  <button
+                    disabled={transparentIndex <= 0}
+                    onClick={() => setTransparentIndex(i => i - 1)}
+                    className='p-1 text-fg-muted transition-colors hover:text-fg-high disabled:opacity-50'
+                  >
+                    <span className='i-lucide-chevron-left h-4 w-4' />
+                  </button>
+                  <span className='min-w-[110px] text-center text-xs font-medium text-fg-muted'>
+                    address #{transparentIndex}
+                  </span>
+                  <button
+                    onClick={() => {
+                      setTransparentIndex(i => {
+                        const next = i + 1;
+                        // persist highest-seen index
+                        chrome.storage.local.get('zcashTransparentIndex').then(r => {
+                          if (next > (r['zcashTransparentIndex'] ?? 0)) {
+                            void chrome.storage.local.set({ zcashTransparentIndex: next });
+                          }
+                        });
+                        return next;
+                      });
+                    }}
+                    className='p-1 text-fg-muted transition-colors hover:text-fg-high'
+                  >
+                    <span className='i-lucide-chevron-right h-4 w-4' />
+                  </button>
+                </div>
+              )}
             </div>
           )}
-        </>
+        </div>
       )}
 
       <div className='w-full'>

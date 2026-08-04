@@ -43,6 +43,7 @@ import {
 } from '../../../state/keyring/endpoint-strategy';
 import { NETWORKS, LAUNCHED_NETWORKS } from '../../../config/networks';
 import { cn } from '@repo/ui/lib/utils';
+import { Button } from '@repo/ui/components/ui/button';
 import { SettingsScreen } from './settings-screen';
 import { PopupPath } from '../paths';
 
@@ -170,7 +171,7 @@ export const SettingsNetworks = () => {
                     </span>
                   )}
                   {network.transparent && (
-                    <span className='text-label px-1.5 py-0.5 rounded-md bg-red-500/15 text-red-500 font-medium leading-none'>
+                    <span className='text-label px-1.5 py-0.5 rounded-md border border-warning/30 bg-warning/10 text-warning font-medium leading-none'>
                       public
                     </span>
                   )}
@@ -241,15 +242,17 @@ export const SettingsNetworks = () => {
                           value={editingEndpoint}
                           onChange={e => setEditingEndpoint(e.target.value)}
                           placeholder={state?.endpoint ?? 'https://...'}
-                          className='flex-1 bg-input border border-border-soft px-2 py-1.5 text-xs font-mono focus:border-primary/50 focus:outline-none'
+                          className='flex-1 rounded-lg bg-input border border-border-soft px-3 py-2.5 text-xs font-mono focus:border-primary/50 focus:outline-none'
                         />
-                        <button
+                        <Button
+                          variant='gradient'
+                          size='md'
                           onClick={() => void handleSaveEndpoint(networkId)}
                           disabled={saving}
-                          className='px-3 py-1.5 text-xs bg-zigner-gold text-zigner-dark hover:bg-primary/90 transition-colors disabled:opacity-50'
+                          className='text-xs'
                         >
                           {saving ? '...' : 'save'}
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   )}
@@ -478,7 +481,7 @@ const ZcashEndpointPanel = ({
             value={selectionStrategy}
             onChange={e => setSelectionStrategy(e.target.value as SelectionStrategy)}
             disabled={autoPicking}
-            className='flex-1 bg-input border border-border-soft px-2 py-1 text-label focus:border-primary/50 focus:outline-none'
+            className='flex-1 rounded-lg bg-input border border-border-soft px-3 py-2.5 text-label focus:border-primary/50 focus:outline-none'
           >
             {(Object.keys(STRATEGY_LABELS) as SelectionStrategy[]).map(s => (
               <option key={s} value={s}>
@@ -495,7 +498,7 @@ const ZcashEndpointPanel = ({
               onPick(preset.url);
             }
           }}
-          className='w-full bg-input border border-border-soft px-2 py-1.5 text-xs focus:border-primary/50 focus:outline-none'
+          className='w-full rounded-lg bg-input border border-border-soft px-3 py-2.5 text-xs focus:border-primary/50 focus:outline-none'
         >
           <option value='' disabled>
             {matched ? matched.label : 'custom url'}
@@ -555,15 +558,17 @@ const ZcashEndpointPanel = ({
                   value={editingEndpoint}
                   onChange={e => setEditingEndpoint(e.target.value)}
                   placeholder='https://...'
-                  className='flex-1 bg-input border border-border-soft px-2 py-1.5 text-xs font-mono focus:border-primary/50 focus:outline-none'
+                  className='flex-1 rounded-lg bg-input border border-border-soft px-3 py-2.5 text-xs font-mono focus:border-primary/50 focus:outline-none'
                 />
-                <button
+                <Button
+                  variant='gradient'
+                  size='md'
                   onClick={onSaveCustom}
                   disabled={saving}
-                  className='px-3 py-1.5 text-xs bg-zigner-gold text-zigner-dark hover:bg-primary/90 transition-colors disabled:opacity-50'
+                  className='text-xs'
                 >
                   {saving ? '...' : 'save'}
-                </button>
+                </Button>
               </div>
             </div>
 

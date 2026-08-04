@@ -134,9 +134,7 @@ export const SettingsClearCache = () => {
 
             {grouped.map(g => (
               <div key={g.type}>
-                <p className='mb-2 text-xs font-medium text-fg-muted uppercase tracking-wider'>
-                  {g.label}
-                </p>
+                <p className='kicker mb-2'>{g.label}</p>
                 <div className='flex flex-col divide-y divide-border/40 rounded-lg border border-border-soft bg-elev-1'>
                   {g.vaults.map(v => {
                     const hasZcash =

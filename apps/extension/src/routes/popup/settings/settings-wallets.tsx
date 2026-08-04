@@ -431,7 +431,7 @@ export const SettingsWallets = () => {
                 href='https://zigner.zafu.pro'
                 target='_blank'
                 rel='noopener noreferrer'
-                className='flex items-center gap-1.5 text-xs text-zigner-gold hover:underline mt-2'
+                className='flex items-center gap-2 text-xs text-zigner-gold hover:underline mt-2'
               >
                 <span className='i-lucide-external-link h-3 w-3' />
                 download zafu zigner
@@ -650,7 +650,7 @@ const VaultRow = ({
     <div className='group px-3 py-2.5'>
       <div className='flex items-center gap-2'>
         <div className='flex-1 min-w-0'>
-          <div className='flex items-center gap-1.5'>
+          <div className='flex items-center gap-2'>
             {editing ? (
               <input
                 ref={ref}
@@ -674,7 +674,7 @@ const VaultRow = ({
             )}
           </div>
           {networks.length > 0 && (
-            <div className='flex gap-1 mt-1'>{networks.map(networkBadge)}</div>
+            <div className='flex gap-2 mt-1'>{networks.map(networkBadge)}</div>
           )}
         </div>
         <button
@@ -700,7 +700,7 @@ const VaultRow = ({
               onBlur={saveBirthday}
               onKeyDown={e => e.key === 'Enter' && saveBirthday()}
               placeholder='auto'
-              className='w-24 bg-input border border-border-soft px-2 py-1 text-label font-mono rounded focus:outline-none focus:border-primary/50'
+              className='w-24 bg-input border border-border-soft px-2 py-2 text-label font-mono rounded focus:outline-none focus:border-primary/50'
             />
           </div>
           <p className='text-label text-fg-dim mt-0.5'>

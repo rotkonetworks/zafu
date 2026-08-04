@@ -1207,7 +1207,8 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
       )}
 
       {/* submit */}
-      <button
+      <Button
+        variant='gradient'
         onClick={() => {
           if (txStatus === 'success') {
             onSuccess ? onSuccess() : handleReset();
@@ -1223,11 +1224,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
           txStatus === 'signing' ||
           txStatus === 'broadcasting'
         }
-        className={cn(
-          'mt-2 w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark',
-          'transition-colors hover:bg-zigner-gold-light',
-          'disabled:opacity-50 disabled:cursor-not-allowed',
-        )}
+        className='mt-2 w-full'
       >
         {txStatus === 'planning' && 'building plan...'}
         {txStatus === 'signing' && 'signing...'}
@@ -1235,7 +1232,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
         {txStatus === 'idle' && 'send'}
         {txStatus === 'success' && (onSuccess ? 'close' : 'send another')}
         {txStatus === 'error' && 'retry'}
-      </button>
+      </Button>
 
       {sendState.error && txStatus === 'idle' && (
         <p className='text-center text-xs text-red-400'>{sendState.error}</p>
@@ -1583,7 +1580,8 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
       )}
 
       {/* submit */}
-      <button
+      <Button
+        variant='gradient'
         onClick={() => {
           if (txStatus === 'success') {
             onSuccess ? onSuccess() : handleReset();
@@ -1599,11 +1597,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
           txStatus === 'signing' ||
           txStatus === 'broadcasting'
         }
-        className={cn(
-          'mt-2 w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark',
-          'transition-colors hover:bg-zigner-gold-light',
-          'disabled:opacity-50 disabled:cursor-not-allowed',
-        )}
+        className='mt-2 w-full'
       >
         {txStatus === 'planning' && 'building plan...'}
         {txStatus === 'signing' && 'signing...'}
@@ -1611,7 +1605,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
         {txStatus === 'idle' && 'send via ibc'}
         {txStatus === 'success' && (onSuccess ? 'close' : 'send another')}
         {txStatus === 'error' && 'retry'}
-      </button>
+      </Button>
 
       {ibcState.error && txStatus === 'idle' && (
         <p className='text-center text-xs text-red-400'>{ibcState.error}</p>
@@ -1760,9 +1754,9 @@ export function SendPage() {
               />
             </div>
 
-            <button className='mt-4 w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors disabled:opacity-50'>
+            <Button variant='gradient' className='mt-4 w-full'>
               continue
-            </button>
+            </Button>
 
             <p className='text-center text-xs text-fg-muted'>
               {activeNetwork === 'polkadot' && 'light client transaction'}
