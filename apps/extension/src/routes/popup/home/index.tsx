@@ -265,7 +265,10 @@ export const PopupIndex = () => {
   const isMultisig = !!selectedMultisigWallet;
 
   // truncate address for display
-  const displayAddress = address ? `${address.slice(0, 12)}...${address.slice(-8)}` : walletName;
+  // full address - it wraps (break-all) to use whatever width is available,
+  // showing in full in a dedicated window / side panel and over a couple of
+  // lines in the narrow popup. walletName is the no-address fallback.
+  const displayAddress = address || walletName;
 
   // Backup nudge as a slot candidate: on zcash it competes inside the single
   // message slot (see ZcashContent); on other networks it renders alone.
@@ -322,25 +325,27 @@ export const PopupIndex = () => {
             <button
               onClick={copyAddress}
               disabled={!address}
-              title={address ? (copied ? 'copied!' : 'click to copy') : undefined}
-              className='flex items-center gap-1.5 text-xs text-fg transition-colors duration-100 hover:text-fg-high disabled:opacity-50 disabled:cursor-not-allowed'
+              title={address ? 'click to copy' : undefined}
+              className='flex min-w-0 items-start gap-1.5 text-xs text-fg transition-colors duration-100 hover:text-fg-high disabled:opacity-50 disabled:cursor-not-allowed'
             >
               {isMultisig && (
-                <span className='rounded-sm bg-zigner-gold/15 px-1.5 py-0.5 text-label text-zigner-gold tabular leading-none'>
+                <span className='mt-0.5 shrink-0 rounded-sm bg-zigner-gold/15 px-1.5 py-0.5 text-label text-zigner-gold tabular leading-none'>
                   {selectedMultisigWallet.multisig!.threshold}/
                   {selectedMultisigWallet.multisig!.maxSigners}
                 </span>
               )}
-              <span className='tabular'>{displayAddress}</span>
-              {address &&
-                (copied ? (
-                  <span className='inline-flex items-center gap-0.5 text-zigner-gold'>
-                    <span className='i-lucide-check h-3 w-3' />
-                    <span className='text-label lowercase'>copied</span>
-                  </span>
-                ) : (
-                  <span className='i-lucide-copy h-3 w-3' />
-                ))}
+              <span className='min-w-0 break-all text-left font-mono leading-snug'>
+                {displayAddress}
+              </span>
+              {/* the icon flipping to a check is the copy feedback - no label needed */}
+              {address && (
+                <span
+                  className={cn(
+                    'mt-0.5 h-3 w-3 shrink-0',
+                    copied ? 'i-lucide-check text-zigner-gold' : 'i-lucide-copy',
+                  )}
+                />
+              )}
             </button>
             {address && activeNetwork === 'zcash' && (
               <button
