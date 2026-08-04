@@ -63,7 +63,7 @@ function formatTimestamp(ts: number): string {
     return time;
   }
   if (diffDays === 1) {
-    return `Yesterday ${time}`;
+    return `yesterday ${time}`;
   }
   if (diffDays < 7) {
     return `${date.toLocaleDateString([], { weekday: 'short' })} ${time}`;
@@ -158,18 +158,11 @@ function ConversationRow({
       )}
 
       {/* icon */}
-      <div
-        className={cn(
-          'flex h-10 w-10 items-center justify-center rounded-full shrink-0',
-          hasFrost ? 'bg-yellow-500/10' : 'bg-elev-2',
-        )}
-      >
+      <div className='flex h-10 w-10 items-center justify-center rounded-full shrink-0 bg-elev-2'>
         <span
           className={cn(
-            'h-5 w-5',
-            hasFrost
-              ? 'i-lucide-key-round text-yellow-400'
-              : 'i-lucide-message-square text-fg-muted',
+            'h-5 w-5 text-fg-muted',
+            hasFrost ? 'i-lucide-key-round' : 'i-lucide-message-square',
           )}
         />
       </div>
@@ -243,7 +236,7 @@ function MessageBubble({ message }: { message: InboxMessage }) {
             </span>
           )}
           {!message.complete && (
-            <span className='text-label text-yellow-400'>
+            <span className='text-label text-warning'>
               incomplete ({message.txids.length} fragments)
             </span>
           )}
@@ -282,9 +275,9 @@ function MessageContent({ message }: { message: InboxMessage }) {
 
     case MemoType.Ack:
       return (
-        <div className='flex items-center gap-1.5'>
-          <span className='i-lucide-check-check h-4 w-4 text-green-400' />
-          <span className='text-xs text-green-400'>read receipt</span>
+        <div className='flex items-center gap-1.5 text-fg-muted'>
+          <span className='i-lucide-check-check h-4 w-4' />
+          <span className='text-xs'>read receipt</span>
         </div>
       );
 
@@ -348,7 +341,7 @@ function ContactCardBubble({ card }: { card?: ContactCard }) {
         </div>
       )}
       {saved ? (
-        <span className='flex items-center gap-1 text-label text-green-400'>
+        <span className='flex items-center gap-1 text-label text-fg-muted'>
           <span className='i-lucide-check h-3 w-3' />
           in contacts
         </span>
@@ -442,8 +435,8 @@ function FrostDkgBubble({ message }: { message: InboxMessage }) {
   return (
     <div className='space-y-2'>
       <div className='flex items-center gap-2'>
-        <span className='i-lucide-key-round h-4 w-4 text-yellow-400' />
-        <span className='text-sm font-medium text-yellow-400'>DKG round {round}</span>
+        <span className='i-lucide-key-round h-4 w-4 text-fg-muted' />
+        <span className='text-sm font-medium text-fg-high'>DKG round {round}</span>
       </div>
       <p className='text-label text-fg-muted'>
         {round === 1 && 'key generation started - share your commitment'}
@@ -453,7 +446,7 @@ function FrostDkgBubble({ message }: { message: InboxMessage }) {
       {message.direction === 'incoming' && (
         <button
           onClick={() => navigate(PopupPath.MULTISIG_JOIN)}
-          className='flex items-center gap-1.5 rounded-md bg-yellow-500/10 border border-yellow-500/30 px-2.5 py-1.5 text-xs text-yellow-400 hover:bg-yellow-500/20 transition-colors'
+          className='flex items-center gap-1.5 rounded-md bg-elev-2 border border-border-soft px-2.5 py-1.5 text-xs text-fg-high hover:bg-elev-1 transition-colors'
         >
           <span className='i-lucide-arrow-right h-3.5 w-3.5' />
           open multisig
@@ -475,21 +468,21 @@ function FrostSignBubble({ message }: { message: InboxMessage }) {
   return (
     <div className='space-y-2'>
       <div className='flex items-center gap-2'>
-        <span className='i-lucide-pen-tool h-4 w-4 text-blue-400' />
-        <span className='text-sm font-medium text-blue-400'>{message.typeLabel}</span>
+        <span className='i-lucide-pen-tool h-4 w-4 text-fg-muted' />
+        <span className='text-sm font-medium text-fg-high'>{message.typeLabel}</span>
       </div>
       <p className='text-label text-fg-muted'>{labels[message.type] ?? 'FROST signing round'}</p>
       {message.direction === 'incoming' && message.type === MemoType.SignRequest && (
         <button
           onClick={() => navigate(PopupPath.MULTISIG_SIGN)}
-          className='flex items-center gap-1.5 rounded-md bg-blue-500/10 border border-blue-500/30 px-2.5 py-1.5 text-xs text-blue-400 hover:bg-blue-500/20 transition-colors'
+          className='flex items-center gap-1.5 rounded-md bg-elev-2 border border-border-soft px-2.5 py-1.5 text-xs text-fg-high hover:bg-elev-1 transition-colors'
         >
           <span className='i-lucide-pen-tool h-3.5 w-3.5' />
           sign transaction
         </button>
       )}
       {message.type === MemoType.SignResult && (
-        <div className='flex items-center gap-1.5 text-green-400'>
+        <div className='flex items-center gap-1.5 text-fg-muted'>
           <span className='i-lucide-check-circle h-3.5 w-3.5' />
           <span className='text-xs'>transaction signed</span>
         </div>
@@ -576,7 +569,7 @@ function ConversationThread({
 
       {/* referral attribution */}
       {referral && (
-        <div className='flex items-center gap-1.5 px-4 py-2 text-xs text-blue-400 border-b border-border-hard/20'>
+        <div className='flex items-center gap-1.5 px-4 py-2 text-xs text-fg-muted border-b border-border-hard/20'>
           <span className='i-lucide-share-2 h-3.5 w-3.5' />
           via {referral.sharedWith}
         </div>
@@ -802,8 +795,11 @@ function ComposeMessage({
         </div>
 
         {txStatus === 'success' && txHash && (
-          <div className='rounded-lg border border-green-500/40 bg-green-500/10 p-3'>
-            <p className='text-sm text-green-400'>message sent!</p>
+          <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
+            <p className='flex items-center gap-1.5 text-sm text-fg-high'>
+              <span className='i-lucide-check h-4 w-4' />
+              message sent
+            </p>
             <p className='text-xs text-fg-muted mt-1 font-mono break-all'>{txHash}</p>
           </div>
         )}
@@ -1195,7 +1191,7 @@ function FlatMessageRow({
           {message.content}
         </p>
         {message.amount && (
-          <span className='inline-flex items-center rounded-md bg-green-500/10 px-1.5 py-0.5 mt-1 text-label text-green-400'>
+          <span className='inline-flex items-center rounded-md bg-elev-2 px-1.5 py-0.5 mt-1 text-label tabular text-fg-high'>
             {message.direction === 'received' ? '+' : '-'}
             {message.amount} {message.asset ?? ''}
           </span>
@@ -1215,14 +1211,15 @@ function OutgoingStatusBadge({
   status: NonNullable<Message['status']>;
   reason?: string;
 }) {
+  // lifecycle states are fg tokens; only a genuine failure keeps red.
   const styles: Record<
     NonNullable<Message['status']>,
     { bg: string; fg: string; label: string }
   > = {
-    submitting: { bg: 'bg-amber-500/10', fg: 'text-amber-400', label: 'sending...' },
-    broadcasting: { bg: 'bg-amber-500/10', fg: 'text-amber-400', label: 'broadcasting...' },
-    pending: { bg: 'bg-blue-500/10', fg: 'text-blue-400', label: 'pending' },
-    confirmed: { bg: 'bg-green-500/10', fg: 'text-green-400', label: 'confirmed' },
+    submitting: { bg: 'bg-elev-2', fg: 'text-fg-muted', label: 'sending...' },
+    broadcasting: { bg: 'bg-elev-2', fg: 'text-fg-muted', label: 'broadcasting...' },
+    pending: { bg: 'bg-elev-2', fg: 'text-fg-muted', label: 'pending' },
+    confirmed: { bg: 'bg-elev-2', fg: 'text-fg-muted', label: 'confirmed' },
     failed: { bg: 'bg-red-500/10', fg: 'text-red-400', label: 'failed' },
   };
   const s = styles[status];
