@@ -65,6 +65,19 @@ const MultisigJoinZafu = () => {
   const goBack = useBackNav(PopupPath.MULTISIG);
   const newFrostMultisigKey = useStore(s => s.keyRing.newFrostMultisigKey);
 
+  // Session teardown, hoisted to refs so leaving mid-DKG (the CancelSessionModal
+  // "leave anyway" and unmount) aborts the controller and disconnects the relay -
+  // otherwise the WebSocket leaks and setState fires after unmount. Mirrors the
+  // zigner join flow below.
+  const abortRef = useRef<AbortController | null>(null);
+  const relayRef = useRef<FrostRelayClient | null>(null);
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+      relayRef.current?.disconnect();
+    };
+  }, []);
+
   const countdown = useDeadlineCountdown(
     step === 'joining' || step === 'dkg' || step === 'fvk-echo' ? deadline : null,
   );
@@ -75,6 +88,7 @@ const MultisigJoinZafu = () => {
     }
 
     const abortController = new AbortController();
+    abortRef.current = abortController;
     const sessionDeadline = Date.now() + FROST_SESSION_TIMEOUT_MS;
     setDeadline(sessionDeadline);
     try {
@@ -82,6 +96,7 @@ const MultisigJoinZafu = () => {
       setStep('joining');
 
       const relay = new FrostRelayClient(url);
+      relayRef.current = relay;
       const participantId = new Uint8Array(32);
       crypto.getRandomValues(participantId);
 
