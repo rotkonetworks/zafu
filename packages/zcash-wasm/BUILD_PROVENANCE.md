@@ -5,10 +5,10 @@
 A rebuild that updates only some copies ships a wallet whose worker and
 prover disagree. This has bitten twice:
 
-| path                                                     | loaded by                  | symptom when stale                                                                       |
-| -------------------------------------------------------- | -------------------------- | ---------------------------------------------------------------------------------------- |
-| `packages/zcash-wasm/` (`zafu_*` + duplicated `zcash_*`) | build-time package import  | type/API drift; missing exports (e.g. shielding)                                                                           |
-| `apps/extension/public/zafu-wasm/`                       | the main compute worker    | `X.compute_txid is not a function`; silently rebuilds txs with an old consensus constant |
+| path                                                     | loaded by                 | symptom when stale                                                                       |
+| -------------------------------------------------------- | ------------------------- | ---------------------------------------------------------------------------------------- |
+| `packages/zcash-wasm/` (`zafu_*` + duplicated `zcash_*`) | build-time package import | type/API drift; missing exports (e.g. shielding)                                         |
+| `apps/extension/public/zafu-wasm/`                       | the main compute worker   | `X.compute_txid is not a function`; silently rebuilds txs with an old consensus constant |
 
 Both `public/` copies are the PARALLEL build (rayon `snippets/`, shared
 memory). After copying either one, re-apply the Chrome worker patch and
@@ -84,18 +84,20 @@ is actually reachable from the extension; the merge that added it to
 crates/zcash-wasm did NOT ship a wasm, so zafu could not call it.
 
 Corrections to this file, both found the hard way:
-  - `apps/extension/public/zafu-wasm-parallel/` no longer exists. There are
-    TWO consumers, not three.
-  - BOTH shipped copies are the PARALLEL build. The heading below still calls
-    `packages/zcash-wasm/` single-thread; it is not, and shipping a
-    single-thread blob there would break rayon proving.
+
+- `apps/extension/public/zafu-wasm-parallel/` no longer exists. There are
+  TWO consumers, not three.
+- BOTH shipped copies are the PARALLEL build. The heading below still calls
+  `packages/zcash-wasm/` single-thread; it is not, and shipping a
+  single-thread blob there would break rayon proving.
 
 Verified after copying:
-  - all three files (zafu_wasm_bg.wasm, the zcash_* duplicate, and the
-    public/ copy) are byte-identical: sha256 1ebdc4b5215f1227...
-  - `(import "./zafu_wasm_bg.js" "memory" (memory ... shared))` present
-  - the Chrome worker patch re-applied to both `snippets/` trees
-  - `tsc --noEmit` clean, all four webpack configs compile
+
+- all three files (zafu*wasm_bg.wasm, the zcash*\* duplicate, and the
+  public/ copy) are byte-identical: sha256 1ebdc4b5215f1227...
+- `(import "./zafu_wasm_bg.js" "memory" (memory ... shared))` present
+- the Chrome worker patch re-applied to both `snippets/` trees
+- `tsc --noEmit` clean, all four webpack configs compile
 
 The one build warning (`workerHelpers.js:57`, expression dependency) is our
 LOCAL PATCH and is expected.
