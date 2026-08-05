@@ -807,6 +807,11 @@ export interface SendTxPcztUnsignedResult {
  *
  * `fragmentSize` defaults to 400 (~v25 QR density). Drop to 200 for older /
  * cheaper Keystone-class cameras if frames don't lock.
+ *
+ * Set `frost` when the PCZT feeds a FROST multisig signing round (self-custody
+ * or airgap co-signers). Those callers REQUIRE the `sighash` / `alphas` /
+ * `spendIndices` fields, which only the orchard builder emits — the worker
+ * fails closed rather than hand back a PCZT with empty FROST fields.
  */
 export const buildSendTxPcztInWorker = async (
   network: NetworkType,
@@ -818,12 +823,13 @@ export const buildSendTxPcztInWorker = async (
   targetHeight: number,
   mainnet: boolean,
   ufvk: string,
+  frost = false,
   fragmentSize = 400,
 ): Promise<SendTxPcztUnsignedResult> => {
   return callWorker(
     network,
     'send-tx-pczt',
-    { serverUrl, recipient, amount, memo, targetHeight, mainnet, ufvk, fragmentSize },
+    { serverUrl, recipient, amount, memo, targetHeight, mainnet, ufvk, fragmentSize, frost },
     walletId,
   );
 };
