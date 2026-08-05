@@ -776,8 +776,59 @@ const ZcashContent = ({
         console.error('[zcash] rescan failed:', err);
       }
     };
+    // Retry after a transient backend error (node restart, 503): respawn the
+    // worker and resume from the height already reached. Deliberately does NOT
+    // clear zcashSyncHeight or zero the balances the way a rescan does — a
+    // blip should cost seconds, not a full re-scan from the birthday.
+    const retryHandler = () => {
+      void (async () => {
+        try {
+          const walletId = selectedKeyInfo?.id;
+          if (!walletId) {
+            return;
+          }
+          await spawnNetworkWorker('zcash');
+          markWalletSyncing('zcash', walletId);
+          const resumeAt = (await chrome.storage.local.get('zcashSyncHeight'))[
+            'zcashSyncHeight'
+          ] as number | undefined;
+          if (hasMnemonic && selectedKeyInfo.type === 'mnemonic') {
+            const mnemonic = await keyRing.getMnemonic(walletId);
+            await startSyncInWorker(
+              'zcash',
+              walletId,
+              mnemonic,
+              zidecarUrl,
+              resumeAt,
+              zcashBackend,
+            );
+          } else if (watchOnly) {
+            const ufvkStr =
+              watchOnly.ufvk ??
+              (watchOnly.orchardFvk?.startsWith('uview') ? watchOnly.orchardFvk : undefined);
+            if (ufvkStr) {
+              await startWatchOnlySyncInWorker(
+                'zcash',
+                walletId,
+                ufvkStr,
+                zidecarUrl,
+                resumeAt,
+                zcashBackend,
+              );
+            }
+          }
+        } catch (err) {
+          console.error('[zcash] sync retry failed:', err);
+        }
+      })();
+    };
+
     window.addEventListener('zcash-rescan', handler);
-    return () => window.removeEventListener('zcash-rescan', handler);
+    window.addEventListener('zcash-retry-sync', retryHandler);
+    return () => {
+      window.removeEventListener('zcash-rescan', handler);
+      window.removeEventListener('zcash-retry-sync', retryHandler);
+    };
   }, [
     hasMnemonic,
     watchOnly,
@@ -1028,6 +1079,7 @@ const ZcashContent = ({
                 }
               : undefined
           }
+          onRetry={() => window.dispatchEvent(new Event('zcash-retry-sync'))}
           onRescan={h => {
             window.dispatchEvent(new CustomEvent('zcash-rescan', { detail: h }));
           }}

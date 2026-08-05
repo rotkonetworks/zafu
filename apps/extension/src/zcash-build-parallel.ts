@@ -16,7 +16,11 @@ type WasmModule = Record<string, any>;
 let wasmModule: WasmModule | null = null;
 let initPromise: Promise<void> | null = null;
 
-const WASM_BASE = '/zafu-wasm-parallel';
+// Same blob the compute worker loads (public/zafu-wasm). They were separate
+// directories holding byte-identical parallel builds — 6.3 MB shipped twice —
+// and the duplication is what let one copy sit stale for two days. One path,
+// one truth; each realm still gets its own module instance and rayon pool.
+const WASM_BASE = '/zafu-wasm';
 
 const initParallelWasm = async (): Promise<WasmModule> => {
   if (wasmModule) {
@@ -53,7 +57,7 @@ const initParallelWasm = async (): Promise<WasmModule> => {
 
     try {
       // @ts-expect-error dynamic import — parallel WASM build with rayon + shared memory
-      const wasm = await import(/* webpackIgnore: true */ '/zafu-wasm-parallel/zafu_wasm.js');
+      const wasm = await import(/* webpackIgnore: true */ '/zafu-wasm/zafu_wasm.js');
       // let the JS glue create shared memory with its own initial/max settings
       await wasm.default({ module_or_path: `${WASM_BASE}/zafu_wasm_bg.wasm` });
       wasm.init();

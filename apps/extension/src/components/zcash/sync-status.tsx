@@ -35,6 +35,8 @@ export interface SyncStatusProps {
   firstSync: boolean;
   error?: string;
   errorAction?: { label: string; onClick: () => void };
+  /** resume the sync from where it stopped — for transient backend errors */
+  onRetry?: () => void;
   onRescan?: (height: number) => void;
 }
 
@@ -90,6 +92,7 @@ export const SyncStatus = ({
   firstSync,
   error,
   errorAction,
+  onRetry,
   onRescan,
 }: SyncStatusProps) => {
   const [open, setOpen] = useState(false);
@@ -157,23 +160,27 @@ export const SyncStatus = ({
         >
           {line}
         </span>
-        {error && errorAction && (
+        {/* Most sync errors are transient (a node restart, a 503 blip), so the
+            first offer is "try again" — resuming from the current height —
+            rather than "switch node", which permanently repoints the wallet
+            because of a ten-second outage. Switching lives in the panel. */}
+        {error && onRetry && (
           <span
             role='button'
             tabIndex={0}
             onClick={e => {
               e.stopPropagation();
-              errorAction.onClick();
+              onRetry();
             }}
             onKeyDown={e => {
               if (e.key === 'Enter') {
                 e.stopPropagation();
-                errorAction.onClick();
+                onRetry();
               }
             }}
             className='text-zigner-gold underline-offset-2 hover:underline lowercase'
           >
-            {errorAction.label}
+            try again
           </span>
         )}
         <span
@@ -193,7 +200,20 @@ export const SyncStatus = ({
       >
         <div className='overflow-hidden'>
           <div className='mt-2 flex flex-col gap-2 rounded-md border border-border-soft bg-elev-1 p-3'>
-            {error && <div className='text-xs text-red-400 break-words'>{error}</div>}
+            {error && (
+              <div className='flex flex-wrap items-baseline gap-x-2 gap-y-1'>
+                <span className='text-xs text-red-400 break-words'>{error}</span>
+                {errorAction && (
+                  <button
+                    type='button'
+                    onClick={errorAction.onClick}
+                    className='text-label text-zigner-gold underline-offset-2 hover:underline lowercase'
+                  >
+                    {errorAction.label}
+                  </button>
+                )}
+              </div>
+            )}
 
             {!synced && (
               <div className='h-1.5 w-full overflow-hidden rounded-full bg-elev-2'>
