@@ -650,6 +650,9 @@ const ZcashContent = ({
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
   const keyRing = useStore(keyRingSelector);
   const { requestAuth, PasswordModal } = usePasswordGate();
+  // must sit with the other hooks: there is an early return for the
+  // no-wallet case further down, and a hook after it changes hook order.
+  const { settings: privacySettings, setSetting: setPrivacySetting } = useStore(privacySelector);
 
   // orchard balance from worker (zatoshi string)
   const [orchardZat, setOrchardZat] = useState(0n);
@@ -989,8 +992,6 @@ const ZcashContent = ({
             zat: pools.orchard,
           },
         ];
-
-  const { settings: privacySettings, setSetting: setPrivacySetting } = useStore(privacySelector);
 
   // glance -> detail: the hero balance opens the full per-pool notes view;
   // each reveal row deep-links to its pool ('shielded' fallback -> ironwood)

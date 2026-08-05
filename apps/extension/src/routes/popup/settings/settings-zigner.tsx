@@ -10,9 +10,7 @@ import { ToggleSwitch } from '../../../components/toggle-switch';
 import { useState, useRef, useEffect } from 'react';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { PagePath } from '../../page/paths';
-import { PopupPath } from '../paths';
 import { openPageInTab } from '../../../utils/popup-detection';
-import { useNavigate } from 'react-router-dom';
 
 /** network color for zigner vault badges */
 const networkColors: Record<string, string> = {
@@ -32,7 +30,6 @@ const networkColors: Record<string, string> = {
  */
 export const SettingsZigner = () => {
   const pro = useStore(isPro);
-  const navigate = useNavigate();
   const {
     scanState,
     walletLabel,
