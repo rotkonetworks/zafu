@@ -3,13 +3,11 @@
 These vendored .wasm blobs are build artifacts. Do NOT hand-edit.
 Reproduce by checking out the zcli rev below and running the commands.
 
-- source repo: zcli-ironwood (branch feat/ironwood-cli)
-- source rev: f87adee (feat(zcli): port zecli to NU6.3/Ironwood fork stack) PLUS
-  uncommitted crates/zcash-wasm/src/lib.rs changes adding build_signed_ironwood_send
-  (HOT-wallet local V6 signed ironwood send) AND build_ironwood_send_pczt (COLD
-  zigner/watch-only redacted ironwood-send PCZT builder; sibling of
-  build_turnstile_migration_pczt, leaves ironwood spends unsigned for the cold
-  device). Both security-reviewed against the shared proven core.
+- source repo: zcli (master)
+- source rev: 65c6ad6 — includes 59934d2 fix(consensus): real V6_VERSION_GROUP_ID
+  0xD884B698 per ZIP-229 (the 0xFFFFFFFF placeholder made every v6 tx —
+  ironwood migration + sends — fail zebrad broadcast with
+  'expected TX_V6_VERSION_GROUP_ID'). Clean committed tree, no dirty state.
 - source state: working tree has the above lib.rs changes staged/dirty; pkg/ + pkg-parallel/
   are build outputs. Commit lib.rs before treating these shas as reproducible.
 - includes the final ironwood producer fixes: real branch id, spend-fvk redaction,
@@ -29,7 +27,7 @@ Reproduce by checking out the zcli rev below and running the commands.
       --enable-simd --enable-bulk-memory --enable-mutable-globals \
       --enable-nontrapping-float-to-int \
       pkg/zafu_wasm_bg.wasm -o pkg/zafu_wasm_bg.wasm
-    sha256(zafu_wasm_bg.wasm) = e627c9748a6d00a7bf18cbe13962b5852cbe471a4ff82f0e9179ca1ef035f5fb
+    sha256(zafu_wasm_bg.wasm) = b9a1c5298f283fde12e5eae075f0745d4400bc943f3d494f6e97a28a33b56d41
 
 ## parallel / rayon (apps/extension/public/zafu-wasm-parallel/zafu_wasm_bg.wasm)
 
@@ -47,7 +45,7 @@ Reproduce by checking out the zcli rev below and running the commands.
     wasm-opt -Oz --enable-threads --enable-bulk-memory --enable-simd \
       --enable-mutable-globals --enable-nontrapping-float-to-int \
       pkg-parallel/zafu_wasm_bg.wasm -o pkg-parallel/zafu_wasm_bg.wasm
-    sha256(zafu_wasm_bg.wasm) = 7a856f5251dd78848783e8ef28407dcea08a91669cd59f2c5e790b6006c0ce2c
+    sha256(zafu_wasm_bg.wasm) = fe73e27a8e31e27b45c6cc961ed9638afd6cfba37ffcb16e114ce11dda82db4a
 
     Verify the rebuilt blob has shared imported memory before shipping:
       `(import "./zafu_wasm_bg.js" "memory" (memory ... shared))` post-bindgen.
