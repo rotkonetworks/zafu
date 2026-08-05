@@ -55,8 +55,8 @@ export const DEFAULT_ZAPPS: Zapp[] = [
   },
   {
     id: 'penumbra-dex',
-    name: 'penumbra dex',
-    description: 'trade shielded assets',
+    name: 'rotko dex',
+    description: 'trade shielded assets on penumbra',
     icon: 'i-lucide-arrow-left-right',
     url: 'https://dex.rotko.net',
     category: 'finance',

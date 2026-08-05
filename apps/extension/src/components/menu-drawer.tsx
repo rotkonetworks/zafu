@@ -313,6 +313,15 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
               <span className='i-lucide-smartphone h-3 w-3' />
               zigner
             </a>
+            <a
+              href='https://dex.rotko.net'
+              target='_blank'
+              rel='noopener noreferrer'
+              className='flex items-center gap-1 transition-colors hover:text-fg-high'
+            >
+              <span className='i-lucide-arrow-left-right h-3 w-3' />
+              dex
+            </a>
           </div>
         </div>
       </div>
