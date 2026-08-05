@@ -18,6 +18,30 @@ Last updated against `zafu@7609f63a` / `zcli@fce00a8`.
 | z→t fee arithmetic                                                  | that tx paid 65,000 − 50,000 = **15,000 zat**, exactly `5000 × (max(1,2) + 1)`                                                                                                                    | —                                                    |
 | ZIP-317 transparent inputs are size-derived                         | `ceil(148n/150) == n` only while `2n < 150`; 75 inputs = 74 actions                                                                                                                               | `zip317_transparent_input_actions_are_size_derived`  |
 
+## Browser smoke test
+
+The built extension was loaded unpacked into headless Chromium (150.0.7871.186)
+and driven over the DevTools protocol:
+
+```
+chromium --headless=new --no-sandbox --remote-debugging-port=9334 \
+  "--remote-allow-origins=http://127.0.0.1:9334" \
+  --load-extension=apps/extension/dist \
+  --disable-extensions-except=apps/extension/dist
+```
+
+Result: the service worker registers, `page.html` boots and routes to
+onboarding, the DOM paints (368 chars: the three entry paths and the
+keys-stay-local line), `offscreen.html` loads as the headless proving document,
+and **every surface reports zero runtime errors and zero exceptions**.
+
+What this does and does not establish. It establishes that the bundle loads,
+the service worker registers, React mounts, and nothing throws on boot — a real
+smoke test, and it is repeatable in CI. It does NOT establish that the money
+paths behave correctly: reaching a balance, a pending send, or a rescan
+confirmation needs an unlocked wallet with funds, and a cold-send round trip
+needs a physical signing device. Those remain unexercised.
+
 ## Verified locally, never broadcast
 
 These pass a full build → prove → sign → extract, which re-verifies the proof
