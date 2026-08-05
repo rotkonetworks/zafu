@@ -17,7 +17,12 @@ import {
   frostInspectPcztOutputsInWorker,
   type FrostParsedTx,
 } from '../../../state/keyring/network-worker';
-import { computeVerdict, type Verdict } from '../send/frost-multisig/multisig-verifier';
+import {
+  computeVerdict,
+  assessClaimedFee,
+  verdictAllowsSigning,
+  type Verdict,
+} from '../send/frost-multisig/multisig-verifier';
 import { FrostRelayClient } from '../../../state/keyring/frost-relay-client';
 import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../../state/frost-session';
 import { useDeadlineCountdown } from '../../../hooks/use-deadline-countdown';
@@ -29,6 +34,22 @@ import { Sensitive } from '../../../components/sensitive';
 import { DEFAULT_RELAY_URL } from './dkg-helpers';
 
 type Step = 'input' | 'joining' | 'review' | 'signing' | 'complete' | 'error';
+
+/**
+ * The exact signing request this screen latched onto. Immutable once set: the
+ * relay handler accepts the FIRST `SIGN:` of a session and treats any later one
+ * as a takeover attempt. Everything downstream (verdict, display, the share we
+ * actually release) is derived from this one object, so what the user reviewed
+ * and what gets signed cannot drift apart.
+ */
+interface SignRequest {
+  sighash: string;
+  alphas: string[];
+  recipient: string;
+  amountZat: string;
+  feeZat: string;
+  pcztHex?: string;
+}
 
 export const MultisigSign = () => {
   const [roomCode, setRoomCode] = useState('');
@@ -52,8 +73,11 @@ export const MultisigSign = () => {
   const relayRef = useRef<FrostRelayClient | null>(null);
   const participantIdRef = useRef<Uint8Array | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const sighashRef = useRef('');
-  const alphasRef = useRef<string[]>([]);
+  // the latched request — set exactly once per session, never mutated after.
+  const txRef = useRef<SignRequest | null>(null);
+  // set if a second, different SIGN: lands after we latched. Poisons the
+  // session: the user reviewed request #1, so request #2 has no consent.
+  const supersededRef = useRef(false);
   // raw "c0|c1|..." per peer; per-action split happens after numActions known.
   const peerCommitsRawRef = useRef<string[]>([]);
 
@@ -66,8 +90,8 @@ export const MultisigSign = () => {
     relayRef.current = null;
     participantIdRef.current = null;
     abortRef.current = null;
-    sighashRef.current = '';
-    alphasRef.current = [];
+    txRef.current = null;
+    supersededRef.current = false;
     peerCommitsRawRef.current = [];
   };
 
@@ -91,6 +115,11 @@ export const MultisigSign = () => {
       participantIdRef.current = participantId;
       abortRef.current = abortController;
 
+      // the relay redelivers buffered room history, so a byte-identical repeat
+      // of the SIGN: we already latched is benign; only a *different* one is a
+      // takeover.
+      let lastSignText = '';
+
       void relay.joinRoom(
         roomCode.trim(),
         participantId,
@@ -103,35 +132,72 @@ export const MultisigSign = () => {
           const signMatch =
             /^SIGN:([0-9a-fA-F]+):([^:]+):([^:]+):(\d+):(\d+)(?::([0-9a-fA-F]+))?$/.exec(text);
           if (signMatch) {
-            sighashRef.current = signMatch[1]!;
-            alphasRef.current = signMatch[2]!.split(',');
-            const claimedRecipient = signMatch[3]!;
-            const claimedAmount = signMatch[4]!;
-            const pcztHex = signMatch[6];
-            setRecipient(claimedRecipient);
-            setAmountZat(claimedAmount);
-            setFeeZat(signMatch[5]!);
+            const req: SignRequest = {
+              sighash: signMatch[1]!,
+              alphas: signMatch[2]!.split(','),
+              recipient: signMatch[3]!,
+              amountZat: signMatch[4]!,
+              feeZat: signMatch[5]!,
+              pcztHex: signMatch[6],
+            };
+
+            // Latch. Anyone who can guess the room code can post here, so a
+            // second SIGN: is not a "retry" — it is an attempt to swap the tx
+            // out from under a review the user has already started (classic
+            // case: land it while the password modal is up). Poison the
+            // session instead; the user can re-join for a fresh one.
+            if (txRef.current) {
+              if (text !== lastSignText) {
+                supersededRef.current = true;
+                setVerdict({
+                  kind: 'refuse',
+                  reasons: [
+                    'the host published a SECOND, different transaction after you began reviewing this one',
+                    'this session is void — reject and re-join if you still intend to sign',
+                  ],
+                });
+              }
+              return;
+            }
+            txRef.current = req;
+            lastSignText = text;
+
+            setRecipient(req.recipient);
+            setAmountZat(req.amountZat);
+            setFeeZat(req.feeZat);
 
             // Verifier: derive output truth from the PCZT (recompute sighash +
-            // OVK-decrypt outputs); mismatch hard-blocks approve. FROST multisig
-            // wallets store the `uview1…` string in `orchardFvk` (DKG flows save it
+            // OVK-decrypt outputs). Anything that cannot be verified refuses —
+            // there is no "show it anyway and leave approve live" path, because
+            // the host chooses whether we can verify. FROST multisig wallets
+            // store the `uview1…` string in `orchardFvk` (DKG flows save it
             // there); single-key wallets store it in `ufvk`.
             const ufvkForVerify = activeWallet?.multisig
               ? activeWallet.orchardFvk
               : activeWallet?.ufvk;
-            if (!pcztHex) {
+            const fee = assessClaimedFee(req.feeZat, req.amountZat);
+            if (!req.pcztHex) {
               setVerdict({
-                kind: 'unverified',
-                reason: 'host did not publish PCZT bytes (older client?)',
+                kind: 'refuse',
+                reasons: [
+                  'host did not publish the PCZT bytes — everything shown here would be host-authored text bound to nothing',
+                  'refusing to release a share against an unverifiable request',
+                ],
               });
             } else if (!ufvkForVerify) {
               setVerdict({
-                kind: 'unverified',
-                reason: 'wallet has no UFVK on file - cannot verify',
+                kind: 'refuse',
+                reasons: [
+                  'this wallet has no viewing key on file, so the PCZT cannot be decoded',
+                  'refusing to release a share against an unverifiable request',
+                ],
               });
+            } else if (!fee.ok) {
+              setVerdict({ kind: 'refuse', reasons: [fee.reason] });
             } else {
               const ufvk = ufvkForVerify;
               const isMain = activeWallet.mainnet;
+              const pcztHex = req.pcztHex;
               void (async () => {
                 try {
                   const p = await frostInspectPcztOutputsInWorker(pcztHex, ufvk);
@@ -139,16 +205,19 @@ export const MultisigSign = () => {
                   setVerdict(
                     computeVerdict({
                       parsed: p,
-                      claimedRecipient,
-                      claimedAmountZat: claimedAmount,
-                      claimedSighashHex: signMatch[1]!,
+                      claimedRecipient: req.recipient,
+                      claimedAmountZat: req.amountZat,
+                      claimedSighashHex: req.sighash,
                       mainnet: isMain,
                     }),
                   );
                 } catch (err) {
                   setVerdict({
-                    kind: 'unverified',
-                    reason: err instanceof Error ? err.message : 'parse failed',
+                    kind: 'refuse',
+                    reasons: [
+                      `could not parse the published PCZT: ${err instanceof Error ? err.message : 'parse failed'}`,
+                      'refusing to release a share against an unverifiable request',
+                    ],
                   });
                 }
               })();
@@ -165,7 +234,7 @@ export const MultisigSign = () => {
       );
 
       setProgress('waiting for transaction data...');
-      await waitForUntil(() => sighashRef.current.length > 0, sessionDeadline);
+      await waitForUntil(() => txRef.current !== null, sessionDeadline);
       setStep('review');
     } catch (e) {
       teardown();
@@ -179,8 +248,33 @@ export const MultisigSign = () => {
       return;
     }
 
+    // ── snapshot what the user is consenting to, BEFORE any await ──
+    // `approved` is the request the verdict on screen was computed from. From
+    // here on nothing reads txRef for signing purposes; only `approved` is
+    // signed. `verdict`/`acknowledged` are this render's values — i.e. exactly
+    // what was displayed when the button was clicked.
+    const approved = txRef.current;
+    if (!approved) {
+      return;
+    }
+    const reviewedVerdict = verdict;
+    if (!verdictAllowsSigning(reviewedVerdict, acknowledged)) {
+      return;
+    }
+
+    // The password modal is open for seconds. That window is the whole attack:
+    // a second SIGN: draining the vault lands while the user is typing. The
+    // handler poisons the session in that case; re-check after the await.
     const authorized = await requestAuth();
     if (!authorized) {
+      return;
+    }
+    if (supersededRef.current || txRef.current !== approved) {
+      teardown();
+      setError(
+        'the signing request changed while you were authenticating — nothing was signed. re-join to review the new request.',
+      );
+      setStep('error');
       return;
     }
 
@@ -197,8 +291,8 @@ export const MultisigSign = () => {
         throw new Error('failed to decrypt multisig keys');
       }
 
-      const sighash = sighashRef.current;
-      const alphas = alphasRef.current;
+      // sign the snapshot, never the live ref.
+      const { sighash, alphas } = approved;
       const numActions = alphas.length;
 
       setProgress(`round 1: generating ${numActions} commitment(s)...`);
@@ -219,6 +313,13 @@ export const MultisigSign = () => {
         () => peerCommitsRawRef.current.length >= ms.threshold - 1,
         sessionDeadline,
       );
+
+      // round 1 also waits on the network. Signing `approved` already makes a
+      // late swap harmless, but there is no reason to release shares into a
+      // session we know has been tampered with.
+      if (supersededRef.current || txRef.current !== approved) {
+        throw new Error('signing request changed mid-session — aborted before releasing any share');
+      }
 
       // split each peer's "c0|c1|..." into per-action lists.
       const peerPerAction: string[][] = Array.from({ length: numActions }, () => []);
@@ -371,11 +472,17 @@ export const MultisigSign = () => {
               </Sensitive>
             </div>
             <div className='flex items-baseline justify-between'>
-              <span className='text-label tracking-wider text-fg-muted'>fee</span>
+              <span className='text-label tracking-wider text-fg-muted'>fee (host claim)</span>
               <Sensitive className='tabular text-xs text-fg-muted'>
                 {formatZec(feeZat)} ZEC
               </Sensitive>
             </div>
+            {/* The fee is the one number on this screen that is NOT derived
+                from the bytes — see assessClaimedFee(). Say so rather than
+                letting it sit next to verified fields looking equally solid. */}
+            <p className='text-label text-fg-dim'>
+              fee is reported by the host and cannot be checked against the transaction bytes
+            </p>
           </div>
 
           {/* verifier verdict */}
@@ -389,7 +496,7 @@ export const MultisigSign = () => {
             <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-2.5 text-label text-green-400 flex items-start gap-2'>
               <span className='i-lucide-shield-check size-3.5 mt-0.5 shrink-0' />
               <span>
-                bytes verified - derived recipient + amount match host claim
+                recipient, amount and sighash verified against the transaction bytes
                 {verdict.changeZat > 0n && (
                   <>
                     {' '}
@@ -397,13 +504,21 @@ export const MultisigSign = () => {
                     self)
                   </>
                 )}
+                . the fee is not covered by this check.
               </span>
             </div>
           )}
-          {verdict.kind === 'unverified' && (
-            <div className='rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-2.5 text-label text-yellow-400 flex items-start gap-2'>
-              <span className='i-lucide-alert-triangle size-3.5 mt-0.5 shrink-0' />
-              <span>host claim shown without verification - {verdict.reason}</span>
+          {verdict.kind === 'refuse' && (
+            <div className='rounded-lg border border-red-500/60 bg-red-500/10 p-3 flex flex-col gap-2'>
+              <div className='flex items-center gap-2 text-body font-medium text-red-400'>
+                <span className='i-lucide-shield-x size-4' />
+                cannot verify - signing refused
+              </div>
+              <ul className='text-label text-red-300/90 list-disc pl-4 space-y-0.5'>
+                {verdict.reasons.map((r, i) => (
+                  <li key={i}>{r}</li>
+                ))}
+              </ul>
             </div>
           )}
           {verdict.kind === 'mismatch' && (
@@ -456,9 +571,7 @@ export const MultisigSign = () => {
             </button>
             <button
               onClick={() => void handleApprove()}
-              disabled={
-                verdict.kind === 'pending' || (verdict.kind === 'mismatch' && !acknowledged)
-              }
+              disabled={!verdictAllowsSigning(verdict, acknowledged)}
               className='rounded-lg border border-primary/40 bg-primary/5 py-2 text-xs text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
             >
               {verdict.kind === 'mismatch' ? 'approve anyway' : 'approve & sign'}
