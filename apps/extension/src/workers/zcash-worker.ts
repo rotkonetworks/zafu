@@ -808,7 +808,7 @@ const DB_NAME = 'zafu-zcash';
 // keys (meta needs no schema change; the store is generic key/value).
 // Strictly additive: orchard stores and keys are untouched, so v3 databases
 // upgrade cleanly with no data migration.
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
 let sharedDb: IDBDatabase | null = null;
 
@@ -849,6 +849,21 @@ const getDb = (): Promise<IDBDatabase> => {
         const store = db.createObjectStore('witnesses-ironwood', {
           keyPath: ['walletId', 'nullifier'],
         });
+        store.createIndex('byWallet', 'walletId', { unique: false });
+      }
+      // v5: a local record of what WE sent.
+      //
+      // History was derived entirely by re-scanning the chain, which cannot
+      // work for outgoing payments: a note sent to someone else is encrypted
+      // to THEIR key, so scanning recovers it only via OVK decryption, and the
+      // recipient/memo/fee the user actually chose are not reliably
+      // reconstructible at all. The result is a send that shows up partially,
+      // late, or not until a rescan.
+      //
+      // We know all of it at broadcast time. Write it down then, and treat the
+      // chain as confirmation rather than as the source of truth.
+      if (!db.objectStoreNames.contains('sent')) {
+        const store = db.createObjectStore('sent', { keyPath: ['walletId', 'txid'] });
         store.createIndex('byWallet', 'walletId', { unique: false });
       }
     };
@@ -2076,6 +2091,38 @@ const backfillWitnesses = async (
  *            ironwood equivalent of build_witnesses_and_paths, so nothing
  *            is persisted on this path - sync repopulates witnesses).
  */
+export interface SentTxRecord {
+  walletId: string;
+  txid: string;
+  /** zatoshi, as a decimal string (bigint is not structured-cloneable to IDB reliably) */
+  amount: string;
+  fee: string;
+  recipient: string;
+  pool: NotePool | 'transparent';
+  kind: 'send' | 'shield' | 'migrate';
+  memo?: string;
+  /** wall-clock ms at broadcast; the chain supplies the height later */
+  sentAt: number;
+}
+
+/**
+ * Record an outgoing transaction the moment it is broadcast.
+ *
+ * Deliberately best-effort: a failure here must never fail a send that the
+ * network has already accepted. The chain remains the authority on whether it
+ * confirmed — this only preserves the details the chain cannot give back.
+ */
+const recordSentTx = async (rec: SentTxRecord): Promise<void> => {
+  try {
+    const db = await getDb();
+    const tx = db.transaction('sent', 'readwrite');
+    tx.objectStore('sent').put(rec);
+    await txComplete(tx);
+  } catch (e) {
+    console.warn('[zcash-worker] could not record sent tx locally:', e);
+  }
+};
+
 /** Stored ironwood witness no longer matches the network tree — recoverable. */
 class IronwoodWitnessDrift extends Error {
   constructor(height: number) {
@@ -4204,6 +4251,32 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           }
         }
 
+        // Merge in what WE recorded at broadcast. The chain cannot give these
+        // details back: an outgoing note is encrypted to the recipient, so
+        // scanning recovers a send only via OVK decryption and never recovers
+        // the recipient/memo the user actually chose. A locally recorded send
+        // also appears IMMEDIATELY, instead of waiting for the spend block to
+        // be scanned — which is why a send could look like it vanished.
+        try {
+          const sent = await idbGetAllByIndex<SentTxRecord>('sent', 'byWallet', walletId);
+          const known = new Set(histTxs.map(h => h.id));
+          for (const s of sent) {
+            if (known.has(s.txid)) {
+              continue; // chain-derived entry wins: it carries the real height
+            }
+            histTxs.push({
+              id: s.txid,
+              // not yet seen on chain; sorts to the top as pending
+              height: Number.MAX_SAFE_INTEGER,
+              type: 'send',
+              amount: s.amount,
+              asset: 'ZEC',
+            });
+          }
+        } catch (e) {
+          console.warn('[zcash-worker] could not read local sent records:', e);
+        }
+
         // sort by height descending (newest first)
         histTxs.sort((a, b) => b.height - a.height);
 
@@ -4752,6 +4825,17 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             }
             const iwTxid = await resolveBroadcastTxid(iwResult, iwTxHex, sendPayload.serverUrl);
             await markNotesSpentLocally(walletId, sendState, selected, iwTxid);
+            await recordSentTx({
+              walletId,
+              txid: iwTxid,
+              amount: amountZat.toString(),
+              fee: fee.toString(),
+              recipient: sendPayload.recipient,
+              pool: 'ironwood',
+              kind: 'send',
+              memo: sendPayload.memo,
+              sentAt: Date.now(),
+            });
             const iwTotalDuration = ((performance.now() - sendStart) / 1000).toFixed(1);
             emitProgress('complete', `txid=${iwTxid}, total=${iwTotalDuration}s`);
             workerSelf.postMessage({
@@ -4838,6 +4922,17 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
           const txid = await resolveBroadcastTxid(result, txHex, sendPayload.serverUrl);
           await markNotesSpentLocally(walletId, sendState, selected, txid);
+          await recordSentTx({
+            walletId,
+            txid,
+            amount: amountZat.toString(),
+            fee: fee.toString(),
+            recipient: sendPayload.recipient,
+            pool: sendActivePool,
+            kind: 'send',
+            memo: sendPayload.memo,
+            sentAt: Date.now(),
+          });
           const totalDuration = ((performance.now() - sendStart) / 1000).toFixed(1);
           emitProgress('complete', `txid=${txid}, total=${totalDuration}s`);
 
@@ -5620,6 +5715,16 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           // launched in that window would build a conflicting spend of the
           // same notes.
           await markNotesSpentLocally(walletId, migrateState, orchardNotes, migrateHotTxid);
+          await recordSentTx({
+            walletId,
+            txid: migrateHotTxid,
+            amount: migrateAmount.toString(),
+            fee: fee.toString(),
+            recipient: 'your ironwood address',
+            pool: 'ironwood',
+            kind: 'migrate',
+            sentAt: Date.now(),
+          });
           emitProgress('complete', `txid=${migrateHotTxid}`);
           workerSelf.postMessage({
             type: 'tx-result',
