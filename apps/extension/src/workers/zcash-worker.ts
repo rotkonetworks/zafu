@@ -4651,6 +4651,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           ufvk: string;
           /** UR fragment-size override; falls back to 200 for back-compat */
           fragmentSize?: number;
+          /**
+           * The PCZT feeds a FROST multisig signing round, so the caller needs
+           * the `sighash` / `alphas` / `spendIndices` fields below. Only the
+           * orchard builder emits them; see the fail-closed guard after the
+           * spend-pool resolution.
+           */
+          frost?: boolean;
         };
         if (!sendPayload.ufvk) {
           throw new Error('UFVK required for PCZT build');
@@ -4708,6 +4715,31 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const sendTip = await sendClient.getTip();
         const pcztPool: NotePool =
           sendTip.height >= NU6_3_ACTIVATION_HEIGHT ? 'ironwood' : 'orchard';
+
+        // FAIL-CLOSED (NU6.3 × FROST): the ironwood branch below builds via
+        // build_ironwood_send_pczt, which returns only { pczt_hex, summary,
+        // action_count } — no sighash, no per-spend alphas, no spend indices —
+        // so it posts them back empty. A FROST caller would then run ZERO
+        // signing rounds (numActions = alphas.length = 0) and hand an empty
+        // signature set to complete_orchard_pczt, which is orchard/v5-only
+        // anyway. Refuse up front rather than burn a halo2 prove on a PCZT the
+        // multisig path cannot sign.
+        // TODO(ironwood FROST): needs wasm-side work before this can be lifted —
+        //   1. an ironwood PCZT builder that returns the ZIP-244 sighash, the
+        //      per-spend randomizers (alphas) and the spend indices;
+        //   2. an ironwood/v6 analogue of complete_orchard_pczt to inject the
+        //      aggregated SpendAuth sigs and extract the tx;
+        //   3. ironwood/v6-aware co-signer verification — frost_parse_tx_outputs
+        //      and frost_inspect_pczt_outputs both read the ORCHARD bundle and
+        //      recompute a v5 sighash, so they cannot bind an ironwood spend's
+        //      display to the message the signers commit to.
+        if (pcztPool === 'ironwood' && sendPayload.frost) {
+          throw new Error(
+            'FROST multisig cannot sign ironwood (NU6.3) spends yet - the ironwood PCZT ' +
+              'builder emits no sighash/alphas and the co-sign path is orchard-only; ' +
+              'multisig sends are unavailable until ironwood FROST support ships',
+          );
+        }
 
         // FAIL-CLOSED: never build an orchard PCZT the network rejects
         // post-NU6.3. If the active pool is ironwood but the wallet holds no
@@ -5461,12 +5493,17 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           const nZOutputs = isTransparent ? 0 : 1;
           const nTOutputs = isTransparent ? 1 : 0;
 
-          // estimate fee and select notes
+          // Estimate fee and select notes. The pool is pinned to orchard to
+          // match the build_signed_spend / buildWitnesses('orchard') calls
+          // below; the NU6.3 guard above already refused post-activation, so
+          // orchard is the only reachable pool here. Passed explicitly rather
+          // than leaning on selectNotes' legacy default.
           const estFee = computeFee(1, nZOutputs, nTOutputs, true);
           const selected = selectNotes(
             multiState.notes,
             multiState.spentNullifiers,
             amountZat + estFee,
+            'orchard',
           );
 
           // compute exact fee

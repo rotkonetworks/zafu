@@ -369,6 +369,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         if (!ufvk) {
           throw new Error('UFVK required for airgap multisig PCZT build');
         }
+        // frost=true: the worker fails closed post-NU6.3 rather than return an
+        // ironwood PCZT with empty sighash/alphas that no co-signer can sign.
         const result = await buildSendTxPcztInWorker(
           'zcash',
           walletId,
@@ -379,6 +381,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           0,
           mainnet,
           ufvk,
+          true,
         );
         if (!result.pcztHex) {
           throw new Error('PCZT build succeeded but pcztHex is empty — reload the extension');
@@ -405,6 +408,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         if (!ufvk) {
           throw new Error('UFVK required for multisig PCZT build');
         }
+        // frost=true: see the airgap branch above — post-NU6.3 the worker
+        // refuses rather than build an ironwood PCZT the FROST rounds and
+        // complete_orchard_pczt (orchard/v5-only) cannot consume.
         const result = await buildSendTxPcztInWorker(
           'zcash',
           walletId,
@@ -415,6 +421,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           0,
           mainnet,
           ufvk,
+          true,
         );
 
         setFee((Number(result.fee) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, ''));
