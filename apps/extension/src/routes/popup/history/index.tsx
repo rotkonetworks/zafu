@@ -19,6 +19,16 @@ interface ParsedTransaction {
   timestamp: number | null;
   type: 'send' | 'receive' | 'shield' | 'swap' | 'delegate' | 'undelegate' | 'unknown';
   description: string;
+  /**
+   * Confirmation state. Absent means the source only ever reports settled
+   * transactions (penumbra) and the row is treated as confirmed.
+   */
+  status?: 'pending' | 'confirmed' | 'failed';
+  /**
+   * `amount` is a ceiling, not a figure: the change coming back from this send
+   * has not been scanned yet, so the true amount is at most this.
+   */
+  amountUpperBound?: boolean;
   amount?: string;
   asset?: string;
   /** penumbra account indices associated with this transaction (from visible actions) */
@@ -138,16 +148,36 @@ function formatTimestamp(ts: number | null): string {
 function TransactionRow({ tx }: { tx: ParsedTransaction }) {
   const isIncoming = tx.type === 'receive';
   const isShield = tx.type === 'shield';
+  const isPending = tx.status === 'pending';
+  const isFailed = tx.status === 'failed';
 
   return (
-    <div className='flex items-center gap-3 rounded-lg border border-border-soft bg-elev-1 p-3 hover:border-fg-muted/30 transition-colors'>
+    <div
+      className={cn(
+        'flex items-center gap-3 rounded-lg border bg-elev-1 p-3 hover:border-fg-muted/30 transition-colors',
+        isFailed ? 'border-hanko/40' : 'border-border-soft',
+        isPending && 'border-dashed',
+      )}
+    >
       <div
         className={cn(
           'flex h-10 w-10 items-center justify-center rounded-full',
-          isShield ? 'bg-blue-500/10' : isIncoming ? 'bg-green-500/10' : 'bg-elev-2',
+          isPending || isFailed
+            ? 'bg-elev-2'
+            : isShield
+              ? 'bg-blue-500/10'
+              : isIncoming
+                ? 'bg-green-500/10'
+                : 'bg-elev-2',
         )}
       >
-        {isShield ? (
+        {/* an unsettled transaction is described by its state, not its
+            direction — the direction stops mattering until it lands */}
+        {isPending ? (
+          <span className='i-lucide-circle-dashed h-5 w-5 animate-pulse text-fg-dim' />
+        ) : isFailed ? (
+          <span className='i-lucide-x h-5 w-5 text-hanko' />
+        ) : isShield ? (
           <span className='i-lucide-move-horizontal h-5 w-5 text-blue-500' />
         ) : isIncoming ? (
           <span className='i-lucide-arrow-down h-5 w-5 text-green-400' />
@@ -158,15 +188,29 @@ function TransactionRow({ tx }: { tx: ParsedTransaction }) {
 
       <div className='flex-1 min-w-0'>
         <div className='flex items-center justify-between gap-2'>
-          <span className='text-sm font-medium'>{tx.description}</span>
+          <span
+            className={cn(
+              'text-sm font-medium',
+              isPending && 'text-fg-muted',
+              isFailed && 'text-hanko',
+            )}
+          >
+            {tx.description}
+          </span>
           {tx.amount && (
             <span
               className={cn(
                 'text-sm font-mono',
-                isShield ? 'text-blue-500' : isIncoming ? 'text-green-400' : 'text-fg-muted',
+                isFailed && 'text-fg-dim line-through',
+                !isFailed && isShield && 'text-blue-500',
+                !isFailed && !isShield && isIncoming && 'text-green-400',
+                !isFailed && !isShield && !isIncoming && 'text-fg-muted',
               )}
             >
-              {isIncoming ? '+' : ''}
+              {/* "at most": the change coming back has not been scanned, so
+                  the real figure is below this. Better vague than overstated —
+                  reporting gross inputs told users they had spent everything. */}
+              {tx.amountUpperBound ? '≤ ' : isIncoming ? '+' : ''}
               <Sensitive>
                 {tx.amount} {tx.asset ?? ''}
               </Sensitive>
@@ -175,8 +219,21 @@ function TransactionRow({ tx }: { tx: ParsedTransaction }) {
         </div>
         <div className='flex items-center justify-between gap-2 mt-0.5'>
           <p className='text-xs text-fg-muted font-mono truncate'>{tx.id.slice(0, 16)}...</p>
-          <span className='text-xs text-fg-muted whitespace-nowrap'>
-            {tx.height > 0 ? `#${tx.height}` : formatTimestamp(tx.timestamp)}
+          {/* no height means no block to name — say what is actually known
+              rather than printing a confident-looking `#0` */}
+          <span
+            className={cn(
+              'text-xs whitespace-nowrap lowercase',
+              isFailed ? 'text-hanko' : 'text-fg-muted',
+            )}
+          >
+            {tx.height > 0
+              ? `#${tx.height}`
+              : isPending
+                ? `${formatTimestamp(tx.timestamp)} · unconfirmed`
+                : isFailed
+                  ? 'expired'
+                  : formatTimestamp(tx.timestamp)}
           </span>
         </div>
       </div>
@@ -249,14 +306,37 @@ export const HistoryPage = () => {
 
       const entries = await getHistoryInWorker('zcash', walletId, zidecarUrl, tAddresses);
 
+      // the worker already returns these in display order — pending first,
+      // then failed, then confirmed by height. Re-sorting here by height would
+      // bury every heightless row at the bottom.
       const txs: ParsedTransaction[] = entries.map(e => ({
         id: e.id,
         height: e.height,
-        timestamp: null,
+        timestamp: e.sentAt ?? null,
         type: e.type as ParsedTransaction['type'],
-        description: e.type === 'send' ? 'sent' : e.type === 'shield' ? 'shielded' : 'received',
+        // the verb must match the state: a broadcast we have not seen mined is
+        // not "sent", and saying it is was the whole problem
+        description:
+          e.status === 'pending'
+            ? e.kind === 'migrate'
+              ? 'migrating'
+              : e.kind === 'shield'
+                ? 'shielding'
+                : 'sending'
+            : e.status === 'failed'
+              ? 'did not confirm'
+              : e.kind === 'migrate'
+                ? 'migrated'
+                : e.type === 'send'
+                  ? 'sent'
+                  : e.type === 'shield'
+                    ? 'shielded'
+                    : 'received',
+        // what left the wallet (recipient + fee), not the notes spent as inputs
         amount: zatoshiToZec(BigInt(e.amount)),
         asset: e.asset,
+        status: e.status,
+        amountUpperBound: e.amountUpperBound,
       }));
 
       setTransactions(txs);

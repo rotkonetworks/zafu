@@ -14,8 +14,10 @@
 
 import { useEffect, useState } from 'react';
 import {
+  getPendingSendsInWorker,
   getPoolBalancesInWorker,
   getPoolNotesInWorker,
+  type HistoryEntry,
   type PoolBalances,
   type PoolNotes,
 } from '../state/keyring/network-worker';
@@ -110,6 +112,28 @@ export function usePoolNotes(walletId: string | undefined, syncTick?: number): P
   return useWorkerPoolValue(
     id => getPoolNotesInWorker('zcash', id),
     EMPTY_POOL_NOTES,
+    walletId,
+    syncTick,
+  );
+}
+
+/** No sends in flight — the value before the first fetch resolves. */
+const EMPTY_PENDING: HistoryEntry[] = [];
+
+/**
+ * Sends this wallet has broadcast that the chain has not confirmed, plus any
+ * that provably expired. Same refetch cadence as the balances beside them,
+ * which matters: the two numbers are read together and must not disagree.
+ *
+ * This exists so the balance can explain itself. `markNotesSpentLocally`
+ * already deducts an in-flight send the instant we broadcast, so the figure
+ * drops immediately — correct, but unexplained, and an unexplained drop is
+ * indistinguishable from money going missing.
+ */
+export function usePendingSends(walletId: string | undefined, syncTick?: number): HistoryEntry[] {
+  return useWorkerPoolValue(
+    id => getPendingSendsInWorker('zcash', id),
+    EMPTY_PENDING,
     walletId,
     syncTick,
   );

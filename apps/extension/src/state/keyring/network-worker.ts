@@ -43,6 +43,7 @@ export interface NetworkWorkerMessage {
     | 'decrypt-memos'
     | 'get-transparent-history'
     | 'get-history'
+    | 'get-pending-sends'
     | 'sync-memos'
     | 'frost-dkg-part1'
     | 'frost-dkg-part2'
@@ -91,6 +92,7 @@ export interface NetworkWorkerResponse {
     | 'memos'
     | 'transparent-history'
     | 'history'
+    | 'pending-sends'
     | 'memos-result'
     | 'sync-memos-progress'
     | 'mempool-update'
@@ -588,13 +590,38 @@ export const getTransparentHistoryInWorker = async (
   return callWorker(network, 'get-transparent-history', { serverUrl, tAddresses });
 };
 
-/** computed history entry from worker */
+/**
+ * computed history entry from worker
+ *
+ * `status` is the honest one: `confirmed` is claimed only on the strength of a
+ * real block height, `pending` means broadcast and not yet seen (we do not know
+ * whether it will confirm), `failed` means the wallet has scanned past the
+ * transaction's own expiry height without finding it. The fields below `status`
+ * exist only for transactions this wallet sent — the chain cannot supply them.
+ */
 export interface HistoryEntry {
   id: string;
+  /** real block height, or 0 when there is not one yet — never a sentinel */
   height: number;
   type: 'send' | 'receive' | 'shield';
-  amount: string; // zatoshis as string
+  /**
+   * zatoshis as a string. For a send this is what LEFT the wallet — recipient
+   * amount plus fee — not the gross value of the notes spent as inputs. Change
+   * comes back to you and was never spent.
+   */
+  amount: string;
   asset: string;
+  status: 'pending' | 'confirmed' | 'failed';
+  /** `amount` is a ceiling: change may exist but has not been scanned yet */
+  amountUpperBound?: boolean;
+  kind?: 'send' | 'shield' | 'migrate';
+  /** zatoshis the recipient received, excluding fee */
+  recipientAmount?: string;
+  recipient?: string;
+  memo?: string;
+  fee?: string;
+  sentAt?: number;
+  expiryHeight?: number;
 }
 
 /**
@@ -607,6 +634,19 @@ export const getHistoryInWorker = async (
   tAddresses: string[],
 ): Promise<HistoryEntry[]> => {
   return callWorker(network, 'get-history', { serverUrl, tAddresses }, walletId);
+};
+
+/**
+ * Sends this wallet broadcast that the chain has not confirmed (plus any that
+ * provably expired). Answered from local state only — no network — so it is
+ * cheap enough to refetch on every sync tick, which is what the balance panel
+ * needs in order to explain a temporarily reduced figure.
+ */
+export const getPendingSendsInWorker = async (
+  network: NetworkType,
+  walletId: string,
+): Promise<HistoryEntry[]> => {
+  return callWorker(network, 'get-pending-sends', {}, walletId);
 };
 
 /** memo result from worker sync */
