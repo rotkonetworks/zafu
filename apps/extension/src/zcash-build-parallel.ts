@@ -265,7 +265,20 @@ async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
       break;
 
     case 'build_shielding':
-      result = wasm['build_shielding_transaction'](
+      // Pool is resolved from the target height IN RUST, not here.
+      // build_shielding_transaction (orchard) is now fail-closed at NU6.3:
+      // shielding into orchard post-activation creates a note that cannot be
+      // spent and needs a turnstile migration plus a second fee to recover.
+      // _auto takes the same arguments and picks ironwood at/after activation,
+      // so the stranded pool cannot be selected by omission.
+      if (typeof wasm['build_shielding_transaction_auto'] !== 'function') {
+        throw new Error(
+          'this wasm build predates ironwood shielding - rebuild the wasm ' +
+            '(see packages/zcash-wasm/BUILD_PROVENANCE.md); shielding into orchard ' +
+            'after NU6.3 would strand the funds',
+        );
+      }
+      result = wasm['build_shielding_transaction_auto'](
         a[0],
         a[1],
         a[2],
@@ -273,7 +286,8 @@ async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
         BigInt(a[4] as string),
         a[5],
         a[6],
-        a[7] ?? null, // branch_id_hex (live consensus branch id; null -> WASM NU6.2 fallback)
+        a[7] ?? null, // branch_id_hex (live consensus branch id; required at NU6.3)
+        a[8] ?? null, // memo_hex
       );
       break;
 
