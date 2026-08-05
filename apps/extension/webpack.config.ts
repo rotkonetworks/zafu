@@ -251,8 +251,9 @@ export default ({
             from: path.join(wasmPackage, 'wasm-parallel'),
             to: 'wasm-parallel',
           },
-          // zcash-wasm: both zafu-wasm/ (scanning) and zafu-wasm-parallel/ (proving)
-          // come from public/ via the 'public' pattern above
+          // zcash-wasm: public/zafu-wasm/ serves BOTH the scanning worker and
+          // the offscreen prover (one parallel build, one path) — copied via
+          // the 'public' pattern above
           // docs: bundled mdBook output
           {
             from: path.resolve(__dirname, '../../docs/book'),
