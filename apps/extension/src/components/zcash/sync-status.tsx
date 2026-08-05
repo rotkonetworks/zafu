@@ -34,7 +34,17 @@ export interface SyncStatusProps {
   stages: SyncStage[];
   /** true during a wallet's first scan — adds the resume-on-reopen line */
   firstSync: boolean;
+  /**
+   * The human message — a classified `SyncFailure.message`, never a raw
+   * worker or wasm error. See `state/sync-failure.ts`.
+   */
   error?: string;
+  /**
+   * The raw error text. Diagnostics only: kept out of the message and shown
+   * behind the "technical details" disclosure, because a height, a hash, or
+   * a type name is not something a person holding money can act on.
+   */
+  errorDetail?: string;
   errorAction?: { label: string; onClick: () => void };
   /** resume the sync from where it stopped — for transient backend errors */
   onRetry?: () => void;
@@ -92,11 +102,13 @@ export const SyncStatus = ({
   stages,
   firstSync,
   error,
+  errorDetail,
   errorAction,
   onRetry,
   onRescan,
 }: SyncStatusProps) => {
   const [open, setOpen] = useState(false);
+  const [showDetail, setShowDetail] = useState(false);
   const [editing, setEditing] = useState(false);
   const [input, setInput] = useState('');
 
@@ -202,16 +214,37 @@ export const SyncStatus = ({
         <div className='overflow-hidden'>
           <div className='mt-2 flex flex-col gap-2 rounded-md border border-border-soft bg-elev-1 p-3'>
             {error && (
-              <div className='flex flex-wrap items-baseline gap-x-2 gap-y-1'>
-                <span className='text-xs text-red-400 break-words'>{error}</span>
-                {errorAction && (
-                  <button
-                    type='button'
-                    onClick={errorAction.onClick}
-                    className='text-label text-zigner-gold underline-offset-2 hover:underline lowercase'
-                  >
-                    {errorAction.label}
-                  </button>
+              <div className='flex flex-col gap-1'>
+                <div className='flex flex-wrap items-baseline gap-x-2 gap-y-1'>
+                  <span className='text-xs text-red-400 break-words'>{error}</span>
+                  {errorAction && (
+                    <button
+                      type='button'
+                      onClick={errorAction.onClick}
+                      className='text-label text-zigner-gold underline-offset-2 hover:underline lowercase'
+                    >
+                      {errorAction.label}
+                    </button>
+                  )}
+                </div>
+                {/* The raw error still exists — it is just not the thing we
+                    say to someone holding money. One tap away, for a bug
+                    report or a support chat. */}
+                {errorDetail && errorDetail !== error && (
+                  <div>
+                    <button
+                      type='button'
+                      onClick={() => setShowDetail(v => !v)}
+                      className='text-label text-fg-dim underline-offset-2 hover:text-fg-muted hover:underline lowercase'
+                    >
+                      {showDetail ? 'hide technical details' : 'technical details'}
+                    </button>
+                    {showDetail && (
+                      <p className='mt-1 font-mono text-label text-fg-dim break-all whitespace-pre-wrap'>
+                        {errorDetail}
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
             )}

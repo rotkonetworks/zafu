@@ -13,6 +13,7 @@ import type { ZcashClient } from '../state/keyring/zcash-backend';
 import { useStore } from '../state';
 import { selectEffectiveKeyInfo } from '../state/keyring';
 import { zcashSyncHeightKey } from '../state/keyring/network-worker';
+import { classifySyncFailure, type SyncFailure } from '../state/sync-failure';
 
 const DEFAULT_ZIDECAR_URL = 'https://zcash.rotko.net';
 const POLL_INTERVAL = 10_000;
@@ -28,6 +29,11 @@ export interface ZcashSyncState {
   workerChainHeight: number;
   isLoading: boolean;
   error: Error | null;
+  /**
+   * The classified failure. `failure.message` is the ONLY string a user may
+   * be shown; `failure.raw` is diagnostics and belongs behind a disclosure.
+   */
+  failure: SyncFailure | null;
 }
 
 export function useZcashSyncStatus(): ZcashSyncState {
@@ -42,24 +48,32 @@ export function useZcashSyncStatus(): ZcashSyncState {
   // the sync bar surface "endpoint won't respond - switch node" instead of
   // silently sitting at 0%.
   const [workerError, setWorkerError] = useState<Error | null>(null);
+  // The same failure, classified. Kept alongside the Error so callers that
+  // only need "did sync fail" are unaffected.
+  const [workerFailure, setWorkerFailure] = useState<SyncFailure | null>(null);
 
   // reset on wallet switch
   useEffect(() => {
     setWorkerSyncHeight(0);
     setWorkerChainHeight(0);
     setWorkerError(null);
+    setWorkerFailure(null);
   }, [activeWalletId]);
 
   // listen for sync errors relayed from the worker (network-worker.ts) and
   // dispatched by the auto-sync hook on start failures
   useEffect(() => {
     const handler = (e: Event) => {
-      const detail = (e as CustomEvent<{ walletId?: string; message?: string }>).detail;
+      const detail = (e as CustomEvent<{ walletId?: string; message?: string; code?: string }>)
+        .detail;
       if (activeWalletId && detail?.walletId && detail.walletId !== activeWalletId) {
         return;
       }
       if (typeof detail?.message === 'string') {
         setWorkerError(new Error(detail.message));
+        // Classify here, once, at the boundary — so no view is ever tempted
+        // to render the raw worker text.
+        setWorkerFailure(classifySyncFailure(detail.message, detail.code));
       }
     };
     window.addEventListener('zcash-sync-error', handler);
@@ -81,10 +95,12 @@ export function useZcashSyncStatus(): ZcashSyncState {
         setWorkerSyncHeight(detail.currentHeight);
         // forward progress means the endpoint is responding - clear stale error
         setWorkerError(null);
+        setWorkerFailure(null);
       }
       if (typeof detail.chainHeight === 'number') {
         setWorkerChainHeight(detail.chainHeight);
         setWorkerError(null);
+        setWorkerFailure(null);
       }
     };
 
@@ -156,5 +172,10 @@ export function useZcashSyncStatus(): ZcashSyncState {
     // workerError (sync loop / auto-sync failures) takes precedence over the
     // status/tip query errors - it's the one the user actually needs to act on.
     error: workerError ?? syncError ?? tipError,
+    // Query errors have no structured code (they come out of fetch), so they
+    // are sniffed; worker failures were classified when they arrived.
+    failure:
+      workerFailure ??
+      ((syncError ?? tipError) ? classifySyncFailure(syncError ?? tipError) : null),
   };
 }
