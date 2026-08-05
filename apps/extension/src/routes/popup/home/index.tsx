@@ -968,7 +968,13 @@ const ZcashContent = ({
         : 0;
   const scanRange = Math.max(1, chainHeight - walletBirthday);
   const scanProgress = Math.max(0, workerSyncHeight - walletBirthday);
-  const scanPct = chainHeight > 0 ? Math.min(100, Math.round((scanProgress / scanRange) * 100)) : 0;
+  // FLOOR, not round. Rounding declared "synced" at 99.5%, which with a
+  // birthday a million blocks back is ~5,000 unscanned blocks presented as a
+  // final balance — and it gated the "get your first zec" prompt, so a wallet
+  // with unscanned receipts told the user they had none.
+  const scanPct = chainHeight > 0 ? Math.min(100, Math.floor((scanProgress / scanRange) * 100)) : 0;
+  // "synced" must mean every block was read, not 100 after rounding.
+  const scanComplete = chainHeight > 0 && scanProgress >= scanRange;
 
   // Synced means "this wallet has scanned every block up to the tip" — that
   // is what makes the balance correct, and it is entirely the wallet's own
@@ -981,7 +987,7 @@ const ZcashContent = ({
   // So the scan decides synced, and verification is reported as its own
   // stage. Note this is a display decision only: it does not weaken any
   // check, and an actually-failed proof still surfaces as a sync error.
-  const allSynced = scanPct >= 100;
+  const allSynced = scanComplete;
 
   // Right after a birthday change the worker's last reported height can sit
   // at or below the new start height - that's 0 scan progress, not a reason

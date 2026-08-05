@@ -73,13 +73,21 @@ const fmtZec = (zat: bigint): string => {
   return `${whole}.${padded}`;
 };
 
-/** subtotal of note values in zatoshi. */
-const subtotal = (notes: DecryptedNoteWithTxid[]): bigint =>
-  notes.reduce((sum, n) => sum + BigInt(n.value), 0n);
-
 /** true when the note has been spent (worker sets `spent` and/or spent_by_txid). */
 const isSpent = (note: DecryptedNoteWithTxid): boolean =>
   note.spent === true || (!!note.spent_by_txid && note.spent_by_txid.length > 0);
+
+/**
+ * Subtotal of UNSPENT note values in zatoshi.
+ *
+ * This summed every note including ones the very same view labels "spent", so
+ * a wallet that had spent its whole orchard balance still showed
+ * "orchard - 7 notes / 4.9000 ZEC" above a list where every row read spent —
+ * and contradicted the hero balance that links here. A pool subtotal means
+ * "what is in this pool", and a spent note is not.
+ */
+const subtotal = (notes: DecryptedNoteWithTxid[]): bigint =>
+  notes.reduce((sum, n) => (isSpent(n) ? sum : sum + BigInt(n.value)), 0n);
 
 /**
  * Fallback per-pool notes hook. Fetches the wallet's full note set from the
