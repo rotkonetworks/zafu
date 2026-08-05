@@ -12,6 +12,7 @@ import { LightwalletdClient } from '../state/keyring/lightwalletd-client';
 import type { ZcashClient } from '../state/keyring/zcash-backend';
 import { useStore } from '../state';
 import { selectEffectiveKeyInfo } from '../state/keyring';
+import { zcashSyncHeightKey } from '../state/keyring/network-worker';
 
 const DEFAULT_ZIDECAR_URL = 'https://zcash.rotko.net';
 const POLL_INTERVAL = 10_000;
@@ -91,14 +92,23 @@ export function useZcashSyncStatus(): ZcashSyncState {
     return () => window.removeEventListener('network-sync-progress', handler);
   }, [activeWalletId]);
 
-  // also try to read persisted sync height on mount
+  // Hydrate from the last height the worker reported for THIS wallet, so a
+  // freshly-opened popup does not spend its first seconds claiming the scan
+  // is at 0 while the worker boots. Re-runs on wallet switch (the reset
+  // effect above zeroes it first), and the per-wallet key means one wallet's
+  // progress can never be shown for another's.
   useEffect(() => {
-    chrome.storage.local.get('zcashSyncHeight', result => {
-      if (result['zcashSyncHeight'] && typeof result['zcashSyncHeight'] === 'number') {
-        setWorkerSyncHeight(h => Math.max(h, result['zcashSyncHeight'] as number));
+    if (!activeWalletId) {
+      return;
+    }
+    const key = zcashSyncHeightKey(activeWalletId);
+    chrome.storage.local.get(key, result => {
+      const stored = result[key];
+      if (typeof stored === 'number' && stored > 0) {
+        setWorkerSyncHeight(h => Math.max(h, stored));
       }
     });
-  }, []);
+  }, [activeWalletId]);
 
   const client = useCallback(
     (): ZcashClient =>

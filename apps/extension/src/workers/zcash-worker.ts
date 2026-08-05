@@ -828,6 +828,19 @@ const getDb = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onerror = () => reject(req.error);
+    // A version upgrade (4 -> 5 added the 'sent' store) cannot run while any
+    // other context still holds a lower-version connection to 'zafu-zcash'.
+    // The open request then fires 'blocked' and NEVER settles: no success, no
+    // error. Every await on getDb() hangs, runSync stalls before it emits a
+    // single height, and the wallet sits at "scanning notes 0%" with nothing
+    // in the log. Fail loudly instead — the caller surfaces it and a reload
+    // (which drops the other connection) fixes it.
+    req.onblocked = () =>
+      reject(
+        new Error(
+          `IndexedDB upgrade to v${DB_VERSION} blocked by another open connection to ${DB_NAME} — reload the extension`,
+        ),
+      );
     req.onsuccess = () => {
       sharedDb = req.result;
       resolve(sharedDb);
@@ -2756,7 +2769,20 @@ const runSync = async (
     (await idbGet<{ value: number }>('meta', [walletId, 'orchardTreeFrontierHeight']))?.value ?? 0;
 
   // Bootstrap / repair the frontier if missing or stale relative to orchardTreeSize/currentHeight.
-  const frontierSize = runningFrontier ? Number(wasmModule.frontier_tree_size(runningFrontier)) : 0;
+  // frontier_tree_size THROWS on a frontier it cannot parse, and this call sits
+  // before the first sync-progress emit — an unparseable stored frontier (or a
+  // wasm instance left poisoned by an earlier panic) therefore killed runSync
+  // outright and the wallet never reported a height again. An unreadable
+  // frontier is exactly the "stale" case the rebootstrap below already handles.
+  let frontierSize = 0;
+  if (runningFrontier) {
+    try {
+      frontierSize = Number(wasmModule.frontier_tree_size(runningFrontier));
+    } catch (e) {
+      console.warn('[zcash-worker] stored orchard frontier unreadable, rebootstrapping:', e);
+      runningFrontier = '';
+    }
+  }
   const frontierValid =
     !!runningFrontier &&
     frontierSize === orchardTreeSize &&
@@ -2792,7 +2818,18 @@ const runSync = async (
   let ironwoodFrontier: string = (await getIronwoodTreeFrontier(walletId)) ?? '';
   let ironwoodFrontierHeight = await getIronwoodTreeFrontierHeight(walletId);
   if (iwSupported && iwSizeFn) {
-    const iwFrontierSize = ironwoodFrontier ? Number(iwSizeFn(ironwoodFrontier)) : 0;
+    // Same unguarded-throw hazard as the orchard frontier above: this runs
+    // before the first sync-progress emit, so a frontier the blob cannot read
+    // silently ended the sync loop instead of triggering a rebootstrap.
+    let iwFrontierSize = 0;
+    if (ironwoodFrontier) {
+      try {
+        iwFrontierSize = Number(iwSizeFn(ironwoodFrontier));
+      } catch (e) {
+        console.warn('[zcash-worker] stored ironwood frontier unreadable, rebootstrapping:', e);
+        ironwoodFrontier = '';
+      }
+    }
     const iwFrontierValid =
       !!ironwoodFrontier &&
       iwFrontierSize === ironwoodTreeSize &&
@@ -3661,6 +3698,12 @@ const runSync = async (
   // skips waitForSyncStop. Safe to call repeatedly.
   state.mempoolAbort?.abort();
   console.log(`[zcash-worker] sync stopped wallet=${walletId}`);
+  // The loop can exit on its own (10 consecutive errors) with nobody having
+  // sent 'stop-sync'. Without this the main thread's syncingWallets set keeps
+  // the wallet listed as syncing forever and the auto-sync hook never
+  // restarts it — a wallet that has silently stopped scanning looks exactly
+  // like one that is up to date.
+  workerSelf.postMessage({ type: 'sync-stopped', id: '', network: 'zcash', walletId });
 };
 
 const getBalance = async (walletId: string): Promise<bigint> => {
@@ -3786,7 +3829,29 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           ufvk,
           effectiveBackend,
           effectiveMempoolWatch,
-        ).catch(err => console.error('[zcash-worker] runSync fatal:', err));
+        ).catch(err => {
+          // A rejection here is everything that happens OUTSIDE the batch
+          // loop's own try/catch: opening IndexedDB, loading state, deriving
+          // keys, sizing the stored frontier. Those all run BEFORE the first
+          // sync-progress is emitted, so the popup never learns a height and
+          // renders "scanning notes 0%" forever.
+          //
+          // 'sync-started' has already been posted by the time we get here, so
+          // network-worker has this wallet in syncingWallets and the auto-sync
+          // hook's isWalletSyncing() guard will refuse to ever start it again.
+          // Logging to a console nobody has open made that permanent and
+          // invisible. Report the failure and retract the started claim so the
+          // UI can surface it and a retry is possible.
+          console.error('[zcash-worker] runSync fatal:', err);
+          workerSelf.postMessage({
+            type: 'sync-error',
+            id: '',
+            network: 'zcash',
+            walletId,
+            payload: { message: err instanceof Error ? err.message : String(err) },
+          });
+          workerSelf.postMessage({ type: 'sync-stopped', id: '', network: 'zcash', walletId });
+        });
         workerSelf.postMessage({ type: 'sync-started', id, network: 'zcash', walletId });
         return;
       }
