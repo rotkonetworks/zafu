@@ -17,6 +17,7 @@ import {
 } from '../../../config/zcash-endpoints';
 import { networksSelector } from '../../../state/networks';
 import { NETWORKS, isLaunched, ZCASH_ORCHARD_ACTIVATION } from '../../../config/networks';
+import { dateToBlock, blockToDate, formatDateInput } from '../../../utils/zcash-blocks';
 
 interface NetworkOption {
   id: NetworkType;
@@ -69,24 +70,7 @@ function regionLabel(region: RpcEndpointRegion): string {
  * zcash targets 75 seconds per block. we anchor to a known block/date
  * and extrapolate. this is approximate - good enough for sync start.
  */
-// anchor at orchard activation - the earliest block we allow
-const ZCASH_ANCHOR_BLOCK = ZCASH_ORCHARD_ACTIVATION; // 1,687,104
-const ZCASH_ANCHOR_DATE = new Date('2022-05-31T00:00:00Z');
-const ZCASH_BLOCK_TIME_S = 75;
-
-const dateToBlock = (date: Date): number => {
-  const diffMs = date.getTime() - ZCASH_ANCHOR_DATE.getTime();
-  const diffBlocks = Math.floor(diffMs / (ZCASH_BLOCK_TIME_S * 1000));
-  return Math.max(ZCASH_ORCHARD_ACTIVATION, ZCASH_ANCHOR_BLOCK + diffBlocks);
-};
-
-const blockToDate = (block: number): Date => {
-  const diffBlocks = block - ZCASH_ANCHOR_BLOCK;
-  const diffMs = diffBlocks * ZCASH_BLOCK_TIME_S * 1000;
-  return new Date(ZCASH_ANCHOR_DATE.getTime() + diffMs);
-};
-
-const formatDateInput = (date: Date): string => date.toISOString().split('T')[0]!;
+// conversion lives in utils/zcash-blocks so settings shows the same numbers
 
 export const SelectNetworks = () => {
   const navigate = usePageNav();
@@ -312,7 +296,7 @@ export const SelectNetworks = () => {
 
             {zcashBirthday && (
               <p className='mt-1.5 text-label text-fg-muted'>
-                ~zcash block {Number(zcashBirthday).toLocaleString()}
+                ~zcash mainnet block {Number(zcashBirthday).toLocaleString()}
                 {zcashDate && ` (~${zcashDate})`}
               </p>
             )}

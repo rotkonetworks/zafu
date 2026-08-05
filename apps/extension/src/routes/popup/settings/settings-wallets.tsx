@@ -15,6 +15,12 @@ import { CustodyBadge } from '../../../components/custody-badge';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { ZCASH_ORCHARD_ACTIVATION, isLaunched } from '../../../config/networks';
+import {
+  describeZcashHeight,
+  dateToBlock,
+  blockToDate,
+  formatDateInput,
+} from '../../../utils/zcash-blocks';
 
 type RemovalStep = 'idle' | 'password' | 'backup' | 'confirm';
 
@@ -592,8 +598,10 @@ const VaultRow = ({
   const ref = useRef<HTMLInputElement>(null);
   const hasZcash = networks.includes('zcash');
 
-  // zcash birthday height per wallet
+  // zcash birthday, held as a height because that is what sync consumes —
+  // but entered as a date, which is the only form a person actually knows.
   const [birthday, setBirthday] = useState<string>('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const birthdayKey = `zcashBirthday_${vault.id}`;
 
   useEffect(() => {
@@ -608,16 +616,36 @@ const VaultRow = ({
     });
   }, [hasZcash, birthdayKey]);
 
-  const saveBirthday = () => {
-    const num = parseInt(birthday, 10);
-    if (!isNaN(num) && num >= ZCASH_ORCHARD_ACTIVATION) {
-      void chrome.storage.local.set({ [birthdayKey]: num });
-    } else if (!isNaN(num) && num > 0 && num < ZCASH_ORCHARD_ACTIVATION) {
-      // clamp to orchard activation — no point scanning earlier
-      setBirthday(String(ZCASH_ORCHARD_ACTIVATION));
-      void chrome.storage.local.set({ [birthdayKey]: ZCASH_ORCHARD_ACTIVATION });
-    } else if (birthday === '') {
+  const birthdayNum = parseInt(birthday, 10);
+  const birthdayValid = !isNaN(birthdayNum) && birthdayNum >= ZCASH_ORCHARD_ACTIVATION;
+  const birthdayHint = birthday.trim() ? describeZcashHeight(birthdayNum) : null;
+
+  const persist = (height: number | null) => {
+    if (height === null) {
+      setBirthday('');
       void chrome.storage.local.remove(birthdayKey);
+      return;
+    }
+    const clamped = Math.max(ZCASH_ORCHARD_ACTIVATION, height);
+    setBirthday(String(clamped));
+    void chrome.storage.local.set({ [birthdayKey]: clamped });
+  };
+
+  /** date input → height. Dates are month-accurate at best, which is fine:
+      an early birthday only costs scan time, never correctness. */
+  const onPickDate = (value: string) => {
+    if (!value) {
+      persist(null);
+      return;
+    }
+    persist(dateToBlock(new Date(value + 'T00:00:00Z')));
+  };
+
+  const saveBirthday = () => {
+    if (birthday === '') {
+      persist(null);
+    } else if (!isNaN(birthdayNum) && birthdayNum > 0) {
+      persist(birthdayNum);
     }
   };
 
@@ -688,26 +716,80 @@ const VaultRow = ({
         </button>
       </div>
 
-      {/* zcash start block */}
+      {/* zcash sync start.
+
+          Asked as a date, not a height. "when did you first use this wallet"
+          is something a person knows; block 2,910,104 is not, and a bare
+          number gives no clue which chain it belongs to — a seed vault
+          derives keys for penumbra too, so both badges sit right above this
+          field. The height still exists (sync consumes it) but it lives
+          under `advanced`, alongside the date it resolves to. */}
       {hasZcash && (
-        <div className='mt-2'>
-          <div className='flex items-center gap-2'>
-            <span className='text-label text-fg-muted whitespace-nowrap'>sync from</span>
+        <div className='mt-2 rounded-md border border-border-soft/70 px-2.5 py-2'>
+          <div className='flex flex-wrap items-center gap-2'>
+            <span className='text-label px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-400'>
+              zcash
+            </span>
+            <span className='text-label text-fg-muted whitespace-nowrap'>first used</span>
             <input
-              type='number'
-              min={ZCASH_ORCHARD_ACTIVATION}
-              step='1000'
-              value={birthday}
-              onChange={e => setBirthday(e.target.value)}
-              onBlur={saveBirthday}
-              onKeyDown={e => e.key === 'Enter' && saveBirthday()}
-              placeholder='auto'
-              className='w-24 bg-input border border-border-soft px-2 py-2 text-label font-mono rounded focus:outline-none focus:border-primary/50'
+              type='date'
+              min={formatDateInput(blockToDate(ZCASH_ORCHARD_ACTIVATION))}
+              max={formatDateInput(new Date())}
+              value={birthdayValid ? formatDateInput(blockToDate(birthdayNum)) : ''}
+              onChange={e => onPickDate(e.target.value)}
+              className='bg-input border border-border-soft px-2 py-1.5 text-label font-mono rounded focus:outline-none focus:border-primary/50'
             />
+            <button
+              type='button'
+              onClick={() => setShowAdvanced(v => !v)}
+              className='ml-auto text-label text-fg-dim hover:text-fg-muted transition-colors'
+            >
+              advanced
+              <span
+                className={cn(
+                  'i-lucide-chevron-down ml-0.5 size-3 transition-transform',
+                  showAdvanced && 'rotate-180',
+                )}
+              />
+            </button>
           </div>
-          <p className='text-label text-fg-dim mt-0.5'>
-            zcash block to sync from - scans the orchard + ironwood shielded pools
+
+          <p className='text-label text-fg-dim mt-1'>
+            {birthdayValid
+              ? 'scans the orchard + ironwood shielded pools from here.'
+              : 'not set — syncs from near the chain tip. set this if the wallet is older.'}
           </p>
+
+          {showAdvanced && (
+            <div className='mt-2 flex flex-wrap items-center gap-2 border-t border-border-soft/70 pt-2'>
+              <span className='text-label text-fg-muted whitespace-nowrap'>block</span>
+              <input
+                type='number'
+                min={ZCASH_ORCHARD_ACTIVATION}
+                step='1000'
+                value={birthday}
+                onChange={e => setBirthday(e.target.value)}
+                onBlur={saveBirthday}
+                onKeyDown={e => e.key === 'Enter' && saveBirthday()}
+                placeholder='auto'
+                className='w-24 bg-input border border-border-soft px-2 py-1.5 text-label font-mono rounded focus:outline-none focus:border-primary/50'
+              />
+              {birthdayHint && (
+                <span className={cn('text-label', birthdayHint.ok ? 'text-fg-dim' : 'text-hanko')}>
+                  {birthdayHint.text}
+                </span>
+              )}
+              {birthday && (
+                <button
+                  type='button'
+                  onClick={() => persist(null)}
+                  className='ml-auto text-label text-fg-dim hover:text-hanko transition-colors'
+                >
+                  clear
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
 
