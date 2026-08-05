@@ -30,6 +30,14 @@ import {
   padNullifierQuery,
   type CommitmentItem,
 } from './proof-decoys';
+import {
+  parseExpiryHeight,
+  reconcileSentTxs,
+  type HistoryTx,
+  type SentTxRecord,
+} from './sent-tx-reconcile';
+
+export type { SentTxRecord } from './sent-tx-reconcile';
 
 const workerSelf = globalThis as any as DedicatedWorkerGlobalScope;
 
@@ -108,6 +116,7 @@ interface WorkerMessage {
     | 'decrypt-memos'
     | 'get-transparent-history'
     | 'get-history'
+    | 'get-pending-sends'
     | 'sync-memos'
     | 'frost-dkg-part1'
     | 'frost-dkg-part2'
@@ -2091,20 +2100,6 @@ const backfillWitnesses = async (
  *            ironwood equivalent of build_witnesses_and_paths, so nothing
  *            is persisted on this path - sync repopulates witnesses).
  */
-export interface SentTxRecord {
-  walletId: string;
-  txid: string;
-  /** zatoshi, as a decimal string (bigint is not structured-cloneable to IDB reliably) */
-  amount: string;
-  fee: string;
-  recipient: string;
-  pool: NotePool | 'transparent';
-  kind: 'send' | 'shield' | 'migrate';
-  memo?: string;
-  /** wall-clock ms at broadcast; the chain supplies the height later */
-  sentAt: number;
-}
-
 /**
  * Record an outgoing transaction the moment it is broadcast.
  *
@@ -2120,6 +2115,44 @@ const recordSentTx = async (rec: SentTxRecord): Promise<void> => {
     await txComplete(tx);
   } catch (e) {
     console.warn('[zcash-worker] could not record sent tx locally:', e);
+  }
+};
+
+/**
+ * Persist what reconciliation learned: heights for sends the chain has now
+ * confirmed, and the removal of sends that provably can no longer be mined.
+ *
+ * Best-effort like the write above. History has already been rendered from the
+ * reconciled view by the time this runs; failing to persist only means the
+ * same conclusion gets recomputed on the next pass.
+ */
+const applyReconciliation = async (
+  walletId: string,
+  confirm: { txid: string; height: number }[],
+  prune: string[],
+): Promise<void> => {
+  if (confirm.length === 0 && prune.length === 0) {
+    return;
+  }
+  try {
+    const db = await getDb();
+    const tx = db.transaction('sent', 'readwrite');
+    const store = tx.objectStore('sent');
+    for (const { txid, height } of confirm) {
+      const req = store.get([walletId, txid]);
+      req.onsuccess = () => {
+        const existing = req.result as SentTxRecord | undefined;
+        if (existing) {
+          store.put({ ...existing, confirmedHeight: height });
+        }
+      };
+    }
+    for (const txid of prune) {
+      store.delete([walletId, txid]);
+    }
+    await txComplete(tx);
+  } catch (e) {
+    console.warn('[zcash-worker] could not persist sent-tx reconciliation:', e);
   }
 };
 
@@ -3840,6 +3873,58 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         return;
       }
 
+      case 'get-pending-sends': {
+        if (!walletId) {
+          throw new Error('walletId required');
+        }
+        // The balance panel needs to know what is in flight, and it needs to
+        // know cheaply — get-history fetches transparent history over the
+        // network, which is far too heavy to run on every sync tick. This
+        // answers the same question from local state only: which of our
+        // recorded sends has the chain not confirmed yet.
+        //
+        // Deliberately read-only. get-history owns writing confirmations back
+        // and pruning; two writers racing over the same records buys nothing.
+        const pendState = await loadState(walletId);
+        const pendChainTxs: Omit<HistoryTx, 'status'>[] = [];
+        for (const n of pendState.notes) {
+          if (n.txid && (n.height ?? 0) > 0) {
+            pendChainTxs.push({
+              id: n.txid,
+              height: n.height ?? 0,
+              type: 'receive',
+              amount: '0',
+              asset: 'ZEC',
+            });
+          }
+          // a spend only counts as seen once scanning has given it a height;
+          // markNotesSpentLocally sets spent_by_txid at broadcast with none
+          if (n.spent_by_txid && (n.spent_at_height ?? 0) > 0) {
+            pendChainTxs.push({
+              id: n.spent_by_txid,
+              height: n.spent_at_height ?? 0,
+              type: 'send',
+              amount: '0',
+              asset: 'ZEC',
+            });
+          }
+        }
+        const pendSent = await idbGetAllByIndex<SentTxRecord>('sent', 'byWallet', walletId);
+        const pendResult = reconcileSentTxs({
+          chainTxs: pendChainTxs,
+          sent: pendSent,
+          scannedHeight: await getSyncHeight(walletId),
+        });
+        workerSelf.postMessage({
+          type: 'pending-sends',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: pendResult.txs.filter(t => t.status !== 'confirmed'),
+        });
+        return;
+      }
+
       case 'list-wallets': {
         const wallets = await listWallets();
         workerSelf.postMessage({ type: 'wallets', id, network: 'zcash', payload: wallets });
@@ -4187,13 +4272,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         }
 
         // build result array (amounts as zatoshi strings)
-        const histTxs: {
-          id: string;
-          height: number;
-          type: string;
-          amount: string;
-          asset: string;
-        }[] = [];
+        const histTxs: Omit<HistoryTx, 'status'>[] = [];
         for (const [txid, info] of histTxMap) {
           const isSend = info.isChange;
           let amount: bigint;
@@ -4217,16 +4296,32 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           });
         }
 
-        // Sends with no change note (full-balance spends): histSpentByMap has an entry
-        // but histTxMap does not (no note was created for the sender). Emit them here.
+        // Sends whose change note we have not found: histSpentByMap has an entry
+        // but histTxMap does not.
+        //
+        // The input total is NOT the amount sent. Spending a 355,000 zat note to
+        // pay 50,000 returns 290,000 as change, and the wallet is 65,000 poorer.
+        // This branch used to publish the gross input total as the amount, which
+        // is only correct when there genuinely was no change — and we cannot tell
+        // the two apart until the block holding the change has been scanned.
+        // (Worse for a turnstile migration, where orchard inputs produce ironwood
+        // change that a separate scan pass discovers later still.)
+        //
+        // So: report it as an upper bound unless we have actually walked the
+        // block that spent it and found no change coming back. Where a local
+        // record exists, reconciliation replaces this figure with the exact one
+        // anyway — this is the honest fallback for sends we did not record.
+        const histScannedHeight = await getSyncHeight(walletId);
         for (const [txid, { value: inputTotal, height: spentHeight }] of histSpentByMap) {
           if (!histTxMap.has(txid)) {
+            const changeIsSettled = spentHeight > 0 && histScannedHeight >= spentHeight;
             histTxs.push({
               id: txid,
               height: spentHeight,
               type: 'send',
               amount: inputTotal.toString(),
               asset: 'ZEC',
+              ...(changeIsSettled ? {} : { amountUpperBound: true }),
             });
           }
         }
@@ -4251,41 +4346,41 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           }
         }
 
-        // Merge in what WE recorded at broadcast. The chain cannot give these
-        // details back: an outgoing note is encrypted to the recipient, so
-        // scanning recovers a send only via OVK decryption and never recovers
-        // the recipient/memo the user actually chose. A locally recorded send
-        // also appears IMMEDIATELY, instead of waiting for the spend block to
-        // be scanned — which is why a send could look like it vanished.
+        // Reconcile with what WE recorded at broadcast. The chain cannot give
+        // those details back: an outgoing note is encrypted to the recipient,
+        // so scanning recovers a send only via OVK decryption and never
+        // recovers the recipient/memo the user actually chose.
+        //
+        // Reconciliation — not a naive merge. The earlier merge skipped any
+        // txid already present in the chain-derived list, but that list gets an
+        // entry for our own send the moment we broadcast, because
+        // markNotesSpentLocally records the inputs we spent. That entry has no
+        // height and an amount computed from input totals rather than what the
+        // user sent, and it was suppressing the accurate local record behind
+        // it: the send looked like it had never left, then surfaced as a wrong
+        // partial row. Only a real block height counts as confirmation now.
+        let reconciled: HistoryTx[];
         try {
           const sent = await idbGetAllByIndex<SentTxRecord>('sent', 'byWallet', walletId);
-          const known = new Set(histTxs.map(h => h.id));
-          for (const s of sent) {
-            if (known.has(s.txid)) {
-              continue; // chain-derived entry wins: it carries the real height
-            }
-            histTxs.push({
-              id: s.txid,
-              // not yet seen on chain; sorts to the top as pending
-              height: Number.MAX_SAFE_INTEGER,
-              type: 'send',
-              amount: s.amount,
-              asset: 'ZEC',
-            });
-          }
+          const result = reconcileSentTxs({
+            chainTxs: histTxs,
+            sent,
+            scannedHeight: histScannedHeight,
+          });
+          reconciled = result.txs;
+          // fire-and-forget: display must not wait on (or fail with) a write
+          void applyReconciliation(walletId, result.confirm, result.prune);
         } catch (e) {
           console.warn('[zcash-worker] could not read local sent records:', e);
+          reconciled = reconcileSentTxs({ chainTxs: histTxs, sent: [], scannedHeight: 0 }).txs;
         }
-
-        // sort by height descending (newest first)
-        histTxs.sort((a, b) => b.height - a.height);
 
         workerSelf.postMessage({
           type: 'history',
           id,
           network: 'zcash',
           walletId,
-          payload: histTxs,
+          payload: reconciled,
         });
         return;
       }
@@ -4835,6 +4930,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               kind: 'send',
               memo: sendPayload.memo,
               sentAt: Date.now(),
+              // taken from the bytes the network actually saw, so the record
+              // cannot disagree with the transaction about when it dies
+              expiryHeight: parseExpiryHeight(iwTxHex),
             });
             const iwTotalDuration = ((performance.now() - sendStart) / 1000).toFixed(1);
             emitProgress('complete', `txid=${iwTxid}, total=${iwTotalDuration}s`);
@@ -4932,6 +5030,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             kind: 'send',
             memo: sendPayload.memo,
             sentAt: Date.now(),
+            expiryHeight: parseExpiryHeight(txHex),
           });
           const totalDuration = ((performance.now() - sendStart) / 1000).toFixed(1);
           emitProgress('complete', `txid=${txid}, total=${totalDuration}s`);
@@ -5724,6 +5823,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             pool: 'ironwood',
             kind: 'migrate',
             sentAt: Date.now(),
+            expiryHeight: parseExpiryHeight(migrateTxHex),
           });
           emitProgress('complete', `txid=${migrateHotTxid}`);
           workerSelf.postMessage({

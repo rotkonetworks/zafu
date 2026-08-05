@@ -39,7 +39,7 @@ import {
   startWatchOnlySyncInWorker,
   getBalanceInWorker,
 } from '../../../state/keyring/network-worker';
-import { usePoolBalances } from '../../../hooks/zcash-pool-balances';
+import { usePendingSends, usePoolBalances } from '../../../hooks/zcash-pool-balances';
 import { ShieldTransparent } from '../../../components/zcash/shield-transparent';
 import { IRONWOOD_MIGRATION, nu63ActivationHeight } from '../../../config/feature-flags';
 import { IronwoodMigrationBanner, IronwoodMigrate } from '../send/ironwood-migrate';
@@ -629,6 +629,76 @@ const PenumbraContent = ({
   );
 };
 
+/**
+ * The hero balance figure, in the four states it can honestly be in.
+ *
+ * The previous version rendered `— ZEC` whenever the wallet had not yet
+ * reported a sync height, which covered "still loading", "failed to read" and
+ * "genuinely zero" with one blank dash. A dash where a number belongs does not
+ * read as "unknown", it reads as "gone" — which is exactly what a user who had
+ * just sent a real payment concluded. Each state now says which it is.
+ *
+ * `partial` still shows the number: a figure that is a floor is far more use
+ * than no figure, so long as it is not passed off as a total.
+ */
+const BalanceFigure = ({
+  view,
+  zec,
+}: {
+  view: 'loading' | 'error' | 'unknown' | 'partial' | 'ready';
+  zec: number;
+}) => {
+  if (view === 'loading') {
+    return (
+      <div className='flex items-baseline gap-2 text-display leading-none'>
+        {/* sized to the figure it replaces, so nothing shifts when it arrives */}
+        <span className='inline-block h-[0.7em] w-40 animate-pulse rounded bg-elev-2' />
+        <span className='text-label text-fg-dim lowercase'>reading balance</span>
+      </div>
+    );
+  }
+
+  // Scanning, nothing found yet. The wallet has not read the blocks that hold
+  // its own notes — including the change from its own recent sends — so it
+  // does not know the balance. Not zero. Not a dash. Not known yet.
+  if (view === 'unknown') {
+    return (
+      <div className='flex flex-wrap items-baseline gap-x-2 gap-y-1'>
+        <span className='text-display leading-none text-fg-dim lowercase'>not yet known</span>
+        <span className='text-label text-fg-dim lowercase'>
+          still scanning — the sync line below shows how far
+        </span>
+      </div>
+    );
+  }
+
+  if (view === 'error') {
+    return (
+      <div className='flex items-baseline gap-2 text-display leading-none'>
+        <span className='text-fg-dim tabular'>—</span>
+        {/* the dash is only ever allowed next to the word that explains it */}
+        <span className='text-label text-hanko lowercase'>balance unavailable</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className='flex flex-wrap items-baseline gap-2'>
+      <span className='text-display leading-none text-network-accent tabular'>
+        <Sensitive>{fmtZec(zec)} ZEC</Sensitive>
+      </span>
+      {view === 'partial' && (
+        <span
+          className='rounded-sm bg-elev-2 px-1.5 py-0.5 text-label text-fg-dim leading-none lowercase'
+          title='still scanning — more funds may yet be found'
+        >
+          so far
+        </span>
+      )}
+    </div>
+  );
+};
+
 /** zcash-specific content — zashi-inspired combined balance */
 const ZcashContent = ({
   hasMnemonic,
@@ -657,6 +727,11 @@ const ZcashContent = ({
 
   // orchard balance from worker (zatoshi string)
   const [orchardZat, setOrchardZat] = useState(0n);
+  // Whether that figure means anything yet. `0n` is both "no funds" and "not
+  // asked yet", and conflating them is how the balance came to render as a
+  // bare em dash — a placeholder that tells the user nothing and reads as
+  // "your money is gone". Every state below is now named.
+  const [balanceState, setBalanceState] = useState<'loading' | 'ready' | 'error'>('loading');
 
   // wallet birthday — used to show progress relative to start, not block 0
   const [walletBirthday, setWalletBirthday] = useState(0);
@@ -684,8 +759,15 @@ const ZcashContent = ({
 
     const fetchBalance = () => {
       getBalanceInWorker('zcash', walletId)
-        .then(bal => setOrchardZat(BigInt(bal)))
-        .catch(() => {});
+        .then(bal => {
+          setOrchardZat(BigInt(bal));
+          setBalanceState('ready');
+        })
+        .catch(() => {
+          // Keep any figure we already had — a transient worker hiccup is not
+          // evidence the balance changed — but stop presenting it as current.
+          setBalanceState(prev => (prev === 'ready' ? 'ready' : 'error'));
+        });
     };
 
     const handler = (e: Event) => {
@@ -713,6 +795,12 @@ const ZcashContent = ({
   // hover/expand of the hero balance, never a second permanent box
   const pools = usePoolBalances(selectedKeyInfo?.id, workerSyncHeight);
   const [poolsPinned, setPoolsPinned] = useState(false);
+
+  // Sends we have broadcast that the chain has not confirmed. Their inputs are
+  // already deducted from the figure above (markNotesSpentLocally runs at
+  // broadcast), so without this line the balance simply drops with nothing to
+  // account for it.
+  const pendingSends = usePendingSends(selectedKeyInfo?.id, workerSyncHeight);
 
   // NU6.3 turnstile migration flow (feature-flagged; see feature-flags.ts)
   const [showIronwoodMigrate, setShowIronwoodMigrate] = useState(false);
@@ -748,6 +836,7 @@ const ZcashContent = ({
         await chrome.storage.local.remove('zcashSyncHeight');
         setWalletBirthday(height);
         setOrchardZat(0n);
+        setBalanceState('loading');
 
         // respawn worker and start sync — mark syncing immediately to prevent
         // auto-sync hook from racing with a duplicate sync
@@ -964,6 +1053,41 @@ const ZcashContent = ({
   const totalZat = orchardZat + transparentZat;
   const totalZec = Number(totalZat) / 1e8;
 
+  // What the hero figure is allowed to claim.
+  //
+  //   loading — we have not read a balance yet. Show a placeholder that is
+  //             visibly a placeholder, never a dash where a number goes.
+  //   error   — the read failed and we have nothing to fall back on. Say so.
+  //   unknown — the read succeeded and came back zero, but the wallet has not
+  //             finished scanning. Zero here means "nothing found YET", and
+  //             the two are not the same claim. A wallet mid-scan has not yet
+  //             rediscovered its own change notes, so printing "0 ZEC" (or a
+  //             bare dash) states a loss that has not happened.
+  //   partial — a positive figure with scanning still to do: a floor, not a
+  //             total, and labelled as such.
+  //   ready   — scanned to the tip. The number is the number, including zero.
+  //
+  // A wallet that has never synced but holds transparent funds still has
+  // something true to show, so a positive figure counts as loaded.
+  const balanceView: 'loading' | 'error' | 'unknown' | 'partial' | 'ready' =
+    balanceState === 'error' && totalZat === 0n
+      ? 'error'
+      : balanceState === 'loading' && totalZat === 0n
+        ? 'loading'
+        : allSynced
+          ? 'ready'
+          : totalZat === 0n
+            ? 'unknown'
+            : 'partial';
+
+  // In-flight and failed sends, for the line under the figure. `amount` is
+  // already what left the wallet (recipient + fee) — adding the fee again here
+  // would double-count it.
+  const inFlightZat = pendingSends
+    .filter(t => t.status === 'pending')
+    .reduce((sum, t) => sum + BigInt(t.amount), 0n);
+  const failedSends = pendingSends.filter(t => t.status === 'failed');
+
   // NU6.3 turnstile: eligible once the flag is on, activation has passed,
   // and legacy orchard funds remain (per-pool split from the worker)
   const ironwoodEligible =
@@ -1074,17 +1198,56 @@ const ZcashContent = ({
             type='button'
             onClick={() => openPoolNotes()}
             title='view notes'
-            className='mt-1 block text-left text-display leading-none text-network-accent tabular transition-opacity hover:opacity-80'
+            className='mt-1 block text-left transition-opacity hover:opacity-80'
           >
-            <Sensitive>
-              {workerSyncHeight > 0 || totalZat > 0n ? `${fmtZec(totalZec)} ZEC` : '— ZEC'}
-            </Sensitive>
+            <BalanceFigure view={balanceView} zec={totalZec} />
           </button>
         ) : (
-          <div className='mt-1 text-display leading-none text-network-accent tabular'>
-            <Sensitive>
-              {workerSyncHeight > 0 || totalZat > 0n ? `${fmtZec(totalZec)} ZEC` : '— ZEC'}
-            </Sensitive>
+          <div className='mt-1'>
+            <BalanceFigure view={balanceView} zec={totalZec} />
+          </div>
+        )}
+
+        {/* What the figure above does not say on its own. Quiet by default;
+            hanko red only for a send that can no longer confirm, which is a
+            genuine problem and the one case the user must act on. */}
+        {inFlightZat > 0n && (
+          <div className='mt-1.5 flex items-center gap-1.5 text-label text-fg-dim lowercase'>
+            <span className='i-lucide-arrow-up h-3 w-3 shrink-0' />
+            <span className='tabular'>
+              <Sensitive>{fmtZec(Number(inFlightZat) / 1e8)} ZEC</Sensitive> leaving
+            </span>
+            <span>·</span>
+            {/* deliberately not "sent" or "on its way": we do not know that it
+                will confirm, and saying so would be rendering hope as fact */}
+            <span>not yet confirmed</span>
+          </div>
+        )}
+        {/* The notes this payment would have spent were marked spent locally at
+            broadcast and are NOT released automatically — nothing in the wallet
+            un-marks them, so the balance stays low until the chain is re-read.
+            Saying "your funds are back" would be a lie; saying what actually
+            recovers them is not. */}
+        {failedSends.length > 0 && (
+          <div className='mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-label text-hanko lowercase'>
+            <span className='i-lucide-alert-triangle h-3 w-3 shrink-0' />
+            <span>
+              {failedSends.length === 1 ? 'a payment' : `${failedSends.length} payments`} expired
+              without confirming
+            </span>
+            <span className='text-fg-dim'>·</span>
+            <button
+              type='button'
+              onClick={() => {
+                window.dispatchEvent(
+                  new CustomEvent('zcash-rescan', { detail: walletBirthday || chainHeight }),
+                );
+              }}
+              className='text-zigner-gold underline-offset-2 hover:underline'
+              title='re-read the chain to release the funds those payments would have spent'
+            >
+              rescan to release the funds
+            </button>
           </div>
         )}
         {/* the one sync surface: enso line + expandable detail (bar, stages,
@@ -1357,6 +1520,22 @@ interface ParsedTransaction {
   amount?: string;
   asset?: string;
   memo?: string;
+  /**
+   * Confirmation state, for transactions where we can tell the difference.
+   * Absent means the entry came from a source that only ever reports settled
+   * transactions (penumbra), and is treated as confirmed.
+   */
+  status?: 'pending' | 'confirmed' | 'failed';
+  /** `amount` is a ceiling — change may exist but has not been scanned yet */
+  amountUpperBound?: boolean;
+  /** what the recipient got, excluding fee (amount = this + fee) */
+  recipientAmount?: string;
+  /** the fee paid, in ZEC, for the breakdown line */
+  feeAmount?: string;
+  /** who we sent it to, from our own record — the chain cannot recover this */
+  recipient?: string;
+  /** wall-clock ms at broadcast, used to date a row that has no height yet */
+  sentAt?: number;
   /** penumbra account indices associated with this transaction (from visible actions) */
   accountIndices?: Set<number>;
 }
@@ -1634,25 +1813,66 @@ function fmtTime(ts: number | null): string {
   return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${t}`;
 }
 
+/**
+ * The unsettled-transaction mark: the same ensō the sync line uses, drawn as
+ * an open arc that never closes. Deliberately the *same* idiom rather than a
+ * new one — "not finished yet" already has a visual language in this wallet,
+ * and a spinner would shout where this whispers.
+ */
+const PendingMark = ({ className }: { className?: string }) => (
+  <svg width='16' height='16' viewBox='0 0 16 16' className={cn('-rotate-90 shrink-0', className)}>
+    <circle
+      cx='8'
+      cy='8'
+      r='6.4'
+      pathLength='100'
+      fill='none'
+      strokeWidth='1.8'
+      strokeLinecap='round'
+      strokeDasharray='100'
+      strokeDashoffset='45'
+      className='stroke-fg-dim'
+    />
+  </svg>
+);
+
 function TxRow({ tx }: { tx: ParsedTransaction }) {
   const [expanded, setExpanded] = useState(false);
   const isIn = tx.type === 'receive';
   const isSh = tx.type === 'shield';
-  const hasMemo = !!tx.memo;
+  const isPending = tx.status === 'pending';
+  const isFailed = tx.status === 'failed';
+  // the recipient is only ever known for our own sends, and only from our own
+  // record — it is worth a line of its own, so it opens the row like a memo
+  const detail = tx.memo ?? (tx.recipient ? `to ${tx.recipient}` : undefined);
+  // the amount/fee split is worth opening a row for on its own: it is what
+  // explains why the balance moved by more than the payment
+  const hasBreakdown = !!tx.recipientAmount && !!tx.feeAmount;
+  const expandable = !!tx.memo || !!tx.recipient || hasBreakdown;
 
   return (
     <div
       className={cn(
-        'rounded-lg border border-border-soft bg-elev-1 p-3 transition-colors',
-        hasMemo ? 'cursor-pointer hover:border-border-soft' : '',
+        'rounded-lg border bg-elev-1 p-3 transition-colors',
+        isFailed ? 'border-hanko/40' : 'border-border-soft',
+        // pending rows recede rather than flash: they are not an alert, they
+        // are simply not finished
+        isPending && 'border-dashed',
+        expandable ? 'cursor-pointer hover:border-border-soft' : '',
       )}
-      onClick={hasMemo ? () => setExpanded(e => !e) : undefined}
+      onClick={expandable ? () => setExpanded(e => !e) : undefined}
     >
       <div className='flex items-center gap-3'>
         {/* direction reads from the lucide icon, not from color-as-category:
-            shield / arrow-down / arrow-up on a neutral chip */}
+            shield / arrow-down / arrow-up on a neutral chip. An unsettled
+            transaction shows the open ensō instead — the state matters more
+            than the direction until it lands. */}
         <div className='flex h-8 w-8 items-center justify-center rounded-full bg-elev-2'>
-          {isSh ? (
+          {isPending ? (
+            <PendingMark />
+          ) : isFailed ? (
+            <span className='i-lucide-x h-4 w-4 text-hanko' />
+          ) : isSh ? (
             <span className='i-lucide-shield h-4 w-4 text-fg-muted' />
           ) : isIn ? (
             <span className='i-lucide-arrow-down h-4 w-4 text-fg-high' />
@@ -1662,17 +1882,36 @@ function TxRow({ tx }: { tx: ParsedTransaction }) {
         </div>
         <div className='flex-1 min-w-0'>
           <div className='flex items-center justify-between gap-2'>
-            <span className='text-xs font-medium'>{tx.description}</span>
+            <span
+              className={cn(
+                'text-xs font-medium',
+                isPending && 'text-fg-muted',
+                isFailed && 'text-hanko',
+              )}
+            >
+              {tx.description}
+            </span>
             <div className='flex items-center gap-1'>
               {tx.amount && (
                 <Sensitive
-                  className={cn('text-xs font-mono', isIn ? 'text-fg-high' : 'text-fg-muted')}
+                  className={cn(
+                    'text-xs font-mono',
+                    isFailed && 'text-fg-dim line-through',
+                    !isFailed && isIn && 'text-fg-high',
+                    !isFailed && !isIn && 'text-fg-muted',
+                  )}
                 >
-                  {isIn ? '+' : ''}
+                  {/* the payment/fee split lives in the expanded row, not a
+                      tooltip — a title attribute would show the amount even
+                      with balances hidden */}
+                  {/* "at most" rather than a confident figure: the change that
+                      came back has not been scanned yet, so the true amount is
+                      somewhere below this. Better vague than five times wrong. */}
+                  {tx.amountUpperBound ? '≤ ' : isIn ? '+' : ''}
                   {tx.amount} {tx.asset ?? ''}
                 </Sensitive>
               )}
-              {hasMemo && (
+              {expandable && (
                 <span
                   className={cn(
                     'i-lucide-chevron-down h-3 w-3 text-fg-muted transition-transform',
@@ -1686,15 +1925,43 @@ function TxRow({ tx }: { tx: ParsedTransaction }) {
             <span className='text-label text-fg-muted font-mono truncate'>
               {tx.id.slice(0, 16)}...
             </span>
-            <span className='text-label text-fg-muted whitespace-nowrap'>
-              {tx.height > 0 ? `#${tx.height}` : fmtTime(tx.timestamp)}
+            {/* A row with no height has no block to name. Rather than print a
+                confident-looking `#0`, say plainly what is and is not known:
+                when we broadcast it, and that the chain has not answered. */}
+            <span
+              className={cn(
+                'text-label whitespace-nowrap lowercase',
+                isFailed ? 'text-hanko' : 'text-fg-muted',
+              )}
+            >
+              {tx.height > 0
+                ? `#${tx.height}`
+                : isPending
+                  ? `${fmtTime(tx.timestamp)} · unconfirmed`
+                  : isFailed
+                    ? 'expired'
+                    : fmtTime(tx.timestamp)}
             </span>
           </div>
         </div>
       </div>
-      {expanded && tx.memo && (
+      {expanded && (detail || hasBreakdown) && (
         <div className='mt-2 ml-11 border-l-2 border-border-soft pl-3'>
-          <p className='text-xs text-fg-muted whitespace-pre-wrap break-words'>{tx.memo}</p>
+          {detail && (
+            <p className='text-xs text-fg-muted whitespace-pre-wrap break-words'>{detail}</p>
+          )}
+          {tx.memo && tx.recipient && (
+            <p className='mt-1 text-label text-fg-dim break-words'>to {tx.recipient}</p>
+          )}
+          {/* where the money went, itemised — the difference between this and
+              the note values spent is change, which never left the wallet */}
+          {hasBreakdown && (
+            <p className='mt-1 text-label text-fg-dim tabular'>
+              <Sensitive>
+                {tx.recipientAmount} {tx.asset ?? ''} sent · {tx.feeAmount} fee
+              </Sensitive>
+            </p>
+          )}
         </div>
       )}
     </div>
@@ -1778,12 +2045,39 @@ const HistoryContent = ({
       return entries.map(e => ({
         id: e.id,
         height: e.height,
-        timestamp: null,
+        // a pending row has no block and therefore no block time; its broadcast
+        // time is the only honest thing to date it by
+        timestamp: e.sentAt ?? null,
         type: e.type as ParsedTransaction['type'],
-        description: e.type === 'send' ? 'sent' : e.type === 'shield' ? 'shielded' : 'received',
+        // The verb has to match the state. "sent" for something that may never
+        // confirm is the overstatement that started all this.
+        description:
+          e.status === 'pending'
+            ? e.kind === 'migrate'
+              ? 'migrating'
+              : e.kind === 'shield'
+                ? 'shielding'
+                : 'sending'
+            : e.status === 'failed'
+              ? 'did not confirm'
+              : e.kind === 'migrate'
+                ? 'migrated'
+                : e.type === 'send'
+                  ? 'sent'
+                  : e.type === 'shield'
+                    ? 'shielded'
+                    : 'received',
         amount: zatToZec(BigInt(e.amount)),
         asset: e.asset,
-        memo: memoByTxId.get(e.id),
+        // our own record's memo is what the user actually typed; the scanned
+        // one is only ever recoverable for incoming notes
+        memo: e.memo ?? memoByTxId.get(e.id),
+        status: e.status,
+        amountUpperBound: e.amountUpperBound,
+        recipientAmount: e.recipientAmount ? zatToZec(BigInt(e.recipientAmount)) : undefined,
+        feeAmount: e.fee ? zatToZec(BigInt(e.fee)) : undefined,
+        recipient: e.recipient,
+        sentAt: e.sentAt,
       }));
     },
   });
