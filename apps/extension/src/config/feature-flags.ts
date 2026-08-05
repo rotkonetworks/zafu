@@ -27,20 +27,41 @@
 export const IRONWOOD_MIGRATION = true;
 
 /**
- * NU6.3 Ironwood mainnet activation height.
+ * NU6.3 Ironwood activation height on MAINNET.
  *
  * Confirmed and tagged by Zcash core (Sean Bowe): block 3,428,143,
  * approximately 2026-07-28 13:00 UTC (8AM EST). At this height the tip's
  * consensus branch id becomes the real NU6.3 value (0x37a5165b) and
  * orchard-to-orchard sends are disabled - the one-way turnstile is the only
  * way to keep spending orchard funds from here on.
- *
- * The migrate-to-ironwood surfaces stay hidden until the synced chain tip
- * reaches this height, so the prompt "activates on the upgrade date" rather
- * than nagging early. The build-time producer still fail-closes on the branch
- * id independently (see IRONWOOD_MIGRATION), so this gate is UX, not safety.
  */
-export const NU6_3_ACTIVATION_HEIGHT = 3_428_143;
+export const NU6_3_ACTIVATION_HEIGHT_MAINNET = 3_428_143;
+
+/**
+ * NU6.3 Ironwood activation height on TESTNET.
+ *
+ * The pinned librustzcash fork activates NU6.3 at height 1 on test/regtest
+ * (see `zcash_protocol::consensus`, and `nu6_3_activation_height(false) == 1`
+ * on the Rust side), i.e. testnet is ALWAYS post-activation.
+ */
+export const NU6_3_ACTIVATION_HEIGHT_TESTNET = 1;
+
+/**
+ * The NU6.3 activation height for the network the wallet is talking to.
+ *
+ * MUST be used instead of a bare constant. The height was previously
+ * mainnet-only but applied network-independently, so on testnet a send saw
+ * `tip < 3_428_143` and picked the ORCHARD pool while
+ * `build_shielding_transaction_auto` (network-aware in Rust) picked IRONWOOD -
+ * the two halves of the wallet disagreed about which pool was live on the same
+ * chain, and the orchard side built transactions the testnet node rejects.
+ *
+ * This gate is UX/pool-selection. The wasm producers independently fail closed
+ * on the live consensus branch id (see IRONWOOD_MIGRATION), so a wrong answer
+ * here surfaces as a clean refusal rather than an invalid broadcast.
+ */
+export const nu63ActivationHeight = (mainnet: boolean): number =>
+  mainnet ? NU6_3_ACTIVATION_HEIGHT_MAINNET : NU6_3_ACTIVATION_HEIGHT_TESTNET;
 
 /**
  * Deterministic password generator (identity -> passwords: derive a site
