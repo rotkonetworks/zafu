@@ -22,7 +22,7 @@ import {
   preludeWrapSinglePczt,
   ZIGNER_PCZT_SIGN_UR_TYPE,
 } from '../routes/popup/send/zcash-send-cbor-helpers';
-import { NU6_3_ACTIVATION_HEIGHT } from '../config/feature-flags';
+import { nu63ActivationHeight } from '../config/feature-flags';
 import {
   CommitmentReservoir,
   padCommitmentQuery,
@@ -580,36 +580,38 @@ const PLACEHOLDER_BRANCH_ID_HEX = 'ffffffff';
  * (NU6.2) or "37a5165b" (NU6.3). This is threaded verbatim into the ordinary
  * send/shield WASM builders, which bind it into the ZIP-244 sighash + v5 header.
  *
- * Fail-SAFE (unlike the turnstile builder's fail-CLOSED guard at the migration
- * path): ordinary sends must keep working across the NU6.3 boundary, so a
- * missing/placeholder value is not fatal here. We return '' in that case; the
- * WASM side then falls back to its compiled-in NU6.2 value and emits a
- * console.warn. Once NU6.3 activates the endpoint reports the new id and it
- * flows straight through with no code change. Networks fail loud on a wrong
- * branch id ("incorrect consensus branch id" on submit), so a stale endpoint is
- * self-announcing rather than silently signing an unspendable tx.
+ * FAIL-CLOSED. This used to return '' on any RPC failure or placeholder value,
+ * on the theory that ordinary sends must keep working across the NU6.3
+ * boundary. They did not: the WASM side quietly substituted its compiled-in
+ * NU6.2 value, so the wallet paid for a full Halo 2 proof and produced a
+ * transaction whose sighash bound the wrong branch, which the node then
+ * rejected with "incorrect consensus branch id" - and the only trace was a
+ * console.warn nobody reads. The WASM builders now refuse a missing branch id
+ * outright; throwing here surfaces the same condition early, with a message
+ * that says what to do (retry / check the endpoint) instead of a proof-time
+ * failure.
  */
 const fetchBranchIdHex = async (client: ZcashClient): Promise<string> => {
+  let info;
   try {
-    const info = await client.getLightdInfo();
-    const hex = (info.consensusBranchId || '').trim().toLowerCase().replace(/^0x/, '');
-    if (!hex || hex === PLACEHOLDER_BRANCH_ID_HEX) {
-      console.warn(
-        `[zcash-worker] endpoint reported no/placeholder consensus branch id ` +
-          `(${JSON.stringify(info.consensusBranchId)}); WASM will fall back to ` +
-          `compiled-in NU6.2. This is WRONG after NU6.3 activation.`,
-      );
-      return '';
-    }
-    return hex;
+    info = await client.getLightdInfo();
   } catch (e) {
-    console.warn(
-      '[zcash-worker] GetLightdInfo failed while resolving consensus branch id; ' +
-        'WASM will fall back to compiled-in NU6.2:',
-      e,
+    throw new Error(
+      `cannot read the consensus branch id from the endpoint (GetLightdInfo failed: ${
+        e instanceof Error ? e.message : String(e)
+      }); refusing to build a transaction that would bind a guessed branch id - retry, ` +
+        'or switch to a reachable endpoint',
     );
-    return '';
   }
+  const hex = (info.consensusBranchId || '').trim().toLowerCase().replace(/^0x/, '');
+  if (!hex || hex === PLACEHOLDER_BRANCH_ID_HEX) {
+    throw new Error(
+      `endpoint reported no/placeholder consensus branch id (${JSON.stringify(
+        info.consensusBranchId,
+      )}); refusing to build a transaction that would bind a guessed branch id`,
+    );
+  }
+  return hex;
 };
 
 const NU5_BRANCH_ID_LE = [0xb4, 0xd0, 0xd6, 0xc2];
@@ -1749,6 +1751,57 @@ const computeFee = (
  * safe under ZIP-317; underpaying is fatal, so the padding is applied
  * conservatively rather than guessed downward.
  */
+/**
+ * Is this recipient a TRANSPARENT address?
+ *
+ * Covers P2SH (`t3…` mainnet, `t2…` testnet) as well as P2PKH (`t1…`/`tm…`).
+ * Many exchange deposit addresses are P2SH, and a `t3…` recipient that slipped
+ * past a `t1`/`tm`-only check was priced as a shielded output and then handed to
+ * the shielded address parser, which rejected it after note selection, fee
+ * pricing and witness building. Mirrors the Rust
+ * `parse_ironwood_recipient`, which decodes the base58 version bytes.
+ */
+const isTransparentRecipient = (addr: string): boolean => /^(t1|t3|tm|t2)/.test(addr.trim());
+
+/**
+ * Serialized size of one P2PKH `tx_in`: 32 (txid) + 4 (index) + 1 (script len)
+ * + 107 (script_sig) + 4 (sequence).
+ */
+const P2PKH_TX_IN_SIZE = 148;
+/** ZIP-317 divides the transparent byte total by this to get logical actions. */
+const ZIP317_TX_BYTES_PER_ACTION = 150;
+
+/**
+ * ZIP-317 transparent-side logical actions for `n` P2PKH inputs:
+ * `ceil(tx_in_total_size / 150)`.
+ *
+ * NOT `n`. `ceil(148n/150) === n` only while `2n < 150`; at n = 75 the byte
+ * total is exactly 11_100 = 74 * 150, so the true count is 74 and every count
+ * from 75 up is strictly below `n`. Using `n` overpaid one marginal fee per
+ * ~75 inputs — safe for consensus (nodes only reject UNDER-payment) but a
+ * wallet fingerprint on every large consolidation, since no ZIP-317-correct
+ * wallet would pay it.
+ *
+ * Kept numerically identical to `zafu_wasm::zip317_transparent_actions` and to
+ * zcli's `ops/shield.rs`; the wasm shielding builder RE-CHECKS the fee with the
+ * same formula and refuses an under-payment, so these must not drift.
+ */
+const zip317TransparentActions = (nTInputs: number): number =>
+  Math.ceil((nTInputs * P2PKH_TX_IN_SIZE) / ZIP317_TX_BYTES_PER_ACTION);
+
+/**
+ * ZIP-317 fee for a shielding transaction: one padded (2-action) shielded
+ * bundle plus the transparent input side.
+ *
+ * Deliberately does NOT apply the user fee multiplier — the shielding paths
+ * never did, and the wasm builder re-checks this exact number, so keeping it at
+ * the conventional fee leaves the two in lockstep.
+ */
+const computeShieldFee = (nTInputs: number): bigint => {
+  const logicalActions = MIN_ORCHARD_ACTIONS + zip317TransparentActions(nTInputs);
+  return MARGINAL_FEE * BigInt(Math.max(logicalActions, GRACE_ACTIONS));
+};
+
 const computeTurnstileFee = (nOrchardSpends: number): bigint => {
   const orchardActions = Math.max(nOrchardSpends, MIN_ORCHARD_ACTIONS);
   const ironwoodActions = MIN_ORCHARD_ACTIONS; // single output, padded
@@ -4452,8 +4505,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const amountZat = BigInt(sendPayload.amount);
 
         // determine recipient type for fee calc
-        const isTransparent =
-          sendPayload.recipient.startsWith('t1') || sendPayload.recipient.startsWith('tm');
+        const isTransparent = isTransparentRecipient(sendPayload.recipient);
         const nZOutputs = isTransparent ? 0 : 1;
         const nTOutputs = isTransparent ? 1 : 0;
 
@@ -4471,7 +4523,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // are consensus-disabled, so the active shielded spend pool is ironwood.
         // Pre-activation we keep spending orchard (legacy path).
         const sendActivePool: NotePool =
-          sendTip.height >= NU6_3_ACTIVATION_HEIGHT ? 'ironwood' : 'orchard';
+          sendTip.height >= nu63ActivationHeight(sendPayload.mainnet) ? 'ironwood' : 'orchard';
 
         // FAIL-CLOSED: never build an orchard tx the network rejects post-NU6.3.
         // If the active pool is ironwood but the wallet holds no ironwood notes
@@ -4559,6 +4611,17 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               );
             }
             emitProgress('NU6.3 active', `branch id 0x${iwReportedBranchHex}`);
+
+            // z->t is supported (the ironwood builder adds a real transparent
+            // output), but a transparent output has no memo field. Refuse here
+            // rather than let the user believe a payment reference was
+            // delivered - and rather than burn a ~2 minute halo2 prove first.
+            if (isTransparent && memoHex) {
+              throw new Error(
+                'a memo cannot be delivered to a transparent address - transparent outputs ' +
+                  'have no memo field. Send to a shielded (unified) address to include a memo.',
+              );
+            }
 
             const iwNotesJson = selected.map(n => ({
               value: Number(n.value),
@@ -4927,8 +4990,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const sendState = await loadState(walletId);
         const amountZat = BigInt(sendPayload.amount);
 
-        const isTransparent =
-          sendPayload.recipient.startsWith('t1') || sendPayload.recipient.startsWith('tm');
+        const isTransparent = isTransparentRecipient(sendPayload.recipient);
         const nZOutputs = isTransparent ? 0 : 1;
         const nTOutputs = isTransparent ? 1 : 0;
 
@@ -4943,7 +5005,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         emitProgress('fetching chain tip');
         const sendTip = await sendClient.getTip();
         const pcztPool: NotePool =
-          sendTip.height >= NU6_3_ACTIVATION_HEIGHT ? 'ironwood' : 'orchard';
+          sendTip.height >= nu63ActivationHeight(sendPayload.mainnet) ? 'ironwood' : 'orchard';
 
         // FAIL-CLOSED (NU6.3 × FROST): the ironwood branch below builds via
         // build_ironwood_send_pczt, which returns only { pczt_hex, summary,
@@ -5066,6 +5128,17 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             );
           }
           emitProgress('NU6.3 active', `branch id 0x${iwReportedBranchHex}`);
+
+          // z->t is supported (the ironwood builder adds a real transparent
+          // output), but a transparent output has no memo field. Refuse here
+          // rather than let the user believe a payment reference was
+          // delivered - and rather than burn a ~2 minute halo2 prove first.
+          if (isTransparent && memoHex) {
+            throw new Error(
+              'a memo cannot be delivered to a transparent address - transparent outputs ' +
+                'have no memo field. Send to a shielded (unified) address to include a memo.',
+            );
+          }
 
           emitProgress(
             'building & proving ironwood PCZT (halo2)',
@@ -5691,7 +5764,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         {
           const multiGuardClient = await makeZcashClient(multiPayload.serverUrl);
           const multiGuardTip = await multiGuardClient.getTip();
-          if (multiGuardTip.height >= NU6_3_ACTIVATION_HEIGHT) {
+          if (multiGuardTip.height >= nu63ActivationHeight(multiPayload.mainnet)) {
             throw new Error(
               'orchard sends are disabled at NU6.3 - multi-send does not support ironwood ' +
                 'yet; send ironwood funds individually',
@@ -5726,7 +5799,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           const multiState = await loadState(walletId);
 
           // determine recipient type for fee calc
-          const isTransparent = recipient.startsWith('t1') || recipient.startsWith('tm');
+          const isTransparent = isTransparentRecipient(recipient);
           const nZOutputs = isTransparent ? 0 : 1;
           const nTOutputs = isTransparent ? 1 : 0;
 
@@ -5943,8 +6016,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         for (const [addrIndex, utxos] of byIndex) {
           const groupZat = utxos.reduce((sum, u) => sum + u.valueZat, 0n);
-          const logicalActions = 2 + utxos.length;
-          const fee = BigInt(5000 * Math.max(logicalActions, 2));
+          const fee = computeShieldFee(utxos.length);
           if (groupZat <= fee) {
             console.warn(
               `[zcash-worker] skipping index ${addrIndex}: ${groupZat} zat <= ${fee} fee`,
@@ -6058,8 +6130,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         // for simplicity, shield all UTXOs in a single tx
         const shieldUTotal = shieldUUtxos.reduce((sum, u) => sum + u.valueZat, 0n);
-        const shieldULogicalActions = 2 + shieldUUtxos.length;
-        const shieldUFee = BigInt(5000 * Math.max(shieldULogicalActions, 2));
+        const shieldUFee = computeShieldFee(shieldUUtxos.length);
         if (shieldUTotal <= shieldUFee) {
           throw new Error('UTXOs too small to cover fee');
         }

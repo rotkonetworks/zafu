@@ -41,7 +41,7 @@ import {
 } from '../../../state/keyring/network-worker';
 import { usePoolBalances } from '../../../hooks/zcash-pool-balances';
 import { ShieldTransparent } from '../../../components/zcash/shield-transparent';
-import { IRONWOOD_MIGRATION, NU6_3_ACTIVATION_HEIGHT } from '../../../config/feature-flags';
+import { IRONWOOD_MIGRATION, nu63ActivationHeight } from '../../../config/feature-flags';
 import { IronwoodMigrationBanner, IronwoodMigrate } from '../send/ironwood-migrate';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -967,7 +967,9 @@ const ZcashContent = ({
   // NU6.3 turnstile: eligible once the flag is on, activation has passed,
   // and legacy orchard funds remain (per-pool split from the worker)
   const ironwoodEligible =
-    IRONWOOD_MIGRATION && (chainTip?.height ?? 0) >= NU6_3_ACTIVATION_HEIGHT && pools.orchard > 0n;
+    IRONWOOD_MIGRATION &&
+    (chainTip?.height ?? 0) >= nu63ActivationHeight(isMainnet) &&
+    pools.orchard > 0n;
 
   // Single message slot - Zashi's HomeMessage pattern: exactly one nudge at
   // a time. Priority: sync error (the sync bar below owns that surface, so
@@ -1201,7 +1203,7 @@ const ZcashContent = ({
       )}
 
       {IRONWOOD_MIGRATION &&
-        (chainTip?.height ?? 0) >= NU6_3_ACTIVATION_HEIGHT &&
+        (chainTip?.height ?? 0) >= nu63ActivationHeight(isMainnet) &&
         showIronwoodMigrate &&
         selectedKeyInfo && (
           <IronwoodMigrate
