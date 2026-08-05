@@ -22,7 +22,10 @@ import {
   type DiversifiedAddressRecord,
 } from '@repo/wallet/networks/zcash/diversified-address';
 import { deriveZidForContact } from '../../../state/identity';
-import { localExtStorage } from '@repo/storage-chrome/local';
+import {
+  getDiversifiedAddresses,
+  setDiversifiedAddresses,
+} from '../../../state/diversified-addresses';
 import { selectActiveZcashWallet, selectMyWalletsAsContacts } from '../../../state/wallets';
 
 const NETWORK_LABELS: Record<ContactNetwork, string> = {
@@ -465,8 +468,12 @@ export function ContactsPage() {
         if (rawAddr) {
           myAddress = rawAddr;
           // record the diversified address for referral tracking
-          const records: DiversifiedAddressRecord[] =
-            (await localExtStorage.get('diversifiedAddresses')) ?? [];
+          // encrypted at rest: these records are the payment-referral graph
+          // (which contact got which address, and when). they went through
+          // localExtStorage directly, which bypasses the encrypting proxy,
+          // so they were written in the clear despite the key being declared
+          // encrypted. see state/diversified-addresses.ts.
+          const records: DiversifiedAddressRecord[] = await getDiversifiedAddresses();
           if (!records.some(r => r.diversifierIndex === divIndex)) {
             records.push({
               diversifierIndex: divIndex,
@@ -474,7 +481,7 @@ export function ContactsPage() {
               address: rawAddr,
               sharedAt: Date.now(),
             });
-            void localExtStorage.set('diversifiedAddresses', records);
+            await setDiversifiedAddresses(records);
           }
         }
       } catch (e) {

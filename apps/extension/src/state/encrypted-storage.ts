@@ -130,6 +130,57 @@ const ENCRYPTED_KEYS = new Set<string>([
 export const isEncryptedKey = (key: string): boolean => ENCRYPTED_KEYS.has(key);
 
 /**
+ * Read an encrypted key from OUTSIDE the zustand store, migrating a legacy
+ * plaintext value in place if one is found.
+ *
+ * Why this exists: `createEncryptedLocal` is only applied to the store's
+ * `local` handle (state/index.ts). UI code that reaches for `localExtStorage`
+ * directly bypasses it completely, and writes the value in the clear even
+ * though the key is listed in ENCRYPTED_KEYS. That is how
+ * `diversifiedAddresses` — the user's payment-referral graph, mapping
+ * contact names to the diversified addresses handed to them — came to be
+ * stored unencrypted despite being declared encrypted.
+ *
+ * The migration matters: `readEncrypted` returns null for an unwrapped
+ * value, so simply switching the read path over would have made every
+ * existing record vanish silently. Instead a plaintext value is detected,
+ * re-written sealed, and returned. It cannot be migrated while locked (there
+ * is no key), so a locked read returns null and leaves the plaintext alone
+ * to be migrated on the next unlocked read.
+ */
+export async function readEncryptedWithMigration<T>(
+  local: ExtensionStorage<LocalStorageState>,
+  session: ExtensionStorage<SessionStorageState>,
+  storageKey: keyof LocalStorageState,
+): Promise<T | null> {
+  const raw = await local.get(storageKey);
+  if (raw === undefined || raw === null) {
+    return null;
+  }
+  if (isEncryptedWrapper(raw)) {
+    return readEncrypted<T>(local, session, storageKey);
+  }
+  // legacy plaintext — seal it now, if we can.
+  const key = await getKey(session);
+  if (!key) {
+    return null;
+  }
+  await writeEncrypted(local, session, storageKey, raw);
+  console.log(`[encrypted-storage] migrated plaintext '${String(storageKey)}' to encrypted`);
+  return raw as T;
+}
+
+/** Write an encrypted key from outside the zustand store. */
+export async function writeEncryptedDirect(
+  local: ExtensionStorage<LocalStorageState>,
+  session: ExtensionStorage<SessionStorageState>,
+  storageKey: keyof LocalStorageState,
+  data: unknown,
+): Promise<void> {
+  await writeEncrypted(local, session, storageKey, data);
+}
+
+/**
  * encrypted local storage proxy  - wraps ExtensionStorage to auto-encrypt/decrypt
  * specific keys. all other keys pass through unchanged.
  */

@@ -37,11 +37,11 @@ import { viewClient } from '../../../clients';
 import { cn } from '@repo/ui/lib/utils';
 import { PopupPath } from '../paths';
 import { AddContactDialog } from '../../../components/add-contact-dialog';
-import { localExtStorage } from '@repo/storage-chrome/local';
 import {
   traceAddressReferral,
   type DiversifiedAddressRecord,
 } from '@repo/wallet/networks/zcash/diversified-address';
+import { getDiversifiedAddresses } from '../../../state/diversified-addresses';
 import {
   MemoType,
   type ContactCard,
@@ -906,7 +906,9 @@ export function InboxPage() {
   // diversified address records for referral tracking
   const [addressRecords, setAddressRecords] = useState<DiversifiedAddressRecord[]>([]);
   useEffect(() => {
-    void localExtStorage.get('diversifiedAddresses').then(r => setAddressRecords(r ?? []));
+    // read through the encrypted accessor, which also migrates any legacy
+    // plaintext value written before this key was actually encrypted.
+    void getDiversifiedAddresses().then(setAddressRecords);
   }, []);
 
   // filter conversations by search
