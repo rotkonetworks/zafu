@@ -415,30 +415,49 @@ export class LightwalletdClient implements ZcashClient {
       } else if (wire === 2 && field === 3) {
         block.hash = val as Uint8Array;
       } else if (wire === 2 && field === 7) {
-        for (const a of this.parseCompactTx(val as Uint8Array)) {
+        const { orchard, ironwood } = this.parseCompactTx(val as Uint8Array);
+        for (const a of orchard) {
           block.actions.push(a);
+        }
+        for (const a of ironwood) {
+          (block.ironwoodActions ??= []).push(a);
         }
       }
     });
     return block;
   }
 
-  /** CompactTx { hash=2 (txid); actions=6 repeated CompactOrchardAction } */
-  private parseCompactTx(buf: Uint8Array): CompactAction[] {
+  /**
+   * CompactTx { hash=2 (txid); actions=6 orchard; ironwoodActions=9 }
+   *
+   * Field 9 is the finalized upstream lightwallet-protocol number for the
+   * NU6.3 ironwood pool, so this decodes identically against zidecar, Zaino,
+   * and canonical lightwalletd as each ships ironwood support. Ironwood
+   * reuses the CompactOrchardAction shape, so parseAction serves both.
+   */
+  private parseCompactTx(buf: Uint8Array): {
+    orchard: CompactAction[];
+    ironwood: CompactAction[];
+  } {
     let txid: Uint8Array = new Uint8Array(0);
     const rawActions: Uint8Array[] = [];
+    const rawIronwood: Uint8Array[] = [];
     this.eachField(buf, (field, wire, val) => {
       if (wire === 2 && field === 2) {
         txid = val as Uint8Array;
       } else if (wire === 2 && field === 6) {
         rawActions.push(val as Uint8Array);
+      } else if (wire === 2 && field === 9) {
+        rawIronwood.push(val as Uint8Array);
       }
     });
-    return rawActions.map(raw => {
-      const a = this.parseAction(raw);
-      a.txid = txid;
-      return a;
-    });
+    const build = (raws: Uint8Array[]) =>
+      raws.map(raw => {
+        const a = this.parseAction(raw);
+        a.txid = txid;
+        return a;
+      });
+    return { orchard: build(rawActions), ironwood: build(rawIronwood) };
   }
 
   /** CompactOrchardAction { nullifier=1; cmx=2; ephemeralKey=3; ciphertext=4 } */

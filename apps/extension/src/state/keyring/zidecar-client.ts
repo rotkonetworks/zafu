@@ -21,12 +21,10 @@ export interface CompactBlock {
   actions: CompactAction[];
   actionsRoot?: Uint8Array;
   /**
-   * NU6.3 ironwood pool actions (same compact-action shape as orchard).
-   * Optional and currently never populated: the compact-block wire format
-   * for ironwood actions is not part of the frozen ironwood contract yet,
-   * so parsers leave this absent until the server-side field lands. The
-   * sync worker consumes it defensively (`?? []`), keeping the ironwood
-   * scan path dormant on today's servers.
+   * NU6.3 ironwood pool actions (same compact-action shape as orchard),
+   * decoded from `zidecar.v1 CompactBlock.ironwood_actions = 5`. Absent on
+   * servers predating ironwood; the sync worker consumes it defensively
+   * (`?? []`), so an old server simply yields no ironwood notes.
    */
   ironwoodActions?: CompactAction[];
 }
@@ -663,6 +661,11 @@ export class ZidecarClient {
           block.actions.push(this.parseAction(data));
         } else if (field === 4) {
           block.actionsRoot = buf.slice(pos, pos + len);
+        } else if (field === 5) {
+          // ironwood_actions — same wire shape as orchard actions. Without
+          // this the wallet downloads its own ironwood notes and discards
+          // them, showing zero after a turnstile migration.
+          (block.ironwoodActions ??= []).push(this.parseAction(data));
         }
         pos += len;
       } else {
