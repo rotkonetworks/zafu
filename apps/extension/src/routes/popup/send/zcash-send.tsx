@@ -338,6 +338,26 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     });
   }, [amount, spendableNotes, recipientIsTransparent, feeMultiplier, notesLoaded]);
 
+  // Keep the DISPLAYED fee in step with the quote.
+  //
+  // `fee` was initialised to the literal '0.0001' and only overwritten from the
+  // worker's result — which on the hot path arrives AFTER the transaction has
+  // been proved and broadcast. So the number on the review screen, the one the
+  // user reads before approving an irreversible send, was a constant that had
+  // nothing to do with what they would actually pay: the real ZIP-317 fee
+  // scales with the input count and the user's fee multiplier, and can be
+  // 15,000-25,000+ zat rather than 10,000.
+  //
+  // quoteSend already prices exactly what the worker will build. Showing that
+  // costs nothing and makes the review screen true. The worker's post-build
+  // value still overwrites it, so a surprise there can only correct downward
+  // into the receipt, never mislead the approval.
+  useEffect(() => {
+    if (amountQuote?.ok) {
+      setFee((Number(amountQuote.feeZat) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, ''));
+    }
+  }, [amountQuote]);
+
   // listen for send progress events from worker
   useEffect(() => {
     if (step !== 'building' && step !== 'broadcast') {

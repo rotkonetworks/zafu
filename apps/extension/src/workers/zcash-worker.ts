@@ -4556,13 +4556,33 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         for (const [txid, info] of histTxMap) {
           const isSend = info.isChange;
           let amount: bigint;
+          // When the input total is unknown we do NOT know what left the wallet.
+          let amountIsUpperBound = false;
           if (isSend) {
             const spent = histSpentByMap.get(txid);
             const inputTotal = spent?.value ?? 0n;
             if (inputTotal > 0n) {
+              // what actually left = inputs - change (this includes the fee)
               amount = inputTotal - info.changeValue;
             } else {
+              // No input total. histSpentByMap is keyed on note.spent_by_txid,
+              // which the NOMT nullifier ORACLE never sets — it adds the
+              // nullifier to spentNullifiers with no txid. So any spend
+              // detected by proof rather than by a scan-time nullifier match
+              // lands here (classic case: the same seed used on another device,
+              // then restored).
+              //
+              // This used to display info.changeValue as the amount sent, which
+              // is not merely imprecise, it is the wrong number entirely: pay
+              // 0.10 out of a 10.00 note and the 9.90 that came BACK to you is
+              // rendered as "sent 9.90 ZEC".
+              //
+              // We genuinely cannot compute what left without the input total,
+              // so report the change as an explicit upper bound rather than
+              // asserting it. A number the UI marks provisional is honest; a
+              // confident wrong number is not.
               amount = info.changeValue;
+              amountIsUpperBound = true;
             }
           } else {
             amount = info.receiveValue;
@@ -4573,6 +4593,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             type: isSend ? 'send' : 'receive',
             amount: amount.toString(),
             asset: 'ZEC',
+            ...(amountIsUpperBound ? { amountUpperBound: true } : {}),
           });
         }
 
@@ -4608,10 +4629,36 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         // merge transparent history
         const seenTxids = new Map(histTxs.map((tx, i) => [tx.id, i]));
+        // Transactions WE sent, so a transparent output of ours is change
+        // coming back — not income.
+        //
+        // parseTransparentTx only sums outputs matching our scripts; the
+        // comment there concedes inputs carry no value, so a t->t or z->t
+        // payment with change to ourselves was rendered as
+        // "received +<change> ZEC", and one with no change back never appeared
+        // at all. Telling a user they RECEIVED money they actually spent is
+        // the worst direction for this error to point.
+        //
+        // We cannot recover transparent input ownership from what the server
+        // returns, but we do know what we broadcast: the local `sent` store
+        // records every txid we sent. That is enough to stop inventing income.
+        let ownSentTxids = new Set<string>();
+        try {
+          const ownSent = await idbGetAllByIndex<SentTxRecord>('sent', 'byWallet', walletId);
+          ownSentTxids = new Set(ownSent.map(s => s.txid));
+        } catch {
+          // best effort — a missing record must not break history
+        }
+
         for (const tTx of tHistory) {
           const existingIdx = seenTxids.get(tTx.txid);
           if (existingIdx !== undefined) {
             histTxs[existingIdx]!.type = 'shield';
+            continue;
+          }
+          if (ownSentTxids.has(tTx.txid)) {
+            // ours: the reconciliation pass below supplies the real amount,
+            // recipient and fee from the record we wrote at broadcast.
             continue;
           }
           const receivedZat = BigInt(tTx.received);
