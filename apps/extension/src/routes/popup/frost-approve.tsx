@@ -589,9 +589,15 @@ export const FrostApprove = () => {
     const pid = new Uint8Array(32);
     crypto.getRandomValues(pid);
 
-    let initSighash = '';
-    let initAlphas: string[] = [];
-    let initPcztHex = '';
+    // Latched escrow request. Set once, by the FIRST SIGN:. The relay is
+    // unauthenticated, so a later SIGN: is an attempt to swap the transaction
+    // out from under the review the user is in the middle of — it poisons the
+    // session rather than overwriting this.
+    const latched: {
+      req: { sighash: string; alphas: string[]; pcztHex: string } | null;
+      raw: string;
+      superseded: boolean;
+    } = { req: null, raw: '', superseded: false };
     const peerCommits: string[] = [];
     const peerShares: Record<number, string> = {};
 
@@ -607,9 +613,16 @@ export const FrostApprove = () => {
           text,
         );
         if (sg) {
-          initSighash = sg[1]!;
-          initAlphas = sg[2]!.split(',');
-          initPcztHex = sg[6] ?? '';
+          if (latched.req) {
+            // byte-identical redelivery of room history is benign; a different
+            // request is a takeover attempt.
+            if (text !== latched.raw) {
+              latched.superseded = true;
+            }
+            return;
+          }
+          latched.req = { sighash: sg[1]!, alphas: sg[2]!.split(','), pcztHex: sg[6] ?? '' };
+          latched.raw = text;
           return;
         }
         const cm = /^C:([\s\S]*)$/.exec(text);
@@ -626,13 +639,21 @@ export const FrostApprove = () => {
     );
 
     setStatus('waiting for host SIGN...');
-    await waitFor(() => initAlphas.length > 0, 120_000);
+    await waitFor(() => latched.req !== null, 120_000);
 
-    // ── verify before signing (gh #17) ──
+    // ── snapshot, then verify, then sign the snapshot ──
+    // `approved` is frozen here. Everything below — the verdict, the review the
+    // user confirms, and the shares we release — refers to this one object, so
+    // a SIGN: arriving during the review cannot become the thing we sign.
+    const approved = latched.req;
+    if (!approved) {
+      throw new Error('no SIGN: request received');
+    }
+
     // The escrow builds the PCZT, so it is the only truth: bind the sighash we
     // are about to sign to the one recomputed from the PCZT, then show the user
     // its OVK-decoded outputs. The dapp's URL `plan` is never trusted here.
-    if (!initPcztHex) {
+    if (!approved.pcztHex) {
       throw new Error('escrow did not publish a PCZT — refusing to sign blind');
     }
     const zw = zcashWallets.find(w => w.vaultId === vault.id);
@@ -640,27 +661,37 @@ export const FrostApprove = () => {
       throw new Error('multisig wallet has no viewing key on file — cannot verify request');
     }
     setStatus('verifying request against escrow PCZT...');
-    const parsed = await frostInspectPcztOutputsInWorker(initPcztHex, zw.orchardFvk);
+    const parsed = await frostInspectPcztOutputsInWorker(approved.pcztHex, zw.orchardFvk);
     const verdict = computeEscrowVerdict({
       parsed,
-      claimedSighashHex: initSighash,
+      claimedSighashHex: approved.sighash,
       mainnet: zw.mainnet,
     });
     if (verdict.kind !== 'ok') {
       throw new Error(verdict.reasons.join(' — '));
     }
-    // computeEscrowVerdict already asserted parsed.computed_sighash_hex === initSighash,
+    // computeEscrowVerdict already asserted parsed.computed_sighash_hex === approved.sighash,
     // so either is the bound value; show the recomputed one as the on-device truth.
-    const confirmed = await awaitReview(verdict, parsed.computed_sighash_hex ?? initSighash);
+    const confirmed = await awaitReview(verdict, parsed.computed_sighash_hex ?? approved.sighash);
     if (!confirmed) {
       abort.abort();
       sendResult(requestId, { error: 'user denied after review' });
       window.close();
       return;
     }
+    // The review is an unbounded human-time await — precisely the window an
+    // attacker aims at. Signing `approved` already makes a swap ineffective;
+    // refuse outright so the user is told rather than silently signing #1 while
+    // the escrow believes it asked for #2.
+    if (latched.superseded) {
+      throw new Error(
+        'the escrow published a second, different transaction while you were reviewing — ' +
+          'nothing was signed. re-request to review the new transaction.',
+      );
+    }
     setPhase('running');
 
-    const n = initAlphas.length;
+    const n = approved.alphas.length;
     setStatus(`round 1: generating ${n} commitment(s)...`);
     const round1s: { nonces: string; commitments: string }[] = [];
     for (let i = 0; i < n; i++) {
@@ -683,8 +714,8 @@ export const FrostApprove = () => {
         secrets.ephemeralSeed,
         secrets.keyPackage,
         round1s[i]!.nonces,
-        initSighash,
-        initAlphas[i]!,
+        approved.sighash,
+        approved.alphas[i]!,
         allCommits,
       );
       await relay.sendMessage(roomCode, pid, new TextEncoder().encode(`S:${i}:${share}`));
