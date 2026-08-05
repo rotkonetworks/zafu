@@ -877,9 +877,18 @@ const ZcashContent = ({
   const scanProgress = Math.max(0, workerSyncHeight - walletBirthday);
   const scanPct = chainHeight > 0 ? Math.min(100, Math.round((scanProgress / scanRange) * 100)) : 0;
 
-  // lightwalletd has no verification pipeline — synced once the scan catches up
-  const allSynced =
-    zcashBackend === 'lightwalletd' ? scanPct >= 100 : scanPct >= 100 && ligeritoPct >= 100;
+  // Synced means "this wallet has scanned every block up to the tip" — that
+  // is what makes the balance correct, and it is entirely the wallet's own
+  // work. Ligerito verification is the server proving it did not lie about
+  // those blocks; valuable, but it trails the server's own backfill and can
+  // lag by hours. Gating "synced" on it left the wallet reading
+  // "syncing 100%" indefinitely with nothing left to do and nothing the user
+  // could act on — which reads as a stall, not as a pending audit.
+  //
+  // So the scan decides synced, and verification is reported as its own
+  // stage. Note this is a display decision only: it does not weaken any
+  // check, and an actually-failed proof still surfaces as a sync error.
+  const allSynced = scanPct >= 100;
 
   // Right after a birthday change the worker's last reported height can sit
   // at or below the new start height - that's 0 scan progress, not a reason
@@ -911,18 +920,27 @@ const ZcashContent = ({
             label: 'ligerito',
             state: ligeritoPct >= 100 ? 'done' : gigaproofStatus >= 1 ? 'active' : 'pending',
             // The wallet VERIFIES a ligerito proof; it never produces one —
-            // proving happens server-side. Labelling this stage "proving"
-            // described the wrong machine doing the wrong verb, so the stage
-            // now just reads as pending/active/done (the ✓ carries "done").
+            // proving happens server-side. So the detail says what the wallet
+            // is waiting on, never what the server is doing.
+            //
+            // Saying nothing was worse than saying the wrong thing: the stage
+            // sat blank and unfinished with no way to tell a stall from a
+            // backlog. GENERATING means the server's proof trails its own
+            // index and will catch up on its own; nothing is wrong and nothing
+            // is required of the user.
             //
             // blocksUntilReady is a countdown, but some server states report a
             // raw height here — rendering "3436543 blocks" as a remaining
-            // count is nonsense. Show it only when it reads like a delta,
-            // since a real countdown is the one genuinely useful detail.
+            // count is nonsense, so it is shown only when it reads like a
+            // delta.
             detail:
-              gigaproofStatus >= 2 && blocksUntilReady > 0 && blocksUntilReady < 100_000
-                ? `${blocksUntilReady} blocks`
-                : undefined,
+              ligeritoPct >= 100
+                ? undefined
+                : blocksUntilReady > 0 && blocksUntilReady < 100_000
+                  ? `${blocksUntilReady} blocks`
+                  : gigaproofStatus >= 1
+                    ? 'server catching up'
+                    : 'waiting for server',
           },
           {
             key: 'scan',
