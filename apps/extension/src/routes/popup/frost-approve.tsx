@@ -523,10 +523,22 @@ export const FrostApprove = () => {
     );
 
     setStatus('generating commitments...');
-    const round1 = await frostSignRound1InWorker(secrets.ephemeralSeed, secrets.keyPackage);
+    // One fresh nonce pair PER alpha. FROST nonces are strictly single-use:
+    // two signatures produced under the same nonces reveal the signing share by
+    // simple algebra. `alphas` has length 1 today, so the old shared-`round1`
+    // loop was not yet exploitable — but that is an invariant held by a
+    // neighbouring line, not by the code that depends on it. Index the nonces
+    // by alpha so growing `alphas` can never silently leak the share.
+    const round1s = await Promise.all(
+      alphas.map(() => frostSignRound1InWorker(secrets.ephemeralSeed, secrets.keyPackage)),
+    );
 
     // send commitments after joining
-    await relay.sendMessage(roomCode, pid, new TextEncoder().encode(`C:${round1.commitments}`));
+    await relay.sendMessage(
+      roomCode,
+      pid,
+      new TextEncoder().encode(`C:${round1s.map(r => r.commitments).join('|')}`),
+    );
 
     // use wallet's stored threshold, not attacker-controlled URL param
     const walletThreshold = (multisigVault.insensitive?.['threshold'] as number) || threshold;
@@ -536,12 +548,13 @@ export const FrostApprove = () => {
     sigPhase = 'shares';
     setStatus('signing...');
 
-    const allCommitments = [round1.commitments, ...peerCommitments];
-    for (const alpha of alphas) {
+    for (const [i, alpha] of alphas.entries()) {
+      const r1 = round1s[i]!;
+      const allCommitments = [r1.commitments, ...peerCommitments];
       const share = await frostSpendSignInWorker(
         secrets.ephemeralSeed,
         secrets.keyPackage,
-        round1.nonces,
+        r1.nonces,
         sighashHex,
         alpha,
         allCommitments,
