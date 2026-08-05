@@ -57,6 +57,20 @@ real chain:
   headline no longer falls back to the server's ligerito percentage when the
   wallet has no scan progress of its own.
 
+After a browser restart the wallet correctly returned to the lock screen, was
+unlocked with the password, and every main surface was navigated and read:
+
+| screen     | rendered                                                                                  |
+| ---------- | ----------------------------------------------------------------------------------------- |
+| home       | `balance: not yet known` + explanation, `syncing 32%` / `scanning notes 32%` **agreeing** |
+| send       | `spendable: 0 ZEC` + `no zec yet - receive first`                                         |
+| pool notes | `ironwood - 0 notes / 0.0000 ZEC`, `no ironwood notes yet`                                |
+| receive    | shielded address with the "they can't see your other transactions" framing                |
+
+Two more fixes verified on screen there: the send form says **spendable**, not
+"balance" — the distinction that had it advertising unspendable orchard funds —
+and the pool subtotal counts only unspent notes.
+
 What this does and does not establish. It establishes that the bundle loads,
 the service worker registers, React mounts, and nothing throws on boot — a real
 smoke test, and it is repeatable in CI. It does NOT establish the paths that need VALUE or HARDWARE: a pending-send
