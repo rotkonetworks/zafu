@@ -5,7 +5,7 @@
  * every function here is independently testable.
  */
 
-import type { KeyInfo, EncryptedVault, NetworkType, ZignerZafuImport } from './types';
+import type { KeyInfo, EncryptedVault, NetworkType, ZignerZafuImport, LedgerImport } from './types';
 import type { ZcashWalletJson } from '../wallets';
 import type { BoxJson } from '@repo/encryption/box';
 
@@ -84,6 +84,40 @@ export const buildZignerVault = (
     ...(data.publicKey ? { cosmosPublicKey: data.publicKey } : {}),
     ...(opts.airgapOnly ? { airgapOnly: true } : {}),
     ...(data.zidPublicKey ? { zid: data.zidPublicKey } : {}),
+  },
+});
+
+/**
+ * build a Ledger cold-signer vault (clone of buildZignerVault).
+ *
+ * matches the Keystone precedent: the vault `type` stays `'zigner-zafu'` so it
+ * reuses all existing zigner vault plumbing (unlock, select, delete, wallet
+ * linkage). the discriminator lives in `insensitive.coldSignerType` and on the
+ * mirrored zcash wallet record. zcash-only for now — no penumbra/polkadot/cosmos
+ * capabilities, so `supportedNetworks` is always `['zcash']`. no seed is stored;
+ * `encryptedData` is the sealed watch-only import payload.
+ */
+export const buildLedgerVault = (
+  vaultId: string,
+  name: string,
+  encryptedData: string,
+  data: LedgerImport,
+  opts: { airgapOnly?: boolean } = {},
+): EncryptedVault => ({
+  id: vaultId,
+  type: 'zigner-zafu',
+  name,
+  createdAt: Date.now(),
+  encryptedData,
+  salt: '',
+  insensitive: {
+    deviceId: data.deviceId,
+    accountIndex: data.accountIndex,
+    supportedNetworks: ['zcash'],
+    coldSignerType: 'ledger',
+    address: data.address,
+    ...(data.ufvk ? { ufvk: data.ufvk } : {}),
+    ...(opts.airgapOnly ? { airgapOnly: true } : {}),
   },
 });
 

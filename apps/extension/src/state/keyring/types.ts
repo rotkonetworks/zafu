@@ -181,6 +181,46 @@ export interface ZignerZafuImport {
 }
 
 /**
+ * cold-signer discriminator for the zcash wallet record.
+ *
+ * NOTE: the persisted storage schema (`storage-chrome` v2) currently narrows
+ * this to `'zigner' | 'keystone'`; `'ledger'` is written through a boundary
+ * cast in `createLedgerWalletEntries` until the schema is widened. This union
+ * is the source of truth the rest of the app should read against.
+ */
+export type ColdSignerType = 'zigner' | 'keystone' | 'ledger';
+
+/**
+ * ledger cold-signer import data (watch-only, zcash-only)
+ *
+ * unlike a zigner/keystone import (which is a multi-network watch-only FVK
+ * bundle), a Ledger account is a single-signer zcash-only cold wallet. it
+ * carries no penumbra FVK, no polkadot/cosmos addresses, no ZID key, and no
+ * FROST share — just enough to watch a single orchard account and hand PCZTs
+ * to the device for signing.
+ *
+ * flag-gated hardware-wallet scaffolding: reuses the `zigner-zafu` vault
+ * machinery with `coldSignerType: 'ledger'` on the zcash wallet record, the
+ * same way Keystone reuses it with `coldSignerType: 'keystone'`.
+ */
+export interface LedgerImport {
+  /** unified/orchard receiving address exported from the device */
+  address: string;
+  /**
+   * unified full viewing key (`uview1…`), if the device exported one. present
+   * enables free watch-only address/balance derivation + shielded scanning.
+   * absent → address-only (no shielded scanning until a ufvk is provided).
+   */
+  ufvk?: string;
+  /** account index on the ledger device */
+  accountIndex: number;
+  /** device identifier */
+  deviceId: string;
+  /** mainnet (true) vs testnet (false) */
+  mainnet: boolean;
+}
+
+/**
  * network activation state
  *
  * a network is only "active" (APIs injected, features loaded) if:

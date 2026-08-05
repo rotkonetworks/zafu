@@ -19,6 +19,7 @@ import type {
   NetworkType,
   DerivedKey,
   ZignerZafuImport,
+  LedgerImport,
 } from './types';
 import type { ZcashWalletJson } from '../wallets';
 
@@ -28,6 +29,7 @@ import {
   vaultsToKeyInfos,
   buildMnemonicVault,
   buildZignerVault,
+  buildLedgerVault,
   buildFrostVault,
   buildFrostZcashWallet,
   zignerSupportedNetworks,
@@ -57,6 +59,8 @@ import {
 import {
   createPenumbraWalletForMnemonic,
   createZignerWalletEntries,
+  createLedgerWalletEntries,
+  assertLedgerUfvkValid,
   removeLinkedWallets,
   cleanupZcashData,
   nukeAllWalletData,
@@ -87,6 +91,10 @@ export interface KeyRingSlice {
   newMnemonicKey: (mnemonic: string, name: string) => Promise<string>;
   newZignerZafuKey: (data: ZignerZafuImport, name: string) => Promise<string>;
   addZignerUnencrypted: (data: ZignerZafuImport, name: string) => Promise<string>;
+  /** add a Ledger cold-signer account (flag-gated hardware-wallet scaffolding).
+   *  zcash-only single-signer; reuses the zigner-zafu vault path with
+   *  `coldSignerType: 'ledger'`, mirroring the Keystone precedent. */
+  addLedgerUnencrypted: (data: LedgerImport, name: string) => Promise<string>;
   newFrostMultisigKey: (params: FrostMultisigParams) => Promise<string>;
   selectKeyRing: (vaultId: string) => Promise<void>;
   renameKeyRing: (vaultId: string, newName: string) => Promise<void>;
@@ -567,6 +575,115 @@ export const createKeyRingSlice =
           state.keyRing.enabledNetworks = newEnabledNetworks;
           if (vaults.length === 0 && supportedNetworks.length > 0) {
             state.keyRing.activeNetwork = supportedNetworks[0] as NetworkType;
+          }
+        });
+
+        return vaultId;
+      },
+
+      addLedgerUnencrypted: async (data: LedgerImport, name: string) => {
+        // Ledger cold-signer account (clone of addZignerUnencrypted, trimmed to
+        // zcash-only single-signer). No ZID-merge: a Ledger import carries no
+        // ZID key and is not part of the "one device = one wallet" cross-network
+        // merge story — each Ledger account is its own zcash-only vault.
+        const existingVaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+
+        // dedup: same device + account = same keys.
+        for (const v of existingVaults) {
+          if (v.type !== 'zigner-zafu') {
+            continue;
+          }
+          if (
+            v.insensitive['coldSignerType'] === 'ledger' &&
+            v.insensitive['deviceId'] === data.deviceId &&
+            v.insensitive['accountIndex'] === data.accountIndex
+          ) {
+            throw new Error('this ledger account is already imported');
+          }
+        }
+        // also catch cross-device UFVK duplicates against existing zcash wallets.
+        if (data.ufvk) {
+          const existingZcash = ((await local.get('zcashWallets')) ?? []) as ZcashWalletJson[];
+          if (existingZcash.some(w => w.ufvk === data.ufvk || w.orchardFvk === data.ufvk)) {
+            throw new Error('a wallet with this zcash viewing key already exists');
+          }
+        }
+
+        // Validate the device-exported UFVK BEFORE anything is persisted. If it
+        // is rejected after the vault write, the user is left with a selected
+        // vault that has no wallet record behind it.
+        await assertLedgerUfvkValid(data.ufvk);
+
+        const vaultId = generateVaultId();
+        const existingKeyPrint = await local.get('passwordKeyPrint');
+        const existingSessionKey = await session.get('passwordKey');
+
+        let key: Key;
+        let isNewSetup = false;
+
+        if (existingKeyPrint && existingSessionKey) {
+          key = await Key.fromJson(existingSessionKey);
+        } else if (!existingKeyPrint) {
+          const created = await createMasterKey('');
+          key = created.key;
+          isNewSetup = true;
+          await session.set('passwordKey', created.keyJson);
+          await local.set('passwordKeyPrint', created.keyPrint.toJson());
+        } else {
+          throw new Error('keyring locked - unlock first or use password flow');
+        }
+
+        const encryptedBox = await key.seal(JSON.stringify(data));
+        const supportedNetworks = ['zcash'];
+        const vault = buildLedgerVault(vaultId, name, JSON.stringify(encryptedBox.toJson()), data, {
+          airgapOnly: isNewSetup,
+        });
+
+        const vaults = ((await local.get('vaults')) ?? []) as EncryptedVault[];
+        const newVaults = [vault, ...vaults];
+        await local.set('vaults', newVaults);
+
+        const currentSelectedId = await local.get('selectedVaultId');
+        const activeNetwork = (await local.get('activeNetwork')) ?? '';
+        const autoSelect = shouldAutoSelectZigner(
+          currentSelectedId,
+          vaults.length,
+          activeNetwork,
+          supportedNetworks,
+        );
+        if (autoSelect) {
+          await local.set('selectedVaultId', vaultId);
+        }
+
+        let newEnabledNetworks: NetworkType[];
+        try {
+          newEnabledNetworks = await createLedgerWalletEntries(
+            data,
+            name,
+            key,
+            vaultId,
+            vaults.length,
+            local,
+          );
+        } catch (cause) {
+          // Roll the vault (and the selection) back so a failed wallet write
+          // cannot leave a selected Ledger vault with nothing behind it.
+          await local.set('vaults', vaults);
+          if (autoSelect) {
+            await local.set('selectedVaultId', currentSelectedId ?? '');
+          }
+          throw cause;
+        }
+
+        const selectedId = autoSelect ? vaultId : (currentSelectedId ?? '');
+        const keyInfos = vaultsToKeyInfos(newVaults, selectedId);
+        set(state => {
+          state.keyRing.keyInfos = keyInfos;
+          state.keyRing.selectedKeyInfo = keyInfos.find(k => k.isSelected);
+          state.keyRing.status = 'unlocked';
+          state.keyRing.enabledNetworks = newEnabledNetworks;
+          if (vaults.length === 0) {
+            state.keyRing.activeNetwork = 'zcash' as NetworkType;
           }
         });
 
