@@ -360,6 +360,31 @@ export const externalMessageListener = (
     }
 
     case 'zafu_frost_sign': {
+      // DISABLED — this was unconditional blind signing.
+      //
+      // The approval screen for this entry showed only a truncated sighash:
+      // no PCZT, no outputs, no verification of any kind. A page holding the
+      // 'frost' capability could therefore get a threshold share released over
+      // an arbitrary 32 bytes it chose. Worse, the caller's randomizer was set
+      // equal to the message (alphas = [sighashHex]) — an attacker-chosen
+      // randomizer over an attacker-chosen message is exactly the adaptive
+      // setting randomized FROST exists to exclude.
+      //
+      // The safety posture was inverted: the VERIFIED orchard path sits behind
+      // ENABLE_FROST_SIGN_ORCHARD while this unverifiable one had no gate at
+      // all. Use zafu_frost_sign_orchard, which publishes the PCZT and runs
+      // the co-signer verdict before anything is signed.
+      sendResponse({
+        success: false,
+        error:
+          'zafu_frost_sign is disabled: it signed an unverifiable digest. ' +
+          'Use zafu_frost_sign_orchard, which binds the signature to a PCZT the ' +
+          'user can actually inspect.',
+      });
+      return true;
+    }
+
+    case 'zafu_frost_sign_disabled_unreachable': {
       void (async () => {
         const gate = await requireCapability(sender, 'frost', sendResponse);
         if (!gate) {

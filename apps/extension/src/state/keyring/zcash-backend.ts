@@ -141,15 +141,30 @@ export function isZidecarEndpoint(serverUrl: string): boolean {
 
 /** Trust description used in UI badges / tooltips. Single source of truth. */
 export function backendTrustDescription(backend: ZcashBackend): {
-  readonly label: 'trustless' | 'trusted';
+  readonly label: 'trustless' | 'partial' | 'trusted';
   readonly summary: string;
 } {
   if (backend === 'zidecar') {
     return {
-      label: 'trustless',
+      // NOT 'trustless'. Claiming that was the most dangerous line in this
+      // codebase: users choose an endpoint based on this badge.
+      //
+      // What actually holds today: NOMT nullifier/commitment paths are real
+      // merkle proofs and are verified locally against the root the server
+      // reports. What does NOT hold: the Ligerito header proof carries no
+      // constraint system, so the roots it "proves" are values the prover
+      // chose and absorbed into its own transcript. Nothing binds them to
+      // consensus. A malicious server can therefore present a coherent but
+      // fabricated chain state, and block/action OMISSION is not detectable
+      // at all. Cross-endpoint verification is the design's stated mitigation
+      // and is not wired up.
+      label: 'partial',
       summary:
-        'Ligerito header proofs + NOMT nullifier proofs verified locally. ' +
-        'The server can refuse to serve but cannot lie about chain state.',
+        'Merkle proofs for nullifiers and commitments are checked locally, so ' +
+        'the server cannot forge those paths. It can still omit blocks or ' +
+        'actions, and the header proof does not yet bind the chain state it ' +
+        'reports — so this is stronger than a plain light server, but it is ' +
+        'not trustless. Prefer an endpoint you run yourself.',
     };
   }
   return {

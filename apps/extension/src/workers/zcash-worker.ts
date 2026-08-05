@@ -1067,17 +1067,31 @@ const verifySyncProofs = async (
     }
   }
 
-  const covered = (n: DecryptedNote): boolean =>
-    poolOf(n) === 'ironwood' ? ironwoodHorizon >= tip : orchardHorizon >= tip;
-
-  const unspentNotes = unspentAll.filter(covered);
+  // The horizon is ONE-DIRECTIONAL, and treating it as a filter was wrong.
+  //
+  // `is_spent = true` is a Merkle INCLUSION proof against nullifier_root,
+  // verified locally below and root-bound before use — it is sound at any
+  // horizon. Only `is_spent = false` is uninformative above the horizon,
+  // because the NOMT set is existence-keyed and "not indexed yet" and "not
+  // spent" are the same bytes.
+  //
+  // Filtering the QUERY by horizon therefore discarded sound positives along
+  // with the unsound negatives. Worse: the orchard backfill trails the tip by
+  // design, so `orchardHorizon >= tip` is essentially never true in
+  // production — which meant this disabled orchard spend detection outright
+  // rather than merely narrowing it. Always ask; gate only what we believe.
+  const unspentNotes = unspentAll;
   const unspentNfs = unspentNotes.map(n => hexDecode(n.nullifier));
 
-  if (unspentAll.length > unspentNfs.length) {
+  // No absence gate is needed at the consumption site below: the loop acts
+  // ONLY on `proof.isSpent === true`, and never infers "unspent" from a
+  // missing entry. The horizons are still reported so the log states what
+  // coverage the answers carry.
+  if (unspentAll.length > 0) {
     console.log(
-      `[zcash-worker] nullifier proofs cover ${unspentNfs.length}/${unspentAll.length} notes ` +
-        `(orchard index @${orchardHorizon}, ironwood @${ironwoodHorizon}, tip ${tip}) — ` +
-        `the rest rely on scan-time spend detection`,
+      `[zcash-worker] querying ${unspentNfs.length} nullifier proofs ` +
+        `(orchard index @${orchardHorizon}, ironwood @${ironwoodHorizon}, tip ${tip}); ` +
+        `spent-proofs always trusted, unspent trusted only at/above the horizon`,
     );
   }
 
@@ -1091,11 +1105,29 @@ const verifySyncProofs = async (
       );
     }
 
+    // Bind every proof to the root we actually checked, and to a nullifier we
+    // actually asked about. Verifying each path against the PER-PROOF root the
+    // server supplied made the whole pass forgeable: a malicious server could
+    // return the real root in the batch field, then serve paths valid against
+    // a tree it built itself. With is_spent=true that permanently marks a live
+    // note spent (funds vanish from the balance and become unspendable); with
+    // is_spent=false it hides a real spend.
+    const requested = new Set(unspentNfs.map(nf => hexEncode(nf)));
     let newlySpent = 0;
     for (const proof of nfProofs) {
+      const proofRootHex = hexEncode(proof.nullifierRoot);
+      if (proofRootHex !== nfRootHex) {
+        throw new Error(
+          `nullifier proof root mismatch: proof=${proofRootHex.slice(0, 16)} batch=${nfRootHex.slice(0, 16)}`,
+        );
+      }
+      const nfHexForProof = hexEncode(proof.nullifier);
+      if (!requested.has(nfHexForProof)) {
+        throw new Error(`nullifier proof for unrequested nullifier ${nfHexForProof.slice(0, 16)}`);
+      }
       const valid = zyncModule['verify_nullifier_proof'](
         hexEncode(proof.nullifier),
-        hexEncode(proof.nullifierRoot),
+        proofRootHex,
         proof.isSpent,
         proof.pathProofRaw,
         hexEncode(proof.valueHash),
@@ -1267,8 +1299,24 @@ const markNotesSpentLocally = async (
     for (const nf of nullifiers) {
       spentStore.put({ walletId, nullifier: nf });
     }
+    // MUST await the commit. Returning early cannot observe onerror/onabort,
+    // so a QuotaExceededError or a version-change abort was swallowed while
+    // state.spentNullifiers had already been mutated: the wallet looked
+    // correct until reload, then offered the spent note again. Every other
+    // writer in this file awaits txComplete; this one did not.
+    await txComplete(tx);
   } catch (e) {
+    // Roll the in-memory marks back so memory cannot claim a durability the
+    // store does not have — better to re-detect the spend on the next scan
+    // than to believe a write that never landed.
+    for (const nf of nullifiers) {
+      state.spentNullifiers.delete(nf);
+    }
+    for (const note of updated) {
+      note.spent_by_txid = undefined;
+    }
     console.error('[zcash-worker] failed to persist local spend marks:', e);
+    return;
   }
   console.log(
     `[zcash-worker] marked ${nullifiers.length} note(s) spent locally by ${txid.slice(0, 16)}`,
@@ -2646,8 +2694,19 @@ const runSync = async (
           console.warn('[zcash-worker] failed to cache tree frontier:', e);
         }
 
-        // verify proofs if we have pending notes and zync-core (zidecar only)
-        if (trustless && zyncModule && pendingCmxs.length > 0) {
+        // Verify proofs whenever the backend supports it — NOT only when this
+        // batch happened to discover a new orchard note.
+        //
+        // pendingCmxs is appended to only by the orchard discovery loop, so
+        // gating on it meant the nullifier pass (all server-side spend
+        // detection, both pools) ran only in a cycle right after an incoming
+        // orchard note. A steady-state wallet never ran it; an ironwood-only
+        // wallet never ran it at all. That is precisely the wallet that needs
+        // it, since ironwood has no other spent oracle.
+        //
+        // The commitment-proof step inside still no-ops on an empty
+        // pendingCmxs, so this only widens what was already conditional.
+        if (trustless && zyncModule) {
           try {
             await verifySyncProofs(
               client,
@@ -5246,6 +5305,14 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             migrateTxHex,
             migratePayload.serverUrl,
           );
+          // The migration spends EVERY orchard note. Both send paths mark
+          // their inputs spent at broadcast; this one did not, so for the
+          // whole confirmation window the wallet still counted the migrated
+          // orchard balance as spendable — and the fail-closed guard only
+          // fires when ironwood notes are absent, so a second migration
+          // launched in that window would build a conflicting spend of the
+          // same notes.
+          await markNotesSpentLocally(walletId, migrateState, orchardNotes, migrateHotTxid);
           emitProgress('complete', `txid=${migrateHotTxid}`);
           workerSelf.postMessage({
             type: 'tx-result',

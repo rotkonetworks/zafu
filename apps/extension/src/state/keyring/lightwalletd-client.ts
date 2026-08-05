@@ -367,15 +367,24 @@ export class LightwalletdClient implements ZcashClient {
         }
         fn(field, wire, v);
       } else if (wire === 2) {
+        // Unsigned + shift-bounded. `len |= (b & 0x7f) << s` overflows to a
+        // NEGATIVE int32 at s=28, after which `pos += len` walks backwards and
+        // the parser loops re-reading the same bytes forever. Multiply instead
+        // of shift, and refuse a varint longer than 5 bytes.
         let len = 0,
-          s = 0;
-        while (pos < buf.length) {
+          s = 0,
+          lenBytes = 0;
+        while (pos < buf.length && lenBytes < 5) {
           const b = buf[pos++]!;
-          len |= (b & 0x7f) << s;
+          len += (b & 0x7f) * Math.pow(2, s);
+          lenBytes++;
           if (!(b & 0x80)) {
             break;
           }
           s += 7;
+        }
+        if (!Number.isSafeInteger(len) || len < 0 || pos + len > buf.length) {
+          break;
         }
         fn(field, wire, buf.subarray(pos, pos + len));
         pos += len;
@@ -399,10 +408,15 @@ export class LightwalletdClient implements ZcashClient {
       if (buf[pos]! & 0x80) {
         break;
       } // trailer frame
+      // `<<24` yields a SIGNED int32: a declared length >= 2^31 parses
+      // negative, the bounds check below passes, subarray clamps to empty and
+      // `pos += len` walks BACKWARDS — an unbounded loop that pushes an object
+      // every 5 bytes until the worker OOMs. A 9-byte hostile response was
+      // enough. Use unsigned arithmetic and reject anything not a sane length.
       const len =
-        (buf[pos + 1]! << 24) | (buf[pos + 2]! << 16) | (buf[pos + 3]! << 8) | buf[pos + 4]!;
+        buf[pos + 1]! * 0x1000000 + (buf[pos + 2]! << 16) + (buf[pos + 3]! << 8) + buf[pos + 4]!;
       pos += 5;
-      if (pos + len > buf.length) {
+      if (!Number.isSafeInteger(len) || len < 0 || pos + len > buf.length) {
         break;
       }
       blocks.push(this.parseBlock(buf.subarray(pos, pos + len)));
