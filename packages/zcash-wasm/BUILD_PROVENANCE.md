@@ -1,5 +1,25 @@
 # zcash-wasm build provenance
 
+## ⚠ THREE consumers — refresh ALL of them
+
+A rebuild that updates only some copies ships a wallet whose worker and
+prover disagree. This has bitten twice:
+
+| path | loaded by | symptom when stale |
+|---|---|---|
+| `packages/zcash-wasm/` (`zafu_*` + duplicated `zcash_*`) | build-time package import | type/API drift |
+| `apps/extension/public/zafu-wasm/` | the main compute worker | `X.compute_txid is not a function`; silently rebuilds txs with an old consensus constant |
+| `apps/extension/public/zafu-wasm-parallel/` | the offscreen halo2 prover | proving fails or falls back to single-thread |
+
+Both `public/` copies are the PARALLEL build (rayon `snippets/`, shared
+memory). After copying either one, re-apply the Chrome worker patch and
+verify `wbgRayonBase` is BOTH defined and used in
+`snippets/*/src/workerHelpers.js` — patching only the call site leaves an
+undefined reference that kills sub-workers silently.
+
+Finally: `pnpm build` (NOT `pnpm bundle:prod`) so `dist/` and `beta-dist/`
+both pick the new blobs up, then grep a known-new symbol in each.
+
 These vendored .wasm blobs are build artifacts. Do NOT hand-edit.
 Reproduce by checking out the zcli rev below and running the commands.
 
