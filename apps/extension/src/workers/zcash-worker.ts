@@ -23,6 +23,7 @@ import {
   ZIGNER_PCZT_SIGN_UR_TYPE,
 } from '../routes/popup/send/zcash-send-cbor-helpers';
 import { nu63ActivationHeight } from '../config/feature-flags';
+import { crossCheckTip } from './cross-verify';
 import {
   CommitmentReservoir,
   padCommitmentQuery,
@@ -2820,10 +2821,46 @@ const runSync = async (
     })();
   }
 
+  // one cross-endpoint check per sync run - it is a sanity check, not a poll
+  let crossCheckedThisRun = false;
+
   while (!state.syncAbort) {
     try {
       const tip = await client.getTip();
       const chainHeight = tip.height;
+
+      // Cross-check the tip against an INDEPENDENT operator, once per
+      // catch-up. The Ligerito header proof has no constraint system, so the
+      // chain state this endpoint reports is not bound to consensus by
+      // anything we can verify locally; cross-verification is the design's
+      // own stated mitigation and had zero call sites. Advisory, not fatal:
+      // a lagging or unreachable peer is far more common than an attack.
+      if (currentHeight >= chainHeight && !crossCheckedThisRun) {
+        crossCheckedThisRun = true;
+        void crossCheckTip(serverUrl, chainHeight, async (peerUrl, timeoutMs) => {
+          const peer = await makeZcashClient(peerUrl);
+          return await Promise.race([
+            peer.getTip(),
+            new Promise<never>((_, rej) =>
+              setTimeout(() => rej(new Error('peer tip timeout')), timeoutMs),
+            ),
+          ]);
+        })
+          .then(res => {
+            if (res.disagreed) {
+              console.error(`[zcash-worker] CROSS-CHECK DISAGREEMENT: ${res.detail}`);
+              workerSelf.postMessage({
+                type: 'cross-check-warning',
+                network: 'zcash',
+                walletId,
+                payload: { detail: res.detail, peerUrl: res.peerUrl },
+              });
+            } else {
+              console.log(`[zcash-worker] cross-check: ${res.detail}`);
+            }
+          })
+          .catch(e => console.warn('[zcash-worker] cross-check failed:', e));
+      }
 
       if (currentHeight >= chainHeight) {
         // caught up: cache the tree frontier at sync height for fast witness building.
