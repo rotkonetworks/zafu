@@ -20,18 +20,33 @@ export { isLedgerSupported, connectLedger } from './transport';
 export {
   ledgerCapabilities,
   versionAtLeast,
+  transparentSigningSupport,
+  branchForHeight,
   MIN_SHIELDED_APP_VERSION,
+  CONSENSUS_BRANCH_ID,
+  NETWORK_UPGRADE_ACTIVATION,
   type LedgerCapabilities,
+  type TransparentSigningSupport,
+  type NetworkUpgradeName,
 } from './capabilities';
 export {
   getLedgerTransparentAddress,
   ledgerTransparentSend,
   buildOutputScriptHex,
+  expiryHeightBytes,
   transparentPath,
+  DEVICE_MAX_OUTPUTS,
+  DEVICE_MAX_SCRIPT_SIZE,
   type LedgerUtxo,
   type LedgerOutput,
   type LedgerTransparentSendParams,
 } from './transparent';
+export {
+  zcashV5PrevTxToLedgerWire,
+  prevTxHexToLedgerWire,
+  type LedgerPrevTx,
+  type LedgerPrevTxOutput,
+} from './prevtx';
 export type { LedgerConnection } from './transport';
 export { getLedgerAccount } from './signer';
 export type { LedgerAccount } from './signer';
