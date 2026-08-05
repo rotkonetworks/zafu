@@ -5,6 +5,7 @@
  * zigner wallets: informational (QR auth happens in approval popup)
  */
 
+import { OverlayPortal } from '../../components/overlay-portal';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useStore } from '../../state';
 import { passwordSelector } from '../../state/password';
@@ -82,8 +83,13 @@ export const PasswordGateModal = ({
     return null;
   }
 
+  // Portaled + z-[70]: the auth gate is by definition the topmost surface.
+  // Rendered inline it was trapped below body-portaled overlays (e.g. the
+  // ironwood migrate takeover at z-60) — requestAuth() opened an invisible
+  // modal and the confirm click appeared to do nothing.
   return (
-    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm'>
+    <OverlayPortal>
+    <div className='fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm'>
       <div className='mx-4 w-full max-w-sm rounded-lg border border-border-soft bg-canvas p-5 shadow-xl'>
         <div className='mb-4 flex items-center gap-2'>
           <span className='i-lucide-lock h-4 w-4 text-zigner-gold' />
@@ -165,5 +171,6 @@ export const PasswordGateModal = ({
         )}
       </div>
     </div>
+    </OverlayPortal>
   );
 };
