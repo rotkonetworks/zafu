@@ -1,15 +1,14 @@
 # zcash-wasm build provenance
 
-## ⚠ THREE consumers — refresh ALL of them
+## ⚠ TWO consumers — refresh BOTH of them
 
 A rebuild that updates only some copies ships a wallet whose worker and
 prover disagree. This has bitten twice:
 
 | path                                                     | loaded by                  | symptom when stale                                                                       |
 | -------------------------------------------------------- | -------------------------- | ---------------------------------------------------------------------------------------- |
-| `packages/zcash-wasm/` (`zafu_*` + duplicated `zcash_*`) | build-time package import  | type/API drift                                                                           |
+| `packages/zcash-wasm/` (`zafu_*` + duplicated `zcash_*`) | build-time package import  | type/API drift; missing exports (e.g. shielding)                                                                           |
 | `apps/extension/public/zafu-wasm/`                       | the main compute worker    | `X.compute_txid is not a function`; silently rebuilds txs with an old consensus constant |
-| `apps/extension/public/zafu-wasm-parallel/`              | the offscreen halo2 prover | proving fails or falls back to single-thread                                             |
 
 Both `public/` copies are the PARALLEL build (rayon `snippets/`, shared
 memory). After copying either one, re-apply the Chrome worker patch and
@@ -47,7 +46,7 @@ Reproduce by checking out the zcli rev below and running the commands.
       --enable-simd --enable-bulk-memory --enable-mutable-globals \
       --enable-nontrapping-float-to-int \
       pkg/zafu_wasm_bg.wasm -o pkg/zafu_wasm_bg.wasm
-    sha256(zafu_wasm_bg.wasm) = b9a1c5298f283fde12e5eae075f0745d4400bc943f3d494f6e97a28a33b56d41
+    sha256(zafu_wasm_bg.wasm) = 1ebdc4b5215f1227ffa05d08b1d9922f3de548f190773cbba15bae98e1072522
 
 ## parallel / rayon (apps/extension/public/zafu-wasm-parallel/zafu_wasm_bg.wasm)
 
@@ -65,7 +64,7 @@ Reproduce by checking out the zcli rev below and running the commands.
     wasm-opt -Oz --enable-threads --enable-bulk-memory --enable-simd \
       --enable-mutable-globals --enable-nontrapping-float-to-int \
       pkg-parallel/zafu_wasm_bg.wasm -o pkg-parallel/zafu_wasm_bg.wasm
-    sha256(zafu_wasm_bg.wasm) = fe73e27a8e31e27b45c6cc961ed9638afd6cfba37ffcb16e114ce11dda82db4a
+    sha256(zafu_wasm_bg.wasm) = 1ebdc4b5215f1227ffa05d08b1d9922f3de548f190773cbba15bae98e1072522
 
     Verify the rebuilt blob has shared imported memory before shipping:
       `(import "./zafu_wasm_bg.js" "memory" (memory ... shared))` post-bindgen.
@@ -77,3 +76,28 @@ Reproduce by checking out the zcli rev below and running the commands.
 
 Verify: rebuild from the rev, sha256sum the outputs,
 diff against the values above. A mismatch means the vendored blob is stale.
+
+## 2026-08-05 rebuild — ironwood shielding
+
+Rebuilt so `build_shielding_transaction_ironwood` (t->z into the NU6.3 pool)
+is actually reachable from the extension; the merge that added it to
+crates/zcash-wasm did NOT ship a wasm, so zafu could not call it.
+
+Corrections to this file, both found the hard way:
+  - `apps/extension/public/zafu-wasm-parallel/` no longer exists. There are
+    TWO consumers, not three.
+  - BOTH shipped copies are the PARALLEL build. The heading below still calls
+    `packages/zcash-wasm/` single-thread; it is not, and shipping a
+    single-thread blob there would break rayon proving.
+
+Verified after copying:
+  - all three files (zafu_wasm_bg.wasm, the zcash_* duplicate, and the
+    public/ copy) are byte-identical: sha256 1ebdc4b5215f1227...
+  - `(import "./zafu_wasm_bg.js" "memory" (memory ... shared))` present
+  - the Chrome worker patch re-applied to both `snippets/` trees
+  - `tsc --noEmit` clean, all four webpack configs compile
+
+The one build warning (`workerHelpers.js:57`, expression dependency) is our
+LOCAL PATCH and is expected.
+
+toolchain: wasm-bindgen 0.2.114, binaryen/wasm-opt 123

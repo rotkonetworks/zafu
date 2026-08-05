@@ -527,6 +527,12 @@ export function build_merkle_paths_ironwood(tree_state_hex, compact_blocks_json,
 /**
  * Build a shielding transaction (transparent → orchard) with real Halo 2 proofs.
  *
+ * PRE-NU6.3 ONLY. [`guard_orchard_shielding_allowed`] refuses to build at or
+ * after the NU6.3 activation height (or when the supplied consensus branch id
+ * is NU6.3), because orchard outputs are consensus-disabled from that point
+ * and the resulting notes would be stranded. Use
+ * [`build_shielding_transaction_ironwood`] there.
+ *
  * Spends transparent P2PKH UTXOs and creates an orchard output to the sender's
  * own shielded address. Uses `orchard::builder::Builder` for proper action
  * construction and zero-knowledge proof generation (client-side).
@@ -564,6 +570,118 @@ export function build_shielding_transaction(utxos_json, privkey_hex, recipient, 
         var ptr3 = isLikeNone(branch_id_hex) ? 0 : passStringToWasm0(branch_id_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         var len3 = WASM_VECTOR_LEN;
         const ret = wasm.build_shielding_transaction(ptr0, len0, ptr1, len1, ptr2, len2, amount, fee, anchor_height, mainnet, ptr3, len3);
+        var ptr5 = ret[0];
+        var len5 = ret[1];
+        if (ret[3]) {
+            ptr5 = 0; len5 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred6_0 = ptr5;
+        deferred6_1 = len5;
+        return getStringFromWasm0(ptr5, len5);
+    } finally {
+        wasm.__wbindgen_free(deferred6_0, deferred6_1, 1);
+    }
+}
+
+/**
+ * Build a shielding transaction into whichever pool is CORRECT at
+ * `target_height`, so a caller never has to (and never can) pick the stranded
+ * one by omission.
+ *
+ * At/after NU6.3 activation this is [`build_shielding_transaction_ironwood`]
+ * (and `branch_id_hex` must be the live NU6.3 branch id - there is no
+ * fallback); before it, the legacy orchard builder. Returns hex-encoded raw
+ * transaction bytes either way.
+ * @param {string} utxos_json
+ * @param {string} privkey_hex
+ * @param {string} recipient
+ * @param {bigint} amount
+ * @param {bigint} fee
+ * @param {number} target_height
+ * @param {boolean} mainnet
+ * @param {string | null} [branch_id_hex]
+ * @param {string | null} [memo_hex]
+ * @returns {string}
+ */
+export function build_shielding_transaction_auto(utxos_json, privkey_hex, recipient, amount, fee, target_height, mainnet, branch_id_hex, memo_hex) {
+    let deferred7_0;
+    let deferred7_1;
+    try {
+        const ptr0 = passStringToWasm0(utxos_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(privkey_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        var ptr3 = isLikeNone(branch_id_hex) ? 0 : passStringToWasm0(branch_id_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len3 = WASM_VECTOR_LEN;
+        var ptr4 = isLikeNone(memo_hex) ? 0 : passStringToWasm0(memo_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len4 = WASM_VECTOR_LEN;
+        const ret = wasm.build_shielding_transaction_auto(ptr0, len0, ptr1, len1, ptr2, len2, amount, fee, target_height, mainnet, ptr3, len3, ptr4, len4);
+        var ptr6 = ret[0];
+        var len6 = ret[1];
+        if (ret[3]) {
+            ptr6 = 0; len6 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred7_0 = ptr6;
+        deferred7_1 = len6;
+        return getStringFromWasm0(ptr6, len6);
+    } finally {
+        wasm.__wbindgen_free(deferred7_0, deferred7_1, 1);
+    }
+}
+
+/**
+ * Build a signed transparent→IRONWOOD shielding transaction (NU6.3 / V6).
+ *
+ * The post-NU6.3 replacement for [`build_shielding_transaction`]: it spends the
+ * selected transparent P2PKH UTXOs and creates ONE ironwood output for
+ * `total_selected - fee` to `recipient`. Returns hex-encoded raw transaction
+ * bytes, the same shape the legacy orchard builder returns, so the caller
+ * broadcasts it unchanged.
+ *
+ * # Arguments
+ * * `utxos_json` - JSON array of `{txid, vout, value, script}` (same shape as
+ *   the orchard builder; `txid` is display/big-endian hex, `script` is the
+ *   P2PKH scriptPubKey hex)
+ * * `privkey_hex` - hex-encoded 32-byte secp256k1 private key owning every UTXO
+ * * `recipient` - unified address whose orchard-format receiver is the ironwood
+ *   recipient
+ * * `amount` - UTXO-selection target (selection stops once `amount + fee` is
+ *   covered); the ironwood output always carries ALL selected value minus fee
+ * * `fee` - fee in zatoshi; MUST be at least the ZIP-317 conventional fee
+ *   ([`zip317_shielding_fee`]) or the build is refused
+ * * `target_height` - build height (must be at/after NU6.3 activation)
+ * * `expected_branch_id` - branch id the wallet read from GetLightdInfo; must
+ *   be 0x37a5165b
+ * * `mainnet` - true for mainnet, false for testnet
+ * * `memo_hex` - optional memo (hex, ≤512 bytes); empty memo when omitted
+ * @param {string} utxos_json
+ * @param {string} privkey_hex
+ * @param {string} recipient
+ * @param {bigint} amount
+ * @param {bigint} fee
+ * @param {number} target_height
+ * @param {number} expected_branch_id
+ * @param {boolean} mainnet
+ * @param {string | null} [memo_hex]
+ * @returns {string}
+ */
+export function build_shielding_transaction_ironwood(utxos_json, privkey_hex, recipient, amount, fee, target_height, expected_branch_id, mainnet, memo_hex) {
+    let deferred6_0;
+    let deferred6_1;
+    try {
+        const ptr0 = passStringToWasm0(utxos_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(privkey_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        var ptr3 = isLikeNone(memo_hex) ? 0 : passStringToWasm0(memo_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len3 = WASM_VECTOR_LEN;
+        const ret = wasm.build_shielding_transaction_ironwood(ptr0, len0, ptr1, len1, ptr2, len2, amount, fee, target_height, expected_branch_id, mainnet, ptr3, len3);
         var ptr5 = ret[0];
         var len5 = ret[1];
         if (ret[3]) {
@@ -857,6 +975,8 @@ export function build_unsigned_pczt(ufvk_str, notes_json, recipient, amount, fee
  *
  * Same as `build_shielding_transaction` but does NOT sign the transparent inputs.
  * Instead, returns the per-input sighashes so an external signer (e.g. Zigner) can sign them.
+ *
+ * PRE-NU6.3 ONLY - same fail-closed gate as `build_shielding_transaction`.
  *
  * Returns JSON: `{ sighashes: [hex], unsigned_tx_hex: hex, summary: string }`
  * @param {string} utxos_json
@@ -1992,6 +2112,32 @@ export function parse_signature_response(qr_hex) {
 }
 
 /**
+ * Which shielded pool a transparent→shielded transaction must target at
+ * `target_height`: `"ironwood"` at/after NU6.3 activation, `"orchard"` before.
+ *
+ * Callers that do not pick a pool explicitly MUST resolve it through this
+ * function (or through [`build_shielding_transaction_auto`], which calls it)
+ * rather than defaulting to orchard: from NU6.3 onwards an orchard output is
+ * a stranded note (orchard sends are consensus-disabled, so the funds can only
+ * be moved again by a turnstile migration that costs a second fee).
+ * @param {number} target_height
+ * @param {boolean} mainnet
+ * @returns {string}
+ */
+export function shielding_pool_for_height(target_height, mainnet) {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.shielding_pool_for_height(target_height, mainnet);
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
  * Derive a transparent (t1.../tm...) address from a UFVK string at a given address index.
  * Returns the base58check-encoded P2PKH address.
  * @param {string} ufvk_str
@@ -2347,6 +2493,17 @@ export function witness_sync_update_ironwood(start_frontier_hex, compact_blocks_
         throw takeFromExternrefTable0(ret[1]);
     }
     return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * ZIP-317 conventional fee for an ironwood shielding transaction with `n`
+ * transparent P2PKH inputs (JS-visible; see [`zip317_shielding_fee`]).
+ * @param {number} n_transparent_inputs
+ * @returns {bigint}
+ */
+export function zip317_shielding_fee_zat(n_transparent_inputs) {
+    const ret = wasm.zip317_shielding_fee_zat(n_transparent_inputs);
+    return BigInt.asUintN(64, ret);
 }
 
 /**
@@ -2737,7 +2894,7 @@ function __wbg_get_imports(memory) {
             table.set(offset + 2, true);
             table.set(offset + 3, false);
         },
-        memory: memory || new WebAssembly.Memory({initial:51,maximum:32768,shared:true}),
+        memory: memory || new WebAssembly.Memory({initial:52,maximum:32768,shared:true}),
     };
     return {
         __proto__: null,

@@ -181,6 +181,12 @@ export function build_merkle_paths_ironwood(tree_state_hex: string, compact_bloc
 /**
  * Build a shielding transaction (transparent → orchard) with real Halo 2 proofs.
  *
+ * PRE-NU6.3 ONLY. [`guard_orchard_shielding_allowed`] refuses to build at or
+ * after the NU6.3 activation height (or when the supplied consensus branch id
+ * is NU6.3), because orchard outputs are consensus-disabled from that point
+ * and the resulting notes would be stranded. Use
+ * [`build_shielding_transaction_ironwood`] there.
+ *
  * Spends transparent P2PKH UTXOs and creates an orchard output to the sender's
  * own shielded address. Uses `orchard::builder::Builder` for proper action
  * construction and zero-knowledge proof generation (client-side).
@@ -197,6 +203,46 @@ export function build_merkle_paths_ironwood(tree_state_hex: string, compact_bloc
  * * `mainnet` - true for mainnet, false for testnet
  */
 export function build_shielding_transaction(utxos_json: string, privkey_hex: string, recipient: string, amount: bigint, fee: bigint, anchor_height: number, mainnet: boolean, branch_id_hex?: string | null): string;
+
+/**
+ * Build a shielding transaction into whichever pool is CORRECT at
+ * `target_height`, so a caller never has to (and never can) pick the stranded
+ * one by omission.
+ *
+ * At/after NU6.3 activation this is [`build_shielding_transaction_ironwood`]
+ * (and `branch_id_hex` must be the live NU6.3 branch id - there is no
+ * fallback); before it, the legacy orchard builder. Returns hex-encoded raw
+ * transaction bytes either way.
+ */
+export function build_shielding_transaction_auto(utxos_json: string, privkey_hex: string, recipient: string, amount: bigint, fee: bigint, target_height: number, mainnet: boolean, branch_id_hex?: string | null, memo_hex?: string | null): string;
+
+/**
+ * Build a signed transparent→IRONWOOD shielding transaction (NU6.3 / V6).
+ *
+ * The post-NU6.3 replacement for [`build_shielding_transaction`]: it spends the
+ * selected transparent P2PKH UTXOs and creates ONE ironwood output for
+ * `total_selected - fee` to `recipient`. Returns hex-encoded raw transaction
+ * bytes, the same shape the legacy orchard builder returns, so the caller
+ * broadcasts it unchanged.
+ *
+ * # Arguments
+ * * `utxos_json` - JSON array of `{txid, vout, value, script}` (same shape as
+ *   the orchard builder; `txid` is display/big-endian hex, `script` is the
+ *   P2PKH scriptPubKey hex)
+ * * `privkey_hex` - hex-encoded 32-byte secp256k1 private key owning every UTXO
+ * * `recipient` - unified address whose orchard-format receiver is the ironwood
+ *   recipient
+ * * `amount` - UTXO-selection target (selection stops once `amount + fee` is
+ *   covered); the ironwood output always carries ALL selected value minus fee
+ * * `fee` - fee in zatoshi; MUST be at least the ZIP-317 conventional fee
+ *   ([`zip317_shielding_fee`]) or the build is refused
+ * * `target_height` - build height (must be at/after NU6.3 activation)
+ * * `expected_branch_id` - branch id the wallet read from GetLightdInfo; must
+ *   be 0x37a5165b
+ * * `mainnet` - true for mainnet, false for testnet
+ * * `memo_hex` - optional memo (hex, ≤512 bytes); empty memo when omitted
+ */
+export function build_shielding_transaction_ironwood(utxos_json: string, privkey_hex: string, recipient: string, amount: bigint, fee: bigint, target_height: number, expected_branch_id: number, mainnet: boolean, memo_hex?: string | null): string;
 
 /**
  * HOT-WALLET general ironwood send: spend the wallet's REAL ironwood notes to
@@ -306,6 +352,8 @@ export function build_unsigned_pczt(ufvk_str: string, notes_json: any, recipient
  *
  * Same as `build_shielding_transaction` but does NOT sign the transparent inputs.
  * Instead, returns the per-input sighashes so an external signer (e.g. Zigner) can sign them.
+ *
+ * PRE-NU6.3 ONLY - same fail-closed gate as `build_shielding_transaction`.
  *
  * Returns JSON: `{ sighashes: [hex], unsigned_tx_hex: hex, summary: string }`
  */
@@ -614,6 +662,18 @@ export function num_threads(): number;
 export function parse_signature_response(qr_hex: string): any;
 
 /**
+ * Which shielded pool a transparent→shielded transaction must target at
+ * `target_height`: `"ironwood"` at/after NU6.3 activation, `"orchard"` before.
+ *
+ * Callers that do not pick a pool explicitly MUST resolve it through this
+ * function (or through [`build_shielding_transaction_auto`], which calls it)
+ * rather than defaulting to orchard: from NU6.3 onwards an orchard output is
+ * a stranded note (orchard sends are consensus-disabled, so the funds can only
+ * be moved again by a turnstile migration that costs a second fee).
+ */
+export function shielding_pool_for_height(target_height: number, mainnet: boolean): string;
+
+/**
  * Derive a transparent (t1.../tm...) address from a UFVK string at a given address index.
  * Returns the base58check-encoded P2PKH address.
  */
@@ -717,6 +777,12 @@ export function witness_sync_update(start_frontier_hex: string, compact_blocks_j
 export function witness_sync_update_ironwood(start_frontier_hex: string, compact_blocks_json: string, existing_witnesses_json: string, new_notes_json: string): any;
 
 /**
+ * ZIP-317 conventional fee for an ironwood shielding transaction with `n`
+ * transparent P2PKH inputs (JS-visible; see [`zip317_shielding_fee`]).
+ */
+export function zip317_shielding_fee_zat(n_transparent_inputs: number): bigint;
+
+/**
  * Encode CBOR bytes as zoda transport QR frames (verified erasure coding).
  * Returns JSON array of `zt:type/hex` strings.
  * k = minimum frames to reconstruct, n = total frames.
@@ -745,6 +811,8 @@ export interface InitOutput {
     readonly build_ironwood_send_pczt: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number) => [number, number, number];
     readonly build_merkle_paths: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
     readonly build_shielding_transaction: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number, k: number, l: number) => [number, number, number, number];
+    readonly build_shielding_transaction_auto: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number, k: number, l: number, m: number, n: number) => [number, number, number, number];
+    readonly build_shielding_transaction_ironwood: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number, k: number, l: number, m: number) => [number, number, number, number];
     readonly build_signed_ironwood_send: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number) => [number, number, number, number];
     readonly build_signed_spend_transaction: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number, o: number, p: number) => [number, number, number, number];
     readonly build_signed_turnstile_migration: (a: number, b: number, c: number, d: number, e: bigint, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number) => [number, number, number, number];
@@ -765,6 +833,7 @@ export interface InitOutput {
     readonly generate_seed_phrase: () => [number, number, number, number];
     readonly get_commitment_proof_request: (a: number, b: number) => [number, number, number, number];
     readonly parse_signature_response: (a: number, b: number) => [number, number, number];
+    readonly shielding_pool_for_height: (a: number, b: number) => [number, number];
     readonly transparent_address_from_ufvk: (a: number, b: number, c: number) => [number, number, number, number];
     readonly transparent_pubkey_from_ufvk: (a: number, b: number, c: number) => [number, number, number, number];
     readonly tree_root_hex: (a: number, b: number) => [number, number, number, number];
@@ -797,6 +866,7 @@ export interface InitOutput {
     readonly watchonlywallet_scan_actions_parallel: (a: number, b: number, c: number) => [number, number, number];
     readonly witness_extract_path: (a: number, b: number) => [number, number, number];
     readonly witness_sync_update: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number];
+    readonly zip317_shielding_fee_zat: (a: number) => bigint;
     readonly zt_encode_frames: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly zt_encode_frames_auto: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly witness_extract_path_ironwood: (a: number, b: number) => [number, number, number];
