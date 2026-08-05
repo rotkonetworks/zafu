@@ -9,7 +9,7 @@
  * 5. broadcast transaction
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Sensitive } from '../../../components/sensitive';
 import { useStore } from '../../../state';
 import { zignerSigningSelector } from '../../../state/zigner-signing';
@@ -25,9 +25,14 @@ import {
   completeOrchardPcztInWorker,
   completeSendTxPcztInWorker,
   getBalanceInWorker,
+  getFeeMultiplier,
   type SendTxUnsignedResult,
   type SendTxPcztUnsignedResult,
 } from '../../../state/keyring/network-worker';
+import { usePoolNotes } from '../../../hooks/zcash-pool-balances';
+import { useZcashSyncStatus } from '../../../hooks/zcash-sync';
+import { nu63ActivationHeight } from '../../../config/feature-flags';
+import { maxSendable, quoteSend } from './spendable';
 import { Button } from '@repo/ui/components/ui/button';
 import { HankoSeal } from '@repo/ui/components/editorial';
 import { QrDisplay } from '../../../shared/components/qr-display';
@@ -74,6 +79,10 @@ type SendStep =
   | 'frost-room'
   | 'frost-signing'
   | 'airgap-flow';
+
+/** zatoshi → ZEC, trailing zeros trimmed. Matches the formatting used inline. */
+const fmtZecShort = (zat: bigint): string =>
+  (Number(zat) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
 
 /** live elapsed timer — ticks every second so the build screen never looks frozen */
 function LiveTimer({ startMs }: { startMs: number }) {
@@ -148,20 +157,37 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     [messages],
   );
 
-  // Defensive cleanup: if the popup is closed (extension popups unmount on
-  // click-outside) while we still have an unresolved optimistic record, mark
-  // it failed so it doesn't sit in 'submitting' forever with no path forward.
-  // The send pipeline running in the worker may complete after the popup is
-  // gone — that's fine, hasMessage() dedup in addMessage will swap the
-  // 'failed' record for the real confirmed one once the block scan lands.
+  // The store object, captured once. `messages` is an immer slice: EVERY
+  // mutation anywhere in the slice replaces it, so depending on it in the
+  // unmount effect below re-ran that cleanup on unrelated store churn — an
+  // incoming message arriving during a 30s–2min halo2 prove was enough to
+  // stamp the live send as over. The actions on the slice are stable, so a ref
+  // is the honest way to say "I want the store, not a subscription to it".
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+
+  // Unmount cleanup. A chrome popup unmounts on any click-outside, and the
+  // build/prove/broadcast pipeline it started keeps running, so this CANNOT
+  // report failure: we simply stop being able to observe the outcome.
+  //
+  // 'interrupted' says exactly that. It also leaves the record promotable —
+  // the ref is deliberately NOT cleared, so if this unmount was a navigation
+  // inside a surviving document (tab / side panel) the in-flight
+  // promoteToBroadcasted() still rewrites the temp id to the real txid and
+  // moves it on to broadcasting → pending.
+  //
+  // Empty deps: this must run on real unmount and nothing else.
   useEffect(() => {
     return () => {
-      if (pendingTempTxIdRef.current !== null) {
-        void messages.markOutgoingFailed(pendingTempTxIdRef.current, 'cancelled');
-        pendingTempTxIdRef.current = null;
+      const tempId = pendingTempTxIdRef.current;
+      if (tempId !== null) {
+        void messagesRef.current.markOutgoingInterrupted(
+          tempId,
+          'zafu closed while this send was still in progress — it may still have been sent',
+        );
       }
     };
-  }, [messages]);
+  }, []);
 
   const [step, setStep] = useState<SendStep>('form');
   const [recipient, setRecipient] = useState(prefill?.recipient ?? '');
@@ -224,21 +250,93 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const isLedgerAccount =
     HARDWARE_WALLET_ENABLED && (selectedKeyInfo?.type === 'ledger' || coldSignerType === 'ledger');
 
-  // fetch spendable balance on mount
-  const [balanceZat, setBalanceZat] = useState<bigint | null>(null);
+  // ── what this form is allowed to say about your money ───────────────────
+  //
+  // The figure shown here is the balance of the pool this send will actually
+  // spend from, not the wallet total. Post-NU6.3 orchard→orchard sends are
+  // consensus-disabled, so orchard funds are real but NOT sendable — a wallet
+  // holding 5 ZEC orchard and 0.01 ZEC ironwood used to advertise 5.0099 and
+  // then die after a full witness build and a two-minute prove. See
+  // ./spendable.ts for the arithmetic and the rest of the reasoning.
+  const { chainTip: sendChainTip } = useZcashSyncStatus();
+  const sendChainHeight = sendChainTip?.height ?? 0;
+  // Unknown height (0) is treated as post-activation: the send worker resolves
+  // the pool from the LIVE tip it fetches, and on mainnet today that is
+  // ironwood. Guessing orchard here would advertise funds the build refuses.
+  const activePool: 'orchard' | 'ironwood' =
+    sendChainHeight > 0 && sendChainHeight < nu63ActivationHeight(mainnet) ? 'orchard' : 'ironwood';
+
+  const poolNotes = usePoolNotes(selectedKeyInfo?.id);
+  const [feeMultiplier, setFeeMultiplier] = useState(1);
+  useEffect(() => {
+    getFeeMultiplier()
+      .then(setFeeMultiplier)
+      .catch(() => {});
+  }, []);
+
+  /** unspent note values in the pool this send would spend from */
+  const spendableNotes = useMemo(
+    () => poolNotes[activePool].filter(n => !n.spent).map(n => BigInt(n.value)),
+    [poolNotes, activePool],
+  );
+  /** value sitting in the pool that CANNOT be spent — orchard, post-NU6.3 */
+  const strandedZat = useMemo(
+    () =>
+      activePool === 'ironwood'
+        ? poolNotes.orchard.filter(n => !n.spent).reduce((s, n) => s + BigInt(n.value), 0n)
+        : 0n,
+    [poolNotes, activePool],
+  );
+
+  // Until the first notes fetch resolves we know nothing. `0n` would read as
+  // "you have no money", which is the one thing a wallet must not say when it
+  // simply has not looked yet.
+  const [notesLoaded, setNotesLoaded] = useState(false);
+  useEffect(() => {
+    if (poolNotes.orchard.length > 0 || poolNotes.ironwood.length > 0) {
+      setNotesLoaded(true);
+    }
+  }, [poolNotes]);
   useEffect(() => {
     if (!selectedKeyInfo) {
       return;
     }
+    // resolves even for a wallet with no notes at all, which the length check
+    // above cannot distinguish from "not fetched yet"
     getBalanceInWorker('zcash', selectedKeyInfo.id)
-      .then(bal => setBalanceZat(BigInt(bal)))
-      .catch(() => {}); // worker not ready
+      .then(() => setNotesLoaded(true))
+      .catch(() => {});
   }, [selectedKeyInfo?.id]);
 
-  const balanceZec = balanceZat !== null ? Number(balanceZat) / 1e8 : null;
-  const FEE_ZAT = 10_000n; // standard 0.0001 ZEC fee
-  const maxSendZec =
-    balanceZat !== null && balanceZat > FEE_ZAT ? Number(balanceZat - FEE_ZAT) / 1e8 : 0;
+  const balanceZat = notesLoaded ? spendableNotes.reduce((s, v) => s + v, 0n) : null;
+
+  const recipientIsTransparent = /^(t1|t3|tm|t2)/.test(recipient.trim());
+  // The real max: spends every note in the pool, priced with the ZIP-317 fee
+  // that transaction would actually pay. Recomputed when the recipient type
+  // changes, because a transparent output is priced differently.
+  const maxSend = useMemo(
+    () =>
+      maxSendable(spendableNotes, {
+        transparentRecipient: recipientIsTransparent,
+        feeMultiplier,
+      }),
+    [spendableNotes, recipientIsTransparent, feeMultiplier],
+  );
+
+  /**
+   * Price the amount as typed, the way the worker will price it at build time.
+   * `null` when there is nothing to price yet.
+   */
+  const amountQuote = useMemo(() => {
+    const n = Number(amount);
+    if (!amount.trim() || isNaN(n) || n <= 0 || !notesLoaded) {
+      return null;
+    }
+    return quoteSend(spendableNotes, BigInt(Math.round(n * 1e8)), {
+      transparentRecipient: recipientIsTransparent,
+      feeMultiplier,
+    });
+  }, [amount, spendableNotes, recipientIsTransparent, feeMultiplier, notesLoaded]);
 
   // listen for send progress events from worker
   useEffect(() => {
@@ -274,6 +372,30 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
     if (!amount.trim() || isNaN(Number(amount)) || Number(amount) <= 0) {
       setFormError('enter a valid amount');
       return false;
+    }
+    // Price it here, not after a witness build and a halo2 prove. The worker
+    // applies the same ZIP-317 arithmetic; reaching it with an amount this
+    // check rejects means waiting minutes for a raw zatoshi error.
+    if (notesLoaded) {
+      const quote = quoteSend(spendableNotes, BigInt(Math.round(Number(amount) * 1e8)), {
+        transparentRecipient: /^(t1|t3|tm|t2)/.test(r),
+        feeMultiplier,
+      });
+      if (!quote.ok) {
+        const maxForThis = maxSendable(spendableNotes, {
+          transparentRecipient: /^(t1|t3|tm|t2)/.test(r),
+          feeMultiplier,
+        });
+        setFormError(
+          `not enough spendable ${activePool} balance — the most this can send, ` +
+            `after a ${fmtZecShort(quote.feeZat)} ZEC fee, is ${fmtZecShort(maxForThis.amountZat)} ZEC` +
+            (strandedZat > 0n
+              ? `. ${fmtZecShort(strandedZat)} ZEC is held in the legacy orchard pool and cannot ` +
+                'be spent until it is migrated to ironwood.'
+              : ''),
+        );
+        return false;
+      }
     }
     setFormError(null);
     return true;
@@ -452,6 +574,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             result.pcztHex,
             orchardSigs,
             result.spendIndices,
+            result.coldSendId,
           );
           void promoteToBroadcasted(finalResult.txid);
           complete(finalResult.txid);
@@ -544,6 +667,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           result.pcztHex,
           orchardSigs,
           spendIndices,
+          result.coldSendId,
         );
         pcztUnsignedRef.current = null;
         void promoteToBroadcasted(finalResult.txid);
@@ -657,6 +781,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           unsignedTxRef.current.unsignedTx,
           signatures,
           unsignedTxRef.current.spendIndices,
+          // lets the worker mark the spent inputs and record the send; without
+          // it the completion sees only signed bytes
+          unsignedTxRef.current.coldSendId,
         );
 
         unsignedTxRef.current = null;
@@ -717,6 +844,9 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           selectedKeyInfo.id,
           zidecarUrl,
           pcztHex,
+          // lets the worker mark the spent inputs and record the send; the
+          // signed PCZT alone cannot say which notes this spent
+          pcztUnsignedRef.current?.coldSendId,
         );
         pcztUnsignedRef.current = null;
         void promoteToBroadcasted(result.txid);
@@ -877,12 +1007,12 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               <div>
                 <div className='flex items-center justify-between mb-1'>
                   <label className='text-xs text-fg-muted'>amount (zec)</label>
-                  {balanceZec !== null && (
+                  {balanceZat !== null && (
+                    // named "spendable", not "balance": this is the active
+                    // pool only, and it deliberately differs from the home
+                    // screen's total, which includes orchard and transparent
                     <span className='text-xs text-fg-muted tabular-nums'>
-                      balance:{' '}
-                      <Sensitive>
-                        {balanceZec.toFixed(8).replace(/0+$/, '').replace(/\.$/, '')} ZEC
-                      </Sensitive>
+                      spendable: <Sensitive>{fmtZecShort(balanceZat)} ZEC</Sensitive>
                     </span>
                   )}
                 </div>
@@ -898,38 +1028,49 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                   />
                   <button
                     type='button'
+                    // MAX is the amount a transaction can actually be BUILT
+                    // for: every note in the pool, minus the ZIP-317 fee that
+                    // transaction really pays. Not balance minus a flat 10,000.
                     onClick={() =>
-                      setAmount(
-                        maxSendZec > 0
-                          ? maxSendZec.toFixed(8).replace(/0+$/, '').replace(/\.$/, '')
-                          : '0',
-                      )
+                      setAmount(maxSend.amountZat > 0n ? fmtZecShort(maxSend.amountZat) : '0')
                     }
-                    disabled={maxSendZec <= 0}
+                    disabled={maxSend.amountZat <= 0n}
                     className='shrink-0 h-[42px] rounded-lg border border-border-soft bg-input px-3 text-xs text-fg-muted hover:text-fg-high transition-colors disabled:opacity-50'
                   >
                     max
                   </button>
                 </div>
-                {/* Inline validation: empty balance -> receive first; over-spend
-                    -> flag before build time. */}
-                {balanceZec === 0 && (
+                {/* Inline validation, all of it computed from the same fee
+                    arithmetic the worker will use at build time. */}
+                {balanceZat === 0n && strandedZat === 0n && (
                   <p className='mt-1.5 text-label text-amber-400 leading-snug'>
                     no zec yet - receive first from the home screen.
                   </p>
                 )}
-                {balanceZec !== null &&
-                  balanceZec > 0 &&
-                  Number(amount) > maxSendZec &&
-                  Number(amount) > 0 && (
-                    <p className='mt-1.5 text-label text-red-400 leading-snug tabular-nums'>
-                      exceeds spendable balance (
-                      <Sensitive>
-                        {maxSendZec.toFixed(8).replace(/0+$/, '').replace(/\.$/, '')} ZEC
-                      </Sensitive>{' '}
-                      after fee)
-                    </p>
-                  )}
+                {/* Orchard funds are real but consensus-disabled post-NU6.3.
+                    Silently folding them into "your balance" is what produced
+                    a send that failed after a two-minute prove. Name them, and
+                    say what actually releases them. */}
+                {strandedZat > 0n && (
+                  <p className='mt-1.5 text-label text-amber-400 leading-snug tabular-nums'>
+                    <Sensitive>{fmtZecShort(strandedZat)} ZEC</Sensitive> is in the legacy orchard
+                    pool and cannot be sent. migrate it to ironwood from the home screen to spend
+                    it.
+                  </p>
+                )}
+                {amountQuote !== null && !amountQuote.ok && (
+                  <p className='mt-1.5 text-label text-red-400 leading-snug tabular-nums'>
+                    exceeds spendable balance — at most{' '}
+                    <Sensitive>{fmtZecShort(maxSend.amountZat)} ZEC</Sensitive> after a{' '}
+                    <Sensitive>{fmtZecShort(maxSend.feeZat)} ZEC</Sensitive> fee
+                  </p>
+                )}
+                {amountQuote !== null && amountQuote.ok && (
+                  <p className='mt-1.5 text-label text-fg-muted leading-snug tabular-nums'>
+                    fee <Sensitive>{fmtZecShort(amountQuote.feeZat)} ZEC</Sensitive> ·{' '}
+                    {amountQuote.nSpends} note{amountQuote.nSpends === 1 ? '' : 's'} spent
+                  </p>
+                )}
               </div>
 
               <div>

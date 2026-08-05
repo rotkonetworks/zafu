@@ -323,6 +323,9 @@ export function IronwoodMigrate({
           walletId,
           serverUrl,
           pcztHex,
+          // lets the worker mark the migrated orchard notes spent and record
+          // the migration, exactly as the hot path does at broadcast
+          unsignedRef.current?.coldSendId,
         );
         unsignedRef.current = null;
         setTxid(result.txid);

@@ -40,6 +40,26 @@ export const formatBlockMonth = (block: number): string =>
     .toLowerCase();
 
 /**
+ * The height a rescan may start from.
+ *
+ * A rescan deletes the note database and writes its start height as the
+ * wallet's new birthday, so the wallet can never look below it again. The home
+ * screen used to fall back to the CHAIN TIP when no birthday was stored —
+ * which is the default for any wallet imported without one — and that fallback
+ * turned "re-read the chain" into "forget every note you hold".
+ *
+ * There is no safe way to guess forward. Orchard activation is the earliest
+ * height that can hold a note this wallet cares about: slow to scan, but it
+ * cannot hide anything.
+ */
+export const rescanStartHeight = (walletBirthday: number | undefined | null): number => {
+  if (typeof walletBirthday !== 'number' || !Number.isFinite(walletBirthday)) {
+    return ZCASH_ORCHARD_ACTIVATION;
+  }
+  return Math.max(ZCASH_ORCHARD_ACTIVATION, Math.floor(walletBirthday));
+};
+
+/**
  * Describe a height for display: either the month it lands in, or why it
  * is not a usable zcash height. Returning the reason (rather than silently
  * clamping) is what surfaces a wrong-chain paste.
