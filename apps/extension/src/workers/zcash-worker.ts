@@ -1168,6 +1168,73 @@ interface IronwoodBatchMeta {
   frontierHeight?: number;
 }
 
+/**
+ * Mark the notes we just spent as spent, immediately, without waiting for a rescan.
+ *
+ * Orchard does not need this: sync step 3 asks zidecar's NOMT nullifier tree
+ * "is this spent?" for every unspent orchard note, so an orchard spend is
+ * noticed on the next tick regardless of which blocks get scanned.
+ *
+ * Ironwood has no such oracle — the NOMT nullifier tree is orchard-only — so
+ * its only spend signal is the scan-time nullifier match in runSync, which
+ * fires only while walking the block that contains the spend. A wallet that
+ * was already synced when it sent is *past* that block and never revisits it,
+ * so the note stayed "unspent" forever and its value kept counting toward the
+ * balance.
+ *
+ * We know exactly which notes we spent, so record it at broadcast. Worst case
+ * the transaction never mines and the note is wrongly held back, which the
+ * mempool/reorg path already has to handle — strictly safer than the reverse,
+ * which is double-spending a note we believe is still ours.
+ */
+const markNotesSpentLocally = async (
+  walletId: string,
+  state: WalletState,
+  notes: DecryptedNote[],
+  txid: string,
+): Promise<void> => {
+  const updated: DecryptedNote[] = [];
+  const nullifiers: string[] = [];
+  for (const note of notes) {
+    if (state.spentNullifiers.has(note.nullifier)) {
+      continue;
+    }
+    state.spentNullifiers.add(note.nullifier);
+    note.spent_by_txid = txid;
+    nullifiers.push(note.nullifier);
+    updated.push(note);
+  }
+  if (nullifiers.length === 0) {
+    return;
+  }
+  try {
+    const db = await getDb();
+    const tx = db.transaction(['notes', 'spent'], 'readwrite');
+    const notesStore = tx.objectStore('notes');
+    const spentStore = tx.objectStore('spent');
+    for (const note of updated) {
+      // mirror saveBatch: ironwood witnesses live in their own store, so
+      // strip them rather than writing them onto the note record.
+      if (poolOf(note) === 'ironwood') {
+        const { witness_hex, witness_tree_size, ...rest } = note;
+        void witness_hex;
+        void witness_tree_size;
+        notesStore.put({ ...rest, walletId });
+      } else {
+        notesStore.put({ ...note, walletId });
+      }
+    }
+    for (const nf of nullifiers) {
+      spentStore.put({ walletId, nullifier: nf });
+    }
+  } catch (e) {
+    console.error('[zcash-worker] failed to persist local spend marks:', e);
+  }
+  console.log(
+    `[zcash-worker] marked ${nullifiers.length} note(s) spent locally by ${txid.slice(0, 16)}`,
+  );
+};
+
 /** batch-save notes + spent + sync height + tree size in one transaction */
 const saveBatch = async (
   walletId: string,
@@ -4288,6 +4355,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               throw new Error(`broadcast failed (${iwResult.errorCode}): ${iwResult.errorMessage}`);
             }
             const iwTxid = await resolveBroadcastTxid(iwResult, iwTxHex, sendPayload.serverUrl);
+            await markNotesSpentLocally(walletId, sendState, selected, iwTxid);
             const iwTotalDuration = ((performance.now() - sendStart) / 1000).toFixed(1);
             emitProgress('complete', `txid=${iwTxid}, total=${iwTotalDuration}s`);
             workerSelf.postMessage({
@@ -4373,6 +4441,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           }
 
           const txid = await resolveBroadcastTxid(result, txHex, sendPayload.serverUrl);
+          await markNotesSpentLocally(walletId, sendState, selected, txid);
           const totalDuration = ((performance.now() - sendStart) / 1000).toFixed(1);
           emitProgress('complete', `txid=${txid}, total=${totalDuration}s`);
 
