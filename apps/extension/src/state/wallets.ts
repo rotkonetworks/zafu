@@ -7,6 +7,7 @@ import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
 import type { SessionStorageState } from '@repo/storage-chrome/session';
 import { AllSlices, SliceCreator } from '.';
+import type { Contact } from './contacts';
 
 /** Zcash wallet stored in extension */
 export interface ZcashWalletJson {
@@ -263,6 +264,33 @@ export const selectActiveZcashIndex = (state: AllSlices) => state.wallets.active
 export const selectActiveZcashWallet = (state: AllSlices) => {
   const { zcashWallets, activeZcashIndex } = state.wallets;
   return zcashWallets[activeZcashIndex];
+};
+/**
+ * The user's own zcash accounts, shaped as read-only `Contact`s so they can be
+ * offered as send recipients (e.g. move Ledger-transparent ZEC into your own
+ * shielded wallet, or any account-to-account transfer). Derived purely from the
+ * stored wallet records - synthetic, NEVER persisted into the real contact book.
+ * IDs are prefixed `mywallet:` so callers can distinguish them from saved
+ * contacts and skip edit/delete. Excludes accounts without a receive address and
+ * (optionally) the active account so you don't offer to send to yourself.
+ */
+export const selectMyWalletsAsContacts = (state: AllSlices): Contact[] => {
+  const wallets = Array.isArray(state.wallets.zcashWallets) ? state.wallets.zcashWallets : [];
+  const activeId = state.wallets.zcashWallets?.[state.wallets.activeZcashIndex]?.id;
+  return wallets
+    .filter(w => w.address && !w.multisig?.hidden && w.id !== activeId)
+    .map(w => ({
+      id: `mywallet:${w.id}`,
+      name: w.label || 'wallet',
+      createdAt: 0,
+      addresses: [
+        {
+          id: `mywallet-addr:${w.id}`,
+          network: 'zcash' as const,
+          address: w.address,
+        },
+      ],
+    }));
 };
 export const selectMultisigWallets = (state: AllSlices) => {
   const wallets = Array.isArray(state.wallets.zcashWallets) ? state.wallets.zcashWallets : [];

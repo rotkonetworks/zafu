@@ -4,6 +4,7 @@ export enum PagePath {
   GENERATE_SEED_PHRASE = '/welcome/generate',
   IMPORT_SEED_PHRASE = '/welcome/import',
   IMPORT_ZIGNER = '/welcome/import-zigner',
+  CONNECT_LEDGER = '/welcome/connect-ledger',
   SELECT_NETWORKS = '/welcome/select-networks',
   ONBOARDING_SUCCESS = '/welcome/success',
   SET_PASSWORD = '/welcome/set-password',

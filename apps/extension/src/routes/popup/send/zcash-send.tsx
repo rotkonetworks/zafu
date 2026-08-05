@@ -39,6 +39,12 @@ import { DontQuitIcon } from './frost-multisig/helpers';
 import { RecipientPicker } from '../../../components/recipient-picker';
 import { SaveContactModal } from '../../../components/save-contact-modal';
 import { usePasswordGate } from '../../../hooks/password-gate';
+import { HARDWARE_WALLET_ENABLED } from '../../../config/feature-flags';
+// connectLedger pairs/opens a WebHID session; ledgerSignerFor wraps the
+// PCZT-signing service in the feature-flag + app-version gates.
+import { connectLedger } from '../../../ledger';
+import { ledgerSignerFor } from '../../../signing/ledger-signer';
+import { isPopup } from '../../../utils/popup-detection';
 import { isZcashSignatureQR, parseZcashSignatureResponse, bytesToHex } from '@repo/wallet/networks'; // self-contained 4-step zigner-mediated multisig sign
 
 import { unwrapCborSinglePczt } from './zcash-send-cbor-helpers';
@@ -64,6 +70,7 @@ type SendStep =
   | 'broadcast'
   | 'complete'
   | 'error'
+  | 'ledger-sign'
   | 'frost-room'
   | 'frost-signing'
   | 'airgap-flow';
@@ -204,6 +211,18 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const ufvk =
     activeZcashWallet?.ufvk ??
     (activeZcashWallet?.orchardFvk?.startsWith('uview') ? activeZcashWallet.orchardFvk : undefined);
+
+  // Ledger send branch is flag-gated (HARDWARE_WALLET_ENABLED) AND keyed off the
+  // account actually being a ledger vault. Two shapes can indicate ledger:
+  //   - a full ledger keyvault: selectedKeyInfo.type === 'ledger'
+  //   - a watch-only import whose cold signer is a ledger. This parallels the
+  //     existing zigner-vs-keystone detection: the cold-signer kind is carried
+  //     in the KeyInfo `insensitive` metadata bag as `coldSignerType`
+  //     ('zigner' | 'keystone' | 'ledger'), NOT on the ZcashWalletJson. Read it
+  //     from there (Record<string, unknown>, so compare as string).
+  const coldSignerType = selectedKeyInfo?.insensitive?.['coldSignerType'] as string | undefined;
+  const isLedgerAccount =
+    HARDWARE_WALLET_ENABLED && (selectedKeyInfo?.type === 'ledger' || coldSignerType === 'ledger');
 
   // fetch spendable balance on mount
   const [balanceZat, setBalanceZat] = useState<bigint | null>(null);
@@ -438,6 +457,96 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         } finally {
           frostAbortRef.current = null;
         }
+      } else if (isLedgerAccount) {
+        // ── ledger hardware wallet (single-signer): WebHID PCZT signing ──
+        // Mirrors the zigner BUILD below but swaps the QR round-trip for a
+        // WebHID transport: build the same orchard PCZT, sign the SpendAuth
+        // sigs on-device, then reuse the FROST-style inject
+        // (completeOrchardPcztInWorker) to finalize + broadcast. Purely
+        // additive; the mnemonic/zigner/FROST branches are untouched.
+        if (!ufvk) {
+          throw new Error('UFVK required for ledger signing');
+        }
+        // WebHID needs a live user gesture in a document that survives the
+        // transfer. The toolbar popup is torn down on blur (and the device
+        // picker steals focus), so the session dies mid-sign. Refuse up front
+        // instead of failing halfway through a signing round.
+        if (isPopup()) {
+          throw new Error(
+            'open zafu in a tab or the side panel to sign with a ledger — usb sessions ' +
+              'are dropped when the toolbar popup loses focus',
+          );
+        }
+        // 0 = "no hint" sentinel; the worker anchors to the live tip (same as
+        // the zigner branch).
+        const targetHeightHint = 0;
+        const result = await buildSendTxPcztInWorker(
+          'zcash',
+          walletId,
+          zidecarUrl,
+          recipient.trim(),
+          amountZat,
+          memo,
+          targetHeightHint,
+          mainnet,
+          ufvk,
+        );
+
+        // Ironwood (NU6.3 / V6) is not implemented for ledger. The build tags
+        // the UR type: 'zcash-pczt' for an orchard PCZT, the zigner-module
+        // envelope for an ironwood send. This MUST fail closed: an absent or
+        // unrecognised tag previously skipped the check entirely
+        // (`if (buildUrType && ...)`), which would have handed an ironwood
+        // build to the orchard-V5 translator.
+        const buildUrType = result.urFrames[0]?.split('/')[0]?.replace(/^ur:/i, '');
+        if (buildUrType !== 'zcash-pczt') {
+          throw new Error(
+            `ledger signing supports orchard (V5) PCZTs only; this build is ` +
+              `"${buildUrType ?? 'untagged'}". note that NU6.3 disabled orchard→orchard ` +
+              `sends on mainnet, so ledger shielded sends are unavailable until ` +
+              `ironwood (V6) support lands.`,
+          );
+        }
+
+        pcztUnsignedRef.current = result;
+        const feeZec = (Number(result.fee) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
+        setFee(feeZec);
+
+        // show the "confirm on your Ledger" prompt while the device signs.
+        setStep('ledger-sign');
+
+        // TODO(ledger-session): the connected Ledger sessionId should be
+        // plumbed from the connect/pair step (a keyring or dedicated ledger
+        // store slice populated when the device is paired during onboarding).
+        // Until that plumbing lands, (re)open a session here to sign this round.
+        // Ledger as a composed ExternalSigner service (server-as-a-function):
+        // the WebHID sign is the base service; the feature-flag + app-version
+        // gates are filters. The send flow just picks the service and calls it.
+        const session = await connectLedger();
+        const ledgerSign = ledgerSignerFor(session);
+        const { orchardSigs, spendIndices } = await ledgerSign({
+          pcztHex: result.pcztHex,
+          spendIndices: result.spendIndices,
+          mainnet,
+        });
+
+        setStep('broadcast');
+        const finalResult = await completeOrchardPcztInWorker(
+          walletId,
+          zidecarUrl,
+          result.pcztHex,
+          orchardSigs,
+          spendIndices,
+        );
+        pcztUnsignedRef.current = null;
+        void promoteToBroadcasted(finalResult.txid);
+        complete(finalResult.txid);
+        setTotalElapsedSec(Math.round((Date.now() - buildStartRef.current) / 1000));
+        setStep('complete');
+        void recordUsage(recipient, 'zcash');
+        if (shouldSuggestSave(recipient)) {
+          setShowSavePrompt(true);
+        }
       } else {
         // ── zigner wallet (single-signer): PCZT signing flow ──
         // Replaces the legacy [sighash][alphas][summary] simple format. The
@@ -644,6 +753,10 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         break;
       case 'scan':
         setStep('sign');
+        break;
+      case 'ledger-sign':
+        // signing is in-flight on the device; back returns to review.
+        setStep('review');
         break;
       case 'frost-room':
       case 'frost-signing':
@@ -885,7 +998,11 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 back
               </Button>
               <Button variant='gradient' onClick={() => void handleSign()} className='flex-1'>
-                {selectedKeyInfo?.type === 'mnemonic' ? 'sign & send' : 'sign with zafu zigner'}
+                {selectedKeyInfo?.type === 'mnemonic'
+                  ? 'sign & send'
+                  : isLedgerAccount
+                    ? 'sign with Ledger'
+                    : 'sign with zafu zigner'}
               </Button>
             </div>
           </div>
@@ -1079,6 +1196,50 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             title='scan signature'
             description="point camera at zafu zigner's signature qr code"
           />
+        );
+
+      case 'ledger-sign':
+        return (
+          <div className='flex flex-col items-center gap-4 p-8'>
+            <div className='flex items-center gap-2 self-start'>
+              <button
+                onClick={handleBack}
+                className='text-fg-muted hover:text-fg-high transition-colors'
+              >
+                <span className='i-lucide-arrow-left w-5 h-5' />
+              </button>
+              <h2 className='text-lg font-medium'>confirm on your Ledger</h2>
+            </div>
+            <div className='w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center'>
+              <span className='i-lucide-usb w-8 h-8 text-zigner-gold' />
+            </div>
+            <p className='text-sm text-fg-muted text-center'>
+              review the recipient, amount, and fee on your Ledger device and approve the orchard
+              spend to continue.
+            </p>
+            <div className='w-full rounded-md border border-border-soft bg-elev-1 divide-y divide-border-soft text-xs'>
+              <div className='flex items-center justify-between px-3 py-2'>
+                <span className='text-fg-muted'>to</span>
+                <span className='font-mono text-fg-high truncate max-w-[60%]'>{recipient}</span>
+              </div>
+              <div className='flex items-center justify-between px-3 py-2'>
+                <span className='text-fg-muted'>amount</span>
+                <span className='tabular text-fg-high'>
+                  <Sensitive>{amount} ZEC</Sensitive>
+                </span>
+              </div>
+              <div className='flex items-center justify-between px-3 py-2'>
+                <span className='text-fg-muted'>fee</span>
+                <span className='tabular text-fg-dim'>
+                  <Sensitive>{fee} ZEC</Sensitive>
+                </span>
+              </div>
+            </div>
+            <div className='flex items-center gap-2 text-xs text-fg-muted'>
+              <div className='h-4 w-4 animate-spin rounded-full border-2 border-zigner-gold border-t-transparent' />
+              waiting for device confirmation...
+            </div>
+          </div>
         );
 
       case 'broadcast':

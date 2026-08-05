@@ -56,7 +56,9 @@ export interface NetworkWorkerMessage {
     | 'frost-derive-ufvk'
     | 'frost-parse-tx-outputs'
     | 'frost-inspect-pczt-outputs'
-    | 'complete-orchard-pczt';
+    | 'complete-orchard-pczt'
+    | 'broadcast-raw-tx'
+    | 'get-transparent-utxos';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -1218,6 +1220,34 @@ export const completeOrchardPcztInWorker = async (
     { serverUrl, pcztHex, orchardSigs, spendIndices },
     walletId,
   );
+};
+
+/** Broadcast a fully-signed transparent tx hex (e.g. from a Ledger t->t send).
+ *  The device already built + signed it; this only submits it. */
+export const broadcastRawTxInWorker = async (
+  serverUrl: string,
+  txHex: string,
+): Promise<{ txid: string }> => {
+  return callWorker<{ txid: string }>('zcash', 'broadcast-raw-tx', { serverUrl, txHex });
+};
+
+/** Spendable transparent UTXOs for the given addresses (e.g. a Ledger t-addr),
+ *  each with the full previous-tx hex the Ledger legacy signer needs. */
+export interface TransparentUtxoInfo {
+  txid: string;
+  vout: number;
+  valueZat: number;
+  scriptHex: string;
+  prevTxHex: string;
+}
+export const getTransparentUtxosInWorker = async (
+  serverUrl: string,
+  addresses: string[],
+): Promise<TransparentUtxoInfo[]> => {
+  return callWorker<TransparentUtxoInfo[]>('zcash', 'get-transparent-utxos', {
+    serverUrl,
+    addresses,
+  });
 };
 
 // worker URLs per network

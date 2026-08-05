@@ -8,7 +8,7 @@
 import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
 import type { SessionStorageState } from '@repo/storage-chrome/session';
-import type { NetworkType, ZignerZafuImport } from './types';
+import type { NetworkType, ZignerZafuImport, LedgerImport } from './types';
 import type { ZcashWalletJson } from '../wallets';
 import type { Key } from '@repo/encryption/key';
 
@@ -143,6 +143,98 @@ export async function createZignerWalletEntries(
 
   if (existingVaultCount === 0 && supportedNetworks.length > 0) {
     await local.set('activeNetwork', supportedNetworks[0] as NetworkType);
+  }
+
+  return newEnabledNetworks;
+}
+
+/**
+ * create the zcash wallet entry for a Ledger cold-signer import (side effect:
+ * local.set). clone of the zcash branch of createZignerWalletEntries, trimmed to
+ * zcash-only single-signer — no penumbra FVK, no polkadot/cosmos, no ZID.
+ *
+ * `key` is accepted for signature parity with createZignerWalletEntries (and so
+ * future device-metadata sealing can slot in) but is currently unused: a Ledger
+ * account stores no secret material, only a watch-only ufvk/address.
+ */
+export async function assertLedgerUfvkValid(ufvk: string | undefined): Promise<void> {
+  // Cryptographic UFVK gate — same authoritative decoder the signing path uses.
+  // Only unified strings (`uview1…`) are validated; a Ledger export is always a
+  // unified string when present.
+  //
+  // MUST run before any storage write: an invalid UFVK that is only caught
+  // after the vault has been persisted leaves a selected vault with no wallet
+  // record behind it (a half-initialised keyring the user cannot use or
+  // obviously delete).
+  if (!ufvk || !ufvk.startsWith('uview')) {
+    return;
+  }
+  const zwasm = (await import('@repo/zcash-wasm')) as unknown as {
+    default?: (opts?: { module_or_path?: string }) => Promise<unknown>;
+    validate_ufvk: (s: string) => boolean;
+  };
+  if (typeof zwasm.default === 'function') {
+    await zwasm.default();
+  }
+  if (!zwasm.validate_ufvk(ufvk)) {
+    throw new Error(
+      'UFVK failed cryptographic validation — refusing to import. ' +
+        'The Ledger-exported viewing key is structurally plausible but does ' +
+        'not decode as a valid Zcash Unified FVK.',
+    );
+  }
+}
+
+export async function createLedgerWalletEntries(
+  data: LedgerImport,
+  name: string,
+  _key: Key,
+  vaultId: string,
+  existingVaultCount: number,
+  local: ExtensionStorage<LocalStorageState>,
+): Promise<NetworkType[]> {
+  // Defence in depth: the caller validates before writing the vault, this
+  // re-checks at the persistence boundary. Cheap - the wasm module is cached.
+  await assertLedgerUfvkValid(data.ufvk);
+
+  {
+    const existingZcashWallets = (await local.get('zcashWallets')) ?? [];
+    const zcashWallet = {
+      id: `zcash-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      label: name,
+      // orchardFvk is a required field; a Ledger import stores its UFVK in the
+      // dedicated `ufvk` field, so leave orchardFvk empty. use-address's
+      // watch-only branch reads `ufvk` first, so address/balance derive free
+      // when a ufvk is present.
+      orchardFvk: '',
+      ...(data.ufvk ? { ufvk: data.ufvk } : {}),
+      // If a ufvk is present, address derives free from it; otherwise store the
+      // address directly. NOTE: without a ufvk there is no shielded scanning —
+      // balances/notes require the UFVK to be provided later.
+      address: data.address,
+      accountIndex: data.accountIndex,
+      mainnet: data.mainnet,
+      vaultId,
+      // 'ledger' is not yet in the persisted v2 storage schema's coldSignerType
+      // union ('zigner' | 'keystone'); cast at this write boundary until the
+      // schema is widened. The value is the ColdSignerType source of truth.
+      coldSignerType: 'ledger' as 'zigner',
+    };
+    // NOT wrapped in a try/catch: a swallowed failure here would leave a vault
+    // the UI presents as a Ledger wallet with no zcash wallet record behind it.
+    // Let it propagate so the caller can roll the vault back.
+    await local.set('zcashWallets', [zcashWallet, ...existingZcashWallets]);
+    await local.set('activeZcashIndex', 0);
+  }
+
+  const currentEnabled = await local.get('enabledNetworks');
+  const networkSet = new Set<string>(currentEnabled ?? []);
+  networkSet.add('zcash');
+  const newEnabledNetworks = [...networkSet] as NetworkType[];
+  await local.set('enabledNetworks', newEnabledNetworks);
+
+  if (existingVaultCount === 0) {
+    await local.set('activeNetwork', 'zcash' as NetworkType);
   }
 
   return newEnabledNetworks;

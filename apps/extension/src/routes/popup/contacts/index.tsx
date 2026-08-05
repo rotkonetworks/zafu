@@ -23,7 +23,7 @@ import {
 } from '@repo/wallet/networks/zcash/diversified-address';
 import { deriveZidForContact } from '../../../state/identity';
 import { localExtStorage } from '@repo/storage-chrome/local';
-import { selectActiveZcashWallet } from '../../../state/wallets';
+import { selectActiveZcashWallet, selectMyWalletsAsContacts } from '../../../state/wallets';
 
 const NETWORK_LABELS: Record<ContactNetwork, string> = {
   penumbra: 'penumbra',
@@ -428,6 +428,9 @@ export function ContactsPage() {
   // must land on home - never teleport into a menu the user never opened.
   const goBack = useBackNav(PopupPath.INDEX);
   const contacts = useStore(contactsSelector);
+  // the user's own accounts, offered read-only alongside the address book so you
+  // can send between your wallets (e.g. Ledger transparent -> your shielded).
+  const myWallets = useStore(selectMyWalletsAsContacts);
   const keyInfo = useStore(selectEffectiveKeyInfo);
   const zcashWallet = useStore(selectActiveZcashWallet);
   const getMnemonic = useStore(s => s.keyRing.getMnemonic);
@@ -774,6 +777,31 @@ export function ContactsPage() {
 
       {/* contacts list */}
       <div className='flex-1 overflow-y-auto px-4 pb-4'>
+        {myWallets.length > 0 && !search && (
+          <div className='mb-4'>
+            <p className='mb-2 text-label text-fg-dim lowercase'>my wallets</p>
+            <div className='space-y-1.5'>
+              {myWallets.map(w => {
+                const addr = w.addresses[0]?.address ?? '';
+                return (
+                  <button
+                    key={w.id}
+                    type='button'
+                    onClick={() => void navigator.clipboard.writeText(addr)}
+                    title='copy address'
+                    className='flex w-full items-center gap-2 border border-border-soft px-3 py-2 text-left transition-colors hover:bg-elev-1'
+                  >
+                    <span className='i-lucide-wallet h-4 w-4 shrink-0 text-fg-dim' />
+                    <span className='text-data text-fg-high truncate'>{w.name}</span>
+                    <span className='ml-auto max-w-[9rem] truncate text-label text-fg-muted tabular'>
+                      {addr.slice(0, 10)}…{addr.slice(-6)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
         {filteredContacts.length === 0 ? (
           <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
             <div className='rounded-full bg-primary/10 p-4'>
