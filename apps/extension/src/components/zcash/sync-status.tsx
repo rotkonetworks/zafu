@@ -31,7 +31,7 @@ export interface SyncStatusProps {
   targetHeight: number;
   startBlock: number;
   stages: SyncStage[];
-  /** true during a wallet's first scan — adds the leave-it-running line */
+  /** true during a wallet's first scan — adds the resume-on-reopen line */
   firstSync: boolean;
   error?: string;
   errorAction?: { label: string; onClick: () => void };
@@ -283,7 +283,7 @@ export const SyncStatus = ({
 
             {firstSync && !synced && !error && (
               <div className='text-label text-fg-dim leading-snug'>
-                you can close this — the worker keeps scanning in the background.
+                closing this pauses the scan — it resumes where it left off.
               </div>
             )}
           </div>

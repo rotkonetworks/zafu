@@ -1375,6 +1375,22 @@ self.addEventListener('message', (e: MessageEvent) => {
 // ── ZIP-317 fee computation ──
 
 const MARGINAL_FEE = 5000n;
+
+/**
+ * User fee multiplier (settings → fees), injected per-operation by the caller
+ * because this is a dedicated web worker with no chrome.storage access.
+ *
+ * Clamped to >= 1: ZIP-317 is a consensus floor, not a fee market. Paying
+ * below it means zebra rejects the tx outright ("Unpaid actions is higher
+ * than the limit"), so a sub-standard multiplier can only break sends.
+ */
+let feeMultiplier = 1;
+const setFeeMultiplier = (m: unknown) => {
+  const n = typeof m === 'number' && Number.isFinite(m) ? m : 1;
+  feeMultiplier = Math.max(1, n);
+};
+const applyFeeMultiplier = (fee: bigint): bigint =>
+  feeMultiplier === 1 ? fee : (fee * BigInt(Math.round(feeMultiplier * 100))) / 100n;
 const GRACE_ACTIONS = 2;
 const MIN_ORCHARD_ACTIONS = 2;
 
@@ -1387,7 +1403,7 @@ const computeFee = (
   const nOrchardOutputs = nZOutputs + (hasChange ? 1 : 0);
   const nOrchardActions = Math.max(nSpends, nOrchardOutputs, MIN_ORCHARD_ACTIONS);
   const logicalActions = nOrchardActions + nTOutputs;
-  return MARGINAL_FEE * BigInt(Math.max(logicalActions, GRACE_ACTIONS));
+  return applyFeeMultiplier(MARGINAL_FEE * BigInt(Math.max(logicalActions, GRACE_ACTIONS)));
 };
 
 /**
@@ -1410,7 +1426,7 @@ const computeTurnstileFee = (nOrchardSpends: number): bigint => {
   const orchardActions = Math.max(nOrchardSpends, MIN_ORCHARD_ACTIONS);
   const ironwoodActions = MIN_ORCHARD_ACTIONS; // single output, padded
   const logicalActions = orchardActions + ironwoodActions;
-  return MARGINAL_FEE * BigInt(Math.max(logicalActions, GRACE_ACTIONS));
+  return applyFeeMultiplier(MARGINAL_FEE * BigInt(Math.max(logicalActions, GRACE_ACTIONS)));
 };
 
 // ── note selection (largest first) ──
@@ -3119,6 +3135,12 @@ const getPoolBalances = async (walletId: string): Promise<PoolBalances> => {
 
 workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
   const { type, id, walletId, payload } = e.data;
+
+  // Every fee-bearing operation carries the user's multiplier (settings →
+  // fees); no chrome.storage in a dedicated worker, so the caller injects it.
+  if (payload && typeof payload === 'object' && 'feeMultiplier' in payload) {
+    setFeeMultiplier((payload as { feeMultiplier?: unknown }).feeMultiplier);
+  }
 
   try {
     switch (type) {

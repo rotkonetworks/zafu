@@ -83,6 +83,12 @@ const groups: SettingsGroup[] = [
         href: PopupPath.SETTINGS_APPEARANCE,
       },
       {
+        title: 'fees',
+        icon: 'i-zafu-mon',
+        href: PopupPath.SETTINGS_FEES,
+        networks: ['zcash'],
+      },
+      {
         title: 'zigner',
         icon: 'i-lucide-qr-code',
         href: PopupPath.SETTINGS_ZIGNER,

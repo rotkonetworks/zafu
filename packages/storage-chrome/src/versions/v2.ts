@@ -291,6 +291,12 @@ type LOCAL = {
   /** appearance font: 'iosevka' (default) | 'system' (OS monospace) */
   zafuFont?: 'iosevka' | 'system';
 
+  /** ZIP-317 fee multiplier. 1 = the network-standard fee (default, and the
+   * privacy-preserving choice — a non-standard fee fingerprints your
+   * transactions). Values below 1 are never applied: ZIP-317 is a consensus
+   * floor, not a market. */
+  zafuFeeMultiplier?: number;
+
   /** serialized pro license JSON */
   proLicense?: string;
 

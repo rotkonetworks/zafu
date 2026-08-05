@@ -68,6 +68,7 @@ export enum PopupPath {
   SETTINGS_RECOVERY_PASSPHRASE = '/settings/recovery-passphrase',
   SETTINGS_ZIGNER = '/settings/zigner',
   SETTINGS_APPEARANCE = '/settings/appearance',
+  SETTINGS_FEES = '/settings/fees',
   SETTINGS_NETWORKS = '/settings/networks',
   SETTINGS_PRIVACY = '/settings/privacy',
   SETTINGS_WALLETS = '/settings/wallets',
