@@ -1013,24 +1013,57 @@ const verifySyncProofs = async (
   // returned root (catches NOMT corruption) and confirm cmx existence; the
   // canonical orchard membership is enforced locally during scan.
   if (pendingCmxs.length > 0) {
-    const { proofs: commitmentProofs } = await client.getCommitmentProofs(
+    const { proofs: commitmentProofs, treeRoot } = await client.getCommitmentProofs(
       pendingCmxs,
       pendingPositions,
       tip,
     );
+
+    // This step used to prove NOTHING. treeRoot was destructured away, each
+    // proof was checked against the PER-PROOF root the server supplied, and
+    // there was no count check and no "is this one of the cmxs I asked about"
+    // check. An empty proofs array therefore skipped the loop body entirely
+    // and logged "0 commitment proofs verified" as success — a malicious
+    // server passed by returning nothing at all.
+    const treeRootHex = hexEncode(treeRoot);
+    const requestedCmxs = new Set(pendingCmxs.map(c => hexEncode(c)));
+
+    if (commitmentProofs.length !== pendingCmxs.length) {
+      throw new Error(
+        `commitment proof count mismatch: asked ${pendingCmxs.length}, got ${commitmentProofs.length}`,
+      );
+    }
+
+    const seenCmxs = new Set<string>();
     for (const proof of commitmentProofs) {
+      const cmxHex = hexEncode(proof.cmx);
+      const proofRootHex = hexEncode(proof.treeRoot);
+      if (proofRootHex !== treeRootHex) {
+        throw new Error(
+          `commitment proof root mismatch: proof=${proofRootHex.slice(0, 16)} batch=${treeRootHex.slice(0, 16)}`,
+        );
+      }
+      if (!requestedCmxs.has(cmxHex)) {
+        throw new Error(`commitment proof for unrequested cmx ${cmxHex.slice(0, 16)}`);
+      }
+      if (seenCmxs.has(cmxHex)) {
+        throw new Error(`duplicate commitment proof for cmx ${cmxHex.slice(0, 16)}`);
+      }
+      seenCmxs.add(cmxHex);
+
       const valid = zyncModule['verify_commitment_proof'](
-        hexEncode(proof.cmx),
-        hexEncode(proof.treeRoot),
+        cmxHex,
+        proofRootHex,
         proof.pathProofRaw,
         hexEncode(proof.valueHash),
       ) as boolean;
       if (!valid) {
-        throw new Error(`commitment proof invalid for cmx ${hexEncode(proof.cmx).slice(0, 16)}`);
+        throw new Error(`commitment proof invalid for cmx ${cmxHex.slice(0, 16)}`);
       }
     }
     console.log(
-      `[zcash-worker] ${commitmentProofs.length} commitment proofs verified (path only; orchard-root binding is local)`,
+      `[zcash-worker] ${commitmentProofs.length}/${pendingCmxs.length} commitment proofs verified ` +
+        `(root-bound, request-bound; orchard-root binding is still local)`,
     );
   }
 
@@ -2718,11 +2751,31 @@ const runSync = async (
               actionsCommitment,
             );
           } catch (e) {
-            // Proof verification is a belt-and-suspenders integrity check on
-            // top of Zidecar header proofs. Dropping the pending buffer lets
-            // the next sync cycle try again on fresh notes instead of looping
-            // forever on the same racy batch.
-            console.warn('[zcash-worker] proof verification failed, dropping batch:', e);
+            // Fail CLOSED on evidence of tampering, fail soft on flakiness.
+            //
+            // This used to swallow everything and clear the pending buffer, so
+            // "actions commitment mismatch: server tampered with block
+            // actions", "nullifier root mismatch" and "commitment proof
+            // invalid" were all downgraded to a console warning while the
+            // affected notes stayed in state and IDB and were never
+            // re-verified. A tampering server got a silent pass.
+            //
+            // Integrity failures now surface as a sync error the user can see;
+            // transport/availability failures still retry on the next cycle,
+            // because a flaky endpoint should not brick the wallet.
+            const detail = e instanceof Error ? e.message : String(e);
+            const tampering =
+              /mismatch|invalid|unrequested|duplicate|count mismatch|tampered/i.test(detail);
+            if (tampering) {
+              console.error('[zcash-worker] INTEGRITY FAILURE, refusing batch:', e);
+              pendingCmxs.length = 0;
+              pendingPositions.length = 0;
+              throw new Error(
+                `server integrity check failed: ${detail}. ` +
+                  `refusing to trust this endpoint's data - switch node or retry`,
+              );
+            }
+            console.warn('[zcash-worker] proof verification unavailable, will retry:', e);
           }
           pendingCmxs.length = 0;
           pendingPositions.length = 0;
