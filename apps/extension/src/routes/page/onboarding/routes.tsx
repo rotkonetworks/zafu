@@ -11,6 +11,9 @@ const ImportSeedPhrase = lazy(() =>
   import('./import').then(m => ({ default: m.ImportSeedPhrase })),
 );
 const ImportZigner = lazy(() => import('./import-zigner').then(m => ({ default: m.ImportZigner })));
+const ConnectLedger = lazy(() =>
+  import('./connect-ledger').then(m => ({ default: m.ConnectLedger })),
+);
 const SelectNetworks = lazy(() =>
   import('./select-networks').then(m => ({ default: m.SelectNetworks })),
 );
@@ -57,6 +60,14 @@ export const onboardingRoutes = [
   {
     path: PagePath.IMPORT_ZIGNER,
     element: withSuspense(ImportZigner),
+  },
+  {
+    // Gated behind HARDWARE_WALLET_ENABLED at the entry point (start.tsx filters
+    // out the card). The route itself stays registered so the screen is
+    // type-checked and reachable by URL when the flag flips - matching how the
+    // other flagged surfaces (subscribe, password-generator) keep their routes.
+    path: PagePath.CONNECT_LEDGER,
+    element: withSuspense(ConnectLedger),
   },
   {
     path: PagePath.SELECT_NETWORKS,

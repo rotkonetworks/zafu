@@ -56,3 +56,13 @@ export const PASSWORD_GENERATOR = false;
  * list and the drawer "upgrade" button. Flip back to `true` to re-enable.
  */
 export const SUBSCRIBE_ENABLED = false;
+
+/**
+ * Ledger hardware-wallet support (WebHID connect + shielded/transparent
+ * account import). Hidden for now - the onboarding "connect Ledger" card, its
+ * route, and the connect screen stay in the codebase, just unreachable from the
+ * UI. The backing pieces (the `src/ledger` WebHID module and the keyring's
+ * `addLedgerUnencrypted`) land ahead of activation; flip to `true` once the
+ * Ledger zcash app version we target ships and the flow is fully reviewed.
+ */
+export const HARDWARE_WALLET_ENABLED = false;

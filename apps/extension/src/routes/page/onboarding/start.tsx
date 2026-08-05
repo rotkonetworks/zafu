@@ -23,6 +23,7 @@ import { cn } from '@repo/ui/lib/utils';
 import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
 import { usePageNav } from '../../../utils/navigate';
 import { PagePath } from '../paths';
+import { HARDWARE_WALLET_ENABLED } from '../../../config/feature-flags';
 
 interface PathOption {
   readonly icon: string;
@@ -30,6 +31,8 @@ interface PathOption {
   readonly hint: string;
   readonly target: PagePath;
   readonly accent: 'gold' | 'blue';
+  /** When set, the card only renders while the named flag is on. */
+  readonly flagged?: boolean;
 }
 
 const OPTIONS: readonly PathOption[] = [
@@ -54,7 +57,20 @@ const OPTIONS: readonly PathOption[] = [
     target: PagePath.IMPORT_ZIGNER,
     accent: 'blue',
   },
+  {
+    icon: 'i-lucide-usb',
+    label: 'connect ledger',
+    hint: 'keys stay on the device. sign over usb.',
+    target: PagePath.CONNECT_LEDGER,
+    accent: 'blue',
+    flagged: true,
+  },
 ];
+
+// Hide flagged cards until their feature flag is on. The ledger card is the
+// only flagged entry today - keep it invisible while HARDWARE_WALLET_ENABLED
+// is false so the option never appears mid-rollout.
+const visibleOptions = OPTIONS.filter(opt => !opt.flagged || HARDWARE_WALLET_ENABLED);
 
 export const OnboardingStart = () => {
   const navigate = usePageNav();
@@ -71,7 +87,7 @@ export const OnboardingStart = () => {
         </header>
 
         <ul className='flex flex-col gap-2.5'>
-          {OPTIONS.map(opt => (
+          {visibleOptions.map(opt => (
             <li key={opt.target}>
               <PathCard option={opt} onClick={go(opt.target)} />
             </li>
