@@ -422,6 +422,31 @@ export function IronwoodMigrate({
                 ironwood address so you can keep spending it normally.
               </p>
 
+              {/* The privacy cost, stated before the user commits.
+                  A turnstile migration moves value BETWEEN pools, so the amount
+                  is a cleartext consensus field (valueBalance) — not shielded.
+                  And because this sweeps every orchard note at once, the number
+                  published is the user's entire orchard balance, which also
+                  links their pre- and post-NU6.3 activity at that txid.
+                  Saying nothing here would let someone deanonymise their whole
+                  orchard history in one click while believing this is a private
+                  shielded-to-shielded move. */}
+              <div className='flex items-start gap-2 rounded-lg border border-hanko/40 bg-elev-1 p-3'>
+                <span className='i-lucide-eye mt-0.5 size-3.5 shrink-0 text-hanko' />
+                <p className='text-label text-fg-muted leading-snug'>
+                  <span className='text-hanko'>this amount becomes public.</span> moving between
+                  pools publishes the value on-chain in the clear, and this migrates your whole
+                  orchard balance at once — so the figure above, and the link between your orchard
+                  and ironwood activity, are visible to anyone.
+                  <br />
+                  <span className='text-fg-dim'>
+                    your orchard funds stay spendable until you move them. if you would rather not
+                    publish this, you can wait — but note that spending orchard directly leaks value
+                    the same way.
+                  </span>
+                </p>
+              </div>
+
               <div className='divide-y divide-border-soft rounded-lg border border-border-soft bg-elev-1'>
                 <div className='flex items-center justify-between px-4 py-3 text-sm'>
                   <span className='text-fg-muted'>destination</span>
