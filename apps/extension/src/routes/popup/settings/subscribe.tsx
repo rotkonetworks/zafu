@@ -68,7 +68,7 @@ export const SubscribePage = () => {
   const pro = useStore(isPro);
   const days = useStore(selectDaysRemaining);
   const pending = useStore(selectPending);
-  const { fetchLicense } = useStore(licenseSelector);
+  const { fetchLicense, registerRing } = useStore(licenseSelector);
   const currentLicense = useStore(s => s.license.license);
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const enabledNetworks = useStore(s => s.keyRing.enabledNetworks);
@@ -182,15 +182,25 @@ export const SubscribePage = () => {
       return false;
     }
     try {
-      const license = await fetchLicense(zidPubkey, ringPubkeyBytes ?? undefined);
+      // The ring pubkey is NOT sent here. This runs on a poll loop, and
+      // bundling it in meant re-disclosing the zid↔ring mapping to the
+      // license server every few seconds for the whole payment wait.
+      // Registration happens once, below, when the license actually lands.
+      const license = await fetchLicense(zidPubkey);
       if (!license) {
         return false;
       }
-      return license.expires > baselineExpiresRef.current;
+      if (license.expires > baselineExpiresRef.current) {
+        if (ringPubkeyBytes) {
+          await registerRing(zidPubkey, ringPubkeyBytes);
+        }
+        return true;
+      }
+      return false;
     } catch {
       return false;
     }
-  }, [zidPubkey, ringPubkeyBytes, fetchLicense]);
+  }, [zidPubkey, ringPubkeyBytes, fetchLicense, registerRing]);
 
   const manualCheck = useCallback(async () => {
     setChecking(true);
