@@ -906,8 +906,7 @@ const ZcashContent = ({
           {
             key: 'ligerito',
             label: 'ligerito',
-            state:
-              ligeritoPct >= 100 ? 'done' : gigaproofStatus >= 1 ? 'active' : 'pending',
+            state: ligeritoPct >= 100 ? 'done' : gigaproofStatus >= 1 ? 'active' : 'pending',
             // blocksUntilReady is a countdown, but some server states report a
             // raw height here — rendering "3436543 blocks" as a remaining
             // count is nonsense. Only show it when it reads like a delta.
@@ -1013,34 +1012,34 @@ const ZcashContent = ({
         <div className='flex items-center justify-between'>
           <span className='kicker'>balance</span>
           <div className='flex items-center gap-1'>
-          {/* the global hide-balances control lives where you notice you
+            {/* the global hide-balances control lives where you notice you
               need it — same state as settings → privacy, effective on
               every amount in the app */}
-          <button
-            onClick={() => void setPrivacySetting('hideBalances', !privacySettings.hideBalances)}
-            title={privacySettings.hideBalances ? 'show balances' : 'hide balances'}
-            className='p-0.5 text-fg-dim transition-colors hover:text-fg-high'
-          >
-            <span
-              className={cn(
-                'block h-3.5 w-3.5',
-                privacySettings.hideBalances ? 'i-lucide-eye-off' : 'i-lucide-eye',
-              )}
-            />
-          </button>
-          <button
-            onClick={() => setPoolsPinned(v => !v)}
-            title={poolsPinned ? 'hide pool detail' : 'show pool detail'}
-            aria-expanded={poolsPinned}
-            className='p-0.5 text-fg-dim transition-colors hover:text-fg-high'
-          >
-            <span
-              className={cn(
-                'block h-3.5 w-3.5 transition-transform',
-                poolsPinned ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down',
-              )}
-            />
-          </button>
+            <button
+              onClick={() => void setPrivacySetting('hideBalances', !privacySettings.hideBalances)}
+              title={privacySettings.hideBalances ? 'show balances' : 'hide balances'}
+              className='p-0.5 text-fg-dim transition-colors hover:text-fg-high'
+            >
+              <span
+                className={cn(
+                  'block h-3.5 w-3.5',
+                  privacySettings.hideBalances ? 'i-lucide-eye-off' : 'i-lucide-eye',
+                )}
+              />
+            </button>
+            <button
+              onClick={() => setPoolsPinned(v => !v)}
+              title={poolsPinned ? 'hide pool detail' : 'show pool detail'}
+              aria-expanded={poolsPinned}
+              className='p-0.5 text-fg-dim transition-colors hover:text-fg-high'
+            >
+              <span
+                className={cn(
+                  'block h-3.5 w-3.5 transition-transform',
+                  poolsPinned ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down',
+                )}
+              />
+            </button>
           </div>
         </div>
         {IRONWOOD_MIGRATION ? (

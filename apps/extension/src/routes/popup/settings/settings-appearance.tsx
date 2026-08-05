@@ -17,9 +17,21 @@ type ZafuTheme = 'sumi' | 'washi' | 'terminal';
 type ZafuFont = 'iosevka' | 'system';
 
 const THEMES: { id: ZafuTheme; name: string; blurb: string; chip: string; ink: string }[] = [
-  { id: 'sumi', name: 'sumi ink', blurb: 'warm ink on woven cloth', chip: '#0c0a08', ink: '#ded5c4' },
+  {
+    id: 'sumi',
+    name: 'sumi ink',
+    blurb: 'warm ink on woven cloth',
+    chip: '#0c0a08',
+    ink: '#ded5c4',
+  },
   { id: 'washi', name: 'washi', blurb: 'ink on unbleached paper', chip: '#efe9dc', ink: '#2b241c' },
-  { id: 'terminal', name: 'terminal', blurb: 'cold black, no cloth', chip: '#000000', ink: '#dcdcdc' },
+  {
+    id: 'terminal',
+    name: 'terminal',
+    blurb: 'cold black, no cloth',
+    chip: '#000000',
+    ink: '#dcdcdc',
+  },
 ];
 
 const FONTS: { id: ZafuFont; name: string; blurb: string; stack: string }[] = [

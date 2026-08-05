@@ -14,9 +14,7 @@ export const FrontendLink = () => {
   // hardcoded host so moving the default (dex.penumbra.zone -> dex.rotko.net)
   // can't silently drop the deep link.
   const href =
-    frontendUrl === DEFAULT_FRONTEND
-      ? new URL('/portfolio', frontendUrl).toString()
-      : frontendUrl;
+    frontendUrl === DEFAULT_FRONTEND ? new URL('/portfolio', frontendUrl).toString() : frontendUrl;
 
   const navigate = usePopupNav();
 

@@ -569,9 +569,7 @@ function ReceiveTab({
     let cancelled = false;
     void (async () => {
       try {
-        const hist = await getTransparentHistoryInWorker('zcash', zidecarUrl, [
-          transparentAddress,
-        ]);
+        const hist = await getTransparentHistoryInWorker('zcash', zidecarUrl, [transparentAddress]);
         if (!cancelled && hist.length > 0) {
           setTransparentUsed(true);
         }

@@ -43,8 +43,8 @@ export const SettingsFees = () => {
     <SettingsScreen title='fees' backPath={PopupPath.SETTINGS}>
       <div className='flex flex-col gap-4 px-4'>
         <p className='text-label text-fg-muted leading-snug'>
-          zcash has no fee auction — ZIP-317 sets one flat rate and blocks are not full, so a
-          higher fee does not confirm faster.
+          zcash has no fee auction — ZIP-317 sets one flat rate and blocks are not full, so a higher
+          fee does not confirm faster.
         </p>
 
         <div className='flex flex-col gap-2'>
@@ -62,9 +62,7 @@ export const SettingsFees = () => {
               <span className='flex flex-1 flex-col'>
                 <span className='text-data text-fg lowercase'>
                   {o.name}
-                  {o.mult === 1 && (
-                    <span className='ml-2 text-label text-fg-dim'>recommended</span>
-                  )}
+                  {o.mult === 1 && <span className='ml-2 text-label text-fg-dim'>recommended</span>}
                 </span>
                 <span className='text-label text-fg-dim lowercase'>{o.blurb}</span>
               </span>

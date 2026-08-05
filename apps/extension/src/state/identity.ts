@@ -517,9 +517,9 @@ export async function currentIdentityName(base: string = DEFAULT_IDENTITY): Prom
 export const ZID_GEN_KEYS_STORAGE_KEY = 'zidGenKeys';
 
 export async function getZidGenKeys(): Promise<Record<number, string>> {
-  const v = (await chrome.storage.local.get(ZID_GEN_KEYS_STORAGE_KEY))[
-    ZID_GEN_KEYS_STORAGE_KEY
-  ] as Record<number, string> | undefined;
+  const v = (await chrome.storage.local.get(ZID_GEN_KEYS_STORAGE_KEY))[ZID_GEN_KEYS_STORAGE_KEY] as
+    | Record<number, string>
+    | undefined;
   return v ?? {};
 }
 

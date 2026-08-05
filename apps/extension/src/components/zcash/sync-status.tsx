@@ -330,9 +330,8 @@ const SyncPersistenceNote = () => {
   }
   return (
     <div className='text-label text-fg-dim leading-snug'>
-      the popup closes when it loses focus, which pauses the scan (it resumes
-      where it left off). open zafu in the side panel to let it run in the
-      background.
+      the popup closes when it loses focus, which pauses the scan (it resumes where it left off).
+      open zafu in the side panel to let it run in the background.
     </div>
   );
 };

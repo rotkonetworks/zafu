@@ -5,11 +5,11 @@
 A rebuild that updates only some copies ships a wallet whose worker and
 prover disagree. This has bitten twice:
 
-| path | loaded by | symptom when stale |
-|---|---|---|
-| `packages/zcash-wasm/` (`zafu_*` + duplicated `zcash_*`) | build-time package import | type/API drift |
-| `apps/extension/public/zafu-wasm/` | the main compute worker | `X.compute_txid is not a function`; silently rebuilds txs with an old consensus constant |
-| `apps/extension/public/zafu-wasm-parallel/` | the offscreen halo2 prover | proving fails or falls back to single-thread |
+| path                                                     | loaded by                  | symptom when stale                                                                       |
+| -------------------------------------------------------- | -------------------------- | ---------------------------------------------------------------------------------------- |
+| `packages/zcash-wasm/` (`zafu_*` + duplicated `zcash_*`) | build-time package import  | type/API drift                                                                           |
+| `apps/extension/public/zafu-wasm/`                       | the main compute worker    | `X.compute_txid is not a function`; silently rebuilds txs with an old consensus constant |
+| `apps/extension/public/zafu-wasm-parallel/`              | the offscreen halo2 prover | proving fails or falls back to single-thread                                             |
 
 Both `public/` copies are the PARALLEL build (rayon `snippets/`, shared
 memory). After copying either one, re-apply the Chrome worker patch and

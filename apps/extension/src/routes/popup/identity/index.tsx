@@ -126,7 +126,9 @@ const usePrefersReducedMotion = (): boolean => {
  * slightly askew. Both the character and the tilt are derived from the
  * key bytes, so every generation gets its own recognizable stamp.
  */
-const SEAL_KANJI = [...'松竹梅月山川雪花風林火水石空海島雲星霜露谷岩波泉森光影音刀弓馬鶴亀龍虎蓮桜柳楓菊苔庭道門橋鈴壺筆墨'];
+const SEAL_KANJI = [
+  ...'松竹梅月山川雪花風林火水石空海島雲星霜露谷岩波泉森光影音刀弓馬鶴亀龍虎蓮桜柳楓菊苔庭道門橋鈴壺筆墨',
+];
 
 const ZidFingerprint = ({ pubkeyHex, size = 40 }: { pubkeyHex: string; size?: number }) => {
   const { glyph, tilt } = useMemo(() => {

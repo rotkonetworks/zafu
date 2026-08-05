@@ -24,9 +24,7 @@ const SettingsPrivacy = lazy(() =>
 const SettingsAppearance = lazy(() =>
   import('./settings-appearance').then(m => ({ default: m.SettingsAppearance })),
 );
-const SettingsFees = lazy(() =>
-  import('./settings-fees').then(m => ({ default: m.SettingsFees })),
-);
+const SettingsFees = lazy(() => import('./settings-fees').then(m => ({ default: m.SettingsFees })));
 const SettingsWallets = lazy(() =>
   import('./settings-wallets').then(m => ({ default: m.SettingsWallets })),
 );
