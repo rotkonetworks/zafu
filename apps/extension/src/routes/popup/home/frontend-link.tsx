@@ -4,13 +4,17 @@ import { Button } from '@repo/ui/components/ui/button';
 import { MouseEventHandler } from 'react';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
+import { DEFAULT_FRONTEND } from '../../page/onboarding/constants';
 
 export const FrontendLink = () => {
   const frontendUrl = useStore(getDefaultFrontend);
 
-  // Append '/portfolio' path for the default dex frontend; use the base minifront URL for all others.
+  // Append '/portfolio' for the default dex frontend; use the base minifront
+  // URL for all others. Compared against DEFAULT_FRONTEND rather than a
+  // hardcoded host so moving the default (dex.penumbra.zone -> dex.rotko.net)
+  // can't silently drop the deep link.
   const href =
-    frontendUrl === 'https://dex.penumbra.zone'
+    frontendUrl === DEFAULT_FRONTEND
       ? new URL('/portfolio', frontendUrl).toString()
       : frontendUrl;
 
