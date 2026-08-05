@@ -72,12 +72,18 @@ async function clearZcashCache(): Promise<void> {
   await localExtStorage.set('clearingCache', true);
 
   broadcastProgress('clearing-database', completed, steps.length);
-  try {
-    indexedDB.deleteDatabase('zafu-zcash');
-  } catch {}
-  try {
-    indexedDB.deleteDatabase('zafu-memo-cache');
-  } catch {}
+  // Deleting inline from here did nothing. The zcash worker holds an open
+  // connection to 'zafu-zcash', and `deleteDatabase` against an open
+  // database does not error — it fires `onblocked` and hangs, so this
+  // reported success while the database survived intact. Defer to the
+  // startup path, which runs before any wallet service opens a connection,
+  // exactly as the penumbra branch above already does.
+  // ('zafu-memo-cache' was also deleted here; no such database exists — the
+  // memo cache is an object store inside 'zafu-zcash'.)
+  const pendingZcash = (await localExtStorage.get('pendingClearCache')) ?? [];
+  if (!pendingZcash.includes('zcash')) {
+    await localExtStorage.set('pendingClearCache', [...pendingZcash, 'zcash']);
+  }
   completed++;
 
   broadcastProgress('clearing-sync-state', completed, steps.length);

@@ -286,39 +286,110 @@ export async function cleanupZcashData(vaultId: string, removedZcashIds: string[
   } catch {}
 }
 
-/** nuke all wallet data — called when last vault is deleted */
+/**
+ * Keys that SURVIVE a nuke.
+ *
+ * This list is deliberately tiny, and it is a deny-list rather than an
+ * allow-list of things to delete. That inversion is the whole point of the
+ * rewrite below: the previous implementation enumerated the keys it wanted
+ * gone, which meant every key added to storage afterwards was retained by
+ * default and silently accumulated. It left behind, among others, the ZID
+ * share log (which sites you authenticated to, and when), the ZID pins and
+ * generation keys, site labels, known sites, the password key print, the
+ * diversified-address referral graph, the contacts and messages ciphertext,
+ * and `zignerWallets` — which stores Penumbra and Zcash full viewing keys in
+ * PLAINTEXT, i.e. a complete, permanent read capability over the user's
+ * transaction history, surviving the deletion of the wallet that owned it.
+ *
+ * A user who deletes their last vault is very plausibly doing it under
+ * duress or before handing over a device. Retaining any of that is a
+ * physical-safety problem, not a tidiness problem. So: everything goes
+ * unless it appears here, and nothing that identifies a person, a wallet, a
+ * counterparty or a site may be added to this list.
+ */
+const NUKE_SURVIVORS: ReadonlySet<string> = new Set<string>([
+  // pure appearance / ergonomics. carry no identity and no history.
+  'zafuTheme',
+  'zafuFont',
+  'autoLockMinutes',
+]);
+
+/** delete an IndexedDB database, resolving even if the delete is blocked. */
+const deleteDatabaseAwaitable = (name: string): Promise<void> =>
+  new Promise(resolve => {
+    let req: IDBOpenDBRequest;
+    try {
+      req = indexedDB.deleteDatabase(name);
+    } catch {
+      resolve();
+      return;
+    }
+    req.onsuccess = () => resolve();
+    req.onerror = () => {
+      console.warn('[nuke] IDB delete failed:', name, req.error);
+      resolve();
+    };
+    // An open connection blocks the delete SILENTLY — the request simply
+    // never completes. Surfacing it is the difference between "the data is
+    // gone" and "we think the data is gone".
+    req.onblocked = () => {
+      console.error('[nuke] IDB delete BLOCKED (data NOT deleted):', name);
+      resolve();
+    };
+  });
+
+/**
+ * nuke all wallet data — called when the last vault is deleted.
+ *
+ * Terminates the sync workers FIRST. `indexedDB.deleteDatabase` against a
+ * database that still has an open connection does not fail; it fires
+ * `onblocked` and hangs, so a delete issued while the zcash worker holds
+ * `zafu-zcash` open was a no-op that looked like a success.
+ */
 export async function nukeAllWalletData(
   session: ExtensionStorage<SessionStorageState>,
   local: ExtensionStorage<LocalStorageState>,
 ): Promise<void> {
   await session.remove('passwordKey');
 
+  // drop worker-held IDB connections before attempting any delete
+  try {
+    const { terminateNetworkWorker } = await import('./network-worker');
+    terminateNetworkWorker('zcash');
+    terminateNetworkWorker('penumbra');
+  } catch {
+    // workers may not be running
+  }
+
   const allLocalKeys = await chrome.storage.local.get(null);
-  const keysToRemove = Object.keys(allLocalKeys).filter(
-    k =>
-      k.startsWith('zcashBirthday_') ||
-      k === 'zcashSyncHeight' ||
-      k === 'zcashShieldedIndex' ||
-      k === 'zcashTransparentIndex' ||
-      k === 'fullSyncHeight' ||
-      k === 'compactFrontierBlockHeight' ||
-      k === 'pendingClaim' ||
-      k === 'params',
-  );
+  const keysToRemove = Object.keys(allLocalKeys).filter(k => !NUKE_SURVIVORS.has(k));
   if (keysToRemove.length > 0) {
     await chrome.storage.local.remove(keysToRemove);
   }
-
+  // session storage holds decrypted material for the unlocked wallet
   try {
-    indexedDB.deleteDatabase('zafu-zcash');
-  } catch {}
-  try {
-    indexedDB.deleteDatabase('zafu-memo-cache');
+    await chrome.storage.session.clear();
   } catch {}
 
+  // Delete every IndexedDB in this origin. Naming a fixed list here has the
+  // same rot problem as the old key allow-list: `viewdata/penumbra/*` is
+  // created per wallet id, so no static list can cover it. Every database in
+  // the extension origin is ours, so enumerate and remove all of them.
+  try {
+    const dbs = await indexedDB.databases();
+    const names = dbs.map(d => d.name).filter((n): n is string => !!n);
+    await Promise.all(names.map(deleteDatabaseAwaitable));
+  } catch (e) {
+    console.warn('[nuke] IDB enumeration failed, falling back to known names:', e);
+    await deleteDatabaseAwaitable('zafu-zcash');
+  }
+
+  // The bulk remove above already deleted these. Re-setting the wallet lists
+  // is not just redundant, it is impossible: `local` is the encrypting proxy
+  // and the session key was dropped at the top of this function, so the
+  // writes would no-op with a "wallet is locked" warning. Only the plaintext
+  // index keys are restored, so the store hydrates to a clean empty state.
   await local.set('selectedVaultId', undefined);
-  await local.set('penumbraWallets', []);
   await local.set('activeWalletIndex', 0);
-  await local.set('zcashWallets', []);
   await local.set('activeZcashIndex', 0);
 }

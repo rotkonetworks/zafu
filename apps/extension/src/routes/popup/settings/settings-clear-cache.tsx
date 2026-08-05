@@ -7,6 +7,7 @@ import { useStore } from '../../../state';
 import { selectKeyInfos } from '../../../state/keyring';
 import { selectZcashWallets, selectPenumbraWallets } from '../../../state/wallets';
 import { terminateNetworkWorker, spawnNetworkWorker } from '../../../state/keyring/network-worker';
+import { deleteZcashDatabases } from '../../../clear-cache-startup';
 import { useState, useEffect } from 'react';
 import { SettingsScreen } from './settings-screen';
 import type { KeyInfo } from '../../../state/keyring';
@@ -71,15 +72,12 @@ export const SettingsClearCache = () => {
       try {
         terminateNetworkWorker('zcash');
       } catch {}
-      // delete IndexedDB databases (zcash sync data + memo cache)
-      try {
-        indexedDB.deleteDatabase('zafu-zcash');
-      } catch {}
-      try {
-        indexedDB.deleteDatabase('zafu-memo-cache');
-      } catch {}
-      // small delay for IDB deletion to settle
-      await new Promise(r => setTimeout(r, 500));
+      // delete the zcash database and WAIT for it, rather than firing the
+      // delete and sleeping. the memo cache is an object store inside
+      // 'zafu-zcash', not a database of its own, so dropping that database
+      // clears it — the separate 'zafu-memo-cache' delete that used to be
+      // here targeted a database that has never existed.
+      await deleteZcashDatabases();
       // respawn worker fresh — sync will restart from birthday
       try {
         await spawnNetworkWorker('zcash');

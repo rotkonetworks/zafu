@@ -49,6 +49,7 @@ import { viewClient, sctClient } from '../../../clients';
 import { getDisplayDenomFromView } from '@penumbra-zone/getters/value-view';
 import { fromValueView } from '@rotko/penumbra-types/amount';
 import { getHistoryInWorker } from '../../../state/keyring/network-worker';
+import { deleteZcashDatabases } from '../../../clear-cache-startup';
 import { cn } from '@repo/ui/lib/utils';
 import { messagesSelector } from '../../../state/messages';
 import { SyncProgressBar } from '../../../components/sync-progress-bar';
@@ -736,13 +737,12 @@ const ZcashContent = ({
         try {
           terminateNetworkWorker('zcash');
         } catch {}
-        // delete IndexedDB to clear stale commitment tree
-        try {
-          indexedDB.deleteDatabase('zafu-zcash');
-        } catch {}
-        try {
-          indexedDB.deleteDatabase('zafu-memo-cache');
-        } catch {}
+        // delete IndexedDB to clear stale commitment tree. awaited: a
+        // fire-and-forget delete against a still-open database hangs on
+        // onblocked and silently leaves the data in place.
+        // ('zafu-memo-cache' was deleted here too; no such database exists —
+        // the memo cache is an object store inside 'zafu-zcash'.)
+        await deleteZcashDatabases();
         // update birthday and clear persisted sync height
         await chrome.storage.local.set({ [birthdayKey]: height });
         await chrome.storage.local.remove('zcashSyncHeight');
