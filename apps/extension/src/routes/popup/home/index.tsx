@@ -38,6 +38,7 @@ import {
   startSyncInWorker,
   startWatchOnlySyncInWorker,
   getBalanceInWorker,
+  zcashSyncHeightKey,
 } from '../../../state/keyring/network-worker';
 import { usePendingSends, usePoolBalances } from '../../../hooks/zcash-pool-balances';
 import { ShieldTransparent } from '../../../components/zcash/shield-transparent';
@@ -833,7 +834,9 @@ const ZcashContent = ({
         await deleteZcashDatabases();
         // update birthday and clear persisted sync height
         await chrome.storage.local.set({ [birthdayKey]: height });
-        await chrome.storage.local.remove('zcashSyncHeight');
+        // legacy global key kept in the removal list so an old install's
+        // stale value cannot outlive a rescan
+        await chrome.storage.local.remove(['zcashSyncHeight', zcashSyncHeightKey(walletId)]);
         setWalletBirthday(height);
         setOrchardZat(0n);
         setBalanceState('loading');
@@ -881,9 +884,10 @@ const ZcashContent = ({
           }
           await spawnNetworkWorker('zcash');
           markWalletSyncing('zcash', walletId);
-          const resumeAt = (await chrome.storage.local.get('zcashSyncHeight'))[
-            'zcashSyncHeight'
-          ] as number | undefined;
+          const resumeKey = zcashSyncHeightKey(walletId);
+          const resumeAt = (await chrome.storage.local.get(resumeKey))[resumeKey] as
+            | number
+            | undefined;
           if (hasMnemonic && selectedKeyInfo.type === 'mnemonic') {
             const mnemonic = await keyRing.getMnemonic(walletId);
             await startSyncInWorker(
@@ -984,7 +988,15 @@ const ZcashContent = ({
   // to fall back to the server pipeline pct (which reads 100% once the
   // pipeline is ready and made the bar claim "syncing 100.0%" with nothing
   // scanned yet).
-  const scanNotStarted = workerSyncHeight > 0 && workerSyncHeight <= walletBirthday;
+  //
+  // workerSyncHeight === 0 means the worker has not reported a height AT ALL:
+  // no sync started, or it died before its first emit. That is the state with
+  // the least information, and it used to fall through to the server pipeline
+  // percentage below and announce "syncing 100%" next to "scanning notes 0%" —
+  // the wallet claiming to be done while admitting it had scanned nothing.
+  // Whatever the server has proven about blocks this wallet never read says
+  // nothing about this wallet's balance, so it must not drive this bar.
+  const scanNotStarted = workerSyncHeight <= walletBirthday;
 
   // pipeline stages for the sync detail panel — a steady row instead of
   // the old flickering label rotation. lightwalletd skips verification.

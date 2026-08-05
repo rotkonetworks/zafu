@@ -17,6 +17,14 @@
 import { localExtStorage } from '@repo/storage-chrome/local';
 import type { NetworkType } from './types';
 
+/**
+ * chrome.storage.local key holding the last scan height the zcash worker
+ * reported for a wallet. A UI hint only — IndexedDB (`meta.syncHeight`) is
+ * what the worker actually resumes from. Per-wallet on purpose; see the
+ * write site in the 'sync-progress' handler.
+ */
+export const zcashSyncHeightKey = (walletId: string): string => `zcashSyncHeight_${walletId}`;
+
 export interface NetworkWorkerMessage {
   type:
     | 'init'
@@ -189,6 +197,26 @@ const spawnNetworkWorkerInner = async (network: NetworkType): Promise<void> => {
           detail: { network, walletId: msg.walletId, ...(msg.payload as object) },
         }),
       );
+      // Persist the height for the next popup open. Two places already READ
+      // chrome.storage.local.zcashSyncHeight — the sync hook's mount-time
+      // hydration and the post-error retry's resume point — and nothing has
+      // ever WRITTEN it, so both silently degraded: the bar started every
+      // session at 0% until the worker's first emit landed, and a retry
+      // resumed from `undefined` instead of where it left off.
+      //
+      // IDB remains the source of truth for what has actually been scanned;
+      // this is only a hint so the UI does not have to claim ignorance it
+      // does not have. Keyed PER WALLET: one shared key would let a
+      // fully-synced wallet's height hydrate the bar for a wallet that has
+      // scanned nothing, which is the same lie in the opposite direction.
+      if (network === 'zcash' && msg.walletId) {
+        const { currentHeight } = (msg.payload ?? {}) as { currentHeight?: number };
+        if (typeof currentHeight === 'number' && currentHeight > 0) {
+          void chrome.storage.local
+            .set({ [zcashSyncHeightKey(msg.walletId)]: currentHeight })
+            .catch(() => {});
+        }
+      }
       return;
     }
 
