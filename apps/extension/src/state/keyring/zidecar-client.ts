@@ -1110,7 +1110,11 @@ export class ZidecarClient {
         const data = buf.subarray(pos, pos + len);
         if (field === 5) {
           orchardTree = decoder.decode(data);
-        } else if (field === 7) {
+        } else if (field === 6) {
+          // zidecar.v1 TreeState.ironwood_tree = 6. This read field 7, which
+          // is the LIGHTWALLETD TreeState number — so against zidecar it never
+          // matched and every ironwood send failed with "server has no
+          // ironwood tree state", despite the server returning it correctly.
           ironwoodTree = decoder.decode(data);
         }
         pos += len;
