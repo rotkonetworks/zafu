@@ -132,6 +132,33 @@ export class WatchOnlyWallet {
 export function address_from_ufvk(ufvk_str: string, diversifier_index: number): string;
 
 /**
+ * COLD (zigner / watch-only) sibling of `build_signed_ironwood_send`: build the
+ * general ironwood send PCZT - spend the wallet's REAL ironwood notes to an
+ * ARBITRARY `recipient` (plus change back to self) in a single V6 transaction -
+ * and return a redacted-for-signer PCZT (same redaction contract as
+ * `build_turnstile_migration_pczt`) as JSON `{ pczt_hex, summary, action_count }`
+ * where `summary` is a `PcztSummary`.
+ *
+ * The wallet-owned ironwood spends are left UNSIGNED for the external cold
+ * signer (zigner), which already knows how to sign redacted ironwood spends
+ * (`pczt_signing::sign_redacted_pczt` signs the orchard AND ironwood spends).
+ * Mirrors `build_turnstile_migration_pczt`'s param shape exactly, except:
+ *  - `recipient` (unified address; its orchard-format receiver is the ironwood
+ *    recipient) and `amount` are added, and
+ *  - the anchor/notes/paths are the IRONWOOD tree's (real anchor + real
+ *    ironwood spends), not the orchard tree's.
+ *
+ * `account_index` is accepted for API parity with the worker call shape but is
+ * not used for derivation - the UFVK is already account-scoped.
+ *
+ * FAIL-CLOSED: inherits the hardened NU6.3 branch-id guard from
+ * `build_ironwood_send_pczt_proven` - the tx binds branch id 0x37a5165b, the
+ * caller MUST pass that real id as `expected_branch_id`, and the 0xffff_ffff
+ * placeholder is refused. No value or recipient appears in any error.
+ */
+export function build_ironwood_send_pczt(ufvk_str: string, ironwood_notes_json: string, recipient: string, amount: bigint, fee: bigint, ironwood_anchor_hex: string, ironwood_merkle_paths_json: string, account_index: number, target_height: number, expected_branch_id: number, mainnet: boolean, memo_hex?: string | null): any;
+
+/**
  * Build merkle paths for note positions by replaying compact blocks from a checkpoint.
  *
  * # Arguments
@@ -169,7 +196,34 @@ export function build_merkle_paths_ironwood(tree_state_hex: string, compact_bloc
  * * `anchor_height` - block height for expiry (expiry_height = anchor_height + 100)
  * * `mainnet` - true for mainnet, false for testnet
  */
-export function build_shielding_transaction(utxos_json: string, privkey_hex: string, recipient: string, amount: bigint, fee: bigint, anchor_height: number, mainnet: boolean): string;
+export function build_shielding_transaction(utxos_json: string, privkey_hex: string, recipient: string, amount: bigint, fee: bigint, anchor_height: number, mainnet: boolean, branch_id_hex?: string | null): string;
+
+/**
+ * HOT-WALLET general ironwood send: spend the wallet's REAL ironwood notes to
+ * an ARBITRARY `recipient` (plus change back to self) in a single V6
+ * transaction, sign the ironwood spends LOCALLY with a seed-derived key, and
+ * return the hex-encoded, signed, broadcast-ready V6 transaction.
+ *
+ * This is the ironwood analogue of a normal orchard send and the sibling of
+ * `build_signed_turnstile_migration`. Parameters mirror that function's shape,
+ * with `recipient`/`amount` added and the anchor/notes/paths being the
+ * ironwood tree's:
+ *  - `seed_phrase` derives BOTH the orchard `FullViewingKey` (recipient/change
+ *    scoping + nullifier verification) AND the `SpendAuthorizingKey` (local
+ *    signing) via the exact ZIP-32 path `SpendingKey::from_zip32_seed`.
+ *  - `recipient` is a unified address; its orchard-format receiver is used as
+ *    the ironwood recipient (the ironwood pool shares the orchard address
+ *    format - the note VERSION, not the address, selects the pool).
+ *  - `ironwood_anchor_hex` is the REAL ironwood tree anchor;
+ *    `ironwood_merkle_paths_json` are ironwood-tree paths from
+ *    `build_merkle_paths_ironwood`.
+ *
+ * FAIL-CLOSED: inherits the hardened NU6.3 branch-id guard from the build core
+ * - the tx binds branch id 0x37a5165b, the caller MUST pass that real id as
+ * `expected_branch_id`, and the 0xffff_ffff placeholder is refused. No value
+ * or recipient appears in any error.
+ */
+export function build_signed_ironwood_send(seed_phrase: string, ironwood_notes_json: string, recipient: string, amount: bigint, fee: bigint, ironwood_anchor_hex: string, ironwood_merkle_paths_json: string, account_index: number, target_height: number, expected_branch_id: number, mainnet: boolean, memo_hex?: string | null): string;
 
 /**
  * Build a fully signed orchard spend transaction from a mnemonic wallet.
@@ -192,7 +246,7 @@ export function build_shielding_transaction(utxos_json: string, privkey_hex: str
  * # Returns
  * Hex-encoded signed v5 transaction bytes ready for broadcast
  */
-export function build_signed_spend_transaction(seed_phrase: string, notes_json: any, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: any, account_index: number, mainnet: boolean, memo_hex?: string | null): string;
+export function build_signed_spend_transaction(seed_phrase: string, notes_json: any, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: any, account_index: number, mainnet: boolean, memo_hex?: string | null, branch_id_hex?: string | null): string;
 
 /**
  * HOT-WALLET sibling of `build_turnstile_migration_pczt`: build the one-way
@@ -255,7 +309,7 @@ export function build_unsigned_pczt(ufvk_str: string, notes_json: any, recipient
  *
  * Returns JSON: `{ sighashes: [hex], unsigned_tx_hex: hex, summary: string }`
  */
-export function build_unsigned_shielding_transaction(utxos_json: string, recipient: string, amount: bigint, fee: bigint, anchor_height: number, mainnet: boolean): string;
+export function build_unsigned_shielding_transaction(utxos_json: string, recipient: string, amount: bigint, fee: bigint, anchor_height: number, mainnet: boolean, branch_id_hex?: string | null): string;
 
 /**
  * Build an unsigned transaction and return the data needed for cold signing.
@@ -269,7 +323,7 @@ export function build_unsigned_shielding_transaction(utxos_json: string, recipie
  * - spend_indices: array of action indices that need external signatures
  * - summary: human-readable transaction summary
  */
-export function build_unsigned_transaction(ufvk_str: string, notes_json: any, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: any, _account_index: number, mainnet: boolean, memo_hex?: string | null): any;
+export function build_unsigned_transaction(ufvk_str: string, notes_json: any, recipient: string, amount: bigint, fee: bigint, anchor_hex: string, merkle_paths_json: any, _account_index: number, mainnet: boolean, memo_hex?: string | null, branch_id_hex?: string | null): any;
 
 /**
  * One-shot witness + path builder used for initial backfill: replays blocks
@@ -280,6 +334,15 @@ export function build_unsigned_transaction(ufvk_str: string, notes_json: any, re
  * `{anchor_hex, end_frontier_hex, entries: [{position, witness_hex, path: [{hash}]}]}`.
  */
 export function build_witnesses_and_paths(tree_state_hex: string, compact_blocks_json: string, note_positions_json: string): any;
+
+/**
+ * Complete an orchard-only FROST multisig PCZT: inject the externally-aggregated
+ * SpendAuth signatures (one per real spend, in `spend_indices` order, matching
+ * what `build_unsigned_pczt` returned) into the PCZT, then extract the
+ * broadcast-ready v5 tx. The mnemonic/zigner host and the poker escrow all
+ * finish a FROST signing round this way (gh #17 PCZT migration).
+ */
+export function complete_orchard_pczt(pczt_hex: string, orchard_sigs_json: any, spend_indices_json: any): string;
 
 /**
  * Complete an unsigned shielding transaction by patching in transparent signatures.
@@ -308,6 +371,17 @@ export function complete_shielding_transaction(unsigned_tx_hex: string, signatur
 export function complete_transaction(unsigned_tx_hex: string, signatures_json: any, spend_indices_json: any): string;
 
 /**
+ * Canonical ZIP-244 txid for a raw signed v5 transaction.
+ *
+ * Public lightwalletd's `SendResponse` carries no txid, so the wallet derives
+ * it locally instead of trusting the server to echo it. This is the same value
+ * zidecar computes server-side and the same bytes that appear as
+ * `CompactTx.hash` during sync — returned as lowercase hex in internal/wire
+ * byte order so the outgoing record reconciles on the next scan.
+ */
+export function compute_txid(tx_hex: string): string;
+
+/**
  * Create a PCZT sign request from transaction parameters
  * This is called by the online wallet to create the data that will be
  * transferred to the cold wallet via QR code.
@@ -334,7 +408,9 @@ export function derive_transparent_privkey(seed_phrase: string, account: number,
  * * `merkle_result_json` - JSON from build_merkle_paths: `{anchor_hex, paths: [{position, path: [{hash}]}]}`
  * * `anchor_height` - block height of the anchor
  * * `mainnet` - true for mainnet, false for testnet
- * * `attestation_hex` - optional hex-encoded 64-byte FROST attestation signature
+ * * `attestation_hex` - optional hex-encoded 64-byte ed25519 anchor attestation
+ *   signature from a trusted verifier (zidecar SignAnchor). Verified on the
+ *   cold device against its anchor-verifier registry.
  *
  * # Returns
  * `Uint8Array` of CBOR bytes ready for UR fountain encoding
@@ -430,6 +506,17 @@ export function frost_dkg_part3(secret_hex: string, round1_broadcasts_json: stri
 export function frost_generate_randomizer(ephemeral_seed_hex: string, message_hex: string, commitments_json: string): string;
 
 /**
+ * Inspect a PCZT's orchard outputs + recompute its canonical ZIP-244 sighash,
+ * for the FROST joiner's display↔sighash binding (gh #17). Returns the same
+ * JSON shape as `frost_parse_tx_outputs`, but sources both the bundle and the
+ * sighash from the PCZT itself via `Pczt::into_effects()` → `v5_signature_hash`.
+ * So the value the joiner checks is the canonical message its signature will
+ * commit to — never a host-supplied claim. The host publishes the (proven,
+ * io-finalized, redacted) PCZT; `into_effects` needs neither proof nor sigs.
+ */
+export function frost_inspect_pczt_outputs(pczt_hex: string, orchard_fvk_uview: string): string;
+
+/**
  * Parse the unsigned v5 transaction and recover what each Orchard action
  * is sending, using the FROST wallet's UFVK to OVK-decrypt outputs.
  *
@@ -513,6 +600,8 @@ export function get_commitment_proof_request(note_cmx_hex: string): string;
  */
 export function init(): void;
 
+export function initThreadPool(num_threads: number): Promise<any>;
+
 /**
  * Get number of threads available (0 if single-threaded)
  */
@@ -548,21 +637,6 @@ export function tree_root_hex(tree_state_hex: string): string;
  */
 export function tree_root_hex_ironwood(tree_state_hex: string): string;
 
-/**
- * Decode UR-encoded animated QR string frames back into CBOR bytes.
- *
- * Accepts a JSON array of UR strings (each `ur:<type>/...`) collected from
- * successive scans of an animated QR. Returns the reconstructed payload bytes
- * once the fountain decoder has enough frames (deduplicated internally), or an
- * error if the parts are malformed or the fountain code can't yet reconstruct.
- *
- * `expected_type` is a sanity check: if non-empty, parts whose UR type doesn't
- * match are rejected. Pass `""` to accept any type.
- *
- * Returns hex-encoded payload bytes (caller can hex_decode if it wants raw).
- * We return hex (rather than `Vec<u8>` directly) to avoid a wasm-bindgen
- * `Uint8Array` allocation pattern that's been flaky for us in some browsers.
- */
 export function ur_decode_frames(parts_json: string, expected_type: string): string;
 
 /**
@@ -601,6 +675,17 @@ export function validate_ufvk(ufvk_str: string): boolean;
  */
 export function version(): string;
 
+export class wbg_rayon_PoolBuilder {
+    private constructor();
+    free(): void;
+    [Symbol.dispose](): void;
+    build(): void;
+    numThreads(): number;
+    receiver(): number;
+}
+
+export function wbg_rayon_start_worker(receiver: number): void;
+
 /**
  * Extract a merkle path from a stored per-note witness. Returns JSON
  * `{position, root_hex, path: [{hash}]}`. The caller must cross-check
@@ -638,23 +723,40 @@ export function witness_sync_update_ironwood(start_frontier_hex: string, compact
  */
 export function zt_encode_frames(cbor_data: Uint8Array, zt_type: string, k: number, n: number): string;
 
+/**
+ * Encode CBOR bytes as zoda transport QR frames, auto-sizing `k`/`n` so each
+ * hex-encoded `zt:` frame fits a scannable QR regardless of payload size.
+ * Returns JSON array of `zt:type/hex` strings.
+ *
+ * - `max_qr_bytes`: max *raw* frame bytes before hex encoding. The QR string
+ *   is `len("zt:type/") + 2 * frame_bytes`, so pick this from the target QR
+ *   capacity: roughly `qr_byte_capacity / 2 - prefix`. ~600 gives a ~1.2 KB
+ *   QR string (≈ v24 at ECC-L), comfortable for handheld scanning.
+ * - `redundancy_pct`: extra parity frames as a percentage of `k` (e.g. 30).
+ */
+export function zt_encode_frames_auto(cbor_data: Uint8Array, zt_type: string, max_qr_bytes: number, redundancy_pct: number): string;
+
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
     readonly __wbg_walletkeys_free: (a: number, b: number) => void;
     readonly __wbg_watchonlywallet_free: (a: number, b: number) => void;
     readonly address_from_ufvk: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly build_ironwood_send_pczt: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number) => [number, number, number];
     readonly build_merkle_paths: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
-    readonly build_shielding_transaction: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number) => [number, number, number, number];
-    readonly build_signed_spend_transaction: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number) => [number, number, number, number];
+    readonly build_shielding_transaction: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number, k: number, l: number) => [number, number, number, number];
+    readonly build_signed_ironwood_send: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number) => [number, number, number, number];
+    readonly build_signed_spend_transaction: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number, o: number, p: number) => [number, number, number, number];
     readonly build_signed_turnstile_migration: (a: number, b: number, c: number, d: number, e: bigint, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number) => [number, number, number, number];
     readonly build_turnstile_migration_pczt: (a: number, b: number, c: number, d: number, e: bigint, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number) => [number, number, number];
     readonly build_unsigned_pczt: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number) => [number, number, number];
-    readonly build_unsigned_shielding_transaction: (a: number, b: number, c: number, d: number, e: bigint, f: bigint, g: number, h: number) => [number, number, number, number];
-    readonly build_unsigned_transaction: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number) => [number, number, number];
+    readonly build_unsigned_shielding_transaction: (a: number, b: number, c: number, d: number, e: bigint, f: bigint, g: number, h: number, i: number, j: number) => [number, number, number, number];
+    readonly build_unsigned_transaction: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number, o: number, p: number) => [number, number, number];
     readonly build_witnesses_and_paths: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
+    readonly complete_orchard_pczt: (a: number, b: number, c: any, d: any) => [number, number, number, number];
     readonly complete_shielding_transaction: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly complete_transaction: (a: number, b: number, c: any, d: any) => [number, number, number, number];
+    readonly compute_txid: (a: number, b: number) => [number, number, number, number];
     readonly create_sign_request: (a: number, b: number, c: number, d: any, e: number, f: number) => [number, number, number, number];
     readonly derive_transparent_privkey: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly encode_notes_bundle: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number, number];
@@ -662,7 +764,6 @@ export interface InitOutput {
     readonly frontier_tree_size: (a: number, b: number) => [bigint, number, number];
     readonly generate_seed_phrase: () => [number, number, number, number];
     readonly get_commitment_proof_request: (a: number, b: number) => [number, number, number, number];
-    readonly num_threads: () => number;
     readonly parse_signature_response: (a: number, b: number) => [number, number, number];
     readonly transparent_address_from_ufvk: (a: number, b: number, c: number) => [number, number, number, number];
     readonly transparent_pubkey_from_ufvk: (a: number, b: number, c: number) => [number, number, number, number];
@@ -697,12 +798,14 @@ export interface InitOutput {
     readonly witness_extract_path: (a: number, b: number) => [number, number, number];
     readonly witness_sync_update: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number];
     readonly zt_encode_frames: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly zt_encode_frames_auto: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly witness_extract_path_ironwood: (a: number, b: number) => [number, number, number];
     readonly init: () => void;
     readonly witness_sync_update_ironwood: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number];
     readonly build_merkle_paths_ironwood: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
     readonly tree_root_hex_ironwood: (a: number, b: number) => [number, number, number, number];
     readonly frontier_tree_size_ironwood: (a: number, b: number) => [bigint, number, number];
+    readonly num_threads: () => number;
     readonly frost_aggregate_shares: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number, number];
     readonly frost_attestation_digest: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly frost_attestation_verify: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number];
@@ -714,6 +817,7 @@ export interface InitOutput {
     readonly frost_dkg_part2: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly frost_dkg_part3: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly frost_generate_randomizer: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly frost_inspect_pczt_outputs: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly frost_parse_tx_outputs: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly frost_sample_fvk_sk: () => [number, number];
     readonly frost_sign_round1: (a: number, b: number, c: number, d: number) => [number, number, number, number];
@@ -725,6 +829,12 @@ export interface InitOutput {
     readonly rustsecp256k1_v0_10_0_default_illegal_callback_fn: (a: number, b: number) => void;
     readonly rustsecp256k1_v0_10_0_context_destroy: (a: number) => void;
     readonly rustsecp256k1_v0_10_0_context_create: (a: number) => number;
+    readonly __wbg_wbg_rayon_poolbuilder_free: (a: number, b: number) => void;
+    readonly initThreadPool: (a: number) => any;
+    readonly wbg_rayon_poolbuilder_build: (a: number) => void;
+    readonly wbg_rayon_poolbuilder_numThreads: (a: number) => number;
+    readonly wbg_rayon_poolbuilder_receiver: (a: number) => number;
+    readonly wbg_rayon_start_worker: (a: number) => void;
     readonly memory: WebAssembly.Memory;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

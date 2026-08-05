@@ -1,4 +1,5 @@
 /* @ts-self-types="./zafu_wasm.d.ts" */
+import { startWorkers } from './snippets/wasm-bindgen-rayon-38edf6e439f6d70d/src/workerHelpers.js';
 
 /**
  * Wallet keys derived from seed phrase
@@ -412,6 +413,64 @@ export function address_from_ufvk(ufvk_str, diversifier_index) {
 }
 
 /**
+ * COLD (zigner / watch-only) sibling of `build_signed_ironwood_send`: build the
+ * general ironwood send PCZT - spend the wallet's REAL ironwood notes to an
+ * ARBITRARY `recipient` (plus change back to self) in a single V6 transaction -
+ * and return a redacted-for-signer PCZT (same redaction contract as
+ * `build_turnstile_migration_pczt`) as JSON `{ pczt_hex, summary, action_count }`
+ * where `summary` is a `PcztSummary`.
+ *
+ * The wallet-owned ironwood spends are left UNSIGNED for the external cold
+ * signer (zigner), which already knows how to sign redacted ironwood spends
+ * (`pczt_signing::sign_redacted_pczt` signs the orchard AND ironwood spends).
+ * Mirrors `build_turnstile_migration_pczt`'s param shape exactly, except:
+ *  - `recipient` (unified address; its orchard-format receiver is the ironwood
+ *    recipient) and `amount` are added, and
+ *  - the anchor/notes/paths are the IRONWOOD tree's (real anchor + real
+ *    ironwood spends), not the orchard tree's.
+ *
+ * `account_index` is accepted for API parity with the worker call shape but is
+ * not used for derivation - the UFVK is already account-scoped.
+ *
+ * FAIL-CLOSED: inherits the hardened NU6.3 branch-id guard from
+ * `build_ironwood_send_pczt_proven` - the tx binds branch id 0x37a5165b, the
+ * caller MUST pass that real id as `expected_branch_id`, and the 0xffff_ffff
+ * placeholder is refused. No value or recipient appears in any error.
+ * @param {string} ufvk_str
+ * @param {string} ironwood_notes_json
+ * @param {string} recipient
+ * @param {bigint} amount
+ * @param {bigint} fee
+ * @param {string} ironwood_anchor_hex
+ * @param {string} ironwood_merkle_paths_json
+ * @param {number} account_index
+ * @param {number} target_height
+ * @param {number} expected_branch_id
+ * @param {boolean} mainnet
+ * @param {string | null} [memo_hex]
+ * @returns {any}
+ */
+export function build_ironwood_send_pczt(ufvk_str, ironwood_notes_json, recipient, amount, fee, ironwood_anchor_hex, ironwood_merkle_paths_json, account_index, target_height, expected_branch_id, mainnet, memo_hex) {
+    const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(ironwood_notes_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ptr3 = passStringToWasm0(ironwood_anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len3 = WASM_VECTOR_LEN;
+    const ptr4 = passStringToWasm0(ironwood_merkle_paths_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len4 = WASM_VECTOR_LEN;
+    var ptr5 = isLikeNone(memo_hex) ? 0 : passStringToWasm0(memo_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len5 = WASM_VECTOR_LEN;
+    const ret = wasm.build_ironwood_send_pczt(ptr0, len0, ptr1, len1, ptr2, len2, amount, fee, ptr3, len3, ptr4, len4, account_index, target_height, expected_branch_id, mainnet, ptr5, len5);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
  * Build merkle paths for note positions by replaying compact blocks from a checkpoint.
  *
  * # Arguments
@@ -489,11 +548,12 @@ export function build_merkle_paths_ironwood(tree_state_hex, compact_blocks_json,
  * @param {bigint} fee
  * @param {number} anchor_height
  * @param {boolean} mainnet
+ * @param {string | null} [branch_id_hex]
  * @returns {string}
  */
-export function build_shielding_transaction(utxos_json, privkey_hex, recipient, amount, fee, anchor_height, mainnet) {
-    let deferred5_0;
-    let deferred5_1;
+export function build_shielding_transaction(utxos_json, privkey_hex, recipient, amount, fee, anchor_height, mainnet, branch_id_hex) {
+    let deferred6_0;
+    let deferred6_1;
     try {
         const ptr0 = passStringToWasm0(utxos_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
@@ -501,18 +561,89 @@ export function build_shielding_transaction(utxos_json, privkey_hex, recipient, 
         const len1 = WASM_VECTOR_LEN;
         const ptr2 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len2 = WASM_VECTOR_LEN;
-        const ret = wasm.build_shielding_transaction(ptr0, len0, ptr1, len1, ptr2, len2, amount, fee, anchor_height, mainnet);
-        var ptr4 = ret[0];
-        var len4 = ret[1];
+        var ptr3 = isLikeNone(branch_id_hex) ? 0 : passStringToWasm0(branch_id_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len3 = WASM_VECTOR_LEN;
+        const ret = wasm.build_shielding_transaction(ptr0, len0, ptr1, len1, ptr2, len2, amount, fee, anchor_height, mainnet, ptr3, len3);
+        var ptr5 = ret[0];
+        var len5 = ret[1];
         if (ret[3]) {
-            ptr4 = 0; len4 = 0;
+            ptr5 = 0; len5 = 0;
             throw takeFromExternrefTable0(ret[2]);
         }
-        deferred5_0 = ptr4;
-        deferred5_1 = len4;
-        return getStringFromWasm0(ptr4, len4);
+        deferred6_0 = ptr5;
+        deferred6_1 = len5;
+        return getStringFromWasm0(ptr5, len5);
     } finally {
-        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
+        wasm.__wbindgen_free(deferred6_0, deferred6_1, 1);
+    }
+}
+
+/**
+ * HOT-WALLET general ironwood send: spend the wallet's REAL ironwood notes to
+ * an ARBITRARY `recipient` (plus change back to self) in a single V6
+ * transaction, sign the ironwood spends LOCALLY with a seed-derived key, and
+ * return the hex-encoded, signed, broadcast-ready V6 transaction.
+ *
+ * This is the ironwood analogue of a normal orchard send and the sibling of
+ * `build_signed_turnstile_migration`. Parameters mirror that function's shape,
+ * with `recipient`/`amount` added and the anchor/notes/paths being the
+ * ironwood tree's:
+ *  - `seed_phrase` derives BOTH the orchard `FullViewingKey` (recipient/change
+ *    scoping + nullifier verification) AND the `SpendAuthorizingKey` (local
+ *    signing) via the exact ZIP-32 path `SpendingKey::from_zip32_seed`.
+ *  - `recipient` is a unified address; its orchard-format receiver is used as
+ *    the ironwood recipient (the ironwood pool shares the orchard address
+ *    format - the note VERSION, not the address, selects the pool).
+ *  - `ironwood_anchor_hex` is the REAL ironwood tree anchor;
+ *    `ironwood_merkle_paths_json` are ironwood-tree paths from
+ *    `build_merkle_paths_ironwood`.
+ *
+ * FAIL-CLOSED: inherits the hardened NU6.3 branch-id guard from the build core
+ * - the tx binds branch id 0x37a5165b, the caller MUST pass that real id as
+ * `expected_branch_id`, and the 0xffff_ffff placeholder is refused. No value
+ * or recipient appears in any error.
+ * @param {string} seed_phrase
+ * @param {string} ironwood_notes_json
+ * @param {string} recipient
+ * @param {bigint} amount
+ * @param {bigint} fee
+ * @param {string} ironwood_anchor_hex
+ * @param {string} ironwood_merkle_paths_json
+ * @param {number} account_index
+ * @param {number} target_height
+ * @param {number} expected_branch_id
+ * @param {boolean} mainnet
+ * @param {string | null} [memo_hex]
+ * @returns {string}
+ */
+export function build_signed_ironwood_send(seed_phrase, ironwood_notes_json, recipient, amount, fee, ironwood_anchor_hex, ironwood_merkle_paths_json, account_index, target_height, expected_branch_id, mainnet, memo_hex) {
+    let deferred8_0;
+    let deferred8_1;
+    try {
+        const ptr0 = passStringToWasm0(seed_phrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(ironwood_notes_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passStringToWasm0(ironwood_anchor_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len3 = WASM_VECTOR_LEN;
+        const ptr4 = passStringToWasm0(ironwood_merkle_paths_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len4 = WASM_VECTOR_LEN;
+        var ptr5 = isLikeNone(memo_hex) ? 0 : passStringToWasm0(memo_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len5 = WASM_VECTOR_LEN;
+        const ret = wasm.build_signed_ironwood_send(ptr0, len0, ptr1, len1, ptr2, len2, amount, fee, ptr3, len3, ptr4, len4, account_index, target_height, expected_branch_id, mainnet, ptr5, len5);
+        var ptr7 = ret[0];
+        var len7 = ret[1];
+        if (ret[3]) {
+            ptr7 = 0; len7 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred8_0 = ptr7;
+        deferred8_1 = len7;
+        return getStringFromWasm0(ptr7, len7);
+    } finally {
+        wasm.__wbindgen_free(deferred8_0, deferred8_1, 1);
     }
 }
 
@@ -546,11 +677,12 @@ export function build_shielding_transaction(utxos_json, privkey_hex, recipient, 
  * @param {number} account_index
  * @param {boolean} mainnet
  * @param {string | null} [memo_hex]
+ * @param {string | null} [branch_id_hex]
  * @returns {string}
  */
-export function build_signed_spend_transaction(seed_phrase, notes_json, recipient, amount, fee, anchor_hex, merkle_paths_json, account_index, mainnet, memo_hex) {
-    let deferred6_0;
-    let deferred6_1;
+export function build_signed_spend_transaction(seed_phrase, notes_json, recipient, amount, fee, anchor_hex, merkle_paths_json, account_index, mainnet, memo_hex, branch_id_hex) {
+    let deferred7_0;
+    let deferred7_1;
     try {
         const ptr0 = passStringToWasm0(seed_phrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
@@ -560,18 +692,20 @@ export function build_signed_spend_transaction(seed_phrase, notes_json, recipien
         const len2 = WASM_VECTOR_LEN;
         var ptr3 = isLikeNone(memo_hex) ? 0 : passStringToWasm0(memo_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         var len3 = WASM_VECTOR_LEN;
-        const ret = wasm.build_signed_spend_transaction(ptr0, len0, notes_json, ptr1, len1, amount, fee, ptr2, len2, merkle_paths_json, account_index, mainnet, ptr3, len3);
-        var ptr5 = ret[0];
-        var len5 = ret[1];
+        var ptr4 = isLikeNone(branch_id_hex) ? 0 : passStringToWasm0(branch_id_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len4 = WASM_VECTOR_LEN;
+        const ret = wasm.build_signed_spend_transaction(ptr0, len0, notes_json, ptr1, len1, amount, fee, ptr2, len2, merkle_paths_json, account_index, mainnet, ptr3, len3, ptr4, len4);
+        var ptr6 = ret[0];
+        var len6 = ret[1];
         if (ret[3]) {
-            ptr5 = 0; len5 = 0;
+            ptr6 = 0; len6 = 0;
             throw takeFromExternrefTable0(ret[2]);
         }
-        deferred6_0 = ptr5;
-        deferred6_1 = len5;
-        return getStringFromWasm0(ptr5, len5);
+        deferred7_0 = ptr6;
+        deferred7_1 = len6;
+        return getStringFromWasm0(ptr6, len6);
     } finally {
-        wasm.__wbindgen_free(deferred6_0, deferred6_1, 1);
+        wasm.__wbindgen_free(deferred7_0, deferred7_1, 1);
     }
 }
 
@@ -731,28 +865,31 @@ export function build_unsigned_pczt(ufvk_str, notes_json, recipient, amount, fee
  * @param {bigint} fee
  * @param {number} anchor_height
  * @param {boolean} mainnet
+ * @param {string | null} [branch_id_hex]
  * @returns {string}
  */
-export function build_unsigned_shielding_transaction(utxos_json, recipient, amount, fee, anchor_height, mainnet) {
-    let deferred4_0;
-    let deferred4_1;
+export function build_unsigned_shielding_transaction(utxos_json, recipient, amount, fee, anchor_height, mainnet, branch_id_hex) {
+    let deferred5_0;
+    let deferred5_1;
     try {
         const ptr0 = passStringToWasm0(utxos_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         const ptr1 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len1 = WASM_VECTOR_LEN;
-        const ret = wasm.build_unsigned_shielding_transaction(ptr0, len0, ptr1, len1, amount, fee, anchor_height, mainnet);
-        var ptr3 = ret[0];
-        var len3 = ret[1];
+        var ptr2 = isLikeNone(branch_id_hex) ? 0 : passStringToWasm0(branch_id_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len2 = WASM_VECTOR_LEN;
+        const ret = wasm.build_unsigned_shielding_transaction(ptr0, len0, ptr1, len1, amount, fee, anchor_height, mainnet, ptr2, len2);
+        var ptr4 = ret[0];
+        var len4 = ret[1];
         if (ret[3]) {
-            ptr3 = 0; len3 = 0;
+            ptr4 = 0; len4 = 0;
             throw takeFromExternrefTable0(ret[2]);
         }
-        deferred4_0 = ptr3;
-        deferred4_1 = len3;
-        return getStringFromWasm0(ptr3, len3);
+        deferred5_0 = ptr4;
+        deferred5_1 = len4;
+        return getStringFromWasm0(ptr4, len4);
     } finally {
-        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
     }
 }
 
@@ -777,9 +914,10 @@ export function build_unsigned_shielding_transaction(utxos_json, recipient, amou
  * @param {number} _account_index
  * @param {boolean} mainnet
  * @param {string | null} [memo_hex]
+ * @param {string | null} [branch_id_hex]
  * @returns {any}
  */
-export function build_unsigned_transaction(ufvk_str, notes_json, recipient, amount, fee, anchor_hex, merkle_paths_json, _account_index, mainnet, memo_hex) {
+export function build_unsigned_transaction(ufvk_str, notes_json, recipient, amount, fee, anchor_hex, merkle_paths_json, _account_index, mainnet, memo_hex, branch_id_hex) {
     const ptr0 = passStringToWasm0(ufvk_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
     const ptr1 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
@@ -788,7 +926,9 @@ export function build_unsigned_transaction(ufvk_str, notes_json, recipient, amou
     const len2 = WASM_VECTOR_LEN;
     var ptr3 = isLikeNone(memo_hex) ? 0 : passStringToWasm0(memo_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     var len3 = WASM_VECTOR_LEN;
-    const ret = wasm.build_unsigned_transaction(ptr0, len0, notes_json, ptr1, len1, amount, fee, ptr2, len2, merkle_paths_json, _account_index, mainnet, ptr3, len3);
+    var ptr4 = isLikeNone(branch_id_hex) ? 0 : passStringToWasm0(branch_id_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len4 = WASM_VECTOR_LEN;
+    const ret = wasm.build_unsigned_transaction(ptr0, len0, notes_json, ptr1, len1, amount, fee, ptr2, len2, merkle_paths_json, _account_index, mainnet, ptr3, len3, ptr4, len4);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
@@ -912,6 +1052,38 @@ export function complete_transaction(unsigned_tx_hex, signatures_json, spend_ind
         const ptr0 = passStringToWasm0(unsigned_tx_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.complete_transaction(ptr0, len0, signatures_json, spend_indices_json);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * Canonical ZIP-244 txid for a raw signed v5 transaction.
+ *
+ * Public lightwalletd's `SendResponse` carries no txid, so the wallet derives
+ * it locally instead of trusting the server to echo it. This is the same value
+ * zidecar computes server-side and the same bytes that appear as
+ * `CompactTx.hash` during sync — returned as lowercase hex in internal/wire
+ * byte order so the outgoing record reconciles on the next scan.
+ * @param {string} tx_hex
+ * @returns {string}
+ */
+export function compute_txid(tx_hex) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(tx_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.compute_txid(ptr0, len0);
         var ptr2 = ret[0];
         var len2 = ret[1];
         if (ret[3]) {
@@ -1786,6 +1958,15 @@ export function init() {
 }
 
 /**
+ * @param {number} num_threads
+ * @returns {Promise<any>}
+ */
+export function initThreadPool(num_threads) {
+    const ret = wasm.initThreadPool(num_threads);
+    return ret;
+}
+
+/**
  * Get number of threads available (0 if single-threaded)
  * @returns {number}
  */
@@ -1921,19 +2102,6 @@ export function tree_root_hex_ironwood(tree_state_hex) {
 }
 
 /**
- * Decode UR-encoded animated QR string frames back into CBOR bytes.
- *
- * Accepts a JSON array of UR strings (each `ur:<type>/...`) collected from
- * successive scans of an animated QR. Returns the reconstructed payload bytes
- * once the fountain decoder has enough frames (deduplicated internally), or an
- * error if the parts are malformed or the fountain code can't yet reconstruct.
- *
- * `expected_type` is a sanity check: if non-empty, parts whose UR type doesn't
- * match are rejected. Pass `""` to accept any type.
- *
- * Returns hex-encoded payload bytes (caller can hex_decode if it wants raw).
- * We return hex (rather than `Vec<u8>` directly) to avoid a wasm-bindgen
- * `Uint8Array` allocation pattern that's been flaky for us in some browsers.
  * @param {string} parts_json
  * @param {string} expected_type
  * @returns {string}
@@ -2046,6 +2214,51 @@ export function version() {
     } finally {
         wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
     }
+}
+
+export class wbg_rayon_PoolBuilder {
+    static __wrap(ptr) {
+        ptr = ptr >>> 0;
+        const obj = Object.create(wbg_rayon_PoolBuilder.prototype);
+        obj.__wbg_ptr = ptr;
+        wbg_rayon_PoolBuilderFinalization.register(obj, obj.__wbg_ptr, obj);
+        return obj;
+    }
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        wbg_rayon_PoolBuilderFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_wbg_rayon_poolbuilder_free(ptr, 0);
+    }
+    build() {
+        wasm.wbg_rayon_poolbuilder_build(this.__wbg_ptr);
+    }
+    /**
+     * @returns {number}
+     */
+    numThreads() {
+        const ret = wasm.wbg_rayon_poolbuilder_numThreads(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {number}
+     */
+    receiver() {
+        const ret = wasm.wbg_rayon_poolbuilder_receiver(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+}
+if (Symbol.dispose) wbg_rayon_PoolBuilder.prototype[Symbol.dispose] = wbg_rayon_PoolBuilder.prototype.free;
+
+/**
+ * @param {number} receiver
+ */
+export function wbg_rayon_start_worker(receiver) {
+    wasm.wbg_rayon_start_worker(receiver);
 }
 
 /**
@@ -2277,6 +2490,14 @@ function __wbg_get_imports(memory) {
             const ret = arg0 == arg1;
             return ret;
         },
+        __wbg___wbindgen_memory_edb3f01e3930bbf6: function() {
+            const ret = wasm.memory;
+            return ret;
+        },
+        __wbg___wbindgen_module_bf945c07123bafe2: function() {
+            const ret = wasmModule;
+            return ret;
+        },
         __wbg___wbindgen_number_get_34bb9d9dcfa21373: function(arg0, arg1) {
             const obj = arg1;
             const ret = typeof(obj) === 'number' ? obj : undefined;
@@ -2350,6 +2571,16 @@ function __wbg_get_imports(memory) {
             let result;
             try {
                 result = arg0 instanceof Uint8Array;
+            } catch (_) {
+                result = false;
+            }
+            const ret = result;
+            return ret;
+        },
+        __wbg_instanceof_Window_23e677d2c6843922: function(arg0) {
+            let result;
+            try {
+                result = arg0 instanceof Window;
             } catch (_) {
                 result = false;
             }
@@ -2442,6 +2673,10 @@ function __wbg_get_imports(memory) {
             getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
             getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
         },
+        __wbg_startWorkers_8b582d57e92bd2d4: function(arg0, arg1, arg2) {
+            const ret = startWorkers(arg0, arg1, wbg_rayon_PoolBuilder.__wrap(arg2));
+            return ret;
+        },
         __wbg_static_accessor_GLOBAL_8adb955bd33fac2f: function() {
             const ret = typeof global === 'undefined' ? null : global;
             return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
@@ -2469,6 +2704,9 @@ function __wbg_get_imports(memory) {
         __wbg_versions_276b2795b1c6a219: function(arg0) {
             const ret = arg0.versions;
             return ret;
+        },
+        __wbg_warn_41f26beafc5e47c2: function(arg0, arg1) {
+            console.warn(getStringFromWasm0(arg0, arg1));
         },
         __wbindgen_cast_0000000000000001: function(arg0) {
             // Cast intrinsic for `F64 -> Externref`.
@@ -2513,6 +2751,9 @@ const WalletKeysFinalization = (typeof FinalizationRegistry === 'undefined')
 const WatchOnlyWalletFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_watchonlywallet_free(ptr >>> 0, 1));
+const wbg_rayon_PoolBuilderFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_wbg_rayon_poolbuilder_free(ptr >>> 0, 1));
 
 function addToExternrefTable0(obj) {
     const idx = wasm.__externref_table_alloc();
