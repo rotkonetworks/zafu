@@ -159,3 +159,40 @@ blobs checked into this repo**. Rust changes do not reach the extension until
 both are refreshed, and a stale copy caused a live failure on 2026-08-05. See
 `packages/zcash-wasm/BUILD_PROVENANCE.md`; verify all copies are byte-identical
 and that the shared imported memory survives, or rayon proving dies.
+
+## license.zafu.pro
+
+Live as of 2026-08-06. `https://license.zafu.pro/license/...` serves from the
+same backend as `zpro.rotko.net`.
+
+How it is wired, so the next person does not have to rediscover it:
+
+- **DNS** — Porkbun (`zafu.pro` uses Porkbun nameservers, NOT Cloudflare).
+  `license.zafu.pro A 160.22.181.6`, ttl 600. Deliberately bkk06's UNIQUE ip,
+  not the anycast `160.22.181.81`: certbot only runs on bkk06, so HTTP-01
+  validation against the anycast address would reach the right host roughly one
+  time in three and renewal would fail intermittently. A license check does not
+  need anycast.
+- **Credential** — `~/tommidata/secrets/porkbun.age` is encrypted to
+  **ssh-ed25519** recipients, not X25519 age recipients, so the age keys in that
+  directory cannot open it. Decrypt with `age -d -i ~/.ssh/id_ed25519`.
+- **Cert** — Let's Encrypt via `certbot --standalone --http-01-port=8888` on
+  bkk06, registered in `/etc/haproxy/domains.map` as
+  `license.zafu.pro:standalone` so the nightly `smart-cert-renewal.sh` picks it
+  up. Deployed as `/etc/haproxy/certs/rotko/license.zafu.pro`
+  (fullchain + privkey concatenated, matching the script's own convention).
+- **haproxy (bkk06)** — `160.22.181.6` added to the :80 and :443 binds, and
+  `license.zafu.pro` added to the existing `is_zpro` ACL.
+
+### A pre-existing bug this uncovered
+
+The ACME ACL read `path_beg -i .well-known/acme-challenge/` — with no leading
+slash. Request paths begin with `/`, so `path_beg` never matched, every ACME
+challenge was 301'd to HTTPS, and **standalone validation had never worked on
+this edge**: `up.rotko.net` and `pm.rotko.net` are both marked `:standalone` in
+domains.map and had no certificates in `/etc/letsencrypt/live` at all. Fixed to
+`/.well-known/acme-challenge/` on bkk06.
+
+bkk07 and bkk08 still carry the unfixed ACL. They should get the same one-
+character fix, and note their certs are scp'd from bkk06 every 3 hours, so
+anything issued on them directly is overwritten.
