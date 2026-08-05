@@ -910,13 +910,19 @@ const ZcashContent = ({
             key: 'ligerito',
             label: 'ligerito',
             state: ligeritoPct >= 100 ? 'done' : gigaproofStatus >= 1 ? 'active' : 'pending',
+            // The wallet VERIFIES a ligerito proof; it never produces one —
+            // proving happens server-side. Labelling this stage "proving"
+            // described the wrong machine doing the wrong verb, so the stage
+            // now just reads as pending/active/done (the ✓ carries "done").
+            //
             // blocksUntilReady is a countdown, but some server states report a
             // raw height here — rendering "3436543 blocks" as a remaining
-            // count is nonsense. Only show it when it reads like a delta.
+            // count is nonsense. Show it only when it reads like a delta,
+            // since a real countdown is the one genuinely useful detail.
             detail:
               gigaproofStatus >= 2 && blocksUntilReady > 0 && blocksUntilReady < 100_000
                 ? `${blocksUntilReady} blocks`
-                : 'proving',
+                : undefined,
           },
           {
             key: 'scan',
