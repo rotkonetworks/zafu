@@ -1248,9 +1248,35 @@ const verifySyncProofs = async (
         `spent-proofs always trusted, unspent trusted only at/above the horizon`,
     );
 
+    // NOT a tampering signal, and it must not fail the sync.
+    //
+    // These two roots are taken at DIFFERENT INSTANTS from a MUTABLE tree.
+    // zidecar's NOMT is a single live tree: proofs are generated against
+    // nomt.root() at request time, and `at_height` is accepted but ignored —
+    // there is no versioned or pinned historical root. Meanwhile the ligerito
+    // header proof carries a snapshot of that root from whenever the proof was
+    // last generated. The server writes continuously (the ironwood cursor
+    // follows the chain tip), so between the proof and this query the root has
+    // simply moved on.
+    //
+    // Treating that as "the server tampered" was my error earlier today: it
+    // converted a benign race into a hard sync failure that users hit within
+    // minutes, and it teaches people to ignore an integrity warning — the
+    // worst possible outcome for a check that is supposed to mean something.
+    //
+    // What IS sound is verified below and stays fatal: every proof must bind
+    // to the batch root we actually checked, must be for a nullifier we asked
+    // about, and the count must match. Those are internally consistent
+    // comparisons taken at one instant, so a mismatch there really is the
+    // server contradicting itself.
+    //
+    // Making this meaningful needs a server that can prove against a pinned
+    // historical root. Until then a divergence here is unremarkable.
     if (nfRootHex !== proven.nullifier_root) {
-      throw new Error(
-        `nullifier root mismatch: server=${nfRootHex.slice(0, 16)} proven=${proven.nullifier_root.slice(0, 16)}`,
+      console.warn(
+        `[zcash-worker] nullifier root moved since the header proof ` +
+          `(live=${nfRootHex.slice(0, 16)} proven=${proven.nullifier_root.slice(0, 16)}); ` +
+          `expected while the server is indexing - proofs are still bound to the live root below`,
       );
     }
 
@@ -3057,21 +3083,36 @@ const runSync = async (
               decoyPool.snapshot(),
             );
           } catch (e) {
-            // Fail CLOSED on evidence of tampering, fail soft on flakiness.
+            // Fail CLOSED only on checks that are actually sound.
             //
-            // This used to swallow everything and clear the pending buffer, so
-            // "actions commitment mismatch: server tampered with block
-            // actions", "nullifier root mismatch" and "commitment proof
-            // invalid" were all downgraded to a console warning while the
-            // affected notes stayed in state and IDB and were never
-            // re-verified. A tampering server got a silent pass.
+            // Two different kinds of failure land here and they are NOT the
+            // same thing:
             //
-            // Integrity failures now surface as a sync error the user can see;
-            // transport/availability failures still retry on the next cycle,
-            // because a flaky endpoint should not brick the wallet.
+            //   SOUND — comparisons taken at ONE instant, where a mismatch
+            //   means the server contradicted itself: a proof that does not
+            //   bind to the batch root we checked, a proof for something we
+            //   never asked about, a duplicate, or a wrong count. These are
+            //   real evidence and must refuse.
+            //
+            //   RACY — comparisons between a SNAPSHOT and a LIVE value. The
+            //   NOMT tree is mutable and single-versioned: proofs are made
+            //   against nomt.root() at request time while the ligerito header
+            //   proof carries a root from whenever it was last generated, and
+            //   the server writes continuously. The same applies to the
+            //   actions commitment, which folds stored per-block roots the
+            //   indexer is still filling in. A divergence there is expected.
+            //
+            // My earlier classifier matched /mismatch|tampered/ and escalated
+            // BOTH, which bricked sync within minutes of a healthy server
+            // doing ordinary work, under a message accusing it of tampering.
+            // A false alarm on an integrity check is worse than none: it
+            // teaches users to click past the one warning that should stop
+            // them.
             const detail = e instanceof Error ? e.message : String(e);
             const tampering =
-              /mismatch|invalid|unrequested|duplicate|count mismatch|tampered/i.test(detail);
+              /proof root mismatch|unrequested|duplicate|count mismatch|proof invalid/i.test(
+                detail,
+              );
             if (tampering) {
               console.error('[zcash-worker] INTEGRITY FAILURE, refusing batch:', e);
               pendingCmxs.length = 0;
