@@ -1,8 +1,16 @@
 // Multisig verifier — verdict computation. Compares the host's claimed
 // (recipient, amount, fee) against the OVK-decrypted output the joiner
-// derived locally from the unsigned tx bytes. Mismatch → joiner refuses
-// to sign. Missing unsignedTx / missing UFVK → fall back to host-claim
-// with a yellow warning.
+// derived locally from the PCZT the host published.
+//
+// There is deliberately NO "unverified but signable" verdict. The relay is
+// unauthenticated and the room code is guessable, so "the host" is anyone who
+// can post to the room; a state that fails to verify yet leaves the approve
+// button live is a downgrade attack, not a compatibility affordance. Every
+// path that cannot establish (recipient, amount, sighash) from bytes returns
+// `refuse`, which no UI may override. This matches computeEscrowVerdict below,
+// which already worked this way.
+//
+// RESIDUAL — the fee is NOT verified. See assessClaimedFee().
 
 import { encodeOrchardUnifiedAddress } from '@repo/wallet/networks/zcash/unified-address';
 import type { FrostParsedTx } from '../../../../state/keyring/network-worker';
@@ -17,7 +25,12 @@ export type Verdict =
       sighashLie?: boolean;
     }
   | { kind: 'pending' }
-  | { kind: 'unverified'; reason: string };
+  /** cannot verify — hard block, not overridable. */
+  | { kind: 'refuse'; reasons: string[] };
+
+/** true for the verdicts a signer is permitted to release a share against. */
+export const verdictAllowsSigning = (v: Verdict, acknowledgedMismatch: boolean): boolean =>
+  v.kind === 'match' || (v.kind === 'mismatch' && acknowledgedMismatch);
 
 const hexToBytes = (h: string): Uint8Array => {
   const out = new Uint8Array(h.length / 2);
@@ -54,12 +67,26 @@ export function computeVerdict(args: {
   const sendZat = externals.reduce((acc, a) => acc + BigInt(a.amount_zat), 0n);
   const changeZat = changes.reduce((acc, a) => acc + BigInt(a.amount_zat), 0n);
 
-  // Sighash check first — if the host published an honest sighash but a
-  // decoy bundle, OVK decryption can return a "matching" parse for an
-  // entirely different tx than the one being signed. The sighash binds
-  // shares to the actual message; verifying it agrees with what the
-  // bundle bytes hash to closes that gap.
-  if (parsed.computed_sighash_hex) {
+  // Sighash check first, and it is MANDATORY. If the host published an honest
+  // sighash but a decoy bundle, OVK decryption can return a "matching" parse
+  // for an entirely different tx than the one being signed. The sighash is the
+  // only thing that binds our share to the actual message, so without it the
+  // OVK decode proves nothing about what we are signing.
+  //
+  // This must not degrade to a warning: a host can *choose* to make the sighash
+  // unrecomputable simply by adding a dust transparent output (the parser
+  // returns null for any tx with a transparent/sapling component). A downgrade
+  // the attacker controls is not a downgrade, it is a bypass.
+  if (!parsed.computed_sighash_hex) {
+    return {
+      kind: 'refuse',
+      reasons: [
+        'sighash could not be recomputed from the published bytes — refusing to sign an unverifiable tx',
+        'this tx has a transparent or sapling component, which this verifier cannot bind; a host can induce this deliberately',
+      ],
+    };
+  }
+  {
     const expected = parsed.computed_sighash_hex.toLowerCase();
     const claimed = claimedSighashHex.toLowerCase();
     if (expected !== claimed) {
@@ -129,17 +156,62 @@ export function computeVerdict(args: {
   if (reasons.length > 0) {
     return { kind: 'mismatch', reasons, sendZat, changeZat };
   }
-  // If we couldn't compute the sighash (transparent/sapling component
-  // present), surface that to the caller so the UI can warn rather than
-  // silently treating "OVK-decryption matches" as full proof.
-  if (!parsed.computed_sighash_hex) {
+  return { kind: 'match', sendZat, changeZat };
+}
+
+/**
+ * Sanity bound on the host's CLAIMED fee.
+ *
+ * READ THIS BEFORE TRUSTING IT. This is not fee verification and cannot be.
+ * For a shielded-only tx the fee IS `orchard_bundle.value_balance()`, and
+ * `frost_inspect_pczt_outputs` does not return it — it returns only the
+ * OVK-decryptable outputs. We can therefore see what is being *sent* but never
+ * what is being *spent*, so value conservation (inputs − outputs = fee) is not
+ * checkable on this side of the wasm boundary at all.
+ *
+ * Concretely, the attack this does NOT stop: spend a 10 ZEC note, pay 0.01 to
+ * the displayed recipient, emit no change, and let 9.99 fall out as fee for a
+ * colluding miner. Every output-side check above passes — the recipient and
+ * amount are exactly what was claimed — and the host simply claims a small fee
+ * here. The fee we are bounding is an attacker-supplied string.
+ *
+ * What this does buy: it catches an *honestly reported* excessive fee (a broken
+ * host, a fat-fingered coordinator, or an attacker who did not bother to lie in
+ * this field), and it keeps the number off the "verified" side of the UI. Real
+ * value-conservation needs `value_balance` plumbed through
+ * `frost_inspect_pczt_outputs` in crates/zcash-wasm/src/frost.rs (the zcli
+ * repo); the wasm ships here prebuilt, so it cannot be done from this repo.
+ */
+export const MAX_PLAUSIBLE_FEE_ZAT = 10_000_000n; // 0.1 ZEC — orders of magnitude above ZIP-317
+
+export function assessClaimedFee(
+  claimedFeeZat: string,
+  claimedAmountZat: string,
+): { ok: true } | { ok: false; reason: string } {
+  let fee: bigint;
+  let amount: bigint;
+  try {
+    fee = BigInt(claimedFeeZat || '0');
+    amount = BigInt(claimedAmountZat || '0');
+  } catch {
+    return { ok: false, reason: 'claimed fee is not a number' };
+  }
+  if (fee < 0n) {
+    return { ok: false, reason: 'claimed fee is negative' };
+  }
+  if (fee > MAX_PLAUSIBLE_FEE_ZAT) {
     return {
-      kind: 'unverified',
-      reason:
-        'tx has transparent/sapling component — sighash check skipped, OVK decode matched only',
+      ok: false,
+      reason: `claimed fee ${fee} zat exceeds the ${MAX_PLAUSIBLE_FEE_ZAT} zat sanity bound`,
     };
   }
-  return { kind: 'match', sendZat, changeZat };
+  if (amount > 0n && fee > amount) {
+    return {
+      ok: false,
+      reason: `claimed fee ${fee} zat exceeds the amount being sent (${amount} zat)`,
+    };
+  }
+  return { ok: true };
 }
 
 export type EscrowVerdict =
