@@ -1309,7 +1309,15 @@ const resolveBroadcastTxid = async (
   if (!wasmModule) {
     throw new Error('wasm not initialized for txid computation');
   }
-  return wasmModule.compute_txid(txHex);
+  // compute_txid returns INTERNAL (wire) byte order — the same bytes that
+  // appear as CompactTx.hash during sync. zidecar's SendResponse, by
+  // contrast, echoes the DISPLAY-order txid, so without this reversal the
+  // same wallet reported two different conventions depending on backend and
+  // the lightwalletd one could not be found in any explorer (it is the real
+  // txid, just byte-reversed). Normalize to display order, which is what
+  // users copy and what block explorers accept.
+  const internal = wasmModule.compute_txid(txHex);
+  return (internal.match(/../g) ?? []).reverse().join('');
 };
 
 // ── zync-core (verification) ──
