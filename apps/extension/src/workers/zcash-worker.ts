@@ -5097,7 +5097,16 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           );
           if (unspentIronwood.length === 0 && unspentOrchard.length > 0) {
             throw new Error(
-              'orchard sends are disabled at NU6.3 - migrate your orchard funds to ironwood first',
+              // Names the CONSEQUENCE, not the consensus rule. The old string
+              // ("orchard sends are disabled at NU6.3") was a developer's note:
+              // it cited a rule, used two pool names as though the reader knows
+              // them, and gave an imperative with no affordance. vizor-wallet,
+              // which has already shipped this exact migration, frames it as
+              // "your balance is frozen, one move fixes it, funds stay yours".
+              'your shielded funds are in the older orchard format. zcash replaced ' +
+                'it with ironwood, so they cannot be spent directly. moving them ' +
+                'once makes them spendable again - the funds stay yours the whole ' +
+                'time, and nothing leaves your wallet.',
             );
           }
         }
@@ -5648,7 +5657,16 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           );
           if (unspentIronwood.length === 0 && unspentOrchard.length > 0) {
             throw new Error(
-              'orchard sends are disabled at NU6.3 - migrate your orchard funds to ironwood first',
+              // Names the CONSEQUENCE, not the consensus rule. The old string
+              // ("orchard sends are disabled at NU6.3") was a developer's note:
+              // it cited a rule, used two pool names as though the reader knows
+              // them, and gave an imperative with no affordance. vizor-wallet,
+              // which has already shipped this exact migration, frames it as
+              // "your balance is frozen, one move fixes it, funds stay yours".
+              'your shielded funds are in the older orchard format. zcash replaced ' +
+                'it with ironwood, so they cannot be spent directly. moving them ' +
+                'once makes them spendable again - the funds stay yours the whole ' +
+                'time, and nothing leaves your wallet.',
             );
           }
         }
