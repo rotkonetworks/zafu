@@ -6,7 +6,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../state';
-import { getZidIndex, getZidPins } from '../state/identity';
+import { addZidPin, getZidIndex, getZidPins } from '../state/identity';
+import { HankoSeal, zidSealGlyph } from '@repo/ui/components/editorial';
 import { selectLock, selectActiveNetwork, selectEffectiveKeyInfo } from '../state/keyring';
 import { isPro } from '../state/license';
 import { isIdentityEnabled } from '../state/privacy';
@@ -59,6 +60,10 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
   // presenting, and identities are the thing it is most costly to confuse —
   // the whole point of rotating is that generations are meant to be distinct.
   const [zidLabel, setZidLabel] = useState<string | undefined>(undefined);
+  const [zidGen, setZidGen] = useState(0);
+  const [renaming, setRenaming] = useState(false);
+  const [draftName, setDraftName] = useState('');
+
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -66,6 +71,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
         const [idx, pins] = await Promise.all([getZidIndex(), getZidPins()]);
         const pin = pins.find(p => p.index === idx);
         if (!cancelled) {
+          setZidGen(idx);
           setZidLabel(pin?.label);
         }
       } catch {
@@ -77,6 +83,21 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
     };
     // re-read when the displayed identity changes
   }, [zidPubkey]);
+
+  // Every generation gets a name. An unnamed one falls back to "generation N"
+  // rather than showing nothing, because the failure this whole panel exists to
+  // prevent is presenting the wrong identity without noticing.
+  const displayName = zidLabel ?? `generation ${zidGen}`;
+
+  const commitRename = () => {
+    const next = draftName.trim();
+    setRenaming(false);
+    if (!next || next === zidLabel) {
+      return;
+    }
+    setZidLabel(next);
+    void addZidPin(zidGen, next).catch(() => setZidLabel(zidLabel));
+  };
 
   const handleLock = () => {
     lock();
@@ -252,25 +273,54 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
 
         {/* zid - hidden when identity feature is disabled */}
         {zidAddress && identityEnabled && (
-          <button
-            onClick={() => {
-              void navigator.clipboard.writeText(zidPubkey!);
-              setZidCopied(true);
-              setTimeout(() => setZidCopied(false), 1500);
-            }}
-            className='mx-4 mt-3 flex items-center gap-2 rounded-md border border-border-soft px-3 py-2 text-left hover:bg-elev-1 transition-colors'
-          >
-            <span className='i-lucide-fingerprint h-3.5 w-3.5 text-fg-dim' />
-            <span className='flex min-w-0 flex-col'>
-              {zidLabel && (
-                <span className='truncate text-xs text-fg-high lowercase'>{zidLabel}</span>
+          <div className='mx-4 mt-3 flex items-center gap-2.5 rounded-md border border-border-soft px-3 py-2'>
+            {/* the seal IS the identity badge — a rotated generation gets a
+                visibly different glyph, so a wrong identity is legible at a
+                glance rather than requiring you to read 16 hex chars */}
+            <HankoSeal glyph={zidSealGlyph(displayName)} size='sm' className='shrink-0' />
+
+            <span className='flex min-w-0 flex-1 flex-col'>
+              {renaming ? (
+                <input
+                  autoFocus
+                  value={draftName}
+                  onChange={e => setDraftName(e.target.value)}
+                  onBlur={commitRename}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      commitRename();
+                    } else if (e.key === 'Escape') {
+                      setRenaming(false);
+                    }
+                  }}
+                  placeholder={displayName}
+                  className='w-full border-b border-zigner-gold/50 bg-transparent text-xs text-fg-high outline-none'
+                />
+              ) : (
+                <button
+                  onClick={() => {
+                    setDraftName(zidLabel ?? '');
+                    setRenaming(true);
+                  }}
+                  title='rename this identity'
+                  className='truncate text-left text-xs text-fg-high lowercase hover:text-zigner-gold transition-colors'
+                >
+                  {displayName}
+                </button>
               )}
-              <span className='text-xs tabular text-fg-muted truncate'>{zidAddress}</span>
+              <button
+                onClick={() => {
+                  void navigator.clipboard.writeText(zidPubkey!);
+                  setZidCopied(true);
+                  setTimeout(() => setZidCopied(false), 1500);
+                }}
+                title='copy this identity'
+                className='truncate text-left text-label tabular text-fg-muted hover:text-fg-high transition-colors'
+              >
+                {zidCopied ? 'copied' : zidAddress}
+              </button>
             </span>
-            <span className='text-label text-fg-dim ml-auto lowercase shrink-0'>
-              {zidCopied ? 'copied' : 'zid'}
-            </span>
-          </button>
+          </div>
         )}
 
         {/* menu items — grouped, with thin top border between groups */}
