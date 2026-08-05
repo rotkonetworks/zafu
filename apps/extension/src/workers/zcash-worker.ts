@@ -1390,6 +1390,29 @@ const computeFee = (
   return MARGINAL_FEE * BigInt(Math.max(logicalActions, GRACE_ACTIONS));
 };
 
+/**
+ * ZIP-317 fee for the NU6.3 turnstile migration — the one transaction that
+ * spans TWO shielded bundles: orchard (the spends) and ironwood (the output).
+ *
+ * ZIP-317 counts logical actions as the SUM over bundles, and each non-empty
+ * shielded bundle is padded to MIN_ORCHARD_ACTIONS for privacy (the orchard
+ * bundle gains a dummy output, the ironwood bundle a dummy spend — which is
+ * why the output-only ironwood bundle still needs an anchor).
+ *
+ * computeFee() above models a SINGLE bundle: it collapses the ironwood output
+ * into the orchard action count via max(), so a 1-note migration priced 2
+ * actions (10,000 zat) for a transaction that really has 4 (20,000). zebra
+ * rejected it with "Unpaid actions is higher than the limit". Overpaying is
+ * safe under ZIP-317; underpaying is fatal, so the padding is applied
+ * conservatively rather than guessed downward.
+ */
+const computeTurnstileFee = (nOrchardSpends: number): bigint => {
+  const orchardActions = Math.max(nOrchardSpends, MIN_ORCHARD_ACTIONS);
+  const ironwoodActions = MIN_ORCHARD_ACTIONS; // single output, padded
+  const logicalActions = orchardActions + ironwoodActions;
+  return MARGINAL_FEE * BigInt(Math.max(logicalActions, GRACE_ACTIONS));
+};
+
 // ── note selection (largest first) ──
 
 const selectNotes = (
@@ -4878,7 +4901,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         }
         const totalIn = orchardNotes.reduce((sum, n) => sum + BigInt(n.value), 0n);
         // ZIP-317: n orchard spends + 1 ironwood output, no change (full sweep)
-        const fee = computeFee(orchardNotes.length, 1, 0, false);
+        const fee = computeTurnstileFee(orchardNotes.length);
         if (totalIn <= fee) {
           throw new Error(`orchard balance ${totalIn} zat does not cover migration fee ${fee} zat`);
         }
