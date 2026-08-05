@@ -168,6 +168,22 @@ export const FrostApprove = () => {
     }
   };
 
+  /**
+   * The DKG group shape is consent-bearing: a share issued into a 1-of-3 group
+   * is a share the coordinator can spend from alone. The confirm screen shows
+   * `threshold`/`maxSigners`, so those are what the user approved — anything the
+   * relay says must equal them, not replace them.
+   */
+  const assertApprovedGroup = (relayThreshold: number, relayMaxSigners: number) => {
+    if (relayThreshold !== threshold || relayMaxSigners !== maxSigners) {
+      throw new Error(
+        `refusing to run DKG: you approved a ${threshold}-of-${maxSigners} group but the ` +
+          `coordinator asked for ${relayThreshold}-of-${relayMaxSigners}. ` +
+          `A lowered threshold would let the coordinator spend without you.`,
+      );
+    }
+  };
+
   const runDkgCreate = async () => {
     const abort = new AbortController();
     const relay = new FrostRelayClient(relayUrl);
@@ -290,6 +306,10 @@ export const FrostApprove = () => {
     // wait for at least one message to learn params
     await waitFor(() => peerBroadcasts.length >= 1, 120_000);
 
+    // same binding as runDkgJoinV2: the coordinator announces T:N over an
+    // unauthenticated relay, and the confirm screen showed the approved pair.
+    assertApprovedGroup(parsedThreshold, parsedMaxSigners);
+
     const round1 = await frostDkgPart1InWorker(parsedMaxSigners, parsedThreshold);
     await relay.sendMessage(roomCode, pid, new TextEncoder().encode(round1.broadcast));
 
@@ -382,6 +402,13 @@ export const FrostApprove = () => {
       () => parsedThreshold > 0 && parsedMaxSigners > 0 && fvkSk.length === 64,
       sessionDeadline,
     );
+
+    // The confirm screen showed the user "{threshold}-of-{maxSigners}". Those
+    // are the only numbers they consented to. The relay is unauthenticated, so
+    // R1's T:N is attacker-controlled: accepting it would let a coordinator
+    // show "2-of-3" and then seat the share in a 1-of-3 group it alone can
+    // spend from. Bind the ceremony to what was approved.
+    assertApprovedGroup(parsedThreshold, parsedMaxSigners);
 
     setStatus('round 1: generating commitment...');
     const round1 = await frostDkgPart1InWorker(parsedMaxSigners, parsedThreshold);
@@ -715,8 +742,18 @@ export const FrostApprove = () => {
                 <p>
                   Join FROST DKG room: <span className='tabular text-zigner-gold'>{roomCode}</span>
                 </p>
+                {/* the group shape must be *shown* here, because it is what the
+                    ceremony is bound to — see assertApprovedGroup(). */}
+                <p>
+                  as a{' '}
+                  <span className='tabular text-zigner-gold'>
+                    {threshold}-of-{maxSigners}
+                  </span>{' '}
+                  group
+                </p>
                 <p className='text-fg-muted'>
-                  You will participate in key generation to create a shared multisig wallet.
+                  You will participate in key generation to create a shared multisig wallet. The
+                  ceremony is aborted if the coordinator asks for a different group size.
                 </p>
               </>
             )}
