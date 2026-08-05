@@ -7,8 +7,18 @@
 // `pcztHex` is the standard pczt::Pczt the host built (gh #17 migration). Each
 // joiner parses it via `frostInspectPcztOutputsInWorker`, recomputes the
 // canonical sighash + OVK-decrypts outputs, and refuses to sign if they diverge
-// from the host's claimed (recipient, amount) or sighash. Old hosts that omit it
-// fall back to host-claim-only with a warning.
+// from the host's claimed (recipient, amount) or sighash.
+//
+// It is syntactically optional and semantically MANDATORY. The regex still
+// accepts a SIGN: without it so that such a message parses and can be reported,
+// but every joiner refuses to sign one: without the PCZT the displayed
+// recipient/amount are host-authored text bound to nothing, and "old host"
+// is indistinguishable from "attacker who truncated the payload" on an
+// unauthenticated relay. There is no host-claim-only fallback.
+//
+// NOT covered by any of this: `feeZat`. See assessClaimedFee() in
+// multisig-verifier.ts — the fee cannot be checked without the bundle's
+// value_balance, which the wasm parser does not return.
 
 import { FrostRelayClient } from '../../../../state/keyring/frost-relay-client';
 

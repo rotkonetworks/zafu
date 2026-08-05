@@ -12,7 +12,12 @@ import {
   frostInspectPcztOutputsInWorker,
   type FrostParsedTx,
 } from '../../../../state/keyring/network-worker';
-import { computeVerdict, type Verdict } from './multisig-verifier';
+import {
+  computeVerdict,
+  assessClaimedFee,
+  verdictAllowsSigning,
+  type Verdict,
+} from './multisig-verifier';
 import { Sensitive } from '../../../../components/sensitive';
 import { DEFAULT_RELAY_URL } from '../../multisig/dkg-helpers';
 
@@ -111,16 +116,27 @@ export function FrostAirgapJoinerSignFlow({
             setStep(cur => (cur === 'awaiting-sign' ? 'review' : cur));
 
             // Verifier: verify host's claim against the PCZT-derived parse.
+            // Anything unverifiable refuses outright — the host decides whether
+            // we can verify, so a soft warning is a bypass it can trigger.
+            const fee = assessClaimedFee(captured.feeZat, captured.amountZat);
             if (!captured.pcztHex) {
               setVerdict({
-                kind: 'unverified',
-                reason: 'host did not publish PCZT bytes (older client?)',
+                kind: 'refuse',
+                reasons: [
+                  'host did not publish the PCZT bytes — everything shown here would be host-authored text bound to nothing',
+                  'refusing to release a share against an unverifiable request',
+                ],
               });
             } else if (!ms.orchardFvkUview) {
               setVerdict({
-                kind: 'unverified',
-                reason: 'wallet has no UFVK on file - cannot verify',
+                kind: 'refuse',
+                reasons: [
+                  'this wallet has no viewing key on file, so the PCZT cannot be decoded',
+                  'refusing to release a share against an unverifiable request',
+                ],
               });
+            } else if (!fee.ok) {
+              setVerdict({ kind: 'refuse', reasons: [fee.reason] });
             } else {
               void (async () => {
                 try {
@@ -140,8 +156,11 @@ export function FrostAirgapJoinerSignFlow({
                   );
                 } catch (err) {
                   setVerdict({
-                    kind: 'unverified',
-                    reason: err instanceof Error ? err.message : 'parse failed',
+                    kind: 'refuse',
+                    reasons: [
+                      `could not parse the published PCZT: ${err instanceof Error ? err.message : 'parse failed'}`,
+                      'refusing to release a share against an unverifiable request',
+                    ],
                   });
                 }
               })();
@@ -178,6 +197,11 @@ export function FrostAirgapJoinerSignFlow({
   // user approved review → build trigger1 and show to zigner.
   const approve = () => {
     if (!tx) {
+      return;
+    }
+    // defence in depth behind the disabled button: never build a zigner trigger
+    // for a request the verifier would not clear.
+    if (!verdictAllowsSigning(verdict, acknowledged)) {
       return;
     }
     const trigger = JSON.stringify({
@@ -316,8 +340,7 @@ export function FrostAirgapJoinerSignFlow({
       );
 
     case 'review': {
-      const hardBlock = verdict.kind === 'mismatch';
-      const approveDisabled = verdict.kind === 'pending' || (hardBlock && !acknowledged);
+      const approveDisabled = !verdictAllowsSigning(verdict, acknowledged);
       return (
         <div className='flex flex-col gap-3 p-4'>
           <Header onBack={cancel} />
@@ -343,11 +366,14 @@ export function FrostAirgapJoinerSignFlow({
               </Sensitive>
             </div>
             <div className='flex items-baseline justify-between'>
-              <span className='text-label tracking-wider text-fg-muted'>fee</span>
+              <span className='text-label tracking-wider text-fg-muted'>fee (host claim)</span>
               <Sensitive className='text-xs text-fg-muted tabular-nums'>
                 {formatZec(tx?.feeZat ?? '')} ZEC
               </Sensitive>
             </div>
+            <p className='text-label text-fg-dim'>
+              fee is reported by the host and cannot be checked against the transaction bytes
+            </p>
           </div>
 
           {/* verifier verdict */}
@@ -361,7 +387,7 @@ export function FrostAirgapJoinerSignFlow({
             <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-2.5 text-label text-green-400 flex items-start gap-2'>
               <span className='i-lucide-shield-check size-3.5 mt-0.5 shrink-0' />
               <span>
-                bytes verified - derived recipient + amount match host claim
+                recipient, amount and sighash verified against the transaction bytes
                 {verdict.changeZat > 0n && (
                   <>
                     {' '}
@@ -369,13 +395,21 @@ export function FrostAirgapJoinerSignFlow({
                     self)
                   </>
                 )}
+                . the fee is not covered by this check.
               </span>
             </div>
           )}
-          {verdict.kind === 'unverified' && (
-            <div className='rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-2.5 text-label text-yellow-400 flex items-start gap-2'>
-              <span className='i-lucide-alert-triangle size-3.5 mt-0.5 shrink-0' />
-              <span>host claim shown without verification - {verdict.reason}</span>
+          {verdict.kind === 'refuse' && (
+            <div className='rounded-lg border border-red-500/60 bg-red-500/10 p-3 flex flex-col gap-2'>
+              <div className='flex items-center gap-2 text-body font-medium text-red-400'>
+                <span className='i-lucide-shield-x size-4' />
+                cannot verify - signing refused
+              </div>
+              <ul className='text-label text-red-300/90 list-disc pl-4 space-y-0.5'>
+                {verdict.reasons.map((r, i) => (
+                  <li key={i}>{r}</li>
+                ))}
+              </ul>
             </div>
           )}
           {verdict.kind === 'mismatch' && (
@@ -424,7 +458,7 @@ export function FrostAirgapJoinerSignFlow({
               reject
             </Button>
             <Button variant='gradient' onClick={approve} disabled={approveDisabled}>
-              {hardBlock ? 'approve anyway' : 'approve & sign'}
+              {verdict.kind === 'mismatch' ? 'approve anyway' : 'approve & sign'}
             </Button>
           </div>
         </div>
