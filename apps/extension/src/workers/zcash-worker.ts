@@ -2076,6 +2076,14 @@ const backfillWitnesses = async (
  *            ironwood equivalent of build_witnesses_and_paths, so nothing
  *            is persisted on this path - sync repopulates witnesses).
  */
+/** Stored ironwood witness no longer matches the network tree — recoverable. */
+class IronwoodWitnessDrift extends Error {
+  constructor(height: number) {
+    super(`ironwood witness drift at height ${height}`);
+    this.name = 'IronwoodWitnessDrift';
+  }
+}
+
 const buildWitnessesIronwood = async (
   client: WitnessClient,
   walletId: string,
@@ -2114,7 +2122,10 @@ const buildWitnessesIronwood = async (
         path: { hash: string }[];
       };
       if (parsed.root_hex !== networkRoot) {
-        throw new Error(`ironwood tree root mismatch at height ${anchorHeight}`);
+        // Recoverable: the stored witness has drifted from the network tree.
+        // Signalled rather than thrown so the caller can fall back to the slow
+        // replay below, which rebuilds from a network checkpoint.
+        throw new IronwoodWitnessDrift(anchorHeight);
       }
       paths.push({ position: parsed.position, path: parsed.path });
     }
@@ -2131,28 +2142,44 @@ const buildWitnessesIronwood = async (
     frontierSize === witnessTreeSize &&
     notes.every(n => n.witness_hex && n.witness_tree_size === witnessTreeSize);
 
+  // The fast path is an OPTIMISATION, so a drifted witness must not fail the
+  // send — it must fall back to the slow replay. Ironwood witnesses live in
+  // their own IDB store which the reorg wipes never touch, so drift is not
+  // exotic: a reorg leaves stale witnesses attached to real notes, and before
+  // this the wallet showed a spendable balance it could never spend.
   if (aligned && frontier) {
-    const { blocks: gapBlocks } = await fetchCompactBlocksRange(
-      client,
-      frontierHeight + 1,
-      anchorHeight,
-      'ironwood',
-    );
-    const existingInput = notes.map(n => ({ id: n.nullifier, witness_hex: n.witness_hex! }));
-    const result = JSON.parse(
-      iwSync(frontier, JSON.stringify(gapBlocks), JSON.stringify(existingInput), '[]') as string,
-    ) as { end_frontier_hex: string; witnesses: { id: string; witness_hex: string }[] };
-    const byId = new Map(result.witnesses.map(w => [w.id, w.witness_hex]));
-    const witnessed = notes.map(n => {
-      const w = byId.get(n.nullifier);
-      if (!w) {
-        throw new Error(`ironwood witness update missing note ${n.nullifier}`);
+    try {
+      const { blocks: gapBlocks } = await fetchCompactBlocksRange(
+        client,
+        frontierHeight + 1,
+        anchorHeight,
+        'ironwood',
+      );
+      const existingInput = notes.map(n => ({ id: n.nullifier, witness_hex: n.witness_hex! }));
+      const result = JSON.parse(
+        iwSync(frontier, JSON.stringify(gapBlocks), JSON.stringify(existingInput), '[]') as string,
+      ) as { end_frontier_hex: string; witnesses: { id: string; witness_hex: string }[] };
+      const byId = new Map(result.witnesses.map(w => [w.id, w.witness_hex]));
+      const witnessed = notes.map(n => {
+        const w = byId.get(n.nullifier);
+        if (!w) {
+          throw new Error(`ironwood witness update missing note ${n.nullifier}`);
+        }
+        return { nullifier: n.nullifier, witness_hex: w };
+      });
+      const paths = extractPaths(witnessed);
+      console.log(`[zcash-worker] ironwood paths (fast) for ${paths.length} notes`);
+      return { anchorHex: networkRoot, paths };
+    } catch (e) {
+      if (!(e instanceof IronwoodWitnessDrift)) {
+        throw e;
       }
-      return { nullifier: n.nullifier, witness_hex: w };
-    });
-    const paths = extractPaths(witnessed);
-    console.log(`[zcash-worker] ironwood paths (fast) for ${paths.length} notes`);
-    return { anchorHex: networkRoot, paths };
+      console.warn(
+        `[zcash-worker] ironwood witness drifted from the network tree at height ` +
+          `${anchorHeight}; rebuilding from a checkpoint instead of failing the send`,
+      );
+      // fall through to the slow replay
+    }
   }
 
   // Slow path: replay from a rounded pre-note checkpoint (mirrors the

@@ -3,15 +3,11 @@
  * includes navigation, about info, and donation
  */
 
-import { useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../state';
-import {
-  selectLock,
-  selectActiveNetwork,
-  selectEffectiveKeyInfo,
-  selectKeyInfos,
-} from '../state/keyring';
+import { getZidIndex, getZidPins } from '../state/identity';
+import { selectLock, selectActiveNetwork, selectEffectiveKeyInfo } from '../state/keyring';
 import { isPro } from '../state/license';
 import { isIdentityEnabled } from '../state/privacy';
 import { PopupPath } from '../routes/popup/paths';
@@ -39,16 +35,48 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
   const lock = useStore(selectLock);
   const activeNetwork = useStore(selectActiveNetwork);
   const keyInfo = useStore(selectEffectiveKeyInfo);
-  const allKeyInfos = useStore(selectKeyInfos);
   const pro = useStore(isPro);
   const identityEnabled = useStore(isIdentityEnabled);
   const inSidePanel = isSidePanel();
   const [zidCopied, setZidCopied] = useState(false);
 
-  // fall back to any keyInfo's ZID if active one doesn't have it
-  const zidPubkey = (keyInfo?.insensitive?.['zid'] ??
-    allKeyInfos.find(k => k.insensitive?.['zid'])?.insensitive?.['zid']) as string | undefined;
+  // ONLY the active wallet's ZID. Never another wallet's.
+  //
+  // This used to fall back to `allKeyInfos.find(k => k.insensitive.zid)` when
+  // the selected wallet had none — which always resolved to the same first
+  // wallet, so the drawer appeared to show one fixed identity no matter which
+  // wallet you switched to. Worse than a wrong label: the button copies this
+  // pubkey to the clipboard, so a user could hand a site the identity of a
+  // wallet they had deliberately switched away from.
+  //
+  // A wallet without an identity now shows nothing rather than someone
+  // else's.
+  const zidPubkey = keyInfo?.insensitive?.['zid'] as string | undefined;
   const zidAddress = zidPubkey ? 'zid' + zidPubkey.slice(0, 16) : undefined;
+
+  // Show the pinned NAME of the current generation when one is set. A raw
+  // zid1b5a0a6ae5ccc64 tells the user nothing about which identity they are
+  // presenting, and identities are the thing it is most costly to confuse —
+  // the whole point of rotating is that generations are meant to be distinct.
+  const [zidLabel, setZidLabel] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [idx, pins] = await Promise.all([getZidIndex(), getZidPins()]);
+        const pin = pins.find(p => p.index === idx);
+        if (!cancelled) {
+          setZidLabel(pin?.label);
+        }
+      } catch {
+        // a missing pin is the normal case, not an error
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // re-read when the displayed identity changes
+  }, [zidPubkey]);
 
   const handleLock = () => {
     lock();
@@ -233,8 +261,13 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
             className='mx-4 mt-3 flex items-center gap-2 rounded-md border border-border-soft px-3 py-2 text-left hover:bg-elev-1 transition-colors'
           >
             <span className='i-lucide-fingerprint h-3.5 w-3.5 text-fg-dim' />
-            <span className='text-xs tabular text-fg-muted truncate'>{zidAddress}</span>
-            <span className='text-label text-fg-dim ml-auto lowercase'>
+            <span className='flex min-w-0 flex-col'>
+              {zidLabel && (
+                <span className='truncate text-xs text-fg-high lowercase'>{zidLabel}</span>
+              )}
+              <span className='text-xs tabular text-fg-muted truncate'>{zidAddress}</span>
+            </span>
+            <span className='text-label text-fg-dim ml-auto lowercase shrink-0'>
               {zidCopied ? 'copied' : 'zid'}
             </span>
           </button>
