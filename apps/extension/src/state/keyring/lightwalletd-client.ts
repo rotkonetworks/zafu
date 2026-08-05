@@ -259,7 +259,12 @@ export class LightwalletdClient implements ZcashClient {
     throw UNSUPPORTED('commitment proofs');
   }
 
-  async getNullifierProofs(): Promise<{ proofs: never[]; nullifierRoot: Uint8Array }> {
+  async getNullifierProofs(): Promise<{
+    proofs: never[];
+    nullifierRoot: Uint8Array;
+    syncedHeight: number;
+    ironwoodSyncedHeight: number;
+  }> {
     throw UNSUPPORTED('nullifier proofs');
   }
 

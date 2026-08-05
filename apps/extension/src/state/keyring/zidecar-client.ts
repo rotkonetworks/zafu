@@ -333,7 +333,14 @@ export class ZidecarClient {
   async getNullifierProofs(
     nullifiers: Uint8Array[],
     height: number,
-  ): Promise<{ proofs: NullifierProofData[]; nullifierRoot: Uint8Array }> {
+  ): Promise<{
+    proofs: NullifierProofData[];
+    nullifierRoot: Uint8Array;
+    /** highest block the sapling/orchard index covers; 0 when unknown */
+    syncedHeight: number;
+    /** highest block the ironwood index covers; 0 when unknown */
+    ironwoodSyncedHeight: number;
+  }> {
     const parts: number[] = [];
     for (const nf of nullifiers) {
       parts.push(0x0a, ...this.lengthDelimited(nf)); // field 1 repeated bytes
@@ -1344,9 +1351,13 @@ export class ZidecarClient {
   private parseNullifierProofsResponse(buf: Uint8Array): {
     proofs: NullifierProofData[];
     nullifierRoot: Uint8Array;
+    syncedHeight: number;
+    ironwoodSyncedHeight: number;
   } {
     const proofs: NullifierProofData[] = [];
     let nullifierRoot = new Uint8Array(0);
+    let syncedHeight = 0;
+    let ironwoodSyncedHeight = 0;
     let pos = 0;
 
     while (pos < buf.length) {
@@ -1354,7 +1365,26 @@ export class ZidecarClient {
       const field = tag >> 3;
       const wire = tag & 0x7;
 
-      if (wire === 2) {
+      if (wire === 0) {
+        // varint. This branch used to `break`, which meant any scalar field
+        // silently truncated the parse — the sync-height fields below sit
+        // after the length-delimited ones on the wire.
+        let v = 0,
+          s = 0;
+        while (pos < buf.length) {
+          const b = buf[pos++]!;
+          v |= (b & 0x7f) << s;
+          if (!(b & 0x80)) {
+            break;
+          }
+          s += 7;
+        }
+        if (field === 3) {
+          syncedHeight = v;
+        } else if (field === 4) {
+          ironwoodSyncedHeight = v;
+        }
+      } else if (wire === 2) {
         let len = 0,
           s = 0;
         while (pos < buf.length) {
@@ -1377,7 +1407,7 @@ export class ZidecarClient {
       }
     }
 
-    return { proofs, nullifierRoot };
+    return { proofs, nullifierRoot, syncedHeight, ironwoodSyncedHeight };
   }
 
   private parseTxidList(buf: Uint8Array): Uint8Array[] {

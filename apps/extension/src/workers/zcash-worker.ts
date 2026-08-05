@@ -1034,12 +1034,52 @@ const verifySyncProofs = async (
     );
   }
 
-  // 3. verify nullifier proofs for unspent notes. Ironwood notes are
-  // excluded: zidecar's NOMT nullifier tree is orchard-only today; ironwood
-  // proof coverage is a post-NU6.3 server feature.
-  const unspentNfs = state.notes
-    .filter(n => !state.spentNullifiers.has(n.nullifier) && poolOf(n) !== 'ironwood')
-    .map(n => hexDecode(n.nullifier));
+  // 3. verify nullifier proofs for unspent notes.
+  //
+  // Ironwood used to be excluded here on the belief that the NOMT nullifier
+  // set was orchard-only. It never was — the set is existence-keyed and
+  // pool-agnostic, and zidecar indexes sapling, orchard and ironwood
+  // nullifiers into it from the same block walk. What actually bounds an
+  // answer is not the pool but the index's height, and the two pools have
+  // different horizons: ironwood is indexed from NU6.3 activation and is
+  // current, while the full-chain backfill trails far behind it.
+  //
+  // That distinction matters because absence is not proof. Above a pool's
+  // horizon "no entry" means "not indexed yet", which is byte-identical to
+  // "not spent" — trusting it would mark a spent note as spendable. So each
+  // note is only queried once its own pool's index reaches the tip; the rest
+  // fall back to scan-time detection.
+  const unspentAll = state.notes.filter(n => !state.spentNullifiers.has(n.nullifier));
+
+  // Probe with a single note to learn the horizons before trusting any
+  // answer. The response is authoritative about its own coverage; we cannot
+  // know it in advance.
+  const probe = unspentAll[0];
+  let orchardHorizon = 0;
+  let ironwoodHorizon = 0;
+  if (probe) {
+    try {
+      const h = await client.getNullifierProofs([hexDecode(probe.nullifier)], tip);
+      orchardHorizon = h.syncedHeight;
+      ironwoodHorizon = h.ironwoodSyncedHeight;
+    } catch {
+      // fall through: horizons stay 0 and nothing is trusted
+    }
+  }
+
+  const covered = (n: DecryptedNote): boolean =>
+    poolOf(n) === 'ironwood' ? ironwoodHorizon >= tip : orchardHorizon >= tip;
+
+  const unspentNotes = unspentAll.filter(covered);
+  const unspentNfs = unspentNotes.map(n => hexDecode(n.nullifier));
+
+  if (unspentAll.length > unspentNfs.length) {
+    console.log(
+      `[zcash-worker] nullifier proofs cover ${unspentNfs.length}/${unspentAll.length} notes ` +
+        `(orchard index @${orchardHorizon}, ironwood @${ironwoodHorizon}, tip ${tip}) — ` +
+        `the rest rely on scan-time spend detection`,
+    );
+  }
 
   if (unspentNfs.length > 0) {
     const { proofs: nfProofs, nullifierRoot } = await client.getNullifierProofs(unspentNfs, tip);

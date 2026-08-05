@@ -77,7 +77,20 @@ export interface ZcashClient {
   getNullifierProofs(
     nullifiers: Uint8Array[],
     height: number,
-  ): Promise<{ proofs: NullifierProofData[]; nullifierRoot: Uint8Array }>;
+  ): Promise<{
+    proofs: NullifierProofData[];
+    nullifierRoot: Uint8Array;
+    /**
+     * Validity horizons. The NOMT indexes are existence-keyed, so above these
+     * heights "no entry" means "not indexed yet" — indistinguishable from
+     * "not spent". Callers must not read absence as unspent above them.
+     * The two pools advance independently: ironwood is indexed from NU6.3
+     * activation and tracks the tip, while the full-chain backfill trails.
+     * 0 means the server did not report one (treat as no coverage).
+     */
+    syncedHeight: number;
+    ironwoodSyncedHeight: number;
+  }>;
   getSyncStatus(): Promise<SyncStatus>;
 }
 
