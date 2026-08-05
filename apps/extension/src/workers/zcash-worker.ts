@@ -34,6 +34,8 @@ import {
   parseExpiryHeight,
   reconcileSentTxs,
   type HistoryTx,
+  type SentKind,
+  type SentPool,
   type SentTxRecord,
 } from './sent-tx-reconcile';
 
@@ -2192,6 +2194,178 @@ const applyReconciliation = async (
     await txComplete(tx);
   } catch (e) {
     console.warn('[zcash-worker] could not persist sent-tx reconciliation:', e);
+  }
+};
+
+/**
+ * ── cold-send continuity ──────────────────────────────────────────────────
+ *
+ * A hot send is one worker message: it selects the notes, builds, signs,
+ * broadcasts, and — because everything it needs is still in scope — marks the
+ * inputs spent and writes the local `sent` record on the way out.
+ *
+ * A cold send (zigner / Keystone / Ledger / watch-only) is TWO messages with a
+ * human and a signing device in between. The BUILD message knows the inputs,
+ * the amount, the fee, the recipient and the memo; the COMPLETE message that
+ * eventually broadcasts knows only the signed bytes. So the completion sites
+ * could not have called markNotesSpentLocally / recordSentTx even if they had
+ * wanted to: the facts were not there.
+ *
+ * They are now. The build stashes what it knows against a generated id, the
+ * unsigned result carries that id out to the UI, and the completion hands it
+ * back. Persisted in the `meta` store rather than a module variable because the
+ * worker is owned by the popup document: it does not survive the popup being
+ * closed while the user walks to their signing device, and neither would an
+ * in-memory map.
+ *
+ * Consequences of getting this wrong are asymmetric, so the resolution is
+ * deliberately conservative — see takeColdSend.
+ */
+interface ColdSendContext {
+  id: string;
+  /** nullifiers of the notes this transaction spends */
+  nullifiers: string[];
+  /** zatoshi leaving the wallet, excluding fee */
+  amount: string;
+  fee: string;
+  recipient: string;
+  pool: SentPool;
+  kind: SentKind;
+  memo?: string;
+  createdAt: number;
+}
+
+const COLD_SEND_META_KEY = 'pendingColdSends';
+/**
+ * A stash older than this is not a cold send waiting to be signed, it is one
+ * that was abandoned. Expiring them keeps a stale entry from ever being
+ * attached to an unrelated transaction.
+ */
+const COLD_SEND_TTL_MS = 24 * 60 * 60 * 1000;
+/** Cap the stash so an abandoned-build loop cannot grow the meta record forever. */
+const COLD_SEND_MAX = 8;
+
+const readColdSends = async (walletId: string): Promise<ColdSendContext[]> => {
+  const r = await idbGet<{ value: ColdSendContext[] }>('meta', [walletId, COLD_SEND_META_KEY]);
+  const list = Array.isArray(r?.value) ? r.value : [];
+  const cutoff = Date.now() - COLD_SEND_TTL_MS;
+  return list.filter(c => c.createdAt >= cutoff);
+};
+
+const writeColdSends = async (walletId: string, list: ColdSendContext[]): Promise<void> => {
+  const db = await getDb();
+  const tx = db.transaction('meta', 'readwrite');
+  tx.objectStore('meta').put({ walletId, key: COLD_SEND_META_KEY, value: list });
+  await txComplete(tx);
+};
+
+/**
+ * Record what a cold build knows, and return the id the completion needs to
+ * find it again. Best-effort: failing to stash must never fail a build the user
+ * can still sign and broadcast — it only costs the bookkeeping below.
+ */
+const stashColdSend = async (
+  walletId: string,
+  ctx: Omit<ColdSendContext, 'id' | 'createdAt'>,
+): Promise<string | undefined> => {
+  try {
+    const id = crypto.randomUUID();
+    const list = await readColdSends(walletId);
+    list.push({ ...ctx, id, createdAt: Date.now() });
+    await writeColdSends(walletId, list.slice(-COLD_SEND_MAX));
+    return id;
+  } catch (e) {
+    console.warn('[zcash-worker] could not stash cold-send context:', e);
+    return undefined;
+  }
+};
+
+/**
+ * Consume the context for a completing cold send.
+ *
+ * Requires the id the build handed out. There is deliberately NO "just use the
+ * most recent one" fallback: attaching the wrong context marks notes this
+ * transaction did not spend, which is how a wallet loses access to its own
+ * money. An unmatched completion is logged and left to the block scan, which is
+ * slower but cannot be wrong.
+ */
+const takeColdSend = async (
+  walletId: string,
+  id: string | undefined,
+): Promise<ColdSendContext | undefined> => {
+  if (!id) {
+    return undefined;
+  }
+  try {
+    const list = await readColdSends(walletId);
+    const found = list.find(c => c.id === id);
+    await writeColdSends(
+      walletId,
+      list.filter(c => c.id !== id),
+    );
+    return found;
+  } catch (e) {
+    console.warn('[zcash-worker] could not read cold-send context:', e);
+    return undefined;
+  }
+};
+
+/**
+ * The tail of a cold broadcast: mark the inputs spent and write the local
+ * record, exactly as the hot paths do at the same point.
+ *
+ * Without this the flagship configuration — every cold signer — kept counting
+ * spent notes toward its balance until a rescan, re-offered them to the next
+ * send, and lost the recipient / memo / fee for good, none of which the chain
+ * can give back.
+ *
+ * Best-effort throughout: the network has already accepted the transaction by
+ * the time we get here, so nothing in this function may throw its way out.
+ */
+const finalizeColdBroadcast = async (
+  walletId: string,
+  coldSendId: string | undefined,
+  txid: string,
+  txHex: string,
+): Promise<void> => {
+  try {
+    const ctx = await takeColdSend(walletId, coldSendId);
+    if (!ctx) {
+      console.warn(
+        `[zcash-worker] cold broadcast ${txid.slice(0, 16)} has no build context ` +
+          `(id=${coldSendId ?? 'absent'}); spend marks and the local send record are ` +
+          'left to the block scan',
+      );
+      return;
+    }
+    const state = await loadState(walletId);
+    const wanted = new Set(ctx.nullifiers);
+    const notes = state.notes.filter(n => wanted.has(n.nullifier));
+    if (notes.length !== ctx.nullifiers.length) {
+      // A rescan between build and broadcast can empty the note store. Say so
+      // rather than silently marking a subset.
+      console.warn(
+        `[zcash-worker] cold broadcast ${txid.slice(0, 16)}: ${notes.length}/${ctx.nullifiers.length} ` +
+          'input notes still present locally',
+      );
+    }
+    await markNotesSpentLocally(walletId, state, notes, txid);
+    await recordSentTx({
+      walletId,
+      txid,
+      amount: ctx.amount,
+      fee: ctx.fee,
+      recipient: ctx.recipient,
+      pool: ctx.pool,
+      kind: ctx.kind,
+      memo: ctx.memo,
+      sentAt: Date.now(),
+      // read from the bytes the network actually saw, so the record cannot
+      // disagree with the transaction about when it dies
+      expiryHeight: parseExpiryHeight(txHex),
+    });
+  } catch (e) {
+    console.error('[zcash-worker] cold broadcast bookkeeping failed:', e);
   }
 };
 
@@ -5224,6 +5398,18 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const totalDuration = ((performance.now() - sendStart) / 1000).toFixed(1);
         emitProgress('unsigned tx ready', `total=${totalDuration}s`);
 
+        // Everything send-tx-complete will need and cannot recover from the
+        // signed bytes. See the ColdSendContext comment.
+        const coldSendId = await stashColdSend(walletId, {
+          nullifiers: selected.map(n => n.nullifier),
+          amount: amountZat.toString(),
+          fee: fee.toString(),
+          recipient: sendPayload.recipient,
+          pool: sendActivePool,
+          kind: 'send',
+          memo: sendPayload.memo,
+        });
+
         workerSelf.postMessage({
           type: 'send-tx-unsigned',
           id,
@@ -5236,6 +5422,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             fee: fee.toString(),
             unsignedTx: parsed.unsigned_tx,
             spendIndices: parsed.spend_indices,
+            coldSendId,
           },
         });
         return;
@@ -5255,6 +5442,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           unsignedTx: string;
           signatures: { orchardSigs: string[]; transparentSigs: string[] };
           spendIndices: number[];
+          /** id returned by the send-tx build; see ColdSendContext */
+          coldSendId?: string;
         };
 
         // pass orchard spend auth signatures and their action indices
@@ -5272,6 +5461,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         }
 
         const txid = await resolveBroadcastTxid(result, txHex, completePayload.serverUrl);
+        // Same bookkeeping the hot paths do at this exact point: the inputs are
+        // spent as of this broadcast whether or not anything ever rescans.
+        await finalizeColdBroadcast(walletId, completePayload.coldSendId, txid, txHex);
         workerSelf.postMessage({
           type: 'tx-result',
           id,
@@ -5573,6 +5765,18 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             `${iwUrFrames.length} frames, total=${iwTotalDuration}s`,
           );
 
+          // What send-tx-pczt-complete / complete-orchard-pczt cannot recover
+          // from the signed bytes. See the ColdSendContext comment.
+          const iwColdSendId = await stashColdSend(walletId, {
+            nullifiers: selected.map(n => n.nullifier),
+            amount: amountZat.toString(),
+            fee: fee.toString(),
+            recipient: sendPayload.recipient,
+            pool: 'ironwood',
+            kind: 'send',
+            memo: sendPayload.memo,
+          });
+
           workerSelf.postMessage({
             type: 'send-tx-pczt-unsigned',
             id,
@@ -5594,6 +5798,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               sighash: '',
               alphas: [],
               spendIndices: [],
+              coldSendId: iwColdSendId,
             },
           });
           return;
@@ -5651,6 +5856,18 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const totalDuration = ((performance.now() - sendStart) / 1000).toFixed(1);
         emitProgress('PCZT QR ready', `${urFrames.length} frames, total=${totalDuration}s`);
 
+        // What send-tx-pczt-complete / complete-orchard-pczt cannot recover from
+        // the signed bytes. See the ColdSendContext comment.
+        const orchardColdSendId = await stashColdSend(walletId, {
+          nullifiers: selected.map(n => n.nullifier),
+          amount: amountZat.toString(),
+          fee: fee.toString(),
+          recipient: sendPayload.recipient,
+          pool: 'orchard',
+          kind: 'send',
+          memo: sendPayload.memo,
+        });
+
         workerSelf.postMessage({
           type: 'send-tx-pczt-unsigned',
           id,
@@ -5667,6 +5884,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             sighash: parsed.sighash,
             alphas: parsed.alphas,
             spendIndices: parsed.spend_indices,
+            coldSendId: orchardColdSendId,
           },
         });
         return;
@@ -5681,7 +5899,12 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           throw new Error('wasm not initialized');
         }
 
-        const completePayload = payload as { serverUrl: string; signedPcztHex: string };
+        const completePayload = payload as {
+          serverUrl: string;
+          signedPcztHex: string;
+          /** id returned by the send-tx-pczt build; see ColdSendContext */
+          coldSendId?: string;
+        };
 
         // TransactionExtractor reconstructs the canonical v5 tx — collects all
         // spend auth sigs from the signed PCZT, validates the proof, and emits
@@ -5697,6 +5920,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         }
 
         const txid = await resolveBroadcastTxid(result, txHex, completePayload.serverUrl);
+        // Same bookkeeping the hot paths do at this exact point. This is THE
+        // cold path for zigner / Keystone / watch-only sends, so without it the
+        // flagship configuration never marked a note spent.
+        await finalizeColdBroadcast(walletId, completePayload.coldSendId, txid, txHex);
         workerSelf.postMessage({
           type: 'tx-result',
           id,
@@ -5993,6 +6220,19 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const migrateUrFrames = JSON.parse(migrateFramesJson) as string[];
         emitProgress('turnstile PCZT QR ready', `${migrateUrFrames.length} frames`);
 
+        // The migration spends EVERY orchard note, so a completion that does
+        // not mark them leaves the whole legacy balance looking spendable — and
+        // a second migration launched in that window builds a conflicting
+        // spend. The hot branch above already does this; see ColdSendContext.
+        const migrateColdSendId = await stashColdSend(walletId, {
+          nullifiers: orchardNotes.map(n => n.nullifier),
+          amount: migrateAmount.toString(),
+          fee: fee.toString(),
+          recipient: 'your ironwood address',
+          pool: 'ironwood',
+          kind: 'migrate',
+        });
+
         workerSelf.postMessage({
           type: 'send-turnstile-migration-unsigned',
           id,
@@ -6006,6 +6246,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             amount: migrateAmount.toString(),
             urFrames: migrateUrFrames,
             cborBytes: migrateEnvelope.length,
+            coldSendId: migrateColdSendId,
           },
         });
         return;
@@ -6026,6 +6267,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           serverUrl: string;
           signedPcztHex: string;
           backend?: ZcashBackend;
+          /** id returned by the send-turnstile-migration build; see ColdSendContext */
+          coldSendId?: string;
         };
         if (migrateCompletePayload.backend) {
           registerBackend(migrateCompletePayload.serverUrl, migrateCompletePayload.backend);
@@ -6048,6 +6291,14 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           migrateResult,
           migrateTxHex,
           migrateCompletePayload.serverUrl,
+        );
+        // mirrors the hot migration branch, which marks its orchard inputs
+        // spent and records the migration at broadcast
+        await finalizeColdBroadcast(
+          walletId,
+          migrateCompletePayload.coldSendId,
+          migrateTxid,
+          migrateTxHex,
         );
         workerSelf.postMessage({
           type: 'tx-result',
@@ -6818,11 +7069,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (!wasmModule) {
           throw new Error('wasm not initialized');
         }
-        const { serverUrl, pcztHex, orchardSigs, spendIndices } = payload as {
+        const { serverUrl, pcztHex, orchardSigs, spendIndices, coldSendId } = payload as {
           serverUrl: string;
           pcztHex: string;
           orchardSigs: string[];
           spendIndices: number[];
+          /** id returned by the send-tx-pczt build; see ColdSendContext */
+          coldSendId?: string;
         };
         // inject the aggregated FROST SpendAuth sigs → extract v5 tx → broadcast
         const cTxHex = wasmModule.complete_orchard_pczt(pcztHex, orchardSigs, spendIndices);
@@ -6833,6 +7086,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           throw new Error(`broadcast failed (${cResult.errorCode}): ${cResult.errorMessage}`);
         }
         const cTxid = await resolveBroadcastTxid(cResult, cTxHex, serverUrl);
+        // This is the ledger and FROST-multisig broadcast. It is a cold path
+        // like the two above and had the same gap.
+        await finalizeColdBroadcast(walletId, coldSendId, cTxid, cTxHex);
         workerSelf.postMessage({
           type: 'tx-result',
           id,

@@ -756,6 +756,19 @@ export interface SendTxUnsignedResult {
   unsignedTx: string;
   /** action indices that need external spend auth signatures */
   spendIndices: number[];
+  /**
+   * Handle to the inputs / amount / fee / recipient / memo this build selected.
+   *
+   * A cold signing round splits one send across two worker messages, and the
+   * completion sees only signed bytes: it cannot tell which notes were spent
+   * (so they stayed "unspent" and got offered to the next send) nor recover the
+   * recipient and memo the chain does not store. Pass this back on the matching
+   * complete* call and the worker does the same bookkeeping a hot send does.
+   *
+   * Optional because stashing it is best-effort — a build that could not record
+   * its context is still perfectly signable and broadcastable.
+   */
+  coldSendId?: string;
 }
 
 /**
@@ -769,7 +782,7 @@ export interface SendTxUnsignedResult {
  * the compute worker is a dedicated Worker with no chrome.storage access — and
  * injected into every fee-bearing payload. Defaults to 1 (network standard).
  */
-const getFeeMultiplier = async (): Promise<number> => {
+export const getFeeMultiplier = async (): Promise<number> => {
   try {
     const v = await localExtStorage.get('zafuFeeMultiplier');
     return typeof v === 'number' && Number.isFinite(v) ? Math.max(1, v) : 1;
@@ -837,11 +850,13 @@ export const completeSendTxInWorker = async (
   unsignedTx: string,
   signatures: { orchardSigs: string[]; transparentSigs: string[] },
   spendIndices: number[],
+  /** SendTxUnsignedResult.coldSendId from the matching build; see that field */
+  coldSendId?: string,
 ): Promise<{ txid: string }> => {
   return callWorker(
     network,
     'send-tx-complete',
-    { serverUrl, unsignedTx, signatures, spendIndices },
+    { serverUrl, unsignedTx, signatures, spendIndices, coldSendId },
     walletId,
   );
 };
@@ -866,6 +881,8 @@ export interface SendTxPcztUnsignedResult {
   sighash: string;
   alphas: string[];
   spendIndices: number[];
+  /** see SendTxUnsignedResult.coldSendId — same handle, same contract */
+  coldSendId?: string;
 }
 
 /**
@@ -914,8 +931,15 @@ export const completeSendTxPcztInWorker = async (
   walletId: string,
   serverUrl: string,
   signedPcztHex: string,
+  /** SendTxPcztUnsignedResult.coldSendId from the matching build */
+  coldSendId?: string,
 ): Promise<{ txid: string }> => {
-  return callWorker(network, 'send-tx-pczt-complete', { serverUrl, signedPcztHex }, walletId);
+  return callWorker(
+    network,
+    'send-tx-pczt-complete',
+    { serverUrl, signedPcztHex, coldSendId },
+    walletId,
+  );
 };
 
 /**
@@ -935,6 +959,8 @@ export interface TurnstileMigrationUnsignedResult {
   amount: string;
   urFrames: string[];
   cborBytes: number;
+  /** see SendTxUnsignedResult.coldSendId — same handle, same contract */
+  coldSendId?: string;
 }
 
 /**
@@ -979,11 +1005,13 @@ export const completeTurnstileMigrationInWorker = async (
   walletId: string,
   serverUrl: string,
   signedPcztHex: string,
+  /** TurnstileMigrationUnsignedResult.coldSendId from the matching build */
+  coldSendId?: string,
 ): Promise<{ txid: string }> => {
   return callWorker(
     network,
     'send-turnstile-migration-complete',
-    { serverUrl, signedPcztHex },
+    { serverUrl, signedPcztHex, coldSendId },
     walletId,
   );
 };
@@ -1287,11 +1315,13 @@ export const completeOrchardPcztInWorker = async (
   pcztHex: string,
   orchardSigs: string[],
   spendIndices: number[],
+  /** SendTxPcztUnsignedResult.coldSendId from the matching build */
+  coldSendId?: string,
 ): Promise<{ txid: string }> => {
   return callWorker<{ txid: string }>(
     'zcash',
     'complete-orchard-pczt',
-    { serverUrl, pcztHex, orchardSigs, spendIndices },
+    { serverUrl, pcztHex, orchardSigs, spendIndices, coldSendId },
     walletId,
   );
 };

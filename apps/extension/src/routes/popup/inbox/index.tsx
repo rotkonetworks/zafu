@@ -1223,6 +1223,9 @@ function OutgoingStatusBadge({
     pending: { bg: 'bg-elev-2', fg: 'text-fg-muted', label: 'pending' },
     confirmed: { bg: 'bg-elev-2', fg: 'text-fg-muted', label: 'confirmed' },
     failed: { bg: 'bg-red-500/10', fg: 'text-red-400', label: 'failed' },
+    // not red: we did not see this fail, we stopped watching. Amber is the
+    // "you need to check" colour, which is exactly the ask.
+    interrupted: { bg: 'bg-amber-500/10', fg: 'text-amber-400', label: 'outcome unknown' },
   };
   const s = styles[status];
   return (
@@ -1232,7 +1235,7 @@ function OutgoingStatusBadge({
         s.bg,
         s.fg,
       )}
-      title={status === 'failed' ? reason : undefined}
+      title={status === 'failed' || status === 'interrupted' ? reason : undefined}
     >
       {s.label}
     </span>

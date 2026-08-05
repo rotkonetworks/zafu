@@ -444,6 +444,8 @@ const ZcashCrosschainSwap = () => {
           unsignedTxRef.current.unsignedTx,
           signatures,
           unsignedTxRef.current.spendIndices,
+          // lets the worker mark the spent inputs and record the send
+          unsignedTxRef.current.coldSendId,
         );
 
         unsignedTxRef.current = null;

@@ -17,14 +17,28 @@ export type MessageNetwork = 'penumbra' | 'zcash';
  *   broadcasting → tx has a txid, RPC submit in flight
  *   pending     → broadcast OK, awaiting block confirmation
  *   confirmed   → block scan saw it (default for any persisted message)
- *   failed      → build or broadcast errored
+ *   failed      → build or broadcast errored. We SAW it not happen.
+ *   interrupted → we stopped watching before we learned the outcome. The
+ *                 transaction may have been broadcast; we do not know.
  *
  * Messages from inbound block scan have no status (treated as confirmed).
  * Optimistic outgoing records progress submitting → broadcasting → pending,
  * then get replaced by the real confirmed record when the block scan picks
  * the tx up.
+ *
+ * `failed` and `interrupted` are deliberately separate. Closing the popup
+ * mid-send is not evidence that anything failed — the build may already have
+ * been signed and broadcast — and a wallet that says "failed" about a payment
+ * that in fact left invites the user to send it a second time. Anything the
+ * wallet did not observe is reported as unknown.
  */
-export type MessageStatus = 'submitting' | 'broadcasting' | 'pending' | 'confirmed' | 'failed';
+export type MessageStatus =
+  | 'submitting'
+  | 'broadcasting'
+  | 'pending'
+  | 'confirmed'
+  | 'failed'
+  | 'interrupted';
 
 export interface Message {
   id: string;
@@ -51,7 +65,7 @@ export interface Message {
   asset?: string;
   /** lifecycle (defaults to 'confirmed' for absent values) */
   status?: MessageStatus;
-  /** reason captured when status === 'failed' */
+  /** reason captured when status === 'failed' or 'interrupted' */
   failureReason?: string;
 }
 
@@ -92,6 +106,16 @@ export interface MessagesSlice {
 
   /** Mark an outgoing entry failed. Used by the send flow's catch block. */
   markOutgoingFailed: (txIdOrTempId: string, reason: string) => Promise<void>;
+
+  /**
+   * Mark an outgoing entry as "we stopped watching" — outcome unknown.
+   *
+   * Distinct from markOutgoingFailed, which asserts the send did not happen.
+   * Leaves the record promotable: if the flow that created it is still alive
+   * (side panel / tab) it will still promote to the real txid and continue
+   * through broadcasting → pending, overwriting this state.
+   */
+  markOutgoingInterrupted: (txIdOrTempId: string, reason: string) => Promise<void>;
 
   /** mark a message as read */
   markRead: (id: string) => Promise<void>;
@@ -136,12 +160,17 @@ export const createMessagesSlice =
 
     /**
      * Sweep stale optimistic-pending records on slice creation. The popup
-     * unmount handler in zcash-send.tsx marks them failed before navigating,
-     * but a forced close (extension reload, browser quit, crash) bypasses
-     * that path and leaves temp:* records persisted in 'submitting' or
-     * 'broadcasting'. There's no live send flow to drive them forward, so
-     * we mark them failed on startup. Real-txid records in 'pending' are
-     * left alone — the block scan will promote them when the tx mines.
+     * unmount handler in zcash-send.tsx marks them interrupted before
+     * navigating, but a forced close (extension reload, browser quit, crash)
+     * bypasses that path and leaves temp:* records persisted in 'submitting'
+     * or 'broadcasting'. There's no live send flow to drive them forward.
+     *
+     * They are marked 'interrupted', not 'failed': a temp: record proves only
+     * that a send was STARTED in a session that ended. The build may have been
+     * signed and broadcast before the session died — the worker writes its own
+     * durable record in that case — so claiming failure here would be asserting
+     * something this code has no way to know. Real-txid records in 'pending'
+     * are left alone; the block scan will promote them when the tx mines.
      */
     void (async () => {
       try {
@@ -157,8 +186,8 @@ export const createMessagesSlice =
             m.txId.startsWith('temp:') &&
             (m.status === 'submitting' || m.status === 'broadcasting')
           ) {
-            m.status = 'failed';
-            m.failureReason = 'interrupted';
+            m.status = 'interrupted';
+            m.failureReason = 'zafu closed before this send reported an outcome';
             touched = true;
           }
         }
@@ -274,6 +303,9 @@ export const createMessagesSlice =
           if (msg) {
             msg.txId = realTxId;
             msg.status = 'broadcasting';
+            // an 'interrupted' record that reaches here was not interrupted
+            // after all — the flow survived and learned the txid
+            msg.failureReason = undefined;
           }
         });
         await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
@@ -296,6 +328,21 @@ export const createMessagesSlice =
           const msg = list.find(m => m.txId === txIdOrTempId);
           if (msg) {
             msg.status = 'failed';
+            msg.failureReason = reason;
+          }
+        });
+        await local.set('messages' as keyof LocalStorageState, safeMessages() as never);
+      },
+
+      markOutgoingInterrupted: async (txIdOrTempId, reason) => {
+        set(state => {
+          const list = Array.isArray(state.messages.messages) ? state.messages.messages : [];
+          const msg = list.find(m => m.txId === txIdOrTempId);
+          // Only a record still mid-flight can be interrupted. A send that has
+          // already reached pending/confirmed/failed has an observed outcome,
+          // and overwriting it with "unknown" would destroy information.
+          if (msg && (msg.status === 'submitting' || msg.status === 'broadcasting')) {
+            msg.status = 'interrupted';
             msg.failureReason = reason;
           }
         });

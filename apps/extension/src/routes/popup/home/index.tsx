@@ -43,6 +43,7 @@ import {
 import { usePendingSends, usePoolBalances } from '../../../hooks/zcash-pool-balances';
 import { ShieldTransparent } from '../../../components/zcash/shield-transparent';
 import { IRONWOOD_MIGRATION, nu63ActivationHeight } from '../../../config/feature-flags';
+import { rescanStartHeight } from '../../../utils/zcash-blocks';
 import { IronwoodMigrationBanner, IronwoodMigrate } from '../send/ironwood-migrate';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -805,18 +806,28 @@ const ZcashContent = ({
 
   // NU6.3 turnstile migration flow (feature-flagged; see feature-flags.ts)
   const [showIronwoodMigrate, setShowIronwoodMigrate] = useState(false);
+  // Height a rescan has been REQUESTED for but not yet confirmed. A rescan
+  // deletes the note database, so it does not happen on one click.
+  const [rescanConfirmHeight, setRescanConfirmHeight] = useState<number | null>(null);
   // toggle to show sync detail panel when wallet is fully synced
 
   // rescan via custom event — terminate worker, clear IDB, let auto-sync restart
   useEffect(() => {
     const handler = async (e: Event) => {
-      const height = (e as CustomEvent<number>).detail;
+      const requested = (e as CustomEvent<number>).detail;
       if (!selectedKeyInfo) {
         return;
       }
-      if (isNaN(height) || height < 0) {
+      if (typeof requested !== 'number' || isNaN(requested)) {
         return;
       }
+      // A rescan DELETES the note database and writes this height as the new
+      // birthday. Any note received before it becomes permanently invisible to
+      // this wallet — no later scan ever revisits those blocks. So a height
+      // below orchard activation is meaningless and a height at or near the
+      // TIP is destructive: it means "start from now", i.e. forget everything
+      // you own. Clamp to the earliest height that can hold a note.
+      const height = rescanStartHeight(requested);
 
       try {
         const walletId = selectedKeyInfo.id;
@@ -1250,16 +1261,69 @@ const ZcashContent = ({
             <span className='text-fg-dim'>·</span>
             <button
               type='button'
-              onClick={() => {
-                window.dispatchEvent(
-                  new CustomEvent('zcash-rescan', { detail: walletBirthday || chainHeight }),
-                );
-              }}
+              // Never the chain tip. The old fallback (`walletBirthday ||
+              // chainHeight`) meant that a wallet with no stored birthday —
+              // the default for every import that did not supply one — asked
+              // to rescan FROM NOW, and the handler then wrote that as the new
+              // birthday: every note the wallet already held became invisible
+              // forever. Orchard activation is the earliest height that can
+              // hold a note, so it can never hide one.
+              onClick={() => setRescanConfirmHeight(rescanStartHeight(walletBirthday || null))}
               className='text-zigner-gold underline-offset-2 hover:underline'
-              title='re-read the chain to release the funds those payments would have spent'
+              // not "release the funds": the inputs are held until the chain
+              // is re-read, and re-reading it is not free
+              title='re-read the chain from the start of this wallet so the held inputs are re-counted'
             >
-              rescan to release the funds
+              re-read the chain to recount those inputs
             </button>
+          </div>
+        )}
+
+        {/* Rescan confirmation. This is the destructive one: it drops every
+            scanned note and re-derives the wallet from `height` upward. Stating
+            the cost is the whole point — the previous version had no confirm
+            step at all. */}
+        {rescanConfirmHeight !== null && (
+          <div className='mt-2 rounded-lg border border-hanko/40 bg-elev-2 p-3 text-label leading-snug'>
+            <div className='flex items-center gap-1.5 text-hanko'>
+              <span className='i-lucide-alert-triangle h-3.5 w-3.5 shrink-0' />
+              <span className='font-medium'>this deletes the wallet&apos;s scanned history</span>
+            </div>
+            <p className='mt-1.5 text-fg-muted'>
+              every note zafu has found is dropped and the chain is read again from block{' '}
+              <span className='tabular-nums'>{rescanConfirmHeight.toLocaleString()}</span>. it can
+              take a long time, your balance reads zero until it finishes, and{' '}
+              <span className='text-fg-high'>
+                anything received before that block will not be found again
+              </span>
+              .
+            </p>
+            {!walletBirthday && (
+              <p className='mt-1.5 text-fg-muted'>
+                this wallet has no recorded birthday, so the scan starts at orchard activation — the
+                earliest block that can hold a note. set a birthday in settings to make this faster.
+              </p>
+            )}
+            <div className='mt-2.5 flex gap-2'>
+              <button
+                type='button'
+                onClick={() => {
+                  const h = rescanConfirmHeight;
+                  setRescanConfirmHeight(null);
+                  window.dispatchEvent(new CustomEvent('zcash-rescan', { detail: h }));
+                }}
+                className='rounded-md bg-hanko/15 px-2 py-1 text-hanko hover:bg-hanko/25'
+              >
+                rescan from {rescanConfirmHeight.toLocaleString()}
+              </button>
+              <button
+                type='button'
+                onClick={() => setRescanConfirmHeight(null)}
+                className='rounded-md px-2 py-1 text-fg-muted hover:text-fg-high'
+              >
+                cancel
+              </button>
+            </div>
           </div>
         )}
         {/* the one sync surface: enso line + expandable detail (bar, stages,
@@ -1284,9 +1348,9 @@ const ZcashContent = ({
               : undefined
           }
           onRetry={() => window.dispatchEvent(new Event('zcash-retry-sync'))}
-          onRescan={h => {
-            window.dispatchEvent(new CustomEvent('zcash-rescan', { detail: h }));
-          }}
+          // same confirmation as the banner above — a hand-typed height is no
+          // less destructive than a suggested one
+          onRescan={h => setRescanConfirmHeight(rescanStartHeight(h))}
         />
 
         {/* per-pool reveal: click-driven only. Hover-expand made the corner
