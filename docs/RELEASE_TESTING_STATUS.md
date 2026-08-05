@@ -35,12 +35,36 @@ onboarding, the DOM paints (368 chars: the three entry paths and the
 keys-stay-local line), `offscreen.html` loads as the headless proving document,
 and **every surface reports zero runtime errors and zero exceptions**.
 
+A full wallet was then created through the real UI in that browser — seed
+generated, backup acknowledged, Zcash enabled, password set, "wallet ready" —
+and the popup opened against the live mainnet zidecar. It rendered:
+
+```
+balance | not yet known | still scanning — the sync line below shows how far
+syncing 99% · ~2 min
+nomt ✓ · ligerito server catching up · scanning notes 99%
+3,430,600 / 3,437,446
+ironwood 0 ZEC | orchard …
+```
+
+That directly verifies the two reported failures are fixed, in a browser, on a
+real chain:
+
+- the balance reads `not yet known` **with an explanation**, not the bare `—`
+  that read as "your money is gone"
+- `syncing 99%` and `scanning notes 99%` **agree**. The reported
+  "syncing 100% / scanning notes 0%" contradiction is gone, because the
+  headline no longer falls back to the server's ligerito percentage when the
+  wallet has no scan progress of its own.
+
 What this does and does not establish. It establishes that the bundle loads,
 the service worker registers, React mounts, and nothing throws on boot — a real
-smoke test, and it is repeatable in CI. It does NOT establish that the money
-paths behave correctly: reaching a balance, a pending send, or a rescan
-confirmation needs an unlocked wallet with funds, and a cold-send round trip
-needs a physical signing device. Those remain unexercised.
+smoke test, and it is repeatable in CI. It does NOT establish the paths that need VALUE or HARDWARE: a pending-send
+row, a failed/expired send, a rescan confirmation, and the cold-sign round trip
+all need a funded wallet and, for cold signing, a physical device. Those remain
+unexercised — and the cold-send bookkeeping fix is the most structurally
+invasive change of the release, so it deserves one real round trip before
+shipping.
 
 ## Verified locally, never broadcast
 
