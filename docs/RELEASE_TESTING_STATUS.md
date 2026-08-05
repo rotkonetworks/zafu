@@ -14,6 +14,8 @@ Last updated against `zafu@7609f63a` / `zcli@fce00a8`.
 | `Anchor::empty_tree()` is accepted for output-only ironwood bundles | computed constant `ae2935f1…` equals the anchor in that mined tx; zebra checks `shared_anchor` with no exemption for spendless bundles (`zebra-state/.../anchors.rs:137`) | `empty_tree_anchor_matches_the_one_mainnet_accepted` |
 | ZIP-317 counts ironwood actions                                     | zebra `zebra-chain/src/transaction/unmined/zip317.rs` adds `n_actions_ironwood` into `logical_actions`                                                                    | `turnstile_fee_matches_the_mined_value_balances`     |
 | Turnstile fee arithmetic                                            | mined value balances: orchard `+385,000`, ironwood `−365,000` → 20,000 zat accepted                                                                                       | same                                                 |
+| **z→t withdrawal from ironwood is consensus-valid** | mainnet tx `6d91730e99dcd192…`, height 3,437,366: V6, versiongroupid `d884b698`, 2 ironwood actions, valueBalance `+65,000`, one transparent output of 50,000 — built by zafu, accepted and mined | — |
+| z→t fee arithmetic | that tx paid 65,000 − 50,000 = **15,000 zat**, exactly `5000 × (max(1,2) + 1)` | — |
 | ZIP-317 transparent inputs are size-derived                         | `ceil(148n/150) == n` only while `2n < 150`; 75 inputs = 74 actions                                                                                                       | `zip317_transparent_input_actions_are_size_derived`  |
 
 ## Verified locally, never broadcast
@@ -24,9 +26,8 @@ dry-run validation RPC (`getmempoolinfo` / `getrawmempool` only), so the only
 way to close these is to broadcast.
 
 - **t→z shielding into ironwood** — `shielding_ironwood_v6.rs`, 7 tests
-- **z→t withdrawal from ironwood** — `signed_ironwood_send_pays_a_transparent_recipient`
 
-Cost to close: one send of roughly 0.0002 ZEC each.
+Cost to close: one shielding send. z→t is now closed (see the table above).
 
 Risk if shipped unbroadcast: a rejected transaction, not a loss of funds — the
 failure mode is the network refusing it, and nothing moves. The two assumptions
