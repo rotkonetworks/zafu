@@ -908,8 +908,11 @@ const ZcashContent = ({
             label: 'ligerito',
             state:
               ligeritoPct >= 100 ? 'done' : gigaproofStatus >= 1 ? 'active' : 'pending',
+            // blocksUntilReady is a countdown, but some server states report a
+            // raw height here — rendering "3436543 blocks" as a remaining
+            // count is nonsense. Only show it when it reads like a delta.
             detail:
-              gigaproofStatus >= 2 && blocksUntilReady > 0
+              gigaproofStatus >= 2 && blocksUntilReady > 0 && blocksUntilReady < 100_000
                 ? `${blocksUntilReady} blocks`
                 : 'proving',
           },

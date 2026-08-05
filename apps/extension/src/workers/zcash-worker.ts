@@ -114,7 +114,9 @@ interface WorkerMessage {
     | 'frost-derive-ufvk'
     | 'frost-parse-tx-outputs'
     | 'frost-inspect-pczt-outputs'
-    | 'complete-orchard-pczt';
+    | 'complete-orchard-pczt'
+    | 'broadcast-raw-tx'
+    | 'get-transparent-utxos';
   id: string;
   network: 'zcash';
   walletId?: string;
@@ -1250,6 +1252,38 @@ const initWasm = async (): Promise<void> => {
   const wasm = await import(/* webpackIgnore: true */ '/zafu-wasm/zafu_wasm.js');
   await wasm.default({ module_or_path: '/zafu-wasm/zafu_wasm_bg.wasm' });
   wasm.init();
+
+  // Rayon thread pool. scan_actions_parallel is only actually parallel once a
+  // pool exists — without it rayon runs sequentially, so trial decryption was
+  // using ONE core no matter how many the machine has. The offscreen prover
+  // has always done this; the scan worker never did.
+  //
+  // rayon's workerHelpers spawn sub-workers via import.meta.url, which
+  // resolves wrong inside an extension worker, so the Worker constructor is
+  // patched to absolute extension URLs exactly as zcash-build-parallel does.
+  // Failure degrades to sequential scanning rather than breaking sync.
+  const OriginalWorker = globalThis.Worker;
+  try {
+    const extOrigin = self.location.origin + '/';
+    globalThis.Worker = class PatchedWorker extends OriginalWorker {
+      constructor(url: string | URL, options?: WorkerOptions) {
+        let urlStr = url instanceof URL ? url.href : String(url);
+        if (!urlStr.startsWith(extOrigin) && !urlStr.startsWith('blob:')) {
+          urlStr = extOrigin + (urlStr.startsWith('/') ? urlStr.slice(1) : urlStr);
+        }
+        super(urlStr, options);
+      }
+    };
+    // leave a core for the UI thread; scanning runs while the popup renders
+    const numThreads = Math.max(1, (navigator.hardwareConcurrency || 4) - 1);
+    await wasm.initThreadPool(numThreads);
+    console.log(`[zcash-worker] rayon: ${numThreads} threads`);
+  } catch (e) {
+    console.warn('[zcash-worker] rayon pool unavailable, scanning sequentially:', e);
+  } finally {
+    globalThis.Worker = OriginalWorker;
+  }
+
   wasmModule = wasm;
   console.log('[zcash-worker] wasm ready');
 };
@@ -5887,6 +5921,58 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         return;
       }
 
+      case 'broadcast-raw-tx': {
+        // submit a fully-signed transparent tx hex (e.g. from a Ledger t->t
+        // send). No building/signing here - the device produced the hex.
+        const { serverUrl: bUrl, txHex: bTxHex } = payload as {
+          serverUrl: string;
+          txHex: string;
+        };
+        const bClient = await makeZcashClient(bUrl);
+        const bResult = await bClient.sendTransaction(hexDecode(bTxHex));
+        if (bResult.errorCode !== 0) {
+          throw new Error(`broadcast failed (${bResult.errorCode}): ${bResult.errorMessage}`);
+        }
+        const bTxid = await resolveBroadcastTxid(bResult, bTxHex, bUrl);
+        workerSelf.postMessage({
+          type: 'tx-result',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: { txid: bTxid },
+        });
+        return;
+      }
+      case 'get-transparent-utxos': {
+        // spendable transparent UTXOs for the given addresses (e.g. a Ledger
+        // t-addr), each with the full prev-tx bytes the Ledger legacy signer
+        // needs as its trusted input.
+        const { serverUrl: uUrl, addresses: uAddrs } = payload as {
+          serverUrl: string;
+          addresses: string[];
+        };
+        const uClient = await makeZcashClient(uUrl);
+        const uUtxos = await uClient.getAddressUtxos(uAddrs);
+        const uOut = [];
+        for (const u of uUtxos) {
+          const uPrevTx = await uClient.getTransaction(u.txid);
+          uOut.push({
+            txid: hexEncode(u.txid),
+            vout: u.outputIndex,
+            valueZat: Number(u.valueZat),
+            scriptHex: hexEncode(u.script),
+            prevTxHex: hexEncode(uPrevTx.data),
+          });
+        }
+        workerSelf.postMessage({
+          type: 'result',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: uOut,
+        });
+        return;
+      }
       case 'complete-orchard-pczt': {
         if (!walletId) {
           throw new Error('walletId required');
