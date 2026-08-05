@@ -19,6 +19,7 @@ import {
 import { selectActiveZcashWallet } from '../state/wallets';
 import { selectHideBalances } from '../state/privacy';
 import { getNetwork } from '../config/networks';
+import { CustodyBadge } from './custody-badge';
 import { cn } from '@repo/ui/lib/utils';
 
 interface AppHeaderProps {
@@ -126,8 +127,13 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
                   className='flex w-full items-center gap-2 px-3 py-2 text-left text-data text-fg transition-colors hover:bg-elev-1 hover:text-fg-high'
                 >
                   <span className='flex-1 truncate'>{k.name}</span>
-                  {k.id === selectedKeyInfo?.id && (
-                    <span className='i-lucide-check h-3.5 w-3.5 text-zigner-gold' />
+                  {/* custody before the checkmark: which wallet you are picking
+                      matters less than whether it can sign on its own. */}
+                  <CustodyBadge vault={k} showLabel={false} />
+                  {k.id === selectedKeyInfo?.id ? (
+                    <span className='i-lucide-check h-3.5 w-3.5 shrink-0 text-zigner-gold' />
+                  ) : (
+                    <span className='h-3.5 w-3.5 shrink-0' />
                   )}
                 </button>
               ))

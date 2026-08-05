@@ -200,6 +200,11 @@
     --fg-dim: #a3947e;
     /* gold on paper: brand hue held, lightness dropped for contrast */
     --zigner-gold: #8a6508;
+    /* same treatment for the blue sibling — #3b82f6 only clears ~3.7:1 on
+       unbleached paper, which is under AA for small text like badges. */
+    --zafu-blue-dark: #1e3a8a;
+    --zafu-blue: #1d4ed8;
+    --zafu-blue-light: #2563eb;
     --zigner-gold-light: #b8860b;
     --zigner-gold-dark: #6b4e06;
     --zigner-gold-foreground: #f6efe2;

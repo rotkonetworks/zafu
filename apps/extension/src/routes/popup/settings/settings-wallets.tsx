@@ -11,6 +11,7 @@ import { QrScanner } from '../../../shared/components/qr-scanner';
 import { Button } from '@repo/ui/components/ui/button';
 import { Input } from '@repo/ui/components/ui/input';
 import { cn } from '@repo/ui/lib/utils';
+import { CustodyBadge } from '../../../components/custody-badge';
 import { usePopupNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { ZCASH_ORCHARD_ACTIVATION, isLaunched } from '../../../config/networks';
@@ -672,6 +673,7 @@ const VaultRow = ({
                 {vault.name}
               </button>
             )}
+            {!editing && <CustodyBadge vault={vault} />}
           </div>
           {networks.length > 0 && (
             <div className='flex gap-2 mt-1'>{networks.map(networkBadge)}</div>
@@ -726,10 +728,6 @@ const VaultRow = ({
 
       {multisigWallet && (
         <div className='flex items-center gap-2 mt-2'>
-          <span className='text-label text-fg-muted'>
-            {String(vault.insensitive['threshold'])}/{String(vault.insensitive['maxSigners'])}{' '}
-            multisig
-          </span>
           {multisigWallet.multisig?.hidden ? (
             // app-managed (poker) table: the multisig manager hides it, so a plain "manage" link
             // dead-ends. Offer recovery — unhide it into a normal, selectable, co-signable multisig.
