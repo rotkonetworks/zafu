@@ -955,7 +955,7 @@ const ZcashContent = ({
           hover (or pin via the chevron) reveals the per-pool split inline,
           click opens the full per-pool notes view. The split never
           occupies a second permanent box. */}
-      <div className='group rounded-md border border-network-accent/20 bg-elev-1 p-4'>
+      <div className='rounded-md border border-network-accent/20 bg-elev-1 p-4'>
         <div className='flex items-center justify-between'>
           <span className='kicker'>balance</span>
           <div className='flex items-center gap-1'>
@@ -976,7 +976,8 @@ const ZcashContent = ({
           </button>
           <button
             onClick={() => setPoolsPinned(v => !v)}
-            title='pool detail'
+            title={poolsPinned ? 'hide pool detail' : 'show pool detail'}
+            aria-expanded={poolsPinned}
             className='p-0.5 text-fg-dim transition-colors hover:text-fg-high'
           >
             <span
@@ -1032,13 +1033,15 @@ const ZcashContent = ({
           }}
         />
 
-        {/* per-pool reveal: hover-expand, chevron pins it open for touch.
-            Three rows - ironwood (active), orchard (legacy), transparent
-            (public) - each deep-linking into the notes view for that pool. */}
+        {/* per-pool reveal: click-driven only. Hover-expand made the corner
+            chevron look dead (the panel was already open by the time you
+            reached it) and it never worked on touch, where every one of these
+            rows is a deep link. Three rows - ironwood (active), orchard
+            (legacy), transparent (public) - each opening that pool's notes. */}
         <div
           className={cn(
             'grid transition-[grid-template-rows] duration-200',
-            poolsPinned ? 'grid-rows-[1fr]' : 'grid-rows-[0fr] group-hover:grid-rows-[1fr]',
+            poolsPinned ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
           )}
         >
           <div className='overflow-hidden'>
