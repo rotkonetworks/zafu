@@ -717,7 +717,13 @@ const ZcashContent = ({
   const isMainnet = watchOnly?.mainnet ?? true;
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const zcashBackend = useStore(s => s.networks.networks.zcash.backend) ?? 'zidecar';
-  const { syncStatus, chainTip, workerSyncHeight, error: syncError } = useZcashSyncStatus();
+  const {
+    syncStatus,
+    chainTip,
+    workerSyncHeight,
+    error: syncError,
+    failure: syncFailure,
+  } = useZcashSyncStatus();
   const navigate = useNavigate();
 
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
@@ -1344,12 +1350,27 @@ const ZcashContent = ({
           startBlock={walletBirthday}
           stages={syncStages}
           firstSync={totalZat === 0n}
-          error={syncError?.message}
+          // Only the classified message is ever shown; the raw error goes
+          // behind the "technical details" disclosure. See state/sync-failure.ts.
+          error={syncFailure?.message}
+          errorDetail={syncFailure?.raw}
+          // The action comes from the taxonomy, so a LOCAL failure (storage,
+          // or anything we could not classify) no longer tells the user to
+          // switch nodes — blaming the endpoint for the wallet's own problem
+          // is how people end up chasing a working node forever.
           errorAction={
-            syncError
+            syncFailure?.action
               ? {
-                  label: 'switch node',
-                  onClick: () => navigate(`${PopupPath.SETTINGS_NETWORKS}?network=zcash`),
+                  label: syncFailure.action.label,
+                  onClick: () => {
+                    if (syncFailure.action?.kind === 'settings') {
+                      navigate(`${PopupPath.SETTINGS_NETWORKS}?network=zcash`);
+                    } else if (syncFailure.action?.kind === 'reload') {
+                      window.location.reload();
+                    } else {
+                      window.dispatchEvent(new Event('zcash-retry-sync'));
+                    }
+                  },
                 }
               : undefined
           }

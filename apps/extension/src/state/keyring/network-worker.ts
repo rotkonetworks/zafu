@@ -224,10 +224,17 @@ const spawnNetworkWorkerInner = async (network: NetworkType): Promise<void> => {
       // forward worker-side sync failures (HTTP 415, GetTip errors, etc) to
       // the UI via the same event the auto-sync hook uses. The sync bar
       // listener already picks this up and shows the "switch node" action.
-      const payload = msg.payload as { message?: string } | undefined;
+      // `code` is the worker's own structured classification (see
+      // state/sync-failure.ts). Relayed verbatim so the UI classifies on a
+      // code we emitted rather than on the shape of an error string.
+      const payload = msg.payload as { message?: string; code?: string } | undefined;
       window.dispatchEvent(
         new CustomEvent('zcash-sync-error', {
-          detail: { walletId: msg.walletId, message: payload?.message ?? 'sync error' },
+          detail: {
+            walletId: msg.walletId,
+            message: payload?.message ?? 'sync error',
+            code: payload?.code,
+          },
         }),
       );
       return;

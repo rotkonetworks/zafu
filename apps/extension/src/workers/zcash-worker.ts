@@ -38,10 +38,29 @@ import {
   type SentPool,
   type SentTxRecord,
 } from './sent-tx-reconcile';
+import {
+  isChainContinuityError,
+  rewindDistanceForAttempt,
+  syncErrorCodeOf,
+  MAX_REWINDS_PER_RUN,
+  type SyncErrorCode,
+} from '../state/sync-failure';
 
 export type { SentTxRecord } from './sent-tx-reconcile';
 
 const workerSelf = globalThis as any as DedicatedWorkerGlobalScope;
+
+/**
+ * Tag an error we raise ourselves with its classification.
+ *
+ * The UI must never render a raw worker error, and guessing what an error
+ * MEANS from its text is brittle — but we own both sides of this boundary, so
+ * anything thrown here can simply say what it is. Only errors from wasm, from
+ * `fetch`, and from IndexedDB fall back to substring sniffing in
+ * `state/sync-failure.ts`.
+ */
+const syncError = (code: SyncErrorCode, message: string): Error =>
+  Object.assign(new Error(message), { syncCode: code });
 
 /**
  * Worker-local endpoint→backend registry. Populated only via the explicit
@@ -2400,7 +2419,10 @@ const buildWitnessesIronwood = async (
   // network root at the anchor - cross-checked against whatever we build
   const anchorTs = await client.getTreeState(anchorHeight);
   if (!anchorTs.ironwoodTree) {
-    throw new Error(`server has no ironwood tree state at height ${anchorHeight}`);
+    throw syncError(
+      'chain-recovery',
+      `server has no ironwood tree state at height ${anchorHeight}`,
+    );
   }
   const networkRoot = iwRoot(anchorTs.ironwoodTree);
 
@@ -2484,7 +2506,10 @@ const buildWitnessesIronwood = async (
   );
   const checkpointTs = await client.getTreeState(roundedHeight);
   if (!checkpointTs.ironwoodTree) {
-    throw new Error(`server has no ironwood tree state at height ${roundedHeight}`);
+    throw syncError(
+      'chain-recovery',
+      `server has no ironwood tree state at height ${roundedHeight}`,
+    );
   }
   const { blocks } = await fetchCompactBlocksRange(
     client,
@@ -2502,7 +2527,7 @@ const buildWitnessesIronwood = async (
     ) as string,
   ) as { anchor_hex: string; paths: { position: number; path: { hash: string }[] }[] };
   if (result.anchor_hex !== networkRoot) {
-    throw new Error(`ironwood tree root mismatch at height ${anchorHeight}`);
+    throw syncError('chain-recovery', `ironwood tree root mismatch at height ${anchorHeight}`);
   }
   console.log(`[zcash-worker] ironwood paths (replay) for ${result.paths.length} notes`);
   return { anchorHex: networkRoot, paths: result.paths };
@@ -2703,7 +2728,10 @@ const buildWitnesses = async (
         `[zcash-worker] witness root mismatch after backfill: note=${mismatchNote.slice(0, 8)} ` +
           `(anchor=${anchorHeight})`,
       );
-      throw new Error(`tree root mismatch after backfill at height ${anchorHeight}`);
+      throw syncError(
+        'chain-recovery',
+        `tree root mismatch after backfill at height ${anchorHeight}`,
+      );
     }
   }
 
@@ -3089,6 +3117,99 @@ const runSync = async (
   state.syncAbort = false;
   let consecutiveErrors = 0;
 
+  // ── chain-continuity recovery ──
+  //
+  // A commitment-tree root disagreement between our stored tree and the one
+  // the endpoint serves is NOT a user-facing failure: it is the expected
+  // consequence of scanning a chain whose tip moves under us, and the wallet
+  // recovers from it by rewinding its scan cursor and reading the range
+  // again. Ported from vizor's sync engine (rust/src/wallet/sync_engine):
+  // rewind with an escalating distance (10 → 100 → 1000 blocks, because a
+  // stale local tree can disagree over a far wider range than a one-block
+  // reorg), at most MAX_REWINDS_PER_RUN times per run, logged at warn. Only
+  // once that budget is spent does the failure become visible — as
+  // `chainRecovery`, never as the raw "tree root mismatch at height N".
+  let rewindsThisRun = 0;
+  // Never rewind below what this wallet was asked to scan from; there is
+  // nothing to re-read there and it would only re-walk the birthday gap.
+  const rewindFloor = Math.max(0, startHeight ?? 0);
+
+  const rewindScanCursor = async (target: number): Promise<void> => {
+    // Re-anchor both frontiers on the server's tree at the rewound height.
+    // Witnesses built past that point are, by assumption, the thing that is
+    // wrong, so they are dropped and rebuilt as the range is re-scanned.
+    const ts = await client.getTreeState(target);
+    runningFrontier = ts.orchardTree;
+    runningFrontierHeight = target;
+    orchardTreeSize = Number(wasmModule!.frontier_tree_size(runningFrontier));
+    if (iwSupported && iwSizeFn) {
+      if (ts.ironwoodTree) {
+        ironwoodFrontier = ts.ironwoodTree;
+        ironwoodFrontierHeight = target;
+        ironwoodTreeSize = Number(iwSizeFn(ironwoodFrontier));
+      } else {
+        // pre-NU6.3 height: leave the pool inert until the loop reaches it
+        ironwoodFrontier = '';
+        ironwoodFrontierHeight = 0;
+      }
+    }
+
+    const persisted = await loadState(walletId);
+    for (const note of persisted.notes) {
+      note.witness_hex = undefined;
+      note.witness_tree_size = undefined;
+    }
+    await saveBatch(
+      walletId,
+      [],
+      [],
+      target,
+      orchardTreeSize,
+      persisted.notes,
+      runningFrontier || undefined,
+      runningFrontier ? runningFrontierHeight : undefined,
+      iwSupported
+        ? {
+            treeSize: ironwoodTreeSize,
+            frontier: ironwoodFrontier || undefined,
+            frontierHeight: ironwoodFrontier ? ironwoodFrontierHeight : undefined,
+          }
+        : undefined,
+    );
+
+    // Ironwood witnesses live in their own store, so clearing the field on
+    // the note record does not remove them — loadState() would re-attach the
+    // stale witness we just decided not to trust. Drop the rows outright;
+    // they are rebuilt from the re-anchored frontier as the range re-scans.
+    try {
+      const wdb = await getDb();
+      const wtx = wdb.transaction('witnesses-ironwood', 'readwrite');
+      const wstore = wtx.objectStore('witnesses-ironwood');
+      const keys: IDBValidKey[] = await new Promise((resolve, reject) => {
+        const req = wstore.index('byWallet').getAllKeys(walletId);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+      for (const key of keys) {
+        wstore.delete(key);
+      }
+      await txComplete(wtx);
+    } catch (e) {
+      console.warn('[zcash-worker] rewind: could not clear ironwood witnesses:', e);
+    }
+    for (const note of state.notes) {
+      note.witness_hex = undefined;
+      note.witness_tree_size = undefined;
+    }
+
+    // Re-scanning a range re-pushes the notes it finds onto `state.notes`,
+    // which is a plain array — leaving the already-known ones in place would
+    // double-count them in the balance. Notes at or below the rewind point
+    // are untouched; the ones above come back as the range is read again
+    // (IndexedDB keeps its copy either way, keyed by nullifier).
+    state.notes = state.notes.filter(n => n.height <= target);
+  };
+
   // running actions commitment for integrity verification
   let actionsCommitment = await getActionsCommitment(walletId);
   // notes found since last header proof verification
@@ -3328,7 +3449,8 @@ const runSync = async (
               console.error('[zcash-worker] INTEGRITY FAILURE, refusing batch:', e);
               pendingCmxs.length = 0;
               pendingPositions.length = 0;
-              throw new Error(
+              throw syncError(
+                'consensus',
                 `server integrity check failed: ${detail}. ` +
                   `refusing to trust this endpoint's data - switch node or retry`,
               );
@@ -3882,18 +4004,68 @@ const runSync = async (
       if (state.syncAbort) {
         break;
       }
+
+      // Chain continuity broken: recover silently rather than telling the
+      // user about a tree root. Rewind the scan cursor by an escalating
+      // distance and read the range again. The user only ever learns about
+      // this if the budget runs out, and then only as "the chain changed".
+      if (isChainContinuityError(err) && rewindsThisRun < MAX_REWINDS_PER_RUN) {
+        const target = Math.max(
+          rewindFloor,
+          currentHeight - rewindDistanceForAttempt(rewindsThisRun),
+        );
+        if (target < currentHeight) {
+          rewindsThisRun++;
+          console.warn(
+            `[zcash-worker] chain continuity broken near ${currentHeight}; rewinding to ${target} ` +
+              `(attempt ${rewindsThisRun}/${MAX_REWINDS_PER_RUN}):`,
+            err,
+          );
+          try {
+            await rewindScanCursor(target);
+            currentHeight = target;
+            workerSelf.postMessage({
+              type: 'sync-progress',
+              id: '',
+              network: 'zcash',
+              walletId,
+              payload: {
+                currentHeight,
+                chainHeight: currentHeight,
+                notesFound: state.notes.length,
+                blocksScanned: 0,
+              },
+            });
+            continue;
+          } catch (rewindErr) {
+            // The rewind itself failed (endpoint down mid-recovery, storage
+            // unavailable). Fall through and treat it as an ordinary failure
+            // so the real reason is the one that gets classified.
+            console.warn('[zcash-worker] rewind failed:', rewindErr);
+          }
+        }
+      }
+
       consecutiveErrors++;
       console.error(`[zcash-worker] sync error (${consecutiveErrors}):`, err);
       // surface to UI from the second consecutive failure (skip transient
       // single hiccups, but don't make the user stare at "syncing 0%" while
       // we silently retry forever)
       if (consecutiveErrors >= 2) {
+        // A continuity error only reaches here once the rewind budget is
+        // spent, so it is reported as chain recovery rather than as whatever
+        // tree-shaped text it happened to carry.
+        const code =
+          syncErrorCodeOf(err) ?? (isChainContinuityError(err) ? 'chain-recovery' : undefined);
         workerSelf.postMessage({
           type: 'sync-error',
           id: '',
           network: 'zcash',
           walletId,
-          payload: { message: err instanceof Error ? err.message : String(err) },
+          payload: {
+            message: err instanceof Error ? err.message : String(err),
+            ...(code ? { code } : {}),
+          },
         });
       }
       // back off exponentially, max 30s
@@ -4063,7 +4235,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             id: '',
             network: 'zcash',
             walletId,
-            payload: { message: err instanceof Error ? err.message : String(err) },
+            payload: {
+              message: err instanceof Error ? err.message : String(err),
+              ...(syncErrorCodeOf(err) ? { code: syncErrorCodeOf(err) } : {}),
+            },
           });
           workerSelf.postMessage({ type: 'sync-stopped', id: '', network: 'zcash', walletId });
         });
