@@ -196,3 +196,29 @@ domains.map and had no certificates in `/etc/letsencrypt/live` at all. Fixed to
 bkk07 and bkk08 still carry the unfixed ACL. They should get the same one-
 character fix, and note their certs are scp'd from bkk06 every 3 hours, so
 anything issued on them directly is overwritten.
+
+## haproxy edge cleanup (2026-08-06)
+
+Applied to all three anycast edges (bkk06/07/08), staged bkk08 -> bkk07 -> bkk06
+so anycast kept serving throughout. Every step `haproxy -c` validated before
+reload; configs, domains.map and crontabs backed up on each host.
+
+| change                                                                   | why                                                                                                                                         |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| ACME acl `path_beg -i .well-known/...` -> `/.well-known/...`             | missing leading slash meant it NEVER matched; every challenge was 301'd to https, so `:standalone` validation had never worked on this edge |
+| removed `*.ibp.network` and `*.dotters.network` from every host acl      | outdated; `*.rotko.net` preserved in the same acls                                                                                          |
+| removed `crt /etc/haproxy/certs/ibp` from the tls binds, deleted the dir | that was the `*.ibp.network` cert                                                                                                           |
+| removed 2 hourly crons re-pulling ibp certs from git                     | they would have undone the above within the hour                                                                                            |
+| removed `up.rotko.net` / `pm.rotko.net`                                  | zero haproxy references, no Let's Encrypt entries, just stale cert files and two domains.map lines                                          |
+
+Verified after each stage: `zcash.rotko.net` 200 from all three hosts,
+`polkadot`/`kusama` 405 (correct for GET on a JSON-RPC endpoint),
+`ibp.rotko.net` 200.
+
+Deliberately KEPT: `ibp.rotko.net`, which is the monitor on rotko's own domain
+with a live backend at 192.168.77.97 -- distinct from the external
+`ibp.network` hostnames that were removed.
+
+Note `160.22.181.181` is bkk07's management address, not a haproxy bind; only
+the anycast addresses (`160.22.181.81`, `160.22.180.180`) serve traffic. A
+curl against the management ip returning 000 is expected, not an outage.
