@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@repo/ui/lib/utils';
 import { ZCASH_ORCHARD_ACTIVATION } from '../../config/networks';
+import { isSidePanel, isDedicatedWindow } from '../../utils/popup-detection';
 
 /**
  * SyncStatus — the one sync surface for the zcash home screen.
@@ -301,14 +302,37 @@ export const SyncStatus = ({
                 ))}
             </div>
 
-            {firstSync && !synced && !error && (
-              <div className='text-label text-fg-dim leading-snug'>
-                closing this pauses the scan — it resumes where it left off.
-              </div>
-            )}
+            {firstSync && !synced && !error && <SyncPersistenceNote />}
           </div>
         </div>
       </div>
+    </div>
+  );
+};
+
+/**
+ * Where the scan actually lives, stated honestly per context.
+ *
+ * Scanning runs in a Worker owned by whichever view spawned it. The toolbar
+ * POPUP is destroyed on focus loss, taking the worker with it; the side panel
+ * and a dedicated window are not. So the popup gets an actionable nudge rather
+ * than a flat "this stops" — the side panel already gives background sync
+ * today, without waiting on moving the worker into the offscreen document.
+ */
+const SyncPersistenceNote = () => {
+  const persists = isSidePanel() || isDedicatedWindow();
+  if (persists) {
+    return (
+      <div className='text-label text-fg-dim leading-snug'>
+        scanning continues while this stays open.
+      </div>
+    );
+  }
+  return (
+    <div className='text-label text-fg-dim leading-snug'>
+      the popup closes when it loses focus, which pauses the scan (it resumes
+      where it left off). open zafu in the side panel to let it run in the
+      background.
     </div>
   );
 };
