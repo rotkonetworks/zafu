@@ -150,15 +150,6 @@ export const DEFAULT_ZAPPS: Zapp[] = [
     builtin: true,
   },
   {
-    id: 'learn-penumbra-tokenomics',
-    name: 'penumbra tokenomics',
-    description: 'token economics',
-    icon: 'i-lucide-coins',
-    url: 'https://tokenomics.penumbra.zone',
-    category: 'learn',
-    builtin: true,
-  },
-  {
     id: 'learn-penumbra-guide',
     name: 'penumbra guide',
     description: 'getting started',
