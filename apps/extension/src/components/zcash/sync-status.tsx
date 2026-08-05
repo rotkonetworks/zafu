@@ -239,7 +239,12 @@ export const SyncStatus = ({
                   >
                     {st.label}
                     {st.state === 'done' && ' ✓'}
-                    {st.state === 'active' && st.detail ? ` ${st.detail}` : ''}
+                    {/* Show the detail on pending stages too, not just active
+                        ones. A stage that is waiting is exactly the one the
+                        user needs explained — dropping its detail left stages
+                        like ligerito rendering as a bare word with no state
+                        and no progress, indistinguishable from a hang. */}
+                    {st.state !== 'done' && st.detail ? ` ${st.detail}` : ''}
                   </span>
                 </span>
               ))}
