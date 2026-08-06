@@ -77,6 +77,52 @@ Reproduce by checking out the zcli rev below and running the commands.
 Verify: rebuild from the rev, sha256sum the outputs,
 diff against the values above. A mismatch means the vendored blob is stale.
 
+## 2026-08-06 rebuild (FINAL) — reconciled migration, merged to zcli master
+
+Supersedes the two entries below. Those blobs were built from
+`feat/upstream-crates`, a branch that has since been reconciled with a
+SECOND, independent migration (`fix/drop-orchard-forks`) done in parallel.
+Neither branch was a superset of the other:
+
+- the other branch was BROADER — it also dropped the `conradoplg/orchard`
+  fork from `frost-spend` and `zync-core`, and avoided `halo2_gadgets`
+  0.3.1 (GHSA soundness advisory) by dropping `default-features` on
+  zync-core's orchard dep. `Cargo.lock` now resolves halo2_gadgets 0.5.0
+  only.
+- this one was DEEPER — the note-domain scanner fix, without which the
+  wallet cannot see the ironwood pool at all, plus the regtest harnesses
+  that caught it.
+
+- source repo: zcli, branch `master` (merged), rev `8274f4e`
+- sha256(zafu_wasm_bg.wasm) = 8148c338eb5991888d856e6b0d5fe93136d7579da09cd3ab7fa263c0fda3cc73
+- toolchain: **wasm-bindgen 0.2.126** (CHANGED from 0.2.114), binaryen 123
+
+  The wasm-bindgen move was NOT deliberate. `crates/zcash-wasm/Cargo.toml`
+  carries a caret constraint (`"0.2.113"`), so regenerating `Cargo.lock`
+  let it float. It cannot be pinned back without cascading downgrades:
+  `js-sys` 0.3.103 requires `wasm-bindgen = "=0.2.126"` exactly. The CLI was
+  moved to match, because bindgen refuses when the schema version baked into
+  the .wasm and the CLI version differ — which is how this was noticed at
+  all. If you want the old toolchain back, that is a dependency-graph
+  decision, not a CLI one.
+
+Verified after copying:
+
+- all three blobs byte-identical: sha256 `8148c338…`
+- shared imported memory confirmed by parsing the import section: flags
+  `0x03`, max 32768 pages
+- full rayon export set present (`initThreadPool`, `wbg_rayon_start_worker`,
+  `__wbindgen_thread_destroy`, `__tls_base`)
+- export surface unchanged at 69 functions
+- snippets patched in BOTH trees; zero live `import('../../..')` remain
+- `tsc` clean, 354 tests pass, `pnpm build` green, blob present 4x across
+  `dist/` and `beta-dist/` with no superseded blob surviving anywhere
+- BOTH regtest gates re-run by hand against the merged tree: ironwood
+  (t→z, z→t) and turnstile (orchard→ironwood), `1 passed` each
+
+NOT verified: no mainnet broadcast. The extension has never been loaded in
+a browser with this blob.
+
 ## 2026-08-06 rebuild — upstream crates (fork dropped)
 
 Rebuilt after zcli moved off the `valargroup/librustzcash` and `zcash/orchard`
