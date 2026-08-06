@@ -148,6 +148,7 @@ because these blobs are the only thing the workers load.
   The transaction is perfectly valid; it is the wallet's ability to recognise
   its OWN output that broke. `cb5136a` fixes the scanner to trial-decrypt both
   domains and adds unit coverage that reproduces it without a node.
+
 - upstream versions: orchard 0.15.5, pczt 0.9.2, zcash_primitives 0.30.0,
   zcash_protocol 0.10.4, zcash_keys 0.16.1, zcash_transparent 0.10.0,
   zcash_address 0.13.0. No git deps; `vendor/librustzcash` and the `[patch]`
