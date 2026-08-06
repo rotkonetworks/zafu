@@ -601,9 +601,11 @@ export class ZidecarClient {
       } else if (field === 5) {
         r.gigaproofStatus = v;
       } else if (field === 6) {
-        r.lastGigaproofHeight = v;
-      } else if (field === 7) {
+        // proto: `uint32 blocks_until_ready = 6;` (0 when the proof is ready)
         r.blocksUntilReady = v;
+      } else if (field === 7) {
+        // proto: `uint32 last_epoch_proof_height = 7;`
+        r.lastGigaproofHeight = v;
       }
     }
 
