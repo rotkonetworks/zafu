@@ -31,6 +31,7 @@ import {
   type CommitmentItem,
 } from './proof-decoys';
 import { BlockPrefetcher } from './block-prefetcher';
+import { once } from './once';
 import {
   parseExpiryHeight,
   reconcileSentTxs,
@@ -1651,10 +1652,14 @@ const saveBatch = async (
 
 // ── wasm ──
 
-const initWasm = async (): Promise<void> => {
-  if (wasmModule) {
-    return;
-  }
+// Every message handler starts with `await initWasm()`, and the handlers run
+// concurrently — network-worker sends `init` and the first real command back to
+// back. A bare `if (wasmModule) return` guard does not survive that: both calls
+// see `null` and both initialize the SAME wasm instance. The second
+// `initThreadPool` then throws, gets swallowed by the fallback below, and
+// scanning drops to one core for the life of the worker. `once` shares the
+// in-flight promise so the initializer runs exactly once.
+const initWasm = once(async (): Promise<void> => {
   // @ts-expect-error — dynamic import in worker
   const wasm = await import(/* webpackIgnore: true */ '/zafu-wasm/zafu_wasm.js');
   await wasm.default({ module_or_path: '/zafu-wasm/zafu_wasm_bg.wasm' });
@@ -1693,7 +1698,7 @@ const initWasm = async (): Promise<void> => {
 
   wasmModule = wasm;
   console.log('[zcash-worker] wasm ready');
-};
+});
 
 /**
  * Resolve the txid of a just-broadcast transaction.
@@ -1731,17 +1736,16 @@ const resolveBroadcastTxid = async (
 
 let zyncModule: Record<string, any> | null = null;
 
-const initZync = async (): Promise<void> => {
-  if (zyncModule) {
-    return;
-  }
+// Same concurrency hazard as initWasm: a second `zync.default()` on the same
+// instance re-runs the module's start section and detaches the live views.
+const initZync = once(async (): Promise<void> => {
   // @ts-expect-error dynamic import in worker
   const zync = await import(/* webpackIgnore: true */ '/zync-core/zync_core.js');
   await zync.default({ module_or_path: '/zync-core/zync_core_bg.wasm' });
   zync.wasm_init();
   zyncModule = zync;
   console.log('[zcash-worker] zync-core ready');
-};
+});
 
 interface ProvenRoots {
   tree_root: string;
