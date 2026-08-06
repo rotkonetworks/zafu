@@ -29,13 +29,28 @@ import { ZidecarClient } from './zidecar-client';
 
 /** Real `GetSyncStatus` response body from zcash.rotko.net (gRPC-web frame stripped). */
 const REAL_SYNC_STATUS = new Uint8Array([
-  0x08, 0xbc, 0xee, 0xd1, 0x01, // 1: current_height       = 3_438_396
-  0x10, 0x9d, 0x1a, //             2: current_epoch        = 3_357
-  0x18, 0xbc, 0x06, //             3: blocks_in_epoch      = 828
-  0x20, 0x9c, 0x1a, //             4: complete_epochs      = 3_356
-  0x28, 0x02, //                   5: epoch_proof_status   = 2 (READY)
+  0x08,
+  0xbc,
+  0xee,
+  0xd1,
+  0x01, // 1: current_height       = 3_438_396
+  0x10,
+  0x9d,
+  0x1a, //             2: current_epoch        = 3_357
+  0x18,
+  0xbc,
+  0x06, //             3: blocks_in_epoch      = 828
+  0x20,
+  0x9c,
+  0x1a, //             4: complete_epochs      = 3_356
+  0x28,
+  0x02, //                   5: epoch_proof_status   = 2 (READY)
   //                               6: blocks_until_ready   = OMITTED (zero)
-  0x38, 0xff, 0xe7, 0xd1, 0x01, // 7: last_epoch_proof_height = 3_437_567
+  0x38,
+  0xff,
+  0xe7,
+  0xd1,
+  0x01, // 7: last_epoch_proof_height = 3_437_567
 ]);
 
 /** `parseSyncStatus` is private; these tests pin wire behaviour, not internals. */
