@@ -30,6 +30,7 @@ import {
   padNullifierQuery,
   type CommitmentItem,
 } from './proof-decoys';
+import { BlockPrefetcher } from './block-prefetcher';
 import {
   parseExpiryHeight,
   reconcileSentTxs,
@@ -1421,6 +1422,40 @@ const resolveAnchorHeight = async (walletId: string, tipHeight: number): Promise
 /** periodic frontier snapshots for privacy-safe witness building.
  *  stored as array of {height, frontier} in IDB, one per SNAPSHOT_INTERVAL blocks. */
 const FRONTIER_SNAPSHOT_INTERVAL = 5_000;
+
+/**
+ * Heights per `GetCompactBlocks` request on the catch-up path.
+ *
+ * Left at 200 deliberately. Measured against zcash.rotko.net, serial
+ * throughput barely moves with batch size (205 blocks/s at 200, 265 at 1000)
+ * and at the depths we actually use it is a wash — the server is per-request
+ * latency bound, not per-block. 200 keeps the cost of discarding a batch on
+ * reorg/abort small, keeps peak worker memory at depth * ~110KB, and keeps
+ * sync-progress updates frequent.
+ */
+const SYNC_BATCH_SIZE = 200;
+
+/**
+ * Compact-block requests in flight during catch-up. The fetch stage measured
+ * 205 blocks/s at depth 1, 614 at 4, ~730 at 6 and flat past that over a
+ * single HTTP/2 connection, so 4 buys most of the available headroom while
+ * holding at most ~450KB of undecoded blocks and keeping the amount of work
+ * thrown away on a reorg or abort to a few hundred milliseconds.
+ */
+const SYNC_PREFETCH_DEPTH = 4;
+
+/**
+ * How stale the cached chain tip may get while catching up.
+ *
+ * `getTip` is a full round trip (~95ms measured) and the old loop paid it
+ * once per 200-block batch. When the wallet is half a million blocks behind,
+ * re-asking for the tip after every batch tells us nothing we act on; the
+ * loop only needs an accurate tip as it approaches one. The cache is dropped
+ * the moment the cursor reaches the cached height, so "caught up" is still
+ * decided against a fresh tip, and a tip that grows during the interval only
+ * delays discovering new blocks by at most this long.
+ */
+const TIP_CACHE_MS = 30_000;
 
 interface FrontierSnapshot {
   height: number;
@@ -3289,10 +3324,44 @@ const runSync = async (
   // one cross-endpoint check per sync run - it is a sanity check, not a poll
   let crossCheckedThisRun = false;
 
+  // ── fetch pipeline ──
+  //
+  // Look-ahead compact-block fetch. Hands batches back in strict ascending
+  // order, so notes and nullifiers are still applied in chain order; every
+  // path that can invalidate the height cursor (rewind, error, empty batch,
+  // abort) discards what is in flight rather than applying it.
+  const prefetcher = new BlockPrefetcher({
+    fetch: (start, end) => client.getCompactBlocks(start, end),
+    batchSize: SYNC_BATCH_SIZE,
+    depth: SYNC_PREFETCH_DEPTH,
+    isAborted: () => state.syncAbort,
+  });
+
+  // Cached chain tip; see TIP_CACHE_MS. Invalidated by setting cachedTipAt to
+  // 0, which every recovery path below does.
+  let cachedTipHeight = 0;
+  let cachedTipAt = 0;
+  const getChainTip = async (): Promise<number> => {
+    const now = Date.now();
+    // Always re-ask once the cursor has reached the cached tip: "caught up"
+    // must never be decided on a stale number.
+    if (cachedTipAt !== 0 && now - cachedTipAt < TIP_CACHE_MS && currentHeight < cachedTipHeight) {
+      return cachedTipHeight;
+    }
+    const tip = await client.getTip();
+    cachedTipHeight = tip.height;
+    cachedTipAt = now;
+    return tip.height;
+  };
+  /** Drop both the look-ahead and the cached tip after anything unexpected. */
+  const dropPipeline = (): void => {
+    prefetcher.reset();
+    cachedTipAt = 0;
+  };
+
   while (!state.syncAbort) {
     try {
-      const tip = await client.getTip();
-      const chainHeight = tip.height;
+      const chainHeight = await getChainTip();
 
       // Cross-check the tip against an INDEPENDENT operator, once per
       // catch-up. The Ligerito header proof has no constraint system, so the
@@ -3405,7 +3474,7 @@ const runSync = async (
             const decoySeed = await getDecoySeed(walletId);
             await verifySyncProofs(
               client,
-              tip.height,
+              chainHeight,
               true,
               pendingCmxs,
               pendingPositions,
@@ -3475,22 +3544,34 @@ const runSync = async (
         continue;
       }
 
-      // 200 blocks per batch - balances memory vs RPC overhead
-      const batchSize = 200;
-      const endHeight = Math.min(currentHeight + batchSize, chainHeight);
+      const batchSize = SYNC_BATCH_SIZE;
 
-      // prefetch: start fetching this batch while previous iteration's IDB write completes
-      console.log(`[zcash-worker] blocks ${currentHeight + 1}..${endHeight}`);
-      const blocks = await client.getCompactBlocks(currentHeight + 1, endHeight);
+      // Top the look-ahead up and take the next in-order range. `prime` also
+      // re-anchors the pipeline if `currentHeight` moved for any reason other
+      // than a normal advance (rewind, retry), discarding anything queued
+      // against the old cursor. A rejected fetch is rethrown here so the
+      // existing continuity/backoff classifier below still sees it.
+      prefetcher.prime(currentHeight, chainHeight);
+      const batch = await prefetcher.next();
+      if (!batch) {
+        // aborted, or nothing left below the tip — the loop condition and the
+        // caught-up branch above handle both on the next pass
+        continue;
+      }
+      const { blocks, end: endHeight } = batch;
+      console.log(`[zcash-worker] blocks ${batch.start}..${endHeight}`);
 
       // Guard: lightwalletd may race between getTip() and block indexing — if the
       // server reported a height but returned zero blocks, don't advance currentHeight.
-      // The next iteration will retry once the server catches up.
+      // The next iteration will retry once the server catches up. The prefetcher
+      // has already dropped its look-ahead (it was aimed past a range the server
+      // just said it cannot serve), so this can never turn into a skipped range.
       if (blocks.length === 0) {
         consecutiveErrors++;
         console.warn(
-          `[zcash-worker] getCompactBlocks(${currentHeight + 1}..${endHeight}) returned 0 blocks, retrying`,
+          `[zcash-worker] getCompactBlocks(${batch.start}..${endHeight}) returned 0 blocks, retrying`,
         );
+        dropPipeline();
         const backoff = Math.min(30000, 1000 * Math.pow(2, consecutiveErrors - 1));
         await sleepUnlessAborted(state, backoff);
         if (consecutiveErrors >= 10) {
@@ -4002,8 +4083,14 @@ const runSync = async (
       // error count, no sync-error to the UI. Mirrors the abort handling in
       // packages/query block-processor retry.
       if (state.syncAbort) {
+        dropPipeline();
         break;
       }
+
+      // Anything that lands here invalidates the look-ahead: the cursor is
+      // about to move (rewind) or the endpoint is unhealthy. Re-fetching a few
+      // batches is free; applying a batch fetched before a rewind is not.
+      dropPipeline();
 
       // Chain continuity broken: recover silently rather than telling the
       // user about a tree root. Rewind the scan cursor by an escalating
@@ -4079,6 +4166,8 @@ const runSync = async (
     }
   }
 
+  // Nothing in flight may be applied after the loop ends, however it ended.
+  prefetcher.reset();
   state.syncing = false;
   // mempool watcher lifecycle is owned by state.mempoolAbort; abort here
   // so the watcher tears down even if the sync loop exits via a path that
