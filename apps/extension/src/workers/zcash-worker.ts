@@ -1439,11 +1439,25 @@ const SYNC_BATCH_SIZE = 200;
 /**
  * Compact-block requests in flight during catch-up. The fetch stage measured
  * 205 blocks/s at depth 1, 614 at 4, ~730 at 6 and flat past that over a
- * single HTTP/2 connection, so 4 buys most of the available headroom while
- * holding at most ~450KB of undecoded blocks and keeping the amount of work
- * thrown away on a reorg or abort to a few hundred milliseconds.
+ * single HTTP/2 connection, so 6 sits at the knee: it takes the remaining
+ * ~17% over depth 4 and nothing beyond it is available on one connection.
+ *
+ * Browsers multiplex a single HTTP/2 connection per origin, which is what
+ * flattens this. A later measurement reached 544-627 blocks/s at depth 8-12,
+ * but that ran under node's undici, which pools HTTP/1.1 connections — so it
+ * measured multi-connection fan-out, not depth. Unlocking that region needs
+ * batches sharded across 2-3 hostnames onto the same anycast edge, NOT a
+ * bigger number here.
+ *
+ * Cost at 6: ~675KB of undecoded blocks held, and a reorg or abort throws
+ * away a few hundred milliseconds of fetch.
+ *
+ * The real ceiling is upstream of all of this: zidecar spends ~7.5ms per
+ * block serving a range (1.6s for 200 blocks, 88ms TTFB), so the client is
+ * pipelining around server-side work. See docs — the fix there is an
+ * append-only action log, not a client change.
  */
-const SYNC_PREFETCH_DEPTH = 4;
+const SYNC_PREFETCH_DEPTH = 6;
 
 /**
  * How stale the cached chain tip may get while catching up.
@@ -1576,6 +1590,26 @@ const markNotesSpentLocally = async (
   );
 };
 
+/**
+ * How many rayon threads the scan is ACTUALLY running on, and why if it is 1.
+ *
+ * This is exported into sync status rather than left in a console line. Every
+ * bug worth finding today shared one shape: a check that degraded to a no-op
+ * and reported nothing. A thread pool that silently fails to start is the same
+ * shape - sync still completes, still looks normal, and merely takes several
+ * times longer. Nobody notices, because the only evidence lands in a worker
+ * console that has to be opened deliberately.
+ *
+ * `threads: 1` with a `reason` is the degraded state; the UI can say so.
+ * The value rides on every sync progress message - see `scanThreads` there.
+ */
+export interface ScanParallelism {
+  threads: number;
+  reason?: string;
+}
+
+let scanParallelism: ScanParallelism = { threads: 1, reason: 'not initialized yet' };
+
 /** batch-save notes + spent + sync height + tree size in one transaction */
 const saveBatch = async (
   walletId: string,
@@ -1689,9 +1723,18 @@ const initWasm = once(async (): Promise<void> => {
     // leave a core for the UI thread; scanning runs while the popup renders
     const numThreads = Math.max(1, (navigator.hardwareConcurrency || 4) - 1);
     await wasm.initThreadPool(numThreads);
+    scanParallelism = { threads: numThreads };
     console.log(`[zcash-worker] rayon: ${numThreads} threads`);
   } catch (e) {
-    console.warn('[zcash-worker] rayon pool unavailable, scanning sequentially:', e);
+    // error, not warn: this is a several-fold slowdown, not a curiosity, and
+    // it is recorded in scanParallelism so it reaches the UI instead of
+    // living only in a console nobody opens.
+    const reason = e instanceof Error ? e.message : String(e);
+    scanParallelism = { threads: 1, reason };
+    console.error(
+      '[zcash-worker] rayon pool unavailable - scanning on ONE core, sync will be several times slower:',
+      e,
+    );
   } finally {
     globalThis.Worker = OriginalWorker;
   }
@@ -4077,6 +4120,11 @@ const runSync = async (
           chainHeight,
           notesFound: state.notes.length,
           blocksScanned: blocks.length,
+          // How many cores the scan is really using. Carried on every progress
+          // message so a degraded pool is visible from the wallet rather than
+          // only from a worker console.
+          scanThreads: scanParallelism.threads,
+          scanDegradedReason: scanParallelism.reason,
         },
       });
 
