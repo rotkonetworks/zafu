@@ -77,7 +77,44 @@ Reproduce by checking out the zcli rev below and running the commands.
 Verify: rebuild from the rev, sha256sum the outputs,
 diff against the values above. A mismatch means the vendored blob is stale.
 
-## 2026-08-06 rebuild (FINAL) — reconciled migration, merged to zcli master
+## 2026-08-06 rebuild — ironwood witness + scan speedup + Pool type
+
+- source repo: zcli, branch `master`, rev `cc7f9d5`
+- sha256(zafu_wasm_bg.wasm) = 1377d1e32cb7d24df0cca7b5102bb0f8c8592140e8d7bd6948222f08c132e9e5
+- toolchain: wasm-bindgen 0.2.126, binaryen 123
+
+Carries three zcli changes that had not reached the extension:
+
+- **witness building is per pool** (`0758c75`). It was orchard-only: seeded
+  from `get_tree_state`, replayed `block.actions`, returned one anchor.
+  Ironwood commitments live in a separate tree, so an ironwood note got a
+  merkle path against the wrong tree — a wrong anchor and a rejected spend.
+  `pool: Pool` replaced the unused `_mainnet: bool` in the same argument slot,
+  so every call site failed to compile rather than silently defaulting. The
+  cached frontier is now per pool: the two frontiers are byte-compatible, so a
+  cross-pool cache would have been undetectable inside the builder.
+- **scan decrypts against one domain** when the pool is known (`71e0812`).
+  The scan entry points are per-pool and were using that only as an output
+  label while still trying both note-version domains — double work on every
+  action of a half-million-block sync.
+- **one `Pool` type** (`cc7f9d5`), moved into zafu-wasm so the scanner can see
+  it. It previously lived in zecli, which depends on this crate, so the
+  scanner dispatched on a `&str` with a silent `_ => try both` fallback.
+
+Glue note: `zafu_wasm.js` gained 8 lines (`Object.entries`, array index
+intrinsics) because `FoundNote.pool` is now a serde enum rather than a
+`String`. Export surface is unchanged at 69 functions; the serde
+representation is deliberately identical (`"orchard"` / `"ironwood"`), so
+persisted notes and JS-facing scan results keep the same shape.
+
+Verified: three blobs byte-identical, shared imported memory (flags 0x03,
+max 32768 pages), full rayon export set, snippets patched in BOTH trees with
+zero live `import('../../..')`, tsc clean, 40 files / 373 tests, build green,
+blob present 4x across dist/ and beta-dist/ with no stale blob surviving.
+Both real-validator gates re-run against zcli master: ironwood (now spending
+a note from a 4-leaf-deep tree via the replayed witness) and turnstile.
+
+## 2026-08-06 rebuild — reconciled migration, merged to zcli master
 
 Supersedes the two entries below. Those blobs were built from
 `feat/upstream-crates`, a branch that has since been reconciled with a

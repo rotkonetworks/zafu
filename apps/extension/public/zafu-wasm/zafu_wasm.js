@@ -2687,6 +2687,10 @@ function __wbg_get_imports(memory) {
             const ret = arg0.done;
             return ret;
         },
+        __wbg_entries_015dc610cd81ede0: function(arg0) {
+            const ret = Object.entries(arg0);
+            return ret;
+        },
         __wbg_error_a6fa202b58aa1cd3: function(arg0, arg1) {
             let deferred0_0;
             let deferred0_1;
@@ -2701,6 +2705,10 @@ function __wbg_get_imports(memory) {
         __wbg_getRandomValues_c44a50d8cfdaebeb: function() { return handleError(function (arg0, arg1) {
             arg0.getRandomValues(arg1);
         }, arguments); },
+        __wbg_get_507a50627bffa49b: function(arg0, arg1) {
+            const ret = arg0[arg1 >>> 0];
+            return ret;
+        },
         __wbg_get_c7eb1f358a7654df: function() { return handleError(function (arg0, arg1) {
             const ret = Reflect.get(arg0, arg1);
             return ret;
