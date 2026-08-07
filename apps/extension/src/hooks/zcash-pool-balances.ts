@@ -23,7 +23,14 @@ import {
 } from '../state/keyring/network-worker';
 
 /** Zeroed balances - the value before the first fetch resolves. */
-const EMPTY_POOL_BALANCES: PoolBalances = { orchard: 0n, ironwood: 0n, total: 0n };
+const EMPTY_POOL_BALANCES: PoolBalances = {
+  orchard: 0n,
+  ironwood: 0n,
+  total: 0n,
+  pendingOrchard: 0n,
+  pendingIronwood: 0n,
+  pendingTotal: 0n,
+};
 
 /** Empty per-pool note lists - the value before the first fetch resolves. */
 const EMPTY_POOL_NOTES: PoolNotes = { orchard: [], ironwood: [] };

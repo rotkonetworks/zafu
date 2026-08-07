@@ -475,22 +475,33 @@ export interface PoolBalances {
   ironwood: bigint;
   /** orchard + ironwood; equals getBalanceInWorker's total */
   total: bigint;
+  /** pending shielded change, NOT spendable (see worker PoolBalances) */
+  pendingOrchard: bigint;
+  /** pending shielded change, NOT spendable (see worker PoolBalances) */
+  pendingIronwood: bigint;
+  /** pendingOrchard + pendingIronwood */
+  pendingTotal: bigint;
 }
 
 export const getPoolBalancesInWorker = async (
   network: NetworkType,
   walletId: string,
 ): Promise<PoolBalances> => {
-  const raw = await callWorker<{ orchard: string; ironwood: string; total: string }>(
-    network,
-    'get-pool-balances',
-    {},
-    walletId,
-  );
+  const raw = await callWorker<{
+    orchard: string;
+    ironwood: string;
+    total: string;
+    pendingOrchard: string;
+    pendingIronwood: string;
+    pendingTotal: string;
+  }>(network, 'get-pool-balances', {}, walletId);
   return {
     orchard: BigInt(raw.orchard),
     ironwood: BigInt(raw.ironwood),
     total: BigInt(raw.total),
+    pendingOrchard: BigInt(raw.pendingOrchard),
+    pendingIronwood: BigInt(raw.pendingIronwood),
+    pendingTotal: BigInt(raw.pendingTotal),
   };
 };
 

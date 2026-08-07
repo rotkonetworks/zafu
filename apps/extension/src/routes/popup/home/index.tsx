@@ -1084,8 +1084,13 @@ const ZcashContent = ({
           ? Math.min(100, ligeritoPct)
           : nomtPct;
 
-  // combined balance - transparent funds fold into the single hero figure
-  const totalZat = orchardZat + transparentZat;
+  // combined balance - transparent funds fold into the single hero figure.
+  // Pending shielded change (change from our own unconfirmed sends, e.g. the
+  // ironwood change note of a send that has not mined yet) is part of what the
+  // wallet holds — it is NOT spendable, but it is not gone, and omitting it
+  // from the figure made a pending send read as "0 in all pools". Include it;
+  // the breakdown below calls it out as pending.
+  const totalZat = orchardZat + transparentZat + pools.pendingTotal;
   const totalZec = Number(totalZat) / 1e8;
 
   // What the hero figure is allowed to claim.
@@ -1141,7 +1146,7 @@ const ZcashContent = ({
     />
   ) : nudge ? (
     nudge
-  ) : allSynced && totalZat === 0n ? (
+  ) : allSynced && totalZat === 0n && inFlightZat === 0n ? (
     <GetZecHint onReceive={() => navigate(PopupPath.RECEIVE)} />
   ) : null;
 
@@ -1150,7 +1155,7 @@ const ZcashContent = ({
   // pool is ever hidden. Falls back to a single "shielded" row if the
   // worker's per-pool endpoint reports nothing while the combined balance
   // is positive (older worker builds).
-  const poolRows =
+  let poolRows =
     pools.total === 0n && orchardZat > 0n
       ? [
           {
@@ -1178,11 +1183,29 @@ const ZcashContent = ({
           },
         ];
 
+  // Pending shielded change from our own unconfirmed sends is part of the
+  // hero figure (total includes it) but is NOT spendable. Give it its own row
+  // so the breakdown reconciles with the figure above instead of showing a
+  // smaller number with no explanation — the case that read as "0 in all
+  // pools" while an ironwood send was pending.
+  if (pools.pendingTotal > 0n) {
+    poolRows.push({
+      key: 'pending',
+      icon: 'i-lucide-hourglass',
+      label: 'pending',
+      badge: 'change · confirming' as string | undefined,
+      zat: pools.pendingTotal,
+    });
+  }
+
   // glance -> detail: the hero balance opens the full per-pool notes view;
   // each reveal row deep-links to its pool ('shielded' fallback -> ironwood)
   const openPoolNotes = (pool?: string) => {
     if (!IRONWOOD_MIGRATION) {
       return; // route is registered only when the flag is on
+    }
+    if (pool === 'pending') {
+      return; // pending change is not a pool's note list yet; row is informational
     }
     navigate(pool ? `${PopupPath.POOL_NOTES}?pool=${pool}` : PopupPath.POOL_NOTES);
   };

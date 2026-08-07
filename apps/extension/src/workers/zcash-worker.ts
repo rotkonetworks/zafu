@@ -1091,6 +1091,11 @@ const verifySyncProofs = async (
   pendingPositions: number[],
   state: WalletState,
   actionsCommitment: string,
+  /** whether this wallet's running actions commitment was folded from genesis
+   *  (start block 0). If it was started at a birthday/import height, the fold
+   *  is seeded from a non-genesis value and can NEVER equal the server's
+   *  genesis-anchored proven commitment, so verifying it is meaningless. */
+  genesisAnchoredActions: boolean,
   /** secret keying the decoy padding; null disables padding (see below). */
   decoySeed: Uint8Array | null,
   /** observed on-chain (cmx, position) pairs to draw commitment decoys from. */
@@ -1368,9 +1373,26 @@ const verifySyncProofs = async (
   }
 
   // 4. verify actions commitment chain
+  //
+  // Only meaningful when the wallet's fold is genesis-anchored. The actions
+  // commitment is a positional hash chain seeded from the previously-folded
+  // value, so a wallet whose sync begins at a birthday/import block (nearly
+  // all wallets — the default start is near tip, not genesis) folds from a
+  // seed that can never equal the server's genesis-anchored proven value. For
+  // those wallets any "mismatch" here is guaranteed by construction and was
+  // spamming the retry loop under a misleading "server tampered" label. See
+  // zcore crates/zync-core sync.rs verify_actions_commitment. We keep it for
+  // genuine genesis wallets, where it is sound and actually checks something.
   const hasSaved = actionsCommitment !== '0'.repeat(64);
-  zyncModule['verify_actions_commitment'](actionsCommitment, proven.actions_commitment, hasSaved);
-  console.log(`[zcash-worker] actions commitment verified`);
+  if (genesisAnchoredActions) {
+    zyncModule['verify_actions_commitment'](actionsCommitment, proven.actions_commitment, hasSaved);
+    console.log(`[zcash-worker] actions commitment verified`);
+  } else {
+    console.warn(
+      '[zcash-worker] actions commitment check skipped: wallet started at a non-genesis ' +
+        'height, so the fold is not genesis-anchored (verifying would always mismatch)',
+    );
+  }
 
   const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
   console.log(`[zcash-worker] all proofs verified in ${elapsed}s`);
@@ -3294,6 +3316,11 @@ const runSync = async (
 
   // running actions commitment for integrity verification
   let actionsCommitment = await getActionsCommitment(walletId);
+  // The actions commitment fold is only sound (and only equal to the server's
+  // proven value) when this wallet's sync has covered the chain from genesis.
+  // A birthday/import start (startHeight > 0) folds from a non-genesis seed,
+  // so the verify step must be skipped for those wallets — see verifySyncProofs.
+  const actionsGenesisAnchored = (startHeight ?? 0) === 0;
   // notes found since last header proof verification
   const pendingCmxs: Uint8Array[] = [];
   const pendingPositions: number[] = [];
@@ -3527,6 +3554,7 @@ const runSync = async (
               pendingPositions,
               state,
               actionsCommitment,
+              actionsGenesisAnchored,
               decoySeed,
               decoyPool.snapshot(),
             );
@@ -4252,6 +4280,18 @@ interface PoolBalances {
   ironwood: bigint;
   /** orchard + ironwood — the same total getBalance() returns */
   total: bigint;
+  /**
+   * Pending shielded change: value our own broadcast-but-unconfirmed sends will
+   * return to us once they mine (upstream change_pending_confirmation). The
+   * input notes are marked spent locally at broadcast, which drops `total` to
+   * zero while the change note has not mined yet — correct, but it made the
+   * wallet read as empty (all pools 0, "get your first zec") with money in
+   * flight. These figures keep that value visible and are NOT spendable.
+   */
+  pendingOrchard: bigint;
+  pendingIronwood: bigint;
+  /** pendingOrchard + pendingIronwood */
+  pendingTotal: bigint;
 }
 
 /**
@@ -4259,6 +4299,7 @@ interface PoolBalances {
  * (single source of truth), split by poolOf(note) so records persisted before
  * the ironwood rollout (no pool field) count as orchard. `total` equals the
  * legacy single balance, so existing callers can keep reading it unchanged.
+ * Also computes pending shielded change (see PoolBalances.pending*).
  */
 const getPoolBalances = async (walletId: string): Promise<PoolBalances> => {
   const state = await loadState(walletId);
@@ -4274,7 +4315,60 @@ const getPoolBalances = async (walletId: string): Promise<PoolBalances> => {
       orchard += BigInt(note.value);
     }
   }
-  return { orchard, ironwood, total: orchard + ironwood };
+
+  // Pending shielded change from our in-flight sends. chain(tx) = inputs(tx)
+  // − amount(tx) − fee, and HistoryTx.amount already includes the fee, so
+  // change = inputs − amount. A confirmed send (reconcile wrote
+  // confirmedHeight) or one whose spend has already been seen on chain
+  // produces no pending change here. NU6.3 makes ironwood the active pool, so
+  // this is where a pending ironwood send inappropriately zeroed the figure.
+  let pendingOrchard = 0n;
+  let pendingIronwood = 0n;
+  try {
+    const sent = await idbGetAllByIndex<SentTxRecord>('sent', 'byWallet', walletId);
+    if (sent.length > 0) {
+      const inputByTx = new Map<string, { value: bigint; ironwood: boolean }>();
+      for (const note of state.notes) {
+        if (note.spent_by_txid && !(note.spent_at_height ?? 0)) {
+          const cur = inputByTx.get(note.spent_by_txid) ?? { value: 0n, ironwood: false };
+          cur.value += BigInt(note.value);
+          if (poolOf(note) === 'ironwood') {
+            cur.ironwood = true;
+          }
+          inputByTx.set(note.spent_by_txid, cur);
+        }
+      }
+      for (const rec of sent) {
+        if (rec.confirmedHeight) {
+          continue;
+        }
+        const inp = inputByTx.get(rec.txid);
+        if (!inp) {
+          continue;
+        }
+        const change = inp.value - BigInt(rec.amount);
+        if (change <= 0n) {
+          continue;
+        }
+        if (inp.ironwood) {
+          pendingIronwood += change;
+        } else {
+          pendingOrchard += change;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[zcash-worker] failed to compute pending change:', e);
+  }
+
+  return {
+    orchard,
+    ironwood,
+    total: orchard + ironwood,
+    pendingOrchard,
+    pendingIronwood,
+    pendingTotal: pendingOrchard + pendingIronwood,
+  };
 };
 
 // ── message handler ──
@@ -4464,6 +4558,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             orchard: pools.orchard.toString(),
             ironwood: pools.ironwood.toString(),
             total: pools.total.toString(),
+            pendingOrchard: pools.pendingOrchard.toString(),
+            pendingIronwood: pools.pendingIronwood.toString(),
+            pendingTotal: pools.pendingTotal.toString(),
           },
         });
         return;
