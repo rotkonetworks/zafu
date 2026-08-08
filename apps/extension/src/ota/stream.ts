@@ -8,7 +8,7 @@
  */
 
 import { decodeCanonical, encodeMap } from './canonical';
-import type { CborMap, CborValue } from './canonical';
+import type { CborValue } from './canonical';
 import { verifyImage } from './signature';
 import {
   BOARD,
@@ -105,7 +105,7 @@ export function verifyStream(
   if (!(value instanceof Map)) {
     throw new OtaStreamError('stream does not start with a manifest map', 'decode');
   }
-  const map = value as CborMap;
+  const map = value;
 
   const version = requireStr(map.get(1), 'version');
   const board = requireStr(map.get(2), 'board');

@@ -675,6 +675,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         }
 
         pcztUnsignedRef.current = result;
+        // Bind the response type to what actually went out on the wire.
+        pcztRequestWasCompactRef.current = result.compactRequest === true;
         const feeZec = (Number(result.fee) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
         setFee(feeZec);
 
@@ -741,6 +743,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         );
 
         pcztUnsignedRef.current = result;
+        // Bind the response type to what actually went out on the wire.
+        pcztRequestWasCompactRef.current = result.compactRequest === true;
         const feeZec = (Number(result.fee) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
         setFee(feeZec);
         setPcztSignFrames(result.urFrames);

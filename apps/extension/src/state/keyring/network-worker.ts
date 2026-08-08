@@ -902,6 +902,13 @@ export interface SendTxPcztUnsignedResult {
   spendIndices: number[];
   /** see SendTxUnsignedResult.coldSendId — same handle, same contract */
   coldSendId?: string;
+  /**
+   * The request envelope went out COMPACT (tx_type 0x05), so the device will
+   * answer with a signatures-only response (0x07). The UI binds the accepted
+   * response type to this - a compact response for a legacy request (or the
+   * reverse) is refused.
+   */
+  compactRequest?: boolean;
 }
 
 /**

@@ -18,6 +18,7 @@ import { idbBucketStore } from '../services/memo-sync/filters/cache';
 import { bucketOf, BUCKET_SIZE as MEMO_BUCKET_SIZE } from '../services/memo-sync/types';
 import type { BucketStart as MemoBucketStart, MemoSyncStrategy } from '../services/memo-sync/types';
 import type { ZcashBackend, ZcashClient } from '../state/keyring/zcash-backend';
+import { COMPACT_SIGN_REQUEST } from '../config/feature-flags';
 import {
   preludeWrapSinglePczt,
   ZIGNER_PCZT_SIGN_UR_TYPE,
@@ -525,6 +526,8 @@ interface WasmModule {
     attestation_hex?: string | null,
   ): Uint8Array;
   ur_encode_frames(cbor_data: Uint8Array, ur_type: string, fragment_size: number): string;
+  /** further-redact a signer PCZT for a compact (tx_type 0x05) request */
+  redact_pczt_compact(pczt_hex: string): string;
   zt_encode_frames(cbor_data: Uint8Array, zt_type: string, k: number, n: number): string;
   zt_encode_frames_auto(
     cbor_data: Uint8Array,
@@ -547,6 +550,34 @@ interface WasmModule {
     anchor_height: number,
     mainnet: boolean,
   ): boolean;
+}
+
+/**
+ * Build the request envelope for an airgapped signing leg.
+ *
+ * With COMPACT_SIGN_REQUEST on we further-redact the PCZT (drop cv_net, the v6
+ * anchors and output cmx; collapse each output ciphertext to its trimmed memo)
+ * and mark the envelope tx_type 0x05, which the device answers with a
+ * signatures-only response. If the redaction throws for any reason we fall
+ * back to the legacy 0x03 envelope rather than failing the send - a bigger QR
+ * beats a broken one.
+ *
+ * Returns the envelope and whether it actually went out compact, so the UI can
+ * bind the response type to what was requested.
+ */
+function buildSignRequestEnvelope(
+  wasm: WasmModule,
+  pcztHex: string,
+): { envelope: Uint8Array; compact: boolean } {
+  if (COMPACT_SIGN_REQUEST) {
+    try {
+      const compactHex = wasm.redact_pczt_compact(pcztHex);
+      return { envelope: preludeWrapSinglePczt(hexDecode(compactHex), true), compact: true };
+    } catch (e) {
+      console.warn('[zcash-worker] compact redaction failed, sending legacy 0x03:', e);
+    }
+  }
+  return { envelope: preludeWrapSinglePczt(hexDecode(pcztHex), false), compact: false };
 }
 
 let wasmModule: WasmModule | null = null;
@@ -5951,6 +5982,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       // The cold device verifies note inclusion + value consistency before
       // signing, and recomputes the sighash from the PCZT contents — so
       // display and signed bytes are bound by construction.
+
       case 'send-tx-pczt': {
         if (!walletId) {
           throw new Error('walletId required');
@@ -6227,8 +6259,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
           // Ironwood-AWARE transport: zigner prelude envelope [0x53][0x04][0x03]
           // (single PCZT), NOT the ironwood-blind ur:zcash-pczt CBOR wrap.
-          const iwPcztBytes = hexDecode(iwParsed.pczt_hex);
-          const iwEnvelope = preludeWrapSinglePczt(iwPcztBytes);
+          const { envelope: iwEnvelope, compact: iwRequestCompact } = buildSignRequestEnvelope(
+            wasmModule,
+            iwParsed.pczt_hex,
+          );
           const iwFragSize =
             sendPayload.fragmentSize && sendPayload.fragmentSize > 0
               ? sendPayload.fragmentSize
@@ -6273,6 +6307,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               actionCount: iwParsed.action_count,
               fee: fee.toString(),
               urFrames: iwUrFrames,
+              /** true when the request went out compact (tx_type 0x05) */
+              compactRequest: iwRequestCompact,
               cborBytes: iwEnvelope.length,
               // single-signer zigner cold-sign: no FROST relay rounds.
               sighash: '',
@@ -6710,14 +6746,16 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           action_count: number;
         };
 
-        const migratePcztBytes = hexDecode(migrateParsed.pczt_hex);
         // FIX-C item 1: the migration MUST reach the ironwood-AWARE signer.
         // `ur:zcash-pczt` (CBOR {1: bytes}) reaches the production, ironwood-
         // BLIND signer which hides the destination and shows a fee ~= the whole
         // amount. Wrap the redacted PCZT in the zigner prelude envelope
         // [0x53][0x04][0x03] (single PCZT) instead - that reaches the
         // pczt_signing module built with --cfg zcash_unstable="nu6.3".
-        const migrateEnvelope = preludeWrapSinglePczt(migratePcztBytes);
+        const { envelope: migrateEnvelope, compact: migrateCompact } = buildSignRequestEnvelope(
+          wasmModule,
+          migrateParsed.pczt_hex,
+        );
         const migrateFragSize =
           migratePayload.fragmentSize && migratePayload.fragmentSize > 0
             ? migratePayload.fragmentSize
@@ -6755,6 +6793,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             fee: fee.toString(),
             amount: migrateAmount.toString(),
             urFrames: migrateUrFrames,
+            /** true when the request went out compact (tx_type 0x05) */
+            compactRequest: migrateCompact,
             cborBytes: migrateEnvelope.length,
             coldSendId: migrateColdSendId,
           },

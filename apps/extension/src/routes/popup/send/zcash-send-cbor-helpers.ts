@@ -105,6 +105,15 @@ export function unwrapCborSinglePczt(cbor: Uint8Array): Uint8Array {
 /** zigner envelope prelude bytes: [0x53][crypto=zcash 0x04][tx_type=PCZT single 0x03]. */
 export const ZIGNER_PRELUDE_PCZT_SINGLE = Object.freeze([0x53, 0x04, 0x03] as const);
 
+/**
+ * Compact single-PCZT request prelude: [0x53][zcash 0x04][tx_type 0x05].
+ *
+ * Same body as 0x03 — the difference is that the PCZT has been compact-redacted
+ * (see `redact_pczt_compact`) and that the device answers with a
+ * signatures-only response (0x07) instead of a whole signed PCZT.
+ */
+export const ZIGNER_PRELUDE_PCZT_SINGLE_COMPACT = Object.freeze([0x53, 0x04, 0x05] as const);
+
 /** UR type carrying the prelude-envelope single-PCZT signing REQUEST (hot -> cold). */
 export const ZIGNER_PCZT_SIGN_UR_TYPE = 'zigner-module';
 
@@ -122,10 +131,11 @@ export const ZIGNER_PCZT_SIGNED_UR_TYPE = 'zigner-module';
  * prelude envelope. Inverse of `parsePreludeSinglePcztResponse` (the response
  * carries an extra integrity digest + length prefix).
  */
-export function preludeWrapSinglePczt(pczt: Uint8Array): Uint8Array {
-  const out = new Uint8Array(ZIGNER_PRELUDE_PCZT_SINGLE.length + pczt.length);
-  out.set(ZIGNER_PRELUDE_PCZT_SINGLE, 0);
-  out.set(pczt, ZIGNER_PRELUDE_PCZT_SINGLE.length);
+export function preludeWrapSinglePczt(pczt: Uint8Array, compact = false): Uint8Array {
+  const prelude = compact ? ZIGNER_PRELUDE_PCZT_SINGLE_COMPACT : ZIGNER_PRELUDE_PCZT_SINGLE;
+  const out = new Uint8Array(prelude.length + pczt.length);
+  out.set(prelude, 0);
+  out.set(pczt, prelude.length);
   return out;
 }
 

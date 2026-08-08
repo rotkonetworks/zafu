@@ -27,6 +27,27 @@
 export const IRONWOOD_MIGRATION = true;
 
 /**
+ * Send the airgapped signing REQUEST in the compact form (zigner envelope
+ * tx_type 0x05) instead of the legacy full-PCZT form (0x03).
+ *
+ * A compact request ships a further-redacted PCZT — cv_net, the v6 bundle
+ * anchors and the output cmx are dropped, and each output's 580-byte
+ * enc_ciphertext collapses to its memo trimmed to the last nonzero byte (one
+ * byte for the empty memo a migration uses). The device recomputes all of it
+ * in `resolve_fields()` before running the SAME verification gates, so nothing
+ * is trusted that was not proven; upstream measured ~2.7x less request payload
+ * on a 35-transaction migration.
+ *
+ * COMPATIBILITY: a zigner older than v0.8.2 does not know tx_type 0x05 and
+ * fail-closes on the unknown prelude. The device also answers a compact
+ * request with a compact (signatures-only) response, which needs the
+ * `apply_signature_contributions` wasm export — present since the zcli
+ * 70722f7 wasm rebuild. Turn this OFF to fall back to the fully
+ * backward-compatible 0x03 request and full-PCZT response.
+ */
+export const COMPACT_SIGN_REQUEST = true;
+
+/**
  * NU6.3 Ironwood activation height on MAINNET.
  *
  * Confirmed and tagged by Zcash core (Sean Bowe): block 3,428,143,

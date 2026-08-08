@@ -21,7 +21,7 @@ import {
 import { verifyStream } from '../ota/stream';
 import { verifyResult, verifyStatus } from '../ota/signature';
 import { decodeStrict, encodeMap } from '../ota/canonical';
-import type { CborMap, CborValue } from '../ota/canonical';
+import type { CborValue } from '../ota/canonical';
 import { encodeStreamFrames } from '../ota/ur';
 import {
   beginAwaitingTap,
@@ -86,7 +86,7 @@ function parseResultVerified(bytes: Uint8Array, zidPubkeyHex: string): Result {
   if (!(value instanceof Map)) {
     throw new Error('result is not a CBOR map');
   }
-  const map = value as CborMap;
+  const map = value;
   const fwVersion = map.get(1);
   const success = map.get(2);
   const slot = map.get(3);
@@ -133,7 +133,7 @@ function parseStatusVerified(bytes: Uint8Array, zidPubkeyHex: string): Status {
   if (!(value instanceof Map)) {
     throw new Error('status is not a CBOR map');
   }
-  const map = value as CborMap;
+  const map = value;
   const fwVersion = map.get(1);
   const slot = map.get(2);
   const successfulBoot = map.get(3);

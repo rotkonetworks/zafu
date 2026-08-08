@@ -69,7 +69,7 @@ export function decodeStream(parts: string[]): Uint8Array {
   if (result.type !== STREAM_UR_TYPE) {
     throw new Error(`unexpected UR type '${result.type}', expected '${STREAM_UR_TYPE}'`);
   }
-  return new Uint8Array(Buffer.from(result.cbor as Buffer));
+  return new Uint8Array(Buffer.from(result.cbor));
 }
 
 /** Encode a tiny single-segment UR (used for decode tests + result/status display). */
@@ -81,7 +81,7 @@ export function encodeSinglePart(urType: string, bytes: Uint8Array): string {
 /** Decode a single-segment UR string. */
 export function decodeSinglePart(uri: string): { type: string; bytes: Uint8Array } {
   const ur = URDecoder.decode(uri);
-  return { type: ur.type, bytes: new Uint8Array(Buffer.from(ur.cbor as Buffer)) };
+  return { type: ur.type, bytes: new Uint8Array(Buffer.from(ur.cbor)) };
 }
 
 /** Decode a `ur:zafu-result` single-segment string into its raw payload bytes. */

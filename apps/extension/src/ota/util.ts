@@ -143,17 +143,19 @@ export function sha256Sync(bytes: Uint8Array): Uint8Array {
       b = a;
       a = (temp1 + temp2) >>> 0;
     }
-    H[0] = (H[0]! + a) >>> 0;
-    H[1] = (H[1]! + b) >>> 0;
-    H[2] = (H[2]! + c) >>> 0;
-    H[3] = (H[3]! + d) >>> 0;
-    H[4] = (H[4]! + e) >>> 0;
-    H[5] = (H[5]! + f) >>> 0;
-    H[6] = (H[6]! + g) >>> 0;
-    H[7] = (H[7]! + h) >>> 0;
+    H[0] = (H[0] + a) >>> 0;
+    H[1] = (H[1] + b) >>> 0;
+    H[2] = (H[2] + c) >>> 0;
+    H[3] = (H[3] + d) >>> 0;
+    H[4] = (H[4] + e) >>> 0;
+    H[5] = (H[5] + f) >>> 0;
+    H[6] = (H[6] + g) >>> 0;
+    H[7] = (H[7] + h) >>> 0;
   }
   const out = new Uint8Array(32);
   const odv = new DataView(out.buffer);
-  for (let i = 0; i < 8; i++) odv.setUint32(i * 4, H[i]!, false);
+  for (let i = 0; i < 8; i++) {
+    odv.setUint32(i * 4, H[i]!, false);
+  }
   return out;
 }

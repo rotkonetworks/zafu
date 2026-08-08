@@ -98,12 +98,14 @@ function estimateQrVersion(payloadBytes: number): number {
   try {
     // all-zero bytes at EC L → the smallest version that fits `payloadBytes`
     const qr = QRCode.create(Buffer.alloc(payloadBytes), { errorCorrectionLevel: 'L' });
-    if (typeof qr?.version === 'number' && qr.version > 0) return qr.version;
+    if (typeof qr?.version === 'number' && qr.version > 0) {
+      return qr.version;
+    }
   } catch {
     /* qrcode lib unavailable/sparse — fall through to the table */
   }
   // QR capacity table (bytes, EC L); first version whose capacity is >= payloadBytes
-  const CAP: Array<[number, number]> = [
+  const CAP: [number, number][] = [
     [16, 41],
     [20, 109],
     [24, 249],
@@ -113,7 +115,9 @@ function estimateQrVersion(payloadBytes: number): number {
     [40, 1307],
   ];
   for (const [v, cap] of CAP) {
-    if (payloadBytes <= cap) return v;
+    if (payloadBytes <= cap) {
+      return v;
+    }
   }
   return 40;
 }
@@ -147,7 +151,9 @@ export function AnimatedQrDisplay({
   useEffect(() => {
     let cancelled = false;
     const apply = (v: unknown) => {
-      if (!cancelled) setIntervalMs(clampSpeed(typeof v === 'number' ? v : frameInterval));
+      if (!cancelled) {
+        setIntervalMs(clampSpeed(typeof v === 'number' ? v : frameInterval));
+      }
     };
     try {
       if (typeof chrome !== 'undefined' && chrome.storage?.local) {
@@ -168,7 +174,9 @@ export function AnimatedQrDisplay({
   const changeSpeed = useCallback((v: number) => {
     const n = clampSpeed(v);
     setIntervalMs(n);
-    if (persistTimer.current) clearTimeout(persistTimer.current);
+    if (persistTimer.current) {
+      clearTimeout(persistTimer.current);
+    }
     persistTimer.current = setTimeout(() => {
       try {
         if (typeof chrome !== 'undefined' && chrome.storage?.local) {
@@ -190,7 +198,9 @@ export function AnimatedQrDisplay({
   useEffect(() => {
     let cancelled = false;
     const apply = (v: unknown) => {
-      if (!cancelled) setDensity(clampPreset(typeof v === 'number' ? v : densityBytes));
+      if (!cancelled) {
+        setDensity(clampPreset(typeof v === 'number' ? v : densityBytes));
+      }
     };
     try {
       if (typeof chrome !== 'undefined' && chrome.storage?.local) {
@@ -243,15 +253,18 @@ export function AnimatedQrDisplay({
           density,
         );
         const frames = JSON.parse(json) as string[];
-        if (!cancelled) setUrDensityFrames(frames);
+        if (!cancelled) {
+          setUrDensityFrames(frames);
+        }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'failed to re-fountain frames');
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : 'failed to re-fountain frames');
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [density, urSource]);
 
   const canReDensify = Boolean(urSource) || Boolean(data);
