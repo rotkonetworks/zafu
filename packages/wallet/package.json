@@ -53,7 +53,7 @@
   },
   "devDependencies": {
     "@repo/encryption": "workspace:*",
-    "@rotko/penumbra-wasm": "55.0.1",
+    "@rotko/penumbra-wasm": "55.0.2",
     "@types/chrome": "0.0.270",
     "@types/qrcode": "^1.5.6"
   }

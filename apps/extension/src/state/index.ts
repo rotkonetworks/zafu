@@ -30,6 +30,7 @@ import { createFrostSessionSlice, FrostSessionSlice } from './frost-session';
 import { createInboxSlice, InboxSlice } from './inbox';
 import { createLicenseSlice, LicenseSlice } from './license';
 import { createRingVrfSlice, RingVrfSlice } from './ring-vrf';
+import { createOtaSlice, type OtaSlice } from './ota';
 
 export interface AllSlices {
   wallets: WalletsSlice;
@@ -57,6 +58,7 @@ export interface AllSlices {
   inbox: InboxSlice;
   license: LicenseSlice;
   ringVrf: RingVrfSlice;
+  ota: OtaSlice;
 }
 
 export type SliceCreator<SliceInterface> = StateCreator<
@@ -100,6 +102,7 @@ export const initializeStore = (
     inbox: createInboxSlice()(setState, getState, store),
     license: createLicenseSlice()(setState, getState, store),
     ringVrf: createRingVrfSlice()(setState, getState, store),
+    ota: createOtaSlice(setState, getState, store),
   }));
 };
 

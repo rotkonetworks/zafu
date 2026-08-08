@@ -109,10 +109,16 @@ jobs:
 
       - name: Build extension (production)
         working-directory: apps/extension
+        env:
+          # Build-time injection for the 1Click partner JWT (see
+          # webpack.config.ts DefinePlugin `process.env.NEAR_1CLICK_JWT`).
+          NEAR_1CLICK_JWT: ${{ secrets.NEAR_1CLICK_JWT }}
         run: NODE_OPTIONS="--max-old-space-size=8192 --import=tsx" npx webpack --config webpack.prod-config.ts
 
       - name: Build extension (beta)
         working-directory: apps/extension
+        env:
+          NEAR_1CLICK_JWT: ${{ secrets.NEAR_1CLICK_JWT }}
         run: NODE_OPTIONS="--max-old-space-size=8192 --import=tsx" npx webpack --config webpack.beta-config.ts
 
       # CWS rejects manifests that carry the `key` field (it's a dev-only

@@ -93,6 +93,11 @@ const groups: SettingsGroup[] = [
         icon: 'i-lucide-qr-code',
         href: PopupPath.SETTINGS_ZIGNER,
       },
+      {
+        title: 'device update',
+        icon: 'i-lucide-cpu',
+        href: PopupPath.SETTINGS_OTA,
+      },
     ],
   },
   {

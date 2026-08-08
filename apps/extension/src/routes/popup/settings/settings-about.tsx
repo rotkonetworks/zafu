@@ -10,6 +10,12 @@ export const SettingsAbout = () => {
           <p className='text-xs text-fg-muted leading-relaxed'>
             privacy-first browser wallet for penumbra, zcash, and cosmos IBC chains.
           </p>
+          <p className='text-xs text-fg-muted mt-1'>
+            version{' '}
+            <span className='font-mono text-fg'>
+              {chrome.runtime.getManifest().version}
+            </span>
+          </p>
         </div>
 
         <div>
@@ -55,7 +61,17 @@ export const SettingsAbout = () => {
         </div>
 
         <div className='border-t border-border-soft pt-3'>
-          <p className='text-label text-fg-muted'>MIT license - built by rotko networks</p>
+          <p className='text-label text-fg-muted'>
+            MIT license - built by{' '}
+            <a
+              href='https://rotko.net'
+              target='_blank'
+              rel='noopener noreferrer'
+              className='text-zigner-gold hover:underline transition-colors'
+            >
+              rotko networks
+            </a>
+          </p>
         </div>
       </div>
     </SettingsScreen>

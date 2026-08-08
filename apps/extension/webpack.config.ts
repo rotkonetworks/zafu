@@ -14,6 +14,7 @@ import url from 'node:url';
 const require = createRequire(import.meta.url);
 import { type WebExtRunner, cmd as WebExtCmd } from 'web-ext';
 import { execSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import webpack from 'webpack';
 import WatchExternalFilesPlugin from 'webpack-watch-external-files-plugin';
 import unocssPostcss from '@unocss/postcss';
@@ -64,11 +65,35 @@ export default ({
    * runtime via chrome.runtime.id, so the same build runs correctly under
    * any install method (unpacked, beta Web Store, prod Web Store).
    */
+  // Build-time env injection source: process env first, then
+  // apps/extension/.env.local (gitignored) so local `webpack` builds match the
+  // CI build exactly. Used by the NEAR_1CLICK_JWT define below; the token
+  // VALUE lives only in the Actions secret / .env.local, never in the repo.
+  const dotEnvLocal: Record<string, string> = (() => {
+    try {
+      const out: Record<string, string> = {};
+      for (const raw of readFileSync(path.join(__dirname, '.env.local'), 'utf8').split(/\r?\n/)) {
+        const line = raw.trim();
+        if (!line || line.startsWith('#')) continue;
+        const eq = line.indexOf('=');
+        if (eq <= 0) continue;
+        out[line.slice(0, eq).trim()] = line.slice(eq + 1).trim();
+      }
+      return out;
+    } catch {
+      return {};
+    }
+  })();
+  const NEAR_1CLICK_JWT =
+    process.env['NEAR_1CLICK_JWT'] ?? dotEnvLocal['NEAR_1CLICK_JWT'] ?? '';
+
   const DefinePlugin = new webpack.DefinePlugin({
     'globalThis.__DEV__': JSON.stringify(process.env['NODE_ENV'] !== 'production'),
     'globalThis.__ASSERT_ROOT__': JSON.stringify(false),
     BUILD_COMMIT: JSON.stringify(gitCommit),
     BUILD_DATE: JSON.stringify(gitDate),
+    'process.env.NEAR_1CLICK_JWT': JSON.stringify(NEAR_1CLICK_JWT),
+    "process.env['NEAR_1CLICK_JWT']": JSON.stringify(NEAR_1CLICK_JWT),
   });
 
   const WebExtReloadPlugin = {

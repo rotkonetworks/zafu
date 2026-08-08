@@ -40,6 +40,9 @@ const SettingsMultisigBackup = lazy(() =>
 const SettingsZigner = lazy(() =>
   import('./settings-zigner').then(m => ({ default: m.SettingsZigner })),
 );
+const SettingsOta = lazy(() =>
+  import('./settings-ota').then(m => ({ default: m.SettingsOta })),
+);
 const SubscribePage = lazy(() => import('./subscribe').then(m => ({ default: m.SubscribePage })));
 
 const LazyFallback = () => (
@@ -117,5 +120,9 @@ export const settingsRoutes = [
   {
     path: PopupPath.SETTINGS_MULTISIG_BACKUP,
     element: withSuspense(SettingsMultisigBackup),
+  },
+  {
+    path: PopupPath.SETTINGS_OTA,
+    element: withSuspense(SettingsOta),
   },
 ];

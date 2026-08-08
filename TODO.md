@@ -217,6 +217,56 @@ Call sites that hit the BUG (they `import('@repo/zcash-wasm')`, i.e. the wrong g
   nullifier spent by pending tx dropping value while output notes pending aren't added).
 - Status: NOT fixed, needs repro + trace. Flag for a deeper agent pass.
 
+### [DONE] zcash send via Zigner cold-sign: "pczt parse failed: NotPczt" on scan-back (Zigner → Zafu)
+- Reported (2026-08-07): standard zcash send through the Zigner cold-signer flow fails on
+  the RETURN scan. Steps: Zafu builds the PCZT → shows animated sign-request QR → Zigner
+  scans it (this leg now works after the byte-mode UR/zoda fix) → Zigner confirms + signs →
+  Zigner shows the signed-PCZT animated QR → Zafu scans it back → "transaction failed:
+  pczt parse failed: NotPczt". Cancel + retry reproduces it every time.
+- Context: the chain is post-NU6.3, so the active shielded spend pool is ironwood
+  ("orchard notes can only be spent, not used to make new outputs"). The standard send
+  therefore rides the IRONWOOD-aware `ur:zigner-module` channel, not the legacy
+  `ur:zcash-pczt` channel:
+  - REQUEST (zafu → zigner): raw prelude envelope `[0x53][0x04][0x03] || pczt_bytes`, NO
+    CBOR wrap, fountain-encoded as `ur:zigner-module`
+    (zcash-worker.ts ~6226-6238 via preludeWrapSinglePczt).
+  - RESPONSE (zigner → zafu): module signs → prelude response envelope
+    `[0x53][0x04][0x03] || digest:32 || pczt_len:u32(LE) || signed_pczt`
+    (rust/pczt_signing/src/envelope.rs encode_response), then module_response_to_ur
+    CBOR-wraps that envelope as `{1: bytes}` and emits it under `ur:zigner-module`
+    (rust/signer/src/lib.rs:4808). So the fountain message the scanner reconstructs is
+    CBOR{ prelude envelope }, NOT plain PCZT bytes.
+- Bug location: `apps/extension/src/routes/popup/send/zcash-send.tsx`
+  `handlePcztSignatureScanned` (line ~846):
+  - line 856 `unwrapCborSinglePczt(cborBytes)` strips the outer CBOR `{1: bytes}` — the
+    result is the prelude ENVELOPE (`0x53 0x04 0x03 …`), not the raw signed PCZT.
+  - lines 857-870 hex-encode that full envelope and call
+    `completeSendTxPcztInWorker(..., pcztHex, ...)` → worker
+    `extract_signed_tx_from_pczt(pczt_hex)` (zcash-worker.ts:320) → wasm `Pczt::parse`
+    → PCZT magic bytes ("PCZT") are absent (bytes start `53 04 03`) → the pczt crate
+    returns NotPczt → "pczt parse failed: NotPczt" (string lives in zafu_wasm_bg.wasm).
+- The correct handling ALREADY EXISTS in `apps/extension/src/routes/popup/send/ironwood-migrate.tsx`
+  `handleSignedScanned` (lines 305-320): `unwrapCborSinglePczt` → THEN
+  `parsePreludeSinglePcztResponse(responseEnvelope)` → take `.signedPczt` → hex → worker.
+  zcash-send.tsx's PCZT route never got that second step.
+- Fix (mirror ironwood-migrate.tsx in handlePcztSignatureScanned): after unwrap, if the
+  inner bytes start with `[0x53, 0x04, 0x03]` (prelude), call
+  `parsePreludeSinglePcztResponse` (already exported from zcash-send-cbor-helpers.ts) and
+  hex-encode `.signedPczt`; for the legacy `zcash-pczt` response the unwrapped bytes are
+  already the raw PCZT and must stay as-is. Note AnimatedQrScanner's onComplete already
+  passes `(bytes, urType)` so zcash-send.tsx can branch on `pcztSignedUrType === 'zigner-module'`
+  without byte-sniffing if preferred.
+- Manifest of the flow: `ZIGNER_PCZT_SIGNED_UR_TYPE === 'zigner-module'` (zcash-send-cbor-helpers.ts:118);
+  requested UR type is captured at zcash-send.tsx:734-735 from the sign-request frames.
+- STATUS: FIX APPLIED 2026-08-07. In `zcash-send.tsx` `handlePcztSignatureScanned`:
+  `unwrapCborSinglePczt` now yields `unwrapped`, and if those bytes open with
+  `[0x53, 0x04, 0x03]` (the prelude; a real PCZT starts with ASCII "PCZT" so the sniff is
+  unambiguous) we run `parsePreludeSinglePcztResponse(unwrapped).signedPczt` and hex-encode
+  THAT; otherwise the raw unwrapped bytes are used (legacy `zcash-pczt` shape unchanged).
+  Import updated to pull `parsePreludeSinglePcztResponse` from zcash-send-cbor-helpers.
+  Verified: `zcash-send-cbor-helpers.node.test.mjs` 20/20 pass; extension `tsc --noEmit` rc 0.
+  Needs a live cold-sign round-trip on the test Pixel/extension to confirm end-to-end.
+
 ### proof-of-build artifacts (as of last full build)
 - `pnpm install` exit 0; `pnpm build` exit 0 (`Tasks: 1 successful`, ~2m27s).
 - Outputs: `apps/extension/dist` (194M) and `apps/extension/beta-dist` (194M),

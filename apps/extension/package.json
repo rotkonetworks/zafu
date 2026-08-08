@@ -1,6 +1,6 @@
 {
   "name": "zafu",
-  "version": "25.2.0",
+  "version": "25.3.0",
   "private": true,
   "license": "MIT",
   "description": "multi-chain privacy wallet for penumbra, zcash, and more",
@@ -13,7 +13,10 @@
     "dev": "NODE_ENV=testnet pnpm bundle:beta --watch --mode=development -d inline-source-map",
     "lint": "eslint src",
     "lint:strict": "tsc --noEmit && eslint src --max-warnings 0",
-    "test": "vitest run"
+    "test": "vitest run",
+    "ota:pack": "vitest run src/ota/producer.test.ts",
+    "ota:serve": "node ../../scripts/ota/ota-dev-server.mjs",
+    "ota:sim": "bash scripts/ota/simulate/run.sh"
   },
   "dependencies": {
     "@bufbuild/protobuf": "^1.10.0",
@@ -45,7 +48,7 @@
     "@repo/zcash-wasm": "workspace:*",
     "@rotko/penumbra-services": "70.0.0",
     "@rotko/penumbra-types": "37.0.0",
-    "@rotko/penumbra-wasm": "55.0.1",
+    "@rotko/penumbra-wasm": "55.0.2",
     "@tanstack/react-query": "5.95.2",
     "exponential-backoff": "^3.1.3",
     "framer-motion": "^12.38.0",

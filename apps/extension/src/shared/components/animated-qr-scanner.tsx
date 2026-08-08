@@ -69,12 +69,17 @@ export const AnimatedQrScanner = ({
   // Stall watchdog. A healthy fountain stream always yields *new* unique
   // parts; "need more frames" and "this will never complete" are otherwise
   // indistinguishable, so without this a corrupt/dead signer produces an
-  // unbounded "scanning..." with no failure. If no new unique part arrives
-  // for STALL_MS we surface a hard error. 12s is ~3x the slowest realistic
-  // animated-QR cycle — long enough not to false-positive on a slow camera,
-  // short enough to not be "infinite".
+  // unbounded "scanning..." with no failure. But a stall must NEVER destroy
+  // a live scan: the signer only emits a new frame while its screen is on,
+  // so a mid-scan screen-sleep (on either device) legitimately pauses the
+  // stream for as long as you hold the phone in the dark. Failing hard here
+  // throws away every accumulated part the moment your display sleeps, which
+  // is worse than the dead-signer case it exists to catch. So the watchdog
+  // now only *warns* — it keeps the camera and accumulated parts alive so a
+  // woken screen resumes the scan instead of forcing a restart.
   const lastNewPartAtRef = useRef(0);
-  const STALL_MS = 12_000;
+  const STALL_MS = 45_000;
+  const stallNotifiedRef = useRef(false);
 
   // Hard caps on the accumulator. The stall watchdog catches "no new unique
   // frames" but is helpless against a hostile or buggy source emitting an
@@ -203,6 +208,14 @@ export const AnimatedQrScanner = ({
 
           // a genuinely new unique part — reset the stall clock
           lastNewPartAtRef.current = Date.now();
+          // stream is alive again — clear any previous stall notice so a
+          // woken/slept scan doesn't keep an obsolete warning on screen
+          if (stallNotifiedRef.current) {
+            stallNotifiedRef.current = false;
+            if (mountedRef.current) {
+              setError(null);
+            }
+          }
           setPartsReceived(urPartsRef.current.size);
 
           // seqLen drives honest progress; without it we'd pin at 99%.
@@ -364,8 +377,8 @@ export const AnimatedQrScanner = ({
 
     // Stall watchdog: fires only once UR accumulation has actually started
     // (>=1 part) and only if no new unique part has arrived for STALL_MS.
-    // Legacy P-format has a known total so it doesn't need this; the guard
-    // on urPartsRef.size keeps it inert for that path.
+    // It warns but does NOT abort — the camera and accumulated parts stay
+    // alive so a woken screen resumes the scan instead of discarding it.
     const stallTimer = setInterval(() => {
       if (completedRef.current) {
         return;
@@ -376,16 +389,18 @@ export const AnimatedQrScanner = ({
       if (Date.now() - lastNewPartAtRef.current < STALL_MS) {
         return;
       }
-      completedRef.current = true; // latch so we report once
-      stopScanning();
+      // only surface the notice once per dry spell
+      if (stallNotifiedRef.current) {
+        return;
+      }
+      stallNotifiedRef.current = true;
       const msg =
-        `scan stalled — no new QR frames for ${Math.round(STALL_MS / 1000)}s ` +
-        `(${urPartsRef.current.size} parts received). The signer may have ` +
-        `closed, or the stream is corrupt. Restart the signing flow.`;
+        `scan paused — no new QR frames for ${Math.round(STALL_MS / 1000)}s ` +
+        `(${urPartsRef.current.size} parts received). Wake the signer to ` +
+        `continue — the scan is still running and will resume automatically.`;
       if (mountedRef.current) {
         setError(msg);
       }
-      onErrorRef.current?.(msg);
     }, 2_000);
 
     return () => {

@@ -52,7 +52,7 @@ import { ledgerSignerFor } from '../../../signing/ledger-signer';
 import { isPopup } from '../../../utils/popup-detection';
 import { isZcashSignatureQR, parseZcashSignatureResponse, bytesToHex } from '@repo/wallet/networks'; // self-contained 4-step zigner-mediated multisig sign
 
-import { unwrapCborSinglePczt } from './zcash-send-cbor-helpers';
+import { unwrapCborSinglePczt, parsePreludeSinglePcztResponse } from './zcash-send-cbor-helpers';
 
 interface ZcashSendProps {
   onClose: () => void;
@@ -851,9 +851,26 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           throw new Error('no wallet selected');
         }
 
-        // Unwrap CBOR `{1: bytes}` → raw PCZT bytes. The envelope shape is
-        // fixed by zigner (matches the wasm `cborWrapPczt` we use on emit).
-        const pcztBytes = unwrapCborSinglePczt(cborBytes);
+        // Unwrap CBOR `{1: bytes}`. Two response shapes ride the animated QR:
+        //   - legacy `ur:zcash-pczt`: the CBOR wrap directly encloses the raw
+        //     signed PCZT (encode_signed_pczt_ur).
+        //   - ironwood `ur:zigner-module`: the device CBOR-wraps its prelude
+        //     response ENVELOPE `[0x53][0x04][0x03] || digest:32 || len:u32(LE)
+        //     || signed_pczt` (rust/signer module_response_to_ur). The raw PCZT
+        //     is the innermost payload AFTER that envelope, so hand the unwrapped
+        //     bytes to parsePreludeSinglePcztResponse when they open with the
+        //     prelude (a real PCZT starts with ASCII "PCZT", so [0x53,0x04,0x03]
+        //     is unambiguous) - otherwise we'd feed the envelope to the wasm
+        //     PCZT parser and hit "pczt parse failed: NotPczt".
+        const unwrapped = unwrapCborSinglePczt(cborBytes);
+        const preluded =
+          unwrapped.length >= 3 &&
+          unwrapped[0] === 0x53 &&
+          unwrapped[1] === 0x04 &&
+          unwrapped[2] === 0x03;
+        const pcztBytes = preluded
+          ? parsePreludeSinglePcztResponse(unwrapped).signedPczt
+          : unwrapped;
         let pcztHex = '';
         for (let i = 0; i < pcztBytes.length; i++) {
           pcztHex += pcztBytes[i]!.toString(16).padStart(2, '0');

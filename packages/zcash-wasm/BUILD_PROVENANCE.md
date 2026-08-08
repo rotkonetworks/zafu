@@ -10,6 +10,13 @@ prover disagree. This has bitten twice:
 | `packages/zcash-wasm/` (`zafu_*` + duplicated `zcash_*`) | build-time package import | type/API drift; missing exports (e.g. shielding)                                         |
 | `apps/extension/public/zafu-wasm/`                       | the main compute worker   | `X.compute_txid is not a function`; silently rebuilds txs with an old consensus constant |
 
+⚠ 2026-08-07: the `zcash_*` duplicate in `packages/zcash-wasm/` was found STALE — its
+wasm-bindgen symbol hashes differed from the binary while `zafu_wasm.js` matched, which
+breaks `import('@repo/zcash-wasm')` with `Import #0 "./zafu_wasm_bg.js": module is not an
+object or function`. The package `main`/`exports` now point at `zafu_wasm.js` and the
+`zcash_*` duplicates were re-copied from `zafu_*` so all glues/binaries are byte-identical
+again. Keep them identical on every refresh — a differing `zcash_*` glue is a landmine.
+
 Both `public/` copies are the PARALLEL build (rayon `snippets/`, shared
 memory). After copying either one, re-apply the Chrome worker patch and
 verify `wbgRayonBase` is BOTH defined and used in

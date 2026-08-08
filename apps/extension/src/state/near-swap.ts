@@ -15,11 +15,18 @@
 
 const API_BASE = 'https://1click.chaindefuser.com';
 
-// same JWT as Zashi — partner_id: electriccoin
-const AUTH_TOKEN =
-  'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6IjIwMjUtMDQtMjMtdjEifQ.eyJ2IjoxLCJrZXlfdHlwZSI6ImRpc3RyaWJ1dGlvbl9jaGFubmVsIiwicGFydG5lcl9pZCI6ImVsZWN0cmljY29pbiIsImlhdCI6MTc1NTE5MDc0MywiZXhwIjoxNzg2NzI2NzQzfQ.LHhSp459njnOoyCssprT4Rc-J4TqlPo6qCcKy0A5npuc3A5iHl-zZ-qua_XroN9ZmU8HxeE4y0qVDeBMQgrzwdV3EybkfXTuSaHI8D4BwbAvkZgYMGqdlCpVFMU4g1uWZSZr2jZiQMkaGm5FxkLsO9bf1g38v-IkT6pEgLYM37kd5K5j4vEv2OC8Qs0dOCPvrnbP_t83ef4ldvJ7fDYlN9faLudHx-BU_FV5vMgMab8yZE_mpYtRNFRAKcSFgIqHlcUdxFZ_nM7yvt6aXoVHbiO9Z8XwhN24ADjnaDtNJ-Jp_z9NqRTxwsNQK2ToszrwNqTMqf86_TuXfl7otZAQMw';
+// 1Click partner JWT — partner_id: rotko-networks (issued via NEAR Intents portal).
+// Sent as `Authorization: Bearer <jwt>` on quote/status/deposit to avoid the 0.2% fee
+// and attribute swaps to rotko.
+//
+// Token value is NEVER committed to the repo. It is injected at build time via
+// the NEAR_1CLICK_JWT define (webpack DefinePlugin): GitHub Actions provides it
+// from the NEAR_1CLICK_JWT repo secret during release builds; local webpack
+// builds read apps/extension/.env.local (gitignored). Empty => unauthenticated
+// 1Click request (degrades the fee-free partner path only).
+const AUTH_TOKEN = process.env['NEAR_1CLICK_JWT'] ?? '';
 
-const AFFILIATE_ADDRESS = 'd78abd5477432c9d9c5e32c4a1a0056cd7b8be6580d3c49e1f97185b786592db';
+const AFFILIATE_ADDRESS = 'bdb384d8c6273bf4e40757d57d49ff7931c12b4ddaa838c323e4f93a7263744f';
 const AFFILIATE_FEE_BPS = 67;
 
 // ── types ──
@@ -96,7 +103,9 @@ async function nearFetch<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: {
       'Content-Type': 'application/json',
-      Authorization: AUTH_TOKEN,
+      // docs require `Authorization: Bearer <JWT>`; a bare token is not
+      // recognized (and the 0.2% fee waiver only applies with the Bearer form)
+      Authorization: `Bearer ${AUTH_TOKEN}`,
       ...init?.headers,
     },
   });
@@ -150,7 +159,7 @@ export async function requestQuote(params: {
     deadline,
     quoteWaitingTimeMs: 3000,
     appFees: [{ recipient: AFFILIATE_ADDRESS, fee: AFFILIATE_FEE_BPS }],
-    referral: 'zodl',
+    referral: 'zafu',
   };
 
   return nearFetch<SwapQuoteResponse>('/v0/quote', {

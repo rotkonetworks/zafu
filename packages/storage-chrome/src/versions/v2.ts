@@ -299,6 +299,24 @@ type LOCAL = {
 
   /** serialized pro license JSON */
   proLicense?: string;
+  /**
+   * Per-device (zid_pubkey) verified firmware records for the Zigner OTA flow
+   * (spec docs/design/zafu-ota-wire-freeze.md §8). Keyed by hex zid_pubkey.
+   * Mutated ONLY from a device-signed, verified ur:zafu-result: `source` is
+   * always 'ur:zafu-result'. Unverified claims never touch this map.
+   */
+  zignerFirmwareRecords?: Record<
+    string,
+    {
+      device: string;
+      fw: string;
+      slot: 'A' | 'B';
+      feature_set: string[];
+      applied_at: number;
+      source: 'ur:zafu-result';
+      session: string;
+    }
+  >;
 
   /** polkadot vault settings */
   polkadotVaultSettings?: {

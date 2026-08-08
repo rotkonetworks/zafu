@@ -5,15 +5,15 @@
   "license": "MIT",
   "description": "minimal zcash orchard key derivation for wasm",
   "type": "module",
-  "main": "zcash_wasm.js",
+  "main": "zafu_wasm.js",
   "files": [
-    "zcash_wasm_bg.wasm",
-    "zcash_wasm.js",
-    "zcash_wasm.d.ts"
+    "zafu_wasm_bg.wasm",
+    "zafu_wasm.js",
+    "zafu_wasm.d.ts"
   ],
   "exports": {
-    ".": "./zcash_wasm.js",
-    "./wasm": "./zcash_wasm_bg.wasm"
+    ".": "./zafu_wasm.js",
+    "./wasm": "./zafu_wasm_bg.wasm"
   },
   "sideEffects": [
     "./snippets/*"

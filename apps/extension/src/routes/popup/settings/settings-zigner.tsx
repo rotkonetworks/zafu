@@ -11,6 +11,9 @@ import { useState, useRef, useEffect } from 'react';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { PagePath } from '../../page/paths';
 import { openPageInTab } from '../../../utils/popup-detection';
+import { ZCASH_ORCHARD_ACTIVATION } from '../../../config/networks';
+import { describeZcashHeight } from '../../../utils/zcash-blocks';
+import { cn } from '@repo/ui/lib/utils';
 
 /** network color for zigner vault badges */
 const networkColors: Record<string, string> = {
@@ -51,6 +54,13 @@ export const SettingsZigner = () => {
   const [deletingVaultId, setDeletingVaultId] = useState<string | null>(null);
   const [confirmDeleteVault, setConfirmDeleteVault] = useState<string | null>(null);
   const [vaultLegacyMode, setVaultLegacyMode] = useState(false);
+  // optional zcash start block (birthday) entered at import time. blank = sync
+  // from near the chain tip. Stored per-vault as zcashBirthday_<vaultId>.
+  const [startBlock, setStartBlock] = useState<string>('');
+
+  const startBlockNum = parseInt(startBlock, 10);
+  const startBlockValid = !isNaN(startBlockNum) && startBlockNum >= ZCASH_ORCHARD_ACTIVATION;
+  const startBlockHint = startBlock.trim() ? describeZcashHeight(startBlockNum) : null;
 
   // All zigner vaults from the keyring (single source of truth)
   const zignerVaults = keyInfos.filter(k => k.type === 'zigner-zafu');
@@ -128,7 +138,14 @@ export const SettingsZigner = () => {
           deviceId: zcashWalletImport.zidPublicKey ?? `zcash-${Date.now()}`,
           zidPublicKey: zcashWalletImport.zidPublicKey,
         };
-        await addZignerUnencrypted(zignerData, walletLabel || zcashWalletImport.label);
+        const vaultId = await addZignerUnencrypted(zignerData, walletLabel || zcashWalletImport.label);
+        // persist an explicitly-entered start block as the wallet birthday, so an
+        // older cold wallet doesn't silently start syncing near the chain tip
+        // (which would hide every pre-existing shielded note).
+        if (startBlock.trim() !== '' && startBlockValid) {
+          const clamped = Math.max(ZCASH_ORCHARD_ACTIVATION, startBlockNum);
+          await chrome.storage.local.set({ [`zcashBirthday_${vaultId}`]: clamped });
+        }
       } else if (detectedNetwork === 'cosmos' && parsedCosmosExport) {
         const zignerData: ZignerZafuImport = {
           cosmosAddresses: parsedCosmosExport.addresses,
@@ -149,6 +166,7 @@ export const SettingsZigner = () => {
 
       setSuccess(true);
       clearZignerState();
+      setStartBlock('');
       manualInputRef.current = false;
 
       setTimeout(() => setSuccess(false), 3000);
@@ -440,6 +458,32 @@ export const SettingsZigner = () => {
                   value={walletLabel}
                   onChange={e => setWalletLabel(e.target.value)}
                 />
+
+                {detectedNetwork === 'zcash' && (
+                  <div className='flex flex-col gap-1'>
+                    <label className='text-label text-fg-muted'>
+                      start block (optional) — blank syncs from near the chain tip
+                    </label>
+                    <Input
+                      type='text'
+                      inputMode='numeric'
+                      placeholder='e.g. 2910104'
+                      value={startBlock}
+                      onChange={e => setStartBlock(e.target.value)}
+                      className='font-mono text-xs'
+                    />
+                    {startBlockHint && (
+                      <p
+                        className={cn(
+                          'text-label',
+                          startBlockHint.ok ? 'text-fg-dim' : 'text-hanko',
+                        )}
+                      >
+                        {startBlockHint.text}
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {errorMessage && <p className='text-xs text-red-400'>{errorMessage}</p>}
 
