@@ -53,6 +53,7 @@ import { isPopup } from '../../../utils/popup-detection';
 import { isZcashSignatureQR, parseZcashSignatureResponse, bytesToHex } from '@repo/wallet/networks'; // self-contained 4-step zigner-mediated multisig sign
 
 import { unwrapCborSinglePczt, parsePreludeSinglePcztResponse } from './zcash-send-cbor-helpers';
+import { parseCompactResponse, mergeContributions } from '../../../state/keyring/compact-signing';
 
 interface ZcashSendProps {
   onClose: () => void;
@@ -851,18 +852,66 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           throw new Error('no wallet selected');
         }
 
-        // Unwrap CBOR `{1: bytes}`. Two response shapes ride the animated QR:
+        // Unwrap CBOR `{1: bytes}`. Multiple response shapes ride the animated QR:
         //   - legacy `ur:zcash-pczt`: the CBOR wrap directly encloses the raw
         //     signed PCZT (encode_signed_pczt_ur).
         //   - ironwood `ur:zigner-module`: the device CBOR-wraps its prelude
         //     response ENVELOPE `[0x53][0x04][0x03] || digest:32 || len:u32(LE)
-        //     || signed_pczt` (rust/signer module_response_to_ur). The raw PCZT
-        //     is the innermost payload AFTER that envelope, so hand the unwrapped
-        //     bytes to parsePreludeSinglePcztResponse when they open with the
-        //     prelude (a real PCZT starts with ASCII "PCZT", so [0x53,0x04,0x03]
-        //     is unambiguous) - otherwise we'd feed the envelope to the wasm
-        //     PCZT parser and hit "pczt parse failed: NotPczt".
+        //     || signed_pczt` (rust/signer module_response_to_ur).
+        //   - compact `ur:zigner-module`: the device CBOR-wraps a prelude
+        //     compact response `[0x53][0x04][0x07|0x08]` with signatures only.
         const unwrapped = unwrapCborSinglePczt(cborBytes);
+
+        // Detect and handle compact response (tx_type 0x07/0x08)
+        if (unwrapped.length >= 3 && unwrapped[0] === 0x53 && unwrapped[1] === 0x04) {
+          const txType = unwrapped[2];
+          if (txType === 0x07 || txType === 0x08) {
+            // Compact response: parse signatures and merge into original PCZTs
+            if (!pcztUnsignedRef.current) {
+              throw new Error('no unsigned PCZT in context for compact merge');
+            }
+
+            const originalPcztHex = pcztUnsignedRef.current.pcztHex;
+            const parsed = parseCompactResponse(unwrapped);
+
+            // Call wasm apply_signature_contributions to merge sigs
+            // Note: this is provided in parallel by another agent and may not exist yet
+            // For now, we assume it's available on the worker/wasm module context
+            const wasmModule = (globalThis as any).wasmModule;
+            if (!wasmModule || typeof wasmModule.apply_signature_contributions !== 'function') {
+              throw new Error(
+                'wasm apply_signature_contributions not available - ' +
+                  'compact signing support not yet shipped',
+              );
+            }
+
+            const updatedHexes = mergeContributions(
+              [originalPcztHex],
+              parsed,
+              wasmModule.apply_signature_contributions,
+            );
+            const pcztHex = updatedHexes[0]!;
+
+            const result = await completeSendTxPcztInWorker(
+              'zcash',
+              selectedKeyInfo.id,
+              zidecarUrl,
+              pcztHex,
+              pcztUnsignedRef.current.coldSendId,
+            );
+            pcztUnsignedRef.current = null;
+            void promoteToBroadcasted(result.txid);
+            complete(result.txid);
+            setStep('complete');
+            void recordUsage(recipient, 'zcash');
+            if (shouldSuggestSave(recipient)) {
+              setShowSavePrompt(true);
+            }
+            return;
+          }
+        }
+
+        // Legacy full-PCZT response path (0x03 or raw bytes)
         const preluded =
           unwrapped.length >= 3 &&
           unwrapped[0] === 0x53 &&
