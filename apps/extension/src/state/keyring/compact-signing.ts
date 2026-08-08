@@ -53,19 +53,46 @@ export interface SignatureContribution {
  */
 export interface CompactResponseMessage {
   pcztIndex: number;
+  /** Echoed request id for this message (batch only; empty for single requests
+   * and for legacy callers that never sent ids). */
+  id: Uint8Array;
   signatures: SignatureContribution[];
 }
 
 /**
+ * A parsed compact response: the wire version prefix plus the per-PCZT
+ * signature messages. Mirrors envelope.rs's `CompactResponse`.
+ *
+ * The version prefix (envelope.rs:80-83, `COMPACT_RESPONSE_VERSION`) exists
+ * so the wallet can refuse to merge a response shape it doesn't understand -
+ * callers MUST check `version` against the version(s) they know how to merge
+ * before calling `mergeContributions`.
+ */
+export interface ParsedCompactResponse {
+  version: string;
+  messages: CompactResponseMessage[];
+}
+
+/** Wire version this module knows how to merge. Bump only in lockstep with a
+ * change to `mergeContributions` / the wasm merge side. */
+export const SUPPORTED_COMPACT_RESPONSE_VERSION = '1';
+
+/**
  * Parse a compact response: tx_type 0x07 (single) or 0x08 (batch).
- * Returns array of {pcztIndex, signatures} for merging back to original PCZTs.
+ * Returns the wire version plus an array of {pcztIndex, id, signatures} for
+ * merging back to original PCZTs.
  *
  * Throws on:
  *   - Wrong tx_type (not 0x07 or 0x08)
  *   - Truncated/malformed payload
  *   - Unknown pool values
+ *
+ * Does NOT enforce the version or reject empty signature sets - those are
+ * business-level checks the caller makes (version: before calling this
+ * function's result into `mergeContributions`; empty signatures:
+ * `mergeContributions` itself fails closed on those, see there).
  */
-export function parseCompactResponse(bytes: Uint8Array): CompactResponseMessage[] {
+export function parseCompactResponse(bytes: Uint8Array): ParsedCompactResponse {
   if (bytes.length < 3) {
     throw new Error('compact response too short');
   }
@@ -98,7 +125,7 @@ export function parseCompactResponse(bytes: Uint8Array): CompactResponseMessage[
   if (pos + verLen > bytes.length) {
     throw new Error('compact response truncated at version data');
   }
-  // version = new TextDecoder().decode(bytes.slice(pos, pos + verLen));
+  const version = new TextDecoder().decode(bytes.slice(pos, pos + verLen));
   pos += verLen;
 
   const messages: CompactResponseMessage[] = [];
@@ -108,6 +135,7 @@ export function parseCompactResponse(bytes: Uint8Array): CompactResponseMessage[
     const sigs = readSignatureContributions(bytes, pos);
     messages.push({
       pcztIndex: 0,
+      id: new Uint8Array(0),
       signatures: sigs.signatures,
     });
   } else {
@@ -132,20 +160,24 @@ export function parseCompactResponse(bytes: Uint8Array): CompactResponseMessage[
       if (pos + idLen > bytes.length) {
         throw new Error(`compact batch response truncated at message ${i} id data`);
       }
-      // id = bytes.slice(pos, pos + idLen);
+      const id = bytes.slice(pos, pos + idLen);
       pos += idLen;
 
-      // For zafu, the id is the PCZT index in the request (but we use positional index i)
+      // The id is echoed from the request message at this position; zafu's
+      // caller correlates positionally (pcztIndex: i) and, when it sent
+      // non-empty ids, additionally verifies the echo matches (see
+      // `mergeContributions`'s `expectedIds` option).
       const sigs = readSignatureContributions(bytes, pos);
       messages.push({
         pcztIndex: i,
+        id,
         signatures: sigs.signatures,
       });
       pos = sigs.nextPos;
     }
   }
 
-  return messages;
+  return { version, messages };
 }
 
 /**
@@ -175,9 +207,22 @@ function readSignatureContributions(
       throw new Error(`unknown pool value ${pool}`);
     }
 
-    // little-endian u32
+    // little-endian u32. Accumulate with `+ b * 256^n` rather than `<< 8` /
+    // `<< 24`: JS bitwise ops are signed 32-bit, so a top byte >= 0x80 would
+    // sign-extend the result to a NEGATIVE action_index (e.g. action_index
+    // 0x80000000 on the wire would decode to -2147483648), silently
+    // corrupting which action the signature gets merged into. Multiplication
+    // keeps the value a positive JS number. Mirrors the length-decoding idiom
+    // in zcash-send-cbor-helpers.ts's `readLen`.
     const actionIndex =
-      bytes[pos + 1]! + (bytes[pos + 2]! << 8) + (bytes[pos + 3]! << 16) + (bytes[pos + 4]! << 24);
+      bytes[pos + 1]! +
+      bytes[pos + 2]! * 256 +
+      bytes[pos + 3]! * 65536 +
+      bytes[pos + 4]! * 16777216;
+
+    if (!Number.isSafeInteger(actionIndex) || actionIndex < 0) {
+      throw new Error(`decoded action_index ${actionIndex} is not a safe non-negative integer`);
+    }
 
     const signature = bytes.slice(pos + 5, pos + 5 + 64);
 
@@ -266,30 +311,104 @@ export function buildCompactRequest(pcztHexes: string[]): Uint8Array {
   }
 }
 
+/** Options that let a caller bind a compact response to what it actually sent. */
+export interface MergeContributionsOptions {
+  /**
+   * The request id sent for each PCZT, positional (index i = the id sent for
+   * `originalPcztHexes[i]`). Pass `undefined` (or an empty array) for a
+   * caller that doesn't use ids - e.g. zafu today always sends `id_len=0`.
+   * When an entry here is non-empty, the echoed `id` on the matching
+   * response message MUST match byte-for-byte or the merge throws.
+   */
+  expectedIds?: (Uint8Array | undefined)[];
+  /**
+   * The number of shielded actions in each original PCZT, positional, if
+   * known to the caller. When present, a signature whose `actionIndex` falls
+   * outside `[0, actionCounts[i])` is rejected as out of range instead of
+   * being merged.
+   */
+  actionCounts?: number[];
+}
+
+function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /**
  * Merge signature contributions back into the original PCZT hex strings.
  * Calls the wasm apply_signature_contributions for each PCZT.
  *
- * @param originalPcztHexes - original PCZT hex strings
- * @param parsed - parsed compact response messages
+ * Fails CLOSED - never silently returns an original, unmerged PCZT as if
+ * signing had succeeded. A device that has nothing to contribute for a PCZT
+ * is expected to error rather than emit an empty contribution set (see
+ * envelope.rs); on the wallet side a missing message or an empty signature
+ * set for a requested PCZT is therefore always an error, not a pass-through.
+ *
+ * @param originalPcztHexes - original PCZT hex strings, in request order
+ * @param messages - parsed compact response messages (`ParsedCompactResponse.messages`)
  * @param wasmApplySignatures - wasm function apply_signature_contributions(pcztHex, contributionsJson): string
+ * @param options - optional id / action-count binding, see `MergeContributionsOptions`
  * @returns updated PCZT hex strings with signatures applied
  */
 export function mergeContributions(
   originalPcztHexes: string[],
-  parsed: CompactResponseMessage[],
+  messages: CompactResponseMessage[],
   wasmApplySignatures: (pcztHex: string, contributionsJson: string) => string,
+  options: MergeContributionsOptions = {},
 ): string[] {
+  if (messages.length !== originalPcztHexes.length) {
+    throw new Error(
+      `compact response carries ${messages.length} message(s) but ${originalPcztHexes.length} PCZT(s) were sent`,
+    );
+  }
+
   const results: string[] = [];
 
   for (let i = 0; i < originalPcztHexes.length; i++) {
     const originalHex = originalPcztHexes[i]!;
-    const message = parsed.find(m => m.pcztIndex === i);
+    const message = messages.find(m => m.pcztIndex === i);
 
-    if (!message || message.signatures.length === 0) {
-      // No signatures for this PCZT - return as-is (fail closed)
-      results.push(originalHex);
-      continue;
+    if (!message) {
+      throw new Error(`compact response is missing signatures for PCZT ${i}`);
+    }
+
+    if (message.signatures.length === 0) {
+      // A zero-signature message for a PCZT we asked to sign is never valid:
+      // the device now errors instead of emitting one, so seeing one here
+      // means the response was tampered with or the device is misbehaving.
+      // Do NOT pass the original PCZT through as if it had been signed.
+      throw new Error(`compact response contains zero signatures for PCZT ${i}`);
+    }
+
+    const expectedId = options.expectedIds?.[i];
+    if (expectedId && expectedId.length > 0 && !bytesEqual(message.id, expectedId)) {
+      throw new Error(`compact response id mismatch for PCZT ${i}`);
+    }
+
+    const actionCount = options.actionCounts?.[i];
+    const seen = new Set<string>();
+    for (const sig of message.signatures) {
+      const key = `${sig.pool}:${sig.actionIndex}`;
+      if (seen.has(key)) {
+        throw new Error(
+          `compact response has duplicate signature for pool ${sig.pool} action ${sig.actionIndex} in PCZT ${i}`,
+        );
+      }
+      seen.add(key);
+
+      if (actionCount !== undefined && (sig.actionIndex < 0 || sig.actionIndex >= actionCount)) {
+        throw new Error(
+          `compact response action_index ${sig.actionIndex} out of range [0, ${actionCount}) for PCZT ${i}`,
+        );
+      }
     }
 
     // Convert signatures to JSON format expected by wasm

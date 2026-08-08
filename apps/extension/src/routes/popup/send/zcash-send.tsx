@@ -53,7 +53,11 @@ import { isPopup } from '../../../utils/popup-detection';
 import { isZcashSignatureQR, parseZcashSignatureResponse, bytesToHex } from '@repo/wallet/networks'; // self-contained 4-step zigner-mediated multisig sign
 
 import { unwrapCborSinglePczt, parsePreludeSinglePcztResponse } from './zcash-send-cbor-helpers';
-import { parseCompactResponse, mergeContributions } from '../../../state/keyring/compact-signing';
+import {
+  parseCompactResponse,
+  mergeContributions,
+  SUPPORTED_COMPACT_RESPONSE_VERSION,
+} from '../../../state/keyring/compact-signing';
 
 interface ZcashSendProps {
   onClose: () => void;
@@ -209,6 +213,15 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   // display frames so the return leg matches for both pools (default orchard).
   const [pcztSignedUrType, setPcztSignedUrType] = useState<string>('zcash-pczt');
   const pcztUnsignedRef = useRef<SendTxPcztUnsignedResult | null>(null);
+  // Binds the response format handlePcztSignatureScanned is allowed to accept
+  // to what was actually sent. Today the outgoing PCZT-sign request always
+  // rides the legacy `ur:zcash-pczt` CBOR wrap (see `cborWrapPczt` in
+  // zcash-worker.ts) — zafu does not yet build a compact (tx_type 0x05/0x06)
+  // request via `buildCompactRequest` anywhere in this flow. This stays
+  // `false` until that wiring lands; a device offering a compact response
+  // (0x07/0x08) while this is `false` is therefore always rejected rather
+  // than trusted opportunistically.
+  const pcztRequestWasCompactRef = useRef(false);
   const [showSavePrompt, setShowSavePrompt] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
   const [fee, setFee] = useState('0.0001');
@@ -866,13 +879,29 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         if (unwrapped.length >= 3 && unwrapped[0] === 0x53 && unwrapped[1] === 0x04) {
           const txType = unwrapped[2];
           if (txType === 0x07 || txType === 0x08) {
+            // Bind accepted-format to requested-format: a compact response is
+            // only valid as the answer to a compact request. Since this leg
+            // never requested compact, this always fails closed today (see
+            // the comment on pcztRequestWasCompactRef) rather than trusting
+            // an unrequested response shape.
+            if (!pcztRequestWasCompactRef.current) {
+              throw new Error(
+                'received a compact (signatures-only) response but this request was not sent as compact',
+              );
+            }
+
             // Compact response: parse signatures and merge into original PCZTs
             if (!pcztUnsignedRef.current) {
               throw new Error('no unsigned PCZT in context for compact merge');
             }
 
             const originalPcztHex = pcztUnsignedRef.current.pcztHex;
-            const parsed = parseCompactResponse(unwrapped);
+            const { version, messages } = parseCompactResponse(unwrapped);
+            if (version !== SUPPORTED_COMPACT_RESPONSE_VERSION) {
+              throw new Error(
+                `unsupported compact response version "${version}" (expected "${SUPPORTED_COMPACT_RESPONSE_VERSION}")`,
+              );
+            }
 
             // Call wasm apply_signature_contributions to merge sigs
             // Note: this is provided in parallel by another agent and may not exist yet
@@ -885,9 +914,13 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               );
             }
 
+            // Exactly one PCZT went out on this leg, so exactly one message
+            // must come back; mergeContributions enforces this (and that it
+            // isn't empty) and throws rather than passing an unsigned PCZT
+            // through as though it had been signed.
             const updatedHexes = mergeContributions(
               [originalPcztHex],
-              parsed,
+              messages,
               wasmModule.apply_signature_contributions,
             );
             const pcztHex = updatedHexes[0]!;
@@ -911,7 +944,14 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           }
         }
 
-        // Legacy full-PCZT response path (0x03 or raw bytes)
+        // Legacy full-PCZT response path (0x03 or raw bytes). Symmetric to
+        // the compact check above: a legacy response is only valid as the
+        // answer to a legacy request.
+        if (pcztRequestWasCompactRef.current) {
+          throw new Error(
+            'received a legacy full-PCZT response but this request was sent as compact',
+          );
+        }
         const preluded =
           unwrapped.length >= 3 &&
           unwrapped[0] === 0x53 &&

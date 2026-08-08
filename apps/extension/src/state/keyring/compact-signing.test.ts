@@ -101,17 +101,46 @@ describe('compact-signing', () => {
 
       const result = parseCompactResponse(new Uint8Array(buf));
 
-      expect(result).toHaveLength(1);
-      expect(result[0]!.pcztIndex).toBe(0);
-      expect(result[0]!.signatures).toHaveLength(2);
+      expect(result.version).toBe('1');
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0]!.pcztIndex).toBe(0);
+      expect(result.messages[0]!.signatures).toHaveLength(2);
 
-      expect(result[0]!.signatures[0]!.pool).toBe(POOL_ORCHARD);
-      expect(result[0]!.signatures[0]!.actionIndex).toBe(0);
-      expect(result[0]!.signatures[0]!.signature).toEqual(sig1);
+      expect(result.messages[0]!.signatures[0]!.pool).toBe(POOL_ORCHARD);
+      expect(result.messages[0]!.signatures[0]!.actionIndex).toBe(0);
+      expect(result.messages[0]!.signatures[0]!.signature).toEqual(sig1);
 
-      expect(result[0]!.signatures[1]!.pool).toBe(POOL_IRONWOOD);
-      expect(result[0]!.signatures[1]!.actionIndex).toBe(1);
-      expect(result[0]!.signatures[1]!.signature).toEqual(sig2);
+      expect(result.messages[0]!.signatures[1]!.pool).toBe(POOL_IRONWOOD);
+      expect(result.messages[0]!.signatures[1]!.actionIndex).toBe(1);
+      expect(result.messages[0]!.signatures[1]!.signature).toEqual(sig2);
+    });
+
+    it('decodes a high-byte (>= 0x80) action_index as a positive number, not negative', () => {
+      // action_index = 0x80000001 (top byte 0x80 would sign-extend under a
+      // naive `<< 24` decoder, producing a negative JS number).
+      const sig = new Uint8Array(64).fill(0xcc);
+      const buf: number[] = [
+        0x53,
+        0x04,
+        0x07, // prelude
+        0x01,
+        0x31, // version "1"
+        0x01,
+        0x00, // sig_count = 1
+        POOL_ORCHARD,
+        0x01,
+        0x00,
+        0x00,
+        0x80, // action_index = 0x80000001 LE
+      ];
+      buf.push(...sig);
+
+      const result = parseCompactResponse(new Uint8Array(buf));
+      const actionIndex = result.messages[0]!.signatures[0]!.actionIndex;
+
+      expect(actionIndex).toBe(0x80000001);
+      expect(actionIndex).toBeGreaterThan(0);
+      expect(Number.isSafeInteger(actionIndex)).toBe(true);
     });
 
     it('parses batch compact response (0x08)', () => {
@@ -153,17 +182,81 @@ describe('compact-signing', () => {
 
       const result = parseCompactResponse(new Uint8Array(buf));
 
-      expect(result).toHaveLength(2);
+      expect(result.version).toBe('1');
+      expect(result.messages).toHaveLength(2);
 
-      expect(result[0]!.pcztIndex).toBe(0);
-      expect(result[0]!.signatures).toHaveLength(1);
-      expect(result[0]!.signatures[0]!.pool).toBe(POOL_ORCHARD);
-      expect(result[0]!.signatures[0]!.actionIndex).toBe(0);
+      expect(result.messages[0]!.pcztIndex).toBe(0);
+      expect(result.messages[0]!.signatures).toHaveLength(1);
+      expect(result.messages[0]!.signatures[0]!.pool).toBe(POOL_ORCHARD);
+      expect(result.messages[0]!.signatures[0]!.actionIndex).toBe(0);
 
-      expect(result[1]!.pcztIndex).toBe(1);
-      expect(result[1]!.signatures).toHaveLength(1);
-      expect(result[1]!.signatures[0]!.pool).toBe(POOL_IRONWOOD);
-      expect(result[1]!.signatures[0]!.actionIndex).toBe(1);
+      expect(result.messages[1]!.pcztIndex).toBe(1);
+      expect(result.messages[1]!.signatures).toHaveLength(1);
+      expect(result.messages[1]!.signatures[0]!.pool).toBe(POOL_IRONWOOD);
+      expect(result.messages[1]!.signatures[0]!.actionIndex).toBe(1);
+    });
+
+    it('captures the echoed id per batch message', () => {
+      const sig = new Uint8Array(64).fill(0xaa);
+      const buf: number[] = [
+        0x53,
+        0x04,
+        0x08, // prelude, batch response
+        0x01,
+        0x31, // version
+        0x01, // count = 1
+        0x03, // id_len = 3
+        0x61,
+        0x62,
+        0x63, // id = "abc"
+        0x01,
+        0x00, // sig_count = 1
+        POOL_ORCHARD,
+        0x00,
+        0x00,
+        0x00,
+        0x00, // action_index = 0
+      ];
+      buf.push(...sig);
+
+      const result = parseCompactResponse(new Uint8Array(buf));
+      expect(result.messages[0]!.id).toEqual(new Uint8Array([0x61, 0x62, 0x63]));
+    });
+
+    it('single response messages carry an empty id', () => {
+      const sig = new Uint8Array(64).fill(0xaa);
+      const buf: number[] = [
+        0x53,
+        0x04,
+        0x07,
+        0x01,
+        0x31,
+        0x01,
+        0x00,
+        POOL_ORCHARD,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+      ];
+      buf.push(...sig);
+
+      const result = parseCompactResponse(new Uint8Array(buf));
+      expect(result.messages[0]!.id).toEqual(new Uint8Array(0));
+    });
+
+    it('captures the version prefix for a non-"1" version string', () => {
+      const buf: number[] = [
+        0x53,
+        0x04,
+        0x07,
+        0x01,
+        0x32, // version "2"
+        0x00,
+        0x00, // sig_count = 0
+      ];
+      const result = parseCompactResponse(new Uint8Array(buf));
+      expect(result.version).toBe('2');
     });
 
     it('throws on wrong prelude', () => {
@@ -308,6 +401,7 @@ describe('compact-signing', () => {
       const parsed = [
         {
           pcztIndex: 0,
+          id: new Uint8Array(0),
           signatures: [
             {
               pool: POOL_ORCHARD,
@@ -331,14 +425,17 @@ describe('compact-signing', () => {
       const parsed = [
         {
           pcztIndex: 0,
+          id: new Uint8Array(0),
           signatures: [{ pool: POOL_ORCHARD, actionIndex: 0, signature: new Uint8Array(64) }],
         },
         {
           pcztIndex: 1,
+          id: new Uint8Array(0),
           signatures: [{ pool: POOL_IRONWOOD, actionIndex: 1, signature: new Uint8Array(64) }],
         },
         {
           pcztIndex: 2,
+          id: new Uint8Array(0),
           signatures: [{ pool: POOL_ORCHARD, actionIndex: 0, signature: new Uint8Array(64) }],
         },
       ];
@@ -350,21 +447,65 @@ describe('compact-signing', () => {
       expect(result).toEqual(['updated_aa', 'updated_bb', 'updated_cc']);
     });
 
-    it('returns original PCZT when no signatures', () => {
+    it('throws when a requested PCZT has no signature message at all (fails closed)', () => {
       const original = ['aa', 'bb'];
       const parsed = [
         {
           pcztIndex: 0,
+          id: new Uint8Array(0),
           signatures: [{ pool: POOL_ORCHARD, actionIndex: 0, signature: new Uint8Array(64) }],
         },
-        // No signatures for PCZT 1
+        // No message for PCZT 1
       ];
 
       const mockWasm = vi.fn(hex => `updated_${hex}`);
-      const result = mergeContributions(original, parsed, mockWasm);
+      // Message-count mismatch (1 message vs 2 PCZTs sent) is caught before
+      // per-PCZT lookup even runs.
+      expect(() => mergeContributions(original, parsed, mockWasm)).toThrow(
+        'compact response carries 1 message(s) but 2 PCZT(s) were sent',
+      );
+    });
 
-      expect(result[0]).toBe('updated_aa'); // got signatures
-      expect(result[1]).toBe('bb'); // no signatures, returned as-is
+    it('throws on an empty signature set for a requested PCZT (fails closed, was: silent pass-through)', () => {
+      const original = ['aa', 'bb'];
+      const parsed = [
+        {
+          pcztIndex: 0,
+          id: new Uint8Array(0),
+          signatures: [{ pool: POOL_ORCHARD, actionIndex: 0, signature: new Uint8Array(64) }],
+        },
+        {
+          pcztIndex: 1,
+          id: new Uint8Array(0),
+          signatures: [], // device claims nothing to contribute - must not merge as "unsigned but fine"
+        },
+      ];
+
+      const mockWasm = vi.fn(hex => `updated_${hex}`);
+      expect(() => mergeContributions(original, parsed, mockWasm)).toThrow(
+        'compact response contains zero signatures for PCZT 1',
+      );
+    });
+
+    it('throws when the message count does not match the number of PCZTs sent', () => {
+      const original = ['aa'];
+      const parsed = [
+        {
+          pcztIndex: 0,
+          id: new Uint8Array(0),
+          signatures: [{ pool: POOL_ORCHARD, actionIndex: 0, signature: new Uint8Array(64) }],
+        },
+        {
+          pcztIndex: 1,
+          id: new Uint8Array(0),
+          signatures: [{ pool: POOL_ORCHARD, actionIndex: 0, signature: new Uint8Array(64) }],
+        },
+      ];
+
+      const mockWasm = vi.fn(hex => `updated_${hex}`);
+      expect(() => mergeContributions(original, parsed, mockWasm)).toThrow(
+        'compact response carries 2 message(s) but 1 PCZT(s) were sent',
+      );
     });
 
     it('throws on wasm failure', () => {
@@ -372,6 +513,7 @@ describe('compact-signing', () => {
       const parsed = [
         {
           pcztIndex: 0,
+          id: new Uint8Array(0),
           signatures: [{ pool: POOL_ORCHARD, actionIndex: 0, signature: new Uint8Array(64) }],
         },
       ];
@@ -394,6 +536,7 @@ describe('compact-signing', () => {
       const parsed = [
         {
           pcztIndex: 0,
+          id: new Uint8Array(0),
           signatures: [
             {
               pool: POOL_IRONWOOD,
@@ -417,6 +560,108 @@ describe('compact-signing', () => {
       expect(parsed_json.contributions[0]!.pool).toBe(POOL_IRONWOOD);
       expect(parsed_json.contributions[0]!.action_index).toBe(42);
       expect(parsed_json.contributions[0]!.signature).toEqual(Array.from(sig));
+    });
+
+    it('throws on an id mismatch when the caller supplied expected ids', () => {
+      const original = ['aa'];
+      const parsed = [
+        {
+          pcztIndex: 0,
+          id: new Uint8Array([0x61, 0x62]), // "ab"
+          signatures: [{ pool: POOL_ORCHARD, actionIndex: 0, signature: new Uint8Array(64) }],
+        },
+      ];
+      const mockWasm = vi.fn(hex => `updated_${hex}`);
+
+      expect(() =>
+        mergeContributions(original, parsed, mockWasm, {
+          expectedIds: [new Uint8Array([0x78, 0x79])], // "xy" - does not match echoed "ab"
+        }),
+      ).toThrow('compact response id mismatch for PCZT 0');
+    });
+
+    it('accepts a matching id when the caller supplied expected ids', () => {
+      const original = ['aa'];
+      const id = new Uint8Array([0x61, 0x62]);
+      const parsed = [
+        {
+          pcztIndex: 0,
+          id,
+          signatures: [{ pool: POOL_ORCHARD, actionIndex: 0, signature: new Uint8Array(64) }],
+        },
+      ];
+      const mockWasm = vi.fn(hex => `updated_${hex}`);
+
+      const result = mergeContributions(original, parsed, mockWasm, { expectedIds: [id] });
+      expect(result).toEqual(['updated_aa']);
+    });
+
+    it('throws on duplicate (pool, action_index) pairs within a message', () => {
+      const original = ['aa'];
+      const parsed = [
+        {
+          pcztIndex: 0,
+          id: new Uint8Array(0),
+          signatures: [
+            { pool: POOL_ORCHARD, actionIndex: 2, signature: new Uint8Array(64) },
+            { pool: POOL_ORCHARD, actionIndex: 2, signature: new Uint8Array(64) },
+          ],
+        },
+      ];
+      const mockWasm = vi.fn(hex => `updated_${hex}`);
+
+      expect(() => mergeContributions(original, parsed, mockWasm)).toThrow(
+        'compact response has duplicate signature for pool 0 action 2 in PCZT 0',
+      );
+    });
+
+    it('allows the same action_index across different pools (not a duplicate)', () => {
+      const original = ['aa'];
+      const parsed = [
+        {
+          pcztIndex: 0,
+          id: new Uint8Array(0),
+          signatures: [
+            { pool: POOL_ORCHARD, actionIndex: 2, signature: new Uint8Array(64) },
+            { pool: POOL_IRONWOOD, actionIndex: 2, signature: new Uint8Array(64) },
+          ],
+        },
+      ];
+      const mockWasm = vi.fn(hex => `updated_${hex}`);
+
+      expect(() => mergeContributions(original, parsed, mockWasm)).not.toThrow();
+    });
+
+    it('throws on an action_index out of range when actionCounts is known', () => {
+      const original = ['aa'];
+      const parsed = [
+        {
+          pcztIndex: 0,
+          id: new Uint8Array(0),
+          signatures: [{ pool: POOL_ORCHARD, actionIndex: 5, signature: new Uint8Array(64) }],
+        },
+      ];
+      const mockWasm = vi.fn(hex => `updated_${hex}`);
+
+      expect(() => mergeContributions(original, parsed, mockWasm, { actionCounts: [3] })).toThrow(
+        'compact response action_index 5 out of range [0, 3) for PCZT 0',
+      );
+    });
+
+    it('accepts an in-range action_index when actionCounts is known', () => {
+      const original = ['aa'];
+      const parsed = [
+        {
+          pcztIndex: 0,
+          id: new Uint8Array(0),
+          signatures: [{ pool: POOL_ORCHARD, actionIndex: 2, signature: new Uint8Array(64) }],
+        },
+      ];
+      const mockWasm = vi.fn(hex => `updated_${hex}`);
+
+      expect(() =>
+        mergeContributions(original, parsed, mockWasm, { actionCounts: [3] }),
+      ).not.toThrow();
     });
   });
 });
