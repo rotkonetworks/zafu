@@ -63,19 +63,19 @@
     "unocss": "^66.6.7",
     "vitest": "~1.6.1"
   },
-  "pnpm": {
-    "peerDependencyRules": {
-      "allowAny": [
-        "@rotko/penumbra-wasm"
-      ]
-    }
-  },
   "overrides": {
     "@bufbuild/protobuf": "^1.10.0",
     "@penumbra-zone/types": "npm:@rotko/penumbra-types@37.0.0",
     "@penumbra-zone/wasm": "npm:@rotko/penumbra-wasm@55.0.2",
     "@rotko/penumbra-wasm": "55.0.2",
     "@penumbra-zone/services": "npm:@rotko/penumbra-services@70.0.0"
+  },
+  "pnpm": {
+    "peerDependencyRules": {
+      "allowAny": [
+        "@rotko/penumbra-wasm"
+      ]
+    }
   },
   "workspaces": [
     "apps/*",

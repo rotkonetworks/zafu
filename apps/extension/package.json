@@ -13,10 +13,10 @@
     "dev": "NODE_ENV=testnet pnpm bundle:beta --watch --mode=development -d inline-source-map",
     "lint": "eslint src",
     "lint:strict": "tsc --noEmit && eslint src --max-warnings 0",
-    "test": "vitest run",
     "ota:pack": "vitest run src/ota/producer.test.ts",
     "ota:serve": "node ../../scripts/ota/ota-dev-server.mjs",
-    "ota:sim": "bash scripts/ota/simulate/run.sh"
+    "ota:sim": "bash scripts/ota/simulate/run.sh",
+    "test": "vitest run"
   },
   "dependencies": {
     "@bufbuild/protobuf": "^1.10.0",
