@@ -30,7 +30,13 @@ These vendored .wasm blobs are build artifacts. Do NOT hand-edit.
 Reproduce by checking out the zcli rev below and running the commands.
 
 - source repo: zcli (master)
-- source rev: 65c6ad6 — includes 59934d2 fix(consensus): real V6_VERSION_GROUP_ID
+- source rev: 70722f7 — "Merge feat/compact-signer-redaction: wallet-side compact
+  PCZT surface". Adds the compact-signing exports the wallet needs:
+  `redact_pczt_compact`, `apply_signature_contributions`,
+  `estimate_compact_savings`. Ironwood is UNGATED upstream now (pczt 0.9.x /
+  zcash_primitives 0.30 / orchard 0.15.5) — build with NO
+  `--cfg zcash_unstable` and no vendored fork.
+- previous rev: 65c6ad6 — includes 59934d2 fix(consensus): real V6_VERSION_GROUP_ID
   0xD884B698 per ZIP-229 (the 0xFFFFFFFF placeholder made every v6 tx —
   ironwood migration + sends — fail zebrad broadcast with
   'expected TX_V6_VERSION_GROUP_ID'). Clean committed tree, no dirty state.
@@ -40,7 +46,9 @@ Reproduce by checking out the zcli rev below and running the commands.
   output-recipient (wallet's own address) redaction on turnstile dummy outputs,
   and the build_signed_ironwood_send (hot) + build_ironwood_send_pczt (cold) producers.
 - built (UTC): see git commit (Date is disabled in this environment)
-- toolchain: wasm-bindgen 0.2.114, wasm-opt (binaryen) version 123
+- toolchain: wasm-bindgen 0.2.114, wasm-opt (binaryen) version 130
+  (was 123; -Oz output differs byte-wise between binaryen versions, so the
+  hashes below will not reproduce under 123)
 
 ## single-thread (packages/zcash-wasm/zafu_wasm_bg.wasm; duplicated as zcash_wasm_bg.wasm)
 
@@ -53,7 +61,7 @@ Reproduce by checking out the zcli rev below and running the commands.
       --enable-simd --enable-bulk-memory --enable-mutable-globals \
       --enable-nontrapping-float-to-int \
       pkg/zafu_wasm_bg.wasm -o pkg/zafu_wasm_bg.wasm
-    sha256(zafu_wasm_bg.wasm) = 1ebdc4b5215f1227ffa05d08b1d9922f3de548f190773cbba15bae98e1072522
+    sha256(zafu_wasm_bg.wasm) = f83178d4c419cf81ec810d512365d0385e9ef251e366c0313665352aeac8f3cf
 
 ## parallel / rayon (apps/extension/public/zafu-wasm-parallel/zafu_wasm_bg.wasm)
 
@@ -71,7 +79,7 @@ Reproduce by checking out the zcli rev below and running the commands.
     wasm-opt -Oz --enable-threads --enable-bulk-memory --enable-simd \
       --enable-mutable-globals --enable-nontrapping-float-to-int \
       pkg-parallel/zafu_wasm_bg.wasm -o pkg-parallel/zafu_wasm_bg.wasm
-    sha256(zafu_wasm_bg.wasm) = 1ebdc4b5215f1227ffa05d08b1d9922f3de548f190773cbba15bae98e1072522
+    sha256(zafu_wasm_bg.wasm) = a779d07c626ea8a79a83ec94056b4d54355e23906f85bbe185632b1cc630784d
 
     Verify the rebuilt blob has shared imported memory before shipping:
       `(import "./zafu_wasm_bg.js" "memory" (memory ... shared))` post-bindgen.

@@ -1,6 +1,4 @@
 /* @ts-self-types="./zafu_wasm.d.ts" */
-import { startWorkers } from './snippets/wasm-bindgen-rayon-38edf6e439f6d70d/src/workerHelpers.js';
-
 
 /**
  * Wallet keys derived from seed phrase
@@ -409,6 +407,47 @@ export function address_from_ufvk(ufvk_str, diversifier_index) {
         return getStringFromWasm0(ptr2, len2);
     } finally {
         wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * Apply spend-auth signatures to a compact PCZT received from a signer.
+ *
+ * Signatures are supplied as a JSON array of objects with:
+ * - `pool`: "orchard" or "ironwood"
+ * - `action_index`: the action index in the corresponding bundle
+ * - `signature_hex`: 64-byte spend-auth signature as hex
+ *
+ * # Arguments
+ * * `pczt_hex` - hex-encoded compact PCZT (typically from `redact_pczt_compact`)
+ * * `contributions_json` - JSON array of signature contributions
+ *
+ * # Returns
+ * Hex-encoded PCZT with signatures applied
+ * @param {string} pczt_hex
+ * @param {string} contributions_json
+ * @returns {string}
+ */
+export function apply_signature_contributions(pczt_hex, contributions_json) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(pczt_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(contributions_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.apply_signature_contributions(ptr0, len0, ptr1, len1);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
 }
 
@@ -1324,6 +1363,40 @@ export function encode_notes_bundle(notes_json, merkle_result_json, anchor_heigh
 }
 
 /**
+ * Estimate the size savings from compact PCZT redaction.
+ *
+ * Returns JSON with `full_bytes` (original size) and `compact_bytes` (after redaction).
+ *
+ * # Arguments
+ * * `pczt_hex` - hex-encoded PCZT (v2 format)
+ *
+ * # Returns
+ * JSON string: `{"full_bytes": number, "compact_bytes": number}`
+ * @param {string} pczt_hex
+ * @returns {string}
+ */
+export function estimate_compact_savings(pczt_hex) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(pczt_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.estimate_compact_savings(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
  * Extract a broadcast-ready v5 transaction from a signed PCZT returned by zigner.
  *
  * Replaces the legacy `parse_signature_response` + `complete_transaction` pair.
@@ -2079,15 +2152,6 @@ export function init() {
 }
 
 /**
- * @param {number} num_threads
- * @returns {Promise<any>}
- */
-export function initThreadPool(num_threads) {
-    const ret = wasm.initThreadPool(num_threads);
-    return ret;
-}
-
-/**
  * Get number of threads available (0 if single-threaded)
  * @returns {number}
  */
@@ -2110,6 +2174,43 @@ export function parse_signature_response(qr_hex) {
         throw takeFromExternrefTable0(ret[1]);
     }
     return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * Compact a PCZT for transmission to a signer by redacting per-action cv_net,
+ * v6 bundle anchors, output cmx, and replacing enc_ciphertext with memo plaintext
+ * (trimmed to last nonzero byte). Builds on the existing signer redaction.
+ *
+ * This function is used to minimize the size of PCZT requests sent to a hardware
+ * signer device. The signer can recompute the redacted fields from the remaining data.
+ *
+ * # Arguments
+ * * `pczt_hex` - hex-encoded PCZT (v2 format)
+ *
+ * # Returns
+ * Hex-encoded compact PCZT
+ * @param {string} pczt_hex
+ * @returns {string}
+ */
+export function redact_pczt_compact(pczt_hex) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(pczt_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.redact_pczt_compact(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
 }
 
 /**
@@ -2363,50 +2464,6 @@ export function version() {
     }
 }
 
-export class wbg_rayon_PoolBuilder {
-    static __wrap(ptr) {
-        const obj = Object.create(wbg_rayon_PoolBuilder.prototype);
-        obj.__wbg_ptr = ptr;
-        wbg_rayon_PoolBuilderFinalization.register(obj, obj.__wbg_ptr, obj);
-        return obj;
-    }
-    __destroy_into_raw() {
-        const ptr = this.__wbg_ptr;
-        this.__wbg_ptr = 0;
-        wbg_rayon_PoolBuilderFinalization.unregister(this);
-        return ptr;
-    }
-    free() {
-        const ptr = this.__destroy_into_raw();
-        wasm.__wbg_wbg_rayon_poolbuilder_free(ptr, 0);
-    }
-    build() {
-        wasm.wbg_rayon_poolbuilder_build(this.__wbg_ptr);
-    }
-    /**
-     * @returns {number}
-     */
-    numThreads() {
-        const ret = wasm.wbg_rayon_poolbuilder_numThreads(this.__wbg_ptr);
-        return ret >>> 0;
-    }
-    /**
-     * @returns {number}
-     */
-    receiver() {
-        const ret = wasm.wbg_rayon_poolbuilder_receiver(this.__wbg_ptr);
-        return ret >>> 0;
-    }
-}
-if (Symbol.dispose) wbg_rayon_PoolBuilder.prototype[Symbol.dispose] = wbg_rayon_PoolBuilder.prototype.free;
-
-/**
- * @param {number} receiver
- */
-export function wbg_rayon_start_worker(receiver) {
-    wasm.wbg_rayon_start_worker(receiver);
-}
-
 /**
  * Extract a merkle path from a stored per-note witness. Returns JSON
  * `{position, root_hex, path: [{hash}]}`. The caller must cross-check
@@ -2646,14 +2703,6 @@ function __wbg_get_imports(memory) {
             const ret = arg0 == arg1;
             return ret;
         },
-        __wbg___wbindgen_memory_de265df8aadd6273: function() {
-            const ret = wasm.memory;
-            return ret;
-        },
-        __wbg___wbindgen_module_a22faa8909381977: function() {
-            const ret = wasmModule;
-            return ret;
-        },
         __wbg___wbindgen_number_get_394265ed1e1b84ee: function(arg0, arg1) {
             const obj = arg1;
             const ret = typeof(obj) === 'number' ? obj : undefined;
@@ -2735,16 +2784,6 @@ function __wbg_get_imports(memory) {
             let result;
             try {
                 result = arg0 instanceof Uint8Array;
-            } catch (_) {
-                result = false;
-            }
-            const ret = result;
-            return ret;
-        },
-        __wbg_instanceof_Window_05ba1ee4f6781663: function(arg0) {
-            let result;
-            try {
-                result = arg0 instanceof Window;
             } catch (_) {
                 result = false;
             }
@@ -2837,10 +2876,6 @@ function __wbg_get_imports(memory) {
             getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
             getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
         },
-        __wbg_startWorkers_8b582d57e92bd2d4: function(arg0, arg1, arg2) {
-            const ret = startWorkers(arg0, arg1, wbg_rayon_PoolBuilder.__wrap(arg2));
-            return ret;
-        },
         __wbg_static_accessor_GLOBAL_4ef717fb391d88b7: function() {
             const ret = typeof global === 'undefined' ? null : global;
             return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
@@ -2912,9 +2947,6 @@ const WalletKeysFinalization = (typeof FinalizationRegistry === 'undefined')
 const WatchOnlyWalletFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_watchonlywallet_free(ptr, 1));
-const wbg_rayon_PoolBuilderFinalization = (typeof FinalizationRegistry === 'undefined')
-    ? { register: () => {}, unregister: () => {} }
-    : new FinalizationRegistry(ptr => wasm.__wbg_wbg_rayon_poolbuilder_free(ptr, 1));
 
 function addToExternrefTable0(obj) {
     const idx = wasm.__externref_table_alloc();

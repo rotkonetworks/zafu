@@ -396,7 +396,7 @@ describe('compact-signing', () => {
   // ============================================================================
 
   describe('mergeContributions', () => {
-    it('calls wasm function with correct arguments', () => {
+    it('calls wasm function with correct arguments', async () => {
       const original = ['aabbccdd'];
       const parsed = [
         {
@@ -413,14 +413,14 @@ describe('compact-signing', () => {
       ];
 
       const mockWasm = vi.fn(() => 'eeff00ff');
-      const result = mergeContributions(original, parsed, mockWasm);
+      const result = await mergeContributions(original, parsed, mockWasm);
 
       expect(mockWasm).toHaveBeenCalledTimes(1);
       expect(mockWasm).toHaveBeenCalledWith('aabbccdd', expect.stringContaining('"contributions"'));
       expect(result).toEqual(['eeff00ff']);
     });
 
-    it('merges multiple PCZTs', () => {
+    it('merges multiple PCZTs', async () => {
       const original = ['aa', 'bb', 'cc'];
       const parsed = [
         {
@@ -441,13 +441,13 @@ describe('compact-signing', () => {
       ];
 
       const mockWasm = vi.fn(hex => `updated_${hex}`);
-      const result = mergeContributions(original, parsed, mockWasm);
+      const result = await mergeContributions(original, parsed, mockWasm);
 
       expect(mockWasm).toHaveBeenCalledTimes(3);
       expect(result).toEqual(['updated_aa', 'updated_bb', 'updated_cc']);
     });
 
-    it('throws when a requested PCZT has no signature message at all (fails closed)', () => {
+    it('throws when a requested PCZT has no signature message at all (fails closed)', async () => {
       const original = ['aa', 'bb'];
       const parsed = [
         {
@@ -461,12 +461,12 @@ describe('compact-signing', () => {
       const mockWasm = vi.fn(hex => `updated_${hex}`);
       // Message-count mismatch (1 message vs 2 PCZTs sent) is caught before
       // per-PCZT lookup even runs.
-      expect(() => mergeContributions(original, parsed, mockWasm)).toThrow(
+      await expect(mergeContributions(original, parsed, mockWasm)).rejects.toThrow(
         'compact response carries 1 message(s) but 2 PCZT(s) were sent',
       );
     });
 
-    it('throws on an empty signature set for a requested PCZT (fails closed, was: silent pass-through)', () => {
+    it('throws on an empty signature set for a requested PCZT (fails closed, was: silent pass-through)', async () => {
       const original = ['aa', 'bb'];
       const parsed = [
         {
@@ -482,12 +482,12 @@ describe('compact-signing', () => {
       ];
 
       const mockWasm = vi.fn(hex => `updated_${hex}`);
-      expect(() => mergeContributions(original, parsed, mockWasm)).toThrow(
+      await expect(mergeContributions(original, parsed, mockWasm)).rejects.toThrow(
         'compact response contains zero signatures for PCZT 1',
       );
     });
 
-    it('throws when the message count does not match the number of PCZTs sent', () => {
+    it('throws when the message count does not match the number of PCZTs sent', async () => {
       const original = ['aa'];
       const parsed = [
         {
@@ -503,12 +503,12 @@ describe('compact-signing', () => {
       ];
 
       const mockWasm = vi.fn(hex => `updated_${hex}`);
-      expect(() => mergeContributions(original, parsed, mockWasm)).toThrow(
+      await expect(mergeContributions(original, parsed, mockWasm)).rejects.toThrow(
         'compact response carries 2 message(s) but 1 PCZT(s) were sent',
       );
     });
 
-    it('throws on wasm failure', () => {
+    it('throws on wasm failure', async () => {
       const original = ['aa'];
       const parsed = [
         {
@@ -522,12 +522,12 @@ describe('compact-signing', () => {
         throw new Error('wasm crash');
       });
 
-      expect(() => mergeContributions(original, parsed, mockWasm)).toThrow(
+      await expect(mergeContributions(original, parsed, mockWasm)).rejects.toThrow(
         'failed to apply signatures to PCZT 0: wasm crash',
       );
     });
 
-    it('passes correct JSON structure to wasm', () => {
+    it('passes correct JSON structure to wasm', async () => {
       const original = ['aa'];
       const sig = new Uint8Array(64);
       sig[0] = 0x42;
@@ -553,7 +553,7 @@ describe('compact-signing', () => {
         return 'updated';
       });
 
-      mergeContributions(original, parsed, mockWasm);
+      await mergeContributions(original, parsed, mockWasm);
 
       const parsed_json = JSON.parse(capturedJson);
       expect(parsed_json.contributions).toHaveLength(1);
@@ -562,7 +562,7 @@ describe('compact-signing', () => {
       expect(parsed_json.contributions[0]!.signature).toEqual(Array.from(sig));
     });
 
-    it('throws on an id mismatch when the caller supplied expected ids', () => {
+    it('throws on an id mismatch when the caller supplied expected ids', async () => {
       const original = ['aa'];
       const parsed = [
         {
@@ -573,14 +573,14 @@ describe('compact-signing', () => {
       ];
       const mockWasm = vi.fn(hex => `updated_${hex}`);
 
-      expect(() =>
+      await expect(
         mergeContributions(original, parsed, mockWasm, {
           expectedIds: [new Uint8Array([0x78, 0x79])], // "xy" - does not match echoed "ab"
         }),
-      ).toThrow('compact response id mismatch for PCZT 0');
+      ).rejects.toThrow('compact response id mismatch for PCZT 0');
     });
 
-    it('accepts a matching id when the caller supplied expected ids', () => {
+    it('accepts a matching id when the caller supplied expected ids', async () => {
       const original = ['aa'];
       const id = new Uint8Array([0x61, 0x62]);
       const parsed = [
@@ -592,11 +592,11 @@ describe('compact-signing', () => {
       ];
       const mockWasm = vi.fn(hex => `updated_${hex}`);
 
-      const result = mergeContributions(original, parsed, mockWasm, { expectedIds: [id] });
+      const result = await mergeContributions(original, parsed, mockWasm, { expectedIds: [id] });
       expect(result).toEqual(['updated_aa']);
     });
 
-    it('throws on duplicate (pool, action_index) pairs within a message', () => {
+    it('throws on duplicate (pool, action_index) pairs within a message', async () => {
       const original = ['aa'];
       const parsed = [
         {
@@ -610,12 +610,12 @@ describe('compact-signing', () => {
       ];
       const mockWasm = vi.fn(hex => `updated_${hex}`);
 
-      expect(() => mergeContributions(original, parsed, mockWasm)).toThrow(
+      await expect(mergeContributions(original, parsed, mockWasm)).rejects.toThrow(
         'compact response has duplicate signature for pool 0 action 2 in PCZT 0',
       );
     });
 
-    it('allows the same action_index across different pools (not a duplicate)', () => {
+    it('allows the same action_index across different pools (not a duplicate)', async () => {
       const original = ['aa'];
       const parsed = [
         {
@@ -629,10 +629,10 @@ describe('compact-signing', () => {
       ];
       const mockWasm = vi.fn(hex => `updated_${hex}`);
 
-      expect(() => mergeContributions(original, parsed, mockWasm)).not.toThrow();
+      await expect(mergeContributions(original, parsed, mockWasm)).resolves.toBeDefined();
     });
 
-    it('throws on an action_index out of range when actionCounts is known', () => {
+    it('throws on an action_index out of range when actionCounts is known', async () => {
       const original = ['aa'];
       const parsed = [
         {
@@ -643,12 +643,12 @@ describe('compact-signing', () => {
       ];
       const mockWasm = vi.fn(hex => `updated_${hex}`);
 
-      expect(() => mergeContributions(original, parsed, mockWasm, { actionCounts: [3] })).toThrow(
-        'compact response action_index 5 out of range [0, 3) for PCZT 0',
-      );
+      await expect(
+        mergeContributions(original, parsed, mockWasm, { actionCounts: [3] }),
+      ).rejects.toThrow('compact response action_index 5 out of range [0, 3) for PCZT 0');
     });
 
-    it('accepts an in-range action_index when actionCounts is known', () => {
+    it('accepts an in-range action_index when actionCounts is known', async () => {
       const original = ['aa'];
       const parsed = [
         {
@@ -659,9 +659,9 @@ describe('compact-signing', () => {
       ];
       const mockWasm = vi.fn(hex => `updated_${hex}`);
 
-      expect(() =>
+      await expect(
         mergeContributions(original, parsed, mockWasm, { actionCounts: [3] }),
-      ).not.toThrow();
+      ).resolves.toBeDefined();
     });
   });
 });

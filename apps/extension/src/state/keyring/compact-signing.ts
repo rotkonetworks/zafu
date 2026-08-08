@@ -354,16 +354,18 @@ function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
  *
  * @param originalPcztHexes - original PCZT hex strings, in request order
  * @param messages - parsed compact response messages (`ParsedCompactResponse.messages`)
- * @param wasmApplySignatures - wasm function apply_signature_contributions(pcztHex, contributionsJson): string
+ * @param wasmApplySignatures - apply_signature_contributions(pcztHex, contributionsJson).
+ *   May be sync (direct wasm) or async (dispatched to the worker that owns the
+ *   wasm instance); both are awaited.
  * @param options - optional id / action-count binding, see `MergeContributionsOptions`
  * @returns updated PCZT hex strings with signatures applied
  */
-export function mergeContributions(
+export async function mergeContributions(
   originalPcztHexes: string[],
   messages: CompactResponseMessage[],
-  wasmApplySignatures: (pcztHex: string, contributionsJson: string) => string,
+  wasmApplySignatures: (pcztHex: string, contributionsJson: string) => string | Promise<string>,
   options: MergeContributionsOptions = {},
-): string[] {
+): Promise<string[]> {
   if (messages.length !== originalPcztHexes.length) {
     throw new Error(
       `compact response carries ${messages.length} message(s) but ${originalPcztHexes.length} PCZT(s) were sent`,
@@ -421,7 +423,7 @@ export function mergeContributions(
     });
 
     try {
-      const updatedHex = wasmApplySignatures(originalHex, contributionsJson);
+      const updatedHex = await wasmApplySignatures(originalHex, contributionsJson);
       results.push(updatedHex);
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e);

@@ -39,6 +39,7 @@ export interface NetworkWorkerMessage {
     | 'send-tx-complete'
     | 'send-tx-pczt'
     | 'send-tx-pczt-complete'
+    | 'pczt-apply-contributions'
     | 'send-turnstile-migration'
     | 'send-turnstile-migration-complete'
     | 'shield'
@@ -944,6 +945,40 @@ export const buildSendTxPcztInWorker = async (
  * broadcast it. The caller has already reassembled the multi-frame UR scan
  * into raw PCZT bytes (hex) via wasm `ur_decode_frames`.
  */
+/** One spend-auth signature the airgapped device produced. */
+export interface SignatureContribution {
+  pool: 'orchard' | 'ironwood';
+  action_index: number;
+  /** 64-byte RedPallas spend-auth signature, hex. */
+  signature_hex: string;
+}
+
+/**
+ * Merge a compact device response into the PCZT the wallet retained.
+ *
+ * The compact flow returns only the signatures the device produced (tx_type
+ * 0x07/0x08) instead of a whole signed PCZT - that is what collapses the QR
+ * return leg. The wasm applies each contribution to its (pool, action_index)
+ * slot and verifies it against the action's randomized verification key, so an
+ * invalid or tampered contribution REJECTS here rather than being absorbed.
+ * Feed the result to `completeSendTxPcztInWorker` exactly like a full signed
+ * PCZT from the legacy path.
+ */
+export const applySignatureContributionsInWorker = async (
+  network: NetworkType,
+  walletId: string,
+  pcztHex: string,
+  contributions: SignatureContribution[],
+): Promise<string> => {
+  const res = await callWorker<{ pcztHex: string }>(
+    network,
+    'pczt-apply-contributions',
+    { pcztHex, contributionsJson: JSON.stringify(contributions) },
+    walletId,
+  );
+  return res.pcztHex;
+};
+
 export const completeSendTxPcztInWorker = async (
   network: NetworkType,
   walletId: string,

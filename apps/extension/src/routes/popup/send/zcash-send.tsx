@@ -23,7 +23,9 @@ import {
   buildSendTxPcztInWorker,
   completeSendTxInWorker,
   completeOrchardPcztInWorker,
+  applySignatureContributionsInWorker,
   completeSendTxPcztInWorker,
+  type SignatureContribution,
   getBalanceInWorker,
   getFeeMultiplier,
   type SendTxUnsignedResult,
@@ -903,25 +905,27 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               );
             }
 
-            // Call wasm apply_signature_contributions to merge sigs
-            // Note: this is provided in parallel by another agent and may not exist yet
-            // For now, we assume it's available on the worker/wasm module context
-            const wasmModule = (globalThis as any).wasmModule;
-            if (!wasmModule || typeof wasmModule.apply_signature_contributions !== 'function') {
-              throw new Error(
-                'wasm apply_signature_contributions not available - ' +
-                  'compact signing support not yet shipped',
-              );
-            }
-
+            // Merge the device's signatures into the PCZT we retained. The
+            // wasm runs in the worker (the popup has no wasm instance of its
+            // own), and verifies each contribution against its action's
+            // randomized verification key before applying it - a tampered or
+            // foreign signature is REFUSED there, not absorbed.
+            //
             // Exactly one PCZT went out on this leg, so exactly one message
             // must come back; mergeContributions enforces this (and that it
             // isn't empty) and throws rather than passing an unsigned PCZT
             // through as though it had been signed.
-            const updatedHexes = mergeContributions(
+            const mergeViaWorker = (pczt: string, contributionsJson: string): Promise<string> =>
+              applySignatureContributionsInWorker(
+                'zcash',
+                selectedKeyInfo.id,
+                pczt,
+                JSON.parse(contributionsJson) as SignatureContribution[],
+              );
+            const updatedHexes = await mergeContributions(
               [originalPcztHex],
               messages,
-              wasmModule.apply_signature_contributions,
+              mergeViaWorker,
             );
             const pcztHex = updatedHexes[0]!;
 

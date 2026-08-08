@@ -127,6 +127,7 @@ interface WorkerMessage {
     | 'send-tx-complete'
     | 'send-tx-pczt'
     | 'send-tx-pczt-complete'
+    | 'pczt-apply-contributions'
     | 'send-turnstile-migration'
     | 'send-turnstile-migration-complete'
     | 'shield'
@@ -318,6 +319,7 @@ interface WasmModule {
     memo_hex?: string | null,
   ): unknown;
   extract_signed_tx_from_pczt(pczt_hex: string): string;
+  apply_signature_contributions: (pcztHex: string, contributionsJson: string) => string;
   complete_orchard_pczt(
     pczt_hex: string,
     orchard_sigs_json: unknown,
@@ -6366,6 +6368,36 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           },
         });
         return;
+      }
+
+      // Merge a compact (signatures-only) device response into the PCZT the
+      // wallet retained. The device returns ONLY the 64-byte spend-auth
+      // signatures it produced; the wasm applies each to its (pool,
+      // action_index) slot, verifying it against the action's randomized
+      // verification key first - a contribution that is not a valid signature
+      // for its action is REFUSED here rather than silently absorbed.
+      case 'pczt-apply-contributions': {
+        await initWasm();
+        if (!wasmModule) {
+          throw new Error('wasm not initialized');
+        }
+        const applyPayload = payload as {
+          pcztHex: string;
+          /** [{pool:'orchard'|'ironwood', action_index:number, signature_hex:string}] */
+          contributionsJson: string;
+        };
+        const mergedHex = wasmModule.apply_signature_contributions(
+          applyPayload.pcztHex,
+          applyPayload.contributionsJson,
+        );
+        workerSelf.postMessage({
+          type: 'pczt-apply-contributions-result',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: { pcztHex: mergedHex },
+        });
+        break;
       }
 
       case 'send-tx-pczt-complete': {
