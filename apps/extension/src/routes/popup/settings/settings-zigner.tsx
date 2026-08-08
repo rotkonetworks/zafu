@@ -138,7 +138,10 @@ export const SettingsZigner = () => {
           deviceId: zcashWalletImport.zidPublicKey ?? `zcash-${Date.now()}`,
           zidPublicKey: zcashWalletImport.zidPublicKey,
         };
-        const vaultId = await addZignerUnencrypted(zignerData, walletLabel || zcashWalletImport.label);
+        const vaultId = await addZignerUnencrypted(
+          zignerData,
+          walletLabel || zcashWalletImport.label,
+        );
         // persist an explicitly-entered start block as the wallet birthday, so an
         // older cold wallet doesn't silently start syncing near the chain tip
         // (which would hide every pre-existing shielded note).

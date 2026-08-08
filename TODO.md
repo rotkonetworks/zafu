@@ -1,9 +1,9 @@
-
 # TODO
 
 ## Features / fixes (2026-08-07)
 
 ### [DONE] cold zcash import: manual start-block (birthday) at import time
+
 - The Zigner zcash QR (`zcash-accounts` UR) carries only the UFVK, accountIndex, label,
   and zidPublicKey — NO birthday/start block. Without it, `resolveBirthday()` in
   `hooks/zcash-auto-sync.ts:31` defaults to near the chain tip (tip-100, rounded to 10k),
@@ -18,8 +18,9 @@
 ## Error definitions / known failures
 
 ### [DONE] penumbra-wasm `computeEffectHash` tsc failure (fixed 2026-08-07)
+
 - Error: `src/ctx/authorization.ts:14` — `Module '"@rotko/penumbra-wasm/build"' has no
-  exported member 'computeEffectHash'`. It calls `computeEffectHash(fvk, plan)` to compute
+exported member 'computeEffectHash'`. It calls `computeEffectHash(fvk, plan)` to compute
   the real 64-byte effect hash for Zigner airgap signing.
 - Root cause: dependency version mismatch. The root `package.json` override pins
   `@rotko/penumbra-wasm@55.0.2` (the rayon-parallel rotko fork, which provides
@@ -34,12 +35,14 @@
   (the `computeEffectHash` webpack warning is gone).
 
 ### [DONE] add-zcash-wallet wasm glue mismatch (fixed 2026-08-07)
+
 - Reported: "failed to add wallet: WebAssembly.instantiate(): Import #0 \"./zafu_wasm_bg.js\":
   module is not an object or function when adding zcash wallet now".
 
 STATUS: FIX APPLIED 2026-08-07 (see below). Root cause confirmed and corrected.
 
 #### Root cause (high confidence)
+
 The zcash wasm package ships TWO different wasm-bindgen glue files that are NOT
 interchangeable, but the package entry point points at the WRONG one:
 
@@ -48,7 +51,7 @@ interchangeable, but the package entry point points at the WRONG one:
 - The wasm binary (`zafu_wasm_bg.wasm` / `zcash_wasm_bg.wasm` — they are byte-identical,
   all copies md5 `6c43b887e73c6f2696d2cc2facb47cdc`) expects glue symbols with hash
   `__wbg_Error_92b29b0548f8b746`, `__wbg_Number_9a4e0ecb0fa16705`, etc.
-- `zafu_wasm.js` (md5 `b5bb50f2…`, 124680 bytes) exports EXACTLY those symbols  -> MATCHES the binary.
+- `zafu_wasm.js` (md5 `b5bb50f2…`, 124680 bytes) exports EXACTLY those symbols -> MATCHES the binary.
 - `zcash_wasm.js` (md5 `111fb270…`, 124419 bytes) exports DIFFERENT hashes
   (`__wbg_Error_83742b46f01ce22d`, `__wbg_Number_a5a435bd…`) -> DOES NOT MATCH the binary.
 
@@ -58,27 +61,31 @@ and WebAssembly.instantiate against the real binary fails on import #0
 module name in the binary doesn't resolve to what the glue provides).
 
 Some call sites sidestep this by loading `/zafu-wasm/zafu_wasm.js` (the CORRECT glue) directly:
-- `apps/extension/src/state/keyring/zcash.ts`  (initZcashWasm -> import('/zafu-wasm/zafu_wasm.js'))
+
+- `apps/extension/src/state/keyring/zcash.ts` (initZcashWasm -> import('/zafu-wasm/zafu_wasm.js'))
 - `apps/extension/src/zcash-build-parallel.ts` (offscreen prover -> import('/zafu-wasm/zafu_wasm.js'))
 
 Call sites that hit the BUG (they `import('@repo/zcash-wasm')`, i.e. the wrong glue):
+
 - `apps/extension/src/state/keyring/wallet-entries.ts:96` and `:172`
 - `apps/extension/src/routes/popup/contacts/index.tsx:454`
 - `apps/extension/src/ledger/pczt-translate.ts:176`
 - `apps/extension/src/shared/components/animated-qr-scanner.tsx:220` and `:347`
-(any of these during wallet add / derive will throw the import #0 error)
+  (any of these during wallet add / derive will throw the import #0 error)
 
 #### Fix applied (2026-08-07)
+
 - `packages/zcash-wasm/package.json`: repointed `main`/`exports` (`.` → `zafu_wasm.js`,
   `./wasm` → `zafu_wasm_bg.wasm`) and `files` at the `zafu_wasm.*` that MATCHES the binary
   (was previously `zcash_wasm.*`, the stale mismatched glue). `types` was already `zafu_wasm.d.ts`.
 - Refreshed the stale `zcash_wasm.js`/`zcash_wasm_bg.wasm`/`zcash_wasm.d.ts` duplicates as
   byte-identical copies of `zafu_*` (all glues md5 b5bb50f2…, all binaries md5 6c43b887…),
-  restoring the BUILD_PROVENANCE invariant that `zcash_*` == `zafu_*`.
+  restoring the BUILD*PROVENANCE invariant that `zcash*\_`==`zafu\_\_`.
 - Documented the pitfall in BUILD_PROVENANCE.md.
 - Verify with: fresh `pnpm build`, then load `dist` unpacked and add a zcash wallet.
 
 #### Candidate fixes (evaluate in order)
+
 1. Point the package entry at the correct glue. Since the binary matches `zafu_wasm.js`
    and `types` already names `zafu_wasm.d.ts`, change `package.json`:
    `"main": "zafu_wasm.js"`, `"exports": { ".": "./zafu_wasm.js", "./wasm": "./zafu_wasm_bg.wasm" }`
@@ -89,6 +96,7 @@ Call sites that hit the BUG (they `import('@repo/zcash-wasm')`, i.e. the wrong g
 3. Verify with a fresh `pnpm build`, then load `dist` unpacked and do an add-wallet.
 
 #### Open questions / verify
+
 - Confirm which of `zafu_wasm.js` / `zcash_wasm.js` is the authoritative, provenance-tracked glue
   (see packages/zcash-wasm/BUILD_PROVENANCE.md); align `package.json` main/exports/types to it.
 - Note: `dist/zafu-wasm/zafu_wasm.js` shipped by `pnpm build` is a MINIFIED variant
@@ -98,15 +106,17 @@ Call sites that hit the BUG (they `import('@repo/zcash-wasm')`, i.e. the wrong g
   not the `/zafu-wasm/zafu_wasm.js` dynamic import.
 
 ### [FIXED 2026-08-08] zcash-worker proof verification spam: "state mismatch: actions commitment mismatch: server tampered with block actions"
+
 - Symptom: worker sync loop repeatedly logs
   `proof verification unavailable, will retry: Error: state mismatch: actions commitment
-  mismatch: server tampered with block actions (computed=<c> proven=<p>)` from
+mismatch: server tampered with block actions (computed=<c> proven=<p>)` from
   `verify_actions_commitment` (zync_core_bg.wasm), plus `peer unreachable: gRPC GetTip:
-  HTTP 415`.
+HTTP 415`.
 - ROOT CAUSE CONFIRMED (2026-08-07), see below. It is a STRUCTURAL anchoring mismatch, not the
   endpoint being down / not on-chain tampering.
 
 #### Why the mismatch happens (confirmed from zcore source + worker)
+
 - The actions commitment is a POSITIONAL hash chain (zcli crates/zync-core/src/actions.rs):
   `chain_i = BLAKE2b("ZYNC_actions_v1" || chain_{i-1} || actions_root_i || height_i)`, folded over
   every block from an initial seed. `verify_actions_commitment` (sync.rs:135) requires the wallet's
@@ -118,7 +128,7 @@ Call sites that hit the BUG (they `import('@repo/zcash-wasm')`, i.e. the wrong g
   :3064) — i.e. a birthday / import start block, NOT genesis. This wallet runs from height
   2,910,104. The server's proven `final_actions_commitment` (from the header proof / prover.rs) is
   anchored to the cumulative value BEFORE that birthday.
-- Because the fold includes `chain_{i-1}`, seeding it with 0x00*32 at height 2,910,104 instead of the
+- Because the fold includes `chain_{i-1}`, seeding it with 0x00\*32 at height 2,910,104 instead of the
   accumulated value entering that height makes the wallet's first block commitment differ from the
   server's, and EVERY subsequent height differs too. => PERMANENT mismatch, retries forever. The
   wallet never re-anchors its running commitment to the proven value: the RSA return value of
@@ -160,6 +170,7 @@ Call sites that hit the BUG (they `import('@repo/zcash-wasm')`, i.e. the wrong g
   anchoring.
 
 ### [FIXED 2026-08-08] balance showed 0 in all pools while a spend was unconfirmed
+
 - RESOLUTION (2026-08-07, original): once the send confirmed at block 3,439,270 the balance corrected to
   0.0024 ZEC. No funds lost. Root cause = pending-send accounting: spendable = confirmed notes
   minus notes reserved by pending sends, and the unconfirmed send's CHANGE note is NOT credited
@@ -178,8 +189,8 @@ Call sites that hit the BUG (they `import('@repo/zcash-wasm')`, i.e. the wrong g
   - a "pending" row (badge "change · confirming") is added to the pool breakdown when pendingTotal>0.
   - the "get your first zec" empty-state now requires totalZat===0 AND inFlightZat===0, so it no
     longer fires while a send is in flight.
-  Files: zcash-worker.ts (getPoolBalances), network-worker.ts, hooks/zcash-pool-balances.ts,
-  routes/popup/home/index.tsx. tsc 0, 378 tests pass, eslint 0.
+    Files: zcash-worker.ts (getPoolBalances), network-worker.ts, hooks/zcash-pool-balances.ts,
+    routes/popup/home/index.tsx. tsc 0, 378 tests pass, eslint 0.
 - Still-open (upstream gap): value_pending_spendability (received-but-unconfirmed value) is not
   tracked separately — only our own change is. Adopting the ECC AccountBalance model fully (per
   TODO note below) would add it; not required for the reported bug.
@@ -197,6 +208,7 @@ Call sites that hit the BUG (they `import('@repo/zcash-wasm')`, i.e. the wrong g
   state on total==0 not spendable==0.
 
 ### [OPEN] balance shows 0 ZEC in all pools while a spend is stuck unconfirmed
+
 - Address (unified): u1e3j0kl74frk2ae2ascjextned588xscssgrmk8zfy0muz9xywtcs0zcmys3clzlmxyryepk8qar3252jenx3caw42ef79mj8gcqtrhz2
 - Repro: held 0.003 ZEC (received via tx d2a2e1fbc18b0c7a..., note at height #3436921). Sent dust
   0.0005 ZEC (tx 93ec85b8d7e695e1..., today 01:59 PM): 0.0004 sent + 0.0001 fee. That tx is now
@@ -218,6 +230,7 @@ Call sites that hit the BUG (they `import('@repo/zcash-wasm')`, i.e. the wrong g
 - Status: NOT fixed, needs repro + trace. Flag for a deeper agent pass.
 
 ### [DONE] zcash send via Zigner cold-sign: "pczt parse failed: NotPczt" on scan-back (Zigner → Zafu)
+
 - Reported (2026-08-07): standard zcash send through the Zigner cold-signer flow fails on
   the RETURN scan. Steps: Zafu builds the PCZT → shows animated sign-request QR → Zigner
   scans it (this leg now works after the byte-mode UR/zoda fix) → Zigner confirms + signs →
@@ -268,6 +281,7 @@ Call sites that hit the BUG (they `import('@repo/zcash-wasm')`, i.e. the wrong g
   Needs a live cold-sign round-trip on the test Pixel/extension to confirm end-to-end.
 
 ### proof-of-build artifacts (as of last full build)
+
 - `pnpm install` exit 0; `pnpm build` exit 0 (`Tasks: 1 successful`, ~2m27s).
 - Outputs: `apps/extension/dist` (194M) and `apps/extension/beta-dist` (194M),
   both `manifest.json` version 25.2.0.

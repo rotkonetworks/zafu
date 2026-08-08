@@ -27,7 +27,11 @@ export function parseSemver(
   const major = Number(m[1]);
   const minor = Number(m[2]);
   const patch = Number(m[3]);
-  if (!Number.isSafeInteger(major) || !Number.isSafeInteger(minor) || !Number.isSafeInteger(patch)) {
+  if (
+    !Number.isSafeInteger(major) ||
+    !Number.isSafeInteger(minor) ||
+    !Number.isSafeInteger(patch)
+  ) {
     return null;
   }
   return { major, minor, patch };

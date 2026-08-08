@@ -7,6 +7,7 @@ Normative specs: `docs/design/zigner-firmware-ota.md`, `zigner-ota-rfc.md`,
 regenerating BOTH copies identically).
 
 ## What's implemented (verified)
+
 - `canonical.ts` — strict canonical CBOR (RFC 8949) encode + strict decode (rejects
   trailing bytes, dup keys, indefinite lengths, non-minimal ints).
 - `semver.ts` — normative numeric component-wise compare; rejects `v`/prerelease.
@@ -30,11 +31,13 @@ regenerating BOTH copies identically).
 - Type-check: `pnpm exec tsc --noEmit -p apps/extension/tsconfig.json` clean.
 
 ## Design decision (product, 2026-08)
+
 OTA target = the SMALL signed MODULE layer (1–3 MB wasm, QR ~1–2 min), NOT a whole
 firmware/kernel replacement (which is a store/USB path). UI presents "protocol module
 update". See IMPLEMENTATION.md context + `zafu-ota-wire-freeze.md`.
 
 ## Known gaps / notes
+
 - The pinned key + all signatures are DEV-PLACEHOLDER identities. Real HSM burn-in +
   manifest-sig-on-wire placement are production gates (spec §3.1/§11.2); the frozen
   wire keeps image_sig inline (frame0 field 8) and passes manifest_sig via the carrier.
@@ -42,7 +45,9 @@ update". See IMPLEMENTATION.md context + `zafu-ota-wire-freeze.md`.
   but not wired as a separate payload (they ride the next signed upgrade per spec).
 
 ## Delivery pipeline — NOW REAL in zafu (added 2026-08)
+
 The "1-3 MB module over QR" was receiving-only; the producer/delivery is now wired:
+
 - `producer.ts` — dev producer builds a fully-signed `ur:zafu-stream` (canonical CBOR
   manifest fields 1..9, image_sig, image wrapper) from a module/wasm file using the
   dev key. `producer.test.ts` (4 tests) proves a real ~2 MB stream verifies against the

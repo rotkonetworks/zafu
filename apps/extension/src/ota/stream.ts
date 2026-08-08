@@ -10,7 +10,13 @@
 import { decodeCanonical, encodeMap } from './canonical';
 import type { CborMap, CborValue } from './canonical';
 import { verifyImage } from './signature';
-import { BOARD, KEY_ID_BLACKLIST, CLASS_WHITELIST, PINNED_OTA_PUBLIC_KEY, MAX_STREAM_BYTES } from './keys';
+import {
+  BOARD,
+  KEY_ID_BLACKLIST,
+  CLASS_WHITELIST,
+  PINNED_OTA_PUBLIC_KEY,
+  MAX_STREAM_BYTES,
+} from './keys';
 import { compareSemver } from './semver';
 import { bytesEqual, sha256Sync, u32leValue } from './util';
 import type { Manifest, ImageHeader, FwClass } from './types';
@@ -144,13 +150,7 @@ export function verifyStream(
   // against the pinned key when an explicit signature is available.
 
   // --- image header + image_sig -------------------------------------------
-  const imageCanonical = buildImageSigned(
-    keyId,
-    board,
-    version,
-    payloadSha256,
-    payloadSize,
-  );
+  const imageCanonical = buildImageSigned(keyId, board, version, payloadSha256, payloadSize);
   if (!verifyImage(imageCanonical, pinnedKey, imageSig)) {
     throw new OtaStreamError('image_sig verification failed against pinned key', 'sig');
   }
@@ -188,7 +188,10 @@ export function verifyStream(
     const payloadStart = consumed + 4 + 4 + 32;
     const payloadBytesActual = payloadBytes.subarray(payloadStart, consumed + bytesAfter);
     if (!bytesEqual(sha256Sync(payloadBytesActual), payloadSha256)) {
-      throw new OtaStreamError('delivered payload does not match signed payload_sha256', 'image-mismatch');
+      throw new OtaStreamError(
+        'delivered payload does not match signed payload_sha256',
+        'image-mismatch',
+      );
     }
   }
 
@@ -204,7 +207,12 @@ export function verifyStream(
     req_id: reqId,
   };
 
-  return { manifest, imageHeader, imagePresent, consumed: consumed + (imagePresent ? bytesAfter : 0) };
+  return {
+    manifest,
+    imageHeader,
+    imagePresent,
+    consumed: consumed + (imagePresent ? bytesAfter : 0),
+  };
 }
 
 function buildImageSigned(
@@ -238,5 +246,11 @@ export function encodeManifestSigned(manifest: Manifest): Uint8Array {
 
 /** Encode the signed image header set (fields 1..5). */
 export function encodeImageSigned(header: ImageHeader): Uint8Array {
-  return buildImageSigned(header.key_id, header.board, header.version, header.payload_sha256, header.payload_len);
+  return buildImageSigned(
+    header.key_id,
+    header.board,
+    header.version,
+    header.payload_sha256,
+    header.payload_len,
+  );
 }

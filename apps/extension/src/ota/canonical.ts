@@ -14,13 +14,7 @@
  *     non-minimal integers, and any major type we never emit.
  */
 
-export type CborValue =
-  | number
-  | bigint
-  | string
-  | Uint8Array
-  | boolean
-  | CborMap;
+export type CborValue = number | bigint | string | Uint8Array | boolean | CborMap;
 
 /** A CBOR map with integer keys (ascending, no duplicates). */
 export type CborMap = Map<number, CborValue>;
@@ -164,9 +158,7 @@ function readLen(bytes: Uint8Array, start: number, what: string): { value: numbe
       break;
     }
     default:
-      throw new OtaCborError(
-        `indefinite/reserved length for ${what} is forbidden (non-canonical)`,
-      );
+      throw new OtaCborError(`indefinite/reserved length for ${what} is forbidden (non-canonical)`);
   }
   if (value < min) {
     throw new OtaCborError(`non-minimal integer encoding for ${what}`);

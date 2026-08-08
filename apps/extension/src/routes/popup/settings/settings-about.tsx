@@ -12,9 +12,7 @@ export const SettingsAbout = () => {
           </p>
           <p className='text-xs text-fg-muted mt-1'>
             version{' '}
-            <span className='font-mono text-fg'>
-              {chrome.runtime.getManifest().version}
-            </span>
+            <span className='font-mono text-fg'>{chrome.runtime.getManifest().version}</span>
           </p>
         </div>
 

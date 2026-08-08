@@ -22,7 +22,9 @@ const moduleBytes = new Uint8Array(size);
 for (let i = 0; i < size; i++) moduleBytes[i] = (i * 31 + 7) & 0xff;
 
 fs.mkdirSync(outDir, { recursive: true });
-const produced = await produceStream(moduleBytes, { reqId: new Uint8Array([7, 6, 5, 4, 3, 2, 1, 0]) });
+const produced = await produceStream(moduleBytes, {
+  reqId: new Uint8Array([7, 6, 5, 4, 3, 2, 1, 0]),
+});
 const frames = encodeStreamFrames(produced.payload, 400);
 fs.writeFileSync(path.join(outDir, 'payload.hex'), toHex(produced.payload));
 fs.writeFileSync(path.join(outDir, 'frames.json'), JSON.stringify(frames));
@@ -37,5 +39,9 @@ await Promise.all(
     fs.writeFileSync(path.join(outDir, `frame_${String(i).padStart(3, '0')}.png`), png);
   }),
 );
-console.log(`[wallet] produced ${(size / 1024 / 1024).toFixed(2)} MiB module, ${frames.length} fountain frames, QR PNGs -> ${outDir}`);
-console.log(`[wallet] payload sha (implicit) verified by stream verification; first frame:\n${frames[0].slice(0, 60)}...`);
+console.log(
+  `[wallet] produced ${(size / 1024 / 1024).toFixed(2)} MiB module, ${frames.length} fountain frames, QR PNGs -> ${outDir}`,
+);
+console.log(
+  `[wallet] payload sha (implicit) verified by stream verification; first frame:\n${frames[0].slice(0, 60)}...`,
+);

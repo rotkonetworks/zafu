@@ -115,12 +115,7 @@ export async function produceStream(
   ]);
 
   // image wrapper (u32le key_id || u32le payload_len || sha256 || payload), NOT CBOR
-  const wrapper = concat(
-    u32le(keyId),
-    u32le(payloadSize),
-    payloadSha256,
-    moduleBytes,
-  );
+  const wrapper = concat(u32le(keyId), u32le(payloadSize), payloadSha256, moduleBytes);
 
   const payload = concat(manifestFrame0, wrapper);
   return {

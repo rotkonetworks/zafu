@@ -30,7 +30,12 @@ export function u32le(value: number): Uint8Array {
   if (!Number.isInteger(value) || value < 0 || value > 0xffffffff) {
     throw new Error(`u32le requires 0..2^32-1, got ${value}`);
   }
-  return new Uint8Array([value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, (value >>> 24) & 0xff]);
+  return new Uint8Array([
+    value & 0xff,
+    (value >>> 8) & 0xff,
+    (value >>> 16) & 0xff,
+    (value >>> 24) & 0xff,
+  ]);
 }
 
 /** Little-endian u32 decode from an offset. */
@@ -85,8 +90,7 @@ export function sha256Sync(bytes: Uint8Array): Uint8Array {
   // square roots of the first 8 primes 2..19).
   type H8 = [number, number, number, number, number, number, number, number];
   const H: H8 = [
-    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
-    0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
   ];
   // Round constants (first 32 bits of the fractional parts of the cube roots
   // of the first 64 primes 2..311).
@@ -130,15 +134,23 @@ export function sha256Sync(bytes: Uint8Array): Uint8Array {
       const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
       const maj = (a & b) ^ (a & c) ^ (b & c);
       const temp2 = (S0 + maj) >>> 0;
-      h = g; g = f; f = e;
+      h = g;
+      g = f;
+      f = e;
       e = (d + temp1) >>> 0;
-      d = c; c = b; b = a;
+      d = c;
+      c = b;
+      b = a;
       a = (temp1 + temp2) >>> 0;
     }
-    H[0] = (H[0]! + a) >>> 0; H[1] = (H[1]! + b) >>> 0;
-    H[2] = (H[2]! + c) >>> 0; H[3] = (H[3]! + d) >>> 0;
-    H[4] = (H[4]! + e) >>> 0; H[5] = (H[5]! + f) >>> 0;
-    H[6] = (H[6]! + g) >>> 0; H[7] = (H[7]! + h) >>> 0;
+    H[0] = (H[0]! + a) >>> 0;
+    H[1] = (H[1]! + b) >>> 0;
+    H[2] = (H[2]! + c) >>> 0;
+    H[3] = (H[3]! + d) >>> 0;
+    H[4] = (H[4]! + e) >>> 0;
+    H[5] = (H[5]! + f) >>> 0;
+    H[6] = (H[6]! + g) >>> 0;
+    H[7] = (H[7]! + h) >>> 0;
   }
   const out = new Uint8Array(32);
   const odv = new DataView(out.buffer);

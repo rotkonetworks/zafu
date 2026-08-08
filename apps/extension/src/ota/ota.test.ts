@@ -2,15 +2,17 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import {
-  encodeMap,
-  decodeStrict,
-  decodeCanonical,
-  OtaCborError,
-} from './canonical';
+import { encodeMap, decodeStrict, decodeCanonical, OtaCborError } from './canonical';
 import type { CborValue } from './canonical';
 import { compareSemver, parseSemver, isValidSemver } from './semver';
-import { verifyManifest, verifyImage, verifyResult, verifyStatus, assertValidPinnedKey, signedMessageHex } from './signature';
+import {
+  verifyManifest,
+  verifyImage,
+  verifyResult,
+  verifyStatus,
+  assertValidPinnedKey,
+  signedMessageHex,
+} from './signature';
 import {
   encodeStreamFrames,
   decodeStream,
@@ -21,7 +23,13 @@ import {
   buildStreamPayload,
 } from './ur';
 import { verifyStream, OtaStreamError } from './stream';
-import { BOARD, KEY_ID_BLACKLIST, CLASS_WHITELIST, PINNED_OTA_PUBLIC_KEY, MAX_STREAM_BYTES } from './keys';
+import {
+  BOARD,
+  KEY_ID_BLACKLIST,
+  CLASS_WHITELIST,
+  PINNED_OTA_PUBLIC_KEY,
+  MAX_STREAM_BYTES,
+} from './keys';
 import { toHex, hexToBytes, bytesEqual } from './util';
 
 const CORPUS_PATH = path.resolve(process.cwd(), 'src/ota/test-data/test-vectors.json');
@@ -32,7 +40,10 @@ function bytes(s: string): Uint8Array {
 }
 
 /** Build the full wire manifest map (fields 1..9) from a corpus vector. */
-function fullManifestMap(v: Record<string, unknown>, reqIdHex = v.req_id_hex as string): [number, CborValue][] {
+function fullManifestMap(
+  v: Record<string, unknown>,
+  reqIdHex = v.req_id_hex as string,
+): [number, CborValue][] {
   return [
     [1, v.version as string],
     [2, corpus.board as string],
@@ -168,9 +179,7 @@ describe('(c) rejects tampered signature and wrong key', () => {
 
   it('rejects a wrong key', () => {
     // a valid but different ed25519 pubkey
-    const wrongKey = hexToBytes(
-      'fc51cd8e6218a1a38da47ed00230f0580816ed13ba3303ac5deb911548908025',
-    );
+    const wrongKey = hexToBytes('fc51cd8e6218a1a38da47ed00230f0580816ed13ba3303ac5deb911548908025');
     expect(verifyManifest(v.manifest_canonical_hex, wrongKey, v.manifest_sig_hex)).toBe(false);
   });
 
@@ -267,11 +276,15 @@ describe('(f) verifyStream policy rejections', () => {
     // version field (key 1) below min
     const m1 = fullManifestMap(v);
     m1[0] = [1, '0.7.5'];
-    expect(() => verifyStream(buildStreamPayload(encodeMap(m1), hexToBytes(v.image_wrapper_hex)), pub)).toThrow(/min_version|downgrade|semver/);
+    expect(() =>
+      verifyStream(buildStreamPayload(encodeMap(m1), hexToBytes(v.image_wrapper_hex)), pub),
+    ).toThrow(/min_version|downgrade|semver/);
     // invalid semver (v prefix)
     const m2 = fullManifestMap(v);
     m2[0] = [1, 'v0.9.0'];
-    expect(() => verifyStream(buildStreamPayload(encodeMap(m2), hexToBytes(v.image_wrapper_hex)), pub)).toThrow(/semver/);
+    expect(() =>
+      verifyStream(buildStreamPayload(encodeMap(m2), hexToBytes(v.image_wrapper_hex)), pub),
+    ).toThrow(/semver/);
   });
 
   it('rejects a tampered image_sig', () => {
@@ -285,9 +298,7 @@ describe('(f) verifyStream policy rejections', () => {
   });
 
   it('rejects a wrong pinned key (server MITM / wrong signer)', () => {
-    const wrong = hexToBytes(
-      'fc51cd8e6218a1a38da47ed00230f0580816ed13ba3303ac5deb911548908025',
-    );
+    const wrong = hexToBytes('fc51cd8e6218a1a38da47ed00230f0580816ed13ba3303ac5deb911548908025');
     expect(() => verifyStream(good, wrong)).toThrow(/image_sig|sig/);
   });
 

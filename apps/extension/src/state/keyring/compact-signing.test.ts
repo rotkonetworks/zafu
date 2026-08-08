@@ -82,11 +82,18 @@ describe('compact-signing', () => {
       const sig2 = new Uint8Array(64).fill(0xbb);
 
       const buf: number[] = [
-        0x53, 0x04, 0x07, // prelude
+        0x53,
+        0x04,
+        0x07, // prelude
         0x01, // version length
         0x31, // "1"
-        0x02, 0x00, // sig_count = 2 (LE)
-        POOL_ORCHARD, 0x00, 0x00, 0x00, 0x00, // action_index = 0
+        0x02,
+        0x00, // sig_count = 2 (LE)
+        POOL_ORCHARD,
+        0x00,
+        0x00,
+        0x00,
+        0x00, // action_index = 0
       ];
       buf.push(...sig1);
       buf.push(POOL_IRONWOOD, 0x01, 0x00, 0x00, 0x00); // action_index = 1
@@ -114,21 +121,33 @@ describe('compact-signing', () => {
       const sig2 = new Uint8Array(64).fill(0xbb);
 
       const buf: number[] = [
-        0x53, 0x04, 0x08, // prelude
+        0x53,
+        0x04,
+        0x08, // prelude
         0x01, // version length
         0x31, // "1"
         0x02, // count = 2
         // First message
         0x00, // id_len = 0
-        0x01, 0x00, // sig_count = 1
-        POOL_ORCHARD, 0x00, 0x00, 0x00, 0x00, // action_index = 0
+        0x01,
+        0x00, // sig_count = 1
+        POOL_ORCHARD,
+        0x00,
+        0x00,
+        0x00,
+        0x00, // action_index = 0
       ];
       buf.push(...sig1);
       buf.push(
         // Second message
         0x00, // id_len = 0
-        0x01, 0x00, // sig_count = 1
-        POOL_IRONWOOD, 0x01, 0x00, 0x00, 0x00, // action_index = 1
+        0x01,
+        0x00, // sig_count = 1
+        POOL_IRONWOOD,
+        0x01,
+        0x00,
+        0x00,
+        0x00, // action_index = 1
       );
       buf.push(...sig2);
 
@@ -174,21 +193,36 @@ describe('compact-signing', () => {
 
     it('throws on truncated signature data', () => {
       const buf = new Uint8Array([
-        0x53, 0x04, 0x07, // prelude
-        0x01, 0x31, // version
-        0x02, 0x00, // sig_count = 2
-        POOL_ORCHARD, 0x00, 0x00, 0x00, 0x00, // first sig - action_index but incomplete
+        0x53,
+        0x04,
+        0x07, // prelude
+        0x01,
+        0x31, // version
+        0x02,
+        0x00, // sig_count = 2
+        POOL_ORCHARD,
+        0x00,
+        0x00,
+        0x00,
+        0x00, // first sig - action_index but incomplete
       ]);
       expect(() => parseCompactResponse(buf)).toThrow('truncated at signature 0');
     });
 
     it('throws on invalid pool value', () => {
       const buf: number[] = [
-        0x53, 0x04, 0x07, // prelude
-        0x01, 0x31, // version
-        0x01, 0x00, // sig_count = 1
+        0x53,
+        0x04,
+        0x07, // prelude
+        0x01,
+        0x31, // version
+        0x01,
+        0x00, // sig_count = 1
         0x99, // invalid pool
-        0x00, 0x00, 0x00, 0x00, // action_index
+        0x00,
+        0x00,
+        0x00,
+        0x00, // action_index
       ];
       buf.push(...new Array(64).fill(0xaa)); // signature
       expect(() => parseCompactResponse(new Uint8Array(buf))).toThrow('unknown pool value');
@@ -202,8 +236,11 @@ describe('compact-signing', () => {
 
     it('throws on invalid batch count (0)', () => {
       const buf = new Uint8Array([
-        0x53, 0x04, 0x08, // prelude
-        0x01, 0x31, // version
+        0x53,
+        0x04,
+        0x08, // prelude
+        0x01,
+        0x31, // version
         0x00, // count = 0
       ]);
       expect(() => parseCompactResponse(buf)).toThrow('invalid batch count');
@@ -211,8 +248,11 @@ describe('compact-signing', () => {
 
     it('throws on invalid batch count (>40)', () => {
       const buf = new Uint8Array([
-        0x53, 0x04, 0x08, // prelude
-        0x01, 0x31, // version
+        0x53,
+        0x04,
+        0x08, // prelude
+        0x01,
+        0x31, // version
         0x29, // count = 41
       ]);
       expect(() => parseCompactResponse(buf)).toThrow('invalid batch count');
@@ -282,10 +322,7 @@ describe('compact-signing', () => {
       const result = mergeContributions(original, parsed, mockWasm);
 
       expect(mockWasm).toHaveBeenCalledTimes(1);
-      expect(mockWasm).toHaveBeenCalledWith(
-        'aabbccdd',
-        expect.stringContaining('"contributions"'),
-      );
+      expect(mockWasm).toHaveBeenCalledWith('aabbccdd', expect.stringContaining('"contributions"'));
       expect(result).toEqual(['eeff00ff']);
     });
 

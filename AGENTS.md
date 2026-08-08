@@ -11,7 +11,7 @@ the Chrome manifest `version`.
 
 Always keep them in lockstep (they must never diverge):
 
-1. `apps/extension/package.json`         — npm `version`
+1. `apps/extension/package.json` — npm `version`
 2. `apps/extension/public/manifest.json` — Chrome manifest `version`
 3. `apps/extension/public/beta-manifest.json` — beta manifest `version`
 

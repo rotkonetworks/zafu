@@ -84,8 +84,7 @@ export default ({
       return {};
     }
   })();
-  const NEAR_1CLICK_JWT =
-    process.env['NEAR_1CLICK_JWT'] ?? dotEnvLocal['NEAR_1CLICK_JWT'] ?? '';
+  const NEAR_1CLICK_JWT = process.env['NEAR_1CLICK_JWT'] ?? dotEnvLocal['NEAR_1CLICK_JWT'] ?? '';
 
   const DefinePlugin = new webpack.DefinePlugin({
     'globalThis.__DEV__': JSON.stringify(process.env['NODE_ENV'] !== 'production'),

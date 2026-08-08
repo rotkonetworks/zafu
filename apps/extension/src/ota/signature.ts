@@ -125,7 +125,11 @@ export function verifyImage(
 }
 
 /** Verify a device-signed ur:zafu-result (fields 1..5 canonical CBOR) against zid_pubkey. */
-export function verifyResult(resultCanonical: Bytes, zidPubkey: Uint8Array, signature?: Bytes): boolean {
+export function verifyResult(
+  resultCanonical: Bytes,
+  zidPubkey: Uint8Array,
+  signature?: Bytes,
+): boolean {
   if (signature) {
     return verifyDomain('result', resultCanonical, signature, zidPubkey);
   }
@@ -133,7 +137,11 @@ export function verifyResult(resultCanonical: Bytes, zidPubkey: Uint8Array, sign
 }
 
 /** Verify a device-signed ur:zafu-status (fields 1..4 canonical CBOR) against zid_pubkey. */
-export function verifyStatus(statusCanonical: Bytes, zidPubkey: Uint8Array, signature?: Bytes): boolean {
+export function verifyStatus(
+  statusCanonical: Bytes,
+  zidPubkey: Uint8Array,
+  signature?: Bytes,
+): boolean {
   if (signature) {
     return verifyDomain('status', statusCanonical, signature, zidPubkey);
   }

@@ -26,13 +26,19 @@ const expectedPayload = fs.readFileSync(path.join(outDir, 'payload.hex'), 'utf8'
 const reassembled = decodeStream(urParts);
 const got = toHex(reassembled);
 if (got !== expectedPayload.trim()) {
-  throw new Error('[verify] FAIL: reassembled payload differs from what the wallet produced (fountain/camera mismatch)');
+  throw new Error(
+    '[verify] FAIL: reassembled payload differs from what the wallet produced (fountain/camera mismatch)',
+  );
 }
-console.log(`[verify] fountain reassembly OK (${(reassembled.length / 1024 / 1024).toFixed(2)} MiB)`);
+console.log(
+  `[verify] fountain reassembly OK (${(reassembled.length / 1024 / 1024).toFixed(2)} MiB)`,
+);
 
 // wallet verifies the stream against the pinned key (it never signs)
 const { manifest, imageHeader } = verifyStream(reassembled);
-console.log(`[verify] stream VERIFIED against pinned key: v${manifest.version} board=${manifest.board} class=${manifest.class} sha=${toHex(manifest.payload_sha256).slice(0, 16)}…`);
+console.log(
+  `[verify] stream VERIFIED against pinned key: v${manifest.version} board=${manifest.board} class=${manifest.class} sha=${toHex(manifest.payload_sha256).slice(0, 16)}…`,
+);
 
 // --- device-standing turn: sign a ur:zafu-result with a ZID key ---
 // (mirrors rust/ota result::produce_result; deterministic dev zid key)
@@ -48,5 +54,9 @@ const canonical = encodeMap([
 const sig = ed25519.sign(concat(DOMAINS.result, canonical), zidSecret);
 const ok = verifyResult(canonical, zidPub, sig);
 if (!ok) throw new Error('[verify] FAIL: wallet rejected the device-signed result');
-console.log(`[verify] device-signed ur:zafu-result accepted by wallet (slot B, fw v${manifest.version})`);
-console.log('[simulate] FULL LOOP OK: wallet→QR→camera→fountain→verify→result→verify all on PC (no phone)');
+console.log(
+  `[verify] device-signed ur:zafu-result accepted by wallet (slot B, fw v${manifest.version})`,
+);
+console.log(
+  '[simulate] FULL LOOP OK: wallet→QR→camera→fountain→verify→result→verify all on PC (no phone)',
+);

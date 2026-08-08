@@ -177,10 +177,7 @@ function readSignatureContributions(
 
     // little-endian u32
     const actionIndex =
-      bytes[pos + 1]! +
-      (bytes[pos + 2]! << 8) +
-      (bytes[pos + 3]! << 16) +
-      (bytes[pos + 4]! << 24);
+      bytes[pos + 1]! + (bytes[pos + 2]! << 8) + (bytes[pos + 3]! << 16) + (bytes[pos + 4]! << 24);
 
     const signature = bytes.slice(pos + 5, pos + 5 + 64);
 
@@ -213,9 +210,7 @@ export function buildCompactRequest(pcztHexes: string[]): Uint8Array {
   }
 
   if (pcztHexes.length > BATCH_MAX_MESSAGES) {
-    throw new Error(
-      `batch size ${pcztHexes.length} exceeds max ${BATCH_MAX_MESSAGES}`,
-    );
+    throw new Error(`batch size ${pcztHexes.length} exceeds max ${BATCH_MAX_MESSAGES}`);
   }
 
   // Convert hex strings to bytes

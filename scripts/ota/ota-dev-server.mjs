@@ -17,15 +17,18 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 const port = parseInt(process.argv[process.argv.indexOf('--port') + 1] ?? '8787', 10);
-const file = process.argv[process.argv.indexOf('--file') + 1]
-  ?? path.join(import.meta.dirname, '..', '..', 'apps/extension/src/ota/test-data/dev-stream.json');
+const file =
+  process.argv[process.argv.indexOf('--file') + 1] ??
+  path.join(import.meta.dirname, '..', '..', 'apps/extension/src/ota/test-data/dev-stream.json');
 
 let stream;
 try {
   stream = readFileSync(file, 'utf8');
 } catch (e) {
   console.error(`[ota-dev] no stream artifact at ${file}`);
-  console.error('[ota-dev] generate one first: run the boolean "ota producer" vitest, or scripts/ota/ota-pack.mjs');
+  console.error(
+    '[ota-dev] generate one first: run the boolean "ota producer" vitest, or scripts/ota/ota-pack.mjs',
+  );
   process.exit(1);
 }
 
@@ -33,7 +36,9 @@ createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('content-type', 'application/json');
   res.end(stream);
-  console.log(`[ota-dev] served ${req.method} ${req.url} (${(stream.length / 1024).toFixed(0)} KB stream json)`);
+  console.log(
+    `[ota-dev] served ${req.method} ${req.url} (${(stream.length / 1024).toFixed(0)} KB stream json)`,
+  );
 }).listen(port, () => {
   console.log(`[ota-dev] Zafu OTA dev endpoint up at http://localhost:${port}/zafu/ota/v1/stream`);
 });

@@ -54,7 +54,11 @@ export function createOtaSession(): OtaSession {
 }
 
 /** Begin streaming: registers the correlation id + target version. */
-export function beginStreaming(session: OtaSession, reqId: string, targetVersion: string): OtaSession {
+export function beginStreaming(
+  session: OtaSession,
+  reqId: string,
+  targetVersion: string,
+): OtaSession {
   const t = now();
   return {
     ...session,
