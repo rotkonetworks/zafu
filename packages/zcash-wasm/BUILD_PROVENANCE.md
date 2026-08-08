@@ -30,7 +30,9 @@ These vendored .wasm blobs are build artifacts. Do NOT hand-edit.
 Reproduce by checking out the zcli rev below and running the commands.
 
 - source repo: zcli (master)
-- source rev: 70722f7 — "Merge feat/compact-signer-redaction: wallet-side compact
+- source rev: 122451e — adds the enc_ciphertext->memo collapse to
+  redact_pczt_compact, the largest request-leg win (2.53x vs 1.08x without).
+- previous rev: 70722f7 — "Merge feat/compact-signer-redaction: wallet-side compact
   PCZT surface". Adds the compact-signing exports the wallet needs:
   `redact_pczt_compact`, `apply_signature_contributions`,
   `estimate_compact_savings`. Ironwood is UNGATED upstream now (pczt 0.9.x /
@@ -61,7 +63,7 @@ Reproduce by checking out the zcli rev below and running the commands.
       --enable-simd --enable-bulk-memory --enable-mutable-globals \
       --enable-nontrapping-float-to-int \
       pkg/zafu_wasm_bg.wasm -o pkg/zafu_wasm_bg.wasm
-    sha256(zafu_wasm_bg.wasm) = f83178d4c419cf81ec810d512365d0385e9ef251e366c0313665352aeac8f3cf
+    sha256(zafu_wasm_bg.wasm) = 9c8ac43637d7d5a8442e131e6728dc33a4c02ac3ea05f5bd47e47bde124f8368
 
 ## parallel / rayon (apps/extension/public/zafu-wasm-parallel/zafu_wasm_bg.wasm)
 
@@ -79,7 +81,7 @@ Reproduce by checking out the zcli rev below and running the commands.
     wasm-opt -Oz --enable-threads --enable-bulk-memory --enable-simd \
       --enable-mutable-globals --enable-nontrapping-float-to-int \
       pkg-parallel/zafu_wasm_bg.wasm -o pkg-parallel/zafu_wasm_bg.wasm
-    sha256(zafu_wasm_bg.wasm) = a779d07c626ea8a79a83ec94056b4d54355e23906f85bbe185632b1cc630784d
+    sha256(zafu_wasm_bg.wasm) = 67860fab0bdead4be5fe96631663cf18a1779d270511ef9588705e5598a909c8
 
     Verify the rebuilt blob has shared imported memory before shipping:
       `(import "./zafu_wasm_bg.js" "memory" (memory ... shared))` post-bindgen.
