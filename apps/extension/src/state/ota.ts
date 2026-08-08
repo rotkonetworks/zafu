@@ -45,6 +45,8 @@ export interface PendingUpdate {
   manifest: Manifest;
   imageHeader: ImageHeader;
   streamFrames: string[];
+  /** raw stream payload (manifest_cbor ‖ image_wrapper) — lets the UI re-fountain at a chosen density */
+  payload: Uint8Array;
 }
 
 export interface OtaSlice {
@@ -213,6 +215,7 @@ export const createOtaSlice: SliceCreator<OtaSlice> = (set, get) => ({
           manifest,
           imageHeader,
           streamFrames: encodeStreamFrames(payloadBytes),
+          payload: payloadBytes,
         };
         state.ota.session = beginStreaming(state.ota.session, reqIdHex, manifest.version);
       });

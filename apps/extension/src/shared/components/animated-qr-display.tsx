@@ -3,9 +3,17 @@
  *
  * for payloads > ~2KB that don't fit in a single QR code.
  * splits the payload into numbered frames and cycles through them.
- * format: "P<frameIndex>/<totalFrames>/<base64chunk>"
+ * format: "P<frameIndex>/<totalFrames>/<base64chunk>" (legacy P-format)
+ * or BC-UR fountain frames ("ur:<type>/...").
  *
- * no external dependencies (avoids @ngraveio/bc-ur Node.js polyfill issues).
+ * no external dependencies (avoids @ngraveio/bc-ur Node.js polyfill issues;
+ * BC-UR encoding for UR flows goes through the wasm ur_encode_frames).
+ *
+ * Two controls:
+ *   QR speed   — ms per frame (how fast the animation cycles)
+ *   QR density — payload bytes per frame (Safe 400B / Medium 800B / Aggressive
+ *                1.2KB). Higher density = fewer frames but a higher QR version,
+ *                which needs a sharper camera. Persistent per-install.
  */
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
@@ -13,22 +21,55 @@ import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const QRCode = require('qrcode');
 
-/** max bytes of base64 data per QR frame (keep QR scannable) */
+/** max base64 chars per frame when building legacy P-frames */
 const DEFAULT_CHUNK_SIZE = 400;
+
+/** density presets: payload bytes per QR frame → QR version ≈ */
+interface DensityPreset {
+  key: 'safe' | 'medium' | 'aggressive';
+  label: string;
+  bytes: number;
+  detail: string;
+}
+export const QR_DENSITY_PRESETS: DensityPreset[] = [
+  { key: 'safe', label: 'safe', bytes: 400, detail: '~v16 · wide compat' },
+  { key: 'medium', label: 'medium', bytes: 800, detail: '~v22 · phone+webcam' },
+  { key: 'aggressive', label: 'aggressive', bytes: 1200, detail: '~v25 · close-up setup' },
+];
+const DENSITY_MIN = 200;
+const DENSITY_MAX = 1600;
+
+/** closest preset for a stored/custom value */
+const clampPreset = (bytes: number): number => {
+  const n = typeof bytes === 'number' && bytes >= DENSITY_MIN ? Math.round(bytes) : 400;
+  return Math.min(DENSITY_MAX, Math.max(DENSITY_MIN, n));
+};
 
 interface AnimatedQrDisplayProps {
   /** raw bytes to encode (used with legacy P-frame format) */
   data?: Uint8Array;
   /** pre-built UR string frames (e.g. from WASM ur_encode_frames) */
   urFrames?: string[];
-  /** UR type string (e.g. 'zcash-notes') — used with data prop */
+  /** UR type string (e.g. 'zcash-notes', 'zafu-stream') — used with data prop */
   urType?: string;
   /** size of QR code in pixels */
   size?: number;
-  /** max base64 chars per frame (legacy mode) */
+  /** max base64 chars per frame (legacy mode; kept for back-compat) */
   chunkSize?: number;
-  /** ms between frames */
+  /** ms between frames (default 300 = ~3 fps; 200/120 used by some flows) */
   frameInterval?: number;
+  /** show the live playback-speed slider under the QR (default true, multipart only) */
+  showSpeedControl?: boolean;
+  /** show the QR density slider (payload bytes/frame). Needs `data` or `urSource`. */
+  showDensityControl?: boolean;
+  /** initial payload-bytes-per-frame density (default 400 = safe) */
+  densityBytes?: number;
+  /**
+   * raw fountain source for UR flows — lets the component re-fountain frames at
+   * the chosen density via wasm ur_encode_frames. Without it, pre-built
+   * urFrames can't be re-densified and the density slider is hidden.
+   */
+  urSource?: { bytes: Uint8Array; urType: string };
   /** title above QR */
   title?: string;
   /** description below QR */
@@ -38,15 +79,43 @@ interface AnimatedQrDisplayProps {
 }
 
 /** split payload into numbered frames: P<idx>/<total>/<type>/<base64> (legacy) */
-function buildFrames(data: Uint8Array, urType: string, chunkSize: number): string[] {
+function buildFrames(data: Uint8Array, urType: string, chunkChars: number): string[] {
   const b64 = btoa(String.fromCharCode(...data));
-  const totalChunks = Math.ceil(b64.length / chunkSize) || 1;
+  const totalChunks = Math.ceil(b64.length / chunkChars) || 1;
   const frames: string[] = [];
   for (let i = 0; i < totalChunks; i++) {
-    const chunk = b64.slice(i * chunkSize, (i + 1) * chunkSize);
+    const chunk = b64.slice(i * chunkChars, (i + 1) * chunkChars);
     frames.push(`P${i + 1}/${totalChunks}/${urType}/${chunk}`);
   }
   return frames;
+}
+
+/** payload bytes per frame → legacy P-frame base64 chars per frame (bytes * 4/3) */
+const bytesToB64Chars = (bytes: number) => Math.ceil((bytes * 4) / 3);
+
+/** estimate the QR version a frame of `payloadBytes` would use (QR spec, byte mode @ EC L) */
+function estimateQrVersion(payloadBytes: number): number {
+  try {
+    // all-zero bytes at EC L → the smallest version that fits `payloadBytes`
+    const qr = QRCode.create(Buffer.alloc(payloadBytes), { errorCorrectionLevel: 'L' });
+    if (typeof qr?.version === 'number' && qr.version > 0) return qr.version;
+  } catch {
+    /* qrcode lib unavailable/sparse — fall through to the table */
+  }
+  // QR capacity table (bytes, EC L); first version whose capacity is >= payloadBytes
+  const CAP: Array<[number, number]> = [
+    [16, 41],
+    [20, 109],
+    [24, 249],
+    [28, 443],
+    [32, 689],
+    [36, 989],
+    [40, 1307],
+  ];
+  for (const [v, cap] of CAP) {
+    if (payloadBytes <= cap) return v;
+  }
+  return 40;
 }
 
 export function AnimatedQrDisplay({
@@ -56,6 +125,10 @@ export function AnimatedQrDisplay({
   size = 256,
   chunkSize = DEFAULT_CHUNK_SIZE,
   frameInterval = 300,
+  showSpeedControl = true,
+  showDensityControl = true,
+  densityBytes = 400,
+  urSource,
   title,
   description,
   totalBytes,
@@ -66,33 +139,153 @@ export function AnimatedQrDisplay({
   const [currentFrame, setCurrentFrame] = useState(1);
   const [error, setError] = useState<string | null>(null);
 
+  // ── playback speed (ms/frame) with a persisted preference ──────────────
+  const [intervalMs, setIntervalMs] = useState(frameInterval);
+  const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clampSpeed = (v: number) => Math.min(700, Math.max(60, Math.round(v)));
+
+  useEffect(() => {
+    let cancelled = false;
+    const apply = (v: unknown) => {
+      if (!cancelled) setIntervalMs(clampSpeed(typeof v === 'number' ? v : frameInterval));
+    };
+    try {
+      if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+        chrome.storage.local
+          .get(['qrPlaybackIntervalMs'])
+          .then(r => apply(r?.['qrPlaybackIntervalMs']));
+      } else {
+        apply(undefined);
+      }
+    } catch {
+      apply(undefined);
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [frameInterval]);
+
+  const changeSpeed = useCallback((v: number) => {
+    const n = clampSpeed(v);
+    setIntervalMs(n);
+    if (persistTimer.current) clearTimeout(persistTimer.current);
+    persistTimer.current = setTimeout(() => {
+      try {
+        if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+          void chrome.storage.local.set({ qrPlaybackIntervalMs: n });
+        }
+      } catch {
+        /* non-extension environment */
+      }
+    }, 250);
+  }, []);
+
+  // ── density (payload bytes/frame) with a persisted preference ──────────
+  // back-compat: a legacy caller's chunkSize seeds the density when no explicit
+  // densityBytes is given (persisted pref still wins once loaded).
+  const [density, setDensity] = useState<number>(() => clampPreset(densityBytes ?? chunkSize));
+  // UR-source frames get re-fountained at the chosen density (async wasm)
+  const [urDensityFrames, setUrDensityFrames] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const apply = (v: unknown) => {
+      if (!cancelled) setDensity(clampPreset(typeof v === 'number' ? v : densityBytes));
+    };
+    try {
+      if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+        chrome.storage.local
+          .get(['qrFrameDensityBytes'])
+          .then(r => apply(r?.['qrFrameDensityBytes']));
+      } else {
+        apply(undefined);
+      }
+    } catch {
+      apply(undefined);
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [densityBytes]);
+
+  const persistDensity = (n: number) => {
+    try {
+      if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+        void chrome.storage.local.set({ qrFrameDensityBytes: n });
+      }
+    } catch {
+      /* non-extension environment */
+    }
+  };
+  const changeDensity = useCallback((n: number) => {
+    setDensity(clampPreset(n));
+    persistDensity(clampPreset(n));
+  }, []);
+
+  // Re-fountain UR frames at the chosen density when a raw source is available.
+  useEffect(() => {
+    if (!urSource || urSource.bytes.byteLength === 0) {
+      setUrDensityFrames(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const mod = await import(/* webpackMode: "eager" */ '@repo/zcash-wasm');
+        const m = mod as {
+          default: (opts?: unknown) => Promise<unknown>;
+          ur_encode_frames: (bytes: Uint8Array, type: string, fragSize: number) => string;
+        };
+        await m.default();
+        const json = (m.ur_encode_frames as (b: Uint8Array, t: string, f: number) => string)(
+          urSource.bytes,
+          urSource.urType,
+          density,
+        );
+        const frames = JSON.parse(json) as string[];
+        if (!cancelled) setUrDensityFrames(frames);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'failed to re-fountain frames');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [density, urSource]);
+
+  const canReDensify = Boolean(urSource) || Boolean(data);
+
+  // Effective frame list:
+  //  UR-source → re-encoded frames (fall back to urFrames until regenerated)
+  //  data      → legacy P-frames at the chosen density
+  //  else      → as-supplied urFrames
   const frames = useMemo(() => {
-    // prefer pre-built UR frames if provided
+    if (urSource) {
+      return urDensityFrames ?? urFrames ?? [];
+    }
     if (urFrames && urFrames.length > 0) {
       return urFrames;
     }
-    // fall back to legacy P-frame format
     if (!data || !urType) {
       return [];
     }
     try {
-      return buildFrames(data, urType, chunkSize);
+      return buildFrames(data, urType, bytesToB64Chars(density));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'failed to encode payload');
       return [];
     }
-  }, [data, urFrames, urType, chunkSize]);
+  }, [data, urFrames, urType, density, urSource, urDensityFrames]);
 
   const renderFrame = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas || frames.length === 0) {
       return;
     }
-
     const idx = frameIndexRef.current % frames.length;
     frameIndexRef.current = idx + 1;
     setCurrentFrame(idx + 1);
-
     QRCode.toCanvas(
       canvas,
       frames[idx],
@@ -114,20 +307,22 @@ export function AnimatedQrDisplay({
     if (frames.length === 0) {
       return;
     }
-
     renderFrame();
-
     if (frames.length > 1) {
-      timerRef.current = setInterval(renderFrame, frameInterval);
+      timerRef.current = setInterval(renderFrame, intervalMs);
     }
-
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
       }
     };
-  }, [renderFrame, frameInterval, frames.length]);
+  }, [renderFrame, intervalMs, frames.length]);
+
+  const byteCount = totalBytes ?? data?.length ?? 0;
+  const frameEstimate =
+    byteCount > 0 && density > 0 ? Math.ceil(byteCount / density) : frames.length;
+  const qrVersion = estimateQrVersion(density);
 
   if (error) {
     return (
@@ -157,10 +352,75 @@ export function AnimatedQrDisplay({
         </div>
       )}
 
+      {/* ── QR speed (ms/frame) ── */}
+      {showSpeedControl && frames.length > 1 && (
+        <label className='flex w-full max-w-xs flex-col gap-1 text-label text-fg-muted'>
+          <div className='flex items-center justify-between'>
+            <span className='flex items-center gap-1'>
+              <span className='i-lucide-gauge size-3' />
+              QR speed
+            </span>
+            <span className='font-mono'>{Math.round(1000 / Math.max(intervalMs, 1))} fps</span>
+          </div>
+          <input
+            type='range'
+            min={60}
+            max={700}
+            step={20}
+            value={intervalMs}
+            onChange={e => changeSpeed(Number(e.target.value))}
+            className='w-full accent-zigner-gold'
+          />
+          <div className='flex justify-between text-xs opacity-70'>
+            <span>slow</span>
+            <span>fast</span>
+          </div>
+        </label>
+      )}
+
+      {/* ── QR density (payload bytes / frame) ── */}
+      {showDensityControl && frames.length > 1 && canReDensify && (
+        <div className='flex w-full max-w-xs flex-col gap-1 text-label text-fg-muted'>
+          <div className='flex items-center justify-between'>
+            <span className='flex items-center gap-1'>
+              <span className='i-lucide-grid-3x3 size-3' />
+              QR density
+            </span>
+            <span className='font-mono'>
+              ≈ v{qrVersion} · ~{frameEstimate.toLocaleString()} frames
+            </span>
+          </div>
+          <div className='grid grid-cols-3 gap-1'>
+            {QR_DENSITY_PRESETS.map(preset => {
+              const active = density === preset.bytes;
+              return (
+                <button
+                  key={preset.key}
+                  type='button'
+                  onClick={() => changeDensity(preset.bytes)}
+                  className={`rounded-md border px-1 py-1 text-center text-xs transition-colors ${
+                    active
+                      ? 'border-zigner-gold bg-zigner-gold/10 text-fg-high'
+                      : 'border-border-soft text-fg-muted hover:border-zigner-gold/50'
+                  }`}
+                >
+                  <span className='block font-medium capitalize'>{preset.label}</span>
+                  <span className='block opacity-70'>{preset.bytes / 1000}KB</span>
+                </button>
+              );
+            })}
+          </div>
+          <div className='flex justify-between text-xs opacity-70'>
+            <span>fewer bytes · more frames</span>
+            <span>more bytes · fewer frames</span>
+          </div>
+        </div>
+      )}
+
       {description && <p className='text-xs text-fg-muted text-center max-w-xs'>{description}</p>}
 
       <p className='text-label text-fg-muted'>
-        {(totalBytes ?? data?.length ?? 0).toLocaleString()} bytes · {frames.length} frame
+        {byteCount.toLocaleString()} bytes · {frames.length} frame
         {frames.length !== 1 ? 's' : ''}
       </p>
     </div>

@@ -81,6 +81,7 @@ export const SettingsOta = () => {
         <AnimatedQrDisplay
           urFrames={pendingUpdate.streamFrames}
           urType={STREAM_UR_TYPE}
+          urSource={{ bytes: pendingUpdate.payload, urType: STREAM_UR_TYPE }}
           totalBytes={pendingUpdate.manifest.payload_size}
           title={`signed update v${pendingUpdate.manifest.version} — hold to device`}
           description='device protocol module update, ~1 min scan. scan the animated QR with the device, then tap to apply.'
@@ -104,19 +105,20 @@ export const SettingsOta = () => {
       />
     ) : null;
 
-  const statusScanner = scanMode === 'status' ? (
-    <AnimatedQrScanner
-      inline
-      urTypeFilter={STATUS_UR_TYPE}
-      title='scan device status (ur:zafu-status)'
-      onComplete={bytes => {
-        setScanMode('none');
-        void onStatusScanned(bytes);
-      }}
-      onError={msg => console.warn('[ota] status scan error', msg)}
-      onClose={() => setScanMode('none')}
-    />
-  ) : null;
+  const statusScanner =
+    scanMode === 'status' ? (
+      <AnimatedQrScanner
+        inline
+        urTypeFilter={STATUS_UR_TYPE}
+        title='scan device status (ur:zafu-status)'
+        onComplete={bytes => {
+          setScanMode('none');
+          void onStatusScanned(bytes);
+        }}
+        onError={msg => console.warn('[ota] status scan error', msg)}
+        onClose={() => setScanMode('none')}
+      />
+    ) : null;
 
   return (
     <SettingsScreen title='device update' backPath={PopupPath.SETTINGS}>
