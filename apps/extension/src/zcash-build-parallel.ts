@@ -92,6 +92,36 @@ const initParallelWasm = async (): Promise<WasmModule> => {
   return wasmModule!;
 };
 
+/**
+ * How many rayon threads to spin up for voting proofs, capped for MEMORY SAFETY.
+ *
+ * Empirical basis (measured 2026-08-10, real K=14 delegation proof in headless
+ * Chromium): the proof needs ~765 MB at 1 thread; each extra rayon worker
+ * duplicates ~32 MB of per-thread proving-key state, so a 32-thread pool peaked
+ * at ~1.76 GB - enough to OOM a low-RAM device. The speedup is SUB-LINEAR
+ * (~4.7x at 32 threads on this small circuit), so past a handful of threads we
+ * buy memory but almost no speed.
+ *
+ * Design: keep the estimated peak under a conservative slice of device RAM, with
+ * a low absolute ceiling (diminishing returns) and a floor of 1. Every unknown
+ * resolves TOWARD FEWER THREADS - navigator.deviceMemory is Chrome-only and
+ * coarse (privacy-capped at 8 GB); if absent we assume a modest 4 GB, not an
+ * optimistic large value. Worst case degrades to single-threaded, which the
+ * caller's try/catch already handles.
+ */
+const votingProofThreads = (): number => {
+  const cores = navigator.hardwareConcurrency || 4;
+  const deviceMemGb = (navigator as { deviceMemory?: number }).deviceMemory || 4;
+  const BASE_MB = 800; // 1-thread footprint, rounded up from ~765 MB measured
+  const PER_THREAD_MB = 40; // per-extra-worker proving-key state, rounded up from ~32
+  // Spend at most ~40% of device RAM on this pool; the rest is for the OS, the
+  // browser, and the core wallet's own pool that shares this offscreen document.
+  const budgetMb = deviceMemGb * 1024 * 0.4;
+  const memCap = Math.max(1, Math.floor((budgetMb - BASE_MB) / PER_THREAD_MB) + 1);
+  const CEILING = 6; // sub-linear scaling: beyond this buys memory, not speed
+  return Math.max(1, Math.min(cores - 1, CEILING, memCap));
+};
+
 const initParallelVotingWasm = async (): Promise<WasmModule> => {
   if (votingWasmModule) {
     return votingWasmModule;
@@ -128,9 +158,14 @@ const initParallelVotingWasm = async (): Promise<WasmModule> => {
       // Own pool, independent of the core module's — same crossOriginIsolated
       // offscreen context, but a separate wasm instance/memory needs its own
       // initThreadPool call.
-      const numThreads = navigator.hardwareConcurrency || 4;
+      const numThreads = votingProofThreads();
       await wasm.initThreadPool(numThreads);
-      console.log(`[zcash-build-parallel] voting-wasm rayon: ${numThreads} threads`);
+      console.log(
+        `[zcash-build-parallel] voting-wasm rayon: ${numThreads} threads ` +
+          `(cores=${navigator.hardwareConcurrency || '?'}, ` +
+          `deviceMemory=${(navigator as { deviceMemory?: number }).deviceMemory ?? '?'}GB, ` +
+          `memory-capped for OOM safety)`,
+      );
 
       votingWasmModule = wasm;
     } finally {
