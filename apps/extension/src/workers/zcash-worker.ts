@@ -1886,7 +1886,13 @@ interface ZcashBuildRequest {
     | 'build_signed_ironwood_send'
     | 'build_ironwood_send_pczt'
     | 'build_shielding'
-    | 'build_unsigned_shielding';
+    | 'build_unsigned_shielding'
+    // shielded-voting proving fns - routed to the standalone voting-wasm
+    // module + its own rayon pool in the offscreen document. See
+    // zcash-build-parallel.ts's VOTING_FNS / initParallelVotingWasm.
+    | 'build_delegation_pczt'
+    | 'finalize_delegation'
+    | 'cast_vote_hot_wire';
   args: unknown[];
 }
 
@@ -7685,7 +7691,6 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       }
 
       case 'build-delegation-pczt': {
-        const votingWasm = await loadVotingWasm();
         const bd = payload as {
           fvkHex: string;
           seedFingerprintHex: string;
@@ -7699,18 +7704,21 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           bundleIndex: number;
         };
         const raw = JSON.parse(
-          votingWasm.build_delegation_pczt(
-            bd.fvkHex,
-            bd.seedFingerprintHex,
-            bd.accountIndex,
-            bd.hotkeyPubkeyHex,
-            bd.notesJson,
-            bd.roundParamsJson,
-            bd.consensusBranchId,
-            bd.roundName,
-            bd.network,
-            bd.bundleIndex,
-          ),
+          (await proveViaOffscreen({
+            fn: 'build_delegation_pczt',
+            args: [
+              bd.fvkHex,
+              bd.seedFingerprintHex,
+              bd.accountIndex,
+              bd.hotkeyPubkeyHex,
+              bd.notesJson,
+              bd.roundParamsJson,
+              bd.consensusBranchId,
+              bd.roundName,
+              bd.network,
+              bd.bundleIndex,
+            ],
+          })) as string,
         ) as {
           redacted_pczt_hex: string;
           pczt_sighash_hex: string;
@@ -7760,7 +7768,6 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       }
 
       case 'finalize-delegation': {
-        const votingWasm = await loadVotingWasm();
         const fd = payload as {
           delegationContextJson: string;
           merkleWitnessesJson: string;
@@ -7769,13 +7776,16 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           sighashHex: string;
         };
         const raw = JSON.parse(
-          votingWasm.finalize_delegation(
-            fd.delegationContextJson,
-            fd.merkleWitnessesJson,
-            fd.imtProofsJson,
-            fd.spendAuthSigHex,
-            fd.sighashHex,
-          ),
+          (await proveViaOffscreen({
+            fn: 'finalize_delegation',
+            args: [
+              fd.delegationContextJson,
+              fd.merkleWitnessesJson,
+              fd.imtProofsJson,
+              fd.spendAuthSigHex,
+              fd.sighashHex,
+            ],
+          })) as string,
         ) as { delegation_submission_wire_json: string };
         workerSelf.postMessage({
           type: 'result',
@@ -7788,7 +7798,6 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       }
 
       case 'cast-vote-hot-wire': {
-        const votingWasm = await loadVotingWasm();
         const cv = payload as {
           network: string;
           hotkeySecretHex: string;
@@ -7799,15 +7808,20 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           submitAt: number;
         };
         const raw = JSON.parse(
-          votingWasm.cast_vote_hot_wire(
-            cv.hotkeySecretHex,
-            cv.roundParamsJson,
-            cv.delegationStateJson,
-            cv.vanWitnessJson,
-            cv.voteJson,
-            cv.network,
-            BigInt(cv.submitAt),
-          ),
+          (await proveViaOffscreen({
+            fn: 'cast_vote_hot_wire',
+            args: [
+              cv.hotkeySecretHex,
+              cv.roundParamsJson,
+              cv.delegationStateJson,
+              cv.vanWitnessJson,
+              cv.voteJson,
+              cv.network,
+              // stringified bigint over postMessage, same convention as the
+              // core send builders' amount/fee args.
+              String(cv.submitAt),
+            ],
+          })) as string,
         ) as { proposal_id: number; wire: string; shares: string; commitment_bundle_json: string };
         workerSelf.postMessage({
           type: 'result',

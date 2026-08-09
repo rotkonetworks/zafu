@@ -21,13 +21,24 @@
  * `multicore` as a hard default feature that cannot be disabled from a
  * downstream crate - the wasm32 target therefore requires
  * `+atomics,+bulk-memory,+mutable-globals` codegen regardless of whether an
- * actual rayon thread pool is spun up. No thread pool IS spun up here (no
- * `wasm-bindgen-rayon` in the dependency graph, so proving runs
- * single-threaded) - but the host context still needs `crossOriginIsolated`
- * (COOP/COEP) for the shared `WebAssembly.Memory` allocation to succeed.
- * This is already true of the worker context that loads the core wallet
- * module, so no extra header wiring should be needed - verify in-browser
- * before shipping.
+ * actual rayon thread pool is spun up.
+ *
+ * This lazy-loaded instance (used by the zcash worker directly, NOT via the
+ * offscreen prover) is for the LIGHT voting fns only:
+ * `generate_voting_hotkey` and `pir_fetch_imt_proofs` - neither runs a halo2
+ * proof, so no thread pool is spun up here and proving-adjacent work stays
+ * off the critical path of a network fetch. The three PROVING fns
+ * (`build_delegation_pczt`, `finalize_delegation` - ZKP #1 - and
+ * `cast_vote_hot_wire` - ZKP #2) are routed through a SEPARATE voting-wasm
+ * instance in the offscreen document instead (see
+ * `zcash-build-parallel.ts`'s `initParallelVotingWasm` /
+ * `proveViaOffscreen` in `workers/zcash-worker.ts`), which DOES call
+ * `initThreadPool` - halo2's K=14 delegation proof measured ~62s wall-clock
+ * with a 32-thread pool there vs. ~290s single-threaded. The host context
+ * still needs `crossOriginIsolated` (COOP/COEP) for the shared
+ * `WebAssembly.Memory` allocation to succeed in either place - already true
+ * of both the worker and offscreen contexts, so no extra header wiring
+ * should be needed - verify in-browser before shipping.
  */
 
 /** WASM module interface (lazy loaded). All heavy functions return JSON strings. */

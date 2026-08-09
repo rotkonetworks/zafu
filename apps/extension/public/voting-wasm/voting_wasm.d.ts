@@ -76,6 +76,8 @@ export function finalize_delegation(delegation_context_json: string, merkle_witn
  */
 export function generate_voting_hotkey(network: string): string;
 
+export function initThreadPool(num_threads: number): Promise<any>;
+
 /**
  * Fetch circuit-ready IMT non-membership proofs for a set of nullifiers.
  *
@@ -88,10 +90,36 @@ export function generate_voting_hotkey(network: string): string;
 export function pir_fetch_imt_proofs(pir_base_url: string, nullifiers_json: string, js_fetch: Function): Promise<string>;
 
 /**
+ * Self-contained delegation-proof feasibility probe.
+ *
+ * Builds synthetic wallet notes / Merkle witnesses / IMT non-membership
+ * proofs entirely inside wasm (no host-supplied inputs) and runs a REAL
+ * K=14 halo2 delegation proof via `zcash_voting::selftest`. Exists purely to
+ * measure whether K=14 proving completes inside a wasm32 module and how
+ * long it takes; the extension does not call this in production flows.
+ *
+ * Returns JSON `{"ok":bool,"proof_len":N,"error":string|null}`. Timing is
+ * deliberately left to the JS caller (`Date.now()` around the call) since
+ * `std::time::Instant` panics on bare wasm32-unknown-unknown.
+ */
+export function selftest_prove_delegation(): string;
+
+/**
  * Install a panic hook that forwards Rust panics to the JS console instead
  * of an opaque "unreachable executed" trap. Call once from JS after load.
  */
 export function voting_wasm_init_panic_hook(): void;
+
+export class wbg_rayon_PoolBuilder {
+    private constructor();
+    free(): void;
+    [Symbol.dispose](): void;
+    build(): void;
+    numThreads(): number;
+    receiver(): number;
+}
+
+export function wbg_rayon_start_worker(receiver: number): void;
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
@@ -102,16 +130,23 @@ export interface InitOutput {
     readonly build_vote_shares_wire: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: bigint) => [number, number, number, number];
     readonly cast_vote_hot_wire: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: bigint) => [number, number, number, number];
     readonly generate_voting_hotkey: (a: number, b: number) => [number, number, number, number];
+    readonly selftest_prove_delegation: () => [number, number];
     readonly voting_wasm_init_panic_hook: () => void;
     readonly pir_fetch_imt_proofs: (a: number, b: number, c: number, d: number, e: any) => any;
+    readonly __wbg_wbg_rayon_poolbuilder_free: (a: number, b: number) => void;
+    readonly initThreadPool: (a: number) => any;
+    readonly wbg_rayon_poolbuilder_build: (a: number) => void;
+    readonly wbg_rayon_poolbuilder_numThreads: (a: number) => number;
+    readonly wbg_rayon_poolbuilder_receiver: (a: number) => number;
+    readonly wbg_rayon_start_worker: (a: number) => void;
     readonly rustsecp256k1_v0_10_0_default_error_callback_fn: (a: number, b: number) => void;
     readonly rustsecp256k1_v0_10_0_default_illegal_callback_fn: (a: number, b: number) => void;
     readonly rustsecp256k1_v0_10_0_context_destroy: (a: number) => void;
     readonly rustsecp256k1_v0_10_0_context_create: (a: number) => number;
     readonly wasm_bindgen_75fefa18e6030595___convert__closures_____invoke___wasm_bindgen_75fefa18e6030595___JsValue__core_2fb3c31ab891fe54___result__Result_____wasm_bindgen_75fefa18e6030595___JsError___true_: (a: number, b: number, c: any) => [number, number];
     readonly wasm_bindgen_75fefa18e6030595___convert__closures_____invoke___js_sys_9ec148cc023792e2___Function_fn_wasm_bindgen_75fefa18e6030595___JsValue_____wasm_bindgen_75fefa18e6030595___sys__Undefined___js_sys_9ec148cc023792e2___Function_fn_wasm_bindgen_75fefa18e6030595___JsValue_____wasm_bindgen_75fefa18e6030595___sys__Undefined_______true_: (a: number, b: number, c: any, d: any) => void;
-    readonly wasm_bindgen_75fefa18e6030595___convert__closures_____invoke___js_sys_9ec148cc023792e2___futures__task__wait_async_polyfill__MessageEvent______true_: (a: number, b: number, c: any) => void;
     readonly wasm_bindgen_75fefa18e6030595___convert__closures_____invoke___wasm_bindgen_75fefa18e6030595___JsValue______true_: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen_75fefa18e6030595___convert__closures_____invoke___js_sys_9ec148cc023792e2___futures__task__wait_async_polyfill__MessageEvent______true_: (a: number, b: number, c: any) => void;
     readonly memory: WebAssembly.Memory;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

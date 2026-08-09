@@ -22,6 +22,16 @@ let initPromise: Promise<void> | null = null;
 // one truth; each realm still gets its own module instance and rayon pool.
 const WASM_BASE = '/zafu-wasm';
 
+// Standalone shielded-voting module (zcli crates/voting-wasm). Kept as a
+// SEPARATE wasm instance and a SEPARATE rayon pool from the core module
+// above - same reasoning as state/voting-wasm.ts: orchard/pczt/zcash_primitives
+// must not co-version with the wallet scanner. Lazily initialized only when
+// a voting proof request actually arrives, so the wallet's normal send/scan
+// path never pays to load it.
+let votingWasmModule: WasmModule | null = null;
+let votingInitPromise: Promise<void> | null = null;
+const VOTING_WASM_BASE = '/voting-wasm';
+
 const initParallelWasm = async (): Promise<WasmModule> => {
   if (wasmModule) {
     return wasmModule;
@@ -82,6 +92,61 @@ const initParallelWasm = async (): Promise<WasmModule> => {
   return wasmModule!;
 };
 
+const initParallelVotingWasm = async (): Promise<WasmModule> => {
+  if (votingWasmModule) {
+    return votingWasmModule;
+  }
+  if (votingInitPromise) {
+    await votingInitPromise;
+    return votingWasmModule!;
+  }
+
+  votingInitPromise = (async () => {
+    // Same Worker-URL patch as initParallelWasm above, applied around the
+    // voting module's own init + initThreadPool call so its rayon pool's
+    // sub-workers resolve against the extension origin too.
+    const OriginalWorker = globalThis.Worker;
+    const extOrigin = self.location.origin + '/';
+    globalThis.Worker = class PatchedWorker extends OriginalWorker {
+      constructor(url: string | URL, options?: WorkerOptions) {
+        let urlStr = url instanceof URL ? url.href : String(url);
+        if (!urlStr.startsWith(extOrigin) && !urlStr.startsWith('blob:')) {
+          const relative = urlStr.startsWith('/') ? urlStr.slice(1) : urlStr;
+          urlStr = extOrigin + relative;
+          console.log('[zcash-build-parallel] patching voting worker URL →', urlStr);
+        }
+        super(urlStr, options);
+      }
+    };
+
+    try {
+      // @ts-expect-error dynamic import — parallel voting-wasm build with rayon + shared memory
+      const wasm = await import(/* webpackIgnore: true */ '/voting-wasm/voting_wasm.js');
+      await wasm.default({ module_or_path: `${VOTING_WASM_BASE}/voting_wasm_bg.wasm` });
+      wasm.voting_wasm_init_panic_hook();
+
+      // Own pool, independent of the core module's — same crossOriginIsolated
+      // offscreen context, but a separate wasm instance/memory needs its own
+      // initThreadPool call.
+      const numThreads = navigator.hardwareConcurrency || 4;
+      await wasm.initThreadPool(numThreads);
+      console.log(`[zcash-build-parallel] voting-wasm rayon: ${numThreads} threads`);
+
+      votingWasmModule = wasm;
+    } finally {
+      globalThis.Worker = OriginalWorker;
+    }
+  })();
+
+  try {
+    await votingInitPromise;
+  } catch (e) {
+    votingInitPromise = null;
+    throw e;
+  }
+  return votingWasmModule!;
+};
+
 interface ZcashBuildRequest {
   fn:
     | 'build_signed_spend'
@@ -92,7 +157,16 @@ interface ZcashBuildRequest {
     | 'build_signed_ironwood_send'
     | 'build_ironwood_send_pczt'
     | 'build_shielding'
-    | 'build_unsigned_shielding';
+    | 'build_unsigned_shielding'
+    // shielded-voting proving fns (standalone voting-wasm module - see
+    // initParallelVotingWasm above). build_delegation_pczt does not itself
+    // run a halo2 proof (that's deferred to finalize_delegation) but is
+    // routed through the offscreen prover anyway so all three share one
+    // lazily-initialized voting-wasm instance + rayon pool instead of each
+    // triggering its own load.
+    | 'build_delegation_pczt'
+    | 'finalize_delegation'
+    | 'cast_vote_hot_wire';
   args: unknown[];
 }
 
@@ -103,8 +177,17 @@ self.addEventListener('message', ({ data }: { data: ZcashBuildRequest }) => {
   );
 });
 
+// voting fns route to the standalone voting-wasm module + pool; everything
+// else routes to the core zafu-wasm module + pool. Keeps the wallet's normal
+// send/scan path from ever loading the voting module.
+const VOTING_FNS = new Set<ZcashBuildRequest['fn']>([
+  'build_delegation_pczt',
+  'finalize_delegation',
+  'cast_vote_hot_wire',
+]);
+
 async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
-  const wasm = await initParallelWasm();
+  const wasm = VOTING_FNS.has(req.fn) ? await initParallelVotingWasm() : await initParallelWasm();
   const a = req.args;
 
   const start = performance.now();
@@ -300,6 +383,46 @@ async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
         a[4],
         a[5],
         a[6] ?? null, // branch_id_hex (live consensus branch id; null -> WASM NU6.2 fallback)
+      );
+      break;
+
+    case 'build_delegation_pczt':
+      // (fvk_hex, seed_fingerprint_hex, account_index, hotkey_pubkey_hex,
+      //  notes_json, round_params_json, consensus_branch_id, round_name,
+      //  network, bundle_index) — see voting-wasm/src/voting_delegation.rs.
+      result = wasm['build_delegation_pczt'](
+        a[0],
+        a[1],
+        a[2],
+        a[3],
+        a[4],
+        a[5],
+        a[6],
+        a[7],
+        a[8],
+        a[9],
+      );
+      break;
+
+    case 'finalize_delegation':
+      // (delegation_context_json, merkle_witnesses_json, imt_proofs_json,
+      //  spend_auth_sig_hex, sighash_hex) — runs the real K=14 ZKP #1 proof.
+      result = wasm['finalize_delegation'](a[0], a[1], a[2], a[3], a[4]);
+      break;
+
+    case 'cast_vote_hot_wire':
+      // (hotkey_secret_hex, round_params_json, delegation_state_json,
+      //  van_witness_json, vote_json, network, submit_at) — runs ZKP #2.
+      // submit_at crosses postMessage as a stringified bigint, same
+      // convention as the amount/fee args on the core send builders above.
+      result = wasm['cast_vote_hot_wire'](
+        a[0],
+        a[1],
+        a[2],
+        a[3],
+        a[4],
+        a[5],
+        BigInt(a[6] as string),
       );
       break;
 
