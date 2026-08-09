@@ -73,7 +73,10 @@ export interface NetworkWorkerMessage {
     | 'build-delegation-pczt'
     | 'finalize-delegation'
     | 'cast-vote-hot-wire'
-    | 'pir-fetch-imt-proofs';
+    | 'pir-fetch-imt-proofs'
+    | 'get-orchard-account-info'
+    | 'get-consensus-branch-id'
+    | 'get-merkle-witnesses';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -542,6 +545,15 @@ export interface DecryptedNoteWithTxid {
   is_change?: boolean;
   spent?: boolean;
   spent_by_txid?: string;
+  /**
+   * Note secrets, already present on the worker's internal record and
+   * spread through by 'get-notes' - just under-typed here previously.
+   * Needed to build voting NoteInfoDto (rho_hex/rseed_hex/diversifier_hex).
+   */
+  rseed?: string;
+  rho?: string;
+  /** raw 43-byte orchard address hex (diversifier[11] + pk_d[32]) */
+  recipient?: string;
 }
 
 /**
@@ -1490,6 +1502,38 @@ export const pirFetchImtProofsInWorker = async (a: {
   nullifiersJson: string;
 }): Promise<{ imtProofsJson: string }> => {
   return callWorker('zcash', 'pir-fetch-imt-proofs', a);
+};
+
+/** Raw Orchard FVK hex + a freshly ZIP-316-encoded UFVK string for a mnemonic
+ *  wallet's account. `WalletKeys` only exports the raw FVK bytes; there is no
+ *  stored UFVK for a hot wallet the way there is for watch-only/Ledger
+ *  imports, so the worker encodes (and self-validates) one on demand. */
+export const getOrchardAccountInfoInWorker = async (
+  mnemonic: string,
+  mainnet: boolean,
+): Promise<{ fvkHex: string; ufvkStr: string }> => {
+  return callWorker('zcash', 'get-orchard-account-info', { mnemonic, mainnet });
+};
+
+/** Live consensus branch id (as a number) from the endpoint's GetLightdInfo,
+ *  the same source `fetchBranchIdHex` uses for send-tx builds. */
+export const getConsensusBranchIdInWorker = async (
+  network: NetworkType,
+  serverUrl: string,
+): Promise<{ consensusBranchId: number }> => {
+  return callWorker(network, 'get-consensus-branch-id', { serverUrl });
+};
+
+/** Merkle witnesses (WitnessDto shape) for a set of the wallet's own notes at
+ *  a target height, in the SAME order as `nullifiers` - callers that feed
+ *  `finalize_delegation` must pass nullifiers in the order the matching
+ *  `notes_json` was given to `build_delegation_pczt`. */
+export const getMerkleWitnessesInWorker = async (
+  network: NetworkType,
+  walletId: string,
+  a: { nullifiers: string[]; targetHeight: number; serverUrl: string; pool?: 'orchard' | 'ironwood' },
+): Promise<{ merkleWitnessesJson: string }> => {
+  return callWorker(network, 'get-merkle-witnesses', a, walletId);
 };
 
 // worker URLs per network

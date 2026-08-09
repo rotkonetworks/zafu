@@ -11,7 +11,7 @@
 
 /// <reference lib="webworker" />
 
-import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
+import { fixOrchardAddress, encodeOrchardUfvk } from '@repo/wallet/networks/zcash/unified-address';
 import { blockRangeFetcher } from '../services/memo-sync/block-range-fetcher';
 import { buildStrategy } from '../services/memo-sync/strategy';
 import { idbBucketStore } from '../services/memo-sync/filters/cache';
@@ -163,7 +163,10 @@ interface WorkerMessage {
     | 'build-delegation-pczt'
     | 'finalize-delegation'
     | 'cast-vote-hot-wire'
-    | 'pir-fetch-imt-proofs';
+    | 'pir-fetch-imt-proofs'
+    | 'get-orchard-account-info'
+    | 'get-consensus-branch-id'
+    | 'get-merkle-witnesses';
   id: string;
   network: 'zcash';
   walletId?: string;
@@ -201,6 +204,8 @@ interface WalletKeys extends ScannerKeys {
   get_receiving_address_at(index: number, mainnet: boolean): string;
   scan_actions(actionsJson: unknown): DecryptedNote[];
   calculate_balance(notes: unknown, spent: unknown): bigint;
+  /** Raw 96-byte Orchard FVK as hex (not a bech32m UFVK string). */
+  get_fvk_hex(): string;
 }
 
 interface WatchOnlyWallet extends ScannerKeys {
@@ -333,6 +338,7 @@ interface WasmModule {
     spend_indices_json: unknown,
   ): string;
   compute_txid(tx_hex: string): string;
+  validate_ufvk(ufvk_str: string): boolean;
   ur_decode_frames(parts_json: string, expected_type: string): string;
   build_unsigned_shielding_transaction(
     utxos_json: string,
@@ -7852,6 +7858,103 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           network: 'zcash',
           walletId,
           payload: { imtProofsJson },
+        });
+        return;
+      }
+
+      case 'get-orchard-account-info': {
+        await initWasm();
+        if (!wasmModule) {
+          throw new Error('wasm not initialized');
+        }
+        const { mnemonic, mainnet: infoMainnet } = payload as {
+          mnemonic: string;
+          mainnet: boolean;
+        };
+        const infoKeys = new wasmModule.WalletKeys(mnemonic);
+        let fvkHex: string;
+        try {
+          fvkHex = infoKeys.get_fvk_hex();
+        } finally {
+          infoKeys.free();
+        }
+        // WalletKeys has no ufvk-string export (only watch-only imports carry
+        // one directly) - encode it ourselves (ZIP-316) and self-check with
+        // the wasm module's own decoder so an encoder bug fails loudly here
+        // instead of surfacing as an opaque proof-build error downstream.
+        const ufvkStr = encodeOrchardUfvk(hexDecode(fvkHex), infoMainnet);
+        if (!wasmModule.validate_ufvk(ufvkStr)) {
+          throw new Error(
+            'internal error: locally-encoded UFVK failed wasm validation (encoder bug)',
+          );
+        }
+        workerSelf.postMessage({
+          type: 'result',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: { fvkHex, ufvkStr },
+        });
+        return;
+      }
+
+      case 'get-consensus-branch-id': {
+        const { serverUrl: branchServerUrl } = payload as { serverUrl: string };
+        const branchClient = await makeZcashClient(branchServerUrl);
+        const branchIdHex = await fetchBranchIdHex(branchClient);
+        workerSelf.postMessage({
+          type: 'result',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: { consensusBranchId: parseInt(branchIdHex, 16) },
+        });
+        return;
+      }
+
+      case 'get-merkle-witnesses': {
+        if (!walletId) {
+          throw new Error('walletId required');
+        }
+        const { nullifiers: witnessNullifiers, targetHeight, serverUrl: witnessServerUrl, pool: witnessPool } =
+          payload as {
+            nullifiers: string[];
+            targetHeight: number;
+            serverUrl: string;
+            pool?: NotePool;
+          };
+        const witnessState = await loadState(walletId);
+        // preserve caller order - finalize_delegation zips merkle_witnesses_json
+        // 1:1 against the notes_json array build_delegation_pczt was called with.
+        const byNullifier = new Map(witnessState.notes.map(n => [n.nullifier, n]));
+        const orderedNotes = witnessNullifiers.map(nf => {
+          const note = byNullifier.get(nf);
+          if (!note) {
+            throw new Error(`get-merkle-witnesses: note for nullifier ${nf} not found`);
+          }
+          return note;
+        });
+        const witnessClient = await makeZcashClient(witnessServerUrl);
+        const witnessResult = await buildWitnesses(
+          witnessClient,
+          walletId,
+          orderedNotes,
+          targetHeight,
+          witnessPool ?? 'orchard',
+        );
+        const witnessPaths = witnessResult.paths as { position: number; path: { hash: string }[] }[];
+        const witnessDtos = orderedNotes.map((note, i) => ({
+          note_commitment_hex: note.cmx,
+          position: witnessPaths[i]!.position,
+          root_hex: witnessResult.anchorHex,
+          auth_path_hex: witnessPaths[i]!.path.map(p => p.hash),
+        }));
+        workerSelf.postMessage({
+          type: 'result',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: { merkleWitnessesJson: JSON.stringify(witnessDtos) },
         });
         return;
       }

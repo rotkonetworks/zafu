@@ -20,6 +20,13 @@ import {
   buildDelegationPcztInWorker,
   finalizeDelegationInWorker,
   castVoteHotInWorker,
+  generateVotingHotkeyInWorker,
+  getOrchardAccountInfoInWorker,
+  getConsensusBranchIdInWorker,
+  getMerkleWitnessesInWorker,
+  getPoolNotesInWorker,
+  pirFetchImtProofsInWorker,
+  type DecryptedNoteWithTxid,
 } from '../../../state/keyring/network-worker';
 import { AnimatedQrDisplay } from '../../../shared/components/animated-qr-display';
 import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanner';
@@ -29,6 +36,112 @@ import {
   POOL_ORCHARD,
   SUPPORTED_COMPACT_RESPONSE_VERSION,
 } from '../../../state/keyring/compact-signing';
+import { useStore } from '../../../state';
+import { selectGetMnemonic } from '../../../state/keyring';
+import { seedFingerprintHex } from '@repo/wallet/networks/zcash/seed-fingerprint';
+import { nu63ActivationHeight } from '../../../config/feature-flags';
+import { localExtStorage } from '@repo/storage-chrome/local';
+import { sessionExtStorage } from '@repo/storage-chrome/session';
+import {
+  saveVotingHotkey,
+  loadVotingRoundRecord,
+  saveDelegationState,
+} from '../../../services/voting/persistence';
+
+// zafu's zcash accounts are single-ZIP32-account and mainnet-only today (same
+// convention as ZcashSend: `accountIndex={0} mainnet={true}`, send/index.tsx).
+const VOTING_ACCOUNT_INDEX = 0;
+const VOTING_MAINNET = true;
+// build_delegation_pczt / generate_voting_hotkey / cast_vote_hot_wire take the
+// voting-wasm network string ("main"|"test"|"regtest"), NOT the NetworkType
+// ('zcash') used to route calls to the right worker.
+const VOTING_WASM_NETWORK = 'main';
+
+/** RoundConfigEntry.ea_pk (and legacy round ids) arrive base64-encoded. */
+const base64ToHex = (b64: string): string =>
+  Array.from(Uint8Array.from(atob(b64), c => c.charCodeAt(0)), b => b.toString(16).padStart(2, '0')).join(
+    '',
+  );
+
+/**
+ * Eligible notes for a round's delegation: unspent, at or below the
+ * snapshot height. valar/ZODL rounds predate NU6.3 (orchard notes); a round
+ * whose snapshot height is past NU6.3 activation is an ironwood-pool round
+ * instead - orchard-to-orchard spends are consensus-disabled post-NU6.3, so
+ * a wallet holding notes across the upgrade only has one spendable pool at
+ * any given snapshot height.
+ */
+const notePoolForSnapshot = (snapshotHeight: number): 'orchard' | 'ironwood' =>
+  snapshotHeight >= nu63ActivationHeight(VOTING_MAINNET) ? 'ironwood' : 'orchard';
+
+const eligibleNotesAtSnapshot = (
+  notes: DecryptedNoteWithTxid[],
+  snapshotHeight: number,
+): DecryptedNoteWithTxid[] =>
+  notes.filter(n => !n.spent && n.height <= snapshotHeight);
+
+/** DecryptedNoteWithTxid -> voting-wasm NoteInfoDto (snake_case, hex/number
+ *  as the Rust side expects - see voting-wasm's voting_delegation.rs). */
+const toNoteInfoDto = (n: DecryptedNoteWithTxid, ufvkStr: string) => {
+  if (!n.rho || !n.rseed || !n.recipient) {
+    throw new Error(
+      `note ${n.nullifier} is missing rho/rseed/recipient - re-sync the wallet before voting`,
+    );
+  }
+  return {
+    commitment_hex: n.cmx,
+    nullifier_hex: n.nullifier,
+    value: Number(n.value),
+    position: n.position,
+    // raw orchard address = diversifier(11) || pk_d(32); diversifier is the
+    // first 22 hex chars (see build_signed_spend_transaction's recipient_hex
+    // consumer for the same 43-byte layout).
+    diversifier_hex: n.recipient.slice(0, 22),
+    rho_hex: n.rho,
+    rseed_hex: n.rseed,
+    // Orchard/ZIP-32 scope: 0 = external, 1 = internal (change).
+    scope: n.is_change ? 1 : 0,
+    ufvk_str: ufvkStr,
+  };
+};
+
+/**
+ * MISSING SUBSYSTEM: the round's note-commitment-tree root and nullifier-IMT
+ * root are not served by the vote-servers' round-listing REST - they must be
+ * computed locally by syncing both trees from the chain REST
+ * (`/shielded-vote/v1/commitment-tree/{round}/leaves` and the nullifier IMT
+ * equivalent), the way zcli's `vote-commitment-tree-client::http_sync_api::
+ * HttpTreeSyncApi` does in the proven Rust round-trip
+ * (crates/zcash-voting/tests/v09_cold_zigner_roundtrip.rs). zafu has no
+ * TypeScript client for either tree yet. Fails closed (rather than sending
+ * zeroed roots the wasm prover would reject anyway) until that sync client
+ * exists.
+ */
+const resolveRoundCommitmentRoots = (
+  round: VotingRound,
+): { ncRootHex: string; nullifierImtRootHex: string } => {
+  throw new Error(
+    `round ${round.id}: cannot resolve the note-commitment-tree / nullifier-IMT roots - ` +
+      'zafu has no vote-commitment-tree sync client yet (see resolveRoundCommitmentRoots)',
+  );
+};
+
+/**
+ * MISSING SUBSYSTEM: the VAN (vote-authorization-nullifier) merkle witness
+ * and the delegation output's vote-commitment-tree position are produced by
+ * the SAME missing sync client as resolveRoundCommitmentRoots - the position
+ * is where the delegation's governance output landed in the tree, and the
+ * witness is its auth path at cast time. Needed for `vote_json.vc_tree_
+ * position` and `cast_vote_hot_wire`'s `van_witness_json`.
+ */
+const resolveVanWitness = (
+  round: VotingRound,
+): { vcTreePosition: number; authPathHex: string[]; anchorHeight: number } => {
+  throw new Error(
+    `round ${round.id}: cannot resolve the VAN witness / vote-commitment-tree position - ` +
+      'zafu has no vote-commitment-tree sync client yet (see resolveVanWitness)',
+  );
+};
 
 type VoteCastStep = 'idle' | 'delegating-qr-sign' | 'scan-delegation' | 'delegated' | 'casting-proposal' | 'done';
 
@@ -54,6 +167,9 @@ export const ZcashVoteCast = ({
   onDelegated,
   onVoteCast,
 }: ZcashVoteCastProps) => {
+  const getMnemonic = useStore(selectGetMnemonic);
+  const serverUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
+
   const [step, setStep] = useState<VoteCastStep>('idle');
   const [delegateError, setDelegateError] = useState<string | null>(null);
   const [delegateSubmitting, setDelegateSubmitting] = useState(false);
@@ -100,23 +216,82 @@ export const ZcashVoteCast = ({
     setDelegateSubmitting(true);
 
     try {
-      // Build the unsigned (redacted) delegation PCZT in the worker - phase 1 of 2.
-      // TODO(crypto/integration): gather the real inputs before this call -
-      //   - fvkHex / seedFingerprintHex / accountIndex: from the keyring for this wallet's orchard account
-      //   - hotkeyPubkeyHex: from generateVotingHotkeyInWorker (persisted via saveVotingHotkey)
-      //   - notesJson: the wallet's eligible orchard notes at round.snapshotHeight (from the worker note DB)
-      //   - roundParamsJson: {vote_round_id, snapshot_height, ea_pk_hex, nc_root_hex, nullifier_imt_root_hex}
-      //   - consensusBranchId: resolved from snapshotHeight via lightwalletd
-      // network must be 'main'|'test'|'regtest' (NOT 'zcash').
+      // ── gather the real crypto inputs ──
+
+      const mnemonic = await getMnemonic(walletId);
+
+      // fvk / seed fingerprint / account index for this wallet's (single)
+      // orchard account. WalletKeys has no stored UFVK, so the worker
+      // encodes + self-validates one from the raw FVK bytes (see
+      // getOrchardAccountInfoInWorker).
+      const { fvkHex, ufvkStr } = await getOrchardAccountInfoInWorker(mnemonic, VOTING_MAINNET);
+      const seedFpHex = seedFingerprintHex(mnemonic);
+
+      // hotkey: reuse the persisted one for this round if we already made
+      // one (e.g. a retry after a failed submit), else generate + persist.
+      const existingRound = await loadVotingRoundRecord(
+        localExtStorage,
+        sessionExtStorage,
+        walletId,
+        round.id,
+      );
+      const hotkeyPubkeyHex =
+        existingRound?.hotkeyPubkeyHex ??
+        (await (async () => {
+          const hk = await generateVotingHotkeyInWorker(VOTING_WASM_NETWORK);
+          await saveVotingHotkey(
+            localExtStorage,
+            sessionExtStorage,
+            walletId,
+            round.id,
+            hk.hotkeySecretHex,
+            hk.hotkeyPubkeyHex,
+          );
+          return hk.hotkeyPubkeyHex;
+        })());
+
+      // eligible notes at the snapshot height, from the worker's own note DB.
+      const pool = notePoolForSnapshot(round.snapshotHeight);
+      const poolNotes = await getPoolNotesInWorker('zcash', walletId);
+      const eligible = eligibleNotesAtSnapshot(poolNotes[pool], round.snapshotHeight);
+      if (eligible.length === 0) {
+        throw new Error(
+          `no unspent ${pool} notes at or below the round's snapshot height ` +
+            `(${round.snapshotHeight}) - nothing to delegate`,
+        );
+      }
+      const notesJson = JSON.stringify(eligible.map(n => toNoteInfoDto(n, ufvkStr)));
+
+      // live consensus branch id (fail-closed if the endpoint can't answer,
+      // same guard build-tx paths use - see fetchBranchIdHex).
+      const { consensusBranchId } = await getConsensusBranchIdInWorker('zcash', serverUrl);
+
+      // round params: ea_pk comes from the pinned dynamic config; the
+      // note-commitment-tree root and nullifier-IMT root do not - see
+      // resolveRoundCommitmentRoots for why (missing sync client).
+      const roundEntry = config.rounds[round.id];
+      if (!roundEntry) {
+        throw new Error(`round ${round.id} is not in the pinned voting config (no ea_pk)`);
+      }
+      const { ncRootHex, nullifierImtRootHex } = resolveRoundCommitmentRoots(round);
+      const roundParams = {
+        vote_round_id: round.id,
+        snapshot_height: round.snapshotHeight,
+        ea_pk_hex: base64ToHex(roundEntry.ea_pk),
+        nc_root_hex: ncRootHex,
+        nullifier_imt_root_hex: nullifierImtRootHex,
+      };
+      const roundParamsJson = JSON.stringify(roundParams);
+
       const unsigned = await buildDelegationPcztInWorker({
-        network: 'main', // TODO(crypto): derive from the active network
-        fvkHex: '', // TODO(crypto)
-        seedFingerprintHex: '', // TODO(crypto)
-        accountIndex: 0, // TODO(crypto)
-        hotkeyPubkeyHex: '', // TODO(crypto)
-        notesJson: '', // TODO(crypto)
-        roundParamsJson: '', // TODO(crypto)
-        consensusBranchId: 0, // TODO(crypto)
+        network: VOTING_WASM_NETWORK,
+        fvkHex,
+        seedFingerprintHex: seedFpHex,
+        accountIndex: VOTING_ACCOUNT_INDEX,
+        hotkeyPubkeyHex,
+        notesJson,
+        roundParamsJson,
+        consensusBranchId,
         roundName: round.title || round.id,
         bundleIndex: 0,
       });
@@ -130,7 +305,7 @@ export const ZcashVoteCast = ({
         pcztSighashHex: unsigned.pcztSighashHex,
         rkHex: unsigned.rkHex,
         actionIndex: unsigned.actionIndex,
-        mainnet: true, // TODO(crypto): derive from the active network
+        mainnet: VOTING_MAINNET,
         urFrames: unsigned.urFrames,
         cborBytes: unsigned.cborBytes,
         contextJson: unsigned.delegationContextJson,
@@ -147,7 +322,7 @@ export const ZcashVoteCast = ({
       setDelegateError(e instanceof Error ? e.message : 'failed to build delegation');
       setDelegateSubmitting(false);
     }
-  }, [walletId, round.id]);
+  }, [walletId, round, config, getMnemonic, serverUrl]);
 
   /**
    * Called when the zigner QR scanner returns a signed PCZT response.
@@ -225,12 +400,39 @@ export const ZcashVoteCast = ({
           throw new Error('invalid response envelope format');
         }
 
+        // Merkle witnesses for the REAL delegated notes (dummy notes aren't
+        // leaves in the note-commitment tree, so they have no witness - only
+        // an IMT non-membership proof, fetched below). Order MUST match the
+        // notes_json order build_delegation_pczt was called with;
+        // real_note_nullifiers_hex preserves that order.
+        const pool = notePoolForSnapshot(round.snapshotHeight);
+        const { merkleWitnessesJson } = await getMerkleWitnessesInWorker('zcash', walletId, {
+          nullifiers: ctx.realNoteNullifiersHex,
+          targetHeight: round.snapshotHeight,
+          serverUrl,
+          pool,
+        });
+
+        // PIR-fetched IMT non-membership proofs, covering both the real and
+        // dummy nullifiers (see finalize_delegation's docstring).
+        const pirBaseUrl = config.pir_endpoints[0]?.url;
+        if (!pirBaseUrl) {
+          throw new Error('voting config has no pir_endpoints - cannot fetch IMT proofs');
+        }
+        const { imtProofsJson } = await pirFetchImtProofsInWorker({
+          pirBaseUrl,
+          nullifiersJson: JSON.stringify([
+            ...ctx.realNoteNullifiersHex,
+            ...ctx.dummyNoteNullifiersHex,
+          ]),
+        });
+
         // Phase 2 of 2: prove ZKP #1 with the host-fetched IMT proofs + witnesses
         // and attach the cold signer's spend-auth sig - submission wire.
         const wireResult = await finalizeDelegationInWorker({
           delegationContextJson: ctx.contextJson,
-          merkleWitnessesJson: '', // TODO(crypto): witnesses for the delegated notes
-          imtProofsJson: '', // TODO(crypto): PIR-fetched IMT proofs for real+dummy nullifiers
+          merkleWitnessesJson,
+          imtProofsJson,
           spendAuthSigHex,
           sighashHex: ctx.sighashHex,
         });
@@ -240,6 +442,15 @@ export const ZcashVoteCast = ({
         const result = await submitDelegation(config, wireJson);
 
         if (result.ok) {
+          // Persist the delegation state now - the cast flow needs it and
+          // it's only ever produced here, once, by this successful finalize.
+          await saveDelegationState(
+            localExtStorage,
+            sessionExtStorage,
+            walletId,
+            round.id,
+            ctx.delegationStateJson,
+          );
           unsignedDelegationRef.current = null;
           setStep('delegated');
           setDelegateSubmitting(false);
@@ -258,7 +469,7 @@ export const ZcashVoteCast = ({
         setDelegateSubmitting(false);
       }
     },
-    [walletId, round, config, onDelegated],
+    [walletId, round, config, serverUrl, onDelegated],
   );
 
   // ─── Vote Casting Flow (per proposal) ───────────────────────────
@@ -289,20 +500,61 @@ export const ZcashVoteCast = ({
       }));
 
       try {
+        // ── gather the real crypto inputs ──
+
+        const record = await loadVotingRoundRecord(
+          localExtStorage,
+          sessionExtStorage,
+          walletId,
+          round.id,
+        );
+        if (!record || !record.delegationStateJson) {
+          throw new Error('no completed delegation found for this round - delegate first');
+        }
+        const hotkeySecretHex = record.hotkeySecretHex;
+        const delegationStateJson = record.delegationStateJson;
+
+        const roundEntry = config.rounds[round.id];
+        if (!roundEntry) {
+          throw new Error(`round ${round.id} is not in the pinned voting config (no ea_pk)`);
+        }
+        // cast_vote_hot_wire's round-params arg is the SMALLER shape (just
+        // vote_round_id + ea_pk_hex) - it doesn't take snapshot_height or
+        // the tree roots build_delegation_pczt's round params take.
+        const roundParamsJson = JSON.stringify({
+          vote_round_id: round.id,
+          ea_pk_hex: base64ToHex(roundEntry.ea_pk),
+        });
+
+        const proposal = round.proposals.find(p => p.id === proposalId);
+        if (!proposal) {
+          throw new Error(`proposal ${proposalId} not found on round ${round.id}`);
+        }
+        // Same missing vote-commitment-tree sync client as delegation - the
+        // VAN witness and the delegation output's tree position (vc_tree_
+        // position, below) both come from syncing that tree at cast time.
+        const { vcTreePosition, authPathHex, anchorHeight } = resolveVanWitness(round);
+        const vanWitnessJson = JSON.stringify({
+          auth_path_hex: authPathHex,
+          position: vcTreePosition,
+          anchor_height: anchorHeight,
+        });
+        const voteJson = JSON.stringify({
+          proposal_id: proposalId,
+          choice: proposalState.selectedOptionId,
+          num_options: proposal.options.length,
+          vc_tree_position: vcTreePosition,
+          single_share: true,
+        });
+
         // Build the hot (non-QR) vote commitment PCZT
-        // TODO(crypto): gather hotkeySecretHex, roundParamsJson, delegationStateJson,
-        // vanWitnessJson, voteJson from keyring state and current vote selection.
         const voteResult = await castVoteHotInWorker({
-          network: 'zcash',
-          hotkeySecretHex: '', // TODO(crypto)
-          roundParamsJson: '', // TODO(crypto): from round config
-          delegationStateJson: '', // TODO(crypto): from delegation step result
-          vanWitnessJson: '', // TODO(crypto)
-          voteJson: JSON.stringify({
-            roundId: round.id,
-            proposalId,
-            optionId: proposalState.selectedOptionId,
-          }),
+          network: VOTING_WASM_NETWORK,
+          hotkeySecretHex,
+          roundParamsJson,
+          delegationStateJson,
+          vanWitnessJson,
+          voteJson,
           submitAt: Math.floor(Date.now() / 1000),
         });
 

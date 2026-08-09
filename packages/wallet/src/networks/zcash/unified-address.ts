@@ -180,6 +180,28 @@ export function f4Jumble(M: Uint8Array): Uint8Array {
 // ── unified address encoding ──
 
 /**
+ * Encode a single-item ZIP-316 "Unified Encoding" container: a CompactSize
+ * typecode, a CompactSize length, the raw item bytes, then the HRP
+ * (US-ASCII, right-padded with 0x00 to 16 bytes) - F4Jumbled, then
+ * bech32m-encoded with the given HRP. Shared by unified addresses (typecode
+ * 0x03, 43-byte orchard receiver, HRP "u"/"utest") and unified full viewing
+ * keys (typecode 0x03, 96-byte orchard FVK, HRP "uview"/"uviewtest") - ZIP-316
+ * defines both as instances of the same generic container/jumble/bech32m
+ * pipeline, only the HRP and item differ.
+ */
+function encodeUnifiedSingleItem(typecode: number, itemBytes: Uint8Array, hrp: string): string {
+  const container = new Uint8Array(1 + 1 + itemBytes.length + 16);
+  container[0] = typecode;
+  container[1] = itemBytes.length;
+  container.set(itemBytes, 2);
+  const padOffset = 1 + 1 + itemBytes.length;
+  for (let i = 0; i < hrp.length; i++) container[padOffset + i] = hrp.charCodeAt(i);
+
+  const jumbled = f4Jumble(container);
+  return bech32mEncode(hrp, jumbled);
+}
+
+/**
  * Encode raw orchard receiver bytes as a ZIP-316 unified address.
  *
  * Layout: [typecode=0x03][length=43][43 raw bytes] + 16 zero padding bytes
@@ -189,22 +211,27 @@ export function encodeOrchardUnifiedAddress(rawBytes: Uint8Array, mainnet = true
   if (rawBytes.length !== 43) {
     throw new Error(`orchard receiver must be 43 bytes, got ${rawBytes.length}`);
   }
+  return encodeUnifiedSingleItem(0x03, rawBytes, mainnet ? 'u' : 'utest');
+}
 
-  const hrp = mainnet ? 'u' : 'utest';
-
-  // unified address container: typecode (CompactSize) + length (CompactSize) + data + 16-byte padding
-  // orchard typecode = 0x03, length = 0x2b (43)
-  // padding = HRP in US-ASCII, right-padded with 0x00 to 16 bytes (ZIP-316)
-  const container = new Uint8Array(1 + 1 + 43 + 16);
-  container[0] = 0x03; // typecode: orchard
-  container[1] = 43; // length
-  container.set(rawBytes, 2);
-  // write HRP padding at offset 45 (= 1 + 1 + 43)
-  const padOffset = 1 + 1 + rawBytes.length;
-  for (let i = 0; i < hrp.length; i++) container[padOffset + i] = hrp.charCodeAt(i);
-
-  const jumbled = f4Jumble(container);
-  return bech32mEncode(hrp, jumbled);
+/**
+ * Encode a raw 96-byte Orchard FVK as a ZIP-316 unified full viewing key
+ * (`uview1...` / `uviewtest1...`).
+ *
+ * Same container/F4Jumble/bech32m pipeline as `encodeOrchardUnifiedAddress`
+ * (ZIP-316 defines UFVKs and unified addresses as the same "Unified Encoding"
+ * construction), just a 96-byte item under the "uview"/"uviewtest" HRP
+ * instead of a 43-byte receiver under "u"/"utest". Needed because zafu-wasm's
+ * `WalletKeys` (mnemonic-derived hot wallet) only exports the raw FVK bytes
+ * (`get_fvk_hex`), not a bech32m UFVK string - watch-only/Ledger imports get
+ * a real UFVK string directly from the user, but a hot wallet's account has
+ * none stored anywhere until this encodes one.
+ */
+export function encodeOrchardUfvk(fvkBytes: Uint8Array, mainnet = true): string {
+  if (fvkBytes.length !== 96) {
+    throw new Error(`orchard FVK must be 96 bytes, got ${fvkBytes.length}`);
+  }
+  return encodeUnifiedSingleItem(0x03, fvkBytes, mainnet ? 'uview' : 'uviewtest');
 }
 
 /**
