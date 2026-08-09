@@ -68,7 +68,12 @@ export interface NetworkWorkerMessage {
     | 'frost-inspect-pczt-outputs'
     | 'complete-orchard-pczt'
     | 'broadcast-raw-tx'
-    | 'get-transparent-utxos';
+    | 'get-transparent-utxos'
+    | 'generate-voting-hotkey'
+    | 'build-delegation-pczt'
+    | 'finalize-delegation'
+    | 'cast-vote-hot-wire'
+    | 'pir-fetch-imt-proofs';
   id: string;
   network: NetworkType;
   walletId?: string;
@@ -107,6 +112,7 @@ export interface NetworkWorkerResponse {
     | 'mempool-update'
     | 'prove-request'
     | 'frost-result'
+    | 'voting-result'
     | 'error';
   id: string;
   network: NetworkType;
@@ -1412,6 +1418,78 @@ export const getTransparentUtxosInWorker = async (
     serverUrl,
     addresses,
   });
+};
+
+// --- Voting worker helpers ---
+
+export const generateVotingHotkeyInWorker = async (
+  network: string,
+): Promise<{ hotkeySecretHex: string; hotkeyPubkeyHex: string }> => {
+  return callWorker('zcash', 'generate-voting-hotkey', { network });
+};
+
+// Delegation is TWO-PHASE (the ZKP #1 circuit also excludes the padded dummy-note
+// nullifiers, which only exist after the PCZT is built). Phase 1 builds + redacts
+// the PCZT and reports the real + dummy nullifiers; the host then fetches their IMT
+// proofs (PIR) + merkle witnesses and has the cold signer sign the redacted PCZT;
+// phase 2 proves + attaches the sig. Delegation spends the voter's REAL notes with
+// the COLD key, so it takes the account's fvk + seed_fingerprint + account_index,
+// NOT the hotkey secret (the hotkey only supplies the output address).
+export const buildDelegationPcztInWorker = async (a: {
+  fvkHex: string;
+  seedFingerprintHex: string;
+  accountIndex: number;
+  hotkeyPubkeyHex: string;
+  notesJson: string;
+  roundParamsJson: string;
+  consensusBranchId: number;
+  roundName: string;
+  network: string;
+  bundleIndex: number;
+}): Promise<{
+  redactedPcztHex: string;
+  pcztSighashHex: string;
+  rkHex: string;
+  actionIndex: number;
+  delegatedWeight: number;
+  displayMemo: string;
+  realNoteNullifiersHex: string[];
+  dummyNoteNullifiersHex: string[];
+  delegationContextJson: string;
+  delegationStateJson: string;
+  urFrames: string[];
+  cborBytes: number;
+}> => {
+  return callWorker('zcash', 'build-delegation-pczt', a);
+};
+
+export const finalizeDelegationInWorker = async (a: {
+  delegationContextJson: string;
+  merkleWitnessesJson: string;
+  imtProofsJson: string;
+  spendAuthSigHex: string;
+  sighashHex: string;
+}): Promise<{ delegationSubmissionWireJson: string }> => {
+  return callWorker('zcash', 'finalize-delegation', a);
+};
+
+export const castVoteHotInWorker = async (a: {
+  network: string;
+  hotkeySecretHex: string;
+  roundParamsJson: string;
+  delegationStateJson: string;
+  vanWitnessJson: string;
+  voteJson: string;
+  submitAt: number;
+}): Promise<{ proposalId: number; wire: string; shares: string; commitmentBundleJson: string }> => {
+  return callWorker('zcash', 'cast-vote-hot-wire', a);
+};
+
+export const pirFetchImtProofsInWorker = async (a: {
+  pirBaseUrl: string;
+  nullifiersJson: string;
+}): Promise<{ imtProofsJson: string }> => {
+  return callWorker('zcash', 'pir-fetch-imt-proofs', a);
 };
 
 // worker URLs per network

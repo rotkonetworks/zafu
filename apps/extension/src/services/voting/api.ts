@@ -214,3 +214,103 @@ export const loadVoting = async (source: PinnedConfigSource) => {
   const rounds = await fetchRounds(config);
   return { config, rounds };
 };
+
+/** Result of submitting delegation to a voting server. */
+export interface DelegationSubmissionResult {
+  ok: boolean;
+  status: number;
+  message: string;
+  rejected?: boolean;
+}
+
+/** Submit a delegation wire to the voting service. */
+export const submitDelegation = async (
+  config: VotingServiceConfig,
+  delegationWireJson: string,
+): Promise<DelegationSubmissionResult> => {
+  const delegationPath = '/shielded-vote/v1/delegations';
+  try {
+    return await firstReachable(
+      config.vote_servers.map(s => s.url),
+      async base => {
+        const resp = await fetch(`${base.replace(/\/$/, '')}${delegationPath}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: delegationWireJson,
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        });
+
+        if (resp.ok) {
+          return { ok: true, status: resp.status, message: 'delegated' };
+        }
+
+        // 422 = rejected (deterministic, don't retry)
+        if (resp.status === 422) {
+          let message = 'delegation rejected';
+          try {
+            const body = await resp.json() as { error?: string; message?: string };
+            message = body.error || body.message || message;
+          } catch {
+            // ignore parse errors
+          }
+          return { ok: false, status: 422, message, rejected: true };
+        }
+
+        throw new Error(`HTTP ${resp.status}`);
+      },
+    );
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    return { ok: false, status: 0, message };
+  }
+};
+
+/** Result of casting a vote. */
+export interface VoteCastResult {
+  ok: boolean;
+  status: number;
+  message: string;
+  rejected?: boolean;
+}
+
+/** Submit a vote to the voting service. */
+export const castVote = async (
+  config: VotingServiceConfig,
+  voteWireJson: string,
+): Promise<VoteCastResult> => {
+  const votePath = '/shielded-vote/v1/votes';
+  try {
+    return await firstReachable(
+      config.vote_servers.map(s => s.url),
+      async base => {
+        const resp = await fetch(`${base.replace(/\/$/, '')}${votePath}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: voteWireJson,
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        });
+
+        if (resp.ok) {
+          return { ok: true, status: resp.status, message: 'vote cast' };
+        }
+
+        // 422 = rejected (deterministic, don't retry)
+        if (resp.status === 422) {
+          let message = 'vote rejected';
+          try {
+            const body = await resp.json() as { error?: string; message?: string };
+            message = body.error || body.message || message;
+          } catch {
+            // ignore parse errors
+          }
+          return { ok: false, status: 422, message, rejected: true };
+        }
+
+        throw new Error(`HTTP ${resp.status}`);
+      },
+    );
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    return { ok: false, status: 0, message };
+  }
+};
