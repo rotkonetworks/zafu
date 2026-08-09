@@ -33,6 +33,7 @@ import {
 } from './proof-decoys';
 import { BlockPrefetcher } from './block-prefetcher';
 import { once } from './once';
+import { loadVotingWasm } from '../state/voting-wasm';
 import {
   parseExpiryHeight,
   reconcileSentTxs,
@@ -157,7 +158,12 @@ interface WorkerMessage {
     | 'frost-inspect-pczt-outputs'
     | 'complete-orchard-pczt'
     | 'broadcast-raw-tx'
-    | 'get-transparent-utxos';
+    | 'get-transparent-utxos'
+    | 'generate-voting-hotkey'
+    | 'build-delegation-pczt'
+    | 'finalize-delegation'
+    | 'cast-vote-hot-wire'
+    | 'pir-fetch-imt-proofs';
   id: string;
   network: 'zcash';
   walletId?: string;
@@ -7645,6 +7651,193 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           network: 'zcash',
           walletId,
           payload: { txid: cTxid },
+        });
+        return;
+      }
+
+      // ── shielded voting ──
+      //
+      // These handlers call the STANDALONE `voting-wasm` module (see
+      // `state/voting-wasm.ts`), NOT the core `wasmModule` (zafu-wasm).
+      // zcash_voting + voting-circuits pull their own orchard/pczt graph
+      // that must not co-version with the wallet scanner/spender, so the
+      // module is lazily fetched here on first use rather than being part
+      // of the worker's `initWasm()` startup path. `ur_encode_frames` /
+      // `cborWrapPczt` (below) are plain CBOR/UR framing utilities from the
+      // core module - not voting crypto - so reusing them here does not
+      // reintroduce the coupling this split exists to avoid.
+
+      case 'generate-voting-hotkey': {
+        const votingWasm = await loadVotingWasm();
+        const { network: vhNetwork } = payload as { network: string };
+        const hk = JSON.parse(votingWasm.generate_voting_hotkey(vhNetwork)) as {
+          hotkey_secret_hex: string;
+          hotkey_pubkey_hex: string;
+        };
+        workerSelf.postMessage({
+          type: 'result',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: { hotkeySecretHex: hk.hotkey_secret_hex, hotkeyPubkeyHex: hk.hotkey_pubkey_hex },
+        });
+        return;
+      }
+
+      case 'build-delegation-pczt': {
+        const votingWasm = await loadVotingWasm();
+        const bd = payload as {
+          fvkHex: string;
+          seedFingerprintHex: string;
+          accountIndex: number;
+          hotkeyPubkeyHex: string;
+          notesJson: string;
+          roundParamsJson: string;
+          consensusBranchId: number;
+          roundName: string;
+          network: string;
+          bundleIndex: number;
+        };
+        const raw = JSON.parse(
+          votingWasm.build_delegation_pczt(
+            bd.fvkHex,
+            bd.seedFingerprintHex,
+            bd.accountIndex,
+            bd.hotkeyPubkeyHex,
+            bd.notesJson,
+            bd.roundParamsJson,
+            bd.consensusBranchId,
+            bd.roundName,
+            bd.network,
+            bd.bundleIndex,
+          ),
+        ) as {
+          redacted_pczt_hex: string;
+          pczt_sighash_hex: string;
+          rk_hex: string;
+          action_index: number;
+          delegated_weight: number;
+          display_memo: string;
+          real_note_nullifiers_hex: string[];
+          dummy_note_nullifiers_hex: string[];
+          delegation_context_json: string;
+          delegation_state_json: string;
+        };
+
+        // UR-encode the redacted PCZT for the animated-QR round-trip to
+        // zigner. This is generic CBOR/UR framing on the CORE module (not
+        // voting crypto) - see the block comment above.
+        await initWasm();
+        if (!wasmModule) {
+          throw new Error('wasm not initialized');
+        }
+        const pcztBytes = hexDecode(raw.redacted_pczt_hex);
+        const cbor = cborWrapPczt(pcztBytes);
+        const framesJson = wasmModule.ur_encode_frames(cbor, 'zcash-pczt', 200);
+        const urFrames = JSON.parse(framesJson) as string[];
+
+        workerSelf.postMessage({
+          type: 'result',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: {
+            redactedPcztHex: raw.redacted_pczt_hex,
+            pcztSighashHex: raw.pczt_sighash_hex,
+            rkHex: raw.rk_hex,
+            actionIndex: raw.action_index,
+            delegatedWeight: raw.delegated_weight,
+            displayMemo: raw.display_memo,
+            realNoteNullifiersHex: raw.real_note_nullifiers_hex,
+            dummyNoteNullifiersHex: raw.dummy_note_nullifiers_hex,
+            delegationContextJson: raw.delegation_context_json,
+            delegationStateJson: raw.delegation_state_json,
+            urFrames,
+            cborBytes: cbor.length,
+          },
+        });
+        return;
+      }
+
+      case 'finalize-delegation': {
+        const votingWasm = await loadVotingWasm();
+        const fd = payload as {
+          delegationContextJson: string;
+          merkleWitnessesJson: string;
+          imtProofsJson: string;
+          spendAuthSigHex: string;
+          sighashHex: string;
+        };
+        const raw = JSON.parse(
+          votingWasm.finalize_delegation(
+            fd.delegationContextJson,
+            fd.merkleWitnessesJson,
+            fd.imtProofsJson,
+            fd.spendAuthSigHex,
+            fd.sighashHex,
+          ),
+        ) as { delegation_submission_wire_json: string };
+        workerSelf.postMessage({
+          type: 'result',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: { delegationSubmissionWireJson: raw.delegation_submission_wire_json },
+        });
+        return;
+      }
+
+      case 'cast-vote-hot-wire': {
+        const votingWasm = await loadVotingWasm();
+        const cv = payload as {
+          network: string;
+          hotkeySecretHex: string;
+          roundParamsJson: string;
+          delegationStateJson: string;
+          vanWitnessJson: string;
+          voteJson: string;
+          submitAt: number;
+        };
+        const raw = JSON.parse(
+          votingWasm.cast_vote_hot_wire(
+            cv.hotkeySecretHex,
+            cv.roundParamsJson,
+            cv.delegationStateJson,
+            cv.vanWitnessJson,
+            cv.voteJson,
+            cv.network,
+            BigInt(cv.submitAt),
+          ),
+        ) as { proposal_id: number; wire: string; shares: string; commitment_bundle_json: string };
+        workerSelf.postMessage({
+          type: 'result',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: {
+            proposalId: raw.proposal_id,
+            wire: raw.wire,
+            shares: raw.shares,
+            commitmentBundleJson: raw.commitment_bundle_json,
+          },
+        });
+        return;
+      }
+
+      case 'pir-fetch-imt-proofs': {
+        const votingWasm = await loadVotingWasm();
+        const pf = payload as { pirBaseUrl: string; nullifiersJson: string };
+        const imtProofsJson = await votingWasm.pir_fetch_imt_proofs(
+          pf.pirBaseUrl,
+          pf.nullifiersJson,
+          (input: string, init?: unknown) => fetch(input, init as RequestInit),
+        );
+        workerSelf.postMessage({
+          type: 'result',
+          id,
+          network: 'zcash',
+          walletId,
+          payload: { imtProofsJson },
         });
         return;
       }
