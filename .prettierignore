@@ -10,6 +10,7 @@ apps/extension/public/ring-vrf-wasm/
 apps/extension/public/zafu-wasm/
 apps/extension/public/zafu-wasm-parallel/
 apps/extension/public/zync-core/
+apps/extension/public/voting-wasm/
 # wasm-bindgen output (committed but generated — never hand-format)
 packages/zcash-wasm/*_wasm.js
 packages/zcash-wasm/*_wasm.d.ts

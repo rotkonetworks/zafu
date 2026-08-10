@@ -7916,13 +7916,17 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (!walletId) {
           throw new Error('walletId required');
         }
-        const { nullifiers: witnessNullifiers, targetHeight, serverUrl: witnessServerUrl, pool: witnessPool } =
-          payload as {
-            nullifiers: string[];
-            targetHeight: number;
-            serverUrl: string;
-            pool?: NotePool;
-          };
+        const {
+          nullifiers: witnessNullifiers,
+          targetHeight,
+          serverUrl: witnessServerUrl,
+          pool: witnessPool,
+        } = payload as {
+          nullifiers: string[];
+          targetHeight: number;
+          serverUrl: string;
+          pool?: NotePool;
+        };
         const witnessState = await loadState(walletId);
         // preserve caller order - finalize_delegation zips merkle_witnesses_json
         // 1:1 against the notes_json array build_delegation_pczt was called with.
@@ -7942,7 +7946,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           targetHeight,
           witnessPool ?? 'orchard',
         );
-        const witnessPaths = witnessResult.paths as { position: number; path: { hash: string }[] }[];
+        const witnessPaths = witnessResult.paths as {
+          position: number;
+          path: { hash: string }[];
+        }[];
         const witnessDtos = orderedNotes.map((note, i) => ({
           note_commitment_hex: note.cmx,
           position: witnessPaths[i]!.position,

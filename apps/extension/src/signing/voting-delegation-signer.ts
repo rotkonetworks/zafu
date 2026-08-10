@@ -20,7 +20,7 @@
  * action at `actionIndex`).
  */
 
-import { type SignRequest, type SignResult, type SignerFilter } from './external-signer';
+import type { SignRequest, SignResult, SignerFilter } from './external-signer';
 
 /**
  * Output of wasm `build_delegation_pczt`:

@@ -248,7 +248,7 @@ export const submitDelegation = async (
         if (resp.status === 422) {
           let message = 'delegation rejected';
           try {
-            const body = await resp.json() as { error?: string; message?: string };
+            const body = (await resp.json()) as { error?: string; message?: string };
             message = body.error || body.message || message;
           } catch {
             // ignore parse errors
@@ -298,7 +298,7 @@ export const castVote = async (
         if (resp.status === 422) {
           let message = 'vote rejected';
           try {
-            const body = await resp.json() as { error?: string; message?: string };
+            const body = (await resp.json()) as { error?: string; message?: string };
             message = body.error || body.message || message;
           } catch {
             // ignore parse errors

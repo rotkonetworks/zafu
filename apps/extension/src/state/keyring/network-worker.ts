@@ -1531,7 +1531,12 @@ export const getConsensusBranchIdInWorker = async (
 export const getMerkleWitnessesInWorker = async (
   network: NetworkType,
   walletId: string,
-  a: { nullifiers: string[]; targetHeight: number; serverUrl: string; pool?: 'orchard' | 'ironwood' },
+  a: {
+    nullifiers: string[];
+    targetHeight: number;
+    serverUrl: string;
+    pool?: 'orchard' | 'ironwood';
+  },
 ): Promise<{ merkleWitnessesJson: string }> => {
   return callWorker(network, 'get-merkle-witnesses', a, walletId);
 };

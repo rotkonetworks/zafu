@@ -59,9 +59,10 @@ const VOTING_WASM_NETWORK = 'main';
 
 /** RoundConfigEntry.ea_pk (and legacy round ids) arrive base64-encoded. */
 const base64ToHex = (b64: string): string =>
-  Array.from(Uint8Array.from(atob(b64), c => c.charCodeAt(0)), b => b.toString(16).padStart(2, '0')).join(
-    '',
-  );
+  Array.from(
+    Uint8Array.from(atob(b64), c => c.charCodeAt(0)),
+    b => b.toString(16).padStart(2, '0'),
+  ).join('');
 
 /**
  * Eligible notes for a round's delegation: unspent, at or below the
@@ -77,8 +78,7 @@ const notePoolForSnapshot = (snapshotHeight: number): 'orchard' | 'ironwood' =>
 const eligibleNotesAtSnapshot = (
   notes: DecryptedNoteWithTxid[],
   snapshotHeight: number,
-): DecryptedNoteWithTxid[] =>
-  notes.filter(n => !n.spent && n.height <= snapshotHeight);
+): DecryptedNoteWithTxid[] => notes.filter(n => !n.spent && n.height <= snapshotHeight);
 
 /** DecryptedNoteWithTxid -> voting-wasm NoteInfoDto (snake_case, hex/number
  *  as the Rust side expects - see voting-wasm's voting_delegation.rs). */
@@ -143,14 +143,20 @@ const resolveVanWitness = (
   );
 };
 
-type VoteCastStep = 'idle' | 'delegating-qr-sign' | 'scan-delegation' | 'delegated' | 'casting-proposal' | 'done';
+type VoteCastStep =
+  | 'idle'
+  | 'delegating-qr-sign'
+  | 'scan-delegation'
+  | 'delegated'
+  | 'casting-proposal'
+  | 'done';
 
-type CastProposalState = {
+interface CastProposalState {
   proposalId: number;
   selectedOptionId: number | null;
   submitting: boolean;
   error: string | null;
-};
+}
 
 interface ZcashVoteCastProps {
   round: VotingRound;
@@ -179,14 +185,13 @@ export const ZcashVoteCast = ({
   } | null>(null);
 
   // Per-proposal state for vote casting
-  const [proposalStates, setProposalStates] = useState<Record<number, CastProposalState>>(
-    () =>
-      Object.fromEntries(
-        round.proposals.map(p => [
-          p.id,
-          { proposalId: p.id, selectedOptionId: null, submitting: false, error: null },
-        ]),
-      ),
+  const [proposalStates, setProposalStates] = useState<Record<number, CastProposalState>>(() =>
+    Object.fromEntries(
+      round.proposals.map(p => [
+        p.id,
+        { proposalId: p.id, selectedOptionId: null, submitting: false, error: null },
+      ]),
+    ),
   );
 
   const unsignedDelegationRef = useRef<{
@@ -206,7 +211,8 @@ export const ZcashVoteCast = ({
 
   // Gate on round status and config
   const canAct = round.status === 'active' && round.inConfig;
-  const isDelegated = step !== 'idle' && step !== 'delegating-qr-sign' && step !== 'scan-delegation';
+  const isDelegated =
+    step !== 'idle' && step !== 'delegating-qr-sign' && step !== 'scan-delegation';
 
   // ─── Delegation Flow ───────────────────────────────────────────
 
@@ -636,7 +642,9 @@ export const ZcashVoteCast = ({
 
           {step === 'delegating-qr-sign' && unsignedDelegationRef.current && (
             <div className='flex flex-col gap-3'>
-              <div className='text-label text-fg-high font-medium'>sign delegation with zafu zigner</div>
+              <div className='text-label text-fg-high font-medium'>
+                sign delegation with zafu zigner
+              </div>
 
               {/* Animated QR display of unsigned delegation PCZT */}
               <AnimatedQrDisplay
@@ -732,7 +740,9 @@ export const ZcashVoteCast = ({
             const pState = proposalStates[proposal.id]!;
             return (
               <div key={proposal.id} className='flex flex-col gap-1.5'>
-                <div className='text-label text-fg-high'>{proposal.title || `proposal ${proposal.id}`}</div>
+                <div className='text-label text-fg-high'>
+                  {proposal.title || `proposal ${proposal.id}`}
+                </div>
 
                 {/* Option buttons */}
                 <div className='flex flex-col gap-1'>
@@ -767,11 +777,7 @@ export const ZcashVoteCast = ({
                   )}
                   <button
                     onClick={() => void handleCastVote(proposal.id)}
-                    disabled={
-                      pState.selectedOptionId === null ||
-                      pState.submitting ||
-                      !isDelegated
-                    }
+                    disabled={pState.selectedOptionId === null || pState.submitting || !isDelegated}
                     className={cn(
                       'w-full py-1.5 px-3 rounded-md text-label font-medium transition-colors',
                       'bg-elev-2 text-fg-muted',

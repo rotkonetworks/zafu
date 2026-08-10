@@ -42,7 +42,7 @@ export function seedFingerprintFromMnemonic(mnemonic: string): Uint8Array {
 
 /** Hex form, as `build_delegation_pczt` expects for `seed_fingerprint_hex`. */
 export function seedFingerprintHex(mnemonic: string): string {
-  return Array.from(seedFingerprintFromMnemonic(mnemonic), b => b.toString(16).padStart(2, '0')).join(
-    '',
-  );
+  return Array.from(seedFingerprintFromMnemonic(mnemonic), b =>
+    b.toString(16).padStart(2, '0'),
+  ).join('');
 }

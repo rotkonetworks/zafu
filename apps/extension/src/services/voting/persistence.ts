@@ -137,7 +137,9 @@ export const saveDelegationState = async (
   const key = await Key.fromJson(sessionKeyJson);
   // P1: bind identity into the sealed plaintext (see saveVotingHotkey).
   const delegationStateBox = JSON.stringify(
-    (await key.seal(JSON.stringify({ v: 1, walletId, roundId, state: delegationStateJson }))).toJson(),
+    (
+      await key.seal(JSON.stringify({ v: 1, walletId, roundId, state: delegationStateJson }))
+    ).toJson(),
   );
 
   storage[key_str] = {
@@ -219,7 +221,11 @@ export const loadVotingRoundRecord = async (
   let delegationStateJson: string | null = null;
   if (stored.delegationStateBox) {
     try {
-      delegationStateJson = await unsealBound(stored.delegationStateBox, 'state', 'delegation state');
+      delegationStateJson = await unsealBound(
+        stored.delegationStateBox,
+        'state',
+        'delegation state',
+      );
     } catch (e) {
       throw new Error(
         `failed to load delegation state: ${e instanceof Error ? e.message : String(e)}`,
