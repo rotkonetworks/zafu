@@ -954,6 +954,13 @@ export const buildSendTxPcztInWorker = async (
   targetHeight: number,
   mainnet: boolean,
   ufvk: string,
+  /**
+   * No longer gates anything. It existed only to drive the NU6.3 fail-closed
+   * refusal of multisig sends, which is gone now that ironwood returns the
+   * FROST inputs and has its own completion step. Kept because it sits before
+   * `fragmentSize` positionally; removing it would silently shift that
+   * argument at any call site that passes it positionally.
+   */
   frost = false,
   fragmentSize = 400,
 ): Promise<SendTxPcztUnsignedResult> => {

@@ -337,6 +337,12 @@ interface WasmModule {
     orchard_sigs_json: unknown,
     spend_indices_json: unknown,
   ): string;
+  complete_ironwood_pczt(
+    pczt_hex: string,
+    ironwood_sigs_json: unknown,
+    spend_indices_json: unknown,
+  ): string;
+  pczt_has_ironwood_actions(pczt_hex: string): boolean;
   compute_txid(tx_hex: string): string;
   validate_ufvk(ufvk_str: string): boolean;
   ur_decode_frames(parts_json: string, expected_type: string): string;
@@ -6084,30 +6090,18 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const pcztPool: NotePool =
           sendTip.height >= nu63ActivationHeight(sendPayload.mainnet) ? 'ironwood' : 'orchard';
 
-        // FAIL-CLOSED (NU6.3 × FROST): the ironwood branch below builds via
-        // build_ironwood_send_pczt, which returns only { pczt_hex, summary,
-        // action_count } — no sighash, no per-spend alphas, no spend indices —
-        // so it posts them back empty. A FROST caller would then run ZERO
-        // signing rounds (numActions = alphas.length = 0) and hand an empty
-        // signature set to complete_orchard_pczt, which is orchard/v5-only
-        // anyway. Refuse up front rather than burn a halo2 prove on a PCZT the
-        // multisig path cannot sign.
-        // TODO(ironwood FROST): needs wasm-side work before this can be lifted —
-        //   1. an ironwood PCZT builder that returns the ZIP-244 sighash, the
-        //      per-spend randomizers (alphas) and the spend indices;
-        //   2. an ironwood/v6 analogue of complete_orchard_pczt to inject the
-        //      aggregated SpendAuth sigs and extract the tx;
-        //   3. ironwood/v6-aware co-signer verification — frost_parse_tx_outputs
-        //      and frost_inspect_pczt_outputs both read the ORCHARD bundle and
-        //      recompute a v5 sighash, so they cannot bind an ironwood spend's
-        //      display to the message the signers commit to.
-        if (pcztPool === 'ironwood' && sendPayload.frost) {
-          throw new Error(
-            'FROST multisig cannot sign ironwood (NU6.3) spends yet - the ironwood PCZT ' +
-              'builder emits no sighash/alphas and the co-sign path is orchard-only; ' +
-              'multisig sends are unavailable until ironwood FROST support ships',
-          );
-        }
+        // NU6.3 x FROST: multisig sends on ironwood used to be refused here.
+        // The three gaps that forced it are closed: build_ironwood_send_pczt now
+        // returns the ZIP-244 sighash, the per-spend alphas and the spend
+        // indices; complete_ironwood_pczt applies the aggregated SpendAuth sigs
+        // via pczt's Signer::apply_ironwood_signature and re-verifies them
+        // against the sighash while extracting; and frost_inspect_pczt_outputs
+        // derives the joiner's sighash from pczt's version-dispatching Signer
+        // instead of v5_signature_hash, so a co-signer's display is bound to
+        // the message it actually signs.
+        //
+        // FROST itself never needed changing: a RedPallas spend-auth signature
+        // over the sighash is the same for an ironwood action as an orchard one.
 
         // FAIL-CLOSED: never build an orchard PCZT the network rejects
         // post-NU6.3. If the active pool is ironwood but the wallet holds no
@@ -6273,6 +6267,12 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             pczt_hex: string;
             summary: unknown;
             action_count: number;
+            /** ZIP-244 sighash the FROST signers commit to. */
+            sighash: string;
+            /** Per-spend rerandomizers for the real ironwood spends, action order. */
+            alphas: string[];
+            /** Action indices those alphas correspond to. */
+            spend_indices: number[];
           };
 
           // Ironwood-AWARE transport: zigner prelude envelope [0x53][0x04][0x03]
@@ -6328,10 +6328,12 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               /** true when the request went out compact (tx_type 0x05) */
               compactRequest: iwRequestCompact,
               cborBytes: iwEnvelope.length,
-              // single-signer zigner cold-sign: no FROST relay rounds.
-              sighash: '',
-              alphas: [],
-              spendIndices: [],
+              // Populated for a FROST caller; a single-signer zigner cold-sign
+              // simply ignores them. Passing them through unconditionally keeps
+              // this the same message shape the orchard branch posts.
+              sighash: iwParsed.sighash,
+              alphas: iwParsed.alphas,
+              spendIndices: iwParsed.spend_indices,
               coldSendId: iwColdSendId,
             },
           });
@@ -7645,8 +7647,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           /** id returned by the send-tx-pczt build; see ColdSendContext */
           coldSendId?: string;
         };
-        // inject the aggregated FROST SpendAuth sigs → extract v5 tx → broadcast
-        const cTxHex = wasmModule.complete_orchard_pczt(pcztHex, orchardSigs, spendIndices);
+        // Inject the aggregated FROST SpendAuth sigs, extract the tx, broadcast.
+        // Which bundle the signatures belong to is a property of the PCZT, not
+        // of the caller, so read it off the artifact rather than trusting a
+        // flag the relay could omit.
+        const cTxHex = wasmModule.pczt_has_ironwood_actions(pcztHex)
+          ? wasmModule.complete_ironwood_pczt(pcztHex, orchardSigs, spendIndices)
+          : wasmModule.complete_orchard_pczt(pcztHex, orchardSigs, spendIndices);
         const cTxData = hexDecode(cTxHex);
         const cClient = await makeZcashClient(serverUrl);
         const cResult = await cClient.sendTransaction(cTxData);
