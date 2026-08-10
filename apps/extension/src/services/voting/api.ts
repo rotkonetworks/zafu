@@ -15,6 +15,7 @@
  *     pinned config's server list.
  */
 
+import { BUNDLED_PINNED_SOURCE } from './types';
 import type {
   PinnedConfigSource,
   StaticVotingConfig,
@@ -64,10 +65,31 @@ const firstReachable = async <T>(
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
 };
 
-/** Fetch + checksum-verify the pinned static config. */
+/** True only for the hash-pinned default shipped with the extension. */
+const isDefaultSource = (source: PinnedConfigSource): boolean =>
+  source.url === BUNDLED_PINNED_SOURCE.url;
+
+/** Loopback dev addresses - allowed only under an explicit user override. */
+const isLocalDevUrl = (url: string): boolean =>
+  url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1');
+
+/**
+ * Fetch + checksum-verify the pinned static config.
+ *
+ * Security scoping: the DEFAULT source (`BUNDLED_PINNED_SOURCE`) must
+ * always be https and always sha256-verified - that path is not relaxed.
+ * A user-supplied OVERRIDE source (anything with a different `url`) is
+ * additionally allowed to point `dynamic_config_url` at
+ * `http://localhost`/`http://127.0.0.1` (for a local dev voting rig), and
+ * may omit `sha256` to skip checksum verification (still verified if the
+ * user provides one). This relaxation only ever applies to an override
+ * the user explicitly typed in - never to the bundled default.
+ */
 export const fetchStaticConfig = async (
   source: PinnedConfigSource,
 ): Promise<StaticVotingConfig> => {
+  const isOverride = !isDefaultSource(source);
+
   const resp = await fetch(source.url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
   if (!resp.ok) {
     throw new Error(`static voting config: HTTP ${resp.status}`);
@@ -79,14 +101,24 @@ export const fetchStaticConfig = async (
     if (actual !== source.sha256) {
       throw new Error(`static voting config checksum mismatch (got ${actual.slice(0, 12)}…)`);
     }
+  } else if (!isOverride) {
+    // defense in depth: the default path must always be checksum-pinned.
+    throw new Error('static voting config: missing sha256 pin');
   }
 
   const cfg = JSON.parse(new TextDecoder().decode(body)) as StaticVotingConfig;
   if (cfg.static_config_version !== 1) {
     throw new Error(`unsupported static_config_version ${cfg.static_config_version}`);
   }
-  if (!cfg.dynamic_config_url?.startsWith('https://')) {
-    throw new Error('static voting config: dynamic_config_url must be https');
+  const dynamicUrlOk =
+    !!cfg.dynamic_config_url?.startsWith('https://') ||
+    (isOverride && isLocalDevUrl(cfg.dynamic_config_url ?? ''));
+  if (!dynamicUrlOk) {
+    throw new Error(
+      isOverride
+        ? 'static voting config: dynamic_config_url must be https, or http://localhost / http://127.0.0.1 for a dev override'
+        : 'static voting config: dynamic_config_url must be https',
+    );
   }
   if (!cfg.trusted_keys?.length) {
     throw new Error('static voting config: trusted_keys empty');

@@ -89,6 +89,12 @@ const groups: SettingsGroup[] = [
         networks: ['zcash'],
       },
       {
+        title: 'voting endpoints',
+        icon: 'i-lucide-vote',
+        href: PopupPath.SETTINGS_VOTING,
+        networks: ['zcash'],
+      },
+      {
         title: 'zigner',
         icon: 'i-lucide-qr-code',
         href: PopupPath.SETTINGS_ZIGNER,

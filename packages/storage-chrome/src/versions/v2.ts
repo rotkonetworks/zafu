@@ -184,6 +184,20 @@ type LOCAL = {
    */
   zcashBackend?: 'zidecar' | 'lightwalletd';
 
+  /**
+   * User override for the voting config source (last-resort escape hatch
+   * if a Chrome Web Store update can't ship in time, or for pointing at a
+   * local dev voting rig). When `enabled` is false or `url` is empty, the
+   * bundled hash-pinned default (`BUNDLED_PINNED_SOURCE`) is used instead.
+   * `sha256` is optional for overrides - a `null`/missing value skips
+   * checksum verification for that custom source only.
+   */
+  votingConfigOverride?: {
+    enabled: boolean;
+    url: string;
+    sha256: string | null;
+  };
+
   /** keyring vaults (keplr-style multi-account) */
   vaults?: {
     id: string;

@@ -74,4 +74,5 @@ export enum PopupPath {
   SETTINGS_WALLETS = '/settings/wallets',
   SETTINGS_ABOUT = '/settings/about',
   SETTINGS_OTA = '/settings/ota',
+  SETTINGS_VOTING = '/settings/voting',
 }

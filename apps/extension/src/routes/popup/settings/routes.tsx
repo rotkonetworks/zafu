@@ -41,6 +41,9 @@ const SettingsZigner = lazy(() =>
   import('./settings-zigner').then(m => ({ default: m.SettingsZigner })),
 );
 const SettingsOta = lazy(() => import('./settings-ota').then(m => ({ default: m.SettingsOta })));
+const SettingsVoting = lazy(() =>
+  import('./settings-voting').then(m => ({ default: m.SettingsVoting })),
+);
 const SubscribePage = lazy(() => import('./subscribe').then(m => ({ default: m.SubscribePage })));
 
 const LazyFallback = () => (
@@ -122,5 +125,9 @@ export const settingsRoutes = [
   {
     path: PopupPath.SETTINGS_OTA,
     element: withSuspense(SettingsOta),
+  },
+  {
+    path: PopupPath.SETTINGS_VOTING,
+    element: withSuspense(SettingsVoting),
   },
 ];
