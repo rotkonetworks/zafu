@@ -47,7 +47,7 @@ import { bytesToHex } from '@noble/hashes/utils';
  * documented — are what actually reduce exposure, and they hold regardless
  * of where this is hosted.
  */
-export const LICENSE_SERVER = 'https://zpro.rotko.net';
+export const LICENSE_SERVER = 'https://license.zafu.pro';
 
 /**
  * ── why these are POSTs, not GETs ────────────────────────────────────────

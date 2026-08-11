@@ -53,6 +53,7 @@ import { walletIdCtx } from '@rotko/penumbra-services/ctx/wallet-id';
 import type { Services } from '@repo/context';
 import { startWalletServices } from './wallet-services';
 import { performPendingClears } from './clear-cache-startup';
+import { installGracefulNetworkErrorHandler } from './utils/graceful-network-errors';
 
 import { backOff } from 'exponential-backoff';
 
@@ -66,6 +67,12 @@ import {
   getCustomChainspecs,
   type RelayChain,
 } from '@repo/wallet/networks/polkadot';
+
+// Quiet transient network fetch failures (offline/unreachable endpoints) so
+// best-effort background calls do not spam "Uncaught (in promise): Failed to
+// fetch" - non-network rejections still surface. Installed first, before any
+// services start.
+installGracefulNetworkErrorHandler();
 
 localExtStorage.enableMigration(localMigrations);
 
