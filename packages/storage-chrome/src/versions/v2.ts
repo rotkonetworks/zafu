@@ -83,10 +83,13 @@ type LOCAL = {
      *   per-tx anchor attestation against a known verifier key.
      * - `'keystone'`: A Keystone hardware wallet acting as zcash-only cold
      *   signer. PCZT-only, no Penumbra/FROST/ZID integration.
+     * - `'ledger'`: A Ledger hardware wallet acting as zcash-only cold signer
+     *   over WebHID. Transparent-only with the current app-zcash; shielded
+     *   signing gates on a newer app version.
      *
      * Optional for backwards compat — undefined = treat as `'zigner'`.
      */
-    coldSignerType?: 'zigner' | 'keystone';
+    coldSignerType?: 'zigner' | 'keystone' | 'ledger';
   }[];
   /** Active zcash wallet index */
   activeZcashIndex?: number;

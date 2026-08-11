@@ -31,6 +31,7 @@ import { createInboxSlice, InboxSlice } from './inbox';
 import { createLicenseSlice, LicenseSlice } from './license';
 import { createRingVrfSlice, RingVrfSlice } from './ring-vrf';
 import { createOtaSlice, type OtaSlice } from './ota';
+import { createLedgerSessionSlice, LedgerSessionSlice } from './ledger-session';
 
 export interface AllSlices {
   wallets: WalletsSlice;
@@ -59,6 +60,7 @@ export interface AllSlices {
   license: LicenseSlice;
   ringVrf: RingVrfSlice;
   ota: OtaSlice;
+  ledgerSession: LedgerSessionSlice;
 }
 
 export type SliceCreator<SliceInterface> = StateCreator<
@@ -103,6 +105,7 @@ export const initializeStore = (
     license: createLicenseSlice()(setState, getState, store),
     ringVrf: createRingVrfSlice()(setState, getState, store),
     ota: createOtaSlice(setState, getState, store),
+    ledgerSession: createLedgerSessionSlice(setState, getState, store),
   }));
 };
 
