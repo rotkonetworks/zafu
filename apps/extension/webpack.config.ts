@@ -168,6 +168,11 @@ export default ({
     new webpack.ProvidePlugin({
       // Required by the `bip39` library
       Buffer: ['buffer', 'Buffer'],
+      // Inert browser `process` shim so a bare `process` / `process.browser`
+      // reference from a dependency in the bundle does not throw
+      // "process is not defined" at runtime. Specific `process.env.X` reads are
+      // still replaced by DefinePlugin at build time.
+      process: path.resolve(__dirname, 'src/stubs/process.cjs'),
     }),
     new webpack.IgnorePlugin({
       // Not required by the `bip39` library, but very nice
