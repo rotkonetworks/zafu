@@ -94,6 +94,22 @@ Reproduce by checking out the zcli rev below and running the commands.
 Verify: rebuild from the rev, sha256sum the outputs,
 diff against the values above. A mismatch means the vendored blob is stale.
 
+## 2026-08-11 rebuild - voting stack + ironwood completion + FROST send builder
+
+- source repo: zcli, branch `master`, rev `6df7849`
+- toolchain: wasm-bindgen 0.2.126, binaryen 130 (the older doc says 0.2.114 -
+  that is STALE; the crate now depends on 0.2.126, so the CLI must match it).
+- sha256(single-thread zafu_wasm_bg.wasm) = 7adb070bbbca20121cad0a82f3d3127a0ff02da58a27b43409bbec1cfa4ac839
+- sha256(parallel zafu_wasm_bg.wasm)      = 968360fa1587811022603ff01cf6cbdbe8c5e71152ed900a3f0e9c84ffed45ef
+- Brings the entire voting stack to the shipped blob (was missing, so voting
+  was dead in the extension): build_delegation_pczt, finalize_delegation,
+  build_vote_commitment_wire, cast_vote_hot_wire, build_vote_shares_wire,
+  generate_voting_hotkey; plus complete_ironwood_pczt, pczt_has_ironwood_actions,
+  and the build_unsigned_pczt NU6.3 fail-close.
+- Verified: zcash_* == zafu_* byte-identical in packages/; parallel blob has
+  shared imported memory (0x03, max 32768); worker patch re-applied
+  (wbgRayonBase defined+used, zero live `import('../../..')`); pnpm build green.
+
 ## 2026-08-06 rebuild — ironwood witness + scan speedup + Pool type
 
 - source repo: zcli, branch `master`, rev `cc7f9d5`
