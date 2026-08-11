@@ -14,17 +14,92 @@ import url from 'node:url';
 const require = createRequire(import.meta.url);
 import { type WebExtRunner, cmd as WebExtCmd } from 'web-ext';
 import { execSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import webpack from 'webpack';
 import WatchExternalFilesPlugin from 'webpack-watch-external-files-plugin';
 import unocssPostcss from '@unocss/postcss';
 // UnoCSS icons are loaded via @unocss/postcss in the PostCSS pipeline
+
+/**
+ * Build-time guard against the "stale shared-memory page count" incident:
+ * a zafu-wasm re-vendor grew the module's declared initial memory (51 -> 59
+ * pages) but loaders kept allocating the old size, so instantiation failed at
+ * RUNTIME with "LinkError: memory import has 51 pages which is smaller than
+ * the declared initial of 59" and address derivation broke.
+ *
+ * This makes that class of bug fail the BUILD instead:
+ * 1. Parse the wasm's declared `initial` from the vendored glue
+ *    (public/zafu-wasm/zafu_wasm.js) - the source of truth.
+ * 2. Check ZAFU_WASM_INITIAL_PAGES (src/config/zafu-wasm-memory.ts, the
+ *    constant every loader imports) covers it.
+ * 3. Sweep src/ for any stray hardcoded `new WebAssembly.Memory({ initial: N`
+ *    in files that touch zafu-wasm, so a future loader that bypasses the
+ *    shared constant is still caught.
+ *
+ * Throws (failing dev, prod, and beta builds - they all evaluate this config)
+ * if any allocation is smaller than the wasm's declared initial.
+ */
+const assertZafuWasmMemoryPages = (rootDir: string): void => {
+  const gluePath = path.join(rootDir, 'public/zafu-wasm/zafu_wasm.js');
+  const glue = readFileSync(gluePath, 'utf8');
+  const declaredMatch = /new WebAssembly\.Memory\(\{initial:(\d+)/.exec(glue);
+  if (!declaredMatch) {
+    throw new Error(
+      `zafu-wasm memory check: could not find "new WebAssembly.Memory({initial:N" in ${gluePath}. ` +
+        'The glue format changed - update assertZafuWasmMemoryPages in webpack.config.ts.',
+    );
+  }
+  const declared = Number(declaredMatch[1]);
+
+  const constantPath = path.join(rootDir, 'src/config/zafu-wasm-memory.ts');
+  const constantSrc = readFileSync(constantPath, 'utf8');
+  const constantMatch = /ZAFU_WASM_INITIAL_PAGES\s*=\s*(\d+)/.exec(constantSrc);
+  if (!constantMatch) {
+    throw new Error(
+      `zafu-wasm memory check: could not find ZAFU_WASM_INITIAL_PAGES in ${constantPath}.`,
+    );
+  }
+  const configured = Number(constantMatch[1]);
+  if (configured < declared) {
+    throw new Error(
+      `zafu-wasm memory check FAILED: ${gluePath} declares initial=${declared} pages ` +
+        `but ZAFU_WASM_INITIAL_PAGES=${configured} in ${constantPath}. ` +
+        `Loaders would throw LinkError at runtime. Bump ZAFU_WASM_INITIAL_PAGES to ${declared}.`,
+    );
+  }
+
+  // Catch loaders that hardcode a page count instead of importing the constant.
+  const srcRoot = path.join(rootDir, 'src');
+  for (const entry of readdirSync(srcRoot, { recursive: true, withFileTypes: true })) {
+    if (!entry.isFile() || !/\.(?:ts|tsx|js|mjs|cjs)$/.test(entry.name)) {
+      continue;
+    }
+    const filePath = path.join(entry.parentPath, entry.name);
+    const source = readFileSync(filePath, 'utf8');
+    if (!source.includes('zafu_wasm') && !source.includes('zafu-wasm')) {
+      continue;
+    }
+    const memoryRe = /new WebAssembly\.Memory\(\s*\{\s*initial:\s*(\d+)/g;
+    for (let m = memoryRe.exec(source); m !== null; m = memoryRe.exec(source)) {
+      const pages = Number(m[1]);
+      if (pages < declared) {
+        throw new Error(
+          `zafu-wasm memory check FAILED: ${filePath} hardcodes WebAssembly.Memory initial=${pages} ` +
+            `but the vendored wasm glue declares initial=${declared}. ` +
+            'Use createZafuWasmMemory() from src/config/zafu-wasm-memory.ts instead of hardcoding.',
+        );
+      }
+    }
+  }
+};
 
 export default ({
   WEBPACK_WATCH = false,
 }: {
   ['WEBPACK_WATCH']?: boolean;
 } = {}): webpack.Configuration[] => {
+  assertZafuWasmMemoryPages(new URL('.', import.meta.url).pathname);
+
   const gitCommit = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
   const gitDate = execSync('git log -1 --format=%cd --date=short', { encoding: 'utf-8' }).trim();
 

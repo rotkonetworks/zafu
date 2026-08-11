@@ -5,6 +5,8 @@
  * connects to zidecar for trustless sync via grpc-web
  */
 
+import { createZafuWasmMemory } from '../../config/zafu-wasm-memory';
+
 // types for zafu-wasm (loaded dynamically)
 interface ZafuWasm {
   WalletKeys: new (seedPhrase: string) => WalletKeys;
@@ -75,10 +77,10 @@ export const initZcashWasm = async (): Promise<void> => {
     // webpack copies this to dist/zafu-wasm/
     // @ts-expect-error - dynamic import from extension root
     const wasm = await import(/* webpackIgnore: true */ '/zafu-wasm/zafu_wasm.js');
-    // Initial pages must match (or exceed) what zafu_wasm.js declares — bump
-    // when wasm rebuild bumps its module-level static footprint, otherwise
-    // WebAssembly.instantiate throws LinkError "memory has N pages, declared initial of M".
-    const memory = new WebAssembly.Memory({ initial: 59, maximum: 32768, shared: true });
+    // Page count lives in src/config/zafu-wasm-memory.ts (single source of
+    // truth) and is checked against the wasm glue at build time - see
+    // assertZafuWasmMemoryPages in webpack.config.ts.
+    const memory = createZafuWasmMemory();
     await wasm.default({ module_or_path: '/zafu-wasm/zafu_wasm_bg.wasm', memory });
 
     // init panic hook

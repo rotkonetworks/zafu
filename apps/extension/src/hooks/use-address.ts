@@ -19,6 +19,7 @@ import { NETWORK_CONFIGS, isIbcNetwork } from '../state/keyring/network-types';
 import type { CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { spawnNetworkWorker, deriveAddressInWorker } from '../state/keyring/network-worker';
 import { fixOrchardAddress } from '@repo/wallet/networks/zcash/unified-address';
+import { createZafuWasmMemory } from '../config/zafu-wasm-memory';
 
 /** derive cosmos/ibc address from mnemonic */
 async function deriveCosmosAddress(mnemonic: string, prefix: string): Promise<string> {
@@ -93,10 +94,10 @@ async function loadZcashWasm() {
   const wasmJsUrl = chrome.runtime.getURL('zafu-wasm/zafu_wasm.js');
   const wasmBinaryUrl = chrome.runtime.getURL('zafu-wasm/zafu_wasm_bg.wasm');
   const zcashWasm = await import(/* webpackIgnore: true */ wasmJsUrl);
-  // Initial pages must match (or exceed) what zafu_wasm.js declares — bump
-  // when wasm rebuild bumps its module-level static footprint, otherwise
-  // WebAssembly.instantiate throws LinkError "memory has N pages, declared initial of M".
-  const memory = new WebAssembly.Memory({ initial: 59, maximum: 32768, shared: true });
+  // Page count lives in src/config/zafu-wasm-memory.ts (single source of
+  // truth) and is checked against the wasm glue at build time - see
+  // assertZafuWasmMemoryPages in webpack.config.ts.
+  const memory = createZafuWasmMemory();
   await zcashWasm.default({ module_or_path: wasmBinaryUrl, memory });
   zcashWasmCache = zcashWasm;
   return zcashWasm;
