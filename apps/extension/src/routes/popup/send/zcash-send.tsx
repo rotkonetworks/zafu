@@ -41,7 +41,7 @@ import { QrDisplay } from '../../../shared/components/qr-display';
 import { QrScanner } from '../../../shared/components/qr-scanner';
 import { AnimatedQrDisplay } from '../../../shared/components/animated-qr-display';
 import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanner';
-import { FrostAirgapSignFlow, runMnemonicFrostSign } from './frost-multisig';
+import { FrostAirgapSignFlow } from './frost-multisig';
 import { DontQuitIcon } from './frost-multisig/helpers';
 import { RecipientPicker } from '../../../components/recipient-picker';
 import { SaveContactModal } from '../../../components/save-contact-modal';
@@ -52,6 +52,7 @@ import { HARDWARE_WALLET_ENABLED } from '../../../config/feature-flags';
 import { connectLedger } from '../../../ledger';
 import { ledgerSignerFor } from '../../../signing/ledger-signer';
 import { signAndBroadcast } from '../../../signing/cold-send';
+import { frostSelfCustodySigner } from '../../../signing/frost-signer';
 import { isPopup } from '../../../utils/popup-detection';
 import { isZcashSignatureQR, parseZcashSignatureResponse, bytesToHex } from '@repo/wallet/networks'; // self-contained 4-step zigner-mediated multisig sign
 
@@ -587,7 +588,13 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
         setStep('frost-room');
         try {
-          const orchardSigs = await runMnemonicFrostSign({
+          // The FROST rounds are a synchronous-await cold signer: run both
+          // rounds, aggregate, and inject the orchard sigs via the shared
+          // signAndBroadcast tail (complete_orchard_pczt). Room/progress/abort
+          // UI stays here via the ctx callbacks; broadcast via onSigned - so the
+          // step transitions are identical to the old inline flow. See
+          // signing/frost-signer.ts + signing/cold-send.ts.
+          const frostSigner = frostSelfCustodySigner({
             ms,
             secrets,
             unsigned: result,
@@ -602,16 +609,20 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             },
             setProgress: setFrostProgress,
           });
-
-          setStep('broadcast');
-          setFrostProgress('broadcasting...');
-          const finalResult = await completeOrchardPcztInWorker(
-            walletId,
-            zidecarUrl,
-            result.pcztHex,
-            orchardSigs,
-            result.spendIndices,
-            result.coldSendId,
+          const finalResult = await signAndBroadcast(
+            frostSigner,
+            {
+              pcztHex: result.pcztHex,
+              spendIndices: result.spendIndices,
+              coldSendId: result.coldSendId,
+            },
+            { walletId, zidecarUrl, mainnet },
+            {
+              onSigned: () => {
+                setStep('broadcast');
+                setFrostProgress('broadcasting...');
+              },
+            },
           );
           void promoteToBroadcasted(finalResult.txid);
           complete(finalResult.txid);
