@@ -20,10 +20,18 @@ export interface LedgerSession {
   appVersion: string;
 }
 
-/** Base service: pure sign against an already-connected session. */
+/** Base service: pure sign against an already-connected session. The device
+ *  returns raw orchard spend-auth sigs, so this is the `spendAuthSigs` (inject)
+ *  delivery form - see external-signer.ts / cold-send.ts. */
 function ledgerSignWith(session: LedgerSession): ExternalSigner {
-  return ({ pcztHex, spendIndices, mainnet }) =>
-    signPcztWithLedger(session.sessionId, pcztHex, { spendIndices, mainnet });
+  return async ({ pcztHex, spendIndices, mainnet }) => {
+    const signed = await signPcztWithLedger(session.sessionId, pcztHex, { spendIndices, mainnet });
+    return {
+      kind: 'spendAuthSigs',
+      spendAuthSigs: signed.orchardSigs,
+      spendIndices: signed.spendIndices,
+    };
+  };
 }
 
 /** Filter: refuse unless the hardware-wallet feature is enabled. */

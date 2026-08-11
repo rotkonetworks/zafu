@@ -83,16 +83,24 @@ export function votingDelegationSigner(ctx: DelegationSignContext): {
   };
 
   const toResult = (sr: SignResult): DelegationSignResult => {
+    // Delegation needs a raw spend-auth signature to bind to an action index, so
+    // only the `spendAuthSigs` (inject) delivery form is meaningful here - a
+    // signed-PCZT result carries no separable per-action signature to extract.
+    if (sr.kind !== 'spendAuthSigs') {
+      throw new Error(
+        `delegation signing needs raw spend-auth signatures (spendAuthSigs), got "${sr.kind}"`,
+      );
+    }
     // S2: select the signature by its action index rather than assuming slot 0.
-    // `orchardSigs` is aligned 1:1 with `spendIndices`; find the position whose
+    // `spendAuthSigs` is aligned 1:1 with `spendIndices`; find the position whose
     // spend index is our delegation action and take the matching signature.
-    const pos = sr.spendIndices.findIndex(i => i === ctx.actionIndex);
+    const pos = sr.spendIndices.findIndex((i: number) => i === ctx.actionIndex);
     if (pos === -1) {
       throw new Error(
         `signer did not return a signature for delegation action ${ctx.actionIndex}; got indices [${sr.spendIndices.join(', ')}]`,
       );
     }
-    const sig = sr.orchardSigs[pos];
+    const sig = sr.spendAuthSigs[pos];
     if (!sig) {
       throw new Error(`no spend-auth signature at position ${pos} for action ${ctx.actionIndex}`);
     }

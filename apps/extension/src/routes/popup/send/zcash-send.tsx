@@ -51,6 +51,7 @@ import { HARDWARE_WALLET_ENABLED } from '../../../config/feature-flags';
 // PCZT-signing service in the feature-flag + app-version gates.
 import { connectLedger } from '../../../ledger';
 import { ledgerSignerFor } from '../../../signing/ledger-signer';
+import { signAndBroadcast } from '../../../signing/cold-send';
 import { isPopup } from '../../../utils/popup-detection';
 import { isZcashSignatureQR, parseZcashSignatureResponse, bytesToHex } from '@repo/wallet/networks'; // self-contained 4-step zigner-mediated multisig sign
 
@@ -689,23 +690,24 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         // Until that plumbing lands, (re)open a session here to sign this round.
         // Ledger as a composed ExternalSigner service (server-as-a-function):
         // the WebHID sign is the base service; the feature-flag + app-version
-        // gates are filters. The send flow just picks the service and calls it.
+        // gates are filters (ledgerSignerFor). The send flow just picks the
+        // service and hands it to the shared orchard cold-send tail, which
+        // injects the spend-auth sigs via complete_orchard_pczt (re-verified in
+        // the worker) and broadcasts - the same tail every cold signer converges
+        // on. See signing/cold-send.ts.
+        // The buildUrType guard above already refused anything but ur:zcash-pczt,
+        // and the Ledger signer returns raw spend-auth sigs (the `spendAuthSigs`
+        // inject variant), so this completes via the orchard inject role.
         const session = await connectLedger();
-        const ledgerSign = ledgerSignerFor(session);
-        const { orchardSigs, spendIndices } = await ledgerSign({
-          pcztHex: result.pcztHex,
-          spendIndices: result.spendIndices,
-          mainnet,
-        });
-
-        setStep('broadcast');
-        const finalResult = await completeOrchardPcztInWorker(
-          walletId,
-          zidecarUrl,
-          result.pcztHex,
-          orchardSigs,
-          spendIndices,
-          result.coldSendId,
+        const finalResult = await signAndBroadcast(
+          ledgerSignerFor(session),
+          {
+            pcztHex: result.pcztHex,
+            spendIndices: result.spendIndices,
+            coldSendId: result.coldSendId,
+          },
+          { walletId, zidecarUrl, mainnet },
+          { onSigned: () => setStep('broadcast') },
         );
         pcztUnsignedRef.current = null;
         void promoteToBroadcasted(finalResult.txid);

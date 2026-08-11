@@ -22,14 +22,57 @@ export interface SignRequest {
   mainnet: boolean;
 }
 
-/** Raw 64-byte RedPallas orchard spend-auth signatures (hex), aligned 1:1 with
- *  `spendIndices`. Ready for `complete_orchard_pczt(pcztHex, orchardSigs, spendIndices)`. */
-export interface SignResult {
-  orchardSigs: string[];
-  spendIndices: number[];
+/**
+ * What a cold signer produces - a discriminated union on DELIVERY FORM, which is
+ * the true axis the completion dispatches on (see cold-send.ts). Pool is NOT a
+ * field: it is implied by the form. Raw spend-auth sigs are injected via the
+ * orchard role - the only inject role that exists - so that form is orchard by
+ * construction; a signed PCZT is extracted pool-agnostically, so it carries its
+ * own pool. This is why there is no `pool` discriminant and no ironwood throw:
+ * to complete an ironwood spend you MUST return `signedPczt`, which is simply a
+ * different variant, not an illegal state.
+ */
+export type SignResult = InjectableSpendAuthSigs | SignedPczt;
+
+/** Raw 64-byte RedPallas spend-auth signatures (hex), aligned 1:1 with
+ *  `spendIndices`, for the host to INJECT via `complete_orchard_pczt`. The only
+ *  inject role today is orchard, so this form is orchard by construction. */
+export interface InjectableSpendAuthSigs {
+  readonly kind: 'spendAuthSigs';
+  readonly spendAuthSigs: string[];
+  readonly spendIndices: number[];
 }
 
-/** A cold signer: PCZT -> orchard spend-auth signatures. */
+/** A fully-signed PCZT (device-signed, or contributions merged in host-side) for
+ *  the worker to EXTRACT + broadcast. Pool-agnostic - orchard or ironwood. */
+export interface SignedPczt {
+  readonly kind: 'signedPczt';
+  readonly pcztHex: string;
+}
+
+/**
+ * A cold signer: PCZT -> orchard spend-auth signatures.
+ *
+ * TWO TRANSPORT TOPOLOGIES fit this one type - naming them is the point, so we
+ * never paper a suspended flow over with a synchronous mold:
+ *
+ *   - SYNCHRONOUS-AWAIT (Ledger WebHID, self-custody FROST rounds): the whole
+ *     request->response happens inside the returned Promise. These drop straight
+ *     into `signAndBroadcast` (cold-send.ts) today.
+ *       * Ledger:  ledgerSignerFor(session)                (ledger-signer.ts)
+ *       * FROST:   () => runMnemonicFrostSign({...})       (wrap the rounds)
+ *
+ *   - SUSPENDED (zigner QR, airgap FROST): the signature returns across a UI
+ *     cycle - display an animated UR, the user carries it to an air-gapped
+ *     device, signs, and scans the response back with the camera, possibly after
+ *     the popup was torn down. To present these as an `ExternalSigner` the
+ *     Promise must be a Deferred RESOLVED by the scan handler, not an inline
+ *     await. Modelled but NOT yet migrated: the send component still drives these
+ *     as an explicit two-phase flow (build+display, then a separate
+ *     handlePcztSignatureScanned). Migrating them means threading that Deferred
+ *     through the signing store; behaviour-preserving but it touches a working
+ *     mainnet path, so it is a deliberate, separately-verified step.
+ */
 export type ExternalSigner = (req: SignRequest) => Promise<SignResult>;
 
 /** A filter transforms one signer into another (feature-flag, version-gate,
