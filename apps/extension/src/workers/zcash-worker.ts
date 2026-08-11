@@ -25,6 +25,7 @@ import {
 } from '../routes/popup/send/zcash-send-cbor-helpers';
 import { nu63ActivationHeight } from '../config/feature-flags';
 import { crossCheckTip } from './cross-verify';
+import { installGracefulNetworkErrorHandler } from '../utils/graceful-network-errors';
 import {
   CommitmentReservoir,
   padCommitmentQuery,
@@ -53,6 +54,14 @@ import {
 export type { SentTxRecord } from './sent-tx-reconcile';
 
 const workerSelf = globalThis as any as DedicatedWorkerGlobalScope;
+
+// This worker runs in the popup's console context, so any rejection that is
+// not awaited here surfaces there as "Uncaught (in promise)". First-party
+// call sites all catch, but wasm-bindgen glue (module/pthread fetches) and
+// best-effort background calls can still reject with a bare TypeError:
+// "Failed to fetch" when an endpoint is unreachable. Downgrade only those
+// transient network errors to console.debug; everything else stays loud.
+installGracefulNetworkErrorHandler();
 
 /**
  * Tag an error we raise ourselves with its classification.

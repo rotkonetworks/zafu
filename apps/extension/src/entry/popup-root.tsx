@@ -5,9 +5,18 @@ import { RouterProvider } from 'react-router-dom';
 import { popupRouter } from '../routes/popup/router';
 import { isSidePanel } from '../utils/popup-detection';
 import { localExtStorage } from '@repo/storage-chrome/local';
+import { installGracefulNetworkErrorHandler } from '../utils/graceful-network-errors';
 
 import '@repo/ui/styles/globals.css';
 import '@repo/ui/styles/icons.css';
+
+// Safety net for the popup page itself: a best-effort fetch in a dependency
+// or a not-awaited background call that rejects with a transient network
+// error ("Failed to fetch" / AbortError) would otherwise show up as
+// "Uncaught (in promise)" in the popup console. The handler downgrades ONLY
+// those to console.debug; every other rejection still surfaces loudly, so
+// real bugs are not hidden. Installed before first render on purpose.
+installGracefulNetworkErrorHandler();
 
 const MainPopup = () => {
   const [queryClient] = useState(() => new QueryClient());

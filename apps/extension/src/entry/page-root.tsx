@@ -4,9 +4,15 @@ import { pageRouter } from '../routes/page/router';
 import { StrictMode, useState, useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { localExtStorage } from '@repo/storage-chrome/local';
+import { installGracefulNetworkErrorHandler } from '../utils/graceful-network-errors';
 
 import '@repo/ui/styles/globals.css';
 import '@repo/ui/styles/icons.css';
+
+// Same safety net as popup-root: downgrade transient "Failed to fetch" /
+// AbortError unhandled rejections to console.debug, leave everything else
+// loud. See utils/graceful-network-errors.ts.
+installGracefulNetworkErrorHandler();
 
 const MainPage = () => {
   const [queryClient] = useState(() => new QueryClient());
