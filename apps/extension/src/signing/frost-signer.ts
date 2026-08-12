@@ -7,10 +7,14 @@
  * request->response happens inside the returned Promise, so it drops straight
  * into `signAndBroadcast`.
  *
- * Post-NU6.3 self-custody FROST is orchard-only: the build fails closed on
- * ironwood (frost=true), the rounds sign orchard alphas, and the only inject
- * role is orchard. So the `spendAuthSigs` variant is the only correct result -
- * never `signedPczt`.
+ * Pool-agnostic. The rounds sign whatever alphas the build returned and the
+ * host injects with the role matching the PCZT's bundle, so ironwood works the
+ * same as orchard: a RedPallas spend-auth signature over the shielded sighash
+ * is identical for both. (This used to say ironwood was refused; that gate is
+ * gone now that the ironwood builder returns the sighash and alphas and there
+ * is an ironwood completion step.)
+ *
+ * `spendAuthSigs` is still the only correct result here - never `signedPczt`.
  */
 
 import type { ExternalSigner } from './external-signer';

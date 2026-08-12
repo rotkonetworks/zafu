@@ -269,11 +269,13 @@ export const PopupIndex = () => {
       : undefined;
   const isMultisig = !!selectedMultisigWallet;
 
-  // truncate address for display
-  // full address - it wraps (break-all) to use whatever width is available,
-  // showing in full in a dedicated window / side panel and over a couple of
-  // lines in the narrow popup. walletName is the no-address fallback.
-  const displayAddress = address || walletName;
+  // Single-line, middle-truncated to fit the popup width instead of wrapping the
+  // full unified address over several lines. The full string is one click away
+  // (copy writes it in full) and shown with a QR on the Receive screen, so
+  // nothing is lost by abbreviating here. walletName is the no-address fallback.
+  const shortenMiddle = (a: string, head = 14, tail = 8) =>
+    a.length <= head + tail + 1 ? a : `${a.slice(0, head)}…${a.slice(-tail)}`;
+  const displayAddress = address ? shortenMiddle(address) : walletName;
 
   // Backup nudge as a slot candidate: on zcash it competes inside the single
   // message slot (see ZcashContent); on other networks it renders alone.
@@ -326,28 +328,31 @@ export const PopupIndex = () => {
               />
             )}
           </div>
-          <div className='flex items-center gap-1'>
+          <div className='flex items-center gap-1.5'>
+            {isMultisig && (
+              <span className='shrink-0 rounded-sm bg-zigner-gold/15 px-1.5 py-0.5 text-label text-zigner-gold tabular leading-none'>
+                {selectedMultisigWallet.multisig!.threshold}/
+                {selectedMultisigWallet.multisig!.maxSigners}
+              </span>
+            )}
+            {/* one line: click anywhere on the address to copy the FULL string.
+                the trailing icon flips to a check as copy feedback - no label. */}
             <button
               onClick={copyAddress}
               disabled={!address}
-              title={address ? 'click to copy' : undefined}
-              className='flex min-w-0 items-start gap-1.5 text-xs text-fg transition-colors duration-100 hover:text-fg-high disabled:opacity-50 disabled:cursor-not-allowed'
+              title={address ? 'click to copy full address' : undefined}
+              className='group flex min-w-0 flex-1 items-center gap-1.5 text-xs text-fg transition-colors duration-100 hover:text-fg-high disabled:cursor-not-allowed disabled:opacity-50'
             >
-              {isMultisig && (
-                <span className='mt-0.5 shrink-0 rounded-sm bg-zigner-gold/15 px-1.5 py-0.5 text-label text-zigner-gold tabular leading-none'>
-                  {selectedMultisigWallet.multisig!.threshold}/
-                  {selectedMultisigWallet.multisig!.maxSigners}
-                </span>
-              )}
-              <span className='min-w-0 break-all text-left font-mono leading-snug'>
+              <span className='min-w-0 flex-1 truncate text-left font-mono leading-snug'>
                 {displayAddress}
               </span>
-              {/* the icon flipping to a check is the copy feedback - no label needed */}
               {address && (
                 <span
                   className={cn(
-                    'mt-0.5 h-3 w-3 shrink-0',
-                    copied ? 'i-lucide-check text-zigner-gold' : 'i-lucide-copy',
+                    'h-3.5 w-3.5 shrink-0',
+                    copied
+                      ? 'i-lucide-check text-zigner-gold'
+                      : 'i-lucide-copy text-fg-muted group-hover:text-fg-high',
                   )}
                 />
               )}
@@ -360,10 +365,10 @@ export const PopupIndex = () => {
                     void chrome.storage.local.set({ zcashShieldedIndex: next });
                   });
                 }}
-                className='p-0.5 text-fg-muted transition-colors hover:text-fg-high'
-                title='rotate address'
+                className='shrink-0 rounded p-1 text-fg-muted transition-colors hover:bg-fg/5 hover:text-fg-high'
+                title='rotate to a fresh receive address'
               >
-                <span className='i-lucide-refresh-cw h-3 w-3' />
+                <span className='i-lucide-refresh-cw h-3.5 w-3.5' />
               </button>
             )}
           </div>

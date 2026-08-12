@@ -65,6 +65,20 @@ export async function runMnemonicFrostSign({
   setProgress('round 1: generating commitments...');
   const numActions = unsigned.alphas.length;
 
+  // Fail closed on a build that carries no real spends. Every line below
+  // indexes per-action state, so zero actions used to die at `peerCommits[0]!`
+  // with "Cannot read properties of undefined" - and, worse, a run that
+  // completed with zero rounds would hand an EMPTY signature set to the
+  // injector, which is precisely the state the NU6.3 multisig gate existed to
+  // prevent. Unreachable while that gate refused ironwood upstream; reachable
+  // now that it is lifted.
+  if (numActions === 0) {
+    throw new Error(
+      'this transaction has no spends to sign - refusing to open a signing room ' +
+        'that could only produce an empty signature set',
+    );
+  }
+
   // fresh nonces+commitments per action - never reuse across actions
   const round1s: { nonces: string; commitments: string }[] = [];
   for (let i = 0; i < numActions; i++) {
