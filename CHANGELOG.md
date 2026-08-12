@@ -48,11 +48,25 @@ vote from the wallet itself.
 - Ledger hardware-wallet support, scaffolded and shipped flag-off
   (`HARDWARE_WALLET_ENABLED`): WebHID transport, connect-ledger onboarding
   screen, cold-signer vaults/watch-only entries in the keyring, ledger
-  signing branch fail-closed on anything that is not a V5 PCZT, and
-  ironwood-aware fail-closed handling for FROST multisig.
+  signing branch fail-closed on anything that is not a V5 PCZT.
 - Ironwood (NU6.3) shielding routed through the pool-correct builder, plus
   z -> t withdrawals and general ironwood sends, with network-aware
   activation height, fail-closed branch id, and ZIP-317 fee handling.
+- FROST multisig sends work on ironwood. Earlier in this cycle they were
+  refused post-NU6.3, and the shorthand for that ("FROST cannot sign
+  ironwood") was misleading: FROST signing was never the problem, since a
+  spend-auth signature over the shielded sighash is the same for an
+  ironwood action as an orchard one. What was missing was on our side -
+  the ironwood builder returned no sighash and no per-spend randomizers,
+  so the signing rounds had nothing to run on, and there was no ironwood
+  completion step to inject the aggregated signatures. Both now exist.
+  Co-signer verification also derives its sighash from the transaction
+  version instead of assuming v5, so what a co-signer is shown is bound to
+  the message it actually signs. Honesty note: this is covered by a native
+  2-of-3 test that really signs and extracts an ironwood transaction (the
+  extract re-verifies the proof and every signature), and by wire-contract
+  tests for the co-signer relay - but it has not yet been run against a
+  live chain, so broadcast and consensus acceptance are unproven.
 - Sync failure taxonomy: chain errors are classified and explained instead
   of surfacing raw internals; sync UI says what it actually knows
   (pending-tx UX, degraded rayon pool visibility, per-context truth about
@@ -86,8 +100,10 @@ vote from the wallet itself.
   latched/snapshotted escrow SIGN state, and commitment verification that
   fails closed on tampering.
 - Compact-PCZT-signing security gaps closed in the wallet-side merge.
-- FROST multisig fails closed on ironwood instead of attempting to sign a
-  spend it cannot handle.
+- FROST multisig on ironwood: refused outright earlier in this cycle, now
+  supported (see Features). The refusal was correct while the builder
+  returned no signing inputs - it stopped a full halo2 prove producing a
+  transaction that could never be signed - but it is no longer needed.
 - Ironwood witness drift recovery; active wallet identity shown correctly
   through migration.
 - Ironwood change detection: stop losing the sync loop silently, stop
