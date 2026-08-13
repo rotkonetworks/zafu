@@ -117,6 +117,7 @@ export const buildLedgerVault = (
     coldSignerType: 'ledger',
     address: data.address,
     ...(data.ufvk ? { ufvk: data.ufvk } : {}),
+    ...(data.transparentAddress ? { transparentAddress: data.transparentAddress } : {}),
     ...(opts.airgapOnly ? { airgapOnly: true } : {}),
   },
 });

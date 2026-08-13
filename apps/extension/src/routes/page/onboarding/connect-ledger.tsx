@@ -35,12 +35,11 @@ import { PagePath } from '../paths';
 import { setOnboardingValuesInStorage } from './persist-parameters';
 import { SEED_PHRASE_ORIGIN } from './password/types';
 import {
-  isLedgerSupported,
-  connectLedger,
-  getLedgerAccount,
-  getLedgerTransparentAccount,
-  ledgerCapabilities,
-} from '../../../ledger';
+  connectLedgerBtc,
+  getLedgerZcashTransparentAddress,
+  isLedgerBtcSupported,
+  zcashTransparentPath,
+} from '../../../ledger/hw-btc-signer';
 
 /** Zcash mainnet - onboarding only imports the mainnet account today. */
 const MAINNET = true;
@@ -76,17 +75,10 @@ interface NoticeBoxProps {
 type Phase = 'idle' | 'connecting' | 'connected' | 'importing';
 
 interface Connected {
+  /** Stable dedup key: `ledger-btc-<t-address>` (the t-address is deterministic
+   *  for a given device seed + path). */
   readonly deviceId: string;
-  readonly appVersion: string;
-  readonly address: string;
-  readonly ufvk: string | undefined;
-  /**
-   * The account's transparent (t1.../tm...) address, read from the device. This
-   * is the address the transparent send/receive path spends from and routes
-   * change to. It is display-only here; persisting it into the wallet record
-   * needs a keyring `transparentAddress` field that does not exist yet, so the
-   * send flow re-derives it from the connected device at send time.
-   */
+  /** the account's transparent (t1.../tm...) address, read from the device. */
   readonly transparentAddress: string;
 }
 
@@ -103,7 +95,7 @@ export const ConnectLedger = () => {
   // already a real tab, so this only trips if someone deep-links the route into
   // a popup - bail with guidance instead of a cryptic HID failure.
   const inPopup = isPopup();
-  const supported = isLedgerSupported();
+  const supported = isLedgerBtcSupported();
 
   const handleBack = () => navigate(-1);
 
@@ -111,17 +103,22 @@ export const ConnectLedger = () => {
     setError(null);
     setPhase('connecting');
     try {
-      const { sessionId, appVersion } = await connectLedger();
-      // Ledger has no stable per-wallet id we can read cheaply; the WebHID
-      // session id is stable for the lifetime of this connection and is what
-      // the ledger module keys transfers on, so use it as the deviceId.
-      const deviceId = `ledger-${sessionId}`;
-      const { address, ufvk } = await getLedgerAccount(0, MAINNET);
-      // Transparent send is the priority path and works on the current app, so
-      // read the account's t-address up front (additive to the shielded import).
-      const { address: transparentAddress } = await getLedgerTransparentAccount(0, MAINNET);
-      setAccount({ deviceId, appVersion, address, ufvk, transparentAddress });
-      setPhase('connected');
+      // Bitcoin-app (hw-app-btc) transparent path - the only Ledger route that
+      // signs Zcash on mainnet today. Read the t-address, then release the
+      // transport; the send flow reopens it with a fresh user gesture.
+      const transport = await connectLedgerBtc();
+      try {
+        const { address } = await getLedgerZcashTransparentAddress(
+          transport,
+          zcashTransparentPath(0),
+        );
+        // Deterministic per device seed + path, so the t-address doubles as the
+        // stable dedup key.
+        setAccount({ deviceId: `ledger-btc-${address}`, transparentAddress: address });
+        setPhase('connected');
+      } finally {
+        await transport.close();
+      }
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
       setError(`failed to connect ledger: ${message}`);
@@ -137,16 +134,16 @@ export const ConnectLedger = () => {
     setPhase('importing');
     try {
       const ledgerImport: LedgerImport = {
-        address: account.address,
-        ufvk: account.ufvk,
+        // Transparent-only account: the t-address is both the receive address
+        // and the spend source; no unified address / ufvk.
+        address: account.transparentAddress,
+        transparentAddress: account.transparentAddress,
         accountIndex: 0,
         deviceId: account.deviceId,
         mainnet: MAINNET,
       };
-      await addLedgerUnencrypted(ledgerImport, walletLabel || 'ledger zcash');
-      // Mirror the zigner completion path so the success screen and background
-      // services see the same onboarding side-effects (rpc/frontend/numeraires).
-      await setOnboardingValuesInStorage(SEED_PHRASE_ORIGIN.ZIGNER);
+      await addLedgerUnencrypted(ledgerImport, walletLabel || 'ledger (transparent)');
+      await setOnboardingValuesInStorage(SEED_PHRASE_ORIGIN.LEDGER);
       navigate(PagePath.ONBOARDING_SUCCESS);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
@@ -217,10 +214,6 @@ export const ConnectLedger = () => {
                 <div className='font-mono text-xs text-fg-muted break-all'>
                   account #0
                   <span className='ml-2'>(mainnet)</span>
-                  <span className='ml-2'>app v{account.appVersion}</span>
-                </div>
-                <div className='mt-1 font-mono text-xs text-fg-muted break-all'>
-                  {account.address}
                 </div>
                 <div className='mt-1 font-mono text-xs text-fg-muted break-all'>
                   <span className='text-fg-muted/70'>transparent: </span>
@@ -234,31 +227,28 @@ export const ConnectLedger = () => {
                 onChange={e => setWalletLabel(e.target.value)}
               />
 
-              {/* Capability notices. Transparent-only (no ufvk) is the common
-                  case for older ledger app builds; call it out plainly. */}
-              {account.ufvk === undefined && (
-                <NoticeBox tone='warn' icon='i-lucide-eye-off'>
-                  this ledger app version exposes only a transparent address; shielded balance
-                  unavailable.
-                </NoticeBox>
-              )}
+              {/* Update-app alert. hw-app-btc signs against the Zcash app on the
+                  device; an app that predates NU6.3 does not know the current
+                  consensus branch id and REJECTS every send (6a80). Tell the user
+                  to update before they try to send, or it fails on-device. */}
+              <NoticeBox tone='warn' icon='i-lucide-refresh-cw'>
+                update your ledger zcash app to the latest version in ledger live first. an older
+                app does not recognise the current zcash network and will reject transparent sends.
+              </NoticeBox>
 
-              {/* what the connected app version can do (current app in, ready for
-                  future): transparent always; shielded gates on app >= 3.8.0. */}
-              {ledgerCapabilities(account.appVersion).shielded ? (
-                <NoticeBox tone='info' icon='i-lucide-shield-check'>
-                  shielded supported - hold and spend shielded on ledger.
-                </NoticeBox>
-              ) : (
-                <NoticeBox tone='warn' icon='i-lucide-shield-off'>
-                  ledger app older than 3.8.0 - transparent works now (sweep into a shielded
-                  wallet); update the zcash app to hold shielded on ledger.
-                </NoticeBox>
-              )}
+              {/* TRANSPARENT-ONLY. zafu signs Ledger via the Bitcoin app (the only
+                  path that works on mainnet today); the dedicated shielded app is
+                  not published yet, so shielded on Ledger is unavailable REGARDLESS
+                  of app version. State that plainly - do not imply shielded works. */}
+              <NoticeBox tone='warn' icon='i-lucide-shield-off'>
+                ledger is transparent-only in zafu right now. you can send and receive transparent
+                zec (t-addresses). shielded on ledger needs a newer zcash app from ledger and is
+                coming later - keep long-term savings in a shielded zafu wallet.
+              </NoticeBox>
 
               <NoticeBox tone='info' icon='i-lucide-usb'>
-                watch-only. view balances and build transactions; signing needs your ledger plugged
-                in.
+                watch-only + transparent. view your t-address balance and sign transparent sends
+                with the ledger plugged in.
               </NoticeBox>
 
               {error && <div className='text-sm text-red-400'>{error}</div>}

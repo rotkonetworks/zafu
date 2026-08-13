@@ -18,6 +18,10 @@ export interface ZcashWalletJson {
   accountIndex: number;
   mainnet: boolean;
   ufvk?: string;
+  /** Transparent (t1.../tm...) address for a transparent-capable Ledger account
+   *  (hw-app-btc path). Present marks a transparent Ledger account: the send
+   *  flow spends from it and the receive screen shows it. */
+  transparentAddress?: string;
   /** vault ID this wallet belongs to */
   vaultId: string;
   /** FROST multisig fields — present only for multisig wallets */

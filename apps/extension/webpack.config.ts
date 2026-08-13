@@ -339,6 +339,11 @@ export default ({
       fallback: {
         crypto: false, // use webcrypto instead of node crypto
         buffer: require.resolve('buffer/'),
+        // @ledgerhq/hw-app-btc -> bip32 -> bs58check -> create-hash requires
+        // node's `stream`; polyfill it for the transparent Ledger (Bitcoin-app)
+        // signing path. create-hash is the browser hash impl, so it needs stream
+        // + buffer only, not node crypto.
+        stream: require.resolve('stream-browserify'),
       },
     },
     plugins: [

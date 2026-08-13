@@ -65,6 +65,7 @@
     "react-router-dom": "^6.30.3",
     "reflect-metadata": "^0.2.2",
     "solid-js": "^1.9.12",
+    "stream-browserify": "^3.0.0",
     "usehooks-ts": "^3.1.1",
     "zustand": "^4.5.7"
   },

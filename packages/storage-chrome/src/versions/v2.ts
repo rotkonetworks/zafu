@@ -72,6 +72,10 @@ type LOCAL = {
     label: string;
     orchardFvk: string;
     address: string;
+    /** Transparent (t1.../tm...) address for a transparent-capable Ledger
+     *  account (hw-app-btc path). Present marks the account's transparent spend
+     *  source + receive address; absent on shielded/zigner/keystone wallets. */
+    transparentAddress?: string;
     accountIndex: number;
     mainnet: boolean;
     vaultId?: string;

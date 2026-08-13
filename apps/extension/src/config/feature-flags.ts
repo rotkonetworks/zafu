@@ -114,8 +114,14 @@ export const HARDWARE_WALLET_ENABLED = false;
  * separate from HARDWARE_WALLET_ENABLED above (which gates the DMK shielded path
  * that is blocked on LedgerHQ's unreleased NU6.3 app). The Bitcoin-app path signs
  * transparent Zcash on mainnet TODAY - it is how a Ledger holder can send/receive
- * t-address ZEC in zafu and migrate over. Flip to `true` ONLY after a real t->t
- * send is confirmed on a physical Ledger (see src/ledger/hw-btc-signer.ts - the
- * expiry buffer / v5 prev-tx parsing / sighash are unverified until then).
+ * t-address ZEC in zafu and migrate over.
+ *
+ * ENABLED experimentally (no real users yet - see the growth rationale: other
+ * wallets' Ledger support is currently broken). The money-path specifics in
+ * src/ledger/hw-btc-signer.ts (expiry buffer / v5 prev-tx parsing / sighash) are
+ * asserted from the hw-app-btc types but NOT yet confirmed against a physical
+ * device signing a real mainnet t->t tx. Worst case of a wrong assumption is a
+ * REJECTED tx (funds safe), and Erwan's plan refuses to burn change to fee. The
+ * device test is what hardens this from experimental to production-trusted.
  */
-export const LEDGER_TRANSPARENT_ENABLED = false;
+export const LEDGER_TRANSPARENT_ENABLED = true;

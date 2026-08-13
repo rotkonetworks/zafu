@@ -212,13 +212,17 @@ export async function createLedgerWalletEntries(
       // address directly. NOTE: without a ufvk there is no shielded scanning —
       // balances/notes require the UFVK to be provided later.
       address: data.address,
+      // Transparent Ledger (hw-app-btc) account: persist the t-address so the
+      // send flow can fetch UTXOs / route change without a device round-trip and
+      // the receive screen can show it.
+      ...(data.transparentAddress ? { transparentAddress: data.transparentAddress } : {}),
       accountIndex: data.accountIndex,
       mainnet: data.mainnet,
       vaultId,
-      // 'ledger' is not yet in the persisted v2 storage schema's coldSignerType
-      // union ('zigner' | 'keystone'); cast at this write boundary until the
-      // schema is widened. The value is the ColdSignerType source of truth.
-      coldSignerType: 'ledger' as 'zigner',
+      // 'ledger' is now in the persisted v2 storage schema's coldSignerType union
+      // (widened alongside this Ledger work). The value is the ColdSignerType
+      // source of truth.
+      coldSignerType: 'ledger' as const,
     };
     // NOT wrapped in a try/catch: a swallowed failure here would leave a vault
     // the UI presents as a Ledger wallet with no zcash wallet record behind it.

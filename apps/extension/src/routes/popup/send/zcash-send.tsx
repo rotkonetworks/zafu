@@ -27,6 +27,8 @@ import {
   type SignatureContribution,
   getBalanceInWorker,
   getFeeMultiplier,
+  getTransparentUtxosInWorker,
+  broadcastRawTxInWorker,
   type SendTxUnsignedResult,
   type SendTxPcztUnsignedResult,
 } from '../../../state/keyring/network-worker';
@@ -45,7 +47,9 @@ import { DontQuitIcon } from './frost-multisig/helpers';
 import { RecipientPicker } from '../../../components/recipient-picker';
 import { SaveContactModal } from '../../../components/save-contact-modal';
 import { usePasswordGate } from '../../../hooks/password-gate';
-import { HARDWARE_WALLET_ENABLED } from '../../../config/feature-flags';
+import { HARDWARE_WALLET_ENABLED, LEDGER_TRANSPARENT_ENABLED } from '../../../config/feature-flags';
+import { connectLedgerBtc, zcashTransparentPath } from '../../../ledger/hw-btc-signer';
+import { ledgerTransparentSendFlowBtc } from '../../../ledger/hw-btc-flow';
 // connectLedger pairs/opens a WebHID session; ledgerSignerFor wraps the
 // PCZT-signing service in the feature-flag + app-version gates.
 import { connectLedger } from '../../../ledger';
@@ -273,6 +277,14 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const coldSignerType = selectedKeyInfo?.insensitive?.['coldSignerType'] as string | undefined;
   const isLedgerAccount =
     HARDWARE_WALLET_ENABLED && (selectedKeyInfo?.type === 'ledger' || coldSignerType === 'ledger');
+  // Transparent Ledger (hw-app-btc) account: a Ledger cold signer whose wallet
+  // record carries a transparent address. Routed to a t->t send via the Bitcoin
+  // app, NOT the shielded PCZT path. Gated on its own flag (separate from the
+  // blocked DMK shielded path's HARDWARE_WALLET_ENABLED).
+  const isTransparentLedger =
+    LEDGER_TRANSPARENT_ENABLED &&
+    coldSignerType === 'ledger' &&
+    !!activeZcashWallet?.transparentAddress;
 
   // ── what this form is allowed to say about your money ───────────────────
   //
@@ -529,6 +541,51 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           if (shouldSuggestSave(recipient)) {
             setShowSavePrompt(true);
           }
+        }
+      } else if (isTransparentLedger) {
+        // Transparent Ledger (hw-app-btc) t->t send. No PCZT: fetch UTXOs, plan,
+        // sign the whole transparent tx on the device's Zcash (Bitcoin-app) path,
+        // broadcast. WebHID needs a persistent surface - refuse in the popup.
+        if (isPopup()) {
+          throw new Error(
+            'open zafu in a tab or the side panel to sign with a ledger - usb sessions ' +
+              'are dropped when the toolbar popup loses focus',
+          );
+        }
+        const fromAddress = activeZcashWallet!.transparentAddress!;
+        // ZIP-317 transparent fee: a conservative fixed estimate covering a few
+        // logical actions. A slightly-high fee still confirms; tune on device.
+        const feeZat = 20000n;
+        setFee((Number(feeZat) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, ''));
+        setStep('ledger-sign');
+        const transport = await connectLedgerBtc();
+        try {
+          const { txid } = await ledgerTransparentSendFlowBtc(
+            transport,
+            {
+              serverUrl: zidecarUrl,
+              fromAddresses: [fromAddress],
+              recipientAddress: recipient.trim(),
+              amountZat: BigInt(amountZat),
+              feeZat,
+              change: { address: fromAddress, path: zcashTransparentPath(0) },
+              accountIndex: 0,
+              mainnet,
+              blockHeight: sendChainHeight,
+            },
+            { fetchUtxos: getTransparentUtxosInWorker, broadcast: broadcastRawTxInWorker },
+          );
+          setStep('broadcast');
+          void promoteToBroadcasted(txid);
+          complete(txid);
+          setTotalElapsedSec(Math.round((Date.now() - buildStartRef.current) / 1000));
+          setStep('complete');
+          void recordUsage(recipient, 'zcash');
+          if (shouldSuggestSave(recipient)) {
+            setShowSavePrompt(true);
+          }
+        } finally {
+          await transport.close();
         }
       } else if (activeZcashWallet?.multisig?.custody === 'airgapSigner') {
         // airgap multisig: build a PCZT (gh #17) then hand off to FrostAirgapSignFlow.

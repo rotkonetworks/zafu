@@ -204,8 +204,15 @@ export type ColdSignerType = 'zigner' | 'keystone' | 'ledger';
  * same way Keystone reuses it with `coldSignerType: 'keystone'`.
  */
 export interface LedgerImport {
-  /** unified/orchard receiving address exported from the device */
+  /** unified/orchard receiving address exported from the device. For a
+   *  transparent-only Ledger account (Bitcoin-app / hw-app-btc path) there is no
+   *  unified address, so this holds the transparent t-address - the receive
+   *  screen shows it and the send flow spends from it. */
   address: string;
+  /** the account's transparent (t1.../tm...) address, read from the device via
+   *  the hw-app-btc path. Present marks this as a transparent-capable Ledger
+   *  account; the transparent send flow keys off it. */
+  transparentAddress?: string;
   /**
    * unified full viewing key (`uview1…`), if the device exported one. present
    * enables free watch-only address/balance derivation + shielded scanning.

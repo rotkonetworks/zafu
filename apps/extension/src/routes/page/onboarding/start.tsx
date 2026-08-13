@@ -23,7 +23,7 @@ import { cn } from '@repo/ui/lib/utils';
 import { FadeTransition } from '@repo/ui/components/ui/fade-transition';
 import { usePageNav } from '../../../utils/navigate';
 import { PagePath } from '../paths';
-import { HARDWARE_WALLET_ENABLED } from '../../../config/feature-flags';
+import { HARDWARE_WALLET_ENABLED, LEDGER_TRANSPARENT_ENABLED } from '../../../config/feature-flags';
 
 interface PathOption {
   readonly icon: string;
@@ -70,7 +70,9 @@ const OPTIONS: readonly PathOption[] = [
 // Hide flagged cards until their feature flag is on. The ledger card is the
 // only flagged entry today - keep it invisible while HARDWARE_WALLET_ENABLED
 // is false so the option never appears mid-rollout.
-const visibleOptions = OPTIONS.filter(opt => !opt.flagged || HARDWARE_WALLET_ENABLED);
+const visibleOptions = OPTIONS.filter(
+  opt => !opt.flagged || HARDWARE_WALLET_ENABLED || LEDGER_TRANSPARENT_ENABLED,
+);
 
 export const OnboardingStart = () => {
   const navigate = usePageNav();
