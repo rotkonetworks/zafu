@@ -38,6 +38,7 @@ import {
   isLedgerSupported,
   connectLedger,
   getLedgerAccount,
+  getLedgerTransparentAccount,
   ledgerCapabilities,
 } from '../../../ledger';
 
@@ -79,6 +80,14 @@ interface Connected {
   readonly appVersion: string;
   readonly address: string;
   readonly ufvk: string | undefined;
+  /**
+   * The account's transparent (t1.../tm...) address, read from the device. This
+   * is the address the transparent send/receive path spends from and routes
+   * change to. It is display-only here; persisting it into the wallet record
+   * needs a keyring `transparentAddress` field that does not exist yet, so the
+   * send flow re-derives it from the connected device at send time.
+   */
+  readonly transparentAddress: string;
 }
 
 export const ConnectLedger = () => {
@@ -108,7 +117,10 @@ export const ConnectLedger = () => {
       // the ledger module keys transfers on, so use it as the deviceId.
       const deviceId = `ledger-${sessionId}`;
       const { address, ufvk } = await getLedgerAccount(0, MAINNET);
-      setAccount({ deviceId, appVersion, address, ufvk });
+      // Transparent send is the priority path and works on the current app, so
+      // read the account's t-address up front (additive to the shielded import).
+      const { address: transparentAddress } = await getLedgerTransparentAccount(0, MAINNET);
+      setAccount({ deviceId, appVersion, address, ufvk, transparentAddress });
       setPhase('connected');
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
@@ -209,6 +221,10 @@ export const ConnectLedger = () => {
                 </div>
                 <div className='mt-1 font-mono text-xs text-fg-muted break-all'>
                   {account.address}
+                </div>
+                <div className='mt-1 font-mono text-xs text-fg-muted break-all'>
+                  <span className='text-fg-muted/70'>transparent: </span>
+                  {account.transparentAddress}
                 </div>
               </div>
 

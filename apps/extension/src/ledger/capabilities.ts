@@ -17,7 +17,27 @@
  *                    -> hold shielded on Ledger; migrate existing shielded funds.
  */
 
-/** Minimum app-zcash version that exposes UFVK export + orchard PCZT signing. */
+// ---------------------------------------------------------------------------
+// DEP BUMP (applied): @ledgerhq/device-signer-kit-zcash ^0.5.0 -> ^0.6.0.
+//   0.6.0 is `latest` on npm. Its peerDependencies are identical to 0.5.0
+//   (@ledgerhq/device-management-kit ^1.7.1, already our pin), so no peer bump
+//   is required; @ledgerhq/device-transport-kit-web-hid (^1.2.4) is not a peer
+//   of the signer kit and is unaffected. package.json string updated; the
+//   parent runs the install. 0.6.0 adds v6/ZIP-229 (Ironwood) prevtx streaming
+//   for GET_TRUSTED_INPUT and an UnsupportedV6TransactionError guard; it does
+//   NOT fix the SIGN-apdu framing blocker (see SIGNER_KIT_SIGN_APDU_COMPATIBLE).
+// ---------------------------------------------------------------------------
+
+/**
+ * Minimum app-zcash version that exposes UFVK export + orchard PCZT signing.
+ *
+ * `3.8.0` is a placeholder above every current build, not a confirmed release:
+ * shielded PCZT v2 signing (app-zcash PR #28, "Ironwood (NU6.3) PCZT v2
+ * signing") merged 2026-07-27 into the PRE-RELEASE branch
+ * `dev/ironwood-pczt-nu6_3` - NOT develop - with the version bump deferred, so
+ * no released/installable app carries it and no real version number exists yet.
+ * Kept above every published build so `shielded` stays fail-closed.
+ */
 export const MIN_SHIELDED_APP_VERSION = '3.8.0';
 
 /** `true` iff dotted-numeric `version` >= `min` (missing/unparsable parts -> 0; a
@@ -43,17 +63,27 @@ export function versionAtLeast(version: string, min: string): boolean {
 // The legacy transparent path commits to a consensus branch id, and
 // @ledgerhq/device-signer-kit-zcash picks it from `blockHeight` with its own
 // hardcoded activation table (`getZcashBranchId`). The device then validates it
-// through the `zcash_protocol` crate it vendors - app-zcash 3.6.0 vendors
-// 0.9.0, whose `BranchId::try_from` knows nothing past NU6.2.
+// through the `zcash_protocol` crate the app vendors. The app-zcash 3.6.0 tag
+// line vendors 0.9.0, whose `BranchId::try_from` knows nothing past NU6.2, so
+// it rejects NU6.3 with 6a80. Device-verified on Speculos (nanosp, app-zcash
+// 3.6.0): NU6.3 -> 6a80 on GET_TRUSTED_INPUT, NU6.2 -> 9000 and the flow
+// completes to a signature.
 //
-// So at current mainnet height the signer kit sends NU6.3 (0x37a5165b) and the
-// app rejects the very first APDU of the flow with 6a80. Device-verified on
-// Speculos (nanosp, app-zcash 3.6.0): NU6.3 -> 6a80 on GET_TRUSTED_INPUT,
-// NU6.2 -> 9000 and the flow completes to a signature.
+// STATUS (2026-08): app-zcash PR #24 "NU6.3 branch id support" (merged
+// 2026-07-20, targets DMK app 3.0.2) adds `BranchId::Nu6_3 = 0x37A5165B`, so
+// the branch id IS now recognised in merged app source. It is still NOT safe to
+// open the gate on a version number, for two reasons: (1) app-zcash publishes
+// no release ELFs, so no released/installable build is confirmed to carry PR
+// #24; (2) unresolved version topology - the DMK-app PRs number on a 3.0.x line
+// while the highest public git tag is 3.6.0 (a different/legacy line). A numeric
+// min of 3.0.2 would make `versionAtLeast('3.6.0', '3.0.2')` true and fail OPEN
+// for a 3.6.0-line app that does NOT carry the branch id. Failing closed is the
+// only correct choice until the released app's numbering and branch-id support
+// are reconciled and Speculos-verified. See BRANCH_ID_MIN_APP_VERSION below.
 //
-// This is a hard blocker, not a warning: with `blockHeight` at or past NU6.3
-// activation - AND with `blockHeight` left undefined, which the signer kit also
-// maps to NU6.3 - no released app can sign a transparent transaction.
+// This remains a hard blocker: with `blockHeight` at or past NU6.3 activation -
+// AND with `blockHeight` left undefined, which the signer kit also maps to
+// NU6.3 - no confirmed released app can sign a transparent transaction.
 
 /** Activation heights, mirroring signer-kit 0.5.0's `getZcashBranchId` table. */
 export const NETWORK_UPGRADE_ACTIVATION = {
@@ -122,10 +152,15 @@ export function branchForHeight(blockHeight?: number): NetworkUpgradeName {
  * `'0.0.0'` = every published app version accepts it (verified against 3.6.0,
  * which vendors zcash_protocol 0.9.0).
  *
- * `null` = NO published app version accepts it. The highest public tag is
- * 3.6.0, and app-zcash publishes no release ELFs, so this cannot be softened by
- * hoping. When a release is verified against Speculos to accept the branch id,
- * put its version here and re-run `transparent.test.ts`.
+ * `null` = no CONFIRMED released app version accepts it, so fail closed. For
+ * NU6.3 the branch-id support is code-merged (app-zcash PR #24, merged
+ * 2026-07-20, targets DMK app 3.0.2, adds `BranchId::Nu6_3 = 0x37A5165B`) but
+ * deliberately left null: app-zcash ships no release ELFs, and the DMK app's
+ * 3.0.x version line cannot be compared against the 3.6.0 public-tag line by
+ * `versionAtLeast` without failing open (see the branch-id gate note above).
+ * When a released build is Speculos-verified to accept the branch id - AND its
+ * numbering is reconciled with the tag line - put that version here and re-run
+ * `transparent.test.ts`.
  */
 export const BRANCH_ID_MIN_APP_VERSION: Record<NetworkUpgradeName, string | null> = {
   'nu6.3': null,
@@ -144,12 +179,20 @@ export const BRANCH_ID_MIN_APP_VERSION: Record<NetworkUpgradeName, string | null
 // signer-kit <-> app incompatibilities
 // ---------------------------------------------------------------------------
 //
-// Two more blockers sit between @ledgerhq/device-signer-kit-zcash 0.5.0 and
-// app-zcash 3.6.0. Neither is fixable from our side - both live inside the
-// SDK's own `SignTransactionTask` - so the transparent path fails closed until
-// a signer-kit release fixes them. Both are device-verified on Speculos.
+// Two more blockers sit between @ledgerhq/device-signer-kit-zcash and app-zcash.
+// Neither is fixable from our side - both live inside the SDK's own
+// `SignTransactionTask` - so the transparent path fails closed until a
+// signer-kit release fixes them. Both are device-verified on Speculos against
+// signer-kit 0.5.0 / app-zcash 3.6.0.
+//
+// signer-kit 0.6.0 (latest on npm, now the pinned range) does NOT touch either:
+// per its changelog it only adds v6/ZIP-229 (Ironwood) GET_TRUSTED_INPUT prevtx
+// streaming and an `UnsupportedV6TransactionError` guard - no change to the
+// SIGN (0x48) command framing. The SIGN-apdu blocker is therefore presumed to
+// persist; it has not been re-verified on-device against 0.6.0, so
+// SIGNER_KIT_VERSION_VERIFIED stays at the last device-verified release.
 
-/** The signer-kit release these observations were made against. */
+/** The signer-kit release these observations were device-verified against. */
 export const SIGNER_KIT_VERSION_VERIFIED = '0.5.0';
 
 /**
@@ -201,9 +244,10 @@ export function transparentSigningSupport(
 
   if (min === null) {
     blockers.push(
-      `${branch} consensus branch id ${hex} is not recognised by any released ` +
-        `app-zcash (latest is 3.6.0, installed ${appVersion}) - the device rejects ` +
-        `the first APDU with 6a80`,
+      `${branch} consensus branch id ${hex} is not recognised by any confirmed ` +
+        `released app-zcash (branch-id support is code-merged in app-zcash PR #24 ` +
+        `but no released build is verified; installed ${appVersion}) - the device ` +
+        `rejects the first APDU with 6a80`,
     );
   } else if (!versionAtLeast(appVersion, min)) {
     blockers.push(

@@ -108,3 +108,14 @@ export const SUBSCRIBE_ENABLED = false;
  * Ledger zcash app version we target ships and the flow is fully reviewed.
  */
 export const HARDWARE_WALLET_ENABLED = false;
+
+/**
+ * Ledger TRANSPARENT support via the legacy Bitcoin-app path (@ledgerhq/hw-app-btc),
+ * separate from HARDWARE_WALLET_ENABLED above (which gates the DMK shielded path
+ * that is blocked on LedgerHQ's unreleased NU6.3 app). The Bitcoin-app path signs
+ * transparent Zcash on mainnet TODAY - it is how a Ledger holder can send/receive
+ * t-address ZEC in zafu and migrate over. Flip to `true` ONLY after a real t->t
+ * send is confirmed on a physical Ledger (see src/ledger/hw-btc-signer.ts - the
+ * expiry buffer / v5 prev-tx parsing / sighash are unverified until then).
+ */
+export const LEDGER_TRANSPARENT_ENABLED = false;

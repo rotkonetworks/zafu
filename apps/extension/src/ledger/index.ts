@@ -47,6 +47,28 @@ export {
   type LedgerPrevTx,
   type LedgerPrevTxOutput,
 } from './prevtx';
+export {
+  decodeTransparentAddress,
+  transparentAddressToScriptHex,
+  type DecodedTransparentAddress,
+} from './address';
+export {
+  planLedgerTransparentSend,
+  selectTransparentUtxos,
+  type LedgerTransparentChange,
+  type LedgerTransparentSendPlanInput,
+  type LedgerTransparentSendPlan,
+} from './transparent-send-plan';
+export {
+  ledgerTransparentSendFlow,
+  type LedgerTransparentSendFlowDeps,
+  type LedgerTransparentSendRequest,
+  type LedgerTransparentSendOutcome,
+} from './transparent-send-flow';
+export {
+  getLedgerTransparentAccount,
+  type LedgerTransparentAccount,
+} from './transparent-account';
 export type { LedgerConnection } from './transport';
 export { getLedgerAccount } from './signer';
 export type { LedgerAccount } from './signer';
