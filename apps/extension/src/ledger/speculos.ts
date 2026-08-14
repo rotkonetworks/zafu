@@ -106,7 +106,12 @@ export class SpeculosDevice {
   }
 
   /** Send a CLA/INS/P1/P2 + data APDU (single frame, data <= 255 bytes). */
-  send(ins: number, p1: number, p2: number, data: Uint8Array = new Uint8Array()): Promise<ApduResponse> {
+  send(
+    ins: number,
+    p1: number,
+    p2: number,
+    data: Uint8Array = new Uint8Array(),
+  ): Promise<ApduResponse> {
     if (data.length > 255) {
       throw new Error(`apdu data ${data.length} > 255 bytes - chunk it`);
     }
@@ -189,7 +194,9 @@ export class SpeculosDevice {
           break;
         }
         const low = text.toLowerCase();
-        await this.press(low.includes('sign transaction') || low.includes('approve') ? 'both' : 'right');
+        await this.press(
+          low.includes('sign transaction') || low.includes('approve') ? 'both' : 'right',
+        );
         await new Promise(r => setTimeout(r, 120));
       }
     })();
@@ -216,7 +223,8 @@ export async function probeSpeculos(): Promise<SpeculosDevice | null> {
   if (!enabled) {
     return null;
   }
-  const api = env('LEDGER_SPECULOS_API') ?? (enabled.startsWith('http') ? enabled : 'http://127.0.0.1:5000');
+  const api =
+    env('LEDGER_SPECULOS_API') ?? (enabled.startsWith('http') ? enabled : 'http://127.0.0.1:5000');
   const device = new SpeculosDevice(api);
   try {
     const { data, sw } = await device.send(INS.GET_FIRMWARE_VERSION, 0, 0);

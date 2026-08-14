@@ -20,11 +20,7 @@ const isTransientNetworkError = (reason: unknown): boolean => {
     const m = reason.message || '';
     // Chromium: "Failed to fetch"; Firefox: "NetworkError when attempting to
     // fetch resource"; Safari: "Load failed".
-    return (
-      m.includes('Failed to fetch') ||
-      m.includes('NetworkError') ||
-      m.includes('Load failed')
-    );
+    return m.includes('Failed to fetch') || m.includes('NetworkError') || m.includes('Load failed');
   }
   // fetch(..., { signal: AbortSignal.timeout(...) }) rejects with AbortError.
   if (reason instanceof DOMException && reason.name === 'AbortError') {
@@ -48,8 +44,7 @@ export const installGracefulNetworkErrorHandler = (): void => {
   };
   scope.addEventListener?.('unhandledrejection', (event: RejectionEventLike) => {
     if (isTransientNetworkError(event.reason)) {
-      const detail =
-        event.reason instanceof Error ? event.reason.message : String(event.reason);
+      const detail = event.reason instanceof Error ? event.reason.message : String(event.reason);
       // Quiet, not an error - the caller already degraded gracefully.
       console.debug('[net] transient fetch failure (offline/unreachable), ignored:', detail);
       event.preventDefault();

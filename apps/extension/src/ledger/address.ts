@@ -117,7 +117,10 @@ export async function decodeTransparentAddress(
  * The output `scriptPubKey` hex a transparent send to `addr` must pay to.
  * P2PKH -> `76a914 <hash> 88ac`; P2SH -> `a914 <hash> 87`.
  */
-export async function transparentAddressToScriptHex(addr: string, mainnet: boolean): Promise<string> {
+export async function transparentAddressToScriptHex(
+  addr: string,
+  mainnet: boolean,
+): Promise<string> {
   const { kind, hash } = await decodeTransparentAddress(addr, mainnet);
   const h = toHex(hash);
   return kind === 'p2pkh' ? `76a914${h}88ac` : `a914${h}87`;

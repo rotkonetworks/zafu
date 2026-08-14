@@ -145,7 +145,9 @@ describe('expiry height encoding', () => {
 // ---------------------------------------------------------------------------
 
 function le32Hex(n: number): string {
-  return bytesToHex(Uint8Array.of(n & 0xff, (n >>> 8) & 0xff, (n >>> 16) & 0xff, (n >>> 24) & 0xff));
+  return bytesToHex(
+    Uint8Array.of(n & 0xff, (n >>> 8) & 0xff, (n >>> 16) & 0xff, (n >>> 24) & 0xff),
+  );
 }
 
 /** Build a v5 transaction in Zcash CONSENSUS wire form. */
@@ -163,7 +165,9 @@ function consensusV5({
   shielded?: number[];
 } = {}): Uint8Array {
   const input = `${'00'.repeat(32)}0000000000ffffffff`; // outpoint | varint(0) script | sequence
-  const outs = outputs.map(o => `${u64le(o.value)}${varint(o.script.length / 2)}${o.script}`).join('');
+  const outs = outputs
+    .map(o => `${u64le(o.value)}${varint(o.script.length / 2)}${o.script}`)
+    .join('');
   return hexToBytes(
     '05000080' + // header 0x80000005 LE
       '0a27a726' + // nVersionGroupId 0x26a7270a LE
@@ -255,7 +259,9 @@ describe('consensus branch id capability gate', () => {
     expect(support.supported).toBe(false);
     expect(support.branchId).toBe(0x37a5165b);
     expect(support.blockers.some(b => /6a80/.test(b))).toBe(true);
-    expect(ledgerCapabilities('3.6.0', NETWORK_UPGRADE_ACTIVATION['nu6.3']).transparent).toBe(false);
+    expect(ledgerCapabilities('3.6.0', NETWORK_UPGRADE_ACTIVATION['nu6.3']).transparent).toBe(
+      false,
+    );
     // and with no height at all, for the same reason
     expect(ledgerCapabilities('3.6.0').transparent).toBe(false);
   });

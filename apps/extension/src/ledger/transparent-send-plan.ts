@@ -158,9 +158,7 @@ export async function planLedgerTransparentSend(
   const totalInZat = utxos.reduce((sum, u) => sum + BigInt(u.valueZat), 0n);
   const spendZat = amountZat + feeZat;
   if (totalInZat < spendZat) {
-    throw new Error(
-      `ledger plan: inputs total ${totalInZat} zat, need ${spendZat} (amount + fee)`,
-    );
+    throw new Error(`ledger plan: inputs total ${totalInZat} zat, need ${spendZat} (amount + fee)`);
   }
   const changeZat = totalInZat - spendZat;
 

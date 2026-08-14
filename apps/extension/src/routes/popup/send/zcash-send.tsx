@@ -1044,7 +1044,11 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               pczt,
               JSON.parse(contributionsJson) as SignatureContribution[],
             );
-          const updatedHexes = await mergeContributions([originalPcztHex], messages, mergeViaWorker);
+          const updatedHexes = await mergeContributions(
+            [originalPcztHex],
+            messages,
+            mergeViaWorker,
+          );
           signedPcztHex = updatedHexes[0]!;
         } else {
           // Legacy full-PCZT response path (0x03 or raw bytes). Symmetric to

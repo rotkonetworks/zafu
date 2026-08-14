@@ -137,9 +137,7 @@ export interface ZignerSignerController {
  *   //   fail(reason);
  *   const { txid } = await signAndBroadcast(signer, unsigned, deps);
  */
-export function createZignerSigner(
-  display: (req: SignRequest) => void,
-): ZignerSignerController {
+export function createZignerSigner(display: (req: SignRequest) => void): ZignerSignerController {
   // The Deferred's resolve/reject, captured out of the Promise executor. Null
   // until `signer` is awaited (nothing is parked yet); nulled again on settle
   // so the captured functions cannot be retained past their single use.

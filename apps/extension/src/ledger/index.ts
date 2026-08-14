@@ -65,10 +65,7 @@ export {
   type LedgerTransparentSendRequest,
   type LedgerTransparentSendOutcome,
 } from './transparent-send-flow';
-export {
-  getLedgerTransparentAccount,
-  type LedgerTransparentAccount,
-} from './transparent-account';
+export { getLedgerTransparentAccount, type LedgerTransparentAccount } from './transparent-account';
 export type { LedgerConnection } from './transport';
 export { getLedgerAccount } from './signer';
 export type { LedgerAccount } from './signer';

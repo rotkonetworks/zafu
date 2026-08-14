@@ -177,10 +177,10 @@ export function zcashV5PrevTxToLedgerWire(wire: Uint8Array): LedgerPrevTx {
     throw new Error(
       header === V4_TX_HEADER
         ? 'ledger prev tx: v4 previous transactions are not supported - the ' +
-          'device framing needs an nConsensusBranchId, which a v4 tx does not ' +
-          'carry on the wire'
+            'device framing needs an nConsensusBranchId, which a v4 tx does not ' +
+            'carry on the wire'
         : `ledger prev tx: expected a v5 transaction header 0x${V5_TX_HEADER.toString(16)}, ` +
-          `got 0x${header.toString(16)}`,
+            `got 0x${header.toString(16)}`,
     );
   }
 

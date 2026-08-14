@@ -40,10 +40,7 @@ function EndpointList({ title, endpoints }: { title: string; endpoints: ServiceE
       ) : (
         <div className='flex flex-col gap-1'>
           {endpoints.map(e => (
-            <div
-              key={e.url}
-              className='rounded border border-border-soft/40 bg-elev-1 px-2 py-1.5'
-            >
+            <div key={e.url} className='rounded border border-border-soft/40 bg-elev-1 px-2 py-1.5'>
               <p className='text-data text-fg-high'>{e.label || e.url}</p>
               <p className='break-all text-label text-fg-muted'>{e.url}</p>
             </div>
@@ -134,7 +131,8 @@ export const SettingsVoting = () => {
 
         {resolvedQ.error && (
           <p className='text-label text-red-400'>
-            failed to load: {resolvedQ.error instanceof Error ? resolvedQ.error.message : String(resolvedQ.error)}
+            failed to load:{' '}
+            {resolvedQ.error instanceof Error ? resolvedQ.error.message : String(resolvedQ.error)}
           </p>
         )}
 
@@ -165,8 +163,8 @@ export const SettingsVoting = () => {
               <div className='rounded border border-red-400/30 bg-red-400/5 px-3 py-2'>
                 <p className='text-label text-red-400'>
                   warning - a custom or malicious voting/PIR server can deanonymize your vote or
-                  serve invalid data. only point this at a source you trust: a build you control,
-                  or a local dev rig. leave this off otherwise.
+                  serve invalid data. only point this at a source you trust: a build you control, or
+                  a local dev rig. leave this off otherwise.
                 </p>
               </div>
 
@@ -177,7 +175,11 @@ export const SettingsVoting = () => {
                     replaces the bundled default for this device only
                   </p>
                 </div>
-                <ToggleSwitch checked={enabledInput} onChange={setEnabledInput} label='enable override' />
+                <ToggleSwitch
+                  checked={enabledInput}
+                  onChange={setEnabledInput}
+                  label='enable override'
+                />
               </div>
 
               <label className='flex flex-col gap-1'>

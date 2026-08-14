@@ -128,12 +128,13 @@ export async function signZcashTransparentWithLedger(
   // splitTransaction is told this is a zcash tx so it parses the v5 sapling /
   // orchard sections rather than mis-reading them as bitcoin witness data.
   const inputs = params.utxos.map(
-    u => [btc.splitTransaction(u.prevTxHex, true, false, ZEC_ADDITIONALS), u.vout, null, null] as [
-      ReturnType<Btc['splitTransaction']>,
-      number,
-      null,
-      null,
-    ],
+    u =>
+      [btc.splitTransaction(u.prevTxHex, true, false, ZEC_ADDITIONALS), u.vout, null, null] as [
+        ReturnType<Btc['splitTransaction']>,
+        number,
+        null,
+        null,
+      ],
   );
 
   const associatedKeysets = params.utxos.map(u => u.path);
