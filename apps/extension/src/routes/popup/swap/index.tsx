@@ -1124,9 +1124,21 @@ const PenumbraSwap = () => {
 
       const outputAmount = Number(totalOutput) / 10 ** selectedOut.exponent;
 
+      // Penumbra always returns an `unfilled` Value; it only means a partial
+      // fill when its amount is > 0 (input that couldn't fill at the price and
+      // is returned to you). Guarding on the object alone flagged every swap.
+      const unfilledAmt = result.unfilled?.amount;
+      const unfilledLo = unfilledAmt?.lo ?? 0n;
+      const hasUnfilled = unfilledLo > 0n || (unfilledAmt?.hi ?? 0n) > 0n;
+
       return {
         outputAmount: outputAmount.toFixed(6),
-        priceImpact: result.unfilled ? 'partial fill' : undefined,
+        unfilled: hasUnfilled
+          ? {
+              amount: (Number(unfilledLo) / 10 ** selectedIn.exponent).toFixed(6),
+              symbol: selectedIn.symbol,
+            }
+          : undefined,
       };
     },
   });
@@ -1380,9 +1392,12 @@ const PenumbraSwap = () => {
         </div>
       </div>
 
-      {simulation?.priceImpact && (
-        <div className='rounded-lg border border-yellow-500/40 bg-yellow-500/10 p-2'>
-          <p className='text-xs text-yellow-400'>{simulation.priceImpact}</p>
+      {simulation?.unfilled && (
+        <div className='rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-2'>
+          <p className='text-xs text-yellow-400'>
+            Only part of this swap fills at the current price - {simulation.unfilled.amount}{' '}
+            {simulation.unfilled.symbol} will be returned to you.
+          </p>
         </div>
       )}
 
@@ -1391,11 +1406,22 @@ const PenumbraSwap = () => {
       )}
 
       {txStatus === 'success' && txHash && (
-        <div className='rounded-lg border border-green-500/40 bg-green-500/10 p-3'>
-          <p className='text-sm text-green-400'>swap submitted!</p>
-          <p className='text-xs text-fg-muted mt-1 font-mono break-all'>{txHash}</p>
-          <p className='text-xs text-fg-muted mt-2'>
-            note: swap outputs will be available after the claim transaction is processed.
+        <div className='rounded-lg border border-green-500/30 bg-green-500/5 p-3'>
+          <div className='flex items-center gap-2'>
+            <span className='i-lucide-check h-4 w-4 text-green-400' />
+            <p className='text-sm font-medium text-fg'>Swap submitted</p>
+          </div>
+          <button
+            type='button'
+            onClick={() => void navigator.clipboard.writeText(txHash)}
+            title='Copy transaction hash'
+            className='mt-2 flex w-full items-center gap-1.5 rounded-md bg-elev-2 px-2 py-1.5 transition-colors hover:bg-elev-1'
+          >
+            <span className='i-lucide-copy h-3 w-3 shrink-0 text-fg-muted' />
+            <span className='truncate font-mono text-xs text-fg-muted'>{txHash}</span>
+          </button>
+          <p className='mt-2 text-xs text-fg-muted'>
+            Outputs arrive once the claim transaction is processed.
           </p>
         </div>
       )}
