@@ -30,5 +30,8 @@ export const popupWindowGeometry = async (): Promise<{
 /** Open a url in a canonical approval-sized popup window */
 export const openApprovalPopup = async (url: string): Promise<chrome.windows.Window> => {
   const geometry = await popupWindowGeometry();
-  return chrome.windows.create({ url, type: 'popup', ...geometry });
+  // focused: true so the approval comes to the front instead of opening behind
+  // the browser or on another display, which reads to the user as "nothing
+  // opened" and drives a second click into the already-open lock.
+  return chrome.windows.create({ url, type: 'popup', focused: true, ...geometry });
 };

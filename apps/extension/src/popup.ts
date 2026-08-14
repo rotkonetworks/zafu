@@ -14,6 +14,37 @@ const POPUP_PATHS = {
 const POPUP_BASE = chrome.runtime.getURL('/popup.html');
 
 /**
+ * Thrown when a popup of the requested type is already open. Distinct from a
+ * generic failure so the connect path can surface the existing window and
+ * treat the duplicate request as benign (not a denial). See
+ * content-script-connect.ts.
+ */
+export class PopupAlreadyOpenError extends Error {
+  constructor(popupType: PopupType) {
+    super(`Popup ${popupType} already open`);
+    this.name = 'PopupAlreadyOpenError';
+  }
+}
+
+/**
+ * Find an already-open approval popup window and bring it to the front. The
+ * ephemeral service worker can lose track of a popup it opened (idle teardown),
+ * and a popup can also land off-screen or behind the browser; a second connect
+ * click should surface that window rather than silently fail.
+ */
+const focusExistingPopup = async (): Promise<void> => {
+  try {
+    const wins = await chrome.windows.getAll({ populate: true, windowTypes: ['popup'] });
+    const ours = wins.find(w => w.tabs?.some(t => t.url?.startsWith(POPUP_BASE)));
+    if (ours?.id != null) {
+      await chrome.windows.update(ours.id, { focused: true, drawAttention: true });
+    }
+  } catch {
+    // best-effort; the throw below still informs the caller
+  }
+};
+
+/**
  * Launch a popup dialog to obtain a decision from the user. Returns the user
  * decision, or `null` if the popup is closed without interaction.
  */
@@ -25,7 +56,10 @@ export const popup = async <M extends PopupType>(
 
   const lockGranted = async (lock: Lock | null): Promise<PopupResponse<M> | null> => {
     if (!lock) {
-      throw new Error(`Popup ${popupType} already open`);
+      // Another approval of this type is in flight. Surface its window and let
+      // the caller treat this duplicate as benign rather than a denial.
+      await focusExistingPopup();
+      throw new PopupAlreadyOpenError(popupType);
     }
 
     const popupId = await spawnDetachedPopup(popupType).catch(cause => {

@@ -5,6 +5,7 @@ import { ZafuConnection } from '../../content-scripts/message/zafu-connection';
 import { ZafuControl } from '../../content-scripts/message/zafu-control';
 import { approveSender } from '../../senders/approve';
 import { isValidExternalSender, ValidExternalSender } from '../../senders/external';
+import { PopupAlreadyOpenError } from '../../popup';
 import { sendTab } from '../send/tab';
 
 // listen for page requests for approval
@@ -40,7 +41,13 @@ const handle = (sender: ValidExternalSender) =>
       }
     },
     async e => {
-      if (e instanceof ConnectError && e.code === Code.Unauthenticated) {
+      if (e instanceof PopupAlreadyOpenError) {
+        // A duplicate/racing connect while an approval is already open. The
+        // existing window was surfaced; do not deny or delay - return null so
+        // the page keeps waiting for the in-flight decision (which Inits on
+        // approval). null is not forwarded to the page as a failure.
+        return null;
+      } else if (e instanceof ConnectError && e.code === Code.Unauthenticated) {
         // user did not see a popup.
         // the website should instruct the user to log in
         return PenumbraRequestFailure.NeedsLogin;

@@ -1,5 +1,6 @@
 import { PenumbraRequestFailure } from '@penumbra-zone/client/error';
 import type { ZafuConnection } from './zafu-connection';
+import { isContextInvalidated, showReloadNotice } from './reload-notice';
 
 export const sendBackground = async (
   request: ZafuConnection,
@@ -22,6 +23,11 @@ export const sendBackground = async (
       error instanceof TypeError
         ? PenumbraRequestFailure.BadResponse
         : PenumbraRequestFailure.NotHandled;
+    // Orphaned content script (extension reloaded/upgraded under an open tab):
+    // tell the user to reload rather than leaving the wallet silently dead.
+    if (isContextInvalidated(error)) {
+      showReloadNotice();
+    }
     const isExpected =
       error instanceof Error &&
       /Could not establish connection|Receiving end does not exist/.test(error.message);
