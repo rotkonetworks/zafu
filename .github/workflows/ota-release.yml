@@ -1,0 +1,133 @@
+# SKELETON - firmware OTA release (2-of-3 ed25519; CI holds ONE key).
+#
+# Trust model (see RELEASING.md lane 3, and zigner modpack/CEREMONY.md): a zigner
+# module receives the raw seed, so its signature is the only thing protecting
+# funds. The device pins THREE independent ed25519 release keys and runs a module
+# only if 2 of the 3 signed it. This is NOT FROST/threshold aggregation - each
+# holder signs the same `prefix.bin` independently and `modpack assemble` joins
+# any two 64-byte signatures into the shippable package.
+#
+# CI holds exactly ONE of the three keys (slot0), age-encrypted at rest. It can
+# only produce ONE of the two required signatures, so it can never sign a release
+# alone: it needs the release manager's presigned slot1. CI compromise leaks one
+# key - useless without a human holder's second signature.
+#
+# The steps below are the real modpack commands (sign/assemble/verify exist).
+# The job stays gated `if: false` until the operational prerequisites are in
+# place - flip it only when ALL of these are true:
+#   1. Real RELEASE_KEY_BYTES are baked into an APK users have installed (the
+#      kernel fails closed until then - a module cannot grant its own trust).
+#   2. Secrets/vars set: OTA_CI_AGE_IDENTITY (unlocks slot0 only),
+#      OTA_VK0/1/2_HEX (the 3 pinned verifying keys), OTA_ZIGNER_REF.
+#   3. ota/keys/ci-share.age committed (slot0, encrypted to the CI identity).
+#   4. Per release: ota/build/<tag>/{prefix,payload}.bin and the manager's
+#      ota/presign/<tag>.slot1.sig committed (their zigner Release-scan → sign).
+# Prereq 4's device half needs the zigner Release-signing SCREENS (FFI exists,
+# navigator UI does not yet) - that is the true blocker, not this workflow.
+
+name: OTA Release (SKELETON)
+
+on:
+  push:
+    tags:
+      - 'ota-*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'OTA tag (e.g. ota-fw-v1.2.3). Empty = dry-run.'
+        required: false
+        type: string
+
+jobs:
+  ota-release:
+    if: false # keep false until the CI software-signer (TODO 1) exists
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # modpack (build/sign/assemble/verify) lives in the zigner repo, so build
+      # it here. Pin ZIGNER_REF to the commit whose module_host RELEASE_KEY_BYTES
+      # match the keys this release is signed against.
+      - name: Checkout zigner + build modpack
+        run: |
+          set -eu
+          git clone --depth 1 --branch "${ZIGNER_REF:-main}" https://github.com/rotkodev/zigner.git /tmp/zigner
+          cargo build --release --manifest-path /tmp/zigner/rust/modpack/Cargo.toml
+          echo "MODPACK=/tmp/zigner/rust/target/release/modpack" >> "$GITHUB_ENV"
+        env:
+          ZIGNER_REF: ${{ vars.OTA_ZIGNER_REF }}
+
+      # 0. The signed region. Committed for review under ota/build/<tag>/ by the
+      #    release manager (the SAME prefix.bin they presigned in step 1). We do
+      #    not rebuild it here: CI rebuilding the bytes the human attested to would
+      #    defeat the attestation.
+      - name: Require prefix.bin + payload.bin
+        run: |
+          set -eu
+          test -f "ota/build/${GITHUB_REF_NAME}/prefix.bin"  || { echo "::error::no prefix.bin for ${GITHUB_REF_NAME}";  exit 1; }
+          test -f "ota/build/${GITHUB_REF_NAME}/payload.bin" || { echo "::error::no payload.bin for ${GITHUB_REF_NAME}"; exit 1; }
+
+      # 1. The release manager's slot1 signature over THIS exact prefix.bin must
+      #    already be committed - `INDEX:SIGHEX`, produced on their zigner (Release
+      #    scan → sign) or via `modpack sign`. Bound to the message, not reusable.
+      - name: Require release-manager presign (slot1)
+        run: |
+          set -eu
+          presign="ota/presign/${GITHUB_REF_NAME}.slot1.sig"
+          test -f "$presign" || { echo "::error::no release-manager slot1 presign for ${GITHUB_REF_NAME}"; exit 1; }
+          grep -qE '^1:[0-9a-fA-F]{128}$' "$presign" || { echo "::error::presign is not a slot-1 INDEX:SIGHEX line"; exit 1; }
+
+      # 2. Decrypt CI's SINGLE key (slot0), age-encrypted at rest. The age identity
+      #    is a CI secret and unlocks ONLY this one key, never the whole 2-of-3.
+      - name: Decrypt CI key (slot0)
+        env:
+          AGE_IDENTITY: ${{ secrets.OTA_CI_AGE_IDENTITY }} # unlocks slot0 only
+        run: |
+          set -eu
+          echo "$AGE_IDENTITY" > /tmp/ci.age-id
+          age --decrypt -i /tmp/ci.age-id ota/keys/ci-share.age > /tmp/slot0.sk
+          shred -u /tmp/ci.age-id 2>/dev/null || true
+
+      # 3. CI signs prefix.bin with slot0 -> INDEX:SIGHEX. modpack parses the
+      #    prefix and refuses trailing bytes before signing, same as the device.
+      - name: Sign prefix with slot0
+        run: |
+          set -eu
+          "$MODPACK" sign --slot 0 --key /tmp/slot0.sk \
+            --prefix "ota/build/${GITHUB_REF_NAME}/prefix.bin" > /tmp/slot0.sig
+          shred -u /tmp/slot0.sk 2>/dev/null || true
+
+      # 4. Assemble the 2-of-3: CI's slot0 signature + the manager's presigned
+      #    slot1, over the same prefix.
+      - name: Assemble 2-of-3 package
+        run: |
+          set -eu
+          mkdir -p "ota/signed"
+          "$MODPACK" assemble \
+            --prefix  "ota/build/${GITHUB_REF_NAME}/prefix.bin" \
+            --payload "ota/build/${GITHUB_REF_NAME}/payload.bin" \
+            --sig "$(cat /tmp/slot0.sig)" \
+            --sig "$(cat ota/presign/${GITHUB_REF_NAME}.slot1.sig)" \
+            --out "ota/signed/${GITHUB_REF_NAME}.zmod"
+
+      # 5. Run the REAL device verifier over the finished package against all three
+      #    pinned verifying keys, BEFORE publish. Fail closed on mismatch.
+      - name: Verify against the 3 pinned release keys
+        run: |
+          set -eu
+          "$MODPACK" verify --package "ota/signed/${GITHUB_REF_NAME}.zmod" \
+            --key 0:"${{ vars.OTA_VK0_HEX }}" \
+            --key 1:"${{ vars.OTA_VK1_HEX }}" \
+            --key 2:"${{ vars.OTA_VK2_HEX }}"
+
+      # 6. Publish the VERIFIED package. CI never signed alone; it published a
+      #    2-of-3, human-attested artifact.
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          gh release create "${GITHUB_REF_NAME}" "ota/signed/${GITHUB_REF_NAME}.zmod" \
+            --title "zigner OTA ${GITHUB_REF_NAME}" --notes "2-of-3 signed firmware module"

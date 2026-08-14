@@ -11,11 +11,11 @@ on:
         required: false
         type: string
       channel:
-        description: 'Which CWS channel to publish. `auto` infers from tag (prerelease → beta-only, clean → both).'
+        description: 'Which CWS channel to publish. `auto` infers from tag (prerelease → beta-only, clean → prod-only promotion).'
         required: false
         default: auto
         type: choice
-        options: [auto, beta-only, both, skip]
+        options: [auto, beta-only, prod-only, both, skip]
 
 env:
   DO_NOT_TRACK: 1
@@ -90,10 +90,12 @@ jobs:
           echo "version=$ref" >> "$GITHUB_OUTPUT"
           echo "release=$release" >> "$GITHUB_OUTPUT"
 
-          # Channel resolution
-          # - `auto` → prerelease tags publish beta only, clean → both
+          # Channel resolution (beta LEADS, prod PROMOTES - see RELEASING.md)
+          # - `auto` → prerelease tags (alpha|beta|rc) publish beta-only;
+          #            a clean tag PROMOTES to prod-only (beta already shipped
+          #            from the earlier -beta.N at this same commit).
           # - `skip` → no CWS publish at all
-          # - explicit beta-only/both honored as-is
+          # - explicit beta-only/prod-only/both honored as-is
           channel="${INPUT_CHANNEL:-auto}"
           if [ "$release" != "true" ]; then
             channel="skip"
@@ -101,7 +103,7 @@ jobs:
             if echo "$ref" | grep -qE '(alpha|beta|rc)'; then
               channel="beta-only"
             else
-              channel="both"
+              channel="prod-only"
             fi
           fi
           echo "channel=$channel" >> "$GITHUB_OUTPUT"
@@ -302,6 +304,10 @@ jobs:
           case "$CHANNEL" in
             both)
               upload_and_publish beta "${CWS_BETA_ITEM_ID}"
+              upload_and_publish prod "${CWS_PROD_ITEM_ID}"
+              ;;
+            prod-only)
+              # promotion: beta already shipped from the -beta.N at this commit
               upload_and_publish prod "${CWS_PROD_ITEM_ID}"
               ;;
             beta-only)
