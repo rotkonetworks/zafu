@@ -12,7 +12,7 @@
 
 /** True only for the orphaned-context signal, NOT transient "SW asleep" errors. */
 export const isContextInvalidated = (e: unknown): boolean =>
-  e instanceof Error && /Extension context invalidated/.test(e.message);
+  e instanceof Error && e.message.includes('Extension context invalidated');
 
 const NOTICE_ID = 'zafu-reload-notice';
 

@@ -552,7 +552,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               'are dropped when the toolbar popup loses focus',
           );
         }
-        const fromAddress = activeZcashWallet!.transparentAddress!;
+        const fromAddress = activeZcashWallet.transparentAddress!;
         // ZIP-317 transparent fee: a conservative fixed estimate covering a few
         // logical actions. A slightly-high fee still confirms; tune on device.
         const feeZat = 20000n;
@@ -837,6 +837,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         // broadcasts (the `signedPczt` variant, pool-agnostic - orchard AND
         // ironwood). This requires the signing surface (tab/side-panel) to stay
         // open for the sign->scan duration, same as the pre-existing flow.
+        // eslint-disable-next-line @typescript-eslint/unbound-method -- createZignerSigner returns plain closures, not this-bound methods
         const { signer, deliver, fail } = createZignerSigner(() => {
           setPcztSignFrames(result.urFrames);
           startSigning({
