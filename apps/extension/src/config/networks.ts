@@ -45,7 +45,8 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     focusColor: 'focus:border-penumbra-purple',
     transparent: false,
     launched: true,
-    features: { stake: true, swap: false, vote: true, inbox: true, multisig: true },
+    // multisig: FROST threshold wallets are not implemented for Penumbra yet.
+    features: { stake: true, swap: false, vote: true, inbox: true, multisig: false },
   },
   polkadot: {
     name: 'Polkadot',

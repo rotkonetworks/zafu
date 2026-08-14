@@ -123,10 +123,10 @@
     --network-accent-light: var(--zigner-gold-light);
     --network-accent-foreground: var(--zigner-dark);
 
-    /* penumbra brand */
-    --penumbra-purple: #7c3aed;
-    --penumbra-purple-light: #a78bfa;
-    --penumbra-purple-dark: #5b21b6;
+    /* penumbra brand - orange/teal radiant identity (was purple) */
+    --penumbra-purple: #fb923c;
+    --penumbra-purple-light: #fdba74;
+    --penumbra-purple-dark: #ea580c;
     --penumbra-teal: #2dd4bf;
     --penumbra-teal-dark: #0d9488;
 

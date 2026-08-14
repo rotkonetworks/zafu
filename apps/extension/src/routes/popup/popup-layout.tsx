@@ -146,10 +146,14 @@ export const PopupLayout = () => {
   const networkTabs = getTabsForNetwork(activeNetwork);
   // On a frost wallet, guarantee a multisig tab - but only append one if the
   // network's own feature-gated tabs don't already include it, otherwise the
-  // rail shows two tabs both labeled "multisig".
+  // rail shows two tabs both labeled "multisig". Also respect network support:
+  // a frost wallet viewing a network without multisig (e.g. Penumbra) must not
+  // force a tab for a feature that network cannot use.
   const hasMultisigTab = networkTabs.some(tab => tab.path === PopupPath.MULTISIG);
   const tabs =
-    selectedKeyInfo?.type === 'frost-multisig' && !hasMultisigTab
+    selectedKeyInfo?.type === 'frost-multisig' &&
+    !hasMultisigTab &&
+    hasFeature(activeNetwork, 'multisig')
       ? [...networkTabs, MULTISIG_TAB]
       : networkTabs;
   const showChrome = !matchesRoute(location.pathname, hiddenHeaderRoutes);

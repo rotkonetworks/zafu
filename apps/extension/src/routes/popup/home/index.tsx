@@ -1703,7 +1703,8 @@ const ActionButton = ({
       'group/action flex h-11 w-full items-center justify-center rounded-md px-3 transition-colors',
       variant === 'default' && 'bg-elev-2 text-fg hover:bg-elev-1/80 hover:text-fg-high',
       variant === 'zcash' && 'bg-zigner-gold text-zigner-dark hover:bg-primary/90',
-      variant === 'penumbra' && 'bg-penumbra-purple text-white hover:bg-penumbra-purple-dark',
+      variant === 'penumbra' &&
+        'bg-gradient-to-r from-orange-400 to-teal-400 text-white transition-opacity hover:opacity-90',
     )}
   >
     <span className={`${icon} h-5 w-5 shrink-0`} />
