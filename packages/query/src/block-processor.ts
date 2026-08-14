@@ -259,7 +259,7 @@ export class BlockProcessor implements BlockProcessorInterface {
     try {
       const freshAppParams = await this.querier.app.appParams();
       await this.persistChainParams(freshAppParams, currentHeight);
-      console.log(
+      console.debug(
         '[sync] chain params refreshed - sct:',
         freshAppParams.sctParams,
         'fmd:',
@@ -440,7 +440,7 @@ export class BlockProcessor implements BlockProcessorInterface {
       );
       return;
     }
-    /* eslint-enable @typescript-eslint/no-deprecated */
+    /* eslint-enable @typescript-eslint/no-deprecated -- end of legacy fixedFmdParams branch */
 
     const meta = spp.fmdMetaParams;
     if (meta) {
