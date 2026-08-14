@@ -58,6 +58,7 @@ import { identifyTransactions, RelevantTx } from './helpers/identify-txs';
 import { TransactionId } from '@penumbra-zone/protobuf/penumbra/core/txhash/v1/txhash_pb';
 import { Amount } from '@penumbra-zone/protobuf/penumbra/core/num/v1/num_pb';
 import { FmdParameters } from '@penumbra-zone/protobuf/penumbra/core/component/shielded_pool/v1/shielded_pool_pb';
+import { AppParameters } from '@penumbra-zone/protobuf/penumbra/core/app/v1/app_pb';
 import { shouldSkipTrialDecrypt } from './helpers/skip-trial-decrypt';
 import { assetIdFromBaseDenom } from '@rotko/penumbra-wasm/asset';
 
@@ -237,41 +238,35 @@ export class BlockProcessor implements BlockProcessorInterface {
       // Pull the app parameters from the full node, which other parameter setting (gas prices
       // for instance) will be derived from, rather than making additional network requests.
       const appParams = await this.querier.app.appParams();
-      await this.indexedDb.saveAppParams(appParams);
-
-      if (appParams.feeParams?.fixedGasPrices) {
-        await this.indexedDb.saveGasPrices({
-          ...toPlainMessage(appParams.feeParams.fixedGasPrices),
-          assetId: toPlainMessage(this.stakingAssetId),
-        });
-      }
-
-      if (appParams.feeParams?.fixedAltGasPrices) {
-        for (const altGasFee of appParams.feeParams.fixedAltGasPrices) {
-          if (altGasFee.assetId) {
-            await this.indexedDb.saveGasPrices({
-              ...toPlainMessage(altGasFee),
-              assetId: toPlainMessage(altGasFee.assetId),
-            });
-          }
-        }
-      }
-
-      /* eslint-disable @typescript-eslint/no-deprecated -- fixedFmdParams is
-         deprecated upstream but still what the node serves */
-      if (appParams.shieldedPoolParams?.fixedFmdParams) {
-        await this.indexedDb.saveFmdParams(
-          new FmdParameters({
-            precisionBits: appParams.shieldedPoolParams.fixedFmdParams.precisionBits,
-            asOfBlockHeight: appParams.shieldedPoolParams.fixedFmdParams.asOfBlockHeight,
-          }),
-        );
-      }
-      /* eslint-enable @typescript-eslint/no-deprecated -- end of fixedFmdParams block */
+      await this.persistChainParams(appParams, currentHeight);
 
       // Finally, persist the frontier to IndexedDB.
       const flush = this.viewServer.flushUpdates();
       await this.indexedDb.saveScanResult(flush);
+    }
+
+    // FMD params: current mainnet serves `fmdMetaParams` (the deprecated
+    // `fixedFmdParams` and per-block `fmdParameters` are both gone), so a wallet
+    // can easily have none stored, and the transaction planner then fails with
+    // "FmdParameters not available". Ensure them on every sync start, fetching
+    // FRESH app params (stored ones may predate fmdMetaParams). Cheap: one unary
+    // query per worker sync loop.
+    // The transaction planner reads SctParameters from the stored app params
+    // (there is no dedicated store), and FMD params from their own store. Older
+    // or partially-initialized wallets can have stale/missing app params, so the
+    // planner fails with "SctParameters not available" / "FmdParameters not
+    // available". Re-fetch and re-store both when either is missing.
+    try {
+      const freshAppParams = await this.querier.app.appParams();
+      await this.persistChainParams(freshAppParams, currentHeight);
+      console.log(
+        '[sync] chain params refreshed - sct:',
+        freshAppParams.sctParams,
+        'fmd:',
+        await this.indexedDb.getFmdParams(),
+      );
+    } catch (e) {
+      console.warn('[sync] chain params refresh failed:', e);
     }
 
     // handle the special case where no syncing has been done yet, and
@@ -384,6 +379,75 @@ export class BlockProcessor implements BlockProcessorInterface {
       if (compactBlock.height > latestKnownBlockHeight) {
         latestKnownBlockHeight = compactBlock.height;
       }
+    }
+  }
+
+  /**
+   * Persist the wallet's FMD parameters, which the transaction planner needs to
+   * attach detection clues. Without them, planning fails with "FmdParameters
+   * not available".
+   *
+   * Handles both shapes: the legacy `fixedFmdParams` struct if a node still
+   * serves it, otherwise `fmdMetaParams` (what current mainnet serves), from
+   * which the effective parameters are derived. Mainnet uses the fixed-precision
+   * algorithm; precision defaults to 0 for anything else (e.g. sliding window),
+   * which is the safe minimum.
+   */
+  /**
+   * Persist every chain parameter the transaction planner reads: app params
+   * (which carry SctParameters), gas prices (native + alt), and FMD params.
+   * The planner fails with "<X> not available" for whichever is missing, and
+   * these were previously only stored on a wallet's first-ever sync - so an
+   * existing wallet could be missing any of them.
+   */
+  private async persistChainParams(appParams: AppParameters, height: bigint): Promise<void> {
+    await this.indexedDb.saveAppParams(appParams);
+
+    if (appParams.feeParams?.fixedGasPrices) {
+      await this.indexedDb.saveGasPrices({
+        ...toPlainMessage(appParams.feeParams.fixedGasPrices),
+        assetId: toPlainMessage(this.stakingAssetId),
+      });
+    }
+    for (const altGasFee of appParams.feeParams?.fixedAltGasPrices ?? []) {
+      if (altGasFee.assetId) {
+        await this.indexedDb.saveGasPrices({
+          ...toPlainMessage(altGasFee),
+          assetId: toPlainMessage(altGasFee.assetId),
+        });
+      }
+    }
+
+    await this.saveFmdParamsFromAppParams(appParams, height);
+  }
+
+  private async saveFmdParamsFromAppParams(
+    appParams: AppParameters | undefined,
+    height: bigint,
+  ): Promise<void> {
+    const spp = appParams?.shieldedPoolParams;
+    if (!spp) {
+      return;
+    }
+
+    /* eslint-disable @typescript-eslint/no-deprecated -- fixedFmdParams is the legacy path */
+    if (spp.fixedFmdParams) {
+      await this.indexedDb.saveFmdParams(
+        new FmdParameters({
+          precisionBits: spp.fixedFmdParams.precisionBits,
+          asOfBlockHeight: spp.fixedFmdParams.asOfBlockHeight,
+        }),
+      );
+      return;
+    }
+    /* eslint-enable @typescript-eslint/no-deprecated */
+
+    const meta = spp.fmdMetaParams;
+    if (meta) {
+      const precisionBits = meta.algorithm.case === 'fixedPrecisionBits' ? meta.algorithm.value : 0;
+      await this.indexedDb.saveFmdParams(
+        new FmdParameters({ precisionBits, asOfBlockHeight: height }),
+      );
     }
   }
 
