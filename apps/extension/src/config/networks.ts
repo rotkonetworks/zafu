@@ -17,6 +17,13 @@ export interface NetworkConfig {
   transparent: boolean;
   /** whether this network is available for selection in the UI */
   launched: boolean;
+  /**
+   * If set, this network is a SUBNETWORK of `parent` rather than a top-level
+   * network - it appears as a sub-selection inside the parent (e.g. the cosmos
+   * IBC destinations under Penumbra), not in the top-level network picker. Used
+   * for the unshield -> transparent-chain -> exchange flow.
+   */
+  parent?: NetworkType;
   features: {
     stake: boolean;
     swap: boolean;
@@ -69,7 +76,10 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     color: 'bg-blue-400',
     focusColor: 'focus:border-blue-400',
     transparent: true,
-    launched: false,
+    // Penumbra subnetwork: the USDC/CCTP gateway, default IBC destination for
+    // unshielding and the off-ramp path to exchanges (Coinbase etc.).
+    launched: true,
+    parent: 'penumbra',
     features: { stake: false, swap: false, vote: false, inbox: false, multisig: false },
   },
   cosmoshub: {
@@ -77,7 +87,9 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     color: 'bg-indigo-500',
     focusColor: 'focus:border-indigo-500',
     transparent: true,
+    // Penumbra subnetwork; not enabled yet (no live IBC channel in veil config).
     launched: false,
+    parent: 'penumbra',
     features: { stake: true, swap: false, vote: false, inbox: false, multisig: false },
   },
   ethereum: {
@@ -114,6 +126,24 @@ export const hasFeature = (
   network: NetworkType,
   feature: keyof NetworkConfig['features'],
 ): boolean => getNetwork(network).features[feature];
+
+/** launched top-level networks (no parent) - the main network picker */
+export const getTopLevelNetworks = (): NetworkType[] =>
+  (Object.keys(NETWORKS) as NetworkType[]).filter(n => NETWORKS[n].launched && !NETWORKS[n].parent);
+
+/** launched subnetworks (IBC destinations) of a parent network */
+export const getSubnetworks = (parent: NetworkType): NetworkType[] =>
+  (Object.keys(NETWORKS) as NetworkType[]).filter(
+    n => NETWORKS[n].launched && NETWORKS[n].parent === parent,
+  );
+
+/** the root (top-level) network for any network: its parent, or itself */
+export const getRootNetwork = (network: NetworkType): NetworkType =>
+  getNetwork(network).parent ?? network;
+
+/** true if `network` belongs to `root`'s group (is `root` or a subnetwork of it) */
+export const isInNetworkGroup = (network: NetworkType, root: NetworkType): boolean =>
+  getRootNetwork(network) === root;
 
 /** check if network is available for selection */
 export const isLaunched = (network: NetworkType): boolean => getNetwork(network).launched;

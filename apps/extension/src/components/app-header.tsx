@@ -82,6 +82,15 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
         >
           <span className={cn('h-2.5 w-2.5 rounded-full', networkInfo.color)} />
           <span className='text-data text-fg-high'>{networkInfo.name}</span>
+          {networkInfo.transparent && (
+            <span
+              className='flex items-center gap-0.5 rounded-md bg-amber-500/15 px-1.5 py-0.5 text-label leading-none text-amber-500'
+              title='transparent network - balances and transactions are public, NOT shielded'
+            >
+              <span className='i-lucide-eye h-3 w-3' />
+              public
+            </span>
+          )}
           <span className='i-lucide-chevron-down h-3 w-3 text-fg-muted' />
         </button>
         {openPicker === 'network' && (
@@ -94,6 +103,15 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
               >
                 <span className={cn('h-2 w-2 rounded-full', getNetwork(n).color)} />
                 <span className='flex-1 truncate'>{getNetwork(n).name}</span>
+                {getNetwork(n).transparent && (
+                  <span
+                    className='flex shrink-0 items-center gap-0.5 rounded-md bg-elev-2 px-1.5 py-0.5 text-label leading-none text-fg-dim'
+                    title='transparent network - balances and transactions are public'
+                  >
+                    <span className='i-lucide-eye h-3 w-3' />
+                    public
+                  </span>
+                )}
                 {n === activeNetwork && (
                   <span className='i-lucide-check h-3.5 w-3.5 text-zigner-gold' />
                 )}
