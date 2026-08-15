@@ -26,6 +26,7 @@ import { assetPatterns } from '@rotko/penumbra-types/assets';
 import { useSkipRoute, useSkipChains } from '../../../hooks/skip-route';
 import { useCosmosSend, useCosmosIbcTransfer } from '../../../hooks/cosmos-signer';
 import { parseAmountToBaseUnits } from '@repo/wallet/networks/cosmos/signer';
+import { localExtStorage } from '@repo/storage-chrome/local';
 import { useCosmosAssets, type CosmosAsset } from '../../../hooks/cosmos-balance';
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
 import {
@@ -295,7 +296,12 @@ function CosmosSend({ sourceChainId }: { sourceChainId: CosmosChainId }) {
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
   const [selectedAsset, setSelectedAsset] = useState<CosmosAsset | undefined>();
+  // Sign from the current rotated burner index, so a fresh (never-reused)
+  // address can actually be spent/shielded (else this defaults to index 0).
   const [accountIndex, setAccountIndex] = useState(0);
+  useEffect(() => {
+    void localExtStorage.get('cosmosAddressIndex').then(v => setAccountIndex(v ?? 0));
+  }, []);
   const [txStatus, setTxStatus] = useState<
     'idle' | 'confirm' | 'signing' | 'broadcasting' | 'success' | 'error'
   >('idle');

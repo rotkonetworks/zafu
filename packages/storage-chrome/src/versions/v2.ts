@@ -49,6 +49,12 @@ type LOCAL = {
   /** Whether camera is enabled for Zigner QR scanning */
   zignerCameraEnabled?: boolean;
   /**
+   * Current cosmos receive-address index (BIP44 address_index in
+   * m/44'/118'/0'/0/n). Rotated on each unshield/receive so transparent
+   * off-ramp addresses are never reused. Default/absent = 0.
+   */
+  cosmosAddressIndex?: number;
+  /**
    * When true, dapp approval prompts render inside the side panel if it is open,
    * falling back to a popup window when it is not. Default (undefined/false) is
    * the classic popup-window behaviour. User preference, set in settings.

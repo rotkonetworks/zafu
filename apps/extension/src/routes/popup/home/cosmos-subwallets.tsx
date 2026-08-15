@@ -10,8 +10,9 @@
  * flow with the asset pre-filled; v1 just surfaces the balances.
  */
 
-import { memo } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { localExtStorage } from '@repo/storage-chrome/local';
 import { Sensitive } from '../../../components/sensitive';
 import { useAllCosmosBalances } from '../../../hooks/cosmos-balance';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
@@ -27,47 +28,89 @@ interface ChainRowProps {
   address: string;
   formatted: string;
   loading: boolean;
+  onReceive: (chainId: CosmosChainId) => void;
+  onSend: (chainId: CosmosChainId) => void;
   onShield: (chainId: CosmosChainId) => void;
 }
 
 const truncateAddress = (addr: string, head = 8, tail = 4) =>
   addr.length <= head + tail + 3 ? addr : `${addr.slice(0, head)}…${addr.slice(-tail)}`;
 
-const ChainRow = memo(({ chainId, address, formatted, loading, onShield }: ChainRowProps) => {
-  const config = COSMOS_CHAINS[chainId];
-  return (
-    <div
-      className={cn(
-        'flex items-center gap-3 rounded-md border border-border/40 bg-card/40 px-3 py-2',
-        'transition-colors hover:bg-card/60',
-      )}
-    >
-      <div className='flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium uppercase'>
-        {config.symbol.slice(0, 2)}
-      </div>
-      <div className='flex flex-1 flex-col min-w-0'>
-        <div className='flex items-center justify-between gap-2'>
-          <span className='text-sm font-medium'>{config.name}</span>
-          <Sensitive className='font-mono text-sm tabular-nums'>
-            {loading ? <span className='text-fg-muted'>-</span> : formatted}
-          </Sensitive>
+const ActionButton = ({
+  icon,
+  label,
+  onClick,
+  accent,
+  title,
+}: {
+  icon: string;
+  label: string;
+  onClick: () => void;
+  accent?: boolean;
+  title: string;
+}) => (
+  <button
+    type='button'
+    onClick={onClick}
+    title={title}
+    className={cn(
+      'flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors',
+      accent
+        ? 'bg-blue-500/15 text-blue-400 hover:bg-blue-500/25'
+        : 'bg-elev-2 text-fg-muted hover:bg-elev-1 hover:text-fg-high',
+    )}
+  >
+    <span className={cn(icon, 'h-3.5 w-3.5')} />
+    {label}
+  </button>
+);
+
+const ChainRow = memo(
+  ({ chainId, address, formatted, loading, onReceive, onSend, onShield }: ChainRowProps) => {
+    const config = COSMOS_CHAINS[chainId];
+    return (
+      <div className='flex flex-col gap-2 rounded-md border border-border/40 bg-card/40 px-3 py-2.5'>
+        <div className='flex items-center gap-3'>
+          <div className='flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium uppercase'>
+            {config.symbol.slice(0, 2)}
+          </div>
+          <div className='flex flex-1 flex-col min-w-0'>
+            <div className='flex items-center justify-between gap-2'>
+              <span className='text-sm font-medium'>{config.name}</span>
+              <Sensitive className='font-mono text-sm tabular-nums'>
+                {loading ? <span className='text-fg-muted'>-</span> : formatted}
+              </Sensitive>
+            </div>
+            <div className='font-mono text-label text-fg-muted' title={address}>
+              {truncateAddress(address)}
+            </div>
+          </div>
         </div>
-        <div className='font-mono text-label text-fg-muted' title={address}>
-          {truncateAddress(address)}
+        <div className='flex gap-2'>
+          <ActionButton
+            icon='i-lucide-arrow-down-to-line'
+            label='receive'
+            onClick={() => onReceive(chainId)}
+            title='rotate to a fresh burner address to receive on'
+          />
+          <ActionButton
+            icon='i-lucide-arrow-up'
+            label='send'
+            onClick={() => onSend(chainId)}
+            title='send to an exchange or address'
+          />
+          <ActionButton
+            icon='i-lucide-shield'
+            label='shield'
+            accent
+            onClick={() => onShield(chainId)}
+            title='shield into Penumbra'
+          />
         </div>
       </div>
-      <button
-        type='button'
-        onClick={() => onShield(chainId)}
-        className='flex shrink-0 items-center gap-1 rounded-md bg-blue-500/15 px-2.5 py-1.5 text-xs font-medium text-blue-400 transition-colors hover:bg-blue-500/25'
-        title='shield into Penumbra'
-      >
-        <span className='i-lucide-shield h-3.5 w-3.5' />
-        shield
-      </button>
-    </div>
-  );
-});
+    );
+  },
+);
 ChainRow.displayName = 'ChainRow';
 
 /**
@@ -76,16 +119,31 @@ ChainRow.displayName = 'ChainRow';
  * with shielded assets.
  */
 export const CosmosSubwallets = () => {
-  const { data, isLoading, isError } = useAllCosmosBalances();
   const navigate = useNavigate();
   const setActiveNetwork = useStore(selectSetActiveNetwork);
 
-  // Shield: switch to the cosmos chain and open its send flow (destination is
-  // the user's Penumbra address = a deposit/shield into the shielded pool).
-  const onShield = (chainId: CosmosChainId) => {
+  // Current receive-address index. Rotated so transparent addresses are never
+  // reused - the whole point of the private off-ramp.
+  const [addressIndex, setAddressIndex] = useState(0);
+  useEffect(() => {
+    void localExtStorage.get('cosmosAddressIndex').then(v => setAddressIndex(v ?? 0));
+  }, []);
+  const rotateAddress = () => {
+    const next = addressIndex + 1;
+    setAddressIndex(next);
+    void localExtStorage.set('cosmosAddressIndex', next);
+  };
+
+  const { data, isLoading, isError } = useAllCosmosBalances(addressIndex);
+
+  const goToSend = (chainId: CosmosChainId) => {
     void setActiveNetwork(chainId as NetworkType);
     navigate(PopupPath.SEND);
   };
+  // Receive rotates to a fresh burner address; Send/Shield open the send flow
+  // (Shield's destination is the user's Penumbra address = shield into the pool).
+  const onSend = (chainId: CosmosChainId) => goToSend(chainId);
+  const onShield = (chainId: CosmosChainId) => goToSend(chainId);
 
   if (isError) {
     return null;
@@ -113,7 +171,7 @@ export const CosmosSubwallets = () => {
 
   return (
     <div className='mt-4'>
-      <div className='kicker mb-2'>unshielded</div>
+      <div className='kicker mb-2'>unshielded · burner</div>
       <div className='flex flex-col gap-1.5'>
         {entries.map(([chainId, e]) => (
           <ChainRow
@@ -122,6 +180,8 @@ export const CosmosSubwallets = () => {
             address={e?.address ?? ''}
             formatted={e?.formatted ?? ''}
             loading={isLoading || !e}
+            onReceive={() => rotateAddress()}
+            onSend={onSend}
             onShield={onShield}
           />
         ))}
