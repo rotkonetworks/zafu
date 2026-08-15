@@ -16,6 +16,7 @@ import { recentAddressesSelector, type AddressNetwork } from '../../../state/rec
 import { contactsSelector } from '../../../state/contacts';
 import { selectIbcWithdraw } from '../../../state/ibc-withdraw';
 import { isActiveIbcChain, getNetwork } from '../../../config/networks';
+import type { NetworkType } from '../../../state/keyring';
 import { selectPenumbraSend } from '../../../state/penumbra-send';
 import { useIbcChains, isValidIbcAddress, type IbcChain } from '../../../hooks/ibc-chains';
 import { viewClient } from '../../../clients';
@@ -1632,6 +1633,12 @@ interface SendLocationState {
   prefillMemo?: string;
   prefillRecipient?: string;
   prefillAmount?: string;
+  /**
+   * Cosmos off-ramp: open the cosmos send for this chain WITHOUT switching the
+   * active network. Noble is a burner doorway, not a network - the user stays
+   * on Penumbra; this just routes the send form to the transparent chain.
+   */
+  cosmosChain?: CosmosChainId;
 }
 
 export function SendPage() {
@@ -1694,9 +1701,12 @@ export function SendPage() {
       : undefined;
 
   const goBack = () => (inDedicatedWindow ? window.close() : navigate(PopupPath.INDEX));
-  const isPenumbra = activeNetwork === 'penumbra';
-  const isCosmos = COSMOS_CHAIN_IDS.includes(activeNetwork as CosmosChainId);
-  const isZcash = activeNetwork === 'zcash';
+  // cosmos chain from route state (burner off-ramp) takes precedence over the
+  // active network - the user is on Penumbra, just routing a send to Noble.
+  const cosmosChain = locationState?.cosmosChain;
+  const isCosmos = cosmosChain != null || COSMOS_CHAIN_IDS.includes(activeNetwork as CosmosChainId);
+  const isPenumbra = !cosmosChain && activeNetwork === 'penumbra';
+  const isZcash = !cosmosChain && activeNetwork === 'zcash';
 
   const getTitle = () => {
     if (isPenumbra) {
@@ -1740,15 +1750,16 @@ export function SendPage() {
         {isPenumbra ? (
           <PenumbraSend onSuccess={inDedicatedWindow ? () => window.close() : undefined} />
         ) : isCosmos ? (
-          isActiveIbcChain(activeNetwork) ? (
-            <CosmosSend sourceChainId={activeNetwork as CosmosChainId} />
+          isActiveIbcChain((cosmosChain ?? activeNetwork) as NetworkType) ? (
+            <CosmosSend sourceChainId={(cosmosChain ?? activeNetwork) as CosmosChainId} />
           ) : (
             // No live IBC channel to this chain right now (channels close on
             // network upgrades and reopen later), so deposit/send is unavailable.
             <div className='flex flex-col gap-2 rounded-lg border border-border-soft bg-elev-1 p-4 text-sm'>
               <span className='font-medium text-fg'>channel unavailable</span>
               <span className='text-fg-muted'>
-                {getNetwork(activeNetwork).name} has no open IBC channel with Penumbra right now.
+                {getNetwork((cosmosChain ?? activeNetwork) as NetworkType).name} has no open IBC
+                channel with Penumbra right now.
                 Only Noble is available until other channels are reopened.
               </span>
             </div>

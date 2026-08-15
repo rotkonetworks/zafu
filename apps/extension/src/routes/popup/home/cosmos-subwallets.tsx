@@ -17,8 +17,6 @@ import { Sensitive } from '../../../components/sensitive';
 import { useAllCosmosBalances } from '../../../hooks/cosmos-balance';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { isActiveIbcChain } from '../../../config/networks';
-import { useStore } from '../../../state';
-import { selectSetActiveNetwork } from '../../../state/keyring';
 import type { NetworkType } from '../../../state/keyring';
 import { PopupPath } from '../paths';
 import { cn } from '@repo/ui/lib/utils';
@@ -120,7 +118,6 @@ ChainRow.displayName = 'ChainRow';
  */
 export const CosmosSubwallets = () => {
   const navigate = useNavigate();
-  const setActiveNetwork = useStore(selectSetActiveNetwork);
 
   // Current receive-address index. Rotated so transparent addresses are never
   // reused - the whole point of the private off-ramp.
@@ -137,8 +134,9 @@ export const CosmosSubwallets = () => {
   const { data, isLoading, isError } = useAllCosmosBalances(addressIndex);
 
   const goToSend = (chainId: CosmosChainId) => {
-    void setActiveNetwork(chainId as NetworkType);
-    navigate(PopupPath.SEND);
+    // Route the send form to the cosmos chain WITHOUT switching networks - the
+    // user stays on Penumbra; Noble is a burner doorway, not a network.
+    navigate(PopupPath.SEND, { state: { cosmosChain: chainId } });
   };
   // Receive rotates to a fresh burner address; Send/Shield open the send flow
   // (Shield's destination is the user's Penumbra address = shield into the pool).

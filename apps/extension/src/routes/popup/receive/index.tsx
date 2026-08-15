@@ -992,7 +992,9 @@ function ReceiveTab({
           ? 'fresh single-use address - share with one party; reuse lets senders link payments.'
           : transparent && isZcash
             ? 'public on-chain - one index per exchange, then shield to Orchard.'
-            : `share with any ${activeNetwork?.toUpperCase() ?? ''} sender - shielded, so they can't see your other transactions.`}
+            : transparent
+              ? 'transparent chain - this address is PUBLIC, not shielded. use a fresh burner per sender and shield into Penumbra soon after.'
+              : 'shielded - senders cannot see your other transactions.'}
       </p>
     </div>
   );
