@@ -1,187 +1,131 @@
 /**
- * Unshielded Cosmos balances rendered as sub-wallets under the active
- * Penumbra wallet.
+ * The transparent off-ramp, surfaced under Penumbra. Noble is not a network -
+ * it's a set of single-use BURNER deposit addresses. This is the "full view of
+ * all deposit wallets": every funded burner (each independently shieldable) plus
+ * one fresh, unused address to receive on.
  *
- * The user's Penumbra spend key is derived from the same mnemonic that
- * derives Cosmos addresses (or, for zigner-zafu wallets, addresses are
- * stored in the keyInfo's insensitive blob), so the Penumbra wallet IS
- * the Cosmos wallet — the rows below are the same identity, just on
- * a transparent chain. Clicking a row will eventually open the shield
- * flow with the asset pre-filled; v1 just surfaces the balances.
+ * The state is derived from on-chain balances (see useCosmosDepositWallets), not
+ * a stored counter - so a fresh address appears only after the current one is
+ * funded, and money can never be stranded behind a rotated index.
  */
 
-import { memo, useEffect, useState } from 'react';
+import { memo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { localExtStorage } from '@repo/storage-chrome/local';
 import { Sensitive } from '../../../components/sensitive';
-import { useAllCosmosBalances } from '../../../hooks/cosmos-balance';
+import { useCosmosDepositWallets, type DepositWallet } from '../../../hooks/cosmos-balance';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
-import { isActiveIbcChain } from '../../../config/networks';
-import type { NetworkType } from '../../../state/keyring';
+import { getActiveIbcSubnetworks } from '../../../config/networks';
+import { useStore } from '../../../state';
+import { selectEffectiveKeyInfo } from '../../../state/keyring';
 import { PopupPath } from '../paths';
-import { cn } from '@repo/ui/lib/utils';
 
-interface ChainRowProps {
-  chainId: CosmosChainId;
-  address: string;
-  formatted: string;
-  loading: boolean;
-  onReceive: (chainId: CosmosChainId) => void;
-  onSend: (chainId: CosmosChainId) => void;
-  onShield: (chainId: CosmosChainId) => void;
-}
-
-const truncateAddress = (addr: string, head = 8, tail = 4) =>
+const truncate = (addr: string, head = 10, tail = 6) =>
   addr.length <= head + tail + 3 ? addr : `${addr.slice(0, head)}…${addr.slice(-tail)}`;
 
-const ActionButton = ({
-  icon,
-  label,
-  onClick,
-  accent,
-  title,
-}: {
-  icon: string;
-  label: string;
-  onClick: () => void;
-  accent?: boolean;
-  title: string;
-}) => (
-  <button
-    type='button'
-    onClick={onClick}
-    title={title}
-    className={cn(
-      'flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors',
-      accent
-        ? 'bg-blue-500/15 text-blue-400 hover:bg-blue-500/25'
-        : 'bg-elev-2 text-fg-muted hover:bg-elev-1 hover:text-fg-high',
-    )}
-  >
-    <span className={cn(icon, 'h-3.5 w-3.5')} />
-    {label}
-  </button>
-);
-
-const ChainRow = memo(
-  ({ chainId, address, formatted, loading, onReceive, onSend, onShield }: ChainRowProps) => {
+const DepositRow = memo(
+  ({
+    chainId,
+    wallet,
+    onShield,
+  }: {
+    chainId: CosmosChainId;
+    wallet: DepositWallet;
+    onShield: () => void;
+  }) => {
     const config = COSMOS_CHAINS[chainId];
     return (
-      <div className='flex flex-col gap-2 rounded-md border border-border/40 bg-card/40 px-3 py-2.5'>
-        <div className='flex items-center gap-3'>
-          <div className='flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium uppercase'>
-            {config.symbol.slice(0, 2)}
-          </div>
-          <div className='flex flex-1 flex-col min-w-0'>
-            <div className='flex items-center justify-between gap-2'>
-              <span className='text-sm font-medium'>{config.name}</span>
-              <Sensitive className='font-mono text-sm tabular-nums'>
-                {loading ? <span className='text-fg-muted'>-</span> : formatted}
-              </Sensitive>
-            </div>
-            <div className='font-mono text-label text-fg-muted' title={address}>
-              {truncateAddress(address)}
-            </div>
+      <div className='flex items-center gap-3 rounded-md border border-border/40 bg-card/40 px-3 py-2'>
+        <div className='flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium uppercase'>
+          {config.symbol.slice(0, 2)}
+        </div>
+        <div className='flex flex-1 flex-col min-w-0'>
+          <Sensitive className='font-mono text-sm tabular-nums'>{wallet.formatted}</Sensitive>
+          <div className='font-mono text-label text-fg-muted' title={wallet.address}>
+            {truncate(wallet.address)}
           </div>
         </div>
-        <div className='flex gap-2'>
-          <ActionButton
-            icon='i-lucide-arrow-down-to-line'
-            label='receive'
-            onClick={() => onReceive(chainId)}
-            title='rotate to a fresh burner address to receive on'
-          />
-          <ActionButton
-            icon='i-lucide-arrow-up'
-            label='send'
-            onClick={() => onSend(chainId)}
-            title='send to an exchange or address'
-          />
-          <ActionButton
-            icon='i-lucide-shield'
-            label='shield'
-            accent
-            onClick={() => onShield(chainId)}
-            title='shield into Penumbra'
-          />
-        </div>
+        <button
+          type='button'
+          onClick={onShield}
+          className='flex shrink-0 items-center gap-1 rounded-md bg-blue-500/15 px-2.5 py-1.5 text-xs font-medium text-blue-400 transition-colors hover:bg-blue-500/25'
+          title='shield into Penumbra'
+        >
+          <span className='i-lucide-shield h-3.5 w-3.5' />
+          shield
+        </button>
       </div>
     );
   },
 );
-ChainRow.displayName = 'ChainRow';
+DepositRow.displayName = 'DepositRow';
 
-/**
- * Sub-wallet section. Hidden when no balances and not loading, to avoid
- * showing an empty unshielded panel for users who only ever interact
- * with shielded assets.
- */
-export const CosmosSubwallets = () => {
+/** deposit wallets + a fresh receive address for one transparent IBC chain */
+const ChainDeposits = ({ chainId }: { chainId: CosmosChainId }) => {
   const navigate = useNavigate();
+  const { data } = useCosmosDepositWallets(chainId);
+  const config = COSMOS_CHAINS[chainId];
 
-  // Current receive-address index. Rotated so transparent addresses are never
-  // reused - the whole point of the private off-ramp.
-  const [addressIndex, setAddressIndex] = useState(0);
-  useEffect(() => {
-    void localExtStorage.get('cosmosAddressIndex').then(v => setAddressIndex(v ?? 0));
-  }, []);
-  const rotateAddress = () => {
-    const next = addressIndex + 1;
-    setAddressIndex(next);
-    void localExtStorage.set('cosmosAddressIndex', next);
-  };
-
-  const { data, isLoading, isError } = useAllCosmosBalances(addressIndex);
-
-  const goToSend = (chainId: CosmosChainId) => {
-    // Route the send form to the cosmos chain WITHOUT switching networks - the
-    // user stays on Penumbra; Noble is a burner doorway, not a network.
-    navigate(PopupPath.SEND, { state: { cosmosChain: chainId } });
-  };
-  // Receive rotates to a fresh burner address; Send/Shield open the send flow
-  // (Shield's destination is the user's Penumbra address = shield into the pool).
-  const onSend = (chainId: CosmosChainId) => goToSend(chainId);
-  const onShield = (chainId: CosmosChainId) => goToSend(chainId);
-
-  if (isError) {
+  if (!data?.receive) {
     return null;
   }
+  const { receive, funded } = data;
 
-  // Compute which chains to render. While loading we render all chains
-  // with a dash placeholder so the section doesn't flicker in.
-  const entries = (
-    data
-      ? (Object.entries(data) as [CosmosChainId, NonNullable<typeof data>[CosmosChainId]][])
-      : (Object.keys(COSMOS_CHAINS) as CosmosChainId[]).map(id => [id, undefined] as const)
-    // only chains with a live IBC channel (Noble) - hide the rest until their
-    // channels reopen, so we don't surface an un-shieldable Cosmos Hub row
-  ).filter(([chainId]) => isActiveIbcChain(chainId as NetworkType));
+  // Shield a specific funded burner: route the send to this chain AND index,
+  // staying on Penumbra (no network switch).
+  const shield = (index: number) =>
+    navigate(PopupPath.SEND, { state: { cosmosChain: chainId, cosmosAccountIndex: index } });
 
-  // Hide the section once data arrives if every balance is zero — we
-  // don't want an empty "unshielded" header on Penumbra for users with
-  // no Cosmos holdings.
-  if (data) {
-    const anyNonZero = entries.some(([, e]) => e && e.balance > 0n);
-    if (!anyNonZero) {
-      return null;
-    }
+  return (
+    <div className='flex flex-col gap-2'>
+      {/* fresh, unused burner address to receive on */}
+      <div className='rounded-md border border-border/40 bg-card/40 p-3'>
+        <div className='flex items-center justify-between'>
+          <span className='text-label text-fg-muted lowercase'>receive on {config.name}</span>
+          <span className='rounded bg-red-500/10 px-1.5 py-0.5 text-label leading-none text-red-400 lowercase'>
+            transparent
+          </span>
+        </div>
+        <div className='mt-1 break-all font-mono text-xs' title={receive.address}>
+          {receive.address}
+        </div>
+        <button
+          type='button'
+          onClick={() => void navigator.clipboard.writeText(receive.address)}
+          className='mt-1.5 flex items-center gap-1 text-label text-network-accent transition-colors hover:text-fg-high'
+        >
+          <span className='i-lucide-copy h-3 w-3' /> copy
+        </button>
+        <p className='mt-1 text-label leading-snug text-fg-muted lowercase'>
+          fresh single-use address - public until shielded. a new one appears once this receives
+          funds.
+        </p>
+      </div>
+
+      {/* every funded burner - each independently shieldable */}
+      {funded.map(w => (
+        <DepositRow key={w.index} chainId={chainId} wallet={w} onShield={() => shield(w.index)} />
+      ))}
+    </div>
+  );
+};
+
+export const CosmosSubwallets = () => {
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  // Only hot (mnemonic) wallets can derive/scan burner addresses here.
+  if (selectedKeyInfo?.type !== 'mnemonic') {
+    return null;
+  }
+  const chains = getActiveIbcSubnetworks('penumbra') as CosmosChainId[];
+  if (chains.length === 0) {
+    return null;
   }
 
   return (
     <div className='mt-4'>
       <div className='kicker mb-2'>unshielded · burner</div>
-      <div className='flex flex-col gap-1.5'>
-        {entries.map(([chainId, e]) => (
-          <ChainRow
-            key={chainId}
-            chainId={chainId}
-            address={e?.address ?? ''}
-            formatted={e?.formatted ?? ''}
-            loading={isLoading || !e}
-            onReceive={() => rotateAddress()}
-            onSend={onSend}
-            onShield={onShield}
-          />
+      <div className='flex flex-col gap-2'>
+        {chains.map(chainId => (
+          <ChainDeposits key={chainId} chainId={chainId} />
         ))}
       </div>
     </div>

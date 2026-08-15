@@ -27,7 +27,6 @@ import { assetPatterns } from '@rotko/penumbra-types/assets';
 import { useSkipRoute, useSkipChains } from '../../../hooks/skip-route';
 import { useCosmosSend, useCosmosIbcTransfer } from '../../../hooks/cosmos-signer';
 import { parseAmountToBaseUnits } from '@repo/wallet/networks/cosmos/signer';
-import { localExtStorage } from '@repo/storage-chrome/local';
 import { useCosmosAssets, type CosmosAsset } from '../../../hooks/cosmos-balance';
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
 import {
@@ -291,18 +290,21 @@ function SaveContactPrompt({
 }
 
 /** cosmos send form with skip routing */
-function CosmosSend({ sourceChainId }: { sourceChainId: CosmosChainId }) {
+function CosmosSend({
+  sourceChainId,
+  initialAccountIndex = 0,
+}: {
+  sourceChainId: CosmosChainId;
+  initialAccountIndex?: number;
+}) {
   const sourceChain = COSMOS_CHAINS[sourceChainId];
   const [destChainId, setDestChainId] = useState<string | undefined>();
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
   const [selectedAsset, setSelectedAsset] = useState<CosmosAsset | undefined>();
-  // Sign from the current rotated burner index, so a fresh (never-reused)
-  // address can actually be spent/shielded (else this defaults to index 0).
-  const [accountIndex, setAccountIndex] = useState(0);
-  useEffect(() => {
-    void localExtStorage.get('cosmosAddressIndex').then(v => setAccountIndex(v ?? 0));
-  }, []);
+  // Sign from the burner index the caller chose (which funded address to spend),
+  // so a rotated/never-reused address is actually spendable. Default 0.
+  const [accountIndex] = useState(initialAccountIndex);
   const [txStatus, setTxStatus] = useState<
     'idle' | 'confirm' | 'signing' | 'broadcasting' | 'success' | 'error'
   >('idle');
@@ -562,28 +564,16 @@ function CosmosSend({ sourceChainId }: { sourceChainId: CosmosChainId }) {
   return (
     <div className='flex flex-col gap-4'>
       {PasswordModal}
-      {/* account selector */}
-      <div>
-        <label className='mb-1 block text-xs text-fg-muted'>account</label>
-        <div className='flex items-center gap-2'>
-          <select
-            value={accountIndex}
-            onChange={e => setAccountIndex(parseInt(e.target.value, 10))}
-            className='flex-1 rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg transition-colors focus:border-penumbra-purple focus:outline-none'
-          >
-            {[0, 1, 2, 3, 4].map(idx => (
-              <option key={idx} value={idx}>
-                account #{idx}
-              </option>
-            ))}
-          </select>
-          {assetsData?.address && (
-            <span className='text-xs text-fg-muted font-mono'>
-              {assetsData.address.slice(0, 10)}...{assetsData.address.slice(-4)}
-            </span>
-          )}
+      {/* which burner address is being spent (fixed by the caller - not a
+          picker; the user chose it by shielding a specific funded address) */}
+      {assetsData?.address && (
+        <div>
+          <label className='mb-1 block text-xs text-fg-muted'>from</label>
+          <span className='block rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-sm text-fg-muted'>
+            {assetsData.address.slice(0, 12)}…{assetsData.address.slice(-6)}
+          </span>
         </div>
-      </div>
+      )}
 
       {/* recipient */}
       <div>
@@ -1639,6 +1629,8 @@ interface SendLocationState {
    * on Penumbra; this just routes the send form to the transparent chain.
    */
   cosmosChain?: CosmosChainId;
+  /** which burner index (BIP44 address_index) to spend from. Default 0. */
+  cosmosAccountIndex?: number;
 }
 
 export function SendPage() {
@@ -1751,7 +1743,10 @@ export function SendPage() {
           <PenumbraSend onSuccess={inDedicatedWindow ? () => window.close() : undefined} />
         ) : isCosmos ? (
           isActiveIbcChain((cosmosChain ?? activeNetwork) as NetworkType) ? (
-            <CosmosSend sourceChainId={(cosmosChain ?? activeNetwork) as CosmosChainId} />
+            <CosmosSend
+              sourceChainId={(cosmosChain ?? activeNetwork) as CosmosChainId}
+              initialAccountIndex={locationState?.cosmosAccountIndex ?? 0}
+            />
           ) : (
             // No live IBC channel to this chain right now (channels close on
             // network upgrades and reopen later), so deposit/send is unavailable.

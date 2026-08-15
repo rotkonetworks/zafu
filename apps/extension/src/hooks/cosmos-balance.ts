@@ -13,6 +13,7 @@ import {
   createSigningClient,
   deriveAllChainAddresses,
   deriveChainAddress,
+  deriveCosmosWallet,
 } from '@repo/wallet/networks/cosmos/signer';
 import { getBalance, getAllBalances } from '@repo/wallet/networks/cosmos/client';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
@@ -119,6 +120,68 @@ export const useAllCosmosBalances = (accountIndex = 0) => {
     structuralSharing: false, // balances contain bigint — not JSON-serializable
     staleTime: 30_000,
     refetchInterval: 60_000,
+  });
+};
+
+export interface DepositWallet {
+  index: number;
+  address: string;
+  balance: bigint;
+  formatted: string;
+}
+
+const DEPOSIT_SCAN_GAP = 8;
+
+/**
+ * Scan burner deposit addresses (indices 0..gap) for one chain. Returns the
+ * FUNDED ones (your deposit wallets, each independently shieldable) plus the
+ * first UNUSED index (the fresh address to receive on).
+ *
+ * Stateless on purpose: the receive pointer and the funded set are derived from
+ * on-chain balances, not a stored counter. That is what makes it safe - a
+ * counter that advances past a funded address (which is what shipped earlier)
+ * strands funds; deriving from balances can never lose sight of money.
+ */
+export const useCosmosDepositWallets = (chainId: CosmosChainId) => {
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  const { getMnemonic } = useStore(keyRingSelector);
+
+  return useQuery({
+    queryKey: ['cosmosDepositWallets', chainId, selectedKeyInfo?.id],
+    enabled: !!selectedKeyInfo && selectedKeyInfo.type === 'mnemonic',
+    structuralSharing: false, // balances are bigint
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+    queryFn: async () => {
+      if (!selectedKeyInfo || selectedKeyInfo.type !== 'mnemonic') {
+        return null;
+      }
+      const mnemonic = await getMnemonic(selectedKeyInfo.id);
+      const config = COSMOS_CHAINS[chainId];
+
+      const scan = await Promise.all(
+        Array.from({ length: DEPOSIT_SCAN_GAP + 1 }, (_, i) => i).map(async index => {
+          const { address: base } = await deriveCosmosWallet(mnemonic, index);
+          const address = deriveChainAddress(base, chainId);
+          let amount = 0n;
+          try {
+            amount = (await getBalance(chainId, address)).amount;
+          } catch {
+            /* unreachable RPC this pass -> treat as 0, retried on refetch */
+          }
+          return {
+            index,
+            address,
+            balance: amount,
+            formatted: formatBalance(amount, config.decimals, config.symbol),
+          } as DepositWallet;
+        }),
+      );
+
+      const funded = scan.filter(w => w.balance > 0n);
+      const receive = scan.find(w => w.balance === 0n) ?? scan[scan.length - 1];
+      return { funded, receive };
+    },
   });
 };
 
