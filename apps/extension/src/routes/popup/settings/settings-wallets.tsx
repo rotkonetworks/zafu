@@ -727,9 +727,10 @@ const VaultRow = ({
       {hasZcash && (
         <div className='mt-2 rounded-md border border-border-soft/70 px-2.5 py-2'>
           <div className='flex flex-wrap items-center gap-2'>
-            <span className='text-label px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-400'>
-              zcash
-            </span>
+            <span
+              className='i-ph-calendar-blank size-3.5 text-fg-muted shrink-0'
+              title='when this wallet was first used - scanning starts here'
+            />
             <span className='text-label text-fg-muted whitespace-nowrap'>first used</span>
             <input
               type='date'
@@ -742,23 +743,24 @@ const VaultRow = ({
             <button
               type='button'
               onClick={() => setShowAdvanced(v => !v)}
+              title='set the start block directly'
               className='ml-auto text-label text-fg-dim hover:text-fg-muted transition-colors'
             >
-              advanced
               <span
                 className={cn(
-                  'i-ph-caret-down ml-0.5 size-3 transition-transform',
-                  showAdvanced && 'rotate-180',
+                  'i-ph-sliders-horizontal size-3.5 transition-transform',
+                  showAdvanced && 'text-fg-muted',
                 )}
               />
             </button>
           </div>
 
-          <p className='text-label text-fg-dim mt-1'>
-            {birthdayValid
-              ? 'scans the orchard + ironwood shielded pools from here.'
-              : 'not set — syncs from near the chain tip. set this if the wallet is older.'}
-          </p>
+          {!birthdayValid && (
+            <p className='text-label text-hanko mt-1 flex items-center gap-1'>
+              <span className='i-ph-warning size-3.5 shrink-0' />
+              not set — syncs from near the tip. set this if the wallet is older.
+            </p>
+          )}
 
           {showAdvanced && (
             <div className='mt-2 flex flex-wrap items-center gap-2 border-t border-border-soft/70 pt-2'>
@@ -796,15 +798,12 @@ const VaultRow = ({
       {vault.type === 'zigner-zafu' && hasZcash && (
         <button
           onClick={() => navigate(PopupPath.NOTE_SYNC)}
-          className='flex items-start gap-2 mt-2 w-full rounded-md border border-border-soft px-3 py-2 text-left hover:border-fg-muted'
+          title='scan it on zigner to verify your notes - re-sync after you send'
+          className='flex items-center gap-2 mt-2 w-full rounded-md border border-border-soft px-3 py-2 text-left hover:border-fg-muted'
         >
-          <span className='i-ph-qr-code size-4 text-fg-high shrink-0 mt-0.5' />
-          <span className='flex flex-col'>
-            <span className='text-xs font-medium text-fg-high'>sync balance to zigner</span>
-            <span className='text-label text-fg-muted'>
-              scan it on zigner to verify your notes - re-sync after you send
-            </span>
-          </span>
+          <span className='i-ph-qr-code size-4 text-fg-high shrink-0' />
+          <span className='text-xs font-medium text-fg-high'>sync to zigner</span>
+          <span className='i-ph-caret-right size-3.5 text-fg-dim ml-auto shrink-0' />
         </button>
       )}
 

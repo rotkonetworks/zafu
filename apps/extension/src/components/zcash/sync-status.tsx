@@ -20,6 +20,10 @@ export interface SyncStage {
   state: 'done' | 'active' | 'pending';
   /** short suffix shown on the active stage, e.g. "33%" or "12 blocks" */
   detail?: string;
+  /** unocss icon class; the row is scanned visually before it is read */
+  icon?: string;
+  /** hover text saying what this stage actually does, in plain words */
+  hint?: string;
 }
 
 export interface SyncStatusProps {
@@ -152,8 +156,18 @@ export const SyncStatus = ({
     : connecting
       ? 'connecting…'
       : synced
-        ? `synced · block ${currentHeight.toLocaleString()}`
+        ? `block ${currentHeight.toLocaleString()}`
         : `syncing ${Math.floor(percent)}%${eta ? ` · ${eta}` : ''}`;
+
+  // What the ring means, for hover. The arc is the state indicator now, so it
+  // has to be able to explain itself.
+  const stateHint = error
+    ? 'sync failed — the node may be down or unreachable'
+    : connecting
+      ? 'connecting to the node'
+      : synced
+        ? 'synced — caught up to the chain tip'
+        : `syncing — ${Math.floor(percent)}% of the way to the tip`;
 
   return (
     <div>
@@ -162,7 +176,7 @@ export const SyncStatus = ({
         type='button'
         onClick={() => setOpen(v => !v)}
         className='group/sync mt-1.5 flex items-center gap-2 text-label tabular transition-colors'
-        title={open ? 'hide sync detail' : 'sync detail'}
+        title={`${stateHint} · ${open ? 'hide detail' : 'show detail'}`}
       >
         <EnsoArc percent={percent} synced={synced} dim={connecting || !!error} />
         <span
@@ -264,12 +278,15 @@ export const SyncStatus = ({
                 <span key={st.key} className='flex items-center gap-2'>
                   {i > 0 && <span className='text-fg-dim'>·</span>}
                   <span
+                    title={st.hint}
                     className={cn(
+                      'flex items-center gap-1',
                       st.state === 'done' && 'text-fg-muted',
                       st.state === 'active' && 'text-zigner-gold',
                       st.state === 'pending' && 'text-fg-dim',
                     )}
                   >
+                    {st.icon && <span className={cn(st.icon, 'size-3.5 shrink-0')} />}
                     {st.label}
                     {st.state === 'done' && ' ✓'}
                     {/* Show the detail on pending stages too, not just active

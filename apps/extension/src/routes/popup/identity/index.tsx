@@ -516,18 +516,19 @@ export const IdentityPage = () => {
                   <span className='i-ph-fingerprint size-3.5 text-network-accent' />
                   zafu id
                 </span>
-                <span
-                  className={`flex items-center gap-1 text-label font-mono px-1.5 py-0.5 border ${
-                    pro
-                      ? 'border-network-accent/35 bg-network-accent/10 text-network-accent-light'
-                      : 'border-border-soft bg-elev-2 text-fg-muted'
-                  }`}
-                  title={pro ? 'zafu pro' : 'free plan'}
-                >
-                  {pro && <span className='i-ph-crown size-3' />}
-                  {plan}
-                  {pro && days > 0 ? ` · ${days}d` : ''}
-                </span>
+                {/* Only pro gets a badge. "free" is the default state, so
+                    labelling it says nothing a user did not already know and
+                    spends a slot on the card saying it. */}
+                {pro && (
+                  <span
+                    className='flex items-center gap-1 text-label font-mono px-1.5 py-0.5 border border-network-accent/35 bg-network-accent/10 text-network-accent-light'
+                    title='zafu pro'
+                  >
+                    <span className='i-ph-crown size-3' />
+                    {plan}
+                    {days > 0 ? ` · ${days}d` : ''}
+                  </span>
+                )}
               </div>
 
               {/* card body: fingerprint chip + short zid */}
