@@ -861,7 +861,7 @@ export const FrostApprove = () => {
 
       {phase === 'running' && (
         <div className='flex flex-col items-center gap-3 flex-1 justify-center'>
-          <span className='i-lucide-loader-2 size-8 animate-spin text-zigner-gold' />
+          <span className='i-ph-circle-notch size-8 animate-spin text-zigner-gold' />
           <p className='text-data text-fg text-center lowercase'>{status}</p>
         </div>
       )}
@@ -869,7 +869,7 @@ export const FrostApprove = () => {
       {phase === 'review' && reviewOutputs && (
         <div className='flex flex-col gap-3 flex-1'>
           <div className='flex items-center gap-2 rounded-md border border-green-500/40 bg-green-500/10 p-2.5'>
-            <span className='i-lucide-shield-check size-5 shrink-0 text-green-400' />
+            <span className='i-ph-shield-check size-5 shrink-0 text-green-400' />
             <div className='leading-tight'>
               <p className='text-xs text-green-300'>verified on-device</p>
               <p className='text-[10px] text-fg-muted'>
@@ -911,7 +911,7 @@ export const FrostApprove = () => {
 
           <div className='rounded-md border border-border-soft bg-elev-1 p-2.5 text-[10px] space-y-1'>
             <div className='flex items-center gap-1.5 text-fg-muted'>
-              <span className='i-lucide-check size-3 shrink-0 text-green-400' />
+              <span className='i-ph-check size-3 shrink-0 text-green-400' />
               <span>sighash your share signs matches the PCZT</span>
             </div>
             <p className='tabular break-all text-fg-dim pl-[18px]'>
@@ -932,7 +932,7 @@ export const FrostApprove = () => {
 
       {phase === 'complete' && (
         <div className='flex flex-col items-center gap-3 flex-1 justify-center'>
-          <span className='i-lucide-check-circle size-10 text-green-400' />
+          <span className='i-ph-check-circle size-10 text-green-400' />
           <p className='text-data text-fg-high lowercase'>done</p>
           {typeof result?.['address'] === 'string' && (
             <p className='text-xs tabular text-fg-muted break-all px-4'>
@@ -947,7 +947,7 @@ export const FrostApprove = () => {
 
       {phase === 'error' && (
         <div className='flex flex-col items-center gap-3 flex-1 justify-center'>
-          <span className='i-lucide-x-circle size-10 text-red-400' />
+          <span className='i-ph-x-circle size-10 text-red-400' />
           <p className='text-data text-red-400 text-center'>{error}</p>
           <Button variant='secondary' onClick={() => window.close()}>
             close

@@ -38,7 +38,7 @@ export function RoomCodeChip({ code }: { code: string }) {
         className='p-1 text-fg-muted hover:text-fg-high transition-colors'
         title='copy room code'
       >
-        <span className='i-lucide-copy size-3.5' />
+        <span className='i-ph-copy size-3.5' />
       </button>
     </div>
   );
@@ -49,7 +49,7 @@ export function DontQuitIcon() {
   return (
     <div className='relative group ml-auto'>
       <span
-        className='i-lucide-alert-triangle size-4 text-amber-400 cursor-help'
+        className='i-ph-warning size-4 text-amber-400 cursor-help'
         aria-label="don't close this page - closing cancels signing"
       />
       <div className='absolute right-full top-1/2 -translate-y-1/2 mr-2 hidden group-hover:block w-48 rounded bg-elev-2 px-2 py-1.5 text-label leading-snug text-fg shadow-lg ring-1 ring-amber-500/30 z-20 pointer-events-none'>

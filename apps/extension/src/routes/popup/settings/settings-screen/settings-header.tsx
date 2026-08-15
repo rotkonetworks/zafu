@@ -22,7 +22,7 @@ export const SettingsHeader = ({
         onClick={onBack ?? goBack}
         className='text-fg-muted transition-colors hover:text-fg-high'
       >
-        <span className='i-lucide-arrow-left h-5 w-5' />
+        <span className='i-ph-arrow-left h-5 w-5' />
       </button>
       <h1 className='text-title text-fg-high lowercase tracking-[-0.01em]'>{title}</h1>
     </div>

@@ -30,7 +30,7 @@ export const FrontendLink = () => {
   return (
     <a href={href} target='_blank' rel='noreferrer'>
       <Button className='flex w-full items-center gap-2' variant='gradient' onClick={onClick}>
-        Manage portfolio {href && <span className='i-lucide-external-link h-4 w-4' />}
+        Manage portfolio {href && <span className='i-ph-arrow-square-out h-4 w-4' />}
       </Button>
     </a>
   );

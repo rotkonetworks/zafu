@@ -29,7 +29,7 @@ const AccessNote = ({ kind }: { kind: 'airgap' | 'watch-only' }) => (
     )}
   >
     <p className='flex items-center gap-1.5 text-sm font-medium lowercase'>
-      <span className={cn(kind === 'airgap' ? 'i-lucide-shield' : 'i-lucide-eye', 'h-3.5 w-3.5')} />
+      <span className={cn(kind === 'airgap' ? 'i-ph-shield' : 'i-ph-eye', 'h-3.5 w-3.5')} />
       {kind === 'airgap' ? 'airgap signer' : 'watch-only account'}
     </p>
     <p className='text-xs text-fg-muted lowercase'>
@@ -323,7 +323,7 @@ export const ImportZigner = () => {
                   setScanState('scanning');
                 }}
               >
-                <span className='i-lucide-scan-line mr-2 h-4 w-4' />
+                <span className='i-ph-scan mr-2 h-4 w-4' />
                 scan zigner QR
               </Button>
 
@@ -335,7 +335,7 @@ export const ImportZigner = () => {
                   setScanState('scanning');
                 }}
               >
-                <span className='i-lucide-scan-line mr-2 h-4 w-4' />
+                <span className='i-ph-scan mr-2 h-4 w-4' />
                 scan keystone QR (zcash)
               </Button>
 
@@ -521,7 +521,7 @@ export const ImportZigner = () => {
           {/* importing */}
           {scanState === 'importing' && (
             <div className='flex flex-col items-center gap-3 py-8 text-fg-muted'>
-              <span className='i-lucide-loader-circle h-5 w-5 animate-spin' />
+              <span className='i-ph-circle-notch h-5 w-5 animate-spin' />
               <span className='text-sm lowercase'>importing wallet...</span>
             </div>
           )}

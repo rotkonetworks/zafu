@@ -45,9 +45,9 @@ export const PasswordInput = ({
       <div className='relative w-full'>
         <div className='absolute inset-y-0 right-4 flex cursor-pointer items-center'>
           {reveal ? (
-            <span className='i-lucide-eye' onClick={() => setReveal(false)} />
+            <span className='i-ph-eye' onClick={() => setReveal(false)} />
           ) : (
-            <span className='i-lucide-eye-off text-fg-muted' onClick={() => setReveal(true)} />
+            <span className='i-ph-eye-slash text-fg-muted' onClick={() => setReveal(true)} />
           )}
         </div>
         <Input

@@ -78,7 +78,7 @@ export const ImportModal = ({ open, onClose, onImported }: Props) => {
               Select an encrypted backup file (.json) you created earlier.
             </p>
             <label className='mt-3 flex cursor-pointer flex-col items-center gap-2 rounded-lg border border-dashed border-border-soft bg-elev-2 px-4 py-6 hover:bg-elev-3 transition-colors'>
-              <span className='i-lucide-file-up size-6 text-fg-muted' />
+              <span className='i-ph-file-arrow-up size-6 text-fg-muted' />
               <span className='text-xs text-fg-muted'>tap to choose backup file</span>
               <input
                 type='file'

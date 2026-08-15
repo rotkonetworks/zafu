@@ -277,7 +277,7 @@ const MultisigJoinZafu = () => {
 
           {maxSigners > 0 && (
             <div className='flex items-center gap-2 rounded-md bg-elev-2 px-3 py-1.5'>
-              <span className='i-lucide-users size-3.5 text-fg-muted' />
+              <span className='i-ph-users size-3.5 text-fg-muted' />
               <span className='text-xs'>
                 <span className='font-medium text-fg'>{participantCount}</span>
                 <span className='text-fg-muted'> / {maxSigners} joined</span>
@@ -286,7 +286,7 @@ const MultisigJoinZafu = () => {
           )}
 
           <div className='flex items-center gap-2 text-xs text-fg-muted'>
-            <span className='i-lucide-loader-2 size-3.5 animate-spin' />
+            <span className='i-ph-circle-notch size-3.5 animate-spin' />
             {progress || 'connecting...'}
             <span className='tabular-nums text-fg-dim'>{countdown}s</span>
           </div>
@@ -751,7 +751,7 @@ const MultisigJoinZigner = () => {
       {step === 'waiting-host-r1' && (
         <div className='flex flex-col items-center gap-3'>
           <p className='text-xs text-fg-muted'>waiting for the wallet creator to start...</p>
-          <span className='i-lucide-loader-2 size-4 animate-spin text-fg-muted' />
+          <span className='i-ph-circle-notch size-4 animate-spin text-fg-muted' />
           {participantCount > 0 && (
             <p className='text-label text-fg-muted'>{participantCount} signer(s) joined</p>
           )}
@@ -832,7 +832,7 @@ const MultisigJoinZigner = () => {
       {step === 'fvk-echo' && (
         <div className='flex flex-col items-center gap-3'>
           <p className='text-xs text-fg-muted'>double-checking everyone sees the same wallet...</p>
-          <span className='i-lucide-loader-2 size-4 animate-spin text-fg-muted' />
+          <span className='i-ph-circle-notch size-4 animate-spin text-fg-muted' />
           <p className='text-label text-fg-muted tabular-nums'>{countdown}s</p>
         </div>
       )}

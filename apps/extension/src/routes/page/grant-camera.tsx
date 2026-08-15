@@ -59,10 +59,10 @@ export const GrantCamera = () => {
               className={cn(
                 'size-8',
                 state === 'granted'
-                  ? 'i-lucide-check-circle text-green-400'
+                  ? 'i-ph-check-circle text-green-400'
                   : state === 'denied'
-                    ? 'i-lucide-x text-red-400'
-                    : 'i-lucide-camera text-zigner-gold',
+                    ? 'i-ph-x text-red-400'
+                    : 'i-ph-camera text-zigner-gold',
               )}
             />
           </div>
@@ -79,7 +79,7 @@ export const GrantCamera = () => {
                 className='w-full'
                 onClick={() => void handleGrantAccess()}
               >
-                <span className='i-lucide-camera mr-2 size-4' />
+                <span className='i-ph-camera mr-2 size-4' />
                 grant camera access
               </Button>
             )}

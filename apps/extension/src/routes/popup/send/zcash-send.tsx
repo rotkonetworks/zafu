@@ -1180,7 +1180,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 onClick={onClose}
                 className='text-fg-muted hover:text-fg-high transition-colors'
               >
-                <span className='i-lucide-arrow-left h-5 w-5' />
+                <span className='i-ph-arrow-left h-5 w-5' />
               </button>
               <h2 className='text-lg font-medium'>send zcash</h2>
             </div>
@@ -1202,7 +1202,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                     className='shrink-0 flex h-[42px] w-[42px] items-center justify-center rounded-lg border border-border-soft bg-input text-fg-muted hover:text-fg-high transition-colors'
                     title='scan QR code'
                   >
-                    <span className='i-lucide-scan h-4 w-4' />
+                    <span className='i-ph-scan h-4 w-4' />
                   </button>
                 </div>
                 {showQrScanner && (
@@ -1331,7 +1331,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 onClick={handleBack}
                 className='text-fg-muted hover:text-fg-high transition-colors'
               >
-                <span className='i-lucide-arrow-left w-5 h-5' />
+                <span className='i-ph-arrow-left w-5 h-5' />
               </button>
               <h2 className='text-lg font-medium'>review transaction</h2>
             </div>
@@ -1432,7 +1432,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 onClick={handleBack}
                 className='text-fg-muted hover:text-fg-high transition-colors'
               >
-                <span className='i-lucide-arrow-left w-4 h-4' />
+                <span className='i-ph-arrow-left w-4 h-4' />
               </button>
               <span className='flex-1 text-sm font-medium'>sign with zigner</span>
               <div className='flex items-center gap-1.5'>
@@ -1527,7 +1527,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 onClick={() => setStep('sign')}
                 className='text-fg-muted hover:text-fg-high transition-colors'
               >
-                <span className='i-lucide-arrow-left w-4 h-4' />
+                <span className='i-ph-arrow-left w-4 h-4' />
               </button>
               <span className='flex-1 text-sm font-medium'>scan signature</span>
               <div className='flex items-center gap-1.5'>
@@ -1578,12 +1578,12 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 onClick={handleBack}
                 className='text-fg-muted hover:text-fg-high transition-colors'
               >
-                <span className='i-lucide-arrow-left w-5 h-5' />
+                <span className='i-ph-arrow-left w-5 h-5' />
               </button>
               <h2 className='text-lg font-medium'>confirm on your Ledger</h2>
             </div>
             <div className='w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center'>
-              <span className='i-lucide-usb w-8 h-8 text-zigner-gold' />
+              <span className='i-ph-usb w-8 h-8 text-zigner-gold' />
             </div>
             <p className='text-sm text-fg-muted text-center'>
               review the recipient, amount, and fee on your Ledger device and approve the orchard
@@ -1643,7 +1643,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
             {showSavePrompt && recipient && !findByAddress(recipient) && !showContactModal && (
               <div className='w-full rounded-lg border border-border-soft bg-elev-1 p-3'>
                 <div className='flex items-center gap-2 mb-2'>
-                  <span className='i-lucide-user h-4 w-4 text-zigner-gold' />
+                  <span className='i-ph-user h-4 w-4 text-zigner-gold' />
                   <p className='text-sm'>save to contacts?</p>
                 </div>
                 <div className='flex gap-2'>
@@ -1693,7 +1693,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         return (
           <div className='flex flex-col items-center gap-6 p-8'>
             <div className='w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center'>
-              <span className='i-lucide-users w-8 h-8 text-zigner-gold' />
+              <span className='i-ph-users w-8 h-8 text-zigner-gold' />
             </div>
             <h2 className='text-lg font-medium'>multisig signing</h2>
 
@@ -1751,7 +1751,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         return (
           <div className='flex flex-col items-center gap-4 p-8'>
             <div className='w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center'>
-              <span className='i-lucide-x w-8 h-8 text-red-400' />
+              <span className='i-ph-x w-8 h-8 text-red-400' />
             </div>
             <h2 className='text-lg font-medium'>transaction failed</h2>
             <p className='text-sm text-red-400 text-center'>

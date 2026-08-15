@@ -299,7 +299,7 @@ const MultisigCreateZafu = () => {
               onClick={() => void navigator.clipboard.writeText(roomCode)}
               className='p-1 text-fg-muted hover:text-fg-high transition-colors'
             >
-              <span className='i-lucide-copy size-4' />
+              <span className='i-ph-copy size-4' />
             </button>
           </div>
 
@@ -313,7 +313,7 @@ const MultisigCreateZafu = () => {
           </div>
 
           <div className='flex items-center gap-2 rounded-md bg-elev-2 px-3 py-1.5'>
-            <span className='i-lucide-users size-3.5 text-fg-muted' />
+            <span className='i-ph-users size-3.5 text-fg-muted' />
             <span className='text-xs'>
               <span className='font-medium text-fg'>{participantCount}</span>
               <span className='text-fg-muted'> / {maxSigners} joined</span>
@@ -321,7 +321,7 @@ const MultisigCreateZafu = () => {
           </div>
 
           <div className='flex items-center gap-2 text-xs text-fg-muted'>
-            <span className='i-lucide-loader-2 size-3.5 animate-spin' />
+            <span className='i-ph-circle-notch size-3.5 animate-spin' />
             waiting for {maxSigners - participantCount} more signer(s)...
             <span className='tabular-nums text-fg-dim'>{countdown}s</span>
           </div>
@@ -331,7 +331,7 @@ const MultisigCreateZafu = () => {
       {currentRound > 0 && (
         <div className='flex flex-col items-center gap-4'>
           <div className='flex items-center gap-2 text-xs text-fg-muted'>
-            <span className='i-lucide-loader-2 size-3.5 animate-spin' />
+            <span className='i-ph-circle-notch size-3.5 animate-spin' />
             {currentRound < 3 ? 'setting up shared keys...' : 'finishing up...'}
             <span className='tabular-nums text-fg-dim'>{countdown}s</span>
           </div>
@@ -359,7 +359,7 @@ const MultisigCreateZafu = () => {
           </div>
 
           <div className='flex items-center gap-2 rounded-md bg-elev-2 px-3 py-1.5'>
-            <span className='i-lucide-users size-3.5 text-fg-muted' />
+            <span className='i-ph-users size-3.5 text-fg-muted' />
             <span className='text-xs'>
               <span className='font-medium text-fg'>{participantCount}</span>
               <span className='text-fg-muted'> / {maxSigners} participants</span>
@@ -373,7 +373,7 @@ const MultisigCreateZafu = () => {
                 onClick={() => void navigator.clipboard.writeText(roomCode)}
                 className='p-1 text-fg-muted hover:text-fg-high transition-colors'
               >
-                <span className='i-lucide-copy size-3.5' />
+                <span className='i-ph-copy size-3.5' />
               </button>
             </div>
           )}
@@ -383,7 +383,7 @@ const MultisigCreateZafu = () => {
       {step === 'fvk-echo' && (
         <div className='flex flex-col items-center gap-3'>
           <div className='flex items-center gap-2 text-xs text-fg-muted'>
-            <span className='i-lucide-loader-2 size-3.5 animate-spin' />
+            <span className='i-ph-circle-notch size-3.5 animate-spin' />
             double-checking everyone sees the same wallet...
             <span className='tabular-nums text-fg-dim'>{countdown}s</span>
           </div>
@@ -849,7 +849,7 @@ const MultisigCreateZigner = () => {
           <p className='text-xs text-fg-muted'>share this code with your co-signers</p>
           <div className='font-mono text-2xl tracking-wider'>{roomCode}</div>
           <div className='flex items-center gap-2 rounded-md bg-elev-2 px-3 py-1.5'>
-            <span className='i-lucide-users size-3.5 text-fg-muted' />
+            <span className='i-ph-users size-3.5 text-fg-muted' />
             <span className='text-xs'>
               <span className='font-medium text-fg'>{participantCount}</span>
               <span className='text-fg-muted'> / {maxSigners} joined</span>
@@ -932,7 +932,7 @@ const MultisigCreateZigner = () => {
       {step === 'fvk-echo' && (
         <div className='flex flex-col items-center gap-3'>
           <p className='text-xs text-fg-muted'>double-checking everyone sees the same wallet...</p>
-          <span className='i-lucide-loader-2 size-4 animate-spin text-fg-muted' />
+          <span className='i-ph-circle-notch size-4 animate-spin text-fg-muted' />
           <p className='text-label text-fg-muted tabular-nums'>{countdown}s</p>
         </div>
       )}

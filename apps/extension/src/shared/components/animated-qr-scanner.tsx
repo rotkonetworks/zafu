@@ -449,7 +449,7 @@ export const AnimatedQrScanner = ({
       {!isScanning && !error && (
         <div className='absolute inset-0 flex items-center justify-center bg-black'>
           <div className='flex flex-col items-center gap-2 text-white'>
-            <span className='i-lucide-camera size-8 animate-pulse' />
+            <span className='i-ph-camera size-8 animate-pulse' />
             <span className='text-sm'>starting camera...</span>
           </div>
         </div>
@@ -459,7 +459,7 @@ export const AnimatedQrScanner = ({
         <div className='absolute inset-0 flex items-center justify-center bg-black p-4'>
           <div className='flex flex-col items-center gap-3 text-center'>
             <div className='rounded-full bg-red-500/20 p-3'>
-              <span className='i-lucide-camera size-6 text-red-400' />
+              <span className='i-ph-camera size-6 text-red-400' />
             </div>
             <p className='text-xs text-red-400'>{error}</p>
             <div className='flex gap-2'>
@@ -509,7 +509,7 @@ export const AnimatedQrScanner = ({
             onClick={handleClose}
             className='p-0.5 text-fg-muted hover:text-fg-high transition-colors'
           >
-            <span className='i-lucide-x h-3.5 w-3.5' />
+            <span className='i-ph-x h-3.5 w-3.5' />
           </button>
         </div>
         <div className='relative aspect-square w-full overflow-hidden rounded-lg border border-yellow-500/40 bg-black'>
@@ -532,7 +532,7 @@ export const AnimatedQrScanner = ({
           onClick={handleClose}
           className='rounded-full p-2 hover:bg-white/10 transition-colors'
         >
-          <span className='i-lucide-x size-6 text-white' />
+          <span className='i-ph-x size-6 text-white' />
         </button>
       </div>
 

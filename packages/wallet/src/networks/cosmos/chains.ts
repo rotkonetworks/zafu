@@ -27,8 +27,15 @@ export interface CosmosChainConfig {
   denom: string;
   /** decimal places */
   decimals: number;
-  /** RPC endpoint */
+  /** RPC endpoint (primary / default) */
   rpcEndpoint: string;
+  /**
+   * Pool of interchangeable RPC endpoints. Burner scans rotate through these so
+   * no single RPC provider sees every one of your deposit addresses together -
+   * ideally each burner is queried from a different endpoint. Falls back to
+   * `rpcEndpoint` when unset.
+   */
+  rpcEndpoints?: string[];
   /** REST/LCD endpoint */
   restEndpoint: string;
   /** gas price in native denom */
@@ -49,6 +56,13 @@ export const COSMOS_CHAINS: Record<CosmosChainId, CosmosChainConfig> = {
     denom: 'uusdc',
     decimals: 6,
     rpcEndpoint: 'https://noble-rpc.polkachu.com',
+    // Interchangeable public Noble RPCs - rotated per burner for privacy.
+    rpcEndpoints: [
+      'https://noble-rpc.polkachu.com',
+      'https://rpc.cosmos.directory/noble',
+      'https://noble-rpc.lavenderfive.com',
+      'https://noble-rpc.publicnode.com',
+    ],
     restEndpoint: 'https://noble-api.polkachu.com',
     gasPrice: '0.1uusdc',
     penumbraChannel: 'channel-89', // noble -> penumbra
@@ -73,6 +87,22 @@ export const COSMOS_CHAINS: Record<CosmosChainId, CosmosChainConfig> = {
 /** get chain config by id */
 export function getCosmosChain(id: CosmosChainId): CosmosChainConfig {
   return COSMOS_CHAINS[id];
+}
+
+/** the RPC pool for a chain (falls back to the single primary endpoint) */
+export function rpcEndpointPool(id: CosmosChainId): string[] {
+  const config = COSMOS_CHAINS[id];
+  return config.rpcEndpoints?.length ? config.rpcEndpoints : [config.rpcEndpoint];
+}
+
+/**
+ * Pick an RPC endpoint for a given burner index, rotating through the pool so
+ * consecutive burners hit different providers. Deterministic per index so the
+ * same burner always maps to the same endpoint within a session.
+ */
+export function rpcEndpointForIndex(id: CosmosChainId, index: number): string {
+  const pool = rpcEndpointPool(id);
+  return pool[index % pool.length] ?? COSMOS_CHAINS[id].rpcEndpoint;
 }
 
 /** get all chain ids */

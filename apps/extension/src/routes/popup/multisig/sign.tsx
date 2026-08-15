@@ -439,7 +439,7 @@ export const MultisigSign = () => {
 
       {step === 'joining' && (
         <div className='flex items-center gap-2 text-xs text-fg-muted'>
-          <span className='i-lucide-loader-2 size-3.5 animate-spin' />
+          <span className='i-ph-circle-notch size-3.5 animate-spin' />
           {progress}
           <span className='tabular-nums text-fg-dim'>{countdown}s</span>
         </div>
@@ -488,13 +488,13 @@ export const MultisigSign = () => {
           {/* verifier verdict */}
           {verdict.kind === 'pending' && (
             <div className='rounded-lg border border-border-soft bg-elev-1 p-2.5 text-label text-fg-muted flex items-center gap-2'>
-              <span className='i-lucide-loader-2 size-3 animate-spin' />
+              <span className='i-ph-circle-notch size-3 animate-spin' />
               verifying tx bytes match host claim…
             </div>
           )}
           {verdict.kind === 'match' && (
             <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-2.5 text-label text-green-400 flex items-start gap-2'>
-              <span className='i-lucide-shield-check size-3.5 mt-0.5 shrink-0' />
+              <span className='i-ph-shield-check size-3.5 mt-0.5 shrink-0' />
               <span>
                 recipient, amount and sighash verified against the transaction bytes
                 {verdict.changeZat > 0n && (
@@ -511,7 +511,7 @@ export const MultisigSign = () => {
           {verdict.kind === 'refuse' && (
             <div className='rounded-lg border border-red-500/60 bg-red-500/10 p-3 flex flex-col gap-2'>
               <div className='flex items-center gap-2 text-body font-medium text-red-400'>
-                <span className='i-lucide-shield-x size-4' />
+                <span className='i-ph-shield-warning size-4' />
                 cannot verify - signing refused
               </div>
               <ul className='text-label text-red-300/90 list-disc pl-4 space-y-0.5'>
@@ -524,7 +524,7 @@ export const MultisigSign = () => {
           {verdict.kind === 'mismatch' && (
             <div className='rounded-lg border border-red-500/60 bg-red-500/10 p-3 flex flex-col gap-2'>
               <div className='flex items-center gap-2 text-body font-medium text-red-400'>
-                <span className='i-lucide-shield-x size-4' />
+                <span className='i-ph-shield-warning size-4' />
                 mismatch - host claim disagrees with tx bytes
               </div>
               <ul className='text-label text-red-300/90 list-disc pl-4 space-y-0.5'>
@@ -594,7 +594,7 @@ export const MultisigSign = () => {
             </div>
           )}
           <div className='flex items-center gap-2 text-xs text-fg-muted'>
-            <span className='i-lucide-loader-2 size-3.5 animate-spin' />
+            <span className='i-ph-circle-notch size-3.5 animate-spin' />
             {progress}
             <span className='tabular-nums text-fg-dim'>{countdown}s</span>
           </div>

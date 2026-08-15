@@ -12,6 +12,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { Sensitive } from '../../../components/sensitive';
 import { ToggleSwitch } from '../../../components/toggle-switch';
 import { useBackNav } from '../../../utils/navigate';
+import { useLocation } from 'react-router-dom';
 import { PopupPath } from '../paths';
 import { useStore } from '../../../state';
 import {
@@ -50,9 +51,9 @@ function CopyButton({ text, className }: { text: string; className?: string }) {
       className={className ?? 'shrink-0 text-fg-muted transition-colors hover:text-fg-high'}
     >
       {copied ? (
-        <span className='i-lucide-check h-4 w-4' />
+        <span className='i-ph-check h-4 w-4' />
       ) : (
-        <span className='i-lucide-copy h-4 w-4' />
+        <span className='i-ph-copy h-4 w-4' />
       )}
     </button>
   );
@@ -119,15 +120,34 @@ function IbcDepositSection({
   selectedKeyInfo,
   keyRing,
   penumbraWallet,
+  accountIndex = 0,
+  preselectCosmosChain,
 }: {
   selectedKeyInfo: { type: string; id: string } | undefined;
   keyRing: { getMnemonic: (id: string) => Promise<string> };
   penumbraWallet: { fullViewingKey?: string } | undefined;
+  /** burner index to shield from (the "shield" button on a funded burner) */
+  accountIndex?: number;
+  /** cosmos chain to preselect (e.g. 'noble') */
+  preselectCosmosChain?: CosmosChainId;
 }) {
   const penumbraAccount = useStore(selectPenumbraAccount);
   const { data: registryChains = [], isLoading: chainsLoading } = useIbcChains();
-  const ibcChains = mergeIbcChains([...registryChains]);
+  // Cosmos Hub deposits aren't working right now (no live channel), so don't
+  // offer it as a source - only Noble is currently depositable.
+  const ibcChains = mergeIbcChains([...registryChains]).filter(c => c.chainId !== 'cosmoshub-4');
   const [selectedIbcChain, setSelectedIbcChain] = useState<IbcChain | undefined>();
+
+  // preselect the chain the burner lives on so the user lands ready to shield
+  useEffect(() => {
+    if (selectedIbcChain || !preselectCosmosChain) {
+      return;
+    }
+    const match = ibcChains.find(c => ibcChainToCosmosId(c) === preselectCosmosChain);
+    if (match) {
+      setSelectedIbcChain(match);
+    }
+  }, [preselectCosmosChain, ibcChains, selectedIbcChain]);
   const [showChainDropdown, setShowChainDropdown] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<CosmosAsset | undefined>();
   const [showAssetDropdown, setShowAssetDropdown] = useState(false);
@@ -144,7 +164,7 @@ function IbcDepositSection({
   // fetch balances on selected chain
   const { data: assetsData, isLoading: assetsLoading } = useCosmosAssets(
     cosmosChainId ?? 'noble',
-    0,
+    accountIndex,
   );
   const chainBtnRef = useRef<HTMLButtonElement>(null);
   const assetBtnRef = useRef<HTMLButtonElement>(null);
@@ -227,6 +247,8 @@ function IbcDepositSection({
         toAddress: depositAddress,
         amount,
         denom: selectedAsset.denom,
+        // shield from the specific burner index, not account 0
+        accountIndex,
       });
 
       if (result.type === 'zigner') {
@@ -258,6 +280,7 @@ function IbcDepositSection({
     cosmosChainId,
     depositAddress,
     amount,
+    accountIndex,
     cosmosIbc,
     requestAuth,
   ]);
@@ -289,7 +312,7 @@ function IbcDepositSection({
             {selectedIbcChain?.displayName ??
               (chainsLoading ? 'loading...' : 'select source chain')}
           </span>
-          <span className='i-lucide-chevron-down h-4 w-4 text-fg-muted' />
+          <span className='i-ph-caret-down h-4 w-4 text-fg-muted' />
         </button>
         {showChainDropdown &&
           chainBtnRef.current &&
@@ -391,7 +414,7 @@ function IbcDepositSection({
                   className='flex w-full items-center justify-between rounded-lg border border-border-soft bg-input px-3 py-2.5 text-xs disabled:opacity-50'
                 >
                   <span>{selectedAsset?.symbol ?? 'select asset'}</span>
-                  <span className='i-lucide-chevron-down h-3 w-3 text-fg-muted' />
+                  <span className='i-ph-caret-down h-3 w-3 text-fg-muted' />
                 </button>
                 {showAssetDropdown &&
                   assetsData?.assets &&
@@ -779,7 +802,7 @@ function ReceiveTab({
             className='inline-flex items-center gap-1 rounded-sm border border-zigner-gold/30 bg-zigner-gold/10 px-2 py-0.5 text-label text-zigner-gold lowercase tracking-[0.05em]'
             title='shielded — senders cannot see your other transactions'
           >
-            <span className='i-lucide-shield-check h-2.5 w-2.5' />
+            <span className='i-ph-shield-check h-2.5 w-2.5' />
             shielded
           </span>
         )}
@@ -788,7 +811,7 @@ function ReceiveTab({
             className='inline-flex items-center gap-1 rounded-sm border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-label text-red-400 lowercase tracking-[0.05em]'
             title='transparent — balance and history publicly visible'
           >
-            <span className='i-lucide-eye h-2.5 w-2.5' />
+            <span className='i-ph-eye h-2.5 w-2.5' />
             public
           </span>
         )}
@@ -829,7 +852,7 @@ function ReceiveTab({
           >
             <span>advanced</span>
             <span
-              className={`i-lucide-chevron-down h-4 w-4 transition-transform ${
+              className={`i-ph-caret-down h-4 w-4 transition-transform ${
                 showAdvanced ? 'rotate-180' : ''
               }`}
             />
@@ -846,7 +869,7 @@ function ReceiveTab({
                         onClick={() => setShowTooltip(prev => !prev)}
                         className='text-fg-muted transition-colors hover:text-fg-high'
                       >
-                        <span className='i-lucide-info h-3.5 w-3.5' />
+                        <span className='i-ph-info h-3.5 w-3.5' />
                       </button>
                       {showTooltip && (
                         <div className='absolute left-1/2 top-6 z-50 w-72 -translate-x-1/2 rounded-lg border border-border-soft bg-canvas p-3 text-xs text-fg-muted shadow-lg lowercase'>
@@ -874,7 +897,7 @@ function ReceiveTab({
                     }}
                     className='p-1 text-fg-muted transition-colors hover:text-fg-high disabled:opacity-50'
                   >
-                    <span className='i-lucide-chevron-left h-4 w-4' />
+                    <span className='i-ph-caret-left h-4 w-4' />
                   </button>
                   <span className='min-w-[110px] text-center text-xs font-medium text-fg-muted'>
                     address #{shieldedIndex}
@@ -883,7 +906,7 @@ function ReceiveTab({
                     onClick={() => void handleRotateShielded()}
                     className='p-1 text-fg-muted transition-colors hover:text-fg-high'
                   >
-                    <span className='i-lucide-chevron-right h-4 w-4' />
+                    <span className='i-ph-caret-right h-4 w-4' />
                   </button>
                 </div>
               )}
@@ -895,7 +918,7 @@ function ReceiveTab({
                     onClick={() => setTransparentIndex(i => i - 1)}
                     className='p-1 text-fg-muted transition-colors hover:text-fg-high disabled:opacity-50'
                   >
-                    <span className='i-lucide-chevron-left h-4 w-4' />
+                    <span className='i-ph-caret-left h-4 w-4' />
                   </button>
                   <span className='min-w-[110px] text-center text-xs font-medium text-fg-muted'>
                     address #{transparentIndex}
@@ -915,7 +938,7 @@ function ReceiveTab({
                     }}
                     className='p-1 text-fg-muted transition-colors hover:text-fg-high'
                   >
-                    <span className='i-lucide-chevron-right h-4 w-4' />
+                    <span className='i-ph-caret-right h-4 w-4' />
                   </button>
                 </div>
               )}
@@ -933,7 +956,7 @@ function ReceiveTab({
               transparent address #{transparentIndex}{' '}
               {transparentUsed && (
                 <span className='mt-1 flex items-start gap-1.5 text-label text-hanko'>
-                  <span className='i-lucide-alert-triangle mt-0.5 size-3 shrink-0' />
+                  <span className='i-ph-warning mt-0.5 size-3 shrink-0' />
                   this address was used before — reusing it publicly links your payments. rotate to
                   a fresh address.
                 </span>
@@ -976,11 +999,11 @@ function ReceiveTab({
             >
               {copied ? (
                 <>
-                  <span className='i-lucide-check h-4 w-4' />
+                  <span className='i-ph-check h-4 w-4' />
                   <span className='text-label lowercase'>copied</span>
                 </>
               ) : (
-                <span className='i-lucide-copy h-4 w-4' />
+                <span className='i-ph-copy h-4 w-4' />
               )}
             </button>
           )}
@@ -993,7 +1016,7 @@ function ReceiveTab({
           : transparent && isZcash
             ? 'public on-chain - one index per exchange, then shield to Orchard.'
             : transparent
-              ? 'transparent chain - this address is PUBLIC, not shielded. use a fresh burner per sender and shield into Penumbra soon after.'
+              ? 'transparent chain - this address is PUBLIC, not shielded. use a fresh deposit address per sender and shield into Penumbra soon after.'
               : 'shielded - senders cannot see your other transactions.'}
       </p>
     </div>
@@ -1010,14 +1033,21 @@ export function ReceivePage() {
 
   const { address, loading } = useActiveAddress();
   const isPenumbra = activeNetwork === 'penumbra';
-  const [mode, setMode] = useState<ReceiveMode>('receive');
+  // the burner "shield" button navigates here asking for the ibc-shield tab,
+  // and passes which burner (chain + index) to shield from
+  const location = useLocation();
+  const navState = location.state as
+    | { mode?: ReceiveMode; cosmosChain?: CosmosChainId; cosmosAccountIndex?: number }
+    | undefined;
+  const initialMode: ReceiveMode = navState?.mode === 'shield' ? 'shield' : 'receive';
+  const [mode, setMode] = useState<ReceiveMode>(initialMode);
   const goBack = useBackNav(PopupPath.INDEX);
 
   return (
     <div className='flex h-full flex-col'>
       <div className='flex shrink-0 items-center gap-3 border-b border-border-soft px-4 py-3'>
         <button onClick={goBack} className='text-fg-muted transition-colors hover:text-fg-high'>
-          <span className='i-lucide-arrow-left h-5 w-5' />
+          <span className='i-ph-arrow-left h-5 w-5' />
         </button>
         <h1 className='text-lg font-medium text-fg'>receive</h1>
       </div>
@@ -1057,6 +1087,8 @@ export function ReceivePage() {
             selectedKeyInfo={selectedKeyInfo}
             keyRing={keyRing}
             penumbraWallet={penumbraWallet}
+            accountIndex={navState?.cosmosAccountIndex ?? 0}
+            preselectCosmosChain={navState?.cosmosChain}
           />
         )}
       </div>

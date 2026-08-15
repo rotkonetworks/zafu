@@ -114,16 +114,16 @@ export function RecipientPicker({ network, onSelect, show }: RecipientPickerProp
   }
 
   const categoryIcon: Record<string, string> = {
-    wallet: 'i-lucide-wallet',
-    recent: 'i-lucide-clock',
-    contact: 'i-lucide-user',
+    wallet: 'i-ph-wallet',
+    recent: 'i-ph-clock',
+    contact: 'i-ph-user',
   };
 
   return (
     <div ref={wrapperRef} className='relative mt-2'>
       {/* search input */}
       <div className='relative'>
-        <span className='i-lucide-search absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-fg-muted' />
+        <span className='i-ph-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-fg-muted' />
         <input
           ref={inputRef}
           type='text'

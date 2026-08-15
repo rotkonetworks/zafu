@@ -153,7 +153,7 @@ export const SettingsParachains = () => {
           onClick={() => navigate(-1)}
           className='text-fg-muted transition-colors hover:text-fg-high'
         >
-          <span className='i-lucide-arrow-left h-5 w-5' />
+          <span className='i-ph-arrow-left h-5 w-5' />
         </button>
         <h1 className='text-lg font-medium'>parachains</h1>
       </div>
@@ -192,7 +192,7 @@ export const SettingsParachains = () => {
               onClick={() => fileInputRef.current?.click()}
               className='flex items-center justify-center gap-2 p-3 rounded-lg border border-dashed border-border-soft hover:border-primary/50 hover:bg-elev-1 transition-colors'
             >
-              <span className='i-lucide-upload h-4 w-4' />
+              <span className='i-ph-upload-simple h-4 w-4' />
               <span className='text-sm'>upload chainspec json</span>
             </button>
 
@@ -220,7 +220,7 @@ export const SettingsParachains = () => {
                       onClick={() => void handleDeleteCustom(chain.id)}
                       className='p-2 text-fg-muted hover:text-destructive transition-colors'
                     >
-                      <span className='i-lucide-trash-2 h-4 w-4' />
+                      <span className='i-ph-trash h-4 w-4' />
                     </button>
                   </div>
                 ))}
@@ -229,7 +229,7 @@ export const SettingsParachains = () => {
           </div>
         ) : loading ? (
           <div className='flex items-center justify-center py-12'>
-            <span className='i-lucide-refresh-cw h-5 w-5 animate-spin text-fg-muted' />
+            <span className='i-ph-arrows-clockwise h-5 w-5 animate-spin text-fg-muted' />
           </div>
         ) : parachains.length === 0 ? (
           <div className='text-center text-sm text-fg-muted py-12'>no parachains available</div>
@@ -261,7 +261,7 @@ export const SettingsParachains = () => {
                         : 'border-muted-foreground/50',
                     )}
                   >
-                    {isEnabled && <span className='i-lucide-check h-3 w-3 text-zigner-dark' />}
+                    {isEnabled && <span className='i-ph-check h-3 w-3 text-zigner-dark' />}
                   </div>
                 </button>
               );

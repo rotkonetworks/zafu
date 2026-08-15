@@ -69,6 +69,7 @@ export const useFinalizeOnboarding = () => {
             // cosmos zigner import
             const zignerData: ZignerZafuImport = {
               cosmosAddresses: parsedCosmosExport.addresses,
+              cosmosXpub: parsedCosmosExport.xpub,
               publicKey: parsedCosmosExport.publicKey || undefined,
               accountIndex: parsedCosmosExport.accountIndex,
               deviceId: `cosmos-${Date.now()}`,

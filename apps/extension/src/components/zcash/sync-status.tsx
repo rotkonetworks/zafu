@@ -198,7 +198,7 @@ export const SyncStatus = ({
         )}
         <span
           className={cn(
-            'i-lucide-chevron-down h-3 w-3 text-fg-dim transition-transform duration-200',
+            'i-ph-caret-down h-3 w-3 text-fg-dim transition-transform duration-200',
             open && 'rotate-180',
           )}
         />

@@ -211,10 +211,11 @@ export const IdentityPage = () => {
     return () => window.clearTimeout(t);
   }, [zidIndex, reducedMotion]);
 
-  // load + subscribe to global zidIndex + pinned generations (chrome.storage.local)
+  // load + subscribe to global zidIndex + this wallet's pinned generations
+  const walletId = keyInfo?.id ?? '';
   useEffect(() => {
     void getZidIndex().then(setZidIndexState);
-    void getZidPins().then(setZidPins);
+    void getZidPins(walletId).then(setZidPins);
     const listener = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
       if (area !== 'local') {
         return;
@@ -225,8 +226,9 @@ export const IdentityPage = () => {
           setZidIndexState(v);
         }
       }
-      if (changes[ZID_PINS_STORAGE_KEY]) {
-        void getZidPins().then(setZidPins);
+      // pins are stored per-wallet under `zidPins:<walletId>` - match by prefix
+      if (Object.keys(changes).some(k => k.startsWith(ZID_PINS_STORAGE_KEY))) {
+        void getZidPins(walletId).then(setZidPins);
       }
       if (changes[ZID_GEN_KEYS_STORAGE_KEY]) {
         void getZidGenKeys().then(setGenKeys);
@@ -234,7 +236,7 @@ export const IdentityPage = () => {
     };
     chrome.storage.onChanged.addListener(listener);
     return () => chrome.storage.onChanged.removeListener(listener);
-  }, []);
+  }, [walletId]);
 
   // Rotation is reversible: up = next generation, down = previous. Every
   // generation is a deterministic derivation, so switching never destroys an
@@ -258,12 +260,15 @@ export const IdentityPage = () => {
   );
 
   const handlePinCurrent = useCallback(async () => {
-    setZidPins(await addZidPin(zidIndex, `gen ${zidIndex}`));
-  }, [zidIndex]);
+    setZidPins(await addZidPin(walletId, zidIndex, `gen ${zidIndex}`));
+  }, [walletId, zidIndex]);
 
-  const handleUnpin = useCallback(async (index: number) => {
-    setZidPins(await removeZidPin(index));
-  }, []);
+  const handleUnpin = useCallback(
+    async (index: number) => {
+      setZidPins(await removeZidPin(walletId, index));
+    },
+    [walletId],
+  );
 
   // rename a pinned generation locally (label only - keys are untouched).
   // addZidPin replaces the existing pin at that index.
@@ -272,11 +277,11 @@ export const IdentityPage = () => {
       const existing = zidPins.find(p => p.index === index);
       const next = label.trim();
       if (next && next !== existing?.label) {
-        setZidPins(await addZidPin(index, next));
+        setZidPins(await addZidPin(walletId, index, next));
       }
       setEditingPin(null);
     },
-    [zidPins],
+    [walletId, zidPins],
   );
 
   // try active keyinfo first, then any keyinfo with a zid (mnemonic wallets)
@@ -424,7 +429,7 @@ export const IdentityPage = () => {
       <SettingsScreen title='identity' backPath={PopupPath.INDEX}>
         <div className='flex flex-col gap-4'>
           <div className='flex min-h-40 flex-col items-center justify-center'>
-            <span className='i-lucide-fingerprint size-8 text-fg-muted mb-3' />
+            <span className='i-ph-fingerprint size-8 text-fg-muted mb-3' />
             {hasAnyWallet ? (
               <>
                 <p className='text-sm text-fg-muted'>zid not available</p>
@@ -451,7 +456,7 @@ export const IdentityPage = () => {
               className={`flex items-center justify-between text-xs font-mono text-fg-muted hover:text-fg-high transition-colors ${focusRing}`}
             >
               <span className='flex items-center gap-1.5'>
-                <span className='i-lucide-users size-3.5' />
+                <span className='i-ph-users size-3.5' />
                 contacts
               </span>
               <span className='text-fg-muted'>{contactCount}</span>
@@ -508,7 +513,7 @@ export const IdentityPage = () => {
               {/* card head: object label + plan chip */}
               <div className='relative z-[1] flex items-center justify-between mb-3'>
                 <span className='kicker flex items-center gap-1.5'>
-                  <span className='i-lucide-fingerprint size-3.5 text-network-accent' />
+                  <span className='i-ph-fingerprint size-3.5 text-network-accent' />
                   zafu id
                 </span>
                 <span
@@ -519,7 +524,7 @@ export const IdentityPage = () => {
                   }`}
                   title={pro ? 'zafu pro' : 'free plan'}
                 >
-                  {pro && <span className='i-lucide-crown size-3' />}
+                  {pro && <span className='i-ph-crown size-3' />}
                   {plan}
                   {pro && days > 0 ? ` · ${days}d` : ''}
                 </span>
@@ -548,14 +553,14 @@ export const IdentityPage = () => {
                     <span
                       className={`size-3.5 shrink-0 transition-colors ${
                         copied === 'zid'
-                          ? 'i-lucide-check text-success'
-                          : 'i-lucide-copy text-fg-dim group-hover:text-fg-muted'
+                          ? 'i-ph-check text-success'
+                          : 'i-ph-copy text-fg-dim group-hover:text-fg-muted'
                       }`}
                     />
                   </button>
                   {keyInfo?.name && (
                     <div className='mt-1 flex items-center gap-1.5 text-label font-mono text-fg-muted'>
-                      <span className='i-lucide-layers size-3 text-fg-dim' />
+                      <span className='i-ph-stack size-3 text-fg-dim' />
                       <span className='truncate'>{keyInfo.name}</span>
                     </div>
                   )}
@@ -573,7 +578,7 @@ export const IdentityPage = () => {
                   title='previous generation (rotate down)'
                   className={`grid size-8 shrink-0 place-items-center border border-border-hard bg-elev-1 text-fg-muted transition-colors hover:text-fg-high hover:border-fg-dim disabled:opacity-30 disabled:hover:text-fg-muted disabled:hover:border-border-hard ${focusRing}`}
                 >
-                  <span className='i-lucide-chevron-left size-4' />
+                  <span className='i-ph-caret-left size-4' />
                 </button>
                 <div className='flex-1 text-center leading-none'>
                   <div className='text-label text-fg-muted lowercase tracking-wide'>generation</div>
@@ -590,7 +595,7 @@ export const IdentityPage = () => {
                   title='next generation (rotate up)'
                   className={`grid size-8 shrink-0 place-items-center border border-border-hard bg-elev-1 text-fg-muted transition-colors hover:text-fg-high hover:border-fg-dim ${focusRing}`}
                 >
-                  <span className='i-lucide-chevron-right size-4' />
+                  <span className='i-ph-caret-right size-4' />
                 </button>
                 <button
                   type='button'
@@ -602,7 +607,7 @@ export const IdentityPage = () => {
                       : 'border-border-hard text-fg-muted hover:text-fg-high hover:border-fg-dim'
                   }`}
                 >
-                  <span className={`size-4 ${isPinned ? 'i-lucide-pin-off' : 'i-lucide-pin'}`} />
+                  <span className={`size-4 ${isPinned ? 'i-ph-push-pin-slash' : 'i-ph-push-pin'}`} />
                 </button>
               </div>
 
@@ -616,7 +621,7 @@ export const IdentityPage = () => {
                         key={p.index}
                         className='flex items-center gap-1 text-label font-mono px-2 py-0.5 border border-network-accent/40 bg-network-accent/10'
                       >
-                        <span className='i-lucide-pin size-3 text-network-accent' />
+                        <span className='i-ph-push-pin size-3 text-network-accent' />
                         <input
                           autoFocus
                           value={pinDraft}
@@ -650,7 +655,7 @@ export const IdentityPage = () => {
                           title={`switch to ${p.label} (gen ${p.index})`}
                           className={`flex items-center gap-1 text-label font-mono pl-2 pr-1 py-0.5 transition-colors hover:text-fg-high ${focusRing}`}
                         >
-                          <span className='i-lucide-pin size-3' />
+                          <span className='i-ph-push-pin size-3' />
                           {p.label}
                         </button>
                         <button
@@ -662,7 +667,7 @@ export const IdentityPage = () => {
                           title='rename pin'
                           className={`grid place-items-center px-1 py-0.5 text-fg-dim transition-colors hover:text-fg-high ${focusRing}`}
                         >
-                          <span className='i-lucide-pencil size-2.5' />
+                          <span className='i-ph-pencil-simple size-2.5' />
                         </button>
                       </span>
                     ),
@@ -686,7 +691,7 @@ export const IdentityPage = () => {
                 className={`flex items-center gap-1 text-fg-muted hover:text-fg-high transition-colors ${focusRing}`}
               >
                 <span
-                  className={`size-3 transition-transform ${showFullKey ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'}`}
+                  className={`size-3 transition-transform ${showFullKey ? 'i-ph-caret-down' : 'i-ph-caret-right'}`}
                 />
                 public key
               </button>
@@ -695,7 +700,7 @@ export const IdentityPage = () => {
                 title='show qr code'
                 className={`flex items-center gap-1 text-fg-muted hover:text-fg-high transition-colors ${focusRing}`}
               >
-                <span className={`size-3 ${showQr ? 'i-lucide-eye-off' : 'i-lucide-qr-code'}`} />
+                <span className={`size-3 ${showQr ? 'i-ph-eye-slash' : 'i-ph-qr-code'}`} />
                 {showQr ? 'hide qr' : 'qr code'}
               </button>
               {crossSiteCount > 0 && (
@@ -703,7 +708,7 @@ export const IdentityPage = () => {
                   className='flex items-center gap-1 text-warning'
                   title='sites sharing a key can link your sessions'
                 >
-                  <span className='i-lucide-triangle-alert size-3' />
+                  <span className='i-ph-warning size-3' />
                   {crossSiteCount} linkable
                 </span>
               )}
@@ -741,7 +746,7 @@ export const IdentityPage = () => {
                 : 'border-transparent text-fg-muted hover:text-fg'
             }`}
           >
-            <span className='i-lucide-globe size-3.5' />
+            <span className='i-ph-globe size-3.5' />
             sites <span className='text-fg-dim'>({sites.length})</span>
           </button>
           <button
@@ -752,7 +757,7 @@ export const IdentityPage = () => {
                 : 'border-transparent text-fg-muted hover:text-fg'
             }`}
           >
-            <span className='i-lucide-scroll-text size-3.5' />
+            <span className='i-ph-scroll size-3.5' />
             log <span className='text-fg-dim'>({shareLog.length})</span>
           </button>
         </div>
@@ -762,7 +767,7 @@ export const IdentityPage = () => {
           <section className='flex flex-col'>
             {sites.length === 0 ? (
               <div className='flex flex-col items-center py-6 text-center text-fg-muted'>
-                <span className='i-lucide-globe size-6 mb-2' />
+                <span className='i-ph-globe size-6 mb-2' />
                 <p className='text-body font-mono'>no sites yet</p>
               </div>
             ) : (
@@ -798,7 +803,7 @@ export const IdentityPage = () => {
           <section className='flex flex-col'>
             {shareLog.length === 0 ? (
               <div className='flex flex-col items-center py-6 text-fg-muted'>
-                <span className='i-lucide-scroll-text size-6 mb-2' />
+                <span className='i-ph-scroll size-6 mb-2' />
                 <p className='text-body font-mono'>no keys shared yet</p>
               </div>
             ) : (
@@ -833,10 +838,10 @@ export const IdentityPage = () => {
                 className={`flex items-center justify-between text-body font-mono text-fg hover:text-fg-high transition-colors ${focusRing}`}
               >
                 <span className='flex items-center gap-1.5'>
-                  <span className='i-lucide-key-round size-3.5' />
+                  <span className='i-ph-key size-3.5' />
                   passwords
                 </span>
-                <span className='i-lucide-chevron-right size-3.5 text-fg-dim' />
+                <span className='i-ph-caret-right size-3.5 text-fg-dim' />
               </button>
             </div>
           </>
@@ -948,7 +953,7 @@ const SiteRow = ({
         <div className='flex items-center gap-2 min-w-0'>
           <span
             className={`size-3.5 shrink-0 ${
-              site.connected ? 'i-lucide-link text-network-accent' : 'i-lucide-unlink text-fg-dim'
+              site.connected ? 'i-ph-link text-network-accent' : 'i-ph-link-break text-fg-dim'
             }`}
           />
           {editingLabel === site.origin ? (
@@ -989,7 +994,7 @@ const SiteRow = ({
             {isSiteMode && rotation > 0 ? ` #${rotation}` : ''}
           </span>
           <span
-            className={`size-3.5 text-fg-dim transition-transform ${expanded ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'}`}
+            className={`size-3.5 text-fg-dim transition-transform ${expanded ? 'i-ph-caret-down' : 'i-ph-caret-right'}`}
           />
         </div>
       </button>
@@ -1005,7 +1010,7 @@ const SiteRow = ({
               className={`flex items-center gap-1 text-left text-label text-fg-muted hover:text-fg-high transition-colors ${focusRing}`}
             >
               <span
-                className={`size-3 ${copied === site.origin ? 'i-lucide-check text-success' : 'i-lucide-copy'}`}
+                className={`size-3 ${copied === site.origin ? 'i-ph-check text-success' : 'i-ph-copy'}`}
               />
               <span className='truncate'>{site.lastShared.publicKey.slice(0, 36)}...</span>
             </button>
@@ -1026,7 +1031,7 @@ const SiteRow = ({
                     : 'border-border-soft text-fg-muted hover:text-fg-high'
                 }`}
               >
-                <span className='i-lucide-shield-check size-3' />
+                <span className='i-ph-shield-check size-3' />
                 unique
               </button>
               <button
@@ -1038,13 +1043,13 @@ const SiteRow = ({
                     : 'border-border-soft text-fg-muted hover:text-fg-high'
                 }`}
               >
-                <span className='i-lucide-link size-3' />
+                <span className='i-ph-link size-3' />
                 shared
               </button>
             </div>
             {!isSiteMode && (
               <span className='flex items-center gap-1 text-label text-warning'>
-                <span className='i-lucide-triangle-alert size-3' />
+                <span className='i-ph-warning size-3' />
                 sites with a shared key can link your sessions
               </span>
             )}
@@ -1065,7 +1070,7 @@ const SiteRow = ({
                   title='remove a rotation'
                   className={`grid size-5 place-items-center border border-border-soft text-fg-muted hover:text-fg-high disabled:opacity-20 transition-colors ${focusRing}`}
                 >
-                  <span className='i-lucide-minus size-3' />
+                  <span className='i-ph-minus size-3' />
                 </button>
                 <input
                   type='number'
@@ -1082,7 +1087,7 @@ const SiteRow = ({
                   title='rotate to a fresh key'
                   className={`grid size-5 place-items-center border border-border-soft text-fg-muted hover:text-fg-high transition-colors ${focusRing}`}
                 >
-                  <span className='i-lucide-plus size-3' />
+                  <span className='i-ph-plus size-3' />
                 </button>
                 <span className='ml-1 text-fg-muted'>
                   {rotation === 0 ? 'original key' : `rotated ${rotation}x`}
@@ -1100,7 +1105,7 @@ const SiteRow = ({
               }}
               className={`flex items-center gap-1 text-fg-muted hover:text-fg-high transition-colors ${focusRing}`}
             >
-              <span className='i-lucide-tag size-3' />
+              <span className='i-ph-tag size-3' />
               label
             </button>
             {site.perms && (
@@ -1108,7 +1113,7 @@ const SiteRow = ({
                 onClick={() => setCapsOpen(!capsOpen)}
                 className={`flex items-center gap-1 text-fg-muted hover:text-fg-high transition-colors ${focusRing}`}
               >
-                <span className='i-lucide-shield size-3' />
+                <span className='i-ph-shield size-3' />
                 {capsOpen ? 'hide' : 'permissions'}
               </button>
             )}
@@ -1116,7 +1121,7 @@ const SiteRow = ({
               onClick={() => handleRevoke()}
               className={`flex items-center gap-1 text-error transition-colors hover:brightness-125 ${focusRing}`}
             >
-              <span className='i-lucide-x size-3' />
+              <span className='i-ph-x size-3' />
               revoke
             </button>
           </div>

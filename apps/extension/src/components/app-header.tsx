@@ -93,11 +93,11 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
               className='flex items-center gap-0.5 rounded-md bg-red-500/15 px-1.5 py-0.5 text-label leading-none text-red-500'
               title='transparent network - balances and transactions are PUBLIC, not shielded'
             >
-              <span className='i-lucide-eye h-3 w-3' />
+              <span className='i-ph-eye h-3 w-3' />
               unshielded
             </span>
           )}
-          <span className='i-lucide-chevron-down h-3 w-3 text-fg-muted' />
+          <span className='i-ph-caret-down h-3 w-3 text-fg-muted' />
         </button>
         {openPicker === 'network' && (
           <div className='absolute left-0 top-full z-50 mt-1 min-w-40 rounded-md border border-border-soft bg-canvas py-1 shadow-xl'>
@@ -114,7 +114,7 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
                   <span className={cn('h-2 w-2 rounded-full', getNetwork(n).color)} />
                   <span className='flex-1 truncate'>{getNetwork(n).name}</span>
                   {n === activeNetwork && (
-                    <span className='i-lucide-check h-3.5 w-3.5 text-zigner-gold' />
+                    <span className='i-ph-check h-3.5 w-3.5 text-zigner-gold' />
                   )}
                 </button>
               ))}
@@ -132,7 +132,7 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
           aria-expanded={openPicker === 'wallet'}
         >
           <span className='max-w-32 truncate text-data text-fg-high'>{walletName}</span>
-          <span className='i-lucide-chevron-down h-3 w-3 text-fg-muted' />
+          <span className='i-ph-caret-down h-3 w-3 text-fg-muted' />
         </button>
         {openPicker === 'wallet' && (
           <div className='absolute right-0 top-full z-50 mt-1 min-w-40 max-w-56 rounded-md border border-border-soft bg-canvas py-1 shadow-xl'>
@@ -150,7 +150,7 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
                       matters less than whether it can sign on its own. */}
                   <CustodyBadge vault={k} showLabel={false} />
                   {k.id === selectedKeyInfo?.id ? (
-                    <span className='i-lucide-check h-3.5 w-3.5 shrink-0 text-zigner-gold' />
+                    <span className='i-ph-check h-3.5 w-3.5 shrink-0 text-zigner-gold' />
                   ) : (
                     <span className='h-3.5 w-3.5 shrink-0' />
                   )}
@@ -168,7 +168,7 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
         title={hideBalances ? 'show balances' : 'hide balances'}
         aria-label={hideBalances ? 'show balances' : 'hide balances'}
       >
-        <span className={cn(hideBalances ? 'i-lucide-eye-off' : 'i-lucide-eye', 'h-4 w-4')} />
+        <span className={cn(hideBalances ? 'i-ph-eye-slash' : 'i-ph-eye', 'h-4 w-4')} />
       </button>
 
       {/* menu */}
@@ -177,7 +177,7 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
         className='rounded-md p-2 text-fg-muted transition-colors hover:bg-elev-1 hover:text-fg-high'
         aria-label='open menu'
       >
-        <span className='i-lucide-menu h-4 w-4' />
+        <span className='i-ph-list h-4 w-4' />
       </button>
     </header>
   );

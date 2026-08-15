@@ -53,6 +53,8 @@ export enum PopupPath {
 
   // Zcash multi-output send approval (opened by external apps via zafu_zcash_send)
   ZCASH_SEND_APPROVAL = '/approval/zcash-send',
+  // Keplr provider approval (connect + cosmos signing, opened by cosmos dapps)
+  KEPLR_APPROVAL = '/approval/keplr',
 
   // Settings sub-pages (multisig)
   SETTINGS_MULTISIG = '/settings/multisig',

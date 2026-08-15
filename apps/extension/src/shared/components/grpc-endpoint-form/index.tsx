@@ -91,7 +91,7 @@ export const GrpcEndpointForm = ({
                 customGrpcEndpointInput.current?.focus();
               }}
               isSelected={isCustomGrpcEndpoint}
-              image={<span className='i-lucide-network size-full' />}
+              image={<span className='i-ph-share-network size-full' />}
             />
           </SelectList>
 
@@ -106,7 +106,7 @@ export const GrpcEndpointForm = ({
             >
               {isValidationLoading ? (
                 <>
-                  <span className='i-lucide-loader-2 mr-2 size-4 animate-spin' />
+                  <span className='i-ph-circle-notch mr-2 size-4 animate-spin' />
                   Validating RPC
                 </>
               ) : (

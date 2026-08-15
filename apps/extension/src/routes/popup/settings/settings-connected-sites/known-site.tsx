@@ -222,7 +222,7 @@ export const KnownSite = ({
             className='h-auto bg-transparent'
             onClick={() => void discard(site)}
           >
-            <span className='i-lucide-trash-2 h-4 w-4 text-fg-muted' />
+            <span className='i-ph-trash h-4 w-4 text-fg-muted' />
           </Button>
         </div>
       </div>
@@ -235,7 +235,7 @@ export const KnownSite = ({
             onClick={() => setCapsExpanded(!capsExpanded)}
             className='flex items-center gap-1 text-label text-fg-muted/50 hover:text-fg-muted transition-colors'
           >
-            <span className={`i-lucide-chevron-${capsExpanded ? 'down' : 'right'} h-2.5 w-2.5`} />
+            <span className={`i-ph-caret-${capsExpanded ? 'down' : 'right'} h-2.5 w-2.5`} />
             capabilities ({perms?.granted.length ?? 0} granted)
           </button>
           {capsExpanded && (
@@ -258,13 +258,13 @@ export const KnownSite = ({
               className='flex items-center gap-1.5 text-label font-mono text-fg-muted/70 hover:text-fg-high transition-colors'
               title={copied ? 'copied' : 'copy full pubkey'}
             >
-              <span className='i-lucide-fingerprint h-3 w-3 shrink-0' />
+              <span className='i-ph-fingerprint h-3 w-3 shrink-0' />
               <span className='truncate'>{zidAddress}</span>
               {copied && <span className='text-green-500 shrink-0'>copied</span>}
             </button>
           ) : (
             <span className='flex items-center gap-1.5 text-label text-fg-muted/40'>
-              <span className='i-lucide-fingerprint h-3 w-3 shrink-0' />
+              <span className='i-ph-fingerprint h-3 w-3 shrink-0' />
               no zid shared yet
             </span>
           )}
@@ -275,7 +275,7 @@ export const KnownSite = ({
               onClick={() => setExpanded(!expanded)}
               className='flex items-center gap-1 text-label text-fg-muted/50 hover:text-fg-muted transition-colors'
             >
-              <span className={`i-lucide-chevron-${expanded ? 'down' : 'right'} h-2.5 w-2.5`} />
+              <span className={`i-ph-caret-${expanded ? 'down' : 'right'} h-2.5 w-2.5`} />
               addresses
             </button>
           )}
@@ -302,7 +302,7 @@ export const KnownSite = ({
               onClick={toggleMode}
               className='flex items-center gap-1 text-label text-fg-muted hover:text-fg-high transition-colors'
             >
-              <span className={`${isSiteMode ? 'i-lucide-shield' : 'i-lucide-globe'} h-3 w-3`} />
+              <span className={`${isSiteMode ? 'i-ph-shield' : 'i-ph-globe'} h-3 w-3`} />
               {isSiteMode ? 'site identity' : 'global identity'}
             </button>
             {isSiteMode && (
@@ -313,7 +313,7 @@ export const KnownSite = ({
                   className='flex items-center gap-0.5 text-label text-fg-muted hover:text-fg-high transition-colors'
                   title='rotate identity - gives this site a new zid'
                 >
-                  <span className='i-lucide-refresh-cw h-2.5 w-2.5' />
+                  <span className='i-ph-arrows-clockwise h-2.5 w-2.5' />
                   rotate
                 </button>
               </>

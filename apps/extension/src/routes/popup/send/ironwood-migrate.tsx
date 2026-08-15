@@ -126,7 +126,7 @@ export function IronwoodMigrationBanner({
     <div className='rounded-lg border border-primary/40 bg-primary/10 p-3'>
       <div className='flex items-center justify-between'>
         <div className='flex items-center gap-2'>
-          <span className='i-lucide-arrow-right-left h-4 w-4 text-zigner-gold' />
+          <span className='i-ph-arrows-left-right h-4 w-4 text-zigner-gold' />
           <span className='text-xs text-fg-high'>orchard is now legacy</span>
           <span className='text-xs font-medium tabular-nums text-fg-muted'>
             <Sensitive>{fmtZec(orchardZat)}</Sensitive> ZEC to migrate
@@ -366,13 +366,13 @@ export function IronwoodMigrate({
                   onClick={onClose}
                   className='text-fg-muted hover:text-fg-high transition-colors'
                 >
-                  <span className='i-lucide-arrow-left h-5 w-5' />
+                  <span className='i-ph-arrow-left h-5 w-5' />
                 </button>
                 <h2 className='text-lg font-medium'>migrate to ironwood</h2>
               </div>
               <div className='flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-6 text-center'>
                 <div className='flex h-16 w-16 items-center justify-center rounded-full bg-green-500/20'>
-                  <span className='i-lucide-check h-8 w-8 text-green-400' />
+                  <span className='i-ph-check h-8 w-8 text-green-400' />
                 </div>
                 <h2 className='text-lg font-medium'>fully migrated</h2>
                 <p className='max-w-sm text-sm text-fg-muted leading-snug'>
@@ -395,7 +395,7 @@ export function IronwoodMigrate({
                 onClick={onClose}
                 className='text-fg-muted hover:text-fg-high transition-colors'
               >
-                <span className='i-lucide-arrow-left h-5 w-5' />
+                <span className='i-ph-arrow-left h-5 w-5' />
               </button>
               <h2 className='text-lg font-medium'>migrate to ironwood</h2>
             </div>
@@ -403,12 +403,12 @@ export function IronwoodMigrate({
             <div className='flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4'>
               <div className='flex items-center justify-center gap-4 pt-2'>
                 <div className='flex flex-col items-center gap-1'>
-                  <span className='i-lucide-shield h-7 w-7 text-fg-muted' />
+                  <span className='i-ph-shield h-7 w-7 text-fg-muted' />
                   <span className='text-xs text-fg-muted'>orchard</span>
                 </div>
-                <span className='i-lucide-arrow-right h-5 w-5 text-zigner-gold' />
+                <span className='i-ph-arrow-right h-5 w-5 text-zigner-gold' />
                 <div className='flex flex-col items-center gap-1'>
-                  <span className='i-lucide-shield-check h-7 w-7 text-fg-high' />
+                  <span className='i-ph-shield-check h-7 w-7 text-fg-high' />
                   <span className='text-xs font-medium'>ironwood</span>
                 </div>
               </div>
@@ -435,7 +435,7 @@ export function IronwoodMigrate({
                   orchard history in one click while believing this is a private
                   shielded-to-shielded move. */}
               <div className='flex items-start gap-2 rounded-lg border border-hanko/40 bg-elev-1 p-3'>
-                <span className='i-lucide-eye mt-0.5 size-3.5 shrink-0 text-hanko' />
+                <span className='i-ph-eye mt-0.5 size-3.5 shrink-0 text-hanko' />
                 <p className='text-label text-fg-muted leading-snug'>
                   <span className='text-hanko'>this amount becomes public.</span> moving between
                   pools publishes the value on-chain in the clear, and this migrates your whole
@@ -462,7 +462,7 @@ export function IronwoodMigrate({
               </div>
 
               <div className='flex items-center gap-2 text-xs text-fg-muted'>
-                <span className='i-lucide-arrow-right h-4 w-4 shrink-0' />
+                <span className='i-ph-arrow-right h-4 w-4 shrink-0' />
                 <span>one-way - your funds stay yours, they just cannot move back to orchard</span>
               </div>
             </div>
@@ -518,7 +518,7 @@ export function IronwoodMigrate({
                 onClick={() => setStep('review')}
                 className='text-fg-muted hover:text-fg-high transition-colors'
               >
-                <span className='i-lucide-arrow-left w-5 h-5' />
+                <span className='i-ph-arrow-left w-5 h-5' />
               </button>
               <h2 className='text-lg font-medium'>sign migration with zafu zigner</h2>
             </div>
@@ -544,7 +544,7 @@ export function IronwoodMigrate({
                   </span>
                 </div>
                 <div className='mt-1 flex items-center gap-1.5 text-label'>
-                  <span className='i-lucide-shield-check h-3.5 w-3.5 shrink-0' />
+                  <span className='i-ph-shield-check h-3.5 w-3.5 shrink-0' />
                   <span>confirmed on your zigner</span>
                 </div>
               </div>
@@ -563,17 +563,17 @@ export function IronwoodMigrate({
               )}
               <div className='flex items-center justify-center gap-3 text-fg-muted'>
                 <span className='flex items-center gap-1.5'>
-                  <span className='i-lucide-smartphone h-4 w-4' />
+                  <span className='i-ph-device-mobile h-4 w-4' />
                   <span className='text-xs'>open zigner</span>
                 </span>
-                <span className='i-lucide-chevron-right h-3 w-3 shrink-0' />
+                <span className='i-ph-caret-right h-3 w-3 shrink-0' />
                 <span className='flex items-center gap-1.5'>
-                  <span className='i-lucide-scan h-4 w-4' />
+                  <span className='i-ph-scan h-4 w-4' />
                   <span className='text-xs'>scan</span>
                 </span>
-                <span className='i-lucide-chevron-right h-3 w-3 shrink-0' />
+                <span className='i-ph-caret-right h-3 w-3 shrink-0' />
                 <span className='flex items-center gap-1.5'>
-                  <span className='i-lucide-check h-4 w-4' />
+                  <span className='i-ph-check h-4 w-4' />
                   <span className='text-xs'>approve</span>
                 </span>
               </div>
@@ -617,7 +617,7 @@ export function IronwoodMigrate({
         return (
           <div className='flex flex-col items-center gap-4 p-8'>
             <div className='w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center'>
-              <span className='i-lucide-check w-8 h-8 text-green-400' />
+              <span className='i-ph-check w-8 h-8 text-green-400' />
             </div>
             <h2 className='text-lg font-medium'>migrated to ironwood</h2>
             <p className='text-center text-sm text-fg-muted'>
@@ -640,7 +640,7 @@ export function IronwoodMigrate({
           return (
             <div className='flex flex-col items-center gap-4 p-8'>
               <div className='flex h-16 w-16 items-center justify-center rounded-full bg-primary/15'>
-                <span className='i-lucide-clock h-8 w-8 text-zigner-gold' />
+                <span className='i-ph-clock h-8 w-8 text-zigner-gold' />
               </div>
               <h2 className='text-lg font-medium'>migration not available yet</h2>
               <p className='max-w-sm text-center text-sm text-fg-muted leading-snug'>
@@ -656,7 +656,7 @@ export function IronwoodMigrate({
         return (
           <div className='flex flex-col items-center gap-4 p-8'>
             <div className='w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center'>
-              <span className='i-lucide-x w-8 h-8 text-red-400' />
+              <span className='i-ph-x w-8 h-8 text-red-400' />
             </div>
             <h2 className='text-lg font-medium'>migration failed</h2>
             <p className='text-sm text-red-400 text-center'>{error ?? 'an error occurred'}</p>

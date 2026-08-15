@@ -312,7 +312,7 @@ export function FrostAirgapJoinerSignFlow({
     <div className='flex items-center gap-3 w-full'>
       {onBack && (
         <button onClick={onBack} className='text-fg-muted hover:text-fg-high transition-colors'>
-          <span className='i-lucide-arrow-left h-5 w-5' />
+          <span className='i-ph-arrow-left h-5 w-5' />
         </button>
       )}
       <h2 className='text-lg font-medium flex-1'>co-sign multisig</h2>
@@ -329,7 +329,7 @@ export function FrostAirgapJoinerSignFlow({
         <div className='flex flex-col items-center gap-4 p-4'>
           <Header onBack={cancel} />
           <div className='flex items-center gap-2 text-xs text-fg-muted'>
-            <span className='i-lucide-loader-2 size-3.5 animate-spin' />
+            <span className='i-ph-circle-notch size-3.5 animate-spin' />
             waiting for transaction from coordinator…
           </div>
           <p className='text-label text-fg-muted/70 leading-snug pt-1 text-center'>
@@ -379,13 +379,13 @@ export function FrostAirgapJoinerSignFlow({
           {/* verifier verdict */}
           {verdict.kind === 'pending' && (
             <div className='rounded-lg border border-border-soft bg-elev-1 p-2.5 text-label text-fg-muted flex items-center gap-2'>
-              <span className='i-lucide-loader-2 size-3 animate-spin' />
+              <span className='i-ph-circle-notch size-3 animate-spin' />
               verifying tx bytes match host claim…
             </div>
           )}
           {verdict.kind === 'match' && (
             <div className='rounded-lg border border-green-500/40 bg-green-500/5 p-2.5 text-label text-green-400 flex items-start gap-2'>
-              <span className='i-lucide-shield-check size-3.5 mt-0.5 shrink-0' />
+              <span className='i-ph-shield-check size-3.5 mt-0.5 shrink-0' />
               <span>
                 recipient, amount and sighash verified against the transaction bytes
                 {verdict.changeZat > 0n && (
@@ -402,7 +402,7 @@ export function FrostAirgapJoinerSignFlow({
           {verdict.kind === 'refuse' && (
             <div className='rounded-lg border border-red-500/60 bg-red-500/10 p-3 flex flex-col gap-2'>
               <div className='flex items-center gap-2 text-body font-medium text-red-400'>
-                <span className='i-lucide-shield-x size-4' />
+                <span className='i-ph-shield-warning size-4' />
                 cannot verify - signing refused
               </div>
               <ul className='text-label text-red-300/90 list-disc pl-4 space-y-0.5'>
@@ -415,7 +415,7 @@ export function FrostAirgapJoinerSignFlow({
           {verdict.kind === 'mismatch' && (
             <div className='rounded-lg border border-red-500/60 bg-red-500/10 p-3 flex flex-col gap-2'>
               <div className='flex items-center gap-2 text-body font-medium text-red-400'>
-                <span className='i-lucide-shield-x size-4' />
+                <span className='i-ph-shield-warning size-4' />
                 mismatch - host claim disagrees with tx bytes
               </div>
               <ul className='text-label text-red-300/90 list-disc pl-4 space-y-0.5'>
@@ -510,11 +510,11 @@ export function FrostAirgapJoinerSignFlow({
           <Header />
           <SignStepProgress current={1} />
           <div className='flex items-center gap-2 text-xs text-fg-muted'>
-            <span className='i-lucide-loader-2 size-3.5 animate-spin' />
+            <span className='i-ph-circle-notch size-3.5 animate-spin' />
             exchanging commitments...
           </div>
           <div className='flex items-center gap-2 rounded-md bg-elev-2 px-3 py-1.5'>
-            <span className='i-lucide-users size-3.5 text-fg-muted' />
+            <span className='i-ph-users size-3.5 text-fg-muted' />
             <span className='text-xs'>
               <span className='font-medium text-fg'>{peersReady + 1}</span>
               <span className='text-fg-muted'> / {ms.threshold} ready</span>
@@ -573,7 +573,7 @@ export function FrostAirgapJoinerSignFlow({
           <Header />
           <SignStepProgress current={3} />
           <div className='flex items-center gap-2 text-xs text-fg-muted'>
-            <span className='i-lucide-loader-2 size-3.5 animate-spin' />
+            <span className='i-ph-circle-notch size-3.5 animate-spin' />
             publishing shares...
           </div>
         </div>

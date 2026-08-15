@@ -107,12 +107,12 @@ export function QrDisplay({
         <Button variant='ghost' size='sm' onClick={handleCopy} className='gap-2'>
           {copied ? (
             <>
-              <span className='i-lucide-check w-4 h-4 text-green-400' />
+              <span className='i-ph-check w-4 h-4 text-green-400' />
               copied
             </>
           ) : (
             <>
-              <span className='i-lucide-copy w-4 h-4' />
+              <span className='i-ph-copy w-4 h-4' />
               copy hex
             </>
           )}

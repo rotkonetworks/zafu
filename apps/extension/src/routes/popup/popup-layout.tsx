@@ -6,6 +6,7 @@ import { usePenumbraSwapClaim } from '../../hooks/penumbra-swap-claim';
 import { BottomTabs, BOTTOM_TABS_HEIGHT } from '../../components/bottom-tabs';
 import { AppHeader } from '../../components/app-header';
 import { MenuDrawer } from '../../components/menu-drawer';
+import { PenumbraSendWatcher } from '../../components/penumbra-send-watcher';
 import { PopupPath } from './paths';
 import { useStore } from '../../state';
 import {
@@ -47,7 +48,7 @@ const BOTTOM_TABS: readonly {
   },
   {
     path: PopupPath.STAKE,
-    icon: <span className='i-lucide-coins h-5 w-5' />,
+    icon: <span className='i-ph-coins h-5 w-5' />,
     label: 'stake',
     feature: 'stake',
   },
@@ -179,6 +180,9 @@ export const PopupLayout = () => {
       </div>
       {showTabs && <BottomTabs tabs={tabs} />}
       {showChrome && <MenuDrawer open={menuOpen} onClose={() => setMenuOpen(false)} />}
+      {/* surfaces the outcome of a service-worker-driven send even when the
+          originating page was destroyed (side-panel approval reload) */}
+      <PenumbraSendWatcher />
     </div>
   );
 };

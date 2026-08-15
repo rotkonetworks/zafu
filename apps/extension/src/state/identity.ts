@@ -457,12 +457,27 @@ export interface ZidPin {
   label: string;
 }
 
-/** chrome.storage.local key holding the user's pinned ZID generations. */
+/**
+ * chrome.storage.local key holding a wallet's pinned ZID generations.
+ *
+ * Pins are labels the user attaches to ZID generations, and a ZID is derived
+ * from the wallet's seed - so the pins MUST be scoped to the wallet. A single
+ * global key meant a label pinned on one wallet ("tommi") showed up on every
+ * other wallet's (different) identity. Keyed by walletId, each wallet keeps its
+ * own labels. The bare 'zidPins' constant is retained only so a stale onChanged
+ * listener still matches the scoped keys via prefix.
+ */
 export const ZID_PINS_STORAGE_KEY = 'zidPins';
 
-export async function getZidPins(): Promise<ZidPin[]> {
-  const r = await chrome.storage.local.get(ZID_PINS_STORAGE_KEY);
-  const v = r[ZID_PINS_STORAGE_KEY];
+const zidPinsKey = (walletId: string): string => `${ZID_PINS_STORAGE_KEY}:${walletId}`;
+
+export async function getZidPins(walletId: string): Promise<ZidPin[]> {
+  if (!walletId) {
+    return [];
+  }
+  const key = zidPinsKey(walletId);
+  const r = await chrome.storage.local.get(key);
+  const v = r[key];
   return Array.isArray(v)
     ? v.filter(
         (p): p is ZidPin =>
@@ -476,20 +491,24 @@ export async function getZidPins(): Promise<ZidPin[]> {
 }
 
 /** Pin the given generation with a label (replaces any existing pin at that index). */
-export async function addZidPin(index: number, label: string): Promise<ZidPin[]> {
-  const pins = await getZidPins();
+export async function addZidPin(
+  walletId: string,
+  index: number,
+  label: string,
+): Promise<ZidPin[]> {
+  const pins = await getZidPins(walletId);
   const next = pins.filter(p => p.index !== index);
   next.push({ index, label: label.trim() || `gen ${index}` });
   next.sort((a, b) => a.index - b.index);
-  await chrome.storage.local.set({ [ZID_PINS_STORAGE_KEY]: next });
+  await chrome.storage.local.set({ [zidPinsKey(walletId)]: next });
   return next;
 }
 
 /** Remove the pin at the given generation index. */
-export async function removeZidPin(index: number): Promise<ZidPin[]> {
-  const pins = await getZidPins();
+export async function removeZidPin(walletId: string, index: number): Promise<ZidPin[]> {
+  const pins = await getZidPins(walletId);
   const next = pins.filter(p => p.index !== index);
-  await chrome.storage.local.set({ [ZID_PINS_STORAGE_KEY]: next });
+  await chrome.storage.local.set({ [zidPinsKey(walletId)]: next });
   return next;
 }
 

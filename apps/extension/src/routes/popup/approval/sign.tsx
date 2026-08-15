@@ -203,7 +203,7 @@ export const SignApproval = () => {
       {step === 'review' && (
         <>
           <div className='mx-auto flex size-20 items-center justify-center rounded-full bg-elev-2'>
-            <span className='i-lucide-fingerprint h-10 w-10 text-fg-muted' />
+            <span className='i-ph-fingerprint h-10 w-10 text-fg-muted' />
           </div>
           <div className='w-full px-[30px]'>
             <div className='flex flex-col gap-3'>
@@ -246,7 +246,7 @@ export const SignApproval = () => {
       {step === 'password' && (
         <div className='w-full px-[30px] flex flex-col gap-4'>
           <div className='mx-auto flex size-16 items-center justify-center rounded-full bg-elev-2'>
-            <span className='i-lucide-lock h-8 w-8 text-fg-muted' />
+            <span className='i-ph-lock h-8 w-8 text-fg-muted' />
           </div>
           <p className='text-sm text-fg-muted text-center'>enter password to sign</p>
           <input
@@ -287,7 +287,7 @@ export const SignApproval = () => {
       {/* ── signing spinner ── */}
       {step === 'signing' && (
         <div className='flex flex-col items-center justify-center gap-3 py-12'>
-          <span className='i-lucide-loader-2 h-8 w-8 text-fg-muted animate-spin' />
+          <span className='i-ph-circle-notch h-8 w-8 text-fg-muted animate-spin' />
           <p className='text-sm text-fg-muted'>signing...</p>
         </div>
       )}

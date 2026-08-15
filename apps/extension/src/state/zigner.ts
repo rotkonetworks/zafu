@@ -91,8 +91,15 @@ export interface PolkadotImportData {
 
 /** Cosmos accounts import data from Zigner QR */
 export interface CosmosImportData {
-  /** Hex-encoded compressed secp256k1 public key */
+  /** Hex-encoded compressed secp256k1 public key (leaf .../0/0) */
   publicKey: string;
+  /**
+   * Change-level xpub (m/44'/118'/account'/0), base58. Present from zigner
+   * firmware that supports rotation; absent on older exports. When present the
+   * hot wallet can derive burner receive addresses .../0/i locally (watch-only),
+   * each signable on the device at the matching address_index.
+   */
+  xpub?: string;
   /** Account index */
   accountIndex: number;
   /** Label for the wallet */
@@ -201,12 +208,14 @@ export const createZignerSlice =
             label: string;
             account_index: number;
             public_key: string;
+            xpub?: string;
             addresses: { chain_id: string; address: string; prefix: string }[];
           };
 
           if (parsed.type === 'cosmos-accounts' && parsed.public_key && parsed.addresses?.length) {
             const cosmosData: CosmosImportData = {
               publicKey: parsed.public_key,
+              xpub: parsed.xpub,
               accountIndex: parsed.account_index ?? 0,
               label: parsed.label || 'zigner cosmos',
               addresses: parsed.addresses.map(a => ({

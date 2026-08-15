@@ -92,7 +92,7 @@ export const PasswordGateModal = ({
       <div className='fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm'>
         <div className='mx-4 w-full max-w-sm rounded-lg border border-border-soft bg-canvas p-5 shadow-xl'>
           <div className='mb-4 flex items-center gap-2'>
-            <span className='i-lucide-lock h-4 w-4 text-zigner-gold' />
+            <span className='i-ph-lock h-4 w-4 text-zigner-gold' />
             <h3 className='text-lg font-medium'>Confirm Transaction</h3>
           </div>
 
@@ -142,9 +142,9 @@ export const PasswordGateModal = ({
                   className='absolute right-3 top-1/2 -translate-y-1/2 text-fg-muted hover:text-fg-high'
                 >
                   {reveal ? (
-                    <span className='i-lucide-eye h-3.5 w-3.5' />
+                    <span className='i-ph-eye h-3.5 w-3.5' />
                   ) : (
-                    <span className='i-lucide-eye-off h-3.5 w-3.5' />
+                    <span className='i-ph-eye-slash h-3.5 w-3.5' />
                   )}
                 </button>
               </div>

@@ -223,7 +223,7 @@ export function FrostAirgapSignFlow({
     <div className='flex items-center gap-3 w-full'>
       {onBack && (
         <button onClick={onBack} className='text-fg-muted hover:text-fg-high transition-colors'>
-          <span className='i-lucide-arrow-left h-5 w-5' />
+          <span className='i-ph-arrow-left h-5 w-5' />
         </button>
       )}
       <h2 className='text-lg font-medium flex-1'>multisig sign</h2>
@@ -290,12 +290,12 @@ export function FrostAirgapSignFlow({
           <Header />
           <SignStepProgress current={1} />
           <div className='flex items-center gap-2 text-xs text-fg-muted'>
-            <span className='i-lucide-loader-2 size-3.5 animate-spin' />
+            <span className='i-ph-circle-notch size-3.5 animate-spin' />
             exchanging commitments...
           </div>
           {sessionRef.current && <RoomCodeChip code={sessionRef.current.roomCode} />}
           <div className='flex items-center gap-2 rounded-md bg-elev-2 px-3 py-1.5'>
-            <span className='i-lucide-users size-3.5 text-fg-muted' />
+            <span className='i-ph-users size-3.5 text-fg-muted' />
             <span className='text-xs'>
               <span className='font-medium text-fg'>{peersReady + 1}</span>
               <span className='text-fg-muted'> / {ms.threshold} ready</span>
@@ -355,7 +355,7 @@ export function FrostAirgapSignFlow({
           <Header />
           <SignStepProgress current={3} />
           <div className='flex items-center gap-2 text-xs text-fg-muted'>
-            <span className='i-lucide-loader-2 size-3.5 animate-spin' />
+            <span className='i-ph-circle-notch size-3.5 animate-spin' />
             {progress || 'finalizing...'}
           </div>
           {sessionRef.current && <RoomCodeChip code={sessionRef.current.roomCode} />}

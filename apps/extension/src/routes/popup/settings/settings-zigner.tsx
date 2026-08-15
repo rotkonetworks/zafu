@@ -205,7 +205,7 @@ export const SettingsZigner = () => {
         {zignerVaults.length === 0 && (
           <div className='rounded-md border border-zigner-gold/30 bg-zigner-gold/5 p-4 flex flex-col gap-3'>
             <div className='flex items-start gap-3'>
-              <span className='i-lucide-shield-check size-5 text-zigner-gold shrink-0 mt-0.5' />
+              <span className='i-ph-shield-check size-5 text-zigner-gold shrink-0 mt-0.5' />
               <div className='flex flex-col gap-2'>
                 <p className='text-data text-fg-high lowercase'>keep your keys off this device</p>
                 <p className='text-xs text-fg-muted'>

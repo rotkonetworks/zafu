@@ -270,6 +270,8 @@ export default ({
     entry: {
       'injected-session': path.join(injectDir, 'injected-session.ts'),
       'injected-penumbra-global': path.join(injectDir, 'injected-penumbra-global.ts'),
+      'injected-keplr': path.join(injectDir, 'injected-keplr.ts'),
+      'keplr-bridge': path.join(injectDir, 'keplr-bridge.ts'),
       'passkey-intercept': path.join(injectDir, 'passkey-intercept.ts'),
       'offscreen-handler': path.join(entryDir, 'offscreen-handler.ts'),
       'page-root': path.join(entryDir, 'page-root.tsx'),
@@ -289,6 +291,8 @@ export default ({
           const filesNotToChunk = [
             'injected-session',
             'injected-penumbra-global',
+            'injected-keplr',
+            'keplr-bridge',
             'passkey-intercept',
             'workers/zcash-worker',
           ];

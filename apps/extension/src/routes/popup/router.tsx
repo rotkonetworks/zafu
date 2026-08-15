@@ -50,6 +50,9 @@ const FrostApprove = lazy(() => import('./frost-approve').then(m => ({ default: 
 const ZcashSendApproval = lazy(() =>
   import('./approval/zcash-send').then(m => ({ default: m.ZcashSendApproval })),
 );
+const KeplrApproval = lazy(() =>
+  import('./approval/keplr').then(m => ({ default: m.KeplrApproval })),
+);
 
 /**
  * Skeleton placeholder for lazy-loaded popup routes.
@@ -294,6 +297,14 @@ export const popupRoutes: RouteObject[] = [
         element: (
           <Suspense fallback={<LazyFallback />}>
             <ZcashSendApproval />
+          </Suspense>
+        ),
+      },
+      {
+        path: PopupPath.KEPLR_APPROVAL,
+        element: (
+          <Suspense fallback={<LazyFallback />}>
+            <KeplrApproval />
           </Suspense>
         ),
       },

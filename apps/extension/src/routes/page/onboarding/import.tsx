@@ -48,7 +48,7 @@ export const ImportSeedPhrase = () => {
             onClick={() => navigate(PagePath.WELCOME)}
             className='mb-2 inline-flex items-center gap-1.5 self-start text-body text-fg-muted transition-colors hover:text-fg-high lowercase'
           >
-            <span className='i-lucide-arrow-left h-3 w-3' />
+            <span className='i-ph-arrow-left h-3 w-3' />
             back
           </button>
           <h2 className='text-2xl lowercase tracking-[-0.01em] text-fg-high'>
@@ -76,7 +76,7 @@ export const ImportSeedPhrase = () => {
           >
             {submitLabel}
             {valid && (
-              <span className='i-lucide-arrow-right h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5' />
+              <span className='i-ph-arrow-right h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5' />
             )}
           </button>
         </form>

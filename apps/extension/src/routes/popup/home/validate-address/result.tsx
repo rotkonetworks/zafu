@@ -12,7 +12,7 @@ export const Result = ({
   if (!addressOwnershipInfo.isValidAddress) {
     return (
       <div className='flex items-center gap-2'>
-        <span className='i-lucide-badge-alert text-red' />
+        <span className='i-ph-seal-warning text-red' />
         Invalid address
       </div>
     );
@@ -21,7 +21,7 @@ export const Result = ({
   if (addressOwnershipInfo.belongsToWallet) {
     return (
       <div className='flex items-center gap-2'>
-        <span className='i-lucide-badge-check text-green' />
+        <span className='i-ph-seal-check text-green' />
 
         <div className='flex flex-col'>
           Belongs to this wallet
@@ -43,7 +43,7 @@ export const Result = ({
 
   return (
     <div className='flex items-center gap-2'>
-      <span className='i-lucide-badge-alert text-red' />
+      <span className='i-ph-seal-warning text-red' />
       Does not belong to this wallet
     </div>
   );

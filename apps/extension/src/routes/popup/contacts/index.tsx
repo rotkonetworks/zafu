@@ -273,19 +273,19 @@ function AddressRow({
         <span className='font-mono text-xs text-fg-muted truncate'>{address.address}</span>
         <button onClick={copyAddress} className='shrink-0 p-1 text-fg-muted hover:text-fg-high'>
           {copied ? (
-            <span className='i-lucide-check h-3 w-3 text-green-400' />
+            <span className='i-ph-check h-3 w-3 text-green-400' />
           ) : (
-            <span className='i-lucide-copy h-3 w-3' />
+            <span className='i-ph-copy h-3 w-3' />
           )}
         </button>
       </div>
 
       <div className='flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity'>
         <button onClick={onEdit} className='p-1 rounded-lg hover:bg-elev-1 transition-colors'>
-          <span className='i-lucide-pencil h-3 w-3 text-fg-muted' />
+          <span className='i-ph-pencil-simple h-3 w-3 text-fg-muted' />
         </button>
         <button onClick={onDelete} className='p-1 rounded-lg hover:bg-elev-1 transition-colors'>
-          <span className='i-lucide-trash-2 h-3 w-3 text-red-400' />
+          <span className='i-ph-trash h-3 w-3 text-red-400' />
         </button>
       </div>
     </div>
@@ -330,14 +330,14 @@ function ContactCard({
             className='p-0.5'
           >
             {expanded ? (
-              <span className='i-lucide-chevron-down h-4 w-4 text-fg-muted' />
+              <span className='i-ph-caret-down h-4 w-4 text-fg-muted' />
             ) : (
-              <span className='i-lucide-chevron-right h-4 w-4 text-fg-muted' />
+              <span className='i-ph-caret-right h-4 w-4 text-fg-muted' />
             )}
           </button>
 
           <div className='flex h-8 w-8 items-center justify-center rounded-full bg-primary/10'>
-            <span className='i-lucide-user h-4 w-4 text-zigner-gold' />
+            <span className='i-ph-user h-4 w-4 text-zigner-gold' />
           </div>
 
           <div>
@@ -359,22 +359,22 @@ function ContactCard({
             className='p-1.5 rounded-lg hover:bg-elev-1 transition-colors'
           >
             {contact.favorite ? (
-              <span className='i-lucide-star h-4 w-4 text-yellow-400' />
+              <span className='i-ph-star h-4 w-4 text-yellow-400' />
             ) : (
-              <span className='i-lucide-star h-4 w-4 text-fg-muted' />
+              <span className='i-ph-star h-4 w-4 text-fg-muted' />
             )}
           </button>
           <button
             onClick={onEditContact}
             className='p-1.5 rounded-lg hover:bg-elev-1 transition-colors'
           >
-            <span className='i-lucide-pencil h-4 w-4 text-fg-muted' />
+            <span className='i-ph-pencil-simple h-4 w-4 text-fg-muted' />
           </button>
           <button
             onClick={onDeleteContact}
             className='p-1.5 rounded-lg hover:bg-elev-1 transition-colors'
           >
-            <span className='i-lucide-trash-2 h-4 w-4 text-red-400' />
+            <span className='i-ph-trash h-4 w-4 text-red-400' />
           </button>
         </div>
       </div>
@@ -405,7 +405,7 @@ function ContactCard({
               onClick={onAddAddress}
               className='flex flex-1 items-center justify-center gap-1 rounded-lg border border-dashed border-border-soft py-2 text-xs text-fg-muted hover:border-zigner-gold hover:text-zigner-gold transition-colors'
             >
-              <span className='i-lucide-plus h-3 w-3' />
+              <span className='i-ph-plus h-3 w-3' />
               add address
             </button>
             {onShareCard && (
@@ -413,7 +413,7 @@ function ContactCard({
                 onClick={onShareCard}
                 className='flex flex-1 items-center justify-center gap-1 rounded-lg border border-dashed border-border-soft py-2 text-xs text-fg-muted hover:border-zigner-gold hover:text-zigner-gold transition-colors'
               >
-                <span className='i-lucide-send h-3 w-3' />
+                <span className='i-ph-paper-plane-right h-3 w-3' />
                 share via zcash
               </button>
             )}
@@ -681,7 +681,7 @@ export function ContactsPage() {
       <div className='flex items-center justify-between px-4 py-3 border-b border-border-soft'>
         <div className='flex items-center gap-3'>
           <button onClick={goBack} className='text-fg-muted transition-colors hover:text-fg-high'>
-            <span className='i-lucide-arrow-left h-5 w-5' />
+            <span className='i-ph-arrow-left h-5 w-5' />
           </button>
           <h1 className='text-lg font-medium'>contacts</h1>
         </div>
@@ -692,7 +692,7 @@ export function ContactsPage() {
               onClick={() => setShowMenu(!showMenu)}
               className='rounded-lg p-1.5 hover:bg-elev-1 transition-colors'
             >
-              <span className='i-lucide-more-horizontal h-5 w-5' />
+              <span className='i-ph-dots-three h-5 w-5' />
             </button>
             {showMenu && (
               <>
@@ -702,14 +702,14 @@ export function ContactsPage() {
                     onClick={() => void handleExport()}
                     className='flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-elev-1 transition-colors'
                   >
-                    <span className='i-lucide-download h-4 w-4' />
+                    <span className='i-ph-download-simple h-4 w-4' />
                     export
                   </button>
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     className='flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-elev-1 transition-colors'
                   >
-                    <span className='i-lucide-upload h-4 w-4' />
+                    <span className='i-ph-upload-simple h-4 w-4' />
                     import
                   </button>
                 </div>
@@ -724,7 +724,7 @@ export function ContactsPage() {
             }}
             className='flex items-center gap-1 rounded-lg bg-zigner-gold px-3 py-1.5 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors'
           >
-            <span className='i-lucide-plus h-4 w-4' />
+            <span className='i-ph-plus h-4 w-4' />
             add
           </button>
         </div>
@@ -747,7 +747,7 @@ export function ContactsPage() {
       {/* search and filter */}
       <div className='px-4 py-3 space-y-2'>
         <div className='relative'>
-          <span className='i-lucide-search absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-fg-muted' />
+          <span className='i-ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-fg-muted' />
           <input
             type='text'
             value={search}
@@ -798,7 +798,7 @@ export function ContactsPage() {
                     title='copy address'
                     className='flex w-full items-center gap-2 border border-border-soft px-3 py-2 text-left transition-colors hover:bg-elev-1'
                   >
-                    <span className='i-lucide-wallet h-4 w-4 shrink-0 text-fg-dim' />
+                    <span className='i-ph-wallet h-4 w-4 shrink-0 text-fg-dim' />
                     <span className='text-data text-fg-high truncate'>{w.name}</span>
                     <span className='ml-auto max-w-[9rem] truncate text-label text-fg-muted tabular'>
                       {addr.slice(0, 10)}…{addr.slice(-6)}
@@ -812,7 +812,7 @@ export function ContactsPage() {
         {filteredContacts.length === 0 ? (
           <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
             <div className='rounded-full bg-primary/10 p-4'>
-              <span className='i-lucide-user h-8 w-8 text-zigner-gold' />
+              <span className='i-ph-user h-8 w-8 text-zigner-gold' />
             </div>
             <div className='flex flex-col gap-1'>
               <p className='text-sm font-medium'>no contacts yet</p>
@@ -831,7 +831,7 @@ export function ContactsPage() {
                 }}
                 className='mt-1 inline-flex items-center gap-1.5 bg-zigner-gold/10 px-3 py-1.5 text-xs text-zigner-gold transition-colors hover:bg-zigner-gold/15'
               >
-                <span className='i-lucide-plus h-3.5 w-3.5' />
+                <span className='i-ph-plus h-3.5 w-3.5' />
                 add your first contact
               </button>
             )}

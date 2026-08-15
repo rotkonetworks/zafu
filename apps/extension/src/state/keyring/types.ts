@@ -164,6 +164,12 @@ export interface ZignerZafuImport {
   polkadotGenesisHash?: string;
   /** cosmos chain addresses (watch-only) */
   cosmosAddresses?: { chainId: string; address: string; prefix: string }[];
+  /**
+   * cosmos change-level xpub (m/44'/118'/account'/0), base58. Present from
+   * rotation-capable zigner firmware. Lets zafu derive burner addresses
+   * .../0/i locally, watch-only; the device signs each at the same index.
+   */
+  cosmosXpub?: string;
   /** account index on zafu device */
   accountIndex: number;
   /** device identifier */

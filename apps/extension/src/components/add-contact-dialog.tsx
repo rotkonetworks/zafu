@@ -75,7 +75,7 @@ export function AddContactDialog({ address, network, onClose, onSuccess }: AddCo
         <div className='flex items-center justify-between border-b border-border-soft px-4 py-3'>
           <h2 className='text-lg font-medium'>add to contacts</h2>
           <button onClick={onClose} className='rounded-lg p-1 hover:bg-elev-1 transition-colors'>
-            <span className='i-lucide-x h-4 w-4' />
+            <span className='i-ph-x h-4 w-4' />
           </button>
         </div>
 
@@ -101,7 +101,7 @@ export function AddContactDialog({ address, network, onClose, onSuccess }: AddCo
                 mode === 'new' ? 'bg-zigner-gold text-zigner-dark' : 'bg-elev-2 hover:bg-elev-1',
               )}
             >
-              <span className='i-lucide-plus h-4 w-4 inline mr-1' />
+              <span className='i-ph-plus h-4 w-4 inline mr-1' />
               new contact
             </button>
             <button
@@ -115,7 +115,7 @@ export function AddContactDialog({ address, network, onClose, onSuccess }: AddCo
                 existingContacts.length === 0 && 'opacity-50 cursor-not-allowed',
               )}
             >
-              <span className='i-lucide-user h-4 w-4 inline mr-1' />
+              <span className='i-ph-user h-4 w-4 inline mr-1' />
               existing
             </button>
           </div>
@@ -148,7 +148,7 @@ export function AddContactDialog({ address, network, onClose, onSuccess }: AddCo
                       selectedContact?.id === contact.id && 'bg-primary/10',
                     )}
                   >
-                    <span className='i-lucide-user h-4 w-4 text-fg-muted' />
+                    <span className='i-ph-user h-4 w-4 text-fg-muted' />
                     <span className='truncate'>{contact.name}</span>
                     <span className='ml-auto text-xs text-fg-muted'>
                       {contact.addresses.length} addr

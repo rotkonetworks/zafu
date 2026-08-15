@@ -96,7 +96,7 @@ export const SwapPage = () => {
   return (
     <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
       <div className='rounded-full bg-primary/10 p-4'>
-        <span className='i-lucide-shuffle h-8 w-8 text-zigner-gold' />
+        <span className='i-ph-shuffle h-8 w-8 text-zigner-gold' />
       </div>
       <div>
         <h2 className='text-lg font-medium'>swap</h2>
@@ -526,7 +526,7 @@ const ZcashCrosschainSwap = () => {
           onClick={() => navigate(-1)}
           className='text-fg-muted transition-colors hover:text-fg-high'
         >
-          <span className='i-lucide-arrow-left h-5 w-5' />
+          <span className='i-ph-arrow-left h-5 w-5' />
         </button>
         <h1 className='text-lg font-medium'>crosschain swap</h1>
       </div>
@@ -571,7 +571,7 @@ const ZcashCrosschainSwap = () => {
                   {tokensLoading ? '...' : (selectedToken?.symbol ?? 'select')}
                   <span
                     className={cn(
-                      'i-lucide-chevron-down h-3.5 w-3.5 transition-transform',
+                      'i-ph-caret-down h-3.5 w-3.5 transition-transform',
                       tokenPickerOpen && 'rotate-180',
                     )}
                   />
@@ -588,7 +588,7 @@ const ZcashCrosschainSwap = () => {
               title='flip direction'
             >
               <div className='flex flex-col items-center'>
-                <span className='i-lucide-arrow-down h-4 w-4' />
+                <span className='i-ph-arrow-down h-4 w-4' />
               </div>
             </button>
           </div>
@@ -609,7 +609,7 @@ const ZcashCrosschainSwap = () => {
                   {tokensLoading ? '...' : (selectedToken?.symbol ?? 'select')}
                   <span
                     className={cn(
-                      'i-lucide-chevron-down h-3.5 w-3.5 transition-transform',
+                      'i-ph-caret-down h-3.5 w-3.5 transition-transform',
                       tokenPickerOpen && 'rotate-180',
                     )}
                   />
@@ -668,7 +668,7 @@ const ZcashCrosschainSwap = () => {
                   )}
                   title='address book'
                 >
-                  <span className='i-lucide-user h-3.5 w-3.5' />
+                  <span className='i-ph-user h-3.5 w-3.5' />
                 </button>
               )}
             </div>
@@ -731,7 +731,7 @@ const ZcashCrosschainSwap = () => {
 
       {step === 'quoting' && (
         <div className='flex flex-col items-center gap-3 py-12'>
-          <span className='i-lucide-refresh-cw h-6 w-6 animate-spin text-fg-muted' />
+          <span className='i-ph-arrows-clockwise h-6 w-6 animate-spin text-fg-muted' />
           <p className='text-sm text-fg-muted'>fetching quote...</p>
         </div>
       )}
@@ -904,7 +904,7 @@ const ZcashCrosschainSwap = () => {
           <div className='rounded-lg border border-border-soft bg-elev-2/20 p-3'>
             <div className='flex items-center gap-2'>
               {step === 'polling' ? (
-                <span className='i-lucide-refresh-cw h-4 w-4 animate-spin text-zigner-gold' />
+                <span className='i-ph-arrows-clockwise h-4 w-4 animate-spin text-zigner-gold' />
               ) : (
                 <div className='h-2 w-2 rounded-full bg-yellow-500 animate-pulse' />
               )}
@@ -1131,8 +1131,16 @@ const PenumbraSwap = () => {
       const unfilledLo = unfilledAmt?.lo ?? 0n;
       const hasUnfilled = unfilledLo > 0n || (unfilledAmt?.hi ?? 0n) > 0n;
 
+      // Effective price against the *filled* portion only: the input that was
+      // returned unfilled never traded, so rating it against the full input
+      // would understate the rate you actually got.
+      const inputAmount = parseFloat(amountIn);
+      const filledInput = inputAmount - Number(unfilledLo) / 10 ** selectedIn.exponent;
+      const rate = filledInput > 0 ? outputAmount / filledInput : 0;
+
       return {
         outputAmount: outputAmount.toFixed(6),
+        rate: rate > 0 ? rate : undefined,
         unfilled: hasUnfilled
           ? {
               amount: (Number(unfilledLo) / 10 ** selectedIn.exponent).toFixed(6),
@@ -1232,7 +1240,7 @@ const PenumbraSwap = () => {
           onClick={() => navigate(-1)}
           className='text-fg-muted transition-colors hover:text-fg-high'
         >
-          <span className='i-lucide-arrow-left h-5 w-5' />
+          <span className='i-ph-arrow-left h-5 w-5' />
         </button>
         <h1 className='text-lg font-medium'>swap</h1>
       </div>
@@ -1277,7 +1285,7 @@ const PenumbraSwap = () => {
             )}
             <span
               className={cn(
-                'i-lucide-chevron-down h-4 w-4 transition-transform',
+                'i-ph-caret-down h-4 w-4 transition-transform',
                 assetInOpen && 'rotate-180',
               )}
             />
@@ -1316,7 +1324,7 @@ const PenumbraSwap = () => {
           disabled={txStatus !== 'idle' || !selectedIn || !selectedOut}
           className='rounded-full border border-border-soft bg-canvas p-2 shadow-sm transition-colors hover:bg-elev-1 disabled:opacity-50'
         >
-          <span className='i-lucide-arrow-down h-4 w-4' />
+          <span className='i-ph-arrow-down h-4 w-4' />
         </button>
       </div>
 
@@ -1326,7 +1334,7 @@ const PenumbraSwap = () => {
           <span className='text-xs text-fg-muted'>you receive</span>
           {simLoading && (
             <span className='flex items-center gap-1 text-xs text-fg-muted'>
-              <span className='i-lucide-refresh-cw h-3 w-3 animate-spin' />
+              <span className='i-ph-arrows-clockwise h-3 w-3 animate-spin' />
               simulating...
             </span>
           )}
@@ -1351,7 +1359,7 @@ const PenumbraSwap = () => {
             )}
             <span
               className={cn(
-                'i-lucide-chevron-down h-4 w-4 transition-transform',
+                'i-ph-caret-down h-4 w-4 transition-transform',
                 assetOutOpen && 'rotate-180',
               )}
             />
@@ -1392,6 +1400,19 @@ const PenumbraSwap = () => {
         </div>
       </div>
 
+      {simulation?.rate && selectedIn && selectedOut && (
+        <div className='flex items-center justify-between px-1 text-xs text-fg-muted'>
+          <span>rate</span>
+          <span className='font-mono'>
+            1 {selectedIn.symbol} ={' '}
+            {simulation.rate < 0.001
+              ? simulation.rate.toPrecision(3)
+              : simulation.rate.toLocaleString(undefined, { maximumFractionDigits: 6 })}{' '}
+            {selectedOut.symbol}
+          </span>
+        </div>
+      )}
+
       {simulation?.unfilled && (
         <div className='rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-2'>
           <p className='text-xs text-yellow-400'>
@@ -1408,7 +1429,7 @@ const PenumbraSwap = () => {
       {txStatus === 'success' && txHash && (
         <div className='rounded-lg border border-green-500/30 bg-green-500/5 p-3'>
           <div className='flex items-center gap-2'>
-            <span className='i-lucide-check h-4 w-4 text-green-400' />
+            <span className='i-ph-check h-4 w-4 text-green-400' />
             <p className='text-sm font-medium text-fg'>Swap submitted</p>
           </div>
           <button
@@ -1417,7 +1438,7 @@ const PenumbraSwap = () => {
             title='Copy transaction hash'
             className='mt-2 flex w-full items-center gap-1.5 rounded-md bg-elev-2 px-2 py-1.5 transition-colors hover:bg-elev-1'
           >
-            <span className='i-lucide-copy h-3 w-3 shrink-0 text-fg-muted' />
+            <span className='i-ph-copy h-3 w-3 shrink-0 text-fg-muted' />
             <span className='truncate font-mono text-xs text-fg-muted'>{txHash}</span>
           </button>
           <p className='mt-2 text-xs text-fg-muted'>

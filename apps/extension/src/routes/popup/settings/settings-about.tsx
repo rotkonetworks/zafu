@@ -34,7 +34,7 @@ export const SettingsAbout = () => {
               rel='noopener noreferrer'
               className='flex items-center gap-1.5 text-xs text-zigner-gold hover:underline transition-colors'
             >
-              <span className='i-lucide-external-link h-3 w-3' />
+              <span className='i-ph-arrow-square-out h-3 w-3' />
               zafu.pro
             </a>
             <a
@@ -43,7 +43,7 @@ export const SettingsAbout = () => {
               rel='noopener noreferrer'
               className='flex items-center gap-1.5 text-xs text-zigner-gold hover:underline transition-colors'
             >
-              <span className='i-lucide-external-link h-3 w-3' />
+              <span className='i-ph-arrow-square-out h-3 w-3' />
               github
             </a>
             <a
@@ -52,7 +52,7 @@ export const SettingsAbout = () => {
               rel='noopener noreferrer'
               className='flex items-center gap-1.5 text-xs text-zigner-gold hover:underline transition-colors'
             >
-              <span className='i-lucide-external-link h-3 w-3' />
+              <span className='i-ph-arrow-square-out h-3 w-3' />
               zigner cold wallet
             </a>
           </div>

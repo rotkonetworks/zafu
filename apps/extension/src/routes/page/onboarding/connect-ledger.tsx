@@ -167,14 +167,14 @@ export const ConnectLedger = () => {
 
         <div className='flex flex-col gap-4'>
           {inPopup && (
-            <NoticeBox tone='warn' icon='i-lucide-external-link'>
+            <NoticeBox tone='warn' icon='i-ph-arrow-square-out'>
               open zafu in the side panel or a full tab to connect a ledger. usb sessions are
               dropped when the popup loses focus.
             </NoticeBox>
           )}
 
           {!inPopup && !supported && (
-            <NoticeBox tone='warn' icon='i-lucide-triangle-alert'>
+            <NoticeBox tone='warn' icon='i-ph-warning'>
               this browser does not support webhid. use a chromium browser to connect a ledger.
             </NoticeBox>
           )}
@@ -190,12 +190,12 @@ export const ConnectLedger = () => {
               >
                 {phase === 'connecting' ? (
                   <>
-                    <span className='i-lucide-loader-circle mr-2 h-4 w-4 animate-spin' />
+                    <span className='i-ph-circle-notch mr-2 h-4 w-4 animate-spin' />
                     connecting...
                   </>
                 ) : (
                   <>
-                    <span className='i-lucide-usb mr-2 h-4 w-4' />
+                    <span className='i-ph-usb mr-2 h-4 w-4' />
                     connect ledger
                   </>
                 )}
@@ -231,7 +231,7 @@ export const ConnectLedger = () => {
                   device; an app that predates NU6.3 does not know the current
                   consensus branch id and REJECTS every send (6a80). Tell the user
                   to update before they try to send, or it fails on-device. */}
-              <NoticeBox tone='warn' icon='i-lucide-refresh-cw'>
+              <NoticeBox tone='warn' icon='i-ph-arrows-clockwise'>
                 update your ledger zcash app to the latest version in ledger live first. an older
                 app does not recognise the current zcash network and will reject transparent sends.
               </NoticeBox>
@@ -240,13 +240,13 @@ export const ConnectLedger = () => {
                   path that works on mainnet today); the dedicated shielded app is
                   not published yet, so shielded on Ledger is unavailable REGARDLESS
                   of app version. State that plainly - do not imply shielded works. */}
-              <NoticeBox tone='warn' icon='i-lucide-shield-off'>
+              <NoticeBox tone='warn' icon='i-ph-shield-slash'>
                 ledger is transparent-only in zafu right now. you can send and receive transparent
                 zec (t-addresses). shielded on ledger needs a newer zcash app from ledger and is
                 coming later - keep long-term savings in a shielded zafu wallet.
               </NoticeBox>
 
-              <NoticeBox tone='info' icon='i-lucide-usb'>
+              <NoticeBox tone='info' icon='i-ph-usb'>
                 watch-only + transparent. view your t-address balance and sign transparent sends
                 with the ledger plugged in.
               </NoticeBox>

@@ -16,7 +16,12 @@ import {
   deriveCosmosWallet,
 } from '@repo/wallet/networks/cosmos/signer';
 import { getBalance, getAllBalances } from '@repo/wallet/networks/cosmos/client';
-import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import {
+  COSMOS_CHAINS,
+  rpcEndpointPool,
+  type CosmosChainId,
+} from '@repo/wallet/networks/cosmos/chains';
+import { getNobleRpcPool } from './noble-rpc';
 
 /** hook to get balance for a specific cosmos chain */
 export const useCosmosBalance = (chainId: CosmosChainId, accountIndex = 0) => {
@@ -123,11 +128,22 @@ export const useAllCosmosBalances = (accountIndex = 0) => {
   });
 };
 
+export interface DepositAsset {
+  denom: string;
+  symbol: string;
+  amount: bigint;
+  formatted: string;
+}
+
 export interface DepositWallet {
   index: number;
   address: string;
+  /** total across all assets - drives the funded/unused split */
   balance: bigint;
+  /** the native asset's formatted balance, kept for the compact summary line */
   formatted: string;
+  /** every asset held at this burner (UM, USDC, ...) - each independently movable */
+  assets: DepositAsset[];
 }
 
 const DEPOSIT_SCAN_GAP = 8;
@@ -158,22 +174,56 @@ export const useCosmosDepositWallets = (chainId: CosmosChainId) => {
       }
       const mnemonic = await getMnemonic(selectedKeyInfo.id);
       const config = COSMOS_CHAINS[chainId];
+      // the user-editable pool for Noble; other chains use their config pool
+      const pool = chainId === 'noble' ? await getNobleRpcPool() : rpcEndpointPool(chainId);
 
       const scan = await Promise.all(
         Array.from({ length: DEPOSIT_SCAN_GAP + 1 }, (_, i) => i).map(async index => {
           const { address: base } = await deriveCosmosWallet(mnemonic, index);
           const address = deriveChainAddress(base, chainId);
-          let amount = 0n;
+          // A burner can hold more than its native asset: an unshield lands UM
+          // here, and the user may also route USDC into the same address before
+          // burning it. Scan every balance, not just the native denom.
+          //
+          // Query each burner through a DIFFERENT RPC endpoint (rotated by index)
+          // so no single provider sees all of your deposit addresses together.
+          // If that endpoint is down, fall back to the primary rather than hide
+          // a funded burner.
+          const toAssets = (balances: { denom: string; amount: bigint }[]): DepositAsset[] =>
+            balances
+              .filter(b => b.amount > 0n)
+              .map(b => {
+                const isNative = b.denom === config.denom;
+                const symbol = isNative ? config.symbol : denomToSymbol(b.denom);
+                const decimals = isNative ? config.decimals : 6;
+                return {
+                  denom: b.denom,
+                  symbol,
+                  amount: b.amount,
+                  formatted: formatBalance(b.amount, decimals, symbol),
+                };
+              })
+              .sort((a, b) => Number(b.amount - a.amount));
+
+          let assets: DepositAsset[] = [];
+          const endpoint = pool[index % pool.length];
           try {
-            amount = (await getBalance(chainId, address)).amount;
+            assets = toAssets(await getAllBalances(chainId, address, endpoint));
           } catch {
-            /* unreachable RPC this pass -> treat as 0, retried on refetch */
+            try {
+              assets = toAssets(await getAllBalances(chainId, address));
+            } catch {
+              /* both unreachable this pass -> empty, retried on refetch */
+            }
           }
+          const total = assets.reduce((sum, a) => sum + a.amount, 0n);
+          const native = assets.find(a => a.denom === config.denom);
           return {
             index,
             address,
-            balance: amount,
-            formatted: formatBalance(amount, config.decimals, config.symbol),
+            balance: total,
+            formatted: native?.formatted ?? formatBalance(0n, config.decimals, config.symbol),
+            assets,
           } as DepositWallet;
         }),
       );

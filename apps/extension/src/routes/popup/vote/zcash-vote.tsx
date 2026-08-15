@@ -151,7 +151,7 @@ const RoundCard = ({
         <span
           className={cn(
             'h-4 w-4 shrink-0 text-fg-muted',
-            expanded ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down',
+            expanded ? 'i-ph-caret-up' : 'i-ph-caret-down',
           )}
         />
       </button>
@@ -174,7 +174,7 @@ const RoundCard = ({
                 className='flex items-center gap-1 text-fg-muted transition-colors hover:text-fg-high'
               >
                 discussion
-                <span className='i-lucide-external-link h-3 w-3' />
+                <span className='i-ph-arrow-square-out h-3 w-3' />
               </a>
             )}
           </div>

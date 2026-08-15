@@ -66,7 +66,7 @@ export const NoteSyncPage = () => {
     <SettingsScreen title='sync to zigner' backPath={PopupPath.SETTINGS_WALLETS}>
       {(step === 'loading' || step === 'building') && (
         <div className='flex flex-col items-center gap-3 py-8'>
-          <span className='i-lucide-loader-2 size-5 animate-spin text-fg-muted' />
+          <span className='i-ph-circle-notch size-5 animate-spin text-fg-muted' />
           <p className='text-xs text-fg-muted'>
             {step === 'loading' ? 'loading notes...' : 'building merkle witnesses...'}
           </p>

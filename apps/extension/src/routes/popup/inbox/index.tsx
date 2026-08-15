@@ -81,30 +81,30 @@ function truncateAddress(addr: string, len = 8): string {
 function memoTypeIcon(type: MemoType): string {
   switch (type) {
     case MemoType.Text:
-      return 'i-lucide-message-square';
+      return 'i-ph-chat';
     case MemoType.ContactCard:
-      return 'i-lucide-contact';
+      return 'i-ph-address-book';
     case MemoType.Data:
-      return 'i-lucide-database';
+      return 'i-ph-database';
     case MemoType.Address:
-      return 'i-lucide-link';
+      return 'i-ph-link';
     case MemoType.PaymentRequest:
-      return 'i-lucide-credit-card';
+      return 'i-ph-credit-card';
     case MemoType.Ack:
-      return 'i-lucide-check-check';
+      return 'i-ph-checks';
     case MemoType.EncryptedMessage:
-      return 'i-lucide-lock';
+      return 'i-ph-lock';
     case MemoType.DkgRound1:
     case MemoType.DkgRound2:
     case MemoType.DkgRound3:
-      return 'i-lucide-key-round';
+      return 'i-ph-key';
     case MemoType.SignRequest:
     case MemoType.SignCommitment:
     case MemoType.SignShare:
     case MemoType.SignResult:
-      return 'i-lucide-pen-tool';
+      return 'i-ph-pen-nib';
     default:
-      return 'i-lucide-file';
+      return 'i-ph-file';
   }
 }
 
@@ -162,7 +162,7 @@ function ConversationRow({
         <span
           className={cn(
             'h-5 w-5 text-fg-muted',
-            hasFrost ? 'i-lucide-key-round' : 'i-lucide-message-square',
+            hasFrost ? 'i-ph-key' : 'i-ph-chat',
           )}
         />
       </div>
@@ -276,7 +276,7 @@ function MessageContent({ message }: { message: InboxMessage }) {
     case MemoType.Ack:
       return (
         <div className='flex items-center gap-1.5 text-fg-muted'>
-          <span className='i-lucide-check-check h-4 w-4' />
+          <span className='i-ph-checks h-4 w-4' />
           <span className='text-xs'>read receipt</span>
         </div>
       );
@@ -284,7 +284,7 @@ function MessageContent({ message }: { message: InboxMessage }) {
     case MemoType.EncryptedMessage:
       return (
         <div className='flex items-center gap-1.5 text-fg-muted'>
-          <span className='i-lucide-lock h-4 w-4' />
+          <span className='i-ph-lock h-4 w-4' />
           <span className='text-xs'>encrypted message (decryption not yet supported)</span>
         </div>
       );
@@ -330,19 +330,19 @@ function ContactCardBubble({ card }: { card?: ContactCard }) {
   return (
     <div className='space-y-2'>
       <div className='flex items-center gap-2'>
-        <span className='i-lucide-contact h-4 w-4 text-zigner-gold' />
+        <span className='i-ph-address-book h-4 w-4 text-zigner-gold' />
         <span className='text-sm font-medium'>{card.name || 'anonymous'}</span>
       </div>
       <p className='text-label font-mono text-fg-muted break-all'>{card.address}</p>
       {card.zid && (
         <div className='flex items-center gap-1'>
-          <span className='i-lucide-fingerprint h-3 w-3 text-fg-muted' />
+          <span className='i-ph-fingerprint h-3 w-3 text-fg-muted' />
           <span className='text-label font-mono text-fg-muted'>zid{card.zid.slice(0, 16)}</span>
         </div>
       )}
       {saved ? (
         <span className='flex items-center gap-1 text-label text-fg-muted'>
-          <span className='i-lucide-check h-3 w-3' />
+          <span className='i-ph-check h-3 w-3' />
           in contacts
         </span>
       ) : (
@@ -350,7 +350,7 @@ function ContactCardBubble({ card }: { card?: ContactCard }) {
           onClick={() => void handleSave()}
           className='flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-label text-zigner-gold hover:bg-primary/20 transition-colors'
         >
-          <span className='i-lucide-user-plus h-3 w-3' />
+          <span className='i-ph-user-plus h-3 w-3' />
           save to contacts
         </button>
       )}
@@ -435,7 +435,7 @@ function FrostDkgBubble({ message }: { message: InboxMessage }) {
   return (
     <div className='space-y-2'>
       <div className='flex items-center gap-2'>
-        <span className='i-lucide-key-round h-4 w-4 text-fg-muted' />
+        <span className='i-ph-key h-4 w-4 text-fg-muted' />
         <span className='text-sm font-medium text-fg-high'>DKG round {round}</span>
       </div>
       <p className='text-label text-fg-muted'>
@@ -448,7 +448,7 @@ function FrostDkgBubble({ message }: { message: InboxMessage }) {
           onClick={() => navigate(PopupPath.MULTISIG_JOIN)}
           className='flex items-center gap-1.5 rounded-md bg-elev-2 border border-border-soft px-2.5 py-1.5 text-xs text-fg-high hover:bg-elev-1 transition-colors'
         >
-          <span className='i-lucide-arrow-right h-3.5 w-3.5' />
+          <span className='i-ph-arrow-right h-3.5 w-3.5' />
           open multisig
         </button>
       )}
@@ -468,7 +468,7 @@ function FrostSignBubble({ message }: { message: InboxMessage }) {
   return (
     <div className='space-y-2'>
       <div className='flex items-center gap-2'>
-        <span className='i-lucide-pen-tool h-4 w-4 text-fg-muted' />
+        <span className='i-ph-pen-nib h-4 w-4 text-fg-muted' />
         <span className='text-sm font-medium text-fg-high'>{message.typeLabel}</span>
       </div>
       <p className='text-label text-fg-muted'>{labels[message.type] ?? 'FROST signing round'}</p>
@@ -477,13 +477,13 @@ function FrostSignBubble({ message }: { message: InboxMessage }) {
           onClick={() => navigate(PopupPath.MULTISIG_SIGN)}
           className='flex items-center gap-1.5 rounded-md bg-elev-2 border border-border-soft px-2.5 py-1.5 text-xs text-fg-high hover:bg-elev-1 transition-colors'
         >
-          <span className='i-lucide-pen-tool h-3.5 w-3.5' />
+          <span className='i-ph-pen-nib h-3.5 w-3.5' />
           sign transaction
         </button>
       )}
       {message.type === MemoType.SignResult && (
         <div className='flex items-center gap-1.5 text-fg-muted'>
-          <span className='i-lucide-check-circle h-3.5 w-3.5' />
+          <span className='i-ph-check-circle h-3.5 w-3.5' />
           <span className='text-xs'>transaction signed</span>
         </div>
       )}
@@ -529,7 +529,7 @@ function ConversationThread({
       {/* header */}
       <div className='flex items-center gap-3 px-4 py-3 border-b border-border-soft'>
         <button onClick={onClose} className='text-fg-muted hover:text-fg-high transition-colors'>
-          <span className='i-lucide-arrow-left h-5 w-5' />
+          <span className='i-ph-arrow-left h-5 w-5' />
         </button>
 
         <div className='flex-1 min-w-0'>
@@ -544,10 +544,10 @@ function ConversationThread({
                 placeholder='conversation label'
               />
               <button onClick={saveLabel} className='text-zigner-gold'>
-                <span className='i-lucide-check h-4 w-4' />
+                <span className='i-ph-check h-4 w-4' />
               </button>
               <button onClick={() => setEditingLabel(false)} className='text-fg-muted'>
-                <span className='i-lucide-x h-4 w-4' />
+                <span className='i-ph-x h-4 w-4' />
               </button>
             </div>
           ) : (
@@ -559,7 +559,7 @@ function ConversationThread({
               className='flex items-center gap-1.5 text-sm font-medium hover:text-zigner-gold transition-colors'
             >
               {conversation.label || `conversation #${conversation.diversifierIndex}`}
-              <span className='i-lucide-pencil h-3 w-3 text-fg-muted' />
+              <span className='i-ph-pencil-simple h-3 w-3 text-fg-muted' />
             </button>
           )}
         </div>
@@ -570,7 +570,7 @@ function ConversationThread({
       {/* referral attribution */}
       {referral && (
         <div className='flex items-center gap-1.5 px-4 py-2 text-xs text-fg-muted border-b border-border-hard/20'>
-          <span className='i-lucide-share-2 h-3.5 w-3.5' />
+          <span className='i-ph-share-network h-3.5 w-3.5' />
           via {referral.sharedWith}
         </div>
       )}
@@ -631,7 +631,7 @@ function ConversationCompose({ diversifierIndex }: { diversifierIndex: number })
           disabled={!message.trim()}
           className='rounded-lg bg-zigner-gold p-2 text-zigner-dark hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
         >
-          <span className='i-lucide-send h-4 w-4' />
+          <span className='i-ph-paper-plane-right h-4 w-4' />
         </button>
       </div>
       <p className='text-label text-fg-muted mt-1'>
@@ -741,7 +741,7 @@ function ComposeMessage({
     <div className='flex flex-col h-full'>
       <div className='flex items-center gap-3 px-4 py-3 border-b border-border-soft'>
         <button onClick={onClose} className='text-fg-muted hover:text-fg-high transition-colors'>
-          <span className='i-lucide-arrow-left h-5 w-5' />
+          <span className='i-ph-arrow-left h-5 w-5' />
         </button>
         <h2 className='text-lg font-medium'>new message</h2>
       </div>
@@ -797,7 +797,7 @@ function ComposeMessage({
         {txStatus === 'success' && txHash && (
           <div className='rounded-lg border border-border-soft bg-elev-1 p-3'>
             <p className='flex items-center gap-1.5 text-sm text-fg-high'>
-              <span className='i-lucide-check h-4 w-4' />
+              <span className='i-ph-check h-4 w-4' />
               message sent
             </p>
             <p className='text-xs text-fg-muted mt-1 font-mono break-all'>{txHash}</p>
@@ -826,17 +826,17 @@ function ComposeMessage({
         >
           {txStatus === 'sending' ? (
             <>
-              <span className='i-lucide-refresh-cw h-4 w-4 animate-spin' /> sending...
+              <span className='i-ph-arrows-clockwise h-4 w-4 animate-spin' /> sending...
             </>
           ) : txStatus === 'success' ? (
             <>
-              <span className='i-lucide-check h-4 w-4' /> done
+              <span className='i-ph-check h-4 w-4' /> done
             </>
           ) : txStatus === 'error' ? (
             'close'
           ) : (
             <>
-              <span className='i-lucide-send h-4 w-4' /> send message
+              <span className='i-ph-paper-plane-right h-4 w-4' /> send message
             </>
           )}
         </button>
@@ -985,7 +985,7 @@ export function InboxPage() {
           <h1 className='text-lg font-medium'>inbox</h1>
           {isSyncing && (
             <span className='flex items-center gap-1 text-xs text-fg-muted'>
-              <span className='i-lucide-refresh-cw h-3 w-3 animate-spin' />
+              <span className='i-ph-arrows-clockwise h-3 w-3 animate-spin' />
               syncing{currentSyncProgress ? ` (${currentSyncProgress.current})` : '...'}
             </span>
           )}
@@ -1003,13 +1003,13 @@ export function InboxPage() {
             className='rounded-lg p-1.5 hover:bg-elev-1 transition-colors disabled:opacity-50'
             title='sync messages'
           >
-            <span className={cn('i-lucide-refresh-cw h-4 w-4', isSyncing && 'animate-spin')} />
+            <span className={cn('i-ph-arrows-clockwise h-4 w-4', isSyncing && 'animate-spin')} />
           </button>
           <button
             onClick={() => setShowCompose(true)}
             className='flex items-center gap-1 rounded-lg bg-zigner-gold px-3 py-1.5 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors'
           >
-            <span className='i-lucide-send h-4 w-4' />
+            <span className='i-ph-paper-plane-right h-4 w-4' />
             compose
           </button>
         </div>
@@ -1028,7 +1028,7 @@ export function InboxPage() {
               : 'border-transparent text-fg-muted hover:text-fg-high',
           )}
         >
-          <span className='i-lucide-messages-square h-4 w-4' />
+          <span className='i-ph-chats h-4 w-4' />
           conversations
           {unreadCount > 0 && (
             <span className='ml-0.5 rounded-full bg-zigner-gold px-1.5 py-0.5 text-label text-zigner-dark'>
@@ -1045,7 +1045,7 @@ export function InboxPage() {
               : 'border-transparent text-fg-muted hover:text-fg-high',
           )}
         >
-          <span className='i-lucide-list h-4 w-4' />
+          <span className='i-ph-list h-4 w-4' />
           all messages
         </button>
       </div>
@@ -1060,7 +1060,7 @@ export function InboxPage() {
         : flatMessages.length > 0 || search.length > 0) && (
         <div className='px-4 py-3'>
           <div className='relative'>
-            <span className='i-lucide-search absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-fg-muted' />
+            <span className='i-ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-fg-muted' />
             <input
               type='text'
               value={search}
@@ -1083,7 +1083,7 @@ export function InboxPage() {
               subtitle={`encrypted ${activeNetwork} conversations show up here. share your address so someone can write to you.`}
               action={{
                 label: 'show my address',
-                icon: 'i-lucide-arrow-down-to-line',
+                icon: 'i-ph-arrow-line-down',
                 onClick: () => navigate(PopupPath.RECEIVE),
               }}
             />
@@ -1109,7 +1109,7 @@ export function InboxPage() {
             subtitle={`messages travel inside ${activeNetwork} transactions. once someone sends with a memo, it shows up here.`}
             action={{
               label: 'show my address',
-              icon: 'i-lucide-arrow-down-to-line',
+              icon: 'i-ph-arrow-line-down',
               onClick: () => navigate(PopupPath.RECEIVE),
             }}
           />
@@ -1174,7 +1174,7 @@ function FlatMessageRow({
         <span
           className={cn(
             'h-4 w-4',
-            message.read ? 'i-lucide-mail-open text-fg-muted' : 'i-lucide-mail text-zigner-gold',
+            message.read ? 'i-ph-envelope-open text-fg-muted' : 'i-ph-envelope text-zigner-gold',
           )}
         />
       </div>
@@ -1254,7 +1254,7 @@ function EmptyState({
   return (
     <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
       <div className='rounded-lg bg-zigner-gold/10 p-4'>
-        <span className='i-lucide-mail h-8 w-8 text-zigner-gold' />
+        <span className='i-ph-envelope h-8 w-8 text-zigner-gold' />
       </div>
       <div className='flex flex-col gap-1'>
         <p className='text-sm font-medium'>{text}</p>

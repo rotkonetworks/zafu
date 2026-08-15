@@ -52,7 +52,7 @@ const PRIVACY_ROWS: readonly PrivacyRow[] = [
   {
     key: 'enablePriceFetching',
     label: 'price display',
-    onLabel: 'fetching prices - apis cannot see addresses',
+    onLabel: 'fetching prices - apis cannot see your addresses, but do see your ip',
     offLabel: 'hidden',
     visible: n => n === 'penumbra' || isIbcNetwork(n),
   },

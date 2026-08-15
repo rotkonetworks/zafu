@@ -37,19 +37,19 @@ const groups: SettingsGroup[] = [
     links: [
       {
         title: 'recovery passphrase',
-        icon: 'i-lucide-file-text',
+        icon: 'i-ph-file-text',
         href: PopupPath.SETTINGS_RECOVERY_PASSPHRASE,
       },
       {
         title: 'multisig backup',
-        icon: 'i-lucide-shield',
+        icon: 'i-ph-shield',
         href: PopupPath.SETTINGS_MULTISIG_BACKUP,
         networks: ['zcash'],
       },
       // auto-lock renders here as an inline control (see below)
       {
         title: 'clear cache',
-        icon: 'i-lucide-trash-2',
+        icon: 'i-ph-trash',
         href: PopupPath.SETTINGS_CLEAR_CACHE,
       },
     ],
@@ -59,12 +59,12 @@ const groups: SettingsGroup[] = [
     links: [
       {
         title: 'privacy',
-        icon: 'i-lucide-eye-off',
+        icon: 'i-ph-eye-slash',
         href: PopupPath.SETTINGS_PRIVACY,
       },
       {
         title: 'connected sites',
-        icon: 'i-lucide-globe',
+        icon: 'i-ph-globe',
         href: PopupPath.SETTINGS_CONNECTED_SITES,
       },
     ],
@@ -74,7 +74,7 @@ const groups: SettingsGroup[] = [
     links: [
       {
         title: 'networks',
-        icon: 'i-lucide-network',
+        icon: 'i-ph-share-network',
         href: PopupPath.SETTINGS_NETWORKS,
       },
       {
@@ -90,18 +90,18 @@ const groups: SettingsGroup[] = [
       },
       {
         title: 'voting endpoints',
-        icon: 'i-lucide-vote',
+        icon: 'i-ph-check-square-offset',
         href: PopupPath.SETTINGS_VOTING,
         networks: ['zcash'],
       },
       {
         title: 'zigner',
-        icon: 'i-lucide-qr-code',
+        icon: 'i-ph-qr-code',
         href: PopupPath.SETTINGS_ZIGNER,
       },
       {
         title: 'device update',
-        icon: 'i-lucide-cpu',
+        icon: 'i-ph-cpu',
         href: PopupPath.SETTINGS_OTA,
       },
     ],
@@ -113,14 +113,14 @@ const groups: SettingsGroup[] = [
         ? [
             {
               title: 'pro subscription',
-              icon: 'i-lucide-zap',
+              icon: 'i-ph-lightning',
               href: PopupPath.SUBSCRIBE,
             },
           ]
         : []),
       {
         title: 'about',
-        icon: 'i-lucide-info',
+        icon: 'i-ph-info',
         href: PopupPath.SETTINGS_ABOUT,
       },
     ],
@@ -143,7 +143,7 @@ function SettingsRow({
     >
       <span className={cn(icon, 'size-5 text-fg-muted group-hover:text-fg-high')} />
       <span className='flex-1 text-data text-fg group-hover:text-fg-high lowercase'>{title}</span>
-      <span className='i-lucide-chevron-right size-4 text-fg-dim group-hover:text-fg-muted' />
+      <span className='i-ph-caret-right size-4 text-fg-dim group-hover:text-fg-muted' />
     </button>
   );
 }
@@ -200,7 +200,7 @@ export const Settings = () => {
                       >
                         <span
                           className={cn(
-                            'i-lucide-timer',
+                            'i-ph-timer',
                             'size-5 text-fg-muted group-hover:text-fg-high',
                           )}
                         />
@@ -222,7 +222,7 @@ export const Settings = () => {
 
         <div className='mt-4 border-t border-border-soft pt-4'>
           <SettingsRow
-            icon='i-lucide-log-out'
+            icon='i-ph-sign-out'
             title='lock wallet'
             onClick={() => {
               clearSessionPassword();

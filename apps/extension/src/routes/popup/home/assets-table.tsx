@@ -386,7 +386,7 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
                   onClick={closeClaim}
                   className='text-fg-muted hover:text-fg-high transition-colors'
                 >
-                  <span className='i-lucide-x h-4 w-4' />
+                  <span className='i-ph-x h-4 w-4' />
                 </button>
               )}
             </div>

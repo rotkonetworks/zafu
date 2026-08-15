@@ -11,8 +11,8 @@ import { Secp256k1HdWallet, makeCosmoshubPath } from '@cosmjs/amino';
 import { makeSignDoc as makeAminoSignDoc, serializeSignDoc } from '@cosmjs/amino';
 import type { AminoMsg, StdSignDoc } from '@cosmjs/amino';
 import { SigningStargateClient, StargateClient, GasPrice } from '@cosmjs/stargate';
-import { fromBech32, toBech32, toBase64 } from '@cosmjs/encoding';
-import { encodePubkey, makeAuthInfoBytes } from '@cosmjs/proto-signing';
+import { fromBech32, toBech32, toBase64, fromBase64 } from '@cosmjs/encoding';
+import { encodePubkey, makeAuthInfoBytes, DirectSecp256k1HdWallet } from '@cosmjs/proto-signing';
 import type { Coin, StdFee } from '@cosmjs/amino';
 import type { DeliverTxResponse } from '@cosmjs/stargate';
 import { COSMOS_CHAINS, type CosmosChainId } from './chains';
@@ -425,4 +425,112 @@ export async function broadcastZignerSignedTx(
   } finally {
     client.disconnect();
   }
+}
+
+// ── Keplr provider signing ──
+// Helpers for the extension's Keplr-compatible provider. They keep the cosmjs
+// dependency (amino + direct wallets) inside this package and hand back
+// JSON/base64-safe results the content-script boundary can carry.
+
+/** derived key for one origin+chain, base64-encoded for the wire */
+export interface KeplrWireKeyRaw {
+  name: string;
+  algo: string;
+  pubKeyB64: string;
+  addressB64: string;
+  bech32Address: string;
+}
+
+/** derive the connectable key (address + pubkey) for a bech32 prefix */
+export async function deriveKeplrWireKey(
+  mnemonic: string,
+  prefix: string,
+  name: string,
+  accountIndex = 0,
+): Promise<KeplrWireKeyRaw> {
+  const wallet = await Secp256k1HdWallet.fromMnemonic(mnemonic, {
+    prefix,
+    hdPaths: [cosmosHdPath(accountIndex)],
+  });
+  const [account] = await wallet.getAccounts();
+  if (!account) {
+    throw new Error('failed to derive cosmos account');
+  }
+  return {
+    name,
+    algo: account.algo,
+    pubKeyB64: toBase64(account.pubkey),
+    addressB64: toBase64(fromBech32(account.address).data),
+    bech32Address: account.address,
+  };
+}
+
+export interface KeplrAminoResult {
+  signed: StdSignDoc;
+  signatureB64: string;
+  pubKeyB64: string;
+}
+
+/** amino-sign a Keplr StdSignDoc, returning the (possibly reordered) doc + sig */
+export async function signKeplrAmino(
+  mnemonic: string,
+  prefix: string,
+  signerAddress: string,
+  signDoc: StdSignDoc,
+  accountIndex = 0,
+): Promise<KeplrAminoResult> {
+  const wallet = await Secp256k1HdWallet.fromMnemonic(mnemonic, {
+    prefix,
+    hdPaths: [cosmosHdPath(accountIndex)],
+  });
+  const res = await wallet.signAmino(signerAddress, signDoc);
+  return {
+    signed: res.signed,
+    signatureB64: res.signature.signature,
+    pubKeyB64: res.signature.pub_key.value,
+  };
+}
+
+export interface KeplrDirectWireDoc {
+  bodyBytesB64: string;
+  authInfoBytesB64: string;
+  chainId: string;
+  accountNumber: string;
+}
+
+export interface KeplrDirectResult {
+  bodyB64: string;
+  authInfoB64: string;
+  accountNumber: string;
+  chainId: string;
+  signatureB64: string;
+  pubKeyB64: string;
+}
+
+/** direct-sign a Keplr SignDoc (base64 body/authInfo), returning base64 output */
+export async function signKeplrDirect(
+  mnemonic: string,
+  prefix: string,
+  signerAddress: string,
+  doc: KeplrDirectWireDoc,
+  accountIndex = 0,
+): Promise<KeplrDirectResult> {
+  const wallet = await DirectSecp256k1HdWallet.fromMnemonic(mnemonic, {
+    prefix,
+    hdPaths: [cosmosHdPath(accountIndex)],
+  });
+  const res = await wallet.signDirect(signerAddress, {
+    bodyBytes: fromBase64(doc.bodyBytesB64),
+    authInfoBytes: fromBase64(doc.authInfoBytesB64),
+    chainId: doc.chainId,
+    accountNumber: BigInt(doc.accountNumber),
+  });
+  return {
+    bodyB64: toBase64(res.signed.bodyBytes),
+    authInfoB64: toBase64(res.signed.authInfoBytes),
+    accountNumber: res.signed.accountNumber.toString(),
+    chainId: res.signed.chainId,
+    signatureB64: res.signature.signature,
+    pubKeyB64: res.signature.pub_key.value,
+  };
 }

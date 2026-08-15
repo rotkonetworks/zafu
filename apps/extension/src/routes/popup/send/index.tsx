@@ -27,7 +27,11 @@ import { assetPatterns } from '@rotko/penumbra-types/assets';
 import { useSkipRoute, useSkipChains } from '../../../hooks/skip-route';
 import { useCosmosSend, useCosmosIbcTransfer } from '../../../hooks/cosmos-signer';
 import { parseAmountToBaseUnits } from '@repo/wallet/networks/cosmos/signer';
-import { useCosmosAssets, type CosmosAsset } from '../../../hooks/cosmos-balance';
+import {
+  useCosmosAssets,
+  useCosmosDepositWallets,
+  type CosmosAsset,
+} from '../../../hooks/cosmos-balance';
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
 import {
   COSMOS_CHAINS,
@@ -68,7 +72,7 @@ function ChainSelector({
           <span className='text-fg-muted'>select chain</span>
         )}
         <span
-          className={cn('i-lucide-chevron-down h-4 w-4 transition-transform', open && 'rotate-180')}
+          className={cn('i-ph-caret-down h-4 w-4 transition-transform', open && 'rotate-180')}
         />
       </button>
 
@@ -141,7 +145,7 @@ function AssetSelector({
           <span className='text-fg-muted'>select asset</span>
         )}
         <span
-          className={cn('i-lucide-chevron-down h-4 w-4 transition-transform', open && 'rotate-180')}
+          className={cn('i-ph-caret-down h-4 w-4 transition-transform', open && 'rotate-180')}
         />
       </button>
 
@@ -204,7 +208,7 @@ function CosmosChainSelector({
       >
         <span className={!manuallySelected && !selected ? 'text-fg-muted' : ''}>{displayName}</span>
         <span
-          className={cn('i-lucide-chevron-down h-4 w-4 transition-transform', open && 'rotate-180')}
+          className={cn('i-ph-caret-down h-4 w-4 transition-transform', open && 'rotate-180')}
         />
       </button>
 
@@ -261,14 +265,14 @@ function SaveContactPrompt({
     <div className='rounded-lg border border-zigner-gold/30 bg-zigner-gold/10 p-3'>
       <div className='flex items-start justify-between gap-2'>
         <div className='flex items-center gap-2'>
-          <span className='i-lucide-user h-4 w-4 text-zigner-gold' />
+          <span className='i-ph-user h-4 w-4 text-zigner-gold' />
           <div>
             <p className='text-sm text-fg'>save to contacts?</p>
             <p className='text-xs text-fg-muted'>you've sent to this address before</p>
           </div>
         </div>
         <button onClick={onDismiss} className='text-fg-muted hover:text-fg-high transition-colors'>
-          <span className='i-lucide-x h-4 w-4' />
+          <span className='i-ph-x h-4 w-4' />
         </button>
       </div>
       <div className='mt-2 flex gap-2'>
@@ -298,6 +302,9 @@ function CosmosSend({
   initialAccountIndex?: number;
 }) {
   const sourceChain = COSMOS_CHAINS[sourceChainId];
+  // two ways to move funds out of a cosmos/burner wallet: same-chain (e.g. to a
+  // Noble exchange deposit address) or cross-chain via IBC (Skip routing).
+  const [sendMode, setSendMode] = useState<'same' | 'ibc'>('same');
   const [destChainId, setDestChainId] = useState<string | undefined>();
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
@@ -325,6 +332,21 @@ function CosmosSend({
   const { addContact, addAddress, findByAddress } = useStore(contactsSelector);
 
   const { data: skipChains = [], isLoading: chainsLoading } = useSkipChains();
+
+  // In IBC mode default the destination to Osmosis - the hub most off-ramps
+  // route through. Same-chain mode has no destination chain (it stays put).
+  useEffect(() => {
+    if (sendMode !== 'ibc') {
+      setDestChainId(undefined);
+      return;
+    }
+    if (destChainId || sourceChain.chainId === 'osmosis-1') {
+      return;
+    }
+    if (skipChains.some(c => c.chainId === 'osmosis-1')) {
+      setDestChainId('osmosis-1');
+    }
+  }, [sendMode, skipChains, destChainId, sourceChain.chainId]);
 
   // assets hook - uses accountIndex
   const {
@@ -404,7 +426,12 @@ function CosmosSend({
   const canSubmit =
     recipient && recipientValid && parseFloat(amount) > 0 && selectedAsset && txStatus === 'idle';
   // effective destination: manual selection > auto-detect > same chain
-  const effectiveDestChainId = destChainId || detectedChain?.chainId || sourceChain.chainId;
+  // same-chain mode always stays on the source chain, regardless of what the
+  // pasted address might auto-detect as - that is the whole point of the tab
+  const effectiveDestChainId =
+    sendMode === 'same'
+      ? sourceChain.chainId
+      : destChainId || detectedChain?.chainId || sourceChain.chainId;
   const isSameChain = effectiveDestChainId === sourceChain.chainId;
 
   // Listen for cosmos sign result from dedicated window
@@ -564,6 +591,31 @@ function CosmosSend({
   return (
     <div className='flex flex-col gap-4'>
       {PasswordModal}
+
+      {/* two ways out: same-chain (Noble) or cross-chain (IBC) */}
+      <div className='flex rounded-lg bg-elev-2 p-1'>
+        <button
+          type='button'
+          onClick={() => setSendMode('same')}
+          className={cn(
+            'flex-1 rounded-md py-2 text-sm font-medium transition-colors',
+            sendMode === 'same' ? 'bg-canvas text-fg shadow-sm' : 'text-fg-muted hover:text-fg-high',
+          )}
+        >
+          send in {sourceChain.name}
+        </button>
+        <button
+          type='button'
+          onClick={() => setSendMode('ibc')}
+          className={cn(
+            'flex-1 rounded-md py-2 text-sm font-medium transition-colors',
+            sendMode === 'ibc' ? 'bg-canvas text-fg shadow-sm' : 'text-fg-muted hover:text-fg-high',
+          )}
+        >
+          send to ibc
+        </button>
+      </div>
+
       {/* which burner address is being spent (fixed by the caller - not a
           picker; the user chose it by shielding a specific funded address) */}
       {assetsData?.address && (
@@ -575,45 +627,36 @@ function CosmosSend({
         </div>
       )}
 
-      {/* recipient */}
-      <div>
-        <label className='mb-1 block text-xs text-fg-muted'>recipient</label>
-        <input
-          type='text'
-          value={recipient}
-          onChange={e => setRecipient(e.target.value)}
-          placeholder='cosmos address'
-          className={cn(
-            'w-full rounded-lg border bg-input px-3 py-2.5 text-sm text-fg',
-            'placeholder:text-fg-muted transition-colors duration-100',
-            'focus:border-penumbra-purple focus:outline-none',
-            recipient && !recipientValid ? 'border-red-400' : 'border-border-soft',
-          )}
-        />
-        {recipient && !recipientValid && (
-          <p className='mt-1 text-xs text-red-400'>invalid cosmos address</p>
-        )}
-        {detectedChain && !destChainId && (
-          <p className='mt-1 text-xs text-fg-muted'>detected: {detectedChain.name}</p>
-        )}
-        <RecipientPicker network='cosmos' onSelect={setRecipient} show={!recipient} />
-      </div>
+      {/* Logical order for someone who doesn't have an address ready: pick the
+          chain, then the asset, then where it goes, then how much. Auto-detect
+          still fills the chain if they paste an address first. */}
 
-      {/* destination chain */}
-      <div>
-        <label className='mb-1 block text-xs text-fg-muted'>destination chain</label>
-        {chainsLoading ? (
-          <div className='h-10 rounded-lg bg-elev-2 animate-pulse' />
-        ) : (
-          <CosmosChainSelector
-            chains={skipChains}
-            selected={destChainId ?? detectedChain?.chainId}
-            onSelect={id => setDestChainId(id || undefined)}
-            currentChainId={sourceChain.chainId}
-            autoLabel={detectedChain ? `auto (${detectedChain.name})` : 'auto-detect from address'}
-          />
-        )}
-      </div>
+      {/* destination chain - IBC mode only; same-chain stays on the source */}
+      {sendMode === 'ibc' && (
+        <div>
+          <label className='mb-1 block text-xs text-fg-muted'>destination chain</label>
+          {chainsLoading ? (
+            <div className='h-10 rounded-lg bg-elev-2 animate-pulse' />
+          ) : (
+            <CosmosChainSelector
+              chains={skipChains}
+              selected={destChainId ?? detectedChain?.chainId}
+              onSelect={id => setDestChainId(id || undefined)}
+              currentChainId={sourceChain.chainId}
+              autoLabel={detectedChain ? `auto (${detectedChain.name})` : 'auto-detect from address'}
+            />
+          )}
+          {/* alternative: hand the cross-chain routing off to Skip's own UI */}
+          <button
+            type='button'
+            onClick={() => void chrome.tabs.create({ url: 'https://go.skip.build/' })}
+            className='mt-1.5 flex items-center gap-1 text-label text-network-accent transition-colors hover:text-fg-high'
+          >
+            <span className='i-ph-arrow-square-out h-3 w-3' />
+            or route via Skip (go.skip.build)
+          </button>
+        </div>
+      )}
 
       {/* asset selector */}
       <div>
@@ -624,6 +667,30 @@ function CosmosSend({
           onSelect={setSelectedAsset}
           loading={assetsLoading}
         />
+      </div>
+
+      {/* recipient / destination address */}
+      <div>
+        <label className='mb-1 block text-xs text-fg-muted'>destination address</label>
+        <input
+          type='text'
+          value={recipient}
+          onChange={e => setRecipient(e.target.value)}
+          placeholder={sendMode === 'same' ? `${sourceChain.bech32Prefix}1...` : 'destination address'}
+          className={cn(
+            'w-full rounded-lg border bg-input px-3 py-2.5 text-sm text-fg',
+            'placeholder:text-fg-muted transition-colors duration-100',
+            'focus:border-penumbra-purple focus:outline-none',
+            recipient && !recipientValid ? 'border-red-400' : 'border-border-soft',
+          )}
+        />
+        {recipient && !recipientValid && (
+          <p className='mt-1 text-xs text-red-400'>invalid cosmos address</p>
+        )}
+        {sendMode === 'ibc' && detectedChain && !destChainId && (
+          <p className='mt-1 text-xs text-fg-muted'>detected: {detectedChain.name}</p>
+        )}
+        <RecipientPicker network='cosmos' onSelect={setRecipient} show={!recipient} />
       </div>
 
       {/* amount */}
@@ -661,7 +728,7 @@ function CosmosSend({
       {/* route info */}
       {routeLoading && (
         <div className='flex items-center gap-2 text-xs text-fg-muted'>
-          <span className='i-lucide-refresh-cw h-3 w-3 animate-spin' />
+          <span className='i-ph-arrows-clockwise h-3 w-3 animate-spin' />
           finding route...
         </div>
       )}
@@ -1060,7 +1127,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
             )}
             <span
               className={cn(
-                'i-lucide-chevron-down h-4 w-4 transition-transform',
+                'i-ph-caret-down h-4 w-4 transition-transform',
                 assetOpen && 'rotate-180',
               )}
             />
@@ -1129,7 +1196,7 @@ function PenumbraNativeSend({ onSuccess }: { onSuccess?: () => void }) {
             className='shrink-0 flex h-[42px] w-[42px] items-center justify-center rounded-lg border border-border-soft bg-input text-fg-muted hover:text-fg-high transition-colors disabled:opacity-50'
             title='scan QR code'
           >
-            <span className='i-lucide-scan h-4 w-4' />
+            <span className='i-ph-scan h-4 w-4' />
           </button>
         </div>
         {showQrScanner && (
@@ -1261,6 +1328,13 @@ const filterWithdrawableAssets = <T,>(balances: T[], channelId: string | undefin
   });
 };
 
+/**
+ * Minimum USDC to unshield to Noble. Noble's per-tx fee is ~0.15-0.16 USDC;
+ * anything at or below that would land a burner that can never afford to move
+ * again. 0.2 clears the fee with margin.
+ */
+const MIN_NOBLE_USDC_UNSHIELD = 0.2;
+
 function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
   const { data: chains = [], isLoading: chainsLoading } = useIbcChains();
   const ibcState = useStore(selectIbcWithdraw);
@@ -1276,6 +1350,9 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
   const [sentToAddress, setSentToAddress] = useState<string | undefined>();
   const [sentToChainId, setSentToChainId] = useState<string | undefined>();
   const [assetOpen, setAssetOpen] = useState(false);
+  // opt-in: send to a hand-entered address instead of our own burner deposit
+  // address. Off by default - unshielding lands in our transparent burner.
+  const [overrideAddress, setOverrideAddress] = useState(false);
 
   const penumbraTx = usePenumbraTransaction();
 
@@ -1337,11 +1414,44 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
     [ibcState.chain, ibcState.destinationAddress],
   );
 
+  // The destination is our own burner deposit address on the counterparty chain
+  // (Noble etc.) by default - unshielding is an off-ramp INTO the burner, not a
+  // send to a stranger. Derive the cosmos chain id from the IBC chain's prefix.
+  const cosmosChainId =
+    ibcState.chain && ibcState.chain.addressPrefix in COSMOS_CHAINS
+      ? (ibcState.chain.addressPrefix as CosmosChainId)
+      : undefined;
+  const { data: depositData } = useCosmosDepositWallets(cosmosChainId ?? 'noble');
+  const burnerAddress = cosmosChainId ? depositData?.receive?.address : undefined;
+
+  // when we have a burner address and the user hasn't opted into a custom
+  // recipient, keep the destination pinned to the fresh burner address
+  useEffect(() => {
+    if (burnerAddress && !overrideAddress && ibcState.destinationAddress !== burnerAddress) {
+      ibcState.setDestinationAddress(burnerAddress);
+    }
+  }, [burnerAddress, overrideAddress]);
+
+  // Noble charges a ~0.15-0.16 USDC fee per tx, so unshielding less than that
+  // strands the balance: the burner can never cover its own fee to move again.
+  // Require a floor that comfortably clears the fee.
+  const isNobleUsdc = useMemo(() => {
+    if (ibcState.chain?.addressPrefix !== 'noble' || !selectedAsset) {
+      return false;
+    }
+    const meta = getMetadataFromBalancesResponse.optional(selectedAsset);
+    const sym = (meta?.symbol ?? meta?.display ?? ibcState.denom ?? '').toUpperCase();
+    return sym.includes('USDC');
+  }, [ibcState.chain, ibcState.denom, selectedAsset]);
+  const belowNobleMin =
+    isNobleUsdc && !!ibcState.amount && parseFloat(ibcState.amount) < MIN_NOBLE_USDC_UNSHIELD;
+
   const canSubmit =
     ibcState.chain &&
     addressValid &&
     ibcState.amount &&
     parseFloat(ibcState.amount) > 0 &&
+    !belowNobleMin &&
     txStatus === 'idle';
 
   const handleSubmit = useCallback(async () => {
@@ -1406,36 +1516,78 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
         )}
       </div>
 
-      {/* destination address */}
+      {/* destination address - our burner deposit address by default */}
       <div>
         <label className='mb-1 block text-xs text-fg-muted'>
           recipient {ibcState.chain && `(${ibcState.chain.addressPrefix}1...)`}
         </label>
-        <input
-          type='text'
-          value={ibcState.destinationAddress}
-          onChange={e => ibcState.setDestinationAddress(e.target.value)}
-          placeholder={
-            ibcState.chain ? `${ibcState.chain.addressPrefix}1...` : 'select chain first'
-          }
-          disabled={!ibcState.chain || txStatus !== 'idle'}
-          className={cn(
-            'w-full rounded-lg border bg-input px-3 py-2.5 text-sm text-fg',
-            'placeholder:text-fg-muted transition-colors duration-100',
-            'focus:border-penumbra-purple focus:outline-none disabled:opacity-50',
-            ibcState.destinationAddress && !addressValid ? 'border-red-400' : 'border-border-soft',
-          )}
-        />
-        {ibcState.destinationAddress && !addressValid && (
-          <p className='mt-1 text-xs text-red-400'>
-            invalid address for {ibcState.chain?.displayName}
-          </p>
+        {burnerAddress && !overrideAddress ? (
+          <div className='rounded-lg border border-border-soft bg-input px-3 py-2.5'>
+            <div className='flex items-center justify-between gap-2'>
+              <span className='text-label text-fg-muted lowercase'>your deposit address</span>
+              <span className='rounded bg-red-500/10 px-1.5 py-0.5 text-label leading-none text-red-400 lowercase'>
+                transparent
+              </span>
+            </div>
+            <p className='mt-1 break-all font-mono text-xs text-fg' title={burnerAddress}>
+              {burnerAddress}
+            </p>
+            <button
+              type='button'
+              onClick={() => {
+                setOverrideAddress(true);
+                ibcState.setDestinationAddress('');
+              }}
+              disabled={txStatus !== 'idle'}
+              className='mt-1.5 text-label text-network-accent transition-colors hover:text-fg-high disabled:opacity-50'
+            >
+              send to a different address
+            </button>
+          </div>
+        ) : (
+          <>
+            <input
+              type='text'
+              value={ibcState.destinationAddress}
+              onChange={e => ibcState.setDestinationAddress(e.target.value)}
+              placeholder={
+                ibcState.chain ? `${ibcState.chain.addressPrefix}1...` : 'select chain first'
+              }
+              disabled={!ibcState.chain || txStatus !== 'idle'}
+              className={cn(
+                'w-full rounded-lg border bg-input px-3 py-2.5 text-sm text-fg',
+                'placeholder:text-fg-muted transition-colors duration-100',
+                'focus:border-penumbra-purple focus:outline-none disabled:opacity-50',
+                ibcState.destinationAddress && !addressValid
+                  ? 'border-red-400'
+                  : 'border-border-soft',
+              )}
+            />
+            {ibcState.destinationAddress && !addressValid && (
+              <p className='mt-1 text-xs text-red-400'>
+                invalid address for {ibcState.chain?.displayName}
+              </p>
+            )}
+            <RecipientPicker
+              network='cosmos'
+              onSelect={ibcState.setDestinationAddress}
+              show={!ibcState.destinationAddress}
+            />
+            {burnerAddress && (
+              <button
+                type='button'
+                onClick={() => {
+                  setOverrideAddress(false);
+                  ibcState.setDestinationAddress(burnerAddress);
+                }}
+                disabled={txStatus !== 'idle'}
+                className='mt-1.5 text-label text-network-accent transition-colors hover:text-fg-high disabled:opacity-50'
+              >
+                use my deposit address
+              </button>
+            )}
+          </>
         )}
-        <RecipientPicker
-          network='cosmos'
-          onSelect={ibcState.setDestinationAddress}
-          show={!ibcState.destinationAddress}
-        />
       </div>
 
       {/* asset selector */}
@@ -1500,6 +1652,12 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
           disabled={txStatus !== 'idle'}
           className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm text-fg placeholder:text-fg-muted transition-colors duration-100 focus:border-penumbra-purple focus:outline-none disabled:opacity-50'
         />
+        {belowNobleMin && (
+          <p className='mt-1 text-xs text-red-400'>
+            minimum {MIN_NOBLE_USDC_UNSHIELD} USDC - Noble's ~0.16 USDC fee would otherwise strand
+            the balance
+          </p>
+        )}
       </div>
 
       {/* transaction status */}
@@ -1631,6 +1789,12 @@ interface SendLocationState {
   cosmosChain?: CosmosChainId;
   /** which burner index (BIP44 address_index) to spend from. Default 0. */
   cosmosAccountIndex?: number;
+  /**
+   * Why the cosmos send form was opened: 'shield' (back into Penumbra) or
+   * 'send' (out to an external address, e.g. an exchange). The form is the same
+   * today; this lets it prefill/route differently later without changing callers.
+   */
+  cosmosIntent?: 'send' | 'shield';
 }
 
 export function SendPage() {
@@ -1705,7 +1869,9 @@ export function SendPage() {
       return 'send penumbra';
     }
     if (isCosmos) {
-      return 'send';
+      // the burner "shield" and "send" buttons route here with an intent; name
+      // the screen for what the user set out to do so they are not identical
+      return locationState?.cosmosIntent === 'shield' ? 'shield into penumbra' : 'send';
     }
     if (isZcash) {
       return 'send zcash';
@@ -1731,7 +1897,7 @@ export function SendPage() {
       <div className='flex items-center gap-3 border-b border-border-soft px-4 py-3'>
         {!inDedicatedWindow && (
           <button onClick={goBack} className='text-fg-muted transition-colors hover:text-fg-high'>
-            <span className='i-lucide-arrow-left h-5 w-5' />
+            <span className='i-ph-arrow-left h-5 w-5' />
           </button>
         )}
         <h1 className='text-lg font-medium text-fg'>{getTitle()}</h1>

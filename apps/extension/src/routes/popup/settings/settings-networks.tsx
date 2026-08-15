@@ -44,6 +44,7 @@ import {
 import { NETWORKS, LAUNCHED_NETWORKS } from '../../../config/networks';
 import { cn } from '@repo/ui/lib/utils';
 import { Button } from '@repo/ui/components/ui/button';
+import { NobleEndpointsEditor } from './noble-endpoints-editor';
 import { SettingsScreen } from './settings-screen';
 import { PopupPath } from '../paths';
 
@@ -189,7 +190,7 @@ export const SettingsNetworks = () => {
                       )}
                       title='configure endpoint'
                     >
-                      <span className='i-lucide-settings-2 h-3.5 w-3.5' />
+                      <span className='i-ph-gear-six h-3.5 w-3.5' />
                     </button>
                   )}
 
@@ -203,7 +204,7 @@ export const SettingsNetworks = () => {
                         : 'border-muted-foreground/50',
                     )}
                   >
-                    {isEnabled && <span className='i-lucide-check h-3 w-3 text-zigner-dark' />}
+                    {isEnabled && <span className='i-ph-check h-3 w-3 text-zigner-dark' />}
                   </button>
                 </div>
               </div>
@@ -235,26 +236,36 @@ export const SettingsNetworks = () => {
                       onMempoolChange={st => void setMempoolWatch('zcash', st)}
                     />
                   ) : (
-                    <div>
-                      <div className='text-label text-fg-muted mb-1'>endpoint</div>
-                      <div className='flex gap-2'>
-                        <input
-                          type='text'
-                          value={editingEndpoint}
-                          onChange={e => setEditingEndpoint(e.target.value)}
-                          placeholder={state?.endpoint ?? 'https://...'}
-                          className='flex-1 rounded-lg bg-input border border-border-soft px-3 py-2.5 text-xs font-mono focus:border-primary/50 focus:outline-none'
-                        />
-                        <Button
-                          variant='gradient'
-                          size='md'
-                          onClick={() => void handleSaveEndpoint(networkId)}
-                          disabled={saving}
-                          className='text-xs'
-                        >
-                          {saving ? '...' : 'save'}
-                        </Button>
+                    <div className='flex flex-col gap-3'>
+                      <div>
+                        <div className='text-label text-fg-muted mb-1'>endpoint</div>
+                        <div className='flex gap-2'>
+                          <input
+                            type='text'
+                            value={editingEndpoint}
+                            onChange={e => setEditingEndpoint(e.target.value)}
+                            placeholder={state?.endpoint ?? 'https://...'}
+                            className='flex-1 rounded-lg bg-input border border-border-soft px-3 py-2.5 text-xs font-mono focus:border-primary/50 focus:outline-none'
+                          />
+                          <Button
+                            variant='gradient'
+                            size='md'
+                            onClick={() => void handleSaveEndpoint(networkId)}
+                            disabled={saving}
+                            className='text-xs'
+                          >
+                            {saving ? '...' : 'save'}
+                          </Button>
+                        </div>
                       </div>
+
+                      {/* Noble is a transparent subnetwork under Penumbra (the
+                          USDC off-ramp); its rotating RPC pool is edited here. */}
+                      {networkId === 'penumbra' && (
+                        <div className='border-t border-border-soft pt-3'>
+                          <NobleEndpointsEditor />
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -541,7 +552,7 @@ const ZcashEndpointPanel = ({
         >
           <span
             className={cn(
-              'i-lucide-chevron-right h-3.5 w-3.5 transition-transform',
+              'i-ph-caret-right h-3.5 w-3.5 transition-transform',
               showAdvanced && 'rotate-90',
             )}
           />

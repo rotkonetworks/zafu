@@ -108,7 +108,7 @@ export const SettingsMultisigBackup = () => {
                 }
               }}
             >
-              <span className='i-lucide-archive h-3.5 w-3.5' />
+              <span className='i-ph-archive h-3.5 w-3.5' />
               export all ({selfCustody.length} wallet{selfCustody.length === 1 ? '' : 's'})
             </Button>
           )}
@@ -184,7 +184,7 @@ export const SettingsMultisigBackup = () => {
                 }
               }}
             >
-              <span className='i-lucide-file-up h-3.5 w-3.5' />
+              <span className='i-ph-file-arrow-up h-3.5 w-3.5' />
               from backup file
             </Button>
             <Button
@@ -197,7 +197,7 @@ export const SettingsMultisigBackup = () => {
                 }
               }}
             >
-              <span className='i-lucide-qr-code h-3.5 w-3.5' />
+              <span className='i-ph-qr-code h-3.5 w-3.5' />
               from zigner QR
             </Button>
           </div>

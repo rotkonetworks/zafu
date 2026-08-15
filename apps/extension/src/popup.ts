@@ -164,7 +164,11 @@ const spawnDetachedPopup = async (
   // Only route into the side panel when it is actually open (real presence,
   // not a render-timeout guess) - otherwise we would setOptions/restore a closed
   // panel and could race a slow render against the fallback window.
-  if (isSidePanelOpen() && (await localExtStorage.get('approvalsInSidePanel')) === true) {
+  // default ON: side panel is the default approval surface when it is open.
+  // Only an explicit `false` (user picked "popup window") opts out. Safe because
+  // the send itself now runs in the service worker (see penumbra-send), so it
+  // completes even though delivering the approval reloads the panel.
+  if (isSidePanelOpen() && (await localExtStorage.get('approvalsInSidePanel')) !== false) {
     const shown = await deliverToSidePanel(relativePopupPath(popupType, popupId), popupId).catch(
       () => false,
     );

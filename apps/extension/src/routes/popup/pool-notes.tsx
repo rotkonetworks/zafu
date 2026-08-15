@@ -153,7 +153,7 @@ function NoteRow({ note }: { note: DecryptedNoteWithTxid }) {
         <span
           className={cn(
             'h-4 w-4',
-            spent ? 'i-lucide-minus text-fg-muted' : 'i-lucide-coins text-green-400',
+            spent ? 'i-ph-minus text-fg-muted' : 'i-ph-coins text-green-400',
           )}
         />
       </div>
@@ -209,9 +209,9 @@ const isPoolFilter = (v: string | null): v is PoolFilter =>
 
 /** per-pool toggle metadata - labels consistent with the home hover-reveal */
 const POOL_TABS: { key: PoolFilter; icon: string; badge?: string }[] = [
-  { key: 'ironwood', icon: 'i-lucide-shield-check' },
-  { key: 'orchard', icon: 'i-lucide-clock', badge: 'legacy' },
-  { key: 'transparent', icon: 'i-lucide-eye', badge: 'public' },
+  { key: 'ironwood', icon: 'i-ph-shield-check' },
+  { key: 'orchard', icon: 'i-ph-clock', badge: 'legacy' },
+  { key: 'transparent', icon: 'i-ph-eye', badge: 'public' },
 ];
 
 /** single transparent UTXO row: value, address, block height - public framing. */
@@ -223,7 +223,7 @@ function UtxoRow({ utxo }: { utxo: Utxo }) {
   return (
     <div className='flex items-center gap-3 rounded-lg border border-border-soft bg-elev-1 p-3'>
       <div className='flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-elev-2'>
-        <span className='i-lucide-eye h-4 w-4 text-fg-muted' />
+        <span className='i-ph-eye h-4 w-4 text-fg-muted' />
       </div>
       <div className='min-w-0 flex-1'>
         <div className='flex items-center justify-between gap-2'>
@@ -406,7 +406,7 @@ const TransparentSection = ({
       ) : utxos.length === 0 ? (
         <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
           <div className='rounded-full bg-primary/10 p-4'>
-            <span className='i-lucide-shield-check h-8 w-8 text-zigner-gold' />
+            <span className='i-ph-shield-check h-8 w-8 text-zigner-gold' />
           </div>
           <p className='text-sm text-fg-muted lowercase'>no transparent funds - all shielded</p>
         </div>
@@ -447,7 +447,7 @@ const ShieldedSection = ({
         className='shrink-0 rounded-lg p-1.5 text-fg-muted transition-colors hover:bg-elev-1 hover:text-fg-high disabled:opacity-50'
         title='refresh'
       >
-        <span className={cn('i-lucide-refresh-cw h-4 w-4', loading && 'animate-spin')} />
+        <span className={cn('i-ph-arrows-clockwise h-4 w-4', loading && 'animate-spin')} />
       </button>
     </div>
 
@@ -482,7 +482,7 @@ const ShieldedSection = ({
             <span
               className={cn(
                 'h-8 w-8 text-zigner-gold',
-                filter === 'ironwood' ? 'i-lucide-shield-check' : 'i-lucide-check',
+                filter === 'ironwood' ? 'i-ph-shield-check' : 'i-ph-check',
               )}
             />
           </div>

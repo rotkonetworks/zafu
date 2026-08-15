@@ -18,6 +18,13 @@ import { internalServiceListener } from './message/listen/internal-services';
 import { externalMessageListener } from './message/listen/external-easteregg';
 import { encryptionMessageListener } from './message/listen/external-encryption';
 import { internalZidListener } from './message/listen/internal-zid';
+import { keplrMessageListener } from './message/listen/keplr';
+import { createPenumbraSendListener } from './message/listen/penumbra-send';
+import {
+  PENUMBRA_SEND_OP_PREFIX,
+  isTerminalStatus,
+  type PenumbraSendOp,
+} from './message/penumbra-send';
 import { openApprovalPopup } from './utils/popup-window';
 import { trackSidePanelPresence } from './side-panel-presence';
 
@@ -47,7 +54,7 @@ import { authorizeCtx } from '@repo/custody-chrome/ctx';
 import { getAuthorization } from './ctx/authorization';
 
 // context clients
-import { CustodyService, StakeService } from '@penumbra-zone/protobuf';
+import { CustodyService, StakeService, ViewService } from '@penumbra-zone/protobuf';
 import { custodyClientCtx } from '@rotko/penumbra-services/ctx/custody-client';
 import { stakeClientCtx } from '@rotko/penumbra-services/ctx/stake-client';
 import { createDirectClient } from '@penumbra-zone/transport-dom/direct';
@@ -300,6 +307,51 @@ void backOff(() => initHandler(), {
     return true;
   },
 }).then(handler => resolveHandler!(handler as unknown as HandlerFn));
+
+// Internal ViewService client for SW-driven sends. It talks to the same rpc
+// handler the page would, but has no dependency on the page's MessagePort - so
+// a send started from the side panel completes even after the panel reloads to
+// show the approval (which tears that port down).
+let internalViewClient: Client<typeof ViewService> | undefined;
+const getInternalViewClient = async (): Promise<Client<typeof ViewService>> => {
+  const readyHandler = await handlerReady;
+  internalViewClient ??= createDirectClient(
+    ViewService,
+    readyHandler as never,
+    internalTransportOptions,
+  );
+  return internalViewClient;
+};
+chrome.runtime.onMessage.addListener(createPenumbraSendListener(getInternalViewClient));
+
+// Keplr provider: cosmos dapps (Skip Go etc.) talk to us through the content-
+// script bridge; this handles connect, getKey, cosmos signing, and broadcast.
+chrome.runtime.onMessage.addListener(keplrMessageListener);
+
+// On startup, any send op still in a non-terminal state belongs to a service
+// worker that has since died; the task cannot resume, so mark it failed rather
+// than leaving a row spinning forever.
+void (async () => {
+  const all = await chrome.storage.session.get(null);
+  const patch: Record<string, PenumbraSendOp> = {};
+  for (const [key, value] of Object.entries(all)) {
+    if (
+      key.startsWith(PENUMBRA_SEND_OP_PREFIX) &&
+      value &&
+      !isTerminalStatus((value as PenumbraSendOp).status)
+    ) {
+      patch[key] = {
+        ...(value as PenumbraSendOp),
+        status: 'error',
+        error: 'interrupted - extension restarted',
+        updatedAt: Date.now(),
+      };
+    }
+  }
+  if (Object.keys(patch).length > 0) {
+    await chrome.storage.session.set(patch);
+  }
+})();
 
 // listen for internal service controls
 chrome.runtime.onMessage.addListener((req, sender, respond) =>

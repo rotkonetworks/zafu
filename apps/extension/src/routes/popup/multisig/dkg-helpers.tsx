@@ -41,7 +41,7 @@ export const RelayTransportField = ({
     <div className='flex flex-col gap-1.5'>
       <div className='flex items-center justify-between gap-2 rounded-lg border border-border-soft bg-elev-1 px-3 py-2.5'>
         <div className='flex min-w-0 items-center gap-2'>
-          <span className='i-lucide-radio-tower size-3.5 shrink-0 text-fg-muted' />
+          <span className='i-ph-broadcast size-3.5 shrink-0 text-fg-muted' />
           <span className='shrink-0 text-xs text-fg-muted'>relay</span>
           <span className='truncate font-mono text-xs'>{value || DEFAULT_RELAY_URL}</span>
         </div>
@@ -53,7 +53,7 @@ export const RelayTransportField = ({
           advanced
           <span
             className={cn(
-              'i-lucide-chevron-down size-3 transition-transform',
+              'i-ph-caret-down size-3 transition-transform',
               open && 'rotate-180',
             )}
           />
@@ -202,7 +202,7 @@ export const WaitingForRelay = ({
   <div className='flex flex-col items-center gap-3'>
     <p className='text-xs text-fg-muted'>{headline}</p>
     <p className='text-label text-fg-muted text-center'>{body}</p>
-    <span className='i-lucide-loader-2 size-4 animate-spin text-fg-muted' />
+    <span className='i-ph-circle-notch size-4 animate-spin text-fg-muted' />
     {countdown != null && (
       <span className='text-label text-fg-muted tabular-nums'>{countdown}s</span>
     )}

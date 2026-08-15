@@ -611,7 +611,7 @@ export const ZcashVoteCast = ({
     return (
       <div className='border-t border-border-soft pt-2 text-label text-fg-dim lowercase'>
         <span className='inline-flex items-center gap-1'>
-          <span className='i-lucide-alert-circle h-3 w-3' />
+          <span className='i-ph-warning-circle h-3 w-3' />
           this round is not available for voting in zafu right now.
         </span>
       </div>
@@ -658,17 +658,17 @@ export const ZcashVoteCast = ({
 
               <div className='flex items-center justify-center gap-3 text-fg-muted'>
                 <span className='flex items-center gap-1.5'>
-                  <span className='i-lucide-smartphone h-4 w-4' />
+                  <span className='i-ph-device-mobile h-4 w-4' />
                   <span className='text-xs'>open zigner</span>
                 </span>
-                <span className='i-lucide-chevron-right h-3 w-3 shrink-0' />
+                <span className='i-ph-caret-right h-3 w-3 shrink-0' />
                 <span className='flex items-center gap-1.5'>
-                  <span className='i-lucide-scan h-4 w-4' />
+                  <span className='i-ph-scan h-4 w-4' />
                   <span className='text-xs'>scan</span>
                 </span>
-                <span className='i-lucide-chevron-right h-3 w-3 shrink-0' />
+                <span className='i-ph-caret-right h-3 w-3 shrink-0' />
                 <span className='flex items-center gap-1.5'>
-                  <span className='i-lucide-check h-4 w-4' />
+                  <span className='i-ph-check h-4 w-4' />
                   <span className='text-xs'>approve</span>
                 </span>
               </div>
@@ -728,7 +728,7 @@ export const ZcashVoteCast = ({
         </div>
       ) : (
         <div className='text-label text-fg-muted inline-flex items-center gap-1'>
-          <span className='i-lucide-check h-3.5 w-3.5 text-zigner-gold' />
+          <span className='i-ph-check h-3.5 w-3.5 text-zigner-gold' />
           voting power delegated - cast your votes below
         </div>
       )}
@@ -762,7 +762,7 @@ export const ZcashVoteCast = ({
                         )}
                       >
                         <span>{opt.label}</span>
-                        {isSelected && <span className='i-lucide-check h-3.5 w-3.5' />}
+                        {isSelected && <span className='i-ph-check h-3.5 w-3.5' />}
                       </button>
                     );
                   })}

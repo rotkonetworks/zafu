@@ -458,7 +458,7 @@ export const SubscribePage = () => {
           <ul className='flex flex-col gap-2 pl-2 mb-3'>
             {FREE_FEATURES.map(f => (
               <li key={f} className='flex items-center gap-2'>
-                <span className='i-lucide-check size-3 text-green-400' />
+                <span className='i-ph-check size-3 text-green-400' />
                 {f.replace(/_/g, ' ')}
               </li>
             ))}
@@ -469,7 +469,7 @@ export const SubscribePage = () => {
               <li key={f} className='flex items-center gap-2'>
                 <span
                   className={
-                    pro ? 'i-lucide-check size-3 text-green-400' : 'size-3 text-fg-muted/30'
+                    pro ? 'i-ph-check size-3 text-green-400' : 'size-3 text-fg-muted/30'
                   }
                 >
                   {pro ? '' : '\u00b7'}
@@ -715,7 +715,7 @@ export const SubscribePage = () => {
           {/* activated */}
           {payState === 'activated' && (
             <div className='rounded border border-green-500/30 bg-green-500/10 p-3 text-center'>
-              <span className='i-lucide-check size-5 text-green-400 inline-block mb-1' />
+              <span className='i-ph-check size-5 text-green-400 inline-block mb-1' />
               <p className='text-sm font-mono text-green-400'>pro activated</p>
             </div>
           )}

@@ -68,7 +68,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
     let cancelled = false;
     void (async () => {
       try {
-        const [idx, pins] = await Promise.all([getZidIndex(), getZidPins()]);
+        const [idx, pins] = await Promise.all([getZidIndex(), getZidPins(keyInfo?.id ?? '')]);
         const pin = pins.find(p => p.index === idx);
         if (!cancelled) {
           setZidGen(idx);
@@ -81,8 +81,8 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
     return () => {
       cancelled = true;
     };
-    // re-read when the displayed identity changes
-  }, [zidPubkey]);
+    // re-read when the displayed identity or the active wallet changes
+  }, [zidPubkey, keyInfo?.id]);
 
   // Every generation gets a name. An unnamed one falls back to "generation N"
   // rather than showing nothing, because the failure this whole panel exists to
@@ -96,7 +96,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
       return;
     }
     setZidLabel(next);
-    void addZidPin(zidGen, next).catch(() => setZidLabel(zidLabel));
+    void addZidPin(keyInfo?.id ?? '', zidGen, next).catch(() => setZidLabel(zidLabel));
   };
 
   const handleLock = () => {
@@ -149,7 +149,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
   const networkDestinations: MenuItem[] = [
     // stake lives in the bottom tab bar (Penumbra only), not the side menu
     hasFeature(activeNetwork, 'swap') && {
-      icon: 'i-lucide-arrow-left-right',
+      icon: 'i-ph-arrows-left-right',
       label: 'swap',
       onClick: () => {
         navigate(PopupPath.SWAP);
@@ -160,7 +160,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
     // pool notes has no drawer entry either: the home balance card links
     // straight into the per-pool notes view.
     showMultisig && {
-      icon: 'i-lucide-shield',
+      icon: 'i-ph-shield',
       label: 'multisig',
       onClick: () => {
         navigate(PopupPath.MULTISIG);
@@ -176,7 +176,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
   // looking past 'settings' to find it.
   const accountItems: MenuItem[] = [
     identityEnabled && {
-      icon: 'i-lucide-fingerprint',
+      icon: 'i-ph-fingerprint',
       label: 'identity',
       onClick: () => {
         navigate(PopupPath.IDENTITY);
@@ -187,7 +187,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
     // recipient, share a card), not an identity sub-setting; burying it
     // behind the identity page made it two taps and undiscoverable.
     identityEnabled && {
-      icon: 'i-lucide-users',
+      icon: 'i-ph-users',
       label: 'contacts',
       onClick: () => {
         navigate(PopupPath.CONTACTS);
@@ -195,7 +195,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
       },
     },
     {
-      icon: 'i-lucide-wallet',
+      icon: 'i-ph-wallet',
       label: 'wallets',
       onClick: () => {
         navigate(PopupPath.SETTINGS_WALLETS);
@@ -208,7 +208,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
   // switches + actions only.
   const appItems: MenuItem[] = [
     {
-      icon: 'i-lucide-settings',
+      icon: 'i-ph-gear',
       label: 'settings',
       onClick: () => {
         navigate(PopupPath.SETTINGS);
@@ -221,14 +221,14 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
     ...(inSidePanel
       ? [
           {
-            icon: 'i-lucide-panel-right',
+            icon: 'i-ph-sidebar-simple',
             label: 'open as popup',
             onClick: handleOpenPopupWindow,
           },
         ]
       : []),
     {
-      icon: 'i-lucide-lock',
+      icon: 'i-ph-lock',
       label: 'lock',
       onClick: handleLock,
       className: 'text-destructive',
@@ -260,7 +260,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
             onClick={onClose}
             className='p-1 rounded-md text-fg-muted hover:text-fg-high hover:bg-elev-1 transition-colors'
           >
-            <span className='i-lucide-x h-4 w-4' />
+            <span className='i-ph-x h-4 w-4' />
           </button>
         </div>
 
@@ -347,7 +347,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
               }}
               className='flex w-full items-center justify-center gap-2 px-3 py-2 rounded-md bg-zigner-gold text-zigner-dark hover:bg-zigner-gold-light transition-colors text-data lowercase'
             >
-              <span className='i-lucide-zap h-3.5 w-3.5' />
+              <span className='i-ph-lightning h-3.5 w-3.5' />
               <span>upgrade to pro</span>
             </button>
           )}
@@ -356,7 +356,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
               onClick={handleDonate}
               className='flex w-full items-center justify-center gap-2 px-3 py-2 rounded-md border border-border-soft text-data text-fg-muted hover:text-fg-high hover:bg-elev-1 transition-colors'
             >
-              <span className='i-lucide-heart h-3.5 w-3.5' />
+              <span className='i-ph-heart h-3.5 w-3.5' />
               <span>donate {activeNetwork}</span>
             </button>
           )}
@@ -368,7 +368,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
               rel='noopener noreferrer'
               className='flex items-center gap-1 transition-colors hover:text-fg-high'
             >
-              <span className='i-lucide-globe h-3 w-3' />
+              <span className='i-ph-globe h-3 w-3' />
               zafu.pro
             </a>
             <a
@@ -377,7 +377,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
               rel='noopener noreferrer'
               className='flex items-center gap-1 transition-colors hover:text-fg-high'
             >
-              <span className='i-lucide-code h-3 w-3' />
+              <span className='i-ph-code h-3 w-3' />
               github
             </a>
             <a
@@ -386,7 +386,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
               rel='noopener noreferrer'
               className='flex items-center gap-1 transition-colors hover:text-fg-high'
             >
-              <span className='i-lucide-smartphone h-3 w-3' />
+              <span className='i-ph-device-mobile h-3 w-3' />
               zigner
             </a>
             <a
@@ -395,7 +395,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
               rel='noopener noreferrer'
               className='flex items-center gap-1 transition-colors hover:text-fg-high'
             >
-              <span className='i-lucide-arrow-left-right h-3 w-3' />
+              <span className='i-ph-arrows-left-right h-3 w-3' />
               dex
             </a>
           </div>

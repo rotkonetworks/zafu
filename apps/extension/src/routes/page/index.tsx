@@ -72,7 +72,7 @@ export const PageIndex = () => {
       id: `custom-${Date.now()}`,
       name: draft.name,
       description: draft.description || draft.url,
-      icon: 'i-lucide-puzzle',
+      icon: 'i-ph-puzzle-piece',
       url: draft.url,
       category: 'tools',
     };
@@ -113,7 +113,7 @@ export const PageIndex = () => {
             onClick={() => setAdding(!adding)}
             className='flex items-center gap-1.5 text-xs text-fg-muted hover:text-fg-high transition-colors'
           >
-            <span className='i-lucide-plus h-3.5 w-3.5' />
+            <span className='i-ph-plus h-3.5 w-3.5' />
             add zapp
           </button>
         </div>
@@ -177,7 +177,7 @@ export const PageIndex = () => {
                       onClick={() => handleRemove(zapp.id)}
                       className='absolute -top-1 -right-1 hidden group-hover:flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground text-xs'
                     >
-                      <span className='i-lucide-x h-3 w-3' />
+                      <span className='i-ph-x h-3 w-3' />
                     </button>
                   )}
                 </div>

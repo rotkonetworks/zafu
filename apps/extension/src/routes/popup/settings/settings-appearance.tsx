@@ -68,12 +68,12 @@ const applyFont = (font: ZafuFont) => {
 export const SettingsAppearance = () => {
   const [theme, setTheme] = useState<ZafuTheme>('sumi');
   const [font, setFont] = useState<ZafuFont>('iosevka');
-  const [approvalsInSidePanel, setApprovalsInSidePanel] = useState(false);
+  const [approvalsInSidePanel, setApprovalsInSidePanel] = useState(true);
 
   useEffect(() => {
     void localExtStorage.get('zafuTheme').then(v => setTheme(v ?? 'sumi'));
     void localExtStorage.get('zafuFont').then(v => setFont(v ?? 'iosevka'));
-    void localExtStorage.get('approvalsInSidePanel').then(v => setApprovalsInSidePanel(v ?? false));
+    void localExtStorage.get('approvalsInSidePanel').then(v => setApprovalsInSidePanel(v ?? true));
   }, []);
 
   const pickApprovalMode = (inSidePanel: boolean) => {
@@ -126,7 +126,7 @@ export const SettingsAppearance = () => {
                   <span className='text-data text-fg lowercase'>{t.name}</span>
                   <span className='text-label text-fg-dim lowercase'>{t.blurb}</span>
                 </span>
-                {theme === t.id && <span className='i-lucide-check size-4 text-zigner-gold' />}
+                {theme === t.id && <span className='i-ph-check size-4 text-zigner-gold' />}
               </button>
             ))}
           </div>
@@ -156,7 +156,7 @@ export const SettingsAppearance = () => {
                   <span className='text-data text-fg lowercase'>{f.name}</span>
                   <span className='text-label text-fg-dim lowercase'>{f.blurb}</span>
                 </span>
-                {font === f.id && <span className='i-lucide-check size-4 text-zigner-gold' />}
+                {font === f.id && <span className='i-ph-check size-4 text-zigner-gold' />}
               </button>
             ))}
           </div>
@@ -177,14 +177,14 @@ export const SettingsAppearance = () => {
                 )}
               >
                 <span className='flex h-8 w-8 shrink-0 items-center justify-center rounded-[4px] border border-border-soft bg-elev-2 text-fg'>
-                  <span className={cn(m.id ? 'i-lucide-panel-right' : 'i-lucide-app-window', 'size-4')} />
+                  <span className={cn(m.id ? 'i-ph-sidebar-simple' : 'i-ph-app-window', 'size-4')} />
                 </span>
                 <span className='flex flex-1 flex-col'>
                   <span className='text-data text-fg lowercase'>{m.name}</span>
                   <span className='text-label text-fg-dim lowercase'>{m.blurb}</span>
                 </span>
                 {approvalsInSidePanel === m.id && (
-                  <span className='i-lucide-check size-4 text-zigner-gold' />
+                  <span className='i-ph-check size-4 text-zigner-gold' />
                 )}
               </button>
             ))}

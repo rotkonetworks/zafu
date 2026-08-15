@@ -73,6 +73,7 @@
     "@babel/core": "^7.29.0",
     "@babel/preset-typescript": "^7.28.5",
     "@iconify-json/lucide": "^1.2.99",
+    "@iconify-json/ph": "^1.2.2",
     "@tailwindcss/postcss": "^4.2.2",
     "@types/chrome": "0.0.270",
     "@types/firefox-webext-browser": "^143.0.0",

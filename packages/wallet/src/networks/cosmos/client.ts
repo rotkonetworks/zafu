@@ -11,16 +11,24 @@ import type { CosmosChainId } from './chains';
 import { COSMOS_CHAINS } from './chains';
 
 /** cached clients per chain */
-const clients: Map<CosmosChainId, StargateClient> = new Map();
+// keyed by endpoint URL so a chain can hold several connections (one per RPC in
+// the rotation pool) without clobbering each other
+const clients: Map<string, StargateClient> = new Map();
 
-/** get or create client for chain */
-export async function getClient(chainId: CosmosChainId): Promise<StargateClient> {
-  let client = clients.get(chainId);
+/**
+ * get or create client for a chain. Pass `endpoint` to use a specific RPC from
+ * the rotation pool (per-burner privacy); omit for the chain's primary.
+ */
+export async function getClient(
+  chainId: CosmosChainId,
+  endpoint?: string,
+): Promise<StargateClient> {
+  const url = endpoint ?? COSMOS_CHAINS[chainId].rpcEndpoint;
+  let client = clients.get(url);
   if (client) return client;
 
-  const config = COSMOS_CHAINS[chainId];
-  client = await StargateClient.connect(config.rpcEndpoint);
-  clients.set(chainId, client);
+  client = await StargateClient.connect(url);
+  clients.set(url, client);
   return client;
 }
 
@@ -40,9 +48,13 @@ export interface CosmosBalance {
   denom: string;
 }
 
-/** get native balance for address */
-export async function getBalance(chainId: CosmosChainId, address: string): Promise<CosmosBalance> {
-  const client = await getClient(chainId);
+/** get native balance for address (optionally via a specific pool endpoint) */
+export async function getBalance(
+  chainId: CosmosChainId,
+  address: string,
+  endpoint?: string,
+): Promise<CosmosBalance> {
+  const client = await getClient(chainId, endpoint);
   const config = COSMOS_CHAINS[chainId];
 
   const balance = await client.getBalance(address, config.denom);
@@ -53,12 +65,13 @@ export async function getBalance(chainId: CosmosChainId, address: string): Promi
   };
 }
 
-/** get all balances for address */
+/** get all balances for address (optionally via a specific pool endpoint) */
 export async function getAllBalances(
   chainId: CosmosChainId,
   address: string,
+  endpoint?: string,
 ): Promise<CosmosBalance[]> {
-  const client = await getClient(chainId);
+  const client = await getClient(chainId, endpoint);
   const balances = await client.getAllBalances(address);
 
   return balances.map(b => ({

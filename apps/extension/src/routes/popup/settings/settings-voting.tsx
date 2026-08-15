@@ -150,11 +150,11 @@ export const SettingsVoting = () => {
             className='flex w-full items-center justify-between text-left'
           >
             <span className='flex items-center gap-2 text-data text-fg-high'>
-              <span className='i-lucide-triangle-alert size-4 text-fg-muted' />
+              <span className='i-ph-warning size-4 text-fg-muted' />
               advanced: custom voting config source
             </span>
             <span
-              className={`i-lucide-chevron-down size-4 text-fg-muted transition-transform ${advancedOpen ? 'rotate-180' : ''}`}
+              className={`i-ph-caret-down size-4 text-fg-muted transition-transform ${advancedOpen ? 'rotate-180' : ''}`}
             />
           </button>
 

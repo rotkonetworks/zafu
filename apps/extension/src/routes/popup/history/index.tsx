@@ -12,26 +12,13 @@ import { getHistoryInWorker } from '../../../state/keyring/network-worker';
 import { useTransparentAddresses } from '../../../hooks/use-transparent-addresses';
 import { cn } from '@repo/ui/lib/utils';
 import type { TransactionInfo } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
-import {
-  classifyTransaction,
-  getTransactionClassificationLabel,
-} from '@penumbra-zone/perspective/transaction/classify';
-import type { TransactionClassification } from '@penumbra-zone/perspective/transaction/classification';
+import { classifyPenumbraTx, type PenumbraTxType } from '../../../utils/penumbra-tx-classify';
 
 interface ParsedTransaction {
   id: string;
   height: number;
   timestamp: number | null;
-  type:
-    | 'send'
-    | 'receive'
-    | 'shield'
-    | 'unshield'
-    | 'deposit'
-    | 'swap'
-    | 'delegate'
-    | 'undelegate'
-    | 'unknown';
+  type: PenumbraTxType;
   description: string;
   /**
    * Confirmation state. Absent means the source only ever reports settled
@@ -49,36 +36,6 @@ interface ParsedTransaction {
   accountIndices?: Set<number>;
 }
 
-/** extract account index from a visible note's decoded address view */
-function noteAccountIndex(note: unknown): number | undefined {
-  const n = note as
-    | { address?: { addressView?: { case?: string; value?: { index?: { account?: number } } } } }
-    | undefined;
-  if (!n?.address?.addressView) {
-    return undefined;
-  }
-  const av = n.address.addressView;
-  if (av.case === 'decoded' && av.value?.index != null) {
-    return av.value.index.account;
-  }
-  return undefined;
-}
-
-/** map the canonical perspective classification to zafu's display type */
-const CLASSIFICATION_TO_TYPE: Partial<Record<TransactionClassification, ParsedTransaction['type']>> =
-  {
-    send: 'send',
-    receive: 'receive',
-    internalTransfer: 'send',
-    ics20Withdrawal: 'unshield',
-    ibcRelayAction: 'deposit',
-    swap: 'swap',
-    swapClaim: 'swap',
-    delegate: 'delegate',
-    undelegate: 'undelegate',
-    undelegateClaim: 'undelegate',
-  };
-
 function parseTransaction(txInfo: TransactionInfo): ParsedTransaction {
   const id = txInfo.id?.inner
     ? Array.from(txInfo.id.inner)
@@ -88,33 +45,8 @@ function parseTransaction(txInfo: TransactionInfo): ParsedTransaction {
 
   const height = Number(txInfo.height ?? 0);
 
-  // account indices touched by this tx (zafu-specific, for per-account filtering)
-  const accountIndices = new Set<number>();
-  for (const action of txInfo.view?.bodyView?.actionViews ?? []) {
-    const actionCase = action.actionView.case;
-    if (actionCase === 'spend' && action.actionView.value.spendView?.case === 'visible') {
-      const idx = noteAccountIndex(action.actionView.value.spendView.value?.note);
-      if (idx != null) {
-        accountIndices.add(idx);
-      }
-    } else if (actionCase === 'output') {
-      const ov = action.actionView.value.outputView;
-      if (ov?.case === 'visible') {
-        const idx = noteAccountIndex(ov.value?.note);
-        if (idx != null) {
-          accountIndices.add(idx);
-        }
-      }
-    }
-  }
-
-  // Canonical classification (perspective) instead of hand-rolling: correctly
-  // separates send / receive / unshield (ics20Withdrawal) / deposit
-  // (ibcRelayAction) / swap / (un)delegate. The old heuristic defaulted any
-  // spend to 'send', so unshields showed as sends.
-  const classification = classifyTransaction(txInfo.view).type;
-  const type: ParsedTransaction['type'] = CLASSIFICATION_TO_TYPE[classification] ?? 'unknown';
-  const description = getTransactionClassificationLabel(txInfo.view).toLowerCase();
+  // canonical classification, shared with the home recent-activity list
+  const { type, description, accountIndices } = classifyPenumbraTx(txInfo);
 
   return { id, height, timestamp: null, type, description, accountIndices };
 }
@@ -184,15 +116,15 @@ function TransactionRow({ tx }: { tx: ParsedTransaction }) {
         {/* an unsettled transaction is described by its state, not its
             direction — the direction stops mattering until it lands */}
         {isPending ? (
-          <span className='i-lucide-circle-dashed h-5 w-5 animate-pulse text-fg-dim' />
+          <span className='i-ph-circle-dashed h-5 w-5 animate-pulse text-fg-dim' />
         ) : isFailed ? (
-          <span className='i-lucide-x h-5 w-5 text-hanko' />
+          <span className='i-ph-x h-5 w-5 text-hanko' />
         ) : isShield ? (
-          <span className='i-lucide-move-horizontal h-5 w-5 text-blue-500' />
+          <span className='i-ph-arrows-horizontal h-5 w-5 text-blue-500' />
         ) : isIncoming ? (
-          <span className='i-lucide-arrow-down h-5 w-5 text-green-400' />
+          <span className='i-ph-arrow-down h-5 w-5 text-green-400' />
         ) : (
-          <span className='i-lucide-arrow-up h-5 w-5 text-fg-muted' />
+          <span className='i-ph-arrow-up h-5 w-5 text-fg-muted' />
         )}
       </div>
 
@@ -385,7 +317,7 @@ export const HistoryPage = () => {
           <h1 className='text-lg font-medium'>history</h1>
         </div>
         <div className='flex-1 flex flex-col items-center justify-center gap-3 p-8 text-center'>
-          <span className='i-lucide-eye-off h-8 w-8 text-fg-muted/30' />
+          <span className='i-ph-eye-slash h-8 w-8 text-fg-muted/30' />
           <p className='text-sm text-fg-muted'>transaction history is disabled</p>
           <p className='text-xs text-fg-muted/50'>
             enable in settings &rarr; privacy to see past transactions
@@ -406,7 +338,7 @@ export const HistoryPage = () => {
           className='rounded-lg p-1.5 hover:bg-elev-1 transition-colors disabled:opacity-50'
           title='refresh'
         >
-          <span className={cn('i-lucide-refresh-cw h-4 w-4', isLoading && 'animate-spin')} />
+          <span className={cn('i-ph-arrows-clockwise h-4 w-4', isLoading && 'animate-spin')} />
         </button>
       </div>
 
@@ -441,7 +373,7 @@ export const HistoryPage = () => {
         ) : filteredTransactions.length === 0 ? (
           <div className='flex flex-col items-center justify-center gap-3 py-12 text-center'>
             <div className='rounded-full bg-primary/10 p-4'>
-              <span className='i-lucide-clock h-8 w-8 text-zigner-gold' />
+              <span className='i-ph-clock h-8 w-8 text-zigner-gold' />
             </div>
             <div>
               <p className='text-sm font-medium'>no transactions yet</p>

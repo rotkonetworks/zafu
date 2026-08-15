@@ -45,7 +45,7 @@ export const SettingsPassphrase = () => {
           passphrase to access your accounts.
         </p>
         <p className='flex items-center gap-2 text-xs text-rust'>
-          <span className='i-lucide-triangle-alert size-4' />
+          <span className='i-ph-warning size-4' />
           don't share this phrase with anyone
         </p>
 

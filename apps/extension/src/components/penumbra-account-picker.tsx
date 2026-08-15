@@ -18,7 +18,7 @@ export function PenumbraAccountPicker({
         onClick={() => onChange(account - 1)}
         className='p-1 text-fg-muted transition-colors hover:text-fg-high disabled:opacity-50'
       >
-        <span className='i-lucide-chevron-left h-4 w-4' />
+        <span className='i-ph-caret-left h-4 w-4' />
       </button>
       <span className='min-w-[110px] text-center text-xs font-medium text-fg-muted'>
         {accountLabel(account)}
@@ -28,7 +28,7 @@ export function PenumbraAccountPicker({
         onClick={() => onChange(account + 1)}
         className='p-1 text-fg-muted transition-colors hover:text-fg-high disabled:opacity-50'
       >
-        <span className='i-lucide-chevron-right h-4 w-4' />
+        <span className='i-ph-caret-right h-4 w-4' />
       </button>
     </div>
   );

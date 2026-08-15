@@ -294,7 +294,7 @@ export const CosmosSign = () => {
     return (
       <div className='flex h-full min-h-0 flex-col items-center justify-center bg-canvas gap-4 p-6'>
         <div className='w-16 h-16 rounded-full bg-success/20 flex items-center justify-center'>
-          <span className='i-lucide-check w-8 h-8 text-success' />
+          <span className='i-ph-check w-8 h-8 text-success' />
         </div>
         <div className='flex flex-col items-center gap-1'>
           <span className='kicker'>broadcast complete</span>

@@ -440,7 +440,7 @@ export const SettingsWallets = () => {
                 rel='noopener noreferrer'
                 className='flex items-center gap-2 text-xs text-zigner-gold hover:underline mt-2'
               >
-                <span className='i-lucide-external-link h-3 w-3' />
+                <span className='i-ph-arrow-square-out h-3 w-3' />
                 download zafu zigner
               </a>
             </div>
@@ -545,7 +545,7 @@ export const SettingsWallets = () => {
                   onClick={() => setScanning(true)}
                   className='w-full flex items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors'
                 >
-                  <span className='i-lucide-scan-line size-4' />
+                  <span className='i-ph-scan size-4' />
                   scan zigner QR
                 </button>
                 {!hasSeedVault && (
@@ -712,7 +712,7 @@ const VaultRow = ({
           disabled={disabled}
           className='p-1 text-fg-muted/0 group-hover:text-fg-muted hover:!text-red-400 transition-colors disabled:opacity-50'
         >
-          <span className='i-lucide-trash-2 size-3.5' />
+          <span className='i-ph-trash size-3.5' />
         </button>
       </div>
 
@@ -747,7 +747,7 @@ const VaultRow = ({
               advanced
               <span
                 className={cn(
-                  'i-lucide-chevron-down ml-0.5 size-3 transition-transform',
+                  'i-ph-caret-down ml-0.5 size-3 transition-transform',
                   showAdvanced && 'rotate-180',
                 )}
               />
@@ -798,7 +798,7 @@ const VaultRow = ({
           onClick={() => navigate(PopupPath.NOTE_SYNC)}
           className='flex items-start gap-2 mt-2 w-full rounded-md border border-border-soft px-3 py-2 text-left hover:border-fg-muted'
         >
-          <span className='i-lucide-qr-code size-4 text-fg-high shrink-0 mt-0.5' />
+          <span className='i-ph-qr-code size-4 text-fg-high shrink-0 mt-0.5' />
           <span className='flex flex-col'>
             <span className='text-xs font-medium text-fg-high'>sync balance to zigner</span>
             <span className='text-label text-fg-muted'>

@@ -164,7 +164,7 @@ export const SettingsTradingMode = () => {
                         onClick={() => removeAllowedOrigin(origin)}
                         className='text-fg-muted hover:text-red-400 transition-colors'
                       >
-                        <span className='i-lucide-x size-4' />
+                        <span className='i-ph-x size-4' />
                       </button>
                     </div>
                   ))}

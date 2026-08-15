@@ -101,7 +101,7 @@ const WalletRow = ({
             {wallet.multisig!.threshold}-of-{wallet.multisig!.maxSigners}
           </span>
           <span className='text-sm font-medium truncate'>{wallet.label}</span>
-          {isActive && <span className='i-lucide-check h-3 w-3 text-zigner-gold shrink-0' />}
+          {isActive && <span className='i-ph-check h-3 w-3 text-zigner-gold shrink-0' />}
         </div>
         <span className='text-body text-fg-muted font-mono'>{truncateAddr(wallet.address)}</span>
         {wallet.multisig?.zignerWalletId && (
@@ -120,7 +120,7 @@ const WalletRow = ({
         className='ml-1 p-1.5 rounded-md text-fg-muted hover:text-fg-high hover:bg-elev-1 transition-colors shrink-0'
         title='backup wallet'
       >
-        <span className='i-lucide-download h-3.5 w-3.5' />
+        <span className='i-ph-download-simple h-3.5 w-3.5' />
       </button>
     )}
     <button
@@ -128,7 +128,7 @@ const WalletRow = ({
       className='ml-1 p-1.5 rounded-md text-fg-muted hover:text-fg-high hover:bg-elev-1 transition-colors shrink-0'
       title='wallet settings'
     >
-      <span className='i-lucide-settings h-3.5 w-3.5' />
+      <span className='i-ph-gear h-3.5 w-3.5' />
     </button>
   </div>
 );
@@ -181,7 +181,7 @@ const GuardedDeleteModal = (props: {
       <div className='w-full max-w-sm rounded-lg border border-red-500/30 bg-elev-1 p-4'>
         <h2 className='text-lg font-medium text-red-400'>delete "{label}"?</h2>
         <div className='mt-3 rounded-md border border-red-500/40 bg-red-500/5 p-2 text-label text-red-300'>
-          <span className='i-lucide-alert-triangle mr-1 inline-block size-3 align-text-bottom' />
+          <span className='i-ph-warning mr-1 inline-block size-3 align-text-bottom' />
           You will permanently lose access to any funds in this table - it is NOT recoverable from
           your seed. If other co-signers rely on your share to reach the signing threshold, they may
           be unable to move funds either.
@@ -190,7 +190,7 @@ const GuardedDeleteModal = (props: {
           onClick={props.onBackup}
           className='mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border-soft px-3 py-2 text-xs text-fg-muted transition-colors hover:bg-elev-2'
         >
-          <span className='i-lucide-download h-3.5 w-3.5' />
+          <span className='i-ph-download-simple h-3.5 w-3.5' />
           Export backup first
         </button>
         <label className='mt-3 block text-xs text-fg-muted'>
@@ -263,7 +263,7 @@ const AppManagedRow = (props: {
           className='flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-border-soft px-2 py-1.5 text-xs text-fg-muted transition-colors hover:bg-elev-2 hover:text-zigner-gold'
           title='make this a normal, selectable multisig you can co-sign'
         >
-          <span className='i-lucide-arrow-up-right h-3.5 w-3.5' />
+          <span className='i-ph-arrow-up-right h-3.5 w-3.5' />
           Recover
         </button>
         <button
@@ -271,7 +271,7 @@ const AppManagedRow = (props: {
           className='flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-border-soft px-2 py-1.5 text-xs text-fg-muted transition-colors hover:bg-elev-2 hover:text-fg'
           title='export this share as an encrypted backup file'
         >
-          <span className='i-lucide-download h-3.5 w-3.5' />
+          <span className='i-ph-download-simple h-3.5 w-3.5' />
           Back up
         </button>
         <button
@@ -279,7 +279,7 @@ const AppManagedRow = (props: {
           className='flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-red-500/30 px-2 py-1.5 text-xs text-red-400 transition-colors hover:bg-red-500/10'
           title='delete this table'
         >
-          <span className='i-lucide-trash-2 h-3.5 w-3.5' />
+          <span className='i-ph-trash h-3.5 w-3.5' />
           Delete
         </button>
       </div>
@@ -335,7 +335,7 @@ const AppManagedTablesSection = () => {
         className='flex w-full items-center justify-between px-3 py-2.5 text-left'
       >
         <span className='flex items-center gap-2'>
-          <span className='i-lucide-layout-grid h-4 w-4 text-fg-muted' />
+          <span className='i-ph-squares-four h-4 w-4 text-fg-muted' />
           <span className='text-sm font-medium'>App-managed tables</span>
           <span className='rounded bg-elev-2 px-1.5 py-0.5 text-label font-mono text-fg-muted'>
             {tables.length}
@@ -343,7 +343,7 @@ const AppManagedTablesSection = () => {
         </span>
         <span
           className={cn(
-            'i-lucide-chevron-down h-4 w-4 text-fg-muted transition-transform',
+            'i-ph-caret-down h-4 w-4 text-fg-muted transition-transform',
             expanded && 'rotate-180',
           )}
         />
@@ -488,7 +488,7 @@ export const MultisigPage = () => {
     : PopupPath.MULTISIG_JOIN;
 
   if (!isZcash) {
-    return <NetworkUnavailable feature='multisig' iconClass='i-lucide-shield' />;
+    return <NetworkUnavailable feature='multisig' iconClass='i-ph-shield' />;
   }
 
   return (
@@ -508,7 +508,7 @@ export const MultisigPage = () => {
       {/* header */}
       <div className='flex items-center justify-between'>
         <div className='flex items-center gap-2'>
-          <span className='i-lucide-shield h-5 w-5 text-zigner-gold' />
+          <span className='i-ph-shield h-5 w-5 text-zigner-gold' />
           <h2 className='text-lg font-medium'>multisig</h2>
         </div>
         {walletsWithIndex.length > 0 && (
@@ -529,7 +529,7 @@ export const MultisigPage = () => {
             onClick={() => navigate(PopupPath.MULTISIG_SIGN)}
             className='flex items-center justify-center gap-2 rounded-lg bg-primary/15 px-4 py-4 text-base font-semibold text-zigner-gold transition-colors hover:bg-primary/25'
           >
-            <span className='i-lucide-pen-tool h-5 w-5' />
+            <span className='i-ph-pen-nib h-5 w-5' />
             Co-sign transaction
           </button>
 
@@ -558,7 +558,7 @@ export const MultisigPage = () => {
               onClick={() => navigate(createPath)}
               className='flex items-center gap-1.5 text-xs text-fg-muted transition-colors hover:text-zigner-gold'
             >
-              <span className='i-lucide-plus h-3.5 w-3.5' />
+              <span className='i-ph-plus h-3.5 w-3.5' />
               New vault
             </button>
             <span className='h-3 w-px bg-border-soft' />
@@ -566,7 +566,7 @@ export const MultisigPage = () => {
               onClick={() => navigate(joinPath)}
               className='flex items-center gap-1.5 text-xs text-fg-muted transition-colors hover:text-zigner-gold'
             >
-              <span className='i-lucide-user-plus h-3.5 w-3.5' />
+              <span className='i-ph-user-plus h-3.5 w-3.5' />
               Join existing
             </button>
           </div>
@@ -598,7 +598,7 @@ export const MultisigPage = () => {
             </div>
           ) : (
             <div className='flex flex-col items-center gap-2 py-8 text-center text-fg-muted'>
-              <span className='i-lucide-shield-off h-8 w-8 opacity-50' />
+              <span className='i-ph-shield-slash h-8 w-8 opacity-50' />
               <p className='text-sm'>no multisig wallets yet</p>
             </div>
           )}
@@ -609,14 +609,14 @@ export const MultisigPage = () => {
                 onClick={() => navigate(createPath)}
                 className='flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary/10 px-3 py-2.5 text-sm font-medium text-zigner-gold transition-colors hover:bg-primary/20'
               >
-                <span className='i-lucide-plus h-4 w-4' />
+                <span className='i-ph-plus h-4 w-4' />
                 Create
               </button>
               <button
                 onClick={() => navigate(joinPath)}
                 className='flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary/10 px-3 py-2.5 text-sm font-medium text-zigner-gold transition-colors hover:bg-primary/20'
               >
-                <span className='i-lucide-user-plus h-4 w-4' />
+                <span className='i-ph-user-plus h-4 w-4' />
                 Join
               </button>
             </div>
@@ -625,7 +625,7 @@ export const MultisigPage = () => {
                 onClick={() => navigate(PopupPath.MULTISIG_SIGN)}
                 className='flex items-center justify-center gap-1.5 rounded-lg border border-border-soft px-3 py-2.5 text-sm font-medium text-fg transition-colors hover:bg-elev-1'
               >
-                <span className='i-lucide-pen-tool h-4 w-4' />
+                <span className='i-ph-pen-nib h-4 w-4' />
                 Co-sign transaction
               </button>
             )}
@@ -633,7 +633,7 @@ export const MultisigPage = () => {
               onClick={() => navigate(PopupPath.SETTINGS_MULTISIG_BACKUP)}
               className='flex items-center justify-center gap-1.5 rounded-lg border border-border-soft px-3 py-2 text-xs text-fg-muted transition-colors hover:bg-elev-1'
             >
-              <span className='i-lucide-upload h-3.5 w-3.5' />
+              <span className='i-ph-upload-simple h-3.5 w-3.5' />
               Restore backup / Import from zigner
             </button>
           </div>

@@ -2,16 +2,17 @@
  * Canonical geometry + spawn helper for dedicated extension popup windows
  * (approvals, login, standalone wallet window).
  *
- * Every approval-shaped window must be 400x628 and anchored to the top
+ * Every approval-shaped window must be 420x760 and anchored to the top
  * right of the last-focused browser window. Keeping this in one place
  * prevents the size drift that made approval screens clip their
- * Approve/Deny buttons.
+ * Approve/Deny buttons. Sized generously on purpose - the old 400x628 read
+ * as cramped next to the side panel and clipped tx detail on longer approvals.
  */
 
-export const POPUP_WINDOW_WIDTH = 400;
-export const POPUP_WINDOW_HEIGHT = 628;
+export const POPUP_WINDOW_WIDTH = 420;
+export const POPUP_WINDOW_HEIGHT = 760;
 
-/** 400x628, anchored top-right of the last-focused browser window */
+/** 420x760, anchored top-right of the last-focused browser window */
 export const popupWindowGeometry = async (): Promise<{
   width: number;
   height: number;

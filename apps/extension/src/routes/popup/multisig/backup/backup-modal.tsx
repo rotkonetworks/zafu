@@ -72,7 +72,7 @@ export const BackupModal = ({
         </p>
 
         <div className='mt-3 rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-label text-amber-300'>
-          <span className='i-lucide-alert-triangle mr-1 inline-block size-3 align-text-bottom' />
+          <span className='i-ph-warning mr-1 inline-block size-3 align-text-bottom' />
           This file contains the FROST share. Anyone with the file AND the passphrase can sign as
           this signer. The passphrase cannot be reset - losing it means the backup is unusable.
         </div>

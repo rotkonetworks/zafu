@@ -89,11 +89,11 @@ export const GenerateSeedPhrase = () => {
                 onClick={copyPhrase}
                 className='inline-flex items-center gap-1.5 text-label text-fg-muted lowercase transition-colors hover:text-fg-high'
               >
-                <span className={cn(copied ? 'i-lucide-check' : 'i-lucide-copy', 'h-3.5 w-3.5')} />
+                <span className={cn(copied ? 'i-ph-check' : 'i-ph-copy', 'h-3.5 w-3.5')} />
                 {copied ? 'copied' : 'copy to clipboard'}
               </button>
               <span className='flex items-center gap-1.5 text-label text-rust lowercase'>
-                <span className='i-lucide-triangle-alert h-3.5 w-3.5' />
+                <span className='i-ph-warning h-3.5 w-3.5' />
                 never share these words with anyone
               </span>
             </div>
@@ -124,7 +124,7 @@ export const GenerateSeedPhrase = () => {
                 )}
               >
                 continue
-                <span className='i-lucide-arrow-right h-4 w-4' />
+                <span className='i-ph-arrow-right h-4 w-4' />
               </button>
             </div>
           </>

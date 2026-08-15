@@ -88,7 +88,7 @@ export const PoolBalanceCard = ({
         <div className='flex items-center gap-1.5'>
           <span className='kicker'>Ironwood balance</span>
           <span
-            className='i-lucide-shield-check h-3 w-3 text-network-accent/70'
+            className='i-ph-shield-check h-3 w-3 text-network-accent/70'
             title='Ironwood - active shielded pool'
           />
         </div>
@@ -105,7 +105,7 @@ export const PoolBalanceCard = ({
         <div className='rounded-md border border-border-soft bg-elev-1 p-3'>
           <div className='flex items-center justify-between gap-2'>
             <div className='flex min-w-0 items-center gap-2'>
-              <span className='i-lucide-clock h-3.5 w-3.5 shrink-0 text-fg-muted' />
+              <span className='i-ph-clock h-3.5 w-3.5 shrink-0 text-fg-muted' />
               <span className='text-xs text-fg-muted'>Orchard</span>
               <span className='rounded-md bg-elev-2 px-1.5 py-0.5 text-label text-fg-dim leading-none'>
                 legacy

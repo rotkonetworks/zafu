@@ -44,6 +44,7 @@ import { usePendingSends, usePoolBalances } from '../../../hooks/zcash-pool-bala
 import { ShieldTransparent } from '../../../components/zcash/shield-transparent';
 import { IRONWOOD_MIGRATION, nu63ActivationHeight } from '../../../config/feature-flags';
 import { rescanStartHeight } from '../../../utils/zcash-blocks';
+import { classifyPenumbraTx, type PenumbraTxType } from '../../../utils/penumbra-tx-classify';
 import { IronwoodMigrationBanner, IronwoodMigrate } from '../send/ironwood-migrate';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
 import { getRootNetwork, getNetwork } from '../../../config/networks';
@@ -139,7 +140,7 @@ const MultisigOverview = () => {
         className='flex items-center justify-between w-full px-4 py-3 text-left'
       >
         <div className='flex items-center gap-2'>
-          <span className='i-lucide-key-round h-4 w-4 text-zigner-gold' />
+          <span className='i-ph-key h-4 w-4 text-zigner-gold' />
           <span className='text-data text-fg-high lowercase'>multisig wallets</span>
           <span className='rounded-full bg-zigner-gold/15 px-1.5 py-0.5 text-label text-zigner-gold tabular'>
             {multisigWallets.length}
@@ -152,7 +153,7 @@ const MultisigOverview = () => {
           <span
             className={cn(
               'h-4 w-4 text-fg-dim transition-transform',
-              expanded ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down',
+              expanded ? 'i-ph-caret-up' : 'i-ph-caret-down',
             )}
           />
         </div>
@@ -180,7 +181,7 @@ const MultisigOverview = () => {
                   </span>
                   <span className='text-data text-fg-high truncate'>{w.label}</span>
                   {isActive && (
-                    <span className='i-lucide-check h-3 w-3 text-zigner-gold shrink-0' />
+                    <span className='i-ph-check h-3 w-3 text-zigner-gold shrink-0' />
                   )}
                 </div>
                 <Sensitive className='text-data tabular text-fg-muted shrink-0'>
@@ -293,17 +294,17 @@ export const PopupIndex = () => {
   const actions = (
     <div className='grid grid-cols-3 gap-3'>
       <ActionButton
-        icon='i-lucide-arrow-down'
+        icon='i-ph-arrow-down'
         label='receive'
         onClick={() => navigate(PopupPath.RECEIVE)}
       />
       <ActionButton
-        icon='i-lucide-arrow-left-right'
+        icon='i-ph-arrows-left-right'
         label='swap'
         onClick={() => navigate(PopupPath.SWAP)}
       />
       <ActionButton
-        icon='i-lucide-arrow-up'
+        icon='i-ph-arrow-up'
         label='send'
         onClick={() => navigate(PopupPath.SEND)}
         variant={activeNetwork === 'penumbra' ? 'penumbra' : 'zcash'}
@@ -324,7 +325,7 @@ export const PopupIndex = () => {
                 icon is universally understood; one icon, no extra text. */}
             {address && address.startsWith('u') && (
               <span
-                className='i-lucide-shield-check h-3 w-3 text-zigner-gold/70'
+                className='i-ph-shield-check h-3 w-3 text-zigner-gold/70'
                 title='shielded address - senders cannot see your other transactions'
               />
             )}
@@ -352,8 +353,8 @@ export const PopupIndex = () => {
                   className={cn(
                     'h-3.5 w-3.5 shrink-0',
                     copied
-                      ? 'i-lucide-check text-zigner-gold'
-                      : 'i-lucide-copy text-fg-muted group-hover:text-fg-high',
+                      ? 'i-ph-check text-zigner-gold'
+                      : 'i-ph-copy text-fg-muted group-hover:text-fg-high',
                   )}
                 />
               )}
@@ -369,7 +370,7 @@ export const PopupIndex = () => {
                 className='shrink-0 rounded p-1 text-fg-muted transition-colors hover:bg-fg/5 hover:text-fg-high'
                 title='rotate to a fresh receive address'
               >
-                <span className='i-lucide-refresh-cw h-3.5 w-3.5' />
+                <span className='i-ph-arrows-clockwise h-3.5 w-3.5' />
               </button>
             )}
           </div>
@@ -404,7 +405,7 @@ export const PopupIndex = () => {
 /** amber, dismissible backup reminder - gone forever once confirmed */
 const BackupNudge = ({ onBackUp, onDismiss }: { onBackUp: () => void; onDismiss: () => void }) => (
   <div className='flex items-center gap-2.5 rounded-md border border-warning/30 bg-warning/[0.07] px-3 py-2.5'>
-    <span className='i-lucide-triangle-alert h-4 w-4 shrink-0 text-warning' />
+    <span className='i-ph-warning h-4 w-4 shrink-0 text-warning' />
     <span className='flex-1 text-label text-fg lowercase'>recovery phrase not backed up</span>
     <button
       onClick={onBackUp}
@@ -417,7 +418,7 @@ const BackupNudge = ({ onBackUp, onDismiss }: { onBackUp: () => void; onDismiss:
       title='I already backed it up'
       className='shrink-0 p-0.5 text-fg-dim transition-colors hover:text-fg-high'
     >
-      <span className='i-lucide-x h-3.5 w-3.5' />
+      <span className='i-ph-x h-3.5 w-3.5' />
     </button>
   </div>
 );
@@ -535,7 +536,7 @@ const PenumbraContent = ({
     ? 'connecting...'
     : isSyncing
       ? `syncing ${syncPct}%`
-      : `penumbra block ${(fullSyncHeight ?? latestBlockHeight).toLocaleString()}`;
+      : `block ${(fullSyncHeight ?? latestBlockHeight).toLocaleString()}`;
 
   // query UM balance for the balance card
   const { data: umBalance } = useQuery({
@@ -580,9 +581,10 @@ const PenumbraContent = ({
 
   return (
     <div className='flex-1 flex flex-col gap-3'>
-      {/* balance card — figure renders in the network accent (rebinds per chain) */}
-      <div className='rounded-md border border-border-soft bg-elev-1 p-4'>
-        <span className='kicker'>total balance</span>
+      {/* balance card — matches the zcash hero card (accent border, 'balance'
+          kicker) so the two networks read as one design, not two. */}
+      <div className='rounded-md border border-network-accent/20 bg-elev-1 p-4'>
+        <span className='kicker'>balance</span>
         <div className='mt-1 text-display leading-none text-network-accent tabular'>
           <Sensitive>{balanceDisplay}</Sensitive>
         </div>
@@ -691,18 +693,22 @@ const BalanceFigure = ({
   }
 
   return (
-    <div className='flex flex-wrap items-baseline gap-2'>
+    // number + unit on one line, no wrap: the number ellipsizes if it is ever
+    // long enough to overflow the card (full precision is one click away in the
+    // pool view), and the unit stays pinned so it never disappears.
+    <div className='flex min-w-0 items-baseline gap-1.5'>
       {/* while still scanning, the balance pulses instead of a "so far" chip -
           a live, non-final value; the sync bar carries the actual progress. */}
       <span
         className={cn(
-          'text-display leading-none text-network-accent tabular',
+          'min-w-0 truncate text-display leading-none text-network-accent tabular',
           view === 'partial' && 'animate-pulse',
         )}
         title={view === 'partial' ? 'still scanning — more funds may yet be found' : undefined}
       >
-        <Sensitive>{fmtZec(zec)} ZEC</Sensitive>
+        <Sensitive>{fmtZecHero(zec)}</Sensitive>
       </span>
+      <span className='shrink-0 text-display leading-none text-network-accent tabular'>ZEC</span>
     </div>
   );
 };
@@ -1166,7 +1172,7 @@ const ZcashContent = ({
       ? [
           {
             key: 'shielded',
-            icon: 'i-lucide-shield-check',
+            icon: 'i-ph-shield-check',
             label: 'shielded',
             badge: undefined as string | undefined,
             zat: orchardZat,
@@ -1175,14 +1181,14 @@ const ZcashContent = ({
       : [
           {
             key: 'ironwood',
-            icon: 'i-lucide-shield-check',
+            icon: 'i-ph-shield-check',
             label: 'ironwood',
             badge: undefined as string | undefined,
             zat: pools.ironwood,
           },
           {
             key: 'orchard',
-            icon: 'i-lucide-clock',
+            icon: 'i-ph-clock',
             label: 'orchard',
             badge: 'legacy' as string | undefined,
             zat: pools.orchard,
@@ -1197,7 +1203,7 @@ const ZcashContent = ({
   if (pools.pendingTotal > 0n) {
     poolRows.push({
       key: 'pending',
-      icon: 'i-lucide-hourglass',
+      icon: 'i-ph-hourglass',
       label: 'pending',
       badge: 'change · confirming' as string | undefined,
       zat: pools.pendingTotal,
@@ -1238,7 +1244,7 @@ const ZcashContent = ({
               <span
                 className={cn(
                   'block h-3.5 w-3.5',
-                  privacySettings.hideBalances ? 'i-lucide-eye-off' : 'i-lucide-eye',
+                  privacySettings.hideBalances ? 'i-ph-eye-slash' : 'i-ph-eye',
                 )}
               />
             </button>
@@ -1251,7 +1257,7 @@ const ZcashContent = ({
               <span
                 className={cn(
                   'block h-3.5 w-3.5 transition-transform',
-                  poolsPinned ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down',
+                  poolsPinned ? 'i-ph-caret-up' : 'i-ph-caret-down',
                 )}
               />
             </button>
@@ -1277,7 +1283,7 @@ const ZcashContent = ({
             genuine problem and the one case the user must act on. */}
         {inFlightZat > 0n && (
           <div className='mt-1.5 flex items-center gap-1.5 text-label text-fg-dim lowercase'>
-            <span className='i-lucide-arrow-up h-3 w-3 shrink-0' />
+            <span className='i-ph-arrow-up h-3 w-3 shrink-0' />
             <span className='tabular'>
               <Sensitive>{fmtZec(Number(inFlightZat) / 1e8)} ZEC</Sensitive> leaving
             </span>
@@ -1294,7 +1300,7 @@ const ZcashContent = ({
             recovers them is not. */}
         {failedSends.length > 0 && (
           <div className='mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-label text-hanko lowercase'>
-            <span className='i-lucide-alert-triangle h-3 w-3 shrink-0' />
+            <span className='i-ph-warning h-3 w-3 shrink-0' />
             <span>
               {failedSends.length === 1 ? 'a payment' : `${failedSends.length} payments`} expired
               without confirming
@@ -1327,7 +1333,7 @@ const ZcashContent = ({
         {rescanConfirmHeight !== null && (
           <div className='mt-2 rounded-lg border border-hanko/40 bg-elev-2 p-3 text-label leading-snug'>
             <div className='flex items-center gap-1.5 text-hanko'>
-              <span className='i-lucide-alert-triangle h-3.5 w-3.5 shrink-0' />
+              <span className='i-ph-warning h-3.5 w-3.5 shrink-0' />
               <span className='font-medium'>this deletes the wallet&apos;s scanned history</span>
             </div>
             <p className='mt-1.5 text-fg-muted'>
@@ -1439,7 +1445,7 @@ const ZcashContent = ({
                         {row.badge}
                       </span>
                     )}
-                    <span className='i-lucide-chevron-right h-3 w-3 shrink-0 text-fg-dim opacity-0 transition-opacity group-hover/row:opacity-100' />
+                    <span className='i-ph-caret-right h-3 w-3 shrink-0 text-fg-dim opacity-0 transition-opacity group-hover/row:opacity-100' />
                     <Sensitive className='ml-auto text-xs tabular text-fg-high'>
                       {`${fmtZec(Number(row.zat) / 1e8)} ZEC`}
                     </Sensitive>
@@ -1460,14 +1466,14 @@ const ZcashContent = ({
                 title='view transparent funds'
                 className='group/row flex min-w-0 items-center gap-2 text-left'
               >
-                <span className='i-lucide-eye h-3.5 w-3.5 shrink-0 text-fg-muted' />
+                <span className='i-ph-eye h-3.5 w-3.5 shrink-0 text-fg-muted' />
                 <span className='text-xs text-fg-muted lowercase transition-colors group-hover/row:text-fg-high'>
                   transparent
                 </span>
                 <span className='rounded-sm bg-elev-2 px-1.5 py-0.5 text-label text-fg-dim leading-none lowercase'>
                   public
                 </span>
-                <span className='i-lucide-chevron-right h-3 w-3 shrink-0 text-fg-dim opacity-0 transition-opacity group-hover/row:opacity-100' />
+                <span className='i-ph-caret-right h-3 w-3 shrink-0 text-fg-dim opacity-0 transition-opacity group-hover/row:opacity-100' />
                 <Sensitive className='ml-auto text-xs tabular text-fg-high'>
                   {`${fmtZec(Number(transparentZat) / 1e8)} ZEC`}
                 </Sensitive>
@@ -1647,7 +1653,7 @@ interface ParsedTransaction {
   id: string;
   height: number;
   timestamp: number | null;
-  type: 'send' | 'receive' | 'shield' | 'swap' | 'delegate' | 'undelegate' | 'unknown';
+  type: PenumbraTxType;
   description: string;
   amount?: string;
   asset?: string;
@@ -1736,13 +1742,13 @@ const ActionButton = ({
 const GetZecHint = ({ onReceive }: { onReceive: () => void }) => (
   <div className='rounded-md border border-network-accent/15 bg-elev-1 p-4'>
     <div className='mb-3 flex items-center gap-2'>
-      <span className='i-lucide-sparkles h-3.5 w-3.5 text-network-accent' />
+      <span className='i-ph-sparkle h-3.5 w-3.5 text-network-accent' />
       <span className='text-xs font-medium text-fg-high'>get your first zec</span>
     </div>
 
     <div className='flex flex-col gap-2'>
       <HintRow
-        icon='i-lucide-arrow-down-to-line'
+        icon='i-ph-arrow-line-down'
         title='receive from someone'
         hint='share your shielded address — works for any zec sender'
         onClick={onReceive}
@@ -1754,7 +1760,7 @@ const GetZecHint = ({ onReceive }: { onReceive: () => void }) => (
         className='group flex items-start gap-3 rounded-sm bg-elev-2/40 p-2.5 text-left transition-colors hover:bg-elev-2/60'
       >
         <span className='mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center bg-network-accent/10 text-network-accent'>
-          <span className='i-lucide-shopping-bag h-3.5 w-3.5' />
+          <span className='i-ph-shopping-bag h-3.5 w-3.5' />
         </span>
         <span className='flex flex-1 flex-col'>
           <span className='text-xs lowercase text-fg-high'>buy at an exchange</span>
@@ -1762,7 +1768,7 @@ const GetZecHint = ({ onReceive }: { onReceive: () => void }) => (
             z.cash list of supported exchanges
           </span>
         </span>
-        <span className='i-lucide-external-link mt-1 h-3 w-3 shrink-0 text-fg-muted transition-colors group-hover:text-fg-high' />
+        <span className='i-ph-arrow-square-out mt-1 h-3 w-3 shrink-0 text-fg-muted transition-colors group-hover:text-fg-high' />
       </a>
     </div>
   </div>
@@ -1791,24 +1797,9 @@ const HintRow = ({
       <span className='text-xs lowercase text-fg-high'>{title}</span>
       <span className='mt-0.5 text-label text-fg-muted lowercase'>{hint}</span>
     </span>
-    <span className='i-lucide-arrow-right mt-1 h-3 w-3 shrink-0 text-fg-muted transition-transform duration-200 group-hover:translate-x-0.5' />
+    <span className='i-ph-arrow-right mt-1 h-3 w-3 shrink-0 text-fg-muted transition-transform duration-200 group-hover:translate-x-0.5' />
   </button>
 );
-
-/** extract account index from a visible note's decoded address view */
-function noteAccountIndex(note: unknown): number | undefined {
-  const n = note as
-    | { address?: { addressView?: { case?: string; value?: { index?: { account?: number } } } } }
-    | undefined;
-  if (!n?.address?.addressView) {
-    return undefined;
-  }
-  const av = n.address.addressView;
-  if (av.case === 'decoded' && av.value?.index != null) {
-    return av.value.index.account;
-  }
-  return undefined;
-}
 
 function parsePenumbraTx(txInfo: TransactionInfo): ParsedTransaction {
   const id = txInfo.id?.inner
@@ -1817,75 +1808,12 @@ function parsePenumbraTx(txInfo: TransactionInfo): ParsedTransaction {
         .join('')
     : '';
   const height = Number(txInfo.height ?? 0);
-  let type: ParsedTransaction['type'] = 'unknown';
-  let description = 'transaction';
-  let hasVisibleSpend = false;
-  let hasOutput = false;
-  const accountIndices = new Set<number>();
 
-  for (const action of txInfo.view?.bodyView?.actionViews ?? []) {
-    const c = action.actionView.case;
-    if (c === 'spend' && action.actionView.value.spendView?.case === 'visible') {
-      hasVisibleSpend = true;
-      const idx = noteAccountIndex(action.actionView.value.spendView.value?.note);
-      if (idx != null) {
-        accountIndices.add(idx);
-      }
-    } else if (c === 'output') {
-      hasOutput = true;
-      const ov = action.actionView.value.outputView;
-      if (ov?.case === 'visible') {
-        const idx = noteAccountIndex(ov.value?.note);
-        if (idx != null) {
-          accountIndices.add(idx);
-        }
-      }
-    } else if (c === 'swap') {
-      type = 'swap';
-      description = 'swap';
-      // extract account from swap output notes (populated after claim)
-      const sv = action.actionView.value.swapView;
-      if (sv?.case === 'visible') {
-        const v = sv.value as { output1?: unknown; output2?: unknown };
-        for (const out of [v.output1, v.output2]) {
-          const idx = noteAccountIndex(out);
-          if (idx != null) {
-            accountIndices.add(idx);
-          }
-        }
-      }
-    } else if (c === 'swapClaim') {
-      type = 'swap';
-      description = 'swap claim';
-      // swap claims are separate txs with no spend/output actions - extract
-      // account from the claim's output notes
-      const scv = action.actionView.value.swapClaimView;
-      if (scv?.case === 'visible') {
-        const v = scv.value as { output1?: unknown; output2?: unknown };
-        for (const out of [v.output1, v.output2]) {
-          const idx = noteAccountIndex(out);
-          if (idx != null) {
-            accountIndices.add(idx);
-          }
-        }
-      }
-    } else if (c === 'delegate') {
-      type = 'delegate';
-      description = 'delegate';
-    } else if (c === 'undelegate') {
-      type = 'undelegate';
-      description = 'undelegate';
-    }
-  }
-  if (type === 'unknown') {
-    if (hasVisibleSpend) {
-      type = 'send';
-      description = 'send';
-    } else if (hasOutput) {
-      type = 'receive';
-      description = 'receive';
-    }
-  }
+  // canonical classification (shared with the full history page) - correctly
+  // separates send / receive / unshield (ics20Withdrawal) / deposit
+  // (ibcRelayAction) / swap / (un)delegate. The old local heuristic defaulted
+  // any spend to 'send', so unshields to Noble read as sends.
+  const { type, description, accountIndices } = classifyPenumbraTx(txInfo);
 
   // extract memo text if visible
   let memo: string | undefined;
@@ -1907,6 +1835,24 @@ function fmtZec(val: number): string {
   }
   const s = val.toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
   // ensure at least 2 decimal places for readability
+  const dot = s.indexOf('.');
+  if (dot === -1) {
+    return s + '.00';
+  }
+  const decimals = s.length - dot - 1;
+  return decimals < 2 ? s + '0'.repeat(2 - decimals) : s;
+}
+
+/**
+ * Hero balance formatter - caps at 4 decimals so a long ZEC amount fits the
+ * balance card instead of overflowing (the 8-decimal full precision was the
+ * source of the overflow). Full precision stays available in the pool view.
+ */
+function fmtZecHero(val: number): string {
+  if (val === 0) {
+    return '0';
+  }
+  const s = val.toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
   const dot = s.indexOf('.');
   if (dot === -1) {
     return s + '.00';
@@ -1971,8 +1917,10 @@ const PendingMark = ({ className }: { className?: string }) => (
 
 function TxRow({ tx }: { tx: ParsedTransaction }) {
   const [expanded, setExpanded] = useState(false);
-  const isIn = tx.type === 'receive';
-  const isSh = tx.type === 'shield';
+  // a deposit (IBC in) lands funds like a receive; unshield is a pool<->
+  // transparent move, shown neutrally like a shield
+  const isIn = tx.type === 'receive' || tx.type === 'deposit';
+  const isSh = tx.type === 'shield' || tx.type === 'unshield';
   const isPending = tx.status === 'pending';
   const isFailed = tx.status === 'failed';
   // the recipient is only ever known for our own sends, and only from our own
@@ -2004,13 +1952,13 @@ function TxRow({ tx }: { tx: ParsedTransaction }) {
           {isPending ? (
             <PendingMark />
           ) : isFailed ? (
-            <span className='i-lucide-x h-4 w-4 text-hanko' />
+            <span className='i-ph-x h-4 w-4 text-hanko' />
           ) : isSh ? (
-            <span className='i-lucide-shield h-4 w-4 text-fg-muted' />
+            <span className='i-ph-shield h-4 w-4 text-fg-muted' />
           ) : isIn ? (
-            <span className='i-lucide-arrow-down h-4 w-4 text-fg-high' />
+            <span className='i-ph-arrow-down h-4 w-4 text-fg-high' />
           ) : (
-            <span className='i-lucide-arrow-up h-4 w-4 text-fg-muted' />
+            <span className='i-ph-arrow-up h-4 w-4 text-fg-muted' />
           )}
         </div>
         <div className='flex-1 min-w-0'>
@@ -2047,7 +1995,7 @@ function TxRow({ tx }: { tx: ParsedTransaction }) {
               {expandable && (
                 <span
                   className={cn(
-                    'i-lucide-chevron-down h-3 w-3 text-fg-muted transition-transform',
+                    'i-ph-caret-down h-3 w-3 text-fg-muted transition-transform',
                     expanded && 'rotate-180',
                   )}
                 />
@@ -2276,7 +2224,7 @@ const HistoryContent = ({
   if (q.isLoading && txs.length === 0) {
     return (
       <div className='flex flex-col items-center justify-center gap-3 py-12'>
-        <span className='i-lucide-refresh-cw h-5 w-5 animate-spin text-fg-muted' />
+        <span className='i-ph-arrows-clockwise h-5 w-5 animate-spin text-fg-muted' />
         <span className='text-xs text-fg-muted'>loading...</span>
       </div>
     );
@@ -2299,7 +2247,7 @@ const HistoryContent = ({
   if (txs.length === 0) {
     return (
       <div className='flex flex-col items-center justify-center gap-3 py-12'>
-        <span className='i-lucide-clock h-5 w-5 text-fg-muted' />
+        <span className='i-ph-clock h-5 w-5 text-fg-muted' />
         <span className='text-xs text-fg-muted'>no transactions yet</span>
       </div>
     );

@@ -154,7 +154,7 @@ export const SelectNetworks = () => {
             onClick={() => navigate(PagePath.WELCOME)}
             className='mb-2 inline-flex items-center gap-1.5 self-start text-body text-fg-muted transition-colors hover:text-fg-high lowercase'
           >
-            <span className='i-lucide-arrow-left h-3 w-3' />
+            <span className='i-ph-arrow-left h-3 w-3' />
             back
           </button>
           <h2 className='text-2xl lowercase tracking-[-0.01em] text-fg-high'>select networks</h2>
@@ -197,6 +197,18 @@ export const SelectNetworks = () => {
                     )}
                   </div>
                   <div className='text-sm text-fg-muted'>{network.description}</div>
+                  {/* Noble is not its own network - it rides under Penumbra as
+                      the transparent USDC off-ramp. Surface that explicitly so
+                      enabling Penumbra is also informed consent to Noble. */}
+                  {network.id === 'penumbra' && (
+                    <div className='mt-1 flex items-center gap-1.5 text-label text-fg-muted lowercase'>
+                      <span className='i-ph-arrow-elbow-down-right h-3 w-3 shrink-0 opacity-60' />
+                      includes Noble USDC off-ramp
+                      <span className='rounded bg-red-500/15 px-1 py-0.5 leading-none text-red-500'>
+                        transparent
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <div
                   className={cn(
@@ -204,7 +216,7 @@ export const SelectNetworks = () => {
                     isSelected ? 'border-zigner-gold bg-zigner-gold' : 'border-muted-foreground/50',
                   )}
                 >
-                  {isSelected && <span className='i-lucide-check h-3 w-3 text-zigner-dark' />}
+                  {isSelected && <span className='i-ph-check h-3 w-3 text-zigner-dark' />}
                 </div>
               </button>
             );

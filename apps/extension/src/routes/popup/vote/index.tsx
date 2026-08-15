@@ -94,11 +94,11 @@ function voteLabel(vote: Vote_Vote): string {
 function voteIcon(vote: Vote_Vote): string {
   switch (vote) {
     case Vote_Vote.YES:
-      return 'i-lucide-check';
+      return 'i-ph-check';
     case Vote_Vote.NO:
-      return 'i-lucide-x';
+      return 'i-ph-x';
     case Vote_Vote.ABSTAIN:
-      return 'i-lucide-minus';
+      return 'i-ph-minus';
     default:
       return '';
   }
@@ -192,7 +192,7 @@ export function VotePage() {
     return <ZcashVotePage />;
   }
   if (!isPenumbra) {
-    return <NetworkUnavailable feature='governance' iconClass='i-lucide-vote' />;
+    return <NetworkUnavailable feature='governance' iconClass='i-ph-check-square-offset' />;
   }
 
   return (
@@ -276,9 +276,9 @@ export function VotePage() {
                   <p className='text-sm mt-0.5 truncate'>{p.title}</p>
                 </div>
                 {isExpanded ? (
-                  <span className='i-lucide-chevron-up h-4 w-4 shrink-0 text-fg-muted' />
+                  <span className='i-ph-caret-up h-4 w-4 shrink-0 text-fg-muted' />
                 ) : (
-                  <span className='i-lucide-chevron-down h-4 w-4 shrink-0 text-fg-muted' />
+                  <span className='i-ph-caret-down h-4 w-4 shrink-0 text-fg-muted' />
                 )}
               </button>
 

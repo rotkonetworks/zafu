@@ -108,7 +108,7 @@ export const PolkadotAssets = ({ publicKey, relay = 'polkadot' }: PolkadotAssets
   if (loading) {
     return (
       <div className='flex items-center justify-center py-12'>
-        <span className='i-lucide-refresh-cw h-5 w-5 animate-spin text-fg-muted' />
+        <span className='i-ph-arrows-clockwise h-5 w-5 animate-spin text-fg-muted' />
       </div>
     );
   }
@@ -122,7 +122,7 @@ export const PolkadotAssets = ({ publicKey, relay = 'polkadot' }: PolkadotAssets
           disabled={refreshing}
           className='text-xs text-fg-muted hover:text-fg-high transition-colors disabled:opacity-50'
         >
-          {refreshing ? <span className='i-lucide-refresh-cw h-3 w-3 animate-spin' /> : 'refresh'}
+          {refreshing ? <span className='i-ph-arrows-clockwise h-3 w-3 animate-spin' /> : 'refresh'}
         </button>
       </div>
 

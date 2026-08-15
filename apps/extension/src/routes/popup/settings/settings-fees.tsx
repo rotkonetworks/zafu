@@ -66,14 +66,14 @@ export const SettingsFees = () => {
                 </span>
                 <span className='text-label text-fg-dim lowercase'>{o.blurb}</span>
               </span>
-              {mult === o.mult && <span className='i-lucide-check size-4 text-zigner-gold' />}
+              {mult === o.mult && <span className='i-ph-check size-4 text-zigner-gold' />}
             </button>
           ))}
         </div>
 
         {mult !== 1 && (
           <div className='flex items-start gap-2 rounded-md border border-hanko/40 bg-elev-1 p-3'>
-            <span className='i-lucide-alert-triangle mt-0.5 size-3.5 shrink-0 text-hanko' />
+            <span className='i-ph-warning mt-0.5 size-3.5 shrink-0 text-hanko' />
             <p className='text-label text-fg-muted leading-snug'>
               <span className='text-hanko'>you are paying a non-standard fee.</span> it will not
               confirm faster, and it makes your transactions stand out — anyone watching the chain

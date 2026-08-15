@@ -360,7 +360,7 @@ export function AnimatedQrDisplay({
 
       {frames.length > 1 && (
         <div className='flex items-center gap-2 text-label text-fg-muted'>
-          <span className='i-lucide-loader-2 size-3 animate-spin' />
+          <span className='i-ph-circle-notch size-3 animate-spin' />
           scanning — hold camera steady
         </div>
       )}
@@ -370,7 +370,7 @@ export function AnimatedQrDisplay({
         <label className='flex w-full max-w-xs flex-col gap-1 text-label text-fg-muted'>
           <div className='flex items-center justify-between'>
             <span className='flex items-center gap-1'>
-              <span className='i-lucide-gauge size-3' />
+              <span className='i-ph-gauge size-3' />
               QR speed
             </span>
             <span className='font-mono'>{Math.round(1000 / Math.max(intervalMs, 1))} fps</span>
@@ -396,7 +396,7 @@ export function AnimatedQrDisplay({
         <div className='flex w-full max-w-xs flex-col gap-1 text-label text-fg-muted'>
           <div className='flex items-center justify-between'>
             <span className='flex items-center gap-1'>
-              <span className='i-lucide-grid-3x3 size-3' />
+              <span className='i-ph-grid-four size-3' />
               QR density
             </span>
             <span className='font-mono'>

@@ -268,7 +268,7 @@ export const ShieldTransparent = ({
       {PasswordModal}
       <div className='flex items-center justify-between gap-3'>
         <div className='flex min-w-0 items-center gap-2'>
-          <span className='i-lucide-eye h-3.5 w-3.5 shrink-0 text-fg-muted' />
+          <span className='i-ph-eye h-3.5 w-3.5 shrink-0 text-fg-muted' />
           <span className='text-xs text-fg-muted lowercase'>transparent</span>
           <span className='rounded-sm bg-elev-2 px-1.5 py-0.5 text-label text-fg-dim leading-none lowercase'>
             public

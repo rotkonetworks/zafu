@@ -37,28 +37,28 @@ interface PathOption {
 
 const OPTIONS: readonly PathOption[] = [
   {
-    icon: 'i-lucide-sparkles',
+    icon: 'i-ph-sparkle',
     label: 'create a new wallet',
     hint: 'generate a fresh secret phrase on this device.',
     target: PagePath.GENERATE_SEED_PHRASE,
     accent: 'gold',
   },
   {
-    icon: 'i-lucide-key',
+    icon: 'i-ph-key',
     label: 'import a recovery phrase',
     hint: '24 words from an existing wallet. no server roundtrip.',
     target: PagePath.IMPORT_SEED_PHRASE,
     accent: 'gold',
   },
   {
-    icon: 'i-lucide-smartphone',
+    icon: 'i-ph-device-mobile',
     label: 'connect zigner (airgap)',
     hint: 'keep keys on your phone. sign by QR.',
     target: PagePath.IMPORT_ZIGNER,
     accent: 'blue',
   },
   {
-    icon: 'i-lucide-usb',
+    icon: 'i-ph-usb',
     label: 'connect ledger',
     hint: 'keys stay on the device. sign over usb.',
     target: PagePath.CONNECT_LEDGER,
@@ -160,7 +160,7 @@ const PathCard = ({ option, onClick }: PathCardProps) => {
       </span>
       <span
         className={cn(
-          'i-lucide-arrow-right h-4 w-4 shrink-0 text-fg-muted',
+          'i-ph-arrow-right h-4 w-4 shrink-0 text-fg-muted',
           'transition-transform duration-200',
           'group-hover:translate-x-0.5',
           isBlue ? 'group-hover:text-zafu-blue' : 'group-hover:text-zigner-gold',

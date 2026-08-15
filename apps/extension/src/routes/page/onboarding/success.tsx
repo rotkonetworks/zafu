@@ -44,7 +44,7 @@ export const OnboardingSuccess = () => {
       <div className='flex h-full flex-col items-center justify-center gap-7 py-6 text-center'>
         {/* tiny checkmark in a soft round badge — restrained */}
         <span className='inline-flex h-12 w-12 items-center justify-center rounded-full bg-zigner-gold/15'>
-          <span className='i-lucide-check h-5 w-5 text-zigner-gold' />
+          <span className='i-ph-check h-5 w-5 text-zigner-gold' />
         </span>
 
         <header className='flex flex-col gap-1'>
@@ -62,9 +62,9 @@ export const OnboardingSuccess = () => {
             'hover:-translate-y-[1px] hover:bg-zigner-gold/15',
           )}
         >
-          <span className='i-lucide-panel-right h-4 w-4' />
+          <span className='i-ph-sidebar-simple h-4 w-4' />
           open zafu
-          <span className='i-lucide-arrow-right h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5' />
+          <span className='i-ph-arrow-right h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5' />
         </button>
 
         <p className='mt-2 max-w-xs text-body text-fg-muted lowercase'>

@@ -175,14 +175,26 @@ export const StakePage = () => {
           const state = getValidatorState(info);
           result.push({ info, name, identity, votingPower, commission, state });
         }
-        // sort by voting power, but always keep rotko.net first
+        // rotko.net always first; the rest ranked by a blended "small + cheap"
+        // score so decentralization-friendly picks (low stake, low commission)
+        // surface first rather than the whales. Each factor is normalized to
+        // [0,1] across the set so stake (a huge raw number) and commission (a
+        // single-digit percent) carry comparable weight; lower score = better.
+        const maxVotingPower = Math.max(1, ...result.map(v => v.votingPower));
+        const maxCommission = Math.max(0.0001, ...result.map(v => v.commission));
+        // weights sum to 1 - tune to favour stake vs commission
+        const STAKE_WEIGHT = 0.5;
+        const COMMISSION_WEIGHT = 0.5;
+        const score = (v: ValidatorRow) =>
+          STAKE_WEIGHT * (v.votingPower / maxVotingPower) +
+          COMMISSION_WEIGHT * (v.commission / maxCommission);
         result.sort((a, b) => {
           const aRotko = a.name.toLowerCase().includes('rotko') ? 1 : 0;
           const bRotko = b.name.toLowerCase().includes('rotko') ? 1 : 0;
           if (aRotko !== bRotko) {
             return bRotko - aRotko;
           }
-          return b.votingPower - a.votingPower;
+          return score(a) - score(b);
         });
       } catch (err) {
         console.error('failed to fetch validators:', err);
@@ -363,7 +375,7 @@ export const StakePage = () => {
   // placed after every hook so the count stays consistent across network
   // switches (was triggering React #300).
   if (!isPenumbra) {
-    return <NetworkUnavailable feature='staking' iconClass='i-lucide-layers' />;
+    return <NetworkUnavailable feature='staking' iconClass='i-ph-stack' />;
   }
 
   // delegation/undelegate form modal
@@ -391,7 +403,7 @@ export const StakePage = () => {
             onClick={closeForm}
             className='text-fg-muted hover:text-fg-high transition-colors'
           >
-            <span className='i-lucide-x h-5 w-5' />
+            <span className='i-ph-x h-5 w-5' />
           </button>
         </div>
 
@@ -518,7 +530,7 @@ export const StakePage = () => {
           }}
           className='text-fg-muted hover:text-fg-high transition-colors'
         >
-          <span className='i-lucide-refresh-cw h-4 w-4' />
+          <span className='i-ph-arrows-clockwise h-4 w-4' />
         </button>
       </div>
 
@@ -545,7 +557,7 @@ export const StakePage = () => {
         </h3>
         {delegationsLoading ? (
           <div className='flex items-center gap-2 py-12 text-sm text-fg-muted'>
-            <span className='i-lucide-refresh-cw h-4 w-4 animate-spin' />
+            <span className='i-ph-arrows-clockwise h-4 w-4 animate-spin' />
             loading...
           </div>
         ) : delegations.length === 0 ? (
@@ -598,7 +610,7 @@ export const StakePage = () => {
         </h3>
         {validatorsLoading ? (
           <div className='flex items-center gap-2 py-12 text-sm text-fg-muted'>
-            <span className='i-lucide-refresh-cw h-4 w-4 animate-spin' />
+            <span className='i-ph-arrows-clockwise h-4 w-4 animate-spin' />
             loading validators...
           </div>
         ) : (
@@ -623,7 +635,7 @@ export const StakePage = () => {
                         {pct.toFixed(2)}% · {v.commission}% fee
                       </p>
                     </div>
-                    <span className='i-lucide-chevron-down h-4 w-4 text-fg-muted rotate-[-90deg]' />
+                    <span className='i-ph-caret-down h-4 w-4 text-fg-muted rotate-[-90deg]' />
                   </button>
                 );
               })}
