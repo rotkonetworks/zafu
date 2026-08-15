@@ -68,11 +68,23 @@ const applyFont = (font: ZafuFont) => {
 export const SettingsAppearance = () => {
   const [theme, setTheme] = useState<ZafuTheme>('sumi');
   const [font, setFont] = useState<ZafuFont>('iosevka');
+  const [approvalsInSidePanel, setApprovalsInSidePanel] = useState(false);
 
   useEffect(() => {
     void localExtStorage.get('zafuTheme').then(v => setTheme(v ?? 'sumi'));
     void localExtStorage.get('zafuFont').then(v => setFont(v ?? 'iosevka'));
+    void localExtStorage.get('approvalsInSidePanel').then(v => setApprovalsInSidePanel(v ?? false));
   }, []);
+
+  const pickApprovalMode = (inSidePanel: boolean) => {
+    setApprovalsInSidePanel(inSidePanel);
+    void localExtStorage.set('approvalsInSidePanel', inSidePanel);
+  };
+
+  const APPROVAL_MODES = [
+    { id: false, name: 'popup window', blurb: 'approvals open in a separate window' },
+    { id: true, name: 'side panel', blurb: 'approvals appear in the panel when open' },
+  ] as const;
 
   const pickTheme = (t: ZafuTheme) => {
     setTheme(t);
@@ -145,6 +157,35 @@ export const SettingsAppearance = () => {
                   <span className='text-label text-fg-dim lowercase'>{f.blurb}</span>
                 </span>
                 {font === f.id && <span className='i-lucide-check size-4 text-zigner-gold' />}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className='kicker pb-2'>approvals</p>
+          <div className='flex flex-col gap-2'>
+            {APPROVAL_MODES.map(m => (
+              <button
+                key={String(m.id)}
+                onClick={() => pickApprovalMode(m.id)}
+                className={cn(
+                  'flex w-full items-center gap-3 rounded-md border px-3 py-2.5 text-left transition-colors',
+                  approvalsInSidePanel === m.id
+                    ? 'border-zigner-gold/60 bg-elev-1'
+                    : 'border-border-soft hover:bg-elev-1',
+                )}
+              >
+                <span className='flex h-8 w-8 shrink-0 items-center justify-center rounded-[4px] border border-border-soft bg-elev-2 text-fg'>
+                  <span className={cn(m.id ? 'i-lucide-panel-right' : 'i-lucide-app-window', 'size-4')} />
+                </span>
+                <span className='flex flex-1 flex-col'>
+                  <span className='text-data text-fg lowercase'>{m.name}</span>
+                  <span className='text-label text-fg-dim lowercase'>{m.blurb}</span>
+                </span>
+                {approvalsInSidePanel === m.id && (
+                  <span className='i-lucide-check size-4 text-zigner-gold' />
+                )}
               </button>
             ))}
           </div>

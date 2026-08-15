@@ -19,6 +19,11 @@ import { externalMessageListener } from './message/listen/external-easteregg';
 import { encryptionMessageListener } from './message/listen/external-encryption';
 import { internalZidListener } from './message/listen/internal-zid';
 import { openApprovalPopup } from './utils/popup-window';
+import { trackSidePanelPresence } from './side-panel-presence';
+
+// count open side panels so approval routing can target the panel only when it
+// is actually open (see popup.ts). Registered once at worker startup.
+trackSidePanelPresence();
 
 // all rpc implementations, local and proxy
 import { getRpcImpls } from './rpc';

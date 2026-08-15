@@ -48,6 +48,12 @@ type LOCAL = {
   walletCreationBlockHeight?: number;
   /** Whether camera is enabled for Zigner QR scanning */
   zignerCameraEnabled?: boolean;
+  /**
+   * When true, dapp approval prompts render inside the side panel if it is open,
+   * falling back to a popup window when it is not. Default (undefined/false) is
+   * the classic popup-window behaviour. User preference, set in settings.
+   */
+  approvalsInSidePanel?: boolean;
   /** Flag indicating cache clearing is in progress (survives extension restart) */
   clearingCache?: boolean;
   /**

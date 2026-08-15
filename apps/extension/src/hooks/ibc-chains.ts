@@ -5,6 +5,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { ChainRegistryClient } from '@penumbra-labs/registry';
 import { useChainIdQuery } from './chain-id';
+import { getActiveIbcChainIds } from '../config/networks';
 
 export interface IbcChain {
   displayName: string;
@@ -30,14 +31,20 @@ export const useIbcChains = () => {
         return [];
       }
       const registry = await registryClient.remote.get(chainId);
-      return registry.ibcConnections.map(chain => ({
-        displayName: chain.displayName,
-        chainId: chain.chainId,
-        channelId: chain.channelId,
-        counterpartyChannelId: chain.counterpartyChannelId,
-        addressPrefix: chain.addressPrefix,
-        images: chain.images,
-      }));
+      // Gate to chains with a live channel/client. The registry lists every
+      // configured connection regardless of whether its channel is currently
+      // open; only offer the ones we have verified active (Noble right now).
+      const active = new Set(getActiveIbcChainIds('penumbra'));
+      return registry.ibcConnections
+        .filter(chain => active.has(chain.chainId))
+        .map(chain => ({
+          displayName: chain.displayName,
+          chainId: chain.chainId,
+          channelId: chain.channelId,
+          counterpartyChannelId: chain.counterpartyChannelId,
+          addressPrefix: chain.addressPrefix,
+          images: chain.images,
+        }));
     },
     enabled: !!chainId,
     staleTime: 5 * 60 * 1000, // 5 minutes

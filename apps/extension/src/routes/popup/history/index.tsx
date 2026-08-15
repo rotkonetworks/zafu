@@ -12,12 +12,26 @@ import { getHistoryInWorker } from '../../../state/keyring/network-worker';
 import { useTransparentAddresses } from '../../../hooks/use-transparent-addresses';
 import { cn } from '@repo/ui/lib/utils';
 import type { TransactionInfo } from '@penumbra-zone/protobuf/penumbra/view/v1/view_pb';
+import {
+  classifyTransaction,
+  getTransactionClassificationLabel,
+} from '@penumbra-zone/perspective/transaction/classify';
+import type { TransactionClassification } from '@penumbra-zone/perspective/transaction/classification';
 
 interface ParsedTransaction {
   id: string;
   height: number;
   timestamp: number | null;
-  type: 'send' | 'receive' | 'shield' | 'swap' | 'delegate' | 'undelegate' | 'unknown';
+  type:
+    | 'send'
+    | 'receive'
+    | 'shield'
+    | 'unshield'
+    | 'deposit'
+    | 'swap'
+    | 'delegate'
+    | 'undelegate'
+    | 'unknown';
   description: string;
   /**
    * Confirmation state. Absent means the source only ever reports settled
@@ -50,6 +64,21 @@ function noteAccountIndex(note: unknown): number | undefined {
   return undefined;
 }
 
+/** map the canonical perspective classification to zafu's display type */
+const CLASSIFICATION_TO_TYPE: Partial<Record<TransactionClassification, ParsedTransaction['type']>> =
+  {
+    send: 'send',
+    receive: 'receive',
+    internalTransfer: 'send',
+    ics20Withdrawal: 'unshield',
+    ibcRelayAction: 'deposit',
+    swap: 'swap',
+    swapClaim: 'swap',
+    delegate: 'delegate',
+    undelegate: 'undelegate',
+    undelegateClaim: 'undelegate',
+  };
+
 function parseTransaction(txInfo: TransactionInfo): ParsedTransaction {
   const id = txInfo.id?.inner
     ? Array.from(txInfo.id.inner)
@@ -59,25 +88,16 @@ function parseTransaction(txInfo: TransactionInfo): ParsedTransaction {
 
   const height = Number(txInfo.height ?? 0);
 
-  let type: ParsedTransaction['type'] = 'unknown';
-  let description = 'transaction';
-  let hasVisibleSpend = false;
-  let hasOutput = false;
+  // account indices touched by this tx (zafu-specific, for per-account filtering)
   const accountIndices = new Set<number>();
-
   for (const action of txInfo.view?.bodyView?.actionViews ?? []) {
     const actionCase = action.actionView.case;
-
-    if (actionCase === 'spend') {
-      if (action.actionView.value.spendView?.case === 'visible') {
-        hasVisibleSpend = true;
-        const idx = noteAccountIndex(action.actionView.value.spendView.value?.note);
-        if (idx != null) {
-          accountIndices.add(idx);
-        }
+    if (actionCase === 'spend' && action.actionView.value.spendView?.case === 'visible') {
+      const idx = noteAccountIndex(action.actionView.value.spendView.value?.note);
+      if (idx != null) {
+        accountIndices.add(idx);
       }
     } else if (actionCase === 'output') {
-      hasOutput = true;
       const ov = action.actionView.value.outputView;
       if (ov?.case === 'visible') {
         const idx = noteAccountIndex(ov.value?.note);
@@ -85,27 +105,16 @@ function parseTransaction(txInfo: TransactionInfo): ParsedTransaction {
           accountIndices.add(idx);
         }
       }
-    } else if (actionCase === 'swap') {
-      type = 'swap';
-      description = 'swap';
-    } else if (actionCase === 'delegate') {
-      type = 'delegate';
-      description = 'delegate';
-    } else if (actionCase === 'undelegate') {
-      type = 'undelegate';
-      description = 'undelegate';
     }
   }
 
-  if (type === 'unknown') {
-    if (hasVisibleSpend) {
-      type = 'send';
-      description = 'send';
-    } else if (hasOutput) {
-      type = 'receive';
-      description = 'receive';
-    }
-  }
+  // Canonical classification (perspective) instead of hand-rolling: correctly
+  // separates send / receive / unshield (ics20Withdrawal) / deposit
+  // (ibcRelayAction) / swap / (un)delegate. The old heuristic defaulted any
+  // spend to 'send', so unshields showed as sends.
+  const classification = classifyTransaction(txInfo.view).type;
+  const type: ParsedTransaction['type'] = CLASSIFICATION_TO_TYPE[classification] ?? 'unknown';
+  const description = getTransactionClassificationLabel(txInfo.view).toLowerCase();
 
   return { id, height, timestamp: null, type, description, accountIndices };
 }
@@ -146,8 +155,9 @@ function formatTimestamp(ts: number | null): string {
 }
 
 function TransactionRow({ tx }: { tx: ParsedTransaction }) {
-  const isIncoming = tx.type === 'receive';
-  const isShield = tx.type === 'shield';
+  // deposit (IBC in) lands funds like a receive; unshield/shield are pool moves
+  const isIncoming = tx.type === 'receive' || tx.type === 'deposit';
+  const isShield = tx.type === 'shield' || tx.type === 'unshield';
   const isPending = tx.status === 'pending';
   const isFailed = tx.status === 'failed';
 

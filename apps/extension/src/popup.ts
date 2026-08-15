@@ -4,8 +4,15 @@ import { sendPopup } from './message/send-popup';
 import { listenReady } from './message/listen-ready';
 import { throwIfNeedsLogin } from './needs-login';
 import { openApprovalPopup } from './utils/popup-window';
+import { localExtStorage } from '@repo/storage-chrome/local';
+import { isSidePanelOpen } from './side-panel-presence';
 
 const POPUP_READY_TIMEOUT = 60_000;
+// How long to wait for the side panel to render an approval before deciding it
+// is closed and falling back to a popup window. Short: an open panel renders
+// almost instantly (same bundle); a closed one never signals ready.
+const SIDE_PANEL_READY_TIMEOUT = 1_500;
+const SIDE_PANEL_DEFAULT_PATH = 'sidepanel.html';
 const POPUP_PATHS = {
   [PopupType.TxApproval]: PopupPath.TRANSACTION_APPROVAL,
   [PopupType.OriginApproval]: PopupPath.ORIGIN_APPROVAL,
@@ -62,7 +69,7 @@ export const popup = async <M extends PopupType>(
       throw new PopupAlreadyOpenError(popupType);
     }
 
-    const popupId = await spawnDetachedPopup(popupType).catch(cause => {
+    const { popupId, viaSidePanel } = await spawnDetachedPopup(popupType).catch(cause => {
       throw new Error(`Popup ${popupType} failed to open`, { cause });
     });
 
@@ -71,7 +78,15 @@ export const popup = async <M extends PopupType>(
       id: popupId,
     } as PopupRequest<M>;
 
-    return sendPopup(popupRequest);
+    try {
+      return await sendPopup(popupRequest);
+    } finally {
+      // Return the panel to the wallet once the approval is answered (or the
+      // panel was closed mid-flow), so it does not stay stuck on the approval.
+      if (viaSidePanel) {
+        await restoreSidePanel();
+      }
+    }
   };
 
   const popupResponse = await navigator.locks.request(
@@ -105,18 +120,63 @@ const popupUrl = (popupType?: PopupType, id?: string): URL => {
   return pop;
 };
 
+/** Relative path (from the extension root) to an approval in the popup app. */
+const relativePopupPath = (popupType: PopupType, id: string): string =>
+  `popup.html?id=${id}#${POPUP_PATHS[popupType]}`;
+
+/** Point the side panel back at the wallet home after an approval is done. */
+const restoreSidePanel = (): Promise<void> =>
+  chrome.sidePanel
+    .setOptions({ path: SIDE_PANEL_DEFAULT_PATH, enabled: true })
+    .catch(() => undefined);
+
 /**
- * Spawns a popup with a unique id, and resolves the ID when the popup is ready.
- * Ready promise times out in {@link POPUP_READY_TIMEOUT} milliseconds.
+ * Route an approval into the side panel if it is open. `setOptions` reloads the
+ * (already-open) panel to the approval - same bundle as the popup, so it just
+ * renders the route and signals ready. If the panel is closed it never renders,
+ * `ready` times out, and we return false so the caller falls back to a popup
+ * window. This also honours MV3's gesture rule: we never force the panel open
+ * from a background event, we only reuse it when the user already had it open.
  */
-const spawnDetachedPopup = async (popupType: PopupType): Promise<string> => {
+const deliverToSidePanel = async (path: string, popupId: string): Promise<boolean> => {
+  const ready = listenReady(popupId, AbortSignal.timeout(SIDE_PANEL_READY_TIMEOUT));
+  await chrome.sidePanel.setOptions({ path, enabled: true });
+  try {
+    await ready;
+    return true;
+  } catch {
+    await restoreSidePanel();
+    return false;
+  }
+};
+
+/**
+ * Spawns a detached approval and resolves when it is ready. Honours the user's
+ * `approvalsInSidePanel` preference: try the open side panel first, else open a
+ * popup window (also the fallback when the panel is closed). Returns whether the
+ * side panel was used, so the caller can restore it afterward.
+ */
+const spawnDetachedPopup = async (
+  popupType: PopupType,
+): Promise<{ popupId: string; viaSidePanel: boolean }> => {
   const popupId = crypto.randomUUID();
+
+  // Only route into the side panel when it is actually open (real presence,
+  // not a render-timeout guess) - otherwise we would setOptions/restore a closed
+  // panel and could race a slow render against the fallback window.
+  if (isSidePanelOpen() && (await localExtStorage.get('approvalsInSidePanel')) === true) {
+    const shown = await deliverToSidePanel(relativePopupPath(popupType, popupId), popupId).catch(
+      () => false,
+    );
+    if (shown) {
+      return { popupId, viaSidePanel: true };
+    }
+  }
+
   const ready = listenReady(popupId, AbortSignal.timeout(POPUP_READY_TIMEOUT));
-
   const created = await openApprovalPopup(popupUrl(popupType, popupId).href);
-
   // window id is guaranteed present after `create`
   void ready.catch(() => chrome.windows.remove(created.id!));
-
-  return ready;
+  await ready;
+  return { popupId, viaSidePanel: false };
 };

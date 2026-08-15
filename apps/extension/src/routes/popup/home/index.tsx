@@ -46,6 +46,7 @@ import { IRONWOOD_MIGRATION, nu63ActivationHeight } from '../../../config/featur
 import { rescanStartHeight } from '../../../utils/zcash-blocks';
 import { IronwoodMigrationBanner, IronwoodMigrate } from '../send/ironwood-migrate';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { getRootNetwork, getNetwork } from '../../../config/networks';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { viewClient, sctClient } from '../../../clients';
 import { getDisplayDenomFromView } from '@penumbra-zone/getters/value-view';
@@ -691,17 +692,17 @@ const BalanceFigure = ({
 
   return (
     <div className='flex flex-wrap items-baseline gap-2'>
-      <span className='text-display leading-none text-network-accent tabular'>
+      {/* while still scanning, the balance pulses instead of a "so far" chip -
+          a live, non-final value; the sync bar carries the actual progress. */}
+      <span
+        className={cn(
+          'text-display leading-none text-network-accent tabular',
+          view === 'partial' && 'animate-pulse',
+        )}
+        title={view === 'partial' ? 'still scanning — more funds may yet be found' : undefined}
+      >
         <Sensitive>{fmtZec(zec)} ZEC</Sensitive>
       </span>
-      {view === 'partial' && (
-        <span
-          className='rounded-sm bg-elev-2 px-1.5 py-0.5 text-label text-fg-dim leading-none lowercase'
-          title='still scanning — more funds may yet be found'
-        >
-          so far
-        </span>
-      )}
     </div>
   );
 };
@@ -2134,7 +2135,7 @@ const HistoryContent = ({
   // hooks must always be called in the same order - queries use `enabled` flag instead
   const penumbraQ = useQuery({
     queryKey: ['homeHistory', 'penumbra', penumbraAccount],
-    enabled: network === 'penumbra' && historyEnabled,
+    enabled: getRootNetwork(network) === 'penumbra' && historyEnabled,
     staleTime: 10_000,
     queryFn: async () => {
       const txs: ParsedTransaction[] = [];
@@ -2247,7 +2248,18 @@ const HistoryContent = ({
     );
   }
 
-  const q = network === 'penumbra' ? penumbraQ : zcashQ;
+  // Cosmos subnetworks (e.g. Noble) have their own transparent-chain activity,
+  // which we do not index yet. Show a neutral empty state rather than the
+  // parent's (Penumbra) or zcash transactions.
+  if (getRootNetwork(network) !== network) {
+    return (
+      <div className='flex items-center justify-center px-4 py-6 text-label lowercase text-fg-muted/60'>
+        history for {getNetwork(network).name} isn&apos;t available yet
+      </div>
+    );
+  }
+
+  const q = network === 'zcash' ? zcashQ : penumbraQ;
   // for penumbra, filter by the selected account index - a tx belongs to an
   // account if any of its visible spend or output notes reference that index
   const allTxs = (q.data ?? []) as ParsedTransaction[];

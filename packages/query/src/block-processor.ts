@@ -257,16 +257,38 @@ export class BlockProcessor implements BlockProcessorInterface {
     // planner fails with "SctParameters not available" / "FmdParameters not
     // available". Re-fetch and re-store both when either is missing.
     try {
-      const freshAppParams = await this.querier.app.appParams();
-      await this.persistChainParams(freshAppParams, currentHeight);
-      console.debug(
-        '[sync] chain params refreshed - sct:',
-        freshAppParams.sctParams,
-        'fmd:',
-        await this.indexedDb.getFmdParams(),
-      );
+      const [fmd, storedApp] = await Promise.all([
+        this.indexedDb.getFmdParams(),
+        this.indexedDb.getAppParams(),
+      ]);
+      // Only hit the network when something the planner needs is actually
+      // missing - once repaired, later syncs skip the fetch, and a fresh wallet
+      // (which already ran the isFreshWallet branch above) does not re-fetch.
+      if (!fmd || !storedApp?.sctParams) {
+        const freshAppParams = await this.querier.app.appParams();
+        await this.persistChainParams(freshAppParams, currentHeight);
+        console.debug(
+          '[sync] chain params repaired - sct:',
+          freshAppParams.sctParams,
+          'fmd:',
+          await this.indexedDb.getFmdParams(),
+        );
+      }
     } catch (e) {
-      console.warn('[sync] chain params refresh failed:', e);
+      console.warn('[sync] chain params repair failed:', e);
+    }
+
+    // Validators: their per-epoch refresh (handleEpochTransition) is gated on
+    // sctParams, so while that was missing no validator infos were stored and
+    // the staking list is empty. If none are stored, repopulate now rather than
+    // waiting for the next epoch boundary.
+    try {
+      const anyValidator = await this.indexedDb.iterateValidatorInfos().next();
+      if (anyValidator.done) {
+        void this.updateValidatorInfos(currentHeight);
+      }
+    } catch (e) {
+      console.warn('[sync] validator repair failed:', e);
     }
 
     // handle the special case where no syncing has been done yet, and

@@ -15,6 +15,7 @@ import { selectActiveNetwork, selectPenumbraAccount } from '../../../state/keyri
 import { recentAddressesSelector, type AddressNetwork } from '../../../state/recent-addresses';
 import { contactsSelector } from '../../../state/contacts';
 import { selectIbcWithdraw } from '../../../state/ibc-withdraw';
+import { isActiveIbcChain, getNetwork } from '../../../config/networks';
 import { selectPenumbraSend } from '../../../state/penumbra-send';
 import { useIbcChains, isValidIbcAddress, type IbcChain } from '../../../hooks/ibc-chains';
 import { viewClient } from '../../../clients';
@@ -1733,7 +1734,19 @@ export function SendPage() {
         {isPenumbra ? (
           <PenumbraSend onSuccess={inDedicatedWindow ? () => window.close() : undefined} />
         ) : isCosmos ? (
-          <CosmosSend sourceChainId={activeNetwork as CosmosChainId} />
+          isActiveIbcChain(activeNetwork) ? (
+            <CosmosSend sourceChainId={activeNetwork as CosmosChainId} />
+          ) : (
+            // No live IBC channel to this chain right now (channels close on
+            // network upgrades and reopen later), so deposit/send is unavailable.
+            <div className='flex flex-col gap-2 rounded-lg border border-border-soft bg-elev-1 p-4 text-sm'>
+              <span className='font-medium text-fg'>channel unavailable</span>
+              <span className='text-fg-muted'>
+                {getNetwork(activeNetwork).name} has no open IBC channel with Penumbra right now.
+                Only Noble is available until other channels are reopened.
+              </span>
+            </div>
+          )
         ) : (
           <div className='flex flex-col gap-4'>
             <div>

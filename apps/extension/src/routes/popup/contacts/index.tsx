@@ -45,7 +45,7 @@ const NETWORK_LABELS: Record<ContactNetwork, string> = {
 };
 
 const NETWORK_COLORS: Record<ContactNetwork, string> = {
-  penumbra: 'bg-purple-500/20 text-purple-400',
+  penumbra: 'bg-teal-400/20 text-teal-300',
   zcash: 'bg-yellow-500/20 text-yellow-400',
   cosmos: 'bg-blue-500/20 text-blue-400',
   polkadot: 'bg-pink-500/20 text-pink-400',

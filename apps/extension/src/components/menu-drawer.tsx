@@ -147,14 +147,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
     className?: string;
   }
   const networkDestinations: MenuItem[] = [
-    hasFeature(activeNetwork, 'stake') && {
-      icon: 'i-lucide-layers',
-      label: 'stake',
-      onClick: () => {
-        navigate(PopupPath.STAKE);
-        onClose();
-      },
-    },
+    // stake lives in the bottom tab bar (Penumbra only), not the side menu
     hasFeature(activeNetwork, 'swap') && {
       icon: 'i-lucide-arrow-left-right',
       label: 'swap',

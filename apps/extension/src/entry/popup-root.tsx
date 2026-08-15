@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router-dom';
 import { popupRouter } from '../routes/popup/router';
 import { isSidePanel } from '../utils/popup-detection';
+import { announceSidePanelPresence } from '../side-panel-presence';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { installGracefulNetworkErrorHandler } from '../utils/graceful-network-errors';
 
@@ -37,6 +38,9 @@ const MainPopup = () => {
   // check for pending side panel navigation
   useEffect(() => {
     if (isSidePanel()) {
+      // let the worker know a side panel is open, so approval routing can target
+      // it instead of opening a separate popup window
+      announceSidePanelPresence();
       chrome.storage.local
         .get('sidePanelNavigateTo')
         .then(result => {

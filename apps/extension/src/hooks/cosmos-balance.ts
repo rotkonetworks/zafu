@@ -265,6 +265,15 @@ export const useCosmosAssets = (chainId: CosmosChainId, accountIndex = 0) => {
   });
 };
 
+/**
+ * Known IBC denoms -> display symbol. IBC denoms are opaque hashes; without a
+ * denom-trace lookup we can't resolve them, so map the ones we ship. This is
+ * Penumbra's UM as it lands on Noble after an IBC transfer.
+ */
+const KNOWN_IBC_DENOMS: Record<string, string> = {
+  'ibc/955A03D0BC92B11738A1E4B0C9F2AAF05B79929703F907D2D7AF5A0D405AE8C1': 'UM',
+};
+
 /** derive display symbol from denom */
 function denomToSymbol(denom: string): string {
   // native denoms like 'uosmo' -> 'OSMO'
@@ -273,8 +282,8 @@ function denomToSymbol(denom: string): string {
   }
   // IBC denoms like 'ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2'
   if (denom.startsWith('ibc/')) {
-    // truncate hash for display
-    return `IBC/${denom.slice(4, 10)}`;
+    // resolve known ones to their symbol; otherwise truncate the hash
+    return KNOWN_IBC_DENOMS[denom] ?? `IBC/${denom.slice(4, 10)}`;
   }
   // factory denoms
   if (denom.startsWith('factory/')) {

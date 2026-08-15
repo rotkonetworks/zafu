@@ -5,9 +5,11 @@
  * no silent cycling, no stray-tap wallet/network switches
  */
 
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '../state';
+import { PopupPath } from '../routes/popup/paths';
 import {
   selectActiveNetwork,
   selectEnabledNetworks,
@@ -18,7 +20,7 @@ import {
 } from '../state/keyring';
 import { selectActiveZcashWallet } from '../state/wallets';
 import { selectHideBalances } from '../state/privacy';
-import { getNetwork } from '../config/networks';
+import { getNetwork, getSubnetworks } from '../config/networks';
 import { CustodyBadge } from './custody-badge';
 import { cn } from '@repo/ui/lib/utils';
 
@@ -41,6 +43,7 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
   const hideBalances = useStore(selectHideBalances);
   const setPrivacySetting = useStore(s => s.privacy.setSetting);
 
+  const navigate = useNavigate();
   const [openPicker, setOpenPicker] = useState<OpenPicker>(null);
 
   const networkInfo = getNetwork(activeNetwork);
@@ -56,6 +59,9 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
     setOpenPicker(null);
     if (n !== activeNetwork) {
       void setActiveNetwork(n);
+      // always land on home - the previous sub-page (stake, send, ...) may not
+      // exist or make sense on the newly selected network
+      navigate(PopupPath.INDEX);
     }
   };
 
@@ -84,39 +90,58 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
           <span className='text-data text-fg-high'>{networkInfo.name}</span>
           {networkInfo.transparent && (
             <span
-              className='flex items-center gap-0.5 rounded-md bg-amber-500/15 px-1.5 py-0.5 text-label leading-none text-amber-500'
-              title='transparent network - balances and transactions are public, NOT shielded'
+              className='flex items-center gap-0.5 rounded-md bg-red-500/15 px-1.5 py-0.5 text-label leading-none text-red-500'
+              title='transparent network - balances and transactions are PUBLIC, not shielded'
             >
               <span className='i-lucide-eye h-3 w-3' />
-              public
+              unshielded
             </span>
           )}
           <span className='i-lucide-chevron-down h-3 w-3 text-fg-muted' />
         </button>
         {openPicker === 'network' && (
           <div className='absolute left-0 top-full z-50 mt-1 min-w-40 rounded-md border border-border-soft bg-canvas py-1 shadow-xl'>
-            {enabledNetworks.map(n => (
-              <button
-                key={n}
-                onClick={() => pickNetwork(n)}
-                className='flex w-full items-center gap-2 px-3 py-2 text-left text-data text-fg transition-colors hover:bg-elev-1 hover:text-fg-high'
-              >
-                <span className={cn('h-2 w-2 rounded-full', getNetwork(n).color)} />
-                <span className='flex-1 truncate'>{getNetwork(n).name}</span>
-                {getNetwork(n).transparent && (
-                  <span
-                    className='flex shrink-0 items-center gap-0.5 rounded-md bg-elev-2 px-1.5 py-0.5 text-label leading-none text-fg-dim'
-                    title='transparent network - balances and transactions are public'
+            {enabledNetworks
+              .filter(n => !getNetwork(n).parent)
+              .map(n => (
+                <Fragment key={n}>
+                  <button
+                    onClick={() => pickNetwork(n)}
+                    className='flex w-full items-center gap-2 px-3 py-2 text-left text-data text-fg transition-colors hover:bg-elev-1 hover:text-fg-high'
                   >
-                    <span className='i-lucide-eye h-3 w-3' />
-                    public
-                  </span>
-                )}
-                {n === activeNetwork && (
-                  <span className='i-lucide-check h-3.5 w-3.5 text-zigner-gold' />
-                )}
-              </button>
-            ))}
+                    <span className={cn('h-2 w-2 rounded-full', getNetwork(n).color)} />
+                    <span className='flex-1 truncate'>{getNetwork(n).name}</span>
+                    {n === activeNetwork && (
+                      <span className='i-lucide-check h-3.5 w-3.5 text-zigner-gold' />
+                    )}
+                  </button>
+                  {/* IBC subnetworks nested under their parent (e.g. Noble under
+                      Penumbra) - the transparent off-ramp destinations. */}
+                  {getSubnetworks(n).map(sub => (
+                    <button
+                      key={sub}
+                      onClick={() => pickNetwork(sub)}
+                      className='flex w-full items-center gap-2 py-2 pl-7 pr-3 text-left text-data text-fg transition-colors hover:bg-elev-1 hover:text-fg-high'
+                    >
+                      <span className='text-fg-dim'>&#8627;</span>
+                      <span className={cn('h-2 w-2 rounded-full', getNetwork(sub).color)} />
+                      <span className='flex-1 truncate'>{getNetwork(sub).name}</span>
+                      {getNetwork(sub).transparent && (
+                        <span
+                          className='flex shrink-0 items-center gap-0.5 rounded-md bg-red-500/10 px-1.5 py-0.5 text-label leading-none text-red-400'
+                          title='transparent - balances and transactions are PUBLIC, not shielded'
+                        >
+                          <span className='i-lucide-eye h-3 w-3' />
+                          unshielded
+                        </span>
+                      )}
+                      {sub === activeNetwork && (
+                        <span className='i-lucide-check h-3.5 w-3.5 text-zigner-gold' />
+                      )}
+                    </button>
+                  ))}
+                </Fragment>
+              ))}
           </div>
         )}
       </div>

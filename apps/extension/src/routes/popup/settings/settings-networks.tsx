@@ -50,6 +50,7 @@ import { PopupPath } from '../paths';
 /** color map for network indicators */
 const NETWORK_COLORS: Record<string, string> = {
   'bg-purple-500': '#8B5CF6',
+  'bg-teal-400': '#2dd4bf',
   'bg-yellow-500': '#EAB308',
   'bg-pink-500': '#EC4899',
   'bg-gray-500': '#6B7280',

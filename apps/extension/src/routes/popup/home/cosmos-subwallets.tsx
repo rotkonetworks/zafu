@@ -11,9 +11,15 @@
  */
 
 import { memo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Sensitive } from '../../../components/sensitive';
 import { useAllCosmosBalances } from '../../../hooks/cosmos-balance';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { isActiveIbcChain } from '../../../config/networks';
+import { useStore } from '../../../state';
+import { selectSetActiveNetwork } from '../../../state/keyring';
+import type { NetworkType } from '../../../state/keyring';
+import { PopupPath } from '../paths';
 import { cn } from '@repo/ui/lib/utils';
 
 interface ChainRowProps {
@@ -21,12 +27,13 @@ interface ChainRowProps {
   address: string;
   formatted: string;
   loading: boolean;
+  onShield: (chainId: CosmosChainId) => void;
 }
 
 const truncateAddress = (addr: string, head = 8, tail = 4) =>
   addr.length <= head + tail + 3 ? addr : `${addr.slice(0, head)}…${addr.slice(-tail)}`;
 
-const ChainRow = memo(({ chainId, address, formatted, loading }: ChainRowProps) => {
+const ChainRow = memo(({ chainId, address, formatted, loading, onShield }: ChainRowProps) => {
   const config = COSMOS_CHAINS[chainId];
   return (
     <div
@@ -49,6 +56,15 @@ const ChainRow = memo(({ chainId, address, formatted, loading }: ChainRowProps) 
           {truncateAddress(address)}
         </div>
       </div>
+      <button
+        type='button'
+        onClick={() => onShield(chainId)}
+        className='flex shrink-0 items-center gap-1 rounded-md bg-blue-500/15 px-2.5 py-1.5 text-xs font-medium text-blue-400 transition-colors hover:bg-blue-500/25'
+        title='shield into Penumbra'
+      >
+        <span className='i-lucide-shield h-3.5 w-3.5' />
+        shield
+      </button>
     </div>
   );
 });
@@ -61,6 +77,15 @@ ChainRow.displayName = 'ChainRow';
  */
 export const CosmosSubwallets = () => {
   const { data, isLoading, isError } = useAllCosmosBalances();
+  const navigate = useNavigate();
+  const setActiveNetwork = useStore(selectSetActiveNetwork);
+
+  // Shield: switch to the cosmos chain and open its send flow (destination is
+  // the user's Penumbra address = a deposit/shield into the shielded pool).
+  const onShield = (chainId: CosmosChainId) => {
+    void setActiveNetwork(chainId as NetworkType);
+    navigate(PopupPath.SEND);
+  };
 
   if (isError) {
     return null;
@@ -68,9 +93,13 @@ export const CosmosSubwallets = () => {
 
   // Compute which chains to render. While loading we render all chains
   // with a dash placeholder so the section doesn't flicker in.
-  const entries = data
-    ? (Object.entries(data) as [CosmosChainId, NonNullable<typeof data>[CosmosChainId]][])
-    : (Object.keys(COSMOS_CHAINS) as CosmosChainId[]).map(id => [id, undefined] as const);
+  const entries = (
+    data
+      ? (Object.entries(data) as [CosmosChainId, NonNullable<typeof data>[CosmosChainId]][])
+      : (Object.keys(COSMOS_CHAINS) as CosmosChainId[]).map(id => [id, undefined] as const)
+    // only chains with a live IBC channel (Noble) - hide the rest until their
+    // channels reopen, so we don't surface an un-shieldable Cosmos Hub row
+  ).filter(([chainId]) => isActiveIbcChain(chainId as NetworkType));
 
   // Hide the section once data arrives if every balance is zero — we
   // don't want an empty "unshielded" header on Penumbra for users with
@@ -84,12 +113,7 @@ export const CosmosSubwallets = () => {
 
   return (
     <div className='mt-4'>
-      <div className='kicker mb-2 flex items-center justify-between'>
-        <span>unshielded</span>
-        <span className='text-label font-normal text-fg-muted normal-case'>
-          shieldable to Penumbra
-        </span>
-      </div>
+      <div className='kicker mb-2'>unshielded</div>
       <div className='flex flex-col gap-1.5'>
         {entries.map(([chainId, e]) => (
           <ChainRow
@@ -98,6 +122,7 @@ export const CosmosSubwallets = () => {
             address={e?.address ?? ''}
             formatted={e?.formatted ?? ''}
             loading={isLoading || !e}
+            onShield={onShield}
           />
         ))}
       </div>

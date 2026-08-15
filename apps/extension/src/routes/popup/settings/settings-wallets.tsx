@@ -27,7 +27,7 @@ type RemovalStep = 'idle' | 'password' | 'backup' | 'confirm';
 /** network badges for a vault */
 const networkBadge = (network: string) => {
   const colors: Record<string, string> = {
-    penumbra: 'bg-purple-500/15 text-purple-400',
+    penumbra: 'bg-teal-400/15 text-teal-300',
     zcash: 'bg-yellow-500/15 text-yellow-400',
     cosmos: 'bg-blue-500/15 text-blue-400',
     polkadot: 'bg-pink-500/15 text-pink-400',

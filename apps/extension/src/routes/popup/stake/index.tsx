@@ -162,7 +162,10 @@ export const StakePage = () => {
           const identity = info.validator?.identityKey?.ik
             ? Buffer.from(info.validator.identityKey.ik).toString('base64').slice(0, 8)
             : '';
-          const votingPower = Number(info.status?.votingPower ?? 0n);
+          // votingPower is an Amount {lo, hi} (uint128), not a number - reading
+          // it directly gives NaN and every share renders 0.00%. It fits in the
+          // low 64 bits, so lo is the value.
+          const votingPower = Number(info.status?.votingPower?.lo ?? 0n);
           // funding streams use a recipient oneof - get rate from recipient if available
           const fundingStream = info.validator?.fundingStreams?.[0];
           const commission =

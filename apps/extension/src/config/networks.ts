@@ -24,6 +24,13 @@ export interface NetworkConfig {
    * for the unshield -> transparent-chain -> exchange flow.
    */
   parent?: NetworkType;
+  /**
+   * For a cosmos subnetwork: its IBC chain id (e.g. 'noble-1'). Only set on
+   * subnetworks that currently have a LIVE channel + client with the parent -
+   * IBC deposit/withdraw is gated to these. Channels close on network upgrades
+   * and must be reopened; set/unset this (with `launched`) as they come back.
+   */
+  ibcChainId?: string;
   features: {
     stake: boolean;
     swap: boolean;
@@ -48,7 +55,7 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
   },
   penumbra: {
     name: 'Penumbra',
-    color: 'bg-purple-500',
+    color: 'bg-teal-400',
     focusColor: 'focus:border-penumbra-purple',
     transparent: false,
     launched: true,
@@ -80,6 +87,7 @@ export const NETWORKS: Record<NetworkType, NetworkConfig> = {
     // unshielding and the off-ramp path to exchanges (Coinbase etc.).
     launched: true,
     parent: 'penumbra',
+    ibcChainId: 'noble-1',
     features: { stake: false, swap: false, vote: false, inbox: false, multisig: false },
   },
   cosmoshub: {
@@ -136,6 +144,27 @@ export const getSubnetworks = (parent: NetworkType): NetworkType[] =>
   (Object.keys(NETWORKS) as NetworkType[]).filter(
     n => NETWORKS[n].launched && NETWORKS[n].parent === parent,
   );
+
+/**
+ * IBC chain ids reachable from `parent` right now: launched cosmos subnetworks
+ * that carry an `ibcChainId` (i.e. have a live channel + client). IBC
+ * deposit/withdraw is gated to these. Only Noble at the moment; other channels
+ * closed on network upgrades and re-open by setting `ibcChainId` + `launched`.
+ */
+export const getActiveIbcChainIds = (parent: NetworkType): string[] =>
+  (Object.keys(NETWORKS) as NetworkType[])
+    .filter(n => NETWORKS[n].launched && NETWORKS[n].parent === parent && NETWORKS[n].ibcChainId)
+    .map(n => NETWORKS[n].ibcChainId!);
+
+/** As above but returns the network KEYS (e.g. 'noble'), for gating by activeNetwork. */
+export const getActiveIbcSubnetworks = (parent: NetworkType): NetworkType[] =>
+  (Object.keys(NETWORKS) as NetworkType[]).filter(
+    n => NETWORKS[n].launched && NETWORKS[n].parent === parent && NETWORKS[n].ibcChainId,
+  );
+
+/** true if this cosmos subnetwork currently has a live IBC channel (deposit/send ok) */
+export const isActiveIbcChain = (network: NetworkType): boolean =>
+  Boolean(NETWORKS[network]?.ibcChainId && NETWORKS[network]?.launched);
 
 /** the root (top-level) network for any network: its parent, or itself */
 export const getRootNetwork = (network: NetworkType): NetworkType =>

@@ -10,7 +10,7 @@ const iconClass = 'h-full w-full';
 /** penumbra shield icon */
 const PenumbraIcon = () => (
   <svg viewBox='0 0 32 32' className={iconClass}>
-    <circle cx='16' cy='16' r='14' fill='#8B5CF6' />
+    <circle cx='16' cy='16' r='14' fill='#2dd4bf' />
     <path
       d='M16 6 L24 14 L16 26 L8 14 Z'
       fill='none'
@@ -93,6 +93,7 @@ const NETWORK_ICON_MAP: Partial<Record<NetworkType, () => JSX.Element>> = {
 
 const FALLBACK_COLORS: Record<string, string> = {
   'purple-500': '#8B5CF6',
+  'teal-400': '#2dd4bf',
   'yellow-500': '#EAB308',
   'pink-500': '#EC4899',
   'gray-500': '#6B7280',

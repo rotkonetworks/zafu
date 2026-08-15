@@ -46,6 +46,12 @@ const BOTTOM_TABS: readonly {
     feature: 'inbox',
   },
   {
+    path: PopupPath.STAKE,
+    icon: <span className='i-lucide-coins h-5 w-5' />,
+    label: 'stake',
+    feature: 'stake',
+  },
+  {
     path: PopupPath.MULTISIG,
     icon: <span className='i-zafu-torii h-5 w-5' />,
     label: 'multisig',
