@@ -1054,7 +1054,10 @@ const ZcashContent = ({
             label: 'nomt',
             icon: 'i-ph-tree-structure',
             iconDone: 'i-ph-tree-structure-fill',
-            hint: "checks the server's answer against the chain's authenticated state tree, so it cannot quietly leave a note out.",
+            // NOT "checks" - nothing here verifies a proof. gigaproofStatus
+            // is parsed straight out of the server's own response, so this
+            // stage reports what the server says about itself.
+            hint: "the server reports its state-tree index is built for this range. the wallet does not yet check that claim.",
             state: nomtPct >= 100 ? 'done' : 'active',
           },
           {
@@ -1062,7 +1065,7 @@ const ZcashContent = ({
             label: 'ligerito',
             icon: 'i-ph-seal-check',
             iconDone: 'i-ph-seal-check-fill',
-            hint: "verifies the server's proof that what it sent you is complete. the wallet only checks these proofs - the server is the one that produces them.",
+            hint: "the server reports a completeness proof is ready for this range. the wallet does not yet verify it - the proof is not checked here.",
             state: ligeritoPct >= 100 ? 'done' : gigaproofStatus >= 1 ? 'active' : 'pending',
             // The wallet VERIFIES a ligerito proof; it never produces one —
             // proving happens server-side. So the detail says what the wallet
@@ -1090,6 +1093,13 @@ const ZcashContent = ({
           {
             key: 'scan',
             label: 'scanning notes',
+            icon: 'i-ph-magnifying-glass',
+            iconDone: 'i-ph-magnifying-glass-fill',
+            // Deliberately not the same sentence as the lightwalletd scan
+            // stage. There you fetch every block yourself; here the two
+            // stages above have already established that what the server
+            // returned is complete, and this trial-decrypts that.
+            hint: 'trial-decrypts the blocks the server returned. only your wallet can tell which notes are yours.',
             state: scanPct >= 100 ? 'done' : scanPct > 0 ? 'active' : 'pending',
             detail: `${Math.floor(scanPct)}%`,
           },
