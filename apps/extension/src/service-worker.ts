@@ -60,60 +60,58 @@ import { backOff } from 'exponential-backoff';
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { localMigrations } from '@repo/storage-chrome/migrations';
 
-// polkadot custom chainspec support
-import {
-  registerCustomChainspec,
-  unregisterCustomChainspec,
-  getCustomChainspecs,
-  type RelayChain,
-} from '@repo/wallet/networks/polkadot';
-
 // Quiet transient network fetch failures (offline/unreachable endpoints) so
 // best-effort background calls do not spam "Uncaught (in promise): Failed to
 // fetch" - non-network rejections still surface. Installed first, before any
-// services start.
+// services start, and must be synchronous at initial worker evaluation.
 installGracefulNetworkErrorHandler();
 
 localExtStorage.enableMigration(localMigrations);
 
 /**
- * load custom chainspecs from storage and register with polkadot light client
+ * Load polkadot custom chainspecs - but ONLY when polkadot/kusama is actually
+ * enabled. The polkadot light client (smoldot) is heavy and was previously
+ * imported statically at service-worker startup, which deferred the SW body
+ * past initial evaluation (breaking the synchronous `unhandledrejection`
+ * registration) and ran for every user regardless of the networks they use.
  *
- * called on startup and when chainspecs change in storage.
+ * We are a privacy-preserving wallet: a network the user has not selected must
+ * not load code or open connections. So the import is dynamic and gated on the
+ * enabled set - zcash-only or penumbra-only users never touch smoldot.
  */
-async function loadCustomChainspecs(): Promise<void> {
+async function loadCustomChainspecsIfEnabled(): Promise<void> {
+  const enabled = (await localExtStorage.get('enabledNetworks')) ?? [];
+  if (!enabled.includes('polkadot') && !enabled.includes('kusama')) {
+    return;
+  }
+  const { registerCustomChainspec, unregisterCustomChainspec, getCustomChainspecs } = await import(
+    /* webpackChunkName: "polkadot-chainspec" */ '@repo/wallet/networks/polkadot'
+  );
   const specs = (await localExtStorage.get('customChainspecs')) ?? [];
   const registered = getCustomChainspecs();
-
-  // register new chainspecs
   for (const spec of specs) {
     if (!registered.has(spec.id)) {
-      // map 'standalone' to null relay, others to RelayChain
-      const relay = spec.relay === 'standalone' ? 'standalone' : (spec.relay as RelayChain);
       registerCustomChainspec(
         spec.id,
         spec.chainspec,
-        relay,
+        spec.relay === 'standalone' ? 'standalone' : spec.relay,
         spec.name,
         spec.symbol,
         spec.decimals,
       );
     }
   }
-
-  // unregister removed chainspecs
   const specIds = new Set(specs.map(s => s.id));
   for (const [id] of registered) {
     if (!specIds.has(id)) {
       unregisterCustomChainspec(id);
     }
   }
-
   console.log(`[polkadot] loaded ${specs.length} custom chainspecs`);
 }
 
-// load custom chainspecs on startup
-void loadCustomChainspecs();
+// gated on enabled networks - a no-op for zcash-only / penumbra-only users
+void loadCustomChainspecsIfEnabled();
 
 let walletServicesResult: Promise<{
   services: Services;
@@ -194,9 +192,17 @@ localExtStorage.addListener(changes => {
     }
   }
 
-  // sync custom chainspecs when they change
+  // Active-scoped sync: when the user switches networks, restart services so
+  // penumbra sync starts only when penumbra is the active network and stops
+  // when they switch away (privacy - no background stream to a network you are
+  // not viewing). startWalletServices enforces the active gate.
+  if (changes.activeNetwork !== undefined) {
+    void reinitializeServices();
+  }
+
+  // sync custom chainspecs when they change (no-op unless polkadot is enabled)
   if (changes.customChainspecs !== undefined) {
-    void loadCustomChainspecs();
+    void loadCustomChainspecsIfEnabled();
   }
 });
 

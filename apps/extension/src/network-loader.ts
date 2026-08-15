@@ -64,7 +64,11 @@ async function loadAdapter(network: NetworkId): Promise<NetworkAdapter> {
         adapter = new ZcashAdapter();
         break;
       }
-      case 'polkadot': {
+      case 'polkadot':
+      case 'kusama': {
+        // kusama shares the polkadot adapter. Lazily imported here, so the
+        // smoldot light client is only pulled in when polkadot/kusama is
+        // actually selected - never at service-worker startup.
         const { PolkadotAdapter } = await import(
           /* webpackChunkName: "adapter-polkadot" */
           '@repo/wallet/networks/polkadot/adapter'
@@ -80,15 +84,6 @@ async function loadAdapter(network: NetworkId): Promise<NetworkAdapter> {
           '@repo/wallet/networks/cosmos/adapter'
         );
         adapter = new CosmosAdapter();
-        break;
-      }
-      case 'kusama': {
-        // kusama uses same adapter as polkadot
-        const { PolkadotAdapter } = await import(
-          /* webpackChunkName: "adapter-polkadot" */
-          '@repo/wallet/networks/polkadot/adapter'
-        );
-        adapter = new PolkadotAdapter();
         break;
       }
       case 'ethereum':

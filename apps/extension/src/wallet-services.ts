@@ -8,6 +8,8 @@ import { getWalletFromStorage } from '@repo/storage-chrome/onboard';
 import type { WalletJson } from '@repo/wallet';
 import { Services } from '@repo/context';
 import { WalletServices } from '@rotko/penumbra-types/services';
+import { getRootNetwork } from './config/networks';
+import type { NetworkType } from './state/keyring';
 import { AssetId } from '@penumbra-zone/protobuf/penumbra/core/asset/v1/asset_pb';
 import { SENTINEL_U64_MAX } from './utils/sentinel';
 
@@ -51,18 +53,35 @@ const getPenumbraEndpoint = async (): Promise<string> => {
 export const startWalletServices = async (
   signal?: AbortSignal,
 ): Promise<{ services: Services; wallet: WalletJson }> => {
+  // Stub services object that throws on access - returned whenever penumbra
+  // must not sync.
+  const stubServices = (reason: string) => ({
+    services: {
+      getWalletServices: () => Promise.reject(new Error(reason)),
+    } as Services,
+    wallet: undefined as unknown as WalletJson,
+  });
+
   // privacy gate: check if penumbra is enabled before making network connections
   const enabled = await isPenumbraEnabled();
   console.log('[sync] isPenumbraEnabled:', enabled);
   if (!enabled) {
     console.log('[sync] penumbra not enabled, skipping wallet services initialization');
-    // return a stub services object that throws on access
-    return {
-      services: {
-        getWalletServices: () => Promise.reject(new Error('penumbra network not enabled')),
-      } as Services,
-      wallet: undefined as unknown as WalletJson,
-    };
+    return stubServices('penumbra network not enabled');
+  }
+
+  // active-scoped privacy gate: only sync penumbra while the user is actually on
+  // it. A privacy-preserving wallet must not keep a gRPC stream open to a
+  // network you have switched away from. Zcash already gates its worker on the
+  // active network; this brings penumbra in line. Unset activeNetwork (fresh
+  // wallet, pre-selection) falls through to the enabled behaviour above.
+  const activeNetwork = await localExtStorage.get('activeNetwork');
+  // A cosmos subnetwork (e.g. Noble) roots to penumbra, so viewing it still
+  // needs penumbra context for unshielding - treat the whole penumbra group as
+  // active. Only a different root (zcash) skips penumbra sync.
+  if (activeNetwork && getRootNetwork(activeNetwork as NetworkType) !== 'penumbra') {
+    console.log(`[sync] penumbra group not active (active=${activeNetwork}), skipping sync`);
+    return stubServices('penumbra network not active');
   }
 
   console.log('[sync] starting wallet services...');
