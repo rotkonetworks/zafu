@@ -572,12 +572,16 @@ const PenumbraContent = ({
     }
   }, [fullSyncHeight, account, queryClient]);
 
-  const balanceDisplay =
+  // Amount and unit kept apart so the unit can be set subordinate, the same
+  // as the zcash hero. Concatenating them forced both to one size, which is
+  // what made the figure read flat.
+  const balanceAmount =
     umBalance != null && umBalance > 0
-      ? `${umBalance.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} UM`
-      : isSyncing
-        ? 'syncing...'
-        : '0 UM';
+      ? umBalance.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 })
+      : umBalance != null
+        ? '0'
+        : null;
+  const balanceSyncing = balanceAmount == null && isSyncing;
 
   return (
     <div className='flex-1 flex flex-col gap-3'>
@@ -585,8 +589,21 @@ const PenumbraContent = ({
           kicker) so the two networks read as one design, not two. */}
       <div className='rounded-md border border-network-accent/20 bg-elev-1 p-4'>
         <span className='kicker'>balance</span>
-        <div className='mt-1 text-display leading-none text-network-accent tabular'>
-          <Sensitive>{balanceDisplay}</Sensitive>
+        <div className='mt-1 flex min-w-0 items-baseline gap-1.5'>
+          {balanceSyncing ? (
+            <span className='text-display leading-none text-fg-dim tabular lowercase'>
+              syncing…
+            </span>
+          ) : (
+            <>
+              <span className='min-w-0 truncate text-display leading-none tracking-tight text-network-accent tabular'>
+                <Sensitive>{balanceAmount ?? '0'}</Sensitive>
+              </span>
+              <span className='shrink-0 text-title leading-none text-network-accent/60 tabular'>
+                UM
+              </span>
+            </>
+          )}
         </div>
         <div className='mt-1 text-label text-fg-dim tabular'>{syncLabel}</div>
       </div>
@@ -701,14 +718,20 @@ const BalanceFigure = ({
           a live, non-final value; the sync bar carries the actual progress. */}
       <span
         className={cn(
-          'min-w-0 truncate text-display leading-none text-network-accent tabular',
+          'min-w-0 truncate text-display leading-none tracking-tight text-network-accent tabular',
           view === 'partial' && 'animate-pulse',
         )}
         title={view === 'partial' ? 'still scanning — more funds may yet be found' : undefined}
       >
         <Sensitive>{fmtZecHero(zec)}</Sensitive>
       </span>
-      <span className='shrink-0 text-display leading-none text-network-accent tabular'>ZEC</span>
+      {/* The ticker used to be set at text-display in the accent, the same as
+          the amount - so "ZEC" carried equal visual weight to the number and
+          the figure read flat. A unit is a subordinate mark: it identifies the
+          number, it is not the thing you came to read. Dropped a step in the
+          scale and to 60% accent, which restores the hierarchy without
+          reaching for another colour. */}
+      <span className='shrink-0 text-title leading-none text-network-accent/60 tabular'>ZEC</span>
     </div>
   );
 };
