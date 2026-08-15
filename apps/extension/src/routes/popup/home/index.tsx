@@ -1042,6 +1042,7 @@ const ZcashContent = ({
             key: 'scan',
             label: 'scanning notes',
             icon: 'i-ph-magnifying-glass',
+            iconDone: 'i-ph-magnifying-glass-fill',
             hint: 'downloads blocks and trial-decrypts them here to find notes that are yours. private, but you fetch every block.',
             state: scanPct >= 100 ? 'done' : scanPct > 0 ? 'active' : 'pending',
             detail: `${Math.floor(scanPct)}%`,
@@ -1052,6 +1053,7 @@ const ZcashContent = ({
             key: 'nomt',
             label: 'nomt',
             icon: 'i-ph-tree-structure',
+            iconDone: 'i-ph-tree-structure-fill',
             hint: "checks the server's answer against the chain's authenticated state tree, so it cannot quietly leave a note out.",
             state: nomtPct >= 100 ? 'done' : 'active',
           },
@@ -1059,6 +1061,7 @@ const ZcashContent = ({
             key: 'ligerito',
             label: 'ligerito',
             icon: 'i-ph-seal-check',
+            iconDone: 'i-ph-seal-check-fill',
             hint: "verifies the server's proof that what it sent you is complete. the wallet only checks these proofs - the server is the one that produces them.",
             state: ligeritoPct >= 100 ? 'done' : gigaproofStatus >= 1 ? 'active' : 'pending',
             // The wallet VERIFIES a ligerito proof; it never produces one —

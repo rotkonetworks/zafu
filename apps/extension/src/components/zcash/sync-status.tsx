@@ -22,6 +22,14 @@ export interface SyncStage {
   detail?: string;
   /** unocss icon class; the row is scanned visually before it is read */
   icon?: string;
+  /**
+   * Filled variant, shown once the stage is done.
+   *
+   * Passed in rather than derived as `icon + '-fill'` because UnoCSS
+   * extracts class names statically - a template-built class is never
+   * generated and the icon silently renders as nothing.
+   */
+  iconDone?: string;
   /** hover text saying what this stage actually does, in plain words */
   hint?: string;
 }
@@ -281,14 +289,29 @@ export const SyncStatus = ({
                     title={st.hint}
                     className={cn(
                       'flex items-center gap-1',
+                      // State is carried by weight and value, not by a second
+                      // hue. Gold stays the only chroma in the row, which is
+                      // the point of a palette built on ink, paper and one
+                      // seal colour - a saturated green here would be the
+                      // brightest thing on the panel and would own the eye
+                      // for the stage that least needs attention.
+                      //
+                      // done reads solid and receded, pending reads dim and
+                      // hollow, active is the only thing lit.
                       st.state === 'done' && 'text-fg-muted',
                       st.state === 'active' && 'text-zigner-gold',
                       st.state === 'pending' && 'text-fg-dim',
                     )}
                   >
-                    {st.icon && <span className={cn(st.icon, 'size-3.5 shrink-0')} />}
+                    {(st.state === 'done' ? st.iconDone ?? st.icon : st.icon) && (
+                      <span
+                        className={cn(
+                          st.state === 'done' ? st.iconDone ?? st.icon : st.icon,
+                          'size-3.5 shrink-0',
+                        )}
+                      />
+                    )}
                     {st.label}
-                    {st.state === 'done' && ' ✓'}
                     {/* Show the detail on pending stages too, not just active
                         ones. A stage that is waiting is exactly the one the
                         user needs explained — dropping its detail left stages
