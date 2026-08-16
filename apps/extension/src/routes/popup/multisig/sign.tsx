@@ -155,11 +155,15 @@ export const MultisigSign = () => {
               pcztHex: signMatch[6],
             };
 
-            // Latch. Anyone who can guess the room code can post here, so a
-            // second SIGN: is not a "retry" — it is an attempt to swap the tx
-            // out from under a review the user has already started (classic
-            // case: land it while the password modal is up). Poison the
-            // session instead; the user can re-join for a fresh one.
+            // Latch. A second SIGN: is not a "retry" — it is an attempt to
+            // swap the tx out from under a review the user has already
+            // started (classic case: land it while the password modal is up).
+            //
+            // This used to be justified by the room code being guessable.
+            // Session membership is now authenticated, and the latch stays:
+            // the sender is a co-signer, and a co-signer is exactly who a
+            // threshold scheme declines to fully trust. Poison the session
+            // instead; the user can re-join for a fresh one.
             if (txRef.current) {
               if (text !== lastSignText) {
                 supersededRef.current = true;
@@ -432,12 +436,12 @@ export const MultisigSign = () => {
       {step === 'input' && (
         <div className='flex flex-col gap-4'>
           <label className='text-xs text-fg-muted'>
-            room code
+            session id
             <input
               className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
               value={roomCode}
               onChange={e => setRoomCode(e.target.value)}
-              placeholder='acid-blue-cave'
+              placeholder='00000000-0000-0000-0000-000000000000'
               autoFocus
             />
           </label>
@@ -743,12 +747,12 @@ const AirgapJoinerWrapper = ({
       <WalletCard />
       <div className='flex flex-col gap-4'>
         <label className='text-xs text-fg-muted'>
-          room code
+          session id
           <input
             className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
             value={room}
             onChange={e => setRoom(e.target.value)}
-            placeholder='acid-blue-cave'
+            placeholder='00000000-0000-0000-0000-000000000000'
             autoFocus
           />
         </label>

@@ -2,10 +2,18 @@
 // (recipient, amount, fee) against the OVK-decrypted output the joiner
 // derived locally from the PCZT the host published.
 //
-// There is deliberately NO "unverified but signable" verdict. The relay is
-// unauthenticated and the room code is guessable, so "the host" is anyone who
-// can post to the room; a state that fails to verify yet leaves the approve
-// button live is a downgrade attack, not a compatibility affordance. Every
+// There is deliberately NO "unverified but signable" verdict.
+//
+// The original reason was that the relay was unauthenticated and the room code
+// guessable, so "the host" was anyone who could post. That is no longer true —
+// frostd admits only listed keys and Noise_K authenticates the sender — and
+// the rule stands anyway, on the reason that does not expire: the host is a
+// co-signer, and a threshold scheme exists precisely because a co-signer is
+// not fully trusted. Authenticating who sent a claim says nothing about
+// whether the claim is honest.
+//
+// A state that fails to verify yet leaves the approve button live is a
+// downgrade attack, not a compatibility affordance. Every
 // path that cannot establish (recipient, amount, sighash) from bytes returns
 // `refuse`, which no UI may override. This matches computeEscrowVerdict below,
 // which already worked this way.

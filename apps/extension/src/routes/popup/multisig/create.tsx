@@ -306,11 +306,14 @@ const MultisigCreateZafu = () => {
       {step === 'waiting' && (
         <div className='flex flex-col items-center gap-4'>
           <p className='text-xs text-fg-muted'>
-            share this code with your co-signers - they pick "join" and enter it
+            share this session id with your co-signers - they pick "join" and enter it,
+            along with the relay keys you already swapped
           </p>
 
           <div className='flex items-center gap-2 rounded-lg border border-border-soft bg-elev-1 px-6 py-4'>
-            <span className='font-mono text-2xl tracking-wider'>{roomCode}</span>
+            {/* a session id is a uuid, not three short words - it needs to wrap
+                rather than run off the popup */}
+            <span className='break-all font-mono text-xs'>{roomCode}</span>
             <button
               onClick={() => void navigator.clipboard.writeText(roomCode)}
               className='p-1 text-fg-muted hover:text-fg-high transition-colors'
@@ -384,7 +387,7 @@ const MultisigCreateZafu = () => {
 
           {roomCode && (
             <div className='flex items-center gap-2 rounded-lg border border-border-soft bg-elev-1 px-4 py-2'>
-              <span className='font-mono text-sm tracking-wider'>{roomCode}</span>
+              <span className='break-all font-mono text-xs'>{roomCode}</span>
               <button
                 onClick={() => void navigator.clipboard.writeText(roomCode)}
                 className='p-1 text-fg-muted hover:text-fg-high transition-colors'
@@ -875,8 +878,8 @@ const MultisigCreateZigner = () => {
 
       {step === 'waiting-room' && (
         <div className='flex flex-col items-center gap-4'>
-          <p className='text-xs text-fg-muted'>share this code with your co-signers</p>
-          <div className='font-mono text-2xl tracking-wider'>{roomCode}</div>
+          <p className='text-xs text-fg-muted'>share this session id with your co-signers</p>
+          <div className='break-all px-4 font-mono text-xs'>{roomCode}</div>
           <div className='flex items-center gap-2 rounded-md bg-elev-2 px-3 py-1.5'>
             <span className='i-ph-users size-3.5 text-fg-muted' />
             <span className='text-xs'>

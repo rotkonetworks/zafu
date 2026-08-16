@@ -14,7 +14,7 @@ export function SignStepProgress({ current }: { current: 1 | 2 | 3 }) {
         <div key={s.key} className='flex items-center gap-1.5'>
           <div
             className={`flex size-5 items-center justify-center rounded-full text-label font-medium ${
-              s.key <= current ? 'bg-zigner-gold text-zigner-dark' : 'bg-elev-2 text-fg-muted'
+              s.key <= current ? 'bg-zigner-gold text-zigner-gold-foreground' : 'bg-elev-2 text-fg-muted'
             }`}
           >
             {s.key}
@@ -36,7 +36,7 @@ export function RoomCodeChip({ code }: { code: string }) {
       <button
         onClick={() => void navigator.clipboard.writeText(code)}
         className='p-1 text-fg-muted hover:text-fg-high transition-colors'
-        title='copy room code'
+        title='copy session id'
       >
         <span className='i-ph-copy size-3.5' />
       </button>

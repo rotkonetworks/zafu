@@ -1699,7 +1699,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
 
             {frostRoomCode && (
               <div className='flex flex-col items-center gap-2'>
-                <p className='text-xs text-fg-muted'>share this code with co-signers:</p>
+                <p className='text-xs text-fg-muted'>share this session id with co-signers:</p>
                 <div className='rounded bg-elev-2 px-4 py-2 font-mono text-lg'>{frostRoomCode}</div>
               </div>
             )}

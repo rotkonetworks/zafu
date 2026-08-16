@@ -62,8 +62,10 @@ export const RelayTransportField = ({
       {open && (
         <div className='flex flex-col gap-2 rounded-lg border border-border-soft bg-elev-1 p-3'>
           <p className='text-label text-fg-muted'>
-            transport: relay (recommended). the relay only shuttles encrypted messages between
-            signers - it never sees keys or amounts.
+            transport: relay (recommended). every message is encrypted to the signer it is
+            for before it leaves this device, so the relay carries ciphertext only - it never
+            sees keys, amounts or recipients. only the signers whose relay keys you entered
+            can take part.
           </p>
           <label className='text-label text-fg-muted'>
             your own relay
