@@ -94,6 +94,24 @@ Reproduce by checking out the zcli rev below and running the commands.
 Verify: rebuild from the rev, sha256sum the outputs,
 diff against the values above. A mismatch means the vendored blob is stale.
 
+## 2026-08-16 rebuild - Noise_K DKG sealing + frostd relay cipher
+
+- source repo: zcli, branch `master`, rev `bd9c63e`
+- toolchain: wasm-bindgen 0.2.126, binaryen 130
+- sha256(single-thread zafu_wasm_bg.wasm) = 7fb97583fc7e680cce0e8c75eadd994d4503beb3249d69d51154b8aabf197824
+- sha256(parallel zafu_wasm_bg.wasm) = e00e659b4ebc979ca9eb10921eaa8c2b58f34fd1e7c96322267277356fe1bf05
+- Adds FrostRelayCipher + frost_relay_generate_keypair: Noise_K end-to-end
+  encryption for relay traffic, byte-compatible with ZF's frost-client (the
+  interop is asserted in Rust, in zcli's frostd_transport tests).
+- Carries the DKG round-2 sealing. Before this blob, round-2 packages were
+  signed but sent in the clear, and for any n > t an observer of the traffic
+  could interpolate the dealers' polynomials and recover the group key.
+- WIRE BREAK: DKG is now wire version 2 and refuses a v1 peer. Every
+  participant must be on this blob or newer; a half-sealed ceremony leaks
+  exactly as much as an unsealed one, so the mismatch fails loudly.
+- Verified: parallel blob has shared imported memory (50 32768 shared);
+  worker patch re-applied; 475 extension tests pass.
+
 ## 2026-08-11 rebuild - voting stack + ironwood completion + FROST send builder
 
 - source repo: zcli, branch `master`, rev `6df7849`
