@@ -36,6 +36,19 @@ export interface MultisigWallet {
   createdAt: number;
   /** participant pubkeys (hex ed25519, for display) */
   participants: string[];
+  /**
+   * The other signers' frostd relay public keys, hex.
+   *
+   * Distinct from `participants`: those are FROST identities, these are
+   * transport identities for the relay. A session cannot be opened without
+   * them, because frostd fixes its participant list at creation and admits
+   * nobody else.
+   *
+   * Optional so wallets created before the frostd migration still load; a
+   * signing flow that finds it missing asks the user to exchange keys rather
+   * than failing inside the relay with a membership error.
+   */
+  relayPeerKeys?: string[];
   /** links to parent vault */
   vaultId: string;
 }

@@ -28,6 +28,12 @@ export interface MnemonicFrostMultisig {
   threshold: number;
   maxSigners: number;
   relayUrl?: string;
+  /**
+   * The other signers' frostd relay public keys, hex. Transport identities,
+   * not FROST ones. Without them no session can be opened: frostd fixes its
+   * participant list at creation.
+   */
+  relayPeerKeys?: string[];
 }
 
 export interface RunMnemonicFrostSignArgs {
@@ -58,6 +64,8 @@ export async function runMnemonicFrostSign({
     ms.threshold,
     ms.maxSigners,
     300,
+    ms.publicKeyPackage,
+    ms.relayPeerKeys ?? [],
   );
   setRoomCode(session.roomCode);
   setFrostAbort(session.abort);

@@ -24,7 +24,8 @@ import {
 import { computeEscrowVerdict } from './send/frost-multisig/multisig-verifier';
 import { encodeOrchardUnifiedAddress } from '@repo/wallet/networks/zcash/unified-address';
 import { hexToBytes } from '@repo/wallet/networks';
-import { FrostRelayClient } from '../../state/keyring/frost-relay-client';
+import { FrostdRelayClient } from '../../state/keyring/frostd-relay-client';
+import { buildRelayIdentity, getOrCreateRelayIdentity } from '../../state/keyring/relay-identity';
 import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../state/frost-session';
 import { usePasswordGate } from '../../hooks/password-gate';
 import { Sensitive } from '../../components/sensitive';
@@ -73,6 +74,17 @@ export const FrostApprove = () => {
   const maxSigners = Math.min(Number(params.get('maxSigners')) || 3, MAX_FROST_SIGNERS);
   const relayUrl = params.get('relayUrl') || 'wss://zcash.rotko.net';
   const roomCode = params.get('roomCode') || '';
+  /**
+   * The other signers' frostd relay public keys, comma-separated.
+   *
+   * frostd fixes a session's participants at creation, so a caller that omits
+   * these cannot open one. Failing here with a clear message beats failing
+   * inside the relay with a membership error.
+   */
+  const relayPeerKeys = (params.get('relayPeerKeys') || '')
+    .split(',')
+    .map(k => k.trim())
+    .filter(k => k !== '');
   const sighashHex = params.get('sighashHex') || '';
   const labelPrefix = params.get('labelPrefix') || 'multisig';
   const requestId = params.get('requestId') || '';
@@ -184,9 +196,28 @@ export const FrostApprove = () => {
     }
   };
 
+  /**
+   * Build a relay client for this approval.
+   *
+   * The ceremony id is the room code where we have one, and the sighash
+   * otherwise: stable for the flow, and not shared across unrelated groups,
+   * so a relay operator cannot link a user's sessions.
+   */
+  const relayClient = async (): Promise<FrostdRelayClient> => {
+    if (relayPeerKeys.length === 0) {
+      throw new Error(
+        'this request has no relayPeerKeys - every signer must be listed before a session exists',
+      );
+    }
+    const ceremonyId = roomCode !== '' ? roomCode : sighashHex;
+    const stored = await getOrCreateRelayIdentity(ceremonyId);
+    const identity = await buildRelayIdentity(stored, relayPeerKeys);
+    return new FrostdRelayClient(relayUrl, identity);
+  };
+
   const runDkgCreate = async () => {
     const abort = new AbortController();
-    const relay = new FrostRelayClient(relayUrl);
+    const relay = await relayClient();
 
     setStatus('creating room...');
     const room = await relay.createRoom(threshold, maxSigners, 600);
@@ -265,7 +296,7 @@ export const FrostApprove = () => {
 
   const runDkgJoin = async () => {
     const abort = new AbortController();
-    const relay = new FrostRelayClient(relayUrl);
+    const relay = await relayClient();
 
     setStatus(`joining room ${roomCode}...`);
 
@@ -354,7 +385,7 @@ export const FrostApprove = () => {
   const runDkgJoinV2 = async () => {
     const abort = new AbortController();
     const sessionDeadline = Date.now() + FROST_SESSION_TIMEOUT_MS;
-    const relay = new FrostRelayClient(relayUrl);
+    const relay = await relayClient();
     const pid = new Uint8Array(32);
     crypto.getRandomValues(pid);
 
@@ -487,7 +518,7 @@ export const FrostApprove = () => {
     }
 
     const abort = new AbortController();
-    const relay = new FrostRelayClient(relayUrl);
+    const relay = await relayClient();
     const secrets = await getMultisigSecrets(multisigVault.id);
     if (!secrets) {
       throw new Error('failed to decrypt multisig secrets');
@@ -592,7 +623,7 @@ export const FrostApprove = () => {
     }
 
     const abort = new AbortController();
-    const relay = new FrostRelayClient(relayUrl);
+    const relay = await relayClient();
     const secrets = await getMultisigSecrets(vault.id);
     if (!secrets) {
       throw new Error('failed to decrypt multisig secrets');

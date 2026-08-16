@@ -20,13 +20,39 @@
 // multisig-verifier.ts — the fee cannot be checked without the bundle's
 // value_balance, which the wasm parser does not return.
 
-import { FrostRelayClient } from '../../../../state/keyring/frost-relay-client';
+import { FrostdRelayClient } from '../../../../state/keyring/frostd-relay-client';
+import {
+  buildRelayIdentity,
+  getOrCreateRelayIdentity,
+} from '../../../../state/keyring/relay-identity';
 
 export interface RelaySession {
-  relay: FrostRelayClient;
+  relay: FrostdRelayClient;
   roomCode: string;
   participantId: Uint8Array;
   abort: AbortController;
+}
+
+/**
+ * Build a relay client for `ceremonyId`, sealed to `peerKeys`.
+ *
+ * A ceremony id rather than a device id: the relay identity is per-ceremony
+ * so a relay operator cannot link a user's sessions to one another.
+ */
+async function clientFor(
+  relayUrl: string,
+  ceremonyId: string,
+  peerKeys: string[],
+): Promise<FrostdRelayClient> {
+  if (peerKeys.length === 0) {
+    throw new Error(
+      'no peer relay keys: frostd fixes a session\'s participants at creation, ' +
+        'so every signer must be listed before it exists',
+    );
+  }
+  const stored = await getOrCreateRelayIdentity(ceremonyId);
+  const identity = await buildRelayIdentity(stored, peerKeys);
+  return new FrostdRelayClient(relayUrl, identity);
 }
 
 export async function openRelayRoom(
@@ -34,17 +60,24 @@ export async function openRelayRoom(
   threshold: number,
   maxSigners: number,
   ttlSec: number,
+  ceremonyId: string,
+  peerKeys: string[],
 ): Promise<RelaySession> {
-  const relay = new FrostRelayClient(relayUrl);
+  const relay = await clientFor(relayUrl, ceremonyId, peerKeys);
   const room = await relay.createRoom(threshold, maxSigners, ttlSec);
   const participantId = new Uint8Array(32);
   crypto.getRandomValues(participantId);
   return { relay, roomCode: room.roomCode, participantId, abort: new AbortController() };
 }
 
-/** joiner variant — connects to an existing room by code (no createRoom). */
-export function openJoinerSession(relayUrl: string, roomCode: string): RelaySession {
-  const relay = new FrostRelayClient(relayUrl);
+/** joiner variant — connects to an existing session by id (no createRoom). */
+export async function openJoinerSession(
+  relayUrl: string,
+  roomCode: string,
+  ceremonyId: string,
+  peerKeys: string[],
+): Promise<RelaySession> {
+  const relay = await clientFor(relayUrl, ceremonyId, peerKeys);
   const participantId = new Uint8Array(32);
   crypto.getRandomValues(participantId);
   return { relay, roomCode, participantId, abort: new AbortController() };

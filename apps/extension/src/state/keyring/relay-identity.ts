@@ -42,9 +42,13 @@ let wasm: RelayWasm | null = null;
 /** Load the wasm bundle, the same way the rest of the extension does. */
 async function loadWasm(): Promise<RelayWasm> {
   if (wasm !== null) {return wasm;}
-  // @ts-expect-error - dynamic import from extension root, resolved at runtime
-  const mod = await import(/* webpackIgnore: true */ '/zafu-wasm/zafu_wasm.js');
-  wasm = mod as RelayWasm;
+  // The specifier is built at runtime on purpose. A literal here is
+  // statically analyzable, and vite then tries to resolve a file that lives
+  // in public/ and is only ever served, never bundled - which fails the test
+  // run even though the extension itself is fine.
+  const specifier = '/zafu-wasm/zafu_wasm.js';
+  const mod = (await import(/* webpackIgnore: true */ /* @vite-ignore */ specifier)) as RelayWasm;
+  wasm = mod;
   return wasm;
 }
 

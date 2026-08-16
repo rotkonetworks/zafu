@@ -136,6 +136,14 @@ export interface FrostMultisigParams {
   threshold: number;
   maxSigners: number;
   relayUrl: string;
+  /**
+   * The other signers' frostd relay public keys, hex.
+   *
+   * Transport identities, not FROST ones. Required to open a session at all:
+   * frostd lists a session's participants at creation and admits nobody else.
+   * Optional so wallets created before the frostd migration still load.
+   */
+  relayPeerKeys?: string[];
   /** secret share location. defaults to 'self' (encrypted on zafu).
    * 'airgapSigner' = share lives on zigner only; keyPackage / ephemeralSeed must be omitted. */
   custody?: FrostCustody;

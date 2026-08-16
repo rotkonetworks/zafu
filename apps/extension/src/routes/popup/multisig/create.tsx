@@ -19,6 +19,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { RelayKeyExchange } from './relay-key-exchange';
 import { useSearchParams } from 'react-router-dom';
 import { useStore } from '../../../state';
 import {
@@ -78,9 +79,14 @@ const MultisigCreateZafu = () => {
   const [participantCount, setParticipantCount] = useState(1);
   const [deadline, setDeadline] = useState<number | null>(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
+  // frostd fixes a session's participants at creation, so the other signers'
+  // relay keys must be in hand before the session exists.
+  const [myRelayKey, setMyRelayKey] = useState('');
+  const [peerKeys, setPeerKeys] = useState<string[]>([]);
   const goBack = useBackNav(PopupPath.MULTISIG);
 
   const startDkg = useStore(s => s.frostSession.startDkg);
+  const prepareRelayIdentity = useStore(s => s.frostSession.prepareRelayIdentity);
   const resetDkg = useStore(s => s.frostSession.resetDkg);
   const newFrostMultisigKey = useStore(s => s.keyRing.newFrostMultisigKey);
 
@@ -94,13 +100,13 @@ const MultisigCreateZafu = () => {
     setDeadline(sessionDeadline);
     try {
       const url = relayUrl || DEFAULT_RELAY_URL;
-      const code = await startDkg(url, threshold, maxSigners);
+      const code = await startDkg(url, threshold, maxSigners, peerKeys);
       setRoomCode(code);
       setStep('waiting');
       setParticipantCount(1);
 
       // reuse the relay client startDkg already created (opening a second
-      // FrostRelayClient would double-subscribe and break part2 parsing).
+      // a second client would double-subscribe and break part2 parsing).
       const relay = useStore.getState().frostSession.relay;
       if (!relay) {
         throw new Error('frost relay missing - startDkg did not initialize it');
@@ -278,11 +284,21 @@ const MultisigCreateZafu = () => {
             transaction
           </p>
           <RelayTransportField value={relayUrl} onChange={setRelayUrl} />
+          <RelayKeyExchange
+            maxSigners={maxSigners}
+            myKey={myRelayKey}
+            onPrepare={prepareRelayIdentity}
+            onMyKey={setMyRelayKey}
+            onPeerKeys={setPeerKeys}
+          />
           <button
-            className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors'
+            className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-40'
+            disabled={peerKeys.length !== maxSigners - 1}
             onClick={() => void handleCreate()}
           >
-            create
+            {peerKeys.length === maxSigners - 1
+              ? 'create'
+              : `waiting for ${maxSigners - 1 - peerKeys.length} more relay key(s)`}
           </button>
         </div>
       )}
@@ -345,7 +361,7 @@ const MultisigCreateZafu = () => {
                 <div
                   className={`flex size-5 items-center justify-center rounded-full text-label font-medium ${
                     i + 1 <= currentRound
-                      ? 'bg-zigner-gold text-zigner-dark'
+                      ? 'bg-zigner-gold text-zigner-gold-foreground'
                       : 'bg-elev-2 text-fg-muted'
                   }`}
                 >
@@ -462,6 +478,8 @@ const MultisigCreateZigner = () => {
   const [roomCode, setRoomCode] = useState('');
   const [error, setError] = useState('');
   const [participantCount, setParticipantCount] = useState(1);
+  const [myRelayKey, setMyRelayKey] = useState('');
+  const [peerKeys, setPeerKeys] = useState<string[]>([]);
   const [publicKeyPackage, setPublicKeyPackage] = useState('');
   const [walletId, setWalletId] = useState('');
   const [, setOrchardFvk] = useState('');
@@ -480,6 +498,7 @@ const MultisigCreateZigner = () => {
   const abortRef = useRef<AbortController | null>(null);
 
   const startDkg = useStore(s => s.frostSession.startDkg);
+  const prepareRelayIdentity = useStore(s => s.frostSession.prepareRelayIdentity);
   const resetDkg = useStore(s => s.frostSession.resetDkg);
   const newFrostMultisigKey = useStore(s => s.keyRing.newFrostMultisigKey);
 
@@ -523,7 +542,7 @@ const MultisigCreateZigner = () => {
       const sk = await frostSampleFvkSkInWorker();
       fvkSkRef.current = sk;
 
-      const code = await startDkg(url, threshold, maxSigners);
+      const code = await startDkg(url, threshold, maxSigners, peerKeys);
       setRoomCode(code);
 
       const relay = useStore.getState().frostSession.relay;
@@ -835,11 +854,21 @@ const MultisigCreateZigner = () => {
             </label>
           </div>
           <RelayTransportField value={relayUrl} onChange={setRelayUrl} />
+          <RelayKeyExchange
+            maxSigners={maxSigners}
+            myKey={myRelayKey}
+            onPrepare={prepareRelayIdentity}
+            onMyKey={setMyRelayKey}
+            onPeerKeys={setPeerKeys}
+          />
           <button
-            className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors'
+            className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-40'
+            disabled={peerKeys.length !== maxSigners - 1}
             onClick={() => void handleStart()}
           >
-            create
+            {peerKeys.length === maxSigners - 1
+              ? 'create'
+              : `waiting for ${maxSigners - 1 - peerKeys.length} more relay key(s)`}
           </button>
         </div>
       )}

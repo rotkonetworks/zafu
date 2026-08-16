@@ -32,8 +32,13 @@ export interface JoinerMultisig {
   orchardFvkUview?: string;
   /** mainnet vs testnet - used for unified address re-encoding when comparing. */
   mainnet?: boolean;
+  /**
+   * The other signers' frostd relay public keys, hex. Transport identities,
+   * not FROST ones. Without them no session can be opened: frostd fixes its
+   * participant list at creation.
+   */
+  relayPeerKeys?: string[];
 }
-
 interface Props {
   ms: JoinerMultisig;
   roomCode: string;
@@ -88,8 +93,17 @@ export function FrostAirgapJoinerSignFlow({
   // raw C:/S: payloads; per-action bucketing happens after numActions is known.
   useEffect(() => {
     let signSeen = false;
+    // openJoinerSession is async now - building the Noise sessions needs the
+    // wasm - so the body moves into an IIFE rather than the effect returning
+    // a promise, which React would ignore.
+    void (async () => {
     try {
-      const s = openJoinerSession(ms.relayUrl || DEFAULT_RELAY_URL, roomCode);
+      const s = await openJoinerSession(
+        ms.relayUrl || DEFAULT_RELAY_URL,
+        roomCode,
+        ms.publicKeyPackage,
+        ms.relayPeerKeys ?? [],
+      );
       sessionRef.current = s;
       void s.relay.joinRoom(
         s.roomCode,
@@ -180,6 +194,10 @@ export function FrostAirgapJoinerSignFlow({
     } catch (err) {
       onError(err instanceof Error ? err.message : 'failed to join room');
     }
+    })();
+    // Cleanup stays on the effect itself, not inside the IIFE: React needs it
+    // synchronously, and an aborted session must tear down even if the join
+    // above is still in flight.
     return () => {
       sessionRef.current?.abort.abort();
       sessionRef.current = null;

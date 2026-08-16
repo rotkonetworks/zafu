@@ -6,7 +6,8 @@
  */
 
 import { AllSlices, SliceCreator } from '.';
-import { FrostRelayClient, type RoomEvent } from './keyring/frost-relay-client';
+import { FrostdRelayClient, type RoomEvent } from './keyring/frostd-relay-client';
+import { buildRelayIdentity, getOrCreateRelayIdentity } from './keyring/relay-identity';
 import type { DkgSession, SigningSession } from './keyring/multisig-types';
 
 /**
@@ -58,16 +59,39 @@ export interface FrostSessionSlice {
   /** active signing session (null when not signing) */
   signing: SigningSession | null;
   /** relay client instance */
-  relay: FrostRelayClient | null;
+  relay: FrostdRelayClient | null;
+  /**
+   * This ceremony's relay identity: a fresh id per ceremony, so a relay
+   * operator cannot link a user's sessions to each other.
+   */
+  relayCeremonyId: string | null;
+  /** our relay public key, hex — the thing to hand to the other signers */
+  relayPublicKey: string | null;
 
-  /** start a new DKG as coordinator — creates room, runs round 1 */
-  startDkg: (relayUrl: string, threshold: number, maxSigners: number) => Promise<string>;
-  /** join an existing DKG room — runs round 1 */
+  /**
+   * Create this ceremony's relay identity and return our public key.
+   *
+   * Must run before startDkg/joinDkg: frostd fixes a session's participants
+   * at creation, so everyone has to exchange keys first. Separate from those
+   * calls because the user needs their own key to share before they can know
+   * anyone else's.
+   */
+  prepareRelayIdentity: () => Promise<string>;
+
+  /** start a new DKG as coordinator — creates the session, runs round 1 */
+  startDkg: (
+    relayUrl: string,
+    threshold: number,
+    maxSigners: number,
+    peerKeys: string[],
+  ) => Promise<string>;
+  /** join an existing DKG session — runs round 1 */
   joinDkg: (
     relayUrl: string,
     roomCode: string,
     threshold: number,
     maxSigners: number,
+    peerKeys: string[],
   ) => Promise<void>;
   /** process incoming DKG events from relay */
   handleDkgEvent: (event: RoomEvent) => void;
@@ -83,6 +107,7 @@ export interface FrostSessionSlice {
     alphasHex: string[],
     keyPackageHex: string,
     ephemeralSeedHex: string,
+    peerKeys?: string[],
   ) => Promise<string>;
   /** join a signing session */
   joinSigning: (
@@ -92,6 +117,7 @@ export interface FrostSessionSlice {
     alphasHex: string[],
     keyPackageHex: string,
     ephemeralSeedHex: string,
+    peerKeys?: string[],
   ) => Promise<void>;
   /** process incoming signing events from relay */
   handleSigningEvent: (event: RoomEvent) => void;
@@ -99,13 +125,53 @@ export interface FrostSessionSlice {
   resetSigning: () => void;
 }
 
+/**
+ * Build a relay client for this ceremony's identity.
+ *
+ * Throws rather than generating an identity on the fly: doing that here would
+ * produce a key the peers have never seen, and frostd would reject it with a
+ * membership error that says nothing about the real cause.
+ */
+const buildRelayClient = async (
+  get: () => AllSlices,
+  relayUrl: string,
+  peerKeys: string[],
+): Promise<FrostdRelayClient> => {
+  const ceremonyId = get().frostSession.relayCeremonyId;
+  if (ceremonyId === null) {
+    throw new Error('call prepareRelayIdentity and exchange keys before starting a session');
+  }
+  if (peerKeys.length === 0) {
+    throw new Error('no peer relay keys: every signer must be listed before the session exists');
+  }
+  const stored = await getOrCreateRelayIdentity(ceremonyId);
+  const identity = await buildRelayIdentity(stored, peerKeys);
+  return new FrostdRelayClient(relayUrl, identity);
+};
+
 export const createFrostSessionSlice = (): SliceCreator<FrostSessionSlice> => (set, get) => ({
   dkg: null,
   signing: null,
   relay: null,
+  relayCeremonyId: null,
+  relayPublicKey: null,
 
-  startDkg: async (relayUrl, threshold, maxSigners) => {
-    const relay = new FrostRelayClient(relayUrl);
+  prepareRelayIdentity: async () => {
+    const existing = get().frostSession.relayPublicKey;
+    if (existing !== null) {
+      return existing;
+    }
+    const ceremonyId = crypto.randomUUID();
+    const stored = await getOrCreateRelayIdentity(ceremonyId);
+    set(state => {
+      state.frostSession.relayCeremonyId = ceremonyId;
+      state.frostSession.relayPublicKey = stored.publicKey;
+    });
+    return stored.publicKey;
+  },
+
+  startDkg: async (relayUrl, threshold, maxSigners, peerKeys) => {
+    const relay = await buildRelayClient(get, relayUrl, peerKeys);
     const room = await relay.createRoom(threshold, maxSigners, 600);
 
     set(state => {
@@ -125,8 +191,8 @@ export const createFrostSessionSlice = (): SliceCreator<FrostSessionSlice> => (s
     return room.roomCode;
   },
 
-  joinDkg: async (relayUrl, roomCode, threshold, maxSigners) => {
-    const relay = new FrostRelayClient(relayUrl);
+  joinDkg: async (relayUrl, roomCode, threshold, maxSigners, peerKeys) => {
+    const relay = await buildRelayClient(get, relayUrl, peerKeys);
 
     set(state => {
       state.frostSession.relay = relay;
@@ -192,10 +258,11 @@ export const createFrostSessionSlice = (): SliceCreator<FrostSessionSlice> => (s
     alphasHex,
     _keyPackageHex,
     _ephemeralSeedHex,
+    peerKeys = [],
     threshold = 2,
     maxSigners = 3,
   ) => {
-    const relay = new FrostRelayClient(relayUrl);
+    const relay = await buildRelayClient(get, relayUrl, peerKeys);
     const room = await relay.createRoom(threshold, maxSigners, 300);
 
     set(state => {
@@ -221,8 +288,9 @@ export const createFrostSessionSlice = (): SliceCreator<FrostSessionSlice> => (s
     alphasHex,
     _keyPackageHex,
     _ephemeralSeedHex,
+    peerKeys = [],
   ) => {
-    const relay = new FrostRelayClient(relayUrl);
+    const relay = await buildRelayClient(get, relayUrl, peerKeys);
 
     set(state => {
       state.frostSession.relay = relay;

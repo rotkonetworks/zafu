@@ -17,6 +17,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { RelayKeyExchange } from './relay-key-exchange';
 import { useSearchParams } from 'react-router-dom';
 import { useStore } from '../../../state';
 import {
@@ -29,7 +30,11 @@ import {
 import { encodeOrchardUnifiedAddress } from '@repo/wallet/networks/zcash/unified-address';
 import { hexToBytes } from '@repo/wallet/networks';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
-import { FrostRelayClient } from '../../../state/keyring/frost-relay-client';
+import { FrostdRelayClient } from '../../../state/keyring/frostd-relay-client';
+import {
+  buildRelayIdentity,
+  getOrCreateRelayIdentity,
+} from '../../../state/keyring/relay-identity';
 import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../../state/frost-session';
 import { useDeadlineCountdown } from '../../../hooks/use-deadline-countdown';
 import { SettingsScreen } from '../settings/settings-screen';
@@ -51,7 +56,12 @@ import {
 type JoinStep = 'input' | 'joining' | 'dkg' | 'fvk-echo' | 'complete' | 'error';
 
 const MultisigJoinZafu = () => {
+  const prepareRelayIdentity = useStore(s => s.frostSession.prepareRelayIdentity);
   const [roomCode, setRoomCode] = useState('');
+  // frostd fixes a session's participants at creation, so a joiner must have
+  // every co-signer's relay key before it can join anything
+  const [myRelayKey, setMyRelayKey] = useState('');
+  const [peerKeys, setPeerKeys] = useState<string[]>([]);
   const [step, setStep] = useState<JoinStep>('input');
   const [error, setError] = useState('');
   const [address, setAddress] = useState('');
@@ -70,7 +80,7 @@ const MultisigJoinZafu = () => {
   // otherwise the WebSocket leaks and setState fires after unmount. Mirrors the
   // zigner join flow below.
   const abortRef = useRef<AbortController | null>(null);
-  const relayRef = useRef<FrostRelayClient | null>(null);
+  const relayRef = useRef<FrostdRelayClient | null>(null);
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
@@ -95,7 +105,12 @@ const MultisigJoinZafu = () => {
       const url = relayUrl || DEFAULT_RELAY_URL;
       setStep('joining');
 
-      const relay = new FrostRelayClient(url);
+      if (peerKeys.length === 0) {
+        throw new Error('enter every co-signer relay key before joining');
+      }
+      // the session id doubles as this ceremony's identity scope
+      const stored = await getOrCreateRelayIdentity(roomCode.trim());
+      const relay = new FrostdRelayClient(url, await buildRelayIdentity(stored, peerKeys));
       relayRef.current = relay;
       const participantId = new Uint8Array(32);
       crypto.getRandomValues(participantId);
@@ -247,16 +262,23 @@ const MultisigJoinZafu = () => {
       {step === 'input' && (
         <div className='flex flex-col gap-4'>
           <label className='text-xs text-fg-muted'>
-            code from the wallet creator
+            session id from the wallet creator
             <input
               className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
               value={roomCode}
               onChange={e => setRoomCode(e.target.value)}
-              placeholder='acid-blue-cave'
+              placeholder='00000000-0000-0000-0000-000000000000'
               autoFocus
             />
           </label>
           <RelayTransportField value={relayUrl} onChange={setRelayUrl} />
+          <RelayKeyExchange
+            maxSigners={maxSigners}
+            myKey={myRelayKey}
+            onPrepare={prepareRelayIdentity}
+            onMyKey={setMyRelayKey}
+            onPeerKeys={setPeerKeys}
+          />
           <button
             className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-50'
             onClick={() => void handleJoin()}
@@ -353,7 +375,12 @@ type ZignerJoinStep =
 
 const MultisigJoinZigner = () => {
   const [relayUrl, setRelayUrl] = useState('');
+  const prepareRelayIdentity = useStore(s => s.frostSession.prepareRelayIdentity);
   const [roomCode, setRoomCode] = useState('');
+  // frostd fixes a session's participants at creation, so a joiner must have
+  // every co-signer's relay key before it can join anything
+  const [myRelayKey, setMyRelayKey] = useState('');
+  const [peerKeys, setPeerKeys] = useState<string[]>([]);
   const [step, setStep] = useState<ZignerJoinStep>('input');
   const [error, setError] = useState('');
   const [participantCount, setParticipantCount] = useState(0);
@@ -377,7 +404,7 @@ const MultisigJoinZigner = () => {
   const peerR2Ref = useRef<string[]>([]);
   const peerFvksRef = useRef<string[]>([]);
   const abortRef = useRef<AbortController | null>(null);
-  const relayRef = useRef<FrostRelayClient | null>(null);
+  const relayRef = useRef<FrostdRelayClient | null>(null);
 
   const newFrostMultisigKey = useStore(s => s.keyRing.newFrostMultisigKey);
 
@@ -421,7 +448,12 @@ const MultisigJoinZigner = () => {
       const sessionDeadline = Date.now() + FROST_SESSION_TIMEOUT_MS;
       setDeadline(sessionDeadline);
 
-      const relay = new FrostRelayClient(url);
+      if (peerKeys.length === 0) {
+        throw new Error('enter every co-signer relay key before joining');
+      }
+      // the session id doubles as this ceremony's identity scope
+      const stored = await getOrCreateRelayIdentity(roomCode.trim());
+      const relay = new FrostdRelayClient(url, await buildRelayIdentity(stored, peerKeys));
       relayRef.current = relay;
 
       const pid = new Uint8Array(32);
@@ -728,16 +760,23 @@ const MultisigJoinZigner = () => {
             the public keys needed to watch the wallet.
           </div>
           <label className='text-xs text-fg-muted'>
-            code from the wallet creator
+            session id from the wallet creator
             <input
               className='mt-1 w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 font-mono text-sm focus:border-primary/50 focus:outline-none'
               value={roomCode}
               onChange={e => setRoomCode(e.target.value)}
-              placeholder='acid-blue-cave'
+              placeholder='00000000-0000-0000-0000-000000000000'
               autoFocus
             />
           </label>
           <RelayTransportField value={relayUrl} onChange={setRelayUrl} />
+          <RelayKeyExchange
+            maxSigners={maxSigners}
+            myKey={myRelayKey}
+            onPrepare={prepareRelayIdentity}
+            onMyKey={setMyRelayKey}
+            onPeerKeys={setPeerKeys}
+          />
           <button
             className='w-full rounded-lg border border-primary/40 bg-primary/5 py-2.5 text-sm text-zigner-gold hover:bg-primary/10 transition-colors disabled:opacity-50'
             onClick={() => void handleJoin()}

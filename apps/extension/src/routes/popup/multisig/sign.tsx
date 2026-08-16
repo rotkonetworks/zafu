@@ -23,7 +23,11 @@ import {
   verdictAllowsSigning,
   type Verdict,
 } from '../send/frost-multisig/multisig-verifier';
-import { FrostRelayClient } from '../../../state/keyring/frost-relay-client';
+import { FrostdRelayClient } from '../../../state/keyring/frostd-relay-client';
+import {
+  buildRelayIdentity,
+  getOrCreateRelayIdentity,
+} from '../../../state/keyring/relay-identity';
 import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../../state/frost-session';
 import { useDeadlineCountdown } from '../../../hooks/use-deadline-countdown';
 import { usePasswordGate } from '../../../hooks/password-gate';
@@ -70,7 +74,7 @@ export const MultisigSign = () => {
   const { requestAuth, PasswordModal } = usePasswordGate();
 
   // session state preserved across the join → review → sign transitions
-  const relayRef = useRef<FrostRelayClient | null>(null);
+  const relayRef = useRef<FrostdRelayClient | null>(null);
   const participantIdRef = useRef<Uint8Array | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   // the latched request — set exactly once per session, never mutated after.
@@ -107,7 +111,17 @@ export const MultisigSign = () => {
 
     try {
       const relayUrl = (typeof ms.relayUrl === 'string' ? ms.relayUrl : '') || DEFAULT_RELAY_URL;
-      const relay = new FrostRelayClient(relayUrl);
+      // ceremony id is the group's public key package: stable for this
+      // group, and unrelated to any other, so a relay operator cannot link
+      // a user's groups to one another
+      const peerKeys = (ms as { relayPeerKeys?: string[] }).relayPeerKeys ?? [];
+      if (peerKeys.length === 0) {
+        throw new Error(
+          'this wallet has no co-signer relay keys on file - exchange them before signing',
+        );
+      }
+      const stored = await getOrCreateRelayIdentity(String(ms.publicKeyPackage));
+      const relay = new FrostdRelayClient(relayUrl, await buildRelayIdentity(stored, peerKeys));
       const participantId = new Uint8Array(32);
       crypto.getRandomValues(participantId);
       const abortController = new AbortController();

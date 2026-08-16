@@ -29,6 +29,12 @@ export interface AirgapMultisig {
   relayUrl?: string;
   /** zigner-side wallet_id for O(1) lookup; falls back to publicKeyPackage scan if absent. */
   zignerWalletId?: string;
+  /**
+   * The other signers' frostd relay public keys, hex. Transport identities,
+   * not FROST ones. Without them no session can be opened: frostd fixes its
+   * participant list at creation.
+   */
+  relayPeerKeys?: string[];
 }
 
 interface Props {
@@ -77,6 +83,8 @@ export function FrostAirgapSignFlow({
           ms.threshold,
           ms.maxSigners,
           600,
+          ms.publicKeyPackage,
+          ms.relayPeerKeys ?? [],
         );
         if (cancelled) {
           session.abort.abort();
