@@ -23,6 +23,15 @@ type LOCAL = {
   }[];
 
   // optional values
+  /** Per-group frostd relay identities, keyed by multisig group id.
+   *
+   *  Not wallet keys: these authenticate to a relay and key the Noise_K
+   *  sessions that stop it reading anything. One per group rather than one
+   *  per device, so a relay operator cannot link a user's sessions together.
+   *
+   *  A record under one key rather than a key per group, because the storage
+   *  schema is typed and dynamic top-level keys do not typecheck. */
+  frostRelayIdentities?: Record<string, { privateKey: string; publicKey: string }>;
   /** Index of the active wallet (default 0) */
   activeWalletIndex?: number;
   backupReminderSeen?: boolean;

@@ -94,7 +94,6 @@ export class FrostdRelayClient {
   private loggedIn = false;
   private polling = false;
   private sequence = 0;
-  private onEvent: ((event: RoomEvent) => void) | null = null;
   private pendingEvents: RoomEvent[] = [];
 
   constructor(serverUrl: string, identity: RelayIdentity) {
@@ -138,7 +137,6 @@ export class FrostdRelayClient {
     onEvent: (event: RoomEvent) => void,
     signal?: AbortSignal,
   ): Promise<void> {
-    this.onEvent = onEvent;
     for (const ev of this.pendingEvents) {onEvent(ev);}
     this.pendingEvents = [];
 
@@ -213,7 +211,6 @@ export class FrostdRelayClient {
 
   disconnect(): void {
     this.polling = false;
-    this.onEvent = null;
     // best effort; a closed session is tidiness, not correctness
     if (this.sessionId !== null && this.loggedIn) {
       void this.client.closeSession(this.sessionId).catch(() => undefined);
