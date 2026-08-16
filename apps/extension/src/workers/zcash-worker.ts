@@ -2571,6 +2571,7 @@ const buildWitnessesIronwood = async (
   walletId: string,
   notes: DecryptedNote[],
   anchorHeight: number,
+  emitProgress?: (stage: string, detail?: string) => void,
 ): Promise<{ anchorHex: string; paths: unknown[] }> => {
   if (!wasmModule) {
     throw new Error('wasm not initialized');
@@ -2626,6 +2627,27 @@ const buildWitnessesIronwood = async (
     !!frontier &&
     frontierSize === witnessTreeSize &&
     notes.every(n => n.witness_hex && n.witness_tree_size === witnessTreeSize);
+
+  // Say WHY the fast path was skipped. Falling back costs ~40s of block
+  // replay on a real send, and until now the only signal was the wall clock -
+  // "witnesses built 41.8s" with no way to tell a missing frontier from a
+  // drifted one from a note that never got a witness. Each cause has a
+  // different fix, so guessing between them is the expensive part.
+  if (!aligned) {
+    const missingWitness = notes.filter(n => !n.witness_hex).length;
+    const wrongSize = notes.filter(
+      n => n.witness_hex && n.witness_tree_size !== witnessTreeSize,
+    ).length;
+    const why = !frontier
+      ? 'no cached frontier (never synced, or the frontier was wiped/rebootstrapped)'
+      : frontierSize !== witnessTreeSize
+        ? `frontier size ${frontierSize} != witness tree size ${witnessTreeSize} (sync ran on without updating witnesses)`
+        : missingWitness > 0
+          ? `${missingWitness}/${notes.length} selected notes have no stored witness`
+          : `${wrongSize}/${notes.length} selected notes carry a witness at a different tree size`;
+    console.warn(`[zcash-worker] ironwood witness fast path unavailable: ${why}`);
+    emitProgress?.('witness fast path unavailable', why);
+  }
 
   // The fast path is an OPTIMISATION, so a drifted witness must not fail the
   // send — it must fall back to the slow replay. Ironwood witnesses live in
@@ -2730,7 +2752,7 @@ const buildWitnesses = async (
     throw new Error('buildWitnesses called with no notes');
   }
   if (pool === 'ironwood') {
-    return buildWitnessesIronwood(client, walletId, notes, anchorHeight);
+    return buildWitnessesIronwood(client, walletId, notes, anchorHeight, emitProgress);
   }
 
   const positions = notes.map(n => n.position);
