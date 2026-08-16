@@ -591,12 +591,12 @@ const PenumbraContent = ({
         <span className='kicker'>balance</span>
         <div className='mt-1 flex min-w-0 items-baseline gap-1.5'>
           {balanceSyncing ? (
-            <span className='text-display leading-none text-fg-dim tabular lowercase'>
+            <span className='text-hero leading-none text-fg-dim tabular lowercase'>
               syncing…
             </span>
           ) : (
             <>
-              <span className='min-w-0 truncate text-display leading-none tracking-tight text-network-accent tabular'>
+              <span className='min-w-0 truncate text-hero leading-none tracking-tight text-network-accent tabular'>
                 <Sensitive>{balanceAmount ?? '0'}</Sensitive>
               </span>
               <span className='shrink-0 text-title leading-none text-network-accent/60 tabular'>
@@ -691,7 +691,7 @@ const BalanceFigure = ({
   if (view === 'unknown') {
     return (
       <div className='flex flex-wrap items-baseline gap-x-2 gap-y-1'>
-        <span className='text-display leading-none text-fg-dim lowercase'>not yet known</span>
+        <span className='text-hero leading-none text-fg-dim lowercase'>not yet known</span>
         <span className='text-label text-fg-dim lowercase'>
           still scanning — the sync line below shows how far
         </span>
@@ -701,7 +701,7 @@ const BalanceFigure = ({
 
   if (view === 'error') {
     return (
-      <div className='flex items-baseline gap-2 text-display leading-none'>
+      <div className='flex items-baseline gap-2 text-hero leading-none'>
         <span className='text-fg-dim tabular'>—</span>
         {/* the dash is only ever allowed next to the word that explains it */}
         <span className='text-label text-hanko lowercase'>balance unavailable</span>
@@ -718,7 +718,7 @@ const BalanceFigure = ({
           a live, non-final value; the sync bar carries the actual progress. */}
       <span
         className={cn(
-          'min-w-0 truncate text-display leading-none tracking-tight text-network-accent tabular',
+          'min-w-0 truncate text-hero leading-none tracking-tight text-network-accent tabular',
           view === 'partial' && 'animate-pulse',
         )}
         title={view === 'partial' ? 'still scanning — more funds may yet be found' : undefined}

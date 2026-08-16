@@ -33,11 +33,17 @@
    * terminal UI that should be confident and legible.
    *
    *   display 28px — the one hero number (wallet balance)
+   *   hero    36px — the balance, and nothing else
    *   title   17px — screen titles, section heads (the missing mid-tier)
    *   body    14px — default running text / buttons / list rows
    *   data    13px — tabular & monospace numerics (addresses, heights)
    *   label   12px — kickers, tab labels, captions (the floor)
    * ============================================================== */
+  /* hero  36px — the one number a screen exists to show: the balance.
+     Added rather than raising --text-display, which also sets the login
+     title, the identity card and the pool rows; the balance wanted to be
+     bigger than those, not equal to them. */
+  --text-hero: 36px;
   --text-display: 28px;
   --text-title: 17px;
   --text-body: 14px;

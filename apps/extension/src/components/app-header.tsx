@@ -134,8 +134,18 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
           <span className='max-w-32 truncate text-data text-fg-high'>{walletName}</span>
           <span className='i-ph-caret-down h-3 w-3 text-fg-muted' />
         </button>
+        {/* left-0, not right-0. Right-aligning anchored the menu's RIGHT edge
+            to the trigger and grew it leftwards - and this trigger sits near
+            the left of the header, so a 224px menu ran straight off the popup
+            and clipped the wallet names to "ixel8hotzigner". The network picker
+            beside it has always used left-0, which is why it never showed the
+            bug.
+
+            The max-width is also clamped to the viewport: a popup can be
+            resized narrower than the menu's natural width, and growing
+            rightwards would then clip the other edge instead. */}
         {openPicker === 'wallet' && (
-          <div className='absolute right-0 top-full z-50 mt-1 min-w-40 max-w-56 rounded-md border border-border-soft bg-canvas py-1 shadow-xl'>
+          <div className='absolute left-0 top-full z-50 mt-1 min-w-40 max-w-[min(14rem,calc(100vw-2rem))] rounded-md border border-border-soft bg-canvas py-1 shadow-xl'>
             {keyInfos.length === 0 ? (
               <span className='block px-3 py-2 text-data text-fg-muted'>no wallets</span>
             ) : (
