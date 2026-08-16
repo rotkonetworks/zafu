@@ -1055,6 +1055,26 @@ const ZcashContent = ({
   // Whatever the server has proven about blocks this wallet never read says
   // nothing about this wallet's balance, so it must not drive this bar.
   const scanNotStarted = workerSyncHeight <= walletBirthday;
+  // Ranges for the stage tooltips. A stage that says what it does but not
+  // what it covers leaves the obvious question unanswered - "verified from
+  // where to where?" - and these numbers are already on hand.
+  const hgt = (n: number) => n.toLocaleString();
+  const serverIndexHeight = syncStatus?.currentHeight ?? 0;
+  const scanRangeHint = scanNotStarted
+    ? `nothing scanned yet. will cover blocks ${hgt(walletBirthday)} to ${hgt(chainHeight)}.`
+    : `covered blocks ${hgt(walletBirthday)} to ${hgt(workerSyncHeight)}` +
+      (chainHeight > 0 ? ` of ${hgt(chainHeight)}.` : '.');
+  const nomtRangeHint =
+    serverIndexHeight > 0
+      ? ` its index reaches block ${hgt(serverIndexHeight)}.`
+      : '';
+  const ligeritoRangeHint =
+    lastGigaproofHeight > 0
+      ? ` proven through block ${hgt(lastGigaproofHeight)}` +
+        (chainHeight > 0 ? `, tip is ${hgt(chainHeight)}.` : '.')
+      : ' no proven range yet.';
+
+
 
   // pipeline stages for the sync detail panel — a steady row instead of
   // the old flickering label rotation. lightwalletd skips verification.
@@ -1066,7 +1086,7 @@ const ZcashContent = ({
             label: 'scanning notes',
             icon: 'i-ph-magnifying-glass',
             iconDone: 'i-ph-magnifying-glass-fill',
-            hint: 'downloads blocks and trial-decrypts them here to find notes that are yours. private, but you fetch every block.',
+            hint: `downloads blocks and trial-decrypts them here to find notes that are yours. private, but you fetch every block. ${scanRangeHint}`,
             state: scanPct >= 100 ? 'done' : scanPct > 0 ? 'active' : 'pending',
             detail: `${Math.floor(scanPct)}%`,
           },
@@ -1080,7 +1100,7 @@ const ZcashContent = ({
             // NOT "checks" - nothing here verifies a proof. gigaproofStatus
             // is parsed straight out of the server's own response, so this
             // stage reports what the server says about itself.
-            hint: "the server reports its state-tree index is built for this range. the wallet does not yet check that claim.",
+            hint: `the server reports its state-tree index is built.${nomtRangeHint} the wallet does not yet check that claim.`,
             state: nomtPct >= 100 ? 'done' : 'active',
           },
           {
@@ -1088,7 +1108,7 @@ const ZcashContent = ({
             label: 'ligerito',
             icon: 'i-ph-seal-check',
             iconDone: 'i-ph-seal-check-fill',
-            hint: "the server reports a completeness proof is ready for this range. the wallet does not yet verify it - the proof is not checked here.",
+            hint: `the server reports a completeness proof is ready.${ligeritoRangeHint} the wallet does not yet verify it - the proof is not checked here.`,
             state: ligeritoPct >= 100 ? 'done' : gigaproofStatus >= 1 ? 'active' : 'pending',
             // The wallet VERIFIES a ligerito proof; it never produces one —
             // proving happens server-side. So the detail says what the wallet
@@ -1122,7 +1142,7 @@ const ZcashContent = ({
             // stage. There you fetch every block yourself; here the two
             // stages above have already established that what the server
             // returned is complete, and this trial-decrypts that.
-            hint: 'trial-decrypts the blocks the server returned. only your wallet can tell which notes are yours.',
+            hint: `trial-decrypts the blocks the server returned. only your wallet can tell which notes are yours. ${scanRangeHint}`,
             state: scanPct >= 100 ? 'done' : scanPct > 0 ? 'active' : 'pending',
             detail: `${Math.floor(scanPct)}%`,
           },
