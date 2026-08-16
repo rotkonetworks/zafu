@@ -103,7 +103,7 @@ export class FrostdRelayClient {
   }
 
   private async ensureLoggedIn(): Promise<void> {
-    if (this.loggedIn) return;
+    if (this.loggedIn) {return;}
     await this.client.login(this.identity.publicKey, this.identity.sign);
     this.loggedIn = true;
   }
@@ -139,7 +139,7 @@ export class FrostdRelayClient {
     signal?: AbortSignal,
   ): Promise<void> {
     this.onEvent = onEvent;
-    for (const ev of this.pendingEvents) onEvent(ev);
+    for (const ev of this.pendingEvents) {onEvent(ev);}
     this.pendingEvents = [];
 
     await this.ensureLoggedIn();
@@ -187,7 +187,7 @@ export class FrostdRelayClient {
         });
       }
 
-      if (signal?.aborted) break;
+      if (signal?.aborted) {break;}
       await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
     }
   }
