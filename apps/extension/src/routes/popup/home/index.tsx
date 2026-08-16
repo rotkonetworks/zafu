@@ -677,7 +677,7 @@ const BalanceFigure = ({
 }) => {
   if (view === 'loading') {
     return (
-      <div className='flex items-baseline gap-2 text-display leading-none'>
+      <div className='flex items-baseline gap-2 text-hero leading-none'>
         {/* sized to the figure it replaces, so nothing shifts when it arrives */}
         <span className='inline-block h-[0.7em] w-40 animate-pulse rounded bg-elev-2' />
         <span className='text-label text-fg-dim lowercase'>reading balance</span>
@@ -1772,8 +1772,16 @@ const ActionButton = ({
       'group/action flex h-11 w-full items-center justify-center rounded-md px-3 transition-colors',
       variant === 'default' && 'bg-elev-2 text-fg hover:bg-elev-1/80 hover:text-fg-high',
       variant === 'zcash' && 'bg-zigner-gold text-zigner-dark hover:bg-primary/90',
+      // Same treatment as zcash: solid accent, dark foreground. It was a
+      // raw orange->teal gradient with white text, which bypassed the
+      // network-accent tokens entirely - so the one control the eye lands on
+      // was the only thing on the screen not wearing the theme, and white on
+      // a light teal is the weakest contrast in the app besides.
+      //
+      // --network-accent-foreground is #0a0a0a under both networks, so this
+      // is the same relationship zcash has: dark on the chain's colour.
       variant === 'penumbra' &&
-        'bg-gradient-to-r from-orange-400 to-teal-400 text-white transition-opacity hover:opacity-90',
+        'bg-network-accent text-network-accent-foreground hover:opacity-90 transition-opacity',
     )}
   >
     <span className={`${icon} h-5 w-5 shrink-0`} />
