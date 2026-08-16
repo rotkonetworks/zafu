@@ -2763,7 +2763,7 @@ const buildWitnessesIronwood = async (
         nullifier: w.id,
         witness_hex: w.witness_hex,
         witness_tree_size: endTreeSize,
-      });
+      } satisfies IronwoodWitnessRecord);
     }
     // The frontier has to advance with them. Witnesses at a tree size the
     // stored frontier does not match fail the `aligned` check just as surely
