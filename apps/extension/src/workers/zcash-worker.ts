@@ -2722,6 +2722,64 @@ const buildWitnessesIronwood = async (
     throw syncError('chain-recovery', `ironwood tree root mismatch at height ${anchorHeight}`);
   }
   console.log(`[zcash-worker] ironwood paths (replay) for ${result.paths.length} notes`);
+
+  // Seed witnesses from the same replay and persist them, so this cost is paid
+  // ONCE rather than on every send.
+  //
+  // This is the half of the orchard fix (17833dd2, "persist per-note
+  // witnesses, eliminate spend-time replay") that ironwood never got. The doc
+  // comment on buildWitnesses has always promised it - "replay from a pre-note
+  // snapshot once, persist witnesses, then fast-forward" - but the ironwood
+  // path returned the paths and wrote nothing back, so a note that missed the
+  // fast path missed it forever. Every send replayed the chain from a
+  // checkpoint: ~42s on a real wallet, indefinitely.
+  //
+  // Notes reach that state routinely, not exceptionally: any note that predates
+  // ironwood witness maintenance, and every note after a rebootstrap or reorg
+  // wipes the witness store.
+  //
+  // Failures here are logged and swallowed. The send already has its paths; a
+  // witness that could not be cached costs another replay next time, which is
+  // exactly the status quo, and is not worth failing a send over.
+  try {
+    const seeded = JSON.parse(
+      iwSync(
+        checkpointTs.ironwoodTree,
+        JSON.stringify(blocks),
+        '[]',
+        JSON.stringify(notes.map(n => ({ id: n.nullifier, position: n.position }))),
+      ) as string,
+    ) as {
+      end_frontier_hex: string;
+      witnesses: { id: string; witness_hex: string }[];
+    };
+    const endTreeSize = Number(iwSize(seeded.end_frontier_hex));
+    const db = await getDb();
+    const tx = db.transaction(['witnesses-ironwood', 'meta'], 'readwrite');
+    const wstore = tx.objectStore('witnesses-ironwood');
+    for (const w of seeded.witnesses) {
+      wstore.put({
+        walletId,
+        nullifier: w.id,
+        witness_hex: w.witness_hex,
+        witness_tree_size: endTreeSize,
+      });
+    }
+    // The frontier has to advance with them. Witnesses at a tree size the
+    // stored frontier does not match fail the `aligned` check just as surely
+    // as no witnesses at all.
+    const metaStore = tx.objectStore('meta');
+    metaStore.put({ walletId, key: 'ironwoodTreeFrontier', value: seeded.end_frontier_hex });
+    metaStore.put({ walletId, key: 'ironwoodTreeFrontierHeight', value: anchorHeight });
+    await txComplete(tx);
+    console.log(
+      `[zcash-worker] ironwood: cached ${seeded.witnesses.length} witnesses at tree size ` +
+        `${endTreeSize} (height ${anchorHeight}) - the next send should take the fast path`,
+    );
+  } catch (e) {
+    console.warn('[zcash-worker] ironwood: could not cache witnesses after replay:', e);
+  }
+
   return { anchorHex: networkRoot, paths: result.paths };
 };
 
