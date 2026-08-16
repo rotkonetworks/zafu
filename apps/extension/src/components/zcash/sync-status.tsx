@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@repo/ui/lib/utils';
 import { ZCASH_ORCHARD_ACTIVATION } from '../../config/networks';
+import { blockToDate, dateToBlock, formatDateInput } from '../../utils/zcash-blocks';
 import { isSidePanel, isDedicatedWindow } from '../../utils/popup-detection';
 
 /**
@@ -122,6 +123,7 @@ export const SyncStatus = ({
   const [open, setOpen] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [byDate, setByDate] = useState(true);
   const [input, setInput] = useState('');
 
   // scan-rate window for the ETA: ring of (height, t) samples over ~45s.
@@ -150,8 +152,20 @@ export const SyncStatus = ({
     }
   }, [currentHeight, targetHeight, synced, connecting]);
 
+  // Rescan asked as a date, matching the wallet birthday field: "when should
+  // this start from" is a question about time, and 2,910,104 is not an answer
+  // anyone holds in their head. The height still exists - sync consumes it,
+  // and it is shown live beside the picker so a destructive rescan is never
+  // committed to blind - but it is no longer what you have to type.
+  const rescanHeight = (): number =>
+    byDate
+      ? input
+        ? dateToBlock(new Date(`${input}T00:00:00Z`))
+        : NaN
+      : parseInt(input, 10);
+
   const submitRescan = () => {
-    const h = parseInt(input, 10);
+    const h = rescanHeight();
     if (!isNaN(h) && h >= ZCASH_ORCHARD_ACTIVATION && onRescan) {
       onRescan(h);
     }
@@ -334,12 +348,16 @@ export const SyncStatus = ({
                 (editing ? (
                   <span className='flex items-center gap-1'>
                     <input
-                      type='number'
-                      min={ZCASH_ORCHARD_ACTIVATION}
+                      type={byDate ? 'date' : 'number'}
+                      min={byDate ? formatDateInput(blockToDate(ZCASH_ORCHARD_ACTIVATION)) : ZCASH_ORCHARD_ACTIVATION}
+                      max={byDate ? formatDateInput(new Date()) : undefined}
                       value={input}
                       onChange={e => setInput(e.target.value)}
-                      placeholder={String(startBlock)}
-                      className='w-20 bg-elev-2 px-1.5 py-0.5 text-label font-mono text-fg placeholder:text-fg-muted outline-none'
+                      placeholder={byDate ? undefined : String(startBlock)}
+                      className={cn(
+                        'bg-elev-2 px-1.5 py-0.5 text-label font-mono text-fg placeholder:text-fg-muted outline-none',
+                        byDate ? 'w-32' : 'w-20',
+                      )}
                       autoFocus
                       onKeyDown={e => {
                         if (e.key === 'Enter') {
@@ -350,6 +368,40 @@ export const SyncStatus = ({
                         }
                       }}
                     />
+                    {/* The height the date resolves to, live. A rescan throws
+                        away scanned state, so the number it will actually act
+                        on has to be visible before you commit - the date is
+                        the friendlier input, not a reason to hide what it
+                        means. */}
+                    {byDate && !isNaN(rescanHeight()) && (
+                      <span className='text-label text-fg-dim tabular-nums'>
+                        {rescanHeight().toLocaleString()}
+                      </span>
+                    )}
+                    <button
+                      onClick={() => {
+                        const h = rescanHeight();
+                        // Carry the value across rather than resetting it:
+                        // switching units should not lose what was picked.
+                        setInput(
+                          byDate
+                            ? isNaN(h)
+                              ? String(startBlock)
+                              : String(h)
+                            : formatDateInput(blockToDate(isNaN(h) ? startBlock : h)),
+                        );
+                        setByDate(v => !v);
+                      }}
+                      title={byDate ? 'enter a block height instead' : 'pick a date instead'}
+                      className='text-label text-fg-dim hover:text-fg-muted'
+                    >
+                      <span
+                        className={cn(
+                          'size-3.5',
+                          byDate ? 'i-ph-hash' : 'i-ph-calendar-blank',
+                        )}
+                      />
+                    </button>
                     <button
                       onClick={submitRescan}
                       className='text-label text-zigner-gold hover:underline'
@@ -370,7 +422,9 @@ export const SyncStatus = ({
                   <button
                     onClick={() => {
                       setEditing(true);
-                      setInput(String(startBlock));
+                      setInput(
+                        byDate ? formatDateInput(blockToDate(startBlock)) : String(startBlock),
+                      );
                     }}
                     className='hover:text-fg-high transition-colors'
                     title='rescan from a different block height'
