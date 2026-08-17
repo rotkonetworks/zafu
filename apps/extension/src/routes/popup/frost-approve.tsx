@@ -24,6 +24,7 @@ import {
 import { computeEscrowVerdict } from './send/frost-multisig/multisig-verifier';
 import { encodeOrchardUnifiedAddress } from '@repo/wallet/networks/zcash/unified-address';
 import { hexToBytes } from '@repo/wallet/networks';
+import { DEFAULT_RELAY_URL } from './multisig/dkg-helpers';
 import { FrostdRelayClient } from '../../state/keyring/frostd-relay-client';
 import { buildRelayIdentity, getOrCreateRelayIdentity } from '../../state/keyring/relay-identity';
 import { FROST_SESSION_TIMEOUT_MS, waitForUntil } from '../../state/frost-session';
@@ -72,7 +73,9 @@ export const FrostApprove = () => {
   const MAX_FROST_SIGNERS = 15;
   const threshold = Math.min(Number(params.get('threshold')) || 2, MAX_FROST_SIGNERS);
   const maxSigners = Math.min(Number(params.get('maxSigners')) || 3, MAX_FROST_SIGNERS);
-  const relayUrl = params.get('relayUrl') || 'wss://zcash.rotko.net';
+  // frostd speaks JSON over HTTPS; the old default here was a WebSocket room
+  // relay that no longer exists on this path.
+  const relayUrl = params.get('relayUrl') || DEFAULT_RELAY_URL;
   const roomCode = params.get('roomCode') || '';
   /**
    * The other signers' frostd relay public keys, comma-separated.

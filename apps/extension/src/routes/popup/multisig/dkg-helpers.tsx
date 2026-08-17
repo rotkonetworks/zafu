@@ -17,12 +17,22 @@ import { cn } from '@repo/ui/lib/utils';
 import { AnimatedQrDisplay } from '../../../shared/components/animated-qr-display';
 import { AnimatedQrScanner } from '../../../shared/components/animated-qr-scanner';
 
-/** preset relay used when the user doesn't override it under "advanced". */
-export const DEFAULT_RELAY_URL = 'wss://zcash.rotko.net';
+/**
+ * Preset relay used when the user doesn't override it under "advanced".
+ *
+ * HTTPS, not wss: this is a frostd instance, which speaks JSON over HTTP.
+ * The previous default was a WebSocket room relay that no longer exists on
+ * this path.
+ *
+ * frostd serves no TLS of its own - it must sit behind a proxy that
+ * terminates it. A plain-http relay would expose the login token and the
+ * participant list to anyone on the path; it would NOT expose ceremony
+ * contents, which are end-to-end encrypted before they leave the device.
+ */
+export const DEFAULT_RELAY_URL = 'https://relay.zafu.pro';
 
-// TODO: point at the exact relay runbook (poker-relay README) once its
-// canonical public URL is settled; org page works as the entry point for now.
-export const RELAY_RUNBOOK_URL = 'https://github.com/rotkonetworks';
+/** Running your own: ZF's frostd, which is what this speaks. */
+export const RELAY_RUNBOOK_URL = 'https://github.com/ZcashFoundation/frost-tools';
 
 /**
  * Transport picker: default is the preset relay with nothing to fill in.
