@@ -912,6 +912,13 @@ export interface SendTxPcztUnsignedResult {
   fee: string;
   urFrames: string[];
   cborBytes: number;
+  /**
+   * The raw UR-source bytes (the CBOR sign-request envelope) the frames were
+   * fountained from. Lets the sign UI re-fountain at a user-chosen density (the
+   * in-app "QR density" slider, twin of the playback-speed slider) instead of
+   * being locked to the worker's default fragment size.
+   */
+  cborData?: Uint8Array;
   /** FROST multisig fields (gh #17): the canonical sighash + per-real-spend
    * alphas the host/joiner sign over, and the action indices those sigs map to.
    * Unused by the single-signer zigner cold-sign path. */
@@ -1181,13 +1188,33 @@ export const isNetworkWorkerRunning = (network: NetworkType): boolean => {
  */
 async function relayProveRequest(worker: Worker, id: string, request: unknown): Promise<void> {
   try {
-    // 1. ensure offscreen document exists
-    const ensureResult = await chrome.runtime.sendMessage({ type: 'ZCASH_ENSURE_OFFSCREEN' });
+    // 1. ensure offscreen document exists. The MV3 service worker may be asleep
+    // or have just been KILLED (e.g. by a long witness rebuild that outran its
+    // ~30s idle timeout), so the first ensure can come back empty or reject
+    // ("Could not establish connection") while the SW wakes and re-registers
+    // its listeners + creates the offscreen doc. Retry a few times before
+    // giving up, so a slow pre-proving step can't take down the whole send.
+    let ensureResult: { ok?: boolean; error?: string } | undefined;
+    for (let attempt = 0; attempt < 6; attempt++) {
+      try {
+        ensureResult = (await chrome.runtime.sendMessage({ type: 'ZCASH_ENSURE_OFFSCREEN' })) as {
+          ok?: boolean;
+          error?: string;
+        };
+      } catch {
+        // SW waking up; the connection error is transient - retry.
+        ensureResult = undefined;
+      }
+      if (ensureResult?.ok) {
+        break;
+      }
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
     if (!ensureResult?.ok) {
       worker.postMessage({
         type: 'prove-response',
         id,
-        error: `failed to activate offscreen: ${ensureResult?.error ?? 'unknown'}`,
+        error: `failed to activate offscreen: ${ensureResult?.error ?? 'service worker unavailable after retries'}`,
       });
       return;
     }

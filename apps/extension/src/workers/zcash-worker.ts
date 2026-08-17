@@ -595,6 +595,15 @@ interface WasmModule {
  * Returns the envelope and whether it actually went out compact, so the UI can
  * bind the response type to what was requested.
  */
+/**
+ * Default UR fountain fragment size (bytes/frame) for the zigner sign QR. 200 is
+ * the BC-UR spec default and keeps each frame at a low QR version that scans on
+ * a phone camera; the frame COUNT is not the scan bottleneck, the physical QR
+ * size on screen is (handled UI-side). The UI can override via
+ * sendPayload.fragmentSize.
+ */
+const DEFAULT_ZIGNER_FRAG_SIZE = 200;
+
 function buildSignRequestEnvelope(
   wasm: WasmModule,
   pcztHex: string,
@@ -6680,7 +6689,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           const iwFragSize =
             sendPayload.fragmentSize && sendPayload.fragmentSize > 0
               ? sendPayload.fragmentSize
-              : 200;
+              : DEFAULT_ZIGNER_FRAG_SIZE;
           const iwFramesJson = wasmModule.ur_encode_frames(
             iwEnvelope,
             ZIGNER_PCZT_SIGN_UR_TYPE,
@@ -6721,6 +6730,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               actionCount: iwParsed.action_count,
               fee: fee.toString(),
               urFrames: iwUrFrames,
+              /** raw envelope bytes so the UI can re-fountain at a chosen density */
+              cborData: iwEnvelope,
               /** true when the request went out compact (tx_type 0x05) */
               compactRequest: iwRequestCompact,
               cborBytes: iwEnvelope.length,
@@ -6781,7 +6792,9 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const pcztBytes = hexDecode(parsed.pczt_hex);
         const cbor = cborWrapPczt(pcztBytes);
         const fragSize =
-          sendPayload.fragmentSize && sendPayload.fragmentSize > 0 ? sendPayload.fragmentSize : 200;
+          sendPayload.fragmentSize && sendPayload.fragmentSize > 0
+            ? sendPayload.fragmentSize
+            : DEFAULT_ZIGNER_FRAG_SIZE;
         const framesJson = wasmModule.ur_encode_frames(cbor, 'zcash-pczt', fragSize);
         const urFrames = JSON.parse(framesJson) as string[];
 
@@ -6811,6 +6824,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             actionCount: parsed.action_count,
             fee: fee.toString(),
             urFrames,
+            /** raw envelope bytes so the UI can re-fountain at a chosen density */
+            cborData: cbor,
             cborBytes: cbor.length,
             // FROST host needs these to drive the relay signing rounds (gh #17)
             sighash: parsed.sighash,

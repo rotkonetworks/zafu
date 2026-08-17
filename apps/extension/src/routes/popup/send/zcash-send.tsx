@@ -112,6 +112,44 @@ function LiveTimer({ startMs }: { startMs: number }) {
   return <div className='font-mono text-2xl tabular-nums text-zigner-gold'>{elapsed}s</div>;
 }
 
+// Ticks the running duration of the step currently in progress. The worker
+// emits a progress marker at the START of each step and can't emit again while
+// it's blocked doing synchronous work (e.g. a long witness replay), so without
+// this the active step would show a frozen number while all the time actually
+// accrues there - which reads as "stuck". This measures from when the step
+// began (buildStart + its cumulative offset) and updates every 100ms.
+function LiveStepTimer({ stepStartMs }: { stepStartMs: number }) {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!stepStartMs) {
+      return;
+    }
+    const tick = () => setElapsed((Date.now() - stepStartMs) / 1000);
+    tick();
+    const id = setInterval(tick, 100);
+    return () => clearInterval(id);
+  }, [stepStartMs]);
+  return <>{elapsed.toFixed(1)}s</>;
+}
+
+// The zigner sign QR must be as LARGE as the surface allows so a phone camera
+// can lock onto it - the previous fixed 210px was too small to scan reliably.
+// Fill the available width (minus page padding), capped so it stays square and
+// doesn't overflow a wide side-panel. Recomputes on resize.
+function useResponsiveQrSize(min = 240, max = 420, padding = 40): number {
+  const [size, setSize] = useState(min);
+  useEffect(() => {
+    const compute = () => {
+      const w = typeof window !== 'undefined' ? window.innerWidth : min + padding;
+      setSize(Math.max(min, Math.min(max, w - padding)));
+    };
+    compute();
+    window.addEventListener('resize', compute);
+    return () => window.removeEventListener('resize', compute);
+  }, [min, max, padding]);
+  return size;
+}
+
 export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSendProps) {
   const {
     txHash,
@@ -215,6 +253,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   // shows AnimatedQrDisplay instead of the legacy single QR, and the scan
   // step uses AnimatedQrScanner with `ur:zcash-pczt` filter.
   const [pcztSignFrames, setPcztSignFrames] = useState<string[] | null>(null);
+  // Fill the sign surface with as large a QR as fits, so a phone camera can lock.
+  const qrSize = useResponsiveQrSize();
   // The signed PCZT returns under the SAME UR type the unsigned display frames
   // carry: orchard uses `zcash-pczt`; an ironwood (NU6.3) send uses the
   // zigner-module prelude envelope. Derive the signed-scan filter from the
@@ -1402,14 +1442,23 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                       key={i}
                       className={`flex items-start gap-2 text-xs ${isLast ? 'text-fg' : 'text-fg-muted'}`}
                     >
-                      <span className='font-mono w-12 text-right shrink-0'>
-                        {(s.elapsedMs / 1000).toFixed(1)}s
+                      <span
+                        className={`font-mono w-12 text-right shrink-0 tabular-nums ${isLast ? 'text-zigner-gold' : ''}`}
+                      >
+                        {isLast ? (
+                          <LiveStepTimer stepStartMs={buildStartRef.current + s.elapsedMs} />
+                        ) : (
+                          `${(s.elapsedMs / 1000).toFixed(1)}s`
+                        )}
                       </span>
-                      <span className={isLast ? '' : ''}>
+                      <span>
                         {s.step}
                         {s.detail && <span className='text-fg-muted ml-1'>({s.detail})</span>}
                         {!isLast && Number(stepDuration) >= 0.5 && (
                           <span className='text-fg-muted ml-1'>+{stepDuration}s</span>
+                        )}
+                        {isLast && (
+                          <span className='ml-1 inline-block w-1.5 h-1.5 rounded-full bg-zigner-gold animate-pulse align-middle' />
                         )}
                       </span>
                     </div>
@@ -1448,8 +1497,17 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                 {pcztSignFrames && pcztSignFrames.length > 0 ? (
                   <AnimatedQrDisplay
                     urFrames={pcztSignFrames}
+                    urSource={
+                      pcztUnsignedRef.current?.cborData
+                        ? {
+                            bytes: pcztUnsignedRef.current.cborData,
+                            urType:
+                              pcztSignFrames[0]?.split('/')[0]?.replace(/^ur:/i, '') || 'zcash-pczt',
+                          }
+                        : undefined
+                    }
                     totalBytes={pcztUnsignedRef.current?.cborBytes}
-                    size={210}
+                    size={qrSize}
                     frameInterval={200}
                     title='scan with zafu zigner'
                     description='hold zigner camera steady; multi-frame transfer'

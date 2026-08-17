@@ -291,6 +291,35 @@ export function AnimatedQrDisplay({
     }
   }, [data, urFrames, urType, density, urSource, urDensityFrames]);
 
+  // Fullscreen QR: a weak phone camera (e.g. Pixel 3) scanning a laptop screen
+  // needs the biggest possible target. Tap the QR to blow it up to the full
+  // viewport; the modules get much larger so it locks far faster.
+  const [fullscreen, setFullscreen] = useState(false);
+  const [viewport, setViewport] = useState<{ w: number; h: number }>(() => ({
+    w: typeof window !== 'undefined' ? window.innerWidth : 360,
+    h: typeof window !== 'undefined' ? window.innerHeight : 640,
+  }));
+  useEffect(() => {
+    const onResize = () => setViewport({ w: window.innerWidth, h: window.innerHeight });
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  useEffect(() => {
+    if (!fullscreen) {
+      return;
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setFullscreen(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [fullscreen]);
+  // Square, minus a small margin so it never overflows either axis.
+  const fullscreenSize = Math.max(240, Math.min(viewport.w, viewport.h) - 24);
+  const renderSize = fullscreen ? fullscreenSize : size;
+
   const renderFrame = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas || frames.length === 0) {
@@ -303,7 +332,7 @@ export function AnimatedQrDisplay({
       canvas,
       frames[idx],
       {
-        width: size,
+        width: renderSize,
         margin: 2,
         color: { dark: '#000000', light: '#ffffff' },
         errorCorrectionLevel: 'L',
@@ -314,7 +343,7 @@ export function AnimatedQrDisplay({
         }
       },
     );
-  }, [frames, size]);
+  }, [frames, renderSize]);
 
   useEffect(() => {
     if (frames.length === 0) {
@@ -345,10 +374,25 @@ export function AnimatedQrDisplay({
     );
   }
 
-  return (
-    <div className='flex flex-col items-center gap-3'>
-      {title && <h3 className='text-sm font-medium text-fg'>{title}</h3>}
-
+  // The canvas element is the same node in both layouts; only the wrapper
+  // styling and the render size change, so the animation loop keeps running.
+  const qrBlock = (
+    <div
+      className={
+        fullscreen
+          ? 'fixed inset-0 z-[100] flex flex-col items-center justify-center gap-3 bg-black p-2'
+          : 'cursor-zoom-in'
+      }
+      onClick={() => setFullscreen(f => !f)}
+      role='button'
+      tabIndex={0}
+      onKeyDown={e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          setFullscreen(f => !f);
+        }
+      }}
+      title={fullscreen ? 'tap to shrink' : 'tap to enlarge for scanning'}
+    >
       <div className='relative rounded-lg bg-white p-3'>
         <canvas ref={canvasRef} />
         {frames.length > 1 && (
@@ -357,6 +401,28 @@ export function AnimatedQrDisplay({
           </div>
         )}
       </div>
+      {fullscreen && (
+        <p className='text-xs text-white/60'>tap anywhere to close · {currentFrame}/{frames.length}</p>
+      )}
+    </div>
+  );
+
+  return (
+    <div className='flex flex-col items-center gap-3'>
+      {title && <h3 className='text-sm font-medium text-fg'>{title}</h3>}
+
+      {qrBlock}
+
+      {!fullscreen && (
+        <button
+          type='button'
+          onClick={() => setFullscreen(true)}
+          className='flex items-center gap-1 text-label text-fg-muted hover:text-fg-high transition-colors'
+        >
+          <span className='i-ph-arrows-out size-3' />
+          enlarge to full screen
+        </button>
+      )}
 
       {frames.length > 1 && (
         <div className='flex items-center gap-2 text-label text-fg-muted'>
@@ -375,13 +441,18 @@ export function AnimatedQrDisplay({
             </span>
             <span className='font-mono'>{Math.round(1000 / Math.max(intervalMs, 1))} fps</span>
           </div>
+          {/*
+            The slider value is ms-per-frame, where a SMALLER number is FASTER.
+            Bind it inverted (min+max - intervalMs) so dragging right lowers the
+            interval = speeds up, matching the slow→fast labels below.
+          */}
           <input
             type='range'
             min={60}
             max={700}
             step={20}
-            value={intervalMs}
-            onChange={e => changeSpeed(Number(e.target.value))}
+            value={760 - intervalMs}
+            onChange={e => changeSpeed(760 - Number(e.target.value))}
             className='w-full accent-zigner-gold'
           />
           <div className='flex justify-between text-xs opacity-70'>
