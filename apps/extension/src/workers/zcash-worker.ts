@@ -2781,6 +2781,12 @@ const buildWitnessesIronwood = async (
     const db = await getDb();
     const tx = db.transaction(['witnesses-ironwood', 'meta'], 'readwrite');
     const wstore = tx.objectStore('witnesses-ironwood');
+    // `notes` are the caller's live note objects (references into the wallet
+    // state), so mirror the persisted witness onto them too. Without this the
+    // caller keeps seeing the pre-replay note (witness_hex undefined) until a
+    // reload - which strands the note in the sync loop's `iwExisting` gate and
+    // leaves a spend-time rebuild uncached in memory for a follow-up send.
+    const noteByNullifier = new Map(notes.map(n => [n.nullifier, n]));
     for (const w of seeded.witnesses) {
       wstore.put({
         walletId,
@@ -2788,6 +2794,11 @@ const buildWitnessesIronwood = async (
         witness_hex: w.witness_hex,
         witness_tree_size: endTreeSize,
       } satisfies IronwoodWitnessRecord);
+      const note = noteByNullifier.get(w.id);
+      if (note) {
+        note.witness_hex = w.witness_hex;
+        note.witness_tree_size = endTreeSize;
+      }
     }
     // The frontier has to advance with them. Witnesses at a tree size the
     // stored frontier does not match fail the `aligned` check just as surely
@@ -3373,6 +3384,45 @@ const runSync = async (
         }
       } catch (e) {
         console.warn('[zcash-worker] failed to bootstrap ironwood frontier:', e);
+      }
+    }
+  }
+
+  // One-time rescue for ironwood notes stranded WITHOUT a witness. A rebootstrap
+  // (the block just above, plus the catch-up divergence path and a clear-cache
+  // resync) leaves an ironwood note with no witness, but the forward scan only
+  // re-seeds notes it discovers as NEW - a note found in an earlier sync is
+  // never "new" again, so it sits at witness_tree_size -1 permanently and forces
+  // a full ~minute replay on EVERY send. Rebuild those witnesses once here via
+  // the proven slow-path replay; the sync loop below then maintains them
+  // forward. Idempotent: only witness-less unspent notes qualify, and
+  // buildWitnessesIronwood persists + attaches them (so loadState finds them
+  // next run) - a healthy wallet does no work. Non-fatal on failure: a send
+  // still self-heals via its own replay.
+  if (iwSupported && ironwoodFrontier) {
+    const strandedIronwood = state.notes.filter(
+      n =>
+        poolOf(n) === 'ironwood' &&
+        !state.spentNullifiers.has(n.nullifier) &&
+        (n.witness_hex === undefined || n.witness_tree_size === undefined),
+    );
+    if (strandedIronwood.length > 0) {
+      try {
+        console.log(
+          `[zcash-worker] rebuilding ${strandedIronwood.length} stranded ironwood witness(es) once (anchor=${currentHeight})`,
+        );
+        await buildWitnessesIronwood(client, walletId, strandedIronwood, currentHeight);
+        // Adopt the consistent (frontier, size, height) the replay just cached,
+        // so the sync loop continues from the same state instead of seeing a
+        // mismatch and rebootstrapping (which would re-wipe what we just built).
+        const rebuiltFrontier = await getIronwoodTreeFrontier(walletId);
+        if (rebuiltFrontier) {
+          ironwoodFrontier = rebuiltFrontier;
+          ironwoodFrontierHeight = await getIronwoodTreeFrontierHeight(walletId);
+          ironwoodTreeSize = Number(iwSizeFn(rebuiltFrontier));
+        }
+      } catch (e) {
+        console.warn('[zcash-worker] ironwood stranded-witness rebuild failed:', e);
       }
     }
   }
