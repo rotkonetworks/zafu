@@ -8,6 +8,7 @@ import { selectKeyInfos } from '../../../state/keyring';
 import { selectZcashWallets, selectPenumbraWallets } from '../../../state/wallets';
 import { terminateNetworkWorker, spawnNetworkWorker } from '../../../state/keyring/network-worker';
 import { deleteZcashDatabases } from '../../../clear-cache-startup';
+import { clearPersonalData } from '../../../state/personal-data';
 import { useState, useEffect } from 'react';
 import { SettingsScreen } from './settings-screen';
 import type { KeyInfo } from '../../../state/keyring';
@@ -32,6 +33,22 @@ export const SettingsClearCache = () => {
   const zcashWallets = useStore(selectZcashWallets);
   const penumbraWallets = useStore(selectPenumbraWallets);
   const [clearingKey, setClearingKey] = useState<string | null>(null);
+  const clearContacts = useStore(s => s.contacts.clearAll);
+  const [personalStep, setPersonalStep] = useState<'idle' | 'confirm' | 'clearing' | 'done'>(
+    'idle',
+  );
+
+  const handleClearPersonal = async () => {
+    setPersonalStep('clearing');
+    try {
+      await clearPersonalData({ notes: true, sent: true });
+      await clearContacts();
+      setPersonalStep('done');
+    } catch (e) {
+      console.error('[clear-personal] failed:', e);
+      setPersonalStep('idle');
+    }
+  };
 
   const [clearingState, setClearingState] = useState<ClearingState>({
     inProgress: false,
@@ -171,6 +188,47 @@ export const SettingsClearCache = () => {
                 </div>
               </div>
             ))}
+
+            {/* Personal data: local-only, chain-irreplaceable (send history, tx
+                notes, contacts). A resync leaves these intact; this is the
+                separate, deliberate way to wipe them. */}
+            <div>
+              <p className='kicker mb-2'>personal data</p>
+              <div className='flex flex-col gap-2 rounded-lg border border-border-soft bg-elev-1 p-3'>
+                <p className='text-label text-fg-muted'>
+                  send history, tx notes, and contacts - local only, never rebuilt from the chain.
+                  a resync keeps these; this clears them.
+                </p>
+                {personalStep === 'done' ? (
+                  <p className='text-label text-fg-dim'>personal data cleared.</p>
+                ) : personalStep === 'confirm' || personalStep === 'clearing' ? (
+                  <div className='flex gap-2'>
+                    <button
+                      disabled={personalStep === 'clearing'}
+                      onClick={() => void handleClearPersonal()}
+                      className='rounded border border-hanko/40 bg-hanko/10 px-2 py-0.5 text-label text-hanko transition-colors hover:bg-hanko/20 disabled:opacity-50'
+                    >
+                      {personalStep === 'clearing' ? 'clearing...' : 'yes, clear it all'}
+                    </button>
+                    {personalStep === 'confirm' && (
+                      <button
+                        onClick={() => setPersonalStep('idle')}
+                        className='rounded border border-border-soft px-2 py-0.5 text-label text-fg-muted'
+                      >
+                        cancel
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setPersonalStep('confirm')}
+                    className='self-start rounded border border-rust/30 bg-rust/5 px-2 py-0.5 text-label text-rust transition-colors hover:bg-rust/15'
+                  >
+                    clear personal data
+                  </button>
+                )}
+              </div>
+            </div>
           </>
         )}
       </div>

@@ -6,6 +6,7 @@ import { useStore } from '../../../state';
 import { privacySelector } from '../../../state/privacy';
 import { contactsSelector, type ContactNetwork } from '../../../state/contacts';
 import { SaveContactModal } from '../../../components/save-contact-modal';
+import { useTxNote } from '../../../hooks/use-tx-note';
 import {
   selectActiveNetwork,
   selectEffectiveKeyInfo,
@@ -2010,6 +2011,12 @@ function TxRow({ tx, network }: { tx: ParsedTransaction; network: NetworkType })
   const { findByAddress } = useStore(contactsSelector);
   const [showSave, setShowSave] = useState(false);
   const contactMatch = tx.recipient ? findByAddress(tx.recipient) : undefined;
+  // local "from" note for received txs - the chain never reveals the sender of
+  // a shielded note, so the user labels it themselves. Stored in chrome.storage
+  // (survives resync), keyed by txid.
+  const { note: fromNote, save: saveFromNote } = useTxNote(tx.id);
+  const [editingNote, setEditingNote] = useState(false);
+  const [noteDraft, setNoteDraft] = useState('');
   const contactNet: ContactNetwork =
     network === 'zcash' ? 'zcash' : network === 'penumbra' ? 'penumbra' : 'cosmos';
   const detail = tx.memo;
@@ -2127,6 +2134,8 @@ function TxRow({ tx, network }: { tx: ParsedTransaction; network: NetworkType })
                 <span className='i-ph-user h-3 w-3 shrink-0' /> to {contactMatch.contact.name}
               </p>
             ) : (
+              // no contact yet: show the actual destination address (truncated)
+              // so the user sees who they paid, and one click names/saves it.
               <button
                 type='button'
                 onClick={e => {
@@ -2134,9 +2143,15 @@ function TxRow({ tx, network }: { tx: ParsedTransaction; network: NetworkType })
                   setShowSave(true);
                 }}
                 className='flex items-center gap-1 text-left text-label text-network-accent transition-colors hover:text-fg-high'
-                title='save this recipient to contacts'
+                title='save to contacts'
               >
-                <span className='i-ph-user-plus h-3 w-3 shrink-0' /> save recipient to contacts
+                <span className='i-ph-user-plus h-3 w-3 shrink-0' /> to{' '}
+                <span className='font-mono'>
+                  {tx.recipient.length > 20
+                    ? `${tx.recipient.slice(0, 10)}…${tx.recipient.slice(-6)}`
+                    : tx.recipient}
+                </span>
+                <span className='text-fg-dim'> · name</span>
               </button>
             ))}
           {showSave && tx.recipient && (
@@ -2149,6 +2164,65 @@ function TxRow({ tx, network }: { tx: ParsedTransaction; network: NetworkType })
               />
             </div>
           )}
+          {/* received: a local "from" label the user adds themselves, since the
+              chain never reveals the sender of a shielded note. */}
+          {isIn &&
+            (editingNote ? (
+              <div className='flex items-center gap-1' onClick={e => e.stopPropagation()}>
+                <input
+                  autoFocus
+                  value={noteDraft}
+                  onChange={e => setNoteDraft(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      void saveFromNote(noteDraft);
+                      setEditingNote(false);
+                    }
+                    if (e.key === 'Escape') {
+                      setEditingNote(false);
+                    }
+                  }}
+                  placeholder='who was this from?'
+                  className='min-w-0 flex-1 rounded border border-border-soft bg-transparent px-1.5 py-0.5 text-label'
+                />
+                <button
+                  type='button'
+                  onClick={() => {
+                    void saveFromNote(noteDraft);
+                    setEditingNote(false);
+                  }}
+                  className='text-label text-network-accent'
+                >
+                  save
+                </button>
+              </div>
+            ) : fromNote ? (
+              <button
+                type='button'
+                onClick={e => {
+                  e.stopPropagation();
+                  setNoteDraft(fromNote);
+                  setEditingNote(true);
+                }}
+                className='flex items-center gap-1 text-left text-label text-fg-dim transition-colors hover:text-fg-high'
+                title='edit note'
+              >
+                <span className='i-ph-note-pencil h-3 w-3 shrink-0' /> from {fromNote}
+              </button>
+            ) : (
+              <button
+                type='button'
+                onClick={e => {
+                  e.stopPropagation();
+                  setNoteDraft('');
+                  setEditingNote(true);
+                }}
+                className='flex items-center gap-1 text-left text-label text-network-accent transition-colors hover:text-fg-high'
+                title='note who this was from'
+              >
+                <span className='i-ph-note-pencil h-3 w-3 shrink-0' /> note who from
+              </button>
+            ))}
           {/* where the money went, itemised - the difference between this and
               the note values spent is change, which never left the wallet */}
           {hasBreakdown && (
