@@ -315,6 +315,30 @@ export const ImportZigner = () => {
           {/* idle - scan buttons */}
           {scanState === 'idle' && !showManualInput && (
             <div className='flex flex-col gap-2.5'>
+              {/* how to get the QR off the zigner */}
+              <div className='flex flex-col gap-2 rounded-lg border border-border-soft bg-elev-1 p-3'>
+                <span className='flex items-center gap-1.5 text-xs font-medium text-fg-high lowercase'>
+                  <span className='i-ph-device-mobile h-3.5 w-3.5 text-zigner-gold' />
+                  on your zigner
+                </span>
+                <ol className='flex flex-col gap-1.5'>
+                  {(
+                    [
+                      'open the zcash key path',
+                      'select FVK (viewing key)',
+                      'scan the QR it shows below',
+                    ] as const
+                  ).map((label, i) => (
+                    <li key={i} className='flex items-center gap-2 text-xs text-fg-muted lowercase'>
+                      <span className='flex size-4 shrink-0 items-center justify-center rounded-full bg-zigner-gold/15 text-[9px] text-zigner-gold'>
+                        {i + 1}
+                      </span>
+                      {label}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+
               <Button
                 variant='gradient'
                 className='w-full'

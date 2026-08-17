@@ -86,16 +86,51 @@ export async function mergeZignerCapabilities(
   const updated = vaults.map(v => (v.id === existing.id ? rebuilt : v));
   await local.set('vaults', updated);
 
-  // create per-network wallet entries ONLY for the newly-added networks.
-  // createZignerWalletEntries reads from `incoming` so we pass just the
-  // new-network slice. existingVaultCount is based on the updated list.
-  if (newlyAddedNetworks.length > 0) {
+  // A per-network wallet ENTRY can be missing even when the vault already
+  // "supports" that network. Removing a wallet deletes its per-network entry
+  // (zcashWallets / penumbraWallets) but does NOT strip the viewing key from
+  // the vault's encrypted data - so a later re-import of the same device finds
+  // the capability still present, computes an EMPTY newlyAddedNetworks, and
+  // skips entry creation entirely. The import then "succeeds" with nothing to
+  // show. So we recreate an entry for any supported network whose wallet entry
+  // is currently absent, in addition to genuinely-new networks. Checking
+  // presence first keeps this dedup-safe (createZignerWalletEntries appends
+  // unconditionally, so calling it for a network that already has an entry
+  // would duplicate it).
+  const zcashWalletsList = ((await local.get('zcashWallets')) ?? []) as { vaultId?: string }[];
+  const penumbraWalletsList = ((await local.get('penumbraWallets')) ?? []) as {
+    vaultId?: string;
+  }[];
+  const hasZcashEntry = zcashWalletsList.some(w => w.vaultId === existing.id);
+  const hasPenumbraEntry = penumbraWalletsList.some(w => w.vaultId === existing.id);
+
+  const needsEntry = new Set<string>(newlyAddedNetworks);
+  if (mergedNetworks.includes('zcash') && merged.viewingKey && !hasZcashEntry) {
+    needsEntry.add('zcash');
+  }
+  if (mergedNetworks.includes('penumbra') && merged.fullViewingKey && !hasPenumbraEntry) {
+    needsEntry.add('penumbra');
+  }
+
+  // create per-network wallet entries for the networks that need one. Source
+  // the keys from `merged` (the vault's authoritative data) rather than
+  // `incoming`, since a re-import may re-supply only one network's key while a
+  // different network's entry is the one that went missing. Null out the keys
+  // for networks that already have an entry so createZignerWalletEntries - which
+  // gates penumbra on fullViewingKey and zcash on viewingKey - only creates the
+  // missing ones and never duplicates an existing entry.
+  if (needsEntry.size > 0) {
+    const createData: ZignerZafuImport = {
+      ...merged,
+      fullViewingKey: needsEntry.has('penumbra') ? merged.fullViewingKey : undefined,
+      viewingKey: needsEntry.has('zcash') ? merged.viewingKey : undefined,
+    };
     await createZignerWalletEntries(
-      incoming,
+      createData,
       existing.name,
       key,
       existing.id,
-      newlyAddedNetworks,
+      [...needsEntry],
       updated.length - 1, // count of OTHER vaults (not including this one)
       local,
     );
