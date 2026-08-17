@@ -345,7 +345,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
                 navigate(PopupPath.SUBSCRIBE);
                 onClose();
               }}
-              className='flex w-full items-center justify-center gap-2 px-3 py-2 rounded-md bg-zigner-gold text-zigner-dark hover:bg-zigner-gold-light transition-colors text-data lowercase'
+              className='flex w-full items-center justify-center gap-2 px-3 py-2 rounded-md bg-zigner-gold text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors text-data lowercase'
             >
               <span className='i-ph-lightning h-3.5 w-3.5' />
               <span>upgrade to pro</span>
@@ -381,7 +381,7 @@ export const MenuDrawer = ({ open, onClose }: MenuDrawerProps) => {
               github
             </a>
             <a
-              href='https://zigner.zafu.pro'
+              href='https://zafu.pro/zigner'
               target='_blank'
               rel='noopener noreferrer'
               className='flex items-center gap-1 transition-colors hover:text-fg-high'

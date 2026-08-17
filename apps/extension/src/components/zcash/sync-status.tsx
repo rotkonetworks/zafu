@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@repo/ui/lib/utils';
+import { Hint } from '../hint';
 import { ZCASH_ORCHARD_ACTIVATION } from '../../config/networks';
 import { blockToDate, dateToBlock, formatDateInput } from '../../utils/zcash-blocks';
 import { isSidePanel, isDedicatedWindow } from '../../utils/popup-detection';
 
 /**
- * SyncStatus — the one sync surface for the zcash home screen.
+ * SyncStatus - the one sync surface for the zcash home screen.
  *
  * Design intent: sync state is a *property of the balance*, not a sibling
- * feature. So it renders as a single quiet line attached to the balance —
+ * feature. So it renders as a single quiet line attached to the balance -
  * an ensō that draws itself closed as the wallet becomes whole, one
  * humanized figure, and everything else (bar, stages, heights, rescan,
  * reassurance) behind one tap. Replaces the old trio of status line +
@@ -45,10 +46,10 @@ export interface SyncStatusProps {
   targetHeight: number;
   startBlock: number;
   stages: SyncStage[];
-  /** true during a wallet's first scan — adds the resume-on-reopen line */
+  /** true during a wallet's first scan - adds the resume-on-reopen line */
   firstSync: boolean;
   /**
-   * The human message — a classified `SyncFailure.message`, never a raw
+   * The human message - a classified `SyncFailure.message`, never a raw
    * worker or wasm error. See `state/sync-failure.ts`.
    */
   error?: string;
@@ -59,14 +60,14 @@ export interface SyncStatusProps {
    */
   errorDetail?: string;
   errorAction?: { label: string; onClick: () => void };
-  /** resume the sync from where it stopped — for transient backend errors */
+  /** resume the sync from where it stopped - for transient backend errors */
   onRetry?: () => void;
   onRescan?: (height: number) => void;
 }
 
 /**
  * The ensō arc. While syncing the circle stays open like a brush stroke
- * (caps at 92/100) — it only closes completely when the wallet is synced.
+ * (caps at 92/100) - it only closes completely when the wallet is synced.
  */
 const EnsoArc = ({ percent, synced, dim }: { percent: number; synced: boolean; dim?: boolean }) => {
   const fill = synced ? 100 : Math.min(Math.max(percent, 4) * 0.92, 92);
@@ -127,7 +128,7 @@ export const SyncStatus = ({
   const [input, setInput] = useState('');
 
   // scan-rate window for the ETA: ring of (height, t) samples over ~45s.
-  // Shown only once the rate is stable — a wrong ETA is worse than none.
+  // Shown only once the rate is stable - a wrong ETA is worse than none.
   const samples = useRef<{ h: number; t: number }[]>([]);
   const [eta, setEta] = useState('');
   useEffect(() => {
@@ -184,16 +185,16 @@ export const SyncStatus = ({
   // What the ring means, for hover. The arc is the state indicator now, so it
   // has to be able to explain itself.
   const stateHint = error
-    ? 'sync failed — the node may be down or unreachable'
+    ? 'sync failed - the node may be down or unreachable'
     : connecting
       ? 'connecting to the node'
       : synced
-        ? 'synced — caught up to the chain tip'
-        : `syncing — ${Math.floor(percent)}% of the way to the tip`;
+        ? 'synced - caught up to the chain tip'
+        : `syncing - ${Math.floor(percent)}% of the way to the tip`;
 
   return (
     <div>
-      {/* the one line — everything else is behind this tap */}
+      {/* the one line - everything else is behind this tap */}
       <button
         type='button'
         onClick={() => setOpen(v => !v)}
@@ -210,7 +211,7 @@ export const SyncStatus = ({
           {line}
         </span>
         {/* Most sync errors are transient (a node restart, a 503 blip), so the
-            first offer is "try again" — resuming from the current height —
+            first offer is "try again" - resuming from the current height -
             rather than "switch node", which permanently repoints the wallet
             because of a ten-second outage. Switching lives in the panel. */}
         {error && onRetry && (
@@ -240,7 +241,7 @@ export const SyncStatus = ({
         />
       </button>
 
-      {/* the panel — grid-rows trick for a measured slide */}
+      {/* the panel - grid-rows trick for a measured slide */}
       <div
         className={cn(
           'grid transition-[grid-template-rows] duration-200',
@@ -263,7 +264,7 @@ export const SyncStatus = ({
                     </button>
                   )}
                 </div>
-                {/* The raw error still exists — it is just not the thing we
+                {/* The raw error still exists - it is just not the thing we
                     say to someone holding money. One tap away, for a bug
                     report or a support chat. */}
                 {errorDetail && errorDetail !== error && (
@@ -294,13 +295,13 @@ export const SyncStatus = ({
               </div>
             )}
 
-            {/* pipeline stages — steady row instead of a flickering label */}
+            {/* pipeline stages - steady row instead of a flickering label */}
             <div className='flex flex-wrap items-center gap-x-2 gap-y-0.5 text-label lowercase'>
               {stages.map((st, i) => (
                 <span key={st.key} className='flex items-center gap-2'>
                   {i > 0 && <span className='text-fg-dim'>·</span>}
+                  <Hint label={st.hint ?? st.label}>
                   <span
-                    title={st.hint}
                     className={cn(
                       'flex items-center gap-1',
                       // State is carried by weight and value, not by a second
@@ -328,11 +329,12 @@ export const SyncStatus = ({
                     {st.label}
                     {/* Show the detail on pending stages too, not just active
                         ones. A stage that is waiting is exactly the one the
-                        user needs explained — dropping its detail left stages
+                        user needs explained - dropping its detail left stages
                         like ligerito rendering as a bare word with no state
                         and no progress, indistinguishable from a hang. */}
                     {st.state !== 'done' && st.detail ? ` ${st.detail}` : ''}
                   </span>
+                  </Hint>
                 </span>
               ))}
             </div>
@@ -342,7 +344,7 @@ export const SyncStatus = ({
               <span>
                 {currentHeight > 0 && targetHeight > 0
                   ? `${currentHeight.toLocaleString()} / ${targetHeight.toLocaleString()}`
-                  : '—'}
+                  : '-'}
               </span>
               {onRescan &&
                 (editing ? (
@@ -448,7 +450,7 @@ export const SyncStatus = ({
  * Scanning runs in a Worker owned by whichever view spawned it. The toolbar
  * POPUP is destroyed on focus loss, taking the worker with it; the side panel
  * and a dedicated window are not. So the popup gets an actionable nudge rather
- * than a flat "this stops" — the side panel already gives background sync
+ * than a flat "this stops" - the side panel already gives background sync
  * today, without waiting on moving the worker into the offscreen document.
  */
 const SyncPersistenceNote = () => {

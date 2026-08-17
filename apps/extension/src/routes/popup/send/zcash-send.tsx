@@ -1632,7 +1632,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
           <div className='flex flex-col items-center gap-4 p-8'>
             {/* the receipt gets stamped — a broadcast tx is sealed (封) */}
             <HankoSeal glyph='封' size='lg' />
-            <h2 className='text-lg font-medium'>sealed — transaction sent</h2>
+            <h2 className='text-lg font-medium'>transaction sent</h2>
             <p className='text-sm text-fg-muted text-center'>
               {amount} zec sent successfully
               {totalElapsedSec !== null && ` in ${totalElapsedSec}s`}

@@ -2318,6 +2318,40 @@ export function frost_relay_generate_keypair() {
 }
 
 /**
+ * Sign a frostd login challenge with a relay private key.
+ *
+ * frostd authenticates by verifying XEdDSA over the participant's X25519
+ * key - the same key Noise uses. This exists because without it the browser
+ * can generate keys and encrypt, but cannot log in at all, which is how the
+ * gap was found: by trying to wire the client up.
+ * @param {string} private_key_hex
+ * @param {string} challenge
+ * @returns {string}
+ */
+export function frost_relay_sign_challenge(private_key_hex, challenge) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(private_key_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(challenge, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.frost_relay_sign_challenge(ptr0, len0, ptr1, len1);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
  * host-only: sample a random 32-byte SpendingKey for nk/rivk derivation.
  * retries until the sampled bytes land in the Pallas scalar range.
  * returns hex-encoded 32-byte `sk` that the host broadcasts to peers in R1.

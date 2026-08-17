@@ -110,7 +110,7 @@ export const PasswordGateModal = ({
                 </button>
                 <button
                   onClick={onConfirm}
-                  className='flex-1 rounded-lg bg-zigner-gold px-4 py-3 text-sm font-medium text-zigner-dark transition-colors hover:bg-primary/90'
+                  className='flex-1 rounded-lg bg-zigner-gold px-4 py-3 text-sm font-medium text-zigner-gold-foreground transition-colors hover:bg-primary/90'
                 >
                   Continue
                 </button>
@@ -162,7 +162,7 @@ export const PasswordGateModal = ({
                 <button
                   onClick={() => void handleSubmit()}
                   disabled={checking || !password.trim()}
-                  className='flex-1 rounded-lg bg-zigner-gold px-4 py-3 text-sm font-medium text-zigner-dark transition-colors hover:bg-primary/90 disabled:opacity-50'
+                  className='flex-1 rounded-lg bg-zigner-gold px-4 py-3 text-sm font-medium text-zigner-gold-foreground transition-colors hover:bg-primary/90 disabled:opacity-50'
                 >
                   {checking ? 'verifying...' : 'Confirm'}
                 </button>

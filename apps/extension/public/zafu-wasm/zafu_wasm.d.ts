@@ -747,6 +747,16 @@ export function frost_parse_tx_outputs(unsigned_tx_hex: string, orchard_fvk_uvie
 export function frost_relay_generate_keypair(): string;
 
 /**
+ * Sign a frostd login challenge with a relay private key.
+ *
+ * frostd authenticates by verifying XEdDSA over the participant's X25519
+ * key - the same key Noise uses. This exists because without it the browser
+ * can generate keys and encrypt, but cannot log in at all, which is how the
+ * gap was found: by trying to wire the client up.
+ */
+export function frost_relay_sign_challenge(private_key_hex: string, challenge: string): string;
+
+/**
  * host-only: sample a random 32-byte SpendingKey for nk/rivk derivation.
  * retries until the sampled bytes land in the Pallas scalar range.
  * returns hex-encoded 32-byte `sk` that the host broadcasts to peers in R1.
@@ -1048,6 +1058,7 @@ export interface InitOutput {
     readonly frost_inspect_pczt_outputs: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly frost_parse_tx_outputs: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly frost_relay_generate_keypair: () => [number, number, number, number];
+    readonly frost_relay_sign_challenge: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly frost_sample_fvk_sk: () => [number, number];
     readonly frost_sign_round1: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly frost_sign_round2: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number, number];

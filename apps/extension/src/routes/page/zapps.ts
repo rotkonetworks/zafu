@@ -82,7 +82,7 @@ export const DEFAULT_ZAPPS: Zapp[] = [
     name: 'zigner',
     description: 'airgap signing app',
     icon: 'i-ph-device-mobile',
-    url: 'https://zigner.zafu.pro',
+    url: 'https://zafu.pro/zigner',
     category: 'tools',
   },
   {

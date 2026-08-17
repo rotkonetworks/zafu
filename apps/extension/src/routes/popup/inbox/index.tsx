@@ -175,7 +175,7 @@ function ConversationRow({
           </span>
           <div className='flex items-center gap-1.5 shrink-0'>
             {conversation.unread > 0 && (
-              <span className='rounded-full bg-zigner-gold px-1.5 py-0.5 text-label tabular text-zigner-dark'>
+              <span className='rounded-full bg-zigner-gold px-1.5 py-0.5 text-label tabular text-zigner-gold-foreground'>
                 {conversation.unread}
               </span>
             )}
@@ -629,7 +629,7 @@ function ConversationCompose({ diversifierIndex }: { diversifierIndex: number })
         <button
           onClick={handleSend}
           disabled={!message.trim()}
-          className='rounded-lg bg-zigner-gold p-2 text-zigner-dark hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
+          className='rounded-lg bg-zigner-gold p-2 text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
         >
           <span className='i-ph-paper-plane-right h-4 w-4' />
         </button>
@@ -822,7 +822,7 @@ function ComposeMessage({
             }
           }}
           disabled={(txStatus === 'idle' && !canSend) || txStatus === 'sending'}
-          className='w-full flex items-center justify-center gap-2 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
+          className='w-full flex items-center justify-center gap-2 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
         >
           {txStatus === 'sending' ? (
             <>
@@ -1007,7 +1007,7 @@ export function InboxPage() {
           </button>
           <button
             onClick={() => setShowCompose(true)}
-            className='flex items-center gap-1 rounded-lg bg-zigner-gold px-3 py-1.5 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors'
+            className='flex items-center gap-1 rounded-lg bg-zigner-gold px-3 py-1.5 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors'
           >
             <span className='i-ph-paper-plane-right h-4 w-4' />
             compose
@@ -1031,7 +1031,7 @@ export function InboxPage() {
           <span className='i-ph-chats h-4 w-4' />
           conversations
           {unreadCount > 0 && (
-            <span className='ml-0.5 rounded-full bg-zigner-gold px-1.5 py-0.5 text-label text-zigner-dark'>
+            <span className='ml-0.5 rounded-full bg-zigner-gold px-1.5 py-0.5 text-label text-zigner-gold-foreground'>
               {unreadCount}
             </span>
           )}

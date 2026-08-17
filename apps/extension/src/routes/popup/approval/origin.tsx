@@ -152,7 +152,7 @@ export const OriginApproval = () => {
                 )}
                 <div className='-ml-3 w-full truncate p-2 pl-6 text-title text-fg-high tracking-[-0.005em]'>
                   {title ? (
-                    <span className='text-zigner-dark'>{title}</span>
+                    <span className='text-zigner-gold-foreground'>{title}</span>
                   ) : (
                     <span className='text-fg-muted underline decoration-dotted decoration-2 underline-offset-4'>
                       no title

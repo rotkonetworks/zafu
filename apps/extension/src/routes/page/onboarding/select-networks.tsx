@@ -45,7 +45,7 @@ const NETWORK_OPTIONS: NetworkOption[] = (Object.keys(NETWORKS) as NetworkType[]
     ...(NETWORK_DESCRIPTIONS[id] ?? { description: '', icon: id[0]?.toUpperCase() ?? '?' }),
   }));
 
-// only show launched networks — no "coming soon" clutter
+// only show launched networks - no "coming soon" clutter
 
 function regionLabel(region: RpcEndpointRegion): string {
   switch (region) {
@@ -182,7 +182,9 @@ export const SelectNetworks = () => {
                 <div
                   className={cn(
                     'w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold',
-                    isSelected ? 'bg-zigner-gold text-zigner-dark' : 'bg-elev-2 text-fg-muted',
+                    isSelected
+                      ? 'bg-zigner-gold text-zigner-gold-foreground'
+                      : 'bg-elev-2 text-fg-muted',
                   )}
                 >
                   {network.icon}
@@ -216,14 +218,16 @@ export const SelectNetworks = () => {
                     isSelected ? 'border-zigner-gold bg-zigner-gold' : 'border-muted-foreground/50',
                   )}
                 >
-                  {isSelected && <span className='i-ph-check h-3 w-3 text-zigner-dark' />}
+                  {isSelected && (
+                    <span className='i-ph-check h-3 w-3 text-zigner-gold-foreground' />
+                  )}
                 </div>
               </button>
             );
           })}
         </div>
 
-        {/* zcash node picker — shown on both create and import paths so
+        {/* zcash node picker - shown on both create and import paths so
               users on rotko-blocked networks have an obvious fallback.
               Default is rotko zidecar (trustless). Public lightwalletd
               endpoints are honest alternates. */}
@@ -243,20 +247,20 @@ export const SelectNetworks = () => {
                   {group.presets.map(p => (
                     <option key={p.id} value={p.id}>
                       {p.label}
-                      {p.backend === 'zidecar' ? ' · trustless' : ''}
+                      {p.backend === 'zidecar' ? ' · trust-minimized' : ''}
                     </option>
                   ))}
                 </optgroup>
               ))}
             </select>
             <p className='mt-1.5 text-label text-fg-muted'>
-              trustless = wallet verifies the server's responses with ligerito + nomt proofs.
-              lightwalletd = trusted public node. you can switch later in settings.
+              trust-minimized = your wallet checks the server's answers instead of trusting them.
+              lightwalletd = a plain public node you trust. switch anytime in settings.
             </p>
           </div>
         )}
 
-        {/* zcash sync start — only relevant for *imported* wallets. A
+        {/* zcash sync start - only relevant for *imported* wallets. A
               brand-new wallet has no prior history to scan, so the worker
               starts from chain tip and the birthday is irrelevant. */}
         {selected.has('zcash') && origin === SEED_PHRASE_ORIGIN.IMPORTED && (

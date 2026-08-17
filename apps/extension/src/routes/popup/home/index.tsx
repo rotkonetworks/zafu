@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom';
 
 import { useStore } from '../../../state';
 import { privacySelector } from '../../../state/privacy';
+import { contactsSelector, type ContactNetwork } from '../../../state/contacts';
+import { SaveContactModal } from '../../../components/save-contact-modal';
 import {
   selectActiveNetwork,
   selectEffectiveKeyInfo,
@@ -686,15 +688,14 @@ const BalanceFigure = ({
   }
 
   // Scanning, nothing found yet. The wallet has not read the blocks that hold
-  // its own notes — including the change from its own recent sends — so it
-  // does not know the balance. Not zero. Not a dash. Not known yet.
+  // its own notes - including the change from its own recent sends - so it does
+  // not know the balance. Show a loading skeleton rather than a misleading 0 or
+  // dash; the sync line just below carries the actual progress, so words here
+  // would only repeat it.
   if (view === 'unknown') {
     return (
-      <div className='flex flex-wrap items-baseline gap-x-2 gap-y-1'>
-        <span className='text-hero leading-none text-fg-dim lowercase'>not yet known</span>
-        <span className='text-label text-fg-dim lowercase'>
-          still scanning — the sync line below shows how far
-        </span>
+      <div className='flex items-center' aria-label='balance syncing'>
+        <span className='inline-block h-[0.9em] w-32 animate-pulse rounded-md bg-elev-2' />
       </div>
     );
   }
@@ -1771,7 +1772,7 @@ const ActionButton = ({
     className={cn(
       'group/action flex h-11 w-full items-center justify-center rounded-md px-3 transition-colors',
       variant === 'default' && 'bg-elev-2 text-fg hover:bg-elev-1/80 hover:text-fg-high',
-      variant === 'zcash' && 'bg-zigner-gold text-zigner-dark hover:bg-primary/90',
+      variant === 'zcash' && 'bg-zigner-gold text-zigner-gold-foreground hover:bg-primary/90',
       // Same treatment as zcash: solid accent, dark foreground. It was a
       // raw orange->teal gradient with white text, which bypassed the
       // network-accent tokens entirely - so the one control the eye lands on
@@ -1985,21 +1986,36 @@ const PendingMark = ({ className }: { className?: string }) => (
   </svg>
 );
 
-function TxRow({ tx }: { tx: ParsedTransaction }) {
+/** public per-tx explorer URL, per network (shielded penumbra has none). */
+const txExplorerUrl = (network: NetworkType, txid: string): string | undefined =>
+  network === 'zcash' ? `https://cipherscan.app/tx/${txid}` : undefined;
+
+function TxRow({ tx, network }: { tx: ParsedTransaction; network: NetworkType }) {
   const [expanded, setExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
+  // explorer links leak your IP + the looked-up txid to a third party, so they
+  // are opt-in; copying the txid never leaves the wallet and is always offered.
+  const explorerEnabled = useStore(s => s.privacy.settings.enableExplorerLinks);
+  const explorer = explorerEnabled ? txExplorerUrl(network, tx.id) : undefined;
   // a deposit (IBC in) lands funds like a receive; unshield is a pool<->
   // transparent move, shown neutrally like a shield
   const isIn = tx.type === 'receive' || tx.type === 'deposit';
   const isSh = tx.type === 'shield' || tx.type === 'unshield';
   const isPending = tx.status === 'pending';
   const isFailed = tx.status === 'failed';
-  // the recipient is only ever known for our own sends, and only from our own
-  // record — it is worth a line of its own, so it opens the row like a memo
-  const detail = tx.memo ?? (tx.recipient ? `to ${tx.recipient}` : undefined);
+  // a known recipient can be saved to contacts on click - the first brick of
+  // the wallet-held social graph (zafu#28); memo gets its own line above it.
+  const { findByAddress } = useStore(contactsSelector);
+  const [showSave, setShowSave] = useState(false);
+  const contactMatch = tx.recipient ? findByAddress(tx.recipient) : undefined;
+  const contactNet: ContactNetwork =
+    network === 'zcash' ? 'zcash' : network === 'penumbra' ? 'penumbra' : 'cosmos';
+  const detail = tx.memo;
   // the amount/fee split is worth opening a row for on its own: it is what
   // explains why the balance moved by more than the payment
   const hasBreakdown = !!tx.recipientAmount && !!tx.feeAmount;
-  const expandable = !!tx.memo || !!tx.recipient || hasBreakdown;
+  // always expandable now: even a bare tx has a txid worth copying / opening
+  const expandable = true;
 
   return (
     <div
@@ -2096,23 +2112,88 @@ function TxRow({ tx }: { tx: ParsedTransaction }) {
           </div>
         </div>
       </div>
-      {expanded && (detail || hasBreakdown) && (
-        <div className='mt-2 ml-11 border-l-2 border-border-soft pl-3'>
+      {expanded && (
+        <div className='mt-2 ml-11 flex flex-col gap-1 border-l-2 border-border-soft pl-3'>
           {detail && (
             <p className='text-xs text-fg-muted whitespace-pre-wrap break-words'>{detail}</p>
           )}
-          {tx.memo && tx.recipient && (
-            <p className='mt-1 text-label text-fg-dim break-words'>to {tx.recipient}</p>
+          {/* recipient: a known contact shows its petname; an unknown address
+              is one click from being saved to contacts (social-graph brick). */}
+          {tx.recipient &&
+            (contactMatch ? (
+              <p className='flex items-center gap-1 text-label text-fg-dim break-words'>
+                <span className='i-ph-user h-3 w-3 shrink-0' /> to {contactMatch.contact.name}
+              </p>
+            ) : (
+              <button
+                type='button'
+                onClick={e => {
+                  e.stopPropagation();
+                  setShowSave(true);
+                }}
+                className='flex items-center gap-1 text-left text-label text-network-accent transition-colors hover:text-fg-high'
+                title='save this recipient to contacts'
+              >
+                <span className='i-ph-user-plus h-3 w-3 shrink-0' /> save recipient to contacts
+              </button>
+            ))}
+          {showSave && tx.recipient && (
+            <div onClick={e => e.stopPropagation()}>
+              <SaveContactModal
+                address={tx.recipient}
+                network={contactNet}
+                onDone={() => setShowSave(false)}
+                onCancel={() => setShowSave(false)}
+              />
+            </div>
           )}
-          {/* where the money went, itemised — the difference between this and
+          {/* where the money went, itemised - the difference between this and
               the note values spent is change, which never left the wallet */}
           {hasBreakdown && (
-            <p className='mt-1 text-label text-fg-dim tabular'>
+            <p className='text-label text-fg-dim tabular'>
               <Sensitive>
                 {tx.recipientAmount} {tx.asset ?? ''} sent · {tx.feeAmount} fee
               </Sensitive>
             </p>
           )}
+          {/* txid: always copyable (no leak); "open in explorer" only when the
+              user has opted into explorer links (it reveals their IP). */}
+          <div className='flex items-center gap-1.5 pt-0.5'>
+            <span className='shrink-0 text-label text-fg-dim'>txid</span>
+            <span
+              className='min-w-0 flex-1 truncate font-mono text-label text-fg-muted'
+              title={tx.id}
+            >
+              {tx.id}
+            </span>
+            <button
+              type='button'
+              onClick={e => {
+                e.stopPropagation();
+                void navigator.clipboard.writeText(tx.id);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1500);
+              }}
+              className='shrink-0 text-fg-muted transition-colors hover:text-fg-high'
+              title={copied ? 'copied' : 'copy txid'}
+            >
+              <span
+                className={cn('h-3.5 w-3.5', copied ? 'i-ph-check text-network-accent' : 'i-ph-copy')}
+              />
+            </button>
+            {explorer && (
+              <a
+                href={explorer}
+                target='_blank'
+                rel='noopener noreferrer'
+                onClick={e => e.stopPropagation()}
+                className='shrink-0 text-fg-muted transition-colors hover:text-fg-high'
+                title='open in block explorer (reveals your ip)'
+              >
+                <span className='i-ph-arrow-square-out h-3.5 w-3.5' />
+              </a>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -2331,7 +2412,7 @@ const HistoryContent = ({
         <span className='kicker'>recent activity</span>
       </div>
       {recent.map(tx => (
-        <TxRow key={tx.id} tx={tx} />
+        <TxRow key={tx.id} tx={tx} network={network} />
       ))}
       {txs.length > 20 && (
         <div className='py-2 text-center text-xs text-fg-muted'>

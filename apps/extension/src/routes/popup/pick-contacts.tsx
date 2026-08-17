@@ -147,7 +147,7 @@ export function ContactPicker() {
                 <div
                   className={cn(
                     'w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold',
-                    isSelected ? 'bg-zigner-gold text-zigner-dark' : 'bg-elev-2 text-fg-muted',
+                    isSelected ? 'bg-zigner-gold text-zigner-gold-foreground' : 'bg-elev-2 text-fg-muted',
                   )}
                 >
                   {contact.name.charAt(0).toUpperCase()}
@@ -173,7 +173,7 @@ export function ContactPicker() {
                 >
                   {isSelected && (
                     <svg
-                      className='w-3 h-3 text-zigner-dark'
+                      className='w-3 h-3 text-zigner-gold-foreground'
                       fill='none'
                       viewBox='0 0 24 24'
                       stroke='currentColor'
@@ -201,7 +201,7 @@ export function ContactPicker() {
           className={cn(
             'flex-1 px-3 py-2 text-xs rounded-md font-medium transition-colors',
             selected.size > 0
-              ? 'bg-zigner-gold text-zigner-dark hover:bg-primary/90'
+              ? 'bg-zigner-gold text-zigner-gold-foreground hover:bg-primary/90'
               : 'bg-elev-2 text-fg-muted cursor-not-allowed',
           )}
           disabled={selected.size === 0}

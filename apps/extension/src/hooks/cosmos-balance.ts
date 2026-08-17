@@ -230,7 +230,11 @@ export const useCosmosDepositWallets = (chainId: CosmosChainId) => {
 
       const funded = scan.filter(w => w.balance > 0n);
       const receive = scan.find(w => w.balance === 0n) ?? scan[scan.length - 1];
-      return { funded, receive };
+      // `used` = every address up to (not including) the fresh receive pointer:
+      // funded now, or funded before and since drained. The Receive tab lists
+      // these so a user can see/return to any address they've deposited to.
+      const used = receive ? scan.filter(w => w.index < receive.index) : [];
+      return { funded, receive, used, all: scan };
     },
   });
 };

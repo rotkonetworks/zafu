@@ -119,7 +119,7 @@ const usePrefersReducedMotion = (): boolean => {
 };
 
 /**
- * deterministic visual fingerprint from a hex pubkey — a personal hanko.
+ * deterministic visual fingerprint from a hex pubkey - a personal hanko.
  *
  * A zid IS a signing identity, and the traditional mark of a signing
  * identity is a seal: a vermillion square carrying one character, pressed
@@ -151,7 +151,7 @@ const ZidFingerprint = ({ pubkeyHex, size = 40 }: { pubkeyHex: string; size?: nu
         fontSize: size * 0.48,
         transform: `rotate(${tilt}deg)`,
       }}
-      title='your seal — changes with each generation'
+      title='your seal - changes with each generation'
     >
       <span
         aria-hidden
@@ -290,7 +290,7 @@ export const IdentityPage = () => {
   // generation-aware: the stored value is generation 0 (written at vault
   // creation); rotated generations come from the derived-key cache, filled
   // on rotation below. Without this, rotating generations changed nothing
-  // on screen — the icon and zid stayed pinned to gen 0.
+  // on screen - the icon and zid stayed pinned to gen 0.
   const getMnemonic = useStore(selectGetMnemonic);
   const [genKeys, setGenKeys] = useState<Record<number, string>>({});
   useEffect(() => {
@@ -312,7 +312,7 @@ export const IdentityPage = () => {
         await deriveAndCacheZidGeneration(mnemonic, zidIndex);
         setGenKeys(await getZidGenKeys());
       } catch {
-        /* locked or non-mnemonic vault — stored gen-0 display only */
+        /* locked or non-mnemonic vault - stored gen-0 display only */
       }
     })();
   }, [zidIndex, zidPubkey, mnemonicVault, getMnemonic]);

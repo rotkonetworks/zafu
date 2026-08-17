@@ -226,7 +226,7 @@ export const SettingsZigner = () => {
                 variant='secondary'
                 size='sm'
                 onClick={() =>
-                  window.open('https://zigner.zafu.pro', '_blank', 'noopener,noreferrer')
+                  window.open('https://zafu.pro/zigner', '_blank', 'noopener,noreferrer')
                 }
               >
                 get zigner

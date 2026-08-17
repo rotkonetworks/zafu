@@ -23,7 +23,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       'inline-flex items-center justify-center font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none';
 
     const variants = {
-      primary: 'bg-zigner-gold text-zigner-dark hover:bg-primary/90',
+      primary: 'bg-zigner-gold text-zigner-gold-foreground hover:bg-primary/90',
       secondary: 'bg-elev-2 text-fg hover:bg-elev-1/80',
       ghost: 'hover:bg-elev-1',
       destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',

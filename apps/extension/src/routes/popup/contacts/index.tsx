@@ -123,7 +123,7 @@ function ContactModal({
           <button
             onClick={handleSave}
             disabled={!canSave}
-            className='flex-1 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
+            className='flex-1 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
           >
             save
           </button>
@@ -230,7 +230,7 @@ function AddressModal({
           <button
             onClick={handleSave}
             disabled={!canSave}
-            className='flex-1 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
+            className='flex-1 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
           >
             save
           </button>
@@ -722,7 +722,7 @@ export function ContactsPage() {
               setEditingContact(undefined);
               setShowContactModal(true);
             }}
-            className='flex items-center gap-1 rounded-lg bg-zigner-gold px-3 py-1.5 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors'
+            className='flex items-center gap-1 rounded-lg bg-zigner-gold px-3 py-1.5 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors'
           >
             <span className='i-ph-plus h-4 w-4' />
             add
@@ -762,7 +762,7 @@ export function ContactsPage() {
             className={cn(
               'rounded-md px-3 py-1 text-xs transition-colors',
               filter === 'all'
-                ? 'bg-zigner-gold text-zigner-dark'
+                ? 'bg-zigner-gold text-zigner-gold-foreground'
                 : 'bg-elev-2 text-fg-muted hover:bg-elev-1/80',
             )}
           >
@@ -773,7 +773,7 @@ export function ContactsPage() {
             className={cn(
               'rounded-md px-3 py-1 text-xs transition-colors',
               filter === 'favorites'
-                ? 'bg-zigner-gold text-zigner-dark'
+                ? 'bg-zigner-gold text-zigner-gold-foreground'
                 : 'bg-elev-2 text-fg-muted hover:bg-elev-1/80',
             )}
           >

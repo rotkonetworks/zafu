@@ -45,6 +45,13 @@ export interface ContactAddress {
 export interface Contact {
   id: string;
   name: string;
+  /**
+   * the contact's ZID (identity pubkey), when known. This is the identity
+   * ANCHOR - addresses are endpoints of this identity, not the identity itself.
+   * Optional + backward-compatible: an address-only contact can be linked to a
+   * ZID later. Foundation for the wallet-held social graph (see zafu#28).
+   */
+  zid?: string;
   /** general notes about the contact */
   notes?: string;
   favorite?: boolean;
@@ -67,7 +74,7 @@ export interface ContactsSlice {
   contacts: Contact[];
 
   /** add a new contact */
-  addContact: (data: { name: string; notes?: string }) => Promise<Contact>;
+  addContact: (data: { name: string; notes?: string; zid?: string }) => Promise<Contact>;
 
   /** update contact info (name, notes, favorite) */
   updateContact: (id: string, updates: { name?: string; notes?: string }) => Promise<void>;
@@ -149,6 +156,7 @@ export const createContactsSlice =
         const contact: Contact = {
           id: generateId(),
           name: data.name.trim(),
+          zid: data.zid?.trim() || undefined,
           notes: data.notes?.trim() || undefined,
           createdAt: Date.now(),
           addresses: [],

@@ -41,7 +41,7 @@ import {
   DEFAULT_STRATEGY,
   type SelectionStrategy,
 } from '../../../state/keyring/endpoint-strategy';
-import { NETWORKS, LAUNCHED_NETWORKS } from '../../../config/networks';
+import { NETWORKS, LAUNCHED_NETWORKS, getTopLevelNetworks } from '../../../config/networks';
 import { cn } from '@repo/ui/lib/utils';
 import { Button } from '@repo/ui/components/ui/button';
 import { NobleEndpointsEditor } from './noble-endpoints-editor';
@@ -129,7 +129,11 @@ export const SettingsNetworks = () => {
   return (
     <SettingsScreen title='networks' backPath={PopupPath.INDEX}>
       <div className='flex flex-col gap-1'>
-        {LAUNCHED_NETWORKS.map(networkId => {
+        {/* Top-level networks only. Subnetworks like Noble (parent: penumbra)
+            are not standalone rows here - Noble's RPC pool is edited under the
+            Penumbra panel via NobleEndpointsEditor, so listing it again would
+            be a confusing duplicate. */}
+        {getTopLevelNetworks().map(networkId => {
           const network = NETWORKS[networkId];
           const isEnabled = enabledNetworks.includes(networkId);
           const isActive = activeNetwork === networkId;
@@ -204,7 +208,9 @@ export const SettingsNetworks = () => {
                         : 'border-muted-foreground/50',
                     )}
                   >
-                    {isEnabled && <span className='i-ph-check h-3 w-3 text-zigner-dark' />}
+                    {isEnabled && (
+                      <span className='i-ph-check h-3 w-3 text-zigner-gold-foreground' />
+                    )}
                   </button>
                 </div>
               </div>
@@ -304,7 +310,6 @@ const regionLabel = (region: RpcEndpointRegion): string => {
 
 /** human labels for the endpoint-health selection strategies (smart pick). */
 const STRATEGY_LABELS: Record<SelectionStrategy, string> = {
-  privacy: 'privacy (tor + zidecar first)',
   fastest: 'fastest (lowest latency)',
   'most-synced': 'most synced (closest to tip)',
   random: 'random (rotates each pick)',
@@ -520,7 +525,6 @@ const ZcashEndpointPanel = ({
               {group.presets.map(p => (
                 <option key={p.id} value={p.id}>
                   {p.label}
-                  {p.backend === 'zidecar' ? ' · trustless' : ''}
                   {optionSuffix(p.url, p.id)}
                 </option>
               ))}

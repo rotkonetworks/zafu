@@ -56,12 +56,13 @@ export const COSMOS_CHAINS: Record<CosmosChainId, CosmosChainConfig> = {
     denom: 'uusdc',
     decimals: 6,
     rpcEndpoint: 'https://noble-rpc.polkachu.com',
-    // Interchangeable public Noble RPCs - rotated per burner for privacy.
+    // Interchangeable public Noble RPCs - rotated per address for privacy.
+    // Only verified-reachable hosts ship as defaults; users can add their own
+    // in Settings -> networks -> Penumbra -> Noble. (cosmos.directory is itself
+    // a load-balancing proxy, so it adds provider diversity on its own.)
     rpcEndpoints: [
       'https://noble-rpc.polkachu.com',
       'https://rpc.cosmos.directory/noble',
-      'https://noble-rpc.lavenderfive.com',
-      'https://noble-rpc.publicnode.com',
     ],
     restEndpoint: 'https://noble-api.polkachu.com',
     gasPrice: '0.1uusdc',

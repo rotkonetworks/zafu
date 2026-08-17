@@ -1,5 +1,5 @@
 /**
- * Onboarding completion — final step of the shell stepper.
+ * Onboarding completion - final step of the shell stepper.
  *
  * Removed the dense link-grid (poker / chat / dex / docs) that competed
  * for attention with the actual primary action ("open zafu"). A user
@@ -20,7 +20,7 @@ const openSidePanel = async () => {
     if (tab?.windowId) {
       await chrome.sidePanel.open({ windowId: tab.windowId });
       // small grace period so the panel has fully attached before we tear
-      // the tab down — without this, some Chrome builds race the panel's
+      // the tab down - without this, some Chrome builds race the panel's
       // initial paint and the user sees a blink instead of the wallet.
       setTimeout(() => window.close(), 250);
       return;
@@ -28,7 +28,7 @@ const openSidePanel = async () => {
   } catch {
     /* fall through to popup window fallback */
   }
-  // side panel not supported or no active tab — fall back to popup
+  // side panel not supported or no active tab - fall back to popup
   await chrome.windows.create({
     url: chrome.runtime.getURL('popup.html'),
     type: 'popup',
@@ -42,7 +42,7 @@ export const OnboardingSuccess = () => {
   return (
     <FadeTransition>
       <div className='flex h-full flex-col items-center justify-center gap-7 py-6 text-center'>
-        {/* tiny checkmark in a soft round badge — restrained */}
+        {/* tiny checkmark in a soft round badge - restrained */}
         <span className='inline-flex h-12 w-12 items-center justify-center rounded-full bg-zigner-gold/15'>
           <span className='i-ph-check h-5 w-5 text-zigner-gold' />
         </span>

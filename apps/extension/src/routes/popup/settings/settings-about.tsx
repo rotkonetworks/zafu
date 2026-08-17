@@ -21,7 +21,7 @@ export const SettingsAbout = () => {
           <ul className='text-xs text-fg-muted space-y-0.5'>
             <li>zcash - orchard + ironwood shielded pools</li>
             <li>penumbra - shielded defi</li>
-            <li>cosmos IBC - noble, cosmos hub</li>
+            <li>cosmos IBC - noble</li>
           </ul>
         </div>
 
@@ -47,7 +47,7 @@ export const SettingsAbout = () => {
               github
             </a>
             <a
-              href='https://zigner.zafu.pro'
+              href='https://zafu.pro/zigner'
               target='_blank'
               rel='noopener noreferrer'
               className='flex items-center gap-1.5 text-xs text-zigner-gold hover:underline transition-colors'

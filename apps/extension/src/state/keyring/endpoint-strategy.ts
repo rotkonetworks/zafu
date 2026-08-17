@@ -2,9 +2,7 @@
  * Endpoint selection strategies.
  *
  * Given probed endpoints, rank them best-first per a user-selected policy:
- *   privacy      — .onion + zidecar > zidecar > .onion > public lwd
- *                  (tiebreak: latency). This is the shipped default.
- *   fastest      — lowest latency first (Zashi's default).
+ *   fastest      — lowest latency first (Zashi's default, and ours).
  *   most-synced  — smallest behindBy first.
  *   random       — session-random shuffle; picks change on rerank.
  *
@@ -16,8 +14,8 @@
 import type { ZcashEndpointPreset } from '../../config/zcash-endpoints';
 import type { EndpointHealth } from './endpoint-health';
 
-export type SelectionStrategy = 'privacy' | 'fastest' | 'most-synced' | 'random';
-export const DEFAULT_STRATEGY: SelectionStrategy = 'privacy';
+export type SelectionStrategy = 'fastest' | 'most-synced' | 'random';
+export const DEFAULT_STRATEGY: SelectionStrategy = 'fastest';
 
 /** Endpoints > this many blocks behind reference are excluded. */
 export const MAX_HEALTHY_BEHIND = 1000;
@@ -43,9 +41,6 @@ export function rankEndpoints(
   }
   const arr = healthy.slice();
   switch (strategy) {
-    case 'fastest':
-      arr.sort((a, b) => a.health!.latencyMs - b.health!.latencyMs);
-      return arr;
     case 'most-synced':
       arr.sort((a, b) => (a.health!.behindBy ?? Infinity) - (b.health!.behindBy ?? Infinity));
       return arr;
@@ -57,15 +52,9 @@ export function rankEndpoints(
         [arr[i], arr[j]] = [arr[j]!, arr[i]!];
       }
       return arr;
-    case 'privacy':
+    case 'fastest':
     default:
-      arr.sort((a, b) => {
-        const diff = privacyRank(b.preset) - privacyRank(a.preset);
-        if (diff !== 0) {
-          return diff;
-        }
-        return a.health!.latencyMs - b.health!.latencyMs;
-      });
+      arr.sort((a, b) => a.health!.latencyMs - b.health!.latencyMs);
       return arr;
   }
 }
@@ -89,27 +78,4 @@ function isHealthy(c: Candidate): boolean {
     return false;
   }
   return true;
-}
-
-/**
- * Privacy-ranking key. Higher is more private.
- *
- *   4 = tor .onion + zidecar   (client IP hidden AND trustless verification)
- *   3 = zidecar (any host)     (trustless verification, IP visible)
- *   2 = tor .onion + lwd       (client IP hidden, trusted server)
- *   1 = public lightwalletd    (everything visible)
- */
-function privacyRank(preset: ZcashEndpointPreset): number {
-  const isOnion = preset.url.toLowerCase().includes('.onion');
-  const isZidecar = preset.backend === 'zidecar';
-  if (isOnion && isZidecar) {
-    return 4;
-  }
-  if (isZidecar) {
-    return 3;
-  }
-  if (isOnion) {
-    return 2;
-  }
-  return 1;
 }

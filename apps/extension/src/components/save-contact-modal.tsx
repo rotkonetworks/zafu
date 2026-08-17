@@ -71,7 +71,7 @@ export function SaveContactModal({ address, network, onDone, onCancel }: SaveCon
               <button
                 onClick={() => void handleSaveExisting()}
                 disabled={saving}
-                className='flex-1 rounded-lg bg-zigner-gold py-2 text-xs font-medium text-zigner-dark hover:bg-primary/90 transition-colors disabled:opacity-50'
+                className='flex-1 rounded-lg bg-zigner-gold py-2 text-xs font-medium text-zigner-gold-foreground hover:bg-primary/90 transition-colors disabled:opacity-50'
               >
                 add address
               </button>
@@ -109,7 +109,7 @@ export function SaveContactModal({ address, network, onDone, onCancel }: SaveCon
             <button
               onClick={() => void handleSaveNew()}
               disabled={!newName.trim() || saving}
-              className='flex-1 rounded-lg bg-zigner-gold py-2 text-xs font-medium text-zigner-dark hover:bg-primary/90 transition-colors disabled:opacity-50'
+              className='flex-1 rounded-lg bg-zigner-gold py-2 text-xs font-medium text-zigner-gold-foreground hover:bg-primary/90 transition-colors disabled:opacity-50'
             >
               save
             </button>

@@ -323,7 +323,7 @@ export const ShieldTransparent = ({
           <div className='flex w-full gap-2'>
             <button
               onClick={() => setZignerStep('scanning')}
-              className='flex-1 bg-zigner-gold py-1.5 text-xs font-medium text-zigner-dark transition-colors hover:bg-primary/90'
+              className='flex-1 bg-zigner-gold py-1.5 text-xs font-medium text-zigner-gold-foreground transition-colors hover:bg-primary/90'
             >
               scan signature
             </button>

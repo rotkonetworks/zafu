@@ -11,6 +11,7 @@ import { getTransparentHistoryInWorker } from '../../../state/keyring/network-wo
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Sensitive } from '../../../components/sensitive';
 import { ToggleSwitch } from '../../../components/toggle-switch';
+import { NobleReceivePanel } from '../home/cosmos-subwallets';
 import { useBackNav } from '../../../utils/navigate';
 import { useLocation } from 'react-router-dom';
 import { PopupPath } from '../paths';
@@ -511,7 +512,7 @@ function IbcDepositSection({
             <button
               onClick={handleShield}
               disabled={!canSubmit}
-              className='w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark lowercase hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
+              className='w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground lowercase hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
             >
               {txStatus === 'signing' ? 'shielding...' : 'shield assets'}
             </button>
@@ -1023,7 +1024,7 @@ function ReceiveTab({
   );
 }
 
-type ReceiveMode = 'receive' | 'shield';
+type ReceiveMode = 'receive' | 'noble' | 'shield';
 
 export function ReceivePage() {
   const activeNetwork = useStore(selectActiveNetwork);
@@ -1056,32 +1057,25 @@ export function ReceivePage() {
         {/* tabs - Penumbra only */}
         {isPenumbra && (
           <div className='mb-4 flex rounded-lg bg-elev-2 p-1'>
-            <button
-              onClick={() => setMode('receive')}
-              className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
-                mode === 'receive'
-                  ? 'bg-canvas text-fg shadow-sm'
-                  : 'text-fg-muted hover:text-fg-high'
-              }`}
-            >
-              receive
-            </button>
-            <button
-              onClick={() => setMode('shield')}
-              className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
-                mode === 'shield'
-                  ? 'bg-canvas text-fg shadow-sm'
-                  : 'text-fg-muted hover:text-fg-high'
-              }`}
-            >
-              ibc shield
-            </button>
+            {(['receive', 'noble', 'shield'] as const).map(m => (
+              <button
+                key={m}
+                onClick={() => setMode(m)}
+                className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
+                  mode === m ? 'bg-canvas text-fg shadow-sm' : 'text-fg-muted hover:text-fg-high'
+                }`}
+              >
+                {m === 'shield' ? 'ibc shield' : m}
+              </button>
+            ))}
           </div>
         )}
 
         {/* content */}
-        {mode === 'receive' || !isPenumbra ? (
+        {!isPenumbra || mode === 'receive' ? (
           <ReceiveTab address={address} loading={loading} activeNetwork={activeNetwork} />
+        ) : mode === 'noble' ? (
+          <NobleReceivePanel />
         ) : (
           <IbcDepositSection
             selectedKeyInfo={selectedKeyInfo}

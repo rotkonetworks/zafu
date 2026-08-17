@@ -278,7 +278,7 @@ function SaveContactPrompt({
       <div className='mt-2 flex gap-2'>
         <button
           onClick={onSave}
-          className='flex-1 rounded-md bg-zigner-gold px-3 py-1.5 text-xs font-medium text-zigner-dark transition-colors hover:bg-zigner-gold-light'
+          className='flex-1 rounded-md bg-zigner-gold px-3 py-1.5 text-xs font-medium text-zigner-gold-foreground transition-colors hover:bg-zigner-gold-light'
         >
           save contact
         </button>
@@ -807,7 +807,7 @@ function CosmosSend({
                 }
               }}
               disabled={!contactName.trim()}
-              className='flex-1 rounded-md bg-zigner-gold px-3 py-1.5 text-xs font-medium text-zigner-dark transition-colors disabled:opacity-50'
+              className='flex-1 rounded-md bg-zigner-gold px-3 py-1.5 text-xs font-medium text-zigner-gold-foreground transition-colors disabled:opacity-50'
             >
               save
             </button>
@@ -1711,7 +1711,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
                 }
               }}
               disabled={!contactName.trim()}
-              className='flex-1 rounded-md bg-zigner-gold px-3 py-1.5 text-xs font-medium text-zigner-dark transition-colors disabled:opacity-50'
+              className='flex-1 rounded-md bg-zigner-gold px-3 py-1.5 text-xs font-medium text-zigner-gold-foreground transition-colors disabled:opacity-50'
             >
               save
             </button>
@@ -1774,7 +1774,9 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
   );
 }
 
-const COSMOS_CHAIN_IDS: CosmosChainId[] = ['noble', 'cosmoshub'];
+// Noble only for now - Cosmos Hub has no live channel to Penumbra, so shielding
+// from it doesn't work. Re-add when its channel/client is configured.
+const COSMOS_CHAIN_IDS: CosmosChainId[] = ['noble'];
 
 /** location state for prefilling forms from inbox */
 interface SendLocationState {

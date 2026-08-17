@@ -98,6 +98,14 @@ export interface PrivacySettings {
   enablePriceFetching: boolean;
 
   /**
+   * show "open in block explorer" links on transactions.
+   * when false (default): copy-only, nothing leaves the wallet.
+   * when true: a link opens a third-party explorer, which sees your IP and
+   * that you looked up that specific tx. off by default for that reason.
+   */
+  enableExplorerLinks: boolean;
+
+  /**
    * SOCKS5 proxy for all extension network traffic.
    * routes zidecar, license, relay, and rpc connections through proxy.
    * hides IP from all servers. uses chrome.proxy API.
@@ -159,6 +167,7 @@ const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = {
   enableTransactionHistory: false,
   enableBackgroundSync: false,
   enablePriceFetching: false,
+  enableExplorerLinks: false,
   proxy: { enabled: false, host: '', port: 1080 },
   enableIdentity: true,
   hideBalances: false,

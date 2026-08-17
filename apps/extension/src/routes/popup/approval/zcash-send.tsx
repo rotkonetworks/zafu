@@ -303,7 +303,7 @@ export function ZcashSendApproval() {
             'flex-1 py-2.5 rounded-md text-data lowercase transition-colors',
             countdown > 0 || status !== 'review'
               ? 'bg-elev-1 text-fg-dim cursor-not-allowed'
-              : 'bg-zigner-gold text-zigner-dark hover:bg-zigner-gold-light',
+              : 'bg-zigner-gold text-zigner-gold-foreground hover:bg-zigner-gold-light',
           )}
           disabled={countdown > 0 || status !== 'review'}
           onClick={handleApprove}

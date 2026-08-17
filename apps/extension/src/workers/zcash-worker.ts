@@ -2771,6 +2771,14 @@ const buildWitnessesIronwood = async (
     const metaStore = tx.objectStore('meta');
     metaStore.put({ walletId, key: 'ironwoodTreeFrontier', value: seeded.end_frontier_hex });
     metaStore.put({ walletId, key: 'ironwoodTreeFrontierHeight', value: anchorHeight });
+    // Persist the tree size for this exact frontier too. Without it the stored
+    // `ironwoodTreeSize` stays at its pre-send value while the frontier moves to
+    // `endTreeSize`, so the next sync-start validity check
+    // (iwSize(frontier) === ironwoodTreeSize) fails, the wallet rebootstraps,
+    // and it wipes the very witnesses we just cached - putting every send back
+    // on the full-replay slow path. Writing endTreeSize keeps the
+    // (frontier, size) pair self-consistent so the fast path survives.
+    metaStore.put({ walletId, key: 'ironwoodTreeSize', value: endTreeSize });
     await txComplete(tx);
     console.log(
       `[zcash-worker] ironwood: cached ${seeded.witnesses.length} witnesses at tree size ` +
@@ -2810,7 +2818,7 @@ const buildWitnesses = async (
     throw new Error('buildWitnesses called with no notes');
   }
   if (pool === 'ironwood') {
-    return buildWitnessesIronwood(client, walletId, notes, anchorHeight, emitProgress);
+    return buildWitnessesIronwood(client, walletId, notes, anchorHeight, onProgress);
   }
 
   const positions = notes.map(n => n.position);
@@ -3271,10 +3279,17 @@ const runSync = async (
       runningFrontier = ts.orchardTree;
       runningFrontierHeight = currentHeight;
       orchardTreeSize = Number(wasmModule.frontier_tree_size(runningFrontier));
-      // frontier refetched => any in-memory witness may be stale relative
-      // to the new tree size. Drop witnesses so spend time triggers a clean
-      // backfill rather than silently advancing a gapped witness.
+      // frontier refetched => any in-memory ORCHARD witness may be stale
+      // relative to the new orchard tree size. Drop orchard witnesses so spend
+      // time triggers a clean backfill rather than silently advancing a gapped
+      // witness. Only the orchard frontier was refetched here - the ironwood
+      // frontier is validated separately just below - so ironwood witnesses
+      // must be left intact (clearing them would strand the ironwood fast path
+      // and force a full replay on the next ironwood send).
       for (const note of state.notes) {
+        if (poolOf(note) === 'ironwood') {
+          continue;
+        }
         note.witness_hex = undefined;
         note.witness_tree_size = undefined;
       }
@@ -3632,12 +3647,24 @@ const runSync = async (
               );
               runningFrontier = syncTs.orchardTree;
               runningFrontierHeight = currentHeight;
+              // Only the ORCHARD frontier diverged here (localRoot/netRoot are
+              // orchard roots), so wipe only orchard witnesses. Ironwood rides a
+              // separate frontier and is reconciled by its own cross-check just
+              // below - clearing it here would spuriously drop good ironwood
+              // witnesses on an orchard-only reorg (or on transient indexer lag)
+              // and force the next send back onto the full replay.
               const wipeState = await loadState(walletId);
               for (const note of wipeState.notes) {
+                if (poolOf(note) === 'ironwood') {
+                  continue;
+                }
                 note.witness_hex = undefined;
                 note.witness_tree_size = undefined;
               }
               for (const note of state.notes) {
+                if (poolOf(note) === 'ironwood') {
+                  continue;
+                }
                 note.witness_hex = undefined;
                 note.witness_tree_size = undefined;
               }
@@ -3645,9 +3672,119 @@ const runSync = async (
               const wipeTx = wipeDb.transaction('notes', 'readwrite');
               const notesStore = wipeTx.objectStore('notes');
               for (const note of wipeState.notes) {
+                // Only orchard witnesses were cleared above; ironwood notes are
+                // unmodified. Skip them - writing an ironwood note through this
+                // raw put (no witness-store split) would stamp its witness_hex
+                // onto the orchard-style note record, which loadState would then
+                // trust if the witnesses-ironwood row were ever deleted.
+                if (poolOf(note) === 'ironwood') {
+                  continue;
+                }
                 notesStore.put({ ...note, walletId });
               }
               await txComplete(wipeTx);
+            }
+          }
+
+          // ── ironwood catch-up cross-check ──
+          //
+          // The batch loop keeps `ironwoodFrontier` in lockstep with the
+          // per-note witnesses (each batch advances both through one
+          // witness_sync_update_ironwood) and saveBatch already persisted that
+          // aligned frontier. Blindly overwriting it here with the server's
+          // tree - as this block used to - desyncs the frontier from the
+          // witnesses: `ironwoodTreeSize` still reflects the maintained lineage,
+          // so on the next sync-start the validity check (iwSize(frontier) ===
+          // ironwoodTreeSize) fails, the wallet rebootstraps, and every stored
+          // ironwood witness is wiped. The spend path then has to replay the
+          // whole range to rebuild witnesses (~80s+ per send). Instead we mirror
+          // the orchard cross-check: keep the maintained frontier when its root
+          // matches the network (fast path stays available → ~instant witness
+          // build), and only on a genuine divergence wipe witnesses and
+          // re-anchor on the server tree. Runs before metaTx opens so the
+          // optional wipe's own transaction can't race the meta write.
+          let iwPersistFrontier = '';
+          let iwPersistSize: number | undefined;
+          if (iwSupported && syncTs.ironwoodTree && iwSizeFn) {
+            const iwRootFn = wasmModule?.tree_root_hex_ironwood;
+            let aligned = false;
+            if (ironwoodFrontier && iwRootFn) {
+              try {
+                aligned = iwRootFn(ironwoodFrontier) === iwRootFn(syncTs.ironwoodTree);
+              } catch (e) {
+                console.warn(
+                  '[zcash-worker] ironwood root cross-check threw, re-anchoring on server tree:',
+                  e,
+                );
+              }
+            }
+            if (aligned) {
+              // Maintained frontier is correct and aligned with the witnesses.
+              // Advance the in-memory height to match what we persist here, so a
+              // subsequent zero-ironwood-action batch's saveBatch re-persists a
+              // consistent (frontier, height) pair rather than a stale height
+              // that would fail the next sync-start validity check and force a
+              // needless rebootstrap + witness wipe.
+              ironwoodFrontierHeight = currentHeight;
+              iwPersistFrontier = ironwoodFrontier;
+              iwPersistSize = ironwoodTreeSize;
+            } else if (ironwoodFrontier) {
+              // diverged (reorg / drift): drop ironwood witnesses and re-anchor
+              console.warn(
+                `[zcash-worker] ironwood frontier diverged from network at catch-up ${currentHeight} — wiping witnesses`,
+              );
+              ironwoodFrontier = syncTs.ironwoodTree;
+              ironwoodFrontierHeight = currentHeight;
+              try {
+                ironwoodTreeSize = Number(iwSizeFn(syncTs.ironwoodTree));
+              } catch {
+                /* keep prior size if the server tree is unreadable */
+              }
+              iwPersistFrontier = ironwoodFrontier;
+              iwPersistSize = ironwoodTreeSize;
+              // Ironwood witnesses live in the 'witnesses-ironwood' store, not on
+              // the note record - clearing the note field alone is a no-op
+              // because loadState() re-attaches the stale rows by nullifier on
+              // the next run. Delete the rows outright, mirroring
+              // rewindScanCursor; they are rebuilt from the re-anchored frontier.
+              try {
+                const wdb = await getDb();
+                const wtx = wdb.transaction('witnesses-ironwood', 'readwrite');
+                const wstore = wtx.objectStore('witnesses-ironwood');
+                const keys: IDBValidKey[] = await new Promise((resolve, reject) => {
+                  const req = wstore.index('byWallet').getAllKeys(walletId);
+                  req.onsuccess = () => resolve(req.result);
+                  req.onerror = () => reject(req.error);
+                });
+                for (const key of keys) {
+                  wstore.delete(key);
+                }
+                await txComplete(wtx);
+              } catch (e) {
+                console.warn('[zcash-worker] catch-up: could not clear ironwood witnesses:', e);
+              }
+              for (const note of state.notes) {
+                if (poolOf(note) === 'ironwood') {
+                  note.witness_hex = undefined;
+                  note.witness_tree_size = undefined;
+                }
+              }
+            } else {
+              // No maintained frontier yet (fresh wallet, or server only now
+              // serves the NU6.3 tree): bootstrap from the server tree, and
+              // adopt it in memory too so the rest of this run maintains
+              // witnesses against it and saveBatch persists a consistent
+              // (frontier, size, height) triple rather than a size with no
+              // matching frontier.
+              ironwoodFrontier = syncTs.ironwoodTree;
+              ironwoodFrontierHeight = currentHeight;
+              try {
+                ironwoodTreeSize = Number(iwSizeFn(syncTs.ironwoodTree));
+              } catch {
+                /* leave size to the next bootstrap */
+              }
+              iwPersistFrontier = ironwoodFrontier;
+              iwPersistSize = ironwoodTreeSize;
             }
           }
 
@@ -3659,14 +3796,21 @@ const runSync = async (
           metaTx
             .objectStore('meta')
             .put({ walletId, key: 'orchardTreeFrontierHeight', value: currentHeight });
-          // ironwood mirror - only once the server serves the NU6.3 tree
-          if (iwSupported && syncTs.ironwoodTree) {
+          // ironwood mirror - persist the frontier chosen by the cross-check
+          // above, keeping frontier + size + witnesses mutually consistent so
+          // the spend-time fast path stays available
+          if (iwSupported && iwPersistFrontier) {
             metaTx
               .objectStore('meta')
-              .put({ walletId, key: 'ironwoodTreeFrontier', value: syncTs.ironwoodTree });
+              .put({ walletId, key: 'ironwoodTreeFrontier', value: iwPersistFrontier });
             metaTx
               .objectStore('meta')
               .put({ walletId, key: 'ironwoodTreeFrontierHeight', value: currentHeight });
+            if (iwPersistSize !== undefined) {
+              metaTx
+                .objectStore('meta')
+                .put({ walletId, key: 'ironwoodTreeSize', value: iwPersistSize });
+            }
           }
           await txComplete(metaTx);
           console.log(`[zcash-worker] cached tree frontier at height ${currentHeight}`);
@@ -3940,15 +4084,41 @@ const runSync = async (
           pendingPositions.push(position);
         }
 
-        // detect spent notes: check if any action nullifier matches an owned note's nullifier
+        // detect spent notes: a nullifier in this block matches an owned note.
+        // Two cases, handled in one pass:
+        //  1. a spend seen for the first time here;
+        //  2. a spend we already marked locally at broadcast (its nullifier is
+        //     already in spentNullifiers) whose CONFIRMATION HEIGHT we never
+        //     recorded — because this loop used to skip already-marked notes.
+        //     markNotesSpentLocally sets spent_by_txid but has no height to give,
+        //     so without backfilling it here spent_at_height stays 0, the send's
+        //     chain-derived entry gets height 0, and reconcile (which confirms
+        //     only on a real height) shows the payment pending forever even
+        //     after its block is scanned. So always backfill height/txid when the
+        //     nullifier appears on chain, marked or not.
         spentUpdatedNotes = [];
         for (const note of state.notes) {
-          if (!state.spentNullifiers.has(note.nullifier) && actionNullifiers.has(note.nullifier)) {
+          if (!actionNullifiers.has(note.nullifier)) {
+            continue;
+          }
+          const firstSeen = !state.spentNullifiers.has(note.nullifier);
+          if (firstSeen) {
             state.spentNullifiers.add(note.nullifier);
-            // record which txid spent this note and at which height
-            note.spent_by_txid = nfToTxid.get(note.nullifier) ?? '';
-            note.spent_at_height = nfToHeight.get(note.nullifier) ?? 0;
             newSpent.push(note.nullifier);
+          }
+          // Only overwrite spent_by_txid when the scan actually carries a txid
+          // (lightwalletd often does not populate per-action txids); never clobber
+          // the value markNotesSpentLocally wrote at broadcast with ''.
+          const spentTxid = nfToTxid.get(note.nullifier);
+          if (spentTxid) {
+            note.spent_by_txid = spentTxid;
+          }
+          const spentHeight = nfToHeight.get(note.nullifier);
+          const heightChanged = !!spentHeight && note.spent_at_height !== spentHeight;
+          if (heightChanged) {
+            note.spent_at_height = spentHeight;
+          }
+          if (firstSeen || heightChanged || spentTxid) {
             spentUpdatedNotes.push(note);
           }
         }
@@ -3971,6 +4141,16 @@ const runSync = async (
         const newNullifiers = new Set(newNotes.map(n => n.nullifier));
         const existingInput: { id: string; witness_hex: string }[] = [];
         for (const note of state.notes) {
+          // ORCHARD maintenance only. Without this guard, ironwood notes (which
+          // now carry a persisted witness_hex) leak into witness_sync_update: the
+          // orchard tree advances them over orchard actions - corrupting the
+          // witness - and the update loop below stamps them with the orchard
+          // newTreeSize (~50M), which then fails the ironwood fast-path size
+          // check (frontier ~62k) and forces a full replay every send. The
+          // ironwood pool has its own maintenance pass with the mirror filter.
+          if (poolOf(note) === 'ironwood') {
+            continue;
+          }
           if (state.spentNullifiers.has(note.nullifier)) {
             continue;
           }
@@ -4116,19 +4296,34 @@ const runSync = async (
           console.error('[zcash-worker] scan_actions_ironwood_parallel crashed:', err);
         }
 
-        // spent detection: ironwood nullifiers spend ironwood notes
+        // spent detection: ironwood nullifiers spend ironwood notes. Same
+        // two-case handling as the orchard branch above - backfill the
+        // confirmation height/txid for notes already marked spent at broadcast,
+        // or the send stays pending forever once its own block is scanned.
         for (const note of state.notes) {
           if (poolOf(note) !== 'ironwood') {
             continue;
           }
-          if (
-            !state.spentNullifiers.has(note.nullifier) &&
-            iwActionNullifiers.has(note.nullifier)
-          ) {
+          if (!iwActionNullifiers.has(note.nullifier)) {
+            continue;
+          }
+          const firstSeen = !state.spentNullifiers.has(note.nullifier);
+          if (firstSeen) {
             state.spentNullifiers.add(note.nullifier);
-            note.spent_by_txid = iwNfToTxid.get(note.nullifier) ?? '';
-            note.spent_at_height = iwNfToHeight.get(note.nullifier) ?? 0;
             newSpent.push(note.nullifier);
+          }
+          // never clobber the broadcast-time spent_by_txid with an empty scan
+          // txid (lightwalletd often serves no per-action txid).
+          const iwSpentTxid = iwNfToTxid.get(note.nullifier);
+          if (iwSpentTxid) {
+            note.spent_by_txid = iwSpentTxid;
+          }
+          const iwSpentHeight = iwNfToHeight.get(note.nullifier);
+          const iwHeightChanged = !!iwSpentHeight && note.spent_at_height !== iwSpentHeight;
+          if (iwHeightChanged) {
+            note.spent_at_height = iwSpentHeight;
+          }
+          if (firstSeen || iwHeightChanged || iwSpentTxid) {
             ironwoodUpdatedNotes.set(note.nullifier, note);
           }
         }
@@ -4256,12 +4451,21 @@ const runSync = async (
               );
               runningFrontier = snapshotTs.orchardTree;
               runningFrontierHeight = currentHeight;
+              // Orchard-only divergence (see catch-up block): preserve ironwood
+              // witnesses, which ride a separate frontier and are reconciled by
+              // the ironwood catch-up cross-check / spend-time drift check.
               const wipeState = await loadState(walletId);
               for (const note of wipeState.notes) {
+                if (poolOf(note) === 'ironwood') {
+                  continue;
+                }
                 note.witness_hex = undefined;
                 note.witness_tree_size = undefined;
               }
               for (const note of state.notes) {
+                if (poolOf(note) === 'ironwood') {
+                  continue;
+                }
                 note.witness_hex = undefined;
                 note.witness_tree_size = undefined;
               }
@@ -4269,6 +4473,11 @@ const runSync = async (
               const wipeTx = wipeDb.transaction('notes', 'readwrite');
               const notesStore = wipeTx.objectStore('notes');
               for (const note of wipeState.notes) {
+                // orchard-only wipe: skip ironwood so its witness_hex is not
+                // written onto the note record (see the catch-up wipe note).
+                if (poolOf(note) === 'ironwood') {
+                  continue;
+                }
                 notesStore.put({ ...note, walletId });
               }
               await txComplete(wipeTx);
@@ -5248,6 +5457,54 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         let reconciled: HistoryTx[];
         try {
           const sent = await idbGetAllByIndex<SentTxRecord>('sent', 'byWallet', walletId);
+
+          // Direct confirmation lookup. Reconcile confirms a send only on a real
+          // block height, and until now that height came exclusively from the
+          // scan tagging our spent input note. That path is fragile: a block
+          // scanned before the spend was recorded, or a backend that serves
+          // incomplete ironwood actions for a block, leaves our own mined tx with
+          // no height, so it shows "pending" forever even though the explorer has
+          // it confirmed. So for any still-pending send with no height yet, ask
+          // the node outright which block the txid is in - it is OUR broadcast
+          // txid on the SAME node, so this reveals nothing the node did not
+          // already see. Bounded to pending, height-less records; once confirmed,
+          // confirmedHeight is persisted and the lookup never runs for it again.
+          const haveRealHeight = new Set(histTxs.filter(t => t.height > 0).map(t => t.id));
+          const needLookup = sent.filter(
+            s =>
+              !(typeof s.confirmedHeight === 'number' && s.confirmedHeight > 0) &&
+              !haveRealHeight.has(s.txid),
+          );
+          if (needLookup.length > 0) {
+            try {
+              const lookupClient = await makeZcashClient(histServerUrl);
+              const found = await Promise.all(
+                needLookup.map(async s => {
+                  try {
+                    const raw = await lookupClient.getTransaction(hexDecode(s.txid));
+                    return raw.height && raw.height > 0 ? { s, height: raw.height } : null;
+                  } catch {
+                    return null; // a failed lookup just leaves it pending
+                  }
+                }),
+              );
+              for (const hit of found) {
+                if (!hit) {
+                  continue;
+                }
+                histTxs.push({
+                  id: hit.s.txid,
+                  height: hit.height,
+                  type: hit.s.kind === 'shield' ? 'shield' : 'send',
+                  amount: (BigInt(hit.s.amount) + BigInt(hit.s.fee)).toString(),
+                  asset: 'ZEC',
+                });
+              }
+            } catch (e) {
+              console.warn('[zcash-worker] get-history: pending-send height lookup failed:', e);
+            }
+          }
+
           const result = reconcileSentTxs({
             chainTxs: histTxs,
             sent,
@@ -5798,8 +6055,14 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 ],
               })) as string;
             } catch (e) {
-              // do NOT log the seed or the caught args; message only
-              console.error('[zcash-worker] build_signed_ironwood_send failed');
+              // do NOT log the seed or the caught args; message only. The
+              // message is what tells us WHY the build failed (bad anchor,
+              // path/position mismatch, diversifier reconstruction, an offscreen
+              // RPC drop) - logging it without a reason was undebuggable.
+              console.error(
+                '[zcash-worker] build_signed_ironwood_send failed:',
+                e instanceof Error ? e.message : String(e),
+              );
               throw e;
             } finally {
               clearInterval(iwProvingTicker);

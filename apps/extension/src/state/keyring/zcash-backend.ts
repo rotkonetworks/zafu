@@ -141,7 +141,7 @@ export function isZidecarEndpoint(serverUrl: string): boolean {
 
 /** Trust description used in UI badges / tooltips. Single source of truth. */
 export function backendTrustDescription(backend: ZcashBackend): {
-  readonly label: 'trustless' | 'partial' | 'trusted';
+  readonly label: 'trust-minimized' | 'trusted';
   readonly summary: string;
 } {
   if (backend === 'zidecar') {
@@ -158,7 +158,7 @@ export function backendTrustDescription(backend: ZcashBackend): {
       // fabricated chain state, and block/action OMISSION is not detectable
       // at all. Cross-endpoint verification is the design's stated mitigation
       // and is not wired up.
-      label: 'partial',
+      label: 'trust-minimized',
       summary:
         'Merkle proofs for nullifiers and commitments are checked locally, so ' +
         'the server cannot forge those paths. It can still omit blocks or ' +

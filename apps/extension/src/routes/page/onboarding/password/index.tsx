@@ -1,12 +1,12 @@
 /**
- * Set-password — last user-input step before the wallet is sealed. Lives
+ * Set-password - last user-input step before the wallet is sealed. Lives
  * inside OnboardingShell now, so this screen only renders the form +
  * primary action. The shell provides the rounded pane, brand rail and
  * stepper.
  *
  * For new users the password is the *only* thing standing between a
  * compromised local context and their seed phrase, so the copy is
- * deliberately honest — not "secure your wallet" boilerplate but the
+ * deliberately honest - not "secure your wallet" boilerplate but the
  * actual concrete thing the password does.
  */
 
@@ -30,7 +30,7 @@ export const SetPassword = () => {
   const location = useLocation();
   const origin = getSeedPhraseOrigin(location);
 
-  // Soft floor — currently 1 (only an empty password is rejected). The
+  // Soft floor - currently 1 (only an empty password is rejected). The
   // seed phrase is the real root of trust; the password just gates
   // local-at-rest access to the encrypted vault. We don't want to
   // paternalize the throwaway/test-wallet case or fight sophisticated
@@ -62,7 +62,7 @@ export const SetPassword = () => {
           <h2 className='text-2xl lowercase tracking-[-0.01em] text-fg-high'>set a password</h2>
           <p className='text-xs text-fg-muted lowercase leading-snug'>
             encrypts your seed phrase on this device. you'll enter it again every time the wallet
-            locks. there's no way to recover it — pick something you'll remember.
+            locks. there's no way to recover it - pick something you'll remember.
           </p>
         </header>
 

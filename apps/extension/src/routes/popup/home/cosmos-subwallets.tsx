@@ -108,13 +108,16 @@ const DepositRow = memo(
     onShield: () => void;
   }) => {
     const config = COSMOS_CHAINS[chainId];
+    // an address used before but since drained: shown for reference (copy), but
+    // there's nothing to send or shield.
+    const hasBalance = wallet.balance > 0n;
     return (
       <div className='flex items-center gap-3 rounded-md border border-border/40 bg-card/40 px-3 py-2'>
         <div className='flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium uppercase'>
           {config.symbol.slice(0, 2)}
         </div>
         <div className='flex flex-1 flex-col min-w-0'>
-          {/* every asset the burner holds (UM, USDC, ...) - each can be shielded
+          {/* every asset the address holds (UM, USDC, ...) - each can be shielded
               or sent from the form the buttons open */}
           {wallet.assets.length > 0 ? (
             wallet.assets.map(a => (
@@ -123,7 +126,7 @@ const DepositRow = memo(
               </Sensitive>
             ))
           ) : (
-            <Sensitive className='font-mono text-sm tabular-nums'>{wallet.formatted}</Sensitive>
+            <span className='text-label text-fg-dim lowercase'>empty</span>
           )}
           <div className='flex items-center gap-1 font-mono text-label text-fg-muted'>
             <span className='truncate' title={wallet.address}>
@@ -133,32 +136,42 @@ const DepositRow = memo(
             <CopyButton value={wallet.address} label='copy address' />
           </div>
         </div>
-        {/* icon-only actions - labels live in the tooltip. blue = send out,
-            penumbra purple = shield back in. */}
-        <button
-          type='button'
-          onClick={onSend}
-          className='flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-500/15 text-blue-400 transition-colors hover:bg-blue-500/25'
-          title='send to an external address'
-        >
-          <span className='i-ph-arrow-up-right h-4 w-4' />
-        </button>
-        <button
-          type='button'
-          onClick={onShield}
-          className='flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-penumbra-purple/15 text-penumbra-purple transition-colors hover:bg-penumbra-purple/25'
-          title='shield into Penumbra'
-        >
-          <span className='i-ph-shield h-4 w-4' />
-        </button>
+        {/* icon-only actions (only when there's a balance to move) - labels live
+            in the tooltip. blue = send out, penumbra purple = shield back in. */}
+        {hasBalance && (
+          <>
+            <button
+              type='button'
+              onClick={onSend}
+              className='flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-500/15 text-blue-400 transition-colors hover:bg-blue-500/25'
+              title='send to an external address'
+            >
+              <span className='i-ph-arrow-up-right h-4 w-4' />
+            </button>
+            <button
+              type='button'
+              onClick={onShield}
+              className='flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-penumbra-purple/15 text-penumbra-purple transition-colors hover:bg-penumbra-purple/25'
+              title='shield into Penumbra'
+            >
+              <span className='i-ph-shield h-4 w-4' />
+            </button>
+          </>
+        )}
       </div>
     );
   },
 );
 DepositRow.displayName = 'DepositRow';
 
-/** deposit wallets + a fresh receive address for one transparent IBC chain */
-const ChainDeposits = ({ chainId }: { chainId: CosmosChainId }) => {
+/**
+ * Deposit view for one transparent IBC chain.
+ * - `view='home'`: balances only, and only when funded (nothing otherwise) -
+ *   the home page shows what you hold, not an address to receive on.
+ * - `view='receive'`: the fresh address to receive on + every address used over
+ *   time (address management, lives on the Receive page's Noble tab).
+ */
+const ChainDeposits = ({ chainId, view }: { chainId: CosmosChainId; view: 'home' | 'receive' }) => {
   const navigate = useNavigate();
   const { data } = useCosmosDepositWallets(chainId);
   const config = COSMOS_CHAINS[chainId];
@@ -172,52 +185,63 @@ const ChainDeposits = ({ chainId }: { chainId: CosmosChainId }) => {
   if (!data?.receive) {
     return null;
   }
-  const { receive, funded } = data;
+  const { receive, funded, used } = data;
 
   // Send out to any address (exchange, another chain): the cosmos send form for
-  // this specific funded burner index, staying on Penumbra (no network switch).
+  // this specific address, staying on Penumbra (no network switch).
   const openSend = (index: number) =>
     navigate(PopupPath.SEND, {
       state: { cosmosChain: chainId, cosmosAccountIndex: index, cosmosIntent: 'send' },
     });
 
-  // Shield a specific funded burner back INTO Penumbra: the real IBC deposit
-  // flow lives on the Receive page's "ibc shield" tab - not a cosmos send. Pass
-  // the chain + burner index so it shields THAT wallet, not account 0.
+  // Shield a specific address back INTO Penumbra: the real IBC deposit flow lives
+  // on the Receive page's "ibc shield" tab. Pass chain + index so it shields THAT
+  // address, not account 0.
   const shieldIntoPenumbra = (index: number) =>
     navigate(PopupPath.RECEIVE, {
       state: { mode: 'shield', cosmosChain: chainId, cosmosAccountIndex: index },
     });
 
+  const row = (w: DepositWallet) => (
+    <DepositRow
+      key={w.index}
+      chainId={chainId}
+      wallet={w}
+      endpoint={endpointFor(w.index)}
+      onSend={() => openSend(w.index)}
+      onShield={() => shieldIntoPenumbra(w.index)}
+    />
+  );
+
+  if (view === 'home') {
+    if (funded.length === 0) {
+      return null;
+    }
+    return <div className='flex flex-col gap-2'>{funded.map(row)}</div>;
+  }
+
+  // receive view
   return (
     <div className='flex flex-col gap-2'>
-      {/* fresh, unused address to receive on - the how/why lives in the badge
-          tooltip rather than a paragraph under it */}
       <ReceiveCard
         chainName={config.name}
         address={receive.address}
         endpoint={endpointFor(receive.index)}
       />
-
-      {/* every funded address - send out or shield back, each from its own index.
-          The editable RPC pool lives in Settings -> networks -> Penumbra -> Noble. */}
-      {funded.map(w => (
-        <DepositRow
-          key={w.index}
-          chainId={chainId}
-          wallet={w}
-          endpoint={endpointFor(w.index)}
-          onSend={() => openSend(w.index)}
-          onShield={() => shieldIntoPenumbra(w.index)}
-        />
-      ))}
+      {used.length > 0 && (
+        <>
+          <div className='kicker mt-1'>addresses used</div>
+          {used.map(row)}
+        </>
+      )}
     </div>
   );
 };
 
+/** Home: Noble balances, shown only when there is something funded. */
 export const CosmosSubwallets = () => {
   const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
-  // Only hot (mnemonic) wallets can derive/scan burner addresses here.
+  // Only hot (mnemonic) wallets can derive/scan deposit addresses here.
   if (selectedKeyInfo?.type !== 'mnemonic') {
     return null;
   }
@@ -225,14 +249,24 @@ export const CosmosSubwallets = () => {
   if (chains.length === 0) {
     return null;
   }
-
   return (
-    <div className='mt-4'>
-      <div className='flex flex-col gap-2'>
-        {chains.map(chainId => (
-          <ChainDeposits key={chainId} chainId={chainId} />
-        ))}
-      </div>
+    <div className='flex flex-col gap-2'>
+      {chains.map(chainId => (
+        <ChainDeposits key={chainId} chainId={chainId} view='home' />
+      ))}
     </div>
   );
+};
+
+/** Receive page (Noble tab): fresh receive address + addresses used over time. */
+export const NobleReceivePanel = () => {
+  const selectedKeyInfo = useStore(selectEffectiveKeyInfo);
+  if (selectedKeyInfo?.type !== 'mnemonic') {
+    return (
+      <div className='rounded-md border border-border-soft bg-elev-1 p-4 text-sm text-fg-muted lowercase'>
+        cold wallets can't derive a Noble deposit address in-app yet.
+      </div>
+    );
+  }
+  return <ChainDeposits chainId='noble' view='receive' />;
 };

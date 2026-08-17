@@ -1139,11 +1139,8 @@ export class ZidecarClient {
     //   field 3: uint64 time (varint)
     //   field 4: string sapling_tree (length-delimited)
     //   field 5: string orchard_tree (length-delimited)
-    //   field 7: string ironwood_tree (length-delimited, NU6.3; absent pre-upgrade)
-    // NOTE (FIX-C): ironwood_tree is proto field 7, not 6. An earlier stream
-    // guessed 6; the authoritative slot (matching lightwalletd-client.ts and
-    // the zidecar producer) is 7 - reading 6 would decode a different field
-    // (or nothing) and silently skip the ironwood frontier.
+    //   field 6: string ironwood_tree (length-delimited, NU6.3; absent pre-upgrade)
+    // zidecar numbers ironwood_tree 6 (lightwalletd numbers it 7 - keep distinct).
     let height = 0;
     let time = 0;
     let orchardTree = '';

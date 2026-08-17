@@ -56,6 +56,13 @@ const PRIVACY_ROWS: readonly PrivacyRow[] = [
     offLabel: 'hidden',
     visible: n => n === 'penumbra' || isIbcNetwork(n),
   },
+  {
+    key: 'enableExplorerLinks',
+    label: 'explorer links',
+    onLabel: 'tx rows link to a block explorer - it sees your ip and which tx you open',
+    offLabel: 'copy-only - nothing leaves the wallet',
+    visible: n => n === 'zcash',
+  },
 ];
 
 function Row({

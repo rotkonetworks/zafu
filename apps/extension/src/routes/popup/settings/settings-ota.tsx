@@ -180,7 +180,10 @@ export const SettingsOta = () => {
 
         {phase === SessionPhase.Recorded && lastResult && (
           <div className='rounded-md border border-green-500/30 bg-green-500/5 p-3 text-data text-fg'>
-            <p className='text-fg-high'>update recorded ✓</p>
+            <p className='flex items-center gap-1 text-fg-high'>
+              update recorded
+              <span className='i-ph-check size-4 text-network-accent' />
+            </p>
             <p>
               fw v{lastResult.fw_version} · slot {lastResult.slot} ·{' '}
               {lastResult.success ? 'successful-boot confirmed' : 'not confirmed'}

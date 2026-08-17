@@ -189,7 +189,7 @@ export const KeplrApproval = () => {
           type='button'
           onClick={() => void approve()}
           disabled={busy || !keyInfo}
-          className='flex-1 rounded-lg bg-zigner-gold px-3 py-2.5 text-sm font-medium text-zigner-dark transition-colors disabled:opacity-50'
+          className='flex-1 rounded-lg bg-zigner-gold px-3 py-2.5 text-sm font-medium text-zigner-gold-foreground transition-colors disabled:opacity-50'
         >
           {busy ? 'working…' : isSign ? 'approve' : 'connect'}
         </button>

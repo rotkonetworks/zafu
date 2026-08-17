@@ -435,7 +435,7 @@ export const SettingsWallets = () => {
                 zafu zigner keeps spending keys offline - sign by QR.
               </p>
               <a
-                href='https://zigner.zafu.pro'
+                href='https://zafu.pro/zigner'
                 target='_blank'
                 rel='noopener noreferrer'
                 className='flex items-center gap-2 text-xs text-zigner-gold hover:underline mt-2'
@@ -814,17 +814,19 @@ const VaultRow = ({
             // dead-ends. Offer recovery — unhide it into a normal, selectable, co-signable multisig.
             <button
               onClick={() => void setMultisigHidden(vault.id, false)}
-              className='text-label text-zigner-gold hover:underline'
+              className='inline-flex items-center gap-1 text-label text-zigner-gold hover:underline'
               title='make this app-managed table a normal multisig you can select and co-sign'
             >
-              recover / take control →
+              recover / take control
+              <span className='i-ph-arrow-right size-3' />
             </button>
           ) : (
             <button
               onClick={() => navigate(PopupPath.MULTISIG)}
-              className='text-label text-zigner-gold hover:underline'
+              className='inline-flex items-center gap-1 text-label text-zigner-gold hover:underline'
             >
-              manage in multisig tab →
+              manage in multisig tab
+              <span className='i-ph-arrow-right size-3' />
             </button>
           )}
         </div>

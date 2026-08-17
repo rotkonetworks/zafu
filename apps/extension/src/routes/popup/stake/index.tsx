@@ -504,7 +504,7 @@ export const StakePage = () => {
             txStatus === 'broadcasting'
           }
           className={cn(
-            'w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark',
+            'w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground',
             'transition-colors hover:bg-zigner-gold-light disabled:opacity-50 disabled:cursor-not-allowed',
           )}
         >
@@ -544,7 +544,7 @@ export const StakePage = () => {
         </p>
         <button
           onClick={() => setAction('delegate')}
-          className='mt-2 w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
+          className='mt-2 w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors disabled:opacity-50'
         >
           delegate
         </button>

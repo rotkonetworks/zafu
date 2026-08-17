@@ -2,7 +2,7 @@
  * Seed-phrase generation + backup step.
  *
  * This screen previously auto-redirected the moment the phrase was
- * derived — the user finished onboarding without ever seeing their 24
+ * derived - the user finished onboarding without ever seeing their 24
  * words. For a self-custody wallet that's a loss-of-funds footgun:
  * device dies before the user finds settings → recovery passphrase,
  * and the wallet is unrecoverable.
@@ -55,13 +55,13 @@ export const GenerateSeedPhrase = () => {
             your recovery phrase
           </h2>
           <p className='text-xs text-fg-muted lowercase'>
-            24 words, derived locally — no server ever sees this. write them down in order and store
+            24 words, derived locally - no server ever sees this. write them down in order and store
             them offline.
           </p>
         </header>
 
         {!ready ? (
-          /* skeleton while WASM derives — CSS pulse only */
+          /* skeleton while WASM derives - CSS pulse only */
           <div className='grid animate-pulse grid-cols-3 gap-2'>
             {Array.from({ length: 24 }).map((_, i) => (
               <div key={i} className='h-8 rounded-sm bg-elev-2/40' />

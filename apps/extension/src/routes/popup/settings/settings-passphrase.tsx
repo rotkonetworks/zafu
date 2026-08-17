@@ -69,7 +69,7 @@ export const SettingsPassphrase = () => {
             {error && <p className='text-xs text-rust'>{error}</p>}
             <button
               type='submit'
-              className='w-full rounded-lg bg-zigner-gold py-2.5 text-sm text-zigner-dark transition-colors hover:bg-primary/90'
+              className='w-full rounded-lg bg-zigner-gold py-2.5 text-sm text-zigner-gold-foreground transition-colors hover:bg-primary/90'
             >
               confirm
             </button>

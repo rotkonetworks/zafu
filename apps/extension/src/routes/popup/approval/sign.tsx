@@ -276,7 +276,7 @@ export const SignApproval = () => {
             </button>
             <button
               onClick={() => void handlePasswordSubmit()}
-              className='flex-1 rounded-md bg-zigner-gold p-3 text-xs text-zigner-dark hover:bg-zigner-gold-light lowercase'
+              className='flex-1 rounded-md bg-zigner-gold p-3 text-xs text-zigner-gold-foreground hover:bg-zigner-gold-light lowercase'
             >
               sign
             </button>
@@ -305,7 +305,7 @@ export const SignApproval = () => {
           </div>
           <button
             onClick={() => setStep('scan-qr')}
-            className='w-full rounded-md bg-zigner-gold p-3 text-xs text-zigner-dark hover:bg-zigner-gold-light lowercase'
+            className='w-full rounded-md bg-zigner-gold p-3 text-xs text-zigner-gold-foreground hover:bg-zigner-gold-light lowercase'
           >
             scan signed response
           </button>

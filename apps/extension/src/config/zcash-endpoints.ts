@@ -56,7 +56,7 @@ export const ZCASH_MAINNET_ENDPOINTS: readonly ZcashEndpointPreset[] = [
   // ── default (trustless) ──
   {
     id: 'rotko-zidecar',
-    label: 'rotko zidecar (trustless)',
+    label: 'rotko zidecar',
     url: 'https://zcash.rotko.net',
     region: 'default',
     backend: 'zidecar',

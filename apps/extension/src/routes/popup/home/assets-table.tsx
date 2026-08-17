@@ -426,7 +426,7 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
                   </button>
                   <button
                     onClick={() => void handleClaim()}
-                    className='flex-1 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors'
+                    className='flex-1 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors'
                   >
                     confirm claim
                   </button>
@@ -477,7 +477,7 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
                       setClaimStatus('confirm');
                       setClaimError(undefined);
                     }}
-                    className='flex-1 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark hover:bg-zigner-gold-light transition-colors'
+                    className='flex-1 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground hover:bg-zigner-gold-light transition-colors'
                   >
                     retry
                   </button>

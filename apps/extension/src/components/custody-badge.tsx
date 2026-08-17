@@ -2,7 +2,7 @@ import { cn } from '@repo/ui/lib/utils';
 import type { KeyInfo, KeyType } from '../state/keyring';
 
 /**
- * custody indicator — where the spending key actually lives.
+ * custody indicator - where the spending key actually lives.
  *
  * This is the single most consequential fact about a wallet and it was
  * previously invisible: the picker showed only a name, so "savings" and
@@ -14,7 +14,7 @@ import type { KeyInfo, KeyType } from '../state/keyring';
  *           password. zafu can sign on its own.
  *   cold    the key has never been here. zafu holds a viewing key, builds
  *           the transaction, and the signature comes back over QR or USB.
- *   shared  a FROST threshold share. Neither hot nor cold — this share
+ *   shared  a FROST threshold share. Neither hot nor cold - this share
  *           alone cannot spend, and co-signers must approve.
  *
  * Deliberately not alarming. Hot custody is the normal, useful state for a
@@ -45,17 +45,17 @@ const STYLE: Record<Custody, { icon: string; tint: string; title: string }> = {
   hot: {
     icon: 'i-zafu-hi',
     tint: 'text-zigner-gold/90 bg-zigner-gold/10',
-    title: 'hot — the spending key is in this browser, encrypted under your password',
+    title: 'hot - the spending key is in this browser, encrypted under your password',
   },
   cold: {
     icon: 'i-zafu-kori',
     tint: 'text-zafu-blue bg-zafu-blue/10',
-    title: 'cold — the spending key never touches this browser; signing happens on your device',
+    title: 'cold - the spending key never touches this browser; signing happens on your device',
   },
   shared: {
     icon: 'i-zafu-torii',
     tint: 'text-fg-muted bg-elev-2',
-    title: 'shared — a threshold share; co-signers must approve before this can spend',
+    title: 'shared - a threshold share; co-signers must approve before this can spend',
   },
 };
 
@@ -72,7 +72,7 @@ export const CustodyBadge = ({
   const custody = custodyOf(vault.type);
   const style = STYLE[custody];
 
-  // for a threshold vault the ratio *is* the useful label — "2/3" says more
+  // for a threshold vault the ratio *is* the useful label - "2/3" says more
   // than the word "shared" ever could.
   const threshold = vault.insensitive['threshold'];
   const maxSigners = vault.insensitive['maxSigners'];

@@ -715,7 +715,7 @@ const ZcashCrosschainSwap = () => {
             onClick={() => void handleRequestQuote()}
             disabled={!canQuote}
             className={cn(
-              'w-full bg-zigner-gold py-3 text-sm font-medium text-zigner-dark',
+              'w-full bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground',
               'transition-colors hover:bg-primary/90',
               'disabled:opacity-50 disabled:cursor-not-allowed',
             )}
@@ -772,7 +772,7 @@ const ZcashCrosschainSwap = () => {
             <div className='mt-3 flex gap-2'>
               <button
                 onClick={() => void handleConfirmSwap()}
-                className='flex-1 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark transition-colors hover:bg-zigner-gold-light'
+                className='flex-1 rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground transition-colors hover:bg-zigner-gold-light'
               >
                 confirm & send
               </button>
@@ -807,7 +807,7 @@ const ZcashCrosschainSwap = () => {
 
           <button
             onClick={() => setStep('scan')}
-            className='w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark transition-colors hover:bg-zigner-gold-light'
+            className='w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground transition-colors hover:bg-zigner-gold-light'
           >
             scan signature
           </button>
@@ -942,7 +942,7 @@ const ZcashCrosschainSwap = () => {
           </div>
           <button
             onClick={handleReset}
-            className='w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark transition-colors hover:bg-primary/90'
+            className='w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground transition-colors hover:bg-primary/90'
           >
             swap again
           </button>
@@ -957,7 +957,7 @@ const ZcashCrosschainSwap = () => {
           </div>
           <button
             onClick={handleReset}
-            className='w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark transition-colors hover:bg-primary/90'
+            className='w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground transition-colors hover:bg-primary/90'
           >
             try again
           </button>
@@ -1469,7 +1469,7 @@ const PenumbraSwap = () => {
           txStatus === 'broadcasting'
         }
         className={cn(
-          'mt-2 w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-dark',
+          'mt-2 w-full rounded-lg bg-zigner-gold py-3 text-sm font-medium text-zigner-gold-foreground',
           'transition-colors hover:bg-zigner-gold-light',
           'disabled:opacity-50 disabled:cursor-not-allowed',
         )}
