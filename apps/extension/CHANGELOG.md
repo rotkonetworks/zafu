@@ -1,5 +1,42 @@
 # chrome-extension
 
+## 27.0.0
+
+Zcash reliability, ironwood completion, and personal-data durability.
+
+### Zcash (money-critical)
+
+- Sends now confirm reliably on lightwalletd backends — fixed a txid byte-order
+  mismatch that left mined transactions showing "unconfirmed" forever (and
+  self-sends surfacing as anonymous "received" notes).
+- Ironwood (NU6.3) witness build dropped from ~166s to ~12s; after the first
+  send the fast path holds, so repeat sends are near-instant + proving time.
+- Hardened orchard/ironwood pool separation — fixed cross-pool witness
+  contamination that forced a full replay on every send.
+- A resync (clear cache) now preserves your send history instead of wiping it.
+
+### Features
+
+- Cold / watch-only / zigner shielding of transparent funds into ironwood —
+  completes the NU6.3 shielding migration.
+- Local "from" notes on received transactions (the chain can't reveal a shielded
+  sender, so you label it yourself; survives resync).
+- Recipient address shown on sent-tx rows, one click to name/save it.
+- Encrypted personal-data backup + restore (contacts + send history + tx notes),
+  and a separate "clear personal data" action distinct from the sync-cache clear.
+- More accurate pending balance (migration + fee accounting).
+
+### Performance & polish
+
+- QR fountain decode moved off the UI thread — no camera-frame drops during
+  airgap scans.
+- Rayon multithreading regression guard (loud warning if cross-origin isolation
+  is ever lost, so proving can't silently drop to single-thread).
+- Responsive down to ~280px — the side panel no longer clips content when
+  narrowed.
+- Node "smart pick" cleanup, Noble network de-duplication, quieter console, and
+  assorted UI copy/contrast fixes.
+
 ## 11.14.0
 
 ### Minor Changes

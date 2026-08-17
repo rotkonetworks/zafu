@@ -306,7 +306,12 @@
 
   /* popup container */
   #popup-root {
-    min-width: 400px;
+    /* The fixed popup window is 420px, but the side panel is user-resizable
+       down to Chrome's ~280px floor. A 400px min-width forced the whole app
+       wider than a narrow panel, so content overflowed and clipped on the
+       right. The layout is fluid (grid actions shrink, text truncates), so
+       hold at a mobile-ish floor and reflow above it. */
+    min-width: 280px;
     min-height: 600px;
     height: 100vh;
     max-height: 100vh;
