@@ -59,11 +59,12 @@ export const AnimatedQrScanner = ({
   const urPartsRef = useRef(new Set());
   // 'p' = legacy P-format, 'ur' = BC-UR fountain, '' = undecided
   const modeRef = useRef<'' | 'p' | 'ur'>('');
-  // wasm module loaded lazily on first UR frame
-  const wasmRef = useRef<{ ur_decode_frames: (parts: string, type: string) => string } | null>(
-    null,
-  );
-  const wasmInitInFlightRef = useRef(false);
+  // The BC-UR fountain decode (ur_decode_frames) is O(n) per part and O(n^2)
+  // over a scan — running it in the scan callback dropped camera frames and
+  // janked the progress bar. It now lives in a dedicated worker; the scan
+  // callback only posts each newly-seen part string. The worker maintains the
+  // accumulating decode and posts back { progress | done | error }.
+  const workerRef = useRef<Worker | null>(null);
   // seqLen from UR header — drives honest progress vs the emitter's cycle
   const urSeqLenRef = useRef(0);
   // Stall watchdog. A healthy fountain stream always yields *new* unique
@@ -107,6 +108,63 @@ export const AnimatedQrScanner = ({
       setIsScanning(false);
     }
   }, []);
+
+  // Terminate the decode worker. Called only where the scan is truly over
+  // (unmount, completion, cap-abort) — NOT from stopScanning, because the
+  // retry button restarts the camera and the worker's accumulated parts must
+  // survive that restart.
+  const terminateWorker = useCallback(() => {
+    if (workerRef.current) {
+      workerRef.current.terminate();
+      workerRef.current = null;
+    }
+  }, []);
+
+  // Lazily create the UR decode worker and wire its message handler. Created
+  // on mount so wasm init overlaps camera startup; idempotent.
+  const ensureWorker = useCallback((): Worker => {
+    if (workerRef.current) {
+      return workerRef.current;
+    }
+    const worker = new Worker('/workers/ur-decode-worker.js', { type: 'module' });
+    worker.onmessage = (
+      e: MessageEvent<
+        | { type: 'ready' }
+        | { type: 'progress'; size: number }
+        | { type: 'done'; bytes: Uint8Array; urType: string }
+        | { type: 'error'; message: string }
+      >,
+    ) => {
+      const msg = e.data;
+      // drop any late message once the scan has completed or aborted
+      if (completedRef.current) {
+        return;
+      }
+      if (msg.type === 'done') {
+        completedRef.current = true;
+        stopScanning();
+        terminateWorker();
+        setProgress(100);
+        onCompleteRef.current(msg.bytes, msg.urType);
+      } else if (msg.type === 'progress') {
+        // seqLen drives honest progress; without it we'd pin at 99%. Formula
+        // preserved exactly from the prior main-thread decode.
+        const seqLen = urSeqLenRef.current;
+        const pct =
+          seqLen > 0
+            ? Math.min(99, Math.round((msg.size / seqLen) * 100))
+            : Math.min(99, msg.size * 10);
+        setProgress(pct);
+      } else if (msg.type === 'error') {
+        console.warn('[ur-scanner] worker:', msg.message);
+      }
+    };
+    worker.onerror = ev => {
+      console.warn('[ur-scanner] worker error:', ev.message);
+    };
+    workerRef.current = worker;
+    return worker;
+  }, [stopScanning, terminateWorker]);
 
   const startScanning = useCallback(async () => {
     if (!videoRef.current) {
@@ -197,6 +255,7 @@ export const AnimatedQrScanner = ({
             const msg = `UR fountain exceeded ${MAX_UR_PARTS} unique frames without completing — aborting scan.`;
             completedRef.current = true; // latch — report once
             stopScanning();
+            terminateWorker();
             setError(msg);
             onErrorRef.current?.(msg);
             return;
@@ -226,56 +285,13 @@ export const AnimatedQrScanner = ({
             }
           }
 
-          // `default()` must be awaited — without it the bindgen glue's
-          // `wasm` is undefined and exported calls die on `__wbindgen_*`.
-          if (!wasmRef.current && !wasmInitInFlightRef.current) {
-            wasmInitInFlightRef.current = true;
-            import(/* webpackMode: "eager" */ '@repo/zcash-wasm')
-              .then(async (mod: unknown) => {
-                // bindgen's default export fetches+instantiates the .wasm
-                const m = mod as {
-                  default: (opts?: { module_or_path?: string }) => Promise<unknown>;
-                  ur_decode_frames: (parts: string, type: string) => string;
-                };
-                await m.default();
-                wasmRef.current = m;
-              })
-              .catch(err => {
-                console.warn('[ur-scanner] wasm init failed:', err);
-                wasmInitInFlightRef.current = false; // allow retry on next frame
-              });
-          }
-          const wasm = wasmRef.current;
-          if (!wasm) {
-            return;
-          } // not loaded yet; keep accumulating
-
-          try {
-            const partsJson = JSON.stringify([...urPartsRef.current]);
-            const hex = wasm.ur_decode_frames(partsJson, urType);
-            // success → reconstructed
-            completedRef.current = true;
-            stopScanning();
-            const bytes = new Uint8Array(hex.length >> 1);
-            for (let i = 0; i < bytes.length; i++) {
-              bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
-            }
-            setProgress(100);
-            onCompleteRef.current(bytes, urType);
-          } catch (e) {
-            // sample errors so a real decode bug surfaces without spam
-            if (urPartsRef.current.size % 8 === 0) {
-              console.warn(
-                `[ur-scanner] decode failed at ${urPartsRef.current.size} parts (${urType}): ${e instanceof Error ? e.message : String(e)}`,
-              );
-            }
-            const seqLen = urSeqLenRef.current;
-            const pct =
-              seqLen > 0
-                ? Math.min(99, Math.round((urPartsRef.current.size / seqLen) * 100))
-                : Math.min(99, urPartsRef.current.size * 10);
-            setProgress(pct);
-          }
+          // Off-thread the fountain decode. Re-decoding the whole accumulated
+          // set on every part is O(n^2) and used to run right here in the scan
+          // callback, dropping camera frames. Now we only hand the worker the
+          // newly-seen part; it accumulates, decodes, and posts back
+          // progress/done (see ensureWorker's onmessage). Progress and
+          // completion are applied there, preserving the exact prior formula.
+          ensureWorker().postMessage({ type: 'part', text, urType });
           return;
         }
 
@@ -352,27 +368,11 @@ export const AnimatedQrScanner = ({
 
   useEffect(() => {
     mountedRef.current = true;
-    // Pre-load wasm in parallel with camera startup. Without this, the first
-    // ~1-2s of scanning is wasted while the user points the camera and the
-    // wasm module is still fetching/instantiating.
-    if (!wasmRef.current && !wasmInitInFlightRef.current) {
-      wasmInitInFlightRef.current = true;
-      import(/* webpackMode: "eager" */ '@repo/zcash-wasm')
-        .then(async (mod: unknown) => {
-          const m = mod as {
-            default: (opts?: { module_or_path?: string }) => Promise<unknown>;
-            ur_decode_frames: (parts: string, type: string) => string;
-          };
-          await m.default();
-          if (mountedRef.current) {
-            wasmRef.current = m;
-          }
-        })
-        .catch(err => {
-          console.warn('[ur-scanner] wasm preload failed:', err);
-          wasmInitInFlightRef.current = false;
-        });
-    }
+    // Create the decode worker up front so its wasm init (kicked off at the
+    // worker's module top level) overlaps camera startup. Without this warm-up
+    // the first ~1-2s of scanning is wasted while the user points the camera
+    // and the wasm module is still fetching/instantiating.
+    ensureWorker();
     void startScanning();
 
     // Stall watchdog: fires only once UR accumulation has actually started
@@ -407,8 +407,9 @@ export const AnimatedQrScanner = ({
       mountedRef.current = false;
       clearInterval(stallTimer);
       stopScanning();
+      terminateWorker();
     };
-  }, [startScanning, stopScanning]);
+  }, [startScanning, stopScanning, ensureWorker, terminateWorker]);
 
   const handleClose = () => {
     stopScanning();
