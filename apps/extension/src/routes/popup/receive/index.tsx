@@ -962,7 +962,7 @@ function ReceiveTab({
                   a fresh address.
                 </span>
               )}
-              <span className='text-label px-1.5 py-0.5 rounded-md bg-red-500/15 text-red-500 font-medium leading-none'>
+              <span className='text-label px-1.5 py-0.5 rounded-md bg-rust/15 text-rust font-medium leading-none'>
                 public
               </span>
             </span>
@@ -977,7 +977,7 @@ function ReceiveTab({
             ephemeral && isPenumbra
               ? 'border-green-500/40 bg-green-500/5'
               : transparent && isZcash
-                ? 'border-red-500/40 bg-red-500/5'
+                ? 'border-rust/35 bg-rust/8'
                 : 'border-border-soft bg-elev-2'
           }`}
         >
@@ -986,7 +986,7 @@ function ReceiveTab({
               ephemeral && isPenumbra
                 ? 'text-green-400'
                 : transparent && isZcash
-                  ? 'text-red-400'
+                  ? 'text-rust'
                   : ''
             }`}
           >
@@ -1015,7 +1015,7 @@ function ReceiveTab({
         {ephemeral && isPenumbra
           ? 'fresh single-use address - share with one party; reuse lets senders link payments.'
           : transparent && isZcash
-            ? 'public on-chain - one index per exchange, then shield to Orchard.'
+            ? 'public on-chain - one index per exchange, then shield to ironwood.'
             : transparent
               ? 'transparent chain - this address is PUBLIC, not shielded. use a fresh deposit address per sender and shield into Penumbra soon after.'
               : 'shielded - senders cannot see your other transactions.'}

@@ -9,6 +9,16 @@ const PENUMBRA_DB_PREFIX = 'viewdata/penumbra';
 // cache is in fact cleared, correctly, by dropping 'zafu-zcash'.
 const ZCASH_DB_NAMES = ['zafu-zcash'];
 
+// A resync must wipe only the SYNC CACHE, never the user's own data.
+//   - 'sent' is the send history - the ONLY record that a tx was a send. A
+//     self-send returns its funds to the user's own address, so without this
+//     record the payment shows merely as "received". Dropping the whole DB
+//     erased it on every resync.
+//   - 'wallets' is the wallet registry.
+// Everything else (notes, spent nullifiers, meta/sync-height, witnesses, memo
+// cache) is derived from the chain and is safe to rebuild.
+const ZCASH_SYNC_CACHE_STORES = ['notes', 'spent', 'meta', 'memo-cache', 'witnesses-ironwood'];
+
 const deleteDb = (name: string): Promise<void> =>
   new Promise((resolve, reject) => {
     const req = indexedDB.deleteDatabase(name);
@@ -28,6 +38,65 @@ const deleteDb = (name: string): Promise<void> =>
   });
 
 /**
+ * Clear the zcash SYNC CACHE stores in place, preserving 'sent' (send history)
+ * and 'wallets' (registry). Replaces the old "drop the whole database" resync,
+ * which destroyed the user's send history - after which their own past sends,
+ * and every self-send, reappeared as anonymous "received" notes.
+ *
+ * Falls back to nothing (resolves) when the DB or a store is absent: a wallet
+ * that never synced has no cache to clear.
+ */
+const clearZcashSyncCache = (name: string): Promise<void> =>
+  new Promise(resolve => {
+    let req: IDBOpenDBRequest;
+    try {
+      req = indexedDB.open(name);
+    } catch (e) {
+      console.warn('[clear-startup] open for cache-clear threw:', name, e);
+      resolve();
+      return;
+    }
+    req.onsuccess = () => {
+      const db = req.result;
+      const stores = ZCASH_SYNC_CACHE_STORES.filter(s => db.objectStoreNames.contains(s));
+      if (stores.length === 0) {
+        db.close();
+        resolve();
+        return;
+      }
+      try {
+        const tx = db.transaction(stores, 'readwrite');
+        for (const s of stores) {
+          tx.objectStore(s).clear();
+        }
+        tx.oncomplete = () => {
+          db.close();
+          console.log('[clear-startup] cleared zcash sync cache, kept sent + wallets:', name);
+          resolve();
+        };
+        tx.onerror = () => {
+          db.close();
+          console.warn('[clear-startup] cache-clear tx failed:', name, tx.error);
+          resolve();
+        };
+      } catch (e) {
+        db.close();
+        console.warn('[clear-startup] cache-clear tx threw:', name, e);
+        resolve();
+      }
+    };
+    req.onerror = () => {
+      console.warn('[clear-startup] open for cache-clear failed:', name, req.error);
+      resolve();
+    };
+    // Caller terminates the worker first, so no live connection should block us.
+    req.onblocked = () => {
+      console.warn('[clear-startup] cache-clear blocked (worker still connected?):', name);
+      resolve();
+    };
+  });
+
+/**
  * Delete the zcash databases and WAIT for the result.
  *
  * Callers must terminate the zcash worker first. An open connection does not
@@ -38,10 +107,14 @@ const deleteDb = (name: string): Promise<void> =>
  * about.
  */
 export const deleteZcashDatabases = async (): Promise<void> => {
+  // Resync = clear the sync cache, NOT the user's send history. Preserving the
+  // 'sent' store is what keeps a past send (and every self-send) labelled
+  // "sent" instead of resurfacing as an anonymous "received" note after a
+  // resync. The DB itself is kept so 'sent' + 'wallets' survive.
   await Promise.all(
     ZCASH_DB_NAMES.map(name =>
-      deleteDb(name).catch(e => {
-        console.warn('[clear-cache] zcash db delete failed:', name, e);
+      clearZcashSyncCache(name).catch(e => {
+        console.warn('[clear-cache] zcash cache clear failed:', name, e);
       }),
     ),
   );
@@ -78,7 +151,8 @@ export const performPendingClears = async (): Promise<void> => {
   }
 
   if (pending.includes('zcash')) {
-    await Promise.all(ZCASH_DB_NAMES.map(name => deleteDb(name).catch(() => {})));
+    // cache-only clear, same as the direct resync path: keep 'sent' + 'wallets'
+    await Promise.all(ZCASH_DB_NAMES.map(name => clearZcashSyncCache(name).catch(() => {})));
   }
 
   await localExtStorage.remove('pendingClearCache');

@@ -64,9 +64,7 @@ export const startWalletServices = async (
 
   // privacy gate: check if penumbra is enabled before making network connections
   const enabled = await isPenumbraEnabled();
-  console.log('[sync] isPenumbraEnabled:', enabled);
   if (!enabled) {
-    console.log('[sync] penumbra not enabled, skipping wallet services initialization');
     return stubServices('penumbra network not enabled');
   }
 
@@ -80,7 +78,8 @@ export const startWalletServices = async (
   // needs penumbra context for unshielding - treat the whole penumbra group as
   // active. Only a different root (zcash) skips penumbra sync.
   if (activeNetwork && getRootNetwork(activeNetwork as NetworkType) !== 'penumbra') {
-    console.log(`[sync] penumbra group not active (active=${activeNetwork}), skipping sync`);
+    // expected whenever the user is on zcash/another network - not an error,
+    // and it fires on every sync tick, so stay silent rather than spam the log.
     return stubServices('penumbra network not active');
   }
 

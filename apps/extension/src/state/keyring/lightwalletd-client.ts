@@ -470,10 +470,19 @@ export class LightwalletdClient implements ZcashClient {
         rawIronwood.push(val as Uint8Array);
       }
     });
+    // CompactTx.hash (field 2) is the txid in INTERNAL / wire byte order — the
+    // lightwallet-protocol standard. But the rest of the wallet stores txids in
+    // DISPLAY order: resolveBroadcastTxid reverses compute_txid to display, and
+    // zidecar's native inline action txid is already display order. So reverse
+    // here to the one convention every txid comparison uses. Without this, on a
+    // lightwalletd backend a sent tx's scanned note carries a wire-order txid
+    // that never matches the display-order `sent` record, and the payment shows
+    // "unconfirmed" forever even though its block was scanned.
+    const txidDisplay = txid.length === 32 ? Uint8Array.from(txid).reverse() : txid;
     const build = (raws: Uint8Array[]) =>
       raws.map(raw => {
         const a = this.parseAction(raw);
-        a.txid = txid;
+        a.txid = txidDisplay;
         return a;
       });
     return { orchard: build(rawActions), ironwood: build(rawIronwood) };
