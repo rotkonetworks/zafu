@@ -17,6 +17,7 @@ export const build_signed_turnstile_migration: (a: number, b: number, c: number,
 export const build_turnstile_migration_pczt: (a: number, b: number, c: number, d: number, e: bigint, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number) => [number, number, number];
 export const build_unsigned_pczt: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number) => [number, number, number];
 export const build_unsigned_shielding_transaction: (a: number, b: number, c: number, d: number, e: bigint, f: bigint, g: number, h: number, i: number, j: number) => [number, number, number, number];
+export const build_unsigned_shielding_transaction_ironwood: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number, k: number, l: number, m: number) => [number, number, number, number];
 export const build_unsigned_transaction: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number, o: number, p: number) => [number, number, number];
 export const build_vote_commitment_wire: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number, number];
 export const build_vote_shares_wire: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: bigint) => [number, number, number, number];
@@ -24,6 +25,7 @@ export const build_witnesses_and_paths: (a: number, b: number, c: number, d: num
 export const cast_vote_hot_wire: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: bigint) => [number, number, number, number];
 export const complete_ironwood_pczt: (a: number, b: number, c: any, d: any) => [number, number, number, number];
 export const complete_orchard_pczt: (a: number, b: number, c: any, d: any) => [number, number, number, number];
+export const complete_shielding_pczt: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const complete_shielding_transaction: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const complete_transaction: (a: number, b: number, c: any, d: any) => [number, number, number, number];
 export const compute_txid: (a: number, b: number) => [number, number, number, number];
@@ -62,7 +64,6 @@ export const frostrelaycipher_new: (a: number, b: number, c: number, d: number) 
 export const generate_seed_phrase: () => [number, number, number, number];
 export const generate_voting_hotkey: (a: number, b: number) => [number, number, number, number];
 export const get_commitment_proof_request: (a: number, b: number) => [number, number, number, number];
-export const num_threads: () => number;
 export const parse_signature_response: (a: number, b: number) => [number, number, number];
 export const pczt_has_ironwood_actions: (a: number, b: number) => [number, number, number];
 export const pir_fetch_imt_proofs: (a: number, b: number, c: number, d: number, e: any) => any;
@@ -109,6 +110,13 @@ export const witness_extract_path_ironwood: (a: number, b: number) => [number, n
 export const frontier_tree_size_ironwood: (a: number, b: number) => [bigint, number, number];
 export const witness_sync_update_ironwood: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number];
 export const tree_root_hex_ironwood: (a: number, b: number) => [number, number, number, number];
+export const num_threads: () => number;
+export const __wbg_wbg_rayon_poolbuilder_free: (a: number, b: number) => void;
+export const initThreadPool: (a: number) => any;
+export const wbg_rayon_poolbuilder_build: (a: number) => void;
+export const wbg_rayon_poolbuilder_numThreads: (a: number) => number;
+export const wbg_rayon_poolbuilder_receiver: (a: number) => number;
+export const wbg_rayon_start_worker: (a: number) => void;
 export const rustsecp256k1_v0_10_0_default_error_callback_fn: (a: number, b: number) => void;
 export const rustsecp256k1_v0_10_0_default_illegal_callback_fn: (a: number, b: number) => void;
 export const rustsecp256k1_v0_10_0_context_destroy: (a: number) => void;

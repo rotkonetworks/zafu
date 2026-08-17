@@ -94,6 +94,24 @@ Reproduce by checking out the zcli rev below and running the commands.
 Verify: rebuild from the rev, sha256sum the outputs,
 diff against the values above. A mismatch means the vendored blob is stale.
 
+## 2026-08-17 rebuild - cold/watch-only ironwood shielding
+
+- source repo: zcli, branch `master`, rev `01d9715`
+- toolchain: wasm-bindgen 0.2.126, wasm-opt (binaryen) **117** (NOT 130 - the
+  local binaryen at hand; -Oz byte-output differs by binaryen version, so these
+  blobs will not sha-reproduce under 130. Functionally correct: parallel blob
+  verified to carry shared imported memory `(memory 50 32768 shared)`.)
+- parallel size after -Oz: 8775443 bytes
+- Adds the NU6.3 cold/watch-only/zigner unsigned shielding surface the wallet
+  needs: `build_unsigned_shielding_transaction_ironwood` +
+  `complete_shielding_pczt` (the latter also reached via the PCZT-magic sniff in
+  `complete_shielding_transaction`). Finishes the migration the hot shielding
+  path already had; the orchard unsigned builder stays fail-closed post-NU6.3.
+- Verified: both copies (`public/zafu-wasm/`, `packages/zcash-wasm/`) carry the
+  new export; the Chrome worker patch (`wbgRayonBase`) was re-applied to
+  `snippets/*/src/workerHelpers.js` in both (zero stray `import('../../..')`);
+  no `zcash_*` duplicates in this tree (package resolves `zafu_wasm.js`).
+
 ## 2026-08-16 rebuild - Noise_K DKG sealing + frostd relay cipher
 
 - source repo: zcli, branch `master`, rev `bd9c63e`

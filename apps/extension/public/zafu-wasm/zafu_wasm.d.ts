@@ -422,6 +422,36 @@ export function build_unsigned_pczt(ufvk_str: string, notes_json: any, recipient
 export function build_unsigned_shielding_transaction(utxos_json: string, recipient: string, amount: bigint, fee: bigint, anchor_height: number, mainnet: boolean, branch_id_hex?: string | null): string;
 
 /**
+ * Build an UNSIGNED transparent→IRONWOOD shielding transaction (NU6.3 / V6) for
+ * cold-wallet / watch-only / zigner signing.
+ *
+ * The post-NU6.3 replacement for [`build_unsigned_shielding_transaction`] (which
+ * builds a now-consensus-disabled orchard V5 bundle). It runs the full guarded
+ * ironwood pipeline through the proof but stops BEFORE signing, and returns the
+ * SAME JSON contract the orchard unsigned builder returns:
+ *   `{ sighashes: [hex_32b...], unsigned_tx_hex: hex, summary: string }`
+ * so the existing zigner sighash encoder needs no change.
+ *
+ * IMPORTANT: `unsigned_tx_hex` here is the serialized PCZT (magic `b"PCZT"`), NOT
+ * a raw transaction - the canonical librustzcash cold-signing carrier. The
+ * air-gapped signer only ever handles the 32-byte `sighashes`; completion must
+ * route to [`complete_shielding_pczt`]. [`complete_shielding_transaction`]
+ * sniffs the PCZT magic and delegates, so an unchanged completion call site also
+ * works.
+ *
+ * # Arguments
+ * * `utxos_json` - JSON array of `{txid, vout, value, script}` (same shape as the
+ *   signed builder)
+ * * `pubkey_hex` - 33-byte compressed secp256k1 pubkey owning every UTXO (from
+ *   e.g. [`transparent_pubkey_from_ufvk`])
+ * * `recipient` - unified address whose orchard-format receiver is the ironwood
+ *   recipient
+ * * `amount`, `fee`, `target_height`, `expected_branch_id`, `mainnet`, `memo_hex`
+ *   - identical semantics to [`build_shielding_transaction_ironwood`]
+ */
+export function build_unsigned_shielding_transaction_ironwood(utxos_json: string, pubkey_hex: string, recipient: string, amount: bigint, fee: bigint, target_height: number, expected_branch_id: number, mainnet: boolean, memo_hex?: string | null): string;
+
+/**
  * Build an unsigned transaction and return the data needed for cold signing.
  * Uses the PCZT (Partially Constructed Zcash Transaction) flow from the orchard
  * crate to produce real v5 transaction bytes with Halo 2 proofs.
@@ -497,6 +527,18 @@ export function complete_ironwood_pczt(pczt_hex: string, ironwood_sigs_json: any
  * finish a FROST signing round this way (gh #17 PCZT migration).
  */
 export function complete_orchard_pczt(pczt_hex: string, orchard_sigs_json: any, spend_indices_json: any): string;
+
+/**
+ * Complete an unsigned ironwood shielding PCZT (from
+ * [`build_unsigned_shielding_transaction_ironwood`]) into a broadcast-ready V6
+ * transaction hex. See [`complete_shielding_pczt_inner`] for the semantics.
+ *
+ * `signatures_json` is `[{sig_hex, pubkey_hex}, ...]`, one per transparent input
+ * in index order - the exact shape [`complete_shielding_transaction`] accepts,
+ * so a caller that always routes ironwood completions here (or one that reuses
+ * `complete_shielding_transaction`, which sniffs the PCZT magic) is unchanged.
+ */
+export function complete_shielding_pczt(pczt_hex: string, signatures_json: string): string;
 
 /**
  * Complete an unsigned shielding transaction by patching in transparent signatures.
@@ -1026,6 +1068,7 @@ export interface InitOutput {
     readonly build_turnstile_migration_pczt: (a: number, b: number, c: number, d: number, e: bigint, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number) => [number, number, number];
     readonly build_unsigned_pczt: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number) => [number, number, number];
     readonly build_unsigned_shielding_transaction: (a: number, b: number, c: number, d: number, e: bigint, f: bigint, g: number, h: number, i: number, j: number) => [number, number, number, number];
+    readonly build_unsigned_shielding_transaction_ironwood: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number, k: number, l: number, m: number) => [number, number, number, number];
     readonly build_unsigned_transaction: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number, o: number, p: number) => [number, number, number];
     readonly build_vote_commitment_wire: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number, number];
     readonly build_vote_shares_wire: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: bigint) => [number, number, number, number];
@@ -1033,6 +1076,7 @@ export interface InitOutput {
     readonly cast_vote_hot_wire: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: bigint) => [number, number, number, number];
     readonly complete_ironwood_pczt: (a: number, b: number, c: any, d: any) => [number, number, number, number];
     readonly complete_orchard_pczt: (a: number, b: number, c: any, d: any) => [number, number, number, number];
+    readonly complete_shielding_pczt: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly complete_shielding_transaction: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly complete_transaction: (a: number, b: number, c: any, d: any) => [number, number, number, number];
     readonly compute_txid: (a: number, b: number) => [number, number, number, number];

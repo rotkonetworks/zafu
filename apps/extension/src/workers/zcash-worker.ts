@@ -368,6 +368,8 @@ interface WasmModule {
   ): string;
   complete_shielding_transaction(unsigned_tx_hex: string, signatures_json: string): string;
   derive_transparent_privkey(seed_phrase: string, account: number, index: number): string;
+  /** 33-byte compressed secp256k1 pubkey for a UFVK's transparent address index */
+  transparent_pubkey_from_ufvk(ufvk_str: string, address_index: number): string;
   build_merkle_paths(
     tree_state_hex: string,
     compact_blocks_json: string,
@@ -1920,6 +1922,7 @@ interface ZcashBuildRequest {
     | 'build_ironwood_send_pczt'
     | 'build_shielding'
     | 'build_unsigned_shielding'
+    | 'build_unsigned_shielding_ironwood'
     // shielded-voting proving fns - routed to the standalone voting-wasm
     // module + its own rayon pool in the offscreen document. See
     // zcash-build-parallel.ts's VOTING_FNS / initParallelVotingWasm.
@@ -7737,18 +7740,54 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           })),
         );
 
-        const shieldUResult = (await proveViaOffscreen({
-          fn: 'build_unsigned_shielding',
-          args: [
-            shieldUUtxosJson,
-            shieldURecipient,
-            shieldUAmount.toString(),
-            shieldUFee.toString(),
-            shieldUTip.height,
-            shieldUnsignedPayload.mainnet,
-            shieldUBranchIdHex,
-          ],
-        })) as string;
+        // Post-NU6.3 the orchard unsigned builder is fail-closed (shielding into
+        // orchard would strand the funds), so route cold shielding to the
+        // ironwood unsigned builder. It signs a single transparent pubkey's
+        // inputs, so a single-address-index shield only (the common case); a
+        // mixed-index shield fails closed rather than mis-sign.
+        const shieldUPostNu63 =
+          shieldUTip.height >= nu63ActivationHeight(shieldUnsignedPayload.mainnet);
+        let shieldUResult: string;
+        if (shieldUPostNu63) {
+          const shieldUIdxSet = new Set(shieldUAddrIndices);
+          if (shieldUIdxSet.size > 1) {
+            throw new Error(
+              'cold ironwood shielding supports one transparent address index per tx; ' +
+                'shield from a single address at a time',
+            );
+          }
+          const shieldUPubkey = wasmModule.transparent_pubkey_from_ufvk(
+            shieldUnsignedPayload.ufvk,
+            shieldUAddrIndices[0] ?? 0,
+          );
+          shieldUResult = (await proveViaOffscreen({
+            fn: 'build_unsigned_shielding_ironwood',
+            args: [
+              shieldUUtxosJson,
+              shieldUPubkey,
+              shieldURecipient,
+              shieldUAmount.toString(),
+              shieldUFee.toString(),
+              shieldUTip.height,
+              parseInt(shieldUBranchIdHex, 16), // expected_branch_id (numeric)
+              shieldUnsignedPayload.mainnet,
+              null, // memo_hex
+            ],
+          })) as string;
+        } else {
+          shieldUResult = (await proveViaOffscreen({
+            fn: 'build_unsigned_shielding',
+            args: [
+              shieldUUtxosJson,
+              shieldURecipient,
+              shieldUAmount.toString(),
+              shieldUFee.toString(),
+              shieldUTip.height,
+              shieldUnsignedPayload.mainnet,
+              shieldUBranchIdHex,
+            ],
+          })) as string;
+        }
 
         const shieldUParsed = JSON.parse(shieldUResult) as {
           sighashes: string[];

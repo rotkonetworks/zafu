@@ -17,6 +17,7 @@ export const build_signed_turnstile_migration: (a: number, b: number, c: number,
 export const build_turnstile_migration_pczt: (a: number, b: number, c: number, d: number, e: bigint, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number) => [number, number, number];
 export const build_unsigned_pczt: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number) => [number, number, number];
 export const build_unsigned_shielding_transaction: (a: number, b: number, c: number, d: number, e: bigint, f: bigint, g: number, h: number, i: number, j: number) => [number, number, number, number];
+export const build_unsigned_shielding_transaction_ironwood: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: bigint, i: number, j: number, k: number, l: number, m: number) => [number, number, number, number];
 export const build_unsigned_transaction: (a: number, b: number, c: any, d: number, e: number, f: bigint, g: bigint, h: number, i: number, j: any, k: number, l: number, m: number, n: number, o: number, p: number) => [number, number, number];
 export const build_vote_commitment_wire: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number, number];
 export const build_vote_shares_wire: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: bigint) => [number, number, number, number];
@@ -24,6 +25,7 @@ export const build_witnesses_and_paths: (a: number, b: number, c: number, d: num
 export const cast_vote_hot_wire: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: bigint) => [number, number, number, number];
 export const complete_ironwood_pczt: (a: number, b: number, c: any, d: any) => [number, number, number, number];
 export const complete_orchard_pczt: (a: number, b: number, c: any, d: any) => [number, number, number, number];
+export const complete_shielding_pczt: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const complete_shielding_transaction: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const complete_transaction: (a: number, b: number, c: any, d: any) => [number, number, number, number];
 export const compute_txid: (a: number, b: number) => [number, number, number, number];

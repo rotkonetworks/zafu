@@ -51,8 +51,7 @@ waitForMsgType(self, 'wasm_bindgen_worker_init').then(async ({ init, receiver })
   // OTOH, even though it can't be inlined, it should be still reasonably
   // cheap since the requested file is already in cache (it was loaded by
   // the main thread).
-  // LOCAL PATCH - stock emits `import('../../..')` (a directory import) which
-  // Chrome extensions reject; resolve the concrete zafu_wasm.js URL instead.
+  // LOCAL PATCH - stock emits a directory import Chrome extensions reject; resolve the concrete zafu_wasm.js URL instead.
   const wbgRayonBase = new URL('../../..', import.meta.url).href;
   const pkg = await import(wbgRayonBase.endsWith('/') ? wbgRayonBase + 'zafu_wasm.js' : wbgRayonBase);
   await pkg.default(init);

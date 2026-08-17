@@ -1204,6 +1204,71 @@ export function build_unsigned_shielding_transaction(utxos_json, recipient, amou
 }
 
 /**
+ * Build an UNSIGNED transparent→IRONWOOD shielding transaction (NU6.3 / V6) for
+ * cold-wallet / watch-only / zigner signing.
+ *
+ * The post-NU6.3 replacement for [`build_unsigned_shielding_transaction`] (which
+ * builds a now-consensus-disabled orchard V5 bundle). It runs the full guarded
+ * ironwood pipeline through the proof but stops BEFORE signing, and returns the
+ * SAME JSON contract the orchard unsigned builder returns:
+ *   `{ sighashes: [hex_32b...], unsigned_tx_hex: hex, summary: string }`
+ * so the existing zigner sighash encoder needs no change.
+ *
+ * IMPORTANT: `unsigned_tx_hex` here is the serialized PCZT (magic `b"PCZT"`), NOT
+ * a raw transaction - the canonical librustzcash cold-signing carrier. The
+ * air-gapped signer only ever handles the 32-byte `sighashes`; completion must
+ * route to [`complete_shielding_pczt`]. [`complete_shielding_transaction`]
+ * sniffs the PCZT magic and delegates, so an unchanged completion call site also
+ * works.
+ *
+ * # Arguments
+ * * `utxos_json` - JSON array of `{txid, vout, value, script}` (same shape as the
+ *   signed builder)
+ * * `pubkey_hex` - 33-byte compressed secp256k1 pubkey owning every UTXO (from
+ *   e.g. [`transparent_pubkey_from_ufvk`])
+ * * `recipient` - unified address whose orchard-format receiver is the ironwood
+ *   recipient
+ * * `amount`, `fee`, `target_height`, `expected_branch_id`, `mainnet`, `memo_hex`
+ *   - identical semantics to [`build_shielding_transaction_ironwood`]
+ * @param {string} utxos_json
+ * @param {string} pubkey_hex
+ * @param {string} recipient
+ * @param {bigint} amount
+ * @param {bigint} fee
+ * @param {number} target_height
+ * @param {number} expected_branch_id
+ * @param {boolean} mainnet
+ * @param {string | null} [memo_hex]
+ * @returns {string}
+ */
+export function build_unsigned_shielding_transaction_ironwood(utxos_json, pubkey_hex, recipient, amount, fee, target_height, expected_branch_id, mainnet, memo_hex) {
+    let deferred6_0;
+    let deferred6_1;
+    try {
+        const ptr0 = passStringToWasm0(utxos_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(pubkey_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        var ptr3 = isLikeNone(memo_hex) ? 0 : passStringToWasm0(memo_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len3 = WASM_VECTOR_LEN;
+        const ret = wasm.build_unsigned_shielding_transaction_ironwood(ptr0, len0, ptr1, len1, ptr2, len2, amount, fee, target_height, expected_branch_id, mainnet, ptr3, len3);
+        var ptr5 = ret[0];
+        var len5 = ret[1];
+        if (ret[3]) {
+            ptr5 = 0; len5 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred6_0 = ptr5;
+        deferred6_1 = len5;
+        return getStringFromWasm0(ptr5, len5);
+    } finally {
+        wasm.__wbindgen_free(deferred6_0, deferred6_1, 1);
+    }
+}
+
+/**
  * Build an unsigned transaction and return the data needed for cold signing.
  * Uses the PCZT (Partially Constructed Zcash Transaction) flow from the orchard
  * crate to produce real v5 transaction bytes with Halo 2 proofs.
@@ -1477,6 +1542,42 @@ export function complete_orchard_pczt(pczt_hex, orchard_sigs_json, spend_indices
         return getStringFromWasm0(ptr2, len2);
     } finally {
         wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * Complete an unsigned ironwood shielding PCZT (from
+ * [`build_unsigned_shielding_transaction_ironwood`]) into a broadcast-ready V6
+ * transaction hex. See [`complete_shielding_pczt_inner`] for the semantics.
+ *
+ * `signatures_json` is `[{sig_hex, pubkey_hex}, ...]`, one per transparent input
+ * in index order - the exact shape [`complete_shielding_transaction`] accepts,
+ * so a caller that always routes ironwood completions here (or one that reuses
+ * `complete_shielding_transaction`, which sniffs the PCZT magic) is unchanged.
+ * @param {string} pczt_hex
+ * @param {string} signatures_json
+ * @returns {string}
+ */
+export function complete_shielding_pczt(pczt_hex, signatures_json) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(pczt_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(signatures_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.complete_shielding_pczt(ptr0, len0, ptr1, len1);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
 }
 
@@ -3642,17 +3743,17 @@ function __wbg_get_imports(memory) {
             return ret;
         },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 3327, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 3329, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___wasm_bindgen_aeea2c632802c019___JsValue__core_8266185441cb29e1___result__Result_____wasm_bindgen_aeea2c632802c019___JsError___true_);
             return ret;
         },
         __wbindgen_cast_0000000000000002: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 3329, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 3331, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___js_sys_74738dcabc251f8d___futures__task__wait_async_polyfill__MessageEvent______true_);
             return ret;
         },
         __wbindgen_cast_0000000000000003: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 72, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 73, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_aeea2c632802c019___convert__closures_____invoke___wasm_bindgen_aeea2c632802c019___JsValue______true_);
             return ret;
         },

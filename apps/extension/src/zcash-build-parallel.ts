@@ -213,6 +213,7 @@ interface ZcashBuildRequest {
     | 'build_ironwood_send_pczt'
     | 'build_shielding'
     | 'build_unsigned_shielding'
+    | 'build_unsigned_shielding_ironwood'
     // shielded-voting proving fns (standalone voting-wasm module - see
     // initParallelVotingWasm above). build_delegation_pczt does not itself
     // run a halo2 proof (that's deferred to finalize_delegation) but is
@@ -438,6 +439,31 @@ async function executeBuild(req: ZcashBuildRequest): Promise<unknown> {
         a[4],
         a[5],
         a[6] ?? null, // branch_id_hex (live consensus branch id; null -> WASM NU6.2 fallback)
+      );
+      break;
+
+    case 'build_unsigned_shielding_ironwood':
+      // Cold/watch-only transparent -> IRONWOOD shielding (NU6.3+). Unlike the
+      // orchard unsigned builder it takes the transparent pubkey_hex (a[1]) and
+      // the numeric expected_branch_id (a[6]); the carrier in the returned
+      // unsigned_tx_hex is a serialized PCZT, which complete_shielding_transaction
+      // sniffs and routes to complete_shielding_pczt. Feature-detected.
+      if (typeof wasm['build_unsigned_shielding_transaction_ironwood'] !== 'function') {
+        throw new Error(
+          'this wasm build predates ironwood cold shielding - rebuild the wasm ' +
+            '(see packages/zcash-wasm/BUILD_PROVENANCE.md)',
+        );
+      }
+      result = wasm['build_unsigned_shielding_transaction_ironwood'](
+        a[0], // utxos_json
+        a[1], // pubkey_hex (33-byte compressed, owns every UTXO)
+        a[2], // recipient
+        BigInt(a[3] as string),
+        BigInt(a[4] as string),
+        a[5], // target_height
+        a[6], // expected_branch_id (number)
+        a[7], // mainnet
+        a[8] ?? null, // memo_hex
       );
       break;
 
