@@ -11,7 +11,25 @@
  * We patch the global Worker constructor to fix the URLs before init.
  */
 
+import {
+  assessAmbientRayonIsolation,
+  RAYON_ISOLATION_WARNING,
+} from './perf/rayon-isolation';
+
 type WasmModule = Record<string, any>;
+
+// Regression guard: rayon needs SharedArrayBuffer + a cross-origin-isolated
+// context. Nothing sets COOP/COEP in this repo - Chrome grants shared memory in
+// extension offscreen/worker realms by policy today. If that policy ever
+// changes, initThreadPool silently builds a single-thread pool (proving ~5x
+// slower) with no error. This shouts at each pool init so the regression is
+// loud, not silent. Non-fatal: the single-thread fallback still runs.
+const assertRayonIsolation = (tag: string): void => {
+  const isolation = assessAmbientRayonIsolation();
+  if (!isolation.ok) {
+    console.error(`${RAYON_ISOLATION_WARNING} (${tag}: ${isolation.reason})`);
+  }
+};
 
 let wasmModule: WasmModule | null = null;
 let initPromise: Promise<void> | null = null;
@@ -72,6 +90,7 @@ const initParallelWasm = async (): Promise<WasmModule> => {
       await wasm.default({ module_or_path: `${WASM_BASE}/zafu_wasm_bg.wasm` });
       wasm.init();
 
+      assertRayonIsolation('zafu-wasm prover');
       const numThreads = navigator.hardwareConcurrency || 4;
       await wasm.initThreadPool(numThreads);
       console.log(`[zcash-build-parallel] rayon: ${numThreads} threads`);
@@ -158,6 +177,7 @@ const initParallelVotingWasm = async (): Promise<WasmModule> => {
       // Own pool, independent of the core module's — same crossOriginIsolated
       // offscreen context, but a separate wasm instance/memory needs its own
       // initThreadPool call.
+      assertRayonIsolation('voting-wasm prover');
       const numThreads = votingProofThreads();
       await wasm.initThreadPool(numThreads);
       console.log(

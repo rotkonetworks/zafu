@@ -1161,10 +1161,12 @@ const ZcashContent = ({
 
   // combined balance - transparent funds fold into the single hero figure.
   // Pending shielded change (change from our own unconfirmed sends, e.g. the
-  // ironwood change note of a send that has not mined yet) is part of what the
-  // wallet holds — it is NOT spendable, but it is not gone, and omitting it
-  // from the figure made a pending send read as "0 in all pools". Include it;
-  // the breakdown below calls it out as pending.
+  // ironwood change note of a send that has not mined yet — and a pending
+  // turnstile migration's in-flight value moving orchard → the wallet's own
+  // ironwood pool) is part of what the wallet holds — it is NOT spendable, but
+  // it is not gone, and omitting it from the figure made a pending send (or
+  // migrate) read as "0 in all pools". Include it; the breakdown below calls it
+  // out as pending.
   const totalZat = orchardZat + transparentZat + pools.pendingTotal;
   const totalZec = Number(totalZat) / 1e8;
 

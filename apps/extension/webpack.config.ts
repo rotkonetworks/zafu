@@ -279,6 +279,8 @@ export default ({
       zitadel: path.join(srcDir, 'zitadel', 'main.tsx'),
       // network workers (isolated sync per network)
       'workers/zcash-worker': path.join(workersDir, 'zcash-worker.ts'),
+      // UR fountain decode worker — off-threads ur_decode_frames from the popup
+      'workers/ur-decode-worker': path.join(workersDir, 'ur-decode-worker.ts'),
     },
     output: {
       path: distDir,
@@ -295,6 +297,7 @@ export default ({
             'keplr-bridge',
             'passkey-intercept',
             'workers/zcash-worker',
+            'workers/ur-decode-worker',
           ];
           return chunk.name ? !filesNotToChunk.includes(chunk.name) : false;
         },

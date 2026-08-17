@@ -18,6 +18,7 @@ import type { JsonValue } from '@bufbuild/protobuf';
 import type { ParallelBuildRequest } from '@rotko/penumbra-types/internal-msg/offscreen';
 import { FullViewingKey } from '@penumbra-zone/protobuf/penumbra/core/keys/v1/keys_pb';
 import actionKeys from '@penumbra-zone/keys';
+import { assessAmbientRayonIsolation, RAYON_ISOLATION_WARNING } from './perf/rayon-isolation';
 
 // Proving key URLs are relative to the extension origin. self.location.origin
 // is the chrome-extension://<id> origin in any extension worker context, so
@@ -71,6 +72,15 @@ const initParallelWasm = async () => {
 
       if (typeof SharedArrayBuffer === 'undefined') {
         throw new Error('SharedArrayBuffer not available - parallel WASM requires it');
+      }
+
+      // Regression guard: even when SharedArrayBuffer exists, a lost
+      // cross-origin-isolated context degrades rayon to a single thread. No
+      // COOP/COEP is set anywhere - this depends on current Chrome policy for
+      // extension realms; shout loudly if that ever slips.
+      const isolation = assessAmbientRayonIsolation();
+      if (!isolation.ok) {
+        console.error(`${RAYON_ISOLATION_WARNING} (penumbra parallel build: ${isolation.reason})`);
       }
 
       const numThreads = navigator.hardwareConcurrency || 4;

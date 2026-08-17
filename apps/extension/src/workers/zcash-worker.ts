@@ -34,6 +34,7 @@ import {
 } from './proof-decoys';
 import { BlockPrefetcher } from './block-prefetcher';
 import { once } from './once';
+import { assessAmbientRayonIsolation, RAYON_ISOLATION_WARNING } from '../perf/rayon-isolation';
 import { loadVotingWasm } from '../state/voting-wasm';
 import {
   parseExpiryHeight,
@@ -1802,10 +1803,21 @@ const initWasm = once(async (): Promise<void> => {
         super(urlStr, options);
       }
     };
+    // Regression guard: rayon silently degrades to one thread if the realm
+    // loses cross-origin isolation / SharedArrayBuffer. No COOP/COEP is set
+    // anywhere - this rides on current Chrome policy for extension workers.
+    // initThreadPool would NOT throw in that case, so surface it into
+    // scanParallelism (the UI degradation channel) as well as a loud log.
+    const isolation = assessAmbientRayonIsolation();
+    if (!isolation.ok) {
+      console.error(`${RAYON_ISOLATION_WARNING} (zcash scan worker: ${isolation.reason})`);
+    }
     // leave a core for the UI thread; scanning runs while the popup renders
     const numThreads = Math.max(1, (navigator.hardwareConcurrency || 4) - 1);
     await wasm.initThreadPool(numThreads);
-    scanParallelism = { threads: numThreads };
+    scanParallelism = isolation.ok
+      ? { threads: numThreads }
+      : { threads: numThreads, reason: `cross-origin isolation lost: ${isolation.reason}` };
     console.log(`[zcash-worker] rayon: ${numThreads} threads`);
   } catch (e) {
     // error, not warn: this is a several-fold slowdown, not a curiosity, and
@@ -4642,6 +4654,9 @@ interface PoolBalances {
    * zero while the change note has not mined yet — correct, but it made the
    * wallet read as empty (all pools 0, "get your first zec") with money in
    * flight. These figures keep that value visible and are NOT spendable.
+   * pendingIronwood additionally carries a pending turnstile migration's
+   * in-flight value: its orchard inputs are spent at broadcast, but the value
+   * returns to the wallet's own ironwood pool once mined.
    */
   pendingOrchard: bigint;
   pendingIronwood: bigint;
@@ -4671,12 +4686,24 @@ const getPoolBalances = async (walletId: string): Promise<PoolBalances> => {
     }
   }
 
-  // Pending shielded change from our in-flight sends. chain(tx) = inputs(tx)
-  // − amount(tx) − fee, and HistoryTx.amount already includes the fee, so
-  // change = inputs − amount. A confirmed send (reconcile wrote
-  // confirmedHeight) or one whose spend has already been seen on chain
-  // produces no pending change here. NU6.3 makes ironwood the active pool, so
-  // this is where a pending ironwood send inappropriately zeroed the figure.
+  // Pending shielded change from our in-flight sends. The change that returns
+  // to us is inputs − recipient − fee. Watch the type: HistoryTx.amount (the
+  // display row built in reconcile) already folds the fee in, but the record
+  // read here is a SentTxRecord, whose `amount` is the RECIPIENT amount ONLY,
+  // with the fee stored separately in `rec.fee` (see the recordSentTx call
+  // sites). So change = inp.value − rec.amount − rec.fee; subtracting only
+  // rec.amount overstated every pending send by exactly one fee. A confirmed
+  // send (reconcile wrote confirmedHeight) or one whose spend has already been
+  // seen on chain produces no pending change here. NU6.3 makes ironwood the
+  // active pool, so this is where a pending ironwood send inappropriately
+  // zeroed the figure.
+  //
+  // A turnstile migration (kind === 'migrate') is special: its orchard inputs
+  // are marked spent at broadcast (orchard → 0) but nothing actually leaves the
+  // wallet except the fee — the value moves to the wallet's OWN ironwood pool
+  // and returns as an ironwood output once mined. Attribute its whole in-flight
+  // value (rec.amount, already inputs − fee) to pendingIronwood so the hero
+  // total stays whole through the confirmation window instead of reading ~0.
   let pendingOrchard = 0n;
   let pendingIronwood = 0n;
   try {
@@ -4701,7 +4728,21 @@ const getPoolBalances = async (walletId: string): Promise<PoolBalances> => {
         if (!inp) {
           continue;
         }
-        const change = inp.value - BigInt(rec.amount);
+        // A pending migrate's value is not leaving the wallet — it is moving
+        // orchard → the wallet's own ironwood pool. rec.amount is the ironwood
+        // output (inputs − fee); count it as arriving ironwood so the hero total
+        // stays whole. The kind check must precede the generic send math: that
+        // math would compute inputs − amount − fee = 0 for a migrate and drop it.
+        if (rec.kind === 'migrate') {
+          const arriving = BigInt(rec.amount);
+          if (arriving > 0n) {
+            pendingIronwood += arriving;
+          }
+          continue;
+        }
+        // rec.amount is the recipient amount only; the fee is separate, so the
+        // change returning to us is inputs − recipient − fee.
+        const change = inp.value - BigInt(rec.amount) - BigInt(rec.fee);
         if (change <= 0n) {
           continue;
         }
