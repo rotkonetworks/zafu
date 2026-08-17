@@ -45,16 +45,7 @@ export const IRONWOOD_MIGRATION = true;
  * 70722f7 wasm rebuild. Turn this OFF to fall back to the fully
  * backward-compatible 0x03 request and full-PCZT response.
  */
-// OFF pending a zafu-wasm rebuild. redact_pczt_compact (zcli) clears cv_net on
-// a PCZT whose spend.value was already stripped by redact_pczt_for_signer, so
-// the device's resolve_cv_net cannot rebuild cv_net and rejects an ironwood
-// sign with ParseError::InvalidValueCommitment. The fix (stop clearing cv_net)
-// is committed in zcli but not yet in the vendored wasm blob; until the blob is
-// rebuilt we send the full signer-redacted PCZT (cv_net retained, spend.value
-// still stripped for privacy) for the only two compact users - ironwood send +
-// turnstile migration. Orchard never used compact. Restore to true once the
-// rebuilt blob ships (small compact QR returns then).
-export const COMPACT_SIGN_REQUEST = false;
+export const COMPACT_SIGN_REQUEST = true;
 
 /**
  * NU6.3 Ironwood activation height on MAINNET.

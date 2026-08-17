@@ -94,6 +94,25 @@ Reproduce by checking out the zcli rev below and running the commands.
 Verify: rebuild from the rev, sha256sum the outputs,
 diff against the values above. A mismatch means the vendored blob is stale.
 
+## 2026-08-17 rebuild (2) - fix compact redaction cv_net (ironwood cold-sign)
+
+- source repo: zcli, branch `master`, rev `9386a35`
+- toolchain: wasm-bindgen 0.2.126, wasm-opt (binaryen) **130** (canonical; last
+  rebuild used the local 117 - byte outputs differ by binaryen version)
+- parallel size after -Oz: 8755225 bytes; parallel blob carries shared imported
+  memory `(memory 50 32768 shared)`.
+- Fixes `redact_pczt_compact`: it cleared `cv_net` on a PCZT whose `spend.value`
+  was already stripped by `redact_pczt_for_signer`, so the device's
+  `resolve_cv_net` could not rebuild it and rejected an ironwood compact sign
+  with `orchard::pczt::ParseError::InvalidValueCommitment`. Now retains `cv_net`
+  (32 public bytes/action; the large cmx + enc_ciphertext savings are kept).
+  This re-enables `COMPACT_SIGN_REQUEST = true` for ironwood (small QR).
+- Only `zafu_wasm_bg.wasm` + the worker-patched `snippets/` changed; the
+  bindgen glue (`zafu_wasm.js` / `.d.ts`) is byte-identical (internals-only fix).
+- Verified: both copies (`public/zafu-wasm/`, `packages/zcash-wasm/`) updated;
+  worker patch re-applied (`wbgRayonBase` defined+used, zero `import('../../..')`);
+  beta bundle green, new blob present in `beta-dist/zafu-wasm/`.
+
 ## 2026-08-17 rebuild - cold/watch-only ironwood shielding
 
 - source repo: zcli, branch `master`, rev `01d9715`
