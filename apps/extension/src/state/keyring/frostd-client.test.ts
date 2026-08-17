@@ -133,4 +133,21 @@ describe('FrostdClient', () => {
 
     expect(msgs).toEqual([{ sender: 'ccdd', msg: 'aa11' }]);
   });
+
+  /// During rollout the relay will be unreachable at some point. fetch throws
+  /// a bare "Failed to fetch" for DNS, refused connections and TLS alike,
+  /// which reads as a bug in the wallet rather than a relay that is not up.
+  it('names the relay when it cannot be reached', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('Failed to fetch');
+      }),
+    );
+
+    const client = new FrostdClient('https://relay.example');
+    await expect(client.login('aabb', async () => new Uint8Array(64))).rejects.toThrow(
+      /cannot reach the relay at https:\/\/relay\.example/,
+    );
+  });
 });

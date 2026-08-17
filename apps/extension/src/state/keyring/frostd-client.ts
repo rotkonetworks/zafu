@@ -134,11 +134,24 @@ export class FrostdClient {
       headers['Authorization'] = `Bearer ${this.accessToken}`;
     }
 
-    const res = await fetch(`${this.host}/${path}`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-    });
+    // fetch rejects with a bare "Failed to fetch" for DNS failures, refused
+    // connections and TLS problems alike, which tells a user nothing and
+    // looks identical to a bug in the wallet. Name the relay instead: during
+    // a rollout the usual cause is that it is not up yet, and the usual fix
+    // is a different relay, which the settings field already allows.
+    let res: Response;
+    try {
+      res = await fetch(`${this.host}/${path}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+      });
+    } catch {
+      throw new Error(
+        `cannot reach the relay at ${this.host} - it may be down, or blocked ` +
+          `by your network. You can point at a different one under "advanced".`,
+      );
+    }
 
     if (!res.ok) {
       // Include the body: frostd returns a structured error and swallowing it
