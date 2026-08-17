@@ -12,7 +12,7 @@ import {
   type Contact,
   type ContactAddress,
   type ContactNetwork,
-  type ContactsExport,
+  type PersonalDataBackup,
 } from '../../../state/contacts';
 import { encodeContactCard, bytesToHex } from '@repo/wallet/networks/zcash/memo-codec';
 import { selectEffectiveKeyInfo } from '../../../state/keyring';
@@ -528,18 +528,20 @@ export function ContactsPage() {
 
   // export contacts as encrypted JSON file download
   const handleExport = useCallback(async () => {
-    const password = window.prompt('enter password to encrypt export');
+    const password = window.prompt(
+      'password to encrypt your personal-data backup (contacts, send history, tx notes)',
+    );
     if (!password) {
       return;
     }
     try {
-      const data = await contacts.exportContacts(password);
+      const data = await contacts.exportPersonalData(password);
       const json = JSON.stringify(data, null, 2);
       const blob = new Blob([json], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `zafu-contacts-${new Date().toISOString().split('T')[0]}.json`;
+      a.download = `zafu-personal-data-${new Date().toISOString().split('T')[0]}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -564,13 +566,16 @@ export function ContactsPage() {
 
       try {
         const text = await file.text();
-        const data = JSON.parse(text) as ContactsExport;
-        const password = window.prompt('enter password to decrypt contacts');
+        const data = JSON.parse(text) as PersonalDataBackup;
+        const password = window.prompt('password to decrypt this backup');
         if (!password) {
           return;
         }
-        const count = await contacts.importContacts(data, password, 'merge');
-        setImportStatus({ type: 'success', message: `imported ${count} contacts` });
+        const n = await contacts.importPersonalData(data, password, 'merge');
+        setImportStatus({
+          type: 'success',
+          message: `restored ${n.contacts} contacts, ${n.sent} sends, ${n.notes} notes`,
+        });
         setTimeout(() => setImportStatus(null), 3000);
       } catch (err) {
         setImportStatus({
@@ -703,14 +708,14 @@ export function ContactsPage() {
                     className='flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-elev-1 transition-colors'
                   >
                     <span className='i-ph-download-simple h-4 w-4' />
-                    export
+                    back up data
                   </button>
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     className='flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-elev-1 transition-colors'
                   >
                     <span className='i-ph-upload-simple h-4 w-4' />
-                    import
+                    restore
                   </button>
                 </div>
               </>

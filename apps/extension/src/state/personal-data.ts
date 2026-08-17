@@ -10,8 +10,79 @@
  * are cleared by the caller via the contacts slice (it owns its own storage).
  */
 
+import type { SentTxRecord } from '../workers/sent-tx-reconcile';
+
 const ZCASH_DB = 'zafu-zcash';
 const TX_NOTES_KEY = 'txNotes';
+
+const openZcashDb = (): Promise<IDBDatabase | null> =>
+  new Promise(resolve => {
+    try {
+      const req = indexedDB.open(ZCASH_DB);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+      req.onblocked = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+
+/** All local send records across wallets (for backup/export). */
+export const readSentRecords = async (): Promise<SentTxRecord[]> => {
+  const db = await openZcashDb();
+  if (!db || !db.objectStoreNames.contains('sent')) {
+    db?.close();
+    return [];
+  }
+  return new Promise(resolve => {
+    try {
+      const req = db.transaction('sent', 'readonly').objectStore('sent').getAll();
+      req.onsuccess = () => {
+        db.close();
+        resolve((req.result as SentTxRecord[] | undefined) ?? []);
+      };
+      req.onerror = () => {
+        db.close();
+        resolve([]);
+      };
+    } catch {
+      db.close();
+      resolve([]);
+    }
+  });
+};
+
+/** Restore send records (import). Each carries its own [walletId, txid] key. */
+export const writeSentRecords = async (records: readonly SentTxRecord[]): Promise<void> => {
+  if (records.length === 0) {
+    return;
+  }
+  const db = await openZcashDb();
+  if (!db || !db.objectStoreNames.contains('sent')) {
+    db?.close();
+    return;
+  }
+  return new Promise(resolve => {
+    try {
+      const tx = db.transaction('sent', 'readwrite');
+      const store = tx.objectStore('sent');
+      for (const r of records) {
+        store.put(r);
+      }
+      tx.oncomplete = () => {
+        db.close();
+        resolve();
+      };
+      tx.onerror = () => {
+        db.close();
+        resolve();
+      };
+    } catch {
+      db.close();
+      resolve();
+    }
+  });
+};
 
 /** Clear the local send history ('sent' object store), keeping the DB + cache. */
 const clearSentStore = (): Promise<void> =>

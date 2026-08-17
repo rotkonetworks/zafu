@@ -12,6 +12,27 @@ import type { SessionStorageState } from '@repo/storage-chrome/session';
 import { Key } from '@repo/encryption/key';
 import { Box, type BoxJson } from '@repo/encryption/box';
 import type { KeyPrintJson } from '@repo/encryption/key-print';
+import {
+  readSentRecords,
+  writeSentRecords,
+  readTxNotes,
+  writeTxNotes,
+} from './personal-data';
+import type { SentTxRecord } from '../workers/sent-tx-reconcile';
+
+/**
+ * Encrypted backup of ALL local, chain-irreplaceable personal data: contacts +
+ * send history + per-tx "from" notes. Same password-derived-key envelope as the
+ * contacts-only export, one version up. This is the "carry it across devices /
+ * recover after a full wipe" layer for data the chain can never give back.
+ */
+export interface PersonalDataBackup {
+  version: 4;
+  exportedAt: number;
+  /** encrypted { contacts, sent, txNotes } JSON */
+  data: BoxJson;
+  keyPrint: KeyPrintJson;
+}
 
 export type ContactNetwork =
   | 'penumbra'
@@ -130,6 +151,16 @@ export interface ContactsSlice {
 
   /** clear all contacts */
   clearAll: () => Promise<void>;
+
+  /** export ALL personal data (contacts + send history + tx notes), encrypted */
+  exportPersonalData: (password: string) => Promise<PersonalDataBackup>;
+
+  /** import a personal-data backup; returns how many of each were restored */
+  importPersonalData: (
+    data: PersonalDataBackup,
+    password: string,
+    mode: 'merge' | 'replace',
+  ) => Promise<{ contacts: number; sent: number; notes: number }>;
 }
 
 const generateId = () => crypto.randomUUID();
@@ -440,6 +471,102 @@ export const createContactsSlice =
           state.contacts.contacts = [];
         });
         await persist();
+      },
+
+      exportPersonalData: async (password: string) => {
+        const contacts = safeContacts().map(c => ({
+          name: c.name,
+          notes: c.notes,
+          favorite: c.favorite,
+          addresses: c.addresses.map(a => ({
+            network: a.network,
+            address: a.address,
+            chainId: a.chainId,
+            notes: a.notes,
+          })),
+        }));
+        const sent = await readSentRecords();
+        const txNotes = await readTxNotes();
+
+        const plaintext = JSON.stringify({ contacts, sent, txNotes });
+        const { key, keyPrint } = await Key.create(password);
+        const box = await key.seal(plaintext);
+
+        return {
+          version: 4 as const,
+          exportedAt: Date.now(),
+          data: box.toJson(),
+          keyPrint: keyPrint.toJson(),
+        };
+      },
+
+      importPersonalData: async (data, password, mode) => {
+        if (data.version !== 4) {
+          throw new Error('unsupported backup version — expected v4');
+        }
+        const { KeyPrint: KP } = await import('@repo/encryption/key-print');
+        const key = await Key.recreate(password, KP.fromJson(data.keyPrint));
+        if (!key) {
+          throw new Error('wrong password');
+        }
+        const plaintext = await key.unseal(Box.fromJson(data.data));
+        if (!plaintext) {
+          throw new Error('failed to decrypt backup');
+        }
+        const parsed = JSON.parse(plaintext) as {
+          contacts: {
+            name: string;
+            notes?: string;
+            favorite?: boolean;
+            addresses: {
+              network: ContactNetwork;
+              address: string;
+              chainId?: string;
+              notes?: string;
+            }[];
+          }[];
+          sent: SentTxRecord[];
+          txNotes: Record<string, string>;
+        };
+
+        const existingNames = new Set(safeContacts().map(c => c.name.toLowerCase()));
+        const newContacts: Contact[] = (parsed.contacts ?? [])
+          .filter(c => mode === 'replace' || !existingNames.has(c.name.toLowerCase()))
+          .map(c => ({
+            id: generateId(),
+            name: c.name,
+            notes: c.notes,
+            favorite: c.favorite,
+            createdAt: Date.now(),
+            addresses: c.addresses.map(a => ({
+              id: generateId(),
+              network: a.network,
+              address: a.address,
+              chainId: a.chainId,
+              notes: a.notes,
+            })),
+          }));
+        set(state => {
+          if (mode === 'replace') {
+            state.contacts.contacts = newContacts;
+          } else {
+            if (!Array.isArray(state.contacts.contacts)) {
+              state.contacts.contacts = [];
+            }
+            state.contacts.contacts.push(...newContacts);
+          }
+        });
+        await persist();
+
+        // send history + tx notes live outside the contacts store
+        await writeSentRecords(parsed.sent ?? []);
+        await writeTxNotes(parsed.txNotes ?? {}, mode);
+
+        return {
+          contacts: newContacts.length,
+          sent: (parsed.sent ?? []).length,
+          notes: Object.keys(parsed.txNotes ?? {}).length,
+        };
       },
     };
   };
