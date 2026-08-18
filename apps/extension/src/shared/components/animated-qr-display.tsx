@@ -26,25 +26,30 @@ const DEFAULT_CHUNK_SIZE = 400;
 
 /** density presets: payload bytes per QR frame → QR version ≈ */
 interface DensityPreset {
-  key: 'fragile' | 'safe' | 'medium' | 'aggressive';
+  key: 'fragile' | 'single' | 'voting' | 'migration';
   label: string;
   bytes: number;
   detail: string;
 }
+// Anchored on vizor's (Keystone reference wallet) actual per-flow fragment sizes
+// - 140 single send, 200 voting, 300 migration - exposed as OUR density slider
+// instead of picked per-flow. 'fragile' (100 B) is below anything vizor ships,
+// for bad laptop/webcam cameras that cannot lock a denser code. Default is 200
+// (voting), matching the worker's DEFAULT_ZIGNER_FRAG_SIZE.
 export const QR_DENSITY_PRESETS: DensityPreset[] = [
-  // 'fragile': lowest QR version, for bad laptop/webcam cameras that cannot lock
-  // a denser code. More frames, but each is trivially scannable.
   { key: 'fragile', label: 'fragile', bytes: 100, detail: '~v6 · worst cameras' },
-  { key: 'safe', label: 'safe', bytes: 400, detail: '~v16 · wide compat' },
-  { key: 'medium', label: 'medium', bytes: 800, detail: '~v22 · phone+webcam' },
-  { key: 'aggressive', label: 'aggressive', bytes: 1200, detail: '~v25 · close-up setup' },
+  { key: 'single', label: 'single', bytes: 140, detail: '~v7 · vizor single-send' },
+  { key: 'voting', label: 'voting', bytes: 200, detail: '~v9 · vizor voting · default' },
+  { key: 'migration', label: 'migration', bytes: 300, detail: '~v11 · vizor migration' },
 ];
+const DENSITY_DEFAULT = 200;
 const DENSITY_MIN = 100;
-const DENSITY_MAX = 1600;
+const DENSITY_MAX = 300;
 
 /** closest preset for a stored/custom value */
 const clampPreset = (bytes: number): number => {
-  const n = typeof bytes === 'number' && bytes >= DENSITY_MIN ? Math.round(bytes) : 400;
+  const n =
+    typeof bytes === 'number' && bytes >= DENSITY_MIN ? Math.round(bytes) : DENSITY_DEFAULT;
   return Math.min(DENSITY_MAX, Math.max(DENSITY_MIN, n));
 };
 
@@ -65,7 +70,7 @@ interface AnimatedQrDisplayProps {
   showSpeedControl?: boolean;
   /** show the QR density slider (payload bytes/frame). Needs `data` or `urSource`. */
   showDensityControl?: boolean;
-  /** initial payload-bytes-per-frame density (default 400 = safe) */
+  /** initial payload-bytes-per-frame density (default 200 = safe) */
   densityBytes?: number;
   /**
    * raw fountain source for UR flows — lets the component re-fountain frames at
@@ -134,7 +139,7 @@ export function AnimatedQrDisplay({
   frameInterval = 300,
   showSpeedControl = true,
   showDensityControl = true,
-  densityBytes = 400,
+  densityBytes = DENSITY_DEFAULT,
   urSource,
   title,
   description,
