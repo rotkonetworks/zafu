@@ -94,6 +94,38 @@ Reproduce by checking out the zcli rev below and running the commands.
 Verify: rebuild from the rev, sha256sum the outputs,
 diff against the values above. A mismatch means the vendored blob is stale.
 
+## 2026-08-18 rebuild - compact redaction losslessness (compact_resolvable_fields)
+
+- source repo: zcli, branch `master`, rev `9386a35` + UNCOMMITTED working-tree
+  change to `redact_pczt_compact` (commit lib.rs before treating this as
+  reproducible).
+- toolchain: wasm-bindgen 0.2.126, wasm-opt (binaryen) **130**
+  (/nix/store/azhmf1il8da9pps80bk2f4l6ql6bgfg7-binaryen-130).
+- parallel size after -Oz: 8760020 bytes; shared imported memory
+  `(memory 50 32768 shared)` confirmed.
+- sha256(parallel zafu_wasm_bg.wasm) =
+  88c5cb08753aa9995563f0f17c7c4ada39816ce39821dd53d5e201db2de9f372
+- Fixes `redact_pczt_compact`: replaced the hand-rolled per-action `clear_cmx()`
+  + `replace_enc_ciphertext_with_memo_plaintext([0u8;512])` with the canonical
+  `redactor.compact_resolvable_fields()` primitive (pczt 0.9.3), which clears
+  cmx/cv_net/enc_ciphertext ONLY when the device's `resolve_fields()` reproduces
+  them byte-for-byte and restores the original otherwise. The old version signed
+  a different sighash than the retained tx (empty-memo hardcode destroyed real
+  memos AND corrupted randomized padding-dummy ciphertext), so compact
+  signatures failed to merge with `IronwoodSign(InvalidExternalSignature)` on
+  EVERY ironwood-send shape. Matches upstream
+  `zcash_client_backend::redact_pczt_for_batch_signer` MINUS the bsk/zkproof
+  clears (deliberately retained so the zigner's on-device fee-vs-bsk check still
+  runs). Verified natively (no browser): zigner
+  `pczt_signing/tests/ironwood_send_fixture.rs` drives the real module0.wasm -
+  compact sigs merge clean on single / memo / z->t / multi-note.
+- Internals-only: `zafu_wasm.js` / `.d.ts` byte-identical to the previous blob;
+  only `zafu_wasm_bg.wasm` changed. Both trees (`packages/zcash-wasm/`,
+  `apps/extension/public/zafu-wasm/`) updated byte-identical; worker patch intact
+  (`wbgRayonBase` defined+used, zero `import('../../..')`).
+- COMPACT_SIGN_REQUEST stays OFF by design (single send compacts only ~1.15x);
+  the fix makes compact CORRECT for the batch migration/voting flows that use it.
+
 ## 2026-08-17 rebuild (2) - fix compact redaction cv_net (ironwood cold-sign)
 
 - source repo: zcli, branch `master`, rev `9386a35`
