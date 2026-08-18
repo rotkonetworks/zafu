@@ -26,17 +26,20 @@ const DEFAULT_CHUNK_SIZE = 400;
 
 /** density presets: payload bytes per QR frame → QR version ≈ */
 interface DensityPreset {
-  key: 'safe' | 'medium' | 'aggressive';
+  key: 'fragile' | 'safe' | 'medium' | 'aggressive';
   label: string;
   bytes: number;
   detail: string;
 }
 export const QR_DENSITY_PRESETS: DensityPreset[] = [
+  // 'fragile': lowest QR version, for bad laptop/webcam cameras that cannot lock
+  // a denser code. More frames, but each is trivially scannable.
+  { key: 'fragile', label: 'fragile', bytes: 100, detail: '~v6 · worst cameras' },
   { key: 'safe', label: 'safe', bytes: 400, detail: '~v16 · wide compat' },
   { key: 'medium', label: 'medium', bytes: 800, detail: '~v22 · phone+webcam' },
   { key: 'aggressive', label: 'aggressive', bytes: 1200, detail: '~v25 · close-up setup' },
 ];
-const DENSITY_MIN = 200;
+const DENSITY_MIN = 100;
 const DENSITY_MAX = 1600;
 
 /** closest preset for a stored/custom value */
@@ -474,7 +477,7 @@ export function AnimatedQrDisplay({
               ≈ v{qrVersion} · ~{frameEstimate.toLocaleString()} frames
             </span>
           </div>
-          <div className='grid grid-cols-3 gap-1'>
+          <div className='grid grid-cols-4 gap-1'>
             {QR_DENSITY_PRESETS.map(preset => {
               const active = density === preset.bytes;
               return (
@@ -489,7 +492,9 @@ export function AnimatedQrDisplay({
                   }`}
                 >
                   <span className='block font-medium capitalize'>{preset.label}</span>
-                  <span className='block opacity-70'>{preset.bytes / 1000}KB</span>
+                  <span className='block opacity-70'>
+                    {preset.bytes < 1000 ? `${preset.bytes}B` : `${preset.bytes / 1000}KB`}
+                  </span>
                 </button>
               );
             })}

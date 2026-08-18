@@ -30,38 +30,34 @@ export const IRONWOOD_MIGRATION = true;
  * Send the airgapped signing REQUEST in the compact form (zigner envelope
  * tx_type 0x05) instead of the legacy full-PCZT form (0x03).
  *
- * A compact request ships a further-redacted PCZT — the v6 bundle anchors and
- * the output cmx are dropped, and each output's 580-byte enc_ciphertext
- * collapses to its memo trimmed to the last nonzero byte (one byte for the
- * empty memo a migration uses). cv_net is deliberately RETAINED (zcli 9386a35):
- * the device's `resolve_cv_net` rebuilds it from the SPEND value, but the
- * signer redaction strips spend.value for privacy, so a dropped cv_net is
- * unrecoverable and the device rejects the PCZT with InvalidValueCommitment.
- * The device recomputes cmx/enc_ciphertext in `resolve_fields()` before running
- * the SAME verification gates, so nothing is trusted that was not proven;
- * upstream measured ~2.5x less request payload on a v6 migration.
+ * WHY THIS IS THE DEFAULT (and the request-size framing is a red herring):
+ * the win is the RESPONSE leg, not the request. A compact request makes the
+ * device answer with a SIGNATURES-ONLY response (tx_type 0x07) - just the
+ * spend-auth signatures, ~64 bytes each - which fits in a SINGLE static QR
+ * frame. A full (0x03) request makes the device answer with the whole signed
+ * PCZT (~12 KB), which the device must display as dozens of animated QR frames
+ * and the wallet must scan BACK through a (often poor, laptop) camera. That
+ * animated multi-frame scan is the actual failure point. It is the same for a
+ * single ironwood send as for a migration batch - there is no reason a single
+ * send should not be redacted, and it should be.
  *
- * The compact redaction is now CORRECT: zcli `redact_pczt_compact` was switched
- * from a hand-rolled empty-memo replacement to the canonical
- * `compact_resolvable_fields()` primitive (matching upstream
+ * The compact redaction is lossless and CORRECT: zcli `redact_pczt_compact`
+ * uses the canonical `compact_resolvable_fields()` primitive (matching upstream
  * `zcash_client_backend::redact_pczt_for_batch_signer`), which clears
  * cmx/enc_ciphertext/cv_net only when the device's `resolve_fields()` reproduces
- * them byte-for-byte. Verified: compact signatures now merge clean on every
- * ironwood-send shape - single, non-empty-memo, z->t, multi-note (zigner
- * `tests/ironwood_send_fixture.rs` drives the real module0.wasm; fixtures from
- * zcli `dump_ironwood_send_fixtures`). The earlier hand-rolled version signed a
- * different sighash than the retained tx and failed to merge with
- * `IronwoodSign(InvalidExternalSignature)`.
+ * them byte-for-byte and restores the original otherwise. Verified: compact
+ * signatures merge clean on every ironwood-send shape - single, non-empty-memo,
+ * z->t, multi-note (zigner `tests/ironwood_send_fixture.rs` drives the real
+ * module0.wasm; fixtures from zcli `dump_ironwood_send_fixtures`). The earlier
+ * hand-rolled empty-memo version signed a different sighash than the retained tx
+ * and failed to merge with `IronwoodSign(InvalidExternalSignature)`.
  *
- * DEFAULT OFF anyway, as a DESIGN choice, not a bug workaround: a single send
- * compacts only ~1.15x (the win is the enc_ciphertext collapse, which mostly
- * matters for the empty-memo outputs of many-PCZT MIGRATION/VOTING batches). So
- * single sends take the full-PCZT 0x03 path - exactly what vizor does - and
- * compact is reserved for the batch flows where its size win is real. It is now
- * safe to enable here; it is simply not worth it for one-off sends.
+ * DEFAULT ON: always redact. Set to false only as a COMPATIBILITY FALLBACK for
+ * a zigner too old to understand tx_type 0x05 / emit the compact response (see
+ * below) - those devices need the full 0x03 request + full-PCZT response.
  *
- * REQUIRES the rebuilt wasm carrying the compact_resolvable_fields fix. Rebuild
- * + vendor `zafu_wasm_bg.wasm` before flipping this on anywhere.
+ * REQUIRES the rebuilt wasm carrying the compact_resolvable_fields fix
+ * (packages/zcash-wasm + apps/extension/public/zafu-wasm, sha 88c5cb08...).
  *
  * COMPATIBILITY: a zigner older than v0.8.2 does not know tx_type 0x05 and
  * fail-closes on the unknown prelude. The device also answers a compact
@@ -70,7 +66,7 @@ export const IRONWOOD_MIGRATION = true;
  * 70722f7 wasm rebuild. Turn this OFF to fall back to the fully
  * backward-compatible 0x03 request and full-PCZT response.
  */
-export const COMPACT_SIGN_REQUEST = false;
+export const COMPACT_SIGN_REQUEST = true;
 
 /**
  * NU6.3 Ironwood activation height on MAINNET.
