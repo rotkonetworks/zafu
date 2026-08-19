@@ -126,7 +126,7 @@
  * ==========================================================================
  */
 
-import { ed25519 } from '@noble/curves/ed25519';
+import { ed25519, x25519 } from '@noble/curves/ed25519';
 import { p256 } from '@noble/curves/p256';
 import { sha256 } from '@noble/hashes/sha256';
 import { sha512 } from '@noble/hashes/sha512';
@@ -229,6 +229,16 @@ const deriveSeedCrossSite = (identity: Uint8Array): Uint8Array =>
 const deriveSeedForContact = (identity: Uint8Array, contactId: string): Uint8Array =>
   deriveSeed(identity, enc.encode('contact:' + contactId));
 
+/**
+ * derive the long-term contact key-agreement seed. ONE per identity, published
+ * (its public half) in the contact card for non-interactive pairwise rendezvous
+ * (contact discovery). the tag `contact-ka-v1` is suite-independent: the same
+ * hash-derived seed feeds whichever KA suite the card declares. reserved future
+ * tag `contact-ka-xwing-v1` if a hybrid ever needs a distinct seed.
+ */
+const deriveSeedForContactKa = (identity: Uint8Array): Uint8Array =>
+  deriveSeed(identity, enc.encode('contact-ka-v1'));
+
 /** derive ring VRF seed for anonymous pro membership (never rotates). */
 const deriveSeedForRingVrf = (identity: Uint8Array): Uint8Array =>
   deriveSeed(identity, enc.encode('ring-vrf-v1'));
@@ -275,6 +285,16 @@ const deriveSeedForHotWallet = (identity: Uint8Array): Uint8Array =>
 const keypairFromSeed = (seed: Uint8Array): { privateKey: Uint8Array; publicKey: Uint8Array } => {
   const privateKey = seed.slice(0, 32);
   const publicKey = ed25519.getPublicKey(privateKey);
+  seed.fill(0);
+  return { privateKey, publicKey };
+};
+
+/** extract an X25519 keypair from seed (for contact key-agreement). zeroizes the seed. */
+const x25519KeypairFromSeed = (
+  seed: Uint8Array,
+): { privateKey: Uint8Array; publicKey: Uint8Array } => {
+  const privateKey = seed.slice(0, 32);
+  const publicKey = x25519.getPublicKey(privateKey);
   seed.fill(0);
   return { privateKey, publicKey };
 };
@@ -340,6 +360,78 @@ export const deriveZidCrossSite = (mnemonic: string, identity: string): Zid =>
     const { publicKey } = keypairFromSeed(deriveSeedCrossSite(id));
     const hex = bytesToHex(publicKey);
     return { publicKey: hex, address: formatZid(hex) };
+  });
+
+// ========================================================================
+// CONTACT KEY-AGREEMENT (for private, non-interactive contact discovery)
+// ========================================================================
+//
+// Everything downstream of the pairwise ROOT SECRET (rendezvous tags, epoch
+// rotation, the forward-secrecy ratchet, presence-blob AEAD) consumes the
+// secret as opaque bytes and is SUITE-BLIND. The suite matters only here, at
+// establishment. That is what makes the PQ migration a localized change:
+//
+//   - today  'x25519-v1' : a NIKE. static-static X25519 DH; both sides compute
+//                          the same secret from static keys, no wire ciphertext.
+//   - soon   'xwing-v1'  : X-Wing (X25519 + ML-KEM-768) hybrid, a KEM. asymmetric
+//                          encapsulate/decapsulate, so it DOES carry a ciphertext
+//                          established once at contact-add and cached. The cached
+//                          root secret is suite-agnostic bytes; tags never change.
+//
+// Callers MUST establish the root secret once (at contact-add) and cache it -
+// do NOT re-derive per tag, or the KEM suite can't slot in (a KEM is not a NIKE).
+
+/** contact key-agreement suite id. carried in the contact card so a peer knows
+ *  how to establish the pairwise secret. */
+export type ContactSuite = 'x25519-v1'; // future: | 'xwing-v1'
+
+/** default (and currently only) contact KA suite. */
+export const CONTACT_SUITE_DEFAULT: ContactSuite = 'x25519-v1';
+
+/** the public half of a contact's key-agreement key, as it appears in the card. */
+export interface ContactCardKey {
+  suite: ContactSuite;
+  /** hex. X25519 public key for 'x25519-v1'; the KEM encapsulation key for a hybrid. */
+  publicKey: string;
+}
+
+/** derive THIS identity's contact-card key (public half only). goes in the card. */
+export const deriveZidContactCardKey = (
+  mnemonic: string,
+  identity: string,
+  suite: ContactSuite = CONTACT_SUITE_DEFAULT,
+): ContactCardKey =>
+  withIdentity(mnemonic, identity, id => {
+    if (suite !== 'x25519-v1') {
+      throw new Error(`unsupported contact suite: ${suite}`);
+    }
+    const { privateKey, publicKey } = x25519KeypairFromSeed(deriveSeedForContactKa(id));
+    privateKey.fill(0);
+    return { suite, publicKey: bytesToHex(publicKey) };
+  });
+
+/**
+ * Establish the pairwise ROOT secret with a peer's contact card. This is the
+ * ONLY suite-specific step; the caller caches the result and derives all
+ * rendezvous tags from it (see packages/zid). Caller must zeroize the return.
+ *
+ * For 'x25519-v1' this is static-static X25519 DH (symmetric, no ciphertext).
+ * A future KEM suite changes this signature to also return/consume a ciphertext,
+ * but the cached secret's role is unchanged.
+ */
+export const zidContactRootSecret = (
+  mnemonic: string,
+  identity: string,
+  peer: ContactCardKey,
+): Uint8Array =>
+  withIdentity(mnemonic, identity, id => {
+    if (peer.suite !== 'x25519-v1') {
+      throw new Error(`unsupported contact suite: ${peer.suite}`);
+    }
+    const { privateKey } = x25519KeypairFromSeed(deriveSeedForContactKa(id));
+    const shared = x25519.getSharedSecret(privateKey, hexToBytes(peer.publicKey));
+    privateKey.fill(0);
+    return shared; // 32 bytes; run HKDF (tag layer) then zeroize
   });
 
 /**

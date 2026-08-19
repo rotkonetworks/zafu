@@ -37,3 +37,14 @@ export { encodeNoiseInitMemo, decodeNoiseInitMemo, isNoiseInitMemo } from './noi
 export type { NoiseInitPayload } from './noise-init-memo';
 
 export { encodeSealedRemark, decodeSealedRemark, isSealedRemark } from './sealed-remark';
+
+export {
+  jamTimeslot,
+  presenceEpoch,
+  rendezvousTag,
+  ratchetRootSecret,
+  JAM_COMMON_ERA,
+  JAM_SLOT_DURATION,
+  PRESENCE_EPOCH_SLOTS,
+  RENDEZVOUS_TAG_BYTES,
+} from './contact-discovery';
