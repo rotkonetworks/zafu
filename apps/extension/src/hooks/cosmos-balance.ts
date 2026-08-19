@@ -177,6 +177,12 @@ export const useCosmosDepositWallets = (chainId: CosmosChainId) => {
       // the user-editable pool for Noble; other chains use their config pool
       const pool = chainId === 'noble' ? await getNobleRpcPool() : rpcEndpointPool(chainId);
 
+      // Track whether any burner scan couldn't reach the RPC at all (both its
+      // rotated endpoint and the fallback failed). Without this, an unreachable
+      // RPC is indistinguishable from a genuinely empty burner - the funds look
+      // gone. Surfaced to the UI as a "balance may be stale" note.
+      let rpcError = false;
+
       const scan = await Promise.all(
         Array.from({ length: DEPOSIT_SCAN_GAP + 1 }, (_, i) => i).map(async index => {
           const { address: base } = await deriveCosmosWallet(mnemonic, index);
@@ -214,6 +220,7 @@ export const useCosmosDepositWallets = (chainId: CosmosChainId) => {
               assets = toAssets(await getAllBalances(chainId, address));
             } catch {
               /* both unreachable this pass -> empty, retried on refetch */
+              rpcError = true;
             }
           }
           const total = assets.reduce((sum, a) => sum + a.amount, 0n);
@@ -234,7 +241,7 @@ export const useCosmosDepositWallets = (chainId: CosmosChainId) => {
       // funded now, or funded before and since drained. The Receive tab lists
       // these so a user can see/return to any address they've deposited to.
       const used = receive ? scan.filter(w => w.index < receive.index) : [];
-      return { funded, receive, used, all: scan };
+      return { funded, receive, used, all: scan, rpcError };
     },
   });
 };

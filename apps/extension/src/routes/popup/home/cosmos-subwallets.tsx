@@ -185,7 +185,16 @@ const ChainDeposits = ({ chainId, view }: { chainId: CosmosChainId; view: 'home'
   if (!data?.receive) {
     return null;
   }
-  const { receive, funded, used } = data;
+  const { receive, funded, used, rpcError } = data;
+
+  // An unreachable RPC leaves burners looking empty - say so plainly rather than
+  // render a silent zero the user reads as lost funds. Non-alarming inline note.
+  const staleNote = rpcError ? (
+    <div className='flex items-center gap-1.5 rounded-md border border-border/40 bg-card/40 px-3 py-2 text-label text-fg-muted lowercase'>
+      <span className='i-ph-warning-circle h-3.5 w-3.5 shrink-0 text-amber-400/80' />
+      <span>couldn't reach {config.name} rpc - balance may be stale</span>
+    </div>
+  ) : null;
 
   // Send out to any address (exchange, another chain): the cosmos send form for
   // this specific address, staying on Penumbra (no network switch).
@@ -215,9 +224,17 @@ const ChainDeposits = ({ chainId, view }: { chainId: CosmosChainId; view: 'home'
 
   if (view === 'home') {
     if (funded.length === 0) {
-      return null;
+      // Nothing funded: normally render nothing, but if the RPC was unreachable
+      // the "nothing" is unverified - show the stale note so an empty screen
+      // isn't mistaken for a zero balance.
+      return staleNote;
     }
-    return <div className='flex flex-col gap-2'>{funded.map(row)}</div>;
+    return (
+      <div className='flex flex-col gap-2'>
+        {staleNote}
+        {funded.map(row)}
+      </div>
+    );
   }
 
   // receive view
