@@ -21,6 +21,14 @@ import { getMetadataFromBalancesResponse } from '@penumbra-zone/getters/balances
 import { getAmount as getAmountFromView } from '@penumbra-zone/getters/value-view';
 import { joinLoHiAmount } from '@rotko/penumbra-types/amount';
 import { COSMOS_CHAINS, type CosmosChainId } from '@repo/wallet/networks/cosmos/chains';
+import { viewClient } from '../clients';
+import {
+  track,
+  defaultTrackerDeps,
+  type DestinationProbe,
+  type IbcTransfer,
+  type NewTransfer,
+} from './ibc-transfer-tracker';
 
 /**
  * Read a cosmos address's balances over plain REST - NOT via
@@ -55,14 +63,6 @@ const parseAmountToBaseUnits = (amount: string, decimals: number): string => {
   const padded = frac.slice(0, decimals).padEnd(decimals, '0');
   return BigInt(whole + padded).toString();
 };
-import { viewClient } from '../clients';
-import {
-  track,
-  defaultTrackerDeps,
-  type DestinationProbe,
-  type IbcTransfer,
-  type NewTransfer,
-} from './ibc-transfer-tracker';
 
 /** two days in ms - the ICS20 withdrawal timeout (ibc-withdraw.ts) */
 export const UNSHIELD_TIMEOUT_MS = 2 * 24 * 60 * 60 * 1000;
