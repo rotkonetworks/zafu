@@ -610,6 +610,16 @@ const PenumbraContent = ({
       {/* action row directly under the balance - Zashi placement */}
       {actions}
 
+      {/* Trade entry - the shielded DEX was only reachable from the apps grid
+          and the menu footer; surface it on the Penumbra home next to the swap
+          action. Opens in a new tab, same as the apps grid. */}
+      <HintRow
+        icon='i-ph-chart-line-up'
+        title='trade on rotko dex'
+        hint='shielded swaps & liquidity positions'
+        onClick={() => window.open('https://dex.rotko.net', '_blank')}
+      />
+
       {/* single message slot for penumbra: only the backup nudge competes */}
       {nudge}
 
