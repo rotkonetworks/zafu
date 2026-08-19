@@ -14,10 +14,7 @@ import type { AllSlices, SliceCreator } from '.';
 import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
 import type { NetworkType } from '@repo/wallet/networks';
-import {
-  DEFAULT_TX_SIGNING_SECURITY,
-  type TxSigningSecurity,
-} from '../shared/tx-signing-security';
+import { DEFAULT_TX_SIGNING_SECURITY, type TxSigningSecurity } from '../shared/tx-signing-security';
 
 // ============================================================================
 // types
