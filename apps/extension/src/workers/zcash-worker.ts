@@ -1514,6 +1514,45 @@ const resolveAnchorHeight = async (walletId: string, tipHeight: number): Promise
   return frontierHeight > 0 ? frontierHeight : tipHeight;
 };
 
+/**
+ * Append the anchor block's own Unix timestamp to a note-sync CBOR bundle as
+ * map key 7 (uint). The block header time is objective chain truth — unlike the
+ * device clock the zigner stamps at import (`synced_at`), which can drift — so
+ * the cold device can render "as of block N" toggleable with that block's real
+ * date without any network access it doesn't have.
+ *
+ * Done in JS rather than the wasm encoder deliberately: it's purely additive and
+ * the zigner decoder already accepts `map(4+)` and skips unknown keys, so this
+ * ships without a wasm rebuild and an older zigner ignores it harmlessly.
+ *
+ * The bundle's outer map header is a single byte (`0xa0 | len`, len ≤ 7), so we
+ * bump it by one and append `07 1a <u32 BE>` (CBOR uint key 7 + 4-byte uint —
+ * unix seconds fit u32 until 2106).
+ */
+const appendCborAnchorTime = (cbor: Uint8Array, unixSeconds: number): Uint8Array => {
+  const t = Math.max(0, Math.floor(unixSeconds));
+  if (t === 0 || cbor.length === 0) {
+    return cbor;
+  }
+  const header = cbor[0]!;
+  // only handle the definite-length single-byte map header we emit; bail safe
+  // (return unchanged) if the shape is ever unexpected rather than corrupt it.
+  if ((header & 0xe0) !== 0xa0 || (header & 0x1f) >= 0x17) {
+    return cbor;
+  }
+  const out = new Uint8Array(cbor.length + 6);
+  out.set(cbor, 0);
+  out[0] = header + 1; // one more map entry
+  const n = cbor.length;
+  out[n] = 0x07; // key: uint 7
+  out[n + 1] = 0x1a; // value: uint, 4-byte big-endian follows
+  out[n + 2] = (t >>> 24) & 0xff;
+  out[n + 3] = (t >>> 16) & 0xff;
+  out[n + 4] = (t >>> 8) & 0xff;
+  out[n + 5] = t & 0xff;
+  return out;
+};
+
 /** periodic frontier snapshots for privacy-safe witness building.
  *  stored as array of {height, frontier} in IDB, one per SNAPSHOT_INTERVAL blocks. */
 const FRONTIER_SNAPSHOT_INTERVAL = 5_000;
@@ -2131,7 +2170,9 @@ const WITNESS_BATCH_SIZE = 1000;
 const WITNESS_FETCH_CONCURRENCY = 12;
 
 interface WitnessClient {
-  getTreeState(h: number): Promise<{ height: number; orchardTree: string; ironwoodTree?: string }>;
+  getTreeState(
+    h: number,
+  ): Promise<{ height: number; orchardTree: string; ironwoodTree?: string; time: number }>;
   getCompactBlocks(
     start: number,
     end: number,
@@ -5258,13 +5299,25 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         }
 
         // encode to CBOR via WASM
-        const cborBytes = wasmModule.encode_notes_bundle(
+        const cborBundle = wasmModule.encode_notes_bundle(
           notesJson,
           merkleJson,
           anchorHeight,
           isMainnet,
           attestationHex,
         );
+
+        // stamp the anchor block's own header time into the bundle (chain truth,
+        // not the device clock) so the cold device can show the anchor as a real
+        // date toggleable with its height. getTreeState carries `time`; on the
+        // odd chance the fetch fails we ship without it (older behavior).
+        let anchorTime = 0;
+        try {
+          anchorTime = (await client.getTreeState(anchorHeight)).time;
+        } catch (e) {
+          console.warn('[zcash-worker] anchor block time unavailable; bundle omits it:', e);
+        }
+        const cborBytes = appendCborAnchorTime(cborBundle, anchorTime);
 
         // encode to QR frames via zoda transport (verified erasure coding).
         // auto-size k/n to the payload so each hex-encoded `zt:` frame fits a
