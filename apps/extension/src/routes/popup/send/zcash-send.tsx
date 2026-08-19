@@ -58,6 +58,8 @@ import { signAndBroadcast } from '../../../signing/cold-send';
 import { createZignerSigner } from '../../../signing/zigner-signer';
 import { frostSelfCustodySigner } from '../../../signing/frost-signer';
 import { isPopup } from '../../../utils/popup-detection';
+import { usePopupNav } from '../../../utils/navigate';
+import { PopupPath } from '../paths';
 import { isZcashSignatureQR, parseZcashSignatureResponse, bytesToHex } from '@repo/wallet/networks'; // self-contained 4-step zigner-mediated multisig sign
 
 import { unwrapCborSinglePczt, parsePreludeSinglePcztResponse } from './zcash-send-cbor-helpers';
@@ -302,6 +304,7 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
   const { requestAuth, PasswordModal } = usePasswordGate();
   const zidecarUrl = useStore(s => s.networks.networks.zcash.endpoint) || 'https://zcash.rotko.net';
   const activeZcashWallet = useStore(selectActiveZcashWallet);
+  const navigate = usePopupNav();
   const ufvk =
     activeZcashWallet?.ufvk ??
     (activeZcashWallet?.orchardFvk?.startsWith('uview') ? activeZcashWallet.orchardFvk : undefined);
@@ -1704,6 +1707,30 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
               {totalElapsedSec !== null && ` in ${totalElapsedSec}s`}
             </p>
             {txHash && <p className='font-mono text-xs text-fg-muted break-all'>{txHash}</p>}
+
+            {/*
+              Cold (zigner) wallet: the balance just changed, so the air-gapped
+              device's offline view is now stale. Offer a one-tap jump to the
+              existing note-sync flow (Settings > Wallets > "sync to zigner") so
+              the user can re-sync the zigner's verified balance right here,
+              instead of hunting for it in settings after every send.
+            */}
+            {coldSignerType === 'zigner' && (
+              <button
+                onClick={() => {
+                  onClose();
+                  navigate(PopupPath.NOTE_SYNC);
+                }}
+                title='scan on your zigner to re-sync its verified balance after this send'
+                className='flex w-full items-center gap-2 rounded-md border border-border-soft px-3 py-2 text-left hover:border-fg-muted'
+              >
+                <span className='i-ph-qr-code size-4 text-fg-high shrink-0' />
+                <span className='text-xs font-medium text-fg-high'>
+                  sync balance to your zigner
+                </span>
+                <span className='i-ph-caret-right size-3.5 text-fg-dim ml-auto shrink-0' />
+              </button>
+            )}
 
             {/* save contact prompt */}
             {showSavePrompt && recipient && !findByAddress(recipient) && !showContactModal && (
