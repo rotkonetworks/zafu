@@ -96,6 +96,31 @@ const webcryptoRandomBytes: RandomBytes = (n: number): Uint8Array => {
 };
 
 // ---------------------------------------------------------------------------
+// PROTOCOL-GLOBAL constants (security-load-bearing)
+// ---------------------------------------------------------------------------
+//
+// F and the blob size hide your friend count ONLY if EVERY client uses the SAME
+// values - a user at F=8 vs F=100 is distinguishable by write size, which leaks
+// exactly what the padding exists to hide. So these are fixed PROTOCOL values,
+// not free per-deployment knobs. `ContactRelayOptions` still takes them as
+// parameters (for tests + a future coordinated bump), but production callers
+// MUST pass these constants; do not vary them per client.
+
+/**
+ * Global padding constant F: entries written per PUT (per shard). Sized for the
+ * max supported friends-per-app-scope. Raising it is a coordinated protocol
+ * change (all clients at once), never a per-user choice.
+ */
+export const PRESENCE_PAD_TO = 64;
+
+/**
+ * Global presence-blob size in bytes. MUST equal the sealed size of a
+ * PresenceRecord from presence-blob.ts: version(1) + nonce(12) + record(35) +
+ * GCM tag(16) = 64. Uniform across clients or the write size leaks.
+ */
+export const PRESENCE_BLOB_BYTES = 64;
+
+// ---------------------------------------------------------------------------
 // Client configuration
 // ---------------------------------------------------------------------------
 

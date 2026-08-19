@@ -47,7 +47,6 @@ export {
   jamTimeslot,
   presenceEpoch,
   rendezvousTag,
-  ratchetRootSecret,
   JAM_COMMON_ERA,
   JAM_SLOT_DURATION,
   PRESENCE_EPOCH_SLOTS,
@@ -64,7 +63,13 @@ export {
 } from './presence-blob';
 export type { PresenceDir, PresenceRecord } from './presence-blob';
 
-export { expectedFriendTags, matchBucket, ContactRelay } from './contact-relay';
+export {
+  expectedFriendTags,
+  matchBucket,
+  ContactRelay,
+  PRESENCE_PAD_TO,
+  PRESENCE_BLOB_BYTES,
+} from './contact-relay';
 export type {
   PresenceEntry,
   RelayTransport,

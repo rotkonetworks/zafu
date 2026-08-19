@@ -86,10 +86,17 @@ export const RENDEZVOUS_TAG_BYTES = 16;
  * length, so no field can be confused for another regardless of input length or
  * KA suite (the publisher pub is hashed, so a hybrid's longer key still fits).
  *
- * NOTE: epoch-in-KDF gives cross-epoch UNLINKABILITY, not forward secrecy. FS
- * requires ratcheting `rootSecret` (see `ratchetRootSecret`) — a deliberate,
- * separate decision, since a compromised static secret otherwise reveals every
- * past epoch's tags.
+ * NOTE ON FORWARD SECRECY (design decision A, accepted): epoch-in-KDF gives
+ * cross-epoch UNLINKABILITY but NOT forward secrecy, and there is no cheap
+ * ratchet that would add it here. The `rootSecret` is a STATIC NIKE output
+ * (X25519 DH of two long-term contact-KA keys), so it is deterministically
+ * recomputable from those keys — a future compromise of the contact-KA key (or
+ * mnemonic) plus logged relay transcripts recovers every past epoch's tags/blobs
+ * regardless of any hash-ratchet (the attacker just re-derives the base and
+ * ratchets forward). This is accepted for presence metadata. The bounded
+ * mitigation (fast-follow) is PERIODIC CONTACT-KA KEY ROTATION with old-key
+ * deletion (like the per-site ZID rotation index), which caps exposure to the
+ * window since the last rotation. See docs/zid-contact-discovery.md.
  */
 export const rendezvousTag = (
   rootSecret: Uint8Array,
@@ -105,11 +112,3 @@ export const rendezvousTag = (
   );
   return hkdf(sha256, rootSecret, undefined, info, RENDEZVOUS_TAG_BYTES);
 };
-
-/**
- * One forward-secrecy ratchet step: s ← SHA-256(s). Apply once per elapsed
- * presence epoch so a later key compromise cannot reveal earlier epochs' tags.
- * Missed-epoch resync = ratchet forward to the current epoch. Opt-in (decide per
- * the threat model); omitting it keeps unlinkability but not forward secrecy.
- */
-export const ratchetRootSecret = (rootSecret: Uint8Array): Uint8Array => sha256(rootSecret);

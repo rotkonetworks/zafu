@@ -5,7 +5,6 @@ import {
   jamTimeslot,
   presenceEpoch,
   rendezvousTag,
-  ratchetRootSecret,
   JAM_COMMON_ERA,
   JAM_SLOT_DURATION,
   PRESENCE_EPOCH_SLOTS,
@@ -72,18 +71,5 @@ describe('rendezvous tag', () => {
     const ab = rendezvousTag(sAB, 'poker.zk.bot', 42, aPub);
     const ac = rendezvousTag(sAC, 'poker.zk.bot', 42, aPub);
     expect(bytesToHex(ab)).not.toBe(bytesToHex(ac));
-  });
-});
-
-describe('forward-secrecy ratchet', () => {
-  it('advances deterministically and both sides stay in sync', () => {
-    const a1 = ratchetRootSecret(sAB);
-    const b1 = ratchetRootSecret(sBA);
-    expect(bytesToHex(a1)).toBe(bytesToHex(b1));
-    expect(bytesToHex(a1)).not.toBe(bytesToHex(sAB));
-    // tags off the ratcheted secret differ from the base epoch's
-    const base = rendezvousTag(sAB, 'poker.zk.bot', 42, aPub);
-    const next = rendezvousTag(a1, 'poker.zk.bot', 43, aPub);
-    expect(bytesToHex(base)).not.toBe(bytesToHex(next));
   });
 });
