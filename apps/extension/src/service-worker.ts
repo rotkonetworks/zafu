@@ -67,6 +67,7 @@ import { backOff } from 'exponential-backoff';
 
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { localMigrations } from '@repo/storage-chrome/migrations';
+import { networkAllowsBackgroundSync } from './state/privacy';
 
 // count open side panels so approval routing can target the panel only when it
 // is actually open (see popup.ts). Registered once at worker startup.
@@ -439,9 +440,16 @@ chrome.alarms.onAlarm.addListener(async alarm => {
   }
 
   if (alarm.name === 'blockSync') {
-    // privacy check: only run background sync if user has enabled it
+    // privacy check: shielded (penumbra, zcash) and light-client (polkadot)
+    // networks always sync - trial decryption / p2p never leak addresses, so
+    // they have no toggle. Only transparent networks honor enableBackgroundSync.
+    // (Gating ALL sync on the raw flag wrongly disabled zcash background sync
+    // with no way to re-enable it, since zcash shows no toggle.)
     const privacySettings = await localExtStorage.get('privacySettings');
-    if (privacySettings?.enableBackgroundSync === false) {
+    const activeNetwork = await localExtStorage.get('activeNetwork');
+    const enableBg = privacySettings?.enableBackgroundSync !== false;
+    const allowed = activeNetwork ? networkAllowsBackgroundSync(activeNetwork, enableBg) : enableBg;
+    if (!allowed) {
       if (globalThis.__DEV__) {
         console.info('Background sync disabled by user privacy settings');
       }

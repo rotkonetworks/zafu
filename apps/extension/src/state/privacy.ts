@@ -289,15 +289,27 @@ export const canFetchHistory = (state: AllSlices) =>
  * - light client (polkadot): always allowed (p2p, no central rpc)
  * - transparent (cosmos): only if enableBackgroundSync is true
  */
-export const canBackgroundSyncForNetwork = (state: AllSlices, network: NetworkType) => {
-  if (SHIELDED_NETWORKS.includes(network)) {
+/**
+ * Pure form of the per-network background-sync rule - usable outside React
+ * (e.g. the service worker, which only has chrome.storage, not the Zustand
+ * store). Shielded and light-client networks are always allowed; transparent
+ * networks honor the `enableBackgroundSync` flag.
+ */
+export const networkAllowsBackgroundSync = (
+  network: string,
+  enableBackgroundSync: boolean,
+): boolean => {
+  if ((SHIELDED_NETWORKS as readonly string[]).includes(network)) {
     return true; // trial decryption, rpc never learns addresses
   }
-  if (LIGHT_CLIENT_NETWORKS.includes(network)) {
+  if ((LIGHT_CLIENT_NETWORKS as readonly string[]).includes(network)) {
     return true; // p2p network, no central rpc to leak to
   }
-  return state.privacy.settings.enableBackgroundSync;
+  return enableBackgroundSync;
 };
+
+export const canBackgroundSyncForNetwork = (state: AllSlices, network: NetworkType) =>
+  networkAllowsBackgroundSync(network, state.privacy.settings.enableBackgroundSync);
 
 export const canFetchPrices = (state: AllSlices) => state.privacy.settings.enablePriceFetching;
 
