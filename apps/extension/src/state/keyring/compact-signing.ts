@@ -40,6 +40,25 @@ export const POOL_ORCHARD = 0;
 export const POOL_IRONWOOD = 1;
 
 /**
+ * Pool number -> the string the wasm `apply_signature_contributions` export
+ * matches on ("orchard" | "ironwood"). The wire/response uses the numeric enum
+ * (0/1); the wasm merge contract uses the name. See `mergeContributions`.
+ */
+const POOL_NAME: Record<number, 'orchard' | 'ironwood'> = {
+  [POOL_ORCHARD]: 'orchard',
+  [POOL_IRONWOOD]: 'ironwood',
+};
+
+/** Lower-case hex, no prefix. 64-byte sig -> 128 hex chars. */
+function toHex(bytes: Uint8Array): string {
+  let s = '';
+  for (let i = 0; i < bytes.length; i++) {
+    s += bytes[i]!.toString(16).padStart(2, '0');
+  }
+  return s;
+}
+
+/**
  * One spend-authorization signature for one action.
  */
 export interface SignatureContribution {
@@ -413,14 +432,25 @@ export async function mergeContributions(
       }
     }
 
-    // Convert signatures to JSON format expected by wasm
-    const contributionsJson = JSON.stringify({
-      contributions: message.signatures.map(sig => ({
-        pool: sig.pool,
+    // Serialize to the EXACT contract the wasm `apply_signature_contributions`
+    // export parses (crates/zcash-wasm/src/lib.rs): a BARE JSON ARRAY of
+    //   { pool: "orchard" | "ironwood", action_index: number, signature_hex: string }
+    // NOT an object wrapper, NOT the numeric pool, NOT a byte-array signature.
+    //
+    // This previously emitted `{ contributions: [{ pool: <0|1>, action_index,
+    // signature: <number[]> }] }`, which the wasm rejected at
+    // `serde_json::from_str::<Vec<_>>` ("failed to parse contributions JSON") -
+    // so every compact ironwood send died as a generic "failed to build
+    // transaction". The native harness never caught it because it merges via
+    // zigner's Rust `apply_signature_contribution`, bypassing this wasm export.
+    // Keep this serialization and that Rust parser in lockstep.
+    const contributionsJson = JSON.stringify(
+      message.signatures.map(sig => ({
+        pool: POOL_NAME[sig.pool] ?? 'orchard',
         action_index: sig.actionIndex,
-        signature: Array.from(sig.signature),
+        signature_hex: toHex(sig.signature),
       })),
-    });
+    );
 
     try {
       const updatedHex = await wasmApplySignatures(originalHex, contributionsJson);

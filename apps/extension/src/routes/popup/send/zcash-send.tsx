@@ -1124,12 +1124,19 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
         zignerDeliverRef.current(signedPcztHex);
       } catch (err) {
         const reason = err instanceof Error ? err.message : 'failed to reconstruct signed PCZT';
+        // Surface the REAL cause. Without this the merge/parse error was only
+        // handed to the reject seam as a bare string, so it was neither logged
+        // nor shown - every compact failure collapsed to the generic "failed to
+        // build transaction" banner (handleSign's catch discards a non-Error
+        // rejection). Log it, and reject with a real Error so the message
+        // actually reaches the error UI.
+        console.error('[zcash] compact signed-PCZT reconstruct/merge failed:', err);
         // Reject the parked signer so handleSign's catch drives the error UI +
         // pending-failed recording (identical to the old inline error path -
         // both render at the error step's `formError || signingError`). Fall
         // back to local error state only if no round is parked.
         if (zignerFailRef.current) {
-          zignerFailRef.current(reason);
+          zignerFailRef.current(err instanceof Error ? err : new Error(reason));
         } else {
           pcztUnsignedRef.current = null;
           void markPendingFailed(reason);
