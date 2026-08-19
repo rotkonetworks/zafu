@@ -74,3 +74,6 @@ export type {
   FriendPresenceQuery,
   PublishOutcome,
 } from './contact-relay';
+
+export { createPresenceService } from './presence-service';
+export type { PresenceService, DiscoveryPeer, PresentPeer } from './presence-service';
