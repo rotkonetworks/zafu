@@ -355,6 +355,8 @@ export async function nukeAllWalletData(
   local: ExtensionStorage<LocalStorageState>,
 ): Promise<void> {
   await session.remove('passwordKey');
+  // grace must never outlive the unlock
+  await session.remove('signGraceUntil');
 
   // drop worker-held IDB connections before attempting any delete
   try {

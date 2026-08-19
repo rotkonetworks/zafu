@@ -5,13 +5,17 @@ export const ApproveDeny = ({
   approve,
   deny,
   ignore,
+  wait,
 }: {
   approve?: () => void;
   deny: () => void;
   ignore?: () => void;
   wait?: number;
 }) => {
-  const count = useWindowCountdown();
+  // when `wait` is provided, count whole seconds from it (approve disabled for
+  // `wait` seconds). when omitted, keep the historical 0.5s / 500ms fat-finger
+  // guard so unrelated approval screens are unchanged.
+  const count = useWindowCountdown(wait ?? 0.5, wait != null ? 1000 : 500);
 
   return (
     <div className='flex shrink-0 flex-row justify-between gap-4 rounded-lg bg-elev-1 px-4 py-7 shadow-lg'>

@@ -14,6 +14,7 @@ import type { AllSlices, SliceCreator } from '.';
 import type { ExtensionStorage } from '@repo/storage-chrome/base';
 import type { LocalStorageState } from '@repo/storage-chrome/local';
 import type { NetworkType } from '@repo/wallet/networks';
+import { DEFAULT_TX_SIGNING_SECURITY, type TxSigningSecurity } from '../shared/tx-signing-security';
 
 // ============================================================================
 // types
@@ -139,6 +140,23 @@ export interface PrivacySettings {
    * field) defaults to visible.
    */
   hideBalances: boolean;
+
+  /**
+   * when the per-transaction password gate (and its 3s approve delay) is
+   * required. this NEVER changes the cryptography - while unlocked the session
+   * key already authorizes signing; this only decides when the confirmation
+   * gate appears. see shared/tx-signing-security.ts.
+   *
+   *  - foilhat:     gate + 3s delay on every transaction (strictest).
+   *  - grace:       gate once, then skipped for 15 minutes (default).
+   *  - unlock-only: no per-tx gate; relies on unlock + auto-lock.
+   *
+   * legacy stored state (no field) is read via `?? DEFAULT_TX_SIGNING_SECURITY`
+   * so it defaults to 'grace'. persist.ts replaces the whole settings object on
+   * hydration, so do not rely on the slice default surviving - always default
+   * at the read site.
+   */
+  txSigningSecurity: TxSigningSecurity;
 }
 
 export interface PrivacySlice {
@@ -171,6 +189,7 @@ const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = {
   proxy: { enabled: false, host: '', port: 1080 },
   enableIdentity: true,
   hideBalances: false,
+  txSigningSecurity: DEFAULT_TX_SIGNING_SECURITY,
 };
 
 // ============================================================================
@@ -321,6 +340,15 @@ export const isIdentityEnabled = (state: AllSlices) => state.privacy.settings.en
 
 /** on-screen balances hidden (blurred)? display privacy only. default false. */
 export const selectHideBalances = (state: AllSlices) => state.privacy.settings.hideBalances;
+
+/**
+ * current transaction signing-security level. legacy stored state (no field)
+ * defaults to 'grace'. persist.ts replaces the whole settings object on
+ * hydration, so we default here at the read site rather than trusting the
+ * slice default to survive.
+ */
+export const selectTxSigningSecurity = (state: AllSlices): TxSigningSecurity =>
+  state.privacy.settings.txSigningSecurity ?? DEFAULT_TX_SIGNING_SECURITY;
 
 /**
  * Read identity-enabled state from chrome.storage.local directly.

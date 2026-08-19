@@ -25,6 +25,14 @@ import {
 import { QrDisplay } from '../../../../shared/components/qr-display';
 import { QrScanner } from '../../../../shared/components/qr-scanner';
 import { Button } from '@repo/ui/components/ui/button';
+import { sessionExtStorage } from '@repo/storage-chrome/session';
+import { selectTxSigningSecurity } from '../../../../state/privacy';
+import {
+  approvalWaitSeconds,
+  opensGraceWindow,
+  shouldPromptPassword,
+  SIGN_GRACE_MS,
+} from '../../../../shared/tx-signing-security';
 
 const getMetadata: MetadataFetchFn = async ({ assetId }) => {
   const feeAssetId = assetId ? assetId : new ChainRegistryClient().bundled.globals().stakingAssetId;
@@ -66,6 +74,8 @@ export const TransactionApproval = () => {
   const { selectedTransactionView, selectedTransactionViewName, setSelectedTransactionViewName } =
     useTransactionViewSwitcher();
 
+  const txSigningSecurity = useStore(selectTxSigningSecurity);
+
   const [airgapStep, setAirgapStep] = useState<AirgapStep>('review');
   const [qrHex, setQrHex] = useState('');
   const [scanError, setScanError] = useState<string | null>(null);
@@ -85,6 +95,31 @@ export const TransactionApproval = () => {
     setChoice(UserChoice.Denied);
     sendResponse();
     window.close();
+  };
+
+  // Decide whether the per-tx password gate is required based on the signing
+  // security level. Skipping it is safe: while unlocked, signing is authorized
+  // by the session `passwordKey` (state/keyring/crypto-ops.ts `requireKey`), not
+  // by a freshly-typed password. The gate is a second confirmation, so approve()
+  // succeeds without it. Reads signGraceUntil at click time.
+  const requestApproval = async () => {
+    const signGraceUntil = await sessionExtStorage.get('signGraceUntil');
+    if (shouldPromptPassword(txSigningSecurity, Date.now(), signGraceUntil)) {
+      setShowPasswordGate(true);
+    } else {
+      approve();
+    }
+  };
+
+  // Called after a successful password gate. Under 'grace', open the 15-minute
+  // window so the next txs skip the gate; the window is cleared whenever the
+  // wallet locks (see session signGraceUntil clear sites).
+  const onGateConfirmed = () => {
+    setShowPasswordGate(false);
+    if (opensGraceWindow(txSigningSecurity)) {
+      void sessionExtStorage.set('signGraceUntil', Date.now() + SIGN_GRACE_MS);
+    }
+    approve();
   };
 
   const hexToBytes = (h: string): Uint8Array => {
@@ -287,16 +322,13 @@ export const TransactionApproval = () => {
           <>
             <PasswordGateModal
               open={showPasswordGate}
-              onConfirm={() => {
-                setShowPasswordGate(false);
-                approve();
-              }}
+              onConfirm={onGateConfirmed}
               onCancel={() => setShowPasswordGate(false)}
             />
             <ApproveDeny
-              approve={invalidPlan ? undefined : () => setShowPasswordGate(true)}
+              approve={invalidPlan ? undefined : () => void requestApproval()}
               deny={deny}
-              wait={3}
+              wait={approvalWaitSeconds(txSigningSecurity)}
             />
           </>
         )}
