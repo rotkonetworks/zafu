@@ -267,6 +267,9 @@ importers:
       '@iconify-json/lucide':
         specifier: ^1.2.99
         version: 1.2.99
+      '@iconify-json/ph':
+        specifier: ^1.2.2
+        version: 1.2.2
       '@tailwindcss/postcss':
         specifier: ^4.2.2
         version: 4.2.2
@@ -422,8 +425,6 @@ importers:
         specifier: 37.0.0
         version: 37.0.0(@bufbuild/protobuf@1.10.1)(@penumbra-zone/bech32m@18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/getters@28.0.0(@bufbuild/protobuf@1.10.1)(@penumbra-zone/bech32m@18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1))
 
-  packages/finagle: {}
-
   packages/mock-chrome:
     devDependencies:
       '@types/chrome':
@@ -432,27 +433,6 @@ importers:
       vitest:
         specifier: ~1.6.1
         version: 1.6.1(@types/node@25.5.0)(@vitest/browser@1.6.1)(jsdom@25.0.1)(lightningcss@1.32.0)(terser@5.46.1)
-
-  packages/noble:
-    dependencies:
-      '@cosmjs/stargate':
-        specifier: ^0.32.4
-        version: 0.32.4
-      '@penumbra-zone/bech32m':
-        specifier: 18.0.0
-        version: 18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1))
-      '@penumbra-zone/getters':
-        specifier: 28.0.0
-        version: 28.0.0(@bufbuild/protobuf@1.10.1)(@penumbra-zone/bech32m@18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1))
-      '@penumbra-zone/protobuf':
-        specifier: 11.0.0
-        version: 11.0.0(@bufbuild/protobuf@1.10.1)
-      '@rotko/penumbra-types':
-        specifier: 37.0.0
-        version: 37.0.0(@bufbuild/protobuf@1.10.1)(@penumbra-zone/bech32m@18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/getters@28.0.0(@bufbuild/protobuf@1.10.1)(@penumbra-zone/bech32m@18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1))
-      '@rotko/penumbra-wasm':
-        specifier: 55.0.2
-        version: 55.0.2(@bufbuild/protobuf@1.10.1)(@penumbra-zone/bech32m@18.0.0(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1)))(@penumbra-zone/protobuf@11.0.0(@bufbuild/protobuf@1.10.1))
 
   packages/query:
     dependencies:
