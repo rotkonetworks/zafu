@@ -132,6 +132,10 @@ export const AppHeader = ({ onMenuClick }: AppHeaderProps) => {
           aria-expanded={openPicker === 'wallet'}
         >
           <span className='max-w-32 truncate text-data text-fg-high'>{walletName}</span>
+          {/* custody of the ACTIVE wallet, visible without opening the picker —
+              whether the selected wallet can sign on its own (hot) or needs the
+              cold device is the one fact worth surfacing at a glance. */}
+          {selectedKeyInfo && <CustodyBadge vault={selectedKeyInfo} showLabel={false} />}
           <span className='i-ph-caret-down h-3 w-3 text-fg-muted' />
         </button>
         {/* left-0, not right-0. Right-aligning anchored the menu's RIGHT edge
