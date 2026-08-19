@@ -1,8 +1,0 @@
-{
-  "extends": "@repo/tsconfig/base.json",
-  "include": ["src"],
-  "compilerOptions": {
-    "lib": ["WebWorker", "DOM", "ESNext"],
-    "noEmit": true
-  }
-}

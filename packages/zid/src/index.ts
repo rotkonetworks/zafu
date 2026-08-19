@@ -63,3 +63,14 @@ export {
   PRESENCE_RECORD_VERSION,
 } from './presence-blob';
 export type { PresenceDir, PresenceRecord } from './presence-blob';
+
+export { expectedFriendTags, matchBucket, ContactRelay } from './contact-relay';
+export type {
+  PresenceEntry,
+  RelayTransport,
+  RandomBytes,
+  ContactRelayOptions,
+  PresentFriend,
+  FriendPresenceQuery,
+  PublishOutcome,
+} from './contact-relay';
