@@ -6725,7 +6725,16 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             clearInterval(iwProvingTicker);
           }
           const iwParsed = iwBuilt as {
+            /** REDACTED-for-signer copy: what goes to the cold device. */
             pczt_hex: string;
+            /**
+             * UNREDACTED base (WITH the fvk): the wallet's retained copy. The
+             * compact-signing merge re-applies the device's signatures into THIS
+             * copy - its `verify_nullifier` needs the fvk, so a redacted copy
+             * fails with IronwoodVerify(MissingFullViewingKey). Never sent to the
+             * device (the request below is built from the redacted `pczt_hex`).
+             */
+            retained_pczt_hex: string;
             summary: unknown;
             action_count: number;
             /** ZIP-244 sighash the FROST signers commit to. */
@@ -6737,7 +6746,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           };
 
           // Ironwood-AWARE transport: zigner prelude envelope [0x53][0x04][0x03]
-          // (single PCZT), NOT the ironwood-blind ur:zcash-pczt CBOR wrap.
+          // (single PCZT), NOT the ironwood-blind ur:zcash-pczt CBOR wrap. Built
+          // from the REDACTED copy - the fvk never leaves the wallet.
           const { envelope: iwEnvelope, compact: iwRequestCompact } = buildSignRequestEnvelope(
             wasmModule,
             iwParsed.pczt_hex,
@@ -6776,7 +6786,12 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             network: 'zcash',
             walletId,
             payload: {
-              pcztHex: iwParsed.pczt_hex,
+              // The wallet RETAINS the UNREDACTED base (with the fvk), not the
+              // redacted device copy: the compact-signing merge re-applies the
+              // device's signatures into this copy and its `verify_nullifier`
+              // needs the fvk. The device only ever sees `urFrames` (built from
+              // the redacted `pczt_hex`), so the fvk never leaves the wallet.
+              pcztHex: iwParsed.retained_pczt_hex,
               // `summary` is a display string here (SendTxPcztUnsignedResult /
               // the zigner-signing store type it as `string`, and the UI renders
               // it as a React child). The authoritative per-output confirmation

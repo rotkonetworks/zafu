@@ -94,6 +94,41 @@ Reproduce by checking out the zcli rev below and running the commands.
 Verify: rebuild from the rev, sha256sum the outputs,
 diff against the values above. A mismatch means the vendored blob is stale.
 
+## 2026-08-19 rebuild (2) - retain UNREDACTED ironwood pczt (compact-sign FVK fix)
+
+- source repo: zcli, branch `master`, rev `c111a06`
+  (fix(ironwood): retain the UNREDACTED pczt so compact-sign merge keeps the fvk).
+- toolchain: wasm-bindgen 0.2.126, wasm-opt (binaryen) **130**
+  (/nix/store/azhmf1il8da9pps80bk2f4l6ql6bgfg7-binaryen-130).
+- parallel build: `env -u RUSTFLAGS RUSTUP_TOOLCHAIN=nightly cargo wasm-parallel`;
+  `wasm-bindgen --out-dir pkg-parallel --target web`; `wasm-opt -Oz` with the
+  standard flag set. Shared imported memory `(memory 50 32768 shared)` verified
+  post-bindgen.
+- sha256(parallel zafu_wasm_bg.wasm) =
+  d6244ea92d2e59360d24ea3adb8fa761b5cf6e0b6628031989bf884b9d45f075
+- Fixes the compact (0x05 -> 0x07 signatures-only) ironwood cold send, which
+  died at merge time with `IronwoodVerify(MissingFullViewingKey)` (surfaced in
+  the extension as a bare "failed to build transaction"). `build_ironwood_send_pczt`
+  returned only the `redact_pczt_for_signer` copy (fvk/witness/note-plaintext
+  stripped); the wallet retained THAT and re-applied the device's signatures into
+  it, but pczt's `apply_ironwood_signature` runs `verify_nullifier`, which needs
+  the fvk. Now `build_ironwood_send_pczt` ALSO returns `retained_pczt_hex` (the
+  UNREDACTED base, WITH the fvk) for the wallet to keep + merge into; `pczt_hex`
+  stays the redacted device copy. The fvk NEVER leaves the wallet (the request is
+  still built from `pczt_hex`). Full 0x03 sends were unaffected (they extract the
+  device's signed pczt, no merge). Mirrors vizor keeping the unredacted base.
+- Reproduced + guarded natively: zcli `crates/zcash-wasm/tests/fvk_repro.rs`
+  drives the real `apply_signature_contributions` merge - redacted retained ->
+  `MissingFullViewingKey`; unredacted -> passes `verify_nullifier`. The
+  zigner-side `ironwood_send_fixture` harness could not catch it: it merges via
+  zigner's `pczt_signing`, not this zcli export.
+- Internals-only: `zafu_wasm.js` / `.d.ts` BYTE-IDENTICAL to the previous blob
+  (`retained_pczt_hex` is an added field on an already-`JsValue` return;
+  `apply_signature_contributions_inner` is a plain fn, not a `#[wasm_bindgen]`
+  export). Only `zafu_wasm_bg.wasm` changed. Both trees (`packages/zcash-wasm/`,
+  `apps/extension/public/zafu-wasm/`) updated byte-identical; worker rayon patch
+  (`wbgRayonBase`) preserved (only bg.wasm swapped, snippets untouched).
+
 ## 2026-08-19 rebuild - single-part UR decode (compact sign response)
 
 - source repo: zcli, branch `master`, rev `50f7a6c` (fix(ur): decode single-part
