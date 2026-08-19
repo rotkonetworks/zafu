@@ -21,12 +21,17 @@ export {
   getContactRefs,
   resolveHandle,
   contactCount,
+  importFromWallet,
+  establishContactSecret,
+  getContactRootSecret,
 } from './contacts';
 export type {
   ZidIdentity,
   ZidChannel,
   ZidOptions,
   ContactRef,
+  ContactCardKey,
+  ContactShare,
   PickContactsOptions,
   InvitePayload,
   InviteResult,
