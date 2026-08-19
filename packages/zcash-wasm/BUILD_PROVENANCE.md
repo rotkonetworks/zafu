@@ -94,6 +94,34 @@ Reproduce by checking out the zcli rev below and running the commands.
 Verify: rebuild from the rev, sha256sum the outputs,
 diff against the values above. A mismatch means the vendored blob is stale.
 
+## 2026-08-19 rebuild - single-part UR decode (compact sign response)
+
+- source repo: zcli, branch `master`, rev `50f7a6c` (fix(ur): decode single-part
+  UR frames).
+- toolchain: wasm-bindgen 0.2.126, wasm-opt (binaryen) **130**
+  (/nix/store/azhmf1il8da9pps80bk2f4l6ql6bgfg7-binaryen-130).
+- parallel size after -Oz: 8762095 bytes; shared imported memory
+  `(memory 50 32768 shared)` confirmed.
+- sha256(parallel zafu_wasm_bg.wasm) =
+  6b0812136cb81147699489f2d5d7cf56e515c880b5998ab6a7d3f1ac3a245856
+- Fixes `ur_decode_frames`: a payload that fits one QR fragment is emitted as a
+  bare single-part UR `ur:<type>/<bytewords>` (via `ur::ur::encode`, no
+  `<seq>-<len>/` header) - e.g. the compact signatures-only sign response, one
+  static frame. The fountain `Decoder` only ever finalizes _sequenced_
+  multi-part frames, so a lone single-part frame looped forever as "need more
+  frames" (zafu scanner stuck at "1 part received / 10%"). Now a single
+  non-sequenced frame is decoded directly via `ur::ur::decode`; multi-part
+  streams still take the fountain path. Unit-tested natively (single_part_ur
+  decodes in one frame; multipart detection). This is the wallet-side half of
+  compact signing - `COMPACT_SIGN_REQUEST` sends a compact request and the
+  device replies with a 1-frame signatures-only response that zafu can now scan.
+- Internals-only: `zafu_wasm.js` / `.d.ts` byte-identical to the previous blob
+  (no export added - `ur_decode_frames` already existed); only
+  `zafu_wasm_bg.wasm` changed. Both trees (`packages/zcash-wasm/`,
+  `apps/extension/public/zafu-wasm/`) updated byte-identical; worker patch intact
+  (`wbgRayonBase` defined+used, zero `import('../../..')`). No `zcash_*`
+  duplicate (package resolves `zafu_wasm.js`).
+
 ## 2026-08-18 rebuild - compact redaction losslessness (compact_resolvable_fields)
 
 - source repo: zcli, branch `master`, rev `9386a35` + UNCOMMITTED working-tree
@@ -106,19 +134,19 @@ diff against the values above. A mismatch means the vendored blob is stale.
 - sha256(parallel zafu_wasm_bg.wasm) =
   88c5cb08753aa9995563f0f17c7c4ada39816ce39821dd53d5e201db2de9f372
 - Fixes `redact_pczt_compact`: replaced the hand-rolled per-action `clear_cmx()`
-  + `replace_enc_ciphertext_with_memo_plaintext([0u8;512])` with the canonical
-  `redactor.compact_resolvable_fields()` primitive (pczt 0.9.3), which clears
-  cmx/cv_net/enc_ciphertext ONLY when the device's `resolve_fields()` reproduces
-  them byte-for-byte and restores the original otherwise. The old version signed
-  a different sighash than the retained tx (empty-memo hardcode destroyed real
-  memos AND corrupted randomized padding-dummy ciphertext), so compact
-  signatures failed to merge with `IronwoodSign(InvalidExternalSignature)` on
-  EVERY ironwood-send shape. Matches upstream
-  `zcash_client_backend::redact_pczt_for_batch_signer` MINUS the bsk/zkproof
-  clears (deliberately retained so the zigner's on-device fee-vs-bsk check still
-  runs). Verified natively (no browser): zigner
-  `pczt_signing/tests/ironwood_send_fixture.rs` drives the real module0.wasm -
-  compact sigs merge clean on single / memo / z->t / multi-note.
+  - `replace_enc_ciphertext_with_memo_plaintext([0u8;512])` with the canonical
+    `redactor.compact_resolvable_fields()` primitive (pczt 0.9.3), which clears
+    cmx/cv_net/enc_ciphertext ONLY when the device's `resolve_fields()` reproduces
+    them byte-for-byte and restores the original otherwise. The old version signed
+    a different sighash than the retained tx (empty-memo hardcode destroyed real
+    memos AND corrupted randomized padding-dummy ciphertext), so compact
+    signatures failed to merge with `IronwoodSign(InvalidExternalSignature)` on
+    EVERY ironwood-send shape. Matches upstream
+    `zcash_client_backend::redact_pczt_for_batch_signer` MINUS the bsk/zkproof
+    clears (deliberately retained so the zigner's on-device fee-vs-bsk check still
+    runs). Verified natively (no browser): zigner
+    `pczt_signing/tests/ironwood_send_fixture.rs` drives the real module0.wasm -
+    compact sigs merge clean on single / memo / z->t / multi-note.
 - Internals-only: `zafu_wasm.js` / `.d.ts` byte-identical to the previous blob;
   only `zafu_wasm_bg.wasm` changed. Both trees (`packages/zcash-wasm/`,
   `apps/extension/public/zafu-wasm/`) updated byte-identical; worker patch intact

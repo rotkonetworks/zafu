@@ -56,8 +56,10 @@ export const IRONWOOD_MIGRATION = true;
  * a zigner too old to understand tx_type 0x05 / emit the compact response (see
  * below) - those devices need the full 0x03 request + full-PCZT response.
  *
- * REQUIRES the rebuilt wasm carrying the compact_resolvable_fields fix
- * (packages/zcash-wasm + apps/extension/public/zafu-wasm, sha 88c5cb08...).
+ * REQUIRES the rebuilt wasm carrying the compact_resolvable_fields fix AND the
+ * single-part UR decode fix (so the device's 1-frame signatures-only response
+ * actually scans back — without it the scanner hangs at "1 part received")
+ * (packages/zcash-wasm + apps/extension/public/zafu-wasm, sha 6b081213...).
  *
  * COMPATIBILITY: a zigner older than v0.8.2 does not know tx_type 0x05 and
  * fail-closes on the unknown prelude. The device also answers a compact
