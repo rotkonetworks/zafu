@@ -86,15 +86,15 @@ export const NoteSyncPage = () => {
             </div>
             <p className='text-label text-fg-muted mt-1'>
               {encoded.noteCount} spendable note{encoded.noteCount !== 1 ? 's' : ''}
-              {encoded.pool ? ` · ${encoded.pool}` : ''} ·{' '}
-              {encoded.cborBytes.toLocaleString()} bytes
+              {encoded.pool ? ` · ${encoded.pool}` : ''} · {encoded.cborBytes.toLocaleString()}{' '}
+              bytes
             </p>
           </div>
 
           {encoded.excludedPool && (encoded.excludedNoteCount ?? 0) > 0 && (
             <div className='rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-amber-500'>
-              this bundle carries only your {encoded.pool} notes.{' '}
-              {encoded.excludedNoteCount} {encoded.excludedPool} note
+              this bundle carries only your {encoded.pool} notes. {encoded.excludedNoteCount}{' '}
+              {encoded.excludedPool} note
               {encoded.excludedNoteCount !== 1 ? 's' : ''} (
               {(Number(BigInt(encoded.excludedBalance ?? '0')) / 1e8)
                 .toFixed(8)

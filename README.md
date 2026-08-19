@@ -111,15 +111,15 @@ signing then happens entirely in the extension.
 Zafu is explicit about what it does and does not protect. Nothing here is
 security theater.
 
-| Property                        | Preserved                              |
-| ------------------------------- | -------------------------------------- |
-| sender / receiver / amount      | yes (chain-level shielding)            |
-| cross-transaction linkability   | yes (chain-level shielding)            |
+| Property                           | Preserved                            |
+| ---------------------------------- | ------------------------------------ |
+| sender / receiver / amount         | yes (chain-level shielding)          |
+| cross-transaction linkability      | yes (chain-level shielding)          |
 | spending key on browser compromise | yes, in cold mode - key is on Zigner |
-| view-only delegation            | yes (Zigner pairing)                   |
-| forward secrecy on key leak     | no - chain history is permanent        |
-| metadata vs query backend       | no - run your own Zidecar / pd         |
-| host-process compromise         | depends on custody mode                |
+| view-only delegation               | yes (Zigner pairing)                 |
+| forward secrecy on key leak        | no - chain history is permanent      |
+| metadata vs query backend          | no - run your own Zidecar / pd       |
+| host-process compromise            | depends on custody mode              |
 
 Full threat model: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md). Broader doc
 index: [docs/README.md](docs/README.md).

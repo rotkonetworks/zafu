@@ -5179,9 +5179,7 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           serverUrl: string;
         };
         const syncState = await loadState(walletId);
-        const allUnspent = syncState.notes.filter(
-          n => !syncState.spentNullifiers.has(n.nullifier),
-        );
+        const allUnspent = syncState.notes.filter(n => !syncState.spentNullifiers.has(n.nullifier));
         if (allUnspent.length === 0) {
           workerSelf.postMessage({
             type: 'note-sync-encoded',
