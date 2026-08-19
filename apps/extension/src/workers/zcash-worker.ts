@@ -5138,8 +5138,10 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           serverUrl: string;
         };
         const syncState = await loadState(walletId);
-        const unspent = syncState.notes.filter(n => !syncState.spentNullifiers.has(n.nullifier));
-        if (unspent.length === 0) {
+        const allUnspent = syncState.notes.filter(
+          n => !syncState.spentNullifiers.has(n.nullifier),
+        );
+        if (allUnspent.length === 0) {
           workerSelf.postMessage({
             type: 'note-sync-encoded',
             id,
@@ -5150,18 +5152,56 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           return;
         }
 
-        // anchor where the witnesses are rooted (cached frontier), not at the
-        // newest note's height — otherwise the cross-check root won't match.
-        const anchorHeight = await resolveAnchorHeight(
-          walletId,
-          Math.max(...unspent.map(n => n.height)),
-        );
+        // NU6.3 keeps orchard and ironwood in SEPARATE commitment trees, but the
+        // note-sync CBOR bundle carries a single tree + anchor. A note's
+        // `position` indexes its OWN pool's tree, so replaying an ironwood note
+        // against the orchard tree fails ("note at position N not found in tree
+        // replay"). Split by pool and export one pool per bundle; when both hold
+        // value (mid-migration), export the larger and disclose the remainder
+        // rather than silently dropping it (a single-anchor bundle cannot verify
+        // two trees — dual-pool export needs a v2 bundle format).
+        const orchardNotes = allUnspent.filter(n => poolOf(n) === 'orchard');
+        const ironwoodNotes = allUnspent.filter(n => poolOf(n) === 'ironwood');
+        const sumBalance = (ns: DecryptedNote[]) =>
+          ns.reduce((acc, n) => acc + BigInt(n.value), 0n);
+        const orchardBalance = sumBalance(orchardNotes);
+        const ironwoodBalance = sumBalance(ironwoodNotes);
+
+        const exportPool: NotePool =
+          ironwoodNotes.length === 0
+            ? 'orchard'
+            : orchardNotes.length === 0
+              ? 'ironwood'
+              : ironwoodBalance >= orchardBalance
+                ? 'ironwood'
+                : 'orchard';
+        const unspent = exportPool === 'ironwood' ? ironwoodNotes : orchardNotes;
+        const excludedNotes = exportPool === 'ironwood' ? orchardNotes : ironwoodNotes;
+        const excludedPool: NotePool = exportPool === 'ironwood' ? 'orchard' : 'ironwood';
+        const excludedBalance = exportPool === 'ironwood' ? orchardBalance : ironwoodBalance;
+
+        // anchor where the witnesses are rooted (that pool's cached frontier),
+        // not the newest note's height — otherwise the cross-check root won't
+        // match. Each pool has its own frontier meta; the ironwood anchor MUST
+        // come from the ironwood frontier or the ironwood tree-state fetch /
+        // drift-check downstream will fail.
+        const newestSelectedHeight = Math.max(...unspent.map(n => n.height));
+        const anchorHeight =
+          exportPool === 'ironwood'
+            ? (await getIronwoodTreeFrontierHeight(walletId)) || newestSelectedHeight
+            : await resolveAnchorHeight(walletId, newestSelectedHeight);
 
         // build merkle witnesses — use the backend-aware client (zidecar/
         // lightwalletd) instead of a hardcoded zidecar REST shape, so export
         // works on any backend the wallet synced against.
         const client = await makeZcashClient(syncServerUrl);
-        const witnessResult = await buildWitnesses(client, walletId, unspent, anchorHeight);
+        const witnessResult = await buildWitnesses(
+          client,
+          walletId,
+          unspent,
+          anchorHeight,
+          exportPool,
+        );
 
         // prepare notes JSON for WASM encoder
         const notesJson = JSON.stringify(
@@ -5186,8 +5226,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // disabled we emit an unattested bundle (still imports on non-FROST
         // devices). The anchor was already cross-checked against zidecar's
         // tree-state during witness building, so it isn't arbitrary.
+        // Attestation is orchard-only for now: zidecar's SignAnchor verifies the
+        // anchor against its orchard tree-state, so an ironwood anchor would not
+        // match and returns unavailable. Ironwood bundles ship unattested — fine
+        // for the non-FROST devices this flow targets. (A FROST device syncing
+        // ironwood notes would need a zidecar ironwood-tree verifier — future.)
         let attestationHex: string | null = null;
-        if (lookupBackend(syncServerUrl) === 'zidecar') {
+        if (exportPool === 'orchard' && lookupBackend(syncServerUrl) === 'zidecar') {
           try {
             const { ZidecarClient } = await import(
               /* webpackMode: "eager" */ '../state/keyring/zidecar-client'
@@ -5231,11 +5276,8 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         const framesJson = wasmModule.zt_encode_frames_auto(cborBytes, 'zcash-notes', 300, 30);
         const urFrames = JSON.parse(framesJson) as string[];
 
-        // compute balance
-        let balance = 0n;
-        for (const n of unspent) {
-          balance += BigInt(n.value);
-        }
+        // balance of the exported pool (what the zigner will verify)
+        const balance = sumBalance(unspent);
 
         workerSelf.postMessage({
           type: 'note-sync-encoded',
@@ -5247,6 +5289,13 @@ workerSelf.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             noteCount: unspent.length,
             balance: balance.toString(),
             cborBytes: cborBytes.length,
+            pool: exportPool,
+            // when the wallet straddles both pools, the zigner bundle can only
+            // carry one — tell the UI what was left out so it doesn't imply the
+            // synced balance is the wallet's whole spendable balance.
+            excludedPool: excludedNotes.length > 0 ? excludedPool : undefined,
+            excludedNoteCount: excludedNotes.length,
+            excludedBalance: excludedBalance.toString(),
           },
         });
         return;

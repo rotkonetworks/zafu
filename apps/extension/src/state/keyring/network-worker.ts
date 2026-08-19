@@ -604,6 +604,17 @@ export interface NoteSyncEncoded {
   noteCount: number;
   balance: string;
   cborBytes: number;
+  /**
+   * Which shielded pool this bundle carries. NU6.3 keeps orchard and ironwood
+   * in separate commitment trees and the single-anchor bundle can only carry
+   * one, so a mixed-pool wallet exports the larger pool and discloses the rest.
+   */
+  pool?: 'orchard' | 'ironwood';
+  /** The pool left out of this bundle, when the wallet holds value in both. */
+  excludedPool?: 'orchard' | 'ironwood';
+  excludedNoteCount?: number;
+  /** Zatoshi (as a decimal string) in the excluded pool. */
+  excludedBalance?: string;
 }
 export const encodeNoteSyncInWorker = async (
   network: NetworkType,
