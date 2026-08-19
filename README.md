@@ -6,7 +6,7 @@
 
 Shielded by default. Keys on your device. Spending keys never touch the browser.
 
-[![Latest release](https://img.shields.io/github/v/release/rotkonetworks/zafu?sort=semver&label=release&color=6E56CF)](https://github.com/rotkonetworks/zafu/releases/latest)
+[![Beta](https://img.shields.io/github/v/release/rotkonetworks/zafu?include_prereleases&sort=date&display_name=release&label=beta&color=6E56CF)](https://github.com/rotkonetworks/zafu/releases/tag/beta)
 [![CI](https://img.shields.io/github/actions/workflow/status/rotkonetworks/zafu/turbo-ci.yml?branch=main&label=CI)](https://github.com/rotkonetworks/zafu/actions/workflows/turbo-ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Chrome MV3](https://img.shields.io/badge/chrome-MV3-4285F4?logo=googlechrome&logoColor=white)](#install)
@@ -57,18 +57,23 @@ plainly.
 
 ## Install
 
-Zafu is a Chrome / Chromium extension. The Chrome Web Store listing is in
-preparation; until it clears review, install the signed build directly - it takes
-about a minute.
+Zafu is a Chrome / Chromium extension. It currently ships as a **continuous
+beta** - that's the live, actively-updated build - so install the signed beta
+directly; it takes about a minute. (A stable Chrome Web Store listing is in
+preparation.)
 
 ### Zafu (browser extension)
 
-1. Download the latest `zafu-prod-*.zip` from the
-   [releases page](https://github.com/rotkonetworks/zafu/releases/latest).
+1. Download the latest `zafu-beta-*.zip` from the
+   [current beta release](https://github.com/rotkonetworks/zafu/releases/tag/beta)
+   (the `beta` tag always points at the newest build).
 2. Unzip it.
 3. Open `chrome://extensions` and enable **Developer mode** (top-right toggle).
 4. Click **Load unpacked** and select the unzipped folder.
 5. Open the extension from the toolbar puzzle-piece menu (pin it for quick access).
+
+> Every push to `main` refreshes this beta in place. A stable prod release and a
+> one-click Chrome Web Store install are coming; until then, the beta is the way in.
 
 ### Zigner (air-gapped cold signer - recommended)
 

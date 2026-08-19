@@ -192,7 +192,7 @@ jobs:
             # (gh release edit --target does not reliably move an existing tag).
             gh release delete beta --yes --cleanup-tag 2>/dev/null || true
             gh release create beta $assets \
-              --prerelease --title "zafu beta (${VER})" \
+              --prerelease --title "${VER}" \
               --target "$GITHUB_SHA" \
               --notes "Rolling beta build. Follows main; version auto-stamped \`<base>.<run_number>\` per build."
           else
