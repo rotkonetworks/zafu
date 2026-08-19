@@ -25,6 +25,8 @@ import {
   isTerminalStatus,
   type PenumbraSendOp,
 } from './message/penumbra-send';
+import { sweepAndResume, defaultTrackerDeps } from './state/ibc-transfer-tracker';
+import { makeIbcProbe } from './state/ibc-transfer-probes';
 import { openApprovalPopup } from './utils/popup-window';
 import { trackSidePanelPresence } from './side-panel-presence';
 
@@ -325,6 +327,19 @@ const getInternalViewClient = async (): Promise<Client<typeof ViewService>> => {
 };
 chrome.runtime.onMessage.addListener(createPenumbraSendListener(getInternalViewClient));
 
+// IBC transfer tracker: poll destination chains for shield/unshield arrival.
+// Shield-in reads the Penumbra note via the SW's INTERNAL view client (no
+// dependency on any page port); unshield-out reads the cosmos burner balance.
+// This runs in the background so arrival/timeout is detected even while the
+// popup is closed, and resumes after SW eviction (see the alarm + startup sweep
+// below). It reuses the existing balance/note query paths - no new RPC.
+const ibcTransferProbe = makeIbcProbe(async account => {
+  const client = await getInternalViewClient();
+  return Array.fromAsync(client.balances({ accountFilter: { account } }));
+});
+const runIbcTransferSweep = (): Promise<void> =>
+  sweepAndResume(ibcTransferProbe, defaultTrackerDeps());
+
 // Keplr provider: cosmos dapps (Skip Go etc.) talk to us through the content-
 // script bridge; this handles connect, getKey, cosmos signing, and broadcast.
 chrome.runtime.onMessage.addListener(keplrMessageListener);
@@ -353,6 +368,11 @@ void (async () => {
     await chrome.storage.session.set(patch);
   }
 })();
+
+// On startup, RESUME polling any pending IBC transfer (unlike penumbra sends, a
+// destination poll is idempotent and fully reconstructible from the persisted
+// record, so it survives SW eviction). Also prunes stale terminal records.
+void runIbcTransferSweep().catch(e => console.warn('[ibc-tracker] startup sweep failed', e));
 
 // listen for internal service controls
 chrome.runtime.onMessage.addListener((req, sender, respond) =>
@@ -420,7 +440,18 @@ void chrome.alarms.create('idleCheck', {
   delayInMinutes: 1,
 });
 
+// poll pending IBC transfers for arrival/timeout in the background
+void chrome.alarms.create('ibcTransferPoll', {
+  periodInMinutes: 1,
+  delayInMinutes: 1,
+});
+
 chrome.alarms.onAlarm.addListener(async alarm => {
+  if (alarm.name === 'ibcTransferPoll') {
+    await runIbcTransferSweep().catch(e => console.warn('[ibc-tracker] poll failed', e));
+    return;
+  }
+
   if (alarm.name === 'idleCheck') {
     const minutes = (await localExtStorage.get('autoLockMinutes')) ?? 15;
     if (minutes <= 0) {

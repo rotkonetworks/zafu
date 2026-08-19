@@ -33,6 +33,8 @@ import {
   type CosmosAsset,
 } from '../../../hooks/cosmos-balance';
 import { usePenumbraTransaction } from '../../../hooks/penumbra-transaction';
+import { trackUnshieldOut } from '../../../state/ibc-transfer-probes';
+import { IbcTransferStatusLine } from '../ibc-transfer-status';
 import {
   COSMOS_CHAINS,
   type CosmosChainId,
@@ -1356,6 +1358,8 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
   const [sentToAddress, setSentToAddress] = useState<string | undefined>();
   const [sentToChainId, setSentToChainId] = useState<string | undefined>();
   const [assetOpen, setAssetOpen] = useState(false);
+  // id of the pending IBC transfer this success view is tracking (undefined once reset)
+  const [trackedTransferId, setTrackedTransferId] = useState<string | undefined>();
   // opt-in: send to a hand-entered address instead of our own burner deposit
   // address. Off by default - unshielding lands in our transparent burner.
   const [overrideAddress, setOverrideAddress] = useState(false);
@@ -1503,6 +1507,26 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
         setShowSavePrompt(true);
       }
 
+      // start tracking arrival on the destination cosmos chain (the relayer has
+      // no status API, so we poll the burner/recipient balance). Capture the
+      // fields BEFORE ibcState.reset() clears them. Best-effort + non-blocking.
+      if (result.txId && cosmosChainId) {
+        const meta = selectedAsset
+          ? getMetadataFromBalancesResponse.optional(selectedAsset)
+          : undefined;
+        void trackUnshieldOut({
+          srcTxHash: result.txId,
+          amount: ibcState.amount,
+          decimals: COSMOS_CHAINS[cosmosChainId].decimals,
+          symbol: meta?.symbol ?? meta?.display ?? ibcState.denom,
+          destChainId: cosmosChainId,
+          destAddress: destAddr,
+          isNative: isNobleUsdc,
+        })
+          .then(() => setTrackedTransferId(result.txId))
+          .catch(err => console.warn('failed to track unshield transfer:', err));
+      }
+
       // reset form after success
       ibcState.reset();
     } catch (err) {
@@ -1514,7 +1538,16 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
           : msg,
       );
     }
-  }, [canSubmit, ibcState, penumbraTx, recordUsage, shouldSuggestSave]);
+  }, [
+    canSubmit,
+    ibcState,
+    penumbraTx,
+    recordUsage,
+    shouldSuggestSave,
+    cosmosChainId,
+    selectedAsset,
+    isNobleUsdc,
+  ]);
 
   const handleReset = useCallback(() => {
     setTxStatus('idle');
@@ -1523,6 +1556,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
     setShowSavePrompt(false);
     setSentToAddress(undefined);
     setSentToChainId(undefined);
+    setTrackedTransferId(undefined);
   }, []);
 
   return (
@@ -1686,6 +1720,7 @@ function PenumbraIbcSend({ onSuccess }: { onSuccess?: () => void }) {
         <div className='rounded-lg border border-green-500/40 bg-green-500/10 p-3'>
           <p className='text-sm text-green-400'>transaction sent!</p>
           <p className='text-xs text-fg-muted mt-1 font-mono break-all'>{txHash}</p>
+          <IbcTransferStatusLine transferId={trackedTransferId} />
         </div>
       )}
 

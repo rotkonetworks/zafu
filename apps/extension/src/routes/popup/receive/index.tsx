@@ -36,6 +36,8 @@ import { useCosmosIbcTransfer } from '../../../hooks/cosmos-signer';
 import { type CosmosChainId, COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
 import { usePasswordGate } from '../../../hooks/password-gate';
 import { openInDedicatedWindow } from '../../../utils/navigate';
+import { trackShieldIn } from '../../../state/ibc-transfer-probes';
+import { IbcTransferStatusLine } from '../ibc-transfer-status';
 import QRCode from 'qrcode';
 
 /** small copy button with feedback */
@@ -154,6 +156,8 @@ function IbcDepositSection({
   const [txStatus, setTxStatus] = useState<'idle' | 'signing' | 'success' | 'error'>('idle');
   const [txHash, setTxHash] = useState('');
   const [txError, setTxError] = useState('');
+  // id of the pending IBC transfer this success view is tracking (undefined once reset)
+  const [trackedTransferId, setTrackedTransferId] = useState<string | undefined>();
 
   // map selected IBC chain to cosmos chain ID
   const cosmosChainId = selectedIbcChain ? ibcChainToCosmosId(selectedIbcChain) : undefined;
@@ -266,6 +270,21 @@ function IbcDepositSection({
 
       setTxStatus('success');
       setTxHash(result.txHash);
+
+      // start tracking arrival on the Penumbra side (destination polling - the
+      // relayer has no status API). Non-blocking + best-effort; failure to
+      // record must never surface as a send failure.
+      if (selectedAsset) {
+        void trackShieldIn({
+          srcTxHash: result.txHash,
+          amount,
+          decimals: selectedAsset.decimals,
+          symbol: selectedAsset.symbol,
+          penumbraAccount,
+        })
+          .then(() => setTrackedTransferId(result.txHash))
+          .catch(err => console.warn('failed to track shield-in transfer:', err));
+      }
     } catch (err) {
       setTxStatus('error');
       setTxError(err instanceof Error ? err.message : 'transaction failed');
@@ -278,6 +297,7 @@ function IbcDepositSection({
     depositAddress,
     amount,
     accountIndex,
+    penumbraAccount,
     cosmosIbc,
     requestAuth,
   ]);
@@ -287,6 +307,7 @@ function IbcDepositSection({
     setTxHash('');
     setTxError('');
     setAmount('');
+    setTrackedTransferId(undefined);
   }, []);
 
   return (
@@ -487,6 +508,7 @@ function IbcDepositSection({
             <div className='mb-3 rounded-lg border border-green-500/40 bg-green-500/10 p-3'>
               <p className='text-sm text-green-400 lowercase'>shielding transfer sent</p>
               <p className='text-xs text-fg-muted mt-1 font-mono break-all'>{txHash}</p>
+              <IbcTransferStatusLine transferId={trackedTransferId} />
               <button onClick={handleReset} className='mt-2 text-xs text-green-400 underline'>
                 send another
               </button>
