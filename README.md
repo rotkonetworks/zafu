@@ -6,7 +6,7 @@
 
 Shielded by default. Keys on your device. Spending keys never touch the browser.
 
-[![Beta](https://img.shields.io/github/v/release/rotkonetworks/zafu?include_prereleases&sort=date&display_name=release&label=beta&color=6E56CF)](https://github.com/rotkonetworks/zafu/releases/tag/beta)
+[![Beta](https://img.shields.io/github/v/release/rotkonetworks/zafu?include_prereleases&sort=date&display_name=release&label=release&color=6E56CF)](https://github.com/rotkonetworks/zafu/releases/tag/beta)
 [![CI](https://img.shields.io/github/actions/workflow/status/rotkonetworks/zafu/turbo-ci.yml?branch=main&label=CI)](https://github.com/rotkonetworks/zafu/actions/workflows/turbo-ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Chrome MV3](https://img.shields.io/badge/chrome-MV3-4285F4?logo=googlechrome&logoColor=white)](#install)
