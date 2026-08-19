@@ -82,3 +82,6 @@ export type {
 
 export { createPresenceService } from './presence-service';
 export type { PresenceService, DiscoveryPeer, PresentPeer } from './presence-service';
+
+export { createPresenceScheduler } from './presence-scheduler';
+export type { PresenceScheduler, PresenceSchedulerDeps, PublishArgs } from './presence-scheduler';
