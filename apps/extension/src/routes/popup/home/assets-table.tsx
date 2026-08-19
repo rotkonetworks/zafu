@@ -324,9 +324,34 @@ export const AssetsTable = ({ account }: AssetsTableProps) => {
 
   if (error || !balances.length) {
     return (
-      <div className='flex flex-col items-center justify-center py-12 text-center'>
-        <span className='text-sm text-fg-muted'>no assets yet</span>
-        <span className='text-xs text-fg-muted/70'>receive funds to get started</span>
+      <div className='flex flex-col items-center gap-4 px-4 py-10 text-center'>
+        <div className='flex flex-col items-center gap-1'>
+          <span className='i-ph-shield-check h-6 w-6 text-network-accent/60' />
+          <span className='text-sm text-fg-muted'>no assets yet</span>
+          <span className='text-xs text-fg-muted/70'>fund your shielded wallet in three steps</span>
+        </div>
+        <ol className='flex w-full max-w-[16rem] flex-col gap-2 text-left'>
+          {[
+            'buy USDC on Coinbase',
+            'withdraw over Noble to your deposit address (use receive above)',
+            'shield it into Penumbra - private by default',
+          ].map((step, i) => (
+            <li key={i} className='flex items-start gap-2 text-xs text-fg-muted'>
+              <span className='mt-px flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-elev-2 text-label text-fg-dim'>
+                {i + 1}
+              </span>
+              {step}
+            </li>
+          ))}
+        </ol>
+        <button
+          type='button'
+          onClick={() => window.open('https://www.coinbase.com/price/usdc', '_blank')}
+          className='inline-flex items-center gap-1.5 rounded-lg border border-border-soft px-3 py-1.5 text-xs text-fg-high transition-colors hover:border-network-accent/50'
+        >
+          buy USDC on Coinbase
+          <span className='i-ph-arrow-up-right h-3 w-3 opacity-70' />
+        </button>
       </div>
     );
   }

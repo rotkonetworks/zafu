@@ -615,7 +615,7 @@ const PenumbraContent = ({
           action. Opens in a new tab, same as the apps grid. */}
       <HintRow
         icon='i-ph-chart-line-up'
-        title='trade on rotko dex'
+        title='trade on penumbra dex'
         hint='shielded swaps & liquidity positions'
         onClick={() => window.open('https://dex.rotko.net', '_blank')}
       />
