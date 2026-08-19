@@ -730,8 +730,7 @@ export function ContactsPage() {
       setShowContactModal(true);
     }
     setSearchParams({}, { replace: true });
-    // run once for the incoming param; contacts.contacts is stable enough here
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // intentionally keyed to openId only - runs once per incoming ?open= param
   }, [openId]);
 
   const handleDeleteContact = async (id: string) => {
