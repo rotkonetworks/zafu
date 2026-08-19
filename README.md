@@ -63,7 +63,7 @@ about a minute.
 
 ### Zafu (browser extension)
 
-1. Download the latest `zafu-*.zip` from the
+1. Download the latest `zafu-prod-*.zip` from the
    [releases page](https://github.com/rotkonetworks/zafu/releases/latest).
 2. Unzip it.
 3. Open `chrome://extensions` and enable **Developer mode** (top-right toggle).
