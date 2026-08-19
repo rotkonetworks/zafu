@@ -53,3 +53,13 @@ export {
   PRESENCE_EPOCH_SLOTS,
   RENDEZVOUS_TAG_BYTES,
 } from './contact-discovery';
+
+export {
+  sealPresence,
+  openPresence,
+  encodePresenceRecord,
+  decodePresenceRecord,
+  PRESENCE_BLOB_VERSION,
+  PRESENCE_RECORD_VERSION,
+} from './presence-blob';
+export type { PresenceDir, PresenceRecord } from './presence-blob';

@@ -770,6 +770,10 @@ importers:
       '@noble/hashes':
         specifier: ^1.8.0
         version: 1.8.0
+    devDependencies:
+      '@types/chrome':
+        specifier: 0.0.270
+        version: 0.0.270
 
 packages:
 
