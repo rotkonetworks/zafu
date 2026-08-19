@@ -1502,7 +1502,8 @@ export function ZcashSend({ onClose, accountIndex, mainnet, prefill }: ZcashSend
                         ? {
                             bytes: pcztUnsignedRef.current.cborData,
                             urType:
-                              pcztSignFrames[0]?.split('/')[0]?.replace(/^ur:/i, '') || 'zcash-pczt',
+                              pcztSignFrames[0]?.split('/')[0]?.replace(/^ur:/i, '') ||
+                              'zcash-pczt',
                           }
                         : undefined
                     }

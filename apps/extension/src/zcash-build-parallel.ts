@@ -11,10 +11,7 @@
  * We patch the global Worker constructor to fix the URLs before init.
  */
 
-import {
-  assessAmbientRayonIsolation,
-  RAYON_ISOLATION_WARNING,
-} from './perf/rayon-isolation';
+import { assessAmbientRayonIsolation, RAYON_ISOLATION_WARNING } from './perf/rayon-isolation';
 
 type WasmModule = Record<string, any>;
 

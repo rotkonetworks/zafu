@@ -60,10 +60,7 @@ export const COSMOS_CHAINS: Record<CosmosChainId, CosmosChainConfig> = {
     // Only verified-reachable hosts ship as defaults; users can add their own
     // in Settings -> networks -> Penumbra -> Noble. (cosmos.directory is itself
     // a load-balancing proxy, so it adds provider diversity on its own.)
-    rpcEndpoints: [
-      'https://noble-rpc.polkachu.com',
-      'https://rpc.cosmos.directory/noble',
-    ],
+    rpcEndpoints: ['https://noble-rpc.polkachu.com', 'https://rpc.cosmos.directory/noble'],
     restEndpoint: 'https://noble-api.polkachu.com',
     gasPrice: '0.1uusdc',
     penumbraChannel: 'channel-89', // noble -> penumbra

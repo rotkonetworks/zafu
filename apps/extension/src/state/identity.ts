@@ -491,11 +491,7 @@ export async function getZidPins(walletId: string): Promise<ZidPin[]> {
 }
 
 /** Pin the given generation with a label (replaces any existing pin at that index). */
-export async function addZidPin(
-  walletId: string,
-  index: number,
-  label: string,
-): Promise<ZidPin[]> {
+export async function addZidPin(walletId: string, index: number, label: string): Promise<ZidPin[]> {
   const pins = await getZidPins(walletId);
   const next = pins.filter(p => p.index !== index);
   next.push({ index, label: label.trim() || `gen ${index}` });

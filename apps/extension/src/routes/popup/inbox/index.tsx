@@ -159,12 +159,7 @@ function ConversationRow({
 
       {/* icon */}
       <div className='flex h-10 w-10 items-center justify-center rounded-full shrink-0 bg-elev-2'>
-        <span
-          className={cn(
-            'h-5 w-5 text-fg-muted',
-            hasFrost ? 'i-ph-key' : 'i-ph-chat',
-          )}
-        />
+        <span className={cn('h-5 w-5 text-fg-muted', hasFrost ? 'i-ph-key' : 'i-ph-chat')} />
       </div>
 
       {/* content */}

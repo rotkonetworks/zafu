@@ -14,7 +14,9 @@ export function SignStepProgress({ current }: { current: 1 | 2 | 3 }) {
         <div key={s.key} className='flex items-center gap-1.5'>
           <div
             className={`flex size-5 items-center justify-center rounded-full text-label font-medium ${
-              s.key <= current ? 'bg-zigner-gold text-zigner-gold-foreground' : 'bg-elev-2 text-fg-muted'
+              s.key <= current
+                ? 'bg-zigner-gold text-zigner-gold-foreground'
+                : 'bg-elev-2 text-fg-muted'
             }`}
           >
             {s.key}

@@ -25,12 +25,7 @@ export interface PenumbraSendRequest {
   planRequestJson: JsonValue;
 }
 
-export type PenumbraSendStatus =
-  | 'planning'
-  | 'building'
-  | 'broadcasting'
-  | 'success'
-  | 'error';
+export type PenumbraSendStatus = 'planning' | 'building' | 'broadcasting' | 'success' | 'error';
 
 /** Persisted state of one send, mirrored in chrome.storage.session. */
 export interface PenumbraSendOp {

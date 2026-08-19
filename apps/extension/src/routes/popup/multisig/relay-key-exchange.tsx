@@ -50,7 +50,9 @@ export function RelayKeyExchange({
   // generate our key as soon as the step is visible — the user cannot share
   // what has not been created, and this is the first thing they must do
   useEffect(() => {
-    if (myKey !== '') {return;}
+    if (myKey !== '') {
+      return;
+    }
     void (async () => {
       try {
         onMyKey(await onPrepare());
@@ -67,9 +69,13 @@ export function RelayKeyExchange({
   useEffect(() => {
     const want = known ? maxSigners - 1 : 1;
     setInputs(prev => {
-      if (known ? prev.length === want : prev.length >= want) {return prev;}
+      if (known ? prev.length === want : prev.length >= want) {
+        return prev;
+      }
       const next = prev.slice(0, want);
-      while (next.length < want) {next.push('');}
+      while (next.length < want) {
+        next.push('');
+      }
       return next;
     });
   }, [known, maxSigners]);
@@ -113,7 +119,7 @@ export function RelayKeyExchange({
         {inputs.map((value, i) => (
           <input
             // index is stable here: the list length is driven by maxSigners
-             
+
             key={i}
             className='w-full rounded-lg border border-border-soft bg-input px-3 py-2 font-mono text-[10px] focus:border-primary/50 focus:outline-none'
             placeholder={`co-signer ${i + 1} relay key`}

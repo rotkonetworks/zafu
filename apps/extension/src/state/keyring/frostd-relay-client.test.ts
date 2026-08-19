@@ -18,8 +18,9 @@ const PEER_KEY = 'bb'.repeat(32);
 /** A stand-in for the wasm cipher: reversible, and obviously not plaintext. */
 function fakeCipher() {
   return {
-    encrypt: vi.fn((_peer: string, msg: Uint8Array) =>
-      'ENC' + [...msg].map(b => (b ^ 0x5a).toString(16).padStart(2, '0')).join(''),
+    encrypt: vi.fn(
+      (_peer: string, msg: Uint8Array) =>
+        'ENC' + [...msg].map(b => (b ^ 0x5a).toString(16).padStart(2, '0')).join(''),
     ),
     decrypt: vi.fn((_sender: string, hex: string) => {
       const body = hex.slice(3);
@@ -126,9 +127,9 @@ describe('FrostdRelayClient', () => {
   it('refuses to send before a session exists', async () => {
     mockFetch({ challenge: { challenge: 'c' }, login: { access_token: 't' } });
     const c = new FrostdRelayClient(HOST, identity());
-    await expect(
-      c.sendMessage('nope', new Uint8Array(32), new Uint8Array([1])),
-    ).rejects.toThrow(/not in a session/i);
+    await expect(c.sendMessage('nope', new Uint8Array(32), new Uint8Array([1]))).rejects.toThrow(
+      /not in a session/i,
+    );
   });
 
   it('decrypts what it delivers, and reports the sender', async () => {
@@ -144,12 +145,17 @@ describe('FrostdRelayClient', () => {
     const events: string[] = [];
     const ctrl = new AbortController();
 
-    const done = c.joinRoom('sess-1', new Uint8Array(32), ev => {
-      if (ev.type === 'message') {
-        events.push(new TextDecoder().decode(ev.message.payload));
-        ctrl.abort();
-      }
-    }, ctrl.signal);
+    const done = c.joinRoom(
+      'sess-1',
+      new Uint8Array(32),
+      ev => {
+        if (ev.type === 'message') {
+          events.push(new TextDecoder().decode(ev.message.payload));
+          ctrl.abort();
+        }
+      },
+      ctrl.signal,
+    );
 
     await done;
     expect(events).toEqual(['C:commitment']);
@@ -173,9 +179,14 @@ describe('FrostdRelayClient', () => {
     const ctrl = new AbortController();
     setTimeout(() => ctrl.abort(), 50);
 
-    await c.joinRoom('sess-1', new Uint8Array(32), ev => {
-      if (ev.type === 'message') seen.push('LEAKED');
-    }, ctrl.signal);
+    await c.joinRoom(
+      'sess-1',
+      new Uint8Array(32),
+      ev => {
+        if (ev.type === 'message') seen.push('LEAKED');
+      },
+      ctrl.signal,
+    );
 
     expect(seen).toEqual([]);
   });

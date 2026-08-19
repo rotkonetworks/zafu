@@ -177,7 +177,9 @@ export const SettingsAppearance = () => {
                 )}
               >
                 <span className='flex h-8 w-8 shrink-0 items-center justify-center rounded-[4px] border border-border-soft bg-elev-2 text-fg'>
-                  <span className={cn(m.id ? 'i-ph-sidebar-simple' : 'i-ph-app-window', 'size-4')} />
+                  <span
+                    className={cn(m.id ? 'i-ph-sidebar-simple' : 'i-ph-app-window', 'size-4')}
+                  />
                 </span>
                 <span className='flex flex-1 flex-col'>
                   <span className='text-data text-fg lowercase'>{m.name}</span>

@@ -12,12 +12,7 @@ import type { SessionStorageState } from '@repo/storage-chrome/session';
 import { Key } from '@repo/encryption/key';
 import { Box, type BoxJson } from '@repo/encryption/box';
 import type { KeyPrintJson } from '@repo/encryption/key-print';
-import {
-  readSentRecords,
-  writeSentRecords,
-  readTxNotes,
-  writeTxNotes,
-} from './personal-data';
+import { readSentRecords, writeSentRecords, readTxNotes, writeTxNotes } from './personal-data';
 import type { SentTxRecord } from '../workers/sent-tx-reconcile';
 
 /**

@@ -27,9 +27,7 @@ export const isKeplrMessage = (m: unknown): m is KeplrMessage =>
 export interface KeplrApprovalResult {
   type: 'zafu_keplr_result';
   requestId: string;
-  result:
-    | { approved: true; payload?: unknown }
-    | { approved: false; error?: string };
+  result: { approved: true; payload?: unknown } | { approved: false; error?: string };
 }
 
 export const isKeplrApprovalResult = (m: unknown): m is KeplrApprovalResult =>

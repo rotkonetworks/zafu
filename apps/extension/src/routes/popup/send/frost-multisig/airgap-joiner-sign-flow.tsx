@@ -97,103 +97,103 @@ export function FrostAirgapJoinerSignFlow({
     // wasm - so the body moves into an IIFE rather than the effect returning
     // a promise, which React would ignore.
     void (async () => {
-    try {
-      const s = await openJoinerSession(
-        ms.relayUrl || DEFAULT_RELAY_URL,
-        roomCode,
-        ms.publicKeyPackage,
-        ms.relayPeerKeys ?? [],
-      );
-      sessionRef.current = s;
-      void s.relay.joinRoom(
-        s.roomCode,
-        s.participantId,
-        event => {
-          if (event.type !== 'message') {
-            return;
-          }
-          const text = new TextDecoder().decode(event.message.payload);
-          const sg = /^SIGN:([0-9a-fA-F]+):([^:]+):([^:]+):(\d+):(\d+)(?::([0-9a-fA-F]+))?$/.exec(
-            text,
-          );
-          if (sg && !signSeen) {
-            signSeen = true;
-            const captured = {
-              sighash: sg[1]!,
-              alphas: sg[2]!.split(','),
-              recipient: sg[3]!,
-              amountZat: sg[4]!,
-              feeZat: sg[5]!,
-              pcztHex: sg[6],
-            };
-            setTx(captured);
-            setStep(cur => (cur === 'awaiting-sign' ? 'review' : cur));
-
-            // Verifier: verify host's claim against the PCZT-derived parse.
-            // Anything unverifiable refuses outright — the host decides whether
-            // we can verify, so a soft warning is a bypass it can trigger.
-            const fee = assessClaimedFee(captured.feeZat, captured.amountZat);
-            if (!captured.pcztHex) {
-              setVerdict({
-                kind: 'refuse',
-                reasons: [
-                  'host did not publish the PCZT bytes — everything shown here would be host-authored text bound to nothing',
-                  'refusing to release a share against an unverifiable request',
-                ],
-              });
-            } else if (!ms.orchardFvkUview) {
-              setVerdict({
-                kind: 'refuse',
-                reasons: [
-                  'this wallet has no viewing key on file, so the PCZT cannot be decoded',
-                  'refusing to release a share against an unverifiable request',
-                ],
-              });
-            } else if (!fee.ok) {
-              setVerdict({ kind: 'refuse', reasons: [fee.reason] });
-            } else {
-              void (async () => {
-                try {
-                  const p = await frostInspectPcztOutputsInWorker(
-                    captured.pcztHex!,
-                    ms.orchardFvkUview!,
-                  );
-                  setParsed(p);
-                  setVerdict(
-                    computeVerdict({
-                      parsed: p,
-                      claimedRecipient: captured.recipient,
-                      claimedAmountZat: captured.amountZat,
-                      claimedSighashHex: captured.sighash,
-                      mainnet: ms.mainnet ?? true,
-                    }),
-                  );
-                } catch (err) {
-                  setVerdict({
-                    kind: 'refuse',
-                    reasons: [
-                      `could not parse the published PCZT: ${err instanceof Error ? err.message : 'parse failed'}`,
-                      'refusing to release a share against an unverifiable request',
-                    ],
-                  });
-                }
-              })();
+      try {
+        const s = await openJoinerSession(
+          ms.relayUrl || DEFAULT_RELAY_URL,
+          roomCode,
+          ms.publicKeyPackage,
+          ms.relayPeerKeys ?? [],
+        );
+        sessionRef.current = s;
+        void s.relay.joinRoom(
+          s.roomCode,
+          s.participantId,
+          event => {
+            if (event.type !== 'message') {
+              return;
             }
-            return;
-          }
-          const cm = /^C:([\s\S]*)$/.exec(text);
-          if (cm) {
-            peerCommitsRawRef.current.push(cm[1]!);
-            setPeersReady(peerCommitsRawRef.current.length);
-            return;
-          }
-          // S: peer shares - joiner ignores; only the host aggregates.
-        },
-        s.abort.signal,
-      );
-    } catch (err) {
-      onError(err instanceof Error ? err.message : 'failed to join room');
-    }
+            const text = new TextDecoder().decode(event.message.payload);
+            const sg = /^SIGN:([0-9a-fA-F]+):([^:]+):([^:]+):(\d+):(\d+)(?::([0-9a-fA-F]+))?$/.exec(
+              text,
+            );
+            if (sg && !signSeen) {
+              signSeen = true;
+              const captured = {
+                sighash: sg[1]!,
+                alphas: sg[2]!.split(','),
+                recipient: sg[3]!,
+                amountZat: sg[4]!,
+                feeZat: sg[5]!,
+                pcztHex: sg[6],
+              };
+              setTx(captured);
+              setStep(cur => (cur === 'awaiting-sign' ? 'review' : cur));
+
+              // Verifier: verify host's claim against the PCZT-derived parse.
+              // Anything unverifiable refuses outright — the host decides whether
+              // we can verify, so a soft warning is a bypass it can trigger.
+              const fee = assessClaimedFee(captured.feeZat, captured.amountZat);
+              if (!captured.pcztHex) {
+                setVerdict({
+                  kind: 'refuse',
+                  reasons: [
+                    'host did not publish the PCZT bytes — everything shown here would be host-authored text bound to nothing',
+                    'refusing to release a share against an unverifiable request',
+                  ],
+                });
+              } else if (!ms.orchardFvkUview) {
+                setVerdict({
+                  kind: 'refuse',
+                  reasons: [
+                    'this wallet has no viewing key on file, so the PCZT cannot be decoded',
+                    'refusing to release a share against an unverifiable request',
+                  ],
+                });
+              } else if (!fee.ok) {
+                setVerdict({ kind: 'refuse', reasons: [fee.reason] });
+              } else {
+                void (async () => {
+                  try {
+                    const p = await frostInspectPcztOutputsInWorker(
+                      captured.pcztHex!,
+                      ms.orchardFvkUview!,
+                    );
+                    setParsed(p);
+                    setVerdict(
+                      computeVerdict({
+                        parsed: p,
+                        claimedRecipient: captured.recipient,
+                        claimedAmountZat: captured.amountZat,
+                        claimedSighashHex: captured.sighash,
+                        mainnet: ms.mainnet ?? true,
+                      }),
+                    );
+                  } catch (err) {
+                    setVerdict({
+                      kind: 'refuse',
+                      reasons: [
+                        `could not parse the published PCZT: ${err instanceof Error ? err.message : 'parse failed'}`,
+                        'refusing to release a share against an unverifiable request',
+                      ],
+                    });
+                  }
+                })();
+              }
+              return;
+            }
+            const cm = /^C:([\s\S]*)$/.exec(text);
+            if (cm) {
+              peerCommitsRawRef.current.push(cm[1]!);
+              setPeersReady(peerCommitsRawRef.current.length);
+              return;
+            }
+            // S: peer shares - joiner ignores; only the host aggregates.
+          },
+          s.abort.signal,
+        );
+      } catch (err) {
+        onError(err instanceof Error ? err.message : 'failed to join room');
+      }
     })();
     // Cleanup stays on the effect itself, not inside the IIFE: React needs it
     // synchronously, and an aborted session must tear down even if the join

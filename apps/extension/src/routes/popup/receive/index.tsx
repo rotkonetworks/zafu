@@ -51,11 +51,7 @@ function CopyButton({ text, className }: { text: string; className?: string }) {
       onClick={copy}
       className={className ?? 'shrink-0 text-fg-muted transition-colors hover:text-fg-high'}
     >
-      {copied ? (
-        <span className='i-ph-check h-4 w-4' />
-      ) : (
-        <span className='i-ph-copy h-4 w-4' />
-      )}
+      {copied ? <span className='i-ph-check h-4 w-4' /> : <span className='i-ph-copy h-4 w-4' />}
     </button>
   );
 }
@@ -983,11 +979,7 @@ function ReceiveTab({
         >
           <code
             className={`flex-1 break-all text-xs ${
-              ephemeral && isPenumbra
-                ? 'text-green-400'
-                : transparent && isZcash
-                  ? 'text-rust'
-                  : ''
+              ephemeral && isPenumbra ? 'text-green-400' : transparent && isZcash ? 'text-rust' : ''
             }`}
           >
             {isLoading ? 'generating...' : displayAddress || 'no wallet selected'}

@@ -46,7 +46,7 @@ async function clientFor(
 ): Promise<FrostdRelayClient> {
   if (peerKeys.length === 0) {
     throw new Error(
-      'no peer relay keys: frostd fixes a session\'s participants at creation, ' +
+      "no peer relay keys: frostd fixes a session's participants at creation, " +
         'so every signer must be listed before it exists',
     );
   }

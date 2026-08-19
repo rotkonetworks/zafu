@@ -98,7 +98,9 @@ export function AddContactDialog({ address, network, onClose, onSuccess }: AddCo
               onClick={() => setMode('new')}
               className={cn(
                 'flex-1 py-2 text-sm font-medium transition-colors',
-                mode === 'new' ? 'bg-zigner-gold text-zigner-gold-foreground' : 'bg-elev-2 hover:bg-elev-1',
+                mode === 'new'
+                  ? 'bg-zigner-gold text-zigner-gold-foreground'
+                  : 'bg-elev-2 hover:bg-elev-1',
               )}
             >
               <span className='i-ph-plus h-4 w-4 inline mr-1' />

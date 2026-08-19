@@ -159,11 +159,7 @@ export const SyncStatus = ({
   // and it is shown live beside the picker so a destructive rescan is never
   // committed to blind - but it is no longer what you have to type.
   const rescanHeight = (): number =>
-    byDate
-      ? input
-        ? dateToBlock(new Date(`${input}T00:00:00Z`))
-        : NaN
-      : parseInt(input, 10);
+    byDate ? (input ? dateToBlock(new Date(`${input}T00:00:00Z`)) : NaN) : parseInt(input, 10);
 
   const submitRescan = () => {
     const h = rescanHeight();
@@ -301,39 +297,39 @@ export const SyncStatus = ({
                 <span key={st.key} className='flex items-center gap-2'>
                   {i > 0 && <span className='text-fg-dim'>·</span>}
                   <Hint label={st.hint ?? st.label}>
-                  <span
-                    className={cn(
-                      'flex items-center gap-1',
-                      // State is carried by weight and value, not by a second
-                      // hue. Gold stays the only chroma in the row, which is
-                      // the point of a palette built on ink, paper and one
-                      // seal colour - a saturated green here would be the
-                      // brightest thing on the panel and would own the eye
-                      // for the stage that least needs attention.
-                      //
-                      // done reads solid and receded, pending reads dim and
-                      // hollow, active is the only thing lit.
-                      st.state === 'done' && 'text-fg-muted',
-                      st.state === 'active' && 'text-zigner-gold',
-                      st.state === 'pending' && 'text-fg-dim',
-                    )}
-                  >
-                    {(st.state === 'done' ? st.iconDone ?? st.icon : st.icon) && (
-                      <span
-                        className={cn(
-                          st.state === 'done' ? st.iconDone ?? st.icon : st.icon,
-                          'size-3.5 shrink-0',
-                        )}
-                      />
-                    )}
-                    {st.label}
-                    {/* Show the detail on pending stages too, not just active
+                    <span
+                      className={cn(
+                        'flex items-center gap-1',
+                        // State is carried by weight and value, not by a second
+                        // hue. Gold stays the only chroma in the row, which is
+                        // the point of a palette built on ink, paper and one
+                        // seal colour - a saturated green here would be the
+                        // brightest thing on the panel and would own the eye
+                        // for the stage that least needs attention.
+                        //
+                        // done reads solid and receded, pending reads dim and
+                        // hollow, active is the only thing lit.
+                        st.state === 'done' && 'text-fg-muted',
+                        st.state === 'active' && 'text-zigner-gold',
+                        st.state === 'pending' && 'text-fg-dim',
+                      )}
+                    >
+                      {(st.state === 'done' ? (st.iconDone ?? st.icon) : st.icon) && (
+                        <span
+                          className={cn(
+                            st.state === 'done' ? (st.iconDone ?? st.icon) : st.icon,
+                            'size-3.5 shrink-0',
+                          )}
+                        />
+                      )}
+                      {st.label}
+                      {/* Show the detail on pending stages too, not just active
                         ones. A stage that is waiting is exactly the one the
                         user needs explained - dropping its detail left stages
                         like ligerito rendering as a bare word with no state
                         and no progress, indistinguishable from a hang. */}
-                    {st.state !== 'done' && st.detail ? ` ${st.detail}` : ''}
-                  </span>
+                      {st.state !== 'done' && st.detail ? ` ${st.detail}` : ''}
+                    </span>
                   </Hint>
                 </span>
               ))}
@@ -351,7 +347,11 @@ export const SyncStatus = ({
                   <span className='flex items-center gap-1'>
                     <input
                       type={byDate ? 'date' : 'number'}
-                      min={byDate ? formatDateInput(blockToDate(ZCASH_ORCHARD_ACTIVATION)) : ZCASH_ORCHARD_ACTIVATION}
+                      min={
+                        byDate
+                          ? formatDateInput(blockToDate(ZCASH_ORCHARD_ACTIVATION))
+                          : ZCASH_ORCHARD_ACTIVATION
+                      }
                       max={byDate ? formatDateInput(new Date()) : undefined}
                       value={input}
                       onChange={e => setInput(e.target.value)}
@@ -398,10 +398,7 @@ export const SyncStatus = ({
                       className='text-label text-fg-dim hover:text-fg-muted'
                     >
                       <span
-                        className={cn(
-                          'size-3.5',
-                          byDate ? 'i-ph-hash' : 'i-ph-calendar-blank',
-                        )}
+                        className={cn('size-3.5', byDate ? 'i-ph-hash' : 'i-ph-calendar-blank')}
                       />
                     </button>
                     <button

@@ -183,9 +183,7 @@ const MultisigOverview = () => {
                     {w.multisig!.threshold}/{w.multisig!.maxSigners}
                   </span>
                   <span className='text-data text-fg-high truncate'>{w.label}</span>
-                  {isActive && (
-                    <span className='i-ph-check h-3 w-3 text-zigner-gold shrink-0' />
-                  )}
+                  {isActive && <span className='i-ph-check h-3 w-3 text-zigner-gold shrink-0' />}
                 </div>
                 <Sensitive className='text-data tabular text-fg-muted shrink-0'>
                   {formatZec(bal)}
@@ -594,9 +592,7 @@ const PenumbraContent = ({
         <span className='kicker'>balance</span>
         <div className='mt-1 flex min-w-0 items-baseline gap-1.5'>
           {balanceSyncing ? (
-            <span className='text-hero leading-none text-fg-dim tabular lowercase'>
-              syncing…
-            </span>
+            <span className='text-hero leading-none text-fg-dim tabular lowercase'>syncing…</span>
           ) : (
             <>
               <span className='min-w-0 truncate text-hero leading-none tracking-tight text-network-accent tabular'>
@@ -1067,16 +1063,12 @@ const ZcashContent = ({
     : `covered blocks ${hgt(walletBirthday)} to ${hgt(workerSyncHeight)}` +
       (chainHeight > 0 ? ` of ${hgt(chainHeight)}.` : '.');
   const nomtRangeHint =
-    serverIndexHeight > 0
-      ? ` its index reaches block ${hgt(serverIndexHeight)}.`
-      : '';
+    serverIndexHeight > 0 ? ` its index reaches block ${hgt(serverIndexHeight)}.` : '';
   const ligeritoRangeHint =
     lastGigaproofHeight > 0
       ? ` proven through block ${hgt(lastGigaproofHeight)}` +
         (chainHeight > 0 ? `, tip is ${hgt(chainHeight)}.` : '.')
       : ' no proven range yet.';
-
-
 
   // pipeline stages for the sync detail panel — a steady row instead of
   // the old flickering label rotation. lightwalletd skips verification.
@@ -2254,7 +2246,10 @@ function TxRow({ tx, network }: { tx: ParsedTransaction; network: NetworkType })
               title={copied ? 'copied' : 'copy txid'}
             >
               <span
-                className={cn('h-3.5 w-3.5', copied ? 'i-ph-check text-network-accent' : 'i-ph-copy')}
+                className={cn(
+                  'h-3.5 w-3.5',
+                  copied ? 'i-ph-check text-network-accent' : 'i-ph-copy',
+                )}
               />
             </button>
             {explorer && (

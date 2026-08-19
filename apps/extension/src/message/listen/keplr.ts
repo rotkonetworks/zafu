@@ -23,7 +23,10 @@ import { COSMOS_CHAINS } from '@repo/wallet/networks/cosmos/chains';
 import { POPUP_WINDOW_WIDTH, POPUP_WINDOW_HEIGHT } from '../../utils/popup-window';
 
 /** requestId -> resolver for an in-flight approval popup */
-const pending = new Map<string, (payload: { approved: boolean; payload?: unknown; error?: string }) => void>();
+const pending = new Map<
+  string,
+  (payload: { approved: boolean; payload?: unknown; error?: string }) => void
+>();
 
 const bytesToB64 = (bytes: Uint8Array): string => {
   let s = '';
@@ -59,7 +62,11 @@ async function openApproval(
 }
 
 /** enable: derive + cache the key(s) for the requested chains via one approval */
-async function handleEnable(origin: string, chainIds: string[], meta: { favIconUrl?: string; title?: string }) {
+async function handleEnable(
+  origin: string,
+  chainIds: string[],
+  meta: { favIconUrl?: string; title?: string },
+) {
   const chainId = chainIds[0] ?? '';
   const decision = await openApproval({
     requestId: crypto.randomUUID(),
@@ -226,7 +233,12 @@ export const keplrMessageListener = (
     return false;
   }
 
-  void handleMethod(message.method, (message.params as Record<string, unknown>) ?? {}, message.origin, sender)
+  void handleMethod(
+    message.method,
+    (message.params as Record<string, unknown>) ?? {},
+    message.origin,
+    sender,
+  )
     .then(result => sendResponse({ ok: true, result }))
     .catch((err: unknown) =>
       sendResponse({ ok: false, error: err instanceof Error ? err.message : 'request failed' }),

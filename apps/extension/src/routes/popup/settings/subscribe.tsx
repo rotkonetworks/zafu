@@ -468,9 +468,7 @@ export const SubscribePage = () => {
             {PRO_FEATURES.map(f => (
               <li key={f} className='flex items-center gap-2'>
                 <span
-                  className={
-                    pro ? 'i-ph-check size-3 text-green-400' : 'size-3 text-fg-muted/30'
-                  }
+                  className={pro ? 'i-ph-check size-3 text-green-400' : 'size-3 text-fg-muted/30'}
                 >
                   {pro ? '' : '\u00b7'}
                 </span>

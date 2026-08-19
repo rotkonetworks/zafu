@@ -48,8 +48,7 @@ const DENSITY_MAX = 300;
 
 /** closest preset for a stored/custom value */
 const clampPreset = (bytes: number): number => {
-  const n =
-    typeof bytes === 'number' && bytes >= DENSITY_MIN ? Math.round(bytes) : DENSITY_DEFAULT;
+  const n = typeof bytes === 'number' && bytes >= DENSITY_MIN ? Math.round(bytes) : DENSITY_DEFAULT;
   return Math.min(DENSITY_MAX, Math.max(DENSITY_MIN, n));
 };
 
@@ -410,7 +409,9 @@ export function AnimatedQrDisplay({
         )}
       </div>
       {fullscreen && (
-        <p className='text-xs text-white/60'>tap anywhere to close · {currentFrame}/{frames.length}</p>
+        <p className='text-xs text-white/60'>
+          tap anywhere to close · {currentFrame}/{frames.length}
+        </p>
       )}
     </div>
   );

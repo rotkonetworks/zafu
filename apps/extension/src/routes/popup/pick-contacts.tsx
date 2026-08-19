@@ -147,7 +147,9 @@ export function ContactPicker() {
                 <div
                   className={cn(
                     'w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold',
-                    isSelected ? 'bg-zigner-gold text-zigner-gold-foreground' : 'bg-elev-2 text-fg-muted',
+                    isSelected
+                      ? 'bg-zigner-gold text-zigner-gold-foreground'
+                      : 'bg-elev-2 text-fg-muted',
                   )}
                 >
                   {contact.name.charAt(0).toUpperCase()}

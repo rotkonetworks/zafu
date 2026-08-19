@@ -1197,10 +1197,7 @@ async function relayProveRequest(worker: Worker, id: string, request: unknown): 
     let ensureResult: { ok?: boolean; error?: string } | undefined;
     for (let attempt = 0; attempt < 6; attempt++) {
       try {
-        ensureResult = (await chrome.runtime.sendMessage({ type: 'ZCASH_ENSURE_OFFSCREEN' })) as {
-          ok?: boolean;
-          error?: string;
-        };
+        ensureResult = (await chrome.runtime.sendMessage({ type: 'ZCASH_ENSURE_OFFSCREEN' }));
       } catch {
         // SW waking up; the connection error is transient - retry.
         ensureResult = undefined;

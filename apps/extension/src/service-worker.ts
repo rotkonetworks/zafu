@@ -28,10 +28,6 @@ import {
 import { openApprovalPopup } from './utils/popup-window';
 import { trackSidePanelPresence } from './side-panel-presence';
 
-// count open side panels so approval routing can target the panel only when it
-// is actually open (see popup.ts). Registered once at worker startup.
-trackSidePanelPresence();
-
 // all rpc implementations, local and proxy
 import { getRpcImpls } from './rpc';
 
@@ -71,6 +67,10 @@ import { backOff } from 'exponential-backoff';
 
 import { localExtStorage } from '@repo/storage-chrome/local';
 import { localMigrations } from '@repo/storage-chrome/migrations';
+
+// count open side panels so approval routing can target the panel only when it
+// is actually open (see popup.ts). Registered once at worker startup.
+trackSidePanelPresence();
 
 // Quiet transient network fetch failures (offline/unreachable endpoints) so
 // best-effort background calls do not spam "Uncaught (in promise): Failed to

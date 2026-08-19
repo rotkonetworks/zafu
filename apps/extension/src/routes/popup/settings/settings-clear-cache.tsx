@@ -196,8 +196,8 @@ export const SettingsClearCache = () => {
               <p className='kicker mb-2'>personal data</p>
               <div className='flex flex-col gap-2 rounded-lg border border-border-soft bg-elev-1 p-3'>
                 <p className='text-label text-fg-muted'>
-                  send history, tx notes, and contacts - local only, never rebuilt from the chain.
-                  a resync keeps these; this clears them.
+                  send history, tx notes, and contacts - local only, never rebuilt from the chain. a
+                  resync keeps these; this clears them.
                 </p>
                 {personalStep === 'done' ? (
                   <p className='text-label text-fg-dim'>personal data cleared.</p>

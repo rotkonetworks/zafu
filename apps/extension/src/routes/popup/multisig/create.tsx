@@ -306,8 +306,8 @@ const MultisigCreateZafu = () => {
       {step === 'waiting' && (
         <div className='flex flex-col items-center gap-4'>
           <p className='text-xs text-fg-muted'>
-            share this session id with your co-signers - they pick "join" and enter it,
-            along with the relay keys you already swapped
+            share this session id with your co-signers - they pick "join" and enter it, along with
+            the relay keys you already swapped
           </p>
 
           <div className='flex items-center gap-2 rounded-lg border border-border-soft bg-elev-1 px-6 py-4'>

@@ -114,9 +114,7 @@ export const PenumbraSendWatcher = () => {
         }
       >
         <span
-          className={
-            (ok ? 'i-ph-check-circle' : 'i-ph-warning') + ' mt-0.5 h-4 w-4 shrink-0'
-          }
+          className={(ok ? 'i-ph-check-circle' : 'i-ph-warning') + ' mt-0.5 h-4 w-4 shrink-0'}
         />
         <div className='min-w-0 flex-1'>
           <p className='text-sm font-medium lowercase'>

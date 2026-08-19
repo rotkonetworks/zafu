@@ -608,7 +608,9 @@ export const IdentityPage = () => {
                       : 'border-border-hard text-fg-muted hover:text-fg-high hover:border-fg-dim'
                   }`}
                 >
-                  <span className={`size-4 ${isPinned ? 'i-ph-push-pin-slash' : 'i-ph-push-pin'}`} />
+                  <span
+                    className={`size-4 ${isPinned ? 'i-ph-push-pin-slash' : 'i-ph-push-pin'}`}
+                  />
                 </button>
               </div>
 

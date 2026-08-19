@@ -41,7 +41,9 @@ let wasm: RelayWasm | null = null;
 
 /** Load the wasm bundle, the same way the rest of the extension does. */
 async function loadWasm(): Promise<RelayWasm> {
-  if (wasm !== null) {return wasm;}
+  if (wasm !== null) {
+    return wasm;
+  }
   // The specifier is built at runtime on purpose. A literal here is
   // statically analyzable, and vite then tries to resolve a file that lives
   // in public/ and is only ever served, never bundled - which fails the test

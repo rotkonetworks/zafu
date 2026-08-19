@@ -41,9 +41,7 @@ export interface RayonIsolationResult {
  *
  * Either missing means rayon will silently degrade to a single thread.
  */
-export const assessRayonIsolation = (
-  inputs: RayonIsolationInputs,
-): RayonIsolationResult => {
+export const assessRayonIsolation = (inputs: RayonIsolationInputs): RayonIsolationResult => {
   const { crossOriginIsolated, hasSharedArrayBuffer } = inputs;
 
   if (!hasSharedArrayBuffer) {
@@ -73,6 +71,6 @@ export const assessAmbientRayonIsolation = (): RayonIsolationResult =>
   assessRayonIsolation({
     // `crossOriginIsolated` is a boolean global in workers/documents; coerce
     // defensively in case a host realm leaves it undefined.
-    crossOriginIsolated: globalThis.crossOriginIsolated === true,
+    crossOriginIsolated: globalThis.crossOriginIsolated,
     hasSharedArrayBuffer: typeof SharedArrayBuffer !== 'undefined',
   });

@@ -599,7 +599,9 @@ function CosmosSend({
           onClick={() => setSendMode('same')}
           className={cn(
             'flex-1 rounded-md py-2 text-sm font-medium transition-colors',
-            sendMode === 'same' ? 'bg-canvas text-fg shadow-sm' : 'text-fg-muted hover:text-fg-high',
+            sendMode === 'same'
+              ? 'bg-canvas text-fg shadow-sm'
+              : 'text-fg-muted hover:text-fg-high',
           )}
         >
           send in {sourceChain.name}
@@ -643,7 +645,9 @@ function CosmosSend({
               selected={destChainId ?? detectedChain?.chainId}
               onSelect={id => setDestChainId(id || undefined)}
               currentChainId={sourceChain.chainId}
-              autoLabel={detectedChain ? `auto (${detectedChain.name})` : 'auto-detect from address'}
+              autoLabel={
+                detectedChain ? `auto (${detectedChain.name})` : 'auto-detect from address'
+              }
             />
           )}
           {/* alternative: hand the cross-chain routing off to Skip's own UI */}
@@ -676,7 +680,9 @@ function CosmosSend({
           type='text'
           value={recipient}
           onChange={e => setRecipient(e.target.value)}
-          placeholder={sendMode === 'same' ? `${sourceChain.bech32Prefix}1...` : 'destination address'}
+          placeholder={
+            sendMode === 'same' ? `${sourceChain.bech32Prefix}1...` : 'destination address'
+          }
           className={cn(
             'w-full rounded-lg border bg-input px-3 py-2.5 text-sm text-fg',
             'placeholder:text-fg-muted transition-colors duration-100',
@@ -1922,8 +1928,8 @@ export function SendPage() {
               <span className='font-medium text-fg'>channel unavailable</span>
               <span className='text-fg-muted'>
                 {getNetwork((cosmosChain ?? activeNetwork) as NetworkType).name} has no open IBC
-                channel with Penumbra right now.
-                Only Noble is available until other channels are reopened.
+                channel with Penumbra right now. Only Noble is available until other channels are
+                reopened.
               </span>
             </div>
           )

@@ -17,8 +17,7 @@
 export {}; // module scope - keeps CHANNEL etc. out of the shared MAIN-world global
 
 const CHANNEL = 'zafu-keplr';
-const b64ToBytes = (b64: string): Uint8Array =>
-  Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+const b64ToBytes = (b64: string): Uint8Array => Uint8Array.from(atob(b64), c => c.charCodeAt(0));
 const bytesToB64 = (bytes: Uint8Array): string => {
   let s = '';
   for (const byte of bytes) {
@@ -41,7 +40,14 @@ window.addEventListener('message', (ev: MessageEvent) => {
     return;
   }
   const data = ev.data as
-    | { channel?: string; direction?: string; id?: string; ok?: boolean; result?: unknown; error?: string }
+    | {
+        channel?: string;
+        direction?: string;
+        id?: string;
+        ok?: boolean;
+        result?: unknown;
+        error?: string;
+      }
     | undefined;
   if (data?.channel !== CHANNEL || data.direction !== 'response' || !data.id) {
     return;
@@ -63,7 +69,10 @@ const request = <T = unknown>(method: string, params: unknown): Promise<T> => {
   const id = nextId();
   return new Promise<T>((resolve, reject) => {
     pending.set(id, { resolve: resolve as (v: unknown) => void, reject });
-    window.postMessage({ channel: CHANNEL, direction: 'request', id, method, params }, window.origin);
+    window.postMessage(
+      { channel: CHANNEL, direction: 'request', id, method, params },
+      window.origin,
+    );
   });
 };
 
@@ -108,10 +117,12 @@ const makeOfflineSigner = (chainId: string) => ({
     return [{ address: key.bech32Address, algo: key.algo, pubkey: key.pubKey }];
   },
   signAmino: async (signerAddress: string, signDoc: unknown) => {
-    const res = await request<{ signedB64?: string; signed: unknown; signatureB64: string; pubKeyB64: string }>(
-      'signAmino',
-      { chainId, signerAddress, signDoc },
-    );
+    const res = await request<{
+      signedB64?: string;
+      signed: unknown;
+      signatureB64: string;
+      pubKeyB64: string;
+    }>('signAmino', { chainId, signerAddress, signDoc });
     return {
       signed: res.signed,
       signature: {
@@ -122,7 +133,12 @@ const makeOfflineSigner = (chainId: string) => ({
   },
   signDirect: async (
     signerAddress: string,
-    signDoc: { bodyBytes: Uint8Array; authInfoBytes: Uint8Array; chainId: string; accountNumber: bigint },
+    signDoc: {
+      bodyBytes: Uint8Array;
+      authInfoBytes: Uint8Array;
+      chainId: string;
+      accountNumber: bigint;
+    },
   ) => {
     const res = await request<{
       bodyB64: string;
@@ -189,7 +205,12 @@ const keplr = {
   signDirect: async (
     chainId: string,
     signer: string,
-    signDoc: { bodyBytes: Uint8Array; authInfoBytes: Uint8Array; chainId: string; accountNumber: bigint },
+    signDoc: {
+      bodyBytes: Uint8Array;
+      authInfoBytes: Uint8Array;
+      chainId: string;
+      accountNumber: bigint;
+    },
   ) => makeOfflineSigner(chainId).signDirect(signer, signDoc),
 
   sendTx: async (chainId: string, tx: Uint8Array, mode: string): Promise<Uint8Array> => {
