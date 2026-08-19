@@ -14,7 +14,7 @@ Code anchors:
   (`deriveZidContactCardKey`, `zidContactRootSecret`, `ContactSuite`,
   `ContactCardKey`, the suite-blind boundary comment, the PQ-recovery block).
 - `packages/zid/src/contact-discovery.ts` - the tag layer (`presenceEpoch`,
-  `jamTimeslot`, `rendezvousTag`, `ratchetRootSecret`, JAM-time constants).
+  `jamTimeslot`, `rendezvousTag`, JAM-time constants).
 - `packages/zid/src/channel.ts`, `noise-channel.ts`, `sealed-remark.ts`,
   `contacts.ts`, `provider.ts` - the existing crypto and API surface reused.
 
@@ -146,27 +146,30 @@ format is DESIGN, not yet code (section 8); the reused AEAD pattern is the
 `hkdf -> AES-256-GCM` seal already used in `sealed-remark.ts` and the
 ChaChaPoly transport in `noise-channel.ts`.
 
-### Forward secrecy: opt-in hash ratchet
+### Forward secrecy: NONE by default (decision A, accepted)
 
-Epoch-in-the-KDF gives cross-epoch UNLINKABILITY, but NOT forward secrecy: a
-compromised static root secret still recomputes every past epoch's tags,
-because every epoch derives from the same static root. The code comment states
-this plainly.
+Epoch-in-the-KDF gives cross-epoch UNLINKABILITY, but NOT forward secrecy, and
+there is no cheap ratchet that would add it here. The pairwise root secret is a
+STATIC NIKE output (X25519 DH of the two long-term contact-KA keys), so it is
+deterministically recomputable from those keys. A future compromise of the
+contact-KA key (or the mnemonic), combined with logged relay transcripts,
+therefore recovers every past epoch's tags and presence blobs - a hash-ratchet
+does NOT prevent this, because the attacker just re-derives the static base and
+ratchets forward. (An earlier draft shipped a `ratchetRootSecret`; it was
+removed because it implied a forward secrecy it cannot provide in this model.)
 
-Forward secrecy is available as an opt-in hash ratchet
-(`ratchetRootSecret`):
+Accepted posture (decision A): no forward secrecy. Presence is low-sensitivity
+metadata (who is online in an app, and an ephemeral session pubkey in the
+blob), not funds. This is a deliberate scope, stated plainly.
 
-```
-ratchetRootSecret(s) = SHA-256(s)
-```
-
-Applied once per elapsed presence epoch, so a later key compromise cannot
-reveal earlier epochs' tags (the pre-image resistance of SHA-256 makes the
-ratchet one-way). The trade-off, stated so it is a deliberate choice rather
-than a default: both sides must track their ratchet position, and a
-missed-epoch resync means ratcheting forward to the current epoch. Omitting the
-ratchet keeps cross-epoch unlinkability but not forward secrecy. Which one you
-want is a per-app threat-model decision.
+Bounded mitigation (fast-follow, decision C): PERIODIC CONTACT-KA KEY ROTATION
+with old-key deletion - the same rotation-index mechanism the per-site ZID keys
+already use. Deriving each epoch from the CURRENT contact-KA key and deleting
+the previous private key caps a compromise's reach to the window since the last
+rotation (e.g. monthly), without any interactive Double-Ratchet machinery or
+breaking the non-interactive "compute the tag offline" property. True
+per-message forward secrecy would require an ephemeral, interactive handshake
+(Signal-style) and is out of scope for a presence beacon.
 
 ---
 
@@ -264,8 +267,7 @@ hybrid slots in at establishment ONLY:
 - `'xwing-v1'` (reserved): X-Wing (X25519 + ML-KEM-768) hybrid, a KEM.
   Encapsulate/decapsulate is asymmetric and DOES carry a ciphertext, so the
   secret is established once at contact-add and cached. The cached root is still
-  suite-agnostic bytes; the tags, epochs, ratchet, and presence blob never
-  change.
+  suite-agnostic bytes; the tags, epochs, and presence blob never change.
 
 This is exactly why the establish-once-cache rule exists. A KEM is not a NIKE:
 you cannot re-run encapsulation per tag and get a stable shared secret. Caching
@@ -344,8 +346,8 @@ Implemented (committed on `feat/zid-contact-discovery`, commit `b9c1d57f`):
   reserved `contact-ka-xwing-v1` / PQ notes. Covered by
   `identity.test.ts` additions.
 - The rendezvous-tag layer in `packages/zid/src/contact-discovery.ts`:
-  `jamTimeslot`, `presenceEpoch`, `rendezvousTag`, `ratchetRootSecret`, the
-  JAM-time constants, and `RENDEZVOUS_TAG_BYTES`. Exported from
+  `jamTimeslot`, `presenceEpoch`, `rendezvousTag`, the JAM-time constants, and
+  `RENDEZVOUS_TAG_BYTES`. Exported from
   `packages/zid/src/index.ts`. Covered by `contact-discovery.test.ts`.
 - Reused crypto it builds on: `sealed-remark.ts` (ephemeral-DH + HKDF +
   AES-256-GCM seal), `noise-channel.ts` (Noise IK, ChaChaPoly transport),
