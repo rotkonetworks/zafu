@@ -2,8 +2,8 @@
  * contacts page - multi-network address book with expandable cards
  */
 
-import { useState, useMemo, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useBackNav } from '../../../utils/navigate';
 import { PopupPath } from '../paths';
 import { useStore } from '../../../state';
@@ -60,17 +60,36 @@ const NETWORK_COLORS: Record<ContactNetwork, string> = {
   polygon: 'bg-purple-600/20 text-purple-300',
 };
 
-/** modal for adding/editing a contact (name only) */
+/** Make a contact's website safe + clickable: only http(s) links, prefixing a
+ *  bare domain with https://. Anything with a different scheme (javascript:,
+ *  data:, etc.) is treated as not a link — the string still shows, just inert. */
+const contactWebsiteUrl = (raw: string): string | undefined => {
+  const s = raw.trim();
+  if (!s) {
+    return undefined;
+  }
+  const withScheme = /^[a-z][a-z0-9+.-]*:/i.test(s) ? s : `https://${s}`;
+  try {
+    const u = new URL(withScheme);
+    return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+/** modal for adding/editing a contact (name, website, zid, notes) */
 function ContactModal({
   onClose,
   onSave,
   editContact,
 }: {
   onClose: () => void;
-  onSave: (data: { name: string; notes?: string }) => void;
+  onSave: (data: { name: string; notes?: string; zid?: string; website?: string }) => void;
   editContact?: Contact;
 }) {
   const [name, setName] = useState(editContact?.name ?? '');
+  const [website, setWebsite] = useState(editContact?.website ?? '');
+  const [zid, setZid] = useState(editContact?.zid ?? '');
   const [notes, setNotes] = useState(editContact?.notes ?? '');
 
   const canSave = name.trim().length > 0;
@@ -79,7 +98,12 @@ function ContactModal({
     if (!canSave) {
       return;
     }
-    onSave({ name: name.trim(), notes: notes.trim() || undefined });
+    onSave({
+      name: name.trim(),
+      website: website.trim() || undefined,
+      zid: zid.trim() || undefined,
+      notes: notes.trim() || undefined,
+    });
     onClose();
   };
 
@@ -98,6 +122,28 @@ function ContactModal({
               placeholder='alice'
               autoFocus
               className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
+            />
+          </div>
+
+          <div>
+            <label className='block text-xs text-fg-muted mb-1'>website (optional)</label>
+            <input
+              type='text'
+              value={website}
+              onChange={e => setWebsite(e.target.value)}
+              placeholder='alice.example or https://…'
+              className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-sm focus:border-zigner-gold focus:outline-none'
+            />
+          </div>
+
+          <div>
+            <label className='block text-xs text-fg-muted mb-1'>zid (optional)</label>
+            <input
+              type='text'
+              value={zid}
+              onChange={e => setZid(e.target.value)}
+              placeholder='identity pubkey — the anchor for their addresses'
+              className='w-full rounded-lg border border-border-soft bg-input px-3 py-2.5 text-xs font-mono focus:border-zigner-gold focus:outline-none'
             />
           </div>
 
@@ -382,6 +428,38 @@ function ContactCard({
       {/* expanded addresses */}
       {expanded && (
         <div className='border-t border-border-soft bg-elev-2/10'>
+          {/* the social layer: where to find this person beyond their wallets */}
+          {(contact.website || contact.zid) && (
+            <div className='flex flex-col gap-1 border-b border-border-soft px-3 py-2'>
+              {contact.website &&
+                (contactWebsiteUrl(contact.website) ? (
+                  <a
+                    href={contactWebsiteUrl(contact.website)}
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    onClick={e => e.stopPropagation()}
+                    className='flex items-center gap-1.5 break-all text-xs text-zigner-gold hover:underline'
+                  >
+                    <span className='i-ph-globe h-3 w-3 shrink-0' /> {contact.website}
+                  </a>
+                ) : (
+                  <span className='flex items-center gap-1.5 break-all text-xs text-fg-muted'>
+                    <span className='i-ph-globe h-3 w-3 shrink-0' /> {contact.website}
+                  </span>
+                ))}
+              {contact.zid && (
+                <span
+                  className='flex items-center gap-1.5 text-label text-fg-muted'
+                  title={contact.zid}
+                >
+                  <span className='i-ph-fingerprint h-3 w-3 shrink-0' />
+                  <span className='truncate font-mono'>
+                    zid {contact.zid.length > 16 ? `${contact.zid.slice(0, 16)}…` : contact.zid}
+                  </span>
+                </span>
+              )}
+            </div>
+          )}
           {contact.addresses.length === 0 ? (
             <div className='p-4 text-center'>
               <p className='text-xs text-fg-muted'>no addresses yet</p>
@@ -618,7 +696,7 @@ export function ContactsPage() {
 
   // contact handlers
   const handleSaveContact = useCallback(
-    async (data: { name: string; notes?: string }) => {
+    async (data: { name: string; notes?: string; zid?: string; website?: string }) => {
       if (editingContact) {
         await contacts.updateContact(editingContact.id, data);
       } else {
@@ -633,6 +711,28 @@ export function ContactsPage() {
     setEditingContact(contact);
     setShowContactModal(true);
   };
+
+  // deep link: /contacts?open=<id> opens that contact's editor directly — this
+  // is where a tx row's "to <contact>" link lands, so you can jump straight from
+  // a payment to editing who you paid. Consume the param so a back/refresh
+  // doesn't re-pop the modal.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const openId = searchParams.get('open');
+  useEffect(() => {
+    if (!openId) {
+      return;
+    }
+    const match = (Array.isArray(contacts.contacts) ? contacts.contacts : []).find(
+      c => c.id === openId,
+    );
+    if (match) {
+      setEditingContact(match);
+      setShowContactModal(true);
+    }
+    setSearchParams({}, { replace: true });
+    // run once for the incoming param; contacts.contacts is stable enough here
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openId]);
 
   const handleDeleteContact = async (id: string) => {
     await contacts.removeContact(id);

@@ -1998,6 +1998,7 @@ const txExplorerUrl = (network: NetworkType, txid: string): string | undefined =
 function TxRow({ tx, network }: { tx: ParsedTransaction; network: NetworkType }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const navigate = useNavigate();
   // explorer links leak your IP + the looked-up txid to a third party, so they
   // are opt-in; copying the txid never leaves the wallet and is always offered.
   const explorerEnabled = useStore(s => s.privacy.settings.enableExplorerLinks);
@@ -2040,11 +2041,27 @@ function TxRow({ tx, network }: { tx: ParsedTransaction; network: NetworkType })
         // pending rows recede rather than flash: they are not an alert, they
         // are simply not finished
         isPending && 'border-dashed',
-        expandable ? 'cursor-pointer hover:border-border-soft' : '',
       )}
-      onClick={expandable ? () => setExpanded(e => !e) : undefined}
     >
-      <div className='flex items-center gap-3'>
+      {/* ONLY the header toggles expand/collapse. The details below carry their
+          own controls (copy the txid, open the contact, edit a note) — a click
+          there must act on that control, never fold the row shut. */}
+      <div
+        className={cn('flex items-center gap-3', expandable && 'cursor-pointer')}
+        onClick={expandable ? () => setExpanded(e => !e) : undefined}
+        role={expandable ? 'button' : undefined}
+        tabIndex={expandable ? 0 : undefined}
+        onKeyDown={
+          expandable
+            ? e => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setExpanded(x => !x);
+                }
+              }
+            : undefined
+        }
+      >
         {/* direction reads from the lucide icon, not from color-as-category:
             shield / arrow-down / arrow-up on a neutral chip. An unsettled
             transaction shows the open ensō instead — the state matters more
@@ -2138,9 +2155,20 @@ function TxRow({ tx, network }: { tx: ParsedTransaction; network: NetworkType })
               is one click from being saved to contacts (social-graph brick). */}
           {tx.recipient &&
             (contactMatch ? (
-              <p className='flex items-center gap-1 text-label text-fg-dim break-words'>
+              // a known contact is one tap from its page — edit the name, add
+              // addresses, or link a website/ZID. The petname, not the address.
+              <button
+                type='button'
+                onClick={e => {
+                  e.stopPropagation();
+                  navigate(`${PopupPath.CONTACTS}?open=${contactMatch.contact.id}`);
+                }}
+                className='flex items-center gap-1 text-left text-label text-fg-dim transition-colors hover:text-fg-high'
+                title='open contact'
+              >
                 <span className='i-ph-user h-3 w-3 shrink-0' /> to {contactMatch.contact.name}
-              </p>
+                <span className='i-ph-caret-right h-3 w-3 shrink-0 text-fg-dim' />
+              </button>
             ) : (
               // no contact yet: show the actual destination address (truncated)
               // so the user sees who they paid, and one click names/saves it.
@@ -2244,12 +2272,7 @@ function TxRow({ tx, network }: { tx: ParsedTransaction; network: NetworkType })
               user has opted into explorer links (it reveals their IP). */}
           <div className='flex items-center gap-1.5 pt-0.5'>
             <span className='shrink-0 text-label text-fg-dim'>txid</span>
-            <span
-              className='min-w-0 flex-1 truncate font-mono text-label text-fg-muted'
-              title={tx.id}
-            >
-              {tx.id}
-            </span>
+            {/* the txid text itself copies on click — no hunting for a tiny icon */}
             <button
               type='button'
               onClick={e => {
@@ -2258,13 +2281,18 @@ function TxRow({ tx, network }: { tx: ParsedTransaction; network: NetworkType })
                 setCopied(true);
                 setTimeout(() => setCopied(false), 1500);
               }}
-              className='shrink-0 text-fg-muted transition-colors hover:text-fg-high'
-              title={copied ? 'copied' : 'copy txid'}
+              title={copied ? 'copied' : 'click to copy txid'}
+              className='group flex min-w-0 flex-1 items-center gap-1 text-left'
             >
+              <span className='min-w-0 flex-1 truncate font-mono text-label text-fg-muted transition-colors group-hover:text-fg-high'>
+                {tx.id}
+              </span>
               <span
                 className={cn(
-                  'h-3.5 w-3.5',
-                  copied ? 'i-ph-check text-network-accent' : 'i-ph-copy',
+                  'h-3.5 w-3.5 shrink-0 transition-colors',
+                  copied
+                    ? 'i-ph-check text-network-accent'
+                    : 'i-ph-copy text-fg-muted group-hover:text-fg-high',
                 )}
               />
             </button>
