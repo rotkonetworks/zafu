@@ -124,7 +124,12 @@ export const createPresenceService = (
         f.blob,
       );
       if (bytes) {
-        out.push({ id: f.id, record: decodePresenceRecord(bytes) });
+        // decode can still reject a malformed / wrong-version record even after
+        // the AEAD opened — drop those rather than surfacing a bogus peer.
+        const record = decodePresenceRecord(bytes);
+        if (record) {
+          out.push({ id: f.id, record });
+        }
       }
     }
     return out;
